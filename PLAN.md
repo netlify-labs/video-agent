@@ -435,7 +435,7 @@ Output: a short `SPIKES.md` with results, and an update to sections 6, 7 and 10 
 ## 16. Open questions for us
 
 1. **Who's it for?** Netlify-only in v1 (as planned), or customers later? It changes auth and branding.
-2. **Which Netlify team** owns the project?
+2. ~~**Which Netlify team** owns the project?~~ Resolved: gtm-engineering (`netlify-video-agent`, see section 13).
 3. **Which agent and model** by default? Claude was used for everything so far.
 4. **Retention:** is 90 days right? Should videos ever be public by link (for embedding in docs, the blog or Slack)?
 5. **Brand:** should every video follow Netlify brand by default, or should the requester be able to choose a look?
