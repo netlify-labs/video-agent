@@ -26,3 +26,25 @@ Consequences:
 - Runs can write **any** store on the site, so finalize's hash check against the authenticated callback manifest is load-bearing (already in the design).
 - `netlify` isn't on `PATH` in non-interactive shells inside the run. `render-job.ts` and `prepare-revision.ts` resolve the CLI (`netlify`, then `npx -y netlify-cli`, then common global paths).
 - Run environment variable **names** include `NETLIFY_AUTH_TOKEN`, `NETLIFY_API_TOKEN`, `NETLIFY_DB_URL`, `NETLIFY_DB_BRANCH`, `NETLIFY_SITE_ID`, `CONTEXT`, `DEPLOY_ID` and 19 `NETLIFY_AGENT_RUNNER_*` variables. Runs get their **own database branch** (`NETLIFY_DB_BRANCH`), confirming that previews and runs never see production writes live.
+
+## S1. From scratch: quality is good; standard quality; ~3–8 minutes per video (2026-10-30)
+
+Three from-scratch runs with the section 5 style prompt (neutral look, no brand context):
+
+| Run | Brief | Aspect | Length asked → got | Total run | Credits | `check` rounds | Render (each quality) | File (standard) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| a | Launch video, "Org webhooks" | 16:9 | Auto → 22.5 s | 447 s | 206 | 3 | ~22 s | (uploaded) |
+| b | Sales clip, deploy previews | 9:16 | 15 s → 15.0 s | 192 s | 92 | 1–2 | ~16 s | 1.0 MB |
+| c | Docs tutorial, env vars | 1:1 | 60 s → 60.0 s | 405 s | 192 | 3 | ~35 s | 1.5 MB |
+
+Quality rubric (frames reviewed by hand): text legible at target size, requested text correct, no clipped
+frames, coherent three-beat stories with an end card, restrained motion. All three pass. Auto picked a
+sensible 22.5 s for a launch clip.
+
+Decisions:
+
+- **Default quality `standard`.** `looks`, `standard` and `delivery` rendered in the same wall-clock time; files are small (1–1.5 MB/min at 1080p), so there's no reason to lower quality. `RENDER_QUALITY` overrides it.
+- **Default agent/model: the runner default** (Claude, claude-opus-5-5 at the time). No effort override.
+- **Authoring deadline 22 min stays.** A 60 s video took under 7 minutes end to end; render time grows ~0.5 s per output second, so a 3-minute video should fit comfortably (unmeasured; first real 3-minute request will confirm).
+- **Credits:** ~90–210 per video in these runs. The admin page shows actual usage per video.
+- **Finding:** the agents did not put the JSON block in their final answer (the runner summarizes from a results file). The callback receipt is therefore the primary manifest path and the final-answer fallback is best effort; `render-job.ts` posts the callback with retries.

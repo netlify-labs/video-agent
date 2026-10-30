@@ -28,7 +28,7 @@ writeFileSync(
 )
 log('context', { isDefault, name: meta.name })
 
-const agentRun = Object.keys(process.env).some((k) => k.startsWith('NETLIFY_AGENT_RUNNER_')) || process.env.AI_AGENT !== undefined
+const agentRun = Object.keys(process.env).some((k) => k.startsWith('NETLIFY_AGENT_RUNNER_'))
 log('build-env', { context: process.env.CONTEXT ?? null, agentRun, agentVars: Object.keys(process.env).filter((k) => /AGENT/.test(k)).sort() })
 if (agentRun && process.env.FORCE_UI_BUILD !== 'true') {
   mkdirSync(join(repoRoot, 'ui/dist'), { recursive: true })

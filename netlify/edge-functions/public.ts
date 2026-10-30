@@ -22,6 +22,7 @@ const notFound = () =>
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
 
 export default async (req: Request, context: Context) => {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return new Response('Method not allowed', { status: 405, headers: { allow: 'GET, HEAD' } })
   if (context.deploy?.published !== true && Netlify.env.get('ALLOW_NON_PRODUCTION') !== 'true') return notFound()
   const url = new URL(req.url)
   const m = /^\/v\/([a-z2-9]{6,32})(?:\.(mp4|jpg|gif|vtt))?$/.exec(url.pathname)
@@ -68,4 +69,5 @@ video{width:100%;height:auto;border-radius:12px;background:#000;display:block}fi
   return new Response(html, { headers: { ...NO_STORE, 'content-type': 'text/html; charset=utf-8' } })
 }
 
-export const config: Config = { path: '/v/*', method: ['GET', 'HEAD'] }
+// GET and HEAD only (the manifest can't list HEAD, so the method check is in the handler).
+export const config: Config = { path: '/v/*' }

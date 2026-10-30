@@ -6,6 +6,7 @@ import { CONTENT_TYPES, mediaResponse, verifySignedPath } from '../../src/lib/me
 const notFound = () => new Response('Not found', { status: 404, headers: { 'cache-control': 'no-store' } })
 
 export default async (req: Request, context: Context) => {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return new Response('Method not allowed', { status: 405, headers: { allow: 'GET, HEAD' } })
   if (context.deploy?.published !== true && Netlify.env.get('ALLOW_NON_PRODUCTION') !== 'true') return notFound()
   const url = new URL(req.url)
   const m = /^\/files\/(vid_[a-z0-9]+)\/v(\d+)\/(video\.mp4|poster\.jpg|preview\.gif|captions\.vtt)$/.exec(url.pathname)
@@ -33,4 +34,5 @@ export default async (req: Request, context: Context) => {
   )
 }
 
-export const config: Config = { path: '/files/*', method: ['GET', 'HEAD'] }
+// GET and HEAD only (the manifest can't list HEAD, so the method check is in the handler).
+export const config: Config = { path: '/files/*' }
