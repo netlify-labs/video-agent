@@ -13,7 +13,11 @@ describe('admission and sessions', () => {
   it('refuses outside domains, unconfirmed accounts and missing sessions', async () => {
     const h = harness()
     expect((await h.call('GET', '/api/v1/me', { as: h.outsider })).status).toBe(403)
-    const unconfirmed = h.deps.identity.addUser({ id: 'u_new', email: 'new@acme.com', confirmed: false }).cookie
+    const unconfirmed = h.deps.identity.addUser({
+      id: 'u_new',
+      email: 'new@acme.com',
+      confirmed: false,
+    }).cookie
     expect((await h.call('GET', '/api/v1/me', { as: unconfirmed })).status).toBe(401)
     expect((await h.call('GET', '/api/v1/me')).status).toBe(401)
   })
@@ -41,10 +45,24 @@ describe('admission and sessions', () => {
 
   it('refuses cross-site state changes on cookie sessions (CSRF) but not on API keys', async () => {
     const h = harness()
-    expect((await h.call('POST', '/api/v1/videos', { as: h.member, origin: 'https://evil.example', body: { prompt: PROMPT } })).status).toBe(403)
-    expect((await h.call('POST', '/api/v1/videos', { as: h.member, origin: null, body: { prompt: PROMPT } })).status).toBe(403)
+    expect(
+      (
+        await h.call('POST', '/api/v1/videos', {
+          as: h.member,
+          origin: 'https://evil.example',
+          body: { prompt: PROMPT },
+        })
+      ).status,
+    ).toBe(403)
+    expect(
+      (await h.call('POST', '/api/v1/videos', { as: h.member, origin: null, body: { prompt: PROMPT } }))
+        .status,
+    ).toBe(403)
     const key = await h.json(await h.call('POST', '/api/v1/keys', { as: h.member, body: { name: 'ci' } }))
-    expect((await h.call('POST', '/api/v1/videos', { key: key.key, origin: null, body: { prompt: PROMPT } })).status).toBe(202)
+    expect(
+      (await h.call('POST', '/api/v1/videos', { key: key.key, origin: null, body: { prompt: PROMPT } }))
+        .status,
+    ).toBe(202)
   })
 
   it('rejects revoked keys, keys of disabled users, and garbage keys', async () => {
@@ -53,7 +71,9 @@ describe('admission and sessions', () => {
     expect((await h.call('GET', '/api/v1/me', { key: key.key })).status).toBe(200)
     expect((await h.call('GET', '/api/v1/me', { key: `${key.key}x` })).status).toBe(401)
     expect((await h.call('GET', '/api/v1/me', { key: 'nva_nope_nope' })).status).toBe(401)
-    expect((await h.call('PATCH', '/api/v1/users/u_member', { as: h.admin, body: { disabled: true } })).status).toBe(200)
+    expect(
+      (await h.call('PATCH', '/api/v1/users/u_member', { as: h.admin, body: { disabled: true } })).status,
+    ).toBe(200)
     expect((await h.call('GET', '/api/v1/me', { key: key.key })).status).toBe(401)
     expect((await h.call('GET', '/api/v1/me', { as: h.member })).status).toBe(403)
   })
@@ -61,7 +81,9 @@ describe('admission and sessions', () => {
   it('keeps at least one admin', async () => {
     const h = harness()
     await h.call('GET', '/api/v1/me', { as: h.admin })
-    expect((await h.call('PATCH', '/api/v1/users/u_admin', { as: h.admin, body: { role: 'member' } })).status).toBe(409)
+    expect(
+      (await h.call('PATCH', '/api/v1/users/u_admin', { as: h.admin, body: { role: 'member' } })).status,
+    ).toBe(409)
   })
 
   it('refuses paid work until setup is complete', async () => {
@@ -94,18 +116,41 @@ describe('admission and sessions', () => {
 describe('policy', () => {
   it('lets anyone view and revise, but only owners and admins rename, publish and delete', async () => {
     const h = harness()
-    const video = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }))
+    const video = await h.json(
+      await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }),
+    )
     await h.drive(4)
     const other = h.deps.identity.addUser({ id: 'u_other', email: 'otto@acme.com' }).cookie
     expect((await h.call('GET', `/api/v1/videos/${video.id}`, { as: other })).status).toBe(200)
-    expect((await h.call('PATCH', `/api/v1/videos/${video.id}`, { as: other, body: { title: 'x' } })).status).toBe(403)
-    expect((await h.call('POST', `/api/v1/videos/${video.id}/versions/1/publish`, { as: other })).status).toBe(403)
+    expect(
+      (await h.call('PATCH', `/api/v1/videos/${video.id}`, { as: other, body: { title: 'x' } })).status,
+    ).toBe(403)
+    expect(
+      (await h.call('POST', `/api/v1/videos/${video.id}/versions/1/publish`, { as: other })).status,
+    ).toBe(403)
     expect((await h.call('DELETE', `/api/v1/videos/${video.id}`, { as: other })).status).toBe(403)
-    expect((await h.call('POST', `/api/v1/videos/${video.id}/versions`, { as: other, body: { prompt: 'Make it blue.' } })).status).toBe(202)
-    expect((await h.call('POST', `/api/v1/videos/${video.id}/versions`, { as: other, body: { prompt: 'And green.' } })).status).toBe(409)
+    expect(
+      (
+        await h.call('POST', `/api/v1/videos/${video.id}/versions`, {
+          as: other,
+          body: { prompt: 'Make it blue.' },
+        })
+      ).status,
+    ).toBe(202)
+    expect(
+      (
+        await h.call('POST', `/api/v1/videos/${video.id}/versions`, {
+          as: other,
+          body: { prompt: 'And green.' },
+        })
+      ).status,
+    ).toBe(409)
     expect((await h.call('GET', '/api/v1/users', { as: other })).status).toBe(403)
     expect((await h.call('GET', '/api/v1/stats', { as: other })).status).toBe(403)
-    expect((await h.call('PATCH', `/api/v1/videos/${video.id}`, { as: h.admin, body: { title: 'Renamed' } })).status).toBe(200)
+    expect(
+      (await h.call('PATCH', `/api/v1/videos/${video.id}`, { as: h.admin, body: { title: 'Renamed' } }))
+        .status,
+    ).toBe(200)
     expect((await h.call('DELETE', `/api/v1/videos/${video.id}`, { as: h.member })).status).toBe(202)
     expect((await h.call('GET', `/api/v1/videos/${video.id}`, { as: other })).status).toBe(404)
   })
@@ -123,23 +168,39 @@ describe('policy', () => {
   it('replays idempotent creates and refuses a reused key with a different body', async () => {
     const h = harness()
     const headers = { 'idempotency-key': 'abc-1' }
-    const a = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, headers, body: { prompt: PROMPT } }))
-    const b = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, headers, body: { prompt: PROMPT } }))
+    const a = await h.json(
+      await h.call('POST', '/api/v1/videos', { as: h.member, headers, body: { prompt: PROMPT } }),
+    )
+    const b = await h.json(
+      await h.call('POST', '/api/v1/videos', { as: h.member, headers, body: { prompt: PROMPT } }),
+    )
     expect(b.id).toBe(a.id)
-    expect((await h.call('POST', '/api/v1/videos', { as: h.member, headers, body: { prompt: `${PROMPT}!` } })).status).toBe(409)
+    expect(
+      (await h.call('POST', '/api/v1/videos', { as: h.member, headers, body: { prompt: `${PROMPT}!` } }))
+        .status,
+    ).toBe(409)
   })
 
   it('lists newest first with search, filters and cursors', async () => {
     const h = harness()
     for (let i = 0; i < 5; i++) {
-      await h.call('POST', '/api/v1/videos', { as: i % 2 ? h.admin : h.member, body: { prompt: `${PROMPT} number ${i} ${i === 3 ? 'pineapple' : ''}` } })
+      await h.call('POST', '/api/v1/videos', {
+        as: i % 2 ? h.admin : h.member,
+        body: { prompt: `${PROMPT} number ${i} ${i === 3 ? 'pineapple' : ''}` },
+      })
       h.deps.clock.advance(1000)
     }
     const page1 = await h.json(await h.call('GET', '/api/v1/videos?limit=2', { as: h.member }))
     expect(page1.items).toHaveLength(2)
-    const page2 = await h.json(await h.call('GET', `/api/v1/videos?limit=2&cursor=${page1.nextCursor}`, { as: h.member }))
+    const page2 = await h.json(
+      await h.call('GET', `/api/v1/videos?limit=2&cursor=${page1.nextCursor}`, { as: h.member }),
+    )
     expect(page2.items[0].createdAt < page1.items[1].createdAt).toBe(true)
-    expect((await h.json(await h.call('GET', '/api/v1/videos?q=pineapple', { as: h.member }))).items).toHaveLength(1)
-    expect((await h.json(await h.call('GET', '/api/v1/videos?owner=me', { as: h.member }))).items).toHaveLength(3)
+    expect(
+      (await h.json(await h.call('GET', '/api/v1/videos?q=pineapple', { as: h.member }))).items,
+    ).toHaveLength(1)
+    expect(
+      (await h.json(await h.call('GET', '/api/v1/videos?owner=me', { as: h.member }))).items,
+    ).toHaveLength(3)
   })
 })

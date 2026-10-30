@@ -11,6 +11,13 @@
   ALLOWED_EMAIL_DOMAINS = "Who can sign up: your company email domains, comma-separated (e.g. acme.com), or invite-only"
   ADMIN_EMAILS = "Email addresses of the first admins, comma-separated"
 
+# Short MCP URL for AI clients.
+[[redirects]]
+  from = "/mcp"
+  to = "/api/mcp"
+  status = 200
+  force = true
+
 # The web app is a single-page app. API, file and share routes are served by functions and edge
 # functions, which take precedence over this fallback.
 [[redirects]]

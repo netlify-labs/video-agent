@@ -28,11 +28,11 @@ You need:
 
 **With the button:** press Deploy to Netlify above. It copies this repo to your GitHub and asks for:
 
-| Variable | What to enter |
-| --- | --- |
-| `RUNNER_API_TOKEN` | The personal access token. |
+| Variable                | What to enter                                                                            |
+| ----------------------- | ---------------------------------------------------------------------------------------- |
+| `RUNNER_API_TOKEN`      | The personal access token.                                                               |
 | `ALLOWED_EMAIL_DOMAINS` | Your company's email domains, comma-separated (`acme.com,acme.co.uk`), or `invite-only`. |
-| `ADMIN_EMAILS` | The first admins' email addresses, comma-separated. |
+| `ADMIN_EMAILS`          | The first admins' email addresses, comma-separated.                                      |
 
 Then enable **Identity** on the new project (Project configuration → Identity) and open `https://<your-site>/setup`.
 The setup page checks everything and links to whatever is left.
@@ -82,17 +82,17 @@ Prompts are visible to your Netlify team in the project's Agent Runs page.
 
 ## Configuration
 
-| Variable | Default | Meaning |
-| --- | --- | --- |
-| `RUNNER_API_TOKEN` | — | Personal access token for starting and watching runs. |
-| `ALLOWED_EMAIL_DOMAINS` | — | Company domains, or `invite-only`. |
-| `ADMIN_EMAILS` | — | First admins. |
-| `MAX_ACTIVE_RUNS` | `3` | Runs at once. |
-| `AGENT`, `AGENT_MODEL`, `AGENT_EFFORT` | runner default | Which agent makes videos. |
-| `AUTHORING_DEADLINE_MIN` | `22` | Stop a run after this many minutes (the runner's ceiling is 25). |
-| `QUEUE_TIMEOUT_MIN` | `60` | Fail a video that waits in the queue longer than this. |
-| `RENDER_QUALITY` | `standard` | HyperFrames render quality (`looks`, `standard`, `delivery`). |
-| `ALLOWED_ORIGINS` | — | Origins allowed to call the API from a browser with an API key (CORS). |
+| Variable                               | Default        | Meaning                                                                |
+| -------------------------------------- | -------------- | ---------------------------------------------------------------------- |
+| `RUNNER_API_TOKEN`                     | —              | Personal access token for starting and watching runs.                  |
+| `ALLOWED_EMAIL_DOMAINS`                | —              | Company domains, or `invite-only`.                                     |
+| `ADMIN_EMAILS`                         | —              | First admins.                                                          |
+| `MAX_ACTIVE_RUNS`                      | `3`            | Runs at once.                                                          |
+| `AGENT`, `AGENT_MODEL`, `AGENT_EFFORT` | runner default | Which agent makes videos.                                              |
+| `AUTHORING_DEADLINE_MIN`               | `22`           | Stop a run after this many minutes (the runner's ceiling is 25).       |
+| `QUEUE_TIMEOUT_MIN`                    | `60`           | Fail a video that waits in the queue longer than this.                 |
+| `RENDER_QUALITY`                       | `standard`     | HyperFrames render quality (`looks`, `standard`, `delivery`).          |
+| `ALLOWED_ORIGINS`                      | —              | Origins allowed to call the API from a browser with an API key (CORS). |
 
 ## The API
 
@@ -109,6 +109,18 @@ curl -L -H "Authorization: Bearer $KEY" https://<site>/api/v1/videos/<id>/versio
 Webhooks (`video.ready`, `video.failed`) are signed: `X-Video-Agent-Signature: t=<unix>,v1=<hex>` where the hex
 is HMAC-SHA256 of `"<t>.<raw body>"` with the key's webhook secret (shown once when the key is created). Dedupe on
 `eventId`; retries continue for 24 hours.
+
+## Use it from AI tools (MCP)
+
+The same video tasks are MCP tools, so people can ask Claude, Cursor or any MCP client for a video:
+`create_video`, `get_video`, `list_videos`, `revise_video`, `publish_video`, `unpublish_video`, `cancel_video`.
+
+- Server URL: `https://<your-site>/mcp` (Streamable HTTP). Authenticate with an API key: `Authorization: Bearer nva_…`.
+- Claude Code: `claude mcp add --transport http video-agent https://<your-site>/mcp --header "Authorization: Bearer nva_…"`
+- Cursor and others (`mcp.json`): `{ "mcpServers": { "video-agent": { "url": "https://<your-site>/mcp", "headers": { "Authorization": "Bearer nva_…" } } } }`
+- Stdio-only clients: `npx -y mcp-remote https://<your-site>/mcp --header "Authorization: Bearer nva_…"`
+
+The web app's **API docs** page has the REST reference and these instructions with your site's URL filled in.
 
 ## Developing
 

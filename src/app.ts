@@ -7,7 +7,6 @@ import { receiveCallback } from './domain/callback.js'
 import { createKey, listKeys, revokeKey } from './domain/keys.js'
 import { assertCan, type Principal } from './domain/policy.js'
 import { resolveUnresolved, tick } from './domain/reconciler.js'
-import { getSettings } from './domain/settings.js'
 import { setupChecks } from './domain/setup.js'
 import { listUsers, updateUser } from './domain/users.js'
 import {
@@ -22,7 +21,8 @@ import {
   unpublishVersion,
   videoDto,
 } from './domain/videos.js'
-import { signPath } from './lib/crypto.js'
+import { signedFilePath } from './domain/files.js'
+import { handleMcp } from './mcp.js'
 import { ApiError, errorBody } from './lib/errors.js'
 import * as s from './schemas.js'
 
@@ -76,13 +76,6 @@ const VersionParam = IdParam.extend({
 const FileParam = VersionParam.extend({
   file: z.enum(['video', 'poster', 'gif', 'captions']).openapi({ param: { name: 'file', in: 'path' } }),
 })
-
-export const FILE_NAMES = {
-  video: 'video.mp4',
-  poster: 'poster.jpg',
-  gif: 'preview.gif',
-  captions: 'captions.vtt',
-} as const
 
 export function createApp(deps: Deps, opts: AppOptions) {
   const app = new OpenAPIHono<Env>({
@@ -420,12 +413,11 @@ export function createApp(deps: Deps, opts: AppOptions) {
       if (!job || job.deletedAt) throw new ApiError('not_found', 'Video not found.')
       const out = await deps.store.getOutput(id, n)
       if (!out) throw new ApiError('not_ready', 'This version has no files yet.')
-      const { fileSigningSecret } = await getSettings(deps)
-      const path = `/files/${id}/v${n}/${FILE_NAMES[file]}`
-      const exp = Math.floor(deps.clock.now().getTime() / 1000) + 600
-      const dl = c.req.valid('query').download === '1' ? '&download=1' : ''
       c.header('cache-control', 'private, no-store')
-      return c.redirect(`${path}?exp=${exp}&sig=${signPath(fileSigningSecret, path, exp)}${dl}`, 302)
+      return c.redirect(
+        await signedFilePath(deps, id, n, file, 600, c.req.valid('query').download === '1'),
+        302,
+      )
     },
   )
 
@@ -611,6 +603,25 @@ export function createApp(deps: Deps, opts: AppOptions) {
       return c.body(null, 204)
     },
   )
+
+  // ───── MCP: the same operations as tools for AI clients (API keys only) ─────
+  app.all('/api/mcp', async (c) => {
+    if (!c.req.header('authorization')) {
+      return c.json(
+        errorBody(
+          'unauthorized',
+          'Send your API key as "Authorization: Bearer nva_…". Create one on the API keys page.',
+        ),
+        401,
+        { 'www-authenticate': 'Bearer realm="video-agent"' },
+      )
+    }
+    const principal = await principalFromRequest(deps, c.req.raw)
+    if (principal.kind !== 'apiKey') throw new ApiError('unauthorized', 'MCP needs an API key.')
+    return handleMcp(deps, principal, c.req.raw, () => {
+      kick(c)
+    })
+  })
 
   // ───── agent callback (hidden from the public spec) ─────
   app.openapi(

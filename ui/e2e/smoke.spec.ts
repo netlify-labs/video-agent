@@ -51,6 +51,15 @@ test('new video form validates and picks a shape', async ({ page }) => {
   await expect(make).toBeEnabled()
 })
 
+test('API docs are embedded with the REST reference and MCP setup', async ({ page }) => {
+  await page.goto('/docs')
+  await expect(page.getByRole('heading', { level: 1, name: 'API docs' })).toBeVisible()
+  await expect(page.getByText('Video Agent API').first()).toBeVisible({ timeout: 15_000 })
+  await page.getByRole('tab', { name: 'MCP for AI tools' }).click()
+  await expect(page.getByText('claude mcp add --transport http video-agent', { exact: false })).toBeVisible()
+  await expect(page.getByText('create_video')).toBeVisible()
+})
+
 test('admin, keys and setup render', async ({ page }) => {
   await page.goto('/admin')
   await expect(page.getByText('1 of 3 run slots in use, 1 queued, 1 failure in the last 7 days.')).toBeVisible()

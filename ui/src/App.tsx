@@ -1,4 +1,5 @@
 import { Center, Loader } from '@mantine/core'
+import { Suspense, lazy } from 'react'
 import { Navigate, Route, Routes } from 'react-router'
 import { $api } from './api/client'
 import { useAuth } from './auth'
@@ -10,6 +11,9 @@ import { NewVideoPage } from './pages/NewVideo'
 import { SetupPage } from './pages/Setup'
 import { AuthPages } from './pages/SignIn'
 import { VideoPage } from './pages/Video'
+
+// The API reference is large; load it only when someone opens it.
+const DocsPage = lazy(() => import('./pages/Docs'))
 
 export function App() {
   const auth = useAuth()
@@ -39,6 +43,20 @@ export function App() {
         <Route path="/keys" element={<KeysPage />} />
         <Route path="/admin" element={<AdminPage />} />
         <Route path="/setup" element={<SetupPage />} />
+        <Route
+          path="/docs"
+          element={
+            <Suspense
+              fallback={
+                <Center p="xl">
+                  <Loader size="sm" />
+                </Center>
+              }
+            >
+              <DocsPage />
+            </Suspense>
+          }
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

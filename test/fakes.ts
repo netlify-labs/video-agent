@@ -50,7 +50,9 @@ export class FakeBlobs implements BlobsPort {
     this.data.delete(this.k(s, key))
   }
   async list(s: BlobStoreName, prefix: string) {
-    return [...this.data.keys()].filter((k) => k.startsWith(`${s}:${prefix}`)).map((k) => k.slice(s.length + 1))
+    return [...this.data.keys()]
+      .filter((k) => k.startsWith(`${s}:${prefix}`))
+      .map((k) => k.slice(s.length + 1))
   }
   text(s: BlobStoreName, key: string) {
     const v = this.data.get(this.k(s, key))
@@ -74,7 +76,15 @@ export class FakeIdentity implements IdentityPort {
     const m = /nf_jwt=([^;]+)/.exec(req.headers.get('cookie') ?? '')
     const id = m?.[1] ? this.sessions.get(m[1]) : undefined
     // Like getUser(): falls back to token claims even if the account is gone.
-    return id ? (this.users.get(id) ?? { id, email: 'ghost@example.com', name: null, confirmed: true, invited: false }) : null
+    return id
+      ? (this.users.get(id) ?? {
+          id,
+          email: 'ghost@example.com',
+          name: null,
+          confirmed: true,
+          invited: false,
+        })
+      : null
   }
   async liveUser(id: string) {
     if (this.outage) throw new Error('identity unreachable')
@@ -93,7 +103,10 @@ export type RunScript = {
 }
 
 export class FakeRunner implements RunnerPort {
-  runs = new Map<string, { req: StartRequest; script: RunScript; i: number; stopped: boolean; runnerId: string }>()
+  runs = new Map<
+    string,
+    { req: StartRequest; script: RunScript; i: number; stopped: boolean; runnerId: string }
+  >()
   starts: StartRequest[] = []
   nextScripts: RunScript[] = []
   defaultScript: (req: StartRequest) => RunScript = () => ({ timeline: [running(), succeeded()] })
@@ -121,13 +134,25 @@ export class FakeRunner implements RunnerPort {
   async reconcile(req: StartRequest) {
     const r = this.runs.get(req.requestId)
     if (!r) return { kind: 'none' as const }
-    return { kind: 'matched' as const, handle: JSON.stringify({ requestId: req.requestId }), runnerId: r.runnerId, sessionId: `${r.runnerId}_s1` }
+    return {
+      kind: 'matched' as const,
+      handle: JSON.stringify({ requestId: req.requestId }),
+      runnerId: r.runnerId,
+      sessionId: `${r.runnerId}_s1`,
+    }
   }
   async snapshot(handle: string): Promise<RunnerSnapshot> {
     const { requestId } = JSON.parse(handle) as { requestId: string }
     const r = this.runs.get(requestId)
     if (!r) throw new Error('unknown run')
-    if (r.stopped) return { kind: 'terminal', status: 'cancelled', resultText: null, usage: { totalCreditsCost: 1 }, failure: null }
+    if (r.stopped)
+      return {
+        kind: 'terminal',
+        status: 'cancelled',
+        resultText: null,
+        usage: { totalCreditsCost: 1 },
+        failure: null,
+      }
     const snap = r.script.timeline[Math.min(r.i, r.script.timeline.length - 1)] as RunnerSnapshot
     r.i++
     if (snap.kind === 'terminal' && r.script.onTerminal) {
@@ -247,7 +272,12 @@ export function fixtureFiles(aspect: '16:9' | '9:16' | '1:1' | '4:5' = '16:9') {
   }
 }
 
-export async function uploadAndManifest(blobs: FakeBlobs, jobId: string, attemptId: string, files = fixtureFiles()): Promise<Manifest> {
+export async function uploadAndManifest(
+  blobs: FakeBlobs,
+  jobId: string,
+  attemptId: string,
+  files = fixtureFiles(),
+): Promise<Manifest> {
   const entries = Object.entries(files) as [keyof Manifest['files'], Uint8Array][]
   for (const [name, bytes] of entries) await blobs.set('uploads', `${attemptId}/${name}`, bytes)
   return {
@@ -255,7 +285,9 @@ export async function uploadAndManifest(blobs: FakeBlobs, jobId: string, attempt
     attemptId,
     title: 'Test video',
     summary: 'Made in a test.',
-    files: Object.fromEntries(entries.map(([n, b]) => [n, { sha256: sha(b), bytes: b.byteLength }])) as Manifest['files'],
+    files: Object.fromEntries(
+      entries.map(([n, b]) => [n, { sha256: sha(b), bytes: b.byteLength }]),
+    ) as Manifest['files'],
     durationSec: 2,
     width: 1920,
     height: 1080,

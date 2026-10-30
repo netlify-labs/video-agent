@@ -11,7 +11,17 @@ export interface Harness {
   admin: string
   member: string
   outsider: string
-  call: (method: string, path: string, opts?: { as?: string; key?: string; body?: unknown; origin?: string | null; headers?: Record<string, string> }) => Promise<Response>
+  call: (
+    method: string,
+    path: string,
+    opts?: {
+      as?: string
+      key?: string
+      body?: unknown
+      origin?: string | null
+      headers?: Record<string, string>
+    },
+  ) => Promise<Response>
   json: <T = any>(res: Response) => Promise<T>
   /** Runs sweep ticks (advancing the clock a minute each) until nothing changes or n ticks pass. */
   drive: (n?: number) => Promise<void>
@@ -32,7 +42,13 @@ export function harness(
   deps.runner.defaultScript = (req) => ({
     timeline: [
       { kind: 'running', state: 'running', latestStep: 'Writing the composition', usage: null },
-      { kind: 'terminal', status: 'succeeded', resultText: 'done', usage: { totalCreditsCost: 42 }, failure: null },
+      {
+        kind: 'terminal',
+        status: 'succeeded',
+        resultText: 'done',
+        usage: { totalCreditsCost: 42 },
+        failure: null,
+      },
     ],
     onTerminal: async () => {
       const a = await deps.store.getAttempt(req.requestId)

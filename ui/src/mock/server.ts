@@ -1,4 +1,5 @@
 // Mock mode: answers /api/* from mock/data.ts by replacing window.fetch. Loaded only when VITE_MOCK=1.
+import spec from '../../../openapi.json'
 import { ASSETS, people, stats, videos } from './data'
 
 const json = (body: unknown, status = 200) =>
@@ -65,6 +66,7 @@ export function installMock() {
         ],
       })
     }
+    if (p === '/api/openapi.json') return json(spec)
     if (p === '/api/v1/config') return json({ admission: ['netlify.com'], siteUrl: window.location.origin })
     if (p === '/api/v1/me') return json(me)
     if (p === '/api/v1/stats') return json(stats)

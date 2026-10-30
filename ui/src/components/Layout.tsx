@@ -110,13 +110,7 @@ export function Layout() {
         {link('/keys', 'API keys', <IconKey size={18} />)}
         {isAdmin ? link('/admin', 'Admin', <IconShieldLock size={18} />) : null}
         {isAdmin ? link('/setup', 'Setup', <IconSettings size={18} />) : null}
-        <NavLink
-          href="/api/docs"
-          target="_blank"
-          label="API docs"
-          leftSection={<IconBook size={18} />}
-          className="va-navlink"
-        />
+        {link('/docs', 'API docs', <IconBook size={18} />)}
         <Text size="xs" c="var(--va-faint)" mt="auto" p="xs">
           Press N for a new video
         </Text>
