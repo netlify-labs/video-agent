@@ -1,7 +1,8 @@
 # Video Agent
 
 Your company's own video agent on Netlify. Your team signs in, describes a video, and gets an MP4 a few
-minutes later, made by an AI agent with [HyperFrames](https://hyperframes.heygen.com) in a
+minutes later, made by an AI agent with [HyperFrames](https://hyperframes.heygen.com) (an open-source HTML-to-video renderer;
+no account needed) in a
 [Netlify Agent Runner](https://docs.netlify.com/build/build-with-ai/agent-runners/overview/). Revise it
 in plain words, publish it to a public link with a share page, or drive everything from scripts with an
 API key.
@@ -19,11 +20,17 @@ API key.
 
 ## Before you deploy
 
-You need:
+Have these ready before you press the button:
 
-- A Netlify team on a **credit-based plan** with **AI features** and **Agent Runners** available, and AI credits. Each video costs roughly 90–210 credits in our tests (more for long or complex videos). There are **no spending limits in this template**: use your team's credit controls.
-- A **GitHub** account (Git-connected Agent Runners support GitHub).
-- A **personal access token** for starting runs. Create it at [User settings → Applications](https://app.netlify.com/user/applications), ideally for a dedicated account that's a member of the team. It's a user-level token: anyone who can read this project's environment can use it.
+- A Netlify team on a **credit-based plan** with **AI features** and **Agent Runners** available, and AI credits.
+  To check, open any project in the team: if it has an **Agent Runs** tab, you're set. Each video costs roughly
+  90–210 credits in our tests (more for long or complex videos), billed to the team's AI credits; nothing else is
+  billed. There are **no spending limits in this template**: use your team's credit controls.
+- A **GitHub** account. The project must be connected to a GitHub repo, because Agent Runners work from Git.
+- A **personal access token** for starting runs. We recommend a dedicated Netlify account for it: invite that
+  account to your team first, sign in as it, then create the token at
+  [User settings → Applications](https://app.netlify.com/user/applications). It's a user-level token: anyone who
+  can read this project's environment can use it.
 
 ## Deploy
 
@@ -35,19 +42,25 @@ You need:
 | `ALLOWED_EMAIL_DOMAINS` | Your company's email domains, comma-separated (`acme.com,acme.co.uk`), or `invite-only`. |
 | `ADMIN_EMAILS`          | The first admins' email addresses, comma-separated.                                      |
 
-Then enable **Identity** on the new project (Project configuration → Identity) and open `https://<your-site>/setup`.
-The setup page checks everything and links to whatever is left.
+Then follow the page Netlify shows after the deploy (it's [`USAGE.md`](USAGE.md)): enable **Identity**, set its
+registration mode, open `https://<your-site>/setup` and create the first admin account. The setup page checks
+everything and links to whatever is left.
 
-**From a clone:**
+**From a clone:** push the clone to a GitHub repo of your own first, then:
 
 ```sh
 npm ci
 npx netlify login
-npm run setup          # creates or links the site, sets the variables, deploys, runs the checks
+npm run setup -- --team <your-team-slug>   # or --site <existing project> to reuse one
 ```
 
-The database (Netlify Database) is created on the first deploy and its tables are created by the migrations in
-`netlify/database/migrations/`.
+`npm run setup` creates (or reuses) the project, asks for the three values above, saves them, enables Identity
+and, once the project is connected to your GitHub repo, starts a production build and runs the setup checks. The
+first time, it stops and tells you where to link the repo; run it again with the `--site` it prints. Then
+follow steps 1 and 3 of [`USAGE.md`](USAGE.md) for the registration mode and the first admin.
+
+Either way, the database (Netlify Database) is created and its tables are migrated automatically by the
+production build from Git (the migrations are in `netlify/database/migrations/`). There's nothing to run by hand.
 
 ## Who can sign in
 
