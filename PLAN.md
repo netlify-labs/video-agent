@@ -42,7 +42,7 @@ Each was observed in this repo's work on 2026-10-29 and 2026-10-30, unless marke
 
 ## 3. User workflows
 
-1. **A script makes a video.** `curl -X POST -H "Authorization: Bearer $KEY" -d '{"prompt":"..."}' https://video-agent.../api/v1/videos` returns `202 { id, status: "queued" }`. The script polls `GET /api/v1/videos/{id}` (or receives a webhook, phase 5) until `status: "ready"`, then downloads `.../video.mp4`.
+1. **A script makes a video.** `curl -X POST -H "Authorization: Bearer $KEY" -d '{"prompt":"..."}' https://netlify-video-agent.netlify.app/api/v1/videos` returns `202 { id, status: "queued" }`. The script polls `GET /api/v1/videos/{id}` (or receives a webhook, phase 5) until `status: "ready"`, then downloads `.../video.mp4`.
 2. **A person makes a video in the UI.** Signs in with Netlify, types a prompt, picks 16:9, 9:16 or 1:1 and a target length, presses Create. The page shows progress (queued, starting, writing, rendering, ready) and the video when it's done.
 3. **A person reviews what's been made.** The library lists every video: poster frame, title, prompt, who, when, status, duration. The detail page has the player, the full prompt, the agent's summary, timings, usage, and a link to the run in the Netlify app.
 4. **A person iterates** (phase 5). On a finished video, "Revise" sends a follow-up prompt ("make the end card orange") to the same runner, so the agent starts from its own composition. The new render becomes revision 2; earlier ones stay.
@@ -220,7 +220,7 @@ Store `jobs`, key `{createdAtIso}_{jobId}`, so listing by prefix comes back in t
   "run": {
     "handle": "<serialized nax-agent-runner-sdk handle>",
     "runnerId": "…", "sessionId": "…",
-    "netlifyUrl": "https://app.netlify.com/projects/video-agent/agent-runs/…",
+    "netlifyUrl": "https://app.netlify.com/projects/netlify-video-agent/agent-runs/…",
     "deployUrl": null
   },
   "callback": { "tokenHash": "sha256:…", "usedAt": null, "expiresAt": "…" },
@@ -346,7 +346,7 @@ Look: one Mantine theme (`ui/theme.ts`) with dark as the default color scheme an
 
 ## 13. Repo, project, deploy
 
-- **One repo**, `netlify-labs/video-agent`, deployed as **one project**, `video-agent`. Team: **open question** (gtm-engineering by default).
+- **One repo**, `netlify-labs/video-agent`, deployed as **one project**, `netlify-video-agent` (https://netlify-video-agent.netlify.app), in the **gtm-engineering** team. The project exists and is linked to `main` through the Netlify GitHub App; its publish dir is `public/` with no build command until C1 sets the real ones, so nothing in the repo is served yet. (`video-agent.netlify.app` belongs to another account.)
 - **Private until open-sourced.** The repo starts private in `netlify-labs` and is standalone: no workspace dependencies on gtm-services or any other private package, so anyone can fork and deploy it once it's public. Before flipping it public: add a LICENSE (MIT), remove internal names and links from docs and this plan, and check the git history for secrets.
 - **Deploy to Netlify button** in the README. It asks for:
   - `NETLIFY_AUTH_TOKEN` (or `AGENT_RUNNER_HOOK_URL`, per S7 and S8), scoped to Functions;
