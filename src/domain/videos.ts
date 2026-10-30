@@ -472,7 +472,7 @@ export async function listVideos(
   assertCan(principal, 'video:read')
   const limit = Math.min(Math.max(q.limit ?? 24, 1), 50)
   let cursor: { createdAt: string; id: string } | undefined
-  if (q.cursor) {
+  if (q.cursor && q.cursor !== 'undefined') {
     try {
       cursor = JSON.parse(Buffer.from(q.cursor, 'base64url').toString('utf8')) as { createdAt: string; id: string }
     } catch {

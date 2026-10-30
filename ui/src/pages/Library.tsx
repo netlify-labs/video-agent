@@ -1,9 +1,9 @@
-import { AspectRatio, Button, Card, Center, Group, Image, Loader, SegmentedControl, Select, SimpleGrid, Stack, Text, TextInput, Title } from '@mantine/core'
+import { Alert, AspectRatio, Button, Card, Center, Group, Image, Loader, SegmentedControl, Select, SimpleGrid, Stack, Text, TextInput, Title } from '@mantine/core'
 import { useDebouncedValue, useHotkeys } from '@mantine/hooks'
 import { IconPhoto, IconSearch, IconWorld } from '@tabler/icons-react'
 import { useRef, useState } from 'react'
 import { Link } from 'react-router'
-import { $api, type Video } from '../api/client'
+import { $api, errorMessage, type Video } from '../api/client'
 import { StatusBadge, duration, fileUrl, inProgress, relativeTime } from '../components/bits'
 import { QuickCreate } from './NewVideo'
 
@@ -66,7 +66,7 @@ export function LibraryPage() {
     { params: { query: { ...query, limit: 24 } } },
     {
       pageParamName: 'cursor',
-      initialPageParam: undefined as unknown as string,
+      initialPageParam: '',
       getNextPageParam: (last) => last.nextCursor ?? undefined,
       refetchInterval: (q) => (q.state.data?.pages.some((p) => p.items.some((v) => inProgress(v.status))) ? 15_000 : false),
     },
@@ -88,7 +88,9 @@ export function LibraryPage() {
         <Select placeholder="Any status" clearable value={status} onChange={setStatus} w={150} data={[{ value: 'ready', label: 'Ready' }, { value: 'running', label: 'Making' }, { value: 'queued', label: 'Queued' }, { value: 'failed', label: 'Failed' }, { value: 'cancelled', label: 'Cancelled' }, { value: 'timed_out', label: 'Timed out' }]} />
         <Select placeholder="Published or not" clearable value={published} onChange={setPublished} w={170} data={[{ value: 'true', label: 'Published' }, { value: 'false', label: 'Not published' }]} />
       </Group>
-      {list.isLoading ? (
+      {list.isError ? (
+        <Alert color="red" title="Couldn't load videos">{errorMessage(list.error)}</Alert>
+      ) : list.isLoading ? (
         <Center p="xl">
           <Loader />
         </Center>
