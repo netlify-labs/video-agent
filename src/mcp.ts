@@ -97,7 +97,7 @@ export function normalizeVideoId(v: string): string {
   const m = /vid_[a-z0-9]+/i.exec(v.trim())
   if (!m) {
     throw new ToolError('INVALID_ARGUMENT', `"${v}" is not a video id.`, {
-      fix_hint: 'Video ids look like vid_01m67dmrns3v0ezmcbcan7h7es. Use list_videos to find one.',
+      fix_hint: 'Video ids look like vid_01jc8x2k4m5n6p7q8r9s0t1v2w. Use list_videos to find one.',
       suggested_tool_calls: [{ name: 'list_videos', arguments: {} }],
     })
   }
@@ -343,7 +343,7 @@ Example: {"prompt": "A 20-second launch video for our new webhooks feature, endi
 When to use: to check progress after create_video or revise_video, or to fetch download links.
 wait_seconds (0-8) waits in this call for the status to change, so you can poll less often.
 
-Example: {"video_id": "vid_01m67dmrns3v0ezmcbcan7h7es", "wait_seconds": 8}`,
+Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "wait_seconds": 8}`,
       inputSchema: {
         video_id: z.string().describe('The video id (vid_…) or its web URL.'),
         wait_seconds: z
@@ -425,7 +425,7 @@ Example: {"query": "webhooks", "mine": true, "limit": 10}`,
 When to use: the user wants a change to an existing video ("make the end card orange", "shorter", "add our URL").
 Don't: describe the whole video again; describe the change. Only one version per video can be in progress.
 
-Example: {"video_id": "vid_01m67dmrns3v0ezmcbcan7h7es", "change": "Make the end card say \\"Start free today\\""}`,
+Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Make the end card say \\"Start free today\\""}`,
       inputSchema: {
         video_id: z.string().describe('The video id (vid_…) or its web URL.'),
         change: z.string().min(3).max(4000).describe('What should change. Everything else stays.'),
@@ -475,7 +475,7 @@ Example: {"video_id": "vid_01m67dmrns3v0ezmcbcan7h7es", "change": "Make the end 
 When to use: the user wants to share or embed the video publicly. For private sharing, use get_video's download URLs instead.
 Only the video's owner or an admin can publish. Publishing a version that is already public returns its existing links.
 
-Example: {"video_id": "vid_01m67dmrns3v0ezmcbcan7h7es"}`,
+Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w"}`,
       inputSchema: {
         video_id: z.string().describe('The video id (vid_…) or its web URL.'),
         version: z
@@ -520,7 +520,7 @@ Example: {"video_id": "vid_01m67dmrns3v0ezmcbcan7h7es"}`,
       title: 'Unpublish a video',
       description: `Take a version's public link down. It stops working on the next request; copies people already downloaded can't be recalled.
 
-Example: {"video_id": "vid_01m67dmrns3v0ezmcbcan7h7es", "version": 2}`,
+Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "version": 2}`,
       inputSchema: {
         video_id: z.string().describe('The video id (vid_…) or its web URL.'),
         version: z
@@ -555,7 +555,7 @@ Example: {"video_id": "vid_01m67dmrns3v0ezmcbcan7h7es", "version": 2}`,
       title: 'Cancel a video in progress',
       description: `Stop the version of a video that is queued or being made. Earlier versions are kept.
 
-Example: {"video_id": "vid_01m67dmrns3v0ezmcbcan7h7es"}`,
+Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w"}`,
       inputSchema: { video_id: z.string().describe('The video id (vid_…) or its web URL.') },
       annotations: {
         title: 'Cancel a video',

@@ -12,7 +12,7 @@ const files = (id: string, n: number): V['links'] => ({
   poster: `/api/v1/videos/${id}/versions/${n}/poster`,
   gif: `/api/v1/videos/${id}/versions/${n}/gif`,
   captions: `/api/v1/videos/${id}/versions/${n}/captions`,
-  netlifyRun: `https://app.netlify.com/projects/netlify-video-agent/agent-runs/6ae5${id.slice(-8)}`,
+  netlifyRun: `https://app.netlify.com/projects/acme-video-agent/agent-runs/6ae5${id.slice(-8)}`,
 })
 const agent = {
   agent: 'claude',
@@ -125,10 +125,10 @@ function video(
 }
 
 export const people = {
-  david: { id: 'u_david', name: 'David Wells', email: 'david.wells@netlify.com' },
-  priya: { id: 'u_priya', name: 'Priya Shah', email: 'priya.shah@netlify.com' },
-  marco: { id: 'u_marco', name: 'Marco Ruiz', email: 'marco.ruiz@netlify.com' },
-  ada: { id: 'u_ada', name: 'Ada Okafor', email: 'ada.okafor@netlify.com' },
+  sam: { id: 'u_sam', name: 'Sam Rivera', email: 'sam@acme.com' },
+  priya: { id: 'u_priya', name: 'Priya Shah', email: 'priya@acme.com' },
+  marco: { id: 'u_marco', name: 'Marco Ruiz', email: 'marco@acme.com' },
+  ada: { id: 'u_ada', name: 'Ada Okafor', email: 'ada@acme.com' },
 }
 
 /** Which mock asset stands in for each video's files. */
@@ -184,7 +184,7 @@ export const videos: Video[] = [
       publications: [],
     },
   ]),
-  video('vid_teaser', 'Ship faster with preview deploys', '16:9', people.david, [
+  video('vid_teaser', 'Ship faster with preview deploys', '16:9', people.sam, [
     ready('vid_teaser', 2, 'Keep everything, but make the end card text "Start free today".', {
       at: 64,
       took: 2.9,
@@ -194,7 +194,7 @@ export const videos: Video[] = [
       h: 1080,
       bytes: 188228,
       title: 'Ship faster with preview deploys',
-      author: people.david.id,
+      author: people.sam.id,
       parent: 1,
       target: 8,
       pub: 'q4czcinsu9',
@@ -214,7 +214,7 @@ export const videos: Video[] = [
         h: 1080,
         bytes: 181877,
         title: 'Ship faster with preview deploys',
-        author: people.david.id,
+        author: people.sam.id,
         target: 8,
         summary:
           'An 8-second, calm product teaser on a dark background with three beats and an end card that reads "Try it today".',
@@ -319,7 +319,7 @@ export const stats: Stats = {
       versionN: 1,
       stage: 'running',
       startedAt: ago(2.4),
-      runUrl: 'https://app.netlify.com/projects/netlify-video-agent/agent-runs/6ae5making',
+      runUrl: 'https://app.netlify.com/projects/acme-video-agent/agent-runs/6ae5making',
     },
   ],
   queued: 1,
@@ -327,7 +327,7 @@ export const stats: Stats = {
   unresolved: [],
   failuresThisWeek: [{ category: 'needs_input', count: 1 }],
   usage: [
-    { userId: people.david.id, email: people.david.email, week: '2026-10-26', credits: 179, videos: 2 },
+    { userId: people.sam.id, email: people.sam.email, week: '2026-10-26', credits: 179, videos: 2 },
     { userId: people.ada.id, email: people.ada.email, week: '2026-10-26', credits: 237, videos: 2 },
     { userId: people.priya.id, email: people.priya.email, week: '2026-10-26', credits: 92, videos: 2 },
     { userId: people.marco.id, email: people.marco.email, week: '2026-10-26', credits: 192, videos: 2 },

@@ -17,7 +17,7 @@ const { values } = parseArgs({
     agent: { type: 'string', default: 'claude' },
     'deadline-min': { type: 'string', default: '25' },
     'no-wait': { type: 'boolean', default: false },
-    site: { type: 'string', default: process.env.NETLIFY_SITE_ID ?? '3a3f4565-083a-4b98-b01b-9011f70f53df' },
+    site: { type: 'string', default: process.env.NETLIFY_SITE_ID },
   },
 })
 
@@ -26,6 +26,7 @@ const log = (step: string, data: Record<string, unknown> = {}) =>
 
 const promptFile = values['prompt-file']
 if (!promptFile) throw new Error('--prompt-file is required')
+if (!values.site) throw new Error('--site or NETLIFY_SITE_ID is required')
 const prompt = readFileSync(promptFile, 'utf8')
 const token = process.env.RUNNER_API_TOKEN
 const sdk = createAgentRunnerSdk(token ? { token } : {})
@@ -46,7 +47,12 @@ const handle = await sdk.start({
 mkdirSync('spikes/out', { recursive: true })
 const handleFile = `spikes/out/${handle.runnerId}.handle.json`
 writeFileSync(handleFile, sdk.serializeHandle(handle))
-log('started', { runnerId: handle.runnerId, sessionId: handle.currentSessionId, handleFile, ms: Date.now() - started })
+log('started', {
+  runnerId: handle.runnerId,
+  sessionId: handle.currentSessionId,
+  handleFile,
+  ms: Date.now() - started,
+})
 if (values['no-wait']) process.exit(0)
 
 let last = ''
@@ -58,13 +64,16 @@ for (;;) {
       status: r.status,
       ms: Date.now() - started,
       usage: r.usage,
-      ...(r.status === 'succeeded' ? { resultText: r.resultText, deployUrl: r.deployUrl, links: r.links } : {}),
+      ...(r.status === 'succeeded'
+        ? { resultText: r.resultText, deployUrl: r.deployUrl, links: r.links }
+        : {}),
       ...(r.status === 'failed' ? { failure: r.failure } : {}),
     })
     break
   }
   const key = `${snap.state}|${snap.latestStep ?? ''}`
-  if (key !== last) log('running', { state: snap.state, latestStep: snap.latestStep, ms: Date.now() - started })
+  if (key !== last)
+    log('running', { state: snap.state, latestStep: snap.latestStep, ms: Date.now() - started })
   last = key
   if (Date.now() > handle.policy.deadlineAt) {
     await sdk.stop(handle)

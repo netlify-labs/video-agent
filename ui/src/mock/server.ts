@@ -5,9 +5,9 @@ import { ASSETS, people, stats, videos } from './data'
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
 const me = {
-  id: people.david.id,
-  email: people.david.email,
-  name: people.david.name,
+  id: people.sam.id,
+  email: people.sam.email,
+  name: people.sam.name,
   role: 'admin',
   via: 'session',
 }
@@ -38,9 +38,9 @@ export function installMock() {
             id: 'admission',
             label: 'Who can sign up',
             status: 'ok',
-            detail: 'Confirmed emails at netlify.com.',
+            detail: 'Confirmed emails at acme.com.',
           },
-          { id: 'admins', label: 'First admins', status: 'ok', detail: 'david.wells@netlify.com' },
+          { id: 'admins', label: 'First admins', status: 'ok', detail: 'sam@acme.com' },
           {
             id: 'identity-registration',
             label: 'Identity registration',
@@ -67,7 +67,7 @@ export function installMock() {
       })
     }
     if (p === '/api/openapi.json') return json(spec)
-    if (p === '/api/v1/config') return json({ admission: ['netlify.com'], siteUrl: window.location.origin })
+    if (p === '/api/v1/config') return json({ admission: ['acme.com'], siteUrl: window.location.origin })
     if (p === '/api/v1/me') return json(me)
     if (p === '/api/v1/stats') return json(stats)
     if (p === '/api/v1/users') {

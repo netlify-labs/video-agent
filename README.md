@@ -13,7 +13,8 @@ API key.
 - **A web app** for your team: write a prompt, pick a shape (16:9, 9:16, 1:1, 4:5), watch it being made, play and download the result (MP4, poster, GIF preview, captions).
 - **Revisions:** "make the end card orange" starts a new version from the previous one's composition. Every version keeps its prompt and author.
 - **Publishing:** any version can get a public share page (with link previews for Slack and social), a raw MP4 URL, a GIF and an embed snippet. Unpublishing takes the link down immediately.
-- **An API** (`/api/docs`) with API keys and signed webhooks, so CI and scripts can make videos too.
+- **An API** with API keys and signed webhooks, so CI and scripts can make videos too. Its reference is built into the app (**API docs**).
+- **MCP tools**, so people can ask Claude, Cursor or any MCP client for a video.
 - **Your brand:** put your brand guide, logos and fonts in [`context/`](context/README.md). Every video follows it.
 
 ## Before you deploy
@@ -96,7 +97,8 @@ Prompts are visible to your Netlify team in the project's Agent Runs page.
 
 ## The API
 
-Reference: `https://<your-site>/api/docs` (OpenAPI at `/api/openapi.json`, committed as [`openapi.json`](openapi.json)).
+Reference: the app's **API docs** page (`/docs`), built from the OpenAPI spec at `/api/openapi.json` (committed as
+[`openapi.json`](openapi.json)). A standalone copy is at `/api/docs`.
 
 ```sh
 KEY=nva_...   # create one on the API keys page
@@ -140,4 +142,6 @@ in `ui/`. The design and its reasoning are in [`PLAN.md`](PLAN.md); measurements
 
 ## License
 
-MIT
+MIT. Third-party pieces keep their own licences: IBM Plex fonts (SIL Open Font License 1.1, installed from npm
+via `@fontsource`), Scalar API reference (MIT), Mantine (MIT), HyperFrames (see its package). The template ships no
+Netlify brand assets; `context/` is neutral until you fill it in.
