@@ -861,6 +861,9 @@
                 "jobId": {
                   "type": "string"
                 },
+                "title": {
+                  "type": "string"
+                },
                 "versionN": {
                   "type": "integer"
                 },
@@ -883,6 +886,7 @@
               "required": [
                 "attemptId",
                 "jobId",
+                "title",
                 "versionN",
                 "stage",
                 "startedAt",
@@ -910,6 +914,9 @@
                 "jobId": {
                   "type": "string"
                 },
+                "title": {
+                  "type": "string"
+                },
                 "versionN": {
                   "type": "integer"
                 },
@@ -923,6 +930,7 @@
               "required": [
                 "attemptId",
                 "jobId",
+                "title",
                 "versionN",
                 "runUrl"
               ]

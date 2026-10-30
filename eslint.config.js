@@ -3,7 +3,7 @@ import tseslint from 'typescript-eslint'
 
 export default tseslint.config(
   {
-    ignores: ['node_modules', 'ui/dist', 'video', '.netlify', '.beads', '.nax', '.render', 'netlify/database/migrations', 'netlify/edge-functions', 'spikes', 'ui/src/api/schema.d.ts', '**/*.cjs'],
+    ignores: ['node_modules', 'ui/dist', 'ui/dist-mock', '.taste-skill', 'video', '.netlify', '.beads', '.nax', '.render', 'netlify/database/migrations', 'netlify/edge-functions', 'spikes', 'ui/src/api/schema.d.ts', '**/*.cjs'],
   },
   js.configs.recommended,
   ...tseslint.configs.strictTypeChecked,

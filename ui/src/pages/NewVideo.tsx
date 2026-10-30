@@ -1,8 +1,22 @@
-import { Button, Card, Group, NumberInput, Paper, Stack, Switch, Text, TextInput, Textarea, Title, UnstyledButton } from '@mantine/core'
+import {
+  Button,
+  Card,
+  Group,
+  NumberInput,
+  SegmentedControl,
+  Stack,
+  Text,
+  TextInput,
+  Textarea,
+  Title,
+  UnstyledButton,
+} from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { useState } from 'react'
-import { useNavigate } from 'react-router'
+import { Link, useNavigate } from 'react-router'
 import { $api, errorMessage, newIdempotencyKey } from '../api/client'
+import { Status, fileUrl, relativeTime } from '../components/bits'
+import { brand } from '../theme'
 
 const EXAMPLES = [
   'A 20-second launch video for our new webhooks feature: what it is, one example event, and an end card with "Available today".',
@@ -10,110 +24,316 @@ const EXAMPLES = [
   'A one-minute docs tutorial: how to add an environment variable to a project and redeploy it, in three steps.',
 ]
 
-const ASPECTS = [
-  { value: '16:9', label: 'Landscape 16:9', w: 32, h: 18 },
-  { value: '9:16', label: 'Vertical 9:16', w: 18, h: 32 },
-  { value: '1:1', label: 'Square 1:1', w: 24, h: 24 },
-  { value: '4:5', label: 'Portrait 4:5', w: 22, h: 27 },
+const SHAPES = [
+  { value: '16:9', label: 'Landscape', note: 'Web, slides, YouTube', w: 48, h: 27 },
+  { value: '9:16', label: 'Vertical', note: 'Reels, Shorts, TikTok', w: 18, h: 32 },
+  { value: '1:1', label: 'Square', note: 'Feeds', w: 30, h: 30 },
+  { value: '4:5', label: 'Portrait', note: 'LinkedIn, Instagram', w: 26, h: 32 },
 ] as const
+type Shape = (typeof SHAPES)[number]['value']
 
 function useCreate() {
   const navigate = useNavigate()
   const [key] = useState(newIdempotencyKey)
   const create = $api.useMutation('post', '/api/v1/videos', {
     onSuccess: (v) => void navigate(`/videos/${v.id}`),
-    onError: (e) => notifications.show({ color: 'red', title: "Couldn't start the video", message: errorMessage(e) }),
+    onError: (e) =>
+      notifications.show({ color: 'red', title: "Couldn't start the video", message: errorMessage(e) }),
   })
   return { create, key }
 }
 
+/** First run in an empty library: the composer where the videos will appear. */
 export function QuickCreate() {
   const [prompt, setPrompt] = useState('')
   const { create, key } = useCreate()
   return (
-    <Paper withBorder p="xl" radius="lg">
-      <Stack>
-        <Title order={3}>Make your first video</Title>
-        <Textarea autosize minRows={3} placeholder="Describe the video you want…" value={prompt} onChange={(e) => { setPrompt(e.currentTarget.value) }} />
+    <Card>
+      <Stack gap="md" maw={760}>
+        <Title order={2}>Make the first video</Title>
+        <Textarea
+          aria-label="What should the video show?"
+          autosize
+          minRows={3}
+          placeholder="Who it's for, the message, any exact words to show, and how it should end"
+          value={prompt}
+          onChange={(e) => {
+            setPrompt(e.currentTarget.value)
+          }}
+        />
         <Group>
-          <Button disabled={prompt.trim().length < 10} loading={create.isPending} onClick={() => { create.mutate({ body: { prompt }, params: { header: { 'idempotency-key': key } } }) }}>
-            Create
+          <Button
+            disabled={prompt.trim().length < 10}
+            loading={create.isPending}
+            onClick={() => {
+              create.mutate({ body: { prompt }, params: { header: { 'idempotency-key': key } } })
+            }}
+          >
+            Make it
           </Button>
+          <Text size="sm" c="var(--va-muted)">
+            Usually ready in 3 to 8 minutes.{' '}
+            <Link to="/new" style={{ color: 'inherit' }}>
+              More options
+            </Link>
+          </Text>
         </Group>
-        <Text size="sm" c="dimmed">
-          Or start from an example:
+        <Text size="sm" c="var(--va-muted)" mt="sm">
+          Start from one of these
         </Text>
-        {EXAMPLES.map((e) => (
-          <UnstyledButton key={e} onClick={() => { setPrompt(e) }}>
-            <Text size="sm" c="dimmed" td="underline">
-              {e}
-            </Text>
-          </UnstyledButton>
-        ))}
+        <Stack gap={8}>
+          {EXAMPLES.map((e) => (
+            <UnstyledButton
+              key={e}
+              className="va-raised"
+              p="sm"
+              onClick={() => {
+                setPrompt(e)
+              }}
+            >
+              <Text size="sm">{e}</Text>
+            </UnstyledButton>
+          ))}
+        </Stack>
       </Stack>
-    </Paper>
+    </Card>
+  )
+}
+
+/** Your last few videos, to reuse a prompt or check on one in progress. */
+function RecentMine() {
+  const mine = $api.useQuery('get', '/api/v1/videos', { params: { query: { owner: 'me', limit: 4 } } })
+  const items = mine.data?.items ?? []
+  return (
+    <Card>
+      <Text fw={600} mb="sm">
+        Your recent videos
+      </Text>
+      {items.length === 0 ? (
+        <div className="va-empty">{mine.isLoading ? 'Loading…' : 'None yet. This will be your first.'}</div>
+      ) : (
+        <Stack gap={4}>
+          {items.map((v) => {
+            const ready = v.versions.find((x) => x.status === 'ready')
+            return (
+              <Link
+                key={v.id}
+                to={`/videos/${v.id}`}
+                className="va-version"
+                style={{ textDecoration: 'none' }}
+              >
+                <div className="va-poster">
+                  {ready ? <img src={fileUrl(v.id, ready.n, 'poster')} alt="" loading="lazy" /> : null}
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <Text size="sm" fw={500} truncate>
+                    {v.title}
+                  </Text>
+                  <Group gap={8} mt={2}>
+                    <Status status={v.status} size="xs" />
+                    <Text size="xs" c="var(--va-faint)">
+                      {relativeTime(v.createdAt)}
+                    </Text>
+                  </Group>
+                </div>
+              </Link>
+            )
+          })}
+        </Stack>
+      )}
+    </Card>
   )
 }
 
 export function NewVideoPage() {
   const [prompt, setPrompt] = useState('')
-  const [aspect, setAspect] = useState<(typeof ASPECTS)[number]['value']>('16:9')
-  const [auto, setAuto] = useState(true)
+  const [shape, setShape] = useState<Shape>('16:9')
+  const [lengthMode, setLengthMode] = useState<'auto' | 'set'>('auto')
   const [seconds, setSeconds] = useState<number | string>(30)
   const [title, setTitle] = useState('')
   const { create, key } = useCreate()
-  const valid = prompt.trim().length >= 10 && prompt.length <= 4000 && (auto || Number(seconds) > 0)
+  const valid =
+    prompt.trim().length >= 10 && prompt.length <= 4000 && (lengthMode === 'auto' || Number(seconds) >= 3)
+
+  const submit = () => {
+    create.mutate({
+      body: {
+        prompt,
+        aspect: shape,
+        ...(lengthMode === 'set' ? { durationSec: Number(seconds) } : {}),
+        ...(title.trim() ? { title: title.trim() } : {}),
+      },
+      params: { header: { 'idempotency-key': key } },
+    })
+  }
 
   return (
-    <Stack maw={760}>
-      <Title order={2}>New video</Title>
-      <Textarea
-        label="What should the video show?"
-        description="Say who it's for, the key message, any exact text to show, and how it should end. Your company's brand and product context are applied automatically."
-        autosize
-        minRows={5}
-        maxLength={4000}
-        value={prompt}
-        onChange={(e) => { setPrompt(e.currentTarget.value) }}
-        rightSection={<Text size="xs" c="dimmed">{prompt.length}/4000</Text>}
-        rightSectionWidth={80}
-        styles={{ section: { alignItems: 'flex-end', paddingBottom: 6 } }}
-      />
-      <div>
-        <Text size="sm" fw={500} mb={6}>
-          Shape
-        </Text>
-        <Group gap="sm">
-          {ASPECTS.map((a) => (
-            <Card key={a.value} withBorder padding="sm" radius="md" component="button" type="button" onClick={() => { setAspect(a.value) }} style={{ cursor: 'pointer', borderColor: aspect === a.value ? 'var(--mantine-primary-color-filled)' : undefined, borderWidth: aspect === a.value ? 2 : 1 }} aria-pressed={aspect === a.value}>
-              <Stack align="center" gap={6}>
-                <div style={{ width: a.w * 1.6, height: a.h * 1.6, border: '2px solid currentColor', borderRadius: 4, opacity: 0.8 }} />
-                <Text size="xs">{a.label}</Text>
-              </Stack>
-            </Card>
-          ))}
-        </Group>
+    <>
+      <div className="va-title-row">
+        <div>
+          <Title order={1}>New video</Title>
+          <div className="va-sub">
+            Describe it once. The agent writes, checks and renders it, usually in 3 to 8 minutes.
+          </div>
+        </div>
       </div>
-      <Group align="end">
-        <Switch label="Auto length" description="The agent picks a sensible length" checked={auto} onChange={(e) => { setAuto(e.currentTarget.checked) }} />
-        {!auto ? <NumberInput label="Target length (seconds)" min={3} value={seconds} onChange={setSeconds} w={200} /> : null}
-      </Group>
-      <TextInput label="Title (optional)" maxLength={120} value={title} onChange={(e) => { setTitle(e.currentTarget.value) }} />
-      <Group>
-        <Button
-          size="md"
-          disabled={!valid}
-          loading={create.isPending}
-          onClick={() => {
-            create.mutate({
-              body: { prompt, aspect, ...(auto ? {} : { durationSec: Number(seconds) }), ...(title.trim() ? { title: title.trim() } : {}) },
-              params: { header: { 'idempotency-key': key } },
-            })
-          }}
-        >
-          Create video
-        </Button>
-      </Group>
-    </Stack>
+      <div className="va-split">
+        <Card>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              if (valid) submit()
+            }}
+          >
+            <Stack gap="lg">
+              <Textarea
+                label="What should the video show?"
+                description="Who it's for, the one message, any exact words to show on screen, and how it should end."
+                autosize
+                minRows={6}
+                maxLength={4000}
+                value={prompt}
+                onChange={(e) => {
+                  setPrompt(e.currentTarget.value)
+                }}
+                data-autofocus
+                autoFocus
+              />
+              <Text size="xs" c="var(--va-faint)" ta="right" mt={-16} className="num">
+                {prompt.length} / 4,000
+              </Text>
+              <div>
+                <Text size="sm" fw={500} mb={8} id="shape-label">
+                  Shape
+                </Text>
+                <div
+                  role="radiogroup"
+                  aria-labelledby="shape-label"
+                  style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8 }}
+                >
+                  {SHAPES.map((s) => {
+                    const on = shape === s.value
+                    return (
+                      <UnstyledButton
+                        key={s.value}
+                        role="radio"
+                        aria-checked={on}
+                        onClick={() => {
+                          setShape(s.value)
+                        }}
+                        className="va-raised"
+                        p="sm"
+                        style={{ outline: on ? '2px solid var(--va-text)' : 'none', outlineOffset: -2 }}
+                      >
+                        <Stack gap={8} align="center">
+                          <div style={{ height: 34, display: 'grid', placeItems: 'center' }}>
+                            <div
+                              style={{
+                                width: s.w,
+                                height: s.h,
+                                borderRadius: 3,
+                                border: `2px solid ${on ? 'var(--va-text)' : 'var(--va-faint)'}`,
+                              }}
+                            />
+                          </div>
+                          <div style={{ textAlign: 'center' }}>
+                            <Text size="sm" fw={500}>
+                              {s.label}{' '}
+                              <span className="num" style={{ color: 'var(--va-muted)', fontWeight: 400 }}>
+                                {s.value}
+                              </span>
+                            </Text>
+                            <Text size="xs" c="var(--va-faint)" visibleFrom="sm">
+                              {s.note}
+                            </Text>
+                          </div>
+                        </Stack>
+                      </UnstyledButton>
+                    )
+                  })}
+                </div>
+              </div>
+              <Group align="end" gap="sm">
+                <div>
+                  <Text size="sm" fw={500} mb={8}>
+                    Length
+                  </Text>
+                  <SegmentedControl
+                    value={lengthMode}
+                    onChange={(v) => {
+                      setLengthMode(v)
+                    }}
+                    data={[
+                      { label: 'Let the agent decide', value: 'auto' },
+                      { label: 'Set a target', value: 'set' },
+                    ]}
+                  />
+                </div>
+                {lengthMode === 'set' ? (
+                  <NumberInput
+                    aria-label="Target length in seconds"
+                    min={3}
+                    value={seconds}
+                    onChange={setSeconds}
+                    w={140}
+                    suffix=" s"
+                    radius="xl"
+                  />
+                ) : null}
+              </Group>
+              <TextInput
+                label="Title"
+                description="Optional. The agent names it otherwise."
+                maxLength={120}
+                value={title}
+                onChange={(e) => {
+                  setTitle(e.currentTarget.value)
+                }}
+              />
+              <Group>
+                <Button type="submit" disabled={!valid} loading={create.isPending}>
+                  Make the video
+                </Button>
+                <Text size="sm" c="var(--va-faint)">
+                  You can revise it in plain words afterwards.
+                </Text>
+              </Group>
+            </Stack>
+          </form>
+        </Card>
+        <div className="va-rail">
+          <Card>
+            <Text fw={600} mb={8}>
+              {brand.isDefault ? 'Brand context: the neutral default' : `${brand.name} brand context`}
+            </Text>
+            <Text size="sm" c="var(--va-muted)">
+              {brand.isDefault
+                ? 'Videos use a neutral look until an admin fills in context/ with your brand guide, logos and fonts.'
+                : 'Every video follows the brand guide, logos and fonts in context/. Ask for something different in the prompt when you need to.'}
+            </Text>
+          </Card>
+          <Card>
+            <Text fw={600} mb={8}>
+              Prompts that work
+            </Text>
+            <Stack gap={10}>
+              <Text size="sm" c="var(--va-muted)">
+                Quote the exact words you want on screen. The agent keeps quoted text as written.
+              </Text>
+              <Text size="sm" c="var(--va-muted)">
+                Say the audience and the one thing they should remember.
+              </Text>
+              <Text size="sm" c="var(--va-muted)">
+                Describe the ending: an end card, a call to action, a URL.
+              </Text>
+              <Text size="sm" c="var(--va-muted)">
+                Videos are silent, with captions. Narration and music aren't supported yet.
+              </Text>
+            </Stack>
+          </Card>
+          <RecentMine />
+        </div>
+      </div>
+    </>
   )
 }

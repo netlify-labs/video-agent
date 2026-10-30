@@ -5,7 +5,12 @@ import { ApiError } from '../lib/errors.js'
 import { isManifest } from './finalize.js'
 import { isTerminal } from './types.js'
 
-export async function receiveCallback(deps: Deps, attemptId: string, token: string | null, body: unknown): Promise<void> {
+export async function receiveCallback(
+  deps: Deps,
+  attemptId: string,
+  token: string | null,
+  body: unknown,
+): Promise<void> {
   const a = await deps.store.getAttempt(attemptId)
   if (!a || !token || !a.callbackTokenHash || !safeEqual(a.callbackTokenHash, sha256Hex(token))) {
     throw new ApiError('unauthorized', 'Invalid callback token.')
@@ -21,11 +26,18 @@ export async function receiveCallback(deps: Deps, attemptId: string, token: stri
   await deps.store.tx(async (repo) => {
     const prior = await repo.getReceipt(attemptId)
     if (prior) {
-      if (prior.manifestHash !== hash) throw new ApiError('conflict', 'A different manifest was already received for this attempt.')
+      if (prior.manifestHash !== hash)
+        throw new ApiError('conflict', 'A different manifest was already received for this attempt.')
       return
     }
-    await repo.insertReceipt({ attemptId, manifest: body, manifestHash: hash, receivedAt: deps.clock.now().toISOString() })
-    if (!isTerminal(a.stage)) await repo.updateAttempt(attemptId, { nextActionAt: deps.clock.now().toISOString() })
+    await repo.insertReceipt({
+      attemptId,
+      manifest: body,
+      manifestHash: hash,
+      receivedAt: deps.clock.now().toISOString(),
+    })
+    if (!isTerminal(a.stage))
+      await repo.updateAttempt(attemptId, { nextActionAt: deps.clock.now().toISOString() })
   })
   deps.log.info('callback.received', { attemptId })
 }

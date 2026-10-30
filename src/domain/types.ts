@@ -28,7 +28,8 @@ export const TERMINAL_STAGES: readonly Stage[] = ['ready', 'failed', 'cancelled'
 export const isTerminal = (s: Stage) => TERMINAL_STAGES.includes(s)
 
 /** What a version (and a video) shows: derived from its latest attempt's stage. */
-export type VersionStatus = 'queued' | 'running' | 'finishing' | 'ready' | 'failed' | 'cancelled' | 'timed_out'
+export type VersionStatus =
+  'queued' | 'running' | 'finishing' | 'ready' | 'failed' | 'cancelled' | 'timed_out'
 
 export function statusForStage(stage: Stage): VersionStatus {
   switch (stage) {
@@ -232,12 +233,21 @@ export interface Manifest {
   attemptId: string
   title: string
   summary: string
-  files: Record<'video.mp4' | 'poster.jpg' | 'preview.gif' | 'captions.vtt' | 'source.tar.gz', { sha256: string; bytes: number }>
+  files: Record<
+    'video.mp4' | 'poster.jpg' | 'preview.gif' | 'captions.vtt' | 'source.tar.gz',
+    { sha256: string; bytes: number }
+  >
   durationSec: number
   width: number
   height: number
   tools?: Record<string, string>
 }
 
-export const OUTPUT_FILES = ['video.mp4', 'poster.jpg', 'preview.gif', 'captions.vtt', 'source.tar.gz'] as const
+export const OUTPUT_FILES = [
+  'video.mp4',
+  'poster.jpg',
+  'preview.gif',
+  'captions.vtt',
+  'source.tar.gz',
+] as const
 export type OutputFile = (typeof OUTPUT_FILES)[number]

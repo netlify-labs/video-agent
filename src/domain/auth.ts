@@ -33,12 +33,17 @@ export function emailDomain(email: string): string {
 }
 
 /** Admission rules for a confirmed Identity account under the configured mode. */
-export function admits(config: Deps['config'], user: IdentityUser): { ok: true; via: 'domain' | 'invite' } | { ok: false; reason: string } {
+export function admits(
+  config: Deps['config'],
+  user: IdentityUser,
+): { ok: true; via: 'domain' | 'invite' } | { ok: false; reason: string } {
   if (!user.confirmed) return { ok: false, reason: 'Confirm your email address first.' }
   const mode = config.allowedEmailDomains
   if (mode === null) return { ok: false, reason: 'This deployment has no admission rule configured yet.' }
   if (mode === 'invite-only') {
-    return user.invited ? { ok: true, via: 'invite' } : { ok: false, reason: 'This deployment is invite-only.' }
+    return user.invited
+      ? { ok: true, via: 'invite' }
+      : { ok: false, reason: 'This deployment is invite-only.' }
   }
   return mode.includes(emailDomain(user.email))
     ? { ok: true, via: 'domain' }
@@ -54,7 +59,10 @@ async function ensureUserRow(deps: Deps, user: IdentityUser): Promise<UserRow> {
     if (existing.admittedVia === 'domain' && Array.isArray(mode) && !mode.includes(emailDomain(user.email))) {
       throw new ApiError('forbidden', 'Your email address is no longer in an allowed domain.')
     }
-    if (existing.email !== user.email.toLowerCase() || now.slice(0, 13) !== existing.lastSeenAt.slice(0, 13)) {
+    if (
+      existing.email !== user.email.toLowerCase() ||
+      now.slice(0, 13) !== existing.lastSeenAt.slice(0, 13)
+    ) {
       await deps.store.updateUser(user.id, { email: user.email.toLowerCase(), lastSeenAt: now })
     }
     return { ...existing, email: user.email.toLowerCase() }
@@ -98,8 +106,16 @@ export async function principalFromRequest(deps: Deps, req: Request): Promise<Pr
     if (!live?.confirmed) throw new ApiError('unauthorized', "This key's owner no longer has an account.")
     const row = await ensureUserRow(deps, live)
     const now = deps.clock.now().toISOString()
-    if (!key.lastUsedAt || now.slice(0, 15) !== key.lastUsedAt.slice(0, 15)) await deps.store.updateKey(key.id, { lastUsedAt: now })
-    return { kind: 'apiKey', userId: row.id, email: row.email, name: row.name, role: row.role, apiKeyId: key.id }
+    if (!key.lastUsedAt || now.slice(0, 15) !== key.lastUsedAt.slice(0, 15))
+      await deps.store.updateKey(key.id, { lastUsedAt: now })
+    return {
+      kind: 'apiKey',
+      userId: row.id,
+      email: row.email,
+      name: row.name,
+      role: row.role,
+      apiKeyId: key.id,
+    }
   }
 
   const session = await deps.identity.sessionUser(req)
@@ -117,5 +133,6 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 export function assertSameOrigin(req: Request, principal: Principal) {
   if (principal.kind !== 'user' || SAFE_METHODS.has(req.method)) return
   const origin = req.headers.get('origin')
-  if (!origin || origin !== new URL(req.url).origin) throw new ApiError('forbidden', 'Cross-site request refused.')
+  if (!origin || origin !== new URL(req.url).origin)
+    throw new ApiError('forbidden', 'Cross-site request refused.')
 }

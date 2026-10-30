@@ -25,7 +25,11 @@ export function prodDeps(): Deps {
     config,
     ...partial,
     identity: netlifyIdentity,
-    runner: createRunner({ siteId: config.siteId ?? '', siteName: env.SITE_NAME ?? config.siteId ?? '', token: token ?? '' }),
+    runner: createRunner({
+      siteId: config.siteId ?? '',
+      siteName: env.SITE_NAME ?? config.siteId ?? '',
+      token: token ?? '',
+    }),
     platform: createPlatform({
       siteId: config.siteId,
       siteUrl: config.siteUrl,

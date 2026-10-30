@@ -1,5 +1,20 @@
 // Postgres store on Netlify Database through Drizzle. Tests run it against PGlite.
-import { and, asc, desc, eq, gte, ilike, inArray, isNull, lt, lte, notInArray, or, sql, exists } from 'drizzle-orm'
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gte,
+  ilike,
+  inArray,
+  isNull,
+  lt,
+  lte,
+  notInArray,
+  or,
+  sql,
+  exists,
+} from 'drizzle-orm'
 import type { PgAsyncDatabase } from 'drizzle-orm/pg-core/async/db'
 import * as t from '../../db/schema.js'
 import { SLOT_STAGES, TERMINAL_STAGES } from '../domain/types.js'
@@ -53,7 +68,11 @@ function repoFor(db: Db): Repo {
     },
     getKey: async (id) => one<ApiKeyRow>(await db.select().from(t.apiKeys).where(eq(t.apiKeys.id, id))),
     listKeys: async (ownerId) =>
-      (await db.select().from(t.apiKeys).where(eq(t.apiKeys.ownerId, ownerId)).orderBy(desc(t.apiKeys.createdAt))),
+      await db
+        .select()
+        .from(t.apiKeys)
+        .where(eq(t.apiKeys.ownerId, ownerId))
+        .orderBy(desc(t.apiKeys.createdAt)),
     updateKey: async (id, patch) => {
       await db.update(t.apiKeys).set(patch).where(eq(t.apiKeys.id, id))
     },
@@ -89,7 +108,10 @@ function repoFor(db: Db): Repo {
       }
       if (q.cursor) {
         const c = q.cursor
-        const before = or(lt(t.jobs.createdAt, c.createdAt), and(eq(t.jobs.createdAt, c.createdAt), lt(t.jobs.id, c.id)))
+        const before = or(
+          lt(t.jobs.createdAt, c.createdAt),
+          and(eq(t.jobs.createdAt, c.createdAt), lt(t.jobs.id, c.id)),
+        )
         if (before) conds.push(before)
       }
       return (await db
@@ -103,11 +125,23 @@ function repoFor(db: Db): Repo {
       await db.insert(t.versions).values(row)
     },
     getVersion: async (jobId, n) =>
-      one<VersionRow>(await db.select().from(t.versions).where(and(eq(t.versions.jobId, jobId), eq(t.versions.n, n)))),
+      one<VersionRow>(
+        await db
+          .select()
+          .from(t.versions)
+          .where(and(eq(t.versions.jobId, jobId), eq(t.versions.n, n))),
+      ),
     listVersions: async (jobId) =>
-      (await db.select().from(t.versions).where(eq(t.versions.jobId, jobId)).orderBy(desc(t.versions.n))) as VersionRow[],
+      (await db
+        .select()
+        .from(t.versions)
+        .where(eq(t.versions.jobId, jobId))
+        .orderBy(desc(t.versions.n))) as VersionRow[],
     updateVersion: async (jobId, n, patch) => {
-      await db.update(t.versions).set(patch).where(and(eq(t.versions.jobId, jobId), eq(t.versions.n, n)))
+      await db
+        .update(t.versions)
+        .set(patch)
+        .where(and(eq(t.versions.jobId, jobId), eq(t.versions.n, n)))
     },
 
     insertAttempt: async (row) => {
@@ -118,7 +152,9 @@ function repoFor(db: Db): Repo {
       return one<AttemptRow>(opts?.lock ? await q.for('update') : await q)
     },
     updateAttempt: async (id, patch, expectStage) => {
-      const where = expectStage ? and(eq(t.attempts.id, id), eq(t.attempts.stage, expectStage)) : eq(t.attempts.id, id)
+      const where = expectStage
+        ? and(eq(t.attempts.id, id), eq(t.attempts.stage, expectStage))
+        : eq(t.attempts.id, id)
       const rows = await db.update(t.attempts).set(patch).where(where).returning({ id: t.attempts.id })
       return rows.length > 0
     },
@@ -146,7 +182,11 @@ function repoFor(db: Db): Repo {
           .limit(1),
       ),
     listAttempts: async (jobId) =>
-      (await db.select().from(t.attempts).where(eq(t.attempts.jobId, jobId)).orderBy(desc(t.attempts.queuedAt))) as AttemptRow[],
+      (await db
+        .select()
+        .from(t.attempts)
+        .where(eq(t.attempts.jobId, jobId))
+        .orderBy(desc(t.attempts.queuedAt))) as AttemptRow[],
     listDueAttempts: async (now, limit) =>
       (await db
         .select()
@@ -172,7 +212,12 @@ function repoFor(db: Db): Repo {
         await db
           .select()
           .from(t.attempts)
-          .where(and(eq(t.attempts.stage, 'queued'), or(isNull(t.attempts.nextActionAt), lte(t.attempts.nextActionAt, now))))
+          .where(
+            and(
+              eq(t.attempts.stage, 'queued'),
+              or(isNull(t.attempts.nextActionAt), lte(t.attempts.nextActionAt, now)),
+            ),
+          )
           .orderBy(asc(t.attempts.queuedAt))
           .limit(1)
           .for('update', { skipLocked: true }),
@@ -182,7 +227,11 @@ function repoFor(db: Db): Repo {
       await db.select().from(t.queueControl).where(eq(t.queueControl.id, 1)).for('update')
     },
     listAttemptsByStage: async (stages, limit) =>
-      (await db.select().from(t.attempts).where(inArray(t.attempts.stage, stages)).limit(limit)) as AttemptRow[],
+      (await db
+        .select()
+        .from(t.attempts)
+        .where(inArray(t.attempts.stage, stages))
+        .limit(limit)) as AttemptRow[],
 
     upsertOutput: async (row) => {
       await db
@@ -191,22 +240,29 @@ function repoFor(db: Db): Repo {
         .onConflictDoUpdate({ target: [t.outputs.jobId, t.outputs.versionN], set: row })
     },
     getOutput: async (jobId, n) =>
-      one<OutputRow>(await db.select().from(t.outputs).where(and(eq(t.outputs.jobId, jobId), eq(t.outputs.versionN, n)))),
+      one<OutputRow>(
+        await db
+          .select()
+          .from(t.outputs)
+          .where(and(eq(t.outputs.jobId, jobId), eq(t.outputs.versionN, n))),
+      ),
     insertPublication: async (row) => {
       await db.insert(t.publications).values(row)
     },
-    getPublication: async (slug) => one<PublicationRow>(await db.select().from(t.publications).where(eq(t.publications.slug, slug))),
+    getPublication: async (slug) =>
+      one<PublicationRow>(await db.select().from(t.publications).where(eq(t.publications.slug, slug))),
     listPublications: async (jobId) =>
-      (await db
+      await db
         .select()
         .from(t.publications)
         .where(eq(t.publications.jobId, jobId))
-        .orderBy(desc(t.publications.publishedAt))),
+        .orderBy(desc(t.publications.publishedAt)),
     updatePublication: async (slug, patch) => {
       await db.update(t.publications).set(patch).where(eq(t.publications.slug, slug))
     },
 
-    getReceipt: async (id) => one<ReceiptRow>(await db.select().from(t.callbackReceipts).where(eq(t.callbackReceipts.attemptId, id))),
+    getReceipt: async (id) =>
+      one<ReceiptRow>(await db.select().from(t.callbackReceipts).where(eq(t.callbackReceipts.attemptId, id))),
     insertReceipt: async (row) => {
       await db.insert(t.callbackReceipts).values(row)
     },
@@ -215,14 +271,24 @@ function repoFor(db: Db): Repo {
         await db
           .select()
           .from(t.idempotencyKeys)
-          .where(and(eq(t.idempotencyKeys.principalId, p), eq(t.idempotencyKeys.operation, op), eq(t.idempotencyKeys.key, key))),
+          .where(
+            and(
+              eq(t.idempotencyKeys.principalId, p),
+              eq(t.idempotencyKeys.operation, op),
+              eq(t.idempotencyKeys.key, key),
+            ),
+          ),
       ),
     insertIdempotency: async (row) => {
       await db.insert(t.idempotencyKeys).values(row)
     },
     deleteExpiredIdempotency: async (now) =>
-      (await db.delete(t.idempotencyKeys).where(lte(t.idempotencyKeys.expiresAt, now)).returning({ k: t.idempotencyKeys.key }))
-        .length,
+      (
+        await db
+          .delete(t.idempotencyKeys)
+          .where(lte(t.idempotencyKeys.expiresAt, now))
+          .returning({ k: t.idempotencyKeys.key })
+      ).length,
 
     insertWebhookEvent: async (row) => {
       await db.insert(t.webhookEvents).values(row)
@@ -258,9 +324,17 @@ function repoFor(db: Db): Repo {
 
     usageSince: async (since) => {
       const rows = await db
-        .select({ authorId: t.versions.authorId, queuedAt: t.attempts.queuedAt, usage: t.attempts.usage, stage: t.attempts.stage })
+        .select({
+          authorId: t.versions.authorId,
+          queuedAt: t.attempts.queuedAt,
+          usage: t.attempts.usage,
+          stage: t.attempts.stage,
+        })
         .from(t.attempts)
-        .innerJoin(t.versions, and(eq(t.versions.jobId, t.attempts.jobId), eq(t.versions.n, t.attempts.versionN)))
+        .innerJoin(
+          t.versions,
+          and(eq(t.versions.jobId, t.attempts.jobId), eq(t.versions.n, t.attempts.versionN)),
+        )
         .where(gte(t.attempts.queuedAt, since))
       const out = new Map<string, { userId: string; week: string; credits: number | null; videos: number }>()
       for (const r of rows) {
@@ -268,7 +342,13 @@ function repoFor(db: Db): Repo {
         const k = `${r.authorId}|${week}`
         const row = out.get(k) ?? { userId: r.authorId, week, credits: 0, videos: 0 }
         const c = (r.usage as { totalCreditsCost?: number } | null)?.totalCreditsCost
-        if (row.credits !== null) row.credits = c === undefined ? (TERMINAL_STAGES.includes(r.stage as never) ? null : row.credits) : row.credits + c
+        if (row.credits !== null)
+          row.credits =
+            c === undefined
+              ? TERMINAL_STAGES.includes(r.stage as never)
+                ? null
+                : row.credits
+              : row.credits + c
         row.videos += 1
         out.set(k, row)
       }

@@ -2,7 +2,8 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { inspectMp4, Mp4Error, sniff } from './mp4.js'
 
-const fx = (name: string) => new Uint8Array(readFileSync(new URL(`../../../test/fixtures/${name}`, import.meta.url)))
+const fx = (name: string) =>
+  new Uint8Array(readFileSync(new URL(`../../../test/fixtures/${name}`, import.meta.url)))
 
 describe('inspectMp4', () => {
   it.each([

@@ -102,7 +102,9 @@ export function inspectMp4(bytes: Uint8Array): Mp4Info {
   for (const trak of find(view, moov, ['trak'], counter)) {
     const hdlr = find(view, trak, ['mdia', 'hdlr'], counter)[0]
     if (!hdlr) continue
-    const handler = String.fromCharCode(...bytes.subarray(hdlr.start + hdlr.headerSize + 8, hdlr.start + hdlr.headerSize + 12))
+    const handler = String.fromCharCode(
+      ...bytes.subarray(hdlr.start + hdlr.headerSize + 8, hdlr.start + hdlr.headerSize + 12),
+    )
     if (handler !== 'vide') continue
     const tkhd = find(view, trak, ['tkhd'], counter)[0]
     if (tkhd) {
@@ -125,7 +127,11 @@ export function inspectMp4(bytes: Uint8Array): Mp4Info {
 
 export function sniff(bytes: Uint8Array): 'jpeg' | 'gif' | 'vtt' | 'mp4' | 'unknown' {
   if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'jpeg'
-  if (String.fromCharCode(...bytes.subarray(0, 6)) === 'GIF89a' || String.fromCharCode(...bytes.subarray(0, 6)) === 'GIF87a') return 'gif'
+  if (
+    String.fromCharCode(...bytes.subarray(0, 6)) === 'GIF89a' ||
+    String.fromCharCode(...bytes.subarray(0, 6)) === 'GIF87a'
+  )
+    return 'gif'
   const head = new TextDecoder('utf-8', { ignoreBOM: false }).decode(bytes.subarray(0, 10))
   if (head.startsWith('WEBVTT')) return 'vtt'
   if (String.fromCharCode(...bytes.subarray(4, 8)) === 'ftyp') return 'mp4'

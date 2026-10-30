@@ -9,7 +9,10 @@ export const netlifyBlobs: BlobsPort = {
     return v ? new Uint8Array(v) : null
   },
   async set(name, key, data, metadata) {
-    const body = typeof data === 'string' ? data : (data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer)
+    const body =
+      typeof data === 'string'
+        ? data
+        : (data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer)
     await store(name).set(key, body, metadata ? { metadata } : {})
   },
   async delete(name, key) {

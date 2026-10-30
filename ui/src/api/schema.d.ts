@@ -1900,6 +1900,7 @@ export interface components {
             inFlight: {
                 attemptId: string;
                 jobId: string;
+                title: string;
                 versionN: number;
                 stage: components["schemas"]["Stage"];
                 startedAt: string | null;
@@ -1910,6 +1911,7 @@ export interface components {
             unresolved: {
                 attemptId: string;
                 jobId: string;
+                title: string;
                 versionN: number;
                 runUrl: string | null;
             }[];

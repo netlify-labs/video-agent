@@ -97,7 +97,9 @@ export interface Repo {
   updateCleanup(id: string, patch: Partial<CleanupRow>): Promise<void>
 
   // stats
-  usageSince(since: string): Promise<{ userId: string; week: string; credits: number | null; videos: number }[]>
+  usageSince(
+    since: string,
+  ): Promise<{ userId: string; week: string; credits: number | null; videos: number }[]>
   failuresSince(since: string): Promise<{ category: string; count: number }[]>
 }
 

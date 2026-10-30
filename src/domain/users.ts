@@ -19,7 +19,12 @@ export async function listUsers(deps: Deps, p: Principal) {
   return (await deps.store.listUsers()).map(userDto)
 }
 
-export async function updateUser(deps: Deps, p: Principal, id: string, patch: { role?: Role | undefined; disabled?: boolean | undefined }) {
+export async function updateUser(
+  deps: Deps,
+  p: Principal,
+  id: string,
+  patch: { role?: Role | undefined; disabled?: boolean | undefined },
+) {
   assertCan(p, 'users:manage')
   return deps.store.tx(async (repo) => {
     const u = await repo.getUser(id)
@@ -31,10 +36,12 @@ export async function updateUser(deps: Deps, p: Principal, id: string, patch: { 
     }
     const next: Partial<UserRow> = {}
     if (patch.role) next.role = patch.role
-    if (patch.disabled !== undefined) next.disabledAt = patch.disabled ? (u.disabledAt ?? deps.clock.now().toISOString()) : null
+    if (patch.disabled !== undefined)
+      next.disabledAt = patch.disabled ? (u.disabledAt ?? deps.clock.now().toISOString()) : null
     await repo.updateUser(id, next)
     if (patch.disabled === true) {
-      for (const k of await repo.listKeys(id)) if (!k.revokedAt) await repo.updateKey(k.id, { revokedAt: deps.clock.now().toISOString() })
+      for (const k of await repo.listKeys(id))
+        if (!k.revokedAt) await repo.updateKey(k.id, { revokedAt: deps.clock.now().toISOString() })
     }
     return userDto({ ...u, ...next })
   })

@@ -13,13 +13,30 @@ export const ErrorSchema = z
   .openapi('Error')
 
 export const AspectSchema = z.enum(['16:9', '9:16', '1:1', '4:5']).openapi('Aspect')
-export const StatusSchema = z.enum(['queued', 'running', 'finishing', 'ready', 'failed', 'cancelled', 'timed_out']).openapi('VideoStatus')
+export const StatusSchema = z
+  .enum(['queued', 'running', 'finishing', 'ready', 'failed', 'cancelled', 'timed_out'])
+  .openapi('VideoStatus')
 export const StageSchema = z
-  .enum(['queued', 'starting', 'running', 'cancelling', 'unresolved', 'finishing', 'ready', 'failed', 'cancelled', 'timed_out'])
+  .enum([
+    'queued',
+    'starting',
+    'running',
+    'cancelling',
+    'unresolved',
+    'finishing',
+    'ready',
+    'failed',
+    'cancelled',
+    'timed_out',
+  ])
   .openapi('Stage')
 
 const UsageSchema = z
-  .object({ totalCreditsCost: z.number().optional(), totalTokens: z.number().optional(), stepsCount: z.number().optional() })
+  .object({
+    totalCreditsCost: z.number().optional(),
+    totalTokens: z.number().optional(),
+    stepsCount: z.number().optional(),
+  })
   .openapi('Usage')
 
 export const PublicationSchema = z
@@ -29,7 +46,13 @@ export const PublicationSchema = z
     publishedAt: z.string(),
     unpublishedAt: z.string().nullable(),
     urls: z
-      .object({ page: z.string(), mp4: z.string(), poster: z.string(), gif: z.string(), captions: z.string() })
+      .object({
+        page: z.string(),
+        mp4: z.string(),
+        poster: z.string(),
+        gif: z.string(),
+        captions: z.string(),
+      })
       .nullable(),
     embed: z.string().nullable(),
   })
@@ -59,12 +82,30 @@ export const VersionSchema = z
       .nullable(),
     usage: UsageSchema.nullable(),
     timings: z
-      .object({ queuedAt: z.string(), startedAt: z.string().nullable(), finishingAt: z.string().nullable(), endedAt: z.string().nullable() })
+      .object({
+        queuedAt: z.string(),
+        startedAt: z.string().nullable(),
+        finishingAt: z.string().nullable(),
+        endedAt: z.string().nullable(),
+      })
       .nullable(),
     output: z
-      .object({ durationSec: z.number(), width: z.number().int(), height: z.number().int(), bytes: z.number().int(), title: z.string(), summary: z.string() })
+      .object({
+        durationSec: z.number(),
+        width: z.number().int(),
+        height: z.number().int(),
+        bytes: z.number().int(),
+        title: z.string(),
+        summary: z.string(),
+      })
       .nullable(),
-    links: z.object({ video: z.string(), poster: z.string(), gif: z.string(), captions: z.string(), netlifyRun: z.string().nullable() }),
+    links: z.object({
+      video: z.string(),
+      poster: z.string(),
+      gif: z.string(),
+      captions: z.string(),
+      netlifyRun: z.string().nullable(),
+    }),
     publications: z.array(PublicationSchema),
   })
   .openapi('Version')
@@ -87,15 +128,29 @@ export const VideoSchema = z
   })
   .openapi('Video')
 
-export const VideoListSchema = z.object({ items: z.array(VideoSchema), nextCursor: z.string().nullable() }).openapi('VideoList')
+export const VideoListSchema = z
+  .object({ items: z.array(VideoSchema), nextCursor: z.string().nullable() })
+  .openapi('VideoList')
 
 export const CreateVideoSchema = z
   .object({
-    prompt: z.string().min(10).max(4000).openapi({ example: 'A 20-second launch video for our new webhooks feature' }),
+    prompt: z
+      .string()
+      .min(10)
+      .max(4000)
+      .openapi({ example: 'A 20-second launch video for our new webhooks feature' }),
     aspect: AspectSchema.optional(),
-    durationSec: z.number().int().positive().optional().openapi({ description: 'Target length in seconds. Omit for Auto.' }),
+    durationSec: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .openapi({ description: 'Target length in seconds. Omit for Auto.' }),
     title: z.string().min(1).max(120).optional(),
-    webhookUrl: z.url().optional().openapi({ description: 'HTTPS URL for video.ready / video.failed events (API keys only).' }),
+    webhookUrl: z
+      .url()
+      .optional()
+      .openapi({ description: 'HTTPS URL for video.ready / video.failed events (API keys only).' }),
   })
   .openapi('CreateVideo')
 
@@ -111,11 +166,19 @@ export const ReviseSchema = z
 export const RenameSchema = z.object({ title: z.string().min(1).max(120) }).openapi('Rename')
 
 export const KeySchema = z
-  .object({ id: z.string(), name: z.string(), createdAt: z.string(), lastUsedAt: z.string().nullable(), revokedAt: z.string().nullable() })
+  .object({
+    id: z.string(),
+    name: z.string(),
+    createdAt: z.string(),
+    lastUsedAt: z.string().nullable(),
+    revokedAt: z.string().nullable(),
+  })
   .openapi('ApiKey')
 export const NewKeySchema = KeySchema.extend({
   key: z.string().openapi({ description: 'Shown once.' }),
-  webhookSecret: z.string().openapi({ description: 'Signs webhooks for videos created with this key. Shown once.' }),
+  webhookSecret: z
+    .string()
+    .openapi({ description: 'Signs webhooks for videos created with this key. Shown once.' }),
 }).openapi('NewApiKey')
 export const CreateKeySchema = z.object({ name: z.string().min(1).max(80) }).openapi('CreateApiKey')
 
@@ -132,27 +195,67 @@ export const UserSchema = z
     disabled: z.boolean(),
   })
   .openapi('User')
-export const UpdateUserSchema = z.object({ role: RoleSchema.optional(), disabled: z.boolean().optional() }).openapi('UpdateUser')
+export const UpdateUserSchema = z
+  .object({ role: RoleSchema.optional(), disabled: z.boolean().optional() })
+  .openapi('UpdateUser')
 
 export const MeSchema = z
-  .object({ id: z.string(), email: z.string(), name: z.string().nullable(), role: RoleSchema, via: z.enum(['session', 'apiKey']) })
+  .object({
+    id: z.string(),
+    email: z.string(),
+    name: z.string().nullable(),
+    role: RoleSchema,
+    via: z.enum(['session', 'apiKey']),
+  })
   .openapi('Me')
 
 export const StatsSchema = z
   .object({
-    inFlight: z.array(z.object({ attemptId: z.string(), jobId: z.string(), versionN: z.number().int(), stage: StageSchema, startedAt: z.string().nullable(), runUrl: z.string().nullable() })),
+    inFlight: z.array(
+      z.object({
+        attemptId: z.string(),
+        jobId: z.string(),
+        title: z.string(),
+        versionN: z.number().int(),
+        stage: StageSchema,
+        startedAt: z.string().nullable(),
+        runUrl: z.string().nullable(),
+      }),
+    ),
     queued: z.number().int(),
     oldestQueuedAt: z.string().nullable(),
-    unresolved: z.array(z.object({ attemptId: z.string(), jobId: z.string(), versionN: z.number().int(), runUrl: z.string().nullable() })),
+    unresolved: z.array(
+      z.object({
+        attemptId: z.string(),
+        jobId: z.string(),
+        title: z.string(),
+        versionN: z.number().int(),
+        runUrl: z.string().nullable(),
+      }),
+    ),
     failuresThisWeek: z.array(z.object({ category: z.string(), count: z.number().int() })),
-    usage: z.array(z.object({ userId: z.string(), email: z.string().nullable(), week: z.string(), credits: z.number().nullable(), videos: z.number().int() })),
+    usage: z.array(
+      z.object({
+        userId: z.string(),
+        email: z.string().nullable(),
+        week: z.string(),
+        credits: z.number().nullable(),
+        videos: z.number().int(),
+      }),
+    ),
     maxActiveRuns: z.number().int(),
     queuePausedReason: z.string().nullable(),
   })
   .openapi('Stats')
 
 export const CheckSchema = z
-  .object({ id: z.string(), label: z.string(), status: z.enum(['ok', 'fail', 'warn', 'unknown']), detail: z.string(), fix: z.string().optional() })
+  .object({
+    id: z.string(),
+    label: z.string(),
+    status: z.enum(['ok', 'fail', 'warn', 'unknown']),
+    detail: z.string(),
+    fix: z.string().optional(),
+  })
   .openapi('SetupCheck')
 export const HealthSchema = z
   .object({ ok: z.boolean(), ready: z.boolean(), checks: z.array(CheckSchema).optional() })

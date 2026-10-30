@@ -1,5 +1,10 @@
 // Agent Runner through nax-agent-runner-sdk. Runs never land (land: 'none').
-import { createAgentRunnerSdk, isAgentRunnerSdkError, type RunResult, type StartInput } from 'nax-agent-runner-sdk'
+import {
+  createAgentRunnerSdk,
+  isAgentRunnerSdkError,
+  type RunResult,
+  type StartInput,
+} from 'nax-agent-runner-sdk'
 import { RunnerError, type RunnerPort, type RunnerSnapshot, type StartRequest } from '../deps.js'
 import type { Usage } from '../domain/types.js'
 
@@ -17,7 +22,9 @@ function toInput(siteId: string, r: StartRequest): StartInput & { requestId: str
   }
 }
 
-function toUsage(u: { totalCreditsCost?: number; totalTokens?: number; stepsCount?: number } | null): Usage | null {
+function toUsage(
+  u: { totalCreditsCost?: number; totalTokens?: number; stepsCount?: number } | null,
+): Usage | null {
   if (!u) return null
   const out: Usage = {}
   if (u.totalCreditsCost !== undefined) out.totalCreditsCost = u.totalCreditsCost
@@ -32,7 +39,10 @@ function terminal(result: RunResult): RunnerSnapshot {
     status: result.status,
     resultText: result.status === 'succeeded' ? result.resultText : null,
     usage: toUsage(result.usage),
-    failure: result.status === 'failed' ? { category: result.failure.category, code: result.failure.code, message: result.failure.message } : null,
+    failure:
+      result.status === 'failed'
+        ? { category: result.failure.category, code: result.failure.code, message: result.failure.message }
+        : null,
   }
 }
 
@@ -44,7 +54,8 @@ export function createRunner(opts: { siteId: string; siteName: string; token: st
     }
     const f = sdk.classifyFailure(e)
     if (/credit/i.test(`${f.code} ${f.message}`)) return new RunnerError('credits', f.message)
-    if (f.category === 'capacity' || f.category === 'rate-limit') return new RunnerError('capacity', f.message)
+    if (f.category === 'capacity' || f.category === 'rate-limit')
+      return new RunnerError('capacity', f.message)
     return new RunnerError('fatal', `${f.title}: ${f.message}`)
   }
   return {
@@ -59,7 +70,12 @@ export function createRunner(opts: { siteId: string; siteName: string; token: st
     async reconcile(req, window) {
       const res = await sdk.reconcileCreate(toInput(opts.siteId, req), window)
       if (res.kind === 'matched') {
-        return { kind: 'matched', handle: sdk.serializeHandle(res.handle), runnerId: res.handle.runnerId, sessionId: res.handle.currentSessionId }
+        return {
+          kind: 'matched',
+          handle: sdk.serializeHandle(res.handle),
+          runnerId: res.handle.runnerId,
+          sessionId: res.handle.currentSessionId,
+        }
       }
       return { kind: res.kind }
     },

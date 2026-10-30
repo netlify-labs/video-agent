@@ -26,7 +26,12 @@ describe('buildPrompt', () => {
     expect(p).not.toContain('prepare-revision')
   })
   it('uses a target length and adds the revision steps', () => {
-    const p = buildPrompt({ ...base, targetDurationSec: 30, versionN: 2, revision: { parentN: 1, sourceKey: 'vid_1/v1.tar.gz', sourceSha256: 'a'.repeat(64) } })
+    const p = buildPrompt({
+      ...base,
+      targetDurationSec: 30,
+      versionN: 2,
+      revision: { parentN: 1, sourceKey: 'vid_1/v1.tar.gz', sourceSha256: 'a'.repeat(64) },
+    })
     expect(p).toContain('Aim for about 30 seconds.')
     expect(p.indexOf('prepare-revision.ts')).toBeLessThan(p.indexOf('Read context/'))
     expect(p).toContain('This is a revision of version 1.')

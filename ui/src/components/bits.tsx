@@ -1,27 +1,86 @@
-import { ActionIcon, Badge, CopyButton, Group, Text, TextInput, Tooltip } from '@mantine/core'
+import { ActionIcon, CopyButton, Group, Text, TextInput, Tooltip } from '@mantine/core'
 import { IconCheck, IconCopy } from '@tabler/icons-react'
-import type { Video } from '../api/client'
+import type { Version, Video } from '../api/client'
+import { mockFile } from '../mock/server'
 
-const STATUS: Record<Video['status'], { color: string; label: string }> = {
-  queued: { color: 'gray', label: 'Queued' },
-  running: { color: 'blue', label: 'Making' },
-  finishing: { color: 'cyan', label: 'Saving' },
-  ready: { color: 'green', label: 'Ready' },
-  failed: { color: 'red', label: 'Failed' },
-  cancelled: { color: 'gray', label: 'Cancelled' },
-  timed_out: { color: 'orange', label: 'Timed out' },
-}
-
-export function StatusBadge({ status }: { status: Video['status'] }) {
-  const s = STATUS[status]
-  return (
-    <Badge color={s.color} variant="light" size="sm">
-      {s.label}
-    </Badge>
-  )
+const STATUS_WORD: Record<Video['status'], string> = {
+  queued: 'Queued',
+  running: 'Making',
+  finishing: 'Saving',
+  ready: 'Ready',
+  failed: 'Failed',
+  cancelled: 'Cancelled',
+  timed_out: 'Timed out',
 }
 
 export const inProgress = (s: Video['status']) => s === 'queued' || s === 'running' || s === 'finishing'
+
+/** A status as a dot and a word: the dot carries the data hue only when it's ready or working. */
+export function Status({ status, size = 'sm' }: { status: Video['status']; size?: 'xs' | 'sm' }) {
+  const state =
+    status === 'ready'
+      ? 'ready'
+      : inProgress(status)
+        ? 'working'
+        : status === 'failed' || status === 'timed_out'
+          ? 'failed'
+          : 'idle'
+  return (
+    <Group gap={6} wrap="nowrap">
+      <span className="va-dot" data-state={state} aria-hidden />
+      <Text size={size} c={state === 'failed' ? 'var(--va-negative)' : 'var(--va-muted)'}>
+        {STATUS_WORD[status]}
+      </Text>
+    </Group>
+  )
+}
+
+const TRACK = ['queued', 'running', 'finishing', 'ready'] as const
+
+/** Where a version is: four steps in the data hue (queued, making, saving, ready). */
+export function StageTrack({ version }: { version: Pick<Version, 'status'> }) {
+  const i = TRACK.indexOf(version.status as (typeof TRACK)[number])
+  return (
+    <div className="va-track" role="img" aria-label={`Stage: ${STATUS_WORD[version.status]}`}>
+      {TRACK.map((s, n) => (
+        <span
+          key={s}
+          {...(n < i || version.status === 'ready'
+            ? { 'data-done': true }
+            : n === i
+              ? { 'data-now': true }
+              : {})}
+        />
+      ))}
+    </div>
+  )
+}
+
+/** The product's mark: a frame with a play notch, in the brand hue. */
+export function Mark({ size = 22 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden>
+      <rect x="2" y="4" width="20" height="16" rx="4" fill="var(--va-accent)" />
+      <path d="M10 8.5v7l6-3.5z" fill="var(--va-ground)" />
+    </svg>
+  )
+}
+
+export function PoweredBy() {
+  return (
+    <a
+      className="va-powered"
+      href="https://docs.netlify.com/build/build-with-ai/agent-runners/overview/"
+      target="_blank"
+      rel="noreferrer"
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden>
+        <path d="M12 2 2 12l10 10 10-10z" fill="var(--va-accent)" />
+      </svg>
+      Powered by Netlify Agent Runners
+    </a>
+  )
+}
 
 export function CopyField({ label, value }: { label: string; value: string }) {
   return (
@@ -36,7 +95,7 @@ export function CopyField({ label, value }: { label: string; value: string }) {
         <CopyButton value={value} timeout={1500}>
           {({ copied, copy }) => (
             <Tooltip label={copied ? 'Copied' : 'Copy'}>
-              <ActionIcon variant="subtle" color={copied ? 'green' : 'gray'} onClick={copy} aria-label={`Copy ${label}`}>
+              <ActionIcon variant="subtle" color="gray" onClick={copy} aria-label={`Copy ${label}`}>
                 {copied ? <IconCheck size={16} /> : <IconCopy size={16} />}
               </ActionIcon>
             </Tooltip>
@@ -57,24 +116,35 @@ export function relativeTime(iso: string): string {
 }
 
 export function duration(sec: number | null | undefined): string {
-  if (sec === null || sec === undefined) return ''
+  if (sec === null || sec === undefined) return '—'
   const m = Math.floor(sec / 60)
   const s = Math.round(sec % 60)
-  return m ? `${m}:${String(s).padStart(2, '0')}` : `${s}s`
+  return m ? `${m}:${String(s).padStart(2, '0')}` : `${s.toFixed(0)} s`
+}
+
+export function credits(v: number | undefined | null): string {
+  return v === undefined || v === null ? '—' : v.toFixed(0)
 }
 
 export function Meta({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <Group gap={6} wrap="nowrap" align="baseline">
-      <Text size="sm" c="dimmed" w={110} style={{ flexShrink: 0 }}>
+    <Group gap={12} wrap="nowrap" align="baseline" justify="space-between">
+      <Text size="sm" c="var(--va-muted)" style={{ flexShrink: 0 }}>
         {label}
       </Text>
-      <Text size="sm" style={{ wordBreak: 'break-word' }}>
+      <Text size="sm" ta="right" className="num" style={{ wordBreak: 'break-word' }}>
         {children}
       </Text>
     </Group>
   )
 }
 
-export const fileUrl = (videoId: string, n: number, file: 'video' | 'poster' | 'gif' | 'captions', download = false) =>
-  `/api/v1/videos/${videoId}/versions/${n}/${file}${download ? '?download=1' : ''}`
+export const fileUrl = (
+  videoId: string,
+  n: number,
+  file: 'video' | 'poster' | 'gif' | 'captions',
+  download = false,
+) =>
+  import.meta.env.VITE_MOCK
+    ? mockFile(videoId, file)
+    : `/api/v1/videos/${videoId}/versions/${n}/${file}${download ? '?download=1' : ''}`

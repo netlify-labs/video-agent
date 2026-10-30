@@ -11,10 +11,15 @@ export interface Check {
   fix?: string
 }
 
-export async function setupChecks(deps: Deps, opts: { contextIsDefault: boolean }): Promise<{ ready: boolean; checks: Check[] }> {
+export async function setupChecks(
+  deps: Deps,
+  opts: { contextIsDefault: boolean },
+): Promise<{ ready: boolean; checks: Check[] }> {
   const checks: Check[] = []
   const add = (c: Check) => checks.push(c)
-  const siteSettings = deps.config.siteId ? `https://app.netlify.com/sites/${deps.config.siteId}` : 'https://app.netlify.com'
+  const siteSettings = deps.config.siteId
+    ? `https://app.netlify.com/sites/${deps.config.siteId}`
+    : 'https://app.netlify.com'
 
   const mode = deps.config.allowedEmailDomains
   add({
@@ -33,7 +38,8 @@ export async function setupChecks(deps: Deps, opts: { contextIsDefault: boolean 
     id: 'admins',
     label: 'First admins',
     status: deps.config.adminEmails.length > 0 ? 'ok' : 'fail',
-    detail: deps.config.adminEmails.length > 0 ? deps.config.adminEmails.join(', ') : 'ADMIN_EMAILS is not set.',
+    detail:
+      deps.config.adminEmails.length > 0 ? deps.config.adminEmails.join(', ') : 'ADMIN_EMAILS is not set.',
     fix: 'Set ADMIN_EMAILS to the email addresses of the first admins, then redeploy.',
   })
   if (Array.isArray(mode)) {
@@ -60,7 +66,8 @@ export async function setupChecks(deps: Deps, opts: { contextIsDefault: boolean 
       id: 'identity',
       label: 'Netlify Identity',
       status: identity === null ? 'fail' : 'unknown',
-      detail: identity === null ? 'Identity is not enabled on this project.' : 'Could not read Identity settings.',
+      detail:
+        identity === null ? 'Identity is not enabled on this project.' : 'Could not read Identity settings.',
       fix: `Enable Identity: ${siteSettings}/configuration/identity`,
     })
   } else {
@@ -70,7 +77,9 @@ export async function setupChecks(deps: Deps, opts: { contextIsDefault: boolean 
       label: 'Identity registration',
       status: wantInviteOnly && !identity.disableSignup ? 'fail' : 'ok',
       detail: identity.disableSignup ? 'Invite only.' : 'Open (sign-ups are filtered by domain).',
-      ...(wantInviteOnly && !identity.disableSignup ? { fix: `Set registration to "Invite only": ${siteSettings}/configuration/identity` } : {}),
+      ...(wantInviteOnly && !identity.disableSignup
+        ? { fix: `Set registration to "Invite only": ${siteSettings}/configuration/identity` }
+        : {}),
     })
     add({
       id: 'identity-autoconfirm',
@@ -78,7 +87,9 @@ export async function setupChecks(deps: Deps, opts: { contextIsDefault: boolean 
       status: Array.isArray(mode) && identity.autoconfirm ? 'fail' : 'ok',
       detail: identity.autoconfirm ? 'Autoconfirm is on.' : 'People must confirm their email.',
       ...(Array.isArray(mode) && identity.autoconfirm
-        ? { fix: `Turn off autoconfirm, otherwise anyone can claim an address at your domain: ${siteSettings}/configuration/identity` }
+        ? {
+            fix: `Turn off autoconfirm, otherwise anyone can claim an address at your domain: ${siteSettings}/configuration/identity`,
+          }
         : {}),
     })
   }
@@ -87,7 +98,13 @@ export async function setupChecks(deps: Deps, opts: { contextIsDefault: boolean 
   add({
     id: 'runner-token',
     label: 'Run token (RUNNER_API_TOKEN)',
-    status: !deps.config.runnerTokenPresent ? 'fail' : facts?.tokenValid === false ? 'fail' : facts?.tokenValid ? 'ok' : 'unknown',
+    status: !deps.config.runnerTokenPresent
+      ? 'fail'
+      : facts?.tokenValid === false
+        ? 'fail'
+        : facts?.tokenValid
+          ? 'ok'
+          : 'unknown',
     detail: !deps.config.runnerTokenPresent
       ? 'RUNNER_API_TOKEN is not set.'
       : facts?.tokenValid === false
@@ -129,6 +146,8 @@ export async function setupChecks(deps: Deps, opts: { contextIsDefault: boolean 
     fix: 'Edit context/BRAND.md and context/brand.json, add your logo to context/assets/, and push.',
   })
 
-  const ready = checks.every((c) => c.status !== 'fail') && !checks.some((c) => ['runner-token', 'identity'].includes(c.id) && c.status === 'unknown')
+  const ready =
+    checks.every((c) => c.status !== 'fail') &&
+    !checks.some((c) => ['runner-token', 'identity'].includes(c.id) && c.status === 'unknown')
   return { ready, checks }
 }

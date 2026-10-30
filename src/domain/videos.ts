@@ -38,7 +38,10 @@ export interface ReviseInput {
 function checkWebhook(principal: Principal, url: string | undefined) {
   if (url === undefined) return
   if (principal.kind !== 'apiKey') {
-    throw new ApiError('invalid_request', 'webhookUrl is only accepted on API-key requests. The web app has in-app notifications.')
+    throw new ApiError(
+      'invalid_request',
+      'webhookUrl is only accepted on API-key requests. The web app has in-app notifications.',
+    )
   }
   let u: URL
   try {
@@ -49,7 +52,12 @@ function checkWebhook(principal: Principal, url: string | undefined) {
   if (u.protocol !== 'https:') throw new ApiError('invalid_request', 'webhookUrl must use https.')
 }
 
-export function newAttempt(deps: Pick<Deps, 'ids' | 'config'>, jobId: string, versionN: number, now: string): AttemptRow {
+export function newAttempt(
+  deps: Pick<Deps, 'ids' | 'config'>,
+  jobId: string,
+  versionN: number,
+  now: string,
+): AttemptRow {
   return {
     id: deps.ids.uuid(),
     jobId,
@@ -127,7 +135,8 @@ async function withIdempotency<T>(
   const hash = sha256Hex(JSON.stringify(body))
   const prior = await repo.getIdempotency(principal.userId, operation, key)
   if (prior && prior.expiresAt > deps.clock.now().toISOString()) {
-    if (prior.requestHash !== hash) throw new ApiError('conflict', 'This Idempotency-Key was used with a different request.')
+    if (prior.requestHash !== hash)
+      throw new ApiError('conflict', 'This Idempotency-Key was used with a different request.')
     return { ...(prior.response as { status: number; body: T }), replayed: true }
   }
   const res = await run()
@@ -142,7 +151,12 @@ async function withIdempotency<T>(
   return { ...res, replayed: false }
 }
 
-export async function createVideo(deps: Deps, principal: Principal, input: CreateVideoInput, idemKey?: string) {
+export async function createVideo(
+  deps: Deps,
+  principal: Principal,
+  input: CreateVideoInput,
+  idemKey?: string,
+) {
   assertCan(principal, 'video:create')
   checkWebhook(principal, input.webhookUrl)
   return deps.store.tx((repo) =>
@@ -196,20 +210,28 @@ async function hasUnfinished(repo: Repo, jobId: string): Promise<boolean> {
   return (await repo.listVersions(jobId)).some((v) => UNFINISHED_STATUSES.includes(v.status))
 }
 
-export async function reviseVideo(deps: Deps, principal: Principal, jobId: string, input: ReviseInput, idemKey?: string) {
+export async function reviseVideo(
+  deps: Deps,
+  principal: Principal,
+  jobId: string,
+  input: ReviseInput,
+  idemKey?: string,
+) {
   assertCan(principal, 'version:create')
   checkWebhook(principal, input.webhookUrl)
   return deps.store.tx((repo) =>
     withIdempotency(repo, deps, principal, `versions.create:${jobId}`, idemKey, input, async () => {
       const job = await loadJob(repo, jobId, true)
-      if (await hasUnfinished(repo, jobId)) throw new ApiError('conflict', 'Another version of this video is still in progress.')
+      if (await hasUnfinished(repo, jobId))
+        throw new ApiError('conflict', 'Another version of this video is still in progress.')
       const versions = await repo.listVersions(jobId)
       const parent =
         input.fromVersion !== undefined
           ? versions.find((v) => v.n === input.fromVersion)
           : versions.find((v) => v.status === 'ready')
       if (!parent) throw new ApiError('conflict', 'There is no ready version to revise from.')
-      if (parent.status !== 'ready') throw new ApiError('conflict', `Version ${parent.n} isn't ready, so it can't be revised.`)
+      if (parent.status !== 'ready')
+        throw new ApiError('conflict', `Version ${parent.n} isn't ready, so it can't be revised.`)
       const now = deps.clock.now().toISOString()
       const n = job.nextVersionN
       await repo.insertVersion({
@@ -218,14 +240,21 @@ export async function reviseVideo(deps: Deps, principal: Principal, jobId: strin
         prompt: input.prompt,
         authorId: principal.userId,
         apiKeyId: principal.apiKeyId,
-        targetDurationSec: input.durationSec ?? (await repo.getVersion(jobId, parent.n))?.targetDurationSec ?? null,
+        targetDurationSec:
+          input.durationSec ?? (await repo.getVersion(jobId, parent.n))?.targetDurationSec ?? null,
         parentN: parent.n,
         webhookUrl: input.webhookUrl ?? null,
         status: 'queued',
         createdAt: now,
       })
       await repo.insertAttempt(newAttempt(deps, jobId, n, now))
-      await repo.updateJob(jobId, { latestVersion: n, nextVersionN: n + 1, status: 'queued', updatedAt: now, version: job.version + 1 })
+      await repo.updateJob(jobId, {
+        latestVersion: n,
+        nextVersionN: n + 1,
+        status: 'queued',
+        updatedAt: now,
+        version: job.version + 1,
+      })
       return { status: 202, body: await videoDto(repo, deps, jobId) }
     }),
   )
@@ -241,7 +270,8 @@ export async function retryVersion(deps: Deps, principal: Principal, jobId: stri
       throw new ApiError('conflict', 'Only failed, cancelled or timed-out versions can be tried again.')
     }
     if (job.latestVersion !== n) throw new ApiError('conflict', 'Only the latest version can be tried again.')
-    if (await hasUnfinished(repo, jobId)) throw new ApiError('conflict', 'Another version of this video is still in progress.')
+    if (await hasUnfinished(repo, jobId))
+      throw new ApiError('conflict', 'Another version of this video is still in progress.')
     const now = deps.clock.now().toISOString()
     await repo.insertAttempt(newAttempt(deps, jobId, n, now))
     await repo.updateVersion(jobId, n, { status: 'queued' })
@@ -257,33 +287,56 @@ export async function cancelVersion(deps: Deps, principal: Principal, jobId: str
     if (!version) throw new ApiError('not_found', 'Version not found.')
     assertCan(principal, 'version:cancel', { ownerId: job.ownerId, authorId: version.authorId })
     const attempt = await repo.latestAttempt(jobId, n)
-    if (!attempt || isTerminal(attempt.stage)) throw new ApiError('conflict', 'This version is not in progress.')
+    if (!attempt || isTerminal(attempt.stage))
+      throw new ApiError('conflict', 'This version is not in progress.')
     await requestCancel(repo, deps, attempt, 'user')
     return videoDto(repo, deps, jobId)
   })
 }
 
 /** Queued: cancel now. Running: persist intent; the sweep stops the session. */
-export async function requestCancel(repo: Repo, deps: Pick<Deps, 'clock'>, attempt: AttemptRow, reason: 'user' | 'needs_input' | 'deadline') {
+export async function requestCancel(
+  repo: Repo,
+  deps: Pick<Deps, 'clock'>,
+  attempt: AttemptRow,
+  reason: 'user' | 'needs_input' | 'deadline',
+) {
   const now = deps.clock.now().toISOString()
   if (attempt.stage === 'queued') {
-    await setStage(repo, attempt, 'cancelled', { endedAt: now, cancelRequestedAt: now, cancelReason: reason, nextActionAt: null }, now)
+    await setStage(
+      repo,
+      attempt,
+      'cancelled',
+      { endedAt: now, cancelRequestedAt: now, cancelReason: reason, nextActionAt: null },
+      now,
+    )
     return
   }
-  if (attempt.stage === 'unresolved') throw new ApiError('conflict', 'This start is unresolved; an admin has to resolve it.')
+  if (attempt.stage === 'unresolved')
+    throw new ApiError('conflict', 'This start is unresolved; an admin has to resolve it.')
   if (attempt.stage === 'finishing') {
     await repo.updateAttempt(attempt.id, { cancelRequestedAt: now, cancelReason: reason })
     return
   }
   if (attempt.stage === 'cancelling') return
-  await setStage(repo, attempt, 'cancelling', { cancelRequestedAt: now, cancelReason: reason, nextActionAt: now, leaseUntil: null }, now)
+  await setStage(
+    repo,
+    attempt,
+    'cancelling',
+    { cancelRequestedAt: now, cancelReason: reason, nextActionAt: now, leaseUntil: null },
+    now,
+  )
 }
 
 export async function renameVideo(deps: Deps, principal: Principal, jobId: string, title: string) {
   return deps.store.tx(async (repo) => {
     const job = await loadJob(repo, jobId, true)
     assertCan(principal, 'video:rename', { ownerId: job.ownerId })
-    await repo.updateJob(jobId, { title: title.trim(), updatedAt: deps.clock.now().toISOString(), version: job.version + 1 })
+    await repo.updateJob(jobId, {
+      title: title.trim(),
+      updatedAt: deps.clock.now().toISOString(),
+      version: job.version + 1,
+    })
     return videoDto(repo, deps, jobId)
   })
 }
@@ -305,7 +358,14 @@ export async function deleteVideo(deps: Deps, principal: Principal, jobId: strin
       if (!isTerminal(a.stage) && a.stage !== 'unresolved') await requestCancel(repo, deps, a, 'user')
     }
     for (const store of ['videos', 'sources'] as const) {
-      await repo.insertCleanup({ id: deps.ids.uuid(), kind: 'delete_prefix', store, prefix: `${jobId}/`, nextActionAt: now, doneAt: null })
+      await repo.insertCleanup({
+        id: deps.ids.uuid(),
+        kind: 'delete_prefix',
+        store,
+        prefix: `${jobId}/`,
+        nextActionAt: now,
+        doneAt: null,
+      })
     }
     return ended
   })
@@ -331,7 +391,8 @@ export async function publishVersion(deps: Deps, principal: Principal, jobId: st
     assertCan(principal, 'video:publish', { ownerId: job.ownerId })
     const output = await repo.getOutput(jobId, n)
     const version = await repo.getVersion(jobId, n)
-    if (!version || version.status !== 'ready' || !output) throw new ApiError('not_ready', 'Only ready versions can be published.')
+    if (!version || version.status !== 'ready' || !output)
+      throw new ApiError('not_ready', 'Only ready versions can be published.')
     const active = (await repo.listPublications(jobId)).find((p) => p.versionN === n && !p.unpublishedAt)
     if (active) return { pub: active, mirror: mirrorFor(active, job, output) }
     const row: PublicationRow = {
@@ -386,7 +447,13 @@ export function publicationDto(deps: Pick<Deps, 'config'>, p: PublicationRow) {
     unpublishedAt: p.unpublishedAt,
     urls: p.unpublishedAt
       ? null
-      : { page: base, mp4: `${base}.mp4`, poster: `${base}.jpg`, gif: `${base}.gif`, captions: `${base}.vtt` },
+      : {
+          page: base,
+          mp4: `${base}.mp4`,
+          poster: `${base}.jpg`,
+          gif: `${base}.gif`,
+          captions: `${base}.vtt`,
+        },
     embed: p.unpublishedAt
       ? null
       : `<video controls playsinline poster="${base}.jpg" src="${base}.mp4"><track kind="captions" src="${base}.vtt" default></video>`,
@@ -415,13 +482,28 @@ function versionDto(
     stage: a?.stage ?? null,
     latestStep: a?.latestStep ?? null,
     error: a?.errorCategory ? { category: a.errorCategory, message: a.errorMessage ?? '' } : null,
-    agent: a ? { agent: a.agent, model: a.model, effort: a.effort, deployId: a.deployId, promptTemplateVersion: a.promptTemplateVersion } : null,
+    agent: a
+      ? {
+          agent: a.agent,
+          model: a.model,
+          effort: a.effort,
+          deployId: a.deployId,
+          promptTemplateVersion: a.promptTemplateVersion,
+        }
+      : null,
     usage: a?.usage ?? null,
     timings: a
       ? { queuedAt: a.queuedAt, startedAt: a.startedAt, finishingAt: a.finishingAt, endedAt: a.endedAt }
       : null,
     output: o
-      ? { durationSec: o.durationSec, width: o.width, height: o.height, bytes: o.bytes, title: o.title, summary: o.agentSummary }
+      ? {
+          durationSec: o.durationSec,
+          width: o.width,
+          height: o.height,
+          bytes: o.bytes,
+          title: o.title,
+          summary: o.agentSummary,
+        }
       : null,
     links: {
       video: `${fileBase}/video`,
@@ -437,7 +519,11 @@ function versionDto(
 export async function videoDto(repo: Repo, deps: Pick<Deps, 'config' | 'runner'>, jobId: string) {
   const job = await repo.getJob(jobId)
   if (!job || job.deletedAt) throw new ApiError('not_found', 'Video not found.')
-  const [versions, attempts, pubs] = await Promise.all([repo.listVersions(jobId), repo.listAttempts(jobId), repo.listPublications(jobId)])
+  const [versions, attempts, pubs] = await Promise.all([
+    repo.listVersions(jobId),
+    repo.listAttempts(jobId),
+    repo.listPublications(jobId),
+  ])
   const out = await Promise.all(
     versions.map(async (v) => {
       const mine = attempts.filter((a) => a.versionN === v.n)
@@ -467,14 +553,24 @@ export type VideoDto = Awaited<ReturnType<typeof videoDto>>
 export async function listVideos(
   deps: Deps,
   principal: Principal,
-  q: { owner?: 'me' | 'all' | undefined; status?: JobRow['status'] | undefined; published?: boolean | undefined; q?: string | undefined; cursor?: string | undefined; limit?: number | undefined },
+  q: {
+    owner?: 'me' | 'all' | undefined
+    status?: JobRow['status'] | undefined
+    published?: boolean | undefined
+    q?: string | undefined
+    cursor?: string | undefined
+    limit?: number | undefined
+  },
 ) {
   assertCan(principal, 'video:read')
   const limit = Math.min(Math.max(q.limit ?? 24, 1), 50)
   let cursor: { createdAt: string; id: string } | undefined
   if (q.cursor && q.cursor !== 'undefined') {
     try {
-      cursor = JSON.parse(Buffer.from(q.cursor, 'base64url').toString('utf8')) as { createdAt: string; id: string }
+      cursor = JSON.parse(Buffer.from(q.cursor, 'base64url').toString('utf8')) as {
+        createdAt: string
+        id: string
+      }
     } catch {
       throw new ApiError('invalid_request', 'Invalid cursor.')
     }
@@ -493,6 +589,8 @@ export async function listVideos(
   return {
     items,
     nextCursor:
-      rows.length > limit && last ? Buffer.from(JSON.stringify({ createdAt: last.createdAt, id: last.id })).toString('base64url') : null,
+      rows.length > limit && last
+        ? Buffer.from(JSON.stringify({ createdAt: last.createdAt, id: last.id })).toString('base64url')
+        : null,
   }
 }

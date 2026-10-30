@@ -1,6 +1,7 @@
 // HTTP Range handling for streamed blobs. Web APIs only: shared by both edge functions (Deno).
 
-export type RangeResult = { kind: 'full' } | { kind: 'partial'; start: number; end: number } | { kind: 'unsatisfiable' }
+export type RangeResult =
+  { kind: 'full' } | { kind: 'partial'; start: number; end: number } | { kind: 'unsatisfiable' }
 
 /** Parses a single `bytes=` range against a known size. Multiple ranges fall back to the full body. */
 export function parseRange(header: string | null, size: number): RangeResult {
@@ -25,7 +26,11 @@ export function parseRange(header: string | null, size: number): RangeResult {
 }
 
 /** Returns a stream of bytes [start, end] from a source stream, skipping what comes before. */
-export function sliceStream(source: ReadableStream<Uint8Array>, start: number, end: number): ReadableStream<Uint8Array> {
+export function sliceStream(
+  source: ReadableStream<Uint8Array>,
+  start: number,
+  end: number,
+): ReadableStream<Uint8Array> {
   let pos = 0
   const reader = source.getReader()
   return new ReadableStream<Uint8Array>({
@@ -95,12 +100,24 @@ export async function mediaResponse(
 
 /** HMAC-SHA256 hex with WebCrypto (same output as lib/crypto.ts signPath). */
 export async function hmacHexWeb(secret: string, data: string): Promise<string> {
-  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  )
   const sig = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(data)))
   return Array.from(sig, (b) => b.toString(16).padStart(2, '0')).join('')
 }
 
-export async function verifySignedPath(secret: string, path: string, exp: number, sig: string, nowSec: number): Promise<boolean> {
+export async function verifySignedPath(
+  secret: string,
+  path: string,
+  exp: number,
+  sig: string,
+  nowSec: number,
+): Promise<boolean> {
   if (!Number.isFinite(exp) || exp < nowSec || !/^[0-9a-f]{64}$/.test(sig)) return false
   const expected = await hmacHexWeb(secret, `${path}\n${exp}`)
   let diff = 0

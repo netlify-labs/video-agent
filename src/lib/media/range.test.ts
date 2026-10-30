@@ -39,12 +39,22 @@ describe('sliceStream', () => {
 describe('mediaResponse', () => {
   const src = { size: 1000, etag: '"e1"', open: async () => chunked() }
   it('serves 206 with Content-Range, 416 when out of range, and HEAD without a body', async () => {
-    const r206 = await mediaResponse(new Request('https://x/', { headers: { range: 'bytes=10-19' } }), src, 'video/mp4', {})
+    const r206 = await mediaResponse(
+      new Request('https://x/', { headers: { range: 'bytes=10-19' } }),
+      src,
+      'video/mp4',
+      {},
+    )
     expect(r206.status).toBe(206)
     expect(r206.headers.get('content-range')).toBe('bytes 10-19/1000')
     expect(r206.headers.get('content-length')).toBe('10')
     expect(new Uint8Array(await r206.arrayBuffer())).toEqual(bytes.slice(10, 20))
-    const r416 = await mediaResponse(new Request('https://x/', { headers: { range: 'bytes=2000-' } }), src, 'video/mp4', {})
+    const r416 = await mediaResponse(
+      new Request('https://x/', { headers: { range: 'bytes=2000-' } }),
+      src,
+      'video/mp4',
+      {},
+    )
     expect(r416.status).toBe(416)
     expect(r416.headers.get('content-range')).toBe('bytes */1000')
     const head = await mediaResponse(new Request('https://x/', { method: 'HEAD' }), src, 'video/mp4', {})

@@ -6,7 +6,14 @@ import { inspectMp4, Mp4Error, sniff } from '../lib/media/mp4.js'
 import { getSettings } from './settings.js'
 import { setStage } from './videos.js'
 import { emitTerminalEvent } from './webhooks.js'
-import { ASPECTS, OUTPUT_FILES, type AttemptRow, type FailureCategory, type Manifest, type OutputFile } from './types.js'
+import {
+  ASPECTS,
+  OUTPUT_FILES,
+  type AttemptRow,
+  type FailureCategory,
+  type Manifest,
+  type OutputFile,
+} from './types.js'
 
 const MIN = 60_000
 const FINALIZE_LEASE_MS = 12 * MIN
@@ -80,22 +87,31 @@ export async function finalizeAttempt(deps: Deps, attemptId: string): Promise<Fi
       const bytes = await deps.blobs.get('uploads', `${a.id}/${name}`)
       if (!bytes) throw new NotYet(`Upload ${name} not found.`)
       const hash = sha256Hex(bytes)
-      if (hash !== manifest.files[name].sha256) throw new NotYet(`Upload ${name} doesn't match the manifest hash.`)
+      if (hash !== manifest.files[name].sha256)
+        throw new NotYet(`Upload ${name} doesn't match the manifest hash.`)
       files[name] = bytes
     }
 
     const video = files['video.mp4']
-    if (video.byteLength > MAX_VIDEO_BYTES) throw new Invalid('invalid_output', 'The video is larger than 2 GB.')
+    if (video.byteLength > MAX_VIDEO_BYTES)
+      throw new Invalid('invalid_output', 'The video is larger than 2 GB.')
     let info
     try {
       info = inspectMp4(video)
     } catch (e) {
-      throw new Invalid('invalid_output', `The MP4 is not valid: ${e instanceof Mp4Error ? e.message : String(e)}`)
+      throw new Invalid(
+        'invalid_output',
+        `The MP4 is not valid: ${e instanceof Mp4Error ? e.message : String(e)}`,
+      )
     }
     const want = ASPECTS[job.aspect]
-    if (info.videoCodec !== 'avc1') throw new Invalid('invalid_output', `Expected H.264 video, got ${info.videoCodec}.`)
+    if (info.videoCodec !== 'avc1')
+      throw new Invalid('invalid_output', `Expected H.264 video, got ${info.videoCodec}.`)
     if (info.width !== want.width || info.height !== want.height) {
-      throw new Invalid('invalid_output', `Expected ${want.width}x${want.height}, got ${info.width}x${info.height}.`)
+      throw new Invalid(
+        'invalid_output',
+        `Expected ${want.width}x${want.height}, got ${info.width}x${info.height}.`,
+      )
     }
     if (!(info.durationSec > 0)) throw new Invalid('invalid_output', 'The video has no duration.')
     if (version.targetDurationSec !== null) {
@@ -104,9 +120,12 @@ export async function finalizeAttempt(deps: Deps, attemptId: string): Promise<Fi
         throw new Invalid('invalid_output', `Asked for about ${t}s, got ${info.durationSec.toFixed(1)}s.`)
       }
     }
-    if (sniff(files['poster.jpg']) !== 'jpeg') throw new Invalid('invalid_output', 'The poster is not a JPEG.')
-    if (sniff(files['preview.gif']) !== 'gif') throw new Invalid('invalid_output', 'The preview is not a GIF.')
-    if (sniff(files['captions.vtt']) !== 'vtt') throw new Invalid('invalid_output', 'The captions are not WebVTT.')
+    if (sniff(files['poster.jpg']) !== 'jpeg')
+      throw new Invalid('invalid_output', 'The poster is not a JPEG.')
+    if (sniff(files['preview.gif']) !== 'gif')
+      throw new Invalid('invalid_output', 'The preview is not a GIF.')
+    if (sniff(files['captions.vtt']) !== 'vtt')
+      throw new Invalid('invalid_output', 'The captions are not WebVTT.')
 
     const prefix = `${a.jobId}/v${a.versionN}`
     const keys = {
@@ -116,10 +135,22 @@ export async function finalizeAttempt(deps: Deps, attemptId: string): Promise<Fi
       captions: `${prefix}/captions.vtt`,
       source: `${a.jobId}/v${a.versionN}.tar.gz`,
     }
-    await deps.blobs.set('videos', keys.video, video, { contentType: 'video/mp4', size: String(video.byteLength) })
-    await deps.blobs.set('videos', keys.poster, files['poster.jpg'], { contentType: 'image/jpeg', size: String(files['poster.jpg'].byteLength) })
-    await deps.blobs.set('videos', keys.gif, files['preview.gif'], { contentType: 'image/gif', size: String(files['preview.gif'].byteLength) })
-    await deps.blobs.set('videos', keys.captions, files['captions.vtt'], { contentType: 'text/vtt', size: String(files['captions.vtt'].byteLength) })
+    await deps.blobs.set('videos', keys.video, video, {
+      contentType: 'video/mp4',
+      size: String(video.byteLength),
+    })
+    await deps.blobs.set('videos', keys.poster, files['poster.jpg'], {
+      contentType: 'image/jpeg',
+      size: String(files['poster.jpg'].byteLength),
+    })
+    await deps.blobs.set('videos', keys.gif, files['preview.gif'], {
+      contentType: 'image/gif',
+      size: String(files['preview.gif'].byteLength),
+    })
+    await deps.blobs.set('videos', keys.captions, files['captions.vtt'], {
+      contentType: 'text/vtt',
+      size: String(files['captions.vtt'].byteLength),
+    })
     await deps.blobs.set('sources', keys.source, files['source.tar.gz'], { contentType: 'application/gzip' })
 
     const sha256 = Object.fromEntries(OUTPUT_FILES.map((f) => [f, manifest.files[f].sha256]))
@@ -146,14 +177,22 @@ export async function finalizeAttempt(deps: Deps, attemptId: string): Promise<Fi
       if (deps.clock.now().getTime() - finishingSince > deps.config.finalizeDeadlineMin * MIN) {
         return finish(deps, a, 'failed', { category: 'artifacts_missing', message: e.message }, null)
       }
-      await deps.store.updateAttempt(a.id, { leaseUntil: null, nextActionAt: new Date(deps.clock.now().getTime() + 30_000).toISOString() }, 'finishing')
+      await deps.store.updateAttempt(
+        a.id,
+        { leaseUntil: null, nextActionAt: new Date(deps.clock.now().getTime() + 30_000).toISOString() },
+        'finishing',
+      )
       return 'retry'
     }
     if (e instanceof Invalid) {
       log.warn('finalize.invalid', { category: e.category, reason: e.message })
       return finish(deps, a, 'failed', { category: e.category, message: e.message }, null)
     }
-    await deps.store.updateAttempt(a.id, { leaseUntil: null, nextActionAt: new Date(deps.clock.now().getTime() + MIN).toISOString() }, 'finishing')
+    await deps.store.updateAttempt(
+      a.id,
+      { leaseUntil: null, nextActionAt: new Date(deps.clock.now().getTime() + MIN).toISOString() },
+      'finishing',
+    )
     throw e
   }
 }

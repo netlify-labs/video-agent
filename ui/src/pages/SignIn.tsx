@@ -1,9 +1,23 @@
-import { Alert, Anchor, Button, Center, Paper, PasswordInput, Stack, Tabs, Text, TextInput, Title } from '@mantine/core'
+import {
+  Alert,
+  Anchor,
+  Button,
+  Card,
+  Center,
+  Group,
+  PasswordInput,
+  Stack,
+  Tabs,
+  Text,
+  TextInput,
+  Title,
+} from '@mantine/core'
 import { useState } from 'react'
 import { Link } from 'react-router'
 import { $api } from '../api/client'
 import { useAuth } from '../auth'
 import { brand } from '../theme'
+import { Mark, PoweredBy } from '../components/bits'
 
 export function AuthPages({ setupReady }: { setupReady: boolean }) {
   const auth = useAuth()
@@ -32,12 +46,15 @@ export function AuthPages({ setupReady }: { setupReady: boolean }) {
 
   const card = (children: React.ReactNode) => (
     <Center mih="100vh" p="md">
-      <Paper withBorder p="xl" radius="lg" w="100%" maw={420}>
+      <Card p="xl" w="100%" maw={420}>
         <Stack>
           <div>
-            <Title order={2}>{brand.name}</Title>
-            <Text c="dimmed" size="sm">
-              Make videos from a prompt.
+            <Group gap={10} mb="md">
+              <Mark size={28} />
+              <Title order={1}>{brand.name}</Title>
+            </Group>
+            <Text c="var(--va-muted)" size="sm">
+              Describe a video. An agent makes it in a few minutes.
             </Text>
           </div>
           {auth.notice ? (
@@ -50,11 +67,16 @@ export function AuthPages({ setupReady }: { setupReady: boolean }) {
           {children}
           {!setupReady ? (
             <Text size="xs" c="dimmed">
-              Setting this up? <Anchor component={Link} to="/setup">Open the setup checklist</Anchor>.
+              Setting this up?{' '}
+              <Anchor component={Link} to="/setup">
+                Open the setup checklist
+              </Anchor>
+              .
             </Text>
           ) : null}
         </Stack>
-      </Paper>
+      </Card>
+      <PoweredBy />
     </Center>
   )
 
@@ -69,7 +91,15 @@ export function AuthPages({ setupReady }: { setupReady: boolean }) {
       >
         <Stack>
           <Text fw={600}>{invite ? 'Accept your invite: choose a password' : 'Choose a new password'}</Text>
-          <PasswordInput label="Password" minLength={8} required value={password} onChange={(e) => { setPassword(e.currentTarget.value) }} />
+          <PasswordInput
+            label="Password"
+            minLength={8}
+            required
+            value={password}
+            onChange={(e) => {
+              setPassword(e.currentTarget.value)
+            }}
+          />
           <Button type="submit" loading={busy}>
             {invite ? 'Join' : 'Save password'}
           </Button>
@@ -93,8 +123,25 @@ export function AuthPages({ setupReady }: { setupReady: boolean }) {
           }}
         >
           <Stack>
-            <TextInput label="Email" type="email" required autoComplete="email" value={email} onChange={(e) => { setEmail(e.currentTarget.value) }} />
-            <PasswordInput label="Password" required autoComplete="current-password" value={password} onChange={(e) => { setPassword(e.currentTarget.value) }} />
+            <TextInput
+              label="Email"
+              type="email"
+              required
+              autoComplete="email"
+              value={email}
+              onChange={(e) => {
+                setEmail(e.currentTarget.value)
+              }}
+            />
+            <PasswordInput
+              label="Password"
+              required
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => {
+                setPassword(e.currentTarget.value)
+              }}
+            />
             <Button type="submit" loading={busy}>
               Sign in
             </Button>
@@ -107,7 +154,10 @@ export function AuthPages({ setupReady }: { setupReady: boolean }) {
                   setError('Enter your email first.')
                   return
                 }
-                void run(() => auth.requestPasswordRecovery(email), 'If that address has an account, a reset link is on its way.')
+                void run(
+                  () => auth.requestPasswordRecovery(email),
+                  'If that address has an account, a reset link is on its way.',
+                )
               }}
             >
               Forgot your password?
@@ -124,7 +174,10 @@ export function AuthPages({ setupReady }: { setupReady: boolean }) {
         <form
           onSubmit={(e) => {
             e.preventDefault()
-            void run(() => auth.signup(email, password), 'Check your email for a confirmation link, then sign in.')
+            void run(
+              () => auth.signup(email, password),
+              'Check your email for a confirmation link, then sign in.',
+            )
           }}
         >
           <Stack>
@@ -133,8 +186,26 @@ export function AuthPages({ setupReady }: { setupReady: boolean }) {
                 Use your {domains} email address.
               </Text>
             ) : null}
-            <TextInput label="Work email" type="email" required autoComplete="email" value={email} onChange={(e) => { setEmail(e.currentTarget.value) }} />
-            <PasswordInput label="Password" required minLength={8} autoComplete="new-password" value={password} onChange={(e) => { setPassword(e.currentTarget.value) }} />
+            <TextInput
+              label="Work email"
+              type="email"
+              required
+              autoComplete="email"
+              value={email}
+              onChange={(e) => {
+                setEmail(e.currentTarget.value)
+              }}
+            />
+            <PasswordInput
+              label="Password"
+              required
+              minLength={8}
+              autoComplete="new-password"
+              value={password}
+              onChange={(e) => {
+                setPassword(e.currentTarget.value)
+              }}
+            />
             <Button type="submit" loading={busy}>
               Create account
             </Button>

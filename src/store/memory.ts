@@ -75,14 +75,19 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
       const u = state.users.get(id)
       if (u) Object.assign(u, clone(patch))
     },
-    listUsers: async () => clone([...state.users.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt))),
+    listUsers: async () =>
+      clone([...state.users.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt))),
 
     insertKey: async (row) => {
       state.keys.set(row.id, clone(row))
     },
     getKey: async (id) => clone(state.keys.get(id) ?? null),
     listKeys: async (ownerId) =>
-      clone([...state.keys.values()].filter((k) => k.ownerId === ownerId).sort((a, b) => b.createdAt.localeCompare(a.createdAt))),
+      clone(
+        [...state.keys.values()]
+          .filter((k) => k.ownerId === ownerId)
+          .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+      ),
     updateKey: async (id, patch) => {
       const k = state.keys.get(id)
       if (k) Object.assign(k, clone(patch))
@@ -110,7 +115,9 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
         rows = rows.filter(
           (j) =>
             j.title.toLowerCase().includes(needle) ||
-            [...state.versions.values()].some((v) => v.jobId === j.id && v.prompt.toLowerCase().includes(needle)),
+            [...state.versions.values()].some(
+              (v) => v.jobId === j.id && v.prompt.toLowerCase().includes(needle),
+            ),
         )
       }
       rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))
@@ -157,7 +164,11 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
       return clone(rows[0] ?? null)
     },
     listAttempts: async (jobId) =>
-      clone([...state.attempts.values()].filter((a) => a.jobId === jobId).sort((a, b) => b.queuedAt.localeCompare(a.queuedAt))),
+      clone(
+        [...state.attempts.values()]
+          .filter((a) => a.jobId === jobId)
+          .sort((a, b) => b.queuedAt.localeCompare(a.queuedAt)),
+      ),
     listDueAttempts: async (now, limit) =>
       clone(
         [...state.attempts.values()]
@@ -173,7 +184,8 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
           .sort((a, b) => (a.nextActionAt ?? '').localeCompare(b.nextActionAt ?? ''))
           .slice(0, limit),
       ),
-    countSlotHolders: async () => [...state.attempts.values()].filter((a) => SLOT_STAGES.includes(a.stage)).length,
+    countSlotHolders: async () =>
+      [...state.attempts.values()].filter((a) => SLOT_STAGES.includes(a.stage)).length,
     claimOldestQueued: async (now) => {
       const rows = [...state.attempts.values()]
         .filter((a) => a.stage === 'queued' && (a.nextActionAt === null || a.nextActionAt <= now))
@@ -194,7 +206,11 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
     },
     getPublication: async (slug) => clone(state.publications.get(slug) ?? null),
     listPublications: async (jobId) =>
-      clone([...state.publications.values()].filter((p) => p.jobId === jobId).sort((a, b) => b.publishedAt.localeCompare(a.publishedAt))),
+      clone(
+        [...state.publications.values()]
+          .filter((p) => p.jobId === jobId)
+          .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt)),
+      ),
     updatePublication: async (slug, patch) => {
       const p = state.publications.get(slug)
       if (p) Object.assign(p, clone(patch))
@@ -226,7 +242,13 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
     listDueWebhookEvents: async (now, limit) =>
       clone(
         [...state.events.values()]
-          .filter((e) => e.deliveredAt === null && e.nextRetryAt !== null && e.nextRetryAt <= now && !live(e.leaseUntil, now))
+          .filter(
+            (e) =>
+              e.deliveredAt === null &&
+              e.nextRetryAt !== null &&
+              e.nextRetryAt <= now &&
+              !live(e.leaseUntil, now),
+          )
           .sort((a, b) => (a.nextRetryAt ?? '').localeCompare(b.nextRetryAt ?? ''))
           .slice(0, limit),
       ),
@@ -239,7 +261,9 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
       state.cleanup.set(row.id, clone(row))
     },
     listDueCleanup: async (now, limit) =>
-      clone([...state.cleanup.values()].filter((c) => c.doneAt === null && c.nextActionAt <= now).slice(0, limit)),
+      clone(
+        [...state.cleanup.values()].filter((c) => c.doneAt === null && c.nextActionAt <= now).slice(0, limit),
+      ),
     updateCleanup: async (id, patch) => {
       const c = state.cleanup.get(id)
       if (c) Object.assign(c, clone(patch))
@@ -255,7 +279,12 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
         const k = `${v.authorId}|${week}`
         const row = out.get(k) ?? { userId: v.authorId, week, credits: 0, videos: 0 }
         const c = a.usage?.totalCreditsCost
-        row.credits = row.credits === null || c === undefined ? (isTerminal(a.stage) ? null : row.credits) : row.credits + c
+        row.credits =
+          row.credits === null || c === undefined
+            ? isTerminal(a.stage)
+              ? null
+              : row.credits
+            : row.credits + c
         row.videos += 1
         out.set(k, row)
       }
@@ -264,7 +293,8 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
     failuresSince: async (since) => {
       const counts = new Map<string, number>()
       for (const a of state.attempts.values()) {
-        if (a.endedAt && a.endedAt >= since && a.errorCategory) counts.set(a.errorCategory, (counts.get(a.errorCategory) ?? 0) + 1)
+        if (a.endedAt && a.endedAt >= since && a.errorCategory)
+          counts.set(a.errorCategory, (counts.get(a.errorCategory) ?? 0) + 1)
       }
       return [...counts].map(([category, count]) => ({ category, count }))
     },

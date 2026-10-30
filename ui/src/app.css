@@ -1,0 +1,458 @@
+/* App styles on top of Mantine. Every colour is a role token from theme.ts (--va-*). */
+
+html,
+body {
+  background: var(--va-ground);
+  color: var(--va-text);
+  -webkit-font-smoothing: antialiased;
+}
+
+.num,
+.va-num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Surfaces: a lightness step, no border, no shadow. */
+.va-surface {
+  background: var(--va-surface);
+  border: 0;
+  box-shadow: none;
+}
+.va-raised {
+  background: var(--va-raised);
+  border-radius: var(--mantine-radius-sm);
+}
+
+/* The one primary: an inverted pill. Secondary: a raised grey pill. The accent never goes on buttons. */
+.va-button[data-variant='filled'] {
+  --button-bg: var(--va-primary-bg);
+  --button-hover: var(--va-primary-bg);
+  --button-color: var(--va-primary-ink);
+  height: 36px;
+  font-weight: 600;
+}
+.va-button[data-variant='filled']:hover:not(:disabled) {
+  filter: brightness(0.88);
+}
+.va-button[data-variant='default'] {
+  --button-bg: var(--va-raised);
+  --button-hover: color-mix(in srgb, var(--va-raised) 80%, var(--va-text));
+  --button-bd: none;
+  --button-color: var(--va-text);
+  height: 36px;
+}
+.va-button:disabled,
+.va-button[data-disabled] {
+  --button-bg: var(--va-raised);
+  background: var(--va-raised);
+  color: var(--va-muted);
+  filter: none;
+}
+
+/* Shell: a 48px top bar over a centred 1152px column (4 x 276 + 3 x 16 = 1152). */
+.va-bar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  height: var(--va-bar);
+  background: var(--va-ground);
+  border-bottom: 1px solid transparent;
+}
+.va-bar[data-scrolled] {
+  border-bottom-color: var(--va-rule);
+}
+.va-column {
+  width: 100%;
+  max-width: calc(var(--va-column) + 48px);
+  margin: 0 auto;
+  padding: 0 24px;
+}
+.va-bar-inner {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+.va-mark {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--va-text);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 15px;
+  white-space: nowrap;
+}
+.va-nav {
+  display: flex;
+  gap: 20px;
+}
+.va-nav a {
+  color: var(--va-muted);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 32px;
+  transition: color 120ms ease;
+}
+.va-nav a:hover,
+.va-nav a[aria-current='page'] {
+  color: var(--va-text);
+}
+.va-main {
+  padding-top: 28px;
+  padding-bottom: 96px;
+}
+
+/* Title row: h1 24/600, one grey sentence under it, actions on the right. */
+.va-title-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+.va-sub {
+  color: var(--va-muted);
+  font-size: 14px;
+  line-height: 20px;
+  margin-top: 4px;
+}
+
+/* The library: poster cards on a 4-column grid. */
+.va-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+@media (max-width: 1100px) {
+  .va-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 820px) {
+  .va-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 520px) {
+  .va-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.va-card {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  border-radius: var(--mantine-radius-lg);
+  background: var(--va-surface);
+  overflow: hidden;
+  transition: background 120ms ease;
+}
+.va-card:hover {
+  background: color-mix(in srgb, var(--va-surface) 88%, var(--va-text));
+}
+.va-card:focus-visible {
+  outline: 2px solid var(--va-text);
+  outline-offset: 2px;
+}
+.va-poster {
+  aspect-ratio: 16 / 9;
+  background: var(--va-raised);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  position: relative;
+}
+.va-poster img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.va-card-body {
+  padding: 12px 16px 16px;
+}
+.va-card-title {
+  font-weight: 500;
+  font-size: 14px;
+  line-height: 20px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.va-prompt {
+  color: var(--va-muted);
+  font-size: 14px;
+  line-height: 20px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-top: 4px;
+  min-height: 40px;
+}
+.va-meta {
+  color: var(--va-faint);
+  font-size: 12px;
+  line-height: 16px;
+  margin-top: 8px;
+}
+
+/* Stage track: the one element in the data hue. Progress through queued → making → saving → ready. */
+.va-track {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+.va-track span {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--va-raised);
+}
+.va-track span[data-done] {
+  background: var(--va-accent);
+}
+.va-track span[data-now] {
+  background: color-mix(in srgb, var(--va-accent) 55%, var(--va-raised));
+}
+.va-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--va-faint);
+  flex-shrink: 0;
+}
+.va-dot[data-state='ready'] {
+  background: var(--va-accent);
+}
+.va-dot[data-state='working'] {
+  background: var(--va-accent);
+  animation: va-pulse 1.6s ease-in-out infinite;
+}
+.va-dot[data-state='failed'] {
+  background: var(--va-negative);
+}
+@keyframes va-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .va-dot[data-state='working'] {
+    animation: none;
+  }
+}
+
+/* Two-column layouts: 760 + 16 + 376 = 1152. */
+.va-split {
+  display: grid;
+  grid-template-columns: minmax(0, 760fr) minmax(0, 376fr);
+  gap: 16px;
+  align-items: start;
+}
+/* Rows whose blocks should end level stretch, and the rail's last card takes the slack. */
+.va-split[data-even] {
+  align-items: stretch;
+}
+.va-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.va-split[data-even] > .va-rail > :last-child {
+  flex: 1;
+}
+@media (max-width: 960px) {
+  .va-split {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Settings rows: label column beside a panel (360 + 16 + 776 = 1152). */
+.va-setting {
+  display: grid;
+  grid-template-columns: minmax(0, 360fr) minmax(0, 776fr);
+  gap: 16px;
+  padding: 32px 0;
+  border-top: 1px solid var(--va-rule);
+}
+.va-setting:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+@media (max-width: 820px) {
+  .va-setting {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Tables: rules and alignment, 12px grey sentence-case headers, no zebra. */
+.va-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.va-table th {
+  text-align: left;
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--va-faint);
+  height: 36px;
+  padding: 0 12px;
+}
+.va-table td {
+  height: 48px;
+  padding: 0 12px;
+  border-top: 1px solid var(--va-rule);
+}
+.va-table th:first-child,
+.va-table td:first-child {
+  padding-left: 0;
+}
+.va-table th:last-child,
+.va-table td:last-child {
+  padding-right: 0;
+}
+.va-table .num {
+  text-align: right;
+}
+
+/* A figure strip: one container split by dividers, label over value. */
+.va-figures {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+}
+.va-figures > div {
+  padding: 20px 24px;
+}
+.va-figures > div + div {
+  border-left: 1px solid var(--va-rule);
+}
+.va-figure-label {
+  color: var(--va-muted);
+  font-size: 12px;
+}
+.va-figure-value {
+  font-size: 24px;
+  line-height: 32px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  margin-top: 4px;
+}
+@media (max-width: 720px) {
+  .va-figures {
+    grid-template-columns: 1fr 1fr;
+  }
+  .va-figures > div:nth-child(3) {
+    border-left: 0;
+  }
+  .va-figures > div:nth-child(n + 3) {
+    border-top: 1px solid var(--va-rule);
+  }
+}
+
+/* Version filmstrip (the signature element). */
+.va-version {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 12px;
+  padding: 8px;
+  margin: 0 -8px;
+  border-radius: var(--mantine-radius-sm);
+  text-align: left;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  width: calc(100% + 16px);
+  cursor: pointer;
+}
+.va-version:hover {
+  background: var(--va-raised);
+}
+.va-version {
+  position: relative;
+}
+.va-version[aria-pressed='true'] {
+  background: var(--va-raised);
+}
+.va-version[aria-pressed='true']::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--va-accent);
+}
+.va-version .va-poster {
+  border-radius: var(--mantine-radius-xs);
+}
+
+.va-empty {
+  border: 1px dashed var(--va-rule);
+  border-radius: var(--mantine-radius-sm);
+  padding: 12px 16px;
+  color: var(--va-muted);
+  font-size: 14px;
+}
+
+/* Powered-by badge: fixed bottom-right, quiet, never covering content on small screens. */
+.va-powered {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 40;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 6px 8px;
+  border-radius: 999px;
+  background: var(--va-raised);
+  color: var(--va-muted);
+  font-size: 12px;
+  line-height: 16px;
+  text-decoration: none;
+  transition: color 120ms ease;
+}
+.va-powered:hover {
+  color: var(--va-text);
+}
+.va-powered svg {
+  flex-shrink: 0;
+}
+
+@media (max-width: 720px) {
+  .va-title-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .va-nav {
+    display: none;
+  }
+  .va-column {
+    padding: 0 16px;
+  }
+  .va-main {
+    padding-top: 20px;
+  }
+}
+
+/* On phones the badge would cover content, so it closes the page instead of floating. */
+@media (max-width: 720px) {
+  .va-powered {
+    position: static;
+    display: flex;
+    width: max-content;
+    margin: 32px auto 24px;
+  }
+}
+
+/* Focused fields use a neutral edge: the brand hue stays on data. */
+.mantine-Input-input:focus,
+.mantine-Input-input:focus-within {
+  border-color: var(--va-muted);
+}

@@ -24,6 +24,7 @@ const fail = (msg: string, f: Record<string, unknown> = {}): never => {
 interface Version { n: number; status: string; stage: string | null; latestStep: string | null; error: { message: string } | null; usage: { totalCreditsCost?: number } | null; output: { durationSec: number; width: number; height: number; bytes: number } | null }
 interface Video { id: string; status: string; versions: Version[] }
 
+// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- the caller names the response type
 async function api<T>(method: string, path: string, body?: unknown): Promise<{ status: number; data: T; headers: Headers }> {
   const res = await fetch(`${base}${path}`, {
     method,

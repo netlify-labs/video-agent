@@ -42,10 +42,20 @@ export interface AppOptions {
 type Env = { Bindings: { context?: NetlifyContext }; Variables: { principal: Principal } }
 
 const SETUP_TTL_MS = 60_000
-const PAID_PATHS = [/^\/api\/v1\/videos$/, /^\/api\/v1\/videos\/[^/]+\/versions$/, /^\/api\/v1\/videos\/[^/]+\/versions\/\d+\/retry$/]
+const PAID_PATHS = [
+  /^\/api\/v1\/videos$/,
+  /^\/api\/v1\/videos\/[^/]+\/versions$/,
+  /^\/api\/v1\/videos\/[^/]+\/versions\/\d+\/retry$/,
+]
 
-const err = (desc: string) => ({ content: { 'application/json': { schema: s.ErrorSchema } }, description: desc })
-const json = <T extends z.ZodType>(schema: T, description: string) => ({ content: { 'application/json': { schema } }, description })
+const err = (desc: string) => ({
+  content: { 'application/json': { schema: s.ErrorSchema } },
+  description: desc,
+})
+const json = <T extends z.ZodType>(schema: T, description: string) => ({
+  content: { 'application/json': { schema } },
+  description,
+})
 const errors = {
   400: err('Invalid request'),
   401: err('Not signed in'),
@@ -56,12 +66,23 @@ const errors = {
 const security = [{ cookieAuth: [] }, { bearerAuth: [] }]
 
 const IdParam = z.object({ id: z.string().openapi({ param: { name: 'id', in: 'path' } }) })
-const VersionParam = IdParam.extend({ n: z.coerce.number().int().positive().openapi({ param: { name: 'n', in: 'path' } }) })
+const VersionParam = IdParam.extend({
+  n: z.coerce
+    .number()
+    .int()
+    .positive()
+    .openapi({ param: { name: 'n', in: 'path' } }),
+})
 const FileParam = VersionParam.extend({
   file: z.enum(['video', 'poster', 'gif', 'captions']).openapi({ param: { name: 'file', in: 'path' } }),
 })
 
-export const FILE_NAMES = { video: 'video.mp4', poster: 'poster.jpg', gif: 'preview.gif', captions: 'captions.vtt' } as const
+export const FILE_NAMES = {
+  video: 'video.mp4',
+  poster: 'poster.jpg',
+  gif: 'preview.gif',
+  captions: 'captions.vtt',
+} as const
 
 export function createApp(deps: Deps, opts: AppOptions) {
   const app = new OpenAPIHono<Env>({
@@ -101,7 +122,10 @@ export function createApp(deps: Deps, opts: AppOptions) {
   // Deploy-context guard: previews and old deploys serve nothing.
   app.use('*', async (c, next) => {
     if (!opts.isLive(c.env.context)) {
-      return c.json(errorBody('not_found', 'This deploy is not the live production deploy of this video agent.'), 404)
+      return c.json(
+        errorBody('not_found', 'This deploy is not the live production deploy of this video agent.'),
+        404,
+      )
     }
     await next()
   })
@@ -137,7 +161,11 @@ export function createApp(deps: Deps, opts: AppOptions) {
   app.use('/api/v1/*', async (c, next) => {
     if (c.req.method === 'POST' && PAID_PATHS.some((r) => r.test(c.req.path))) {
       const st = await setup()
-      if (!st.ready) throw new ApiError('setup_required', 'This video agent is not set up yet. An admin should open /setup.')
+      if (!st.ready)
+        throw new ApiError(
+          'setup_required',
+          'This video agent is not set up yet. An admin should open /setup.',
+        )
     }
     await next()
   })
@@ -191,7 +219,12 @@ export function createApp(deps: Deps, opts: AppOptions) {
       responses: { 202: json(s.VideoSchema, 'Queued'), ...errors, 503: err('Setup required') },
     }),
     async (c) => {
-      const res = await createVideo(deps, c.get('principal'), c.req.valid('json'), c.req.valid('header')['idempotency-key'])
+      const res = await createVideo(
+        deps,
+        c.get('principal'),
+        c.req.valid('json'),
+        c.req.valid('header')['idempotency-key'],
+      )
       c.header('location', res.body.links.self)
       if (!res.replayed) kick(c)
       return c.json(res.body, statusOf(res.status))
@@ -251,10 +284,17 @@ export function createApp(deps: Deps, opts: AppOptions) {
       summary: 'Rename a video',
       tags: ['videos'],
       security,
-      request: { params: IdParam, body: { content: { 'application/json': { schema: s.RenameSchema } }, required: true } },
+      request: {
+        params: IdParam,
+        body: { content: { 'application/json': { schema: s.RenameSchema } }, required: true },
+      },
       responses: { 200: json(s.VideoSchema, 'Renamed'), ...errors },
     }),
-    async (c) => c.json(await renameVideo(deps, c.get('principal'), c.req.valid('param').id, c.req.valid('json').title), 200),
+    async (c) =>
+      c.json(
+        await renameVideo(deps, c.get('principal'), c.req.valid('param').id, c.req.valid('json').title),
+        200,
+      ),
   )
   app.openapi(
     createRoute({
@@ -286,7 +326,13 @@ export function createApp(deps: Deps, opts: AppOptions) {
       responses: { 202: json(s.VideoSchema, 'Queued'), ...errors, 503: err('Setup required') },
     }),
     async (c) => {
-      const res = await reviseVideo(deps, c.get('principal'), c.req.valid('param').id, c.req.valid('json'), c.req.valid('header')['idempotency-key'])
+      const res = await reviseVideo(
+        deps,
+        c.get('principal'),
+        c.req.valid('param').id,
+        c.req.valid('json'),
+        c.req.valid('header')['idempotency-key'],
+      )
       c.header('location', res.body.links.self)
       if (!res.replayed) kick(c)
       return c.json(res.body, statusOf(res.status))
@@ -345,7 +391,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'delete',
       path: '/api/v1/videos/{id}/versions/{n}/publish',
-      summary: "Unpublish a version (its link stops working on the next request)",
+      summary: 'Unpublish a version (its link stops working on the next request)',
       tags: ['publishing'],
       security,
       request: { params: VersionParam },
@@ -385,7 +431,14 @@ export function createApp(deps: Deps, opts: AppOptions) {
 
   // ───── keys, me, users, stats ─────
   app.openapi(
-    createRoute({ method: 'get', path: '/api/v1/keys', summary: 'Your API keys', tags: ['keys'], security, responses: { 200: json(z.array(s.KeySchema), 'Keys'), ...errors } }),
+    createRoute({
+      method: 'get',
+      path: '/api/v1/keys',
+      summary: 'Your API keys',
+      tags: ['keys'],
+      security,
+      responses: { 200: json(z.array(s.KeySchema), 'Keys'), ...errors },
+    }),
     async (c) => c.json(await listKeys(deps, c.get('principal')), 200),
   )
   app.openapi(
@@ -416,14 +469,37 @@ export function createApp(deps: Deps, opts: AppOptions) {
     },
   )
   app.openapi(
-    createRoute({ method: 'get', path: '/api/v1/me', summary: 'Who you are', tags: ['me'], security, responses: { 200: json(s.MeSchema, 'Me'), ...errors } }),
+    createRoute({
+      method: 'get',
+      path: '/api/v1/me',
+      summary: 'Who you are',
+      tags: ['me'],
+      security,
+      responses: { 200: json(s.MeSchema, 'Me'), ...errors },
+    }),
     (c) => {
       const p = c.get('principal')
-      return c.json({ id: p.userId, email: p.email, name: p.name, role: p.role, via: p.kind === 'user' ? ('session' as const) : ('apiKey' as const) }, 200)
+      return c.json(
+        {
+          id: p.userId,
+          email: p.email,
+          name: p.name,
+          role: p.role,
+          via: p.kind === 'user' ? ('session' as const) : ('apiKey' as const),
+        },
+        200,
+      )
     },
   )
   app.openapi(
-    createRoute({ method: 'get', path: '/api/v1/users', summary: 'List users (admin)', tags: ['admin'], security, responses: { 200: json(z.array(s.UserSchema), 'Users'), ...errors } }),
+    createRoute({
+      method: 'get',
+      path: '/api/v1/users',
+      summary: 'List users (admin)',
+      tags: ['admin'],
+      security,
+      responses: { 200: json(z.array(s.UserSchema), 'Users'), ...errors },
+    }),
     async (c) => c.json(await listUsers(deps, c.get('principal')), 200),
   )
   app.openapi(
@@ -433,13 +509,24 @@ export function createApp(deps: Deps, opts: AppOptions) {
       summary: 'Change a role, disable or enable a user (admin)',
       tags: ['admin'],
       security,
-      request: { params: IdParam, body: { content: { 'application/json': { schema: s.UpdateUserSchema } }, required: true } },
+      request: {
+        params: IdParam,
+        body: { content: { 'application/json': { schema: s.UpdateUserSchema } }, required: true },
+      },
       responses: { 200: json(s.UserSchema, 'Updated'), ...errors },
     }),
-    async (c) => c.json(await updateUser(deps, c.get('principal'), c.req.valid('param').id, c.req.valid('json')), 200),
+    async (c) =>
+      c.json(await updateUser(deps, c.get('principal'), c.req.valid('param').id, c.req.valid('json')), 200),
   )
   app.openapi(
-    createRoute({ method: 'get', path: '/api/v1/stats', summary: 'Runs, queue, failures and credits (admin)', tags: ['admin'], security, responses: { 200: json(s.StatsSchema, 'Stats'), ...errors } }),
+    createRoute({
+      method: 'get',
+      path: '/api/v1/stats',
+      summary: 'Runs, queue, failures and credits (admin)',
+      tags: ['admin'],
+      security,
+      responses: { 200: json(s.StatsSchema, 'Stats'), ...errors },
+    }),
     async (c) => {
       assertCan(c.get('principal'), 'stats:read')
       const now = deps.clock.now()
@@ -455,13 +542,33 @@ export function createApp(deps: Deps, opts: AppOptions) {
         deps.store.getSettings(),
       ])
       const email = new Map(users.map((u) => [u.id, u.email]))
-      const runUrl = (a: { runnerId: string | null; sessionId: string | null }) => (a.runnerId ? deps.runner.runUrl(a.runnerId, a.sessionId) : null)
+      const titles = new Map<string, string>()
+      for (const a of [...inFlight, ...unresolved]) {
+        if (!titles.has(a.jobId)) titles.set(a.jobId, (await deps.store.getJob(a.jobId))?.title ?? a.jobId)
+      }
+      const title = (jobId: string) => titles.get(jobId) ?? jobId
+      const runUrl = (a: { runnerId: string | null; sessionId: string | null }) =>
+        a.runnerId ? deps.runner.runUrl(a.runnerId, a.sessionId) : null
       return c.json(
         {
-          inFlight: inFlight.map((a) => ({ attemptId: a.id, jobId: a.jobId, versionN: a.versionN, stage: a.stage, startedAt: a.startedAt, runUrl: runUrl(a) })),
+          inFlight: inFlight.map((a) => ({
+            attemptId: a.id,
+            jobId: a.jobId,
+            title: title(a.jobId),
+            versionN: a.versionN,
+            stage: a.stage,
+            startedAt: a.startedAt,
+            runUrl: runUrl(a),
+          })),
           queued: queued.length,
           oldestQueuedAt: queued.map((a) => a.queuedAt).sort()[0] ?? null,
-          unresolved: unresolved.map((a) => ({ attemptId: a.id, jobId: a.jobId, versionN: a.versionN, runUrl: runUrl(a) })),
+          unresolved: unresolved.map((a) => ({
+            attemptId: a.id,
+            jobId: a.jobId,
+            title: title(a.jobId),
+            versionN: a.versionN,
+            runUrl: runUrl(a),
+          })),
           failuresThisWeek: failures,
           usage: usage.map((u) => ({ ...u, email: email.get(u.userId) ?? null })),
           maxActiveRuns: deps.config.maxActiveRuns,
@@ -483,7 +590,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     }),
     async (c) => {
       assertCan(c.get('principal'), 'attempts:resolve')
-      if (!(await resolveUnresolved(deps, c.req.valid('param').id))) throw new ApiError('conflict', 'That attempt is not unresolved.')
+      if (!(await resolveUnresolved(deps, c.req.valid('param').id)))
+        throw new ApiError('conflict', 'That attempt is not unresolved.')
       return c.body(null, 204)
     },
   )
@@ -511,7 +619,13 @@ export function createApp(deps: Deps, opts: AppOptions) {
       path: '/api/internal/runs/{id}/done',
       hide: true,
       request: { params: IdParam },
-      responses: { 202: { description: 'Received' }, 400: err('Invalid'), 401: err('Bad token'), 409: err('Conflict'), 410: err('Gone') },
+      responses: {
+        202: { description: 'Received' },
+        400: err('Invalid'),
+        401: err('Bad token'),
+        409: err('Conflict'),
+        410: err('Gone'),
+      },
     }),
     async (c) => {
       const token = /^Bearer\s+(\S+)$/i.exec(c.req.header('authorization') ?? '')?.[1] ?? null
@@ -558,4 +672,3 @@ export function createApp(deps: Deps, opts: AppOptions) {
 
   return Object.assign(app, { spec })
 }
-

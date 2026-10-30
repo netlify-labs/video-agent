@@ -6,3 +6,6 @@ openapi.json
 package-lock.json
 ui/dist
 video
+ui/src/api/schema.d.ts
+ui/dist-mock
+.taste-skill

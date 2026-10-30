@@ -16,7 +16,8 @@ export const keyDto = (k: ApiKeyRow) => ({
 
 export async function createKey(deps: Deps, p: Principal, name: string) {
   assertCan(p, 'keys:manage')
-  if (p.kind !== 'user') throw new ApiError('forbidden', 'API keys can only be created from a signed-in session.')
+  if (p.kind !== 'user')
+    throw new ApiError('forbidden', 'API keys can only be created from a signed-in session.')
   const id = deps.ids.keyId()
   const secret = Buffer.from(deps.ids.secret(24), 'base64url').toString('hex')
   const webhookSecret = `whsec_${deps.ids.secret(24)}`
@@ -42,6 +43,7 @@ export async function listKeys(deps: Deps, p: Principal) {
 
 export async function revokeKey(deps: Deps, p: Principal, keyId: string) {
   const key = await deps.store.getKey(keyId)
-  if (!key || (key.ownerId !== p.userId && p.role !== 'admin')) throw new ApiError('not_found', 'API key not found.')
+  if (!key || (key.ownerId !== p.userId && p.role !== 'admin'))
+    throw new ApiError('not_found', 'API key not found.')
   if (!key.revokedAt) await deps.store.updateKey(keyId, { revokedAt: deps.clock.now().toISOString() })
 }

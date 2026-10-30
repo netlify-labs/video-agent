@@ -35,11 +35,23 @@ export async function claimSlots(deps: Deps): Promise<number> {
       if (!next) return false
       const queuedFor = now.getTime() - new Date(next.queuedAt).getTime()
       if (queuedFor > deps.config.queueTimeoutMin * MIN) {
-        await setStage(repo, next, 'failed', terminal(now, 'queue_timeout', 'Waited too long in the queue.'), now.toISOString())
+        await setStage(
+          repo,
+          next,
+          'failed',
+          terminal(now, 'queue_timeout', 'Waited too long in the queue.'),
+          now.toISOString(),
+        )
         await emitTerminalEvent(repo, deps, next.id)
         return true
       }
-      return setStage(repo, next, 'starting', { nextActionAt: now.toISOString(), leaseUntil: null }, now.toISOString())
+      return setStage(
+        repo,
+        next,
+        'starting',
+        { nextActionAt: now.toISOString(), leaseUntil: null },
+        now.toISOString(),
+      )
     })
     if (!got) return claimed
     claimed++
@@ -76,7 +88,10 @@ export async function tick(deps: Deps, budget: TickBudget): Promise<{ claimed: n
       await step(deps, leased)
     } catch (e) {
       deps.log.error('reconciler.step_failed', { attemptId: a.id, stage: a.stage, error: e })
-      await deps.store.updateAttempt(a.id, { leaseUntil: null, nextActionAt: iso(deps.clock.now().getTime() + MIN) })
+      await deps.store.updateAttempt(a.id, {
+        leaseUntil: null,
+        nextActionAt: iso(deps.clock.now().getTime() + MIN),
+      })
     }
     processed++
   }
@@ -104,7 +119,11 @@ async function handleOf(deps: Deps, a: AttemptRow): Promise<string> {
   return decrypt((await getSettings(deps)).dataEncryptionKey, a.handleEnc)
 }
 
-async function startRequest(deps: Deps, a: AttemptRow, callbackToken: string): Promise<{ req: StartRequest; parentSha: string | null }> {
+async function startRequest(
+  deps: Deps,
+  a: AttemptRow,
+  callbackToken: string,
+): Promise<{ req: StartRequest; parentSha: string | null }> {
   const job = await deps.store.getJob(a.jobId)
   const version = await deps.store.getVersion(a.jobId, a.versionN)
   if (!job || !version) throw new Error('attempt without job/version')
@@ -155,20 +174,32 @@ async function start(deps: Deps, a: AttemptRow): Promise<void> {
     const res = await deps.runner.reconcile(req, a.sendWindow)
     if (res.kind === 'matched') {
       await deps.store.tx((repo) =>
-        setStage(repo, a, 'running', {
-          handleEnc: encrypt(settings.dataEncryptionKey, res.handle),
-          runnerId: res.runnerId,
-          sessionId: res.sessionId,
-          leaseUntil: null,
-          nextActionAt: iso(now.getTime() + MIN),
-        }, now.toISOString()),
+        setStage(
+          repo,
+          a,
+          'running',
+          {
+            handleEnc: encrypt(settings.dataEncryptionKey, res.handle),
+            runnerId: res.runnerId,
+            sessionId: res.sessionId,
+            leaseUntil: null,
+            nextActionAt: iso(now.getTime() + MIN),
+          },
+          now.toISOString(),
+        ),
       )
       deps.log.info('attempt.reconciled', { attemptId: a.id, runnerId: res.runnerId })
       return
     }
     if (now.getTime() - a.sendWindow.failedAt > SEND_WINDOW_GRACE_MS || res.kind === 'ambiguous') {
       await deps.store.tx((repo) =>
-        setStage(repo, a, 'unresolved', { leaseUntil: null, nextActionAt: null, errorMessage: `reconcile: ${res.kind}` }, now.toISOString()),
+        setStage(
+          repo,
+          a,
+          'unresolved',
+          { leaseUntil: null, nextActionAt: null, errorMessage: `reconcile: ${res.kind}` },
+          now.toISOString(),
+        ),
       )
       deps.log.warn('attempt.unresolved', { attemptId: a.id, reconcile: res.kind })
       return
@@ -206,16 +237,22 @@ async function start(deps: Deps, a: AttemptRow): Promise<void> {
     const res = await deps.runner.start(req)
     const after = deps.clock.now()
     await deps.store.tx((repo) =>
-      setStage(repo, a, 'running', {
-        handleEnc: encrypt(settings.dataEncryptionKey, res.handle),
-        runnerId: res.runnerId,
-        sessionId: res.sessionId,
-        sendWindow: null,
-        startedAt: after.toISOString(),
-        authoringDeadlineAt: iso(after.getTime() + deps.config.authoringDeadlineMin * MIN),
-        leaseUntil: null,
-        nextActionAt: iso(after.getTime() + MIN),
-      }, after.toISOString()),
+      setStage(
+        repo,
+        a,
+        'running',
+        {
+          handleEnc: encrypt(settings.dataEncryptionKey, res.handle),
+          runnerId: res.runnerId,
+          sessionId: res.sessionId,
+          sendWindow: null,
+          startedAt: after.toISOString(),
+          authoringDeadlineAt: iso(after.getTime() + deps.config.authoringDeadlineMin * MIN),
+          leaseUntil: null,
+          nextActionAt: iso(after.getTime() + MIN),
+        },
+        after.toISOString(),
+      ),
     )
     deps.log.info('attempt.started', { attemptId: a.id, runnerId: res.runnerId, sessionId: res.sessionId })
   } catch (e) {
@@ -232,7 +269,13 @@ async function start(deps: Deps, a: AttemptRow): Promise<void> {
     if (e instanceof RunnerError && e.kind === 'capacity') {
       const backoff = MIN + Math.floor(Math.random() * MIN)
       await deps.store.tx((repo) =>
-        setStage(repo, a, 'queued', { sendWindow: null, leaseUntil: null, nextActionAt: iso(after.getTime() + backoff) }, after.toISOString()),
+        setStage(
+          repo,
+          a,
+          'queued',
+          { sendWindow: null, leaseUntil: null, nextActionAt: iso(after.getTime() + backoff) },
+          after.toISOString(),
+        ),
       )
       deps.log.warn('attempt.requeued_capacity', { attemptId: a.id, backoffMs: backoff })
       return
@@ -243,10 +286,15 @@ async function start(deps: Deps, a: AttemptRow): Promise<void> {
         repo,
         a,
         'failed',
-        terminal(after, credits ? 'credits_unavailable' : 'start_failed', e instanceof Error ? e.message : String(e)),
+        terminal(
+          after,
+          credits ? 'credits_unavailable' : 'start_failed',
+          e instanceof Error ? e.message : String(e),
+        ),
         after.toISOString(),
       )
-      if (credits) await repo.updateSettings({ queuePausedReason: 'AI credits are unavailable for this team.' })
+      if (credits)
+        await repo.updateSettings({ queuePausedReason: 'AI credits are unavailable for this team.' })
       await emitTerminalEvent(repo, deps, a.id)
     })
     deps.log.error('attempt.start_failed', { attemptId: a.id, credits, error: e })
@@ -257,17 +305,44 @@ async function poll(deps: Deps, a: AttemptRow): Promise<void> {
   const snap = await deps.runner.snapshot(await handleOf(deps, a))
   const now = deps.clock.now()
   if (snap.kind === 'running') {
-    const patch = { latestStep: snap.latestStep, usage: snap.usage, leaseUntil: null, nextActionAt: iso(now.getTime() + MIN) }
+    const patch = {
+      latestStep: snap.latestStep,
+      usage: snap.usage,
+      leaseUntil: null,
+      nextActionAt: iso(now.getTime() + MIN),
+    }
     if (snap.state === 'await_input') {
       await deps.store.tx((repo) =>
-        setStage(repo, a, 'cancelling', { ...patch, cancelRequestedAt: now.toISOString(), cancelReason: 'needs_input', nextActionAt: now.toISOString() }, now.toISOString()),
+        setStage(
+          repo,
+          a,
+          'cancelling',
+          {
+            ...patch,
+            cancelRequestedAt: now.toISOString(),
+            cancelReason: 'needs_input',
+            nextActionAt: now.toISOString(),
+          },
+          now.toISOString(),
+        ),
       )
       deps.log.warn('attempt.needs_input', { attemptId: a.id })
       return
     }
     if (a.authoringDeadlineAt && now.toISOString() > a.authoringDeadlineAt) {
       await deps.store.tx((repo) =>
-        setStage(repo, a, 'cancelling', { ...patch, cancelRequestedAt: now.toISOString(), cancelReason: 'deadline', nextActionAt: now.toISOString() }, now.toISOString()),
+        setStage(
+          repo,
+          a,
+          'cancelling',
+          {
+            ...patch,
+            cancelRequestedAt: now.toISOString(),
+            cancelReason: 'deadline',
+            nextActionAt: now.toISOString(),
+          },
+          now.toISOString(),
+        ),
       )
       deps.log.warn('attempt.deadline', { attemptId: a.id })
       return
@@ -285,7 +360,12 @@ async function onTerminal(deps: Deps, a: AttemptRow, snap: Extract<RunnerSnapsho
   const base = { usage: snap.usage, leaseUntil: null }
   await deps.store.tx(async (repo) => {
     if (fresh.cancelReason) {
-      const stage = fresh.cancelReason === 'deadline' ? 'timed_out' : fresh.cancelReason === 'needs_input' ? 'failed' : 'cancelled'
+      const stage =
+        fresh.cancelReason === 'deadline'
+          ? 'timed_out'
+          : fresh.cancelReason === 'needs_input'
+            ? 'failed'
+            : 'cancelled'
       const category = fresh.cancelReason === 'needs_input' ? 'needs_input' : null
       const msg =
         fresh.cancelReason === 'needs_input'
@@ -298,16 +378,28 @@ async function onTerminal(deps: Deps, a: AttemptRow, snap: Extract<RunnerSnapsho
       return
     }
     if (snap.status === 'succeeded') {
-      await setStage(repo, fresh, 'finishing', { ...base, finishingAt: now.toISOString(), nextActionAt: now.toISOString() }, now.toISOString())
-      await repo.updateAttempt(a.id, { latestStep: snap.resultText ? 'Finished authoring' : fresh.latestStep })
+      await setStage(
+        repo,
+        fresh,
+        'finishing',
+        { ...base, finishingAt: now.toISOString(), nextActionAt: now.toISOString() },
+        now.toISOString(),
+      )
+      await repo.updateAttempt(a.id, {
+        latestStep: snap.resultText ? 'Finished authoring' : fresh.latestStep,
+      })
       return
     }
-    const stage = snap.status === 'cancelled' ? 'cancelled' : snap.status === 'timedOut' ? 'timed_out' : 'failed'
+    const stage =
+      snap.status === 'cancelled' ? 'cancelled' : snap.status === 'timedOut' ? 'timed_out' : 'failed'
     await setStage(
       repo,
       fresh,
       stage,
-      { ...base, ...terminal(now, stage === 'failed' ? 'runner_failed' : null, snap.failure?.message ?? null) },
+      {
+        ...base,
+        ...terminal(now, stage === 'failed' ? 'runner_failed' : null, snap.failure?.message ?? null),
+      },
       now.toISOString(),
     )
     await emitTerminalEvent(repo, deps, a.id)
@@ -338,13 +430,26 @@ async function finishing(deps: Deps, a: AttemptRow): Promise<void> {
   const startedFinishing = a.finishingAt ? new Date(a.finishingAt).getTime() : now.getTime()
   if (now.getTime() - startedFinishing > deps.config.finalizeDeadlineMin * MIN) {
     await deps.store.tx(async (repo) => {
-      await setStage(repo, a, 'failed', terminal(now, 'artifacts_missing', "The video files didn't arrive, or didn't match what the agent reported, in time."), now.toISOString())
+      await setStage(
+        repo,
+        a,
+        'failed',
+        terminal(
+          now,
+          'artifacts_missing',
+          "The video files didn't arrive, or didn't match what the agent reported, in time.",
+        ),
+        now.toISOString(),
+      )
       await emitTerminalEvent(repo, deps, a.id)
     })
     return
   }
   // The lease taken by tick() covers the background worker; re-dispatch when it expires.
-  await deps.store.updateAttempt(a.id, { leaseUntil: iso(now.getTime() + 2 * MIN), nextActionAt: iso(now.getTime() + 2 * MIN) })
+  await deps.store.updateAttempt(a.id, {
+    leaseUntil: iso(now.getTime() + 2 * MIN),
+    nextActionAt: iso(now.getTime() + 2 * MIN),
+  })
   await deps.platform.dispatchFinalize(a.id)
 }
 
@@ -354,7 +459,13 @@ export async function resolveUnresolved(deps: Deps, attemptId: string) {
   return deps.store.tx(async (repo) => {
     const a = await repo.getAttempt(attemptId, { lock: true })
     if (!a || a.stage !== 'unresolved') return false
-    await setStage(repo, a, 'failed', terminal(now, 'unresolved_start', 'Marked failed by an admin after an unresolved start.'), now.toISOString())
+    await setStage(
+      repo,
+      a,
+      'failed',
+      terminal(now, 'unresolved_start', 'Marked failed by an admin after an unresolved start.'),
+      now.toISOString(),
+    )
     await emitTerminalEvent(repo, deps, a.id)
     return true
   })

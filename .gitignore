@@ -12,3 +12,5 @@ coverage/
 *.log
 spikes/out/
 spikes/out-*.log
+ui/dist-mock/
+.taste-skill/

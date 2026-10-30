@@ -1,157 +1,278 @@
 import {
-  Alert, Anchor, Badge, Button, Card, Center, Code, Grid, Group, Loader, Menu, Paper, Stack, Switch, Text, Textarea, TextInput, Timeline, Title,
+  ActionIcon,
+  Alert,
+  Anchor,
+  Button,
+  Card,
+  CopyButton,
+  Group,
+  Menu,
+  Skeleton,
+  Stack,
+  Switch,
+  Text,
+  TextInput,
+  Textarea,
+  Title,
 } from '@mantine/core'
 import { modals } from '@mantine/modals'
 import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
-import { IconDots, IconDownload, IconExternalLink, IconWorld } from '@tabler/icons-react'
+import { IconDots, IconDownload, IconExternalLink } from '@tabler/icons-react'
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router'
+import { Link, useNavigate, useParams } from 'react-router'
 import { $api, errorMessage, newIdempotencyKey, type Version, type Video } from '../api/client'
-import { CopyField, Meta, StatusBadge, duration, fileUrl, inProgress, relativeTime } from '../components/bits'
+import {
+  CopyField,
+  Meta,
+  StageTrack,
+  Status,
+  credits,
+  duration,
+  fileUrl,
+  inProgress,
+  relativeTime,
+} from '../components/bits'
 
-const STAGES = ['queued', 'starting', 'running', 'finishing', 'ready'] as const
-const STAGE_LABEL: Record<(typeof STAGES)[number], string> = {
-  queued: 'Queued',
-  starting: 'Starting a run',
-  running: 'The agent is making it',
-  finishing: 'Checking and saving the files',
-  ready: 'Ready',
+const STAGE_WORDS: Record<string, string> = {
+  queued: 'Waiting for a free slot',
+  starting: 'Starting an agent run',
+  running: 'The agent is writing and checking the composition',
+  cancelling: 'Stopping the run',
+  unresolved: 'Checking whether the run started (an admin can resolve this)',
+  finishing: 'Verifying and saving the files',
 }
 
-function stageIndex(v: Version): number {
-  const s = v.stage ?? 'queued'
-  if (s === 'cancelling' || s === 'unresolved') return 2
-  const i = STAGES.indexOf(s as (typeof STAGES)[number])
-  return i === -1 ? 4 : i
-}
-
-function useElapsed(since: string | null | undefined) {
-  const [, tick] = useState(0)
+function useTicker() {
+  const [, set] = useState(0)
   useEffect(() => {
-    const t = setInterval(() => { tick((n) => n + 1) }, 1000)
-    return () => { clearInterval(t) }
+    const t = setInterval(() => {
+      set((n) => n + 1)
+    }, 1000)
+    return () => {
+      clearInterval(t)
+    }
   }, [])
-  if (!since) return ''
-  return duration((Date.now() - new Date(since).getTime()) / 1000)
 }
 
-function Progress({ video, v }: { video: Video; v: Version }) {
-  const elapsed = useElapsed(v.timings?.queuedAt)
+function clock(since: string | null | undefined): string {
+  if (!since) return '0:00'
+  const s = Math.max(0, (Date.now() - new Date(since).getTime()) / 1000)
+  return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
+}
+
+function Progress({ video, v, canCancel }: { video: Video; v: Version; canCancel: boolean }) {
+  useTicker()
   const qc = useQueryClient()
   const cancel = $api.useMutation('post', '/api/v1/videos/{id}/versions/{n}/cancel', {
     onSuccess: () => void qc.invalidateQueries(),
     onError: (e) => notifications.show({ color: 'red', message: errorMessage(e) }),
   })
-  const [notify, setNotify] = useState(() => localStorage.getItem('notify') === '1' && Notification.permission === 'granted')
+  const [notify, setNotify] = useState(() => {
+    try {
+      return (
+        localStorage.getItem('notify') === '1' &&
+        'Notification' in window &&
+        Notification.permission === 'granted'
+      )
+    } catch {
+      return false
+    }
+  })
   return (
-    <Paper withBorder p="lg" radius="md">
-      <Stack>
-        <Group justify="space-between">
-          <Text fw={600}>Version {v.n} is in progress · {elapsed}</Text>
-          <Button
-            variant="default"
-            size="xs"
-            loading={cancel.isPending}
-            disabled={v.stage === 'cancelling' || v.stage === 'unresolved'}
-            onClick={() => { cancel.mutate({ params: { path: { id: video.id, n: v.n } } }) }}
-          >
-            {v.stage === 'cancelling' ? 'Cancelling…' : 'Cancel'}
-          </Button>
-        </Group>
-        <Timeline active={stageIndex(v)} bulletSize={18} lineWidth={2}>
-          {STAGES.map((s) => (
-            <Timeline.Item key={s} title={STAGE_LABEL[s]} />
-          ))}
-        </Timeline>
-        {v.latestStep ? (
-          <Text size="sm" c="dimmed" lineClamp={3}>
-            Agent activity: {v.latestStep}
+    <Card p={0} style={{ overflow: 'hidden' }}>
+      <div
+        style={{
+          aspectRatio: '16 / 9',
+          background: 'var(--va-raised)',
+          display: 'grid',
+          placeItems: 'center',
+          padding: 24,
+        }}
+      >
+        <Stack gap="md" w="min(520px, 100%)">
+          <Group justify="space-between" align="baseline">
+            <Text fw={600} size="lg">
+              {v.status === 'queued' ? `Version ${v.n} is queued` : `Making version ${v.n}`}
+            </Text>
+            <Text size="xl" fw={500} className="num" aria-label="Elapsed">
+              {clock(v.timings?.queuedAt)}
+            </Text>
+          </Group>
+          <StageTrack version={v} />
+          <Text size="sm" c="var(--va-muted)">
+            {STAGE_WORDS[v.stage ?? 'queued'] ?? 'Working'}
           </Text>
-        ) : null}
-        <Text size="xs" c="dimmed">
-          Status updates every minute. Most videos take a few minutes.
-        </Text>
-        {'Notification' in window ? (
-          <Switch
-            size="sm"
-            label="Notify me when it's done (while this tab is open)"
-            checked={notify}
-            onChange={(e) => {
-              const on = e.currentTarget.checked
-              if (on && Notification.permission !== 'granted') {
-                void Notification.requestPermission().then((p) => {
-                  setNotify(p === 'granted')
-                  localStorage.setItem('notify', p === 'granted' ? '1' : '0')
-                })
-              } else {
-                setNotify(on)
-                localStorage.setItem('notify', on ? '1' : '0')
-              }
-            }}
-          />
-        ) : null}
-      </Stack>
-    </Paper>
+          {v.latestStep ? (
+            <Text size="sm" c="var(--va-faint)" lineClamp={2}>
+              Agent: {v.latestStep}
+            </Text>
+          ) : null}
+          <Group justify="space-between" mt="xs">
+            {'Notification' in window ? (
+              <Switch
+                size="sm"
+                label="Notify me when it's done"
+                checked={notify}
+                onChange={(e) => {
+                  const on = e.currentTarget.checked
+                  const save = (x: boolean) => {
+                    setNotify(x)
+                    try {
+                      localStorage.setItem('notify', x ? '1' : '0')
+                    } catch {
+                      // private mode
+                    }
+                  }
+                  if (on && Notification.permission !== 'granted')
+                    void Notification.requestPermission().then((p) => {
+                      save(p === 'granted')
+                    })
+                  else save(on)
+                }}
+              />
+            ) : (
+              <span />
+            )}
+            {canCancel ? (
+              <Button
+                variant="default"
+                size="xs"
+                loading={cancel.isPending}
+                disabled={v.stage === 'cancelling' || v.stage === 'unresolved'}
+                onClick={() => {
+                  cancel.mutate({ params: { path: { id: video.id, n: v.n } } })
+                }}
+              >
+                {v.stage === 'cancelling' ? 'Stopping…' : 'Cancel'}
+              </Button>
+            ) : null}
+          </Group>
+        </Stack>
+      </div>
+    </Card>
   )
 }
 
-function PublishPanel({ video, v, canPublish }: { video: Video; v: Version; canPublish: boolean }) {
+function Filmstrip({
+  video,
+  selected,
+  onSelect,
+}: {
+  video: Video
+  selected: number
+  onSelect: (n: number) => void
+}) {
+  return (
+    <Card>
+      <Group justify="space-between" mb="sm">
+        <Text fw={600}>Versions</Text>
+        <Text size="sm" c="var(--va-faint)" className="num">
+          {video.versions.length}
+        </Text>
+      </Group>
+      <Stack gap={4}>
+        {video.versions.map((x) => {
+          const pub = x.publications.some((p) => !p.unpublishedAt)
+          return (
+            <button
+              key={x.n}
+              type="button"
+              className="va-version"
+              aria-pressed={x.n === selected}
+              onClick={() => {
+                onSelect(x.n)
+              }}
+            >
+              <div className="va-poster">
+                {x.status === 'ready' ? (
+                  <img src={fileUrl(video.id, x.n, 'poster')} alt="" loading="lazy" />
+                ) : (
+                  <StageTrack version={x} />
+                )}
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <Group justify="space-between" gap={6} wrap="nowrap">
+                  <Text size="sm" fw={500}>
+                    v{x.n}
+                    {x.parentN ? (
+                      <span style={{ color: 'var(--va-faint)', fontWeight: 400 }}> from v{x.parentN}</span>
+                    ) : null}
+                  </Text>
+                  <Status status={x.status} size="xs" />
+                </Group>
+                <Text size="sm" c="var(--va-muted)" lineClamp={2}>
+                  {x.prompt}
+                </Text>
+                <Text size="xs" c="var(--va-faint)">
+                  {relativeTime(x.createdAt)}
+                  {pub ? ' · Public' : ''}
+                </Text>
+              </div>
+            </button>
+          )
+        })}
+      </Stack>
+    </Card>
+  )
+}
+
+function PublicLink({ video, v, canPublish }: { video: Video; v: Version; canPublish: boolean }) {
   const qc = useQueryClient()
-  const publish = $api.useMutation('post', '/api/v1/videos/{id}/versions/{n}/publish', {
-    onSuccess: () => void qc.invalidateQueries(),
-    onError: (e) => notifications.show({ color: 'red', message: errorMessage(e) }),
-  })
   const unpublish = $api.useMutation('delete', '/api/v1/videos/{id}/versions/{n}/publish', {
     onSuccess: () => void qc.invalidateQueries(),
     onError: (e) => notifications.show({ color: 'red', message: errorMessage(e) }),
   })
   const live = v.publications.find((p) => !p.unpublishedAt && p.urls)
-  if (!live) {
-    return canPublish ? (
-      <Button leftSection={<IconWorld size={16} />} variant="light" loading={publish.isPending} onClick={() => { publish.mutate({ params: { path: { id: video.id, n: v.n } } }) }}>
-        Publish version {v.n}
-      </Button>
-    ) : null
-  }
+  if (!live?.urls) return null
   return (
-    <Paper withBorder p="md" radius="md">
-      <Stack gap="xs">
-        <Group justify="space-between">
-          <Group gap="xs">
-            <IconWorld size={16} />
-            <Text fw={600}>Version {v.n} is public</Text>
+    <Card>
+      <Group justify="space-between" mb="sm">
+        <Text fw={600}>Public link for v{v.n}</Text>
+        <Anchor href={live.urls.page} target="_blank" size="sm" c="var(--va-muted)">
+          <Group gap={4}>
+            Open <IconExternalLink size={14} />
           </Group>
-          {canPublish ? (
+        </Anchor>
+      </Group>
+      <Stack gap="sm">
+        <CopyField label="Share page" value={live.urls.page} />
+        <CopyField label="MP4" value={live.urls.mp4} />
+        <CopyField label="GIF" value={live.urls.gif} />
+        <CopyField label="Embed" value={live.embed ?? ''} />
+        {canPublish ? (
+          <Group justify="space-between" mt={4}>
+            <Text size="xs" c="var(--va-faint)">
+              Anyone with the link can watch it.
+            </Text>
             <Button
-              size="xs"
               variant="subtle"
               color="red"
+              size="xs"
               loading={unpublish.isPending}
               onClick={() => {
                 modals.openConfirmModal({
                   title: 'Unpublish this version?',
-                  children: <Text size="sm">The links stop working right away. Copies people already downloaded, and link previews already shown in Slack or social apps, can't be recalled.</Text>,
+                  children: (
+                    <Text size="sm">
+                      The links stop working right away. Copies people already downloaded, and link previews
+                      already shown in Slack or social apps, can't be recalled.
+                    </Text>
+                  ),
                   labels: { confirm: 'Unpublish', cancel: 'Keep it public' },
-                  confirmProps: { color: 'red' },
-                  onConfirm: () => { unpublish.mutate({ params: { path: { id: video.id, n: v.n } } }) },
+                  confirmProps: { color: 'red', variant: 'light' },
+                  onConfirm: () => {
+                    unpublish.mutate({ params: { path: { id: video.id, n: v.n } } })
+                  },
                 })
               }}
             >
               Unpublish
             </Button>
-          ) : null}
-        </Group>
-        {live.urls ? (
-          <>
-            <CopyField label="Share page" value={live.urls.page} />
-            <CopyField label="MP4" value={live.urls.mp4} />
-            <CopyField label="GIF preview" value={live.urls.gif} />
-            <CopyField label="Embed" value={live.embed ?? ''} />
-          </>
+          </Group>
         ) : null}
       </Stack>
-    </Paper>
+    </Card>
   )
 }
 
@@ -160,14 +281,20 @@ export function VideoPage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const me = $api.useQuery('get', '/api/v1/me')
-  const video = $api.useQuery('get', '/api/v1/videos/{id}', { params: { path: { id } } }, {
-    refetchInterval: (q) => (q.state.data && inProgress(q.state.data.status) ? 5000 : false),
-  })
+  const video = $api.useQuery(
+    'get',
+    '/api/v1/videos/{id}',
+    { params: { path: { id } } },
+    {
+      refetchInterval: (q) => (q.state.data && inProgress(q.state.data.status) ? 5000 : false),
+    },
+  )
   const [selected, setSelected] = useState<number | null>(null)
   const [revision, setRevision] = useState('')
   const [revKey, setRevKey] = useState(newIdempotencyKey)
   const prevStatus = useRef<string | null>(null)
 
+  const onError = (e: unknown) => notifications.show({ color: 'red', message: errorMessage(e) })
   const revise = $api.useMutation('post', '/api/v1/videos/{id}/versions', {
     onSuccess: () => {
       setRevision('')
@@ -175,18 +302,26 @@ export function VideoPage() {
       setSelected(null)
       void qc.invalidateQueries()
     },
-    onError: (e) => notifications.show({ color: 'red', title: "Couldn't start the revision", message: errorMessage(e) }),
+    onError,
   })
   const retry = $api.useMutation('post', '/api/v1/videos/{id}/versions/{n}/retry', {
     onSuccess: () => void qc.invalidateQueries(),
-    onError: (e) => notifications.show({ color: 'red', message: errorMessage(e) }),
+    onError,
   })
-  const rename = $api.useMutation('patch', '/api/v1/videos/{id}', { onSuccess: () => void qc.invalidateQueries() })
+  const publish = $api.useMutation('post', '/api/v1/videos/{id}/versions/{n}/publish', {
+    onSuccess: () => void qc.invalidateQueries(),
+    onError,
+  })
+  const rename = $api.useMutation('patch', '/api/v1/videos/{id}', {
+    onSuccess: () => void qc.invalidateQueries(),
+    onError,
+  })
   const remove = $api.useMutation('delete', '/api/v1/videos/{id}', {
     onSuccess: () => {
       void qc.invalidateQueries()
       void navigate('/')
     },
+    onError,
   })
 
   const data = video.data
@@ -195,48 +330,152 @@ export function VideoPage() {
     const was = prevStatus.current
     prevStatus.current = data.status
     if (was && inProgress(was as Video['status']) && !inProgress(data.status)) {
-      const msg = data.status === 'ready' ? `"${data.title}" is ready.` : `"${data.title}" ${data.status.replace('_', ' ')}.`
-      if (localStorage.getItem('notify') === '1' && 'Notification' in window && Notification.permission === 'granted') new Notification(msg)
-      notifications.show({ color: data.status === 'ready' ? 'green' : 'red', message: msg })
+      const msg = data.status === 'ready' ? `"${data.title}" is ready.` : `"${data.title}" didn't finish.`
+      try {
+        if (
+          localStorage.getItem('notify') === '1' &&
+          'Notification' in window &&
+          Notification.permission === 'granted'
+        )
+          new Notification(msg)
+      } catch {
+        // notifications unavailable
+      }
+      notifications.show({ color: data.status === 'ready' ? 'teal' : 'red', message: msg })
     }
   }, [data])
 
-  if (video.isLoading) return <Center p="xl"><Loader /></Center>
-  if (!data) return <Alert color="red">{errorMessage(video.error)}</Alert>
+  if (video.isLoading) {
+    return (
+      <>
+        <div className="va-title-row">
+          <div>
+            <Skeleton height={28} width={320} />
+            <Skeleton height={14} width={420} mt={10} />
+          </div>
+        </div>
+        <div className="va-split">
+          <Card p={0}>
+            <div style={{ aspectRatio: '16 / 9', background: 'var(--va-raised)' }} />
+          </Card>
+          <Card>
+            <Skeleton height={16} width={120} />
+            <Skeleton height={64} mt="md" />
+            <Skeleton height={64} mt="sm" />
+          </Card>
+        </div>
+      </>
+    )
+  }
+  if (!data) {
+    return (
+      <Alert color="red" variant="light" title="Couldn't load this video">
+        <Group justify="space-between">
+          <Text size="sm">{errorMessage(video.error)}</Text>
+          <Button variant="default" size="xs" onClick={() => void video.refetch()}>
+            Retry
+          </Button>
+        </Group>
+      </Alert>
+    )
+  }
 
   const isAdmin = me.data?.role === 'admin'
   const isOwner = me.data?.id === data.owner.id
-  const v = data.versions.find((x) => x.n === selected) ?? data.versions.find((x) => x.status === 'ready') ?? data.versions[0]
   const latest = data.versions[0]
+  const v =
+    data.versions.find((x) => x.n === selected) ?? data.versions.find((x) => x.status === 'ready') ?? latest
   if (!v || !latest) return null
   const busy = data.versions.some((x) => inProgress(x.status))
+  const canPublish = isAdmin || isOwner
   const canAct = (author: string) => isAdmin || isOwner || me.data?.id === author
+  const live = v.publications.find((p) => !p.unpublishedAt && p.urls)
+  const showProgress = inProgress(latest.status) && (selected === null || selected === latest.n)
+
+  const sub = inProgress(latest.status)
+    ? `Making v${latest.n}${latest.parentN ? ` from v${latest.parentN}` : ''}. ${data.versions.some((x) => x.status === 'ready') ? 'Earlier versions are below.' : 'Usually ready in 3 to 8 minutes.'}`
+    : v.status === 'ready' && v.output
+      ? `v${v.n} · ${duration(v.output.durationSec)} · ${v.output.width}×${v.output.height} · ${data.owner.name ?? data.owner.email?.split('@')[0] ?? ''} · ${relativeTime(v.createdAt)}`
+      : `v${v.n} ${v.status === 'timed_out' ? 'timed out' : v.status}${v.error ? `: ${v.error.message}` : ''}`
 
   return (
-    <Stack>
-      <Group justify="space-between" align="start">
-        <div>
-          <Title order={2}>{data.title}</Title>
-          <Text c="dimmed" size="sm">
-            {data.owner.name ?? data.owner.email} · {relativeTime(data.createdAt)} · {data.aspect}
-          </Text>
+    <>
+      <Anchor component={Link} to="/" size="sm" c="var(--va-muted)">
+        Videos
+      </Anchor>
+      <div className="va-title-row" style={{ marginTop: 4 }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <Title order={1} style={{ overflowWrap: 'anywhere' }}>
+            {data.title}
+          </Title>
+          <div className="va-sub num">{sub}</div>
         </div>
-        <Group gap="xs">
-          <StatusBadge status={data.status} />
-          {isAdmin || isOwner ? (
+        <Group gap="sm">
+          {v.status === 'ready' ? (
+            <Button
+              component="a"
+              href={fileUrl(data.id, v.n, 'video', true)}
+              variant="default"
+              leftSection={<IconDownload size={16} />}
+            >
+              MP4
+            </Button>
+          ) : null}
+          {v.status === 'ready' && canPublish && !live ? (
+            <Button
+              loading={publish.isPending}
+              onClick={() => {
+                publish.mutate({ params: { path: { id: data.id, n: v.n } } })
+              }}
+            >
+              Publish v{v.n}
+            </Button>
+          ) : live?.urls ? (
+            <CopyButton value={live.urls.page}>
+              {({ copied, copy }) => (
+                <Button onClick={copy}>{copied ? 'Link copied' : 'Copy public link'}</Button>
+              )}
+            </CopyButton>
+          ) : null}
+          {canPublish ? (
             <Menu position="bottom-end">
               <Menu.Target>
-                <Button variant="default" size="xs" px={8} aria-label="More actions"><IconDots size={16} /></Button>
+                <ActionIcon variant="subtle" color="gray" size={36} radius="xl" aria-label="More actions">
+                  <IconDots size={18} />
+                </ActionIcon>
               </Menu.Target>
               <Menu.Dropdown>
+                {v.status === 'ready'
+                  ? (['poster', 'gif', 'captions'] as const).map((f) => (
+                      <Menu.Item
+                        key={f}
+                        component="a"
+                        href={fileUrl(data.id, v.n, f, true)}
+                        leftSection={<IconDownload size={14} />}
+                      >
+                        Download {f === 'gif' ? 'GIF preview' : f}
+                      </Menu.Item>
+                    ))
+                  : null}
                 <Menu.Item
                   onClick={() => {
                     let t = data.title
                     modals.openConfirmModal({
                       title: 'Rename',
-                      children: <TextInput defaultValue={data.title} maxLength={120} onChange={(e) => { t = e.currentTarget.value }} data-autofocus />,
+                      children: (
+                        <TextInput
+                          defaultValue={data.title}
+                          maxLength={120}
+                          onChange={(e) => {
+                            t = e.currentTarget.value
+                          }}
+                          data-autofocus
+                        />
+                      ),
                       labels: { confirm: 'Save', cancel: 'Cancel' },
-                      onConfirm: () => { rename.mutate({ params: { path: { id } }, body: { title: t } }) },
+                      onConfirm: () => {
+                        rename.mutate({ params: { path: { id } }, body: { title: t } })
+                      },
                     })
                   }}
                 >
@@ -247,10 +486,16 @@ export function VideoPage() {
                   onClick={() => {
                     modals.openConfirmModal({
                       title: 'Delete this video?',
-                      children: <Text size="sm">Every version, file and public link is removed. This can't be undone.</Text>,
+                      children: (
+                        <Text size="sm">
+                          Every version, file and public link is removed. This can't be undone.
+                        </Text>
+                      ),
                       labels: { confirm: 'Delete', cancel: 'Cancel' },
-                      confirmProps: { color: 'red' },
-                      onConfirm: () => { remove.mutate({ params: { path: { id } } }) },
+                      confirmProps: { color: 'red', variant: 'light' },
+                      onConfirm: () => {
+                        remove.mutate({ params: { path: { id } } })
+                      },
                     })
                   }}
                 >
@@ -260,134 +505,174 @@ export function VideoPage() {
             </Menu>
           ) : null}
         </Group>
-      </Group>
+      </div>
 
-      <Grid gap="lg">
-        <Grid.Col span={{ base: 12, md: 8 }}>
-          <Stack>
-            {inProgress(latest.status) ? <Progress video={data} v={latest} /> : null}
-            {v.status === 'ready' ? (
-              <video
-                key={`${data.id}-${v.n}`}
-                controls
-                playsInline
-                poster={fileUrl(data.id, v.n, 'poster')}
-                src={fileUrl(data.id, v.n, 'video')}
-                style={{ width: '100%', maxHeight: '70vh', background: '#000', borderRadius: 12 }}
+      <div className="va-split">
+        <div className="va-rail">
+          {showProgress ? (
+            <Progress video={data} v={latest} canCancel={canAct(latest.authorId)} />
+          ) : v.status === 'ready' ? (
+            <video
+              key={`${data.id}-${v.n}`}
+              controls
+              playsInline
+              poster={fileUrl(data.id, v.n, 'poster')}
+              src={fileUrl(data.id, v.n, 'video')}
+              style={{
+                width: '100%',
+                aspectRatio: '16 / 9',
+                background: '#000',
+                borderRadius: 16,
+                display: 'block',
+              }}
+            >
+              <track
+                kind="captions"
+                src={fileUrl(data.id, v.n, 'captions')}
+                srcLang="en"
+                label="Captions"
+                default
+              />
+            </video>
+          ) : (
+            <Card p={0} style={{ overflow: 'hidden' }}>
+              <div
+                style={{
+                  aspectRatio: '16 / 9',
+                  background: 'var(--va-raised)',
+                  display: 'grid',
+                  placeItems: 'center',
+                  padding: 24,
+                }}
               >
-                <track kind="captions" src={fileUrl(data.id, v.n, 'captions')} srcLang="en" label="Captions" default />
-              </video>
-            ) : null}
-            {['failed', 'cancelled', 'timed_out'].includes(v.status) ? (
-              <Alert color={v.status === 'failed' ? 'red' : 'orange'} title={`Version ${v.n} ${v.status === 'timed_out' ? 'timed out' : v.status}`}>
-                <Stack gap="xs">
-                  <Text size="sm">
-                    {v.error?.message ?? (v.status === 'cancelled' ? 'It was cancelled.' : 'The run did not finish.')}
-                    {v.status === 'timed_out' && v.targetDurationSec === null ? ' Try again with a shorter target length.' : ''}
+                <Stack gap="sm" maw={480}>
+                  <Text fw={600} size="lg">
+                    Version {v.n}{' '}
+                    {v.status === 'timed_out'
+                      ? 'timed out'
+                      : v.status === 'cancelled'
+                        ? 'was cancelled'
+                        : "didn't finish"}
+                  </Text>
+                  <Text size="sm" c="var(--va-muted)">
+                    {v.error?.message ??
+                      (v.status === 'cancelled'
+                        ? 'Someone stopped it before it finished.'
+                        : 'The run ended without a video.')}
+                    {v.status === 'timed_out' && v.targetDurationSec === null
+                      ? ' A shorter target length usually fixes this.'
+                      : ''}
                   </Text>
                   {v.n === latest.n && canAct(v.authorId) ? (
-                    <Group>
-                      <Button size="xs" loading={retry.isPending} disabled={busy} onClick={() => { retry.mutate({ params: { path: { id, n: v.n } } }) }}>
+                    <Group mt="xs">
+                      <Button
+                        loading={retry.isPending}
+                        disabled={busy}
+                        onClick={() => {
+                          retry.mutate({ params: { path: { id, n: v.n } } })
+                        }}
+                      >
                         Try again
                       </Button>
                     </Group>
                   ) : null}
                 </Stack>
-              </Alert>
-            ) : null}
-            {v.status === 'ready' ? (
-              <Group gap="xs">
-                {(['video', 'poster', 'gif', 'captions'] as const).map((f) => (
-                  <Button key={f} component="a" href={fileUrl(data.id, v.n, f, true)} size="xs" variant="default" leftSection={<IconDownload size={14} />}>
-                    {{ video: 'MP4', poster: 'Poster', gif: 'GIF', captions: 'Captions' }[f]}
-                  </Button>
-                ))}
-              </Group>
-            ) : null}
-            {v.status === 'ready' ? <PublishPanel video={data} v={v} canPublish={isAdmin || isOwner} /> : null}
+              </div>
+            </Card>
+          )}
 
-            <Card withBorder radius="md" padding="md">
-              <Stack gap="xs">
-                <Text fw={600}>Revise</Text>
+          <Card>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                revise.mutate({
+                  params: { path: { id }, header: { 'idempotency-key': revKey } },
+                  body: { prompt: revision, fromVersion: v.n },
+                })
+              }}
+            >
+              <Stack gap="sm">
+                <Group justify="space-between">
+                  <Text fw={600}>Revise</Text>
+                  <Text size="sm" c="var(--va-faint)">
+                    {busy
+                      ? 'Wait for the version in progress'
+                      : v.status === 'ready'
+                        ? `Starts from v${v.n}`
+                        : 'Pick a ready version'}
+                  </Text>
+                </Group>
                 <Textarea
+                  aria-label="What should change?"
                   autosize
                   minRows={2}
-                  placeholder={busy ? 'Wait for the version in progress to finish.' : `Change something about version ${v.status === 'ready' ? v.n : '…'}, e.g. "make the end card orange"`}
+                  placeholder='What should change? For example: "make the end card say Start free today"'
                   value={revision}
                   disabled={busy || v.status !== 'ready'}
-                  onChange={(e) => { setRevision(e.currentTarget.value) }}
+                  onChange={(e) => {
+                    setRevision(e.currentTarget.value)
+                  }}
                 />
                 <Group>
                   <Button
+                    type="submit"
                     disabled={busy || v.status !== 'ready' || revision.trim().length < 3}
                     loading={revise.isPending}
-                    onClick={() => { revise.mutate({ params: { path: { id }, header: { 'idempotency-key': revKey } }, body: { prompt: revision, fromVersion: v.n } }) }}
                   >
-                    Make version {data.versions.length + 1}
+                    Make v{data.versions.length + 1}
                   </Button>
-                  {v.status !== 'ready' && !busy ? <Text size="sm" c="dimmed">Select a ready version to revise it.</Text> : null}
                 </Group>
               </Stack>
-            </Card>
-          </Stack>
-        </Grid.Col>
+            </form>
+          </Card>
 
-        <Grid.Col span={{ base: 12, md: 4 }}>
-          <Stack>
-            <Card withBorder radius="md" padding="md">
-              <Text fw={600} mb="xs">Versions</Text>
-              <Stack gap="xs">
-                {data.versions.map((x) => (
-                  <Paper
-                    key={x.n}
-                    withBorder
-                    p="xs"
-                    radius="sm"
-                    onClick={() => { setSelected(x.n) }}
-                    style={{ cursor: 'pointer', borderColor: x.n === v.n ? 'var(--mantine-primary-color-filled)' : undefined }}
-                  >
-                    <Group justify="space-between" gap="xs">
-                      <Text size="sm" fw={600}>v{x.n}</Text>
-                      <Group gap={4}>
-                        {x.publications.some((p) => !p.unpublishedAt) ? <Badge size="xs" variant="outline">Public</Badge> : null}
-                        <StatusBadge status={x.status} />
-                      </Group>
-                    </Group>
-                    <Text size="sm" style={{ whiteSpace: 'pre-wrap' }} {...(x.n === v.n ? {} : { lineClamp: 2 })}>
-                      {x.prompt}
-                    </Text>
-                    <Text size="xs" c="dimmed">{relativeTime(x.createdAt)}{x.parentN ? ` · from v${x.parentN}` : ''}</Text>
-                  </Paper>
-                ))}
-              </Stack>
-            </Card>
-            {v.output ? (
-              <Card withBorder radius="md" padding="md">
-                <Text fw={600} mb="xs">What the agent said</Text>
-                <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>{v.output.summary || '—'}</Text>
-              </Card>
-            ) : null}
-            <Card withBorder radius="md" padding="md">
-              <Text fw={600} mb="xs">Details (v{v.n})</Text>
-              <Stack gap={4}>
-                {v.output ? <Meta label="Format">{v.output.width}×{v.output.height}, {duration(v.output.durationSec)}, {(v.output.bytes / 1e6).toFixed(1)} MB</Meta> : null}
-                <Meta label="Length asked">{v.targetDurationSec ? `${v.targetDurationSec}s` : 'Auto'}</Meta>
-                {v.agent ? <Meta label="Agent">{[v.agent.agent, v.agent.model, v.agent.effort].filter(Boolean).join(' · ')}</Meta> : null}
-                {v.agent?.deployId ? <Meta label="Deploy"><Code>{v.agent.deployId.slice(0, 12)}</Code></Meta> : null}
-                <Meta label="Credits">{v.usage?.totalCreditsCost !== undefined ? v.usage.totalCreditsCost.toFixed(1) : 'unknown'}</Meta>
-                {v.timings?.startedAt ? <Meta label="Started">{new Date(v.timings.startedAt).toLocaleString()}</Meta> : null}
-                {v.timings?.endedAt ? <Meta label="Finished">{new Date(v.timings.endedAt).toLocaleString()}</Meta> : null}
-                <Meta label="Attempts">{v.attempts}</Meta>
-                {v.links.netlifyRun ? (
-                  <Anchor href={v.links.netlifyRun} target="_blank" size="sm">
-                    <Group gap={4}>View run in Netlify <IconExternalLink size={14} /></Group>
-                  </Anchor>
-                ) : null}
-              </Stack>
-            </Card>
-          </Stack>
-        </Grid.Col>
-      </Grid>
-    </Stack>
+          <Card>
+            <Text fw={600} mb={8}>
+              {v.output?.summary ? 'What the agent made' : 'The request'}
+            </Text>
+            <Text size="sm" c="var(--va-muted)" style={{ whiteSpace: 'pre-wrap' }}>
+              {v.output?.summary ?? v.prompt}
+            </Text>
+          </Card>
+        </div>
+
+        <div className="va-rail">
+          <Filmstrip video={data} selected={v.n} onSelect={setSelected} />
+          <PublicLink video={data} v={v} canPublish={canPublish} />
+          <Card>
+            <Text fw={600} mb="sm">
+              Details for v{v.n}
+            </Text>
+            <Stack gap={8}>
+              <Meta label="Prompt">{v.prompt.length > 80 ? `${v.prompt.slice(0, 80)}…` : v.prompt}</Meta>
+              <Meta label="Length">
+                {v.output ? duration(v.output.durationSec) : '—'}{' '}
+                {v.targetDurationSec ? `(asked ${v.targetDurationSec} s)` : '(auto)'}
+              </Meta>
+              <Meta label="File">{v.output ? `${(v.output.bytes / 1e6).toFixed(2)} MB` : '—'}</Meta>
+              <Meta label="Credits">{credits(v.usage?.totalCreditsCost)}</Meta>
+              <Meta label="Agent">
+                {v.agent ? [v.agent.agent, v.agent.model].filter(Boolean).join(' · ') || '—' : '—'}
+              </Meta>
+              <Meta label="Attempts">{v.attempts}</Meta>
+              {v.timings?.endedAt && v.timings.startedAt ? (
+                <Meta label="Took">
+                  {duration(
+                    (new Date(v.timings.endedAt).getTime() - new Date(v.timings.startedAt).getTime()) / 1000,
+                  )}
+                </Meta>
+              ) : null}
+              {v.links.netlifyRun ? (
+                <Anchor href={v.links.netlifyRun} target="_blank" size="sm" c="var(--va-muted)" mt={4}>
+                  <Group gap={4}>
+                    View the run in Netlify <IconExternalLink size={14} />
+                  </Group>
+                </Anchor>
+              ) : null}
+            </Stack>
+          </Card>
+        </div>
+      </div>
+    </>
   )
 }

@@ -29,9 +29,11 @@ export function readConfig(env: Record<string, string | undefined>): Config {
       .map((s) => s.trim().toLowerCase())
       .filter(Boolean)
   const domains = list(env.ALLOWED_EMAIL_DOMAINS)
-  const num = (v: string | undefined, d: number) => (v && Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : d)
+  const num = (v: string | undefined, d: number) =>
+    v && Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : d
   return {
-    allowedEmailDomains: domains.length === 0 ? null : domains.includes('invite-only') ? 'invite-only' : domains,
+    allowedEmailDomains:
+      domains.length === 0 ? null : domains.includes('invite-only') ? 'invite-only' : domains,
     adminEmails: list(env.ADMIN_EMAILS),
     agent: env.AGENT ?? 'claude',
     agentModel: env.AGENT_MODEL ?? null,
@@ -74,7 +76,12 @@ export type BlobStoreName = 'uploads' | 'videos' | 'sources' | 'internal'
 
 export interface BlobsPort {
   get(store: BlobStoreName, key: string): Promise<Uint8Array | null>
-  set(store: BlobStoreName, key: string, data: Uint8Array | string, metadata?: Record<string, string>): Promise<void>
+  set(
+    store: BlobStoreName,
+    key: string,
+    data: Uint8Array | string,
+    metadata?: Record<string, string>,
+  ): Promise<void>
   delete(store: BlobStoreName, key: string): Promise<void>
   list(store: BlobStoreName, prefix: string): Promise<string[]>
 }
@@ -112,8 +119,13 @@ export class RunnerError extends Error {
 export interface RunnerPort {
   start(req: StartRequest): Promise<{ handle: string; runnerId: string; sessionId: string }>
   /** After an ambiguous start: find the same logical create by requestId. */
-  reconcile(req: StartRequest, window: { sentAt: number; failedAt: number }): Promise<
-    { kind: 'matched'; handle: string; runnerId: string; sessionId: string } | { kind: 'none' } | { kind: 'ambiguous' }
+  reconcile(
+    req: StartRequest,
+    window: { sentAt: number; failedAt: number },
+  ): Promise<
+    | { kind: 'matched'; handle: string; runnerId: string; sessionId: string }
+    | { kind: 'none' }
+    | { kind: 'ambiguous' }
   >
   snapshot(handle: string): Promise<RunnerSnapshot>
   stop(handle: string): Promise<void>
@@ -138,7 +150,12 @@ export interface SetupFacts {
 
 export interface HttpPort {
   /** Webhook delivery; resolves DNS, refuses private addresses and redirects. */
-  postJson(url: string, body: string, headers: Record<string, string>, timeoutMs: number): Promise<{ status: number }>
+  postJson(
+    url: string,
+    body: string,
+    headers: Record<string, string>,
+    timeoutMs: number,
+  ): Promise<{ status: number }>
 }
 
 export interface Clock {

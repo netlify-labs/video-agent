@@ -9,7 +9,11 @@ import { videoDto } from './videos.js'
 const DELIVER_FOR_MS = 24 * 3600_000
 const MAX_BACKOFF_MS = 3600_000
 
-export async function emitTerminalEvent(repo: Repo, deps: Pick<Deps, 'ids' | 'clock' | 'config' | 'runner'>, attemptId: string) {
+export async function emitTerminalEvent(
+  repo: Repo,
+  deps: Pick<Deps, 'ids' | 'clock' | 'config' | 'runner'>,
+  attemptId: string,
+) {
   const a = await repo.getAttempt(attemptId)
   if (!a) return
   const v = await repo.getVersion(a.jobId, a.versionN)
@@ -41,23 +45,38 @@ export function backoffMs(attempt: number, random = Math.random()): number {
   return Math.round(base / 2 + random * (base / 2))
 }
 
-export async function deliverWebhooks(deps: Deps, budget: { deadline: number; maxItems: number }): Promise<number> {
+export async function deliverWebhooks(
+  deps: Deps,
+  budget: { deadline: number; maxItems: number },
+): Promise<number> {
   const now = deps.clock.now()
   const due = await deps.store.listDueWebhookEvents(now.toISOString(), budget.maxItems)
   const { dataEncryptionKey } = await getSettings(deps)
   let delivered = 0
   for (const e of due) {
     if (Date.now() > budget.deadline) break
-    await deps.store.updateWebhookEvent(e.eventId, { leaseUntil: new Date(now.getTime() + 60_000).toISOString() })
+    await deps.store.updateWebhookEvent(e.eventId, {
+      leaseUntil: new Date(now.getTime() + 60_000).toISOString(),
+    })
     const key = await deps.store.getKey(e.apiKeyId)
     const t = Math.floor(deps.clock.now().getTime() / 1000)
-    const body = JSON.stringify({ eventId: e.eventId, event: e.type, createdAt: new Date(t * 1000).toISOString(), ...(e.payload as object) })
+    const body = JSON.stringify({
+      eventId: e.eventId,
+      event: e.type,
+      createdAt: new Date(t * 1000).toISOString(),
+      ...(e.payload as object),
+    })
     let result: string
     let ok = false
     try {
       if (!key) throw new Error('signing key missing')
       const secret = decrypt(dataEncryptionKey, key.webhookSecretEnc)
-      const res = await deps.http.postJson(e.url, body, { 'x-video-agent-signature': webhookSignature(secret, body, t), 'x-video-agent-event': e.type }, 10_000)
+      const res = await deps.http.postJson(
+        e.url,
+        body,
+        { 'x-video-agent-signature': webhookSignature(secret, body, t), 'x-video-agent-event': e.type },
+        10_000,
+      )
       ok = res.status >= 200 && res.status < 300
       result = `HTTP ${res.status}`
     } catch (err) {
@@ -66,7 +85,13 @@ export async function deliverWebhooks(deps: Deps, budget: { deadline: number; ma
     const attempts = e.attempts + 1
     const after = deps.clock.now()
     if (ok) {
-      await deps.store.updateWebhookEvent(e.eventId, { deliveredAt: after.toISOString(), attempts, lastResult: result, leaseUntil: null, nextRetryAt: null })
+      await deps.store.updateWebhookEvent(e.eventId, {
+        deliveredAt: after.toISOString(),
+        attempts,
+        lastResult: result,
+        leaseUntil: null,
+        nextRetryAt: null,
+      })
       delivered++
       continue
     }

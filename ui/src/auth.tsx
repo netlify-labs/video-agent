@@ -38,6 +38,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [notice, setNotice] = useState<string | null>(null)
 
   useEffect(() => {
+    if (import.meta.env.VITE_MOCK) {
+      // Mock mode: signed in as the first admin; the mock API answers every request.
+      setUser({ id: 'u_david', email: 'david.wells@netlify.com', name: 'David Wells' })
+      setReady(true)
+      return undefined
+    }
     const off = onAuthChange((_e, u) => {
       setUser(u)
     })
