@@ -2,8 +2,15 @@ import { describe, expect, it } from 'vitest'
 import { normalizeAspect, normalizeDuration, normalizeVideoId } from '../src/mcp.js'
 import { harness, type Harness } from './helpers.js'
 
-async function rpc(h: Harness, key: string | null, method: string, params: unknown = {}, id = 1) {
-  const res = await h.call('POST', '/api/mcp', {
+async function rpc(
+  h: Harness,
+  key: string | null,
+  method: string,
+  params: unknown = {},
+  id = 1,
+  path = '/api/mcp',
+) {
+  const res = await h.call('POST', path, {
     origin: null,
     headers: {
       accept: 'application/json, text/event-stream',
@@ -28,6 +35,13 @@ async function setup() {
 }
 
 describe('MCP', () => {
+  it('serves the short /mcp URL too', async () => {
+    const { h, key } = await setup()
+    const r = await rpc(h, key, 'tools/list', {}, 1, '/mcp')
+    expect(r.status).toBe(200)
+    expect((r.body as { result: { tools: unknown[] } }).result.tools).toHaveLength(7)
+  })
+
   it('initializes and lists seven tools with instructions', async () => {
     const { h, key } = await setup()
     const init = await rpc(h, key, 'initialize', {

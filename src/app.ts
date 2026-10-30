@@ -605,7 +605,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
   )
 
   // ───── MCP: the same operations as tools for AI clients (API keys only) ─────
-  app.all('/api/mcp', async (c) => {
+  const mcp = async (c: Context<Env>) => {
     if (!c.req.header('authorization')) {
       return c.json(
         errorBody(
@@ -621,7 +621,10 @@ export function createApp(deps: Deps, opts: AppOptions) {
     return handleMcp(deps, principal, c.req.raw, () => {
       kick(c)
     })
-  })
+  }
+  // /mcp is the short URL people paste into their clients; the function serves it directly.
+  app.all('/api/mcp', mcp)
+  app.all('/mcp', mcp)
 
   // ───── agent callback (hidden from the public spec) ─────
   app.openapi(
