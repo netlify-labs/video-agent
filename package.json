@@ -1,0 +1,47 @@
+{
+  "name": "video-agent",
+  "version": "0.0.0",
+  "private": true,
+  "description": "A Netlify template that turns a prompt into a video with Agent Runners and HyperFrames",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p ui/tsconfig.json --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "openapi:gen": "tsx scripts/gen-openapi.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:check": "drizzle-kit check",
+    "build": "tsx scripts/build.ts",
+    "build:ui": "vite build ui",
+    "setup": "tsx scripts/setup.ts"
+  },
+  "dependencies": {
+    "@hono/netlify": "1.0.2",
+    "@hono/zod-openapi": "1.6.3",
+    "@netlify/blobs": "11.1.7",
+    "@netlify/database": "2.0.1",
+    "@netlify/functions": "6.0.3",
+    "@netlify/identity": "2.0.0",
+    "drizzle-orm": "1.0.0-beta.22",
+    "hono": "4.13.14",
+    "nax-agent-runner-sdk": "0.3.0",
+    "ulid": "3.0.2",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.2.17",
+    "@eslint/js": "10.0.1",
+    "@types/node": "24.19.2",
+    "drizzle-kit": "1.0.0-beta.22",
+    "eslint": "10.14.0",
+    "prettier": "3.9.10",
+    "tsx": "4.23.15",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.72.1",
+    "vitest": "5.0.5"
+  }
+}

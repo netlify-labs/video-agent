@@ -1,0 +1,8 @@
+node_modules
+.beads
+.nax
+netlify/database/migrations
+openapi.json
+package-lock.json
+ui/dist
+video

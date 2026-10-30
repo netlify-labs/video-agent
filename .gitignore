@@ -1,8 +1,14 @@
 node_modules/
 dist/
+ui/dist/
 .netlify/
 .env
 .env.*
 !.env.example
 .DS_Store
 .nax/
+.render/
+coverage/
+*.log
+spikes/out/
+spikes/out-*.log
