@@ -48,3 +48,37 @@ Decisions:
 - **Authoring deadline 22 min stays.** A 60 s video took under 7 minutes end to end; render time grows ~0.5 s per output second, so a 3-minute video should fit comfortably (unmeasured; first real 3-minute request will confirm).
 - **Credits:** ~90–210 per video in these runs. The admin page shows actual usage per video.
 - **Finding:** the agents did not put the JSON block in their final answer (the runner summarizes from a results file). The callback receipt is therefore the primary manifest path and the final-answer fallback is best effort; `render-job.ts` posts the callback with retries.
+
+## S3, S4, S5, S6, S7: answered by the live deployment (2026-10-30)
+
+Production (`netlify-video-agent.netlify.app`, deploy `f89d1f4` and later) ran `scripts/e2e/phase2.ts` with an API key:
+create → v1 ready in **2:51** → signed download + Range → revise to v2 (**ready ~3 min later**, end card changed,
+everything else kept) → publish → share page with `og:video` → unpublish → **404 immediately**. PASS in 5.9 minutes.
+A second video made by a person through the web app finished too (221 credits).
+
+- **S3 (callback and signals): done.** `render-job.ts` reached the production callback from the run; receipts arrived
+  before the session went terminal, as designed; finalize used the receipt. Final answers did not reliably contain the
+  manifest block (S1), so the receipt is the primary path.
+- **S4 (serving): done for real sizes.** Signed `/files/…` returned `206` with `Content-Range: bytes 100-199/181877`;
+  unsigned and expired URLs are refused (`403`); public `/v/{slug}.mp4` HEAD `200`, then `404` right after unpublish.
+  Edge functions read the signing secret and publications from the `internal` Blobs store (strong reads), not the
+  database. The 20 MB / 100 MB seek-latency measurement is still open; at 1–1.5 MB per minute of video, typical files
+  are far below that.
+- **S5 (SDK in Functions): done.** `nax-agent-runner-sdk` 0.3.0 bundles in the `api` and `sweep` functions; starts
+  happen within one sweep tick (the e2e run went from queued to running in 16 s). Ambiguous-start reconciliation is
+  covered by tests with the persisted start request; it has not been triggered in production.
+- **S6 (previews and deploy context): mostly done.** The deploy-context guard holds: the published deploy's own
+  permalink (`<deploy-id>--netlify-video-agent.netlify.app/api/health`) returns `404`. Agent-run previews deploy with
+  only post-processing in their logs; whether the build command's UI skip ran is not visible there (open, harmless).
+  Parallel runs: 3 S1 runs and the S2 run ran concurrently without interference.
+- **S7 (Identity): done.** In the catch-all Hono function: sign-up with a `netlify.com` address, email confirmation,
+  `getUser()` from the `nf_jwt` cookie, the live `admin.getUser` check, admin bootstrap from `ADMIN_EMAILS`, and API-key
+  creation from the session all worked in production. `userValidate` (typed handler in `netlify/functions/identity.ts`)
+  is deployed; outside domains are also refused by the API (tested). Invite-only acceptance through the deny-all hook
+  is not yet exercised live.
+
+## S8. Deploy button: blocked on a public repo
+
+The button only works from a public GitHub/GitLab repo. Testing it means publishing a fixture copy of this template
+publicly, which waits for the owner's decision to open-source (or approval for a throwaway public fixture).
+`netlify.toml` already declares `[template.environment]`; `npm run setup` covers the same path from a clone.

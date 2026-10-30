@@ -137,7 +137,7 @@ export function AdminPage() {
                     <tr key={a.attemptId}>
                       <td>
                         <Anchor component={Link} to={`/videos/${a.jobId}`} c="var(--va-text)">
-                          v{a.versionN} of {a.jobId.slice(-6)}
+                          {a.title} <span style={{ color: 'var(--va-faint)' }}>v{a.versionN}</span>
                         </Anchor>
                         {a.runUrl ? (
                           <Anchor href={a.runUrl} target="_blank" size="sm" c="var(--va-muted)" ml="sm">
@@ -181,7 +181,7 @@ export function AdminPage() {
                       <tr key={a.attemptId}>
                         <td>
                           <Anchor component={Link} to={`/videos/${a.jobId}`} c="var(--va-text)">
-                            v{a.versionN} of {a.jobId.slice(-6)}
+                            {a.title} <span style={{ color: 'var(--va-faint)' }}>v{a.versionN}</span>
                           </Anchor>
                         </td>
                         <td style={{ textAlign: 'right' }}>

@@ -4,5 +4,5 @@
     "types": ["node"],
     "noEmit": true
   },
-  "include": ["src", "db", "netlify/functions", "scripts", "spikes", "test", "drizzle.config.ts", "vitest.config.ts"]
+  "include": ["src", "db", "netlify/functions", "scripts", "spikes", "test", "drizzle.config.ts", "vitest.config.ts", "playwright.config.ts", "ui/e2e"]
 }
