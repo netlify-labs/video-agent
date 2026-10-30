@@ -145,7 +145,7 @@ export function LibraryPage() {
     <Stack gap={0}>
       <div className="va-title-row">
         <div>
-          <Title order={1}>Videos</Title>
+          <Title order={1}>Library</Title>
           <div className="va-sub">{list.isLoading ? 'Loading…' : finding}</div>
         </div>
         <Group gap="sm">

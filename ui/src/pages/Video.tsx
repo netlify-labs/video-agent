@@ -401,7 +401,7 @@ export function VideoPage() {
   return (
     <>
       <Anchor component={Link} to="/" size="sm" c="var(--va-muted)">
-        Videos
+        Library
       </Anchor>
       <div className="va-title-row" style={{ marginTop: 4 }}>
         <div style={{ minWidth: 0, flex: 1 }}>

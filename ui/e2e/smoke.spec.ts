@@ -2,20 +2,19 @@ import { expect, test } from '@playwright/test'
 
 test('library shows videos, progress and the badge', async ({ page }) => {
   await page.goto('/')
-  await expect(page.getByRole('heading', { level: 1, name: 'Videos' })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1, name: 'Library' })).toBeVisible()
   await expect(page.getByText('7 videos, 2 in progress.')).toBeVisible()
   await expect(page.getByText('Making v1')).toBeVisible()
   await expect(page.getByText('Org webhooks launch')).toBeVisible()
   await expect(page.getByRole('link', { name: 'Powered by Netlify Agent Runners' })).toBeVisible()
 })
 
-test('search narrows the library', async ({ page, isMobile }) => {
+test('search narrows the library', async ({ page }) => {
   await page.goto('/')
   const search = page.getByRole('textbox', { name: 'Search prompts and titles' }).filter({ visible: true }).first()
   await search.fill('docs tutorial')
   await expect(page.getByText('Add an environment variable, then redeploy')).toBeVisible()
   await expect(page.getByText('Org webhooks launch')).toHaveCount(0)
-  expect(isMobile !== undefined).toBe(true)
 })
 
 test('video page shows the player, versions and the public link', async ({ page }) => {

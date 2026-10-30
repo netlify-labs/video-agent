@@ -49,7 +49,45 @@ body {
   filter: none;
 }
 
-/* Shell: a 48px top bar over a centred 1152px column (4 x 276 + 3 x 16 = 1152). */
+/* App shell: header and sidebar on the page ground, divided by one quiet rule. */
+.va-shell-edge {
+  background: var(--va-ground);
+  border-color: var(--va-rule) !important;
+}
+.va-shell-main {
+  background: var(--va-ground);
+}
+.va-navlink {
+  border-radius: var(--mantine-radius-sm);
+  color: var(--va-muted);
+  font-weight: 500;
+  margin-bottom: 2px;
+}
+.va-navlink:hover {
+  background: var(--va-surface);
+  color: var(--va-text);
+}
+.va-navlink[data-active],
+.va-navlink[data-active]:hover {
+  background: var(--va-raised);
+  color: var(--va-text);
+}
+.va-navlink[data-active] .mantine-NavLink-label {
+  color: var(--va-text);
+}
+.va-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: var(--va-raised);
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--va-text);
+}
+
+/* Legacy top-bar shell (unused by the app frame; kept for the standalone setup page). */
 .va-bar {
   position: sticky;
   top: 0;
@@ -125,6 +163,11 @@ body {
   display: grid;
   gap: 16px;
   grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+@media (min-width: 1680px) {
+  .va-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
 }
 @media (max-width: 1100px) {
   .va-grid {
