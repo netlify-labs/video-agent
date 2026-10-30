@@ -211,7 +211,12 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
     },
     deleteExpiredIdempotency: async (now) => {
       let n = 0
-      for (const [k, v] of state.idem) if (v.expiresAt <= now) (state.idem.delete(k), n++)
+      for (const [k, v] of state.idem) {
+        if (v.expiresAt <= now) {
+          state.idem.delete(k)
+          n++
+        }
+      }
       return n
     },
 

@@ -7,7 +7,7 @@ import { hmacHex, safeEqual } from '../../src/lib/crypto.js'
 
 export default async (req: Request, context: Context) => {
   const deps = prodDeps()
-  if (context.deploy.published !== true && process.env.ALLOW_NON_PRODUCTION !== 'true') return
+  if (!context.deploy.published && process.env.ALLOW_NON_PRODUCTION !== 'true') return
   const { attemptId } = (await req.json().catch(() => ({}))) as { attemptId?: string }
   const sig = req.headers.get('x-finalize-signature') ?? ''
   if (!attemptId) return

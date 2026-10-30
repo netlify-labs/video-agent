@@ -39,10 +39,12 @@ export function manifestFromResult(text: string | null): unknown {
 
 export function isManifest(v: unknown, attemptId: string): v is Manifest {
   if (!v || typeof v !== 'object') return false
-  const m = v as Partial<Manifest>
-  if (m.attemptId !== attemptId || typeof m.files !== 'object' || m.files === null) return false
+  const m = v as Record<string, unknown>
+  const files = m.files
+  if (m.attemptId !== attemptId || typeof m.title !== 'string' || typeof m.summary !== 'string') return false
+  if (!files || typeof files !== 'object') return false
   return OUTPUT_FILES.every((f) => {
-    const e = (m.files as Record<string, unknown>)[f] as { sha256?: unknown; bytes?: unknown } | undefined
+    const e = (files as Record<string, unknown>)[f] as { sha256?: unknown; bytes?: unknown } | undefined
     return typeof e?.sha256 === 'string' && /^[0-9a-f]{64}$/.test(e.sha256)
   })
 }
@@ -134,8 +136,8 @@ export async function finalizeAttempt(deps: Deps, attemptId: string): Promise<Fi
       durationSec: info.durationSec,
       width: info.width,
       height: info.height,
-      title: String(manifest.title || '').slice(0, 120),
-      agentSummary: String(manifest.summary || '').slice(0, 4000),
+      title: manifest.title.slice(0, 120),
+      agentSummary: manifest.summary.slice(0, 4000),
     })
   } catch (e) {
     if (e instanceof NotYet) {

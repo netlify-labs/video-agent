@@ -18,7 +18,7 @@ export const ids: Ids = {
   slug: () => {
     const bytes = randomBytes(10)
     let out = ''
-    for (const b of bytes) out += SLUG_ALPHABET[b % SLUG_ALPHABET.length]
+    for (const b of bytes) out += SLUG_ALPHABET.charAt(b % SLUG_ALPHABET.length)
     return out
   },
   secret: (n = 32) => randomBytes(n).toString('base64url'),

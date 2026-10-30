@@ -5,7 +5,7 @@ const store = (name: BlobStoreName) => getStore({ name, consistency: 'strong' })
 
 export const netlifyBlobs: BlobsPort = {
   async get(name, key) {
-    const v = await store(name).get(key, { type: 'arrayBuffer' })
+    const v = (await store(name).get(key, { type: 'arrayBuffer' })) as ArrayBuffer | null
     return v ? new Uint8Array(v) : null
   },
   async set(name, key, data, metadata) {

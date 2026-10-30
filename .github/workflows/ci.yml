@@ -16,6 +16,6 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test
-      - run: npm run openapi:gen -- --check
+      - run: npm run openapi:check
       - run: npm run db:check
       - run: npm run build:ui

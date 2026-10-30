@@ -12,7 +12,6 @@ export interface Mp4Info {
 export class Mp4Error extends Error {}
 
 const LIMITS = { maxBoxes: 20_000, maxDepth: 12, maxMoovBytes: 64 * 1024 * 1024 }
-const CONTAINERS = new Set(['moov', 'trak', 'mdia', 'minf', 'stbl', 'edts', 'dinf', 'udta'])
 
 interface Box {
   type: string
@@ -127,7 +126,7 @@ export function inspectMp4(bytes: Uint8Array): Mp4Info {
 export function sniff(bytes: Uint8Array): 'jpeg' | 'gif' | 'vtt' | 'mp4' | 'unknown' {
   if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'jpeg'
   if (String.fromCharCode(...bytes.subarray(0, 6)) === 'GIF89a' || String.fromCharCode(...bytes.subarray(0, 6)) === 'GIF87a') return 'gif'
-  const head = new TextDecoder().decode(bytes.subarray(0, 10)).replace(/^﻿/, '')
+  const head = new TextDecoder('utf-8', { ignoreBOM: false }).decode(bytes.subarray(0, 10))
   if (head.startsWith('WEBVTT')) return 'vtt'
   if (String.fromCharCode(...bytes.subarray(4, 8)) === 'ftyp') return 'mp4'
   return 'unknown'

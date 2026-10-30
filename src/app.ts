@@ -127,15 +127,13 @@ export function createApp(deps: Deps, opts: AppOptions) {
   })
 
   const requireAuth: MiddlewareHandler<Env> = async (c, next) => {
+    if (c.req.path === '/api/v1/config' || c.req.method === 'OPTIONS') return next()
     const principal = await principalFromRequest(deps, c.req.raw)
     assertSameOrigin(c.req.raw, principal)
     c.set('principal', principal)
     await next()
   }
-  app.use('/api/v1/*', async (c, next) => {
-    if (c.req.path === '/api/v1/config' || c.req.method === 'OPTIONS') return next()
-    return requireAuth(c, next)
-  })
+  app.use('/api/v1/*', requireAuth)
   app.use('/api/v1/*', async (c, next) => {
     if (c.req.method === 'POST' && PAID_PATHS.some((r) => r.test(c.req.path))) {
       const st = await setup()

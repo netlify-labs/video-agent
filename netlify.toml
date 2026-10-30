@@ -1,0 +1,24 @@
+[build]
+  command = "npm run build"
+  publish = "ui/dist"
+
+[build.environment]
+  NODE_VERSION = "24"
+
+# The Deploy to Netlify button asks for these. Everything else has defaults (see README).
+[template.environment]
+  RUNNER_API_TOKEN = "A Netlify personal access token used to start agent runs (ideally from a dedicated account in this team)"
+  ALLOWED_EMAIL_DOMAINS = "Who can sign up: your company email domains, comma-separated (e.g. acme.com), or invite-only"
+  ADMIN_EMAILS = "Email addresses of the first admins, comma-separated"
+
+# The web app is a single-page app. API, file and share routes are served by functions and edge
+# functions, which take precedence over this fallback.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"

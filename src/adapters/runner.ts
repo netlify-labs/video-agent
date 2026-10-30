@@ -1,5 +1,5 @@
 // Agent Runner through nax-agent-runner-sdk. Runs never land (land: 'none').
-import { createAgentRunnerSdk, isAgentRunnerSdkError, type Handle, type RunResult, type StartInput } from 'nax-agent-runner-sdk'
+import { createAgentRunnerSdk, isAgentRunnerSdkError, type RunResult, type StartInput } from 'nax-agent-runner-sdk'
 import { RunnerError, type RunnerPort, type RunnerSnapshot, type StartRequest } from '../deps.js'
 import type { Usage } from '../domain/types.js'
 
@@ -64,7 +64,7 @@ export function createRunner(opts: { siteId: string; siteName: string; token: st
       return { kind: res.kind }
     },
     async snapshot(handle) {
-      const snap = await sdk.getSnapshot(sdk.parseHandle(handle) as Handle)
+      const snap = await sdk.getSnapshot(sdk.parseHandle(handle))
       if (snap.kind === 'terminal') return terminal(snap.result)
       return {
         kind: 'running',
@@ -74,7 +74,7 @@ export function createRunner(opts: { siteId: string; siteName: string; token: st
       }
     },
     async stop(handle) {
-      await sdk.stop(sdk.parseHandle(handle) as Handle)
+      await sdk.stop(sdk.parseHandle(handle))
     },
     runUrl(runnerId, sessionId) {
       return `https://app.netlify.com/projects/${opts.siteName}/agent-runs/${runnerId}${sessionId ? `?session=${sessionId}` : ''}`

@@ -23,6 +23,7 @@ import type { Repo, Store } from './types.js'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- driver-agnostic (netlify-db, pglite)
 type Db = PgAsyncDatabase<any, any, any>
 
+// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- the caller names the row type
 const one = <T>(rows: unknown[]): T | null => (rows[0] as T | undefined) ?? null
 const nonDue = [...TERMINAL_STAGES, 'queued', 'unresolved']
 
@@ -52,7 +53,7 @@ function repoFor(db: Db): Repo {
     },
     getKey: async (id) => one<ApiKeyRow>(await db.select().from(t.apiKeys).where(eq(t.apiKeys.id, id))),
     listKeys: async (ownerId) =>
-      (await db.select().from(t.apiKeys).where(eq(t.apiKeys.ownerId, ownerId)).orderBy(desc(t.apiKeys.createdAt))) as ApiKeyRow[],
+      (await db.select().from(t.apiKeys).where(eq(t.apiKeys.ownerId, ownerId)).orderBy(desc(t.apiKeys.createdAt))),
     updateKey: async (id, patch) => {
       await db.update(t.apiKeys).set(patch).where(eq(t.apiKeys.id, id))
     },
@@ -164,7 +165,7 @@ function repoFor(db: Db): Repo {
         .select({ n: sql<number>`count(*)::int` })
         .from(t.attempts)
         .where(inArray(t.attempts.stage, [...SLOT_STAGES]))
-      return Number(row?.n ?? 0)
+      return row?.n ?? 0
     },
     claimOldestQueued: async (now) =>
       one<AttemptRow>(
@@ -200,7 +201,7 @@ function repoFor(db: Db): Repo {
         .select()
         .from(t.publications)
         .where(eq(t.publications.jobId, jobId))
-        .orderBy(desc(t.publications.publishedAt))) as PublicationRow[],
+        .orderBy(desc(t.publications.publishedAt))),
     updatePublication: async (slug, patch) => {
       await db.update(t.publications).set(patch).where(eq(t.publications.slug, slug))
     },
@@ -280,7 +281,7 @@ function repoFor(db: Db): Repo {
           .from(t.attempts)
           .where(and(gte(t.attempts.endedAt, since), sql`${t.attempts.errorCategory} is not null`))
           .groupBy(t.attempts.errorCategory)
-      ).map((r) => ({ category: r.category ?? 'unknown', count: Number(r.count) })),
+      ).map((r) => ({ category: r.category ?? 'unknown', count: r.count })),
   }
 }
 
