@@ -191,6 +191,7 @@ async function startRequest(
     aspect: job.aspect,
     targetDurationSec: version.targetDurationSec,
     callbackUrl: `${deps.config.siteUrl}/api/internal/runs/${a.id}/done`,
+    checkpointUrl: `${deps.config.siteUrl}/api/internal/runs/${a.id}/checkpoint`,
     callbackToken,
     upload: { mode: 'blobs' },
     revision: revision && { parentN: revision.parentN },

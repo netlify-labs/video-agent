@@ -24,6 +24,14 @@ export interface Progress {
   /** When the runner was last read for this value (null when it comes from stored rows). */
   observedAt: string | null
   stale: boolean
+  /** The latest milestone the run posted itself (plan v2 §6 A2). */
+  checkpoint: {
+    seq: number
+    message: string | null
+    renderPercent: number | null
+    at: string
+    hasBundle: boolean
+  } | null
 }
 
 interface CacheEntry {
@@ -46,6 +54,7 @@ function fromRow(a: AttemptRow, stale: boolean): Progress {
     credits: a.usage?.totalCreditsCost ?? null,
     observedAt: null,
     stale,
+    checkpoint: null,
   }
 }
 
@@ -59,6 +68,7 @@ function fromCache(a: AttemptRow, c: CacheEntry, stale: boolean): Progress {
     credits: c.credits ?? a.usage?.totalCreditsCost ?? null,
     observedAt: new Date(c.observedAt).toISOString(),
     stale,
+    checkpoint: null,
   }
 }
 
@@ -72,6 +82,24 @@ async function readCache(deps: Deps, attemptId: string): Promise<CacheEntry | nu
 }
 
 export async function getProgress(deps: Deps, p: Principal, jobId: string): Promise<Progress> {
+  const base = await snapshotProgress(deps, p, jobId)
+  if (!base.attemptId) return base
+  const c = await deps.store.getCheckpoint(base.attemptId)
+  return {
+    ...base,
+    checkpoint: c
+      ? {
+          seq: c.seq,
+          message: c.message,
+          renderPercent: c.renderPercent,
+          at: c.createdAt,
+          hasBundle: c.bundleKey !== null,
+        }
+      : null,
+  }
+}
+
+async function snapshotProgress(deps: Deps, p: Principal, jobId: string): Promise<Progress> {
   const job = await loadJob(deps.store, p, jobId)
   assertCan(p, 'video:read')
   // The newest attempt of the latest version: a retry is a new attempt with its own cache entry.
@@ -88,6 +116,7 @@ export async function getProgress(deps: Deps, p: Principal, jobId: string): Prom
       credits: null,
       observedAt: null,
       stale: false,
+      checkpoint: null,
     }
   // Queued, starting, finishing and finished runs: the stored rows are the truth.
   if (a.stage !== 'running' || !a.handleEnc) return fromRow(a, false)

@@ -78,7 +78,8 @@ export async function emitEvent(
 }
 
 /** video.ready / video.failed for an attempt that just reached a terminal stage. */
-/** Every path that ends an attempt calls this: the terminal webhook, plus cleanup of its progress cache. */
+/** Every path that ends an attempt calls this: the terminal webhook, plus cleanup of its progress cache and
+ * checkpoint bundles. */
 export async function emitTerminalEvent(repo: Repo, deps: EmitDeps, attemptId: string) {
   const a = await repo.getAttempt(attemptId)
   if (!a) return
@@ -87,6 +88,14 @@ export async function emitTerminalEvent(repo: Repo, deps: EmitDeps, attemptId: s
     kind: 'delete_prefix',
     store: 'internal',
     prefix: progressKey(attemptId),
+    nextActionAt: deps.clock.now().toISOString(),
+    doneAt: null,
+  })
+  await repo.insertCleanup({
+    id: deps.ids.uuid(),
+    kind: 'delete_prefix',
+    store: 'checkpoints',
+    prefix: `${attemptId}/`,
     nextActionAt: deps.clock.now().toISOString(),
     doneAt: null,
   })

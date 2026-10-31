@@ -329,6 +329,16 @@ export const ProgressSchema = z
     stale: z
       .boolean()
       .openapi({ description: "True when the run couldn't be read and this is the last known value" }),
+    checkpoint: z
+      .object({
+        seq: z.number().int(),
+        message: z.string().nullable(),
+        renderPercent: z.number().int().nullable(),
+        at: z.string(),
+        hasBundle: z.boolean(),
+      })
+      .nullable()
+      .openapi({ description: 'The latest milestone the run reported itself' }),
   })
   .openapi('Progress')
 

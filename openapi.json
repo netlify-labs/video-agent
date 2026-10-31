@@ -1664,6 +1664,43 @@
           "stale": {
             "type": "boolean",
             "description": "True when the run couldn't be read and this is the last known value"
+          },
+          "checkpoint": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "seq": {
+                "type": "integer"
+              },
+              "message": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "renderPercent": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "at": {
+                "type": "string"
+              },
+              "hasBundle": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "seq",
+              "message",
+              "renderPercent",
+              "at",
+              "hasBundle"
+            ],
+            "description": "The latest milestone the run reported itself"
           }
         },
         "required": [
@@ -1674,7 +1711,8 @@
           "steps",
           "credits",
           "observedAt",
-          "stale"
+          "stale",
+          "checkpoint"
         ]
       },
       "CommentList": {

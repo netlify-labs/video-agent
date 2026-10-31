@@ -35,6 +35,7 @@ import type {
   NotificationRow,
   PlanRow,
   CommentRow,
+  CheckpointRow,
   GatewayCallRow,
   WebhookDeliveryRow,
   UserWebhookRow,
@@ -392,6 +393,21 @@ function repoFor(db: Db): Repo {
         .where(and(inArray(c.jobId, jobIds), isNull(c.deletedAt)))
         .groupBy(c.jobId, r.readAt)
       return Object.fromEntries(rows.map((x) => [x.jobId, { count: x.count, unread: x.unread }]))
+    },
+    getCheckpoint: async (attemptId, opts) => {
+      const q = db.select().from(t.checkpoints).where(eq(t.checkpoints.attemptId, attemptId))
+      return one<CheckpointRow>(opts?.lock ? await q.for('update') : await q)
+    },
+    putCheckpoint: async (row) => {
+      // Even two racing first posts keep the highest seq.
+      await db
+        .insert(t.checkpoints)
+        .values(row)
+        .onConflictDoUpdate({
+          target: t.checkpoints.attemptId,
+          set: row,
+          setWhere: sql`${t.checkpoints.seq} < ${row.seq}`,
+        })
     },
     insertVersionComments: async (rows) => {
       if (rows.length) await db.insert(t.versionComments).values(rows)

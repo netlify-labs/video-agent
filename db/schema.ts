@@ -266,6 +266,19 @@ export const comments = pgTable(
   (t) => [index('comments_job_idx').on(t.jobId, t.createdAt)],
 )
 
+// The latest milestone a run reported (plan v2 §6 A2): one row per attempt, replaced only by a higher seq.
+export const checkpoints = pgTable('checkpoints', {
+  attemptId: text('attempt_id').primaryKey(),
+  jobId: text('job_id').notNull(),
+  seq: integer('seq').notNull(),
+  message: text('message'),
+  renderPercent: integer('render_percent'),
+  bundleKey: text('bundle_key'),
+  createdAt: ts('created_at').notNull(),
+  windowStart: ts('window_start').notNull(),
+  windowCount: integer('window_count').notNull(),
+})
+
 // Comments a version was asked to incorporate, snapshotted when it was queued (plan v2 §5): later edits or
 // deletes of the comment don't change what the run was given.
 export const versionComments = pgTable(

@@ -10,6 +10,7 @@ const base = {
   aspect: '9:16' as const,
   targetDurationSec: null,
   callbackUrl: 'https://v.example.com/api/internal/runs/x/done',
+  checkpointUrl: 'https://v.example.com/api/internal/runs/x/checkpoint',
   callbackToken: 'tok',
   upload: { mode: 'blobs' as const },
   revision: null,

@@ -303,6 +303,20 @@ export interface CommentRow {
   deletedAt: string | null
 }
 
+export interface CheckpointRow {
+  attemptId: string
+  jobId: string
+  seq: number
+  message: string | null
+  renderPercent: number | null
+  /** Key in the checkpoints store of the latest composition bundle, if one was sent. */
+  bundleKey: string | null
+  createdAt: string
+  /** Rate window: when it began and how many posts it has seen. */
+  windowStart: string
+  windowCount: number
+}
+
 export interface VersionCommentRow {
   jobId: string
   versionN: number
@@ -393,7 +407,7 @@ export interface UserWebhookRow {
 export interface CleanupRow {
   id: string
   kind: 'delete_prefix'
-  store: 'videos' | 'sources' | 'uploads' | 'internal'
+  store: 'videos' | 'sources' | 'uploads' | 'internal' | 'checkpoints'
   prefix: string
   nextActionAt: string
   doneAt: string | null

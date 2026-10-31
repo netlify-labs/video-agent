@@ -1,7 +1,7 @@
 // The run prompt: a fixed, versioned template plus the user's request, fenced as a creative brief.
 import { ASPECTS, type Aspect } from './types.js'
 
-export const PROMPT_TEMPLATE_VERSION = 4
+export const PROMPT_TEMPLATE_VERSION = 5
 
 export interface PromptInput {
   jobId: string
@@ -12,6 +12,8 @@ export interface PromptInput {
   aspect: Aspect
   targetDurationSec: number | null
   callbackUrl: string
+  /** Where scripts/checkpoint.ts posts milestones (plan v2 §6 A2). */
+  checkpointUrl: string
   callbackToken: string
   upload: { mode: 'blobs' } | { mode: 'signed'; url: string }
   revision: { parentN: number } | null
@@ -116,6 +118,8 @@ export function buildPrompt(p: PromptInput): string {
     `5. Run: ${renderCmd}`,
     '   If it fails, read its error, fix the composition, and run it again.',
     '6. End your answer with the fenced ```json block render-job.ts prints.',
+    '',
+    `Progress (optional, best effort): at milestones (after reading context/, after each scene, before each check round) run: npx tsx scripts/checkpoint.ts --attempt ${p.attemptId} --url ${p.checkpointUrl} --token ${p.callbackToken} --message "<what you are doing, in a few words>". Add --bundle once video/index.html exists, so people can watch it take shape. It never fails the run; don't retry it or wait for it.`,
     '',
     'Never print environment variables. Never commit, push or open a pull request.',
   )

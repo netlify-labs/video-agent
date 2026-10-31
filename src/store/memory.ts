@@ -20,6 +20,7 @@ import type {
   PlanRow,
   CommentRow,
   VersionCommentRow,
+  CheckpointRow,
   GatewayCallRow,
   WebhookDeliveryRow,
   UserWebhookRow,
@@ -48,6 +49,7 @@ interface State {
   notificationReads: Map<string, string>
   commentReads: Map<string, string>
   versionComments: VersionCommentRow[]
+  checkpoints: Map<string, CheckpointRow>
   userWebhooks: Map<string, UserWebhookRow>
   cleanup: Map<string, CleanupRow>
 }
@@ -74,6 +76,7 @@ const empty = (): State => ({
   notificationReads: new Map(),
   commentReads: new Map(),
   versionComments: [],
+  checkpoints: new Map(),
   userWebhooks: new Map(),
   cleanup: new Map(),
 })
@@ -328,6 +331,10 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
         if (userId && c.authorId !== userId && (readAt === null || c.createdAt > readAt)) o.unread++
       }
       return out
+    },
+    getCheckpoint: async (attemptId) => clone(state.checkpoints.get(attemptId) ?? null),
+    putCheckpoint: async (row) => {
+      state.checkpoints.set(row.attemptId, clone(row))
     },
     insertVersionComments: async (rows) => {
       state.versionComments.push(...clone(rows))

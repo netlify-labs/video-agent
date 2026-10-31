@@ -3983,6 +3983,14 @@ export interface components {
             observedAt: string | null;
             /** @description True when the run couldn't be read and this is the last known value */
             stale: boolean;
+            /** @description The latest milestone the run reported itself */
+            checkpoint: {
+                seq: number;
+                message: string | null;
+                renderPercent: number | null;
+                at: string;
+                hasBundle: boolean;
+            } | null;
         };
         CommentList: {
             items: components["schemas"]["Comment"][];

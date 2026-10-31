@@ -21,6 +21,7 @@ import type {
   PlanRow,
   CommentRow,
   VersionCommentRow,
+  CheckpointRow,
   GatewayCallRow,
   WebhookDeliveryRow,
   UserWebhookRow,
@@ -113,6 +114,8 @@ export interface Repo {
   /** Not deleted, oldest first; optionally one version. */
   listComments(jobId: string, versionN?: number): Promise<CommentRow[]>
   getCommentReadAt(userId: string, jobId: string): Promise<string | null>
+  getCheckpoint(attemptId: string, opts?: { lock?: boolean }): Promise<CheckpointRow | null>
+  putCheckpoint(row: CheckpointRow): Promise<void>
   insertVersionComments(rows: VersionCommentRow[]): Promise<void>
   /** In position order; all versions of the video when `versionN` is left out. */
   listVersionComments(jobId: string, versionN?: number): Promise<VersionCommentRow[]>

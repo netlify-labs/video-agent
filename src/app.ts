@@ -29,6 +29,7 @@ import { handleMcp } from './mcp.js'
 import * as hooks from './domain/webhook-settings.js'
 import { listNotifications, markNotificationsRead } from './domain/notifications.js'
 import { getProgress } from './domain/progress.js'
+import { receiveCheckpoint } from './domain/checkpoints.js'
 import {
   addComment,
   deleteComment,
@@ -1085,6 +1086,41 @@ export function createApp(deps: Deps, opts: AppOptions) {
       await receiveCallback(deps, c.req.valid('param').id, token, body)
       kick(c)
       return c.body(null, 202)
+    },
+  )
+
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/internal/runs/{id}/checkpoint',
+      hide: true,
+      request: {
+        params: IdParam,
+        body: {
+          content: {
+            'application/json': {
+              schema: z.object({
+                seq: z.number().int().min(0),
+                message: z.string().max(2000).optional(),
+                renderPercent: z.number().int().min(0).max(100).optional(),
+                bundle: z.string().max(3_000_000).optional(),
+              }),
+            },
+          },
+          required: true,
+        },
+      },
+      responses: {
+        200: { description: 'Accepted, or ignored as older than the latest' },
+        400: err('Invalid'),
+        401: err('Bad token'),
+        410: err('Gone'),
+        429: err('Too many'),
+      },
+    }),
+    async (c) => {
+      const token = /^Bearer\s+(\S+)$/i.exec(c.req.header('authorization') ?? '')?.[1] ?? null
+      return c.json(await receiveCheckpoint(deps, c.req.valid('param').id, token, c.req.valid('json')), 200)
     },
   )
 
