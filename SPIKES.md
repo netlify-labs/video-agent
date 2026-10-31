@@ -12,13 +12,13 @@ Runs started with `spikes/start-run.ts` against project `our internal deployment
 
 Run `s2` (148 s, 36.5 credits):
 
-| Step | Result |
-| --- | --- |
-| `netlify blobs:set` 2 MB / 20 MB / 100 MB to a site store | OK in 1.0 s / 1.3 s / 2.5 s (~40 MB/s) |
-| Write to a second store (`videos`) | OK (27 s for the first write: store creation latency, single sample) |
-| `blobs:list`, `blobs:get` round trip | OK, SHA-256 matches |
-| 100 MB upload killed after 1 s, then retried | Retry OK |
-| Outbound HTTPS POST | 200 |
+| Step                                                      | Result                                                               |
+| --------------------------------------------------------- | -------------------------------------------------------------------- |
+| `netlify blobs:set` 2 MB / 20 MB / 100 MB to a site store | OK in 1.0 s / 1.3 s / 2.5 s (~40 MB/s)                               |
+| Write to a second store (`videos`)                        | OK (27 s for the first write: store creation latency, single sample) |
+| `blobs:list`, `blobs:get` round trip                      | OK, SHA-256 matches                                                  |
+| 100 MB upload killed after 1 s, then retried              | Retry OK                                                             |
+| Outbound HTTPS POST                                       | 200                                                                  |
 
 Consequences:
 
@@ -31,11 +31,11 @@ Consequences:
 
 Three from-scratch runs with the section 5 style prompt (neutral look, no brand context):
 
-| Run | Brief | Aspect | Length asked → got | Total run | Credits | `check` rounds | Render (each quality) | File (standard) |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| a | Launch video, "Org webhooks" | 16:9 | Auto → 22.5 s | 447 s | 206 | 3 | ~22 s | (uploaded) |
-| b | Sales clip, deploy previews | 9:16 | 15 s → 15.0 s | 192 s | 92 | 1–2 | ~16 s | 1.0 MB |
-| c | Docs tutorial, env vars | 1:1 | 60 s → 60.0 s | 405 s | 192 | 3 | ~35 s | 1.5 MB |
+| Run | Brief                        | Aspect | Length asked → got | Total run | Credits | `check` rounds | Render (each quality) | File (standard) |
+| --- | ---------------------------- | ------ | ------------------ | --------- | ------- | -------------- | --------------------- | --------------- |
+| a   | Launch video, "Org webhooks" | 16:9   | Auto → 22.5 s      | 447 s     | 206     | 3              | ~22 s                 | (uploaded)      |
+| b   | Sales clip, deploy previews  | 9:16   | 15 s → 15.0 s      | 192 s     | 92      | 1–2            | ~16 s                 | 1.0 MB          |
+| c   | Docs tutorial, env vars      | 1:1    | 60 s → 60.0 s      | 405 s     | 192     | 3              | ~35 s                 | 1.5 MB          |
 
 Quality rubric (frames reviewed by hand): text legible at target size, requested text correct, no clipped
 frames, coherent three-beat stories with an end card, restrained motion. All three pass. Auto picked a
@@ -82,3 +82,27 @@ A second video made by a person through the web app finished too (221 credits).
 The button only works from a public GitHub/GitLab repo. Testing it means publishing a fixture copy of this template
 publicly, which waits for the owner's decision to open-source (or approval for a throwaway public fixture).
 `netlify.toml` already declares `[template.environment]`; `npm run setup` covers the same path from a clone.
+
+## Plan v2 spikes
+
+### S1: AI Gateway for planning calls (2026-10-31, deploy preview of `spike/s1-gateway`, since deleted)
+
+AI Gateway env vars (`ANTHROPIC_*`, `TYPESAFE_*`) are injected in deploy previews and production on our team.
+
+| Call                                                  | Model              | Latency (cold / warm)    | Tokens in / out                              | Notes                                                                                                                 |
+| ----------------------------------------------------- | ------------------ | ------------------------ | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Router (`systemOne`, 4 choice questions, prompt only) | `jev-1.14.0`       | 0.1–0.3 s                | ~330 / ~60                                   | Typed answers with probabilities                                                                                      |
+| Router with the brand/history context added           | `jev-1.14.0`       | 400 Invalid request body |                                              | Context plus 4 questions is rejected; context plus 1 question works. Keep router input to the prompt and short titles |
+| Questions (0–6, JSON)                                 | `claude-haiku-4-5` | 7.3 / 6.1–7.2 s          | ~280 / ~900                                  | Valid JSON every run, sensible questions                                                                              |
+| Questions                                             | `claude-sonnet-5`  | 16.4 / 15.7–16.0 s       | ~360 / ~1,460 (incl. 330–460 thinking)       | First content block is `thinking`; read the `text` block                                                              |
+| Questions                                             | `claude-opus-5-5`  | 14.9 / 11.8–13.1 s       | ~365 / ~1,230–1,500 (incl. 150–350 thinking) | Same `thinking` block                                                                                                 |
+| Brief (JSON)                                          | `claude-sonnet-5`  | 9.6 / 5.0–6.2 s          | ~330 / 420–840                               |                                                                                                                       |
+
+Cost at list prices (estimates; 180 credits per US$): router well under 0.1 credit; Haiku questions ≈ 1 credit;
+Sonnet questions ≈ 4 credits; Opus questions ≈ 6 credits; Sonnet brief ≈ 2–3 credits.
+
+**Decisions for B:** the router runs on the prompt (plus the person's last titles) only, with snake_case keys and ≤4
+questions. Questions default to **Haiku** (≈7 s); the router's `complex` answer escalates to the admin's deep model
+(default Sonnet, ≈16 s). The brief uses the deep model (≈5–10 s). Read the first `text` content block. Both stay inside
+the 25 s deadline with room for one validation retry on Haiku; Sonnet questions leave no room for a retry, so a retry
+falls back to Haiku.
