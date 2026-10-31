@@ -109,6 +109,8 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
       const needle = q.q?.toLowerCase()
       let rows = [...state.jobs.values()].filter((j) => j.deletedAt === null)
       if (q.ownerId) rows = rows.filter((j) => j.ownerId === q.ownerId)
+      const vis = q.visibleTo
+      if (vis && !vis.all) rows = rows.filter((j) => !j.private || j.ownerId === vis.userId)
       if (q.status) rows = rows.filter((j) => j.status === q.status)
       if (q.published !== undefined) rows = rows.filter((j) => published.has(j.id) === q.published)
       if (needle) {

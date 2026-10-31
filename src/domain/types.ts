@@ -110,6 +110,10 @@ export interface JobRow {
   updatedAt: string
   deletedAt: string | null
   version: number
+  /** Hidden from everyone but its owner and admins (plan v2 §3). */
+  private: boolean
+  /** Bumped on every privacy or owner change; part of file URL signatures (§14 rule 4). */
+  accessEpoch: number
 }
 
 export interface VersionRow {

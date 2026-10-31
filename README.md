@@ -70,7 +70,22 @@ Sign-in uses [Netlify Identity](https://docs.netlify.com/manage/security/secure-
 - **Company domains** (`acme.com`): anyone with an `@acme.com` address can create an account and must confirm their email. Keep Identity's **autoconfirm off**, or people could claim addresses they don't own. Other domains are refused at sign-up and by the API.
 - **`invite-only`**: set Identity registration to **Invite only** and invite people from the Identity tab. Nobody else can sign up.
 
-`ADMIN_EMAILS` become admins on their first sign-in. Admins can make others admins, disable people (which also revokes their API keys), stop runs and see usage on the Admin page. Everyone signed in can see and revise every video; only a video's owner or an admin can rename, publish, unpublish or delete it.
+`ADMIN_EMAILS` become admins on their first sign-in; everyone else joins as a **Creator**. Admins change roles on the
+Admin page:
+
+| Role         | Can                                                                                                      |
+| ------------ | -------------------------------------------------------------------------------------------------------- |
+| **Admin**    | Everything: people and roles, settings, usage, stopping runs, owner actions on any video                 |
+| **Creator**  | Make, revise and plan videos (spends credits); rename, publish, delete and make private their own videos |
+| **Reviewer** | Watch videos and give feedback; never spends credits                                                     |
+| **Viewer**   | Watch videos                                                                                             |
+
+API keys and the MCP server act with their owner's role. Disabling someone also revokes their API keys.
+
+**Private videos** are hidden from everyone except their owner and admins: they don't appear in other people's
+Library, search, API or MCP results. Private means hidden in the app among trusted colleagues, not confidential:
+agent runs in this project can read the project's storage, so a Creator could have a run fetch another video's files.
+A private video can still be published to a public link; publishing is a separate, explicit step.
 
 ## How it works
 

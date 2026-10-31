@@ -1,6 +1,6 @@
 // Netlify Database schema (Drizzle). Migrations are generated into netlify/database/migrations.
 import { sql } from 'drizzle-orm'
-import { bigint, doublePrecision, index, integer, jsonb, pgTable, primaryKey, text, uniqueIndex } from 'drizzle-orm/pg-core'
+import { bigint, boolean, doublePrecision, index, integer, jsonb, pgTable, primaryKey, text, uniqueIndex } from 'drizzle-orm/pg-core'
 
 // Timestamps are ISO-8601 UTC strings (toISOString), which sort correctly as text.
 const ts = (name: string) => text(name)
@@ -53,6 +53,8 @@ export const jobs = pgTable(
     updatedAt: ts('updated_at').notNull(),
     deletedAt: ts('deleted_at'),
     version: integer('version').notNull(),
+    private: boolean('private').notNull().default(false),
+    accessEpoch: integer('access_epoch').notNull().default(0),
   },
   (t) => [
     index('jobs_created_idx').on(t.createdAt, t.id),

@@ -175,6 +175,8 @@ export async function createVideo(
         updatedAt: now,
         deletedAt: null,
         version: 1,
+        private: false,
+        accessEpoch: 0,
       }
       await repo.insertJob(job)
       await repo.insertVersion({
@@ -190,7 +192,7 @@ export async function createVideo(
         createdAt: now,
       })
       await repo.insertAttempt(newAttempt(deps, jobId, 1, now))
-      return { status: 202, body: await videoDto(repo, deps, jobId) }
+      return { status: 202, body: await videoDto(repo, deps, jobId, principal) }
     }),
   )
 }
@@ -200,9 +202,16 @@ export function deriveTitle(prompt: string): string {
   return oneLine.length <= 60 ? oneLine : `${oneLine.slice(0, 57).trimEnd()}…`
 }
 
-async function loadJob(repo: Repo, id: string, lock = false): Promise<JobRow> {
+/** Private videos are visible only to their owner and admins (plan v2 §3). */
+export function canSee(p: Principal, job: Pick<JobRow, 'private' | 'ownerId'>): boolean {
+  return !job.private || p.role === 'admin' || job.ownerId === p.userId
+}
+
+/** Loads a video the principal may see. Invisible private videos are not_found (never forbidden), and this
+ * runs before any role check, replay or file signing (§14 rule 3). */
+export async function loadJob(repo: Repo, p: Principal, id: string, lock = false): Promise<JobRow> {
   const job = await repo.getJob(id, { lock })
-  if (!job || job.deletedAt) throw new ApiError('not_found', 'Video not found.')
+  if (!job || job.deletedAt || !canSee(p, job)) throw new ApiError('not_found', 'Video not found.')
   return job
 }
 
@@ -219,9 +228,11 @@ export async function reviseVideo(
 ) {
   assertCan(principal, 'version:create')
   checkWebhook(principal, input.webhookUrl)
-  return deps.store.tx((repo) =>
-    withIdempotency(repo, deps, principal, `versions.create:${jobId}`, idemKey, input, async () => {
-      const job = await loadJob(repo, jobId, true)
+  return deps.store.tx(async (repo) => {
+    // Visibility first: a replay must not return a saved response for a video that has since gone private.
+    await loadJob(repo, principal, jobId)
+    return withIdempotency(repo, deps, principal, `versions.create:${jobId}`, idemKey, input, async () => {
+      const job = await loadJob(repo, principal, jobId, true)
       if (await hasUnfinished(repo, jobId))
         throw new ApiError('conflict', 'Another version of this video is still in progress.')
       const versions = await repo.listVersions(jobId)
@@ -255,14 +266,14 @@ export async function reviseVideo(
         updatedAt: now,
         version: job.version + 1,
       })
-      return { status: 202, body: await videoDto(repo, deps, jobId) }
-    }),
-  )
+      return { status: 202, body: await videoDto(repo, deps, jobId, principal) }
+    })
+  })
 }
 
 export async function retryVersion(deps: Deps, principal: Principal, jobId: string, n: number) {
   return deps.store.tx(async (repo) => {
-    const job = await loadJob(repo, jobId, true)
+    const job = await loadJob(repo, principal, jobId, true)
     const version = await repo.getVersion(jobId, n)
     if (!version) throw new ApiError('not_found', 'Version not found.')
     assertCan(principal, 'version:retry', { ownerId: job.ownerId, authorId: version.authorId })
@@ -276,13 +287,13 @@ export async function retryVersion(deps: Deps, principal: Principal, jobId: stri
     await repo.insertAttempt(newAttempt(deps, jobId, n, now))
     await repo.updateVersion(jobId, n, { status: 'queued' })
     await repo.updateJob(jobId, { status: 'queued', updatedAt: now, version: job.version + 1 })
-    return videoDto(repo, deps, jobId)
+    return videoDto(repo, deps, jobId, principal)
   })
 }
 
 export async function cancelVersion(deps: Deps, principal: Principal, jobId: string, n: number) {
   return deps.store.tx(async (repo) => {
-    const job = await loadJob(repo, jobId, true)
+    const job = await loadJob(repo, principal, jobId, true)
     const version = await repo.getVersion(jobId, n)
     if (!version) throw new ApiError('not_found', 'Version not found.')
     assertCan(principal, 'version:cancel', { ownerId: job.ownerId, authorId: version.authorId })
@@ -290,7 +301,7 @@ export async function cancelVersion(deps: Deps, principal: Principal, jobId: str
     if (!attempt || isTerminal(attempt.stage))
       throw new ApiError('conflict', 'This version is not in progress.')
     await requestCancel(repo, deps, attempt, 'user')
-    return videoDto(repo, deps, jobId)
+    return videoDto(repo, deps, jobId, principal)
   })
 }
 
@@ -328,22 +339,30 @@ export async function requestCancel(
   )
 }
 
-export async function renameVideo(deps: Deps, principal: Principal, jobId: string, title: string) {
+export async function updateVideo(
+  deps: Deps,
+  principal: Principal,
+  jobId: string,
+  patch: { title?: string | undefined; private?: boolean | undefined },
+) {
   return deps.store.tx(async (repo) => {
-    const job = await loadJob(repo, jobId, true)
-    assertCan(principal, 'video:rename', { ownerId: job.ownerId })
+    const job = await loadJob(repo, principal, jobId, true)
+    if (patch.title !== undefined) assertCan(principal, 'video:rename', { ownerId: job.ownerId })
+    const privacyChanges = patch.private !== undefined && patch.private !== job.private
+    if (patch.private !== undefined) assertCan(principal, 'video:private', { ownerId: job.ownerId })
     await repo.updateJob(jobId, {
-      title: title.trim(),
+      ...(patch.title !== undefined ? { title: patch.title.trim() } : {}),
+      ...(privacyChanges ? { private: patch.private as boolean, accessEpoch: job.accessEpoch + 1 } : {}),
       updatedAt: deps.clock.now().toISOString(),
       version: job.version + 1,
     })
-    return videoDto(repo, deps, jobId)
+    return videoDto(repo, deps, jobId, principal)
   })
 }
 
 export async function deleteVideo(deps: Deps, principal: Principal, jobId: string) {
   const slugs = await deps.store.tx(async (repo) => {
-    const job = await loadJob(repo, jobId, true)
+    const job = await loadJob(repo, principal, jobId, true)
     assertCan(principal, 'video:delete', { ownerId: job.ownerId })
     const now = deps.clock.now().toISOString()
     await repo.updateJob(jobId, { deletedAt: now, updatedAt: now, version: job.version + 1 })
@@ -387,7 +406,7 @@ export interface PublicationMirror {
 
 export async function publishVersion(deps: Deps, principal: Principal, jobId: string, n: number) {
   const { pub, mirror } = await deps.store.tx(async (repo) => {
-    const job = await loadJob(repo, jobId, true)
+    const job = await loadJob(repo, principal, jobId, true)
     assertCan(principal, 'video:publish', { ownerId: job.ownerId })
     const output = await repo.getOutput(jobId, n)
     const version = await repo.getVersion(jobId, n)
@@ -425,7 +444,7 @@ function mirrorFor(p: PublicationRow, job: JobRow, o: OutputRow): PublicationMir
 
 export async function unpublishVersion(deps: Deps, principal: Principal, jobId: string, n: number) {
   const slugs = await deps.store.tx(async (repo) => {
-    const job = await loadJob(repo, jobId, true)
+    const job = await loadJob(repo, principal, jobId, true)
     assertCan(principal, 'video:publish', { ownerId: job.ownerId })
     const now = deps.clock.now().toISOString()
     const active = (await repo.listPublications(jobId)).filter((p) => p.versionN === n && !p.unpublishedAt)
@@ -516,9 +535,17 @@ function versionDto(
   }
 }
 
-export async function videoDto(repo: Repo, deps: Pick<Deps, 'config' | 'runner'>, jobId: string) {
+/** `viewer` is the principal the DTO is for (visibility enforced), or 'system' for webhooks and other
+ * server-side uses that already decided who receives it. */
+export async function videoDto(
+  repo: Repo,
+  deps: Pick<Deps, 'config' | 'runner'>,
+  jobId: string,
+  viewer: Principal | 'system',
+) {
   const job = await repo.getJob(jobId)
-  if (!job || job.deletedAt) throw new ApiError('not_found', 'Video not found.')
+  if (!job || job.deletedAt || (viewer !== 'system' && !canSee(viewer, job)))
+    throw new ApiError('not_found', 'Video not found.')
   const [versions, attempts, pubs] = await Promise.all([
     repo.listVersions(jobId),
     repo.listAttempts(jobId),
@@ -544,6 +571,7 @@ export async function videoDto(repo: Repo, deps: Pick<Deps, 'config' | 'runner'>
     etag: `"${job.id}-${job.version}"`,
     versions: out,
     published: pubs.some((p) => !p.unpublishedAt),
+    private: job.private,
     links: { self: `${deps.config.siteUrl}/api/v1/videos/${job.id}` },
   }
 }
@@ -581,10 +609,11 @@ export async function listVideos(
     ...(q.published !== undefined ? { published: q.published } : {}),
     ...(q.q ? { q: q.q } : {}),
     ...(cursor ? { cursor } : {}),
+    visibleTo: { userId: principal.userId, all: principal.role === 'admin' },
     limit: limit + 1,
   })
   const page = rows.slice(0, limit)
-  const items = await Promise.all(page.map((j) => videoDto(deps.store, deps, j.id)))
+  const items = await Promise.all(page.map((j) => videoDto(deps.store, deps, j.id, principal)))
   const last = page.at(-1)
   return {
     items,

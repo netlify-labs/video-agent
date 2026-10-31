@@ -398,7 +398,7 @@ export interface paths {
         };
         options?: never;
         head?: never;
-        /** Rename a video */
+        /** Rename a video or make it private */
         patch: {
             parameters: {
                 query?: never;
@@ -410,11 +410,11 @@ export interface paths {
             };
             requestBody: {
                 content: {
-                    "application/json": components["schemas"]["Rename"];
+                    "application/json": components["schemas"]["UpdateVideo"];
                 };
             };
             responses: {
-                /** @description Renamed */
+                /** @description Updated */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -1745,6 +1745,7 @@ export interface components {
             etag: string;
             versions: components["schemas"]["Version"][];
             published: boolean;
+            private: boolean;
             links: {
                 self: string;
             };
@@ -1845,8 +1846,9 @@ export interface components {
             items: components["schemas"]["Video"][];
             nextCursor: string | null;
         };
-        Rename: {
-            title: string;
+        UpdateVideo: {
+            title?: string;
+            private?: boolean;
         };
         Revise: {
             prompt: string;

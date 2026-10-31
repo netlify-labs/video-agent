@@ -28,7 +28,7 @@ export async function emitTerminalEvent(
     versionN: a.versionN,
     attemptId,
     type,
-    payload: { video: await videoDto(repo, deps, a.jobId), version: a.versionN },
+    payload: { video: await videoDto(repo, deps, a.jobId, 'system'), version: a.versionN },
     apiKeyId: v.apiKeyId,
     url: v.webhookUrl,
     leaseUntil: null,

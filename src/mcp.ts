@@ -266,7 +266,7 @@ export function buildMcpServer(deps: Deps, principal: Principal, kick: () => voi
     { name: 'video-agent', version: '1.0.0' },
     { instructions: SERVER_INSTRUCTIONS },
   )
-  const load = (id: string) => videoDto(deps.store, deps, id)
+  const load = (id: string) => videoDto(deps.store, deps, id, principal)
 
   server.registerTool(
     'create_video',

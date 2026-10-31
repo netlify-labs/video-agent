@@ -120,6 +120,7 @@ function video(
     etag: `"${id}-${versions.length}"`,
     versions,
     published: versions.some((v) => v.publications.some((p) => !p.unpublishedAt)),
+    private: false,
     links: { self: `/api/v1/videos/${id}` },
   }
 }

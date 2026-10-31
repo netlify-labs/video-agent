@@ -124,6 +124,7 @@ export const VideoSchema = z
     etag: z.string(),
     versions: z.array(VersionSchema),
     published: z.boolean(),
+    private: z.boolean(),
     links: z.object({ self: z.string() }),
   })
   .openapi('Video')
@@ -163,7 +164,10 @@ export const ReviseSchema = z
   })
   .openapi('Revise')
 
-export const RenameSchema = z.object({ title: z.string().min(1).max(120) }).openapi('Rename')
+export const UpdateVideoSchema = z
+  .object({ title: z.string().min(1).max(120).optional(), private: z.boolean().optional() })
+  .refine((v) => v.title !== undefined || v.private !== undefined, { message: 'Send title or private.' })
+  .openapi('UpdateVideo')
 
 export const KeySchema = z
   .object({

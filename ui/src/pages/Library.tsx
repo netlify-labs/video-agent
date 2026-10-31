@@ -12,7 +12,7 @@ import {
   Title,
 } from '@mantine/core'
 import { useDebouncedValue, useHotkeys } from '@mantine/hooks'
-import { IconSearch } from '@tabler/icons-react'
+import { IconLock, IconSearch } from '@tabler/icons-react'
 import { useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { $api, errorMessage, type Video } from '../api/client'
@@ -69,7 +69,12 @@ function VideoCard({ v }: { v: Video }) {
       </div>
       <div className="va-card-body">
         <Group justify="space-between" wrap="nowrap" gap="xs">
-          <div className="va-card-title">{v.title}</div>
+          <div className="va-card-title">
+            {v.private ? (
+              <IconLock size={13} aria-label="Private" style={{ marginRight: 4, verticalAlign: -1 }} />
+            ) : null}
+            {v.title}
+          </div>
           {latest ? <Status status={latest.status} size="xs" /> : null}
         </Group>
         <div className="va-prompt">{latest?.prompt}</div>

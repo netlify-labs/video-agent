@@ -186,6 +186,9 @@
           "published": {
             "type": "boolean"
           },
+          "private": {
+            "type": "boolean"
+          },
           "links": {
             "type": "object",
             "properties": {
@@ -211,6 +214,7 @@
           "etag",
           "versions",
           "published",
+          "private",
           "links"
         ]
       },
@@ -641,18 +645,18 @@
           "nextCursor"
         ]
       },
-      "Rename": {
+      "UpdateVideo": {
         "type": "object",
         "properties": {
           "title": {
             "type": "string",
             "minLength": 1,
             "maxLength": 120
+          },
+          "private": {
+            "type": "boolean"
           }
-        },
-        "required": [
-          "title"
-        ]
+        }
       },
       "Revise": {
         "type": "object",
@@ -1408,7 +1412,7 @@
         }
       },
       "patch": {
-        "summary": "Rename a video",
+        "summary": "Rename a video or make it private",
         "tags": [
           "videos"
         ],
@@ -1435,14 +1439,14 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Rename"
+                "$ref": "#/components/schemas/UpdateVideo"
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "Renamed",
+            "description": "Updated",
             "content": {
               "application/json": {
                 "schema": {

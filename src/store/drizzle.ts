@@ -90,6 +90,10 @@ function repoFor(db: Db): Repo {
     listJobs: async (q) => {
       const conds = [isNull(t.jobs.deletedAt)]
       if (q.ownerId) conds.push(eq(t.jobs.ownerId, q.ownerId))
+      if (q.visibleTo && !q.visibleTo.all) {
+        const visible = or(eq(t.jobs.private, false), eq(t.jobs.ownerId, q.visibleTo.userId))
+        if (visible) conds.push(visible)
+      }
       if (q.status) conds.push(eq(t.jobs.status, q.status))
       const livePub = db
         .select({ one: sql`1` })

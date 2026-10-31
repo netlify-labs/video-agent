@@ -15,7 +15,8 @@ import {
   deleteVideo,
   listVideos,
   publishVersion,
-  renameVideo,
+  updateVideo,
+  loadJob,
   retryVersion,
   reviseVideo,
   unpublishVersion,
@@ -262,8 +263,9 @@ export function createApp(deps: Deps, opts: AppOptions) {
       responses: { 200: json(s.VideoSchema, 'Video'), 304: { description: 'Not modified' }, ...errors },
     }),
     async (c) => {
+      await loadJob(deps.store, c.get('principal'), c.req.valid('param').id)
       assertCan(c.get('principal'), 'video:read')
-      const dto = await videoDto(deps.store, deps, c.req.valid('param').id)
+      const dto = await videoDto(deps.store, deps, c.req.valid('param').id, c.get('principal'))
       c.header('etag', dto.etag)
       c.header('cache-control', 'private, no-cache')
       if (c.req.header('if-none-match') === dto.etag) return c.body(null, 304)
@@ -274,20 +276,17 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'patch',
       path: '/api/v1/videos/{id}',
-      summary: 'Rename a video',
+      summary: 'Rename a video or make it private',
       tags: ['videos'],
       security,
       request: {
         params: IdParam,
-        body: { content: { 'application/json': { schema: s.RenameSchema } }, required: true },
+        body: { content: { 'application/json': { schema: s.UpdateVideoSchema } }, required: true },
       },
-      responses: { 200: json(s.VideoSchema, 'Renamed'), ...errors },
+      responses: { 200: json(s.VideoSchema, 'Updated'), ...errors },
     }),
     async (c) =>
-      c.json(
-        await renameVideo(deps, c.get('principal'), c.req.valid('param').id, c.req.valid('json').title),
-        200,
-      ),
+      c.json(await updateVideo(deps, c.get('principal'), c.req.valid('param').id, c.req.valid('json')), 200),
   )
   app.openapi(
     createRoute({
@@ -408,9 +407,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     }),
     async (c) => {
       const { id, n, file } = c.req.valid('param')
+      await loadJob(deps.store, c.get('principal'), id)
       assertCan(c.get('principal'), 'video:read')
-      const job = await deps.store.getJob(id)
-      if (!job || job.deletedAt) throw new ApiError('not_found', 'Video not found.')
       const out = await deps.store.getOutput(id, n)
       if (!out) throw new ApiError('not_ready', 'This version has no files yet.')
       c.header('cache-control', 'private, no-store')

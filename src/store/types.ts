@@ -23,6 +23,8 @@ export interface JobQuery {
   published?: boolean
   q?: string
   cursor?: { createdAt: string; id: string }
+  /** Private videos are returned only to their owner, unless `all` (admins). */
+  visibleTo?: { userId: string; all: boolean }
   limit: number
 }
 

@@ -18,7 +18,7 @@ import {
 import { modals } from '@mantine/modals'
 import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
-import { IconDots, IconDownload, IconExternalLink } from '@tabler/icons-react'
+import { IconDots, IconDownload, IconExternalLink, IconLock, IconLockOpen } from '@tabler/icons-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { $api, errorMessage, newIdempotencyKey, type Version, type Video } from '../api/client'
@@ -480,6 +480,14 @@ export function VideoPage() {
                   }}
                 >
                   Rename
+                </Menu.Item>
+                <Menu.Item
+                  leftSection={data.private ? <IconLockOpen size={14} /> : <IconLock size={14} />}
+                  onClick={() => {
+                    rename.mutate({ params: { path: { id } }, body: { private: !data.private } })
+                  }}
+                >
+                  {data.private ? 'Make visible to the team' : 'Make private'}
                 </Menu.Item>
                 <Menu.Item
                   color="red"
