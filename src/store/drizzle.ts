@@ -34,6 +34,7 @@ import type {
   VerdictRow,
   NotificationRow,
   PlanRow,
+  CommentRow,
   GatewayCallRow,
   WebhookDeliveryRow,
   UserWebhookRow,
@@ -302,6 +303,26 @@ function repoFor(db: Db): Repo {
           .returning({ k: t.idempotencyKeys.key })
       ).length,
 
+    insertComment: async (row) => {
+      await db.insert(t.comments).values(row)
+    },
+    getComment: async (id) =>
+      one<CommentRow>(await db.select().from(t.comments).where(eq(t.comments.id, id))),
+    updateComment: async (id, patch) => {
+      await db.update(t.comments).set(patch).where(eq(t.comments.id, id))
+    },
+    listComments: async (jobId, n) =>
+      (await db
+        .select()
+        .from(t.comments)
+        .where(
+          and(
+            eq(t.comments.jobId, jobId),
+            isNull(t.comments.deletedAt),
+            n === undefined ? undefined : eq(t.comments.versionN, n),
+          ),
+        )
+        .orderBy(asc(t.comments.createdAt), asc(t.comments.id))),
     insertPlan: async (row) => {
       await db.insert(t.plans).values(row)
     },
@@ -353,6 +374,19 @@ function repoFor(db: Db): Repo {
         .insert(t.notificationReads)
         .values({ userId, readAt })
         .onConflictDoUpdate({ target: t.notificationReads.userId, set: { readAt } })
+    },
+    getCommentReadAt: async (userId, jobId) =>
+      (
+        await db
+          .select()
+          .from(t.commentReads)
+          .where(and(eq(t.commentReads.userId, userId), eq(t.commentReads.jobId, jobId)))
+      )[0]?.readAt ?? null,
+    setCommentReadAt: async (userId, jobId, readAt) => {
+      await db
+        .insert(t.commentReads)
+        .values({ userId, jobId, readAt })
+        .onConflictDoUpdate({ target: [t.commentReads.userId, t.commentReads.jobId], set: { readAt } })
     },
     insertOwnershipTransfer: async (row) => {
       await db.insert(t.ownershipTransfers).values(row)

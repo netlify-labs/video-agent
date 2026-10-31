@@ -25,6 +25,7 @@ export type Action =
   | 'video:incorporate'
   | 'video:transfer'
   | 'comment:create'
+  | 'comment:moderate'
   | 'verdict:set'
   | 'plan:create'
   | 'edit:create'
@@ -55,6 +56,7 @@ const OWNER: Action[] = [
   'video:delete',
   'video:private',
   'video:incorporate',
+  'comment:moderate',
 ]
 const ADMIN_ONLY: Action[] = [
   'users:manage',

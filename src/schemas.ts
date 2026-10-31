@@ -321,6 +321,52 @@ export const NotificationListSchema = z
   })
   .openapi('NotificationList')
 
+const PersonRef = z.object({ id: z.string(), name: z.string().nullable(), email: z.string().nullable() })
+export const CommentSchema = z
+  .object({
+    id: z.string(),
+    videoId: z.string(),
+    versionN: z.number().int(),
+    author: PersonRef,
+    body: z.string(),
+    timeSec: z.number().nullable(),
+    x: z
+      .number()
+      .nullable()
+      .openapi({ description: '0–1 across the displayed video, letterboxing excluded' }),
+    y: z.number().nullable().openapi({ description: '0–1 down the displayed video, letterboxing excluded' }),
+    createdAt: z.string(),
+    editedAt: z.string().nullable(),
+    resolvedAt: z.string().nullable(),
+    resolvedBy: PersonRef.nullable(),
+    addressedInN: z.number().int().nullable(),
+    can: z.object({ edit: z.boolean(), delete: z.boolean(), resolve: z.boolean() }),
+  })
+  .openapi('Comment')
+export const CommentListSchema = z
+  .object({
+    items: z.array(CommentSchema),
+    unreadCount: z
+      .number()
+      .int()
+      .openapi({ description: "Others' comments on this video since you last read" }),
+    readAt: z.string().nullable(),
+    nextCursor: z.string().nullable(),
+  })
+  .openapi('CommentList')
+export const CreateCommentSchema = z
+  .object({
+    versionN: z.number().int().positive(),
+    body: z.string().min(1).max(2000),
+    timeSec: z.number().min(0).nullable().optional(),
+    x: z.number().min(0).max(1).nullable().optional(),
+    y: z.number().min(0).max(1).nullable().optional(),
+  })
+  .openapi('CreateComment')
+export const PatchCommentSchema = z
+  .object({ body: z.string().min(1).max(2000).optional(), resolved: z.boolean().optional() })
+  .openapi('PatchComment')
+
 export const PutWebhookSchema = z
   .object({ url: z.url().max(2000), rotate: z.boolean().optional() })
   .openapi('PutWebhook')

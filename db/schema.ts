@@ -244,6 +244,39 @@ export const gatewayCalls = pgTable(
   (t) => [index('gateway_calls_at_idx').on(t.at), index('gateway_calls_caller_idx').on(t.callerId, t.at)],
 )
 
+// Comments pinned to a moment of a version (plan v2 §5). x/y are 0–1 within the displayed video, always paired.
+export const comments = pgTable(
+  'comments',
+  {
+    id: text('id').primaryKey(),
+    jobId: text('job_id').notNull(),
+    versionN: integer('version_n').notNull(),
+    authorId: text('author_id').notNull(),
+    body: text('body').notNull(),
+    timeSec: doublePrecision('time_sec'),
+    x: doublePrecision('x'),
+    y: doublePrecision('y'),
+    createdAt: ts('created_at').notNull(),
+    editedAt: ts('edited_at'),
+    resolvedAt: ts('resolved_at'),
+    resolvedBy: text('resolved_by'),
+    addressedInN: integer('addressed_in_n'),
+    deletedAt: ts('deleted_at'),
+  },
+  (t) => [index('comments_job_idx').on(t.jobId, t.createdAt)],
+)
+
+// Per-person read watermark for a video's comments (plan v2 §5): drives the unread badge.
+export const commentReads = pgTable(
+  'comment_reads',
+  {
+    userId: text('user_id').notNull(),
+    jobId: text('job_id').notNull(),
+    readAt: ts('read_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.jobId] })],
+)
+
 // In-app notifications for video owners (plan v2 §3, §14 rule 13): comments and verdicts on their videos.
 export const notifications = pgTable(
   'notifications',

@@ -205,9 +205,11 @@ describe('MCP tools by role', () => {
     }
     expect(await names(h.member)).toEqual(
       [
+        'add_comment',
         'cancel_video',
         'create_video',
         'get_video',
+        'list_comments',
         'list_videos',
         'plan_brief',
         'plan_video',
@@ -218,8 +220,15 @@ describe('MCP tools by role', () => {
       ].sort(),
     )
     const rita = await person(h, 'u_reviewer', 'reviewer')
-    expect(await names(rita)).toEqual(['cancel_video', 'get_video', 'list_videos', 'set_verdict'])
+    expect(await names(rita)).toEqual([
+      'add_comment',
+      'cancel_video',
+      'get_video',
+      'list_comments',
+      'list_videos',
+      'set_verdict',
+    ])
     const vic = await person(h, 'u_viewer', 'viewer')
-    expect(await names(vic)).toEqual(['cancel_video', 'get_video', 'list_videos'])
+    expect(await names(vic)).toEqual(['cancel_video', 'get_video', 'list_comments', 'list_videos'])
   })
 })

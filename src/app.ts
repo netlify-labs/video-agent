@@ -28,6 +28,13 @@ import { signedFilePath } from './domain/files.js'
 import { handleMcp } from './mcp.js'
 import * as hooks from './domain/webhook-settings.js'
 import { listNotifications, markNotificationsRead } from './domain/notifications.js'
+import {
+  addComment,
+  deleteComment,
+  listComments,
+  markCommentsRead,
+  updateComment,
+} from './domain/comments.js'
 import * as planning from './domain/plans.js'
 import { myUsage, planningByUserWeek } from './domain/usage.js'
 import { ApiError, errorBody } from './lib/errors.js'
@@ -774,6 +781,108 @@ export function createApp(deps: Deps, opts: AppOptions) {
     async (c) => {
       const body = (await c.req.json().catch(() => ({}))) as { upTo?: string }
       await markNotificationsRead(deps, c.get('principal'), body.upTo)
+      return c.body(null, 204)
+    },
+  )
+  const CommentParam = z.object({ id: z.string() })
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/v1/videos/{id}/comments',
+      summary: 'Comments on a video (optionally one version), oldest first, with your unread count',
+      tags: ['review'],
+      security,
+      request: {
+        params: z.object({ id: z.string() }),
+        query: z.object({
+          version: z.coerce.number().int().positive().optional(),
+          cursor: z.string().optional(),
+          limit: z.coerce.number().int().min(1).max(200).optional(),
+        }),
+      },
+      responses: { 200: json(s.CommentListSchema, 'Comments'), ...errors },
+    }),
+    async (c) => {
+      const q = c.req.valid('query')
+      return c.json(
+        await listComments(deps, c.get('principal'), c.req.valid('param').id, {
+          versionN: q.version,
+          cursor: q.cursor,
+          limit: q.limit,
+        }),
+        200,
+      )
+    },
+  )
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/v1/videos/{id}/comments',
+      summary: 'Comment on a version, optionally pinned to a moment (timeSec) and a spot (x, y)',
+      tags: ['review'],
+      security,
+      request: {
+        params: z.object({ id: z.string() }),
+        body: { content: { 'application/json': { schema: s.CreateCommentSchema } }, required: true },
+      },
+      responses: { 201: json(s.CommentSchema, 'Created'), ...errors },
+    }),
+    async (c) =>
+      c.json(await addComment(deps, c.get('principal'), c.req.valid('param').id, c.req.valid('json')), 201),
+  )
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/v1/videos/{id}/comments/read',
+      summary: "Mark this video's comments read (all, or up to a time)",
+      tags: ['review'],
+      security,
+      request: {
+        params: z.object({ id: z.string() }),
+        body: {
+          content: { 'application/json': { schema: z.object({ upTo: z.string().optional() }) } },
+          required: false,
+        },
+      },
+      responses: { 204: { description: 'Marked read' }, ...errors },
+    }),
+    async (c) => {
+      const body = (await c.req.json().catch(() => ({}))) as { upTo?: string }
+      await markCommentsRead(deps, c.get('principal'), c.req.valid('param').id, body.upTo)
+      return c.body(null, 204)
+    },
+  )
+  app.openapi(
+    createRoute({
+      method: 'patch',
+      path: '/api/v1/comments/{id}',
+      summary: 'Edit your comment, or resolve/reopen one (video owner or admin)',
+      tags: ['review'],
+      security,
+      request: {
+        params: CommentParam,
+        body: { content: { 'application/json': { schema: s.PatchCommentSchema } }, required: true },
+      },
+      responses: { 200: json(s.CommentSchema, 'Updated'), ...errors },
+    }),
+    async (c) =>
+      c.json(
+        await updateComment(deps, c.get('principal'), c.req.valid('param').id, c.req.valid('json')),
+        200,
+      ),
+  )
+  app.openapi(
+    createRoute({
+      method: 'delete',
+      path: '/api/v1/comments/{id}',
+      summary: 'Delete your comment, or any comment on your video (owner or admin)',
+      tags: ['review'],
+      security,
+      request: { params: CommentParam },
+      responses: { 204: { description: 'Deleted' }, ...errors },
+    }),
+    async (c) => {
+      await deleteComment(deps, c.get('principal'), c.req.valid('param').id)
       return c.body(null, 204)
     },
   )

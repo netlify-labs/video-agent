@@ -19,6 +19,7 @@ import type {
   OwnershipTransferRow,
   NotificationRow,
   PlanRow,
+  CommentRow,
   GatewayCallRow,
   WebhookDeliveryRow,
   UserWebhookRow,
@@ -100,6 +101,13 @@ export interface Repo {
   deleteExpiredPlans(now: string): Promise<number>
 
   // webhooks and cleanup
+  insertComment(row: CommentRow): Promise<void>
+  getComment(id: string): Promise<CommentRow | null>
+  updateComment(id: string, patch: Partial<CommentRow>): Promise<void>
+  /** Not deleted, oldest first; optionally one version. */
+  listComments(jobId: string, versionN?: number): Promise<CommentRow[]>
+  getCommentReadAt(userId: string, jobId: string): Promise<string | null>
+  setCommentReadAt(userId: string, jobId: string, readAt: string): Promise<void>
   insertPlan(row: PlanRow): Promise<void>
   getPlan(id: string, opts?: { lock?: boolean }): Promise<PlanRow | null>
   updatePlan(id: string, patch: Partial<PlanRow>): Promise<void>

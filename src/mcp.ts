@@ -6,6 +6,7 @@ import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/
 import { z } from 'zod'
 import type { Deps } from './deps.js'
 import { PRIVATE_URL_TTL_SEC, signedFilePath } from './domain/files.js'
+import { addComment, listComments } from './domain/comments.js'
 import * as planning from './domain/plans.js'
 import { can, type Principal } from './domain/policy.js'
 import type { Aspect } from './domain/types.js'
@@ -623,6 +624,71 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "version": 2, "verdict":
       }, args.video_id),
   )
 
+  server.registerTool(
+    'list_comments',
+    {
+      title: 'List comments on a video',
+      description: `Read the feedback people left on a video, oldest first. Pass version to see one version only. Pinned comments carry time_sec (seconds into the video) and x/y (0–1 across and down the frame). resolved_at is set once the owner marked it done; addressed_in is the version that took it into account.
+
+Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "version": 2}`,
+      inputSchema: {
+        video_id: z.string().describe('Video id (vid_…) or a link to it.'),
+        version: z.number().int().positive().optional(),
+        cursor: z.string().optional().describe('next_cursor from the previous page.'),
+      },
+      annotations: { title: 'List comments', readOnlyHint: true, openWorldHint: false },
+    },
+    async (args) =>
+      run(async () => {
+        const id = normalizeVideoId(args.video_id)
+        const page = await listComments(deps, principal, id, { versionN: args.version, cursor: args.cursor })
+        return {
+          video_id: id,
+          comments: page.items.map((c) => ({
+            id: c.id,
+            version: c.versionN,
+            author: c.author.name ?? c.author.email,
+            body: c.body,
+            time_sec: c.timeSec,
+            x: c.x,
+            y: c.y,
+            created_at: c.createdAt,
+            resolved_at: c.resolvedAt,
+            addressed_in: c.addressedInN,
+          })),
+          next_cursor: page.nextCursor,
+        }
+      }, args.video_id),
+  )
+
+  const addCommentTool = server.registerTool(
+    'add_comment',
+    {
+      title: 'Comment on a version',
+      description: `Leave feedback on one version of a video. Optionally pin it to a moment with time_sec (seconds from the start; the version must be ready). The video's owner is notified.
+
+Do: say what to change and why ("The logo at 12s is too small to read"). Don't: post one comment per word; one comment per point.
+
+Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "version": 2, "body": "The CTA flashes by too fast", "time_sec": 27.5}`,
+      inputSchema: {
+        video_id: z.string().describe('Video id (vid_…) or a link to it.'),
+        version: z.number().int().positive(),
+        body: z.string().min(1).max(2000),
+        time_sec: z.number().min(0).optional(),
+      },
+    },
+    async (args) =>
+      run(async () => {
+        const id = normalizeVideoId(args.video_id)
+        const c = await addComment(deps, principal, id, {
+          versionN: args.version,
+          body: args.body,
+          timeSec: args.time_sec ?? null,
+        })
+        return { video_id: id, comment_id: c.id, version: c.versionN, time_sec: c.timeSec }
+      }, args.video_id),
+  )
+
   const planVideoTool = server.registerTool(
     'plan_video',
     {
@@ -719,6 +785,7 @@ Example: {"plan_id": "plan_…", "answers": [{"question_id": "q1", "choice_ids":
     for (const t of [createTool, reviseTool, publishTool, unpublishTool]) t.remove()
   }
   if (!can(principal, 'verdict:set')) verdictTool.remove()
+  if (!can(principal, 'comment:create')) addCommentTool.remove()
   if (!can(principal, 'plan:create') || !deps.gateway.available()) {
     planVideoTool.remove()
     planBriefTool.remove()

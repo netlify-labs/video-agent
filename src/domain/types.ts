@@ -286,6 +286,23 @@ export interface GatewayCallRow {
   at: string
 }
 
+export interface CommentRow {
+  id: string
+  jobId: string
+  versionN: number
+  authorId: string
+  body: string
+  timeSec: number | null
+  x: number | null
+  y: number | null
+  createdAt: string
+  editedAt: string | null
+  resolvedAt: string | null
+  resolvedBy: string | null
+  addressedInN: number | null
+  deletedAt: string | null
+}
+
 export type NotificationType = 'comment.created' | 'version.approved' | 'version.changes_requested'
 
 export interface NotificationRow {

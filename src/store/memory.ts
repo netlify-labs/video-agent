@@ -18,6 +18,7 @@ import type {
   OwnershipTransferRow,
   NotificationRow,
   PlanRow,
+  CommentRow,
   GatewayCallRow,
   WebhookDeliveryRow,
   UserWebhookRow,
@@ -41,8 +42,10 @@ interface State {
   transfers: OwnershipTransferRow[]
   notifications: NotificationRow[]
   plans: Map<string, PlanRow>
+  comments: Map<string, CommentRow>
   gatewayCalls: GatewayCallRow[]
   notificationReads: Map<string, string>
+  commentReads: Map<string, string>
   userWebhooks: Map<string, UserWebhookRow>
   cleanup: Map<string, CleanupRow>
 }
@@ -64,8 +67,10 @@ const empty = (): State => ({
   transfers: [],
   notifications: [],
   plans: new Map(),
+  comments: new Map(),
   gatewayCalls: [],
   notificationReads: new Map(),
+  commentReads: new Map(),
   userWebhooks: new Map(),
   cleanup: new Map(),
 })
@@ -270,6 +275,20 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
       return n
     },
 
+    insertComment: async (row) => {
+      state.comments.set(row.id, clone(row))
+    },
+    getComment: async (id) => clone(state.comments.get(id) ?? null),
+    updateComment: async (id, patch) => {
+      const c = state.comments.get(id)
+      if (c) Object.assign(c, clone(patch))
+    },
+    listComments: async (jobId, n) =>
+      clone(
+        [...state.comments.values()]
+          .filter((c) => c.jobId === jobId && c.deletedAt === null && (n === undefined || c.versionN === n))
+          .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)),
+      ),
     insertPlan: async (row) => {
       state.plans.set(row.id, clone(row))
     },
@@ -295,6 +314,10 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
           .filter((n) => !b || n.createdAt < b.createdAt || (n.createdAt === b.createdAt && n.id < b.id))
           .slice(0, q.limit),
       )
+    },
+    getCommentReadAt: async (userId, jobId) => state.commentReads.get(`${userId}/${jobId}`) ?? null,
+    setCommentReadAt: async (userId, jobId, readAt) => {
+      state.commentReads.set(`${userId}/${jobId}`, readAt)
     },
     getNotificationReadAt: async (userId) => state.notificationReads.get(userId) ?? null,
     setNotificationReadAt: async (userId, readAt) => {
