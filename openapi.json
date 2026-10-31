@@ -645,6 +645,10 @@
             "minLength": 1,
             "maxLength": 120
           },
+          "planId": {
+            "type": "string",
+            "description": "A plan from POST /api/v1/plans; its brief is added to the run. Optional."
+          },
           "webhookUrl": {
             "type": "string",
             "format": "uri",
@@ -708,6 +712,9 @@
           "webhookUrl": {
             "type": "string",
             "format": "uri"
+          },
+          "planId": {
+            "type": "string"
           }
         },
         "required": [

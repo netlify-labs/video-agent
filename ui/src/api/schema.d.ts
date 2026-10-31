@@ -3184,6 +3184,8 @@ export interface components {
             /** @description Target length in seconds. Omit for Auto. */
             durationSec?: number;
             title?: string;
+            /** @description A plan from POST /api/v1/plans; its brief is added to the run. Optional. */
+            planId?: string;
             /**
              * Format: uri
              * @description HTTPS URL for video.ready / video.failed events (API keys only).
@@ -3204,6 +3206,7 @@ export interface components {
             durationSec?: number;
             /** Format: uri */
             webhookUrl?: string;
+            planId?: string;
         };
         SetVerdict: {
             verdict: components["schemas"]["Verdict"];

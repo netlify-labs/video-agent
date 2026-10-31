@@ -7,7 +7,8 @@ import { notifyOwner } from './notifications.js'
 import { ApiError } from '../lib/errors.js'
 import type { Repo } from '../store/types.js'
 import { assertCan, type Principal } from './policy.js'
-import type { Verdict, VerdictRow } from './types.js'
+import type { FrozenPlan, Verdict, VerdictRow } from './types.js'
+import { planningContext } from '../generated/planning-context.js'
 import {
   ASPECTS,
   UNFINISHED_STATUSES,
@@ -30,6 +31,7 @@ export interface CreateVideoInput {
   durationSec?: number | undefined
   title?: string | undefined
   webhookUrl?: string | undefined
+  planId?: string | undefined
 }
 
 export interface ReviseInput {
@@ -37,6 +39,53 @@ export interface ReviseInput {
   fromVersion?: number | undefined
   durationSec?: number | undefined
   webhookUrl?: string | undefined
+  planId?: string | undefined
+}
+
+/**
+ * Consumes a plan exactly once inside the caller's transaction (plan v2 §14 rule 15): the plan row is locked, must
+ * belong to the caller, be unexpired and unused, have a brief, and (for revisions) be bound to this video. Returns
+ * the frozen copy stored on the version and the length the brief implies.
+ */
+async function consumePlan(
+  repo: Repo,
+  deps: Deps,
+  principal: Principal,
+  planId: string,
+  target: { jobId: string | null; n: number; newJobId: string },
+): Promise<{ frozen: FrozenPlan; aspect: Aspect | null; durationSec: number | null }> {
+  const plan = await repo.getPlan(planId, { lock: true })
+  if (!plan || plan.userId !== principal.userId) throw new ApiError('not_found', 'Plan not found.')
+  if (plan.consumedByJobId) throw new ApiError('conflict', 'This plan was already used to make a video.')
+  if (plan.expiresAt <= deps.clock.now().toISOString())
+    throw new ApiError('gone', 'This plan expired. Start a new one.')
+  if ((plan.jobId ?? null) !== target.jobId)
+    throw new ApiError(
+      'conflict',
+      target.jobId ? 'This plan is for a different video.' : 'This plan is for a revision.',
+    )
+  if (!plan.brief)
+    throw new ApiError('conflict', 'Finish the plan (get a brief) first, or create without it.')
+  const qa = (plan.questions ?? []).map((q) => {
+    const a = plan.answers?.find((x) => x.questionId === q.id)
+    return {
+      question: q.question,
+      answer:
+        !a || a.skipped
+          ? '(skipped)'
+          : [
+              ...(a.optionIds ?? []).map((o) => q.options.find((x) => x.id === o)?.label ?? o),
+              ...(a.other ? [a.other] : []),
+            ],
+    }
+  })
+  await repo.updatePlan(plan.id, { consumedByJobId: target.newJobId, consumedByN: target.n })
+  const seconds = plan.brief.beats.reduce((t, b) => t + b.seconds, 0)
+  return {
+    frozen: { planId: plan.id, brief: plan.brief, qa, contextHash: planningContext.hash },
+    aspect: (plan.aspect as Aspect | null) ?? plan.route?.suggestedAspect ?? null,
+    durationSec: plan.durationSec ?? (seconds > 0 ? Math.round(seconds) : null),
+  }
 }
 
 function checkWebhook(principal: Principal, url: string | undefined) {
@@ -167,10 +216,13 @@ export async function createVideo(
     withIdempotency(repo, deps, principal, 'videos.create', idemKey, input, async () => {
       const now = deps.clock.now().toISOString()
       const jobId = deps.ids.videoId()
+      const planned = input.planId
+        ? await consumePlan(repo, deps, principal, input.planId, { jobId: null, n: 1, newJobId: jobId })
+        : null
       const job: JobRow = {
         id: jobId,
         title: input.title?.trim() || deriveTitle(input.prompt),
-        aspect: input.aspect ?? '16:9',
+        aspect: input.aspect ?? planned?.aspect ?? '16:9',
         ownerId: principal.userId,
         status: 'queued',
         latestVersion: 1,
@@ -189,11 +241,12 @@ export async function createVideo(
         prompt: input.prompt,
         authorId: principal.userId,
         apiKeyId: principal.apiKeyId,
-        targetDurationSec: input.durationSec ?? null,
+        targetDurationSec: input.durationSec ?? planned?.durationSec ?? null,
         parentN: null,
         webhookUrl: input.webhookUrl ?? null,
         status: 'queued',
         createdAt: now,
+        plan: planned?.frozen ?? null,
       })
       await repo.insertAttempt(newAttempt(deps, jobId, 1, now))
       return { status: 202, body: await videoDto(repo, deps, jobId, principal) }
@@ -252,18 +305,26 @@ export async function reviseVideo(
         throw new ApiError('conflict', `Version ${parent.n} isn't ready, so it can't be revised.`)
       const now = deps.clock.now().toISOString()
       const n = job.nextVersionN
+      const planned = input.planId
+        ? await consumePlan(repo, deps, principal, input.planId, { jobId, n, newJobId: jobId })
+        : null
       await repo.insertVersion({
         jobId,
         n,
         prompt: input.prompt,
         authorId: principal.userId,
         apiKeyId: principal.apiKeyId,
+        // An accepted plan's length replaces the inherited target (§14 rule 15).
         targetDurationSec:
-          input.durationSec ?? (await repo.getVersion(jobId, parent.n))?.targetDurationSec ?? null,
+          input.durationSec ??
+          planned?.durationSec ??
+          (await repo.getVersion(jobId, parent.n))?.targetDurationSec ??
+          null,
         parentN: parent.n,
         webhookUrl: input.webhookUrl ?? null,
         status: 'queued',
         createdAt: now,
+        plan: planned?.frozen ?? null,
       })
       await repo.insertAttempt(newAttempt(deps, jobId, n, now))
       await repo.updateJob(jobId, {

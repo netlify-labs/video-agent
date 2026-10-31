@@ -1,7 +1,7 @@
 // The run prompt: a fixed, versioned template plus the user's request, fenced as a creative brief.
 import { ASPECTS, type Aspect } from './types.js'
 
-export const PROMPT_TEMPLATE_VERSION = 1
+export const PROMPT_TEMPLATE_VERSION = 2
 
 export interface PromptInput {
   jobId: string
@@ -15,6 +15,8 @@ export interface PromptInput {
   callbackToken: string
   upload: { mode: 'blobs' } | { mode: 'signed'; url: string }
   revision: { parentN: number; sourceKey: string; sourceSha256: string } | null
+  /** The accepted plan from the questions (plan v2 §4), frozen on the version. */
+  plan?: { brief: unknown; qa: unknown } | null
 }
 
 const FENCE_OPEN = '<<<'
@@ -53,6 +55,16 @@ export function buildPrompt(p: PromptInput): string {
     sanitizeBrief(p.userPrompt),
     FENCE_CLOSE,
   )
+  if (p.plan) {
+    // The plan is data the person accepted, encoded as JSON inside its own fence (§14 rule 16).
+    lines.push(
+      '',
+      'Plan (from the questions they answered before creating it), as JSON. Follow it where the request leaves room:',
+      FENCE_OPEN,
+      sanitizeBrief(JSON.stringify({ brief: p.plan.brief, answers: p.plan.qa })),
+      FENCE_CLOSE,
+    )
+  }
   if (p.revision) {
     lines.push(`This is a revision of version ${p.revision.parentN}. Change only what the request asks for.`)
   }

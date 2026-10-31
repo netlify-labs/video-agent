@@ -132,6 +132,15 @@ export interface VersionRow {
   webhookUrl: string | null
   status: VersionStatus
   createdAt: string
+  /** The accepted plan, frozen at creation: brief, questions and answers, context hash. */
+  plan?: FrozenPlan | null
+}
+
+export interface FrozenPlan {
+  planId: string
+  brief: PlanBrief
+  qa: { question: string; answer: string[] | string }[]
+  contextHash: string
 }
 
 export interface AttemptRow {

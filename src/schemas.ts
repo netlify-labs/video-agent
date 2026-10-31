@@ -158,6 +158,10 @@ export const CreateVideoSchema = z
       .optional()
       .openapi({ description: 'Target length in seconds. Omit for Auto.' }),
     title: z.string().min(1).max(120).optional(),
+    planId: z
+      .string()
+      .optional()
+      .openapi({ description: 'A plan from POST /api/v1/plans; its brief is added to the run. Optional.' }),
     webhookUrl: z
       .url()
       .optional()
@@ -171,6 +175,7 @@ export const ReviseSchema = z
     fromVersion: z.number().int().positive().optional(),
     durationSec: z.number().int().positive().optional(),
     webhookUrl: z.url().optional(),
+    planId: z.string().optional(),
   })
   .openapi('Revise')
 

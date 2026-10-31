@@ -89,6 +89,8 @@ export const versions = pgTable(
     webhookUrl: text('webhook_url'),
     status: text('status').notNull(),
     createdAt: ts('created_at').notNull(),
+    // The accepted plan, frozen when the version was created (plan v2 §14 rule 15).
+    plan: jsonb('plan'),
   },
   (t) => [primaryKey({ columns: [t.jobId, t.n] })],
 )

@@ -147,6 +147,7 @@ async function startRequest(
     callbackToken,
     upload: { mode: 'blobs' },
     revision,
+    plan: version.plan ? { brief: version.plan.brief, qa: version.plan.qa } : null,
   })
   return {
     req: {
