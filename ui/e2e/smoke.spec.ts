@@ -92,7 +92,7 @@ test('API docs are embedded with the REST reference and MCP setup', async ({ pag
   await expect(page.getByText('Video Agent API').first()).toBeVisible({ timeout: 15_000 })
   await page.getByRole('tab', { name: 'MCP for AI tools' }).click()
   await expect(page.getByText('claude mcp add --transport http video-agent', { exact: false })).toBeVisible()
-  await expect(page.getByText('create_video')).toBeVisible()
+  await expect(page.getByText('create_video', { exact: true })).toBeVisible()
 })
 
 test('admin, keys and setup render', async ({ page }) => {
