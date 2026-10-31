@@ -211,12 +211,13 @@ describe('MCP tools by role', () => {
         'list_videos',
         'publish_video',
         'revise_video',
+        'set_verdict',
         'unpublish_video',
       ].sort(),
     )
-    for (const role of ['reviewer', 'viewer'] as const) {
-      const cookie = await person(h, `u_${role}`, role)
-      expect(await names(cookie)).toEqual(['cancel_video', 'get_video', 'list_videos'])
-    }
+    const rita = await person(h, 'u_reviewer', 'reviewer')
+    expect(await names(rita)).toEqual(['cancel_video', 'get_video', 'list_videos', 'set_verdict'])
+    const vic = await person(h, 'u_viewer', 'viewer')
+    expect(await names(vic)).toEqual(['cancel_video', 'get_video', 'list_videos'])
   })
 })

@@ -16,6 +16,7 @@ import {
   listVideos,
   publishVersion,
   updateVideo,
+  setVerdict,
   loadJob,
   retryVersion,
   reviseVideo,
@@ -131,7 +132,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
     if (c.req.method === 'OPTIONS' && allowed) {
       return c.body(null, 204, {
         'access-control-allow-origin': origin,
-        'access-control-allow-methods': 'GET,POST,PATCH,DELETE',
+        'access-control-allow-methods': 'GET,POST,PUT,PATCH,DELETE',
         'access-control-allow-headers': 'authorization,content-type,idempotency-key',
         'access-control-max-age': '600',
         vary: 'origin',
@@ -393,6 +394,24 @@ export function createApp(deps: Deps, opts: AppOptions) {
       const p = c.req.valid('param')
       await unpublishVersion(deps, c.get('principal'), p.id, p.n)
       return c.body(null, 204)
+    },
+  )
+  app.openapi(
+    createRoute({
+      method: 'put',
+      path: '/api/v1/videos/{id}/versions/{n}/verdict',
+      summary: 'Approve a version or request changes (null clears your verdict); never on your own version',
+      tags: ['review'],
+      security,
+      request: {
+        params: VersionParam,
+        body: { content: { 'application/json': { schema: s.SetVerdictSchema } }, required: true },
+      },
+      responses: { 200: json(s.VideoSchema, 'Updated'), ...errors },
+    }),
+    async (c) => {
+      const p = c.req.valid('param')
+      return c.json(await setVerdict(deps, c.get('principal'), p.id, p.n, c.req.valid('json')), 200)
     },
   )
   app.openapi(

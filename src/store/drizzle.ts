@@ -31,6 +31,7 @@ import type {
   UserRow,
   VersionRow,
   WebhookEventRow,
+  VerdictRow,
   WebhookDeliveryRow,
   UserWebhookRow,
 } from '../domain/types.js'
@@ -296,6 +297,24 @@ function repoFor(db: Db): Repo {
           .returning({ k: t.idempotencyKeys.key })
       ).length,
 
+    putVerdict: async (row) => {
+      await db
+        .insert(t.verdicts)
+        .values(row)
+        .onConflictDoUpdate({
+          target: [t.verdicts.jobId, t.verdicts.versionN, t.verdicts.userId],
+          set: { verdict: row.verdict, note: row.note, updatedAt: row.updatedAt },
+        })
+    },
+    deleteVerdict: async (jobId, n, userId) => {
+      await db
+        .delete(t.verdicts)
+        .where(and(eq(t.verdicts.jobId, jobId), eq(t.verdicts.versionN, n), eq(t.verdicts.userId, userId)))
+    },
+    listVerdicts: async (jobIds) =>
+      jobIds.length === 0
+        ? []
+        : ((await db.select().from(t.verdicts).where(inArray(t.verdicts.jobId, jobIds))) as VerdictRow[]),
     insertWebhookEvent: async (row) => {
       await db.insert(t.webhookEvents).values(row)
     },

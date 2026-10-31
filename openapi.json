@@ -242,6 +242,25 @@
       "Version": {
         "type": "object",
         "properties": {
+          "verdicts": {
+            "type": "object",
+            "properties": {
+              "approved": {
+                "type": "integer"
+              },
+              "changesRequested": {
+                "type": "integer"
+              },
+              "mine": {
+                "$ref": "#/components/schemas/Verdict"
+              }
+            },
+            "required": [
+              "approved",
+              "changesRequested",
+              "mine"
+            ]
+          },
           "n": {
             "type": "integer"
           },
@@ -448,6 +467,7 @@
           }
         },
         "required": [
+          "verdicts",
           "n",
           "status",
           "prompt",
@@ -465,6 +485,17 @@
           "output",
           "links",
           "publications"
+        ]
+      },
+      "Verdict": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "enum": [
+          "approved",
+          "changes_requested",
+          null
         ]
       },
       "Stage": {
@@ -681,6 +712,21 @@
         },
         "required": [
           "prompt"
+        ]
+      },
+      "SetVerdict": {
+        "type": "object",
+        "properties": {
+          "verdict": {
+            "$ref": "#/components/schemas/Verdict"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "verdict"
         ]
       },
       "ApiKey": {
@@ -2039,6 +2085,113 @@
         "responses": {
           "204": {
             "description": "Unpublished"
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/videos/{id}/versions/{n}/verdict": {
+      "put": {
+        "summary": "Approve a version or request changes (null clears your verdict); never on your own version",
+        "tags": [
+          "review"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "required": true,
+            "name": "n",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetVerdict"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Video"
+                }
+              }
+            }
           },
           "400": {
             "description": "Invalid request",

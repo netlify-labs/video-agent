@@ -208,6 +208,17 @@ export interface IdempotencyRow {
   expiresAt: string
 }
 
+export type Verdict = 'approved' | 'changes_requested'
+
+export interface VerdictRow {
+  jobId: string
+  versionN: number
+  userId: string
+  verdict: Verdict
+  note: string | null
+  updatedAt: string
+}
+
 export type WebhookEventType =
   'video.ready' | 'video.failed' | 'comment.created' | 'version.approved' | 'version.changes_requested'
 

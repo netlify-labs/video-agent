@@ -182,6 +182,20 @@ export const queueControl = pgTable('queue_control', {
   id: integer('id').primaryKey(),
 })
 
+// Approved / Changes requested, one current verdict per person per version (plan v2 §3).
+export const verdicts = pgTable(
+  'verdicts',
+  {
+    jobId: text('job_id').notNull(),
+    versionN: integer('version_n').notNull(),
+    userId: text('user_id').notNull(),
+    verdict: text('verdict').notNull(),
+    note: text('note'),
+    updatedAt: ts('updated_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.jobId, t.versionN, t.userId] }), index('verdicts_job_idx').on(t.jobId)],
+)
+
 // Webhook outbox (plan v2 §14 rule 10): one logical event, one delivery row per destination.
 export const webhookEvents = pgTable('webhook_events', {
   eventId: text('event_id').primaryKey(),

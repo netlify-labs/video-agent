@@ -51,6 +51,8 @@ function ready(
     parentN: o.parent ?? null,
     targetDurationSec: o.target ?? null,
     createdAt: ago(o.at + 0.3),
+    verdicts: { approved: 0, changesRequested: 0, mine: null },
+
     attempts: 1,
     stage: 'ready',
     latestStep: 'Finished authoring',
@@ -151,6 +153,8 @@ export const videos: Video[] = [
       parentN: null,
       targetDurationSec: 20,
       createdAt: ago(2.6),
+      verdicts: { approved: 0, changesRequested: 0, mine: null },
+
       attempts: 1,
       stage: 'running',
       latestStep: 'Run `npx hyperframes check` in video/',
@@ -173,6 +177,8 @@ export const videos: Video[] = [
       parentN: null,
       targetDurationSec: 30,
       createdAt: ago(0.8),
+      verdicts: { approved: 0, changesRequested: 0, mine: null },
+
       attempts: 1,
       stage: 'queued',
       latestStep: null,
@@ -294,6 +300,8 @@ export const videos: Video[] = [
       parentN: null,
       targetDurationSec: null,
       createdAt: ago(2900),
+      verdicts: { approved: 0, changesRequested: 0, mine: null },
+
       attempts: 1,
       stage: 'failed',
       latestStep: 'Asked: which plans should the walkthrough cover?',

@@ -14,6 +14,7 @@ import type {
   UserRow,
   VersionRow,
   WebhookEventRow,
+  VerdictRow,
   WebhookDeliveryRow,
   UserWebhookRow,
 } from '../domain/types.js'
@@ -32,6 +33,7 @@ interface State {
   idem: Map<string, IdempotencyRow>
   events: Map<string, WebhookEventRow>
   deliveries: Map<string, WebhookDeliveryRow>
+  verdicts: Map<string, VerdictRow>
   userWebhooks: Map<string, UserWebhookRow>
   cleanup: Map<string, CleanupRow>
 }
@@ -49,6 +51,7 @@ const empty = (): State => ({
   idem: new Map(),
   events: new Map(),
   deliveries: new Map(),
+  verdicts: new Map(),
   userWebhooks: new Map(),
   cleanup: new Map(),
 })
@@ -244,6 +247,14 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
       return n
     },
 
+    putVerdict: async (row) => {
+      state.verdicts.set(`${row.jobId}:${row.versionN}:${row.userId}`, clone(row))
+    },
+    deleteVerdict: async (jobId, n, userId) => {
+      state.verdicts.delete(`${jobId}:${n}:${userId}`)
+    },
+    listVerdicts: async (jobIds) =>
+      clone([...state.verdicts.values()].filter((v) => jobIds.includes(v.jobId))),
     insertWebhookEvent: async (row) => {
       state.events.set(row.eventId, clone(row))
     },

@@ -19,6 +19,7 @@ const TOOLS: [string, string][] = [
   ['publish_video', 'Public share page, MP4, GIF and embed snippet for a ready version.'],
   ['unpublish_video', 'Take a public link down.'],
   ['cancel_video', 'Stop the version in progress.'],
+  ['set_verdict', 'Approve a version or request changes (not on your own version).'],
 ]
 
 // Scalar themed with the app's role tokens (--va-*), which already switch between light and dark,

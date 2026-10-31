@@ -12,6 +12,7 @@ import {
   cancelVersion,
   createVideo,
   listVideos,
+  setVerdict,
   publishVersion,
   reviseVideo,
   unpublishVersion,
@@ -580,10 +581,40 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w"}`,
       }, args.video_id),
   )
 
+  const verdictTool = server.registerTool(
+    'set_verdict',
+    {
+      title: 'Approve a version or request changes',
+      description: `Record your review of a ready version: "approved" or "changes_requested", with an optional short note. Use null to clear your verdict. You can't review your own version.
+
+Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "version": 2, "verdict": "approved", "note": "Ship it"}`,
+      inputSchema: {
+        video_id: z.string().describe('Video id (vid_…) or a link to it.'),
+        version: z.number().int().positive(),
+        verdict: z.enum(['approved', 'changes_requested']).nullable(),
+        note: z.string().max(500).optional(),
+      },
+    },
+    async (args) =>
+      run(async () => {
+        const id = normalizeVideoId(args.video_id)
+        const v = await setVerdict(deps, principal, id, args.version, {
+          verdict: args.verdict,
+          note: args.note,
+        })
+        return {
+          video_id: v.id,
+          version: args.version,
+          verdicts: v.versions.find((x) => x.n === args.version)?.verdicts,
+        }
+      }, args.video_id),
+  )
+
   // Keys inherit their owner's role, so the tool list shows only what that role can do (plan v2 §3).
   if (!can(principal, 'video:create')) {
     for (const t of [createTool, reviseTool, publishTool, unpublishTool]) t.remove()
   }
+  if (!can(principal, 'verdict:set')) verdictTool.remove()
   return server
 }
 

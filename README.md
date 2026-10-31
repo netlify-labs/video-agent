@@ -144,7 +144,8 @@ is HMAC-SHA256 of `"<t>.<raw body>"` with the key's webhook secret (shown once w
 ## Use it from AI tools (MCP)
 
 The same video tasks are MCP tools, so people can ask Claude, Cursor or any MCP client for a video:
-`create_video`, `get_video`, `list_videos`, `revise_video`, `publish_video`, `unpublish_video`, `cancel_video`.
+`create_video`, `get_video`, `list_videos`, `revise_video`, `publish_video`, `unpublish_video`, `cancel_video`,
+`set_verdict`. Each key's tool list matches its owner's role: Reviewers see the read and review tools, Viewers read only.
 
 - Server URL: `https://<your-site>/mcp` (Streamable HTTP). Authenticate with an API key: `Authorization: Bearer nva_…`.
 - Claude Code: `claude mcp add --transport http video-agent https://<your-site>/mcp --header "Authorization: Bearer nva_…"`

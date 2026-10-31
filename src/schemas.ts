@@ -58,8 +58,18 @@ export const PublicationSchema = z
   })
   .openapi('Publication')
 
+export const VerdictSchema = z.enum(['approved', 'changes_requested']).openapi('Verdict')
+export const SetVerdictSchema = z
+  .object({ verdict: VerdictSchema.nullable(), note: z.string().max(500).optional() })
+  .openapi('SetVerdict')
+
 export const VersionSchema = z
   .object({
+    verdicts: z.object({
+      approved: z.number().int(),
+      changesRequested: z.number().int(),
+      mine: VerdictSchema.nullable(),
+    }),
     n: z.number().int(),
     status: StatusSchema,
     prompt: z.string(),

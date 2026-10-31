@@ -2,9 +2,11 @@
 import type { Deps } from '../deps.js'
 import { sha256Hex } from '../lib/crypto.js'
 import { accessKey, writeAccessMirror } from './files.js'
+import { emitEvent } from './webhooks.js'
 import { ApiError } from '../lib/errors.js'
 import type { Repo } from '../store/types.js'
 import { assertCan, type Principal } from './policy.js'
+import type { Verdict, VerdictRow } from './types.js'
 import {
   ASPECTS,
   UNFINISHED_STATUSES,
@@ -498,9 +500,18 @@ function versionDto(
   attemptsCount: number,
   o: OutputRow | null,
   pubs: PublicationRow[],
+  verdicts: VerdictRow[] = [],
+  viewerId: string | null = null,
 ) {
+  const mineV = verdicts.find((x) => x.versionN === v.n && x.userId === viewerId)
   const fileBase = `${deps.config.siteUrl}/api/v1/videos/${jobId}/versions/${v.n}`
   return {
+    verdicts: {
+      approved: verdicts.filter((x) => x.versionN === v.n && x.verdict === 'approved').length,
+      changesRequested: verdicts.filter((x) => x.versionN === v.n && x.verdict === 'changes_requested')
+        .length,
+      mine: mineV?.verdict ?? null,
+    },
     n: v.n,
     status: v.status,
     prompt: v.prompt,
@@ -553,19 +564,31 @@ export async function videoDto(
   deps: Pick<Deps, 'config' | 'runner'>,
   jobId: string,
   viewer: Principal | 'system',
+  prefetched?: { verdicts: VerdictRow[] },
 ) {
   const job = await repo.getJob(jobId)
   if (!job || job.deletedAt || (viewer !== 'system' && !canSee(viewer, job)))
     throw new ApiError('not_found', 'Video not found.')
-  const [versions, attempts, pubs] = await Promise.all([
+  const [versions, attempts, pubs, verdicts] = await Promise.all([
     repo.listVersions(jobId),
     repo.listAttempts(jobId),
     repo.listPublications(jobId),
+    prefetched ? prefetched.verdicts.filter((x) => x.jobId === jobId) : repo.listVerdicts([jobId]),
   ])
   const out = await Promise.all(
     versions.map(async (v) => {
       const mine = attempts.filter((a) => a.versionN === v.n)
-      return versionDto(deps, jobId, v, mine[0] ?? null, mine.length, await repo.getOutput(jobId, v.n), pubs)
+      return versionDto(
+        deps,
+        jobId,
+        v,
+        mine[0] ?? null,
+        mine.length,
+        await repo.getOutput(jobId, v.n),
+        pubs,
+        verdicts,
+        viewer === 'system' ? null : viewer.userId,
+      )
     }),
   )
   const owner = await repo.getUser(job.ownerId)
@@ -624,7 +647,9 @@ export async function listVideos(
     limit: limit + 1,
   })
   const page = rows.slice(0, limit)
-  const items = await Promise.all(page.map((j) => videoDto(deps.store, deps, j.id, principal)))
+  // Verdict counts for the whole page in one query.
+  const verdicts = await deps.store.listVerdicts(page.map((j) => j.id))
+  const items = await Promise.all(page.map((j) => videoDto(deps.store, deps, j.id, principal, { verdicts })))
   const last = page.at(-1)
   return {
     items,
@@ -633,4 +658,50 @@ export async function listVideos(
         ? Buffer.from(JSON.stringify({ createdAt: last.createdAt, id: last.id })).toString('base64url')
         : null,
   }
+}
+
+/** Approved / Changes requested on a ready version (plan v2 §3, §14 rule 8). Never on your own version. */
+export async function setVerdict(
+  deps: Deps,
+  principal: Principal,
+  jobId: string,
+  n: number,
+  input: { verdict: Verdict | null; note?: string | undefined },
+) {
+  return deps.store.tx(async (repo) => {
+    await loadJob(repo, principal, jobId)
+    assertCan(principal, 'verdict:set')
+    const v = await repo.getVersion(jobId, n)
+    if (!v) throw new ApiError('not_found', 'Version not found.')
+    if (v.authorId === principal.userId)
+      throw new ApiError('forbidden', "You can't approve your own version.")
+    if (v.status !== 'ready') throw new ApiError('conflict', 'Only ready versions can be approved.')
+    if (input.verdict === null) {
+      await repo.deleteVerdict(jobId, n, principal.userId)
+    } else {
+      await repo.putVerdict({
+        jobId,
+        versionN: n,
+        userId: principal.userId,
+        verdict: input.verdict,
+        note: input.note?.trim() || null,
+        updatedAt: deps.clock.now().toISOString(),
+      })
+      await emitEvent(repo, deps, {
+        type: input.verdict === 'approved' ? 'version.approved' : 'version.changes_requested',
+        jobId,
+        versionN: n,
+        data: {
+          verdict: {
+            by: { id: principal.userId, name: principal.name, email: principal.email },
+            verdict: input.verdict,
+            note: input.note?.trim() || null,
+          },
+        },
+      })
+    }
+    const job = await repo.getJob(jobId)
+    if (job) await repo.updateJob(jobId, { version: job.version + 1 })
+    return videoDto(repo, deps, jobId, principal)
+  })
 }
