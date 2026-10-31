@@ -15,3 +15,15 @@ Keep it short and concrete. The agent follows rules better than adjectives: "hea
 #0b0d10, never more than 6 words" beats "bold and modern".
 
 The web app's setup page shows a warning while this folder still has the neutral default.
+
+## Keeping your brand out of the repo
+
+If this repo is public, or several deployments share it, put the brand kit in a zip instead and set
+`BRAND_ZIP_URL` on the Netlify project (scopes: builds and functions). Agent runs unpack it into
+`context/brand/` (through [netlify-agent-kit](https://www.npmjs.com/package/netlify-agent-kit)'s `files`), where it
+overrides the rest of `context/`, and the build reads its `brand.json` for the web app. Nothing is committed.
+
+The zip holds the same things as this folder, at its root: `BRAND.md`, `brand.json`, and `assets/`. In
+`brand.json`, `logo` is the logo for dark backgrounds and the optional `logoLight` is for light ones. Fonts go in
+`assets/fonts/`; the agent copies the ones it uses into the video. Anyone with the URL can download the zip, so
+use a long unguessable path, or put only public brand material in it.

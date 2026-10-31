@@ -96,17 +96,18 @@ Prompts are visible to your Netlify team in the project's Agent Runs page.
 
 ## Configuration
 
-| Variable                               | Default        | Meaning                                                                |
-| -------------------------------------- | -------------- | ---------------------------------------------------------------------- |
-| `RUNNER_API_TOKEN`                     | —              | Personal access token for starting and watching runs.                  |
-| `ALLOWED_EMAIL_DOMAINS`                | —              | Company domains, or `invite-only`.                                     |
-| `ADMIN_EMAILS`                         | —              | First admins.                                                          |
-| `MAX_ACTIVE_RUNS`                      | `3`            | Runs at once.                                                          |
-| `AGENT`, `AGENT_MODEL`, `AGENT_EFFORT` | runner default | Which agent makes videos.                                              |
-| `AUTHORING_DEADLINE_MIN`               | `22`           | Stop a run after this many minutes (the runner's ceiling is 25).       |
-| `QUEUE_TIMEOUT_MIN`                    | `60`           | Fail a video that waits in the queue longer than this.                 |
-| `RENDER_QUALITY`                       | `standard`     | HyperFrames render quality (`looks`, `standard`, `delivery`).          |
-| `ALLOWED_ORIGINS`                      | —              | Origins allowed to call the API from a browser with an API key (CORS). |
+| Variable                               | Default        | Meaning                                                                                                                             |
+| -------------------------------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `RUNNER_API_TOKEN`                     | —              | Personal access token for starting and watching runs.                                                                               |
+| `ALLOWED_EMAIL_DOMAINS`                | —              | Company domains, or `invite-only`.                                                                                                  |
+| `ADMIN_EMAILS`                         | —              | First admins.                                                                                                                       |
+| `MAX_ACTIVE_RUNS`                      | `3`            | Runs at once.                                                                                                                       |
+| `AGENT`, `AGENT_MODEL`, `AGENT_EFFORT` | runner default | Which agent makes videos.                                                                                                           |
+| `AUTHORING_DEADLINE_MIN`               | `22`           | Stop a run after this many minutes (the runner's ceiling is 25).                                                                    |
+| `QUEUE_TIMEOUT_MIN`                    | `60`           | Fail a video that waits in the queue longer than this.                                                                              |
+| `RENDER_QUALITY`                       | `standard`     | HyperFrames render quality (`looks`, `standard`, `delivery`).                                                                       |
+| `ALLOWED_ORIGINS`                      | —              | Origins allowed to call the API from a browser with an API key (CORS).                                                              |
+| `BRAND_ZIP_URL`                        | —              | A zip of your brand kit, used instead of committing it to `context/` ([how](context/README.md#keeping-your-brand-out-of-the-repo)). |
 
 ## The API
 

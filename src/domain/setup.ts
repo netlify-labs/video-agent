@@ -143,7 +143,7 @@ export async function setupChecks(
     label: 'Company context',
     status: opts.contextIsDefault ? 'warn' : 'ok',
     detail: opts.contextIsDefault ? 'context/ still has the neutral default.' : 'Customized.',
-    fix: 'Edit context/BRAND.md and context/brand.json, add your logo to context/assets/, and push.',
+    fix: 'Edit context/BRAND.md and context/brand.json, add your logo to context/assets/, and push. Or set BRAND_ZIP_URL to a zip of your brand kit (see context/README.md) and redeploy.',
   })
 
   const ready =

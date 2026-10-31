@@ -77,6 +77,15 @@
     "hyperframes": {
       "version": "0.8.222",
       "dir": "video"
-    }
+    },
+    "files": [
+      {
+        "from": {
+          "env": "BRAND_ZIP_URL"
+        },
+        "to": "context/brand",
+        "optional": true
+      }
+    ]
   }
 }

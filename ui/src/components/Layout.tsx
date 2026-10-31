@@ -8,6 +8,7 @@ import {
   Text,
   Tooltip,
   UnstyledButton,
+  useComputedColorScheme,
   useMantineColorScheme,
 } from '@mantine/core'
 import { useDisclosure, useHotkeys } from '@mantine/hooks'
@@ -34,6 +35,7 @@ export function Layout() {
   const navigate = useNavigate()
   const auth = useAuth()
   const { colorScheme, toggleColorScheme } = useMantineColorScheme()
+  const computedScheme = useComputedColorScheme('dark')
   const me = $api.useQuery('get', '/api/v1/me')
   const health = $api.useQuery('get', '/api/health', {}, { staleTime: 60_000 })
   const isAdmin = me.data?.role === 'admin'
@@ -50,6 +52,8 @@ export function Layout() {
       onClick={close}
     />
   )
+  // brand.logo is for dark backgrounds; logoLight (when the brand has one) for the light theme.
+  const logo = computedScheme === 'light' ? (brand.logoLight ?? brand.logo) : brand.logo
   const initial = (me.data?.name ?? me.data?.email ?? '?').slice(0, 1).toUpperCase()
 
   return (
@@ -64,7 +68,7 @@ export function Layout() {
           <Group gap="sm">
             <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" aria-label="Menu" />
             <Link to="/" className="va-mark">
-              {brand.logo ? <img src={brand.logo} alt="" height={22} /> : <Mark />}
+              {logo ? <img src={logo} alt="" height={22} /> : <Mark />}
               {brand.name}
             </Link>
           </Group>

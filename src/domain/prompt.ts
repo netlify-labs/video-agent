@@ -46,7 +46,7 @@ export function buildPrompt(p: PromptInput): string {
     )
   }
   lines.push(
-    'Read context/ first. It describes the company, its brand and its products. Follow it unless the request explicitly asks for something different.',
+    "Read context/ first. It describes the company, its brand and its products. If context/brand/ exists, it is this deployment's brand kit (copy any fonts you use into video/): it overrides the rest of context/. Follow the brand unless the request explicitly asks for something different.",
     '',
     `Request (from ${sanitizeBrief(p.requesterName)}):`,
     FENCE_OPEN,
