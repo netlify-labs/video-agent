@@ -1,11 +1,11 @@
 # Phase 0 spike results
 
-Runs started with `spikes/start-run.ts` against project `netlify-video-agent` on branch `spike/phase-0`
+Runs started with `spikes/start-run.ts` against project `our internal deployment` on branch `spike/phase-0`
 (minimal HyperFrames project + `netlify-agent-kit@0.3.1`). Logs are in `spikes/out-*.log` (not committed).
 
 ## S0. Workbench: done (2026-10-30)
 
-- Hello run `6ae508ea7aeaf1eebda6042e`: 45 s, 5 steps, **14.4 credits**, default agent Claude (claude-opus-5-5).
+- Hello run `<runner id>`: 45 s, 5 steps, **14.4 credits**, default agent Claude (claude-opus-5-5).
 - In the run: Node v24.22.2, FFmpeg 7.0.2 static, FFprobe static, `npx hyperframes --version` 0.8.222, clean `git status`.
 
 ## S2. Hand-back: option A works (2026-10-30)
@@ -51,7 +51,7 @@ Decisions:
 
 ## S3, S4, S5, S6, S7: answered by the live deployment (2026-10-30)
 
-Production (`netlify-video-agent.netlify.app`, deploy `f89d1f4` and later) ran `scripts/e2e/phase2.ts` with an API key:
+Production (`our internal deployment`, deploy `f89d1f4` and later) ran `scripts/e2e/phase2.ts` with an API key:
 create → v1 ready in **2:51** → signed download + Range → revise to v2 (**ready ~3 min later**, end card changed,
 everything else kept) → publish → share page with `og:video` → unpublish → **404 immediately**. PASS in 5.9 minutes.
 A second video made by a person through the web app finished too (221 credits).
@@ -68,7 +68,7 @@ A second video made by a person through the web app finished too (221 credits).
   happen within one sweep tick (the e2e run went from queued to running in 16 s). Ambiguous-start reconciliation is
   covered by tests with the persisted start request; it has not been triggered in production.
 - **S6 (previews and deploy context): mostly done.** The deploy-context guard holds: the published deploy's own
-  permalink (`<deploy-id>--netlify-video-agent.netlify.app/api/health`) returns `404`. Agent-run previews deploy with
+  permalink (`<deploy-id>--our internal deployment/api/health`) returns `404`. Agent-run previews deploy with
   only post-processing in their logs; whether the build command's UI skip ran is not visible there (open, harmless).
   Parallel runs: 3 S1 runs and the S2 run ran concurrently without interference.
 - **S7 (Identity): done.** In the catch-all Hono function: sign-up with a `netlify.com` address, email confirmation,

@@ -451,7 +451,7 @@ React + Mantine + Vite, served at `/`, talking only to the public API through ge
 
 ## 13. Template, repo and deploy
 
-- **Repo:** `netlify-labs/video-agent`, private until it's open-sourced, standalone (no private dependencies). Our deployment: project `netlify-video-agent` in the gtm-engineering team (https://netlify-video-agent.netlify.app), linked to `main`; its publish dir is `public/` with no build command until C1 sets the real ones, so nothing is served yet. `ALLOWED_EMAIL_DOMAINS=netlify.com`. Our Netlify `context/` lives outside the template's `main` (open question 1).
+- **Repo:** `netlify-labs/video-agent`, private until it's open-sourced, standalone (no private dependencies). Our deployment: our internal project (our internal deployment), linked to `main`; its publish dir is `public/` with no build command until C1 sets the real ones, so nothing is served yet. `ALLOWED_EMAIL_DOMAINS=netlify.com`. Our Netlify `context/` lives outside the template's `main` (open question 1).
 - **Before going public:** MIT LICENSE; licenses for any bundled fonts and logos (the template ships none of Netlify's); remove internal names and links from this spec; scan the git history for secrets.
 - **Deploy to Netlify button** in the README (it only works once the repo is public). `netlify.toml`'s `[template.environment]` declares the required inputs, with labels:
   - `RUNNER_API_TOKEN`: a personal access token for starting runs;
