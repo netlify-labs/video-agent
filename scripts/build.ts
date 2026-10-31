@@ -129,5 +129,7 @@ if (agentRun && process.env.FORCE_UI_BUILD !== 'true') {
     join(repoRoot, 'ui/dist/_preview/runtime.js'),
   )
   copyFileSync(join(repoRoot, 'src/preview/bridge.js'), join(repoRoot, 'ui/dist/_preview/bridge.js'))
+  // For compositions made before GSAP was vendored (the preview rewrites their CDN tag to this).
+  copyFileSync(join(repoRoot, 'video/vendor/gsap.min.js'), join(repoRoot, 'ui/dist/_preview/gsap.js'))
   log('preview', { runtime: 'hyperframes/dist/hyperframe.runtime.iife.js' })
 }

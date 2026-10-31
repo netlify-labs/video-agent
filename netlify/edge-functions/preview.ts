@@ -7,6 +7,7 @@ import { getStore } from '@netlify/blobs'
 import { mediaResponse, verifySignedPath, type AccessMirror } from '../../src/lib/media/range.ts'
 import {
   BRIDGE_PATH,
+  GSAP_PATH,
   RUNTIME_PATH,
   injectPreviewScripts,
   parsePreviewPath,
@@ -51,12 +52,16 @@ export default async (req: Request, context: Context) => {
   if (!ok) return plain(403, 'This preview link has expired. Reopen the video to get a fresh one.')
 
   const base = previewBase(url.origin, t)
-  if (t.path === RUNTIME_PATH || t.path === BRIDGE_PATH) {
-    const asset = await fetch(
-      new URL(t.path === RUNTIME_PATH ? '/_preview/runtime.js' : '/_preview/bridge.js', url),
-    )
-    if (!asset.ok) return plain(502, 'The preview runtime is missing from this deploy.')
-    return new Response(asset.body, { headers: previewHeaders(base, 'text/javascript; charset=utf-8') })
+  const vendored: Record<string, string> = {
+    [RUNTIME_PATH]: '/_preview/runtime.js',
+    [BRIDGE_PATH]: '/_preview/bridge.js',
+    [GSAP_PATH]: '/_preview/gsap.js',
+  }
+  const asset = vendored[t.path]
+  if (asset) {
+    const res = await fetch(new URL(asset, url))
+    if (!res.ok) return plain(502, 'The preview runtime is missing from this deploy.')
+    return new Response(res.body, { headers: previewHeaders(base, 'text/javascript; charset=utf-8') })
   }
 
   const bundles = getStore({ name: 'bundles', consistency: 'strong' })

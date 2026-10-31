@@ -86,9 +86,15 @@ export function previewHeaders(base: string, contentType: string): Record<string
 
 export const RUNTIME_PATH = '_hf/runtime.js'
 export const BRIDGE_PATH = '_hf/bridge.js'
+export const GSAP_PATH = '_hf/gsap.js'
+
+/** Compositions made before GSAP was vendored load it from a CDN, which the preview blocks: point them at ours. */
+const GSAP_CDN =
+  /<script\b[^>]*\bsrc=["']https?:\/\/(?:cdn\.jsdelivr\.net\/npm\/gsap@[^"'/]+\/dist|unpkg\.com\/gsap@[^"'/]+\/dist|cdnjs\.cloudflare\.com\/ajax\/libs\/gsap\/[^"'/]+)\/gsap(?:\.min)?\.js["'][^>]*>\s*<\/script>/gi
 
 /** The runtime goes first in <head> (or right after the doctype), the bridge last in <body>. */
 export function injectPreviewScripts(html: string): string {
+  html = html.replace(GSAP_CDN, `<script src="${GSAP_PATH}"></script>`)
   const runtime = `<script src="${RUNTIME_PATH}"></script>`
   const bridge = `<script src="${BRIDGE_PATH}"></script>`
   const at = /<head[^>]*>/i.exec(html) ?? /^\s*<!doctype[^>]*>/i.exec(html)

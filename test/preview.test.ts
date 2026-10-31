@@ -60,6 +60,17 @@ describe('preview helpers', () => {
     expect(injectPreviewScripts('<html><head><title>x</title></head><body><p>hi</p></body></html>')).toBe(
       '<html><head><script src="_hf/runtime.js"></script><title>x</title></head><body><p>hi</p><script src="_hf/bridge.js"></script></body></html>',
     )
+    // Older compositions' CDN GSAP points at the vendored copy under the capability.
+    expect(
+      injectPreviewScripts(
+        '<head><script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script></head>',
+      ),
+    ).toBe(
+      '<head><script src="_hf/runtime.js"></script><script src="_hf/gsap.js"></script></head><script src="_hf/bridge.js"></script>',
+    )
+    expect(
+      injectPreviewScripts('<script src="https://unpkg.com/gsap@3.12.5/dist/gsap.js"></script>'),
+    ).toContain('<script src="_hf/gsap.js"></script>')
     expect(injectPreviewScripts('<!DOCTYPE html><p>x</p>')).toBe(
       '<!DOCTYPE html><script src="_hf/runtime.js"></script><p>x</p><script src="_hf/bridge.js"></script>',
     )
