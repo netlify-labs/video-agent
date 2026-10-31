@@ -14,8 +14,9 @@ import {
 import { notifications } from '@mantine/notifications'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router'
-import { $api, errorMessage, newIdempotencyKey } from '../api/client'
+import { $api, errorMessage, newIdempotencyKey, useCanCreate } from '../api/client'
 import { Status, fileUrl, relativeTime } from '../components/bits'
+import { PlanPanel } from '../components/PlanPanel'
 import { brand } from '../theme'
 
 const EXAMPLES = [
@@ -152,16 +153,21 @@ export function NewVideoPage() {
   const [seconds, setSeconds] = useState<number | string>(30)
   const [title, setTitle] = useState('')
   const { create, key } = useCreate()
+  const config = $api.useQuery('get', '/api/v1/config')
+  const canPlan = useCanCreate() && config.data?.planningAvailable === true
+  const [planning, setPlanning] = useState(false)
+  const [shapeTouched, setShapeTouched] = useState(false)
   const valid =
     prompt.trim().length >= 10 && prompt.length <= 4000 && (lengthMode === 'auto' || Number(seconds) >= 3)
 
-  const submit = () => {
+  const submit = (planId: string | null = null) => {
     create.mutate({
       body: {
         prompt,
         aspect: shape,
         ...(lengthMode === 'set' ? { durationSec: Number(seconds) } : {}),
         ...(title.trim() ? { title: title.trim() } : {}),
+        ...(planId ? { planId } : {}),
       },
       params: { header: { 'idempotency-key': key } },
     })
@@ -182,7 +188,9 @@ export function NewVideoPage() {
           <form
             onSubmit={(e) => {
               e.preventDefault()
-              if (valid) submit()
+              if (!valid) return
+              if (canPlan) setPlanning(true)
+              else submit()
             }}
           >
             <Stack gap="lg">
@@ -220,6 +228,7 @@ export function NewVideoPage() {
                         aria-checked={on}
                         onClick={() => {
                           setShape(s.value)
+                          setShapeTouched(true)
                         }}
                         className="va-raised"
                         p="sm"
@@ -291,9 +300,27 @@ export function NewVideoPage() {
                 }}
               />
               <Group>
-                <Button type="submit" disabled={!valid} loading={create.isPending}>
-                  Make the video
-                </Button>
+                {canPlan ? (
+                  <Group gap={0} className="va-split-button">
+                    <Button type="submit" disabled={!valid || planning}>
+                      Plan it first
+                    </Button>
+                    <Button
+                      variant="default"
+                      disabled={!valid}
+                      loading={create.isPending && !planning}
+                      onClick={() => {
+                        submit()
+                      }}
+                    >
+                      Create now
+                    </Button>
+                  </Group>
+                ) : (
+                  <Button type="submit" disabled={!valid} loading={create.isPending}>
+                    Make the video
+                  </Button>
+                )}
                 <Text size="sm" c="var(--va-faint)">
                   You can revise it in plain words afterwards.
                 </Text>
@@ -302,6 +329,23 @@ export function NewVideoPage() {
           </form>
         </Card>
         <div className="va-rail">
+          {planning ? (
+            <PlanPanel
+              prompt={prompt}
+              aspect={shapeTouched ? shape : undefined}
+              durationSec={lengthMode === 'set' ? Number(seconds) : undefined}
+              creating={create.isPending}
+              onSuggestAspect={(a) => {
+                setShape(a)
+              }}
+              onClose={() => {
+                setPlanning(false)
+              }}
+              onCreate={(planId) => {
+                submit(planId)
+              }}
+            />
+          ) : null}
           <Card>
             <Text fw={600} mb={8}>
               {brand.isDefault ? 'Brand context: the neutral default' : `${brand.name} brand context`}

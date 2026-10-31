@@ -11,7 +11,10 @@ test('library shows videos, progress and the badge', async ({ page }) => {
 
 test('search narrows the library', async ({ page }) => {
   await page.goto('/')
-  const search = page.getByRole('textbox', { name: 'Search prompts and titles' }).filter({ visible: true }).first()
+  const search = page
+    .getByRole('textbox', { name: 'Search prompts and titles' })
+    .filter({ visible: true })
+    .first()
   await search.fill('docs tutorial')
   await expect(page.getByText('Add an environment variable, then redeploy')).toBeVisible()
   await expect(page.getByText('Org webhooks launch')).toHaveCount(0)
@@ -19,7 +22,9 @@ test('search narrows the library', async ({ page }) => {
 
 test('video page shows the player, versions and the public link', async ({ page }) => {
   await page.goto('/videos/vid_teaser')
-  await expect(page.getByRole('heading', { level: 1, name: 'Ship faster with preview deploys' })).toBeVisible()
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Ship faster with preview deploys' }),
+  ).toBeVisible()
   await expect(page.locator('video')).toBeVisible()
   await expect(page.getByRole('button', { name: /v2 from v1/ })).toHaveAttribute('aria-pressed', 'true')
   await expect(page.getByText('Public link for v2')).toBeVisible()
@@ -43,12 +48,42 @@ test('a failed video explains why and offers Try again', async ({ page }) => {
 
 test('new video form validates and picks a shape', async ({ page }) => {
   await page.goto('/new')
-  const make = page.getByRole('button', { name: 'Make the video' })
+  const make = page.getByRole('button', { name: 'Plan it first' })
   await expect(make).toBeDisabled()
-  await page.getByLabel('What should the video show?').fill('A 20-second launch video for our new feature, ending with "Try it today".')
+  await page
+    .getByLabel('What should the video show?')
+    .fill('A 20-second launch video for our new feature, ending with "Try it today".')
   await page.getByRole('radio', { name: /Vertical/ }).click()
   await expect(page.getByRole('radio', { name: /Vertical/ })).toHaveAttribute('aria-checked', 'true')
   await expect(make).toBeEnabled()
+})
+
+test('Plan it first asks questions, writes an editable brief, and creates the video with it', async ({
+  page,
+}) => {
+  await page.goto('/new')
+  await page
+    .getByLabel('What should the video show?')
+    .fill('A 30-second launch video for org-wide webhooks, ending on our logo.')
+  await page.getByRole('button', { name: 'Plan it first' }).click()
+  await expect(page.getByText('Who is this video for?')).toBeVisible()
+  await page.getByRole('radio', { name: /Developers/ }).click()
+  await page.getByPlaceholder('Other…').first().fill('Platform engineers too')
+  await page.getByRole('checkbox', { name: 'Skip' }).nth(1).check()
+  await page.getByRole('button', { name: 'Done: write the brief' }).click()
+  await expect(page.getByLabel('Call to action')).toHaveValue('Read the docs')
+  await page.getByLabel('Call to action').fill('Start free today')
+  await page.getByRole('button', { name: 'Create video' }).click()
+  await expect(page).toHaveURL(/\/videos\//)
+})
+
+test('Create now skips planning', async ({ page }) => {
+  await page.goto('/new')
+  await page
+    .getByLabel('What should the video show?')
+    .fill('A 20-second launch video for our new feature, ending with "Try it today".')
+  await page.getByRole('button', { name: 'Create now' }).click()
+  await expect(page).toHaveURL(/\/videos\//)
 })
 
 test('API docs are embedded with the REST reference and MCP setup', async ({ page }) => {
@@ -62,7 +97,9 @@ test('API docs are embedded with the REST reference and MCP setup', async ({ pag
 
 test('admin, keys and setup render', async ({ page }) => {
   await page.goto('/admin')
-  await expect(page.getByText('1 of 3 run slots in use, 1 queued, 1 failure in the last 7 days.')).toBeVisible()
+  await expect(
+    page.getByText('1 of 3 run slots in use, 1 queued, 1 failure in the last 7 days.'),
+  ).toBeVisible()
   await expect(page.getByText('Deploy rollbacks in one click')).toBeVisible()
   await page.goto('/keys')
   await expect(page.getByText('Release pipeline')).toBeVisible()

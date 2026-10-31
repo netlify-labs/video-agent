@@ -3064,6 +3064,8 @@ export interface components {
         PublicConfig: {
             admission: "invite-only" | string[] | null;
             siteUrl: string;
+            /** @description AI Gateway is available, so Plan it first is offered. */
+            planningAvailable: boolean;
         };
         Video: {
             /** @example vid_01jc8k0000000000000000000 */

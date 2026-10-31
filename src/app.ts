@@ -200,7 +200,15 @@ export function createApp(deps: Deps, opts: AppOptions) {
       tags: ['system'],
       responses: { 200: json(s.PublicConfigSchema, 'Config') },
     }),
-    (c) => c.json({ admission: deps.config.allowedEmailDomains, siteUrl: deps.config.siteUrl }, 200),
+    (c) =>
+      c.json(
+        {
+          admission: deps.config.allowedEmailDomains,
+          siteUrl: deps.config.siteUrl,
+          planningAvailable: deps.gateway.available(),
+        },
+        200,
+      ),
   )
 
   // ───── videos ─────

@@ -67,8 +67,15 @@ export function installMock() {
       })
     }
     if (p === '/api/openapi.json') return json(spec)
+    // Plan it first (plan v2 §4): a router that asks two questions, then a brief.
+    if (p === '/api/v1/plans' && method === 'POST') return json(mockPlan(), 201)
+    if (/^\/api\/v1\/plans\/[^/]+\/questions$/.test(p)) return json(mockPlan('questions'))
+    if (/^\/api\/v1\/plans\/[^/]+\/brief$/.test(p)) return json(mockPlan('brief'))
+    if (/^\/api\/v1\/plans\/[^/]+$/.test(p) && method === 'PATCH')
+      return json({ ...mockPlan('brief'), briefRev: 2 })
     if (p === '/api/v1/notifications') return json({ items: [], unreadCount: 0, nextCursor: null })
-    if (p === '/api/v1/config') return json({ admission: ['acme.com'], siteUrl: window.location.origin })
+    if (p === '/api/v1/config')
+      return json({ admission: ['acme.com'], siteUrl: window.location.origin, planningAvailable: true })
     if (p === '/api/v1/me') return json(me)
     if (p === '/api/v1/stats') return json(stats)
     if (p === '/api/v1/users') {
@@ -137,5 +144,59 @@ export function installMock() {
       return v ? json(v) : json({ error: { code: 'not_found', message: 'Video not found.' } }, 404)
     }
     return json({ error: { code: 'not_found', message: `Mock has no ${method} ${p}` } }, 404)
+  }
+}
+
+function mockPlan(stage: 'route' | 'questions' | 'brief' = 'route') {
+  const questions = [
+    {
+      id: 'q1',
+      question: 'Who is this video for?',
+      why: 'It sets how technical the beats get.',
+      options: [
+        { id: 'a', label: 'Developers', description: 'Show the API' },
+        { id: 'b', label: 'Team leads', description: 'Show the outcome' },
+      ],
+      multiSelect: false,
+      allowOther: true,
+    },
+    {
+      id: 'q2',
+      question: 'How should it end?',
+      why: '',
+      options: [
+        { id: 'a', label: 'Read the docs', description: '' },
+        { id: 'b', label: 'Start free', description: '' },
+      ],
+      multiSelect: false,
+      allowOther: true,
+    },
+  ]
+  return {
+    id: 'plan_mock',
+    prompt: 'mock',
+    revisionOf: null,
+    route: { needsQuestions: true, template: 'launch', suggestedAspect: null },
+    questions: stage === 'route' ? null : questions,
+    answers: stage === 'brief' ? [] : null,
+    brief:
+      stage === 'brief'
+        ? {
+            goal: 'Announce org-wide webhooks',
+            audience: 'Developers',
+            keyMessage: 'One subscription covers every project',
+            beats: [
+              { text: 'The problem: a webhook per project', seconds: 8 },
+              { text: 'Org webhooks: subscribe once', seconds: 14 },
+              { text: 'End card: Read the docs', seconds: 8 },
+            ],
+            tone: 'Confident, plain',
+            callToAction: 'Read the docs',
+            mustInclude: ['logo'],
+            avoid: [],
+          }
+        : null,
+    briefRev: stage === 'brief' ? 1 : 0,
+    expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
   }
 }

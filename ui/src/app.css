@@ -499,3 +499,20 @@ body {
 .mantine-Input-input:focus-within {
   border-color: var(--va-muted);
 }
+
+/* Plan it first: split button and the planning panel in the rail */
+.va-split-button > .mantine-Button-root:first-child {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.va-split-button > .mantine-Button-root:last-child {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  margin-left: -1px;
+}
+.va-plan {
+  border-color: var(--va-accent);
+}
+.va-plan-q {
+  background: var(--va-raised);
+}

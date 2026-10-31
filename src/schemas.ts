@@ -389,5 +389,6 @@ export const PublicConfigSchema = z
   .object({
     admission: z.union([z.literal('invite-only'), z.array(z.string()), z.null()]),
     siteUrl: z.string(),
+    planningAvailable: z.boolean().describe('AI Gateway is available, so Plan it first is offered.'),
   })
   .openapi('PublicConfig')

@@ -18,6 +18,7 @@ import {
 import { modals } from '@mantine/modals'
 import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
+import { PlanPanel } from '../components/PlanPanel'
 import { IconDots, IconDownload, IconExternalLink, IconLock, IconLockOpen } from '@tabler/icons-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
@@ -282,6 +283,9 @@ export function VideoPage() {
   const qc = useQueryClient()
   const me = $api.useQuery('get', '/api/v1/me')
   const canCreate = me.data?.role === 'admin' || me.data?.role === 'creator'
+  const config = $api.useQuery('get', '/api/v1/config')
+  const canPlan = canCreate && config.data?.planningAvailable === true
+  const [planningRevision, setPlanningRevision] = useState(false)
   const video = $api.useQuery(
     'get',
     '/api/v1/videos/{id}',
@@ -591,6 +595,10 @@ export function VideoPage() {
               <form
                 onSubmit={(e) => {
                   e.preventDefault()
+                  if (canPlan) {
+                    setPlanningRevision(true)
+                    return
+                  }
                   revise.mutate({
                     params: { path: { id }, header: { 'idempotency-key': revKey } },
                     body: { prompt: revision, fromVersion: v.n },
@@ -619,18 +627,53 @@ export function VideoPage() {
                       setRevision(e.currentTarget.value)
                     }}
                   />
-                  <Group>
+                  <Group gap={0} className={canPlan ? 'va-split-button' : undefined}>
                     <Button
                       type="submit"
-                      disabled={busy || v.status !== 'ready' || revision.trim().length < 3}
-                      loading={revise.isPending}
+                      disabled={
+                        busy || v.status !== 'ready' || revision.trim().length < 3 || planningRevision
+                      }
+                      loading={revise.isPending && !canPlan}
                     >
-                      Make v{data.versions.length + 1}
+                      {canPlan ? 'Plan it first' : `Make v${data.versions.length + 1}`}
                     </Button>
+                    {canPlan ? (
+                      <Button
+                        variant="default"
+                        disabled={busy || v.status !== 'ready' || revision.trim().length < 3}
+                        loading={revise.isPending && !planningRevision}
+                        onClick={() => {
+                          revise.mutate({
+                            params: { path: { id }, header: { 'idempotency-key': revKey } },
+                            body: { prompt: revision, fromVersion: v.n },
+                          })
+                        }}
+                      >
+                        Make v{data.versions.length + 1} now
+                      </Button>
+                    ) : null}
                   </Group>
                 </Stack>
               </form>
             </Card>
+          ) : null}
+          {planningRevision ? (
+            <PlanPanel
+              key={`${id}-${v.n}`}
+              prompt={revision}
+              revisionOf={{ videoId: id, version: v.n }}
+              creating={revise.isPending}
+              onClose={() => {
+                setPlanningRevision(false)
+              }}
+              onCreate={(planId) => {
+                setPlanningRevision(false)
+                revise.mutate({
+                  params: { path: { id }, header: { 'idempotency-key': revKey } },
+                  body: { prompt: revision, fromVersion: v.n, ...(planId ? { planId } : {}) },
+                })
+              }}
+            />
           ) : null}
 
           <Card>

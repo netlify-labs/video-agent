@@ -102,11 +102,16 @@
           },
           "siteUrl": {
             "type": "string"
+          },
+          "planningAvailable": {
+            "type": "boolean",
+            "description": "AI Gateway is available, so Plan it first is offered."
           }
         },
         "required": [
           "admission",
-          "siteUrl"
+          "siteUrl",
+          "planningAvailable"
         ]
       },
       "Video": {
