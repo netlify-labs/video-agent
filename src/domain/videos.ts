@@ -456,7 +456,7 @@ export function publicationDto(deps: Pick<Deps, 'config'>, p: PublicationRow) {
         },
     embed: p.unpublishedAt
       ? null
-      : `<video controls playsinline poster="${base}.jpg" src="${base}.mp4"><track kind="captions" src="${base}.vtt" default></video>`,
+      : `<video controls playsinline poster="${base}.jpg" src="${base}.mp4"><track kind="captions" src="${base}.vtt" srclang="en" label="Captions"></video>`,
   }
 }
 

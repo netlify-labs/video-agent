@@ -531,7 +531,6 @@ export function VideoPage() {
                 src={fileUrl(data.id, v.n, 'captions')}
                 srcLang="en"
                 label="Captions"
-                default
               />
             </video>
           ) : (

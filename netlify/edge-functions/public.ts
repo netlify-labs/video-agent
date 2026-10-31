@@ -65,7 +65,7 @@ export default async (req: Request, context: Context) => {
 main{min-height:100%;display:grid;place-items:center;padding:16px;box-sizing:border-box}figure{margin:0;max-width:min(100%,calc(85vh*${pub.width}/${pub.height}))}
 video{width:100%;height:auto;border-radius:12px;background:#000;display:block}figcaption{margin-top:12px;opacity:.8}</style></head>
 <body><main><figure><video controls playsinline preload="metadata" poster="${base}.jpg" src="${base}.mp4" width="${pub.width}" height="${pub.height}">
-<track kind="captions" src="${base}.vtt" srclang="en" label="Captions" default></video><figcaption>${title}</figcaption></figure></main></body></html>`
+<track kind="captions" src="${base}.vtt" srclang="en" label="Captions"></video><figcaption>${title}</figcaption></figure></main></body></html>`
   return new Response(html, { headers: { ...NO_STORE, 'content-type': 'text/html; charset=utf-8' } })
 }
 

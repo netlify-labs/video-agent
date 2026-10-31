@@ -86,7 +86,7 @@ function ready(
               gif: `${SITE}/v/${o.pub}.gif`,
               captions: `${SITE}/v/${o.pub}.vtt`,
             },
-            embed: `<video controls playsinline poster="${SITE}/v/${o.pub}.jpg" src="${SITE}/v/${o.pub}.mp4"><track kind="captions" src="${SITE}/v/${o.pub}.vtt" default></video>`,
+            embed: `<video controls playsinline poster="${SITE}/v/${o.pub}.jpg" src="${SITE}/v/${o.pub}.mp4"><track kind="captions" src="${SITE}/v/${o.pub}.vtt" srclang="en" label="Captions"></video>`,
           },
         ]
       : [],
