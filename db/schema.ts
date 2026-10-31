@@ -182,6 +182,27 @@ export const queueControl = pgTable('queue_control', {
   id: integer('id').primaryKey(),
 })
 
+// In-app notifications for video owners (plan v2 §3, §14 rule 13): comments and verdicts on their videos.
+export const notifications = pgTable(
+  'notifications',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull(),
+    jobId: text('job_id').notNull(),
+    versionN: integer('version_n'),
+    type: text('type').notNull(),
+    actorId: text('actor_id').notNull(),
+    summary: text('summary').notNull(),
+    createdAt: ts('created_at').notNull(),
+  },
+  (t) => [index('notifications_user_idx').on(t.userId, t.createdAt)],
+)
+
+export const notificationReads = pgTable('notification_reads', {
+  userId: text('user_id').primaryKey(),
+  readAt: ts('read_at').notNull(),
+})
+
 // Ownership transfers (plan v2 §3, §14 rule 7): audit of who moved which video to whom.
 export const ownershipTransfers = pgTable('ownership_transfers', {
   id: text('id').primaryKey(),

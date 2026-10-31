@@ -209,6 +209,26 @@ export const UserSchema = z
     disabled: z.boolean(),
   })
   .openapi('User')
+export const NotificationSchema = z
+  .object({
+    id: z.string(),
+    type: z.enum(['comment.created', 'version.approved', 'version.changes_requested']),
+    video: z.object({ id: z.string(), title: z.string() }),
+    versionN: z.number().int().nullable(),
+    actor: z.object({ id: z.string(), name: z.string().nullable(), email: z.string().nullable() }),
+    summary: z.string(),
+    createdAt: z.string(),
+    unread: z.boolean(),
+  })
+  .openapi('Notification')
+export const NotificationListSchema = z
+  .object({
+    items: z.array(NotificationSchema),
+    unreadCount: z.number().int(),
+    nextCursor: z.string().nullable(),
+  })
+  .openapi('NotificationList')
+
 export const PutWebhookSchema = z
   .object({ url: z.url().max(2000), rotate: z.boolean().optional() })
   .openapi('PutWebhook')

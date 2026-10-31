@@ -28,6 +28,7 @@ import { $api } from '../api/client'
 import { useAuth } from '../auth'
 import { brand } from '../theme'
 import { Mark, PoweredBy } from './bits'
+import { NotificationBell } from './NotificationBell'
 
 export function Layout() {
   const [opened, { toggle, close }] = useDisclosure()
@@ -82,6 +83,7 @@ export function Layout() {
                 Setup incomplete
               </Link>
             ) : null}
+            <NotificationBell />
             <Tooltip label={colorScheme === 'dark' ? 'Light theme' : 'Dark theme'}>
               <ActionIcon variant="subtle" color="gray" onClick={toggleColorScheme} aria-label="Toggle theme">
                 {colorScheme === 'dark' ? <IconSun size={18} /> : <IconMoon size={18} />}

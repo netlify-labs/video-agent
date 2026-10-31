@@ -27,6 +27,7 @@ import {
 import { signedFilePath } from './domain/files.js'
 import { handleMcp } from './mcp.js'
 import * as hooks from './domain/webhook-settings.js'
+import { listNotifications, markNotificationsRead } from './domain/notifications.js'
 import { ApiError, errorBody } from './lib/errors.js'
 import * as s from './schemas.js'
 
@@ -624,6 +625,44 @@ export function createApp(deps: Deps, opts: AppOptions) {
       responses: { 200: json(s.WebhookTestSchema, 'Result'), ...errors },
     }),
     async (c) => c.json(await hooks.testWebhook(deps, c.get('principal'), 'team'), 200),
+  )
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/v1/notifications',
+      summary: 'Comments and approvals on your videos, newest first, with an unread count',
+      tags: ['notifications'],
+      security,
+      request: {
+        query: z.object({
+          cursor: z.string().optional(),
+          limit: z.coerce.number().int().min(1).max(50).optional(),
+        }),
+      },
+      responses: { 200: json(s.NotificationListSchema, 'Notifications'), ...errors },
+    }),
+    async (c) => c.json(await listNotifications(deps, c.get('principal'), c.req.valid('query')), 200),
+  )
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/v1/notifications/read',
+      summary: 'Mark notifications read (all, or up to a time)',
+      tags: ['notifications'],
+      security,
+      request: {
+        body: {
+          content: { 'application/json': { schema: z.object({ upTo: z.string().optional() }) } },
+          required: false,
+        },
+      },
+      responses: { 204: { description: 'Marked read' }, ...errors },
+    }),
+    async (c) => {
+      const body = (await c.req.json().catch(() => ({}))) as { upTo?: string }
+      await markNotificationsRead(deps, c.get('principal'), body.upTo)
+      return c.body(null, 204)
+    },
   )
   app.openapi(
     createRoute({

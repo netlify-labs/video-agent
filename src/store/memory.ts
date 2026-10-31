@@ -16,6 +16,7 @@ import type {
   WebhookEventRow,
   VerdictRow,
   OwnershipTransferRow,
+  NotificationRow,
   WebhookDeliveryRow,
   UserWebhookRow,
 } from '../domain/types.js'
@@ -36,6 +37,8 @@ interface State {
   deliveries: Map<string, WebhookDeliveryRow>
   verdicts: Map<string, VerdictRow>
   transfers: OwnershipTransferRow[]
+  notifications: NotificationRow[]
+  notificationReads: Map<string, string>
   userWebhooks: Map<string, UserWebhookRow>
   cleanup: Map<string, CleanupRow>
 }
@@ -55,6 +58,8 @@ const empty = (): State => ({
   deliveries: new Map(),
   verdicts: new Map(),
   transfers: [],
+  notifications: [],
+  notificationReads: new Map(),
   userWebhooks: new Map(),
   cleanup: new Map(),
 })
@@ -250,6 +255,23 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
       return n
     },
 
+    insertNotification: async (row) => {
+      state.notifications.push(clone(row))
+    },
+    listNotifications: async (userId, q) => {
+      const b = q.before
+      return clone(
+        state.notifications
+          .filter((n) => n.userId === userId)
+          .sort((a, c) => c.createdAt.localeCompare(a.createdAt) || c.id.localeCompare(a.id))
+          .filter((n) => !b || n.createdAt < b.createdAt || (n.createdAt === b.createdAt && n.id < b.id))
+          .slice(0, q.limit),
+      )
+    },
+    getNotificationReadAt: async (userId) => state.notificationReads.get(userId) ?? null,
+    setNotificationReadAt: async (userId, readAt) => {
+      state.notificationReads.set(userId, readAt)
+    },
     insertOwnershipTransfer: async (row) => {
       state.transfers.push(clone(row))
     },

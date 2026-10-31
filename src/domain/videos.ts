@@ -3,6 +3,7 @@ import type { Deps } from '../deps.js'
 import { sha256Hex } from '../lib/crypto.js'
 import { accessKey, writeAccessMirror } from './files.js'
 import { emitEvent } from './webhooks.js'
+import { notifyOwner } from './notifications.js'
 import { ApiError } from '../lib/errors.js'
 import type { Repo } from '../store/types.js'
 import { assertCan, type Principal } from './policy.js'
@@ -698,6 +699,18 @@ export async function setVerdict(
             note: input.note?.trim() || null,
           },
         },
+      })
+      const who = principal.name ?? principal.email
+      const note = input.note?.trim() ? `: ${input.note.trim()}` : ''
+      await notifyOwner(repo, deps, {
+        type: input.verdict === 'approved' ? 'version.approved' : 'version.changes_requested',
+        jobId,
+        versionN: n,
+        actorId: principal.userId,
+        summary:
+          input.verdict === 'approved'
+            ? `${who} approved v${n}${note}`
+            : `${who} requested changes on v${n}${note}`,
       })
     }
     const job = await repo.getJob(jobId)

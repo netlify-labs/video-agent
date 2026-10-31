@@ -67,6 +67,7 @@ export function installMock() {
       })
     }
     if (p === '/api/openapi.json') return json(spec)
+    if (p === '/api/v1/notifications') return json({ items: [], unreadCount: 0, nextCursor: null })
     if (p === '/api/v1/config') return json({ admission: ['acme.com'], siteUrl: window.location.origin })
     if (p === '/api/v1/me') return json(me)
     if (p === '/api/v1/stats') return json(stats)

@@ -32,6 +32,7 @@ import type {
   VersionRow,
   WebhookEventRow,
   VerdictRow,
+  NotificationRow,
   WebhookDeliveryRow,
   UserWebhookRow,
 } from '../domain/types.js'
@@ -297,6 +298,35 @@ function repoFor(db: Db): Repo {
           .returning({ k: t.idempotencyKeys.key })
       ).length,
 
+    insertNotification: async (row) => {
+      await db.insert(t.notifications).values(row)
+    },
+    listNotifications: async (userId, q) => {
+      const n = t.notifications
+      const conds = [eq(n.userId, userId)]
+      if (q.before) {
+        const older = or(
+          lt(n.createdAt, q.before.createdAt),
+          and(eq(n.createdAt, q.before.createdAt), lt(n.id, q.before.id)),
+        )
+        if (older) conds.push(older)
+      }
+      return (await db
+        .select()
+        .from(n)
+        .where(and(...conds))
+        .orderBy(desc(n.createdAt), desc(n.id))
+        .limit(q.limit)) as NotificationRow[]
+    },
+    getNotificationReadAt: async (userId) =>
+      (await db.select().from(t.notificationReads).where(eq(t.notificationReads.userId, userId)))[0]
+        ?.readAt ?? null,
+    setNotificationReadAt: async (userId, readAt) => {
+      await db
+        .insert(t.notificationReads)
+        .values({ userId, readAt })
+        .onConflictDoUpdate({ target: t.notificationReads.userId, set: { readAt } })
+    },
     insertOwnershipTransfer: async (row) => {
       await db.insert(t.ownershipTransfers).values(row)
     },

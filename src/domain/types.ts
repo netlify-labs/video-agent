@@ -208,6 +208,19 @@ export interface IdempotencyRow {
   expiresAt: string
 }
 
+export type NotificationType = 'comment.created' | 'version.approved' | 'version.changes_requested'
+
+export interface NotificationRow {
+  id: string
+  userId: string
+  jobId: string
+  versionN: number | null
+  type: NotificationType
+  actorId: string
+  summary: string
+  createdAt: string
+}
+
 export interface OwnershipTransferRow {
   id: string
   jobId: string

@@ -17,6 +17,7 @@ import type {
   WebhookEventRow,
   VerdictRow,
   OwnershipTransferRow,
+  NotificationRow,
   WebhookDeliveryRow,
   UserWebhookRow,
 } from '../domain/types.js'
@@ -95,6 +96,14 @@ export interface Repo {
   deleteExpiredIdempotency(now: string): Promise<number>
 
   // webhooks and cleanup
+  insertNotification(row: NotificationRow): Promise<void>
+  /** Newest first; `before` is a createdAt|id cursor. */
+  listNotifications(
+    userId: string,
+    q: { before?: { createdAt: string; id: string }; limit: number },
+  ): Promise<NotificationRow[]>
+  getNotificationReadAt(userId: string): Promise<string | null>
+  setNotificationReadAt(userId: string, readAt: string): Promise<void>
   insertOwnershipTransfer(row: OwnershipTransferRow): Promise<void>
   listOwnershipTransfers(jobId: string): Promise<OwnershipTransferRow[]>
   // verdicts
