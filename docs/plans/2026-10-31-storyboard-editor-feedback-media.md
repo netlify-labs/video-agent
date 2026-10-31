@@ -120,6 +120,20 @@ as today. Setup reports it.
 - **On finished versions:** **Edit** loads that version's composition from `sources`; saving makes vN+1, labeled
   "edited by Ada from v2".
 
+### Prior art for in-browser editing
+
+Browser video editors work on **video frames**: OpenCut (MIT, Next.js), OpenReel and Omniclip (WebCodecs + WebGPU or
+Canvas; Omniclip ships as web components), WebAV (an MIT WebCodecs SDK), and older ffmpeg.wasm editors. Remotion-based
+editors need a commercial Remotion licence for business use. Our videos are **HTML compositions**, so editing them is
+DOM and attribute editing, which these projects don't do. What they offer us:
+
+- **Timeline UI patterns** (tracks, trimming, snapping): OpenCut's and Omniclip's timelines are references for the
+  step-2 editor.
+- **Rendering in the browser** (spike S7): WebCodecs can encode MP4 in the browser in real time. The blocker is
+  rasterizing a DOM composition to frames, which browsers can't do natively (html2canvas-style approximations differ
+  from Chrome's real rendering). If S7 finds a faithful path, draft previews could export a quick MP4 with no run.
+  Until then, final renders stay in the runner.
+
 ## 7. Feature D: comments, pinned feedback, incorporate
 
 - **Data:** `comments` (id, videoId, versionN, authorId, body, timeSec?, x?, y? (0–1), frameKey?, createdAt,
@@ -188,6 +202,7 @@ the spikes are done.
 | S4  | Time and credits for a render-only run on a 15 s and a 60 s composition                                                                                     | Measurements in SPIKES.md                          |
 | S5  | Largest upload path that works: edge function stream to Blobs, or chunked function parts                                                                    | A 150 MB MP4 uploaded and hash-verified            |
 | S6  | Do Gateway-written compositions (with `data-va-*`) render cleanly when the approval run "changes nothing"?                                                  | 5 prompts across formats, pass rate recorded       |
+| S7  | Can the browser render a composition to MP4 faithfully (WebCodecs encode plus some DOM-to-frame path)? Compare with the runner's render on 3 compositions   | A yes or no with frame diffs; if no, the reason    |
 
 ## 12. Risks
 
