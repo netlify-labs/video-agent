@@ -54,6 +54,14 @@ export default async (req: Request) => {
       template: choice('Kind of video?', { launch: null, tutorial: null, social: null, changelog: null, sales: null, other: null }),
       complexity: choice('Brief complexity?', { simple: null, standard: null, complex: null }),
       aspect: choice('Implied shape?', { landscape: null, vertical: null, square: null, portrait: null, unspecified: null }) } }],
+    ['four_no_context', { state: { request: PROMPT }, questions: {
+      needs_questions: choice('Does this request leave open questions?', { yes: null, no: null }),
+      template: choice('Kind of video?', { launch: null, tutorial: null, social: null, changelog: null, sales: null, other: null }),
+      complexity: choice('Brief complexity?', { simple: null, standard: null, complex: null }),
+      aspect: choice('Implied shape?', { landscape: null, vertical: null, square: null, portrait: null, unspecified: null }) } }],
+    ['camel_key', { state: { request: PROMPT }, questions: { needsQuestions: choice('Open questions?', { yes: null, no: null }) } }],
+    ['with_context', { state: { request: PROMPT, context: CONTEXT }, questions: { a: choice('Is this a launch?', { yes: null, no: null }) } }],
+    ['three_q', { state: { request: PROMPT }, questions: { a: choice('A?', { yes: null, no: null }), b: choice('B?', { yes: null, no: null }), c: choice('C?', { yes: null, no: null }) } }],
     ['readme_object', { state: { document: 'I was charged twice. Please fix this ASAP.' }, questions: { category: choice('What is this ticket about?', { billing: null, technical: null, other: null }) } }],
   ] as const) {
     try {
