@@ -1,0 +1,12 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      // A same-origin frame forging preview messages to the host: the host must ignore them (wrong source).
+      setInterval(
+        () => parent.postMessage({ channel: 'guess', type: 'click', x: 1, y: 1, textId: 'forged' }, '*'),
+        200,
+      )
+    </script>
+  </body>
+</html>

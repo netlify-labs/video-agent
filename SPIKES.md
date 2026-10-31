@@ -106,3 +106,31 @@ questions. Questions default to **Haiku** (≈7 s); the router's `complex` answe
 (default Sonnet, ≈16 s). The brief uses the deep model (≈5–10 s). Read the first `text` content block. Both stay inside
 the 25 s deadline with room for one validation retry on Haiku; Sonnet questions leave no room for a retry, so a retry
 falls back to Haiku.
+
+### S2: sandboxed composition preview (2026-10-31, `spikes/s2`, `npx playwright test -c spikes/s2`)
+
+Passes in Chromium and WebKit (8/8): play, pause, seek, click → element id, apply-edits (text only), relative
+subresources through one capability (CSS `url()`, `<img>`, vendored GSAP, a nested scene, the MP4 slot with Range),
+capability renewal keeping the playhead, expired capability refused, encoded traversal refused. Negative: the
+composition can't read `document.cookie` or storage, can't reach the parent, and every request outside its bundle
+(`/api/v1/me`, another origin by `fetch`, `<img>` or `<script>`) is blocked by the CSP; forged messages from another
+frame and off-channel commands are ignored.
+
+What changed from the plan:
+
+- **No nested `<hyperframes-player>`.** The player drives its composition through `contentDocument`, so it needs
+  the composition in the same origin. Inside an opaque-origin sandbox, Chromium gives a `srcdoc` child the parent's
+  origin but WebKit gives it a fresh one, and WebKit's `'self'` matches nothing in that child. Instead the
+  composition is the sandboxed document: the edge serves `index.html` with the vendored runtime
+  (`hyperframe.runtime.iife.js`) injected first and our bridge last. The bridge drives the runtime's
+  `window.__player` (`play`, `pause`, `seek`, `getTime`, `getDuration`) and the app draws its own controls. Only the
+  runtime is vendored; the player bundle isn't needed (it also tries to load the runtime from jsDelivr).
+- **CSP sources are the capability path, not `'self'`:** `script-src <origin>/preview/<cap>/ 'unsafe-inline'`, and
+  the same for style, font, img, media, frame and **connect** (the runtime fetches nested scenes). This works in both
+  engines and is tighter than `'self'`: a bundle can't load another bundle, the app or `/api`.
+- **`Access-Control-Allow-Origin: *` on bundle files:** the sandboxed document's origin is `null`, so nested-scene
+  fetches are cross-origin. Bundle files are capability-gated and sent without credentials.
+- **The session cookie does reach `/preview/*` requests** (same-site). The page can't read it or send it anywhere,
+  so the edge function must authorize by capability only and never vary on cookies (tested: same bytes with and
+  without the cookie). A separate preview origin would remove even that; not needed for v1.
+- MP4 slots play under the capability (`media-src`, Range), so the poster fallback isn't needed.

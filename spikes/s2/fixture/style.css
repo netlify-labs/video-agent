@@ -1,0 +1,42 @@
+html,
+body {
+  width: 1920px;
+  height: 1080px;
+  overflow: hidden;
+  margin: 0;
+  background: url(assets/bg.svg) #0b0d10;
+}
+#root {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  font-family: system-ui, sans-serif;
+}
+#title {
+  position: absolute;
+  left: 160px;
+  top: 300px;
+  color: #f4f5f7;
+  font-size: 120px;
+  margin: 0;
+}
+#sub {
+  position: absolute;
+  left: 160px;
+  top: 480px;
+  color: #9aa3ad;
+  font-size: 48px;
+  margin: 0;
+}
+#logo {
+  position: absolute;
+  left: 160px;
+  top: 140px;
+}
+#clip {
+  position: absolute;
+  right: 120px;
+  top: 300px;
+  width: 640px;
+  height: 360px;
+}
