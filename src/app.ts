@@ -17,6 +17,7 @@ import {
   publishVersion,
   updateVideo,
   setVerdict,
+  transferVideos,
   loadJob,
   retryVersion,
   reviseVideo,
@@ -526,6 +527,28 @@ export function createApp(deps: Deps, opts: AppOptions) {
     }),
     async (c) =>
       c.json(await updateUser(deps, c.get('principal'), c.req.valid('param').id, c.req.valid('json')), 200),
+  )
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/v1/transfers',
+      summary: "Transfer videos to another Creator or Admin: some videos, or all of a person's (admin)",
+      tags: ['admin'],
+      security,
+      request: { body: { content: { 'application/json': { schema: s.TransferSchema } }, required: true } },
+      responses: { 200: json(s.TransferResultSchema, 'Transferred'), ...errors },
+    }),
+    async (c) => {
+      const b = c.req.valid('json')
+      return c.json(
+        await transferVideos(deps, c.get('principal'), {
+          toUserId: b.toUserId,
+          jobIds: b.videoIds,
+          fromUserId: b.fromUserId,
+        }),
+        200,
+      )
+    },
   )
   app.openapi(
     createRoute({

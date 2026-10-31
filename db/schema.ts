@@ -182,6 +182,16 @@ export const queueControl = pgTable('queue_control', {
   id: integer('id').primaryKey(),
 })
 
+// Ownership transfers (plan v2 §3, §14 rule 7): audit of who moved which video to whom.
+export const ownershipTransfers = pgTable('ownership_transfers', {
+  id: text('id').primaryKey(),
+  jobId: text('job_id').notNull(),
+  fromUserId: text('from_user_id').notNull(),
+  toUserId: text('to_user_id').notNull(),
+  byUserId: text('by_user_id').notNull(),
+  at: ts('at').notNull(),
+})
+
 // Approved / Changes requested, one current verdict per person per version (plan v2 §3).
 export const verdicts = pgTable(
   'verdicts',

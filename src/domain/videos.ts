@@ -705,3 +705,49 @@ export async function setVerdict(
     return videoDto(repo, deps, jobId, principal)
   })
 }
+
+/**
+ * Moves job ownership (plan v2 §3, §14 rule 7). Version authorship, API keys and usage attribution stay with the
+ * people who made them. Bumps the ETag version and the access epoch (old private links stop working).
+ */
+export async function transferVideos(
+  deps: Deps,
+  principal: Principal,
+  input: { jobIds?: string[] | undefined; fromUserId?: string | undefined; toUserId: string },
+) {
+  assertCan(principal, 'video:transfer')
+  return deps.store.tx(async (repo) => {
+    const to = await repo.getUser(input.toUserId)
+    if (!to || to.disabledAt) throw new ApiError('invalid_request', 'Pick an active person to transfer to.')
+    if (to.role !== 'admin' && to.role !== 'creator')
+      throw new ApiError('invalid_request', 'Videos can only be transferred to a Creator or an Admin.')
+    let ids = input.jobIds ?? []
+    if (input.fromUserId) {
+      const owned = await repo.listJobs({ ownerId: input.fromUserId, limit: 10_000 })
+      ids = [...ids, ...owned.map((j) => j.id)]
+    }
+    const now = deps.clock.now().toISOString()
+    const moved: string[] = []
+    for (const id of new Set(ids)) {
+      const job = await loadJob(repo, principal, id, true)
+      if (job.ownerId === to.id) continue
+      await repo.updateJob(id, {
+        ownerId: to.id,
+        version: job.version + 1,
+        accessEpoch: job.accessEpoch + 1,
+        updatedAt: now,
+      })
+      await repo.insertOwnershipTransfer({
+        id: deps.ids.uuid(),
+        jobId: id,
+        fromUserId: job.ownerId,
+        toUserId: to.id,
+        byUserId: principal.userId,
+        at: now,
+      })
+      if (job.private) await writeAccessMirror(deps, { id, private: true, accessEpoch: job.accessEpoch + 1 })
+      moved.push(id)
+    }
+    return { transferred: moved.length, videoIds: moved }
+  })
+}

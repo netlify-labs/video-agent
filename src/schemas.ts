@@ -209,6 +209,20 @@ export const UserSchema = z
     disabled: z.boolean(),
   })
   .openapi('User')
+export const TransferSchema = z
+  .object({
+    toUserId: z.string().min(1),
+    videoIds: z.array(z.string()).max(500).optional(),
+    fromUserId: z.string().optional(),
+  })
+  .refine((v) => (v.videoIds?.length ?? 0) > 0 || v.fromUserId !== undefined, {
+    message: 'Send videoIds or fromUserId.',
+  })
+  .openapi('Transfer')
+export const TransferResultSchema = z
+  .object({ transferred: z.number().int(), videoIds: z.array(z.string()) })
+  .openapi('TransferResult')
+
 export const UpdateUserSchema = z
   .object({ role: RoleSchema.optional(), disabled: z.boolean().optional() })
   .openapi('UpdateUser')

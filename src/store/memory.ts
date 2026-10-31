@@ -15,6 +15,7 @@ import type {
   VersionRow,
   WebhookEventRow,
   VerdictRow,
+  OwnershipTransferRow,
   WebhookDeliveryRow,
   UserWebhookRow,
 } from '../domain/types.js'
@@ -34,6 +35,7 @@ interface State {
   events: Map<string, WebhookEventRow>
   deliveries: Map<string, WebhookDeliveryRow>
   verdicts: Map<string, VerdictRow>
+  transfers: OwnershipTransferRow[]
   userWebhooks: Map<string, UserWebhookRow>
   cleanup: Map<string, CleanupRow>
 }
@@ -52,6 +54,7 @@ const empty = (): State => ({
   events: new Map(),
   deliveries: new Map(),
   verdicts: new Map(),
+  transfers: [],
   userWebhooks: new Map(),
   cleanup: new Map(),
 })
@@ -247,6 +250,10 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
       return n
     },
 
+    insertOwnershipTransfer: async (row) => {
+      state.transfers.push(clone(row))
+    },
+    listOwnershipTransfers: async (jobId) => clone(state.transfers.filter((t) => t.jobId === jobId)),
     putVerdict: async (row) => {
       state.verdicts.set(`${row.jobId}:${row.versionN}:${row.userId}`, clone(row))
     },

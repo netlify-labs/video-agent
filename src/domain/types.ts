@@ -208,6 +208,15 @@ export interface IdempotencyRow {
   expiresAt: string
 }
 
+export interface OwnershipTransferRow {
+  id: string
+  jobId: string
+  fromUserId: string
+  toUserId: string
+  byUserId: string
+  at: string
+}
+
 export type Verdict = 'approved' | 'changes_requested'
 
 export interface VerdictRow {

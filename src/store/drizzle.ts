@@ -32,6 +32,7 @@ import type {
   VersionRow,
   WebhookEventRow,
   VerdictRow,
+  OwnershipTransferRow,
   WebhookDeliveryRow,
   UserWebhookRow,
 } from '../domain/types.js'
@@ -297,6 +298,15 @@ function repoFor(db: Db): Repo {
           .returning({ k: t.idempotencyKeys.key })
       ).length,
 
+    insertOwnershipTransfer: async (row) => {
+      await db.insert(t.ownershipTransfers).values(row)
+    },
+    listOwnershipTransfers: async (jobId) =>
+      (await db
+        .select()
+        .from(t.ownershipTransfers)
+        .where(eq(t.ownershipTransfers.jobId, jobId))
+        .orderBy(asc(t.ownershipTransfers.at))) as OwnershipTransferRow[],
     putVerdict: async (row) => {
       await db
         .insert(t.verdicts)

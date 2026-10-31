@@ -1,4 +1,5 @@
 import { Alert, Anchor, Button, Card, Group, Select, Stack, Switch, Text, Title } from '@mantine/core'
+import { modals } from '@mantine/modals'
 import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
 import { Link, Navigate } from 'react-router'
@@ -37,6 +38,43 @@ export function AdminPage() {
     onError,
   })
   const resume = $api.useMutation('post', '/api/v1/admin/queue/resume', { onSuccess: done, onError })
+  const transfer = $api.useMutation('post', '/api/v1/transfers', {
+    onSuccess: (r) => {
+      notifications.show({ message: `Transferred ${r.transferred} video${r.transferred === 1 ? '' : 's'}.` })
+      done()
+    },
+    onError,
+  })
+  const openTransfer = (from: { id: string; email: string }) => {
+    let to: string | null = null
+    const targets = (users.data ?? [])
+      .filter((x) => x.id !== from.id && !x.disabled && (x.role === 'admin' || x.role === 'creator'))
+      .map((x) => ({ value: x.id, label: x.email }))
+    modals.openConfirmModal({
+      title: `Transfer ${from.email}'s videos`,
+      children: (
+        <Stack gap="xs">
+          <Text size="sm" c="var(--va-muted)">
+            The new owner gets publish, private and delete on all of them. Who made each version doesn't
+            change.
+          </Text>
+          <Select
+            label="Transfer to"
+            data={targets}
+            searchable
+            data-autofocus
+            onChange={(v) => {
+              to = v
+            }}
+          />
+        </Stack>
+      ),
+      labels: { confirm: 'Transfer', cancel: 'Cancel' },
+      onConfirm: () => {
+        if (to) transfer.mutate({ body: { toUserId: to, fromUserId: from.id } })
+      },
+    })
+  }
   const cancel = $api.useMutation('post', '/api/v1/videos/{id}/versions/{n}/cancel', {
     onSuccess: done,
     onError,
@@ -270,7 +308,18 @@ export function AdminPage() {
                         }}
                       />
                     </td>
-                    <td style={{ textAlign: 'right' }}>
+                    <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <Button
+                        variant="subtle"
+                        color="gray"
+                        size="compact-xs"
+                        mr="sm"
+                        onClick={() => {
+                          openTransfer(u)
+                        }}
+                      >
+                        Transfer videos
+                      </Button>
                       <Switch
                         aria-label={`${u.email} active`}
                         checked={!u.disabled}

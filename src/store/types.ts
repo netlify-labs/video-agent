@@ -16,6 +16,7 @@ import type {
   VersionStatus,
   WebhookEventRow,
   VerdictRow,
+  OwnershipTransferRow,
   WebhookDeliveryRow,
   UserWebhookRow,
 } from '../domain/types.js'
@@ -94,6 +95,8 @@ export interface Repo {
   deleteExpiredIdempotency(now: string): Promise<number>
 
   // webhooks and cleanup
+  insertOwnershipTransfer(row: OwnershipTransferRow): Promise<void>
+  listOwnershipTransfers(jobId: string): Promise<OwnershipTransferRow[]>
   // verdicts
   putVerdict(row: VerdictRow): Promise<void>
   deleteVerdict(jobId: string, versionN: number, userId: string): Promise<void>
