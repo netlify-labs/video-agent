@@ -25,14 +25,15 @@ async function claude(model: string, system: string, user: string, maxTokens: nu
     body: JSON.stringify({ model, max_tokens: maxTokens, system, messages: [{ role: 'user', content: user }] }),
   })
   const ms = Date.now() - t0
-  const body = (await res.json()) as { usage?: unknown; content?: { text?: string }[]; error?: unknown }
-  const text = body.content?.[0]?.text ?? ''
+  const body = (await res.json()) as { usage?: unknown; content?: { type?: string; text?: string }[]; error?: unknown }
+  const text = body.content?.find((c) => c.type === 'text')?.text ?? ''
+  const blocks = body.content?.map((c) => c.type)
   let parsed = false
   try {
     JSON.parse(text.replace(/^\`\`\`json\s*|\`\`\`$/g, ''))
     parsed = true
   } catch {}
-  return { model, status: res.status, ms, usage: body.usage, parsed, sample: text.slice(0, 400), error: body.error }
+  return { model, status: res.status, ms, usage: body.usage, parsed, blocks, sample: text.slice(0, 400), error: body.error }
 }
 
 export default async (req: Request) => {
@@ -42,6 +43,22 @@ export default async (req: Request) => {
     typesafe: Boolean(process.env.TYPESAFE_BASE_URL),
   }
   const out: Record<string, unknown> = { env }
+  const probes: Record<string, unknown> = {}
+  for (const [name, req] of [
+    ['minimal_string', { state: 'I was charged twice. Please fix this ASAP.', questions: { category: choice('What is this ticket about?', { billing: null, technical: null, other: null }) } }],
+    ['readme_object', { state: { document: 'I was charged twice. Please fix this ASAP.' }, questions: { category: choice('What is this ticket about?', { billing: null, technical: null, other: null }) } }],
+  ] as const) {
+    try {
+      const c = new TypeSafeClient()
+      const t0 = Date.now()
+      const r = await c.systemOne(req as never)
+      probes[name] = { ms: Date.now() - t0, answers: r.answers, usage: r.usage, model: r.model }
+    } catch (e) {
+      const err = e as { message?: string; status?: number; error?: unknown; body?: unknown }
+      probes[name] = { error: err.message, status: err.status, body: err.error ?? err.body }
+    }
+  }
+  out.probes = probes
   try {
     const client = new TypeSafeClient()
     const t0 = Date.now()
@@ -56,7 +73,8 @@ export default async (req: Request) => {
     })
     out.router = { ms: Date.now() - t0, model: r.model, answers: r.answers, usage: r.usage }
   } catch (e) {
-    out.router = { error: String(e) }
+    const err = e as { message?: string; status?: number; error?: unknown }
+    out.router = { error: err.message, status: err.status, body: err.error }
   }
   const user = `<request>${PROMPT}</request>\n<context>${CONTEXT}</context>`
   out.questions = await Promise.all(
