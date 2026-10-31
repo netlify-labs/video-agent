@@ -152,4 +152,30 @@ describe('private videos', () => {
     expect((await h.json(await h.call('GET', '/api/v1/videos', { as: h.member }))).items).toHaveLength(1)
     expect((await h.call('GET', `/api/v1/videos/${id}`, { as: bob })).status).toBe(404)
   })
+
+  it('private file links carry the access epoch, expire within 10 minutes, and are mirrored for the edge', async () => {
+    const h = harness()
+    const { id } = await setup(h)
+    const pub = await h.call('GET', `/api/v1/videos/${id}/versions/1/video`, { as: h.member })
+    expect(pub.headers.get('location')).not.toContain('&e=')
+    await makePrivate(h, id)
+    const priv = await h.call('GET', `/api/v1/videos/${id}/versions/1/video`, { as: h.member })
+    const loc = new URL(priv.headers.get('location') ?? '', 'https://x')
+    expect(loc.searchParams.get('e')).toBe('1')
+    const ttl = Number(loc.searchParams.get('exp')) - Math.floor(h.deps.clock.now().getTime() / 1000)
+    expect(ttl).toBeLessThanOrEqual(600)
+    const mirror = await h.deps.blobs.get('internal', `access/${id}.json`)
+    expect(JSON.parse(new TextDecoder().decode(mirror ?? new Uint8Array()))).toEqual({
+      private: true,
+      epoch: 1,
+    })
+    await makePrivate(h, id, false)
+    const mirror2 = await h.deps.blobs.get('internal', `access/${id}.json`)
+    expect(JSON.parse(new TextDecoder().decode(mirror2 ?? new Uint8Array()))).toEqual({
+      private: false,
+      epoch: 2,
+    })
+    await h.call('DELETE', `/api/v1/videos/${id}`, { as: h.member })
+    expect(await h.deps.blobs.get('internal', `access/${id}.json`)).toBeNull()
+  })
 })

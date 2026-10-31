@@ -22,18 +22,24 @@ const notFound = () =>
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
 
 export default async (req: Request, context: Context) => {
-  if (req.method !== 'GET' && req.method !== 'HEAD') return new Response('Method not allowed', { status: 405, headers: { allow: 'GET, HEAD' } })
-  if (context.deploy?.published !== true && Netlify.env.get('ALLOW_NON_PRODUCTION') !== 'true') return notFound()
+  if (req.method !== 'GET' && req.method !== 'HEAD')
+    return new Response('Method not allowed', { status: 405, headers: { allow: 'GET, HEAD' } })
+  if (context.deploy?.published !== true && Netlify.env.get('ALLOW_NON_PRODUCTION') !== 'true')
+    return notFound()
   const url = new URL(req.url)
   const m = /^\/v\/([a-z2-9]{6,32})(?:\.(mp4|jpg|gif|vtt))?$/.exec(url.pathname)
   if (!m?.[1]) return notFound()
   const slug = m[1]
   const ext = m[2]
-  const pub = (await getStore({ name: 'internal', consistency: 'strong' }).get(`pub/${slug}.json`, { type: 'json' })) as Mirror | null
+  const pub = (await getStore({ name: 'internal', consistency: 'strong' }).get(`pub/${slug}.json`, {
+    type: 'json',
+  })) as Mirror | null
   if (!pub) return notFound()
 
   if (ext) {
-    const key = { mp4: pub.keys.video, jpg: pub.keys.poster, gif: pub.keys.gif, vtt: pub.keys.captions }[ext as 'mp4']
+    const key = { mp4: pub.keys.video, jpg: pub.keys.poster, gif: pub.keys.gif, vtt: pub.keys.captions }[
+      ext as 'mp4'
+    ]
     const videos = getStore({ name: 'videos', consistency: 'strong' })
     const meta = await videos.getMetadata(key)
     if (!meta) return notFound()

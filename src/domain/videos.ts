@@ -1,6 +1,7 @@
 // Creating, revising, retrying, cancelling, renaming, deleting and publishing videos.
 import type { Deps } from '../deps.js'
 import { sha256Hex } from '../lib/crypto.js'
+import { accessKey, writeAccessMirror } from './files.js'
 import { ApiError } from '../lib/errors.js'
 import type { Repo } from '../store/types.js'
 import { assertCan, type Principal } from './policy.js'
@@ -356,6 +357,12 @@ export async function updateVideo(
       updatedAt: deps.clock.now().toISOString(),
       version: job.version + 1,
     })
+    if (privacyChanges)
+      await writeAccessMirror(deps, {
+        id: jobId,
+        private: patch.private as boolean,
+        accessEpoch: job.accessEpoch + 1,
+      })
     return videoDto(repo, deps, jobId, principal)
   })
 }
@@ -389,6 +396,7 @@ export async function deleteVideo(deps: Deps, principal: Principal, jobId: strin
     return ended
   })
   for (const slug of slugs) await deps.blobs.delete('internal', pubKey(slug))
+  await deps.blobs.delete('internal', accessKey(jobId))
 }
 
 export const pubKey = (slug: string) => `pub/${slug}.json`

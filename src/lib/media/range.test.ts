@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { signPath } from '../crypto.js'
-import { mediaResponse, parseRange, sliceStream, verifySignedPath } from './range.js'
+import { mediaResponse, parseRange, sliceStream, verifyFileUrl, verifySignedPath } from './range.js'
 
 const bytes = new Uint8Array(Array.from({ length: 1000 }, (_, i) => i % 256))
 const chunked = () =>
@@ -72,5 +72,38 @@ describe('verifySignedPath (edge) matches signPath (API)', () => {
     expect(await verifySignedPath('secret', path, 2000, sig, 2001)).toBe(false)
     expect(await verifySignedPath('secret', '/files/vid_2/v1/video.mp4', 2000, sig, 1000)).toBe(false)
     expect(await verifySignedPath('other', path, 2000, sig, 1000)).toBe(false)
+  })
+})
+
+describe('verifyFileUrl (private video links)', () => {
+  const secret = 's3cret'
+  const path = '/files/vid_abc/v1/video.mp4'
+  const now = 1_000
+  const url = (exp: number, epoch?: number) => {
+    const p = new URLSearchParams({ exp: String(exp) })
+    if (epoch !== undefined) p.set('e', String(epoch))
+    p.set('sig', signPath(secret, path, exp, epoch))
+    return p
+  }
+  it('public videos accept plain signed URLs', async () => {
+    expect(await verifyFileUrl(secret, path, url(now + 60), now, null)).toBe('ok')
+    expect(await verifyFileUrl(secret, path, url(now + 60), now, { private: false, epoch: 3 })).toBe('ok')
+  })
+  it('a URL issued before the video went private is revoked', async () => {
+    expect(await verifyFileUrl(secret, path, url(now + 60), now, { private: true, epoch: 1 })).toBe('revoked')
+  })
+  it('a private URL from an older epoch is revoked; the current epoch works', async () => {
+    expect(await verifyFileUrl(secret, path, url(now + 60, 1), now, { private: true, epoch: 2 })).toBe(
+      'revoked',
+    )
+    expect(await verifyFileUrl(secret, path, url(now + 60, 2), now, { private: true, epoch: 2 })).toBe('ok')
+  })
+  it('tampering with the epoch breaks the signature; expiry still applies', async () => {
+    const p = url(now + 60, 1)
+    p.set('e', '2')
+    expect(await verifyFileUrl(secret, path, p, now, { private: true, epoch: 2 })).toBe('invalid')
+    expect(await verifyFileUrl(secret, path, url(now - 1, 2), now, { private: true, epoch: 2 })).toBe(
+      'invalid',
+    )
   })
 })

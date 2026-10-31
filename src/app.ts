@@ -407,13 +407,13 @@ export function createApp(deps: Deps, opts: AppOptions) {
     }),
     async (c) => {
       const { id, n, file } = c.req.valid('param')
-      await loadJob(deps.store, c.get('principal'), id)
+      const job = await loadJob(deps.store, c.get('principal'), id)
       assertCan(c.get('principal'), 'video:read')
       const out = await deps.store.getOutput(id, n)
       if (!out) throw new ApiError('not_ready', 'This version has no files yet.')
       c.header('cache-control', 'private, no-store')
       return c.redirect(
-        await signedFilePath(deps, id, n, file, 600, c.req.valid('query').download === '1'),
+        await signedFilePath(deps, job, n, file, 600, c.req.valid('query').download === '1'),
         302,
       )
     },

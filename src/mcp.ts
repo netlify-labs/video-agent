@@ -5,7 +5,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { z } from 'zod'
 import type { Deps } from './deps.js'
-import { signedFilePath } from './domain/files.js'
+import { PRIVATE_URL_TTL_SEC, signedFilePath } from './domain/files.js'
 import { can, type Principal } from './domain/policy.js'
 import type { Aspect } from './domain/types.js'
 import {
@@ -196,6 +196,8 @@ async function run(fn: () => Promise<Record<string, unknown>>, videoId?: string)
 // ───────────── results shaped for agents ─────────────
 
 async function summarize(deps: Deps, v: VideoDto) {
+  const job = (await deps.store.getJob(v.id)) ?? { id: v.id, private: v.private, accessEpoch: 0 }
+  const ttl = v.private ? PRIVATE_URL_TTL_SEC : 3600
   const ready = v.versions.find((x) => x.status === 'ready')
   const latest = v.versions[0]
   const versions = await Promise.all(
@@ -216,11 +218,11 @@ async function summarize(deps: Deps, v: VideoDto) {
               summary: x.output.summary,
             },
             downloads: {
-              mp4: `${deps.config.siteUrl}${await signedFilePath(deps, v.id, x.n, 'video', 3600, true)}`,
-              poster: `${deps.config.siteUrl}${await signedFilePath(deps, v.id, x.n, 'poster', 3600)}`,
-              gif: `${deps.config.siteUrl}${await signedFilePath(deps, v.id, x.n, 'gif', 3600)}`,
-              captions: `${deps.config.siteUrl}${await signedFilePath(deps, v.id, x.n, 'captions', 3600)}`,
-              expires_in_sec: 3600,
+              mp4: `${deps.config.siteUrl}${await signedFilePath(deps, job, x.n, 'video', ttl, true)}`,
+              poster: `${deps.config.siteUrl}${await signedFilePath(deps, job, x.n, 'poster', ttl)}`,
+              gif: `${deps.config.siteUrl}${await signedFilePath(deps, job, x.n, 'gif', ttl)}`,
+              captions: `${deps.config.siteUrl}${await signedFilePath(deps, job, x.n, 'captions', ttl)}`,
+              expires_in_sec: ttl,
             },
           }
         : {}),

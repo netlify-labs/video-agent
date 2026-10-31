@@ -117,10 +117,39 @@ export async function verifySignedPath(
   exp: number,
   sig: string,
   nowSec: number,
+  epoch?: number,
 ): Promise<boolean> {
   if (!Number.isFinite(exp) || exp < nowSec || !/^[0-9a-f]{64}$/.test(sig)) return false
-  const expected = await hmacHexWeb(secret, `${path}\n${exp}`)
+  const expected = await hmacHexWeb(secret, `${path}\n${exp}${epoch === undefined ? '' : `\ne${epoch}`}`)
   let diff = 0
   for (let i = 0; i < expected.length; i++) diff |= expected.charCodeAt(i) ^ sig.charCodeAt(i)
   return diff === 0
+}
+
+/** What the files edge function knows about a job's access (the `access/{jobId}.json` mirror in the internal store). */
+export interface AccessMirror {
+  private: boolean
+  epoch: number
+}
+
+/**
+ * Decides whether a signed file URL may be served (plan v2 §14 rule 4). URLs for private videos carry the job's
+ * access epoch (`e`); a URL issued before the video went private, or before its last privacy or owner change, is
+ * revoked. Public videos keep working with plain signed URLs.
+ */
+export async function verifyFileUrl(
+  secret: string,
+  path: string,
+  params: URLSearchParams,
+  nowSec: number,
+  access: AccessMirror | null,
+): Promise<'ok' | 'invalid' | 'revoked'> {
+  const exp = Number(params.get('exp'))
+  const sig = params.get('sig') ?? ''
+  const eParam = params.get('e')
+  const epoch = eParam === null ? undefined : Number(eParam)
+  if (epoch !== undefined && !Number.isInteger(epoch)) return 'invalid'
+  if (!(await verifySignedPath(secret, path, exp, sig, nowSec, epoch))) return 'invalid'
+  if (access?.private && epoch !== access.epoch) return 'revoked'
+  return 'ok'
 }

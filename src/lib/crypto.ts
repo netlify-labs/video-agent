@@ -20,10 +20,13 @@ export function safeEqual(a: string, b: string): boolean {
   return ab.length === bb.length && timingSafeEqual(ab, bb)
 }
 
-/** Signed file URL parameters: HMAC over path and expiry. */
-export function signPath(secret: string, path: string, expiresAtSec: number): string {
-  return hmacHex(secret, `${path}\n${expiresAtSec}`)
+/** Signed file URL parameters: HMAC over path and expiry, plus the job's access epoch for private videos. */
+export function signPath(secret: string, path: string, expiresAtSec: number, epoch?: number): string {
+  return hmacHex(secret, signedString(path, expiresAtSec, epoch))
 }
+
+export const signedString = (path: string, exp: number, epoch?: number) =>
+  `${path}\n${exp}${epoch === undefined ? '' : `\ne${epoch}`}`
 
 export function verifyPath(
   secret: string,
