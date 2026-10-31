@@ -31,6 +31,8 @@ import type {
   UserRow,
   VersionRow,
   WebhookEventRow,
+  WebhookDeliveryRow,
+  UserWebhookRow,
 } from '../domain/types.js'
 import { isoWeek } from './memory.js'
 import type { Repo, Store } from './types.js'
@@ -297,21 +299,49 @@ function repoFor(db: Db): Repo {
     insertWebhookEvent: async (row) => {
       await db.insert(t.webhookEvents).values(row)
     },
-    listDueWebhookEvents: async (now, limit) =>
-      (await db
-        .select()
-        .from(t.webhookEvents)
+    getWebhookEvent: async (id) =>
+      one<WebhookEventRow>(await db.select().from(t.webhookEvents).where(eq(t.webhookEvents.eventId, id))),
+    insertWebhookDelivery: async (row) => {
+      await db.insert(t.webhookDeliveries).values(row).onConflictDoNothing()
+    },
+    claimDueWebhookDeliveries: async (now, leaseUntil, limit) => {
+      const d = t.webhookDeliveries
+      const due = db
+        .select({ id: d.id })
+        .from(d)
         .where(
           and(
-            isNull(t.webhookEvents.deliveredAt),
-            lte(t.webhookEvents.nextRetryAt, now),
-            or(isNull(t.webhookEvents.leaseUntil), lte(t.webhookEvents.leaseUntil, now)),
+            isNull(d.deliveredAt),
+            isNull(d.droppedAt),
+            lte(d.nextRetryAt, now),
+            or(isNull(d.leaseUntil), lte(d.leaseUntil, now)),
           ),
         )
-        .orderBy(asc(t.webhookEvents.nextRetryAt))
-        .limit(limit)) as WebhookEventRow[],
-    updateWebhookEvent: async (id, patch) => {
-      await db.update(t.webhookEvents).set(patch).where(eq(t.webhookEvents.eventId, id))
+        .orderBy(asc(d.nextRetryAt))
+        .limit(limit)
+        .for('update', { skipLocked: true })
+      return (await db
+        .update(d)
+        .set({ leaseUntil })
+        .where(inArray(d.id, due))
+        .returning()) as WebhookDeliveryRow[]
+    },
+    updateWebhookDelivery: async (id, patch) => {
+      await db.update(t.webhookDeliveries).set(patch).where(eq(t.webhookDeliveries.id, id))
+    },
+    getUserWebhook: async (userId) =>
+      one<UserWebhookRow>(await db.select().from(t.userWebhooks).where(eq(t.userWebhooks.userId, userId))),
+    putUserWebhook: async (row) => {
+      await db
+        .insert(t.userWebhooks)
+        .values(row)
+        .onConflictDoUpdate({
+          target: t.userWebhooks.userId,
+          set: { url: row.url, secretEnc: row.secretEnc, updatedAt: row.updatedAt },
+        })
+    },
+    deleteUserWebhook: async (userId) => {
+      await db.delete(t.userWebhooks).where(eq(t.userWebhooks.userId, userId))
     },
     insertCleanup: async (row) => {
       await db.insert(t.cleanup).values(row).onConflictDoNothing()

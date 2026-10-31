@@ -14,6 +14,8 @@ import type {
   UserRow,
   VersionRow,
   WebhookEventRow,
+  WebhookDeliveryRow,
+  UserWebhookRow,
 } from '../domain/types.js'
 import type { JobQuery, Repo, Store } from './types.js'
 
@@ -29,6 +31,8 @@ interface State {
   receipts: Map<string, ReceiptRow>
   idem: Map<string, IdempotencyRow>
   events: Map<string, WebhookEventRow>
+  deliveries: Map<string, WebhookDeliveryRow>
+  userWebhooks: Map<string, UserWebhookRow>
   cleanup: Map<string, CleanupRow>
 }
 
@@ -44,6 +48,8 @@ const empty = (): State => ({
   receipts: new Map(),
   idem: new Map(),
   events: new Map(),
+  deliveries: new Map(),
+  userWebhooks: new Map(),
   cleanup: new Map(),
 })
 
@@ -241,22 +247,38 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
     insertWebhookEvent: async (row) => {
       state.events.set(row.eventId, clone(row))
     },
-    listDueWebhookEvents: async (now, limit) =>
-      clone(
-        [...state.events.values()]
-          .filter(
-            (e) =>
-              e.deliveredAt === null &&
-              e.nextRetryAt !== null &&
-              e.nextRetryAt <= now &&
-              !live(e.leaseUntil, now),
-          )
-          .sort((a, b) => (a.nextRetryAt ?? '').localeCompare(b.nextRetryAt ?? ''))
-          .slice(0, limit),
-      ),
-    updateWebhookEvent: async (id, patch) => {
-      const e = state.events.get(id)
-      if (e) Object.assign(e, clone(patch))
+    getWebhookEvent: async (id) => clone(state.events.get(id) ?? null),
+    insertWebhookDelivery: async (row) => {
+      const dup = [...state.deliveries.values()].some(
+        (d) => d.eventId === row.eventId && d.destKind === row.destKind && d.destRef === row.destRef,
+      )
+      if (!dup) state.deliveries.set(row.id, clone(row))
+    },
+    claimDueWebhookDeliveries: async (now, leaseUntil, limit) => {
+      const due = [...state.deliveries.values()]
+        .filter(
+          (d) =>
+            d.deliveredAt === null &&
+            d.droppedAt === null &&
+            d.nextRetryAt !== null &&
+            d.nextRetryAt <= now &&
+            !live(d.leaseUntil, now),
+        )
+        .sort((a, b) => (a.nextRetryAt ?? '').localeCompare(b.nextRetryAt ?? ''))
+        .slice(0, limit)
+      for (const d of due) d.leaseUntil = leaseUntil
+      return clone(due)
+    },
+    updateWebhookDelivery: async (id, patch) => {
+      const d = state.deliveries.get(id)
+      if (d) Object.assign(d, clone(patch))
+    },
+    getUserWebhook: async (userId) => clone(state.userWebhooks.get(userId) ?? null),
+    putUserWebhook: async (row) => {
+      state.userWebhooks.set(row.userId, clone(row))
+    },
+    deleteUserWebhook: async (userId) => {
+      state.userWebhooks.delete(userId)
     },
     insertCleanup: async (row) => {
       if ([...state.cleanup.values()].some((c) => c.store === row.store && c.prefix === row.prefix)) return

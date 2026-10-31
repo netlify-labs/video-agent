@@ -11,6 +11,8 @@ export const settings = pgTable('settings', {
   dataEncryptionKey: text('data_encryption_key').notNull(),
   queuePausedReason: text('queue_paused_reason'),
   createdAt: ts('created_at').notNull(),
+  teamWebhookUrl: text('team_webhook_url'),
+  teamWebhookSecretEnc: text('team_webhook_secret_enc'),
 })
 
 export const users = pgTable('users', {
@@ -180,16 +182,24 @@ export const queueControl = pgTable('queue_control', {
   id: integer('id').primaryKey(),
 })
 
-export const webhookEvents = pgTable(
-  'webhook_events',
+// Webhook outbox (plan v2 §14 rule 10): one logical event, one delivery row per destination.
+export const webhookEvents = pgTable('webhook_events', {
+  eventId: text('event_id').primaryKey(),
+  jobId: text('job_id').notNull(),
+  versionN: integer('version_n'),
+  attemptId: text('attempt_id'),
+  type: text('type').notNull(),
+  payload: jsonb('payload').notNull(),
+  createdAt: ts('created_at').notNull(),
+})
+
+export const webhookDeliveries = pgTable(
+  'webhook_deliveries',
   {
-    eventId: text('event_id').primaryKey(),
-    jobId: text('job_id').notNull(),
-    versionN: integer('version_n').notNull(),
-    attemptId: text('attempt_id').notNull(),
-    type: text('type').notNull(),
-    payload: jsonb('payload').notNull(),
-    apiKeyId: text('api_key_id').notNull(),
+    id: text('id').primaryKey(),
+    eventId: text('event_id').notNull(),
+    destKind: text('dest_kind').notNull(),
+    destRef: text('dest_ref').notNull(),
     url: text('url').notNull(),
     leaseUntil: ts('lease_until'),
     nextRetryAt: ts('next_retry_at'),
@@ -197,9 +207,23 @@ export const webhookEvents = pgTable(
     attempts: integer('attempts').notNull(),
     lastResult: text('last_result'),
     deliveredAt: ts('delivered_at'),
+    droppedAt: ts('dropped_at'),
   },
-  (t) => [index('webhook_events_due_idx').on(t.nextRetryAt).where(sql`${t.deliveredAt} is null`)],
+  (t) => [
+    uniqueIndex('webhook_deliveries_dest_idx').on(t.eventId, t.destKind, t.destRef),
+    index('webhook_deliveries_due_idx')
+      .on(t.nextRetryAt)
+      .where(sql`${t.deliveredAt} is null and ${t.droppedAt} is null`),
+  ],
 )
+
+export const userWebhooks = pgTable('user_webhooks', {
+  userId: text('user_id').primaryKey(),
+  url: text('url').notNull(),
+  secretEnc: text('secret_enc').notNull(),
+  createdAt: ts('created_at').notNull(),
+  updatedAt: ts('updated_at').notNull(),
+})
 
 export const cleanup = pgTable(
   'cleanup',

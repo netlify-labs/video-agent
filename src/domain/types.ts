@@ -74,6 +74,9 @@ export interface SettingsRow {
   dataEncryptionKey: string
   queuePausedReason: string | null
   createdAt: string
+  /** Admin-set webhook for every event on every video (plan v2 §3). */
+  teamWebhookUrl?: string | null
+  teamWebhookSecretEnc?: string | null
 }
 
 export interface UserRow {
@@ -205,14 +208,29 @@ export interface IdempotencyRow {
   expiresAt: string
 }
 
+export type WebhookEventType =
+  'video.ready' | 'video.failed' | 'comment.created' | 'version.approved' | 'version.changes_requested'
+
+/** A logical event; each destination gets its own delivery row (plan v2 §14 rule 10). */
 export interface WebhookEventRow {
   eventId: string
   jobId: string
-  versionN: number
-  attemptId: string
-  type: 'video.ready' | 'video.failed'
+  versionN: number | null
+  attemptId: string | null
+  type: WebhookEventType
   payload: unknown
-  apiKeyId: string
+  createdAt: string
+}
+
+/** version_key: the per-video webhookUrl, signed with the API key's secret (destRef = key id).
+ * personal: the video owner's own webhook (destRef = user id). team: the admin-set webhook (destRef = 'team'). */
+export type WebhookDestKind = 'version_key' | 'personal' | 'team'
+
+export interface WebhookDeliveryRow {
+  id: string
+  eventId: string
+  destKind: WebhookDestKind
+  destRef: string
   url: string
   leaseUntil: string | null
   nextRetryAt: string | null
@@ -220,6 +238,15 @@ export interface WebhookEventRow {
   attempts: number
   lastResult: string | null
   deliveredAt: string | null
+  droppedAt: string | null
+}
+
+export interface UserWebhookRow {
+  userId: string
+  url: string
+  secretEnc: string
+  createdAt: string
+  updatedAt: string
 }
 
 export interface CleanupRow {

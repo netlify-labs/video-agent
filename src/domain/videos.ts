@@ -204,7 +204,10 @@ export function deriveTitle(prompt: string): string {
 }
 
 /** Private videos are visible only to their owner and admins (plan v2 §3). */
-export function canSee(p: Principal, job: Pick<JobRow, 'private' | 'ownerId'>): boolean {
+export function canSee(
+  p: Pick<Principal, 'role' | 'userId'>,
+  job: Pick<JobRow, 'private' | 'ownerId'>,
+): boolean {
   return !job.private || p.role === 'admin' || job.ownerId === p.userId
 }
 

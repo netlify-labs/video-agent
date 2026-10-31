@@ -15,6 +15,8 @@ import type {
   VersionRow,
   VersionStatus,
   WebhookEventRow,
+  WebhookDeliveryRow,
+  UserWebhookRow,
 } from '../domain/types.js'
 
 export interface JobQuery {
@@ -92,8 +94,15 @@ export interface Repo {
 
   // webhooks and cleanup
   insertWebhookEvent(row: WebhookEventRow): Promise<void>
-  listDueWebhookEvents(now: string, limit: number): Promise<WebhookEventRow[]>
-  updateWebhookEvent(eventId: string, patch: Partial<WebhookEventRow>): Promise<void>
+  getWebhookEvent(eventId: string): Promise<WebhookEventRow | null>
+  /** Ignores a duplicate (event, destination). */
+  insertWebhookDelivery(row: WebhookDeliveryRow): Promise<void>
+  /** Atomically leases up to `limit` due deliveries (skipping rows other sweeps hold) and returns them. */
+  claimDueWebhookDeliveries(now: string, leaseUntil: string, limit: number): Promise<WebhookDeliveryRow[]>
+  updateWebhookDelivery(id: string, patch: Partial<WebhookDeliveryRow>): Promise<void>
+  getUserWebhook(userId: string): Promise<UserWebhookRow | null>
+  putUserWebhook(row: UserWebhookRow): Promise<void>
+  deleteUserWebhook(userId: string): Promise<void>
   insertCleanup(row: CleanupRow): Promise<void>
   listDueCleanup(now: string, limit: number): Promise<CleanupRow[]>
   updateCleanup(id: string, patch: Partial<CleanupRow>): Promise<void>
