@@ -1,8 +1,7 @@
-// Netlify Identity in the browser. The session lives in the nf_jwt cookie, which the API reads.
+// Netlify Identity in the browser. The session lives in the nf_jwt cookie, which the API reads; session.ts
+// keeps it fresh.
 import {
   acceptInvite,
-  handleAuthCallback,
-  hydrateSession,
   login,
   logout,
   onAuthChange,
@@ -12,6 +11,7 @@ import {
   type User,
 } from '@netlify/identity'
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { endSession, onSessionLost, refreshIfNeeded, startSession } from './session'
 
 interface AuthState {
   user: User | null
@@ -47,19 +47,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const off = onAuthChange((_e, u) => {
       setUser(u)
     })
+    // Identity rejected the session (expired refresh token, deleted account): show the sign-in screen
+    // instead of a signed-in shell whose requests all fail.
+    const offLost = onSessionLost(() => {
+      endSession()
+      void logout().catch(() => undefined)
+      setUser(null)
+      setNotice('Your session ended. Sign in again.')
+    })
+    // A tab that slept past the token's expiry refreshes as soon as it's used again.
+    const wake = () => {
+      if (document.visibilityState === 'visible') void refreshIfNeeded()
+    }
+    window.addEventListener('focus', wake)
+    document.addEventListener('visibilitychange', wake)
     void (async () => {
       try {
         // Process email links before anything else (confirmation, invite, recovery, email change).
-        if (AUTH_HASH.test(window.location.hash)) {
-          const res = await handleAuthCallback()
+        const isLink = AUTH_HASH.test(window.location.hash)
+        const { user: u, callback: res } = await startSession(isLink)
+        if (isLink) {
           history.replaceState(null, '', window.location.pathname + window.location.search)
           if (res?.type === 'invite' && res.token) setPending({ kind: 'invite', token: res.token })
           else if (res?.type === 'recovery') setPending({ kind: 'recovery' })
           else if (res?.type === 'confirmation') setNotice('Your email is confirmed. Welcome.')
           else if (res?.type === 'email_change') setNotice('Your email address was changed.')
-          if (res?.user) setUser(res.user)
         }
-        const u = await hydrateSession()
         if (u) setUser(u)
       } catch (e) {
         setNotice(e instanceof Error ? e.message : 'Sign-in link failed. Ask for a new one.')
@@ -67,7 +80,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setReady(true)
       }
     })()
-    return off
+    return () => {
+      off()
+      offLost()
+      window.removeEventListener('focus', wake)
+      document.removeEventListener('visibilitychange', wake)
+    }
   }, [])
 
   const value = useMemo<AuthState>(
@@ -78,7 +96,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       notice,
       login,
       signup,
-      logout,
+      logout: async () => {
+        endSession()
+        await logout()
+      },
       requestPasswordRecovery,
       acceptInvite: async (password) => {
         if (pending?.kind !== 'invite') return

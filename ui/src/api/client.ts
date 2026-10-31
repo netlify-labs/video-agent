@@ -1,13 +1,26 @@
 // Typed API client generated from openapi.json: a response shape change breaks the typecheck.
 import createFetchClient from 'openapi-fetch'
 import createClient from 'openapi-react-query'
+import { recoverAfterUnauthorized, refreshIfNeeded } from '../session'
 import type { paths } from './schema'
 
-// fetch is looked up per call so mock mode (ui/src/mock) can replace it after this module loads.
+/**
+ * Sends a request with the session cookie, refreshing the token first when it's about to expire and once
+ * more after a 401. fetch is looked up per call so mock mode (ui/src/mock) can replace it after this loads.
+ */
+export async function sessionFetch(req: Request): Promise<Response> {
+  if (import.meta.env.VITE_MOCK) return globalThis.fetch(req)
+  await refreshIfNeeded()
+  const retry = req.clone()
+  const res = await globalThis.fetch(req)
+  if (res.status !== 401) return res
+  return (await recoverAfterUnauthorized()) ? globalThis.fetch(retry) : res
+}
+
 export const fetchClient = createFetchClient<paths>({
   baseUrl: '',
   credentials: 'same-origin',
-  fetch: (req) => globalThis.fetch(req),
+  fetch: sessionFetch,
 })
 export const $api = createClient(fetchClient)
 
