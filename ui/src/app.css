@@ -619,3 +619,18 @@ body {
   border-radius: 999px;
   font-weight: 600;
 }
+
+/* Sandboxed composition preview: renders at the composition's size, scaled to fit */
+.va-preview-frame {
+  position: relative;
+  width: 100%;
+  background: #000;
+  border-radius: 16px;
+  overflow: hidden;
+}
+.va-preview-frame iframe {
+  position: absolute;
+  inset: 0 auto auto 0;
+  border: 0;
+  display: block;
+}

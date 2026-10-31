@@ -267,6 +267,16 @@ export function installMock() {
           : null,
       })
     }
+    // Composition preview links (plan v2 §7): a stand-in page with the bridge protocol. Short-lived, so the renewal
+    // path runs in tests; window.__previewLinks counts how many were minted.
+    if (/^\/api\/v1\/videos\/[^/]+\/versions\/\d+\/preview$/.test(p)) {
+      const w = window as unknown as { __previewLinks?: number }
+      w.__previewLinks = (w.__previewLinks ?? 0) + 1
+      return json({
+        url: `${window.location.origin}/mock-preview/index.html?link=${w.__previewLinks}`,
+        expiresAt: new Date(Date.now() + 62_000).toISOString(),
+      })
+    }
     // Review (plan v2 §5)
     const cm = /^\/api\/v1\/videos\/([^/]+)\/comments(\/read)?$/.exec(p)
     if (cm?.[1] && cm[2]) {

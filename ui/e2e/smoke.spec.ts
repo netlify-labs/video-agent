@@ -247,3 +247,44 @@ test('render progress shows as Rendering N%', async ({ page }) => {
   await page.goto('/videos/vid_making')
   await expect(page.getByTestId('narration')).toContainText(/Rendering \d+%/)
 })
+
+// Composition preview (plan v2 §7)
+test('the live composition plays in a sandboxed frame driven over its channel', async ({ page }) => {
+  await page.goto('/videos/vid_teaser')
+  await page.getByText('Live composition').click()
+  const frame = page.getByTestId('composition-preview')
+  await expect(frame).toHaveAttribute('sandbox', 'allow-scripts')
+  await expect(page.getByRole('button', { name: 'Play preview' })).toBeEnabled()
+  await page.getByRole('button', { name: 'Play preview' }).click()
+  await expect(page.getByText(/^0:0[1-8] \/ 0:08$/)).toBeVisible()
+  await page.getByRole('button', { name: 'Pause preview' }).click()
+  await expect(page.getByText('close to, not exactly, the final video')).toBeVisible()
+})
+
+test('the app ignores messages that are not from its preview frame and channel', async ({ page }) => {
+  await page.goto('/videos/vid_teaser')
+  await page.getByText('Live composition').click()
+  await expect(page.getByRole('button', { name: 'Play preview' })).toBeEnabled()
+  await expect(page.getByText('0:00 / 0:08')).toBeVisible()
+  // From the top window itself (wrong source), with and without a plausible channel, and a malformed shape.
+  await page.evaluate(`
+    window.postMessage({ type: 'time', time: 5, channel: 'guess' }, '*')
+    window.postMessage({ type: 'ready', duration: 99 }, '*')
+    window.postMessage({ type: 'time', time: 'x' }, '*')
+  `)
+  await page.waitForTimeout(400)
+  await expect(page.getByText('0:00 / 0:08')).toBeVisible()
+})
+
+test('the preview link is renewed before it expires, keeping the playhead', async ({ page }) => {
+  await page.goto('/videos/vid_teaser')
+  await page.getByText('Live composition').click()
+  await expect(page.getByRole('button', { name: 'Play preview' })).toBeEnabled()
+  await page.getByRole('button', { name: 'Play preview' }).click()
+  await page.waitForTimeout(1500)
+  await page.getByRole('button', { name: 'Pause preview' }).click()
+  const at = await page.getByText(/ \/ 0:08$/).innerText()
+  await expect.poll(() => page.evaluate<number>('window.__previewLinks ?? 0'), { timeout: 12_000 }).toBe(2)
+  await expect(page.getByTestId('composition-preview')).toHaveAttribute('src', /link=2/)
+  await expect(page.getByText(at)).toBeVisible()
+})

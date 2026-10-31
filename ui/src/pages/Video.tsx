@@ -7,6 +7,7 @@ import {
   CopyButton,
   Group,
   Menu,
+  SegmentedControl,
   Skeleton,
   Stack,
   Switch,
@@ -20,6 +21,7 @@ import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
 import { PlanPanel } from '../components/PlanPanel'
 import { CommentsCard, ReviewPlayer, VerdictBar, type Pin } from '../components/Review'
+import { CompositionPreview } from '../components/CompositionPreview'
 import { IconDots, IconDownload, IconExternalLink, IconLock, IconLockOpen } from '@tabler/icons-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
@@ -341,6 +343,7 @@ export function VideoPage() {
   const player = useRef<HTMLVideoElement>(null)
   const [picking, setPicking] = useState(false)
   const [pending, setPending] = useState<Pin | null>(null)
+  const [view, setView] = useState<'video' | 'composition'>('video')
   const select = (n: number) => {
     setSelected(n)
     setPicking(false)
@@ -578,17 +581,39 @@ export function VideoPage() {
             <Progress video={data} v={latest} canCancel={canAct(latest.authorId)} />
           ) : v.status === 'ready' ? (
             <Stack gap="xs">
-              <ReviewPlayer
-                video={data}
-                v={v}
-                player={player}
-                picking={picking}
-                pending={pending}
-                onPick={(x, y) => {
-                  if (pending) setPending({ ...pending, x, y })
-                  setPicking(false)
+              <SegmentedControl
+                size="xs"
+                w="fit-content"
+                value={view}
+                onChange={(x) => {
+                  setView(x)
                 }}
+                data={[
+                  { value: 'video', label: 'Video' },
+                  { value: 'composition', label: 'Live composition' },
+                ]}
               />
+              {view === 'composition' ? (
+                <CompositionPreview
+                  key={`${data.id}-${v.n}`}
+                  videoId={data.id}
+                  versionN={v.n}
+                  dimensions={data.dimensions}
+                />
+              ) : null}
+              <div hidden={view !== 'video'}>
+                <ReviewPlayer
+                  video={data}
+                  v={v}
+                  player={player}
+                  picking={picking}
+                  pending={pending}
+                  onPick={(x, y) => {
+                    if (pending) setPending({ ...pending, x, y })
+                    setPicking(false)
+                  }}
+                />
+              </div>
               <VerdictBar video={data} v={v} canReview={canReview && me.data.id !== v.authorId} />
             </Stack>
           ) : (
