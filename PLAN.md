@@ -551,8 +551,10 @@ Output: `SPIKES.md` and updates to sections 5, 6, 7, 10, 11 and 13.
 
 ## 16. Open questions
 
-1. Is the Netlify brand for our deployment kept on a long-lived branch of this repo, or in a separate private fork?
-2. Should the README include a public demo deployment (it would need its own credits and a narrow admission rule)?
+1. How does our deployment get the Netlify brand without it living in the public repo? Owner (2026-10-30): inject it
+   through netlify-agent-kit rather than a branch or fork. Design pending.
+2. ~~Should the README include a public demo deployment?~~ Owner (2026-10-30): no; revisit after launch.
+3. PLAN.md, SPIKES.md and `.beads` stay public, scrubbed of internal names (owner, 2026-10-30).
 
 ## Decision log
 
