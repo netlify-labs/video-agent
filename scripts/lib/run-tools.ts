@@ -1,4 +1,4 @@
-// Helpers shared by render-job.ts and prepare-revision.ts (run inside Agent Runner runs).
+// Helpers shared by render-job.ts and prepare-run.ts (run inside Agent Runner runs).
 import { execFileSync, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'

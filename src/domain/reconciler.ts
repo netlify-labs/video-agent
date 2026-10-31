@@ -3,6 +3,7 @@
 import type { Deps, RunnerSnapshot, StartRequest } from '../deps.js'
 import { RunnerError } from '../deps.js'
 import { decrypt, encrypt, sha256Hex } from '../lib/crypto.js'
+import { RUN_MANIFEST_VERSION, runManifestKey, serializeRunManifest } from '../lib/run-manifest.js'
 import { getSettings } from './settings.js'
 import { PROMPT_TEMPLATE_VERSION, buildPrompt } from './prompt.js'
 import { setStage } from './videos.js'
@@ -135,6 +136,23 @@ async function startRequest(
     if (!parent || !sha) throw new SourceUnavailable(`Version ${version.parentN} has no saved composition.`)
     revision = { parentN: version.parentN, sourceKey: parent.sourceKey, sourceSha256: sha }
   }
+  // Inputs to restore go in a server-written manifest the run verifies by hash (plan v2 §14 rule 21).
+  let runManifestSha256: string | null = null
+  if (revision) {
+    const manifest = serializeRunManifest({
+      v: RUN_MANIFEST_VERSION,
+      jobId: a.jobId,
+      attemptId: a.id,
+      versionN: a.versionN,
+      kind: 'revision',
+      source: { key: revision.sourceKey, sha256: revision.sourceSha256, parentN: revision.parentN },
+      bundle: null,
+    })
+    await deps.blobs.set('sources', runManifestKey(a.jobId, a.id), manifest, {
+      contentType: 'application/json',
+    })
+    runManifestSha256 = sha256Hex(manifest)
+  }
   const prompt = buildPrompt({
     jobId: a.jobId,
     attemptId: a.id,
@@ -146,7 +164,8 @@ async function startRequest(
     callbackUrl: `${deps.config.siteUrl}/api/internal/runs/${a.id}/done`,
     callbackToken,
     upload: { mode: 'blobs' },
-    revision,
+    revision: revision && { parentN: revision.parentN },
+    runManifestSha256,
     plan: version.plan ? { brief: version.plan.brief, qa: version.plan.qa } : null,
   })
   return {

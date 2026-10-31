@@ -13,6 +13,7 @@ const base = {
   callbackToken: 'tok',
   upload: { mode: 'blobs' as const },
   revision: null,
+  runManifestSha256: null,
 }
 
 describe('buildPrompt', () => {
@@ -23,17 +24,21 @@ describe('buildPrompt', () => {
     expect(p).toContain('Pick the shortest length')
     expect(p).toContain('Never ask questions')
     expect(p).toContain('--token tok --upload blobs')
-    expect(p).not.toContain('prepare-revision')
+    expect(p).not.toContain('prepare-run')
   })
   it('uses a target length and adds the revision steps', () => {
     const p = buildPrompt({
       ...base,
       targetDurationSec: 30,
       versionN: 2,
-      revision: { parentN: 1, sourceKey: 'vid_1/v1.tar.gz', sourceSha256: 'a'.repeat(64) },
+      revision: { parentN: 1 },
+      runManifestSha256: 'a'.repeat(64),
     })
     expect(p).toContain('Aim for about 30 seconds.')
-    expect(p.indexOf('prepare-revision.ts')).toBeLessThan(p.indexOf('Read context/'))
+    expect(p).toContain(
+      `scripts/prepare-run.ts --job vid_1 --attempt ${base.attemptId} --manifest ${'a'.repeat(64)}`,
+    )
+    expect(p.indexOf('prepare-run.ts')).toBeLessThan(p.indexOf('Read context/'))
     expect(p).toContain('This is a revision of version 1.')
   })
   it("can't be escaped by fence markers in the request", () => {

@@ -48,7 +48,7 @@ describe('video lifecycle', () => {
     ).toBe(true)
     expect(await h.deps.blobs.get('videos', `${video.id}/v1/video.mp4`)).not.toBeNull()
 
-    // Revise from v1: the run gets prepare-revision with v1's source hash.
+    // Revise from v1: the run gets prepare-run with a manifest that names v1's source.
     const revised = await h.call('POST', `/api/v1/videos/${video.id}/versions`, {
       as: h.admin,
       body: { prompt: 'Make the end card orange.' },
@@ -59,7 +59,7 @@ describe('video lifecycle', () => {
     expect(v2.latestVersion).toBe(2)
     expect(v2.versions[0]).toMatchObject({ n: 2, status: 'ready', parentN: 1, authorId: 'u_admin' })
     expect(h.deps.runner.starts[1]?.prompt).toMatch(
-      /prepare-revision\.ts --attempt \S+ --source \S+v1\.tar\.gz --sha256 [0-9a-f]{64}/,
+      /prepare-run\.ts --job \S+ --attempt \S+ --manifest [0-9a-f]{64}/,
     )
 
     // Publishing: member (owner) publishes v2; the edge mirror appears; unpublish removes it.

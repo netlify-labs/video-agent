@@ -5,6 +5,8 @@
 // Prints the manifest as a fenced json block on stdout. Logs JSON lines on stderr.
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { bundleManifest } from '../src/lib/bundle-manifest.js'
+import type { RunManifest } from '../src/lib/run-manifest.js'
 import { toVtt } from './lib/captions.js'
 import {
   StepError,
@@ -53,6 +55,20 @@ async function main() {
     summary = JSON.parse(readFileSync(summaryPath, 'utf8')) as typeof summary
   } catch (e) {
     throw new StepError(`video/summary.json is not valid JSON: ${e instanceof Error ? e.message : String(e)}`)
+  }
+
+  // Render-unchanged runs render exactly the frozen bundle prepare-run restored (plan v2 §14 rule 21).
+  const runManifestPath = join(repoRoot, '.render', 'run-manifest.json')
+  if (existsSync(runManifestPath)) {
+    const m = JSON.parse(readFileSync(runManifestPath, 'utf8')) as RunManifest
+    if (m.attemptId === attempt && m.kind === 'render_unchanged' && m.bundle) {
+      const actual = bundleManifest(videoDir).hash
+      if (actual !== m.bundle.manifestHash)
+        throw new StepError(
+          `video/ changed since prepare-run restored it (got ${actual}). Render-unchanged runs must not edit files. Stop and report this.`,
+        )
+      log('bundle.verified', { manifestHash: actual })
+    }
   }
 
   log('render.start', { quality: QUALITY })

@@ -8,7 +8,7 @@ run, these rules apply on top of your prompt.
 - Read the hyperframes skill and follow its work loop. Run `npx hyperframes check` in `video/` until it reports 0 errors.
 - Never ask questions or request authorization. Make a reasonable choice and say so in your summary.
 - Write `video/summary.json`: `{ "title", "summary", "captions": [{ "start", "end", "text" }] }`, one caption cue per piece of on-screen text, in seconds.
-- For a revision, run `scripts/prepare-revision.ts` first, exactly as your prompt says. If it fails, stop.
+- When your prompt says so, run `scripts/prepare-run.ts` first, exactly as written. If it fails, stop.
 - Render, upload and report with `scripts/render-job.ts`, exactly as your prompt says. If it fails, fix the composition and run it again.
 - End your answer with the fenced json block that render-job prints.
 - Never print environment variables. Never commit, push or open a pull request.

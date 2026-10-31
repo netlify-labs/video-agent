@@ -1,7 +1,7 @@
 // The run prompt: a fixed, versioned template plus the user's request, fenced as a creative brief.
 import { ASPECTS, type Aspect } from './types.js'
 
-export const PROMPT_TEMPLATE_VERSION = 2
+export const PROMPT_TEMPLATE_VERSION = 3
 
 export interface PromptInput {
   jobId: string
@@ -14,7 +14,9 @@ export interface PromptInput {
   callbackUrl: string
   callbackToken: string
   upload: { mode: 'blobs' } | { mode: 'signed'; url: string }
-  revision: { parentN: number; sourceKey: string; sourceSha256: string } | null
+  revision: { parentN: number } | null
+  /** sha256 of the run manifest the server wrote for this attempt; set when the run has inputs to restore. */
+  runManifestSha256: string | null
   /** The accepted plan from the questions (plan v2 §4), frozen on the version. */
   plan?: { brief: unknown; qa: unknown } | null
 }
@@ -40,10 +42,12 @@ export function buildPrompt(p: PromptInput): string {
     `You are making version ${p.versionN} of video ${p.jobId} (attempt ${p.attemptId}). Work only inside video/.`,
     '',
   ]
-  if (p.revision) {
+  if (p.runManifestSha256) {
     lines.push(
-      `First run: npx tsx scripts/prepare-revision.ts --attempt ${p.attemptId} --source ${p.revision.sourceKey} --sha256 ${p.revision.sourceSha256}`,
-      `It restores video/ to version ${p.revision.parentN}'s composition. If it fails, stop and report the error.`,
+      `First run: npx tsx scripts/prepare-run.ts --job ${p.jobId} --attempt ${p.attemptId} --manifest ${p.runManifestSha256}`,
+      p.revision
+        ? `It restores video/ to version ${p.revision.parentN}'s composition. If it fails, stop and report the error.`
+        : 'It sets up video/ for this run. If it fails, stop and report the error.',
       '',
     )
   }
