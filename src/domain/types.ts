@@ -77,6 +77,8 @@ export interface SettingsRow {
   /** Admin-set webhook for every event on every video (plan v2 §3). */
   teamWebhookUrl?: string | null
   teamWebhookSecretEnc?: string | null
+  /** Admin-chosen deep model for planning (allowlisted; null = default). */
+  planDeepModel?: string | null
 }
 
 export interface UserRow {
@@ -206,6 +208,73 @@ export interface IdempotencyRow {
   requestHash: string
   response: { status: number; body: unknown }
   expiresAt: string
+}
+
+export interface PlanQuestion {
+  id: string
+  question: string
+  why: string
+  options: { id: string; label: string; description: string }[]
+  multiSelect: boolean
+  allowOther: boolean
+}
+export interface PlanAnswer {
+  questionId: string
+  optionIds?: string[] | undefined
+  other?: string | undefined
+  skipped?: boolean | undefined
+}
+export interface PlanBrief {
+  goal: string
+  audience: string
+  keyMessage: string
+  beats: { text: string; seconds: number }[]
+  tone: string
+  callToAction: string
+  mustInclude: string[]
+  avoid: string[]
+}
+export interface PlanRoute {
+  needsQuestions: boolean
+  template: string
+  complexity: string
+  suggestedAspect: '16:9' | '9:16' | '1:1' | '4:5' | null
+  model: string
+}
+export interface PlanRow {
+  id: string
+  userId: string
+  jobId: string | null
+  baseN: number | null
+  prompt: string
+  aspect: string | null
+  durationSec: number | null
+  inputsHash: string
+  route: PlanRoute | null
+  questions: PlanQuestion[] | null
+  answers: PlanAnswer[] | null
+  brief: PlanBrief | null
+  briefRev: number
+  consumedByJobId: string | null
+  consumedByN: number | null
+  createdAt: string
+  expiresAt: string
+}
+export interface GatewayCallRow {
+  id: string
+  callerId: string
+  planId: string | null
+  kind: 'router' | 'questions' | 'brief' | 'retry'
+  model: string
+  inputTokens: number
+  outputTokens: number
+  cacheTokens: number
+  credits: number | null
+  estimate: boolean
+  ok: boolean
+  error: string | null
+  ms: number
+  at: string
 }
 
 export type NotificationType = 'comment.created' | 'version.approved' | 'version.changes_requested'

@@ -1,6 +1,17 @@
 // Netlify Database schema (Drizzle). Migrations are generated into netlify/database/migrations.
 import { sql } from 'drizzle-orm'
-import { bigint, boolean, doublePrecision, index, integer, jsonb, pgTable, primaryKey, text, uniqueIndex } from 'drizzle-orm/pg-core'
+import {
+  bigint,
+  boolean,
+  doublePrecision,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  primaryKey,
+  text,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core'
 
 // Timestamps are ISO-8601 UTC strings (toISOString), which sort correctly as text.
 const ts = (name: string) => text(name)
@@ -13,6 +24,7 @@ export const settings = pgTable('settings', {
   createdAt: ts('created_at').notNull(),
   teamWebhookUrl: text('team_webhook_url'),
   teamWebhookSecretEnc: text('team_webhook_secret_enc'),
+  planDeepModel: text('plan_deep_model'),
 })
 
 export const users = pgTable('users', {
@@ -119,7 +131,9 @@ export const attempts = pgTable(
     index('attempts_due_idx')
       .on(t.nextActionAt)
       .where(sql`${t.stage} not in ('ready','failed','cancelled','timed_out','queued','unresolved')`),
-    index('attempts_queued_idx').on(t.queuedAt).where(sql`${t.stage} = 'queued'`),
+    index('attempts_queued_idx')
+      .on(t.queuedAt)
+      .where(sql`${t.stage} = 'queued'`),
     index('attempts_job_idx').on(t.jobId, t.versionN),
   ],
 )
@@ -181,6 +195,52 @@ export const idempotencyKeys = pgTable(
 export const queueControl = pgTable('queue_control', {
   id: integer('id').primaryKey(),
 })
+
+// Plan with questions (plan v2 §4, §14 rules 14–17). Plan content expires; gateway_calls (usage) is kept.
+export const plans = pgTable(
+  'plans',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull(),
+    jobId: text('job_id'),
+    baseN: integer('base_n'),
+    prompt: text('prompt').notNull(),
+    aspect: text('aspect'),
+    durationSec: integer('duration_sec'),
+    inputsHash: text('inputs_hash').notNull(),
+    route: jsonb('route'),
+    questions: jsonb('questions'),
+    answers: jsonb('answers'),
+    brief: jsonb('brief'),
+    briefRev: integer('brief_rev').notNull(),
+    consumedByJobId: text('consumed_by_job_id'),
+    consumedByN: integer('consumed_by_n'),
+    createdAt: ts('created_at').notNull(),
+    expiresAt: ts('expires_at').notNull(),
+  },
+  (t) => [index('plans_user_idx').on(t.userId, t.createdAt)],
+)
+
+export const gatewayCalls = pgTable(
+  'gateway_calls',
+  {
+    id: text('id').primaryKey(),
+    callerId: text('caller_id').notNull(),
+    planId: text('plan_id'),
+    kind: text('kind').notNull(),
+    model: text('model').notNull(),
+    inputTokens: integer('input_tokens').notNull(),
+    outputTokens: integer('output_tokens').notNull(),
+    cacheTokens: integer('cache_tokens').notNull(),
+    credits: doublePrecision('credits'),
+    estimate: boolean('estimate').notNull(),
+    ok: boolean('ok').notNull(),
+    error: text('error'),
+    ms: integer('ms').notNull(),
+    at: ts('at').notNull(),
+  },
+  (t) => [index('gateway_calls_at_idx').on(t.at), index('gateway_calls_caller_idx').on(t.callerId, t.at)],
+)
 
 // In-app notifications for video owners (plan v2 §3, §14 rule 13): comments and verdicts on their videos.
 export const notifications = pgTable(

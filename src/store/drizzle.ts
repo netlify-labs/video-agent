@@ -33,6 +33,8 @@ import type {
   WebhookEventRow,
   VerdictRow,
   NotificationRow,
+  PlanRow,
+  GatewayCallRow,
   WebhookDeliveryRow,
   UserWebhookRow,
 } from '../domain/types.js'
@@ -298,6 +300,29 @@ function repoFor(db: Db): Repo {
           .returning({ k: t.idempotencyKeys.key })
       ).length,
 
+    insertPlan: async (row) => {
+      await db.insert(t.plans).values(row)
+    },
+    getPlan: async (id, opts) => {
+      const q = db.select().from(t.plans).where(eq(t.plans.id, id))
+      return one<PlanRow>(opts?.lock ? await q.for('update') : await q)
+    },
+    updatePlan: async (id, patch) => {
+      await db.update(t.plans).set(patch).where(eq(t.plans.id, id))
+    },
+    insertGatewayCall: async (row) => {
+      await db.insert(t.gatewayCalls).values(row)
+    },
+    listGatewayCalls: async (q) =>
+      (await db
+        .select()
+        .from(t.gatewayCalls)
+        .where(
+          and(
+            gte(t.gatewayCalls.at, q.since),
+            q.callerId ? eq(t.gatewayCalls.callerId, q.callerId) : undefined,
+          ),
+        )) as GatewayCallRow[],
     insertNotification: async (row) => {
       await db.insert(t.notifications).values(row)
     },

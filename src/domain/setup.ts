@@ -146,6 +146,17 @@ export async function setupChecks(
     fix: 'Edit context/BRAND.md and context/brand.json, add your logo to context/assets/, and push. Or set BRAND_ZIP_URL to a zip of your brand kit (see context/README.md) and redeploy.',
   })
 
+  // Optional: planning with questions needs AI Gateway; without it Plan it first is hidden and nothing else changes.
+  add({
+    id: 'ai-gateway',
+    label: 'AI Gateway (optional)',
+    status: deps.gateway.available() ? 'ok' : 'warn',
+    detail: deps.gateway.available()
+      ? 'Available: people can plan a video with a few questions first.'
+      : "Not available on this team's plan, so planning with questions is off. Videos work as usual.",
+    fix: 'AI Gateway comes with credit-based plans; Enterprise teams can ask their account manager to enable it.',
+  })
+
   const ready =
     checks.every((c) => c.status !== 'fail') &&
     !checks.some((c) => ['runner-token', 'identity'].includes(c.id) && c.status === 'unknown')

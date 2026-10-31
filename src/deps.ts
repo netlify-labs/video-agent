@@ -170,7 +170,44 @@ export interface Deps {
   runner: RunnerPort
   platform: PlatformPort
   http: HttpPort
+  gateway: GatewayPort
   clock: Clock
   ids: Ids
   log: Logger
+}
+
+/** AI Gateway (plan v2 §4): a fast TypeSafe `jev` router and Anthropic Messages for questions and briefs. */
+export interface GatewayUsage {
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheWriteTokens: number
+}
+export interface RouteAnswers {
+  needs_questions: 'yes' | 'no'
+  template: 'launch' | 'tutorial' | 'social' | 'changelog' | 'sales' | 'other'
+  complexity: 'simple' | 'standard' | 'complex'
+  aspect: 'landscape' | 'vertical' | 'square' | 'portrait' | 'unspecified'
+}
+export interface GatewayPort {
+  /** True when the Gateway env vars are present (credit-based plans; Enterprise only when enabled). */
+  available(): boolean
+  route(
+    input: { request: string; history: string[] },
+    opts: { signal: AbortSignal },
+  ): Promise<{
+    answers: RouteAnswers
+    model: string
+    usage: GatewayUsage
+  }>
+  messages(
+    req: {
+      model: string
+      system: string
+      user: string
+      maxTokens: number
+      images?: { mime: string; base64: string }[]
+    },
+    opts: { signal: AbortSignal },
+  ): Promise<{ text: string; model: string; usage: GatewayUsage }>
 }

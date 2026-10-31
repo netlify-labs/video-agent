@@ -203,4 +203,14 @@ describe('policy', () => {
       (await h.json(await h.call('GET', '/api/v1/videos?owner=me', { as: h.member }))).items,
     ).toHaveLength(3)
   })
+
+  it('reports AI Gateway as an optional capability that never blocks setup', async () => {
+    const { harness } = await import('./helpers.js')
+    const h = harness()
+    h.deps.gateway.isAvailable = false
+    const r = await h.json(await h.call('GET', '/api/health?fresh=1', { as: h.admin }))
+    const g = r.checks.find((c: { id: string }) => c.id === 'ai-gateway')
+    expect(g.status).toBe('warn')
+    expect(r.ready).toBe(true)
+  })
 })

@@ -16,6 +16,8 @@ import type {
   RunnerPort,
   RunnerSnapshot,
   StartRequest,
+  GatewayPort,
+  RouteAnswers,
 } from '../src/deps.js'
 import { RunnerError, readConfig } from '../src/deps.js'
 import { ids as realIds } from '../src/lib/ids.js'
@@ -218,6 +220,55 @@ export class FakeHttp implements HttpPort {
   }
 }
 
+/** Scripted AI Gateway: set `route`/`reply` or push errors; every call is recorded. */
+export class FakeGateway implements GatewayPort {
+  isAvailable = true
+  calls: { kind: 'route' | 'messages'; model?: string; system?: string; user?: string }[] = []
+  routeAnswers: RouteAnswers = {
+    needs_questions: 'yes',
+    template: 'launch',
+    complexity: 'standard',
+    aspect: 'unspecified',
+  }
+  /** Replies for messages() in order; a function gets the request. Errors are thrown. */
+  replies: (string | Error | ((req: { model: string; system: string; user: string }) => string))[] = []
+  delayMs = 0
+  available() {
+    return this.isAvailable
+  }
+  async route(input: { request: string; history: string[] }) {
+    this.calls.push({ kind: 'route', user: input.request })
+    return {
+      answers: this.routeAnswers,
+      model: 'jev-1.14.0',
+      usage: { inputTokens: 330, outputTokens: 60, cacheReadTokens: 0, cacheWriteTokens: 0 },
+    }
+  }
+  async messages(
+    req: { model: string; system: string; user: string; maxTokens: number },
+    opts: { signal: AbortSignal },
+  ) {
+    this.calls.push({ kind: 'messages', model: req.model, system: req.system, user: req.user })
+    if (this.delayMs)
+      await new Promise((resolve, reject) => {
+        const t = setTimeout(resolve, this.delayMs)
+        opts.signal.addEventListener('abort', () => {
+          clearTimeout(t)
+          reject(new Error('aborted'))
+        })
+      })
+    const next = this.replies.shift()
+    if (next === undefined) throw new Error('FakeGateway: no reply scripted')
+    if (next instanceof Error) throw next
+    const text = typeof next === 'function' ? next(req) : next
+    return {
+      text,
+      model: req.model,
+      usage: { inputTokens: 300, outputTokens: 900, cacheReadTokens: 0, cacheWriteTokens: 0 },
+    }
+  }
+}
+
 export interface TestDeps extends Deps {
   clock: FakeClock
   blobs: FakeBlobs
@@ -225,6 +276,7 @@ export interface TestDeps extends Deps {
   runner: FakeRunner
   platform: FakePlatform
   http: FakeHttp
+  gateway: FakeGateway
   logs: string[]
 }
 
@@ -250,6 +302,7 @@ export function makeDeps(env: Record<string, string> = {}, store?: Deps['store']
     runner: new FakeRunner(),
     platform: new FakePlatform(),
     http: new FakeHttp(),
+    gateway: new FakeGateway(),
     clock,
     ids: { ...realIds, videoId: () => `vid_${String(++n).padStart(4, '0')}` },
     log,

@@ -17,6 +17,8 @@ import type {
   VerdictRow,
   OwnershipTransferRow,
   NotificationRow,
+  PlanRow,
+  GatewayCallRow,
   WebhookDeliveryRow,
   UserWebhookRow,
 } from '../domain/types.js'
@@ -38,6 +40,8 @@ interface State {
   verdicts: Map<string, VerdictRow>
   transfers: OwnershipTransferRow[]
   notifications: NotificationRow[]
+  plans: Map<string, PlanRow>
+  gatewayCalls: GatewayCallRow[]
   notificationReads: Map<string, string>
   userWebhooks: Map<string, UserWebhookRow>
   cleanup: Map<string, CleanupRow>
@@ -59,6 +63,8 @@ const empty = (): State => ({
   verdicts: new Map(),
   transfers: [],
   notifications: [],
+  plans: new Map(),
+  gatewayCalls: [],
   notificationReads: new Map(),
   userWebhooks: new Map(),
   cleanup: new Map(),
@@ -255,6 +261,19 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
       return n
     },
 
+    insertPlan: async (row) => {
+      state.plans.set(row.id, clone(row))
+    },
+    getPlan: async (id) => clone(state.plans.get(id) ?? null),
+    updatePlan: async (id, patch) => {
+      const p = state.plans.get(id)
+      if (p) Object.assign(p, clone(patch))
+    },
+    insertGatewayCall: async (row) => {
+      state.gatewayCalls.push(clone(row))
+    },
+    listGatewayCalls: async (q) =>
+      clone(state.gatewayCalls.filter((c) => c.at >= q.since && (!q.callerId || c.callerId === q.callerId))),
     insertNotification: async (row) => {
       state.notifications.push(clone(row))
     },

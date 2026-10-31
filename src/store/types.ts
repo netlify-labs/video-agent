@@ -18,6 +18,8 @@ import type {
   VerdictRow,
   OwnershipTransferRow,
   NotificationRow,
+  PlanRow,
+  GatewayCallRow,
   WebhookDeliveryRow,
   UserWebhookRow,
 } from '../domain/types.js'
@@ -96,6 +98,11 @@ export interface Repo {
   deleteExpiredIdempotency(now: string): Promise<number>
 
   // webhooks and cleanup
+  insertPlan(row: PlanRow): Promise<void>
+  getPlan(id: string, opts?: { lock?: boolean }): Promise<PlanRow | null>
+  updatePlan(id: string, patch: Partial<PlanRow>): Promise<void>
+  insertGatewayCall(row: GatewayCallRow): Promise<void>
+  listGatewayCalls(q: { since: string; callerId?: string }): Promise<GatewayCallRow[]>
   insertNotification(row: NotificationRow): Promise<void>
   /** Newest first; `before` is a createdAt|id cursor. */
   listNotifications(

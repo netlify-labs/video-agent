@@ -7,6 +7,7 @@ import { createLogger } from '../lib/log.js'
 import { createDrizzleStore } from '../store/drizzle.js'
 import * as schema from '../../db/schema.js'
 import { netlifyBlobs } from './blobs.js'
+import { createGateway } from './gateway.js'
 import { safeHttp } from './http.js'
 import { netlifyIdentity } from './identity.js'
 import { createPlatform } from './platform.js'
@@ -37,6 +38,7 @@ export function prodDeps(): Deps {
       signingSecret: async () => (await getSettings(partial)).fileSigningSecret,
     }),
     http: safeHttp,
+    gateway: createGateway(env),
     log: createLogger({ service: 'video-agent' }),
   }
   return deps
