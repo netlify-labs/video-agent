@@ -16,3 +16,6 @@ ui/dist-mock/
 .taste-skill/
 test-results/
 playwright-report/
+
+# bv (beads viewer) local config and caches
+.bv/

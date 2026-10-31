@@ -74,7 +74,7 @@ async function ensureUserRow(deps: Deps, user: IdentityUser): Promise<UserRow> {
     id: user.id,
     email: user.email.toLowerCase(),
     name: user.name,
-    role: isAdmin ? 'admin' : 'member',
+    role: isAdmin ? 'admin' : 'creator',
     admittedVia: verdict.via,
     createdAt: now,
     lastSeenAt: now,

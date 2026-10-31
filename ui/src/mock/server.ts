@@ -74,7 +74,7 @@ export function installMock() {
       return json(
         Object.values(people).map((u, i) => ({
           ...u,
-          role: i === 0 ? 'admin' : 'member',
+          role: i === 0 ? 'admin' : 'creator',
           admittedVia: 'domain',
           createdAt: new Date(Date.now() - (30 - i * 6) * 86400_000).toISOString(),
           lastSeenAt: new Date().toISOString(),

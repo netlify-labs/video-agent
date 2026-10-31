@@ -1,6 +1,6 @@
 // Domain records. These mirror the database tables (db/schema.ts) and the in-memory store.
 
-export type Role = 'admin' | 'member'
+export type Role = 'admin' | 'creator' | 'reviewer' | 'viewer'
 export type Aspect = '16:9' | '9:16' | '1:1' | '4:5'
 
 export const ASPECTS: Record<Aspect, { width: number; height: number }> = {

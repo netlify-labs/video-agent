@@ -255,7 +255,9 @@ export function AdminPage() {
                         radius="xl"
                         value={u.role}
                         data={[
-                          { value: 'member', label: 'Member' },
+                          { value: 'creator', label: 'Creator' },
+                          { value: 'reviewer', label: 'Reviewer' },
+                          { value: 'viewer', label: 'Viewer' },
                           { value: 'admin', label: 'Admin' },
                         ]}
                         allowDeselect={false}

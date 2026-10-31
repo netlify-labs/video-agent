@@ -1880,7 +1880,7 @@ export interface components {
             via: "session" | "apiKey";
         };
         /** @enum {string} */
-        Role: "admin" | "member";
+        Role: "admin" | "creator" | "reviewer" | "viewer";
         User: {
             id: string;
             email: string;

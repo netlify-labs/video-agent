@@ -182,7 +182,7 @@ export const NewKeySchema = KeySchema.extend({
 }).openapi('NewApiKey')
 export const CreateKeySchema = z.object({ name: z.string().min(1).max(80) }).openapi('CreateApiKey')
 
-export const RoleSchema = z.enum(['admin', 'member']).openapi('Role')
+export const RoleSchema = z.enum(['admin', 'creator', 'reviewer', 'viewer']).openapi('Role')
 export const UserSchema = z
   .object({
     id: z.string(),

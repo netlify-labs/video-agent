@@ -6,7 +6,7 @@ const PROMPT = 'A short launch video for org webhooks, with three beats.'
 describe('admission and sessions', () => {
   it('admits confirmed users at an allowed domain and makes ADMIN_EMAILS admins', async () => {
     const h = harness()
-    expect((await h.json(await h.call('GET', '/api/v1/me', { as: h.member }))).role).toBe('member')
+    expect((await h.json(await h.call('GET', '/api/v1/me', { as: h.member }))).role).toBe('creator')
     expect((await h.json(await h.call('GET', '/api/v1/me', { as: h.admin }))).role).toBe('admin')
   })
 
@@ -82,7 +82,7 @@ describe('admission and sessions', () => {
     const h = harness()
     await h.call('GET', '/api/v1/me', { as: h.admin })
     expect(
-      (await h.call('PATCH', '/api/v1/users/u_admin', { as: h.admin, body: { role: 'member' } })).status,
+      (await h.call('PATCH', '/api/v1/users/u_admin', { as: h.admin, body: { role: 'reviewer' } })).status,
     ).toBe(409)
   })
 

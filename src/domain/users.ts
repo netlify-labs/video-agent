@@ -27,9 +27,12 @@ export async function updateUser(
 ) {
   assertCan(p, 'users:manage')
   return deps.store.tx(async (repo) => {
+    // Serialize role and disable changes, so two concurrent changes can't remove the last enabled admin.
+    await repo.lockQueueControl()
     const u = await repo.getUser(id)
     if (!u) throw new ApiError('not_found', 'User not found.')
-    const losesAdmin = u.role === 'admin' && (patch.role === 'member' || patch.disabled === true)
+    const losesAdmin =
+      u.role === 'admin' && ((patch.role !== undefined && patch.role !== 'admin') || patch.disabled === true)
     if (losesAdmin) {
       const admins = (await repo.listUsers()).filter((x) => x.role === 'admin' && !x.disabledAt)
       if (admins.length <= 1) throw new ApiError('conflict', "You can't remove the last admin.")

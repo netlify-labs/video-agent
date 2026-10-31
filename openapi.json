@@ -787,7 +787,9 @@
         "type": "string",
         "enum": [
           "admin",
-          "member"
+          "creator",
+          "reviewer",
+          "viewer"
         ]
       },
       "User": {
