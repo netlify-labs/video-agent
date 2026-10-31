@@ -1,7 +1,9 @@
 // Live check for progress (plan v2 §6). Spends one revision run (~250 credits).
 //   VIDEO_AGENT_URL=https://<site> VIDEO_AGENT_KEY=nva_… [VIDEO_ID=vid_…] npx tsx scripts/e2e/progress.ts
 // Revises a ready video the key owns and polls /progress every 3 s like the page does. Passes when the version is
-// ready and the run reported at least one milestone (scripts/checkpoint.ts) and render progress (render-job).
+// ready and the run reported at least one milestone (scripts/checkpoint.ts) and render progress (render-job). When a
+// milestone carries a composition snapshot, the live preview link is minted and its index.html fetched (200 with the
+// preview CSP); the agent sends snapshots by choice, so their absence is logged, not failed.
 // Logs every distinct step, milestone and render percent as JSON lines.
 const base = (process.env.VIDEO_AGENT_URL ?? '').replace(/\/$/, '')
 const key = process.env.VIDEO_AGENT_KEY ?? ''
@@ -36,7 +38,7 @@ interface Progress {
   steps: number | null
   credits: number | null
   stale: boolean
-  checkpoint: { seq: number; message: string | null; renderPercent: number | null } | null
+  checkpoint: { seq: number; message: string | null; renderPercent: number | null; hasBundle: boolean } | null
 }
 
 async function api(method: string, path: string, body?: unknown): Promise<{ status: number; json: unknown }> {
@@ -68,6 +70,7 @@ log('revise', { id, n })
 
 const milestones = new Set<string>()
 const percents = new Set<number>()
+const snapshots: { seq: number; status: number; csp: boolean }[] = []
 let last = ''
 for (let i = 0; i < 300; i++) {
   await new Promise((r) => setTimeout(r, 3000))
@@ -75,6 +78,20 @@ for (let i = 0; i < 300; i++) {
   if (p.versionN !== n) continue
   if (p.checkpoint?.message) milestones.add(p.checkpoint.message)
   if (p.checkpoint?.renderPercent != null) percents.add(p.checkpoint.renderPercent)
+  const cp = p.checkpoint
+  if (cp?.hasBundle && p.stage === 'running' && !snapshots.some((s) => s.seq === cp.seq)) {
+    const link = (await api('GET', `/api/v1/videos/${id}/versions/${n}/preview?live=1`)).json as {
+      url?: string
+    }
+    const page = link.url ? await fetch(link.url) : null
+    const snap = {
+      seq: cp.seq,
+      status: page?.status ?? 0,
+      csp: (page?.headers.get('content-security-policy') ?? '').includes('sandbox allow-scripts'),
+    }
+    snapshots.push(snap)
+    log('snapshot', snap)
+  }
   const now = JSON.stringify([p.stage, p.step, p.checkpoint?.message, p.checkpoint?.renderPercent, p.stale])
   if (now !== last) {
     last = now
@@ -95,7 +112,8 @@ for (let i = 0; i < 300; i++) {
   }
   if (i === 299) fail('Timed out.')
 }
-log('seen', { milestones: [...milestones], renderPercents: [...percents].sort((a, b) => a - b) })
+log('seen', { milestones: [...milestones], renderPercents: [...percents].sort((a, b) => a - b), snapshots })
+if (snapshots.some((s) => s.status !== 200 || !s.csp)) fail('A live snapshot did not load.', { snapshots })
 if (milestones.size === 0) fail('No milestone checkpoints arrived.')
 if (percents.size === 0) fail('No render progress arrived.')
 log('PASS', { id, n })
