@@ -1,309 +1,350 @@
-# Plan: plan-with-questions, in-browser editing, pinned feedback, live progress and a media library
+# Plan v2: roles, plan with questions, comments, live progress, editing and media
 
-Draft 2 (2026-10-31). Builds on [`PLAN.md`](../../PLAN.md) (the v1 spec). Draft 1 was reviewed by Claude Fable 5 and
-Codex `gpt-6.1-sol` (high effort); the decision log at the end says what was taken. Draft 2 also replaces draft 1's
-"Gateway writes a storyboard composition" with the owner's **plan with questions** flow (§5).
+Draft 3 (2026-10-31). Builds on [`PLAN.md`](../../PLAN.md) (the v1 spec). Draft 1 was reviewed by Claude Fable 5 and
+Codex `gpt-6.1-sol` (high effort). Draft 2 adopted the owner's **plan with questions** flow. Draft 3 records a full
+owner interview: it adds roles and privacy (Feature R), widens the editor and media scope, and fixes the order of
+work. The decision log at the end lists every decision.
 
 ## 1. What we're building and why
 
-| Feature                             | What people get                                                                                                                                                        | Why it matters                                                                               |
-| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| **A. Live progress**                | While a run works: what it's doing in words, steps and credits so far; later (A2) the composition playing as it's written                                              | A stage name for 5 minutes feels broken                                                      |
-| **B. Plan with questions**          | On Create: "Answer a few questions to plan it first?" A few multiple-choice clarifying questions (with write-in, skippable), then a refined brief that goes to the run | Vague prompts are the main cause of wasted renders; questions cost seconds and a few credits |
-| **C. Edit in the browser**          | On a finished version: change on-screen text and beat timing in a form (later: click the text in the preview), see it instantly, then **Render** without new authoring | Typo and timing fixes stop costing a full authoring run                                      |
-| **D. Comments and pinned feedback** | Anyone signed in pauses, clicks a spot and comments; selected comments become the next version with **Incorporate feedback**                                           | Precise revisions from the whole team                                                        |
-| **E. Media library**                | A **Media** page for logos and screenshots; **Add media** on New video and Revise                                                                                      | Product videos need real product UI                                                          |
+The goal is a real SaaS-like team product: people who make videos, people who only review them, and admins who run it.
 
-Non-goals: audio (va-css.2), templates (va-css.3), spend limits (va-css.4).
+| #   | Feature                               | What people get                                                                                                                                               |
+| --- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| R   | **Roles, privacy, approvals**         | Admin, Creator, Reviewer and Viewer roles; private videos; Approved or Changes requested per version; ownership transfer; personal and team webhooks          |
+| B   | **Plan with questions**               | **Plan it first** beside Create: a few multiple-choice clarifying questions (write-in, skippable, sometimes none), then an editable brief appended to the run |
+| D   | **Comments and incorporate feedback** | Comments pinned to a moment; the owner (or an admin) picks comments and makes the next version from them                                                      |
+| A   | **Live progress**                     | Plain-language narration while a run works, then the composition playing as it's written                                                                      |
+| C   | **Edit in the browser**               | On finished videos: text, beat timing, brand colours, reorder or delete beats, swap media; then **Render** with no new authoring                              |
+| E   | **Media library**                     | Images, SVG logos, short MP4 clips and fonts, shared across the team; **Add media** on create, revise and plan                                                |
+
+Non-goals: audio (va-css.2), templates (va-css.3), spend limits (va-css.4), email.
 
 ## 2. Facts this plan relies on (checked 2026-10-31)
 
 - **HyperFrames plays in the browser.** `hyperframes@0.8.222` (Apache-2.0) ships `dist/hyperframes-player.global.js`, a
-  `<hyperframes-player>` element (`src`/`srcdoc`, controls, play/pause/seek/durationchange). It creates its **own
-  nested iframe** and by default loads its runtime from `cdn.jsdelivr.net/npm/@hyperframes/core@0.8.222/…` (we must
-  vendor it). HyperFrames Studio, a browser editor, ships in the same package as a reference.
-- **Compositions are attribute-driven HTML** (`data-start`, `data-duration`, `data-track-index`; root
-  `data-composition-id`, `data-width`, `data-height`), but animation timing also lives in GSAP timelines
-  (`video/index.html`), so editing timing safely needs a contract (§6).
-- **The HyperFrames skill ships in the package** at `dist/skills/hyperframes/` (`SKILL.md` 7 KB; references ≈150 KB).
-- **Run progress is readable** via `nax-agent-runner-sdk` `getSnapshot()` (`state`, `latestStep`, nullable `usage`
-  with `stepsCount` and `totalCreditsCost`); the reconciler already stores `latestStep` every minute
-  (`src/domain/reconciler.ts:304`). The SDK has no render-only execution mode; every run is a prompt.
-- **AI Gateway** injects `ANTHROPIC_API_KEY`/`ANTHROPIC_BASE_URL` (and others) into Functions; 180 credits per US$;
-  200k context. Its docs exclude Enterprise plans unless enabled. **Our team (`gtm-engineering`, Enterprise) has AI
-  Gateway access** (confirmed by the owner, 2026-10-31). Deployers on other plans may not, so the feature is optional
-  (§5).
-- **Constraints from the shipped code:**
-  - Version and job status are derived from the latest attempt (`statusForStage`, `src/domain/types.ts:30–48`).
-  - A revision inherits its parent's `targetDurationSec` (`src/domain/videos.ts:243`), and finalize rejects ±25% (`src/domain/finalize.ts:117`).
-  - Source archives exclude every `*.mp4` (`scripts/render-job.ts:58`).
-  - Finished compositions exist only as `sources/{job}/v{n}.tar.gz` (`src/domain/finalize.ts:154`).
-  - The files edge function serves four fixed names (`netlify/edge-functions/files.ts:12`).
+  `<hyperframes-player>` element that creates its **own nested iframe** and by default loads its runtime from
+  `cdn.jsdelivr.net` (we vendor it). HyperFrames Studio, a browser editor, ships as a reference.
+- **Compositions** use `data-start`, `data-duration` and `data-track-index` on clips, but animation timing also lives in
+  GSAP timelines, so editing needs a contract (§8).
+- **The HyperFrames skill** ships at `dist/skills/hyperframes/` (`SKILL.md` 7 KB; references ≈150 KB).
+- **Run progress:** `getSnapshot()` returns `state`, `latestStep` and nullable `usage` (`stepsCount`,
+  `totalCreditsCost`); the reconciler stores `latestStep` every minute. The SDK has no render-only mode.
+- **AI Gateway** injects `ANTHROPIC_*`, `OPENAI_*`, `GEMINI_*`, `OPENROUTER_*` and `TYPESAFE_*` keys and base URLs into
+  Functions. TypeSafe's `jev` models are decision models suited to fast routing. Usage is billed at 180 credits per
+  US$. **Our team (`gtm-engineering`) has Gateway access** (owner, 2026-10-31); other deployers may not, so planning
+  is optional.
+- **Code constraints:**
+  - Status derives from the latest attempt (`src/domain/types.ts:30–48`).
+  - Revisions inherit the parent's target length, and finalize rejects ±25% (`src/domain/videos.ts:243`,
+    `src/domain/finalize.ts:117`).
+  - Source archives drop `*.mp4` (`scripts/render-job.ts:58`).
+  - Finished compositions exist only as tarballs (`src/domain/finalize.ts:154`).
+  - The files edge function serves four fixed names.
   - `AGENTS.md` allows only two scripts outside `video/`.
-  - Cleanup handles explicit rows only, over closed store unions (`src/domain/types.ts:221`, `src/deps.ts:75`).
-  - Captions come from `video/summary.json` (`scripts/render-job.ts:57`).
+  - Cleanup is explicit rows over closed store unions.
+  - Captions come from `summary.json`.
+  - Roles today are `admin` and `member` (`src/domain/policy.ts`).
 
-## 3. Shared foundation: a safe composition preview (needed by C and A2)
+## 3. Feature R: roles, privacy, approvals (built first)
 
-Compositions are model-written HTML with scripts. They never run on the app's origin.
+### Roles
 
-- **Preview bundles:** finalize (a background function) also extracts each version's composition into
-  `bundles/{job}/v{n}/` with a manifest (paths, sizes, hashes), with no MP4s. Extraction validates paths, entry
-  count and expanded size, and stages before committing.
-- **Preview page:** `GET /preview/{job}/v{n}/…?exp&sig` from an edge function, serving only manifest files of that
-  immutable bundle, with headers:
-  - `Content-Security-Policy: sandbox allow-scripts; default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; media-src 'self'; connect-src 'none'; frame-src 'self'; form-action 'none'; base-uri 'none'`
-  - `Referrer-Policy: no-referrer`, `Cache-Control: private, no-store`, `X-Content-Type-Options: nosniff`.
-    The vendored player and runtime come from the same signed path. Nothing is fetched from a CDN.
-- **In the app:** `<iframe sandbox="allow-scripts">`. A per-preview channel id accompanies every `postMessage`; the
-  parent checks the sender is that iframe and the message matches a schema (`time`, `click{x,y,textId}`, `ready`,
-  `error`). The parent sends only `play`, `pause`, `seek`, `apply-edits`. Nothing from the composition can trigger a
-  fetch, a mutation or a new asset grant.
-- **Residual risk, stated plainly:** a malicious composition can still try to exfiltrate what it's given
-  (`connect-src 'none'` and no referrer reduce this; signed URLs are short-lived and bundle-scoped). It can't read
-  the viewer's session or the API.
-- **The UI says** the preview is close but not frame-exact; the MP4 is the truth.
+| Can…                                                                            | Admin     | Creator    | Reviewer                  | Viewer                 |
+| ------------------------------------------------------------------------------- | --------- | ---------- | ------------------------- | ---------------------- |
+| Watch videos, see comments and approvals                                        | ✓         | ✓          | ✓                         | ✓ (comments read-only) |
+| Comment; approve or request changes (not on their own version)                  | ✓         | ✓          | ✓                         |                        |
+| Create, revise, plan, edit (spends credits)                                     | ✓         | ✓          |                           |                        |
+| Revise or edit **someone else's** video (adds a version they author)            | ✓         | ✓          |                           |                        |
+| Owner powers: publish, unpublish, private, rename, delete, incorporate feedback | any video | own videos |                           |                        |
+| Upload media                                                                    | ✓         | ✓          |                           |                        |
+| API keys                                                                        | ✓         | ✓          | ✓ (read and comment only) | ✓ (read only)          |
+| Users, roles, settings, ownership transfer, team webhook, queue                 | ✓         |            |                           |                        |
 
-## 4. Feature A: live progress
+- **Joining:** new people join as **Creator**; `ADMIN_EMAILS` become Admin. Admins change roles on the Admin page.
+  Today's `member` rows migrate to Creator.
+- **Keys and MCP inherit the role:** a Reviewer's key can list, watch and comment through REST and MCP. Mutations
+  outside the role return `forbidden` with the reason ("your role can't create videos"). The MCP tool list is
+  filtered to what the role can do.
+- **Disabled people:** their videos stay and published links keep working. Admins can **Transfer to…** another
+  Creator, which moves owner powers. Until then, admins act as owner.
+- One policy module enforces all of this in the domain layer, so REST, MCP and the UI agree. A role demotion takes
+  effect on the next request (the live account check already re-reads users).
 
-**A1 (ships first, no prompt changes):**
+### Private videos
 
-- `GET /api/v1/videos/{id}/progress` returns `{ attemptId, versionN, stage, step, steps, credits, observedAt, stale }`.
-- It's a pure read and never changes attempt state; outcomes stay with the reconciler.
-- It calls `getSnapshot` for running attempts at most every 5 s per run. A Blobs-backed cache entry coalesces
-  concurrent fetches across Function instances. It serves the last value marked `stale` when upstream fails, and
-  falls back to the stored `attempts.latestStep`.
-- Queued and starting attempts return the stage and queue position from stored rows.
-- The UI polls every 3 s while visible, shows the narration under the stage track, and labels steps and credits as
-  counts, never as percentages.
+- A per-video **Private** toggle (owner or admin). A private video is visible only to its owner and admins: it's
+  hidden from everyone else's Library, search, comments, API and MCP (404, not 403).
+- **Private doesn't block publishing:** publishing is a separate, explicit owner act, and share links work as before.
+- Videos are team-visible by default. **The Library defaults to Everyone (as today)**, with a **Mine** tab, and private
+  videos show a lock.
 
-**A2 (after F0):**
+### Approvals
 
-- **Checkpoints:** `scripts/checkpoint.ts "<message>"` (added to `AGENTS.md` run rules) posts to
-  `/api/internal/runs/{attemptId}/checkpoint` with the attempt's callback token.
-  - Accepted only while that attempt is the latest and `running`.
-  - Sequence-numbered; a late or reordered checkpoint never replaces a newer one.
-  - Bounded: 500-character message, 2 MB bundle, 10/min. Server-chosen keys under `checkpoints/{attemptId}/`.
-  - Never touches callback receipts, leases or outcomes. Cleaned up when the attempt ends.
-  - The preview plays the latest checkpoint bundle.
-- **Render percentage** comes from `render-job.ts` itself (it owns the blocking render) through the same endpoint, not
-  from the agent.
+- Any Reviewer, Creator or Admin, **except the version's author**, can mark a version **Approved** or **Changes
+  requested** (one current verdict per person per version, changeable, with an optional note).
+- It's a **signal only**: shown on the version and in the Library ("2 approved, 1 changes requested"); nothing is
+  blocked.
 
-## 5. Feature B: plan with questions (AI Gateway)
+### Notifications and webhooks
 
-**Flow (web):** the person writes a prompt and presses **Create video**. A dialog asks **"Answer a few questions to
-plan it first?"** with **Plan it** and **Just create**; an admin setting picks which is the default button, and a
-"Don't ask again" box remembers the choice per person.
+- **In-app:** an unread badge on the owner's videos and in the Library, for comments and approvals.
+- **Browser notifications:** like today's "video ready", while the app is open.
+- **Webhooks:**
+  - **Personal:** in Settings, each person may set one signed webhook URL, for events on videos they own:
+    `video.ready`, `video.failed`, `comment.created`, `version.approved`, `version.changes_requested`.
+  - **Team:** admins set one signed webhook URL for all events on all videos.
+  - Both reuse today's signing (`X-Video-Agent-Signature`), outbox, retries and SSRF checks.
+  - The existing per-video `webhookUrl` on API create keeps working.
 
-1. **Questions.** The app shows 3–6 questions, one card each, like Claude's question tool. Each card has 2–4
-   options, an **Other** write-in, and **Skip**. A **Create now** button is always there, and leaving the dialog
-   keeps the prompt.
-2. **Brief.** On **Done**, a second call turns prompt + answers into a refined brief. The person sees it and can edit
-   it, then presses **Create video**.
-3. **Run.** The run's prompt is the original request plus a fenced `Plan (from the questions)` section with the brief
-   and the Q&A. Everything after is today's flow.
+## 4. Feature B: plan with questions
 
-**Gateway calls** (synchronous Function routes; both are short JSON outputs, S1 measures latency):
+**UX:** the Create button becomes a split button. **Plan it first** is the default; **Create now** is beside it. Planning
+opens a side panel next to the prompt, not a modal.
 
-| Call                            | Input                                                     | Output (validated with zod)                                                                                             |
-| ------------------------------- | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `POST /api/v1/plans`            | prompt, aspect, durationSec, mediaIds                     | `{ planId, questions: [{ id, question, why, options: [{ id, label, description }], multiSelect, allowOther }] }` (3–6)  |
-| `POST /api/v1/plans/{id}/brief` | `answers: [{ questionId, optionIds?, other?, skipped? }]` | `{ brief: { goal, audience, keyMessage, beats: [{ text, seconds }], tone, length, callToAction, mustInclude, avoid } }` |
+1. **Routing call (fast, `jev`).** It classifies the request and returns:
+   - `needsQuestions` (detailed prompts skip straight to the brief);
+   - the model for the next call (Haiku, Sonnet or Opus);
+   - a question template (`launch`, `tutorial`, `social`, `changelog`, `sales`, `other`);
+   - suggested length and aspect ("for TikTok" means 9:16), pre-filled and editable.
+2. **Questions (routed model).** 0–6 questions, guided by the template's checklist (audience, key message, length,
+   call to action, tone, must-include, avoid). The model asks only about what the prompt leaves open, in its own
+   words. Each question has 2–4 options, **Other** (write-in) and **Skip**. With 0 questions the panel says "Your
+   prompt covers it" and goes to the brief.
+3. **Brief.** A short, readable, editable brief (goal, audience, key message, beats with seconds, tone, call to
+   action, must-include, avoid). **Create video** is one click away.
+4. **Run.** The run prompt is **the person's original prompt, verbatim**, plus a fenced `Plan (from the questions)`
+   section with the brief and the Q&A.
 
-- **Context:** a build-time, allowlisted digest of `context/` (and the brand kit from `BRAND_ZIP_URL` when set),
-  packaged with the function and identified by hash. Media captions are included, and images go in as vision input
-  where helpful. Everything user-provided goes in as labelled data inside fences, never as instructions. The system
-  prompt says: "you're storyboarding a short video; ask only questions whose answers change the video".
-- **Model:** an admin setting from a server-side allowlist of exact model ids (default: a fast Sonnet). No tool loop
-  is needed.
-- **Records:** a `plans` row (id, userId, prompt, inputs hash, questions, answers, brief, model, tokens, credits,
-  createdAt, usedByVersion, expiresAt 24 h). Each call's credits count in usage views, separate from run credits.
-- **Failure:** if Gateway is unavailable, rate-limited or times out, the dialog says so and offers **Create now**.
-  Planning is never required, and setup reports Gateway as an optional capability that never blocks ordinary videos.
+**Context for the planner:**
+
+- an allowlisted, build-time digest of `context/` and the brand kit (`BRAND_ZIP_URL`), identified by hash;
+- chosen media (captions, and images as vision input);
+- **the person's own last 5 prompts and titles** (never other people's).
+  All of it is passed as fenced, labelled data, never as instructions.
+
+**Revisions:** **Plan it first** also appears on Revise. The router returns `needsQuestions: false` for small, precise
+changes ("make the end card orange"), so it rarely gets in the way.
 
 **API and MCP:**
 
-- `POST /api/v1/videos` and `revise` accept an optional `planId` (the brief is attached server-side from the plan row,
-  owned by the same user and unused), so scripts and webhooks behave exactly as today unless they opt in.
-- MCP gains `plan_video` (returns the questions for the AI client to ask its user) and `plan_brief`; `create_video`
-  accepts `plan_id`.
-- Revisions can plan too: the questions are about the change.
+- `POST /api/v1/plans` (route, then questions) and `POST /api/v1/plans/{id}/brief`.
+- `planId` on create and revise.
+- MCP `plan_video`, `plan_brief`, and `plan_id` on `create_video` and `revise_video`.
+- Without `planId`, API behaviour is unchanged.
 
-## 6. Feature C: edit in the browser, render without new authoring
+**Records and cost:**
 
-- **Editing contract (version 1), required by the run prompt and `AGENTS.md` for new videos:**
-  - each beat is a clip with `data-va-beat="<id>"`, `data-start` and `data-duration`, and **its own GSAP timeline
-    with times local to the beat**;
-  - on-screen text nodes carry `data-va-text="<id>"` (unique), with captions in `summary.json` keyed to the same ids;
-  - the root carries `data-va-contract="1"`.
-    Compositions without the marker show **Edit** disabled, with "Ask for a revision instead".
-- **Editor:** opens a finished version from its preview bundle (§3).
-  - **Step 1:** a beat timeline (drag edges, number inputs, keyboard nudges) and text fields.
-  - **Step 2:** click text in the preview to edit it in place; the preview reports `data-va-text`, and HyperFrames
-    Studio is the reference. OpenCut's and Omniclip's timelines are references for the UI.
-  - Edits are applied by an inert parser (no script execution), with text set as escaped text nodes. Changing beat
-    _k_ shifts later beats; the root duration, `summary.json` caption cues and the new version's `targetDurationSec`
-    are updated together.
-  - The preview updates instantly via `apply-edits`.
-- **Saving** creates an `edits` draft: id, job, base version, author, `rev`, an immutable bundle key and hash,
-  contract version, expiry 7 days.
-  - Save needs `If-Match: rev`; a conflict offers reload, or fork to your own draft.
-  - **Render** freezes that revision and creates vN+1 plus one queued attempt in `render_unchanged` mode, atomically.
-    It uses an `Idempotency-Key`, and retries reuse the frozen bundle.
-- **Render unchanged** run: `prepare-run` restores the frozen bundle and verifies its hash. The prompt says: "Don't
-  change the composition. Run `hyperframes check`; if it fails, stop and report. Render." `render-job` re-hashes the
-  composition before rendering and fails on any difference. It's still an Agent Runner (rendering needs Chrome and
-  FFmpeg); S4 measures cost.
-- **Prior art:** browser video editors (OpenCut, OpenReel, Omniclip, WebAV) edit video frames with WebCodecs; ours are
-  HTML, so we borrow their timeline UI, not their engines. S7 asks whether the browser could render the MP4 itself
-  (WebCodecs encodes fine; faithfully turning DOM into frames is the blocker). It's research only.
-- **Fallback if S8 fails:** generate compositions from beat JSON with our own compiler for editable videos (less
-  creative range, fully editable).
+- `plans` rows: route decision, questions, answers, brief, models, tokens and credits per call, expiry 24 h, single
+  use.
+- Gateway failures (unavailable, 429, timeout) fall back to **Create now** with a message. Setup reports Gateway as an
+  optional capability that never blocks ordinary videos.
+- **Admins** pick the default deep model from an allowlist and see usage **split into runs and planning**. **Creators**
+  see **my usage this month**.
 
-## 7. Feature D: comments, pinned feedback, incorporate
+## 5. Feature D: comments, approvals UI, incorporate feedback
 
-- **`comments`:**
-  - id, job, versionN, authorId, body (≤2,000 chars), `timeSec?` and `x?`/`y?` (normalized 0–1 within the displayed
-    video content, letterboxing excluded, always paired), createdAt, editedAt, resolvedAt/By, deletedAt;
-  - rendered as text only.
-- **Pinning:** pause on a ready version, click the frame, type. Markers appear on the progress bar and as dots, only
-  on the version they were made on. Clicking a comment seeks there. No HTML preview is needed (it's the MP4).
-- **Permissions:** everyone signed in can read and comment; authors edit and delete their own; the video owner and
-  admins resolve and delete any.
-- **Notifications:** an in-app unread badge for the owner, with a per-user read model (`comment_reads`).
-- **Incorporate feedback:**
-  - Select open comments on one ready version and press the button. It's disabled, with the reason, while another
-    version is unfinished.
-  - It creates a revision with `version_comments` rows that snapshot each comment (body, author, timeSec, x/y) at
-    queue time. The prompt lists them as fenced, labelled data; total length is bounded.
-  - **Frame stills are made in the run:** `prepare-run` pulls the parent MP4 and runs `ffmpeg -ss` per pinned comment
-    into `video/feedback/`, with a dot drawn at x/y. No browser capture or upload.
-  - Comments are marked "addressed in vN+1" only in the successful finalize transaction. Failed, cancelled or
-    replayed attempts change nothing. Resolving stays a separate human action.
-- **MCP:** `list_comments`, `add_comment`; `revise_video` accepts `comment_ids`.
+- **Comments:** text plus an optional pin (`timeSec`, and `x`/`y` normalized within the displayed video content,
+  letterboxing excluded). Pins show on the progress bar and as dots, only on their own version.
+  - Authors edit and delete their own; owner and admins resolve or delete any.
+  - Viewers read only. Private videos hide their comments too.
+- **Incorporate feedback** (owner or admin):
+  1. Open comments on one ready version are listed with checkboxes, all checked, plus an optional note ("ignore the
+     colour comments"). Resolved comments are excluded.
+  2. A revision is created with `version_comments` snapshots (body, author, time, position) taken at queue time.
+  3. The run's `prepare-run` makes frame stills with `ffmpeg -ss` and draws a dot at the pin.
+  4. Comments are marked "addressed in vN+1" only when that version finalizes successfully.
+     The action is disabled, with the reason, while another version is unfinished.
+- **Approvals UI:** Approve and Request changes buttons with an optional note on each version; counts in the Library.
+- MCP: `list_comments`, `add_comment`, `set_verdict`; `revise_video` accepts `comment_ids` (owner or admin).
 
-## 8. Feature E: media library
+## 6. Feature A: live progress
 
-**E1 (images):**
+- **A1:** `GET /videos/{id}/progress`, a pure read.
+  - It reads the runner snapshot at most every 5 s per run, through a shared Blobs cache across instances, and falls
+    back to the stored step, marked `stale` when it is.
+  - The page shows plain-language narration under the stage track, plus steps and credits so far as counts.
+  - It polls every 3 s while visible.
+- **A2:** `scripts/checkpoint.ts` (added to `AGENTS.md`) posts milestones ("Writing the end card", "Checking, round 2")
+  and a composition snapshot to a hardened internal endpoint: the attempt token, latest running attempt only,
+  sequence numbers, size and rate bounds, its own store and cleanup.
+  - `render-job.ts` reports **Rendering N%** itself.
+  - The page plays the latest snapshot in the sandboxed preview (§7). No raw logs.
 
-- PNG, JPEG and WebP, up to 5 MB, uploaded in one request (under the Function body limit).
-- The server sniffs the type, decodes it (pixel limit 40 MP), computes the sha256 and dimensions, and quarantines the
-  upload until it's verified. Files are served with a fixed type and `nosniff` from new signed routes.
-- **`media`:** id, name, caption (≤300 chars), mime, bytes, sha256, width, height, uploadedBy, createdAt, deletedAt.
-  The library is team-wide.
-- **Media page:**
-  - a grid with "used in N videos" and an empty state;
-  - drag-and-drop upload with per-file progress and errors;
-  - delete by the uploader or an admin (soft delete).
-- **Add media:** chips on New video, Revise and the plan dialog.
-  - At queue time, `version_media` snapshots media id, sha256, blob key and caption into the version.
+## 7. Shared foundation F0: the sandboxed composition preview
+
+- Finalize extracts each version's composition into `bundles/{job}/v{n}/` with a manifest. Extraction validates paths
+  (no traversal or links) and entry counts and sizes, and excludes MP4s.
+- `GET /preview/...?exp&sig` (edge) serves only manifest files of an immutable bundle, or a checkpoint bundle, with:
+  - `Content-Security-Policy: sandbox allow-scripts; default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; media-src 'self'; connect-src 'none'; frame-src 'self'; form-action 'none'; base-uri 'none'`
+  - `Referrer-Policy: no-referrer`, `Cache-Control: private, no-store`, `nosniff`.
+    The player and runtime are vendored from the pinned package.
+- The app embeds `<iframe sandbox="allow-scripts">` with a per-preview channel. It accepts only schema-valid messages
+  from that iframe (`time`, `click{x,y,textId}`, `ready`, `error`) and sends only `play`, `pause`, `seek`,
+  `apply-edits`. Signed URLs refresh before they expire without losing the playhead.
+- **Residual risk, stated:** a composition can try to exfiltrate what it's given. It can't read the session or the API.
+  The UI notes that the preview is close to the final video but not exact.
+
+## 8. Feature C: edit in the browser
+
+**Editing contract v1** (required for new videos by the prompt, `AGENTS.md` and a skill addendum; editability wins
+over creative range):
+
+- **Beats:** each is a clip with `data-va-beat`, `data-start`, `data-duration` and **its own beat-local GSAP
+  timeline**. Beats don't depend on each other's timing, so they can be reordered and deleted.
+- **Text:** unique `data-va-text` ids; `summary.json` captions are keyed to them.
+- **Colours:** elements take colours from CSS custom properties named for brand roles (`--va-color-<role>`, for
+  example `bg`, `text`, `accent`), declared once at the root and drawn from the brand palette.
+- **Media slots:** `<img>`/`<video>` with `data-va-media="<slot>"` referencing `assets/media/<mediaId>`.
+- **Root:** `data-va-contract="1"`.
+
+**Editor v1, all on finished contract-1 videos** (others show **Edit** disabled with "Ask for a revision instead"):
+
+- change text (fields, and clicking text in the preview);
+- beat timing (drag edges, number inputs, keyboard nudges);
+- brand colours (swap a role's colour within the brand palette);
+- reorder or delete beats;
+- swap a media slot for another library item.
+
+**How edits apply:**
+
+- An inert parser (no script execution) applies edits to the bundle. Text is set as escaped text nodes. Beat starts,
+  root duration, caption cues and the new version's target length are recomputed together. Previews update instantly.
+- **Each person gets their own draft** (`edits`, expiry 7 days), based on a version. If someone else renders first,
+  the editor says "v5 now exists: start from v5, or render yours as v6".
+- **Render** (Idempotency-Key) freezes the draft and creates **a new version labelled "edited from vN"**, with one
+  queued **render-unchanged** run:
+  - the run restores the frozen bundle and verifies its hash;
+  - it runs `hyperframes check`; if that fails, it **stops**, and the UI explains why and offers **Revise instead**;
+  - `render-job` re-hashes before rendering, and any difference fails the run.
+- **Prior art:** OpenCut and Omniclip timelines (UI patterns); HyperFrames Studio (click-to-select). S7 researches
+  rendering in the browser.
+
+## 9. Feature E: media library
+
+- **Types and limits:**
+  - PNG, JPEG and WebP up to 5 MB.
+  - SVG up to 1 MB: **sanitized on upload** (scripts, event handlers and external references stripped), with the
+    original kept for download. Runs and previews use the clean copy, served only inside the sandbox or as an
+    attachment.
+  - **MP4 clips** up to 100 MB and 2 minutes: H.264/AAC checked with ffprobe in the run that first uses them, plus a
+    container check on upload.
+  - **Fonts:** WOFF2, TTF or OTF up to 2 MB, with no licence checks (owner decision).
+- **Uploads:**
+  - Under 5 MB: one request.
+  - Over 5 MB: upload sessions. Sessions are uploader-bound with server keys, parts of at most 5 MB with hashes,
+    idempotent completion, a whole-file hash, quotas and abandoned-part cleanup. Assembly happens outside the request
+    path, either in a background function or by streaming in the run.
+  - The server sniffs types from bytes, decodes images (40 MP limit), and quarantines files until they're verified.
+- **Who:** Creators and Admins upload; everyone can view. The library is team-wide. The uploader or an admin can
+  soft-delete. Bytes are kept while any version, plan, draft or queued attempt references them.
+- **Use:**
+  - **Add media** chips on create, revise, the plan panel and the editor's slot swap.
+  - `version_media` snapshots id, hash, key and caption at queue time.
   - `prepare-run` downloads into `video/assets/media/` and verifies hashes.
-  - The prompt lists files with their captions as data.
-  - Media is **by reference**: it never enters `source.tar.gz`. Revisions re-download via `version_media`, and soft
-    delete keeps the bytes while any version, plan or queued attempt references them.
-- **E2 (later):** SVG (served only inside the sandbox, or as an attachment) and MP4, behind an upload-session design:
-  - uploader-bound expiring sessions and server keys;
-  - part limits and hashes, idempotent completion;
-  - decode and codec validation, quotas, abandoned-part cleanup;
-  - assembly where there are no Function limits.
+  - Media is by reference, never inside `source.tar.gz`.
+  - Fonts are offered to the agent in the prompt and copied into the project.
+- **Media page:** a grid with thumbnails or posters, a "used in N videos" count, captions, drag-and-drop upload with
+  progress and resume, and an empty state.
 
-## 9. Cross-cutting changes
+## 10. Cross-cutting
 
-| Area                      | Change                                                                                                                                                                                                                                                                                                                           |
-| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Data (new migration only) | `plans`, `edits`, `comments`, `comment_reads`, `version_comments`, `media`, `version_media`; version `mode` (`author` default, `render_unchanged`); settings columns: plan default, plan model                                                                                                                                   |
-| Stores and cleanup        | New Blobs stores or prefixes: `bundles`, `checkpoints`, `edits`, `media`, `brand-cache`, each added to `BlobStoreName`, `CleanupRow.store` and `deleteVideo`'s cleanup rows. The sweep gains an expiry worker (plans 24 h, edits 7 d, checkpoints at attempt end). Late writers recheck deletion before commit, as finalize does |
-| Policy                    | New actions for plans, edits (read, save, fork, render), comments (create, edit, resolve, delete), media (upload, delete); enforced in the domain layer so REST and MCP share them; paid routes keep the setup gate                                                                                                              |
-| API                       | All new routes in OpenAPI with errors and pagination; `If-Match` and `PUT` allowed in CORS; idempotency on render, incorporate and media upload                                                                                                                                                                                  |
-| Edge                      | `/preview/{job}/v{n}/*` (sandbox CSP, manifest-only); `/media/{id}` and `/media/{id}/thumb` (signed, fixed MIME)                                                                                                                                                                                                                 |
-| Runs                      | `prepare-revision` → `prepare-run` (bundles, media, feedback stills); `checkpoint.ts`; contract and render-unchanged prompts; `AGENTS.md` updated in the same change                                                                                                                                                             |
-| Setup page                | AI Gateway: optional capability (ok, unavailable or unknown)                                                                                                                                                                                                                                                                     |
+| Area                       | Change                                                                                                                                                                                                                                                                                                                                                                                                              |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Data (new migrations only) | `users.role` widened (`admin`, `creator`, `reviewer`, `viewer`; `member` → `creator`); `jobs.private`, `jobs.ownerId` transfer audit; `verdicts`; `user_webhooks`, settings team webhook; `plans`; `comments`, `comment_reads`, `version_comments`; `edits`; `media`, `media_uploads`, `version_media`; version `mode` (`author`, `render_unchanged`) and `editedFromN`; settings: plan model allowlist and default |
+| Stores and cleanup         | `bundles`, `checkpoints`, `edits`, `media`, `media-parts`, `brand-cache`: each added to `BlobStoreName`, `CleanupRow.store` and delete paths; the sweep's expiry worker covers plans, edits, uploads and checkpoints; late writers recheck deletion                                                                                                                                                                 |
+| Policy                     | One action matrix (§3) enforced in the domain layer for REST and MCP; private videos are 404 to non-owners; the setup gate stays on paid routes                                                                                                                                                                                                                                                                     |
+| API                        | Everything in OpenAPI with errors and pagination; `If-Match`/`PUT` in CORS; idempotency on render, incorporate, upload completion and plan-to-create                                                                                                                                                                                                                                                                |
+| Webhooks                   | New event types; personal and team destinations; same outbox, signing and retries                                                                                                                                                                                                                                                                                                                                   |
+| Edge                       | `/preview/*` (sandbox CSP); `/media/{id}`, thumbs and posters (signed, fixed MIME, `nosniff`; SVG attachment or sandbox only)                                                                                                                                                                                                                                                                                       |
+| Runs                       | `prepare-revision` → `prepare-run` (bundles, media, fonts, feedback stills); `checkpoint.ts`; contract and render-unchanged prompts; `AGENTS.md` updated in the same change                                                                                                                                                                                                                                         |
+| Usage                      | Runs and planning split for admins; "my usage this month" for creators                                                                                                                                                                                                                                                                                                                                              |
 
-## 10. Order of work
+## 11. Order of work
 
-1. **A1 live progress** (snapshot only). Independent; ships first.
-2. **S1, then B (plan with questions).** Our team has Gateway access; S1 measures latency and cost.
-3. **D comments and incorporate.** No preview needed; can run in parallel with B.
-4. **E1 media (images).** Parallel with D; B and D use it when present.
-5. **S2 + S8, then F0 (preview) and C (editor + render unchanged).** S4 measures the render cost.
-6. **A2 checkpoints and live composition** (needs F0).
-7. **E2** (SVG and video uploads, after S5). **S7** browser render stays research.
+1. **R:** roles, private videos, approvals, ownership transfer, webhooks.
+2. **B:** plan with questions (S1 first).
+3. **D:** comments and incorporate feedback (uses R's permissions and approvals).
+4. **A1:** live progress, snapshot only.
+5. **S2 and S8, then F0, then C** (the editor), with **A2** after F0. S4 measures the render-unchanged cost.
+6. **E:** the media library. Images and fonts first, then SVG and MP4 after S5. The editor's media swap waits for E.
+7. **S7:** research only.
 
-## 11. Spikes
+## 12. Spikes
 
-| #   | Question                                                                                                                                                                                                                                                                                       | Done when                                                                                |
-| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| S1  | Latency, tokens and credits for questions + brief with two models from a deployed Function; 429 and timeout behaviour                                                                                                                                                                          | Measured calls from production, numbers in SPIKES.md                                     |
-| S2  | The real nested player and runtime (vendored) inside the §3 CSP, in Chrome and Safari: play, seek, click to text id, fonts and media from signed bundle URLs, `apply-edits`, URL renewal; negative tests (no API access with the viewer's session, forged messages ignored, no network egress) | All checks pass in both browsers, as an automated test                                   |
-| S4  | Full time and credits for a render-unchanged run (15 s and 60 s, with fonts and media): setup, check, render, upload, finalize; cold and warm; hash mismatch fails                                                                                                                             | Measurements in SPIKES.md                                                                |
-| S5  | (E2) Upload sessions at the configured maxima for SVG and MP4: assembly memory and time, resume, duplicates, hash mismatch, Range playback, cleanup                                                                                                                                            | Before E2 only                                                                           |
-| S7  | Browser render with WebCodecs plus a faithful DOM-to-frame path                                                                                                                                                                                                                                | Timeboxed research; "no" is fine                                                         |
-| S8  | Edit round trip: a contract-1 composition with nested scenes, a font, an image; shorten and lengthen a middle beat, change long text; captions follow; restore in a fresh run and render unchanged                                                                                             | Saved edits survive exactly, with no model repair; unsupported compositions fail clearly |
+| #   | Question                                                                                                                                                                                                                    | Done when                                                                                                                      |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| S1  | Gateway from a deployed Function: `jev` routing latency and cost, questions and brief with Haiku, Sonnet and Opus; 429 and timeout behaviour                                                                                | Numbers in SPIKES.md and default models chosen                                                                                 |
+| S2  | The vendored nested player inside the §7 CSP in Chrome and Safari: play, seek, click to text id, fonts and media from signed URLs, `apply-edits`, URL renewal; no session or API access, forged messages ignored, no egress | An automated test passes in both browsers                                                                                      |
+| S4  | Time and credits of a render-unchanged run (15 s and 60 s, with fonts and media), cold and warm; hash mismatch fails                                                                                                        | Numbers in SPIKES.md                                                                                                           |
+| S5  | Upload sessions at the limits (100 MB MP4, 1 MB SVG): assembly memory and time, resume, duplicates, hash mismatch, Range playback, cleanup; SVG sanitizer against a malicious corpus                                        | All pass, corpus in tests                                                                                                      |
+| S7  | Browser render (WebCodecs plus faithful DOM-to-frames)                                                                                                                                                                      | Timeboxed; "no" is fine                                                                                                        |
+| S8  | Contract-1 round trip: retime, reorder and delete beats, change text, swap a colour role and a media slot; captions follow; a fresh run renders unchanged                                                                   | Edits survive exactly with no model repair; side-by-side quality check against free-form videos is recorded (editability wins) |
 
-(Draft 1's S3 and S6 are gone: the Gateway no longer writes compositions.)
+## 13. Tests and release gates
 
-## 12. Tests and release gates per feature
+| Feature | Unit + integration (PGlite, fakes)                                                                                                                                                    | Playwright (mock)                                                             | Live gate                                                         |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| R       | Full role × action matrix (REST and MCP), private 404s, self-approval refused, transfer, demotion takes effect, keys inherit role, webhook signing and fan-out                        | Role-specific UI (Reviewer sees no Create), private lock, Mine tab, approvals | Reviewer key via MCP can comment but not create                   |
+| B       | Router and question zod validation, 0-question path, fenced inputs (prompt, answers, history, captions), plan ownership, single use and expiry, Gateway down/429/timeout, usage split | Split button, panel, skip, Other, 0 questions, brief edit, fallback           | Plan, answer, run on production; credits split                    |
+| D       | Comment permissions incl. private and viewers, coordinates, snapshots, addressed only on success                                                                                      | Pins with letterboxing, checkboxes, note, unread badge                        | Incorporate run gets stills; only included comments addressed     |
+| A       | Cache coalescing, stale, checkpoint ordering and bounds                                                                                                                               | Narration, hidden-tab pause, live preview                                     | Several viewers, bounded upstream calls                           |
+| F0/C    | Patcher invariants (retime, reorder, delete, colour, media), inert parsing, per-person drafts, frozen render, hash check, check-fail stop                                             | All five edit kinds, "v5 exists" flow, unsupported versions                   | Edit, render; MP4 and VTT match                                   |
+| E       | Sniff, decode, sanitize, sessions, quotas, references, soft delete                                                                                                                    | Upload, resume, errors, picker, empty library                                 | 100 MB clip and a font used in a video, revised after soft delete |
 
-| Feature | Unit + integration (PGlite, fakes)                                                                                                                     | Playwright (mock build)                                                   | Live gate                                                         |
-| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| A1      | Cache coalescing, stale/error/null usage, queued/starting, retry identity, no state changes from reads                                                 | Hidden-tab polling stops, stale label, cancel/retry                       | Several viewers, bounded upstream calls                           |
-| B       | Zod validation of model output, fenced inputs, plan ownership/expiry/single use, Gateway down/429/timeout, usage accounting                            | Dialog: plan, skip one, Other, skip all, Create now, edit brief, errors   | Questions + brief + run on production, credits recorded           |
-| C       | Edit patcher invariants (timing shift, captions, target), inert parsing/escaping, If-Match conflicts, frozen render input, render-unchanged hash check | Text/timing edits, conflict reload/fork, unsupported version              | Edit → render → MP4 and VTT match the edit                        |
-| D       | Scope/permission matrix, coordinate validation, snapshot at queue, addressed only on success, deletion                                                 | Pin accuracy with letterboxing, unread badge, incorporate disabled states | Incorporate run receives stills; only included comments addressed |
-| E1      | Sniff/decode/size failures, quarantine, soft delete with references, permissions                                                                       | Upload states, picker, empty library                                      | Upload → use in a video → revise after soft delete                |
-| F0/A2   | Manifest/path/signature, late-checkpoint ordering, cleanup                                                                                             | CSP headers, forged messages, canaries                                    | Production preview plays; old deploys can't serve bundles         |
-
-Existing CI (typecheck, lint, vitest, Playwright, `openapi:check`, migrations applied in PGlite) stays required.
-
-## 13. Owner decisions
-
-1. **Plan dialog default:** show the dialog with **Plan it** or **Just create** as the default button? (Proposed: the
-   dialog shows; default button **Plan it**; "Don't ask again" per person.)
-2. **Planning model:** a fast Sonnet by default; may admins pick others from the allowlist?
-3. **Edits and incorporate:** anyone may make an edit or incorporate feedback (like revisions today), or owner and
-   admins only? (Proposed: anyone; it creates a new version, never changes an existing one.)
-4. **Render unchanged is a hard guarantee:** if the check fails, stop rather than let the agent fix it? (Proposed: yes;
-   offer "Revise instead".)
-5. **Media:** team-wide, images-only E1 at 5 MB (proposed); when do SVG and video matter?
-6. **Notifications for comments:** in-app badge only (proposed), or also browser notifications and webhooks?
+Existing CI (typecheck, lint, vitest, Playwright, `openapi:check`, migrations in PGlite) stays required.
 
 ## Decision log
 
-**Draft 2 (2026-10-31), owner input:**
+**Owner interview (2026-10-31), draft 3:**
 
-- Planning became **plan with questions**: the Gateway asks multiple-choice clarifying questions (with write-in,
-  skippable) and returns a refined brief that's appended to the run prompt. It never writes compositions. Removed:
-  Gateway HTML, the planning draft lifecycle and its durable-task machinery, S3 and S6.
-- The gtm-engineering team has AI Gateway access (owner). S1 measures cost and latency only.
+- **Planning:**
+  - Split button, **Plan it first** by default, and a side panel, not a modal.
+  - The router may return 0 questions; a fast `jev` routing call picks the model, template and whether to ask, and
+    suggests length and aspect.
+  - Questions are model-written and guided by a checklist.
+  - The original prompt is kept verbatim with the brief appended. The brief is shown, editable, and one click to go.
+  - Revisions plan only for big changes. The planner sees the person's last 5 prompts and titles.
+  - The default deep model is a fast Sonnet; admins can switch.
+- **Roles:** Admin, Creator, Reviewer, Viewer. New people join as **Creator**. Reviewers and Viewers never spend
+  credits. Keys and MCP inherit the role. Creators can revise others' videos (a new version they author). Leavers'
+  videos stay, and admins can transfer them.
+- **Privacy:** a per-video Private toggle (owner and admins see it); private videos can still be published. The Library
+  defaults to Everyone, with a Mine tab.
+- **Feedback:** everyone signed in comments; Viewers read only.
+  - Owner or admin incorporates feedback: checkboxes, all checked, plus a note.
+  - Approved or Changes requested is a signal only; nobody approves their own version.
+  - Notifications: in-app badge, browser notification, personal and team webhooks.
+- **Editor:** text, timing, brand colours, reorder or delete beats, and swap media in v1. Old videos say "Revise
+  instead".
+  - Edits make a new version, labelled "edited from vN"; each person has their own draft.
+  - Render unchanged stops on a check failure.
+  - Editability wins over creative range.
+- **Media:** images, SVG (sanitized, original kept), MP4 up to 100 MB and 2 min, and fonts (no licence checks), all in
+  the first release. Creators and admins upload; everyone views.
+- **Progress:** plain-language narration plus a live preview, with no raw logs.
+- **Cost:** split runs and planning on the admin usage page, plus "my usage this month".
+- **Order:** R, B, D, A, then the editor, then media.
 
-**Reviews of draft 1** (Fable 5 high, runner `6ae61fb3247cb8bb680b47d4`, 844 credits; Codex `gpt-6.1-sol` high,
-runner `6ae61fb3ff57a9beee1f8711`, 192 credits). Claims checked against the code before acting.
+**Draft 2:** plan with questions replaced Gateway-written storyboards; the gtm-engineering team has Gateway access.
 
-Taken:
+**Reviews of draft 1** (Fable 5 high, 844 credits; Codex `gpt-6.1-sol` high, 192 credits). Taken:
 
-- No new version states; drafts are separate and a version is created only at render or approval (both).
-- Planning is opt-in per request for API and MCP (`planId`); the admin default affects only the web dialog (Fable).
-- Media by reference, snapshotted per version, because archives drop MP4s (Fable; verified `render-job.ts:58`).
-- Render unchanged sets the target from the edit and updates captions, because finalize's ±25% check and
-  `summary.json` captions would otherwise reject or contradict edits (both; verified).
-- An explicit editing contract with beat-local timing, and the S8 round-trip spike (Codex).
-- Preview bundles extracted by finalize; preview CSP, vendored runtime, message validation and residual-risk statement
-  (both; verified the player's nested iframe and CDN default).
-- A1 snapshot-only first; checkpoints hardened as A2; render percentage from `render-job` (both).
-- Prompt inputs as labelled data; bounded sizes; injection fixtures for each new channel (both).
-- E1 images-only single-request uploads; E2 upload sessions (both).
-- Comment snapshots, addressed only on successful finalize, stills made by ffmpeg in the run (Codex; Fable for the
-  stills).
-- Cleanup and expiry for every new store, a new migration, a policy and API matrix covering REST, MCP and CORS, the
-  per-feature test matrix (both).
-- Gateway as an optional capability with per-call usage accounting; exact model allowlist (Codex).
-- Fact fix: skill references are ≈150 KB, not 346 KB (Fable).
+- drafts outside version states;
+- opt-in planning for API and MCP;
+- media by reference, because archives drop MP4s;
+- render unchanged fixing the target length and captions;
+- the editing contract and S8;
+- preview bundles, the CSP, vendored runtime and message validation;
+- snapshot-first progress and hardened checkpoints;
+- labelled prompt inputs;
+- comment snapshots, addressed on success, with stills made in the run;
+- cleanup for every store, new migrations only, the policy and API matrix, the per-feature tests;
+- Gateway as an optional capability with usage accounting.
 
 Not taken:
 
-- Archiving input MP4s inside source archives (Codex): by reference is simpler and keeps one copy.
-- A deterministic beat-to-HTML compiler as the default (Codex): kept as the fallback if S8 fails, since it narrows
-  creative range.
-- A short planning agent run instead of the Gateway (Codex): the questions flow needs seconds, not minutes; S1 still
-  measures Gateway cost.
-- Fable's note that Enterprise plans lack AI Gateway: true in general, but the owner confirmed our team has access.
+- archiving input MP4s (by reference instead);
+- a beat-to-HTML compiler as the default (fallback only if S8 fails; the owner chose editability, so the contract
+  stands);
+- a planning agent run (the Gateway is seconds, not minutes).
