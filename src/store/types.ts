@@ -20,6 +20,7 @@ import type {
   NotificationRow,
   PlanRow,
   CommentRow,
+  VersionCommentRow,
   GatewayCallRow,
   WebhookDeliveryRow,
   UserWebhookRow,
@@ -112,6 +113,11 @@ export interface Repo {
   /** Not deleted, oldest first; optionally one version. */
   listComments(jobId: string, versionN?: number): Promise<CommentRow[]>
   getCommentReadAt(userId: string, jobId: string): Promise<string | null>
+  insertVersionComments(rows: VersionCommentRow[]): Promise<void>
+  /** In position order; all versions of the video when `versionN` is left out. */
+  listVersionComments(jobId: string, versionN?: number): Promise<VersionCommentRow[]>
+  /** Marks the comments addressed in version n (only those still on this video and not deleted). */
+  markCommentsAddressed(jobId: string, commentIds: string[], n: number): Promise<void>
   /** Per video: comments not deleted, and those by others newer than `userId`'s read watermark. */
   commentCounts(jobIds: string[], userId: string | null): Promise<Record<string, CommentCounts>>
   setCommentReadAt(userId: string, jobId: string, readAt: string): Promise<void>

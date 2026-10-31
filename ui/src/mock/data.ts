@@ -54,6 +54,7 @@ function ready(
     plan: null,
 
     verdicts: { approved: 0, changesRequested: 0, mine: null },
+    incorporates: 0,
 
     attempts: 1,
     stage: 'ready',
@@ -159,6 +160,7 @@ export const videos: Video[] = [
       plan: null,
 
       verdicts: { approved: 0, changesRequested: 0, mine: null },
+      incorporates: 0,
 
       attempts: 1,
       stage: 'running',
@@ -185,6 +187,7 @@ export const videos: Video[] = [
       plan: null,
 
       verdicts: { approved: 0, changesRequested: 0, mine: null },
+      incorporates: 0,
 
       attempts: 1,
       stage: 'queued',
@@ -310,6 +313,7 @@ export const videos: Video[] = [
       plan: null,
 
       verdicts: { approved: 0, changesRequested: 0, mine: null },
+      incorporates: 0,
 
       attempts: 1,
       stage: 'failed',

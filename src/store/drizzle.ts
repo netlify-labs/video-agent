@@ -393,6 +393,27 @@ function repoFor(db: Db): Repo {
         .groupBy(c.jobId, r.readAt)
       return Object.fromEntries(rows.map((x) => [x.jobId, { count: x.count, unread: x.unread }]))
     },
+    insertVersionComments: async (rows) => {
+      if (rows.length) await db.insert(t.versionComments).values(rows)
+    },
+    listVersionComments: async (jobId, n) =>
+      (await db
+        .select()
+        .from(t.versionComments)
+        .where(
+          and(
+            eq(t.versionComments.jobId, jobId),
+            n === undefined ? undefined : eq(t.versionComments.versionN, n),
+          ),
+        )
+        .orderBy(asc(t.versionComments.versionN), asc(t.versionComments.position))),
+    markCommentsAddressed: async (jobId, ids, n) => {
+      if (ids.length === 0) return
+      await db
+        .update(t.comments)
+        .set({ addressedInN: n })
+        .where(and(eq(t.comments.jobId, jobId), inArray(t.comments.id, ids), isNull(t.comments.deletedAt)))
+    },
     getCommentReadAt: async (userId, jobId) =>
       (
         await db

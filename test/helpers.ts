@@ -1,4 +1,9 @@
+import { readdirSync, readFileSync } from 'node:fs'
+import { PGlite } from '@electric-sql/pglite'
+import { drizzle } from 'drizzle-orm/pglite'
+import * as schema from '../db/schema.js'
 import { createApp } from '../src/app.js'
+import { createDrizzleStore } from '../src/store/drizzle.js'
 import { tick } from '../src/domain/reconciler.js'
 import { finalizeAttempt } from '../src/domain/finalize.js'
 import { receiveCallback } from '../src/domain/callback.js'
@@ -96,4 +101,15 @@ export function harness(
     drive,
     attempts: (jobId) => deps.store.listAttempts(jobId),
   }
+}
+
+/** A Drizzle store on PGlite with every committed migration applied. */
+export async function pgStore() {
+  const pg = new PGlite()
+  const dir = new URL('../netlify/database/migrations/', import.meta.url)
+  for (const m of readdirSync(dir).sort()) {
+    const sql = readFileSync(new URL(`${m}/migration.sql`, dir), 'utf8')
+    for (const stmt of sql.split('--> statement-breakpoint')) if (stmt.trim()) await pg.exec(stmt)
+  }
+  return createDrizzleStore(drizzle({ client: pg, schema }))
 }

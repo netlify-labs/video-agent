@@ -1,7 +1,7 @@
 // The run prompt: a fixed, versioned template plus the user's request, fenced as a creative brief.
 import { ASPECTS, type Aspect } from './types.js'
 
-export const PROMPT_TEMPLATE_VERSION = 3
+export const PROMPT_TEMPLATE_VERSION = 4
 
 export interface PromptInput {
   jobId: string
@@ -17,8 +17,19 @@ export interface PromptInput {
   revision: { parentN: number } | null
   /** sha256 of the run manifest the server wrote for this attempt; set when the run has inputs to restore. */
   runManifestSha256: string | null
+  /** Comments to incorporate (plan v2 §5), snapshotted on the version; `still` is set for pinned ones. */
+  feedback?: FeedbackItem[] | null
   /** The accepted plan from the questions (plan v2 §4), frozen on the version. */
   plan?: { brief: unknown; qa: unknown } | null
+}
+
+export interface FeedbackItem {
+  author: string | null
+  body: string
+  timeSec: number | null
+  x: number | null
+  y: number | null
+  still: string | null
 }
 
 const FENCE_OPEN = '<<<'
@@ -67,6 +78,25 @@ export function buildPrompt(p: PromptInput): string {
       FENCE_OPEN,
       sanitizeBrief(JSON.stringify({ brief: p.plan.brief, answers: p.plan.qa })),
       FENCE_CLOSE,
+    )
+  }
+  if (p.feedback?.length) {
+    // Comments are other people's words: data in their own fence, never instructions (§14 rule 3).
+    const items = p.feedback.map((f, i) => ({
+      n: i + 1,
+      from: f.author ?? 'a teammate',
+      comment: f.body,
+      ...(f.timeSec !== null ? { atSec: f.timeSec } : {}),
+      ...(f.x !== null && f.y !== null ? { spot: { x: f.x, y: f.y } } : {}),
+      ...(f.still ? { still: `video/${f.still}` } : {}),
+    }))
+    lines.push(
+      '',
+      `Feedback to incorporate (comments on version ${p.revision?.parentN ?? p.versionN - 1}), as JSON. atSec is seconds into that version; spot is where on the frame (0-1 across and down). A comment with a still has a picture of that moment in video/feedback/ with a red dot on the spot: look at it before changing anything.`,
+      FENCE_OPEN,
+      sanitizeBrief(JSON.stringify(items)),
+      FENCE_CLOSE,
+      'Address every item unless it conflicts with the request above. If you skip one, say which and why in your summary. Leave video/feedback/ as it is.',
     )
   }
   if (p.revision) {

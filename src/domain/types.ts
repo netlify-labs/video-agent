@@ -303,6 +303,19 @@ export interface CommentRow {
   deletedAt: string | null
 }
 
+export interface VersionCommentRow {
+  jobId: string
+  versionN: number
+  commentId: string
+  position: number
+  authorId: string
+  authorName: string | null
+  body: string
+  timeSec: number | null
+  x: number | null
+  y: number | null
+}
+
 export type NotificationType = 'comment.created' | 'version.approved' | 'version.changes_requested'
 
 export interface NotificationRow {

@@ -266,6 +266,25 @@ export const comments = pgTable(
   (t) => [index('comments_job_idx').on(t.jobId, t.createdAt)],
 )
 
+// Comments a version was asked to incorporate, snapshotted when it was queued (plan v2 §5): later edits or
+// deletes of the comment don't change what the run was given.
+export const versionComments = pgTable(
+  'version_comments',
+  {
+    jobId: text('job_id').notNull(),
+    versionN: integer('version_n').notNull(),
+    commentId: text('comment_id').notNull(),
+    position: integer('position').notNull(),
+    authorId: text('author_id').notNull(),
+    authorName: text('author_name'),
+    body: text('body').notNull(),
+    timeSec: doublePrecision('time_sec'),
+    x: doublePrecision('x'),
+    y: doublePrecision('y'),
+  },
+  (t) => [primaryKey({ columns: [t.jobId, t.versionN, t.commentId] })],
+)
+
 // Per-person read watermark for a video's comments (plan v2 §5): drives the unread badge.
 export const commentReads = pgTable(
   'comment_reads',

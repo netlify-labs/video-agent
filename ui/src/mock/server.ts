@@ -293,6 +293,16 @@ export function installMock() {
       return json(withComments(vid))
     }
     if (p === '/api/v1/videos' && method === 'POST') return json(videos[0], 202)
+    // Revise (and incorporate): the last request body is kept for tests.
+    const rv = /^\/api\/v1\/videos\/([^/]+)\/versions$/.exec(p)
+    if (rv?.[1] && method === 'POST') {
+      const b = await readBody(init, input)
+      ;(window as unknown as { __lastRevise?: unknown }).__lastRevise = b
+      const vid = videos.find((x) => x.id === rv[1])
+      return vid
+        ? json(withComments(vid), 202)
+        : json({ error: { code: 'not_found', message: 'Video not found.' } }, 404)
+    }
     const m = /^\/api\/v1\/videos\/([^/]+)(?:\/versions\/(\d+)\/(video|poster|gif|captions))?$/.exec(p)
     if (m?.[1] && m[3])
       return Response.redirect(new URL(mockFile(m[1], m[3] as 'video'), window.location.origin).href, 302)

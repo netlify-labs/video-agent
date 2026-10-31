@@ -3595,6 +3595,8 @@ export interface components {
                 changesRequested: number;
                 mine: components["schemas"]["Verdict"];
             };
+            /** @description How many comments this version was asked to incorporate. */
+            incorporates: number;
             n: number;
             status: components["schemas"]["VideoStatus"];
             prompt: string;
@@ -3714,6 +3716,8 @@ export interface components {
             /** Format: uri */
             webhookUrl?: string;
             planId?: string;
+            /** @description Incorporate feedback: open comments on the version being revised (owner or admin). prompt is your note. */
+            commentIds?: string[];
         };
         SetVerdict: {
             verdict: components["schemas"]["Verdict"];

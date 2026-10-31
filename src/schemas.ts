@@ -93,6 +93,7 @@ export const VersionSchema = z
       changesRequested: z.number().int(),
       mine: VerdictSchema.nullable(),
     }),
+    incorporates: z.number().int().describe('How many comments this version was asked to incorporate.'),
     n: z.number().int(),
     status: StatusSchema,
     prompt: z.string(),
@@ -203,6 +204,10 @@ export const ReviseSchema = z
     durationSec: z.number().int().positive().optional(),
     webhookUrl: z.url().optional(),
     planId: z.string().optional(),
+    commentIds: z.array(z.string()).max(50).optional().openapi({
+      description:
+        'Incorporate feedback: open comments on the version being revised (owner or admin). prompt is your note.',
+    }),
   })
   .openapi('Revise')
 

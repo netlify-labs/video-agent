@@ -7,7 +7,7 @@ import { notifyOwner } from './notifications.js'
 import { ApiError } from '../lib/errors.js'
 import type { CommentCounts, Repo } from '../store/types.js'
 import { assertCan, type Principal } from './policy.js'
-import type { FrozenPlan, Verdict, VerdictRow } from './types.js'
+import type { CommentRow, FrozenPlan, Verdict, VerdictRow, VersionCommentRow } from './types.js'
 import { planningContext } from '../generated/planning-context.js'
 import {
   ASPECTS,
@@ -40,7 +40,12 @@ export interface ReviseInput {
   durationSec?: number | undefined
   webhookUrl?: string | undefined
   planId?: string | undefined
+  /** Incorporate feedback (plan v2 §5): open comments on the version being revised. Owner or admin. */
+  commentIds?: string[] | undefined
 }
+
+export const INCORPORATE_MAX_COMMENTS = 50
+const INCORPORATE_MAX_CHARS = 20_000
 
 /**
  * Consumes a plan exactly once inside the caller's transaction (plan v2 §14 rule 15): the plan row is locked, must
@@ -305,6 +310,9 @@ export async function reviseVideo(
         throw new ApiError('conflict', `Version ${parent.n} isn't ready, so it can't be revised.`)
       const now = deps.clock.now().toISOString()
       const n = job.nextVersionN
+      const feedback = input.commentIds?.length
+        ? await snapshotFeedback(repo, principal, job, parent.n, n, input.commentIds)
+        : []
       const planned = input.planId
         ? await consumePlan(repo, deps, principal, input.planId, { jobId, n, newJobId: jobId })
         : null
@@ -326,6 +334,7 @@ export async function reviseVideo(
         createdAt: now,
         plan: planned?.frozen ?? null,
       })
+      await repo.insertVersionComments(feedback)
       await repo.insertAttempt(newAttempt(deps, jobId, n, now))
       await repo.updateJob(jobId, {
         latestVersion: n,
@@ -337,6 +346,53 @@ export async function reviseVideo(
       return { status: 202, body: await videoDto(repo, deps, jobId, principal) }
     })
   })
+}
+
+/**
+ * Checks the comments to incorporate and snapshots them for version n (plan v2 §5): owner or admin; open (not
+ * resolved or deleted) comments on the version being revised; bounded so the prompt stays small.
+ */
+async function snapshotFeedback(
+  repo: Repo,
+  principal: Principal,
+  job: JobRow,
+  parentN: number,
+  n: number,
+  ids: string[],
+): Promise<VersionCommentRow[]> {
+  assertCan(principal, 'video:incorporate', { ownerId: job.ownerId })
+  const unique = [...new Set(ids)]
+  if (unique.length > INCORPORATE_MAX_COMMENTS)
+    throw new ApiError('invalid_request', `Pick at most ${INCORPORATE_MAX_COMMENTS} comments.`)
+  const open = new Map(
+    (await repo.listComments(job.id, parentN)).filter((c) => !c.resolvedAt).map((c) => [c.id, c]),
+  )
+  const missing = unique.filter((id) => !open.has(id))
+  if (missing.length)
+    throw new ApiError(
+      'invalid_request',
+      `These aren't open comments on v${parentN}: ${missing.slice(0, 5).join(', ')}${missing.length > 5 ? '…' : ''}.`,
+    )
+  const picked = unique.map((id) => open.get(id) as CommentRow)
+  if (picked.reduce((s, c) => s + c.body.length, 0) > INCORPORATE_MAX_CHARS)
+    throw new ApiError('invalid_request', 'Those comments are too long to send together. Pick fewer.')
+  const rows: VersionCommentRow[] = []
+  for (const [i, c] of picked.entries()) {
+    const author = await repo.getUser(c.authorId)
+    rows.push({
+      jobId: job.id,
+      versionN: n,
+      commentId: c.id,
+      position: i,
+      authorId: c.authorId,
+      authorName: author?.name ?? author?.email.split('@')[0] ?? null,
+      body: c.body,
+      timeSec: c.timeSec,
+      x: c.x,
+      y: c.y,
+    })
+  }
+  return rows
 }
 
 export async function retryVersion(deps: Deps, principal: Principal, jobId: string, n: number) {
@@ -564,6 +620,7 @@ function versionDto(
   pubs: PublicationRow[],
   verdicts: VerdictRow[] = [],
   viewerId: string | null = null,
+  incorporates = 0,
 ) {
   const mineV = verdicts.find((x) => x.versionN === v.n && x.userId === viewerId)
   const fileBase = `${deps.config.siteUrl}/api/v1/videos/${jobId}/versions/${v.n}`
@@ -575,6 +632,7 @@ function versionDto(
       mine: mineV?.verdict ?? null,
     },
     plan: v.plan ? { planId: v.plan.planId, brief: v.plan.brief, answers: v.plan.qa } : null,
+    incorporates,
     n: v.n,
     status: v.status,
     prompt: v.prompt,
@@ -632,11 +690,12 @@ export async function videoDto(
   const job = await repo.getJob(jobId)
   if (!job || job.deletedAt || (viewer !== 'system' && !canSee(viewer, job)))
     throw new ApiError('not_found', 'Video not found.')
-  const [versions, attempts, pubs, verdicts] = await Promise.all([
+  const [versions, attempts, pubs, verdicts, fed] = await Promise.all([
     repo.listVersions(jobId),
     repo.listAttempts(jobId),
     repo.listPublications(jobId),
     prefetched ? prefetched.verdicts.filter((x) => x.jobId === jobId) : repo.listVerdicts([jobId]),
+    repo.listVersionComments(jobId),
   ])
   const out = await Promise.all(
     versions.map(async (v) => {
@@ -651,6 +710,7 @@ export async function videoDto(
         pubs,
         verdicts,
         viewer === 'system' ? null : viewer.userId,
+        fed.filter((c) => c.versionN === v.n).length,
       )
     }),
   )

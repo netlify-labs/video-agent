@@ -436,6 +436,7 @@ Example: {"query": "webhooks", "mine": true, "limit": 10}`,
 
 When to use: the user wants a change to an existing video ("make the end card orange", "shorter", "add our URL").
 Don't: describe the whole video again; describe the change. Only one version per video can be in progress.
+Incorporate feedback: pass comment_ids (from list_comments; open comments on from_version) and use change for your note. Only the video's owner or an admin can.
 
 Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Make the end card say \\"Start free today\\""}`,
       inputSchema: {
@@ -455,6 +456,11 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Make the end 
           .union([z.number(), z.string()])
           .optional()
           .describe('A new target length, if it should change.'),
+        comment_ids: z
+          .array(z.string())
+          .max(50)
+          .optional()
+          .describe('Optional. Comments to incorporate (owner or admin), from list_comments.'),
       },
       annotations: {
         title: 'Revise a video',
@@ -472,6 +478,7 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Make the end 
           fromVersion: args.from_version,
           planId: args.plan_id,
           durationSec: normalizeDuration(args.duration_sec),
+          commentIds: args.comment_ids,
         })
         if (!res.replayed) kick()
         return {

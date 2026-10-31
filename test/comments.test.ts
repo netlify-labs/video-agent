@@ -1,15 +1,10 @@
 // Comments (plan v2 §5, §14 rules 3, 13): who reads and writes, pins, resolve, unread, events and MCP.
-import { readdirSync, readFileSync } from 'node:fs'
-import { PGlite } from '@electric-sql/pglite'
-import { drizzle } from 'drizzle-orm/pglite'
 import { describe, expect, it } from 'vitest'
-import * as schema from '../db/schema.js'
 import { getSettings } from '../src/domain/settings.js'
 import type { Role } from '../src/domain/types.js'
 import { deliverWebhooks } from '../src/domain/webhooks.js'
 import { encrypt } from '../src/lib/crypto.js'
-import { createDrizzleStore } from '../src/store/drizzle.js'
-import { harness, type Harness } from './helpers.js'
+import { harness, pgStore, type Harness } from './helpers.js'
 
 const PROMPT = 'A short launch video for org webhooks, with three beats and an end card.'
 
@@ -30,16 +25,6 @@ const post = (h: Harness, as: string, id: string, body: unknown) =>
   h.call('POST', `/api/v1/videos/${id}/comments`, { as, body })
 const list = async (h: Harness, as: string, id: string, qs = '') =>
   h.json(await h.call('GET', `/api/v1/videos/${id}/comments${qs}`, { as }))
-
-async function pgStore() {
-  const pg = new PGlite()
-  const dir = new URL('../netlify/database/migrations/', import.meta.url)
-  for (const m of readdirSync(dir).sort()) {
-    const sql = readFileSync(new URL(`${m}/migration.sql`, dir), 'utf8')
-    for (const stmt of sql.split('--> statement-breakpoint')) if (stmt.trim()) await pg.exec(stmt)
-  }
-  return createDrizzleStore(drizzle({ client: pg, schema }))
-}
 
 describe('comments', () => {
   it('reviewers comment and pin; viewers read only; the list shows author and permissions', async () => {

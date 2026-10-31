@@ -19,6 +19,7 @@ import type {
   NotificationRow,
   PlanRow,
   CommentRow,
+  VersionCommentRow,
   GatewayCallRow,
   WebhookDeliveryRow,
   UserWebhookRow,
@@ -46,6 +47,7 @@ interface State {
   gatewayCalls: GatewayCallRow[]
   notificationReads: Map<string, string>
   commentReads: Map<string, string>
+  versionComments: VersionCommentRow[]
   userWebhooks: Map<string, UserWebhookRow>
   cleanup: Map<string, CleanupRow>
 }
@@ -71,6 +73,7 @@ const empty = (): State => ({
   gatewayCalls: [],
   notificationReads: new Map(),
   commentReads: new Map(),
+  versionComments: [],
   userWebhooks: new Map(),
   cleanup: new Map(),
 })
@@ -325,6 +328,19 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
         if (userId && c.authorId !== userId && (readAt === null || c.createdAt > readAt)) o.unread++
       }
       return out
+    },
+    insertVersionComments: async (rows) => {
+      state.versionComments.push(...clone(rows))
+    },
+    listVersionComments: async (jobId, n) =>
+      clone(
+        state.versionComments
+          .filter((r) => r.jobId === jobId && (n === undefined || r.versionN === n))
+          .sort((a, b) => a.versionN - b.versionN || a.position - b.position),
+      ),
+    markCommentsAddressed: async (jobId, ids, n) => {
+      for (const c of state.comments.values())
+        if (c.jobId === jobId && ids.includes(c.id) && !c.deletedAt) c.addressedInN = n
     },
     getCommentReadAt: async (userId, jobId) => state.commentReads.get(`${userId}/${jobId}`) ?? null,
     setCommentReadAt: async (userId, jobId, readAt) => {

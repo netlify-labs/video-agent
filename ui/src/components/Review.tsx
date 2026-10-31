@@ -1,13 +1,26 @@
 // Review on a ready version (plan v2 §5): pinned comments, markers, approvals. A pin is a moment (timeSec) and,
 // optionally, a spot (x/y, 0–1 within the displayed video, letterboxing excluded). Pins show on their own version
 // only: as markers under the player and as dots on the frame around their moment.
-import { ActionIcon, Badge, Button, Card, Group, Menu, Stack, Text, Textarea, Tooltip } from '@mantine/core'
+import {
+  ActionIcon,
+  Badge,
+  Button,
+  Card,
+  Checkbox,
+  Group,
+  Menu,
+  Modal,
+  Stack,
+  Text,
+  Textarea,
+  Tooltip,
+} from '@mantine/core'
 import { modals } from '@mantine/modals'
 import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
 import { IconCheck, IconDots, IconMapPin, IconX } from '@tabler/icons-react'
 import { useEffect, useRef, useState, type RefObject } from 'react'
-import { $api, errorMessage, type Version, type Video } from '../api/client'
+import { $api, errorMessage, newIdempotencyKey, type Version, type Video } from '../api/client'
 import type { paths } from '../api/schema'
 import { fileUrl, relativeTime } from './bits'
 
@@ -252,11 +265,109 @@ export function VerdictBar({ video, v, canReview }: { video: Video; v: Version; 
   )
 }
 
+/**
+ * Incorporate feedback (plan v2 §5): every open comment on this version, all checked, plus an optional note. Makes
+ * the next version from this one with those comments; they count as addressed once it succeeds.
+ */
+function IncorporateModal({
+  video,
+  v,
+  open,
+  comments,
+  onClose,
+}: {
+  video: Video
+  v: Version
+  open: Comment[]
+  comments: boolean
+  onClose: () => void
+}) {
+  const qc = useQueryClient()
+  const [picked, setPicked] = useState<string[]>(() => open.map((c) => c.id))
+  const [note, setNote] = useState('')
+  const [key] = useState(newIdempotencyKey)
+  const revise = $api.useMutation('post', '/api/v1/videos/{id}/versions', {
+    onSuccess: () => {
+      onClose()
+      void qc.invalidateQueries()
+      notifications.show({
+        color: 'teal',
+        message: `Making v${video.versions.length + 1} with the feedback.`,
+      })
+    },
+    onError: (e) => notifications.show({ color: 'red', message: errorMessage(e) }),
+  })
+  return (
+    <Modal
+      opened={comments}
+      onClose={onClose}
+      title={`Incorporate feedback into v${video.versions.length + 1}`}
+    >
+      <Stack gap="sm">
+        <Text size="sm" c="var(--va-muted)">
+          The agent starts from v{v.n} and works through the comments you leave checked. Pinned comments come
+          with a still of that moment.
+        </Text>
+        <Checkbox.Group value={picked} onChange={setPicked}>
+          <Stack gap={8}>
+            {open.map((c) => (
+              <Checkbox
+                key={c.id}
+                value={c.id}
+                label={
+                  <Text size="sm">
+                    <b>{c.author.name ?? c.author.email?.split('@')[0]}</b>
+                    {c.timeSec !== null ? ` · ${clockTime(c.timeSec)}` : ''}: {c.body}
+                  </Text>
+                }
+              />
+            ))}
+          </Stack>
+        </Checkbox.Group>
+        <Textarea
+          label="Note for the agent (optional)"
+          placeholder='For example: "ignore the colour comments"'
+          autosize
+          minRows={2}
+          maxLength={2000}
+          value={note}
+          onChange={(e) => {
+            setNote(e.currentTarget.value)
+          }}
+        />
+        <Group justify="flex-end" gap="xs">
+          <Button variant="subtle" color="gray" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            loading={revise.isPending}
+            disabled={picked.length === 0}
+            onClick={() => {
+              revise.mutate({
+                params: { path: { id: video.id }, header: { 'idempotency-key': key } },
+                body: {
+                  prompt: note.trim().length >= 3 ? note.trim() : 'Incorporate the feedback below.',
+                  fromVersion: v.n,
+                  commentIds: picked,
+                },
+              })
+            }}
+          >
+            Make v{video.versions.length + 1} ({picked.length})
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
+  )
+}
+
 export function CommentsCard({
   video,
   v,
   player,
   canComment,
+  canIncorporate,
+  busy,
   picking,
   setPicking,
   pending,
@@ -266,11 +377,16 @@ export function CommentsCard({
   v: Version
   player: RefObject<HTMLVideoElement | null>
   canComment: boolean
+  /** The owner or an admin, with Creator powers. */
+  canIncorporate: boolean
+  /** Another version is in progress. */
+  busy: boolean
   picking: boolean
   setPicking: (on: boolean) => void
   pending: Pin | null
   setPending: (p: Pin | null) => void
 }) {
+  const [incorporating, setIncorporating] = useState(false)
   const qc = useQueryClient()
   const comments = useComments(video.id)
   const [body, setBody] = useState('')
@@ -305,6 +421,7 @@ export function CommentsCard({
 
   const items = (comments.data?.items ?? []).filter((c) => c.versionN === v.n)
   const ready = v.status === 'ready'
+  const open = items.filter((c) => !c.resolvedAt)
   const startPin = () => {
     const el = player.current
     if (!el) return
@@ -322,11 +439,38 @@ export function CommentsCard({
   return (
     <Card>
       <Group justify="space-between" mb="sm">
-        <Text fw={600}>Comments on v{v.n}</Text>
-        <Text size="sm" c="var(--va-faint)" className="num">
-          {items.length}
-        </Text>
+        <Group gap={8}>
+          <Text fw={600}>Comments on v{v.n}</Text>
+          <Text size="sm" c="var(--va-faint)" className="num">
+            {items.length}
+          </Text>
+        </Group>
+        {canIncorporate && ready && open.length > 0 ? (
+          <Tooltip label="Wait for the version in progress" disabled={!busy}>
+            <Button
+              size="xs"
+              variant="default"
+              disabled={busy}
+              onClick={() => {
+                setIncorporating(true)
+              }}
+            >
+              Incorporate feedback
+            </Button>
+          </Tooltip>
+        ) : null}
       </Group>
+      {incorporating ? (
+        <IncorporateModal
+          video={video}
+          v={v}
+          open={open}
+          comments={incorporating}
+          onClose={() => {
+            setIncorporating(false)
+          }}
+        />
+      ) : null}
       <Stack gap="sm">
         {items.length === 0 ? (
           <Text size="sm" c="var(--va-faint)">

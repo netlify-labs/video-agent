@@ -604,6 +604,8 @@ export function VideoPage() {
             v={v}
             player={player}
             canComment={canReview}
+            canIncorporate={canCreate && canPublish}
+            busy={busy}
             picking={picking}
             setPicking={setPicking}
             pending={pending}
@@ -725,6 +727,11 @@ export function VideoPage() {
                 {v.agent ? [v.agent.agent, v.agent.model].filter(Boolean).join(' · ') || '—' : '—'}
               </Meta>
               <Meta label="Attempts">{v.attempts}</Meta>
+              {v.incorporates ? (
+                <Meta label="Feedback">
+                  {v.incorporates} comment{v.incorporates === 1 ? '' : 's'} from v{v.parentN}
+                </Meta>
+              ) : null}
               {v.timings?.endedAt && v.timings.startedAt ? (
                 <Meta label="Took">
                   {duration(

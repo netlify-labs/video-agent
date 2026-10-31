@@ -179,3 +179,28 @@ test('viewers read comments but cannot comment or approve', async ({ page }) => 
   await expect(page.getByRole('button', { name: 'Approve', exact: true })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Comment actions' })).toHaveCount(0)
 })
+
+test('the owner incorporates feedback: open comments all checked, plus a note', async ({ page }) => {
+  await page.goto('/videos/vid_teaser')
+  await page.getByRole('button', { name: 'Incorporate feedback' }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByRole('checkbox')).toHaveCount(2)
+  for (const box of await dialog.getByRole('checkbox').all()) await expect(box).toBeChecked()
+  await dialog.getByRole('checkbox').nth(1).uncheck()
+  await dialog.getByRole('textbox', { name: 'Note for the agent (optional)' }).fill('Keep the colours')
+  await dialog.getByRole('button', { name: /Make v3 \(1\)/ }).click()
+  await expect(dialog).toHaveCount(0)
+  const sent = await page.evaluate<{ prompt: string; fromVersion: number; commentIds: string[] }>(
+    '(window).__lastRevise',
+  )
+  expect(sent).toEqual({ prompt: 'Keep the colours', fromVersion: 2, commentIds: ['c_1'] })
+})
+
+test('viewers and non-owners get no Incorporate button', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('mockRole', 'viewer')
+  })
+  await page.goto('/videos/vid_teaser')
+  await expect(page.getByText('Love the end card.')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Incorporate feedback' })).toHaveCount(0)
+})

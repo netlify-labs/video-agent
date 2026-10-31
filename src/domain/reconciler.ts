@@ -3,7 +3,12 @@
 import type { Deps, RunnerSnapshot, StartRequest } from '../deps.js'
 import { RunnerError } from '../deps.js'
 import { decrypt, encrypt, sha256Hex } from '../lib/crypto.js'
-import { RUN_MANIFEST_VERSION, runManifestKey, serializeRunManifest } from '../lib/run-manifest.js'
+import {
+  RUN_MANIFEST_VERSION,
+  feedbackStillPath,
+  runManifestKey,
+  serializeRunManifest,
+} from '../lib/run-manifest.js'
 import { getSettings } from './settings.js'
 import { PROMPT_TEMPLATE_VERSION, buildPrompt } from './prompt.js'
 import { setStage } from './videos.js'
@@ -136,6 +141,26 @@ async function startRequest(
     if (!parent || !sha) throw new SourceUnavailable(`Version ${version.parentN} has no saved composition.`)
     revision = { parentN: version.parentN, sourceKey: parent.sourceKey, sourceSha256: sha }
   }
+  // Comments to incorporate, snapshotted on the version; pinned ones get stills from the parent MP4 (plan v2 §5).
+  const snapshots = revision ? await deps.store.listVersionComments(a.jobId, a.versionN) : []
+  const pins = snapshots.filter((c) => c.timeSec !== null)
+  let feedbackVideo: { key: string; sha256: string } | null = null
+  if (pins.length && version.parentN !== null) {
+    const parent = await deps.store.getOutput(a.jobId, version.parentN)
+    const sha = parent?.sha256['video.mp4']
+    if (parent && sha) feedbackVideo = { key: parent.videoKey, sha256: sha }
+  }
+  const feedback = snapshots.map((c) => {
+    const i = pins.indexOf(c)
+    return {
+      author: c.authorName,
+      body: c.body,
+      timeSec: c.timeSec,
+      x: c.x,
+      y: c.y,
+      still: feedbackVideo && i >= 0 ? feedbackStillPath(i, c.commentId) : null,
+    }
+  })
   // Inputs to restore go in a server-written manifest the run verifies by hash (plan v2 §14 rule 21).
   let runManifestSha256: string | null = null
   if (revision) {
@@ -147,7 +172,10 @@ async function startRequest(
       kind: 'revision',
       source: { key: revision.sourceKey, sha256: revision.sourceSha256, parentN: revision.parentN },
       bundle: null,
-      feedback: null,
+      feedback: feedbackVideo && {
+        video: feedbackVideo,
+        pins: pins.map((c) => ({ commentId: c.commentId, timeSec: c.timeSec ?? 0, x: c.x, y: c.y })),
+      },
     })
     await deps.blobs.set('sources', runManifestKey(a.jobId, a.id), manifest, {
       contentType: 'application/json',
@@ -167,6 +195,7 @@ async function startRequest(
     upload: { mode: 'blobs' },
     revision: revision && { parentN: revision.parentN },
     runManifestSha256,
+    feedback,
     plan: version.plan ? { brief: version.plan.brief, qa: version.plan.qa } : null,
   })
   return {

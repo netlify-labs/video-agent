@@ -1,21 +1,6 @@
 // The same lifecycle against real Postgres semantics (PGlite + the committed migrations).
-import { readdirSync, readFileSync } from 'node:fs'
-import { PGlite } from '@electric-sql/pglite'
-import { drizzle } from 'drizzle-orm/pglite'
 import { describe, expect, it } from 'vitest'
-import * as schema from '../db/schema.js'
-import { createDrizzleStore } from '../src/store/drizzle.js'
-import { harness } from './helpers.js'
-
-async function pgStore() {
-  const pg = new PGlite()
-  const dir = new URL('../netlify/database/migrations/', import.meta.url)
-  for (const m of readdirSync(dir).sort()) {
-    const sql = readFileSync(new URL(`${m}/migration.sql`, dir), 'utf8')
-    for (const stmt of sql.split('--> statement-breakpoint')) if (stmt.trim()) await pg.exec(stmt)
-  }
-  return createDrizzleStore(drizzle({ client: pg, schema }))
-}
+import { harness, pgStore } from './helpers.js'
 
 const PROMPT = 'A short launch video for org webhooks, with three beats and an end card.'
 

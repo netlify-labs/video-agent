@@ -211,7 +211,16 @@ async function finish(
     if (fresh?.stage !== 'finishing') return 'skipped'
     // Cancellation intent or a deletion during finalize wins: never publish files.
     const final = fresh.cancelRequestedAt || job?.deletedAt ? 'cancelled' : outcome
-    if (final === 'ready' && output) await repo.upsertOutput(output)
+    if (final === 'ready' && output) {
+      await repo.upsertOutput(output)
+      // Comments this version was asked to incorporate count as addressed only once it succeeds (plan v2 §5).
+      const fed = await repo.listVersionComments(a.jobId, a.versionN)
+      await repo.markCommentsAddressed(
+        a.jobId,
+        fed.map((c) => c.commentId),
+        a.versionN,
+      )
+    }
     await setStage(
       repo,
       fresh,
