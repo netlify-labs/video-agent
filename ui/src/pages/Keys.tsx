@@ -5,6 +5,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { $api, errorMessage } from '../api/client'
 import { CopyField, relativeTime } from '../components/bits'
+import { WebhookCard } from '../components/WebhookCard'
 
 export function KeysPage() {
   const qc = useQueryClient()
@@ -153,6 +154,10 @@ curl -L -H "Authorization: Bearer ${key}" \\
             of <Code>&lt;t&gt;.&lt;body&gt;</Code> with the key's webhook secret.
           </Text>
         </Card>
+      </section>
+
+      <section style={{ marginTop: 32 }}>
+        <WebhookCard scope="personal" />
       </section>
 
       <Modal

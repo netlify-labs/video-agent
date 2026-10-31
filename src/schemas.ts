@@ -209,6 +209,19 @@ export const UserSchema = z
     disabled: z.boolean(),
   })
   .openapi('User')
+export const PutWebhookSchema = z
+  .object({ url: z.string().url().max(2000), rotate: z.boolean().optional() })
+  .openapi('PutWebhook')
+export const WebhookSettingSchema = z
+  .object({
+    url: z.string(),
+    createdAt: z.string().optional(),
+    updatedAt: z.string().optional(),
+    secret: z.string().nullable().optional().describe('Shown only when the webhook is created or rotated.'),
+  })
+  .openapi('WebhookSetting')
+export const WebhookTestSchema = z.object({ ok: z.boolean(), result: z.string() }).openapi('WebhookTest')
+
 export const TransferSchema = z
   .object({
     toUserId: z.string().min(1),

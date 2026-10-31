@@ -1,5 +1,6 @@
 import { Alert, Anchor, Button, Card, Group, Select, Stack, Switch, Text, Title } from '@mantine/core'
 import { modals } from '@mantine/modals'
+import { WebhookCard } from '../components/WebhookCard'
 import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
 import { Link, Navigate } from 'react-router'
@@ -341,6 +342,7 @@ export function AdminPage() {
               project settings.
             </Text>
           </Card>
+          <WebhookCard scope="team" />
           <Card>
             <Text fw={600} mb="xs">
               Credits by person

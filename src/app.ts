@@ -26,6 +26,7 @@ import {
 } from './domain/videos.js'
 import { signedFilePath } from './domain/files.js'
 import { handleMcp } from './mcp.js'
+import * as hooks from './domain/webhook-settings.js'
 import { ApiError, errorBody } from './lib/errors.js'
 import * as s from './schemas.js'
 
@@ -527,6 +528,102 @@ export function createApp(deps: Deps, opts: AppOptions) {
     }),
     async (c) =>
       c.json(await updateUser(deps, c.get('principal'), c.req.valid('param').id, c.req.valid('json')), 200),
+  )
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/v1/me/webhook',
+      summary: 'Get your webhook (events on videos you own)',
+      tags: ['keys'],
+      security,
+      responses: { 200: json(s.WebhookSettingSchema.nullable(), 'Webhook or null'), ...errors },
+    }),
+    async (c) => c.json(await hooks.getMyWebhook(deps, c.get('principal')), 200),
+  )
+  app.openapi(
+    createRoute({
+      method: 'put',
+      path: '/api/v1/me/webhook',
+      summary: 'Set your webhook URL (a signing secret is returned once, on create or rotate)',
+      tags: ['keys'],
+      security,
+      request: { body: { content: { 'application/json': { schema: s.PutWebhookSchema } }, required: true } },
+      responses: { 200: json(s.WebhookSettingSchema, 'Saved'), ...errors },
+    }),
+    async (c) => c.json(await hooks.putMyWebhook(deps, c.get('principal'), c.req.valid('json')), 200),
+  )
+  app.openapi(
+    createRoute({
+      method: 'delete',
+      path: '/api/v1/me/webhook',
+      summary: 'Remove your webhook (pending deliveries to it are dropped)',
+      tags: ['keys'],
+      security,
+      responses: { 204: { description: 'Removed' }, ...errors },
+    }),
+    async (c) => {
+      await hooks.deleteMyWebhook(deps, c.get('principal'))
+      return c.body(null, 204)
+    },
+  )
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/v1/me/webhook/test',
+      summary: 'Send a signed webhook.test event to your webhook now',
+      tags: ['keys'],
+      security,
+      responses: { 200: json(s.WebhookTestSchema, 'Result'), ...errors },
+    }),
+    async (c) => c.json(await hooks.testWebhook(deps, c.get('principal'), 'personal'), 200),
+  )
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/v1/admin/team-webhook',
+      summary: 'Get the team webhook (events on every video)',
+      tags: ['admin'],
+      security,
+      responses: { 200: json(s.WebhookSettingSchema.nullable(), 'Webhook or null'), ...errors },
+    }),
+    async (c) => c.json(await hooks.getTeamWebhook(deps, c.get('principal')), 200),
+  )
+  app.openapi(
+    createRoute({
+      method: 'put',
+      path: '/api/v1/admin/team-webhook',
+      summary: 'Set the team webhook URL (a signing secret is returned once, on create or rotate)',
+      tags: ['admin'],
+      security,
+      request: { body: { content: { 'application/json': { schema: s.PutWebhookSchema } }, required: true } },
+      responses: { 200: json(s.WebhookSettingSchema, 'Saved'), ...errors },
+    }),
+    async (c) => c.json(await hooks.putTeamWebhook(deps, c.get('principal'), c.req.valid('json')), 200),
+  )
+  app.openapi(
+    createRoute({
+      method: 'delete',
+      path: '/api/v1/admin/team-webhook',
+      summary: 'Remove the team webhook (pending deliveries to it are dropped)',
+      tags: ['admin'],
+      security,
+      responses: { 204: { description: 'Removed' }, ...errors },
+    }),
+    async (c) => {
+      await hooks.deleteTeamWebhook(deps, c.get('principal'))
+      return c.body(null, 204)
+    },
+  )
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/v1/admin/team-webhook/test',
+      summary: 'Send a signed webhook.test event to the team webhook now',
+      tags: ['admin'],
+      security,
+      responses: { 200: json(s.WebhookTestSchema, 'Result'), ...errors },
+    }),
+    async (c) => c.json(await hooks.testWebhook(deps, c.get('principal'), 'team'), 200),
   )
   app.openapi(
     createRoute({
