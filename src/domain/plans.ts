@@ -124,7 +124,7 @@ async function record(
     estimate: true,
     ok: !result.error,
     error: result.error
-      ? (result.error instanceof Error ? result.error.message : String(result.error)).slice(0, 300)
+      ? (result.error instanceof Error ? result.error.message : JSON.stringify(result.error)).slice(0, 300)
       : null,
     ms: Date.now() - started,
     at: deps.clock.now().toISOString(),
