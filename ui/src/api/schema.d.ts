@@ -3179,6 +3179,15 @@ export interface components {
         /** @enum {string} */
         VideoStatus: "queued" | "running" | "finishing" | "ready" | "failed" | "cancelled" | "timed_out";
         Version: {
+            /** @description The plan accepted before this version was made, if any. */
+            plan: {
+                planId: string;
+                brief: components["schemas"]["PlanBrief"];
+                answers: {
+                    question: string;
+                    answer: string | string[];
+                }[];
+            } | null;
             verdicts: {
                 approved: number;
                 changesRequested: number;
@@ -3228,6 +3237,19 @@ export interface components {
                 netlifyRun: string | null;
             };
             publications: components["schemas"]["Publication"][];
+        };
+        PlanBrief: {
+            goal: string;
+            audience: string;
+            keyMessage: string;
+            beats: {
+                text: string;
+                seconds: number;
+            }[];
+            tone: string;
+            callToAction: string;
+            mustInclude: string[];
+            avoid: string[];
         };
         /** @enum {string|null} */
         Verdict: "approved" | "changes_requested" | null;
@@ -3383,23 +3405,22 @@ export interface components {
                 other?: string;
                 skipped?: boolean;
             }[] | null;
-            brief: components["schemas"]["PlanBrief"];
+            brief: {
+                goal: string;
+                audience: string;
+                keyMessage: string;
+                beats: {
+                    text: string;
+                    seconds: number;
+                }[];
+                tone: string;
+                callToAction: string;
+                mustInclude: string[];
+                avoid: string[];
+            } | null;
             briefRev: number;
             expiresAt: string;
         };
-        PlanBrief: {
-            goal: string;
-            audience: string;
-            keyMessage: string;
-            beats: {
-                text: string;
-                seconds: number;
-            }[];
-            tone: string;
-            callToAction: string;
-            mustInclude: string[];
-            avoid: string[];
-        } | null;
         CreatePlan: {
             prompt: string;
             /** @enum {string} */

@@ -63,8 +63,31 @@ export const SetVerdictSchema = z
   .object({ verdict: VerdictSchema.nullable(), note: z.string().max(500).optional() })
   .openapi('SetVerdict')
 
+const planBriefShape = z.object({
+  goal: z.string().max(400),
+  audience: z.string().max(300),
+  keyMessage: z.string().max(300),
+  beats: z.array(z.object({ text: z.string().max(300), seconds: z.number().min(0).max(600) })).max(12),
+  tone: z.string().max(200),
+  callToAction: z.string().max(200),
+  mustInclude: z.array(z.string().max(200)).max(10),
+  avoid: z.array(z.string().max(200)).max(10),
+})
+// Registered for non-null uses; nullable spots use the plain shape (openapi-typescript can't express a nullable $ref).
+export const PlanBriefSchema = planBriefShape.openapi('PlanBrief')
+
 export const VersionSchema = z
   .object({
+    plan: z
+      .object({
+        planId: z.string(),
+        brief: PlanBriefSchema,
+        answers: z.array(
+          z.object({ question: z.string(), answer: z.union([z.string(), z.array(z.string())]) }),
+        ),
+      })
+      .nullable()
+      .describe('The plan accepted before this version was made, if any.'),
     verdicts: z.object({
       approved: z.number().int(),
       changesRequested: z.number().int(),
@@ -228,18 +251,7 @@ const PlanAnswerSchema = z.object({
   other: z.string().max(500).optional(),
   skipped: z.boolean().optional(),
 })
-export const PlanBriefSchema = z
-  .object({
-    goal: z.string().max(400),
-    audience: z.string().max(300),
-    keyMessage: z.string().max(300),
-    beats: z.array(z.object({ text: z.string().max(300), seconds: z.number().min(0).max(600) })).max(12),
-    tone: z.string().max(200),
-    callToAction: z.string().max(200),
-    mustInclude: z.array(z.string().max(200)).max(10),
-    avoid: z.array(z.string().max(200)).max(10),
-  })
-  .openapi('PlanBrief')
+
 export const PlanSchema = z
   .object({
     id: z.string(),
@@ -254,7 +266,7 @@ export const PlanSchema = z
       .nullable(),
     questions: z.array(PlanQuestionSchema).nullable(),
     answers: z.array(PlanAnswerSchema).nullable(),
-    brief: PlanBriefSchema.nullable(),
+    brief: planBriefShape.nullable(),
     briefRev: z.number().int(),
     expiresAt: z.string(),
   })

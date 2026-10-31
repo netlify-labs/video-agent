@@ -574,6 +574,7 @@ function versionDto(
         .length,
       mine: mineV?.verdict ?? null,
     },
+    plan: v.plan ? { planId: v.plan.planId, brief: v.plan.brief, answers: v.plan.qa } : null,
     n: v.n,
     status: v.status,
     prompt: v.prompt,

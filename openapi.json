@@ -247,6 +247,54 @@
       "Version": {
         "type": "object",
         "properties": {
+          "plan": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "planId": {
+                "type": "string"
+              },
+              "brief": {
+                "$ref": "#/components/schemas/PlanBrief"
+              },
+              "answers": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "question": {
+                      "type": "string"
+                    },
+                    "answer": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "question",
+                    "answer"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "planId",
+              "brief",
+              "answers"
+            ],
+            "description": "The plan accepted before this version was made, if any."
+          },
           "verdicts": {
             "type": "object",
             "properties": {
@@ -472,6 +520,7 @@
           }
         },
         "required": [
+          "plan",
           "verdicts",
           "n",
           "status",
@@ -490,6 +539,79 @@
           "output",
           "links",
           "publications"
+        ]
+      },
+      "PlanBrief": {
+        "type": "object",
+        "properties": {
+          "goal": {
+            "type": "string",
+            "maxLength": 400
+          },
+          "audience": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "keyMessage": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "beats": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string",
+                  "maxLength": 300
+                },
+                "seconds": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 600
+                }
+              },
+              "required": [
+                "text",
+                "seconds"
+              ]
+            },
+            "maxItems": 12
+          },
+          "tone": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "callToAction": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "mustInclude": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "maxItems": 10
+          },
+          "avoid": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "maxItems": 10
+          }
+        },
+        "required": [
+          "goal",
+          "audience",
+          "keyMessage",
+          "beats",
+          "tone",
+          "callToAction",
+          "mustInclude",
+          "avoid"
         ]
       },
       "Verdict": {
@@ -1119,7 +1241,80 @@
             }
           },
           "brief": {
-            "$ref": "#/components/schemas/PlanBrief"
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "goal": {
+                "type": "string",
+                "maxLength": 400
+              },
+              "audience": {
+                "type": "string",
+                "maxLength": 300
+              },
+              "keyMessage": {
+                "type": "string",
+                "maxLength": 300
+              },
+              "beats": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "text": {
+                      "type": "string",
+                      "maxLength": 300
+                    },
+                    "seconds": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 600
+                    }
+                  },
+                  "required": [
+                    "text",
+                    "seconds"
+                  ]
+                },
+                "maxItems": 12
+              },
+              "tone": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "callToAction": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "mustInclude": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "maxItems": 10
+              },
+              "avoid": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "maxItems": 10
+              }
+            },
+            "required": [
+              "goal",
+              "audience",
+              "keyMessage",
+              "beats",
+              "tone",
+              "callToAction",
+              "mustInclude",
+              "avoid"
+            ]
           },
           "briefRev": {
             "type": "integer"
@@ -1138,82 +1333,6 @@
           "brief",
           "briefRev",
           "expiresAt"
-        ]
-      },
-      "PlanBrief": {
-        "type": [
-          "object",
-          "null"
-        ],
-        "properties": {
-          "goal": {
-            "type": "string",
-            "maxLength": 400
-          },
-          "audience": {
-            "type": "string",
-            "maxLength": 300
-          },
-          "keyMessage": {
-            "type": "string",
-            "maxLength": 300
-          },
-          "beats": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "text": {
-                  "type": "string",
-                  "maxLength": 300
-                },
-                "seconds": {
-                  "type": "number",
-                  "minimum": 0,
-                  "maximum": 600
-                }
-              },
-              "required": [
-                "text",
-                "seconds"
-              ]
-            },
-            "maxItems": 12
-          },
-          "tone": {
-            "type": "string",
-            "maxLength": 200
-          },
-          "callToAction": {
-            "type": "string",
-            "maxLength": 200
-          },
-          "mustInclude": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "maxLength": 200
-            },
-            "maxItems": 10
-          },
-          "avoid": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "maxLength": 200
-            },
-            "maxItems": 10
-          }
-        },
-        "required": [
-          "goal",
-          "audience",
-          "keyMessage",
-          "beats",
-          "tone",
-          "callToAction",
-          "mustInclude",
-          "avoid"
         ]
       },
       "CreatePlan": {

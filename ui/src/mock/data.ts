@@ -51,6 +51,8 @@ function ready(
     parentN: o.parent ?? null,
     targetDurationSec: o.target ?? null,
     createdAt: ago(o.at + 0.3),
+    plan: null,
+
     verdicts: { approved: 0, changesRequested: 0, mine: null },
 
     attempts: 1,
@@ -153,6 +155,8 @@ export const videos: Video[] = [
       parentN: null,
       targetDurationSec: 20,
       createdAt: ago(2.6),
+      plan: null,
+
       verdicts: { approved: 0, changesRequested: 0, mine: null },
 
       attempts: 1,
@@ -177,6 +181,8 @@ export const videos: Video[] = [
       parentN: null,
       targetDurationSec: 30,
       createdAt: ago(0.8),
+      plan: null,
+
       verdicts: { approved: 0, changesRequested: 0, mine: null },
 
       attempts: 1,
@@ -300,6 +306,8 @@ export const videos: Video[] = [
       parentN: null,
       targetDurationSec: null,
       createdAt: ago(2900),
+      plan: null,
+
       verdicts: { approved: 0, changesRequested: 0, mine: null },
 
       attempts: 1,
