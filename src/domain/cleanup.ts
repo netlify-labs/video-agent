@@ -22,5 +22,6 @@ export async function runCleanup(
     }
   }
   await deps.store.deleteExpiredIdempotency(now.toISOString())
+  await deps.store.deleteExpiredPlans(now.toISOString())
   return done
 }

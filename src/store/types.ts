@@ -96,6 +96,8 @@ export interface Repo {
   getIdempotency(principalId: string, operation: string, key: string): Promise<IdempotencyRow | null>
   insertIdempotency(row: IdempotencyRow): Promise<void>
   deleteExpiredIdempotency(now: string): Promise<number>
+  /** Deletes plan content past its expiry (gateway_calls, the usage record, is kept). */
+  deleteExpiredPlans(now: string): Promise<number>
 
   // webhooks and cleanup
   insertPlan(row: PlanRow): Promise<void>

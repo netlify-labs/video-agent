@@ -292,6 +292,8 @@ function repoFor(db: Db): Repo {
     insertIdempotency: async (row) => {
       await db.insert(t.idempotencyKeys).values(row)
     },
+    deleteExpiredPlans: async (now) =>
+      (await db.delete(t.plans).where(lte(t.plans.expiresAt, now)).returning({ id: t.plans.id })).length,
     deleteExpiredIdempotency: async (now) =>
       (
         await db

@@ -9,6 +9,7 @@ export type ErrorCode =
   | 'rate_limited'
   | 'upstream_error'
   | 'setup_required'
+  | 'planning_unavailable'
   | 'internal'
 
 const STATUS: Record<ErrorCode, number> = {
@@ -22,6 +23,7 @@ const STATUS: Record<ErrorCode, number> = {
   rate_limited: 429,
   upstream_error: 502,
   setup_required: 503,
+  planning_unavailable: 503,
   internal: 500,
 }
 

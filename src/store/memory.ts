@@ -250,6 +250,15 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
     insertIdempotency: async (row) => {
       state.idem.set(`${row.principalId}|${row.operation}|${row.key}`, clone(row))
     },
+    deleteExpiredPlans: async (now) => {
+      let n = 0
+      for (const [id, p] of state.plans)
+        if (p.expiresAt <= now) {
+          state.plans.delete(id)
+          n++
+        }
+      return n
+    },
     deleteExpiredIdempotency: async (now) => {
       let n = 0
       for (const [k, v] of state.idem) {

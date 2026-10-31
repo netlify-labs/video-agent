@@ -28,6 +28,7 @@ import { signedFilePath } from './domain/files.js'
 import { handleMcp } from './mcp.js'
 import * as hooks from './domain/webhook-settings.js'
 import { listNotifications, markNotificationsRead } from './domain/notifications.js'
+import * as planning from './domain/plans.js'
 import { ApiError, errorBody } from './lib/errors.js'
 import * as s from './schemas.js'
 
@@ -136,7 +137,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       return c.body(null, 204, {
         'access-control-allow-origin': origin,
         'access-control-allow-methods': 'GET,POST,PUT,PATCH,DELETE',
-        'access-control-allow-headers': 'authorization,content-type,idempotency-key',
+        'access-control-allow-headers': 'authorization,content-type,idempotency-key,if-match',
         'access-control-max-age': '600',
         vary: 'origin',
       })
@@ -625,6 +626,96 @@ export function createApp(deps: Deps, opts: AppOptions) {
       responses: { 200: json(s.WebhookTestSchema, 'Result'), ...errors },
     }),
     async (c) => c.json(await hooks.testWebhook(deps, c.get('principal'), 'team'), 200),
+  )
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/v1/plans',
+      summary: 'Start planning a video: a fast router decides whether a few questions would help',
+      tags: ['planning'],
+      security,
+      request: { body: { content: { 'application/json': { schema: s.CreatePlanSchema } }, required: true } },
+      responses: { 201: json(s.PlanSchema, 'Plan'), ...errors },
+    }),
+    async (c) => c.json(await planning.createPlan(deps, c.get('principal'), c.req.valid('json')), 201),
+  )
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/v1/plans/{id}',
+      summary: 'A plan (yours)',
+      tags: ['planning'],
+      security,
+      request: { params: IdParam },
+      responses: { 200: json(s.PlanSchema, 'Plan'), ...errors },
+    }),
+    async (c) => c.json(await planning.getPlan(deps, c.get('principal'), c.req.valid('param').id), 200),
+  )
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/v1/plans/{id}/questions',
+      summary: '0–6 multiple-choice questions about the video (empty when the prompt covers it)',
+      tags: ['planning'],
+      security,
+      request: { params: IdParam },
+      responses: { 200: json(s.PlanSchema, 'Plan with questions'), ...errors },
+    }),
+    async (c) =>
+      c.json(await planning.generateQuestions(deps, c.get('principal'), c.req.valid('param').id), 200),
+  )
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/v1/plans/{id}/brief',
+      summary: 'Turn the answers into an editable brief',
+      tags: ['planning'],
+      security,
+      request: {
+        params: IdParam,
+        body: { content: { 'application/json': { schema: s.PlanAnswersSchema } }, required: true },
+      },
+      responses: { 200: json(s.PlanSchema, 'Plan with a brief'), ...errors },
+    }),
+    async (c) =>
+      c.json(
+        await planning.generateBrief(
+          deps,
+          c.get('principal'),
+          c.req.valid('param').id,
+          c.req.valid('json').answers,
+        ),
+        200,
+      ),
+  )
+  app.openapi(
+    createRoute({
+      method: 'patch',
+      path: '/api/v1/plans/{id}',
+      summary: 'Save your edits to the brief (send If-Match with the current briefRev)',
+      tags: ['planning'],
+      security,
+      request: {
+        params: IdParam,
+        headers: z.object({ 'if-match': z.string().optional() }),
+        body: { content: { 'application/json': { schema: s.PatchPlanSchema } }, required: true },
+      },
+      responses: { 200: json(s.PlanSchema, 'Saved'), ...errors },
+    }),
+    async (c) => {
+      const raw = c.req.header('if-match')?.replace(/"/g, '')
+      const ifMatch = raw && /^\d+$/.test(raw) ? Number(raw) : null
+      return c.json(
+        await planning.updatePlanBrief(
+          deps,
+          c.get('principal'),
+          c.req.valid('param').id,
+          c.req.valid('json').brief,
+          ifMatch,
+        ),
+        200,
+      )
+    },
   )
   app.openapi(
     createRoute({

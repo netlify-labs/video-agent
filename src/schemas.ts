@@ -209,6 +209,64 @@ export const UserSchema = z
     disabled: z.boolean(),
   })
   .openapi('User')
+const PlanQuestionSchema = z.object({
+  id: z.string(),
+  question: z.string(),
+  why: z.string(),
+  options: z.array(z.object({ id: z.string(), label: z.string(), description: z.string() })),
+  multiSelect: z.boolean(),
+  allowOther: z.boolean(),
+})
+const PlanAnswerSchema = z.object({
+  questionId: z.string(),
+  optionIds: z.array(z.string()).max(4).optional(),
+  other: z.string().max(500).optional(),
+  skipped: z.boolean().optional(),
+})
+export const PlanBriefSchema = z
+  .object({
+    goal: z.string().max(400),
+    audience: z.string().max(300),
+    keyMessage: z.string().max(300),
+    beats: z.array(z.object({ text: z.string().max(300), seconds: z.number().min(0).max(600) })).max(12),
+    tone: z.string().max(200),
+    callToAction: z.string().max(200),
+    mustInclude: z.array(z.string().max(200)).max(10),
+    avoid: z.array(z.string().max(200)).max(10),
+  })
+  .openapi('PlanBrief')
+export const PlanSchema = z
+  .object({
+    id: z.string(),
+    prompt: z.string(),
+    revisionOf: z.object({ videoId: z.string(), version: z.number().int().nullable() }).nullable(),
+    route: z
+      .object({
+        needsQuestions: z.boolean(),
+        template: z.string(),
+        suggestedAspect: z.enum(['16:9', '9:16', '1:1', '4:5']).nullable(),
+      })
+      .nullable(),
+    questions: z.array(PlanQuestionSchema).nullable(),
+    answers: z.array(PlanAnswerSchema).nullable(),
+    brief: PlanBriefSchema.nullable(),
+    briefRev: z.number().int(),
+    expiresAt: z.string(),
+  })
+  .openapi('Plan')
+export const CreatePlanSchema = z
+  .object({
+    prompt: z.string().min(1).max(4000),
+    aspect: z.enum(['16:9', '9:16', '1:1', '4:5']).optional(),
+    durationSec: z.number().int().min(3).max(600).optional(),
+    revisionOf: z.object({ videoId: z.string(), version: z.number().int().optional() }).optional(),
+  })
+  .openapi('CreatePlan')
+export const PlanAnswersSchema = z
+  .object({ answers: z.array(PlanAnswerSchema).max(6) })
+  .openapi('PlanAnswers')
+export const PatchPlanSchema = z.object({ brief: PlanBriefSchema }).openapi('PatchPlan')
+
 export const NotificationSchema = z
   .object({
     id: z.string(),
