@@ -22,6 +22,7 @@ import type {
   CommentRow,
   VersionCommentRow,
   CheckpointRow,
+  EditRow,
   GatewayCallRow,
   WebhookDeliveryRow,
   UserWebhookRow,
@@ -114,6 +115,14 @@ export interface Repo {
   /** Not deleted, oldest first; optionally one version. */
   listComments(jobId: string, versionN?: number): Promise<CommentRow[]>
   getCommentReadAt(userId: string, jobId: string): Promise<string | null>
+  insertEdit(row: EditRow): Promise<void>
+  getEdit(id: string, opts?: { lock?: boolean }): Promise<EditRow | null>
+  updateEdit(id: string, patch: Partial<EditRow>): Promise<void>
+  deleteEdit(id: string): Promise<void>
+  /** The person's open (unrendered, unexpired) draft on a version, if any. */
+  findEdit(authorId: string, jobId: string, baseN: number, now: string): Promise<EditRow | null>
+  /** Expired drafts, oldest first (the sweep removes them and their bundles). */
+  listExpiredEdits(now: string, limit: number): Promise<EditRow[]>
   getCheckpoint(attemptId: string, opts?: { lock?: boolean }): Promise<CheckpointRow | null>
   putCheckpoint(row: CheckpointRow): Promise<void>
   insertVersionComments(rows: VersionCommentRow[]): Promise<void>

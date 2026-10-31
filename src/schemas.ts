@@ -313,6 +313,66 @@ export const MyUsageSchema = z
   })
   .openapi('MyUsage')
 
+const EditOpSchema = z.discriminatedUnion('op', [
+  z.object({ op: z.literal('text'), id: z.string().max(80), text: z.string().max(500) }),
+  z.object({ op: z.literal('retime'), beat: z.string().max(80), duration: z.number().min(0.5).max(120) }),
+  z.object({ op: z.literal('reorder'), order: z.array(z.string().max(80)).max(100) }),
+  z.object({ op: z.literal('delete'), beat: z.string().max(80) }),
+  z.object({ op: z.literal('color'), role: z.string().max(40), value: z.string().max(20) }),
+  z.object({
+    op: z.literal('media'),
+    slot: z.string().max(80),
+    src: z.string().max(200),
+    kind: z.enum(['image', 'video']),
+    fit: z.enum(['cover', 'contain']),
+  }),
+])
+export const EditSchema = z
+  .object({
+    id: z.string(),
+    videoId: z.string(),
+    baseN: z.number().int(),
+    rev: z.number().int(),
+    ops: z.array(EditOpSchema),
+    composition: z.object({
+      duration: z.number(),
+      colors: z.record(z.string(), z.string()),
+      beats: z.array(
+        z.object({
+          id: z.string(),
+          start: z.number(),
+          duration: z.number(),
+          authoredDuration: z.number(),
+          texts: z.array(z.object({ id: z.string(), text: z.string() })),
+          media: z.array(
+            z.object({
+              slot: z.string(),
+              kind: z.enum(['image', 'video']),
+              src: z.string(),
+              beat: z.string().nullable(),
+              fit: z.string().nullable(),
+            }),
+          ),
+        }),
+      ),
+      layers: z.array(z.string()),
+    }),
+    palette: z.array(z.string()),
+    expiresAt: z.string(),
+    renderedN: z.number().int().nullable(),
+    newerVersion: z
+      .number()
+      .int()
+      .nullable()
+      .openapi({
+        description: 'A newer version exists: start from it, or render this draft as the next version',
+      }),
+  })
+  .openapi('Edit')
+export const SaveEditSchema = z
+  .object({ ops: z.array(EditOpSchema).max(500), rev: z.number().int().min(0) })
+  .openapi('SaveEdit')
+
 export const PreviewLinkSchema = z
   .object({
     url: z

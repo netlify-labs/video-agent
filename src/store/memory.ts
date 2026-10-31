@@ -21,6 +21,7 @@ import type {
   CommentRow,
   VersionCommentRow,
   CheckpointRow,
+  EditRow,
   GatewayCallRow,
   WebhookDeliveryRow,
   UserWebhookRow,
@@ -50,6 +51,7 @@ interface State {
   commentReads: Map<string, string>
   versionComments: VersionCommentRow[]
   checkpoints: Map<string, CheckpointRow>
+  edits: Map<string, EditRow>
   userWebhooks: Map<string, UserWebhookRow>
   cleanup: Map<string, CleanupRow>
 }
@@ -77,6 +79,7 @@ const empty = (): State => ({
   commentReads: new Map(),
   versionComments: [],
   checkpoints: new Map(),
+  edits: new Map(),
   userWebhooks: new Map(),
   cleanup: new Map(),
 })
@@ -332,6 +335,37 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
       }
       return out
     },
+    insertEdit: async (row) => {
+      state.edits.set(row.id, clone(row))
+    },
+    getEdit: async (id) => clone(state.edits.get(id) ?? null),
+    updateEdit: async (id, patch) => {
+      const e = state.edits.get(id)
+      if (e) Object.assign(e, clone(patch))
+    },
+    deleteEdit: async (id) => {
+      state.edits.delete(id)
+    },
+    findEdit: async (authorId, jobId, baseN, now) =>
+      clone(
+        [...state.edits.values()]
+          .filter(
+            (e) =>
+              e.authorId === authorId &&
+              e.jobId === jobId &&
+              e.baseN === baseN &&
+              e.renderedN === null &&
+              e.expiresAt >= now,
+          )
+          .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0] ?? null,
+      ),
+    listExpiredEdits: async (now, limit) =>
+      clone(
+        [...state.edits.values()]
+          .filter((e) => e.expiresAt < now)
+          .sort((a, b) => a.expiresAt.localeCompare(b.expiresAt))
+          .slice(0, limit),
+      ),
     getCheckpoint: async (attemptId) => clone(state.checkpoints.get(attemptId) ?? null),
     putCheckpoint: async (row) => {
       state.checkpoints.set(row.attemptId, clone(row))

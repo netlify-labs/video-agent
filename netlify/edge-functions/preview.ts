@@ -38,16 +38,14 @@ export default async (req: Request, context: Context) => {
     fileSigningSecret?: string
   } | null
   const access = (await internal.get(`access/${t.jobId}.json`, { type: 'json' })) as AccessMirror | null
+  // e/{editId}/r{rev}/… is someone's edit draft: its capability signs that draft, not the version (plan v2 §8).
+  const draft = /^e\/([0-9a-f-]{36})\/r(\d{1,6})\/(.+)$/.exec(t.path)
+  const scope = draft
+    ? `${previewScope(t.jobId, t.versionN)}/e/${draft[1]}`
+    : previewScope(t.jobId, t.versionN)
   const ok =
     !!cfg?.fileSigningSecret &&
-    (await verifySignedPath(
-      cfg.fileSigningSecret,
-      previewScope(t.jobId, t.versionN),
-      t.exp,
-      t.sig,
-      Date.now() / 1000,
-      t.epoch,
-    )) &&
+    (await verifySignedPath(cfg.fileSigningSecret, scope, t.exp, t.sig, Date.now() / 1000, t.epoch)) &&
     !(access?.private && t.epoch !== access.epoch)
   if (!ok) return plain(403, 'This preview link has expired. Reopen the video to get a fresh one.')
 
@@ -66,9 +64,13 @@ export default async (req: Request, context: Context) => {
 
   const bundles = getStore({ name: 'bundles', consistency: 'strong' })
   // live/s{seq}/… is the running version's latest checkpoint snapshot (plan v2 §6 A2), under the same capability.
-  const live = /^live\/s(\d{1,9})\/(.+)$/.exec(t.path)
-  const prefix = live ? `${t.jobId}/v${t.versionN}/live/s${live[1]}/` : `${t.jobId}/v${t.versionN}/`
-  const path = live?.[2] ?? t.path
+  const live = draft ? null : /^live\/s(\d{1,9})\/(.+)$/.exec(t.path)
+  const prefix = draft
+    ? `${t.jobId}/v${t.versionN}/e/${draft[1]}/r${draft[2]}/`
+    : live
+      ? `${t.jobId}/v${t.versionN}/live/s${live[1]}/`
+      : `${t.jobId}/v${t.versionN}/`
+  const path = draft?.[3] ?? live?.[2] ?? t.path
   const index = (await bundles.get(`${prefix}manifest.json`, { type: 'json' })) as BundleIndex | null
   const entry = index?.files.find((f) => f.path === path)
   if (!entry) return plain(404, 'Not in this bundle.')

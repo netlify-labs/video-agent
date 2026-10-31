@@ -36,6 +36,7 @@ import type {
   PlanRow,
   CommentRow,
   CheckpointRow,
+  EditRow,
   GatewayCallRow,
   WebhookDeliveryRow,
   UserWebhookRow,
@@ -394,6 +395,43 @@ function repoFor(db: Db): Repo {
         .groupBy(c.jobId, r.readAt)
       return Object.fromEntries(rows.map((x) => [x.jobId, { count: x.count, unread: x.unread }]))
     },
+    insertEdit: async (row) => {
+      await db.insert(t.edits).values(row)
+    },
+    getEdit: async (id, opts) => {
+      const q = db.select().from(t.edits).where(eq(t.edits.id, id))
+      return one<EditRow>(opts?.lock ? await q.for('update') : await q)
+    },
+    updateEdit: async (id, patch) => {
+      await db.update(t.edits).set(patch).where(eq(t.edits.id, id))
+    },
+    deleteEdit: async (id) => {
+      await db.delete(t.edits).where(eq(t.edits.id, id))
+    },
+    findEdit: async (authorId, jobId, baseN, now) =>
+      one<EditRow>(
+        await db
+          .select()
+          .from(t.edits)
+          .where(
+            and(
+              eq(t.edits.authorId, authorId),
+              eq(t.edits.jobId, jobId),
+              eq(t.edits.baseN, baseN),
+              isNull(t.edits.renderedN),
+              gte(t.edits.expiresAt, now),
+            ),
+          )
+          .orderBy(desc(t.edits.updatedAt))
+          .limit(1),
+      ),
+    listExpiredEdits: async (now, limit) =>
+      (await db
+        .select()
+        .from(t.edits)
+        .where(lt(t.edits.expiresAt, now))
+        .orderBy(asc(t.edits.expiresAt))
+        .limit(limit)) as EditRow[],
     getCheckpoint: async (attemptId, opts) => {
       const q = db.select().from(t.checkpoints).where(eq(t.checkpoints.attemptId, attemptId))
       return one<CheckpointRow>(opts?.lock ? await q.for('update') : await q)

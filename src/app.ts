@@ -30,6 +30,7 @@ import * as hooks from './domain/webhook-settings.js'
 import { listNotifications, markNotificationsRead } from './domain/notifications.js'
 import { getProgress } from './domain/progress.js'
 import { previewLink } from './domain/preview.js'
+import { discardEdit, editPreviewLink, getEdit, openEdit, saveEdit } from './domain/edits.js'
 import { receiveCheckpoint } from './domain/checkpoints.js'
 import {
   addComment,
@@ -818,6 +819,82 @@ export function createApp(deps: Deps, opts: AppOptions) {
       responses: { 200: json(s.ProgressSchema, 'Progress'), ...errors },
     }),
     async (c) => c.json(await getProgress(deps, c.get('principal'), c.req.valid('param').id), 200),
+  )
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/v1/videos/{id}/versions/{n}/edits',
+      summary: 'Open your edit draft of a finished, editable version (creates it if you have none)',
+      tags: ['editor'],
+      security,
+      request: { params: VersionParam },
+      responses: {
+        200: json(s.EditSchema, 'Your open draft'),
+        201: json(s.EditSchema, 'A new draft'),
+        ...errors,
+      },
+    }),
+    async (c) => {
+      const p = c.req.valid('param')
+      const r = await openEdit(deps, c.get('principal'), p.id, p.n)
+      return c.json(r.edit, r.created ? 201 : 200)
+    },
+  )
+  const EditParam = z.object({ id: z.string() })
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/v1/edits/{id}',
+      summary: 'One of your edit drafts',
+      tags: ['editor'],
+      security,
+      request: { params: EditParam },
+      responses: { 200: json(s.EditSchema, 'Draft'), ...errors },
+    }),
+    async (c) => c.json(await getEdit(deps, c.get('principal'), c.req.valid('param').id), 200),
+  )
+  app.openapi(
+    createRoute({
+      method: 'put',
+      path: '/api/v1/edits/{id}',
+      summary: 'Save the full list of edits as the next rev (rev must match the draft, for multi-tab safety)',
+      tags: ['editor'],
+      security,
+      request: {
+        params: EditParam,
+        body: { content: { 'application/json': { schema: s.SaveEditSchema } }, required: true },
+      },
+      responses: { 200: json(s.EditSchema, 'Saved'), ...errors },
+    }),
+    async (c) =>
+      c.json(await saveEdit(deps, c.get('principal'), c.req.valid('param').id, c.req.valid('json')), 200),
+  )
+  app.openapi(
+    createRoute({
+      method: 'delete',
+      path: '/api/v1/edits/{id}',
+      summary: 'Discard one of your edit drafts',
+      tags: ['editor'],
+      security,
+      request: { params: EditParam },
+      responses: { 204: { description: 'Discarded' }, ...errors },
+    }),
+    async (c) => {
+      await discardEdit(deps, c.get('principal'), c.req.valid('param').id)
+      return c.body(null, 204)
+    },
+  )
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/v1/edits/{id}/preview',
+      summary: "A short-lived link to play the draft's current rev in the sandboxed preview",
+      tags: ['editor'],
+      security,
+      request: { params: EditParam },
+      responses: { 200: json(s.PreviewLinkSchema, 'Preview link'), ...errors },
+    }),
+    async (c) => c.json(await editPreviewLink(deps, c.get('principal'), c.req.valid('param').id), 200),
   )
   const CommentParam = z.object({ id: z.string() })
   app.openapi(

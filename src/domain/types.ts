@@ -305,6 +305,22 @@ export interface CommentRow {
   deletedAt: string | null
 }
 
+export interface EditRow {
+  id: string
+  jobId: string
+  baseN: number
+  authorId: string
+  rev: number
+  /** The contract edit operations, in order (src/lib/contract.ts EditOp). */
+  ops: unknown[]
+  /** Canonical manifest hash of this rev's bundle. */
+  bundleSha256: string | null
+  renderedN: number | null
+  createdAt: string
+  updatedAt: string
+  expiresAt: string
+}
+
 export interface CheckpointRow {
   attemptId: string
   jobId: string

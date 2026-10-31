@@ -268,6 +268,26 @@ export const comments = pgTable(
   (t) => [index('comments_job_idx').on(t.jobId, t.createdAt)],
 )
 
+// Edit drafts (plan v2 §8): one person's edits on one version, re-applied by the server on every save. Each rev has
+// an immutable bundle in the bundles store; a render freezes the draft's latest rev into the new version.
+export const edits = pgTable(
+  'edits',
+  {
+    id: text('id').primaryKey(),
+    jobId: text('job_id').notNull(),
+    baseN: integer('base_n').notNull(),
+    authorId: text('author_id').notNull(),
+    rev: integer('rev').notNull(),
+    ops: jsonb('ops').notNull(),
+    bundleSha256: text('bundle_sha256'),
+    renderedN: integer('rendered_n'),
+    createdAt: ts('created_at').notNull(),
+    updatedAt: ts('updated_at').notNull(),
+    expiresAt: ts('expires_at').notNull(),
+  },
+  (t) => [index('edits_author_idx').on(t.authorId, t.jobId), index('edits_expires_idx').on(t.expiresAt)],
+)
+
 // The latest milestone a run reported (plan v2 §6 A2): one row per attempt, replaced only by a higher seq.
 export const checkpoints = pgTable('checkpoints', {
   attemptId: text('attempt_id').primaryKey(),

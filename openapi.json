@@ -1744,6 +1744,507 @@
           "checkpoint"
         ]
       },
+      "Edit": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "videoId": {
+            "type": "string"
+          },
+          "baseN": {
+            "type": "integer"
+          },
+          "rev": {
+            "type": "integer"
+          },
+          "ops": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "enum": [
+                        "text"
+                      ]
+                    },
+                    "id": {
+                      "type": "string",
+                      "maxLength": 80
+                    },
+                    "text": {
+                      "type": "string",
+                      "maxLength": 500
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "id",
+                    "text"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "enum": [
+                        "retime"
+                      ]
+                    },
+                    "beat": {
+                      "type": "string",
+                      "maxLength": 80
+                    },
+                    "duration": {
+                      "type": "number",
+                      "minimum": 0.5,
+                      "maximum": 120
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "beat",
+                    "duration"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "enum": [
+                        "reorder"
+                      ]
+                    },
+                    "order": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "maxLength": 80
+                      },
+                      "maxItems": 100
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "order"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "enum": [
+                        "delete"
+                      ]
+                    },
+                    "beat": {
+                      "type": "string",
+                      "maxLength": 80
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "beat"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "enum": [
+                        "color"
+                      ]
+                    },
+                    "role": {
+                      "type": "string",
+                      "maxLength": 40
+                    },
+                    "value": {
+                      "type": "string",
+                      "maxLength": 20
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "role",
+                    "value"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "enum": [
+                        "media"
+                      ]
+                    },
+                    "slot": {
+                      "type": "string",
+                      "maxLength": 80
+                    },
+                    "src": {
+                      "type": "string",
+                      "maxLength": 200
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "image",
+                        "video"
+                      ]
+                    },
+                    "fit": {
+                      "type": "string",
+                      "enum": [
+                        "cover",
+                        "contain"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "slot",
+                    "src",
+                    "kind",
+                    "fit"
+                  ]
+                }
+              ]
+            }
+          },
+          "composition": {
+            "type": "object",
+            "properties": {
+              "duration": {
+                "type": "number"
+              },
+              "colors": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "beats": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "start": {
+                      "type": "number"
+                    },
+                    "duration": {
+                      "type": "number"
+                    },
+                    "authoredDuration": {
+                      "type": "number"
+                    },
+                    "texts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "text": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "text"
+                        ]
+                      }
+                    },
+                    "media": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "slot": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "image",
+                              "video"
+                            ]
+                          },
+                          "src": {
+                            "type": "string"
+                          },
+                          "beat": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "fit": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "slot",
+                          "kind",
+                          "src",
+                          "beat",
+                          "fit"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "start",
+                    "duration",
+                    "authoredDuration",
+                    "texts",
+                    "media"
+                  ]
+                }
+              },
+              "layers": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "duration",
+              "colors",
+              "beats",
+              "layers"
+            ]
+          },
+          "palette": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "expiresAt": {
+            "type": "string"
+          },
+          "renderedN": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "newerVersion": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "A newer version exists: start from it, or render this draft as the next version"
+          }
+        },
+        "required": [
+          "id",
+          "videoId",
+          "baseN",
+          "rev",
+          "ops",
+          "composition",
+          "palette",
+          "expiresAt",
+          "renderedN",
+          "newerVersion"
+        ]
+      },
+      "SaveEdit": {
+        "type": "object",
+        "properties": {
+          "ops": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "enum": [
+                        "text"
+                      ]
+                    },
+                    "id": {
+                      "type": "string",
+                      "maxLength": 80
+                    },
+                    "text": {
+                      "type": "string",
+                      "maxLength": 500
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "id",
+                    "text"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "enum": [
+                        "retime"
+                      ]
+                    },
+                    "beat": {
+                      "type": "string",
+                      "maxLength": 80
+                    },
+                    "duration": {
+                      "type": "number",
+                      "minimum": 0.5,
+                      "maximum": 120
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "beat",
+                    "duration"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "enum": [
+                        "reorder"
+                      ]
+                    },
+                    "order": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "maxLength": 80
+                      },
+                      "maxItems": 100
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "order"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "enum": [
+                        "delete"
+                      ]
+                    },
+                    "beat": {
+                      "type": "string",
+                      "maxLength": 80
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "beat"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "enum": [
+                        "color"
+                      ]
+                    },
+                    "role": {
+                      "type": "string",
+                      "maxLength": 40
+                    },
+                    "value": {
+                      "type": "string",
+                      "maxLength": 20
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "role",
+                    "value"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "enum": [
+                        "media"
+                      ]
+                    },
+                    "slot": {
+                      "type": "string",
+                      "maxLength": 80
+                    },
+                    "src": {
+                      "type": "string",
+                      "maxLength": 200
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "image",
+                        "video"
+                      ]
+                    },
+                    "fit": {
+                      "type": "string",
+                      "enum": [
+                        "cover",
+                        "contain"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "slot",
+                    "src",
+                    "kind",
+                    "fit"
+                  ]
+                }
+              ]
+            },
+            "maxItems": 500
+          },
+          "rev": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "ops",
+          "rev"
+        ]
+      },
       "CommentList": {
         "type": "object",
         "properties": {
@@ -5483,6 +5984,464 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Progress"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/videos/{id}/versions/{n}/edits": {
+      "post": {
+        "summary": "Open your edit draft of a finished, editable version (creates it if you have none)",
+        "tags": [
+          "editor"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "required": true,
+            "name": "n",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Your open draft",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Edit"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "A new draft",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Edit"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/edits/{id}": {
+      "get": {
+        "summary": "One of your edit drafts",
+        "tags": [
+          "editor"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Draft",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Edit"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Save the full list of edits as the next rev (rev must match the draft, for multi-tab safety)",
+        "tags": [
+          "editor"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveEdit"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Edit"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Discard one of your edit drafts",
+        "tags": [
+          "editor"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Discarded"
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/edits/{id}/preview": {
+      "get": {
+        "summary": "A short-lived link to play the draft's current rev in the sandboxed preview",
+        "tags": [
+          "editor"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Preview link",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewLink"
                 }
               }
             }
