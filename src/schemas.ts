@@ -210,7 +210,7 @@ export const UserSchema = z
   })
   .openapi('User')
 export const PutWebhookSchema = z
-  .object({ url: z.string().url().max(2000), rotate: z.boolean().optional() })
+  .object({ url: z.url().max(2000), rotate: z.boolean().optional() })
   .openapi('PutWebhook')
 export const WebhookSettingSchema = z
   .object({
