@@ -282,7 +282,16 @@ export const CreatePlanSchema = z
 export const PlanAnswersSchema = z
   .object({ answers: z.array(PlanAnswerSchema).max(6) })
   .openapi('PlanAnswers')
-export const PatchPlanSchema = z.object({ brief: PlanBriefSchema }).openapi('PatchPlan')
+export const PatchPlanSchema = z
+  .object({
+    brief: PlanBriefSchema,
+    briefRev: z
+      .number()
+      .int()
+      .optional()
+      .describe('The briefRev you loaded; the save is refused if it changed (If-Match also works).'),
+  })
+  .openapi('PatchPlan')
 
 export const MyUsageSchema = z
   .object({

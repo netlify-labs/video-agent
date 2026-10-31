@@ -701,7 +701,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'patch',
       path: '/api/v1/plans/{id}',
-      summary: 'Save your edits to the brief (send If-Match with the current briefRev)',
+      summary: 'Save your edits to the brief (send the briefRev you loaded)',
       tags: ['planning'],
       security,
       request: {
@@ -712,8 +712,10 @@ export function createApp(deps: Deps, opts: AppOptions) {
       responses: { 200: json(s.PlanSchema, 'Saved'), ...errors },
     }),
     async (c) => {
+      // The revision comes in the body (some CDNs consume If-Match before it reaches the function) or If-Match.
       const raw = c.req.header('if-match')?.replace(/"/g, '')
-      const ifMatch = raw && /^\d+$/.test(raw) ? Number(raw) : null
+      const body = c.req.valid('json')
+      const ifMatch = body.briefRev ?? (raw && /^\d+$/.test(raw) ? Number(raw) : null)
       return c.json(
         await planning.updatePlanBrief(
           deps,

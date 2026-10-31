@@ -2303,7 +2303,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Save your edits to the brief (send If-Match with the current briefRev) */
+        /** Save your edits to the brief (send the briefRev you loaded) */
         patch: {
             parameters: {
                 query?: never;
@@ -3441,6 +3441,8 @@ export interface components {
         };
         PatchPlan: {
             brief: components["schemas"]["PlanBrief"];
+            /** @description The briefRev you loaded; the save is refused if it changed (If-Match also works). */
+            briefRev?: number;
         };
         MyUsage: {
             since: string;

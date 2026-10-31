@@ -179,11 +179,16 @@ describe('planning', () => {
     expect(stale.status).toBe(409)
     const saved = await h.call('PATCH', `/api/v1/plans/${plan.id}`, {
       as: h.member,
-      headers: { 'if-match': '1' },
-      body: { brief: edited },
+      body: { brief: edited, briefRev: 1 },
     })
     expect(saved.status).toBe(200)
-    expect((await h.json(saved)).briefRev).toBe(2)
+    // If-Match still works too.
+    const viaHeader = await h.call('PATCH', `/api/v1/plans/${plan.id}`, {
+      as: h.member,
+      headers: { 'if-match': '2' },
+      body: { brief: edited },
+    })
+    expect((await h.json(viaHeader)).briefRev).toBe(3)
   })
 
   it('plans belong to their author, expire, need Creator and AI Gateway, and respect privacy', async () => {

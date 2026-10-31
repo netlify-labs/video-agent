@@ -96,12 +96,10 @@ if (briefed.status !== 200 || !briefed.json.brief)
   fail('brief', { status: briefed.status, error: briefed.json.error })
 log('brief', { ms: Date.now() - t, brief: briefed.json.brief })
 const edited = { ...briefed.json.brief, callToAction: 'Read the docs' }
-const saved = await api<Plan>(
-  'PATCH',
-  `/api/v1/plans/${planId}`,
-  { brief: edited },
-  { 'if-match': String(briefed.json.briefRev) },
-)
+const saved = await api<Plan>('PATCH', `/api/v1/plans/${planId}`, {
+  brief: edited,
+  briefRev: briefed.json.briefRev,
+})
 if (saved.status !== 200) fail('brief edit', { status: saved.status, error: saved.json.error })
 log('brief_saved', { briefRev: saved.json.briefRev })
 

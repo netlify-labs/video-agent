@@ -1418,6 +1418,10 @@
         "properties": {
           "brief": {
             "$ref": "#/components/schemas/PlanBrief"
+          },
+          "briefRev": {
+            "type": "integer",
+            "description": "The briefRev you loaded; the save is refused if it changed (If-Match also works)."
           }
         },
         "required": [
@@ -4396,7 +4400,7 @@
         }
       },
       "patch": {
-        "summary": "Save your edits to the brief (send If-Match with the current briefRev)",
+        "summary": "Save your edits to the brief (send the briefRev you loaded)",
         "tags": [
           "planning"
         ],

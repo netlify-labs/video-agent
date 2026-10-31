@@ -98,8 +98,8 @@ export function PlanPanel(props: PlanPanelProps) {
     if (!plan) return props.onCreate(null)
     if (edited && brief) {
       await save.mutateAsync({
-        params: { path: { id: plan.id }, header: { 'if-match': String(plan.briefRev) } },
-        body: { brief },
+        params: { path: { id: plan.id } },
+        body: { brief, briefRev: plan.briefRev },
       })
     }
     props.onCreate(plan.id)
