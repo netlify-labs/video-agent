@@ -226,6 +226,36 @@ export function installMock() {
       if (owner === 'me') items = items.filter((v) => v.owner.id === me.id)
       return json({ items: items.map(withComments), nextCursor: null })
     }
+    // Live progress (plan v2 §6): the step moves on with every poll; localStorage.mockStale marks it stale.
+    const pg = /^\/api\/v1\/videos\/([^/]+)\/progress$/.exec(p)
+    if (pg?.[1]) {
+      const w = window as unknown as { __progressCalls?: number }
+      w.__progressCalls = (w.__progressCalls ?? 0) + 1
+      const vid = videos.find((x) => x.id === pg[1])
+      const latest = vid?.versions[0]
+      const steps = [
+        'Reading context/',
+        'Writing the composition',
+        'Writing the end card',
+        'Checking, round 2',
+      ]
+      let stale = false
+      try {
+        stale = localStorage.getItem('mockStale') === '1'
+      } catch {
+        // private mode
+      }
+      return json({
+        attemptId: latest ? `att_${vid.id}_${latest.n}` : null,
+        versionN: latest?.n ?? null,
+        stage: latest?.stage ?? null,
+        step: steps[(w.__progressCalls - 1) % steps.length],
+        steps: 10 + w.__progressCalls,
+        credits: 30 + w.__progressCalls * 2,
+        observedAt: new Date(Date.now() - (stale ? 90_000 : 2000)).toISOString(),
+        stale,
+      })
+    }
     // Review (plan v2 §5)
     const cm = /^\/api\/v1\/videos\/([^/]+)\/comments(\/read)?$/.exec(p)
     if (cm?.[1] && cm[2]) {

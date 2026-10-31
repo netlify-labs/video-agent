@@ -204,3 +204,38 @@ test('viewers and non-owners get no Incorporate button', async ({ page }) => {
   await expect(page.getByText('Love the end card.')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Incorporate feedback' })).toHaveCount(0)
 })
+
+// Live progress (plan v2 §6)
+test('narration updates while the run is going, with steps and credits as counts', async ({ page }) => {
+  await page.goto('/videos/vid_making')
+  const narration = page.getByTestId('narration')
+  await expect(narration).toContainText('Working: ')
+  await expect(narration).toContainText(/\d+ steps · \d+ credits so far · updated just now/)
+  const first = await narration.innerText()
+  await expect.poll(() => narration.innerText(), { timeout: 8000 }).not.toBe(first)
+  await expect(narration).not.toContainText('%')
+})
+
+test('narration polling pauses while the tab is hidden', async ({ page }) => {
+  await page.goto('/videos/vid_making')
+  await expect(page.getByTestId('narration')).toBeVisible()
+  await expect.poll(() => page.evaluate<number>('window.__progressCalls ?? 0')).toBeGreaterThan(0)
+  await page.evaluate(`
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' })
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => true })
+    document.dispatchEvent(new Event('visibilitychange'))
+  `)
+  const calls = () => page.evaluate<number>('window.__progressCalls ?? 0')
+  const before = await calls()
+  await page.waitForTimeout(7000)
+  expect(await calls()).toBe(before)
+})
+
+test('a stale update says so', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('mockStale', '1')
+  })
+  await page.goto('/videos/vid_making')
+  await expect(page.getByTestId('narration')).toContainText("couldn't reach the run, showing the last update")
+  await expect(page.getByTestId('narration')).toContainText('updated 1 min ago')
+})

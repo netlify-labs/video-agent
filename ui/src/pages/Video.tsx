@@ -63,6 +63,41 @@ function clock(since: string | null | undefined): string {
   return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
 }
 
+function updatedAgo(iso: string): string {
+  const s = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000))
+  return s < 5 ? 'updated just now' : s < 60 ? `updated ${s} s ago` : `updated ${relativeTime(iso)}`
+}
+
+/** Live narration (plan v2 §6 A1): polls /progress every 3 s while the tab is visible and the run is going. */
+function Narration({ video, v }: { video: Video; v: Version }) {
+  const progress = $api.useQuery(
+    'get',
+    '/api/v1/videos/{id}/progress',
+    { params: { path: { id: video.id } } },
+    { refetchInterval: 3000, refetchIntervalInBackground: false, enabled: inProgress(v.status) },
+  )
+  const p = progress.data?.versionN === v.n ? progress.data : null
+  const step = p?.step ?? v.latestStep
+  if (!step && p?.steps == null) return null
+  const counts = [
+    p?.steps != null ? `${p.steps} step${p.steps === 1 ? '' : 's'}` : null,
+    p?.credits != null ? `${credits(p.credits)} credits so far` : null,
+  ].filter(Boolean)
+  return (
+    <Stack gap={2} data-testid="narration">
+      {step ? (
+        <Text size="sm" c="var(--va-muted)" lineClamp={2}>
+          Working: {step}
+        </Text>
+      ) : null}
+      <Text size="xs" c="var(--va-faint)" className="num">
+        {[...counts, p?.observedAt ? updatedAgo(p.observedAt) : null].filter(Boolean).join(' · ')}
+        {p?.stale ? " · couldn't reach the run, showing the last update" : ''}
+      </Text>
+    </Stack>
+  )
+}
+
 function Progress({ video, v, canCancel }: { video: Video; v: Version; canCancel: boolean }) {
   useTicker()
   const qc = useQueryClient()
@@ -105,11 +140,7 @@ function Progress({ video, v, canCancel }: { video: Video; v: Version; canCancel
           <Text size="sm" c="var(--va-muted)">
             {STAGE_WORDS[v.stage ?? 'queued'] ?? 'Working'}
           </Text>
-          {v.latestStep ? (
-            <Text size="sm" c="var(--va-faint)" lineClamp={2}>
-              Agent: {v.latestStep}
-            </Text>
-          ) : null}
+          <Narration video={video} v={v} />
           <Group justify="space-between" mt="xs">
             {'Notification' in window ? (
               <Switch
