@@ -305,8 +305,8 @@ inserts `member`; idempotency replays before loading the job; `GET /videos/{id}`
 loads GSAP from a CDN; `targetDurationSec` is an integer.
 
 - Taken: everything in §14.
-- Not taken: Fable's "split `/plans` into route + questions" (taken in a three-request form). Codex's identity-bound
-  file capabilities were taken in the lighter `accessEpoch` form.
+- Adapted: Fable's "split `/plans`" became three requests (route, questions, brief) plus `PATCH`; Codex's
+  identity-bound file capabilities became the lighter `accessEpoch` signature.
 - Owner decisions:
   - Private is in-app hiding among trusted colleagues.
   - The team webhook gets full private details.
