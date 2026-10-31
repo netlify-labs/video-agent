@@ -32,7 +32,6 @@ import type {
   VersionRow,
   WebhookEventRow,
   VerdictRow,
-  OwnershipTransferRow,
   WebhookDeliveryRow,
   UserWebhookRow,
 } from '../domain/types.js'
