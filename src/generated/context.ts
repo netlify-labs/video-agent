@@ -2,12 +2,14 @@
 export const contextMeta = {
   "isDefault": true,
   "name": "Video Agent",
+  "appName": "Video Agent",
   "primaryColor": "#14b8a6",
   "logo": null,
   "logoLight": null
 } as {
   isDefault: boolean
   name: string
+  appName: string
   primaryColor: string
   logo: string | null
   logoLight: string | null

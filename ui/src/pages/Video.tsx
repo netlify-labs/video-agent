@@ -526,12 +526,7 @@ export function VideoPage() {
                 display: 'block',
               }}
             >
-              <track
-                kind="captions"
-                src={fileUrl(data.id, v.n, 'captions')}
-                srcLang="en"
-                label="Captions"
-              />
+              <track kind="captions" src={fileUrl(data.id, v.n, 'captions')} srcLang="en" label="Captions" />
             </video>
           ) : (
             <Card p={0} style={{ overflow: 'hidden' }}>

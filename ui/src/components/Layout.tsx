@@ -68,8 +68,8 @@ export function Layout() {
           <Group gap="sm">
             <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" aria-label="Menu" />
             <Link to="/" className="va-mark">
-              {logo ? <img src={logo} alt="" height={22} /> : <Mark />}
-              {brand.name}
+              {logo ? <img src={logo} alt="" height={28} /> : <Mark />}
+              {brand.appName}
             </Link>
           </Group>
           <Group gap="sm">

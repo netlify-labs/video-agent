@@ -11,6 +11,7 @@ import {
   Text,
   TextInput,
   Title,
+  useComputedColorScheme,
 } from '@mantine/core'
 import { useState } from 'react'
 import { Link } from 'react-router'
@@ -20,6 +21,7 @@ import { brand } from '../theme'
 import { Mark, PoweredBy } from '../components/bits'
 
 export function AuthPages({ setupReady }: { setupReady: boolean }) {
+  const logo = useComputedColorScheme('dark') === 'light' ? (brand.logoLight ?? brand.logo) : brand.logo
   const auth = useAuth()
   const config = $api.useQuery('get', '/api/v1/config')
   const [email, setEmail] = useState('')
@@ -50,8 +52,8 @@ export function AuthPages({ setupReady }: { setupReady: boolean }) {
         <Stack>
           <div>
             <Group gap={10} mb="md">
-              <Mark size={28} />
-              <Title order={1}>{brand.name}</Title>
+              {logo ? <img src={logo} alt="" height={36} /> : <Mark size={28} />}
+              <Title order={1}>{brand.appName}</Title>
             </Group>
             <Text c="var(--va-muted)" size="sm">
               Describe a video. An agent makes it in a few minutes.
