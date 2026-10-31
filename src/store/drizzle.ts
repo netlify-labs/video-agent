@@ -397,7 +397,7 @@ function repoFor(db: Db): Repo {
       if (rows.length) await db.insert(t.versionComments).values(rows)
     },
     listVersionComments: async (jobId, n) =>
-      (await db
+      await db
         .select()
         .from(t.versionComments)
         .where(
@@ -406,7 +406,7 @@ function repoFor(db: Db): Repo {
             n === undefined ? undefined : eq(t.versionComments.versionN, n),
           ),
         )
-        .orderBy(asc(t.versionComments.versionN), asc(t.versionComments.position))),
+        .orderBy(asc(t.versionComments.versionN), asc(t.versionComments.position)),
     markCommentsAddressed: async (jobId, ids, n) => {
       if (ids.length === 0) return
       await db

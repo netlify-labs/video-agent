@@ -2799,6 +2799,89 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/videos/{id}/progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Live progress of the latest version's run: the agent's step, steps and credits so far */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Progress */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Progress"];
+                    };
+                };
+                /** @description Invalid request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not signed in */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not allowed */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Conflict or not ready */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/videos/{id}/comments": {
         parameters: {
             query?: never;
@@ -3885,6 +3968,21 @@ export interface components {
             summary: string;
             createdAt: string;
             unread: boolean;
+        };
+        Progress: {
+            attemptId: string | null;
+            versionN: number | null;
+            stage: components["schemas"]["Stage"];
+            /** @description The agent's latest step, in its own words */
+            step: string | null;
+            /** @description Agent steps so far (a count, not a percentage) */
+            steps: number | null;
+            /** @description Credits used so far */
+            credits: number | null;
+            /** @description When the run was last read (null: from stored rows) */
+            observedAt: string | null;
+            /** @description True when the run couldn't be read and this is the last known value */
+            stale: boolean;
         };
         CommentList: {
             items: components["schemas"]["Comment"][];

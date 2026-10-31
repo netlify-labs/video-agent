@@ -7,6 +7,7 @@ import { decrypt, webhookSignature } from '../lib/crypto.js'
 import type { Repo } from '../store/types.js'
 import { getSettings } from './settings.js'
 import type { JobRow, WebhookDeliveryRow, WebhookDestKind, WebhookEventType } from './types.js'
+import { progressKey } from './progress.js'
 import { canSee, videoDto } from './videos.js'
 
 const DELIVER_FOR_MS = 24 * 3600_000
@@ -77,9 +78,18 @@ export async function emitEvent(
 }
 
 /** video.ready / video.failed for an attempt that just reached a terminal stage. */
+/** Every path that ends an attempt calls this: the terminal webhook, plus cleanup of its progress cache. */
 export async function emitTerminalEvent(repo: Repo, deps: EmitDeps, attemptId: string) {
   const a = await repo.getAttempt(attemptId)
   if (!a) return
+  await repo.insertCleanup({
+    id: deps.ids.uuid(),
+    kind: 'delete_prefix',
+    store: 'internal',
+    prefix: progressKey(attemptId),
+    nextActionAt: deps.clock.now().toISOString(),
+    doneAt: null,
+  })
   await emitEvent(repo, deps, {
     type: a.stage === 'ready' ? 'video.ready' : 'video.failed',
     jobId: a.jobId,

@@ -42,16 +42,13 @@ interface Comment {
   versionN: number
   addressedInN: number | null
 }
-interface Json {
+/** Every response this script reads, as one shape (each call reads only its own fields). */
+interface Json extends Video, Comment {
   items?: (Video & Comment)[]
   error?: { message?: string }
 }
 
-async function api<T>(
-  method: string,
-  path: string,
-  body?: unknown,
-): Promise<{ status: number; json: T & Json }> {
+async function api(method: string, path: string, body?: unknown): Promise<{ status: number; json: Json }> {
   const res = await fetch(`${base}${path}`, {
     method,
     headers: {
@@ -62,15 +59,15 @@ async function api<T>(
     ...(body ? { body: JSON.stringify(body) } : {}),
   })
   const text = await res.text()
-  return { status: res.status, json: (text ? JSON.parse(text) : {}) as T & Json }
+  return { status: res.status, json: (text ? JSON.parse(text) : {}) as Json }
 }
 
 let id = process.env.VIDEO_ID ?? ''
 if (!id) {
-  const list = await api<Json>('GET', '/api/v1/videos?owner=me&status=ready&limit=1')
+  const list = await api('GET', '/api/v1/videos?owner=me&status=ready&limit=1')
   id = list.json.items?.[0]?.id ?? fail('No ready video owned by this key to test with.')
 }
-const video = (await api<Video>('GET', `/api/v1/videos/${id}`)).json
+const video = (await api('GET', `/api/v1/videos/${id}`)).json
 if (video.versions.some((v) => ['queued', 'running', 'finishing'].includes(v.status)))
   fail('A version of this video is still in progress.', { id })
 const from = video.versions.find((v) => v.status === 'ready') ?? fail('The video has no ready version.')
@@ -78,7 +75,7 @@ const length = from.output?.durationSec ?? 4
 log('video', { id, from: from.n, durationSec: length })
 
 const pin = async (body: string, timeSec: number, x: number, y: number) => {
-  const r = await api<Comment>('POST', `/api/v1/videos/${id}/comments`, {
+  const r = await api('POST', `/api/v1/videos/${id}/comments`, {
     versionN: from.n,
     body,
     timeSec,
@@ -102,7 +99,7 @@ const skipped = await pin(
   0.3,
 )
 
-const rev = await api<Video>('POST', `/api/v1/videos/${id}/versions`, {
+const rev = await api('POST', `/api/v1/videos/${id}/versions`, {
   prompt: 'Only change what the feedback asks for.',
   fromVersion: from.n,
   commentIds: [picked],
@@ -115,7 +112,7 @@ let last = ''
 const sawFeedback = new Set<string>()
 for (let i = 0; i < 100; i++) {
   await new Promise((r) => setTimeout(r, 15_000))
-  const v = (await api<Video>('GET', `/api/v1/videos/${id}`)).json.versions.find((x) => x.n === n)
+  const v = (await api('GET', `/api/v1/videos/${id}`)).json.versions.find((x) => x.n === n)
   if (!v) continue
   if (v.latestStep?.includes('feedback/')) sawFeedback.add(v.latestStep.slice(0, 160))
   if (`${v.status}:${v.latestStep}` !== last) {
@@ -131,7 +128,7 @@ for (let i = 0; i < 100; i++) {
   if (i === 99) fail('Timed out waiting for the version.')
 }
 
-const comments = (await api<Json>('GET', `/api/v1/videos/${id}/comments?version=${from.n}`)).json.items ?? []
+const comments = (await api('GET', `/api/v1/videos/${id}/comments?version=${from.n}`)).json.items ?? []
 const a = comments.find((c) => c.id === picked)
 const b = comments.find((c) => c.id === skipped)
 log('addressed', { picked: a?.addressedInN, skipped: b?.addressedInN })

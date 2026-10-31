@@ -310,6 +310,28 @@ export const MyUsageSchema = z
   })
   .openapi('MyUsage')
 
+export const ProgressSchema = z
+  .object({
+    attemptId: z.string().nullable(),
+    versionN: z.number().int().nullable(),
+    stage: StageSchema.nullable(),
+    step: z.string().nullable().openapi({ description: "The agent's latest step, in its own words" }),
+    steps: z
+      .number()
+      .int()
+      .nullable()
+      .openapi({ description: 'Agent steps so far (a count, not a percentage)' }),
+    credits: z.number().nullable().openapi({ description: 'Credits used so far' }),
+    observedAt: z
+      .string()
+      .nullable()
+      .openapi({ description: 'When the run was last read (null: from stored rows)' }),
+    stale: z
+      .boolean()
+      .openapi({ description: "True when the run couldn't be read and this is the last known value" }),
+  })
+  .openapi('Progress')
+
 export const NotificationSchema = z
   .object({
     id: z.string(),

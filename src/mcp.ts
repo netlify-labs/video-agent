@@ -7,6 +7,7 @@ import { z } from 'zod'
 import type { Deps } from './deps.js'
 import { PRIVATE_URL_TTL_SEC, signedFilePath } from './domain/files.js'
 import { addComment, listComments } from './domain/comments.js'
+import { getProgress } from './domain/progress.js'
 import * as planning from './domain/plans.js'
 import { can, type Principal } from './domain/policy.js'
 import type { Aspect } from './domain/types.js'
@@ -378,7 +379,22 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "wait_seconds": 8}`,
           v = await load(id)
           if (v.etag !== start) break
         }
-        return summarize(deps, v)
+        const summary = await summarize(deps, v)
+        if (!['queued', 'running', 'finishing'].includes(v.status)) return summary
+        // Live progress for a version in progress (plan v2 §6).
+        const p = await getProgress(deps, principal, id)
+        return {
+          ...summary,
+          progress: {
+            version: p.versionN,
+            stage: p.stage,
+            step: p.step,
+            steps: p.steps,
+            credits: p.credits,
+            observed_at: p.observedAt,
+            stale: p.stale,
+          },
+        }
       }, args.video_id),
   )
 

@@ -28,6 +28,7 @@ import { signedFilePath } from './domain/files.js'
 import { handleMcp } from './mcp.js'
 import * as hooks from './domain/webhook-settings.js'
 import { listNotifications, markNotificationsRead } from './domain/notifications.js'
+import { getProgress } from './domain/progress.js'
 import {
   addComment,
   deleteComment,
@@ -783,6 +784,18 @@ export function createApp(deps: Deps, opts: AppOptions) {
       await markNotificationsRead(deps, c.get('principal'), body.upTo)
       return c.body(null, 204)
     },
+  )
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/v1/videos/{id}/progress',
+      summary: "Live progress of the latest version's run: the agent's step, steps and credits so far",
+      tags: ['videos'],
+      security,
+      request: { params: z.object({ id: z.string() }) },
+      responses: { 200: json(s.ProgressSchema, 'Progress'), ...errors },
+    }),
+    async (c) => c.json(await getProgress(deps, c.get('principal'), c.req.valid('param').id), 200),
   )
   const CommentParam = z.object({ id: z.string() })
   app.openapi(

@@ -1615,6 +1615,68 @@
           "unread"
         ]
       },
+      "Progress": {
+        "type": "object",
+        "properties": {
+          "attemptId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "versionN": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "stage": {
+            "$ref": "#/components/schemas/Stage"
+          },
+          "step": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The agent's latest step, in its own words"
+          },
+          "steps": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Agent steps so far (a count, not a percentage)"
+          },
+          "credits": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Credits used so far"
+          },
+          "observedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When the run was last read (null: from stored rows)"
+          },
+          "stale": {
+            "type": "boolean",
+            "description": "True when the run couldn't be read and this is the last known value"
+          }
+        },
+        "required": [
+          "attemptId",
+          "versionN",
+          "stage",
+          "step",
+          "steps",
+          "credits",
+          "observedAt",
+          "stale"
+        ]
+      },
       "CommentList": {
         "type": "object",
         "properties": {
@@ -5161,6 +5223,94 @@
         "responses": {
           "204": {
             "description": "Marked read"
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/videos/{id}/progress": {
+      "get": {
+        "summary": "Live progress of the latest version's run: the agent's step, steps and credits so far",
+        "tags": [
+          "videos"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Progress",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Progress"
+                }
+              }
+            }
           },
           "400": {
             "description": "Invalid request",
