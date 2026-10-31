@@ -134,3 +134,29 @@ What changed from the plan:
   so the edge function must authorize by capability only and never vary on cookies (tested: same bytes with and
   without the cookie). A separate preview origin would remove even that; not needed for v1.
 - MP4 slots play under the capability (`media-src`, Range), so the poster fallback isn't needed.
+
+### S8: edit round trip on a contract-1 composition (2026-10-31, `spikes/s8`)
+
+A contract-1 fixture (three beats, a background layer on track 1, text, colour roles, an image slot and a video
+slot) passes `hyperframes check` and renders. Beats are composition siblings (`data-va-beat` = `data-composition-id`)
+registered through a vendored seek adapter, `vendor/va-contract.js` (`vaBeat(id, (tl, el) => …)`): the authored
+animations sit in an inner timeline that the registered one time-stretches by `data-duration` /
+`data-va-authored-duration`, so a retime needs no script change. Rendered and sampled frame by frame:
+
+| Variant | Length | What the frames show |
+| --- | --- | --- |
+| base | 9.0 s | intro 0-3, demo (video slot) 3-6, outro 6-9 |
+| intro stretched to 4.5 s | 10.5 s | intro holds to 4.5 s, demo from 4.5 s; the intro title fades in 1.5× slower |
+| reorder (outro before demo) | 9.0 s | outro 3-6, demo 6-9 |
+| delete demo | 6.0 s | outro 3-6, video ends at 6 s |
+| patcher output (stretch + reorder + text + accent colour + image swap) | 10.5 s | intro to 4.5, outro 4.5-7.5 in the new accent, demo 7.5-10.5; captions moved with their beats |
+
+Findings that shaped contract v1 (`src/lib/contract.ts`, the validator and patcher):
+
+- HyperFrames needs every `<video>` to have an `id` and its own `data-start`/`data-duration` (beat-local); the
+  patcher keeps a video slot's duration equal to its beat's (longer clips are trimmed).
+- Captions keep beat-relative keyed fields (`beat`, `textId`, `beatStart`, `beatEnd`) next to the absolute
+  `start`/`end`/`text` render-job reads; the patcher recomputes the absolute ones (stretched with the beat).
+- Times are frame-quantized (30 fps) and written with six decimals.
+- Quality: the contract trades range for editability (beats sit back to back on one track; transitions belong to a
+  beat, not between beats). A rendered-unchanged run with the canonical manifest is verified by the live editor e2e.

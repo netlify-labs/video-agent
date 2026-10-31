@@ -19,3 +19,6 @@ playwright-report/
 
 # bv (beads viewer) local config and caches
 .bv/
+spikes/s8/out-*.mp4
+spikes/s8/variants/
+**/.hyperframes/
