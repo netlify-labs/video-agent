@@ -17,9 +17,24 @@ const ts = (sec: number) => {
 export function toVtt(cues: unknown, durationSec: number): string {
   const list = Array.isArray(cues) ? cues : []
   const valid = list
-    .filter((c): c is Cue => !!c && typeof c === 'object' && typeof (c as Cue).text === 'string' && Number.isFinite((c as Cue).start) && Number.isFinite((c as Cue).end))
-    .map((c) => ({ start: Math.max(0, c.start), end: Math.min(durationSec, c.end), text: c.text.replace(/-->/g, '→').trim() }))
+    .filter(
+      (c): c is Cue =>
+        !!c &&
+        typeof c === 'object' &&
+        typeof (c as Cue).text === 'string' &&
+        Number.isFinite((c as Cue).start) &&
+        Number.isFinite((c as Cue).end),
+    )
+    .map((c) => ({
+      start: Math.max(0, c.start),
+      end: Math.min(durationSec, c.end),
+      text: c.text.replace(/-->/g, '→').trim(),
+    }))
     .filter((c) => c.text && c.end > c.start)
     .sort((a, b) => a.start - b.start)
-  return ['WEBVTT', '', ...valid.flatMap((c, i) => [String(i + 1), `${ts(c.start)} --> ${ts(c.end)}`, c.text, ''])].join('\n')
+  return [
+    'WEBVTT',
+    '',
+    ...valid.flatMap((c, i) => [String(i + 1), `${ts(c.start)} --> ${ts(c.end)}`, c.text, '']),
+  ].join('\n')
 }

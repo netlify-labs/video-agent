@@ -14,18 +14,41 @@ if (!base || !key) throw new Error('Set VIDEO_AGENT_URL and VIDEO_AGENT_KEY.')
 const args = parseArgs(process.argv.slice(2))
 const started = Date.now()
 const log = (step: string, f: Record<string, unknown> = {}) => {
-  console.log(JSON.stringify({ ts: new Date().toISOString(), s: Math.round((Date.now() - started) / 1000), step, ...f }))
+  console.log(
+    JSON.stringify({
+      ts: new Date().toISOString(),
+      s: Math.round((Date.now() - started) / 1000),
+      step,
+      ...f,
+    }),
+  )
 }
 const fail = (msg: string, f: Record<string, unknown> = {}): never => {
   log('FAIL', { msg, ...f })
   process.exit(1)
 }
 
-interface Version { n: number; status: string; stage: string | null; latestStep: string | null; error: { message: string } | null; usage: { totalCreditsCost?: number } | null; output: { durationSec: number; width: number; height: number; bytes: number } | null }
-interface Video { id: string; status: string; versions: Version[] }
+interface Version {
+  n: number
+  status: string
+  stage: string | null
+  latestStep: string | null
+  error: { message: string } | null
+  usage: { totalCreditsCost?: number } | null
+  output: { durationSec: number; width: number; height: number; bytes: number } | null
+}
+interface Video {
+  id: string
+  status: string
+  versions: Version[]
+}
 
 // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- the caller names the response type
-async function api<T>(method: string, path: string, body?: unknown): Promise<{ status: number; data: T; headers: Headers }> {
+async function api<T>(
+  method: string,
+  path: string,
+  body?: unknown,
+): Promise<{ status: number; data: T; headers: Headers }> {
   const res = await fetch(`${base}${path}`, {
     method,
     redirect: 'manual',
@@ -33,7 +56,11 @@ async function api<T>(method: string, path: string, body?: unknown): Promise<{ s
     ...(body ? { body: JSON.stringify(body) } : {}),
   })
   const text = await res.text()
-  return { status: res.status, data: (text && res.headers.get('content-type')?.includes('json') ? JSON.parse(text) : text) as T, headers: res.headers }
+  return {
+    status: res.status,
+    data: (text && res.headers.get('content-type')?.includes('json') ? JSON.parse(text) : text) as T,
+    headers: res.headers,
+  }
 }
 
 async function waitFor(id: string, n: number, maxMin = 25): Promise<Video> {
@@ -42,7 +69,8 @@ async function waitFor(id: string, n: number, maxMin = 25): Promise<Video> {
     const { data } = await api<Video>('GET', `/api/v1/videos/${id}`)
     const v = data.versions.find((x) => x.n === n)
     const now = `${v?.status}|${v?.stage}|${(v?.latestStep ?? '').slice(0, 80)}`
-    if (now !== last) log('progress', { n, status: v?.status, stage: v?.stage, step: v?.latestStep?.slice(0, 120) })
+    if (now !== last)
+      log('progress', { n, status: v?.status, stage: v?.stage, step: v?.latestStep?.slice(0, 120) })
     last = now
     if (v && ['ready', 'failed', 'cancelled', 'timed_out'].includes(v.status)) return data
     if (Date.now() - started > maxMin * 60_000 * 2) fail('timed out waiting', { n })
@@ -54,7 +82,8 @@ const dir = mkdtempSync(join(tmpdir(), 'va-e2e-'))
 const webhookUrl = args.webhook
 
 const created = await api<Video>('POST', '/api/v1/videos', {
-  prompt: 'A short product teaser: the words "Ship faster" appear, then "with preview deploys", then an end card that says "Try it today". Calm, modern, dark background.',
+  prompt:
+    'A short product teaser: the words "Ship faster" appear, then "with preview deploys", then an end card that says "Try it today". Calm, modern, dark background.',
   aspect: '16:9',
   durationSec: 8,
   title: 'E2E teaser',
@@ -75,22 +104,40 @@ if (redirect.status !== 302 || !signed) fail('file redirect missing', { status: 
 const full = await fetch(new URL(signed ?? '', base))
 const mp4 = new Uint8Array(await full.arrayBuffer())
 writeFileSync(join(dir, 'v1.mp4'), mp4)
-const probe = execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration:stream=width,height,codec_name', '-of', 'json', join(dir, 'v1.mp4')], { encoding: 'utf8' })
+const probe = execFileSync(
+  'ffprobe',
+  [
+    '-v',
+    'error',
+    '-show_entries',
+    'format=duration:stream=width,height,codec_name',
+    '-of',
+    'json',
+    join(dir, 'v1.mp4'),
+  ],
+  { encoding: 'utf8' },
+)
 log('v1.downloaded', { bytes: mp4.byteLength, probe: JSON.parse(probe) as unknown })
 const ranged = await fetch(new URL(signed ?? '', base), { headers: { range: 'bytes=100-199' } })
-if (ranged.status !== 206 || (await ranged.arrayBuffer()).byteLength !== 100) fail('range request failed', { status: ranged.status })
+if (ranged.status !== 206 || (await ranged.arrayBuffer()).byteLength !== 100)
+  fail('range request failed', { status: ranged.status })
 log('v1.range_ok', { contentRange: ranged.headers.get('content-range') })
 const unsigned = await fetch(`${base}/files/${id}/v1/video.mp4`)
 if (unsigned.status !== 403) fail('unsigned file not refused', { status: unsigned.status })
 
-const revised = await api<Video>('POST', `/api/v1/videos/${id}/versions`, { prompt: 'Keep everything, but make the end card text "Start free today".' })
+const revised = await api<Video>('POST', `/api/v1/videos/${id}/versions`, {
+  prompt: 'Keep everything, but make the end card text "Start free today".',
+})
 if (revised.status !== 202) fail('revise failed', { status: revised.status, body: revised.data })
 video = await waitFor(id, 2)
 const v2 = video.versions.find((x) => x.n === 2)
 if (v2?.status !== 'ready') fail('v2 not ready', { v2 })
 log('v2.ready', { output: v2?.output, credits: v2?.usage?.totalCreditsCost })
 
-const pub = await api<{ slug: string; urls: { page: string; mp4: string; gif: string } }>('POST', `/api/v1/videos/${id}/versions/2/publish`)
+const pub = await api<{ slug: string; urls: { page: string; mp4: string; gif: string } }>(
+  'POST',
+  `/api/v1/videos/${id}/versions/2/publish`,
+)
 if (pub.status !== 200) fail('publish failed', { status: pub.status })
 const page = await fetch(pub.data.urls.page)
 const html = await page.text()
@@ -101,7 +148,8 @@ log('published', { page: pub.data.urls.page, mp4: pubMp4.headers.get('content-le
 
 const un = await api('DELETE', `/api/v1/videos/${id}/versions/2/publish`)
 const gone = await fetch(pub.data.urls.mp4, { method: 'HEAD' })
-if (un.status !== 204 || gone.status !== 404) fail('unpublish did not take effect', { un: un.status, gone: gone.status })
+if (un.status !== 204 || gone.status !== 404)
+  fail('unpublish did not take effect', { un: un.status, gone: gone.status })
 log('unpublished', { status: gone.status })
 
 if (!args.keep) {

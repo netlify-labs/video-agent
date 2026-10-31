@@ -48,7 +48,9 @@ export function run(cmd: string, args: string[], opts: { cwd?: string; timeoutMs
     })
   } catch (e) {
     const err = e as { stderr?: string; stdout?: string; message: string }
-    throw new StepError(`${cmd} ${args.slice(0, 3).join(' ')} failed: ${(err.stderr || err.stdout || err.message).trim().slice(-2000)}`)
+    throw new StepError(
+      `${cmd} ${args.slice(0, 3).join(' ')} failed: ${(err.stderr || err.stdout || err.message).trim().slice(-2000)}`,
+    )
   }
 }
 
