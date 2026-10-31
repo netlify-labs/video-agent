@@ -6,6 +6,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { bundleManifest } from '../src/lib/bundle-manifest.js'
+import { validate, type Summary } from '../src/lib/contract.js'
 import type { RunManifest } from '../src/lib/run-manifest.js'
 import { postCheckpoint } from './checkpoint.js'
 import { toVtt } from './lib/captions.js'
@@ -59,6 +60,17 @@ async function main() {
   } catch (e) {
     throw new StepError(`video/summary.json is not valid JSON: ${e instanceof Error ? e.message : String(e)}`)
   }
+
+  // Editing contract v1 (plan v2 §8): a composition that declares it must keep it, or the editor can't open it.
+  const indexHtml = readFileSync(join(videoDir, 'index.html'), 'utf8')
+  if (/data-va-contract\s*=\s*["']1["']/.test(indexHtml)) {
+    const violations = validate(indexHtml, summary as Summary)
+    if (violations.length)
+      throw new StepError(
+        `The composition breaks the editing contract (see "Editing contract v1" in video/AGENTS.md):\n- ${violations.join('\n- ')}`,
+      )
+    log('contract.ok')
+  } else log('contract.absent', { note: 'This video will not be editable in the browser.' })
 
   // Render-unchanged runs render exactly the frozen bundle prepare-run restored (plan v2 §14 rule 21).
   const runManifestPath = join(repoRoot, '.render', 'run-manifest.json')

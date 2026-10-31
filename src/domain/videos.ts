@@ -633,6 +633,7 @@ function versionDto(
     },
     plan: v.plan ? { planId: v.plan.planId, brief: v.plan.brief, answers: v.plan.qa } : null,
     incorporates,
+    editable: v.status === 'ready' && v.contract === 1,
     n: v.n,
     status: v.status,
     prompt: v.prompt,

@@ -335,6 +335,10 @@
             "type": "integer",
             "description": "How many comments this version was asked to incorporate."
           },
+          "editable": {
+            "type": "boolean",
+            "description": "Ready and keeps editing contract v1, so it can be edited in the browser."
+          },
           "n": {
             "type": "integer"
           },
@@ -544,6 +548,7 @@
           "plan",
           "verdicts",
           "incorporates",
+          "editable",
           "n",
           "status",
           "prompt",

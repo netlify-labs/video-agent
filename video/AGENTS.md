@@ -76,7 +76,8 @@ https://hyperframes.heygen.com/llms.txt
 ## Project Structure
 
 - `index.html` — main composition (root timeline)
-- `vendor/` — GSAP and other runtime scripts, vendored (never load them from a CDN)
+- `vendor/` — GSAP and other runtime scripts, vendored (never load them from a CDN), and `va-contract.js`, the
+  beat adapter for the editing contract
 - `compositions/` — sub-compositions referenced via `data-composition-src`
 - `meta.json` — project metadata (id, name)
 - `transcript.json` — whisper word-level transcript (if generated)
@@ -92,6 +93,36 @@ npm run check
 Fix all errors before presenting the result. Warnings should be reviewed before rendering.
 
 Then look at what you changed: `npx hyperframes snapshot --at <seconds>` (or `--range START,END`, `--composition <id>`) at the moments you edited, and read the frames before you reply. A passing check does not show how it looks.
+
+## Editing contract v1 (Video Agent)
+
+People edit finished videos in the browser (text, beat timing, colours, beat order, media), so every new
+composition follows this contract. Editability wins over creative range. `npx tsx ../scripts/check-contract.ts`
+checks it, and `render-job` refuses a composition that declares the contract but breaks it.
+
+- **Root:** `data-composition-id="main"`, `data-va-contract="1"`, and `data-duration` = the sum of the beats. Load
+  `vendor/gsap.min.js`, then `vendor/va-contract.js`, in `<head>`.
+- **Beats:** the story's sections, as direct children of the root, back to back from 0 on track 0:
+  `<section class="clip" data-va-beat="intro" data-composition-id="intro" data-start="0" data-duration="4" data-va-authored-duration="4" data-track-index="0">`.
+  Ids are lowercase letters, digits and dashes. Each beat animates itself with one script inside it:
+  ```html
+  <script>
+    vaBeat('intro', (tl, el) => {
+      tl.from(el.querySelector('[data-va-text="intro-title"]'), { opacity: 0, y: 24, duration: 0.6 }, 0.3)
+    })
+  </script>
+  ```
+  Select only inside `el` (never `document` or another beat). No animation crosses a beat boundary; a transition
+  belongs to the beat it leads into.
+- **Layers:** anything that spans the whole video (a background, a logo bug) is a direct child of the root with
+  `data-va-layer="<name>"`, `data-track-index="1"` (or higher), `data-start="0"` and the full duration.
+- **Text:** every piece of on-screen text has a unique `data-va-text="<beat>-<name>"`.
+- **Colours:** declare the brand colours once on `#root` as `--va-color-<role>` (`bg`, `text`, `muted`, `accent`, …)
+  and use only `var(--va-color-…)` for colour.
+- **Media:** images and video clips the person can swap are slots: `<img data-va-media="<slot>" data-va-kind="image" src="assets/media/…">`
+  or `<video id="…" data-va-media="<slot>" data-va-kind="video" src="assets/media/…" muted data-start="0" data-duration="<beat duration>">`.
+- **Captions** in `summary.json`, one per text cue: `{ "start", "end", "text", "beat", "textId", "beatStart", "beatEnd" }`,
+  where `start`/`end` are seconds in the video and `beatStart`/`beatEnd` are seconds into the beat.
 
 ## Key Rules
 

@@ -134,6 +134,8 @@ export interface VersionRow {
   createdAt: string
   /** The accepted plan, frozen at creation: brief, questions and answers, context hash. */
   plan?: FrozenPlan | null
+  /** Editing contract the finished composition conforms to (validated at finalize); null when it doesn't. */
+  contract?: number | null
 }
 
 export interface FrozenPlan {

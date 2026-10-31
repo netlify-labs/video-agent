@@ -1,7 +1,7 @@
 // The run prompt: a fixed, versioned template plus the user's request, fenced as a creative brief.
 import { ASPECTS, type Aspect } from './types.js'
 
-export const PROMPT_TEMPLATE_VERSION = 6
+export const PROMPT_TEMPLATE_VERSION = 7
 
 export interface PromptInput {
   jobId: string
@@ -113,9 +113,10 @@ export function buildPrompt(p: PromptInput): string {
     '1. Read the hyperframes skill and follow its work loop. The project is video/.',
     `2. Write video/index.html (and any files it needs inside video/). Set the composition to ${width}x${height}.`,
     '   Load GSAP from video/vendor/gsap.min.js (<script src="vendor/gsap.min.js">). Never load scripts, styles or fonts from a CDN or any other URL.',
+    '   Follow the editing contract in video/AGENTS.md ("Editing contract v1"): beats as data-va-beat sections animated with vaBeat, data-va-text ids, --va-color-<role> colours, media slots. People edit the finished video in the browser. Check it with: npx tsx scripts/check-contract.ts',
     '3. Run `npx hyperframes check` in video/ until it reports 0 errors.',
-    '4. Write video/summary.json: { "title", "summary", "captions": [{ "start", "end", "text" }] }',
-    '   with one caption cue per piece of on-screen text, timed to your timeline (seconds).',
+    '4. Write video/summary.json: { "title", "summary", "captions": [{ "start", "end", "text", "beat", "textId", "beatStart", "beatEnd" }] }',
+    '   with one caption cue per piece of on-screen text: start/end in seconds of the video, beatStart/beatEnd in seconds into its beat.',
     `5. Run: ${renderCmd}`,
     '   If it fails, read its error, fix the composition, and run it again.',
     '6. End your answer with the fenced ```json block render-job.ts prints.',

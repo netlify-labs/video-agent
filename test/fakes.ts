@@ -279,6 +279,8 @@ export interface TestDeps extends Deps {
   http: FakeHttp
   gateway: FakeGateway
   logs: string[]
+  /** The source.tar.gz the next fake run uploads (once), instead of the default fixture. */
+  nextSource: Uint8Array | null
 }
 
 export function makeDeps(env: Record<string, string> = {}, store?: Deps['store']): TestDeps {
@@ -298,6 +300,7 @@ export function makeDeps(env: Record<string, string> = {}, store?: Deps['store']
   return {
     config,
     store: store ?? createMemoryStore(),
+    nextSource: null,
     blobs: new FakeBlobs(),
     identity: new FakeIdentity(),
     runner: new FakeRunner(),

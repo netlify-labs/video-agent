@@ -94,6 +94,9 @@ export const VersionSchema = z
       mine: VerdictSchema.nullable(),
     }),
     incorporates: z.number().int().describe('How many comments this version was asked to incorporate.'),
+    editable: z
+      .boolean()
+      .describe('Ready and keeps editing contract v1, so it can be edited in the browser.'),
     n: z.number().int(),
     status: StatusSchema,
     prompt: z.string(),

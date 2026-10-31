@@ -59,7 +59,12 @@ export function harness(
       const a = await deps.store.getAttempt(req.requestId)
       if (!a) return
       const job = await deps.store.getJob(a.jobId)
-      const manifest = await uploadAndManifest(deps.blobs, a.jobId, a.id, fixtureFiles(job?.aspect))
+      const files = fixtureFiles(job?.aspect)
+      if (deps.nextSource) {
+        files['source.tar.gz'] = deps.nextSource
+        deps.nextSource = null
+      }
+      const manifest = await uploadAndManifest(deps.blobs, a.jobId, a.id, files)
       const token = /--token (\S+)/.exec(req.prompt)?.[1] ?? null
       if (opts.autoCallback ?? true) await receiveCallback(deps, a.id, token, manifest)
     },

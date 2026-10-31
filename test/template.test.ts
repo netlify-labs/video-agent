@@ -28,3 +28,18 @@ describe('template video/', () => {
     )
   })
 })
+
+describe('editing contract v1 in the template', () => {
+  it('the template keeps the contract, and the checker says so', async () => {
+    const { validate } = await import('../src/lib/contract.js')
+    const html = readFileSync(join(root, 'index.html'), 'utf8')
+    const summary = JSON.parse(readFileSync(join(root, 'summary.json'), 'utf8')) as Parameters<
+      typeof validate
+    >[1]
+    expect(validate(html, summary)).toEqual([])
+    const { execFileSync } = await import('node:child_process')
+    expect(execFileSync('npx', ['tsx', 'scripts/check-contract.ts'], { encoding: 'utf8' })).toContain(
+      'Contract v1: OK',
+    )
+  })
+})

@@ -9,3 +9,5 @@ video
 ui/src/api/schema.d.ts
 ui/dist-mock
 .taste-skill
+test/fixtures
+spikes/*/fixture

@@ -3766,6 +3766,8 @@ export interface components {
             };
             /** @description How many comments this version was asked to incorporate. */
             incorporates: number;
+            /** @description Ready and keeps editing contract v1, so it can be edited in the browser. */
+            editable: boolean;
             n: number;
             status: components["schemas"]["VideoStatus"];
             prompt: string;

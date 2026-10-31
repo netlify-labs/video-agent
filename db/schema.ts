@@ -91,6 +91,8 @@ export const versions = pgTable(
     createdAt: ts('created_at').notNull(),
     // The accepted plan, frozen when the version was created (plan v2 §14 rule 15).
     plan: jsonb('plan'),
+    // Editing contract version the finished composition conforms to (plan v2 §8); null: not editable.
+    contract: integer('contract'),
   },
   (t) => [primaryKey({ columns: [t.jobId, t.n] })],
 )

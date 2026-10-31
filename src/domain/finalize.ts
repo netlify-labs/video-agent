@@ -174,7 +174,11 @@ export async function finalizeAttempt(deps: Deps, attemptId: string): Promise<Fi
     // The preview bundle (plan v2 §7). Best effort: a version without one is still ready and is extracted later.
     if (result === 'ready') {
       try {
-        await ensureBundle(deps, a.jobId, a.versionN)
+        const bundle = await ensureBundle(deps, a.jobId, a.versionN)
+        // Editable in the browser only when the finished composition keeps the contract (plan v2 §8).
+        await deps.store.updateVersion(a.jobId, a.versionN, { contract: bundle?.contract?.version ?? null })
+        if (bundle?.contract?.version === null)
+          log.info('finalize.not_editable', { reasons: bundle.contract.violations.slice(0, 5) })
       } catch (e) {
         log.warn('finalize.bundle_failed', { error: e })
       }

@@ -1,1 +1,7 @@
-{ "title": "Template", "summary": "The neutral starting composition.", "captions": [{ "start": 0.35, "end": 5, "text": "Your video goes here" }] }
+{
+  "title": "Template",
+  "summary": "The neutral starting composition.",
+  "captions": [
+    { "start": 0.35, "end": 5, "text": "Your video goes here", "beat": "intro", "textId": "intro-title", "beatStart": 0.35, "beatEnd": 5 }
+  ]
+}

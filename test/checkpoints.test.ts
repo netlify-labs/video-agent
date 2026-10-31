@@ -176,7 +176,7 @@ describe('live snapshots', () => {
     await post(h, attemptId, token, { seq: 2, message: 'second', bundle: gz('two') })
     expect(await h.deps.blobs.get('bundles', liveIndexKey(id, 1, 1))).toBeNull()
     const index = JSON.parse(
-      new TextDecoder().decode((await h.deps.blobs.get('bundles', liveIndexKey(id, 1, 2)))),
+      new TextDecoder().decode(await h.deps.blobs.get('bundles', liveIndexKey(id, 1, 2))),
     )
     expect(index.files.map((f: { path: string }) => f.path).sort()).toEqual(['index.html', 'style.css'])
     const link = await h.json(

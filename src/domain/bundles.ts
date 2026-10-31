@@ -3,6 +3,7 @@
 // and the manifest written last, so a half-written bundle is never served; a deletion that lands meanwhile wins.
 import type { Deps } from '../deps.js'
 import { sha256Hex } from '../lib/crypto.js'
+import { validate, type Summary } from '../lib/contract.js'
 import { readTarGz, TarError } from '../lib/tar.js'
 
 export interface BundleIndex {
@@ -11,6 +12,8 @@ export interface BundleIndex {
   versionN: number
   files: { path: string; size: number; sha256: string }[]
   createdAt: string
+  /** Editing contract the composition conforms to, or null (with why), checked when the bundle was made. */
+  contract?: { version: 1 | null; violations: string[] }
 }
 
 export const bundlePrefix = (jobId: string, n: number) => `${jobId}/v${n}/`
@@ -26,6 +29,26 @@ export const liveFileKey = (jobId: string, n: number, seq: number, path: string)
 
 /** Rendered video and run inputs stay out: previews play the composition, not the MP4. */
 const keep = (path: string) => !path.endsWith('.mp4') && path !== 'feedback' && !path.startsWith('feedback/')
+
+/** Whether a composition keeps the editing contract (plan v2 §8): only ones that declare it are checked. */
+export function contractOf(files: Map<string, Uint8Array>): { version: 1 | null; violations: string[] } {
+  const dec = (p: string) => {
+    const b = files.get(p)
+    return b ? new TextDecoder().decode(b) : null
+  }
+  const html = dec('index.html')
+  if (!html || !/data-va-contract\s*=\s*["']1["']/.test(html))
+    return { version: null, violations: ['The composition does not declare editing contract v1.'] }
+  let summary: Summary | undefined
+  try {
+    const s = dec('summary.json')
+    summary = s ? (JSON.parse(s) as Summary) : undefined
+  } catch {
+    return { version: null, violations: ['summary.json is not valid JSON.'] }
+  }
+  const violations = validate(html, summary)
+  return { version: violations.length ? null : 1, violations }
+}
 
 export async function readBundleIndex(deps: Pick<Deps, 'blobs'>, jobId: string, n: number) {
   const raw = await deps.blobs.get('bundles', bundleIndexKey(jobId, n))
@@ -59,6 +82,7 @@ export async function ensureBundle(
     versionN: n,
     files: files.map(([path, bytes]) => ({ path, size: bytes.byteLength, sha256: sha256Hex(bytes) })),
     createdAt: deps.clock.now().toISOString(),
+    contract: contractOf(new Map(files)),
   }
   await deps.blobs.set('bundles', bundleIndexKey(jobId, n), JSON.stringify(index), {
     contentType: 'application/json',
