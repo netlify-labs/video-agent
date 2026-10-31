@@ -1,5 +1,5 @@
 // Helpers shared by render-job.ts and prepare-run.ts (run inside Agent Runner runs).
-import { execFileSync, spawnSync } from 'node:child_process'
+import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
@@ -52,6 +52,40 @@ export function run(cmd: string, args: string[], opts: { cwd?: string; timeoutMs
       `${cmd} ${args.slice(0, 3).join(' ')} failed: ${(err.stderr || err.stdout || err.message).trim().slice(-2000)}`,
     )
   }
+}
+
+/** Like run(), but streams output to `onOutput` as it arrives (for long renders that report progress). */
+export function runStreaming(
+  cmd: string,
+  args: string[],
+  opts: { cwd?: string; timeoutMs?: number; onOutput?: (chunk: string) => void } = {},
+): Promise<string> {
+  return new Promise((resolvePromise, reject) => {
+    const child = spawn(cmd, args, { cwd: opts.cwd ?? repoRoot, stdio: ['ignore', 'pipe', 'pipe'] })
+    let tail = ''
+    const keep = (b: Buffer) => {
+      const s = b.toString('utf8')
+      tail = (tail + s).slice(-8000)
+      opts.onOutput?.(s)
+    }
+    child.stdout.on('data', keep)
+    child.stderr.on('data', keep)
+    const timer = setTimeout(() => child.kill('SIGKILL'), opts.timeoutMs ?? 15 * 60_000)
+    child.on('error', (e) => {
+      clearTimeout(timer)
+      reject(new StepError(`${cmd} failed to start: ${e.message}`))
+    })
+    child.on('close', (code, signal) => {
+      clearTimeout(timer)
+      if (code === 0) resolvePromise(tail)
+      else
+        reject(
+          new StepError(
+            `${cmd} ${args.slice(0, 3).join(' ')} failed (${signal ?? `exit ${code}`}): ${tail.trim().slice(-2000)}`,
+          ),
+        )
+    })
+  })
 }
 
 export async function withRetries<T>(what: string, n: number, fn: () => Promise<T> | T): Promise<T> {

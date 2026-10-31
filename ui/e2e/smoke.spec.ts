@@ -239,3 +239,11 @@ test('a stale update says so', async ({ page }) => {
   await expect(page.getByTestId('narration')).toContainText("couldn't reach the run, showing the last update")
   await expect(page.getByTestId('narration')).toContainText('updated 1 min ago')
 })
+
+test('render progress shows as Rendering N%', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('mockRender', '1')
+  })
+  await page.goto('/videos/vid_making')
+  await expect(page.getByTestId('narration')).toContainText(/Rendering \d+%/)
+})

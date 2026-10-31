@@ -7,7 +7,9 @@ import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } 
 import { join } from 'node:path'
 import { bundleManifest } from '../src/lib/bundle-manifest.js'
 import type { RunManifest } from '../src/lib/run-manifest.js'
+import { postCheckpoint } from './checkpoint.js'
 import { toVtt } from './lib/captions.js'
+import { RenderProgressReporter } from './lib/render-progress.js'
 import {
   StepError,
   log,
@@ -15,6 +17,7 @@ import {
   parseArgs,
   repoRoot,
   run,
+  runStreaming,
   sha256File,
   which,
   withRetries,
@@ -73,10 +76,21 @@ async function main() {
 
   log('render.start', { quality: QUALITY })
   const video = join(out, 'video.mp4')
-  run('npx', ['-y', 'hyperframes', 'render', '--quality', QUALITY, '--output', video], {
+  // "Rendering N%" for the person watching, through the checkpoint endpoint (best effort, plan v2 §6 A2).
+  const checkpointUrl = callback.replace(/\/done$/, '/checkpoint')
+  const reporter = new RenderProgressReporter((pct) => {
+    void postCheckpoint({ attempt, url: checkpointUrl, token, renderPercent: pct }).then((r) => {
+      if (!r.ok) log('render.progress_skipped', { pct, reason: r.reason })
+    })
+  })
+  await runStreaming('npx', ['-y', 'hyperframes', 'render', '--quality', QUALITY, '--output', video], {
     cwd: videoDir,
     timeoutMs: 20 * 60_000,
+    onOutput: (chunk) => {
+      reporter.line(chunk)
+    },
   })
+  reporter.end()
   log('render.done', { ms: Date.now() - started, bytes: statSync(video).size })
 
   const probe = JSON.parse(

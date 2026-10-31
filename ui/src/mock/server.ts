@@ -240,8 +240,10 @@ export function installMock() {
         'Checking, round 2',
       ]
       let stale = false
+      let render = false
       try {
         stale = localStorage.getItem('mockStale') === '1'
+        render = localStorage.getItem('mockRender') === '1'
       } catch {
         // private mode
       }
@@ -254,6 +256,15 @@ export function installMock() {
         credits: 30 + w.__progressCalls * 2,
         observedAt: new Date(Date.now() - (stale ? 90_000 : 2000)).toISOString(),
         stale,
+        checkpoint: render
+          ? {
+              seq: w.__progressCalls,
+              message: 'Rendering',
+              renderPercent: Math.min(99, 40 + w.__progressCalls * 5),
+              at: new Date().toISOString(),
+              hasBundle: false,
+            }
+          : null,
       })
     }
     // Review (plan v2 §5)

@@ -1,0 +1,36 @@
+[INFO] [Render] Pipeline started {"renderJobId":"ba1a3a67-14f1-4cd8-a6ea-dc6244b12a04","platform":"darwin","arch":"arm64","nodeVersion":"v24.19.0","fps":{"num":30,"den":1},"format":"mp4","quality":"draft","browserGpuMode":"auto","forceScreenshot":false,"protocolTimeout":300000,"browserTimeout":120000,"pageNavigationTimeout":60000,"playerReadyTimeout":45000}
+  █░░░░░░░░░░░░░░░░░░░░░░░░  5%  Compiling composition
+@hf-progress {"code":"compile","pct":5}
+  ██░░░░░░░░░░░░░░░░░░░░░░░  10%  Extracting video frames
+@hf-progress {"code":"extract_video","pct":10}
+[INFO] [Render] No HDR sources detected, rendering SDR {"renderJobId":"ba1a3a67-14f1-4cd8-a6ea-dc6244b12a04"}
+  █████░░░░░░░░░░░░░░░░░░░░  20%  Processing audio tracks
+@hf-progress {"code":"process_audio","pct":20}
+  ██████░░░░░░░░░░░░░░░░░░░  25%  Starting frame capture
+@hf-progress {"code":"start_browsers","pct":25}
+  ██████░░░░░░░░░░░░░░░░░░░  25%  Checking browser GPU
+@hf-progress {"code":"start_browsers","pct":25}
+[INFO] [Render] Calibration config {"renderJobId":"ba1a3a67-14f1-4cd8-a6ea-dc6244b12a04","protocolTimeout":30000,"parentProtocolTimeout":300000,"forceScreenshot":false,"totalFrames":150}
+  ██████░░░░░░░░░░░░░░░░░░░  25%  Measuring capture speed
+@hf-progress {"code":"start_browsers","pct":25}
+[INFO] [Render] Fast capture: default-on drawElement disabled for this render: parallel capture has no runtime self-verification. Set PRODUCER_EXPERIMENTAL_FAST_CAPTURE=true to override. {"renderJobId":"ba1a3a67-14f1-4cd8-a6ea-dc6244b12a04"}
+  ██████░░░░░░░░░░░░░░░░░░░  25%  Starting browsers (0/5 ready)
+@hf-progress {"code":"start_browsers","done":0,"total":5,"pct":25}
+  ██████░░░░░░░░░░░░░░░░░░░  25%  Starting browsers (1/5 ready)
+@hf-progress {"code":"start_browsers","done":1,"total":5,"pct":25}
+  ██████░░░░░░░░░░░░░░░░░░░  25%  Capturing frame 1/150 (5 workers)
+@hf-progress {"code":"capture","done":1,"total":150,"pct":25}
+  ████████░░░░░░░░░░░░░░░░░  32%  Capturing frame 24/150 (5 workers)
+@hf-progress {"code":"capture","done":24,"total":150,"pct":32}
+  █████████████████░░░░░░░░  70%  Capturing frame 150/150 (5 workers)
+@hf-progress {"code":"capture","done":150,"total":150,"pct":70}
+[INFO] [Render] Encoded frames while capturing {"renderJobId":"ba1a3a67-14f1-4cd8-a6ea-dc6244b12a04","framesFed":150,"totalFrames":150}
+  ██████████████████░░░░░░░  75%  Encoding video
+@hf-progress {"code":"encode","done":0,"total":150,"pct":75}
+  ██████████████████████░░░  90%  Encoding frame 150/150
+@hf-progress {"code":"encode","done":150,"total":150,"pct":90}
+  ██████████████████████░░░  90%  Assembling final video
+@hf-progress {"code":"assemble","done":0,"total":5,"pct":90}
+  ████████████████████████░  99%  Assembling final video
+@hf-progress {"code":"assemble","done":5,"total":5,"pct":99}
+  █████████████████████████  100%  Render complete

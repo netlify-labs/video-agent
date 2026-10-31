@@ -77,15 +77,22 @@ function Narration({ video, v }: { video: Video; v: Version }) {
     { refetchInterval: 3000, refetchIntervalInBackground: false, enabled: inProgress(v.status) },
   )
   const p = progress.data?.versionN === v.n ? progress.data : null
-  const step = p?.step ?? v.latestStep
-  if (!step && p?.steps == null) return null
+  // The run's own milestones (checkpoints) read better than the SDK's step; render-job reports Rendering N%.
+  const cp = p?.checkpoint
+  const step = cp?.message ?? p?.step ?? v.latestStep
+  const rendering = cp?.renderPercent != null && v.status === 'running' ? cp.renderPercent : null
+  if (!step && p?.steps == null && rendering === null) return null
   const counts = [
     p?.steps != null ? `${p.steps} step${p.steps === 1 ? '' : 's'}` : null,
     p?.credits != null ? `${credits(p.credits)} credits so far` : null,
   ].filter(Boolean)
   return (
     <Stack gap={2} data-testid="narration">
-      {step ? (
+      {rendering !== null ? (
+        <Text size="sm" c="var(--va-muted)" className="num">
+          Rendering {rendering}%
+        </Text>
+      ) : step ? (
         <Text size="sm" c="var(--va-muted)" lineClamp={2}>
           Working: {step}
         </Text>
