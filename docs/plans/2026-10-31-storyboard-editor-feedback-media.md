@@ -1,9 +1,10 @@
 # Plan v2: roles, plan with questions, comments, live progress, editing and media
 
-Draft 3 (2026-10-31). Builds on [`PLAN.md`](../../PLAN.md) (the v1 spec). Draft 1 was reviewed by Claude Fable 5 and
+Draft 4 (2026-10-31). Builds on [`PLAN.md`](../../PLAN.md) (the v1 spec). Draft 1 was reviewed by Claude Fable 5 and
 Codex `gpt-6.1-sol` (high effort). Draft 2 adopted the owner's **plan with questions** flow. Draft 3 records a full
 owner interview: it adds roles and privacy (Feature R), widens the editor and media scope, and fixes the order of
-work. The decision log at the end lists every decision.
+work. Draft 4 folds in a second Fable/Codex review round (§14 holds the binding implementation rules it produced). The
+decision log at the end lists every decision.
 
 ## 1. What we're building and why
 
@@ -102,16 +103,17 @@ Non-goals: audio (va-css.2), templates (va-css.3), spend limits (va-css.4), emai
 **UX:** the Create button becomes a split button. **Plan it first** is the default; **Create now** is beside it. Planning
 opens a side panel next to the prompt, not a modal.
 
-1. **Routing call (fast, `jev`).** It classifies the request and returns:
+1. **Routing call (fast, `jev`), its own request.** It classifies the request and returns:
    - `needsQuestions` (detailed prompts skip straight to the brief);
    - the model for the next call (Haiku, Sonnet or Opus);
    - a question template (`launch`, `tutorial`, `social`, `changelog`, `sales`, `other`);
    - suggested length and aspect ("for TikTok" means 9:16), pre-filled and editable.
-2. **Questions (routed model).** 0–6 questions, guided by the template's checklist (audience, key message, length,
+2. **Questions (routed model), a second request**, so each stays well inside the Function deadline. 0–6 questions, guided by the template's checklist (audience, key message, length,
    call to action, tone, must-include, avoid). The model asks only about what the prompt leaves open, in its own
    words. Each question has 2–4 options, **Other** (write-in) and **Skip**. With 0 questions the panel says "Your
    prompt covers it" and goes to the brief.
-3. **Brief.** A short, readable, editable brief (goal, audience, key message, beats with seconds, tone, call to
+3. **Brief.** A short, readable, editable brief (edits are saved to the plan with `PATCH /plans/{id}` and
+   `If-Match`, and the run uses exactly the saved revision) (goal, audience, key message, beats with seconds, tone, call to
    action, must-include, avoid). **Create video** is one click away.
 4. **Run.** The run prompt is **the person's original prompt, verbatim**, plus a fenced `Plan (from the questions)`
    section with the brief and the Q&A.
@@ -223,7 +225,7 @@ over creative range):
 ## 9. Feature E: media library
 
 - **Types and limits:**
-  - PNG, JPEG and WebP up to 5 MB.
+  - PNG, JPEG and WebP up to 5 MB (files over 4 MB use an upload session).
   - SVG up to 1 MB: **sanitized on upload** (scripts, event handlers and external references stripped), with the
     original kept for download. Runs and previews use the clean copy, served only inside the sandbox or as an
     attachment.
@@ -231,8 +233,8 @@ over creative range):
     container check on upload.
   - **Fonts:** WOFF2, TTF or OTF up to 2 MB, with no licence checks (owner decision).
 - **Uploads:**
-  - Under 5 MB: one request.
-  - Over 5 MB: upload sessions. Sessions are uploader-bound with server keys, parts of at most 5 MB with hashes,
+  - Up to 4 MB: one request (Netlify's effective binary request limit is about 4.5 MB).
+  - Over 4 MB: upload sessions. Sessions are uploader-bound with server keys, parts of at most 4 MB with hashes,
     idempotent completion, a whole-file hash, quotas and abandoned-part cleanup. Assembly happens outside the request
     path, either in a background function or by streaming in the run.
   - The server sniffs types from bytes, decodes images (40 MP limit), and quarantines files until they're verified.
@@ -296,6 +298,22 @@ Existing CI (typecheck, lint, vitest, Playwright, `openapi:check`, migrations in
 
 ## Decision log
 
+**Round-2 review (2026-10-31), draft 4:** Fable 5 high (runner `6ae64145bc2b9a453ff73385`, 787 credits) and Codex
+`gpt-6.1-sol` high (runner `6ae64145e9215f3b1d0eb6f6`, 215 credits). Claims checked against the code: webhooks emit
+only with an API key, and `webhook_events.api_key_id` is NOT NULL; the last-admin guard covers only `member`; signup
+inserts `member`; idempotency replays before loading the job; `GET /videos/{id}` has no per-video check; the template
+loads GSAP from a CDN; `targetDurationSec` is an integer.
+
+- Taken: everything in §14.
+- Not taken: Fable's "split `/plans` into route + questions" (taken in a three-request form). Codex's identity-bound
+  file capabilities were taken in the lighter `accessEpoch` form.
+- Owner decisions:
+  - Private is in-app hiding among trusted colleagues.
+  - The team webhook gets full private details.
+  - Pending deliveries are re-checked at send time.
+  - A demoted author can cancel but not retry.
+  - Poster fallback is fine for clip previews.
+
 **Owner interview (2026-10-31), draft 3:**
 
 - **Planning:**
@@ -348,3 +366,148 @@ Not taken:
 - a beat-to-HTML compiler as the default (fallback only if S8 fails; the owner chose editability, so the contract
   stands);
 - a planning agent run (the Gateway is seconds, not minutes).
+
+## 14. Implementation rules from the round-2 review (binding)
+
+These are part of the spec. Each feature's beads cite the rules that apply.
+
+### Roles and privacy (R)
+
+1. **Role migration:**
+   - A forward data migration moves `member` to `creator`. `auth.ts` inserts `creator` for new users in the same
+     change.
+   - The last-admin guard covers demotion to **any** non-admin role and disablement, serialized so two concurrent
+     changes can't remove the last enabled admin.
+2. **Retry and cancel:**
+   - Retry spends credits, so it needs Creator or Admin.
+   - A demoted author may still **cancel** their own in-flight version (stopping spend), but not retry it (owner
+     decision).
+3. **One visibility loader:** `loadVisibleJob(repo, principal, id)` returns 404 for private videos the principal
+   can't see, **before** any role check, idempotency replay, ETag or 304, file signing, progress, comments, verdicts,
+   plans, drafts or preview access.
+   - Lists and search filter visibility in SQL inside `listJobs`, before pagination.
+   - Webhook payloads use a system-context DTO.
+   - Admin and team stats stay admin-only. Personal usage is a separate query.
+4. **Files for private videos:** signed URLs stay bearer capabilities, but URLs for private videos are short (10 min)
+   and the files edge function rejects a URL issued before the video's last privacy or owner change. The job's
+   `accessEpoch` is part of the signature and is bumped on every privacy toggle and transfer. Public publication
+   links are unaffected.
+5. **The privacy promise is stated plainly in the docs:** Private hides a video in the app among trusted colleagues.
+   It isn't confidentiality from Creators, because runs can read project storage (v1 trust model; owner decision).
+6. **Private toggles and transfers** bump `jobs.version`, so the ETag changes.
+7. **Transfer:**
+   - It moves job ownership only, never version authorship, key ownership or usage attribution. It's audited.
+   - The target is a Creator or Admin.
+   - It works whether the person is disabled before or after the transfer.
+8. **Self-approval** is checked against `version.authorId` before any admin shortcut, and only on ready versions.
+9. **New spend routes:** edit render and incorporate feedback join the paid-route setup gate. `/plans` instead checks
+   Gateway availability and falls back to Create now; it never uses the runner setup gate.
+
+### Webhooks and notifications (R)
+
+10. **The outbox becomes event plus deliveries:**
+    - A logical event row, plus one delivery row per destination (per-video API-key webhook, personal, team).
+    - Each destination has its own signing secret: per-video uses the key's secret as today; personal is
+      `user_webhooks.secret_enc`; team is a settings secret.
+    - `api_key_id` becomes nullable. Uniqueness is on (event, destination), with atomic claims.
+    - Events and deliveries are inserted with the mutation that caused them, so session-created videos emit events
+      too.
+11. **At send time,** each delivery re-checks that its recipient can still see the video; dropped deliveries are
+    logged (owner decision). **The team webhook receives full details for private videos** (owner decision: admins
+    can already see them).
+12. **SSRF hardening before more webhook URLs:** pin the validated IP for the connection (keeping TLS hostname checks),
+    normalize IPv4-mapped IPv6 in every notation, and test DNS rebinding.
+13. **Notifications have their own feed:** a paginated endpoint with a read watermark, polled app-wide while the tab
+    is visible (not tied to run polling), with visibility enforced. Comments and verdicts emit their events from
+    their own features.
+
+### Planning (B)
+
+14. **Two requests:** `POST /plans` routes and returns `needsQuestions` with suggestions;
+    `POST /plans/{id}/questions` generates questions; `POST /plans/{id}/brief` makes the brief.
+    - Each has an absolute deadline (route 5 s, questions and brief 25 s), covering SDK retries, the one validation
+      retry and persistence.
+    - Each caps input and output tokens.
+    - On any deadline or Gateway error the panel offers **Create now**.
+    - Routing is deterministic around the model: model output is clamped to the allowlist, and defaults apply when
+      it's missing.
+15. **Accepted plan:**
+    - `PATCH /plans/{id}` (with `If-Match`) saves the person's edited brief.
+    - Create or revise with `planId` consumes that exact revision **once**, atomically across races.
+    - It freezes the verbatim prompt, the accepted brief and Q&A, media hashes, context hash, and the effective length
+      and aspect. An accepted length replaces the inherited target on revisions; the aspect must match the job.
+    - Revision plans are bound to their job and base version, with visibility re-checked.
+16. **Prompt boundary:** every untrusted field (the original prompt, which stays verbatim, and the brief, answers,
+    history and captions) is framed with delimiter-safe encoding at the runner handoff, never as raw sections. Nothing
+    is silently truncated; oversize input is rejected with a message.
+17. **Durable usage:** per-call usage (router, questions, brief, validation retry, failed calls) goes in a
+    `gateway_calls` table that outlives plan expiry, keyed by caller.
+    - Credits come from provider token prices, including cache tokens, at 180 credits per US$. Estimates are labelled,
+      and an ambiguous outcome is recorded as unknown.
+    - "My usage this month" queries by caller.
+
+### Editor (C)
+
+18. **The contract is structural, not just a marker:**
+    - Stable beat and composition ids. Each beat's GSAP timeline is registered through a defined seek adapter
+      (HyperFrames requires registered timelines), with selectors scoped to the beat and no cross-beat references.
+    - **All beats sit on one track.** Other tracks may only hold beat-independent layers, such as a background or a
+      logo bug. The validator rejects anything else.
+    - Conformance is validated, never assumed from `data-va-contract`.
+19. **Timing semantics:**
+    - Changing a beat's duration time-stretches its timeline. Holds and trims are explicit later options.
+    - Caption offsets are beat-relative.
+    - Deleting the last remaining beat is refused.
+    - Times are quantized to frames (30 fps).
+    - `targetDurationSec` becomes a frame-accurate decimal for edited versions, via a migration.
+20. **Media slots:**
+    - Each slot records its kind (image or video) and box.
+    - A swap must match the kind, and gets an explicit fit (cover or contain).
+    - A video longer than its beat is trimmed (loop is optional); slot audio is muted.
+    - Fonts aren't slots.
+21. **Frozen render inputs are version-owned:**
+    - Render copies the draft's frozen manifest and bundle into version-owned storage, kept until the version is
+      deleted, so retries after draft expiry still work.
+    - The hash covers a canonical file manifest: composition files, `summary.json`, and per-media digests from
+      `version_media`.
+    - The `assets/media/` directory, check caches and render outputs are excluded.
+    - `prepare-run` and `render-job` both verify the same manifest.
+22. **Template dependencies are local:** GSAP and any other runtime script are vendored into the template's `video/`
+    (today it loads GSAP from jsDelivr), so the preview CSP and offline renders work.
+
+### Preview (F0)
+
+23. **Manifest-scoped asset resolution:**
+    - The preview page receives one signed capability for the bundle.
+    - Relative subresources (CSS `url()`, fonts, nested scenes, `assets/media/*`) resolve through a path-scoped token
+      in the URL path, not a query string, so they work without per-file signatures.
+    - Media slots map to `/media/{id}` under that capability.
+    - **If signed clip playback proves hard in S2, video slots show their poster in the preview** (owner decision).
+
+### Media (E)
+
+24. **Uploads:**
+    - One request up to 4 MB, and parts of at most 4 MB.
+    - Immutable part index, count and length; a changed duplicate part conflicts.
+    - Quota reserved atomically when the session is created.
+    - A completion lease, so retried completion can't race assembly or cleanup.
+    - The assembly worker receives only the session id.
+25. **Verification states:** `uploading` → `verifying` → `ready` or `rejected`.
+    - **MP4s are checked at upload completion** with a bounded ffprobe (duration ≤ 2 min, dimensions, H.264 video, AAC
+      or no audio) before anyone else can see or pick them. The run's ffprobe is a second line, recording results by
+      hash so a bad file never wastes repeated runs.
+    - Only `ready` media can be picked. Uploaders see their own pending items.
+26. **SVG:**
+    - A maintained allowlist sanitizer with bounded parsing.
+    - The malicious corpus covers `<use href>`, `foreignObject`, CSS `url()` and `@import`, data: URIs, XML entities,
+      and animation-driven link mutation.
+    - Separate original and clean keys and hashes. Only the clean copy is referenced; originals are served strictly as
+      attachments.
+27. **Inheritance:** ordinary revisions and edits inherit the parent's `version_media` snapshot, including soft-deleted
+    assets. The hydrated `assets/media/` directory is excluded from archives and rehydrated from snapshots.
+    "Used in N videos" counts only videos visible to the viewer.
+
+### Progress (A)
+
+28. **A1's text is the SDK's step text,** not polished narration. The UI says "Working: <step>". Plain-language
+    milestones arrive with A2's checkpoints.
