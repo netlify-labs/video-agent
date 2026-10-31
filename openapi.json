@@ -194,6 +194,22 @@
           "private": {
             "type": "boolean"
           },
+          "comments": {
+            "type": "object",
+            "properties": {
+              "count": {
+                "type": "integer"
+              },
+              "unread": {
+                "type": "integer",
+                "description": "Others' comments since you last read them"
+              }
+            },
+            "required": [
+              "count",
+              "unread"
+            ]
+          },
           "links": {
             "type": "object",
             "properties": {
@@ -220,6 +236,7 @@
           "versions",
           "published",
           "private",
+          "comments",
           "links"
         ]
       },

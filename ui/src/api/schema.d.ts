@@ -3567,6 +3567,11 @@ export interface components {
             versions: components["schemas"]["Version"][];
             published: boolean;
             private: boolean;
+            comments: {
+                count: number;
+                /** @description Others' comments since you last read them */
+                unread: number;
+            };
             links: {
                 self: string;
             };

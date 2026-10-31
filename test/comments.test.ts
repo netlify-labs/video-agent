@@ -159,6 +159,20 @@ describe('comments', () => {
     expect((await list(h, h.member, id)).unreadCount).toBe(0)
   })
 
+  it('the video and the Library carry comment counts with your unread count', async () => {
+    const h = harness()
+    const bob = await person(h, 'u_bob')
+    const id = await readyVideo(h, h.member)
+    await post(h, bob, id, { versionN: 1, body: 'One' })
+    await post(h, bob, id, { versionN: 1, body: 'Two' })
+    const asOwner = await h.json(await h.call('GET', `/api/v1/videos/${id}`, { as: h.member }))
+    expect(asOwner.comments).toEqual({ count: 2, unread: 2 })
+    const lib = await h.json(await h.call('GET', '/api/v1/videos', { as: h.member }))
+    expect(lib.items[0].comments).toEqual({ count: 2, unread: 2 })
+    const asBob = await h.json(await h.call('GET', '/api/v1/videos', { as: bob }))
+    expect(asBob.items[0].comments).toEqual({ count: 2, unread: 0 })
+  })
+
   it('pages oldest first with a cursor', async () => {
     const h = harness()
     const bob = await person(h, 'u_bob')
@@ -246,5 +260,11 @@ describe('comments', () => {
     await h.call('POST', `/api/v1/videos/${id}/comments/read`, { as: h.member })
     await h.call('POST', `/api/v1/videos/${id}/comments/read`, { as: h.member })
     expect((await list(h, h.member, id)).unreadCount).toBe(0)
+    h.deps.clock.advance(1000)
+    await post(h, bob, id, { versionN: 1, body: 'after read' })
+    const lib = await h.json(await h.call('GET', '/api/v1/videos', { as: h.member }))
+    expect(lib.items[0].comments).toEqual({ count: 2, unread: 1 })
+    const asBob = await h.json(await h.call('GET', '/api/v1/videos', { as: bob }))
+    expect(asBob.items[0].comments).toEqual({ count: 2, unread: 0 })
   })
 })

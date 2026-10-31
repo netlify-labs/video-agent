@@ -106,3 +106,76 @@ test('admin, keys and setup render', async ({ page }) => {
   await page.goto('/setup')
   await expect(page.getByText('Everything needed is in place. People can make videos.')).toBeVisible()
 })
+
+// Review (plan v2 §5)
+test('comments show on the video, markers seek, and the library shows the unread badge', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.getByLabel('1 unread comments')).toBeVisible()
+  await page.goto('/videos/vid_teaser')
+  await expect(page.getByText('Comments on v2')).toBeVisible()
+  await expect(page.getByText('The logo here is too small to read on a phone.')).toBeVisible()
+  await expect(page.getByText('Love the end card.')).toBeVisible()
+  await page.waitForFunction("(document.querySelector('video')?.readyState ?? 0) >= 1")
+  await page.getByRole('button', { name: 'Comment at 0:01' }).click()
+  await expect
+    .poll(() => page.evaluate<number>("document.querySelector('video')?.currentTime ?? 0"))
+    .toBeCloseTo(1.5, 1)
+  await expect(page.getByTestId('pin-dot')).toHaveCount(1)
+  // Pins belong to their version only.
+  await page.getByRole('button', { name: /^v1/ }).click()
+  await expect(page.getByText('Comments on v1')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Comment at 0:01' })).toHaveCount(0)
+})
+
+test('a pin lands where you click, inside the letterboxed picture', async ({ page }) => {
+  await page.goto('/videos/vid_sales')
+  await page.waitForFunction("(document.querySelector('video')?.videoWidth ?? 0) > 0")
+  await page.getByRole('button', { name: 'Pin to this moment' }).click()
+  const capture = page.getByTestId('pin-capture')
+  const r = await capture.boundingBox()
+  if (!r) throw new Error('no frame')
+  // A 9:16 picture in a 16:9 frame: bars left and right.
+  const cw = (r.height * 9) / 16
+  const left = (r.width - cw) / 2
+  await capture.click({ position: { x: left / 2, y: r.height / 2 } })
+  await expect(capture).toBeVisible()
+  const target = { x: left + cw * 0.25, y: r.height * 0.75 }
+  await capture.click({ position: target })
+  await expect(capture).toHaveCount(0)
+  const dot = await page.locator('.va-pin-dot-pending').boundingBox()
+  if (!dot) throw new Error('no dot')
+  expect(Math.abs(dot.x + dot.width / 2 - (r.x + target.x))).toBeLessThan(3)
+  expect(Math.abs(dot.y + dot.height / 2 - (r.y + target.y))).toBeLessThan(3)
+  await expect(page.getByText('spot marked')).toBeVisible()
+  await page.getByRole('textbox', { name: 'Add a comment' }).fill('Move the button up')
+  await page.getByRole('button', { name: 'Comment', exact: true }).click()
+  await expect(page.getByText('Move the button up')).toBeVisible()
+  const saved = await page.evaluate(async () => {
+    const res = await fetch('/api/v1/videos/vid_sales/comments')
+    const body = (await res.json()) as { items: { body: string; x: number; y: number }[] }
+    return body.items.find((c) => c.body === 'Move the button up')
+  })
+  // Within 2 px of the click, measured in the picture (click positions round to whole pixels).
+  expect(Math.abs((saved?.x ?? 0) - 0.25) * cw).toBeLessThan(2)
+  expect(Math.abs((saved?.y ?? 0) - 0.75) * r.height).toBeLessThan(2)
+})
+
+test("approve someone else's version with a note; counts update", async ({ page }) => {
+  await page.goto('/videos/vid_webhooks')
+  await page.getByRole('button', { name: 'Approve', exact: true }).click()
+  await page.getByRole('textbox', { name: 'Note (optional)' }).fill('Ship it')
+  await page.getByRole('dialog').getByRole('button', { name: 'Approve' }).click()
+  await expect(page.getByRole('button', { name: 'Approved' })).toBeVisible()
+  await expect(page.getByText('1 approved')).toBeVisible()
+})
+
+test('viewers read comments but cannot comment or approve', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('mockRole', 'viewer')
+  })
+  await page.goto('/videos/vid_teaser')
+  await expect(page.getByText('The logo here is too small to read on a phone.')).toBeVisible()
+  await expect(page.getByRole('textbox', { name: 'Add a comment' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Approve', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Comment actions' })).toHaveCount(0)
+})

@@ -19,6 +19,7 @@ import { modals } from '@mantine/modals'
 import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
 import { PlanPanel } from '../components/PlanPanel'
+import { CommentsCard, ReviewPlayer, VerdictBar, type Pin } from '../components/Review'
 import { IconDots, IconDownload, IconExternalLink, IconLock, IconLockOpen } from '@tabler/icons-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
@@ -298,6 +299,14 @@ export function VideoPage() {
   const [revision, setRevision] = useState('')
   const [revKey, setRevKey] = useState(newIdempotencyKey)
   const prevStatus = useRef<string | null>(null)
+  const player = useRef<HTMLVideoElement>(null)
+  const [picking, setPicking] = useState(false)
+  const [pending, setPending] = useState<Pin | null>(null)
+  const select = (n: number) => {
+    setSelected(n)
+    setPicking(false)
+    setPending(null)
+  }
 
   const onError = (e: unknown) => notifications.show({ color: 'red', message: errorMessage(e) })
   const revise = $api.useMutation('post', '/api/v1/videos/{id}/versions', {
@@ -396,6 +405,8 @@ export function VideoPage() {
   const canAct = (author: string) => isAdmin || isOwner || me.data?.id === author
   // Retry spends credits, so it also needs Creator; cancel doesn't.
   const canRetry = (author: string) => canCreate && canAct(author)
+  // Reviewers and up comment and approve; viewers watch.
+  const canReview = me.data !== undefined && me.data.role !== 'viewer'
   const live = v.publications.find((p) => !p.unpublishedAt && p.urls)
   const showProgress = inProgress(latest.status) && (selected === null || selected === latest.n)
 
@@ -527,22 +538,20 @@ export function VideoPage() {
           {showProgress ? (
             <Progress video={data} v={latest} canCancel={canAct(latest.authorId)} />
           ) : v.status === 'ready' ? (
-            <video
-              key={`${data.id}-${v.n}`}
-              controls
-              playsInline
-              poster={fileUrl(data.id, v.n, 'poster')}
-              src={fileUrl(data.id, v.n, 'video')}
-              style={{
-                width: '100%',
-                aspectRatio: '16 / 9',
-                background: '#000',
-                borderRadius: 16,
-                display: 'block',
-              }}
-            >
-              <track kind="captions" src={fileUrl(data.id, v.n, 'captions')} srcLang="en" label="Captions" />
-            </video>
+            <Stack gap="xs">
+              <ReviewPlayer
+                video={data}
+                v={v}
+                player={player}
+                picking={picking}
+                pending={pending}
+                onPick={(x, y) => {
+                  if (pending) setPending({ ...pending, x, y })
+                  setPicking(false)
+                }}
+              />
+              <VerdictBar video={data} v={v} canReview={canReview && me.data.id !== v.authorId} />
+            </Stack>
           ) : (
             <Card p={0} style={{ overflow: 'hidden' }}>
               <div
@@ -589,6 +598,17 @@ export function VideoPage() {
               </div>
             </Card>
           )}
+
+          <CommentsCard
+            video={data}
+            v={v}
+            player={player}
+            canComment={canReview}
+            picking={picking}
+            setPicking={setPicking}
+            pending={pending}
+            setPending={setPending}
+          />
 
           {canCreate ? (
             <Card>
@@ -687,7 +707,7 @@ export function VideoPage() {
         </div>
 
         <div className="va-rail">
-          <Filmstrip video={data} selected={v.n} onSelect={setSelected} />
+          <Filmstrip video={data} selected={v.n} onSelect={select} />
           <PublicLink video={data} v={v} canPublish={canPublish} />
           <Card>
             <Text fw={600} mb="sm">

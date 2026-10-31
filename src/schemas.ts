@@ -158,6 +158,10 @@ export const VideoSchema = z
     versions: z.array(VersionSchema),
     published: z.boolean(),
     private: z.boolean(),
+    comments: z.object({
+      count: z.number().int(),
+      unread: z.number().int().openapi({ description: "Others' comments since you last read them" }),
+    }),
     links: z.object({ self: z.string() }),
   })
   .openapi('Video')

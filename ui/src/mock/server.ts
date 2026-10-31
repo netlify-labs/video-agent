@@ -4,17 +4,102 @@ import { ASSETS, people, stats, videos } from './data'
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
+// Tests switch roles with localStorage.mockRole (admin by default).
+const mockRole = () => {
+  try {
+    return localStorage.getItem('mockRole') ?? 'admin'
+  } catch {
+    return 'admin'
+  }
+}
 const me = {
   id: people.sam.id,
   email: people.sam.email,
   name: people.sam.name,
-  role: 'admin',
+  get role() {
+    return mockRole()
+  },
   via: 'session',
+}
+
+interface MockComment {
+  id: string
+  videoId: string
+  versionN: number
+  author: { id: string; name: string | null; email: string | null }
+  body: string
+  timeSec: number | null
+  x: number | null
+  y: number | null
+  createdAt: string
+  editedAt: string | null
+  resolvedAt: string | null
+  resolvedBy: null
+  addressedInN: number | null
+  unread?: boolean
+}
+// Ada left two comments on Sam's teaser; one is unread.
+const comments: MockComment[] = [
+  {
+    id: 'c_1',
+    videoId: 'vid_teaser',
+    versionN: 2,
+    author: people.ada,
+    body: 'The logo here is too small to read on a phone.',
+    timeSec: 1.5,
+    x: 0.25,
+    y: 0.3,
+    createdAt: new Date(Date.now() - 3600_000).toISOString(),
+    editedAt: null,
+    resolvedAt: null,
+    resolvedBy: null,
+    addressedInN: null,
+  },
+  {
+    id: 'c_2',
+    videoId: 'vid_teaser',
+    versionN: 2,
+    author: people.marco,
+    body: 'Love the end card.',
+    timeSec: null,
+    x: null,
+    y: null,
+    createdAt: new Date(Date.now() - 600_000).toISOString(),
+    editedAt: null,
+    resolvedAt: null,
+    resolvedBy: null,
+    addressedInN: null,
+    unread: true,
+  },
+]
+const commentDto = (c: MockComment) => {
+  const owner = videos.find((v) => v.id === c.videoId)?.owner.id === me.id
+  const mine = c.author.id === me.id
+  const moderate = me.role === 'admin' || (owner && me.role === 'creator')
+  return {
+    ...c,
+    unread: undefined,
+    can: { edit: mine && me.role !== 'viewer', delete: mine || moderate, resolve: moderate },
+  }
+}
+const withComments = <T extends { id: string; comments: { count: number; unread: number } }>(v: T): T => {
+  const mine = comments.filter((c) => c.videoId === v.id)
+  return { ...v, comments: { count: mine.length, unread: mine.filter((c) => c.unread).length } }
+}
+const readBody = async (init?: RequestInit, input?: RequestInfo | URL) => {
+  try {
+    if (typeof init?.body === 'string') return JSON.parse(init.body) as Record<string, unknown>
+    if (input instanceof Request) return (await input.clone().json()) as Record<string, unknown>
+  } catch {
+    // no body
+  }
+  return {}
 }
 
 export function mockFile(videoId: string, file: 'video' | 'poster' | 'gif' | 'captions'): string {
   const base = ASSETS[videoId] ?? 'teaser-v2'
   const ext = { video: 'mp4', poster: 'jpg', gif: 'gif', captions: 'vtt' }[file]
+  if (file === 'video' && base === 'sales-vertical') return '/sales-vertical.mp4'
   return `/${file === 'video' || file === 'captions' ? 'teaser-v2' : base}.${ext}`
 }
 
@@ -139,7 +224,73 @@ export function installMock() {
         )
       if (status) items = items.filter((v) => v.status === status)
       if (owner === 'me') items = items.filter((v) => v.owner.id === me.id)
-      return json({ items, nextCursor: null })
+      return json({ items: items.map(withComments), nextCursor: null })
+    }
+    // Review (plan v2 §5)
+    const cm = /^\/api\/v1\/videos\/([^/]+)\/comments(\/read)?$/.exec(p)
+    if (cm?.[1] && cm[2]) {
+      for (const c of comments) if (c.videoId === cm[1]) c.unread = false
+      return new Response(null, { status: 204 })
+    }
+    if (cm?.[1] && method === 'GET') {
+      const mine = comments.filter((c) => c.videoId === cm[1])
+      return json({
+        items: mine.map(commentDto),
+        unreadCount: mine.filter((c) => c.unread).length,
+        readAt: null,
+        nextCursor: null,
+      })
+    }
+    if (cm?.[1] && method === 'POST') {
+      if (me.role === 'viewer')
+        return json({ error: { code: 'forbidden', message: "Your role (viewer) can't comment." } }, 403)
+      const b = await readBody(init, input)
+      const c: MockComment = {
+        id: `c_${comments.length + 1}`,
+        videoId: cm[1],
+        versionN: Number(b.versionN),
+        author: people.sam,
+        body: typeof b.body === 'string' ? b.body.trim() : '',
+        timeSec: (b.timeSec as number | undefined) ?? null,
+        x: (b.x as number | undefined) ?? null,
+        y: (b.y as number | undefined) ?? null,
+        createdAt: new Date().toISOString(),
+        editedAt: null,
+        resolvedAt: null,
+        resolvedBy: null,
+        addressedInN: null,
+      }
+      comments.push(c)
+      return json(commentDto(c), 201)
+    }
+    const one = /^\/api\/v1\/comments\/([^/]+)$/.exec(p)
+    if (one?.[1]) {
+      const i = comments.findIndex((c) => c.id === one[1])
+      const c = comments[i]
+      if (!c) return json({ error: { code: 'not_found', message: 'Comment not found.' } }, 404)
+      if (method === 'DELETE') {
+        comments.splice(i, 1)
+        return new Response(null, { status: 204 })
+      }
+      const b = await readBody(init, input)
+      if (typeof b.body === 'string') Object.assign(c, { body: b.body, editedAt: new Date().toISOString() })
+      if (typeof b.resolved === 'boolean') c.resolvedAt = b.resolved ? new Date().toISOString() : null
+      return json(commentDto(c))
+    }
+    const vm = /^\/api\/v1\/videos\/([^/]+)\/versions\/(\d+)\/verdict$/.exec(p)
+    if (vm?.[1] && method === 'PUT') {
+      const b = await readBody(init, input)
+      const vid = videos.find((x) => x.id === vm[1])
+      const ver = vid?.versions.find((x) => x.n === Number(vm[2]))
+      if (!vid || !ver) return json({ error: { code: 'not_found', message: 'Video not found.' } }, 404)
+      const prev = ver.verdicts.mine
+      const next = (b.verdict as 'approved' | 'changes_requested' | null) ?? null
+      if (prev === 'approved') ver.verdicts.approved--
+      if (prev === 'changes_requested') ver.verdicts.changesRequested--
+      if (next === 'approved') ver.verdicts.approved++
+      if (next === 'changes_requested') ver.verdicts.changesRequested++
+      ver.verdicts.mine = next
+      return json(withComments(vid))
     }
     if (p === '/api/v1/videos' && method === 'POST') return json(videos[0], 202)
     const m = /^\/api\/v1\/videos\/([^/]+)(?:\/versions\/(\d+)\/(video|poster|gif|captions))?$/.exec(p)
@@ -147,7 +298,9 @@ export function installMock() {
       return Response.redirect(new URL(mockFile(m[1], m[3] as 'video'), window.location.origin).href, 302)
     if (m?.[1]) {
       const v = videos.find((x) => x.id === m[1])
-      return v ? json(v) : json({ error: { code: 'not_found', message: 'Video not found.' } }, 404)
+      return v
+        ? json(withComments(v))
+        : json({ error: { code: 'not_found', message: 'Video not found.' } }, 404)
     }
     return json({ error: { code: 'not_found', message: `Mock has no ${method} ${p}` } }, 404)
   }

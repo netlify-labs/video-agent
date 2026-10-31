@@ -12,7 +12,7 @@ import {
   Title,
 } from '@mantine/core'
 import { useDebouncedValue, useHotkeys } from '@mantine/hooks'
-import { IconLock, IconSearch } from '@tabler/icons-react'
+import { IconLock, IconMessage, IconSearch } from '@tabler/icons-react'
 import { useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { $api, errorMessage, useCanCreate, type Video } from '../api/client'
@@ -31,6 +31,7 @@ function VideoCard({ v }: { v: Video }) {
   const [hover, setHover] = useState(false)
   const working = latest && inProgress(latest.status)
   const live = v.versions.some((x) => x.publications.some((p) => !p.unpublishedAt))
+  const approved = v.versions.reduce((n, x) => n + x.verdicts.approved, 0)
   return (
     <Link
       to={`/videos/${v.id}`}
@@ -75,7 +76,23 @@ function VideoCard({ v }: { v: Video }) {
             ) : null}
             {v.title}
           </div>
-          {latest ? <Status status={latest.status} size="xs" /> : null}
+          <Group gap={6} wrap="nowrap">
+            {v.comments.count > 0 ? (
+              <span
+                className="va-comment-count num"
+                data-unread={v.comments.unread > 0 ? 'true' : undefined}
+                aria-label={
+                  v.comments.unread > 0
+                    ? `${v.comments.unread} unread comments`
+                    : `${v.comments.count} comments`
+                }
+              >
+                <IconMessage size={13} />
+                {v.comments.unread > 0 ? v.comments.unread : v.comments.count}
+              </span>
+            ) : null}
+            {latest ? <Status status={latest.status} size="xs" /> : null}
+          </Group>
         </Group>
         <div className="va-prompt">{latest?.prompt}</div>
         <div className="va-meta num">
@@ -86,6 +103,7 @@ function VideoCard({ v }: { v: Video }) {
             ready?.output ? duration(ready.output.durationSec) : null,
             v.versions.length > 1 ? `${v.versions.length} versions` : null,
             live ? 'Public' : null,
+            approved ? `${approved} approved` : null,
           ]
             .filter(Boolean)
             .join(' · ')}

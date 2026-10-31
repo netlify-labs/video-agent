@@ -312,7 +312,7 @@ function repoFor(db: Db): Repo {
       await db.update(t.comments).set(patch).where(eq(t.comments.id, id))
     },
     listComments: async (jobId, n) =>
-      (await db
+      await db
         .select()
         .from(t.comments)
         .where(
@@ -322,7 +322,7 @@ function repoFor(db: Db): Repo {
             n === undefined ? undefined : eq(t.comments.versionN, n),
           ),
         )
-        .orderBy(asc(t.comments.createdAt), asc(t.comments.id))),
+        .orderBy(asc(t.comments.createdAt), asc(t.comments.id)),
     insertPlan: async (row) => {
       await db.insert(t.plans).values(row)
     },
@@ -374,6 +374,24 @@ function repoFor(db: Db): Repo {
         .insert(t.notificationReads)
         .values({ userId, readAt })
         .onConflictDoUpdate({ target: t.notificationReads.userId, set: { readAt } })
+    },
+    commentCounts: async (jobIds, userId) => {
+      if (jobIds.length === 0) return {}
+      const c = t.comments
+      const r = t.commentReads
+      const rows = await db
+        .select({
+          jobId: c.jobId,
+          count: sql<number>`count(*)::int`,
+          unread: userId
+            ? sql<number>`count(*) filter (where ${c.authorId} <> ${userId} and (${r.readAt} is null or ${c.createdAt} > ${r.readAt}))::int`
+            : sql<number>`0`,
+        })
+        .from(c)
+        .leftJoin(r, and(eq(r.jobId, c.jobId), eq(r.userId, userId ?? '')))
+        .where(and(inArray(c.jobId, jobIds), isNull(c.deletedAt)))
+        .groupBy(c.jobId, r.readAt)
+      return Object.fromEntries(rows.map((x) => [x.jobId, { count: x.count, unread: x.unread }]))
     },
     getCommentReadAt: async (userId, jobId) =>
       (

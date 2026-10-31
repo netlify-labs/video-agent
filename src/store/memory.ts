@@ -315,6 +315,17 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
           .slice(0, q.limit),
       )
     },
+    commentCounts: async (jobIds, userId) => {
+      const out: Record<string, { count: number; unread: number }> = {}
+      for (const c of state.comments.values()) {
+        if (!jobIds.includes(c.jobId) || c.deletedAt) continue
+        const readAt = userId ? (state.commentReads.get(`${userId}/${c.jobId}`) ?? null) : null
+        const o = (out[c.jobId] ??= { count: 0, unread: 0 })
+        o.count++
+        if (userId && c.authorId !== userId && (readAt === null || c.createdAt > readAt)) o.unread++
+      }
+      return out
+    },
     getCommentReadAt: async (userId, jobId) => state.commentReads.get(`${userId}/${jobId}`) ?? null,
     setCommentReadAt: async (userId, jobId, readAt) => {
       state.commentReads.set(`${userId}/${jobId}`, readAt)

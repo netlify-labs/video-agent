@@ -36,6 +36,11 @@ export interface JobQuery {
   limit: number
 }
 
+export interface CommentCounts {
+  count: number
+  unread: number
+}
+
 export interface Repo {
   // settings
   getSettings(): Promise<SettingsRow | null>
@@ -107,6 +112,8 @@ export interface Repo {
   /** Not deleted, oldest first; optionally one version. */
   listComments(jobId: string, versionN?: number): Promise<CommentRow[]>
   getCommentReadAt(userId: string, jobId: string): Promise<string | null>
+  /** Per video: comments not deleted, and those by others newer than `userId`'s read watermark. */
+  commentCounts(jobIds: string[], userId: string | null): Promise<Record<string, CommentCounts>>
   setCommentReadAt(userId: string, jobId: string, readAt: string): Promise<void>
   insertPlan(row: PlanRow): Promise<void>
   getPlan(id: string, opts?: { lock?: boolean }): Promise<PlanRow | null>

@@ -5,7 +5,7 @@ import { accessKey, writeAccessMirror } from './files.js'
 import { emitEvent } from './webhooks.js'
 import { notifyOwner } from './notifications.js'
 import { ApiError } from '../lib/errors.js'
-import type { Repo } from '../store/types.js'
+import type { CommentCounts, Repo } from '../store/types.js'
 import { assertCan, type Principal } from './policy.js'
 import type { FrozenPlan, Verdict, VerdictRow } from './types.js'
 import { planningContext } from '../generated/planning-context.js'
@@ -627,7 +627,7 @@ export async function videoDto(
   deps: Pick<Deps, 'config' | 'runner'>,
   jobId: string,
   viewer: Principal | 'system',
-  prefetched?: { verdicts: VerdictRow[] },
+  prefetched?: { verdicts: VerdictRow[]; comments: Record<string, CommentCounts> },
 ) {
   const job = await repo.getJob(jobId)
   if (!job || job.deletedAt || (viewer !== 'system' && !canSee(viewer, job)))
@@ -655,6 +655,10 @@ export async function videoDto(
     }),
   )
   const owner = await repo.getUser(job.ownerId)
+  const viewerId = viewer === 'system' ? null : viewer.userId
+  const comments = prefetched
+    ? prefetched.comments[jobId]
+    : (await repo.commentCounts([jobId], viewerId))[jobId]
   return {
     id: job.id,
     title: job.title,
@@ -669,6 +673,7 @@ export async function videoDto(
     versions: out,
     published: pubs.some((p) => !p.unpublishedAt),
     private: job.private,
+    comments: comments ?? { count: 0, unread: 0 },
     links: { self: `${deps.config.siteUrl}/api/v1/videos/${job.id}` },
   }
 }
@@ -711,8 +716,14 @@ export async function listVideos(
   })
   const page = rows.slice(0, limit)
   // Verdict counts for the whole page in one query.
-  const verdicts = await deps.store.listVerdicts(page.map((j) => j.id))
-  const items = await Promise.all(page.map((j) => videoDto(deps.store, deps, j.id, principal, { verdicts })))
+  const ids = page.map((j) => j.id)
+  const [verdicts, comments] = await Promise.all([
+    deps.store.listVerdicts(ids),
+    deps.store.commentCounts(ids, principal.userId),
+  ])
+  const items = await Promise.all(
+    page.map((j) => videoDto(deps.store, deps, j.id, principal, { verdicts, comments })),
+  )
   const last = page.at(-1)
   return {
     items,
