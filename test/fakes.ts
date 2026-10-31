@@ -1,6 +1,7 @@
 // In-memory fakes for every port. FakeRunner scripts a run's timeline so tests can reproduce
 // lost callbacks, ambiguous starts, await_input, capacity errors and slow stops.
 import { readFileSync } from 'node:fs'
+import { tarGz } from './tarball.js'
 import { createHash, randomUUID } from 'node:crypto'
 import type {
   BlobStoreName,
@@ -321,7 +322,12 @@ export function fixtureFiles(aspect: '16:9' | '9:16' | '1:1' | '4:5' = '16:9') {
     'poster.jpg': fx('poster.jpg'),
     'preview.gif': fx('preview.gif'),
     'captions.vtt': fx('captions.vtt'),
-    'source.tar.gz': new TextEncoder().encode(`composition ${randomUUID()}`),
+    // A real archive, like render-job makes, so finalize extracts a preview bundle from it.
+    'source.tar.gz': tarGz([
+      { name: 'video/', type: '5' },
+      { name: 'video/index.html', body: `<!doctype html><h1 id="title">composition ${randomUUID()}</h1>` },
+      { name: 'video/summary.json', body: '{}' },
+    ]),
   }
 }
 

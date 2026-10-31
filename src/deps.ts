@@ -72,7 +72,7 @@ export interface IdentityPort {
   settings(): Promise<IdentitySettings | null>
 }
 
-export type BlobStoreName = 'uploads' | 'videos' | 'sources' | 'internal' | 'checkpoints'
+export type BlobStoreName = 'uploads' | 'videos' | 'sources' | 'internal' | 'checkpoints' | 'bundles'
 
 export interface BlobsPort {
   get(store: BlobStoreName, key: string): Promise<Uint8Array | null>

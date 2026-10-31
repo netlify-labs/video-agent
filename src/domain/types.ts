@@ -407,7 +407,7 @@ export interface UserWebhookRow {
 export interface CleanupRow {
   id: string
   kind: 'delete_prefix'
-  store: 'videos' | 'sources' | 'uploads' | 'internal' | 'checkpoints'
+  store: 'videos' | 'sources' | 'uploads' | 'internal' | 'checkpoints' | 'bundles'
   prefix: string
   nextActionAt: string
   doneAt: string | null

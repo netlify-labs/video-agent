@@ -506,7 +506,7 @@ export async function deleteVideo(deps: Deps, principal: Principal, jobId: strin
     for (const a of await repo.listAttempts(jobId)) {
       if (!isTerminal(a.stage) && a.stage !== 'unresolved') await requestCancel(repo, deps, a, 'user')
     }
-    for (const store of ['videos', 'sources'] as const) {
+    for (const store of ['videos', 'sources', 'bundles'] as const) {
       await repo.insertCleanup({
         id: deps.ids.uuid(),
         kind: 'delete_prefix',

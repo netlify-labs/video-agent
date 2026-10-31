@@ -3,6 +3,7 @@
 import type { Deps } from '../deps.js'
 import { decrypt, sha256Hex } from '../lib/crypto.js'
 import { inspectMp4, Mp4Error, sniff } from '../lib/media/mp4.js'
+import { ensureBundle } from './bundles.js'
 import { getSettings } from './settings.js'
 import { setStage } from './videos.js'
 import { emitTerminalEvent } from './webhooks.js'
@@ -154,7 +155,7 @@ export async function finalizeAttempt(deps: Deps, attemptId: string): Promise<Fi
     await deps.blobs.set('sources', keys.source, files['source.tar.gz'], { contentType: 'application/gzip' })
 
     const sha256 = Object.fromEntries(OUTPUT_FILES.map((f) => [f, manifest.files[f].sha256]))
-    return await finish(deps, a, 'ready', null, {
+    const result = await finish(deps, a, 'ready', null, {
       jobId: a.jobId,
       versionN: a.versionN,
       videoKey: keys.video,
@@ -170,6 +171,15 @@ export async function finalizeAttempt(deps: Deps, attemptId: string): Promise<Fi
       title: manifest.title.slice(0, 120),
       agentSummary: manifest.summary.slice(0, 4000),
     })
+    // The preview bundle (plan v2 §7). Best effort: a version without one is still ready and is extracted later.
+    if (result === 'ready') {
+      try {
+        await ensureBundle(deps, a.jobId, a.versionN)
+      } catch (e) {
+        log.warn('finalize.bundle_failed', { error: e })
+      }
+    }
+    return result
   } catch (e) {
     if (e instanceof NotYet) {
       log.warn('finalize.not_yet', { reason: e.message })
