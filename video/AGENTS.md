@@ -76,6 +76,7 @@ https://hyperframes.heygen.com/llms.txt
 ## Project Structure
 
 - `index.html` — main composition (root timeline)
+- `vendor/` — GSAP and other runtime scripts, vendored (never load them from a CDN)
 - `compositions/` — sub-compositions referenced via `data-composition-src`
 - `meta.json` — project metadata (id, name)
 - `transcript.json` — whisper word-level transcript (if generated)
@@ -107,3 +108,4 @@ Then look at what you changed: `npx hyperframes snapshot --at <seconds>` (or `--
 4. A video with sound keeps it on the `<video>` (`data-has-audio="true"`, no `muted`). Use a separate `<audio>` for music, voiceover, replacement audio, J/L cuts, or audio detached in Studio. Silent footage and b-roll: `muted`.
 5. Sub-compositions use `data-composition-src="compositions/file.html"` to reference other HTML files
 6. Only deterministic logic — no `Date.now()`, no `Math.random()`, no network fetches
+7. Load everything from this folder: GSAP is vendored at `vendor/gsap.min.js` (`<script src="vendor/gsap.min.js"></script>`). Never load scripts, styles or fonts from a CDN or any other URL; the web preview blocks them and renders must work offline

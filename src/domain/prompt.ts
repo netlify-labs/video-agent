@@ -1,7 +1,7 @@
 // The run prompt: a fixed, versioned template plus the user's request, fenced as a creative brief.
 import { ASPECTS, type Aspect } from './types.js'
 
-export const PROMPT_TEMPLATE_VERSION = 5
+export const PROMPT_TEMPLATE_VERSION = 6
 
 export interface PromptInput {
   jobId: string
@@ -112,6 +112,7 @@ export function buildPrompt(p: PromptInput): string {
     '',
     '1. Read the hyperframes skill and follow its work loop. The project is video/.',
     `2. Write video/index.html (and any files it needs inside video/). Set the composition to ${width}x${height}.`,
+    '   Load GSAP from video/vendor/gsap.min.js (<script src="vendor/gsap.min.js">). Never load scripts, styles or fonts from a CDN or any other URL.',
     '3. Run `npx hyperframes check` in video/ until it reports 0 errors.',
     '4. Write video/summary.json: { "title", "summary", "captions": [{ "start", "end", "text" }] }',
     '   with one caption cue per piece of on-screen text, timed to your timeline (seconds).',
