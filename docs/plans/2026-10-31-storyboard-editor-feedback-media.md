@@ -56,8 +56,8 @@ Features A, B and C all play a composition in the app. Compositions are model-wr
 
 ## 4. Feature A: live progress
 
-1. **Narration from the runner:** `GET /api/v1/videos/{id}/progress` returns `{ stage, step, steps, credits,
-updatedAt }`. The server calls `getSnapshot` at most every 5 s per run (cached), so many viewers cost one call.
+1. **Narration from the runner:** `GET /api/v1/videos/{id}/progress` returns
+   `{ stage, step, steps, credits, updatedAt }`. The server calls `getSnapshot` at most every 5 s per run (cached), so many viewers cost one call.
    The web app polls it every 3 s while the page is visible.
 2. **Checkpoints from the run:** the prompt asks the agent to run `npx tsx scripts/checkpoint.ts "<what I'm doing>"`
    at milestones (composition drafted, each check round, render started, render %). The script posts
@@ -84,8 +84,8 @@ list plus the live preview), with three actions:
   - the template's composition rules (size, `data-va-*` marking, see §6);
   - `context/` and, when set, the brand zip (fetched from `BRAND_ZIP_URL` and cached in Blobs by ETag);
   - chosen media as images (vision), with their names and captions.
-- **Tools:** `read_reference(name)` serves skill references on demand rather than sending all 90k tokens. `submit({
-storyboard, html })` ends the loop. Prompt caching on the static part.
+- **Tools:** `read_reference(name)` serves skill references on demand rather than sending all 90k tokens. `submit({ storyboard, html })`
+  ends the loop. Prompt caching on the static part.
 - **Output:** `storyboard.json` (beats: id, start, duration, on-screen text, visual notes) and `index.html`, stored
   as a draft. A static check runs server-side: parse, required attributes, beat timings consistent, total length,
   every asset reference resolvable. Spike S3: can parts of `hyperframes check` run in a function?
