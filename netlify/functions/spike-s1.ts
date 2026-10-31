@@ -46,6 +46,14 @@ export default async (req: Request) => {
   const probes: Record<string, unknown> = {}
   for (const [name, req] of [
     ['minimal_string', { state: 'I was charged twice. Please fix this ASAP.', questions: { category: choice('What is this ticket about?', { billing: null, technical: null, other: null }) } }],
+    ['two_questions', { state: { request: PROMPT }, questions: { a: choice('Is this a launch?', { yes: null, no: null }), b: choice('Kind?', { launch: null, tutorial: null }) } }],
+    ['underscore_digits', { state: { request: PROMPT }, questions: { aspect: choice('Shape?', { landscape_16_9: null, vertical_9_16: null }) } }],
+    ['plain_aspect', { state: { request: PROMPT }, questions: { aspect: choice('Shape?', { landscape: null, vertical: null, square: null, portrait: null, unspecified: null }) } }],
+    ['four_plain', { state: { request: PROMPT, context: CONTEXT }, questions: {
+      needsQuestions: choice('Does this request leave open questions?', { yes: null, no: null }),
+      template: choice('Kind of video?', { launch: null, tutorial: null, social: null, changelog: null, sales: null, other: null }),
+      complexity: choice('Brief complexity?', { simple: null, standard: null, complex: null }),
+      aspect: choice('Implied shape?', { landscape: null, vertical: null, square: null, portrait: null, unspecified: null }) } }],
     ['readme_object', { state: { document: 'I was charged twice. Please fix this ASAP.' }, questions: { category: choice('What is this ticket about?', { billing: null, technical: null, other: null }) } }],
   ] as const) {
     try {
