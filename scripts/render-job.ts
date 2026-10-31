@@ -91,6 +91,14 @@ async function main() {
     },
   })
   reporter.end()
+  // hyperframes stops its machine lines at 99%: close the render out so the page moves on to "saving".
+  void postCheckpoint({
+    attempt,
+    url: checkpointUrl,
+    token,
+    renderPercent: 100,
+    message: 'Rendered, saving the files',
+  })
   log('render.done', { ms: Date.now() - started, bytes: statSync(video).size })
 
   const probe = JSON.parse(

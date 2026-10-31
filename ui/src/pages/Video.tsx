@@ -80,7 +80,8 @@ function Narration({ video, v }: { video: Video; v: Version }) {
   // The run's own milestones (checkpoints) read better than the SDK's step; render-job reports Rendering N%.
   const cp = p?.checkpoint
   const step = cp?.message ?? p?.step ?? v.latestStep
-  const rendering = cp?.renderPercent != null && v.status === 'running' ? cp.renderPercent : null
+  const rendering =
+    cp?.renderPercent != null && cp.renderPercent < 100 && v.status === 'running' ? cp.renderPercent : null
   if (!step && p?.steps == null && rendering === null) return null
   const counts = [
     p?.steps != null ? `${p.steps} step${p.steps === 1 ? '' : 's'}` : null,
