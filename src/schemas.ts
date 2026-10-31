@@ -310,6 +310,15 @@ export const MyUsageSchema = z
   })
   .openapi('MyUsage')
 
+export const PreviewLinkSchema = z
+  .object({
+    url: z
+      .string()
+      .openapi({ description: 'Load in <iframe sandbox="allow-scripts">; append #ch=<channel id>' }),
+    expiresAt: z.string(),
+  })
+  .openapi('PreviewLink')
+
 export const ProgressSchema = z
   .object({
     attemptId: z.string().nullable(),

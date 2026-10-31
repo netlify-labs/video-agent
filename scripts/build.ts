@@ -3,7 +3,7 @@
 // With BRAND_ZIP_URL set, the web app's name, accent and logo come from that zip's brand.json, the same
 // zip netlify-agent-kit unpacks into context/brand/ for agent runs.
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { repoRoot } from './lib/run-tools.js'
@@ -121,4 +121,13 @@ if (agentRun && process.env.FORCE_UI_BUILD !== 'true') {
 } else {
   execFileSync('npx', ['vite', 'build', 'ui'], { stdio: 'inherit', cwd: repoRoot })
   log('ui', { skipped: false })
+  // The preview's runtime comes from the pinned hyperframes package, never a CDN (plan v2 §7). The /preview edge
+  // function serves these under each bundle's capability path.
+  mkdirSync(join(repoRoot, 'ui/dist/_preview'), { recursive: true })
+  copyFileSync(
+    join(repoRoot, 'node_modules/hyperframes/dist/hyperframe.runtime.iife.js'),
+    join(repoRoot, 'ui/dist/_preview/runtime.js'),
+  )
+  copyFileSync(join(repoRoot, 'src/preview/bridge.js'), join(repoRoot, 'ui/dist/_preview/bridge.js'))
+  log('preview', { runtime: 'hyperframes/dist/hyperframe.runtime.iife.js' })
 }

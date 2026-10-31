@@ -29,6 +29,7 @@ import { handleMcp } from './mcp.js'
 import * as hooks from './domain/webhook-settings.js'
 import { listNotifications, markNotificationsRead } from './domain/notifications.js'
 import { getProgress } from './domain/progress.js'
+import { previewLink } from './domain/preview.js'
 import { receiveCheckpoint } from './domain/checkpoints.js'
 import {
   addComment,
@@ -434,6 +435,22 @@ export function createApp(deps: Deps, opts: AppOptions) {
     async (c) => {
       const p = c.req.valid('param')
       return c.json(await setVerdict(deps, c.get('principal'), p.id, p.n, c.req.valid('json')), 200)
+    },
+  )
+  // Before the {file} route, which would otherwise take 'preview' as a file name.
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/v1/videos/{id}/versions/{n}/preview',
+      summary: "A short-lived link to play a ready version's composition in the sandboxed preview",
+      tags: ['videos'],
+      security,
+      request: { params: VersionParam },
+      responses: { 200: json(s.PreviewLinkSchema, 'Preview link'), ...errors },
+    }),
+    async (c) => {
+      const p = c.req.valid('param')
+      return c.json(await previewLink(deps, c.get('principal'), p.id, p.n), 200)
     },
   )
   app.openapi(
