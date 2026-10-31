@@ -17,6 +17,13 @@ export const bundlePrefix = (jobId: string, n: number) => `${jobId}/v${n}/`
 export const bundleIndexKey = (jobId: string, n: number) => `${bundlePrefix(jobId, n)}manifest.json`
 export const bundleFileKey = (jobId: string, n: number, path: string) => `${bundlePrefix(jobId, n)}f/${path}`
 
+/** Live snapshots from a running version's checkpoints (plan v2 §6 A2): one at a time, under the same capability. */
+export const livePrefix = (jobId: string, n: number) => `${bundlePrefix(jobId, n)}live/`
+export const liveIndexKey = (jobId: string, n: number, seq: number) =>
+  `${livePrefix(jobId, n)}s${seq}/manifest.json`
+export const liveFileKey = (jobId: string, n: number, seq: number, path: string) =>
+  `${livePrefix(jobId, n)}s${seq}/f/${path}`
+
 /** Rendered video and run inputs stay out: previews play the composition, not the MP4. */
 const keep = (path: string) => !path.endsWith('.mp4') && path !== 'feedback' && !path.startsWith('feedback/')
 
@@ -65,4 +72,29 @@ export async function ensureBundle(
   }
   deps.log.info('bundle.extracted', { jobId, versionN: n, files: index.files.length })
   return index
+}
+
+/** Extracts a checkpoint's composition (already validated) as the version's live snapshot, replacing the last one. */
+export async function writeLiveSnapshot(
+  deps: Pick<Deps, 'blobs' | 'clock'>,
+  jobId: string,
+  n: number,
+  seq: number,
+  files: Map<string, Uint8Array>,
+) {
+  const kept = [...files].filter(([path]) => keep(path))
+  for (const [path, bytes] of kept) await deps.blobs.set('bundles', liveFileKey(jobId, n, seq, path), bytes)
+  const index: BundleIndex = {
+    v: 1,
+    jobId,
+    versionN: n,
+    files: kept.map(([path, bytes]) => ({ path, size: bytes.byteLength, sha256: sha256Hex(bytes) })),
+    createdAt: deps.clock.now().toISOString(),
+  }
+  await deps.blobs.set('bundles', liveIndexKey(jobId, n, seq), JSON.stringify(index), {
+    contentType: 'application/json',
+  })
+  // Older snapshots go once the new one is committed.
+  for (const k of await deps.blobs.list('bundles', livePrefix(jobId, n)))
+    if (!k.startsWith(`${livePrefix(jobId, n)}s${seq}/`)) await deps.blobs.delete('bundles', k)
 }

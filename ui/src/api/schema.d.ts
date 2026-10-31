@@ -992,10 +992,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** A short-lived link to play a ready version's composition in the sandboxed preview */
+        /** A short-lived link to play a ready version's composition in the sandboxed preview (live=1: a running version's latest snapshot) */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    live?: "1";
+                };
                 header?: never;
                 path: {
                     id: string;
@@ -3894,6 +3896,8 @@ export interface components {
             /** @description Load in <iframe sandbox="allow-scripts">; append #ch=<channel id> */
             url: string;
             expiresAt: string;
+            /** @description For live=1: the checkpoint this snapshot is from */
+            seq: number | null;
         };
         ApiKey: {
             id: string;

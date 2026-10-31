@@ -316,6 +316,11 @@ export const PreviewLinkSchema = z
       .string()
       .openapi({ description: 'Load in <iframe sandbox="allow-scripts">; append #ch=<channel id>' }),
     expiresAt: z.string(),
+    seq: z
+      .number()
+      .int()
+      .nullable()
+      .openapi({ description: 'For live=1: the checkpoint this snapshot is from' }),
   })
   .openapi('PreviewLink')
 

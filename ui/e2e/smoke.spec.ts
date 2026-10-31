@@ -288,3 +288,20 @@ test('the preview link is renewed before it expires, keeping the playhead', asyn
   await expect(page.getByTestId('composition-preview')).toHaveAttribute('src', /link=2/)
   await expect(page.getByText(at)).toBeVisible()
 })
+
+test('a running version shows the agent’s latest composition snapshot, refreshed on new checkpoints', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('mockLive', '1')
+  })
+  await page.goto('/videos/vid_making')
+  const snap = page.getByTestId('live-snapshot')
+  await expect(snap.getByTestId('composition-preview')).toHaveAttribute('src', /live=1/)
+  await expect(snap.getByText('a work in progress, not the final video')).toBeVisible()
+  const first = await snap.getByTestId('composition-preview').getAttribute('src')
+  // The mock's checkpoint seq moves every third poll (3 s apart): a new snapshot remounts the frame.
+  await expect
+    .poll(() => snap.getByTestId('composition-preview').getAttribute('src'), { timeout: 15_000 })
+    .not.toBe(first)
+})

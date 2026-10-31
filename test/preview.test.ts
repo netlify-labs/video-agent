@@ -3,7 +3,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TestDeps } from './fakes.js'
 import { injectPreviewScripts, parsePreviewPath, previewCsp, previewContentType } from '../src/lib/preview.js'
+import { running } from './fakes.js'
 import { harness, type Harness } from './helpers.js'
+import { tarGz } from './tarball.js'
 
 const PROMPT = 'A short launch video for org webhooks, with three beats and an end card.'
 
@@ -185,5 +187,39 @@ describe('preview links and the edge function', () => {
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toBe('text/javascript; charset=utf-8')
     expect(fetched).toEqual(['/_preview/runtime.js'])
+  })
+
+  it('serves a running version live snapshot under the same capability', async () => {
+    const h = harness()
+    current = h.deps
+    h.deps.runner.nextScripts.push({ timeline: [running()] })
+    const v = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }))
+    await h.drive(2)
+    const [a] = await h.attempts(v.id)
+    const token = /--token (\S+)/.exec(h.deps.runner.starts.at(-1)?.prompt ?? '')?.[1] ?? ''
+    const bundle = Buffer.from(
+      tarGz([
+        { name: 'video/index.html', body: '<!doctype html><head></head><body><h1>wip</h1></body>' },
+        { name: 'video/style.css', body: 'h1{}' },
+      ]),
+    ).toString('base64')
+    await h.call('POST', `/api/internal/runs/${a?.id}/checkpoint`, {
+      origin: null,
+      headers: { authorization: `Bearer ${token}` },
+      body: { seq: 3, message: 'Writing', bundle },
+    })
+    const link = await h.json<{ url: string }>(
+      await h.call('GET', `/api/v1/videos/${v.id}/versions/1/preview?live=1`, { as: h.member }),
+    )
+    const res = await edge(link.url)
+    expect(res.status).toBe(200)
+    expect(await res.text()).toContain('<h1>wip</h1><script src="_hf/bridge.js"></script>')
+    const css = await edge(link.url.replace('index.html', 'style.css'))
+    expect(await css.text()).toBe('h1{}')
+    expect((await edge(link.url.replace('/live/s3/', '/live/s2/'))).status).toBe(404)
+    // The CSP base is the capability, so live/ paths stay inside it.
+    expect(res.headers.get('content-security-policy')).toContain(
+      link.url.replace(/live\/s3\/index\.html$/, ''),
+    )
   })
 })

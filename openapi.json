@@ -902,11 +902,19 @@
           },
           "expiresAt": {
             "type": "string"
+          },
+          "seq": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "For live=1: the checkpoint this snapshot is from"
           }
         },
         "required": [
           "url",
-          "expiresAt"
+          "expiresAt",
+          "seq"
         ]
       },
       "ApiKey": {
@@ -3363,7 +3371,7 @@
     },
     "/api/v1/videos/{id}/versions/{n}/preview": {
       "get": {
-        "summary": "A short-lived link to play a ready version's composition in the sandboxed preview",
+        "summary": "A short-lived link to play a ready version's composition in the sandboxed preview (live=1: a running version's latest snapshot)",
         "tags": [
           "videos"
         ],
@@ -3392,6 +3400,17 @@
             "required": true,
             "name": "n",
             "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            },
+            "required": false,
+            "name": "live",
+            "in": "query"
           }
         ],
         "responses": {

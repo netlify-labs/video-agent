@@ -111,6 +111,15 @@ function Narration({ video, v }: { video: Video; v: Version }) {
 function Progress({ video, v, canCancel }: { video: Video; v: Version; canCancel: boolean }) {
   useTicker()
   const qc = useQueryClient()
+  // The agent's latest composition snapshot, when its checkpoints send one (plan v2 §6 A2). Same query as Narration.
+  const progress = $api.useQuery(
+    'get',
+    '/api/v1/videos/{id}/progress',
+    { params: { path: { id: video.id } } },
+    { refetchInterval: 3000, refetchIntervalInBackground: false, enabled: inProgress(v.status) },
+  )
+  const snapshot =
+    progress.data?.versionN === v.n && progress.data.checkpoint?.hasBundle ? progress.data.checkpoint : null
   const cancel = $api.useMutation('post', '/api/v1/videos/{id}/versions/{n}/cancel', {
     onSuccess: () => void qc.invalidateQueries(),
     onError: (e) => notifications.show({ color: 'red', message: errorMessage(e) }),
@@ -128,9 +137,20 @@ function Progress({ video, v, canCancel }: { video: Video; v: Version; canCancel
   })
   return (
     <Card p={0} style={{ overflow: 'hidden' }}>
+      {snapshot ? (
+        <div style={{ padding: 12, paddingBottom: 0 }} data-testid="live-snapshot">
+          <CompositionPreview
+            key={snapshot.seq}
+            videoId={video.id}
+            versionN={v.n}
+            dimensions={video.dimensions}
+            live
+          />
+        </div>
+      ) : null}
       <div
         style={{
-          aspectRatio: '16 / 9',
+          aspectRatio: snapshot ? undefined : '16 / 9',
           background: 'var(--va-raised)',
           display: 'grid',
           placeItems: 'center',

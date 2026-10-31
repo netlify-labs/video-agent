@@ -65,12 +65,15 @@ export default async (req: Request, context: Context) => {
   }
 
   const bundles = getStore({ name: 'bundles', consistency: 'strong' })
-  const prefix = `${t.jobId}/v${t.versionN}/`
+  // live/s{seq}/… is the running version's latest checkpoint snapshot (plan v2 §6 A2), under the same capability.
+  const live = /^live\/s(\d{1,9})\/(.+)$/.exec(t.path)
+  const prefix = live ? `${t.jobId}/v${t.versionN}/live/s${live[1]}/` : `${t.jobId}/v${t.versionN}/`
+  const path = live?.[2] ?? t.path
   const index = (await bundles.get(`${prefix}manifest.json`, { type: 'json' })) as BundleIndex | null
-  const entry = index?.files.find((f) => f.path === t.path)
+  const entry = index?.files.find((f) => f.path === path)
   if (!entry) return plain(404, 'Not in this bundle.')
-  const type = previewContentType(t.path)
-  if (t.path === 'index.html') {
+  const type = previewContentType(path)
+  if (path === 'index.html') {
     const html = (await bundles.get(`${prefix}f/index.html`, { type: 'text' })) as string | null
     if (html === null) return plain(404, 'Not in this bundle.')
     return new Response(req.method === 'HEAD' ? null : injectPreviewScripts(html), {
@@ -83,7 +86,7 @@ export default async (req: Request, context: Context) => {
       size: entry.size,
       etag: `"${entry.sha256.slice(0, 32)}"`,
       open: async () =>
-        (await bundles.get(`${prefix}f/${t.path}`, { type: 'stream' })) as ReadableStream<Uint8Array> | null,
+        (await bundles.get(`${prefix}f/${path}`, { type: 'stream' })) as ReadableStream<Uint8Array> | null,
     },
     type,
     previewHeaders(base, type),

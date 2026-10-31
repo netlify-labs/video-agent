@@ -442,15 +442,19 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/videos/{id}/versions/{n}/preview',
-      summary: "A short-lived link to play a ready version's composition in the sandboxed preview",
+      summary:
+        "A short-lived link to play a ready version's composition in the sandboxed preview (live=1: a running version's latest snapshot)",
       tags: ['videos'],
       security,
-      request: { params: VersionParam },
+      request: { params: VersionParam, query: z.object({ live: z.enum(['1']).optional() }) },
       responses: { 200: json(s.PreviewLinkSchema, 'Preview link'), ...errors },
     }),
     async (c) => {
       const p = c.req.valid('param')
-      return c.json(await previewLink(deps, c.get('principal'), p.id, p.n), 200)
+      return c.json(
+        await previewLink(deps, c.get('principal'), p.id, p.n, { live: c.req.valid('query').live === '1' }),
+        200,
+      )
     },
   )
   app.openapi(

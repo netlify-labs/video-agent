@@ -7,6 +7,7 @@ import { decrypt, webhookSignature } from '../lib/crypto.js'
 import type { Repo } from '../store/types.js'
 import { getSettings } from './settings.js'
 import type { JobRow, WebhookDeliveryRow, WebhookDestKind, WebhookEventType } from './types.js'
+import { livePrefix } from './bundles.js'
 import { progressKey } from './progress.js'
 import { canSee, videoDto } from './videos.js'
 
@@ -96,6 +97,14 @@ export async function emitTerminalEvent(repo: Repo, deps: EmitDeps, attemptId: s
     kind: 'delete_prefix',
     store: 'checkpoints',
     prefix: `${attemptId}/`,
+    nextActionAt: deps.clock.now().toISOString(),
+    doneAt: null,
+  })
+  await repo.insertCleanup({
+    id: deps.ids.uuid(),
+    kind: 'delete_prefix',
+    store: 'bundles',
+    prefix: livePrefix(a.jobId, a.versionN),
     nextActionAt: deps.clock.now().toISOString(),
     doneAt: null,
   })

@@ -5,6 +5,8 @@
 import type { Deps } from '../deps.js'
 import { safeEqual, sha256Hex } from '../lib/crypto.js'
 import { ApiError } from '../lib/errors.js'
+import { readTarGz } from '../lib/tar.js'
+import { writeLiveSnapshot } from './bundles.js'
 import type { CheckpointRow } from './types.js'
 
 export const CHECKPOINT_MESSAGE_MAX = 500
@@ -51,6 +53,18 @@ export async function receiveCheckpoint(
     if (bundle[0] !== 0x1f || bundle[1] !== 0x8b)
       throw new ApiError('invalid_request', 'The bundle must be a .tar.gz.')
   }
+  // The same strict checks as preview bundles: only video/ files, no links, bounded.
+  let files: Map<string, Uint8Array> | null = null
+  if (bundle) {
+    try {
+      files = readTarGz(new Uint8Array(bundle))
+    } catch (e) {
+      throw new ApiError(
+        'invalid_request',
+        `The bundle was refused: ${e instanceof Error ? e.message : String(e)}`,
+      )
+    }
+  }
 
   return deps.store.tx(async (repo) => {
     const prev = await repo.getCheckpoint(attemptId, { lock: true })
@@ -83,6 +97,8 @@ export async function receiveCheckpoint(
       windowCount: inWindow ? prev.windowCount + 1 : 1,
     }
     await repo.putCheckpoint(row)
+    // What the page's live preview plays (plan v2 §6 A2).
+    if (files) await writeLiveSnapshot(deps, a.jobId, a.versionN, input.seq, files)
     // Only the latest bundle is kept.
     if (bundle && prev?.bundleKey && prev.bundleKey !== bundleKey)
       await deps.blobs.delete('checkpoints', prev.bundleKey)

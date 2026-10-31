@@ -4,9 +4,9 @@
 // renewed before it expires without losing the playhead.
 import { ActionIcon, Group, Slider, Stack, Text } from '@mantine/core'
 import { IconPlayerPauseFilled, IconPlayerPlayFilled } from '@tabler/icons-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { z } from 'zod'
-import { $api } from '../api/client'
+import { fetchClient } from '../api/client'
 
 const Msg = z.discriminatedUnion('type', [
   z.object({ type: z.literal('ready'), channel: z.string(), duration: z.number().nonnegative() }),
@@ -38,25 +38,38 @@ export function CompositionPreview({
   videoId,
   versionN,
   dimensions,
+  live = false,
   onClick,
   onMessage,
 }: {
   videoId: string
   versionN: number
+  /** A running version's latest checkpoint snapshot instead of the finished bundle. */
+  live?: boolean
   /** The composition's own size: it renders at that size, scaled to fit. */
   dimensions: { width: number; height: number }
   onClick?: (c: { textId: string | null; x: number; y: number }) => void
   onMessage?: (m: PreviewMessage) => void
 }) {
-  const link = $api.useQuery(
-    'get',
-    '/api/v1/videos/{id}/versions/{n}/preview',
-    { params: { path: { id: videoId, n: versionN } } },
-    { staleTime: Infinity, retry: 1 },
-  )
+  // Not a cached query: app-wide invalidations (after a comment, a publish…) must not mint a new link and reload
+  // the frame. Fetched on mount and again before it expires.
+  const [link, setLink] = useState<{ url: string; expiresAt: string } | null>(null)
+  const [failed, setFailed] = useState(false)
+  const load = useCallback(async () => {
+    const { data } = await fetchClient.GET('/api/v1/videos/{id}/versions/{n}/preview', {
+      params: live
+        ? { path: { id: videoId, n: versionN }, query: { live: '1' } }
+        : { path: { id: videoId, n: versionN } },
+    })
+    if (data) setLink(data)
+    else setFailed(true)
+  }, [videoId, versionN, live])
+  useEffect(() => {
+    void load()
+  }, [load])
   const frame = useRef<HTMLIFrameElement>(null)
   // A fresh channel per load: messages from an older load (or anyone else) never match.
-  const channel = useMemo(() => crypto.randomUUID(), [link.data?.url])
+  const channel = useMemo(() => crypto.randomUUID(), [link?.url])
   const [ready, setReady] = useState(false)
   const [playing, setPlaying] = useState(false)
   const [time, setTime] = useState(0)
@@ -113,21 +126,21 @@ export function CompositionPreview({
 
   // Renew before the link expires, coming back to the same moment.
   useEffect(() => {
-    if (!link.data) return
-    const ms = new Date(link.data.expiresAt).getTime() - Date.now() - RENEW_EARLY_MS
+    if (!link) return
+    const ms = new Date(link.expiresAt).getTime() - Date.now() - RENEW_EARLY_MS
     const t = setTimeout(
       () => {
         resumeAt.current = timeRef.current
         setReady(false)
         setPlaying(false)
-        void link.refetch()
+        void load()
       },
       Math.max(5_000, ms),
     )
     return () => {
       clearTimeout(t)
     }
-  }, [link.data?.expiresAt])
+  }, [link, load])
 
   return (
     <Stack gap={6}>
@@ -136,13 +149,13 @@ export function CompositionPreview({
         className="va-preview-frame"
         style={{ aspectRatio: `${dimensions.width} / ${dimensions.height}` }}
       >
-        {link.data ? (
+        {link ? (
           <iframe
             ref={frame}
-            key={link.data.url}
+            key={link.url}
             title="Composition preview"
             sandbox="allow-scripts"
-            src={`${link.data.url}#ch=${channel}`}
+            src={`${link.url}#ch=${channel}`}
             data-testid="composition-preview"
             style={{
               width: dimensions.width,
@@ -153,7 +166,7 @@ export function CompositionPreview({
           />
         ) : (
           <Text size="sm" c="var(--va-faint)" p="md">
-            {link.isError ? "This version can't be previewed." : 'Loading the preview…'}
+            {failed ? "This version can't be previewed." : 'Loading the preview…'}
           </Text>
         )}
       </div>
@@ -190,7 +203,9 @@ export function CompositionPreview({
       <Text size="xs" c="var(--va-faint)">
         {error
           ? `Preview problem: ${error}`
-          : 'A live preview of the composition: close to, not exactly, the final video.'}
+          : live
+            ? 'The composition as the agent last saved it: a work in progress, not the final video.'
+            : 'A live preview of the composition: close to, not exactly, the final video.'}
       </Text>
     </Stack>
   )

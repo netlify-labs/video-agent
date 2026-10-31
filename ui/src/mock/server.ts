@@ -241,9 +241,11 @@ export function installMock() {
       ]
       let stale = false
       let render = false
+      let live = false
       try {
         stale = localStorage.getItem('mockStale') === '1'
         render = localStorage.getItem('mockRender') === '1'
+        live = localStorage.getItem('mockLive') === '1'
       } catch {
         // private mode
       }
@@ -256,15 +258,23 @@ export function installMock() {
         credits: 30 + w.__progressCalls * 2,
         observedAt: new Date(Date.now() - (stale ? 90_000 : 2000)).toISOString(),
         stale,
-        checkpoint: render
+        checkpoint: live
           ? {
-              seq: w.__progressCalls,
-              message: 'Rendering',
-              renderPercent: Math.min(99, 40 + w.__progressCalls * 5),
+              seq: Math.ceil(w.__progressCalls / 3),
+              message: 'Writing the end card',
+              renderPercent: null,
               at: new Date().toISOString(),
-              hasBundle: false,
+              hasBundle: true,
             }
-          : null,
+          : render
+            ? {
+                seq: w.__progressCalls,
+                message: 'Rendering',
+                renderPercent: Math.min(99, 40 + w.__progressCalls * 5),
+                at: new Date().toISOString(),
+                hasBundle: false,
+              }
+            : null,
       })
     }
     // Composition preview links (plan v2 §7): a stand-in page with the bridge protocol. Short-lived, so the renewal
@@ -272,9 +282,11 @@ export function installMock() {
     if (/^\/api\/v1\/videos\/[^/]+\/versions\/\d+\/preview$/.test(p)) {
       const w = window as unknown as { __previewLinks?: number }
       w.__previewLinks = (w.__previewLinks ?? 0) + 1
+      const live = url.searchParams.get('live') === '1'
       return json({
-        url: `${window.location.origin}/mock-preview/index.html?link=${w.__previewLinks}`,
+        url: `${window.location.origin}/mock-preview/index.html?link=${w.__previewLinks}${live ? '&live=1' : ''}`,
         expiresAt: new Date(Date.now() + 62_000).toISOString(),
+        seq: live ? w.__previewLinks : null,
       })
     }
     // Review (plan v2 §5)

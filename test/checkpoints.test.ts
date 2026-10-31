@@ -1,11 +1,12 @@
 // Run checkpoints (plan v2 §6 A2, §14 rule 28): token, latest running attempt only, ordering, bounds, rate, its
 // own store, cleanup, and never touching attempt rows. Plus the best-effort client in scripts/checkpoint.ts.
-import { gzipSync } from 'node:zlib'
 import { describe, expect, it } from 'vitest'
 import { postCheckpoint } from '../scripts/checkpoint.js'
 import { checkpointBundleKey } from '../src/domain/checkpoints.js'
 import { failedSnap, running } from './fakes.js'
 import { harness, type Harness } from './helpers.js'
+import { tarGz } from './tarball.js'
+import { liveIndexKey } from '../src/domain/bundles.js'
 
 const PROMPT = 'A short launch video for org webhooks, with three beats and an end card.'
 
@@ -29,7 +30,14 @@ const post = (h: Harness, attemptId: string, token: string | null, body: unknown
   })
 const progress = async (h: Harness, id: string) =>
   h.json(await h.call('GET', `/api/v1/videos/${id}/progress`, { as: h.member }))
-const gz = (s: string) => gzipSync(Buffer.from(s)).toString('base64')
+/** A checkpoint bundle like scripts/checkpoint.ts sends: a .tar.gz of video/. */
+const gz = (s: string) =>
+  Buffer.from(
+    tarGz([
+      { name: 'video/index.html', body: `<!doctype html><h1 id="t">${s}</h1>` },
+      { name: 'video/style.css', body: 'h1{color:red}' },
+    ]),
+  ).toString('base64')
 
 describe('checkpoints', () => {
   it('the prompt names the checkpoint script with this attempt and its URL', async () => {
@@ -156,6 +164,51 @@ describe('checkpoints', () => {
     const [a] = await h.attempts(v.id)
     const due = await h.deps.store.listDueCleanup(new Date(Date.now() + 365 * 86400_000).toISOString(), 100)
     expect(due.some((c) => c.store === 'checkpoints' && c.prefix === `${a?.id}/`)).toBe(true)
+  })
+})
+
+describe('live snapshots', () => {
+  it('a checkpoint bundle becomes the version live snapshot; only the latest is kept', async () => {
+    const h = harness()
+    const { id, attemptId, token } = await runningAttempt(h)
+    await post(h, attemptId, token, { seq: 1, message: 'first', bundle: gz('one') })
+    expect(await h.deps.blobs.get('bundles', liveIndexKey(id, 1, 1))).not.toBeNull()
+    await post(h, attemptId, token, { seq: 2, message: 'second', bundle: gz('two') })
+    expect(await h.deps.blobs.get('bundles', liveIndexKey(id, 1, 1))).toBeNull()
+    const index = JSON.parse(
+      new TextDecoder().decode((await h.deps.blobs.get('bundles', liveIndexKey(id, 1, 2)))),
+    )
+    expect(index.files.map((f: { path: string }) => f.path).sort()).toEqual(['index.html', 'style.css'])
+    const link = await h.json(
+      await h.call('GET', `/api/v1/videos/${id}/versions/1/preview?live=1`, { as: h.member }),
+    )
+    expect(link.seq).toBe(2)
+    expect(link.url).toMatch(new RegExp(`/preview/${id}/v1/[^/]+/live/s2/index\\.html$`))
+  })
+
+  it('refuses bundles that fail the archive checks, keeping the checkpoint text out too', async () => {
+    const h = harness()
+    const { attemptId, token } = await runningAttempt(h)
+    const evil = Buffer.from(tarGz([{ name: 'video/../netlify.toml', body: 'x' }])).toString('base64')
+    const res = await post(h, attemptId, token, { seq: 1, message: 'evil', bundle: evil })
+    expect(res.status).toBe(400)
+    expect((await h.json(res)).error.message).toContain('refused')
+  })
+
+  it('no live link before a snapshot exists; cleanup of live snapshots when the attempt ends', async () => {
+    const h = harness()
+    const { id, attemptId, token } = await runningAttempt(h)
+    expect(
+      (await h.call('GET', `/api/v1/videos/${id}/versions/1/preview?live=1`, { as: h.member })).status,
+    ).toBe(404)
+    await post(h, attemptId, token, { seq: 1, message: 'text only' })
+    expect(
+      (await h.call('GET', `/api/v1/videos/${id}/versions/1/preview?live=1`, { as: h.member })).status,
+    ).toBe(404)
+    const v = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }))
+    await h.drive(4)
+    const due = await h.deps.store.listDueCleanup(new Date(Date.now() + 365 * 86400_000).toISOString(), 100)
+    expect(due.some((c) => c.store === 'bundles' && c.prefix === `${v.id}/v1/live/`)).toBe(true)
   })
 })
 
