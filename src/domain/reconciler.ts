@@ -147,6 +147,7 @@ async function startRequest(
       kind: 'revision',
       source: { key: revision.sourceKey, sha256: revision.sourceSha256, parentN: revision.parentN },
       bundle: null,
+      feedback: null,
     })
     await deps.blobs.set('sources', runManifestKey(a.jobId, a.id), manifest, {
       contentType: 'application/json',

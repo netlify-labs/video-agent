@@ -20,11 +20,13 @@ export interface BundleManifest {
 const sha256 = (b: Uint8Array | string) => createHash('sha256').update(b).digest('hex')
 
 /** Paths (relative to video/, with forward slashes) that never count. Matches what render-job leaves out of
- * source.tar.gz (node_modules, .hyperframes, renders, *.mp4), so a restored archive hashes the same. */
+ * source.tar.gz (node_modules, .hyperframes, renders, feedback, *.mp4), so a restored archive hashes the same. */
 export function excluded(path: string): boolean {
   const parts = path.split('/')
   if (parts.some((p) => p.startsWith('.') || p === 'node_modules' || p === 'renders')) return true
   if (path.endsWith('.mp4')) return true
+  // Feedback stills are run inputs, not part of the composition.
+  if (path === 'feedback' || path.startsWith('feedback/')) return true
   return path === 'assets/media' || path.startsWith('assets/media/')
 }
 

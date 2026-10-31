@@ -142,6 +142,7 @@ async function main() {
     '--exclude=node_modules',
     '--exclude=.hyperframes',
     '--exclude=renders',
+    '--exclude=video/feedback',
     '--exclude=*.mp4',
     '-C',
     repoRoot,

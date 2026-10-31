@@ -17,7 +17,26 @@ export interface RunManifest {
   source: { key: string; sha256: string; parentN: number } | null
   /** A version-owned frozen bundle (render-unchanged runs): archive hash plus the canonical file manifest hash. */
   bundle: { key: string; sha256: string; manifestHash: string } | null
+  /** Incorporate-feedback runs: the parent MP4 and the pinned comments to make stills of (plan v2 §5). */
+  feedback: {
+    video: { key: string; sha256: string }
+    pins: FeedbackPin[]
+  } | null
 }
+
+export interface FeedbackPin {
+  commentId: string
+  timeSec: number
+  /** 0–1 within the picture; null for a moment without a spot (still, no dot). */
+  x: number | null
+  y: number | null
+}
+
+/** Where prepare-run writes a pin's still, relative to video/. */
+export const feedbackStillPath = (index: number, commentId: string) =>
+  `feedback/${String(index + 1).padStart(2, '0')}-${commentId}.jpg`
+
+const MAX_PINS = 50
 
 export const runManifestKey = (jobId: string, attemptId: string) => `${jobId}/runs/${attemptId}.json`
 
@@ -31,6 +50,10 @@ export function serializeRunManifest(m: RunManifest): string {
     kind: m.kind,
     source: m.source && { key: m.source.key, sha256: m.source.sha256, parentN: m.source.parentN },
     bundle: m.bundle && { key: m.bundle.key, sha256: m.bundle.sha256, manifestHash: m.bundle.manifestHash },
+    feedback: m.feedback && {
+      video: { key: m.feedback.video.key, sha256: m.feedback.video.sha256 },
+      pins: m.feedback.pins.map((p) => ({ commentId: p.commentId, timeSec: p.timeSec, x: p.x, y: p.y })),
+    },
   })
 }
 
@@ -59,6 +82,22 @@ export function verifyRunManifest(raw: string, expected: { attemptId: string; sh
     throw new Error('The run manifest has a bad source entry.')
   if (m.bundle && (!own(m.bundle.key) || !HEX.test(m.bundle.sha256) || !HEX.test(m.bundle.manifestHash)))
     throw new Error('The run manifest has a bad bundle entry.')
+  if (m.feedback) {
+    const f = m.feedback
+    if (!own(f.video.key) || !HEX.test(f.video.sha256))
+      throw new Error('The run manifest has a bad feedback video.')
+    if (!Array.isArray(f.pins) || f.pins.length > MAX_PINS)
+      throw new Error('The run manifest has bad feedback pins.')
+    const unit = (n: unknown) => n === null || (typeof n === 'number' && n >= 0 && n <= 1)
+    for (const p of f.pins)
+      if (
+        !ID.test(p.commentId) ||
+        !(typeof p.timeSec === 'number' && p.timeSec >= 0) ||
+        !unit(p.x) ||
+        !unit(p.y)
+      )
+        throw new Error('The run manifest has a bad feedback pin.')
+  }
   if (m.kind === 'revision' && !m.source) throw new Error('A revision run needs a source.')
   if (m.kind === 'render_unchanged' && !m.bundle) throw new Error('A render-unchanged run needs a bundle.')
   return m as RunManifest

@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, copyFileSync } fro
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { prepare } from '../scripts/prepare-run.js'
+import { feedbackStills, prepare } from '../scripts/prepare-run.js'
 import { bundleManifest, excluded } from '../src/lib/bundle-manifest.js'
 import {
   RUN_MANIFEST_VERSION,
@@ -26,6 +26,7 @@ const base: RunManifest = {
   kind: 'revision',
   source: { key: 'vid_1/v1/source.tar.gz', sha256: H('a'), parentN: 1 },
   bundle: null,
+  feedback: null,
 }
 const verify = (m: RunManifest, raw = serializeRunManifest(m)) =>
   verifyRunManifest(raw, { attemptId: 'att_1', sha256: sha256Hex(raw) })
@@ -62,6 +63,18 @@ describe('run manifest', () => {
     expect(() => verify({ ...base, source: null })).toThrow(/needs a source/)
     expect(() => verify({ ...base, kind: 'render_unchanged', source: null })).toThrow(/needs a bundle/)
     expect(() => verify(base, '{not json')).toThrow()
+    const video = { key: 'vid_1/v1/video.mp4', sha256: H('f') }
+    const pin = { commentId: 'c_1', timeSec: 1, x: 0.5, y: 0.5 }
+    expect(verify({ ...base, feedback: { video, pins: [pin] } }).feedback?.pins).toHaveLength(1)
+    expect(() => verify({ ...base, feedback: { video, pins: [{ ...pin, x: 2 }] } })).toThrow(
+      /bad feedback pin/,
+    )
+    expect(() => verify({ ...base, feedback: { video, pins: [{ ...pin, commentId: '../x' }] } })).toThrow(
+      /bad feedback pin/,
+    )
+    expect(() =>
+      verify({ ...base, feedback: { video: { ...video, key: 'vid_9/v1/video.mp4' }, pins: [] } }),
+    ).toThrow(/bad feedback video/)
   })
 
   it('serializes the same inputs to the same bytes', () => {
@@ -158,6 +171,97 @@ describe('prepare-run restore', () => {
         { tmp: target, root: target, fetch: fetchFrom(archive) },
       ),
     ).rejects.toThrow(/unexpected entry/)
+  })
+})
+
+/** The RGB of one pixel of a JPEG, via ffmpeg. */
+function pixel(file: string, x: number, y: number) {
+  const out = execFileSync('ffmpeg', [
+    '-loglevel',
+    'error',
+    '-i',
+    file,
+    '-vf',
+    `format=rgb24,crop=1:1:${x}:${y}`,
+    '-f',
+    'rawvideo',
+    '-pix_fmt',
+    'rgb24',
+    '-',
+  ])
+  return [out[0] ?? 0, out[1] ?? 0, out[2] ?? 0] as const
+}
+
+describe('feedback stills', () => {
+  it('makes one still per pin with a dot at the spot, and an index for the agent', () => {
+    const root = mkdtempSync(join(tmpdir(), 'va-fb-'))
+    mkdirSync(join(root, 'video'))
+    const mp4 = join(process.cwd(), 'test/fixtures/a169.mp4')
+    const index = feedbackStills(root, mp4, [
+      { commentId: 'c_dot', timeSec: 0.5, x: 0.25, y: 0.5 },
+      { commentId: 'c_moment', timeSec: 0.5, x: null, y: null },
+      { commentId: 'c_late', timeSec: 9999, x: 0.75, y: 0.25 },
+    ])
+    expect(index.map((i) => i.still)).toEqual([
+      'feedback/01-c_dot.jpg',
+      'feedback/02-c_moment.jpg',
+      'feedback/03-c_late.jpg',
+    ])
+    const probe = (f: string) =>
+      execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=width,height', '-of', 'csv=p=0', f], {
+        encoding: 'utf8',
+      }).trim()
+    const [w, h] = probe(join(root, 'video', 'feedback/01-c_dot.jpg'))
+      .split(',')
+      .map(Number) as [number, number]
+    const [r, g, b] = pixel(
+      join(root, 'video', 'feedback/01-c_dot.jpg'),
+      Math.round(w * 0.25),
+      Math.round(h * 0.5),
+    )
+    expect(r).toBeGreaterThan(180)
+    expect(g).toBeLessThan(90)
+    expect(b).toBeLessThan(90)
+    // No spot, no dot.
+    const plain = pixel(
+      join(root, 'video', 'feedback/02-c_moment.jpg'),
+      Math.round(w * 0.25),
+      Math.round(h * 0.5),
+    )
+    expect(plain[0] > 180 && plain[1] < 90).toBe(false)
+    // A pin past the end still gets the last frame, with its dot.
+    const late = pixel(
+      join(root, 'video', 'feedback/03-c_late.jpg'),
+      Math.round(w * 0.75),
+      Math.round(h * 0.25),
+    )
+    expect(late[0]).toBeGreaterThan(180)
+    const written = JSON.parse(readFileSync(join(root, 'video', 'feedback', 'index.json'), 'utf8'))
+    expect(written[0]).toMatchObject({ commentId: 'c_dot', timeSec: 0.5, x: 0.25, y: 0.5 })
+    // Stills stay out of the composition's hash.
+    expect(bundleManifest(join(root, 'video')).files).toEqual([])
+  })
+
+  it('prepare-run checks the parent video hash before making stills', async () => {
+    const target = mkdtempSync(join(tmpdir(), 'va-fb-'))
+    mkdirSync(join(target, 'video'))
+    const mp4 = join(process.cwd(), 'test/fixtures/a169.mp4')
+    const feedback = {
+      video: { key: 'vid_1/v1/video.mp4', sha256: H('0') },
+      pins: [{ commentId: 'c_1', timeSec: 0.5, x: 0.5, y: 0.5 }],
+    }
+    const fetch = async (_key: string, to: string) => {
+      copyFileSync(mp4, to)
+    }
+    await expect(
+      prepare({ ...base, kind: 'author', source: null, feedback }, { tmp: target, root: target, fetch }),
+    ).rejects.toThrow(/parent video doesn't match/)
+    const good = { ...feedback, video: { ...feedback.video, sha256: sha256Hex(readFileSync(mp4)) } }
+    await prepare(
+      { ...base, kind: 'author', source: null, feedback: good },
+      { tmp: target, root: target, fetch },
+    )
+    expect(readFileSync(join(target, 'video', 'feedback', 'index.json'), 'utf8')).toContain('c_1')
   })
 })
 
