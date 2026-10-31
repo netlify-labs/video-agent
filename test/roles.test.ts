@@ -209,6 +209,8 @@ describe('MCP tools by role', () => {
         'create_video',
         'get_video',
         'list_videos',
+        'plan_brief',
+        'plan_video',
         'publish_video',
         'revise_video',
         'set_verdict',

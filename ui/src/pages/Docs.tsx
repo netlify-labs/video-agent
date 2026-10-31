@@ -20,6 +20,8 @@ const TOOLS: [string, string][] = [
   ['unpublish_video', 'Take a public link down.'],
   ['cancel_video', 'Stop the version in progress.'],
   ['set_verdict', 'Approve a version or request changes (not on your own version).'],
+  ['plan_video', 'Optional: a few multiple-choice questions to plan the video first (needs AI Gateway).'],
+  ['plan_brief', 'Turns the answers into a brief; pass its plan_id to create_video or revise_video.'],
 ]
 
 // Scalar themed with the app's role tokens (--va-*), which already switch between light and dark,

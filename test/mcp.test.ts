@@ -39,10 +39,10 @@ describe('MCP', () => {
     const { h, key } = await setup()
     const r = await rpc(h, key, 'tools/list', {}, 1, '/mcp')
     expect(r.status).toBe(200)
-    expect((r.body as { result: { tools: unknown[] } }).result.tools).toHaveLength(8)
+    expect((r.body as { result: { tools: unknown[] } }).result.tools).toHaveLength(10)
   })
 
-  it('initializes and lists eight tools with instructions', async () => {
+  it('initializes and lists ten tools with instructions', async () => {
     const { h, key } = await setup()
     const init = await rpc(h, key, 'initialize', {
       protocolVersion: '2025-06-18',
@@ -58,6 +58,8 @@ describe('MCP', () => {
       'create_video',
       'get_video',
       'list_videos',
+      'plan_brief',
+      'plan_video',
       'publish_video',
       'revise_video',
       'set_verdict',
@@ -138,5 +140,63 @@ describe('MCP input normalization', () => {
     expect(normalizeDuration('auto')).toBeUndefined()
     expect(normalizeDuration(12.4)).toBe(12)
     expect(normalizeVideoId('https://x.netlify.app/videos/vid_01ABC')).toBe('vid_01abc')
+  })
+
+  it('plans through MCP: plan_video asks, plan_brief writes the brief, create_video uses plan_id', async () => {
+    const { h, key } = await setup()
+    h.deps.gateway.replies.push(
+      JSON.stringify({
+        questions: [
+          {
+            id: 'q1',
+            question: 'Who is it for?',
+            why: '',
+            options: [
+              { id: 'a', label: 'Developers', description: '' },
+              { id: 'b', label: 'Leads', description: '' },
+            ],
+            multiSelect: false,
+            allowOther: true,
+          },
+        ],
+      }),
+      JSON.stringify({
+        goal: 'g',
+        audience: 'Developers',
+        keyMessage: 'k',
+        beats: [{ text: 'b', seconds: 2 }],
+        tone: 't',
+        callToAction: 'Read the docs',
+        mustInclude: [],
+        avoid: [],
+      }),
+    )
+    const planned = await tool(h, key, 'plan_video', { prompt: 'A 30-second launch video for org webhooks' })
+    expect(planned.data.questions[0]).toEqual(
+      expect.objectContaining({
+        question_id: 'q1',
+        choices: [expect.objectContaining({ choice_id: 'a' }), expect.anything()],
+      }),
+    )
+    const brief = await tool(h, key, 'plan_brief', {
+      plan_id: planned.data.plan_id,
+      answers: [{ question_id: 'q1', choice_ids: ['a'] }],
+    })
+    expect(brief.data.brief.callToAction).toBe('Read the docs')
+    const created = await tool(h, key, 'create_video', {
+      prompt: 'A 30-second launch video for org webhooks',
+      plan_id: planned.data.plan_id,
+    })
+    expect(created.isError).toBe(false)
+    const v = await h.deps.store.getVersion(created.data.video_id, 1)
+    expect(v?.plan?.planId).toBe(planned.data.plan_id)
+  })
+
+  it('hides the planning tools when AI Gateway is unavailable', async () => {
+    const { h, key } = await setup()
+    h.deps.gateway.isAvailable = false
+    const list = await rpc(h, key, 'tools/list')
+    const names = (list.body as { result: { tools: { name: string }[] } }).result.tools.map((t) => t.name)
+    expect(names).not.toContain('plan_video')
   })
 })

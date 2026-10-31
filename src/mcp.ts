@@ -6,6 +6,7 @@ import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/
 import { z } from 'zod'
 import type { Deps } from './deps.js'
 import { PRIVATE_URL_TTL_SEC, signedFilePath } from './domain/files.js'
+import * as planning from './domain/plans.js'
 import { can, type Principal } from './domain/policy.js'
 import type { Aspect } from './domain/types.js'
 import {
@@ -29,6 +30,8 @@ Typical flow:
 3. When ready, the result has signed download URLs (valid 1 hour) and the web page for the video.
 4. revise_video to change something ("make the end card orange"); it creates the next version from the latest ready one.
 5. publish_video to get a public share page, MP4 URL and embed snippet.
+
+Optional planning (when plan_video is listed): call plan_video with the prompt first. If it returns questions, ask your user (they can skip any), then call plan_brief with their answers, show the brief, and pass plan_id to create_video (or revise_video). Skip planning when the request is already specific.
 
 Videos are silent, with captions. The company's brand context is applied automatically. Don't create a new video to fix a small thing: revise it.`
 
@@ -300,6 +303,10 @@ Example: {"prompt": "A 20-second launch video for our new webhooks feature, endi
           .optional()
           .describe('Target length in seconds ("30s", "2 min" work). Leave out to let the agent choose.'),
         title: z.string().max(120).optional().describe('Optional title. The agent names it otherwise.'),
+        plan_id: z
+          .string()
+          .optional()
+          .describe('Optional. A plan from plan_video + plan_brief; its brief is added to the run.'),
         idempotency_key: z
           .string()
           .max(200)
@@ -324,6 +331,7 @@ Example: {"prompt": "A 20-second launch video for our new webhooks feature, endi
             aspect: normalizeAspect(args.aspect),
             durationSec: normalizeDuration(args.duration_sec),
             title: args.title,
+            planId: args.plan_id,
           },
           args.idempotency_key,
         )
@@ -432,6 +440,10 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Make the end 
       inputSchema: {
         video_id: z.string().describe('The video id (vid_…) or its web URL.'),
         change: z.string().min(3).max(4000).describe('What should change. Everything else stays.'),
+        plan_id: z
+          .string()
+          .optional()
+          .describe('Optional. A revision plan from plan_video (with video_id) + plan_brief.'),
         from_version: z
           .number()
           .int()
@@ -457,6 +469,7 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Make the end 
         const res = await reviseVideo(deps, principal, id, {
           prompt: args.change,
           fromVersion: args.from_version,
+          planId: args.plan_id,
           durationSec: normalizeDuration(args.duration_sec),
         })
         if (!res.replayed) kick()
@@ -610,11 +623,106 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "version": 2, "verdict":
       }, args.video_id),
   )
 
+  const planVideoTool = server.registerTool(
+    'plan_video',
+    {
+      title: 'Plan a video with a few questions',
+      description: `Optional first step before create_video (or revise_video). Reads the request and returns 0–6 multiple-choice questions whose answers would change the video. Ask your user these questions (they may skip any or give their own answer), then call plan_brief.
+
+Pass video_id to plan a revision of an existing video; the questions are about the change. If "questions" is empty, call plan_brief with no answers.
+
+Example: {"prompt": "A 30-second launch video for org webhooks, ending on our logo"}`,
+      inputSchema: {
+        prompt: z.string().min(10).max(4000).describe('The video request, as the user wrote it.'),
+        aspect: z.string().optional().describe('16:9, 9:16, 1:1 or 4:5, if the user already chose one.'),
+        duration_sec: z.union([z.number(), z.string()]).optional(),
+        video_id: z.string().optional().describe('Plan a revision of this video instead of a new one.'),
+      },
+    },
+    async (args) =>
+      run(async () => {
+        const created = await planning.createPlan(deps, principal, {
+          prompt: args.prompt,
+          aspect: normalizeAspect(args.aspect),
+          durationSec: normalizeDuration(args.duration_sec),
+          ...(args.video_id ? { revisionOf: { videoId: normalizeVideoId(args.video_id) } } : {}),
+        })
+        const plan = await planning.generateQuestions(deps, principal, created.id)
+        return {
+          plan_id: plan.id,
+          suggested_aspect: plan.route?.suggestedAspect ?? null,
+          questions: (plan.questions ?? []).map((q) => ({
+            question_id: q.id,
+            question: q.question,
+            why: q.why,
+            multi_select: q.multiSelect,
+            allow_other: q.allowOther,
+            choices: q.options.map((o) => ({ choice_id: o.id, label: o.label, description: o.description })),
+          })),
+          next_actions: [
+            (plan.questions ?? []).length > 0
+              ? 'Ask the user these questions (each can be skipped), then call plan_brief with plan_id and their answers.'
+              : `The request covers it: call plan_brief with plan_id "${plan.id}" and no answers.`,
+          ],
+        }
+      }),
+  )
+  const planBriefTool = server.registerTool(
+    'plan_brief',
+    {
+      title: 'Turn the answers into a brief',
+      description: `Second planning step. Send the user's answers to the plan_video questions (choice_ids and/or "other" text; mark a question skipped if they skip it). Returns a short brief. Show it to the user, then call create_video (or revise_video) with plan_id.
+
+Example: {"plan_id": "plan_…", "answers": [{"question_id": "q1", "choice_ids": ["a"]}, {"question_id": "q2", "skipped": true}]}`,
+      inputSchema: {
+        plan_id: z.string(),
+        answers: z
+          .array(
+            z.object({
+              question_id: z.string(),
+              choice_ids: z.array(z.string()).optional(),
+              other: z.string().max(500).optional(),
+              skipped: z.boolean().optional(),
+            }),
+          )
+          .max(6)
+          .default([]),
+      },
+    },
+    async (args) =>
+      run(async () => {
+        const plan = await planning.generateBrief(
+          deps,
+          principal,
+          args.plan_id,
+          args.answers.map((a) => ({
+            questionId: a.question_id,
+            ...(a.choice_ids ? { optionIds: a.choice_ids } : {}),
+            ...(a.other ? { other: a.other } : {}),
+            ...(a.skipped ? { skipped: true } : {}),
+          })),
+        )
+        return {
+          plan_id: plan.id,
+          brief: plan.brief,
+          next_actions: [
+            plan.revisionOf
+              ? `Show the brief, then call revise_video with video_id "${plan.revisionOf.videoId}", the change, and plan_id "${plan.id}".`
+              : `Show the brief, then call create_video with the original prompt and plan_id "${plan.id}".`,
+          ],
+        }
+      }),
+  )
+
   // Keys inherit their owner's role, so the tool list shows only what that role can do (plan v2 §3).
   if (!can(principal, 'video:create')) {
     for (const t of [createTool, reviseTool, publishTool, unpublishTool]) t.remove()
   }
   if (!can(principal, 'verdict:set')) verdictTool.remove()
+  if (!can(principal, 'plan:create') || !deps.gateway.available()) {
+    planVideoTool.remove()
+    planBriefTool.remove()
+  }
   return server
 }
 
