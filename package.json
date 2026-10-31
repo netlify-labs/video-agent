@@ -57,7 +57,7 @@
     "drizzle-kit": "1.0.0-beta.22",
     "eslint": "10.14.0",
     "hyperframes": "0.8.222",
-    "netlify-agent-kit": "0.3.1",
+    "netlify-agent-kit": "0.4.0",
     "openapi-fetch": "0.17.0",
     "openapi-react-query": "0.5.4",
     "postcss": "8.5.32",
