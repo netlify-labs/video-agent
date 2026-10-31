@@ -302,11 +302,11 @@ function repoFor(db: Db): Repo {
       await db.insert(t.ownershipTransfers).values(row)
     },
     listOwnershipTransfers: async (jobId) =>
-      (await db
+      await db
         .select()
         .from(t.ownershipTransfers)
         .where(eq(t.ownershipTransfers.jobId, jobId))
-        .orderBy(asc(t.ownershipTransfers.at))) as OwnershipTransferRow[],
+        .orderBy(asc(t.ownershipTransfers.at)),
     putVerdict: async (row) => {
       await db
         .insert(t.verdicts)
