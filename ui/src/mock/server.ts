@@ -73,6 +73,12 @@ export function installMock() {
     if (/^\/api\/v1\/plans\/[^/]+\/brief$/.test(p)) return json(mockPlan('brief'))
     if (/^\/api\/v1\/plans\/[^/]+$/.test(p) && method === 'PATCH')
       return json({ ...mockPlan('brief'), briefRev: 2 })
+    if (p === '/api/v1/me/usage')
+      return json({
+        since: new Date().toISOString().slice(0, 8) + '01T00:00:00.000Z',
+        runs: { credits: 312, videos: 3, unknown: false },
+        planning: { credits: 6.4, calls: 9, unknown: 0 },
+      })
     if (p === '/api/v1/notifications') return json({ items: [], unreadCount: 0, nextCursor: null })
     if (p === '/api/v1/config')
       return json({ admission: ['acme.com'], siteUrl: window.location.origin, planningAvailable: true })

@@ -29,6 +29,7 @@ import { handleMcp } from './mcp.js'
 import * as hooks from './domain/webhook-settings.js'
 import { listNotifications, markNotificationsRead } from './domain/notifications.js'
 import * as planning from './domain/plans.js'
+import { myUsage, planningByUserWeek } from './domain/usage.js'
 import { ApiError, errorBody } from './lib/errors.js'
 import * as s from './schemas.js'
 
@@ -728,6 +729,17 @@ export function createApp(deps: Deps, opts: AppOptions) {
   app.openapi(
     createRoute({
       method: 'get',
+      path: '/api/v1/me/usage',
+      summary: 'Your credits this month: agent runs and planning (estimates)',
+      tags: ['usage'],
+      security,
+      responses: { 200: json(s.MyUsageSchema, 'Usage'), ...errors },
+    }),
+    async (c) => c.json(await myUsage(deps, c.get('principal')), 200),
+  )
+  app.openapi(
+    createRoute({
+      method: 'get',
       path: '/api/v1/notifications',
       summary: 'Comments and approvals on your videos, newest first, with an unread count',
       tags: ['notifications'],
@@ -808,6 +820,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
         deps.store.listUsers(),
         deps.store.getSettings(),
       ])
+      const planningRows = planningByUserWeek(await deps.store.listGatewayCalls({ since: monthAgo }))
       const email = new Map(users.map((u) => [u.id, u.email]))
       const titles = new Map<string, string>()
       for (const a of [...inFlight, ...unresolved]) {
@@ -837,7 +850,28 @@ export function createApp(deps: Deps, opts: AppOptions) {
             runUrl: runUrl(a),
           })),
           failuresThisWeek: failures,
-          usage: usage.map((u) => ({ ...u, email: email.get(u.userId) ?? null })),
+          usage: [
+            ...usage.map((u) => {
+              const p = planningRows.get(`${u.userId}|${u.week}`)
+              planningRows.delete(`${u.userId}|${u.week}`)
+              return {
+                ...u,
+                email: email.get(u.userId) ?? null,
+                planningCredits: Math.round((p?.credits ?? 0) * 100) / 100,
+                planningUnknown: p?.unknown ?? 0,
+              }
+            }),
+            // People who planned but made no runs that week.
+            ...[...planningRows.values()].map((p) => ({
+              userId: p.userId,
+              email: email.get(p.userId) ?? null,
+              week: p.week,
+              credits: 0,
+              videos: 0,
+              planningCredits: Math.round(p.credits * 100) / 100,
+              planningUnknown: p.unknown,
+            })),
+          ],
           maxActiveRuns: deps.config.maxActiveRuns,
           queuePausedReason: settings?.queuePausedReason ?? null,
         },

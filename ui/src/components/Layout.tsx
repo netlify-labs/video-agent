@@ -39,6 +39,7 @@ export function Layout() {
   const computedScheme = useComputedColorScheme('dark')
   const me = $api.useQuery('get', '/api/v1/me')
   const health = $api.useQuery('get', '/api/health', {}, { staleTime: 60_000 })
+  const usage = $api.useQuery('get', '/api/v1/me/usage', {}, { staleTime: 60_000 })
   const isAdmin = me.data?.role === 'admin'
   const canCreate = isAdmin || me.data?.role === 'creator'
   useHotkeys(canCreate ? [['n', () => void navigate('/new')]] : [])
@@ -100,6 +101,14 @@ export function Layout() {
                   {me.data?.email}
                   {me.data?.role ? ` · ${me.data.role}` : ''}
                 </Menu.Label>
+                {usage.data ? (
+                  <Menu.Label>
+                    This month: {Math.round(usage.data.runs.credits + usage.data.planning.credits)} credits
+                    {usage.data.planning.credits > 0
+                      ? ` (planning ${usage.data.planning.credits.toFixed(1)})`
+                      : ''}
+                  </Menu.Label>
+                ) : null}
                 <Menu.Item
                   leftSection={<IconLogout size={16} />}
                   onClick={() => void auth.logout().then(() => navigate('/'))}

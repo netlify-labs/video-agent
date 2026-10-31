@@ -2549,6 +2549,87 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Your credits this month: agent runs and planning (estimates) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Usage */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MyUsage"];
+                    };
+                };
+                /** @description Invalid request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not signed in */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not allowed */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Conflict or not ready */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/notifications": {
         parameters: {
             query?: never;
@@ -3340,6 +3421,19 @@ export interface components {
         PatchPlan: {
             brief: components["schemas"]["PlanBrief"];
         };
+        MyUsage: {
+            since: string;
+            runs: {
+                credits: number;
+                videos: number;
+                unknown: boolean;
+            };
+            planning: {
+                credits: number;
+                calls: number;
+                unknown: number;
+            };
+        };
         NotificationList: {
             items: components["schemas"]["Notification"][];
             unreadCount: number;
@@ -3401,6 +3495,10 @@ export interface components {
                 week: string;
                 credits: number | null;
                 videos: number;
+                /** @description Estimated AI Gateway credits for planning (Plan it first). */
+                planningCredits: number;
+                /** @description Planning calls whose cost is unknown (errors, timeouts). */
+                planningUnknown: number;
             }[];
             maxActiveRuns: number;
             queuePausedReason: string | null;

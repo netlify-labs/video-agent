@@ -272,6 +272,14 @@ export const PlanAnswersSchema = z
   .openapi('PlanAnswers')
 export const PatchPlanSchema = z.object({ brief: PlanBriefSchema }).openapi('PatchPlan')
 
+export const MyUsageSchema = z
+  .object({
+    since: z.string(),
+    runs: z.object({ credits: z.number(), videos: z.number().int(), unknown: z.boolean() }),
+    planning: z.object({ credits: z.number(), calls: z.number().int(), unknown: z.number().int() }),
+  })
+  .openapi('MyUsage')
+
 export const NotificationSchema = z
   .object({
     id: z.string(),
@@ -365,6 +373,11 @@ export const StatsSchema = z
         week: z.string(),
         credits: z.number().nullable(),
         videos: z.number().int(),
+        planningCredits: z.number().describe('Estimated AI Gateway credits for planning (Plan it first).'),
+        planningUnknown: z
+          .number()
+          .int()
+          .describe('Planning calls whose cost is unknown (errors, timeouts).'),
       }),
     ),
     maxActiveRuns: z.number().int(),

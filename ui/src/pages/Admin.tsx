@@ -348,7 +348,7 @@ export function AdminPage() {
               Credits by person
             </Text>
             {(s?.usage ?? []).length === 0 ? (
-              <div className="va-empty">No runs in the last 5 weeks.</div>
+              <div className="va-empty">No runs or planning in the last 5 weeks.</div>
             ) : (
               <table className="va-table">
                 <thead>
@@ -356,7 +356,8 @@ export function AdminPage() {
                     <th>Who</th>
                     <th>Week of</th>
                     <th className="num">Videos</th>
-                    <th className="num">Credits</th>
+                    <th className="num">Run credits</th>
+                    <th className="num">Planning</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -369,6 +370,15 @@ export function AdminPage() {
                         <td className="num">{u.week.slice(5)}</td>
                         <td className="num">{u.videos}</td>
                         <td className="num">{u.credits === null ? '—' : u.credits.toFixed(0)}</td>
+                        <td
+                          className="num"
+                          title={
+                            u.planningUnknown ? `${u.planningUnknown} call(s) with unknown cost` : undefined
+                          }
+                        >
+                          {u.planningCredits.toFixed(1)}
+                          {u.planningUnknown ? '+' : ''}
+                        </td>
                       </tr>
                     ))}
                 </tbody>
