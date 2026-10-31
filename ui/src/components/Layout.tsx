@@ -39,7 +39,8 @@ export function Layout() {
   const me = $api.useQuery('get', '/api/v1/me')
   const health = $api.useQuery('get', '/api/health', {}, { staleTime: 60_000 })
   const isAdmin = me.data?.role === 'admin'
-  useHotkeys([['n', () => void navigate('/new')]])
+  const canCreate = isAdmin || me.data?.role === 'creator'
+  useHotkeys(canCreate ? [['n', () => void navigate('/new')]] : [])
 
   const link = (to: string, label: string, icon: React.ReactNode) => (
     <NavLink
@@ -95,7 +96,7 @@ export function Layout() {
               <Menu.Dropdown>
                 <Menu.Label>
                   {me.data?.email}
-                  {isAdmin ? ' · admin' : ''}
+                  {me.data?.role ? ` · ${me.data.role}` : ''}
                 </Menu.Label>
                 <Menu.Item
                   leftSection={<IconLogout size={16} />}
@@ -109,15 +110,17 @@ export function Layout() {
         </Group>
       </AppShell.Header>
       <AppShell.Navbar p="xs">
-        {link('/new', 'New video', <IconPlus size={18} />)}
+        {canCreate ? link('/new', 'New video', <IconPlus size={18} />) : null}
         {link('/', 'Library', <IconLayoutGrid size={18} />)}
         {link('/keys', 'API keys', <IconKey size={18} />)}
         {isAdmin ? link('/admin', 'Admin', <IconShieldLock size={18} />) : null}
         {isAdmin ? link('/setup', 'Setup', <IconSettings size={18} />) : null}
         {link('/docs', 'API docs', <IconBook size={18} />)}
-        <Text size="xs" c="var(--va-faint)" mt="auto" p="xs">
-          Press N for a new video
-        </Text>
+        {canCreate ? (
+          <Text size="xs" c="var(--va-faint)" mt="auto" p="xs">
+            Press N for a new video
+          </Text>
+        ) : null}
       </AppShell.Navbar>
       <AppShell.Main>
         <Outlet />

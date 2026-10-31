@@ -43,3 +43,10 @@ export function errorMessage(e: unknown): string {
 export function newIdempotencyKey(): string {
   return crypto.randomUUID()
 }
+
+/** Creators and admins make, revise and edit videos; reviewers and viewers don't (plan v2 §3). The server
+ * enforces this; the UI only hides what the role can't use. */
+export function useCanCreate(): boolean {
+  const me = $api.useQuery('get', '/api/v1/me')
+  return me.data?.role === 'admin' || me.data?.role === 'creator'
+}

@@ -15,7 +15,7 @@ import { useDebouncedValue, useHotkeys } from '@mantine/hooks'
 import { IconLock, IconSearch } from '@tabler/icons-react'
 import { useRef, useState } from 'react'
 import { Link } from 'react-router'
-import { $api, errorMessage, type Video } from '../api/client'
+import { $api, errorMessage, useCanCreate, type Video } from '../api/client'
 import { StageTrack, Status, duration, fileUrl, inProgress, relativeTime } from '../components/bits'
 import { QuickCreate } from './NewVideo'
 
@@ -114,6 +114,7 @@ export function LibraryPage() {
   const [debounced] = useDebouncedValue(q, 300)
   const [owner, setOwner] = useState<'all' | 'me'>('all')
   const [status, setStatus] = useState<string | null>(null)
+  const canCreate = useCanCreate()
   const [published, setPublished] = useState<string | null>(null)
   const search = useRef<HTMLInputElement>(null)
   useHotkeys([['/', () => search.current?.focus()]])
@@ -167,9 +168,11 @@ export function LibraryPage() {
             w={280}
             visibleFrom="sm"
           />
-          <Button component={Link} to="/new">
-            New video
-          </Button>
+          {canCreate ? (
+            <Button component={Link} to="/new">
+              New video
+            </Button>
+          ) : null}
         </Group>
       </div>
       <Group gap="sm" mb="lg" wrap="wrap">
@@ -242,7 +245,11 @@ export function LibraryPage() {
           ))}
         </div>
       ) : items.length === 0 && !filtered ? (
-        <QuickCreate />
+        canCreate ? (
+          <QuickCreate />
+        ) : (
+          <div className="va-empty">No videos yet. Creators' videos will show up here.</div>
+        )
       ) : items.length === 0 ? (
         <div className="va-empty">No videos match. Clear a filter or search for other words.</div>
       ) : (

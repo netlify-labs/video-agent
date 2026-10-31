@@ -74,7 +74,8 @@ describe('roles', () => {
       ).toBe(403)
       const mcp = await mcpCreate(h, key)
       expect(mcp.result.isError).toBe(true)
-      expect(mcp.result.content[0]?.text).toContain(`Your role (${role}) can't create videos`)
+      // The tool isn't even listed for this role, so calling it fails as unknown.
+      expect(mcp.result.content[0]?.text).toContain('create_video')
     }
   })
 
@@ -184,5 +185,38 @@ describe('roles migration', () => {
       { id: 'u1', role: 'admin' },
       { id: 'u2', role: 'creator' },
     ])
+  })
+})
+
+describe('MCP tools by role', () => {
+  it('reviewers and viewers see only the tools their role can use', async () => {
+    const h = harness()
+    const names = async (cookie: string) => {
+      const key = (await h.json(await h.call('POST', '/api/v1/keys', { as: cookie, body: { name: 'k' } })))
+        .key
+      const res = await h.call('POST', '/api/mcp', {
+        origin: null,
+        headers: { accept: 'application/json, text/event-stream', authorization: `Bearer ${key}` },
+        body: { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} },
+      })
+      return ((await res.json()) as { result: { tools: { name: string }[] } }).result.tools
+        .map((t) => t.name)
+        .sort()
+    }
+    expect(await names(h.member)).toEqual(
+      [
+        'cancel_video',
+        'create_video',
+        'get_video',
+        'list_videos',
+        'publish_video',
+        'revise_video',
+        'unpublish_video',
+      ].sort(),
+    )
+    for (const role of ['reviewer', 'viewer'] as const) {
+      const cookie = await person(h, `u_${role}`, role)
+      expect(await names(cookie)).toEqual(['cancel_video', 'get_video', 'list_videos'])
+    }
   })
 })

@@ -6,7 +6,7 @@ import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/
 import { z } from 'zod'
 import type { Deps } from './deps.js'
 import { signedFilePath } from './domain/files.js'
-import type { Principal } from './domain/policy.js'
+import { can, type Principal } from './domain/policy.js'
 import type { Aspect } from './domain/types.js'
 import {
   cancelVersion,
@@ -268,7 +268,7 @@ export function buildMcpServer(deps: Deps, principal: Principal, kick: () => voi
   )
   const load = (id: string) => videoDto(deps.store, deps, id, principal)
 
-  server.registerTool(
+  const createTool = server.registerTool(
     'create_video',
     {
       title: 'Create a video',
@@ -416,7 +416,7 @@ Example: {"query": "webhooks", "mine": true, "limit": 10}`,
       }),
   )
 
-  server.registerTool(
+  const reviseTool = server.registerTool(
     'revise_video',
     {
       title: 'Revise a video',
@@ -466,7 +466,7 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Make the end 
       }, args.video_id),
   )
 
-  server.registerTool(
+  const publishTool = server.registerTool(
     'publish_video',
     {
       title: 'Publish a video',
@@ -514,7 +514,7 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w"}`,
       }, args.video_id),
   )
 
-  server.registerTool(
+  const unpublishTool = server.registerTool(
     'unpublish_video',
     {
       title: 'Unpublish a video',
@@ -578,6 +578,10 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w"}`,
       }, args.video_id),
   )
 
+  // Keys inherit their owner's role, so the tool list shows only what that role can do (plan v2 §3).
+  if (!can(principal, 'video:create')) {
+    for (const t of [createTool, reviseTool, publishTool, unpublishTool]) t.remove()
+  }
   return server
 }
 

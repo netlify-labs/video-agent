@@ -281,6 +281,7 @@ export function VideoPage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const me = $api.useQuery('get', '/api/v1/me')
+  const canCreate = me.data?.role === 'admin' || me.data?.role === 'creator'
   const video = $api.useQuery(
     'get',
     '/api/v1/videos/{id}',
@@ -389,6 +390,8 @@ export function VideoPage() {
   const busy = data.versions.some((x) => inProgress(x.status))
   const canPublish = isAdmin || isOwner
   const canAct = (author: string) => isAdmin || isOwner || me.data?.id === author
+  // Retry spends credits, so it also needs Creator; cancel doesn't.
+  const canRetry = (author: string) => canCreate && canAct(author)
   const live = v.publications.find((p) => !p.unpublishedAt && p.urls)
   const showProgress = inProgress(latest.status) && (selected === null || selected === latest.n)
 
@@ -565,7 +568,7 @@ export function VideoPage() {
                       ? ' A shorter target length usually fixes this.'
                       : ''}
                   </Text>
-                  {v.n === latest.n && canAct(v.authorId) ? (
+                  {v.n === latest.n && canRetry(v.authorId) ? (
                     <Group mt="xs">
                       <Button
                         loading={retry.isPending}
@@ -583,50 +586,52 @@ export function VideoPage() {
             </Card>
           )}
 
-          <Card>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault()
-                revise.mutate({
-                  params: { path: { id }, header: { 'idempotency-key': revKey } },
-                  body: { prompt: revision, fromVersion: v.n },
-                })
-              }}
-            >
-              <Stack gap="sm">
-                <Group justify="space-between">
-                  <Text fw={600}>Revise</Text>
-                  <Text size="sm" c="var(--va-faint)">
-                    {busy
-                      ? 'Wait for the version in progress'
-                      : v.status === 'ready'
-                        ? `Starts from v${v.n}`
-                        : 'Pick a ready version'}
-                  </Text>
-                </Group>
-                <Textarea
-                  aria-label="What should change?"
-                  autosize
-                  minRows={2}
-                  placeholder='What should change? For example: "make the end card say Start free today"'
-                  value={revision}
-                  disabled={busy || v.status !== 'ready'}
-                  onChange={(e) => {
-                    setRevision(e.currentTarget.value)
-                  }}
-                />
-                <Group>
-                  <Button
-                    type="submit"
-                    disabled={busy || v.status !== 'ready' || revision.trim().length < 3}
-                    loading={revise.isPending}
-                  >
-                    Make v{data.versions.length + 1}
-                  </Button>
-                </Group>
-              </Stack>
-            </form>
-          </Card>
+          {canCreate ? (
+            <Card>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  revise.mutate({
+                    params: { path: { id }, header: { 'idempotency-key': revKey } },
+                    body: { prompt: revision, fromVersion: v.n },
+                  })
+                }}
+              >
+                <Stack gap="sm">
+                  <Group justify="space-between">
+                    <Text fw={600}>Revise</Text>
+                    <Text size="sm" c="var(--va-faint)">
+                      {busy
+                        ? 'Wait for the version in progress'
+                        : v.status === 'ready'
+                          ? `Starts from v${v.n}`
+                          : 'Pick a ready version'}
+                    </Text>
+                  </Group>
+                  <Textarea
+                    aria-label="What should change?"
+                    autosize
+                    minRows={2}
+                    placeholder='What should change? For example: "make the end card say Start free today"'
+                    value={revision}
+                    disabled={busy || v.status !== 'ready'}
+                    onChange={(e) => {
+                      setRevision(e.currentTarget.value)
+                    }}
+                  />
+                  <Group>
+                    <Button
+                      type="submit"
+                      disabled={busy || v.status !== 'ready' || revision.trim().length < 3}
+                      loading={revise.isPending}
+                    >
+                      Make v{data.versions.length + 1}
+                    </Button>
+                  </Group>
+                </Stack>
+              </form>
+            </Card>
+          ) : null}
 
           <Card>
             <Text fw={600} mb={8}>
