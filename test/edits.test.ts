@@ -189,6 +189,10 @@ describe('edit drafts', () => {
     const res = await edge(link.url)
     expect(res.status).toBe(200)
     expect(await res.text()).toContain('Draft title')
+    // The runtime and bridge are served inside the draft too, or the editor's preview can't play or seek.
+    vi.stubGlobal('fetch', async () => new Response('/* runtime */'))
+    for (const f of ['_hf/runtime.js', '_hf/bridge.js', '_hf/gsap.js'])
+      expect((await edge(link.url.replace('index.html', f))).status).toBe(200)
     // The draft capability doesn't open the version, and the version capability doesn't open the draft.
     expect((await edge(link.url.replace(`e/${e.id}/r1/`, ''))).status).toBe(403)
     const version = await h.json<{ url: string }>(

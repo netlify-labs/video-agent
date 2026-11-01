@@ -216,6 +216,10 @@ describe('preview links and the edge function', () => {
     expect(await res.text()).toContain('<h1>wip</h1><script src="_hf/bridge.js"></script>')
     const css = await edge(link.url.replace('index.html', 'style.css'))
     expect(await css.text()).toBe('h1{}')
+    // The runtime and bridge are served inside live/ too, or the snapshot can't play.
+    vi.stubGlobal('fetch', async () => new Response('/* runtime */'))
+    for (const f of ['_hf/runtime.js', '_hf/bridge.js'])
+      expect((await edge(link.url.replace('index.html', f))).status).toBe(200)
     expect((await edge(link.url.replace('/live/s3/', '/live/s2/'))).status).toBe(404)
     // The CSP base is the capability, so live/ paths stay inside it.
     expect(res.headers.get('content-security-policy')).toContain(

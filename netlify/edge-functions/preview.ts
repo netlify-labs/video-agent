@@ -52,12 +52,16 @@ export default async (req: Request, context: Context) => {
   if (!ok) return plain(403, 'This preview link has expired. Reopen the video to get a fresh one.')
 
   const base = previewBase(url.origin, t)
+  // live/s{seq}/… is the running version's latest checkpoint snapshot (plan v2 §6 A2), under the same capability.
+  const live = draft ? null : /^live\/s(\d{1,9})\/(.+)$/.exec(t.path)
+  // The path inside the version, draft or snapshot: the vendored runtime is served at the same place in each.
+  const path = draft?.[3] ?? live?.[2] ?? t.path
   const vendored: Record<string, string> = {
     [RUNTIME_PATH]: '/_preview/runtime.js',
     [BRIDGE_PATH]: '/_preview/bridge.js',
     [GSAP_PATH]: '/_preview/gsap.js',
   }
-  const asset = vendored[t.path]
+  const asset = vendored[path]
   if (asset) {
     const res = await fetch(new URL(asset, url))
     if (!res.ok) return plain(502, 'The preview runtime is missing from this deploy.')
@@ -65,14 +69,11 @@ export default async (req: Request, context: Context) => {
   }
 
   const bundles = getStore({ name: 'bundles', consistency: 'strong' })
-  // live/s{seq}/… is the running version's latest checkpoint snapshot (plan v2 §6 A2), under the same capability.
-  const live = draft ? null : /^live\/s(\d{1,9})\/(.+)$/.exec(t.path)
   const prefix = draft
     ? `${t.jobId}/v${t.versionN}/e/${draft[1]}/r${draft[2]}/`
     : live
       ? `${t.jobId}/v${t.versionN}/live/s${live[1]}/`
       : `${t.jobId}/v${t.versionN}/`
-  const path = draft?.[3] ?? live?.[2] ?? t.path
   const index = (await bundles.get(`${prefix}manifest.json`, { type: 'json' })) as BundleIndex | null
   const entry = index?.files.find((f) => f.path === path)
   if (!entry) return plain(404, 'Not in this bundle.')
