@@ -2,6 +2,7 @@
 // draft-scoped capability, and swept when they expire.
 import { readFileSync } from 'node:fs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { bundleFileKey } from '../src/domain/bundles.js'
 import { runCleanup } from '../src/domain/cleanup.js'
 import { editRevPrefix } from '../src/domain/edits.js'
 import type { TestDeps } from './fakes.js'
@@ -231,6 +232,24 @@ describe('edit drafts', () => {
     expect((await h.deps.store.listVersionMedia(id, 2)).map((r) => r.mediaId)).toContain(logo.id)
   })
 
+  it('a version that no longer passes the editing check gets a clear 409, not a server error', async () => {
+    const h = harness()
+    current = h.deps
+    const music = readFileSync(new URL('./fixtures/contract1-music/index.html', import.meta.url), 'utf8')
+    const id = await editableVideo(h, music, [{ name: 'video/assets/media/poster.png', body: png(16, 16) }])
+    // As if a stricter rule had shipped after the version was made: a gain past HyperFrames' maximum.
+    await h.deps.blobs.set(
+      'bundles',
+      bundleFileKey(id, 1, 'index.html'),
+      new TextEncoder().encode(music.replace('data-volume="0.8"', 'data-volume="9"')),
+    )
+    const res = await open(h, id)
+    expect(res.status).toBe(409)
+    expect((await h.json<{ error: { message: string } }>(res)).error.message).toMatch(
+      /can't be edited in the browser \(Audio "music" needs data-volume between 0 and 4\.\)/,
+    )
+  })
+
   it('swaps, levels and mutes the music: library audio only, served from the library, snapshotted', async () => {
     const h = harness({ MAX_ACTIVE_RUNS: '0' })
     current = h.deps
@@ -262,7 +281,7 @@ describe('edit drafts', () => {
       audio({ src: `assets/media/${picture.id}.png` }),
       audio({ src: 'assets/media/med_nope.mp3' }),
       audio({ src: 'assets/media/poster.png' }),
-      audio({ volume: 1.5 }),
+      audio({ volume: 4.5 }),
       audio({ id: 'nope', volume: 0.5 }),
     ])
       expect((await save(h, e.id, { rev: 0, ops: [bad] })).status).toBe(400)

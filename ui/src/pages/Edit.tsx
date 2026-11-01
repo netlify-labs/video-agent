@@ -157,7 +157,7 @@ function AudioRow({
           style={{ flex: 1 }}
           size="sm"
           min={0}
-          max={1}
+          max={Math.max(2, track.volume)}
           step={0.05}
           value={track.volume}
           disabled={track.muted}

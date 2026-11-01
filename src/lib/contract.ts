@@ -15,7 +15,8 @@
 //               assets/voice/, beat-local data-start/data-duration that end inside the beat (SPIKES.md S9)
 //   ducking     a layer with data-va-duck=<level> (the music) carries a volume lane that dips under every voice;
 //               the patcher rewrites it after retimes and reorders
-//   audio       <audio id> elements with src under assets/ and data-volume 0-1: music is the root layer
+//   audio       <audio id> elements with src under assets/ and data-volume 0-4 (HyperFrames gain, up to +12 dB, which
+//               loudness normalization can set): music is the root layer
 //               data-va-layer="music"; voice (data-va-audio="voice") and effects live inside beats. A muted track
 //               keeps data-volume="0" (HyperFrames' silence; the render mixes every timed <audio>, muted or not) and
 //               its level in data-va-volume
@@ -198,6 +199,8 @@ function voiceOf(beat: Element): VoiceClip | null {
 }
 
 const AUDIO_ROLES: readonly string[] = ['music', 'voice', 'sfx']
+/** HyperFrames' data-volume is a gain up to about +12 dB; loudness normalization sets values above 1. */
+export const MAX_VOLUME = 4
 /** A file the composition carries (library media, the brand's music, effects): under assets/, no way out. */
 const AUDIO_SRC = /^assets(?:\/[^/\\.?#:][^/\\?#:]*)+$/
 
@@ -373,7 +376,8 @@ export function validate(html: string, summary?: Summary): string[] {
     if (!AUDIO_SRC.test(attr(e, 'src') ?? '')) v.push(`${name} must use a file in assets/.`)
     for (const a of ['data-volume', 'data-va-volume']) {
       const level = num(attr(e, a))
-      if (attr(e, a) !== null && !(level >= 0 && level <= 1)) v.push(`${name} needs ${a} between 0 and 1.`)
+      if (attr(e, a) !== null && !(level >= 0 && level <= MAX_VOLUME))
+        v.push(`${name} needs ${a} between 0 and ${MAX_VOLUME}.`)
     }
     const role = attr(e, 'data-va-audio')
     if (role !== null && !AUDIO_ROLES.includes(role))
@@ -651,7 +655,8 @@ function applyOne(d: Doc, op: EditOp, opts: EditOptions) {
       }
       const track = audioOf(d.root).find((t) => t.id === op.id)
       const volume = op.volume ?? track?.volume ?? 1
-      if (!(volume >= 0 && volume <= 1)) throw new ContractError(['Volume goes from 0 to 1.'])
+      if (!(volume >= 0 && volume <= MAX_VOLUME))
+        throw new ContractError([`Volume goes from 0 to ${MAX_VOLUME}.`])
       const level = fmt(Math.round(volume * 100) / 100)
       // HyperFrames mixes every timed <audio> whatever its muted attribute says, so muting is data-volume="0".
       el.attrs = el.attrs.filter((a) => !['data-volume', 'data-va-volume', 'data-va-muted'].includes(a.name))

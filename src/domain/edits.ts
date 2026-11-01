@@ -74,7 +74,19 @@ async function computeRev(deps: Deps, e: Pick<EditRow, 'jobId' | 'baseN'>, ops: 
   }
   const html = await read('index.html')
   const summary = JSON.parse((await read('summary.json')) || '{}') as Summary
-  const base = applyEdits(html, summary, [], {})
+  let base
+  try {
+    base = applyEdits(html, summary, [], {})
+  } catch (err) {
+    // A version made before a contract rule tightened can fail it: say so instead of failing the request.
+    if (err instanceof ContractError)
+      throw new ApiError(
+        'conflict',
+        `This version can't be edited in the browser (${err.violations[0] ?? 'it no longer passes the editing check'}). Ask for a revision instead.`,
+        { violations: err.violations },
+      )
+    throw err
+  }
   const palette = paletteOf(base.composition.colors)
   const baseComposition = base.composition
   let out

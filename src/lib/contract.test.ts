@@ -277,6 +277,13 @@ describe('contract patcher', () => {
 })
 
 describe('contract audio', () => {
+  it('accepts a normalization gain above 1 (HyperFrames goes to about +12 dB) and edits it', () => {
+    const loud = musicHtml.replace('data-volume="0.8"', 'data-volume="1.64059"')
+    expect(validate(loud, summary)).toEqual([])
+    const out = applyEdits(loud, summary, [{ op: 'audio', id: 'music', volume: 2 }], {})
+    expect(out.composition.audio.find((a) => a.id === 'music')?.volume).toBe(2)
+  })
+
   const sfx = '<audio id="sfx-pop" src="assets/sfx/pop.mp3" data-start="0.4" data-volume="0.35"></audio>'
   const withSfx = musicHtml.replace(
     '<div class="kicker" data-va-text="intro-kicker">',
@@ -331,9 +338,9 @@ describe('contract audio', () => {
       /must use a file in assets\//,
     ],
     [
-      'volume above 1',
-      (h: string) => h.replace('data-volume="0.8"', 'data-volume="1.5"'),
-      /data-volume between 0 and 1/,
+      'volume above HyperFrames’ maximum gain',
+      (h: string) => h.replace('data-volume="0.8"', 'data-volume="4.5"'),
+      /data-volume between 0 and 4/,
     ],
     [
       'an unknown role',
@@ -384,8 +391,8 @@ describe('contract audio', () => {
     const out = applyEdits(musicHtml, summary, [{ op: 'audio', id: 'music', volume: 0.456 }])
     expect(out.html).toMatch(/<audio id="music"[^>]*data-volume="0.46"/)
     expect(music(out.html)?.volume).toBe(0.46)
-    for (const volume of [-0.1, 1.2, Number.NaN])
-      expect(() => applyEdits(musicHtml, summary, [{ op: 'audio', id: 'music', volume }])).toThrow(/0 to 1/)
+    for (const volume of [-0.1, 4.2, Number.NaN])
+      expect(() => applyEdits(musicHtml, summary, [{ op: 'audio', id: 'music', volume }])).toThrow(/0 to 4/)
   })
 
   it('mutes with data-volume="0", keeps the level, and unmutes back to it', () => {

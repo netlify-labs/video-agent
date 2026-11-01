@@ -2276,7 +2276,7 @@
                     "volume": {
                       "type": "number",
                       "minimum": 0,
-                      "maximum": 1
+                      "maximum": 4
                     },
                     "muted": {
                       "type": "boolean"
@@ -2486,7 +2486,7 @@
                 },
                 "volume": {
                   "type": "number",
-                  "description": "The level set, 0-1, kept while muted"
+                  "description": "The level set (a gain: 1 is as authored, up to 4), kept while muted"
                 },
                 "muted": {
                   "type": "boolean"
@@ -2702,7 +2702,7 @@
                     "volume": {
                       "type": "number",
                       "minimum": 0,
-                      "maximum": 1
+                      "maximum": 4
                     },
                     "muted": {
                       "type": "boolean"

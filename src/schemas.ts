@@ -390,11 +390,9 @@ export const PlanSchema = z
     briefRev: z.number().int(),
     mediaIds: z.array(z.string()).openapi({ description: 'Library items attached while planning.' }),
     sound: SoundSchema.nullable().openapi({ description: 'The Sound chosen while planning, if any.' }),
-    voiceover: voiceoverShape
-      .nullable()
-      .openapi({
-        description: 'The voice-over chosen while planning, if any; the brief then has narration per beat.',
-      }),
+    voiceover: voiceoverShape.nullable().openapi({
+      description: 'The voice-over chosen while planning, if any; the brief then has narration per beat.',
+    }),
     expiresAt: z.string(),
   })
   .openapi('Plan')
@@ -500,7 +498,7 @@ const EditOpSchema = z.discriminatedUnion('op', [
         .max(200)
         .optional()
         .openapi({ description: 'A ready audio item from the library, as assets/media/<media id>.<ext>' }),
-      volume: z.number().min(0).max(1).optional(),
+      volume: z.number().min(0).max(4).optional(),
       muted: z.boolean().optional(),
     })
     .openapi({ description: "Swap an audio track's file, set its level or mute it, by its id" }),
@@ -536,7 +534,9 @@ const CompositionSchema = z
         role: z.enum(['music', 'voice', 'sfx']),
         label: z.string().nullable(),
         src: z.string(),
-        volume: z.number().openapi({ description: 'The level set, 0-1, kept while muted' }),
+        volume: z
+          .number()
+          .openapi({ description: 'The level set (a gain: 1 is as authored, up to 4), kept while muted' }),
         muted: z.boolean(),
         beat: z.string().nullable().openapi({ description: 'The beat it plays in; null for music' }),
       }),

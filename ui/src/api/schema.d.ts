@@ -5807,7 +5807,7 @@ export interface components {
                 role: "music" | "voice" | "sfx";
                 label: string | null;
                 src: string;
-                /** @description The level set, 0-1, kept while muted */
+                /** @description The level set (a gain: 1 is as authored, up to 4), kept while muted */
                 volume: number;
                 muted: boolean;
                 /** @description The beat it plays in; null for music */
