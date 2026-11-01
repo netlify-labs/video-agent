@@ -5,6 +5,8 @@ export interface Mp4Info {
   width: number
   height: number
   videoCodec: string
+  /** The first audio track's sample entry (mp4a for AAC), or null with no audio. */
+  audioCodec: string | null
   fastStart: boolean
   topLevel: string[]
 }
@@ -99,30 +101,41 @@ export function inspectMp4(bytes: Uint8Array): Mp4Info {
   let width = 0
   let height = 0
   let videoCodec = ''
+  let audioCodec: string | null = null
+  const sampleEntry = (trak: Box) => {
+    const stsd = find(view, trak, ['mdia', 'minf', 'stbl', 'stsd'], counter)[0]
+    if (!stsd) return ''
+    const entry = stsd.start + stsd.headerSize + 8
+    return entry + 8 <= stsd.start + stsd.size
+      ? String.fromCharCode(...bytes.subarray(entry + 4, entry + 8))
+      : ''
+  }
   for (const trak of find(view, moov, ['trak'], counter)) {
     const hdlr = find(view, trak, ['mdia', 'hdlr'], counter)[0]
     if (!hdlr) continue
     const handler = String.fromCharCode(
       ...bytes.subarray(hdlr.start + hdlr.headerSize + 8, hdlr.start + hdlr.headerSize + 12),
     )
-    if (handler !== 'vide') continue
+    if (handler === 'soun' && audioCodec === null) audioCodec = sampleEntry(trak) || null
+    if (handler !== 'vide' || videoCodec) continue
     const tkhd = find(view, trak, ['tkhd'], counter)[0]
     if (tkhd) {
       const end = tkhd.start + tkhd.size
       width = Math.round(view.getUint32(end - 8) / 65536)
       height = Math.round(view.getUint32(end - 4) / 65536)
     }
-    const stsd = find(view, trak, ['mdia', 'minf', 'stbl', 'stsd'], counter)[0]
-    if (stsd) {
-      const entry = stsd.start + stsd.headerSize + 8
-      if (entry + 8 <= stsd.start + stsd.size) {
-        videoCodec = String.fromCharCode(...bytes.subarray(entry + 4, entry + 8))
-      }
-    }
-    break
+    videoCodec = sampleEntry(trak)
   }
   if (!videoCodec) throw new Mp4Error('No video track')
-  return { durationSec: duration / timescale, width, height, videoCodec, fastStart, topLevel: types }
+  return {
+    durationSec: duration / timescale,
+    width,
+    height,
+    videoCodec,
+    audioCodec,
+    fastStart,
+    topLevel: types,
+  }
 }
 
 export function sniff(bytes: Uint8Array): 'jpeg' | 'gif' | 'vtt' | 'mp4' | 'unknown' {
