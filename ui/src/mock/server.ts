@@ -2,7 +2,8 @@
 import spec from '../../../openapi.json'
 import type { paths } from '../api/schema'
 import { applyEdits, type EditOp } from '../../../src/lib/contract'
-import contractHtml from '../../../test/fixtures/contract1/index.html?raw'
+import plainHtml from '../../../test/fixtures/contract1/index.html?raw'
+import musicHtml from '../../../test/fixtures/contract1-music/index.html?raw'
 import contractSummary from '../../../test/fixtures/contract1/summary.json'
 import { people, stats, videos } from './data'
 import { mockFile } from './files'
@@ -460,7 +461,7 @@ export function installMock() {
         if (b.rev !== mockEdit.rev)
           return fail(409, 'conflict', 'This draft changed in another tab. Reload it to continue.')
         try {
-          const out = applyEdits(contractHtml, contractSummary, b.ops, { palette: mockPalette })
+          const out = applyEdits(contractHtml(), contractSummary, b.ops, { palette: mockPalette })
           mockEdit = { ...mockEdit, rev: mockEdit.rev + 1, ops: b.ops, composition: out.composition }
           return json(mockEdit)
         } catch (e) {
@@ -631,8 +632,15 @@ function mockPlan(stage: 'route' | 'questions' | 'brief' = 'route') {
 const mockPalette = ['#0b0d10', '#f4f5f7', '#9aa3ad', '#14b8a6', '#ff5a1f']
 type MockEdit = ReturnType<typeof newMockEdit>
 let mockEdit: MockEdit | null = null
+/** localStorage.mockMusic=1 edits the copy of the fixture with a music layer, whose track is in the library. */
+function contractHtml() {
+  if (!localStorage.getItem('mockMusic')) return plainHtml
+  if (!mockMedia.some((m) => m.id === 'med_theme01'))
+    mockMedia.push({ ...mockItem('Upbeat theme.mp3', 'audio', 2_400_000), id: 'med_theme01' })
+  return musicHtml
+}
 function newMockEdit(videoId: string, baseN: number) {
-  const base = applyEdits(contractHtml, contractSummary, []).composition
+  const base = applyEdits(contractHtml(), contractSummary, []).composition
   return {
     id: '00000000-0000-4000-8000-00000000ed17',
     videoId,

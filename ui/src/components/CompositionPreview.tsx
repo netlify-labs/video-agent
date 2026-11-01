@@ -176,6 +176,8 @@ export function CompositionPreview({
             key={link.url}
             title="Composition preview"
             sandbox="allow-scripts"
+            // Sound plays when the person presses play here: the click is in this page, not the frame's.
+            allow="autoplay"
             src={`${link.url}#ch=${channel}`}
             data-testid="composition-preview"
             style={{

@@ -26,6 +26,7 @@ import { hasUnfinished, loadJob, newAttempt, videoDto, withIdempotency } from '.
 
 export const EDIT_TTL_MS = 7 * 24 * 3600_000
 const MAX_OPS = 500
+const AUDIO_FILE = /\.(mp3|m4a|aac|wav|ogg|opus)$/i
 
 export const editPrefix = (jobId: string, n: number, editId: string) =>
   `${bundlePrefix(jobId, n)}e/${editId}/`
@@ -92,20 +93,29 @@ async function computeRev(deps: Deps, e: Pick<EditRow, 'jobId' | 'baseN'>, ops: 
   ])
   for (const [path, bytes] of changed)
     entries.set(path, { path, size: bytes.byteLength, sha256: sha256Hex(bytes) })
-  // Media swapped in from the library (plan v2 §8): ready items only, of the slot's kind, served from the library.
+  // Media and music swapped in from the library (plan v2 §8): ready items only, of the slot's (or audio's) kind,
+  // served from the library.
   const picks: string[] = []
   for (const op of ops) {
-    if (op.op !== 'media' || entries.has(op.src)) continue
-    const file = op.src.slice('assets/media/'.length)
+    if ((op.op !== 'media' && op.op !== 'audio') || !op.src) continue
+    const src = op.src
+    const kind = op.op === 'media' ? op.kind : 'audio'
+    if (entries.has(src)) {
+      // A file the composition already has; an audio track only takes another sound file.
+      if (kind === 'audio' && !AUDIO_FILE.test(src))
+        throw new ApiError('invalid_request', `That edit can't be made: ${src} isn't an audio file.`)
+      continue
+    }
+    const file = src.slice('assets/media/'.length)
     const m = await deps.store.getMedia(file.split('.')[0] ?? '')
-    const fits = op.kind === 'video' ? m?.kind === 'video' : m?.kind === 'image' || m?.kind === 'svg'
+    const fits = kind === 'image' ? m?.kind === 'image' || m?.kind === 'svg' : m?.kind === kind
     if (!m || m.deletedAt || m.status !== 'ready' || `${m.id}.${m.ext}` !== file || !fits)
       throw new ApiError(
         'invalid_request',
-        `That edit can't be made: ${file} isn't a ready ${op.kind} in the library.`,
+        `That edit can't be made: ${file} isn't a ready ${kind} in the library.`,
       )
-    entries.set(op.src, {
-      path: op.src,
+    entries.set(src, {
+      path: src,
       size: m.bytes,
       sha256: m.cleanSha256,
       src: { store: 'media', key: m.cleanKey },

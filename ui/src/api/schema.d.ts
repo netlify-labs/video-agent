@@ -5757,6 +5757,14 @@ export interface components {
                 kind: "image" | "video";
                 /** @enum {string} */
                 fit: "cover" | "contain";
+            } | {
+                /** @enum {string} */
+                op: "audio";
+                id: string;
+                /** @description A ready audio item from the library, as assets/media/<media id>.<ext> */
+                src?: string;
+                volume?: number;
+                muted?: boolean;
             })[];
             composition: components["schemas"]["Composition"];
             base: components["schemas"]["Composition"];
@@ -5793,6 +5801,18 @@ export interface components {
                 }[];
             }[];
             layers: string[];
+            audio: {
+                id: string;
+                /** @enum {string} */
+                role: "music" | "voice" | "sfx";
+                label: string | null;
+                src: string;
+                /** @description The level set, 0-1, kept while muted */
+                volume: number;
+                muted: boolean;
+                /** @description The beat it plays in; null for music */
+                beat: string | null;
+            }[];
         };
         SaveEdit: {
             ops: ({
@@ -5827,6 +5847,14 @@ export interface components {
                 kind: "image" | "video";
                 /** @enum {string} */
                 fit: "cover" | "contain";
+            } | {
+                /** @enum {string} */
+                op: "audio";
+                id: string;
+                /** @description A ready audio item from the library, as assets/media/<media id>.<ext> */
+                src?: string;
+                volume?: number;
+                muted?: boolean;
             })[];
             rev: number;
         };

@@ -15,6 +15,10 @@
 //               assets/voice/, beat-local data-start/data-duration that end inside the beat (SPIKES.md S9)
 //   ducking     a layer with data-va-duck=<level> (the music) carries a volume lane that dips under every voice;
 //               the patcher rewrites it after retimes and reorders
+//   audio       <audio id> elements with src under assets/ and data-volume 0-1: music is the root layer
+//               data-va-layer="music"; voice (data-va-audio="voice") and effects live inside beats. A muted track
+//               keeps data-volume="0" (HyperFrames' silence; the render mixes every timed <audio>, muted or not) and
+//               its level in data-va-volume
 //   captions    summary.json captions carry beat, textId, beatStart, beatEnd (beat-relative) plus the absolute
 //               start, end and text render-job reads; the patcher keeps both in step. Voice cues (voice: true) follow
 //               the spoken words instead of a text, and keep their times when a beat is stretched (audio isn't)
@@ -72,11 +76,24 @@ export interface MediaSlot {
   beat: string | null
   fit: string | null
 }
+export type AudioRole = 'music' | 'voice' | 'sfx'
+export interface AudioTrack {
+  id: string
+  role: AudioRole
+  label: string | null
+  src: string
+  /** The level the person set, 0-1, kept while muted. */
+  volume: number
+  muted: boolean
+  /** The beat it plays in; null for the music layer. */
+  beat: string | null
+}
 export interface Composition {
   duration: number
   colors: Record<string, string>
   beats: Beat[]
   layers: string[]
+  audio: AudioTrack[]
 }
 
 export class ContractError extends Error {
@@ -163,6 +180,7 @@ export function read(d: Doc): Composition {
     layers: kids(d.root)
       .filter((e) => attr(e, 'data-va-layer') !== null)
       .map((e) => attr(e, 'data-va-layer') ?? ''),
+    audio: audioOf(d.root),
   }
 }
 
@@ -177,6 +195,40 @@ function voiceOf(beat: Element): VoiceClip | null {
     start: num(attr(e, 'data-start')),
     duration: num(attr(e, 'data-duration')),
   }
+}
+
+const AUDIO_ROLES: readonly string[] = ['music', 'voice', 'sfx']
+/** A file the composition carries (library media, the brand's music, effects): under assets/, no way out. */
+const AUDIO_SRC = /^assets(?:\/[^/\\.?#:][^/\\?#:]*)+$/
+
+/** Every <audio id> in the composition: HyperFrames leaves out audio without an id, so the editor does too. */
+function audioOf(root: Element): AudioTrack[] {
+  return kids(root).flatMap((top) => {
+    const beat = attr(top, 'data-va-beat')
+    return [top, ...walk(top)]
+      .filter((e) => e.tagName === 'audio' && attr(e, 'id'))
+      .map((e): AudioTrack => {
+        // Voice-over clips are marked data-va-voice (scripts/voice.ts); an explicit data-va-audio wins.
+        const role =
+          attr(e, 'data-va-audio') ??
+          (attr(e, 'data-va-voice') !== null
+            ? 'voice'
+            : attr(e, 'data-va-layer') === 'music'
+              ? 'music'
+              : 'sfx')
+        const muted = attr(e, 'data-va-muted') !== null
+        const level = num(muted ? attr(e, 'data-va-volume') : attr(e, 'data-volume'))
+        return {
+          id: attr(e, 'id') ?? '',
+          role: AUDIO_ROLES.includes(role) ? (role as AudioRole) : 'sfx',
+          label: labelOf(e),
+          src: attr(e, 'src') ?? '',
+          volume: Number.isFinite(level) ? level : 1,
+          muted,
+          beat,
+        }
+      })
+  })
 }
 
 /** data-va-label, trimmed and bounded; it's display text only. */
@@ -312,6 +364,25 @@ export function validate(html: string, summary?: Summary): string[] {
         `The music's ducking doesn't match the voice-over; run npx tsx scripts/voice.ts sync (it rewrites the volume lane).`,
       )
   }
+  const audioIds: string[] = []
+  for (const e of [...walk(root)].filter((x) => x.tagName === 'audio')) {
+    const id = attr(e, 'id') ?? ''
+    const name = id ? `Audio "${id}"` : 'An <audio>'
+    if (id && audioIds.includes(id)) v.push(`Audio id "${id}" is used twice.`)
+    audioIds.push(id)
+    if (!AUDIO_SRC.test(attr(e, 'src') ?? '')) v.push(`${name} must use a file in assets/.`)
+    for (const a of ['data-volume', 'data-va-volume']) {
+      const level = num(attr(e, a))
+      if (attr(e, a) !== null && !(level >= 0 && level <= 1)) v.push(`${name} needs ${a} between 0 and 1.`)
+    }
+    const role = attr(e, 'data-va-audio')
+    if (role !== null && !AUDIO_ROLES.includes(role))
+      v.push(`${name} has data-va-audio="${role}"; use music, voice or sfx.`)
+    if (attr(e, 'data-va-muted') !== null && num(attr(e, 'data-volume')) !== 0)
+      v.push(`${name} is muted, so it needs data-volume="0".`)
+  }
+  for (const e of kids(root).filter((x) => attr(x, 'data-va-layer') === 'music'))
+    if (e.tagName !== 'audio' || !attr(e, 'id')) v.push('The music layer must be an <audio> with an id.')
 
   const { colors } = readColors(d)
   if (Object.keys(colors).length === 0) v.push('Declare colours as --va-color-<role> on the root.')
@@ -417,6 +488,13 @@ export type EditOp =
   | { op: 'delete'; beat: string }
   | { op: 'color'; role: string; value: string }
   | { op: 'media'; slot: string; src: string; kind: 'image' | 'video'; fit: 'cover' | 'contain' }
+  | {
+      op: 'audio'
+      id: string
+      src?: string | undefined
+      volume?: number | undefined
+      muted?: boolean | undefined
+    }
 
 export interface EditOptions {
   /** Colours a role may take (the brand palette). Empty: any #rgb/#rrggbb. */
@@ -559,6 +637,29 @@ function applyOne(d: Doc, op: EditOp, opts: EditOptions) {
         setAttr(el, 'muted', '') // slot audio is muted
         el.attrs = el.attrs.filter((a) => a.name !== 'data-has-audio')
       }
+      return
+    }
+    case 'audio': {
+      const el = [...walk(d.root)].find((e) => e.tagName === 'audio' && attr(e, 'id') === op.id)
+      if (!el) throw new ContractError([`There's no audio "${op.id}".`])
+      if (op.src !== undefined && op.src !== attr(el, 'src')) {
+        if (!/^assets\/media\/[A-Za-z0-9_.-]+$/.test(op.src))
+          throw new ContractError(['Audio comes from assets/media/.'])
+        setAttr(el, 'src', op.src)
+        // A trim point belongs to the old file.
+        el.attrs = el.attrs.filter((a) => a.name !== 'data-media-start')
+      }
+      const track = audioOf(d.root).find((t) => t.id === op.id)
+      const volume = op.volume ?? track?.volume ?? 1
+      if (!(volume >= 0 && volume <= 1)) throw new ContractError(['Volume goes from 0 to 1.'])
+      const level = fmt(Math.round(volume * 100) / 100)
+      // HyperFrames mixes every timed <audio> whatever its muted attribute says, so muting is data-volume="0".
+      el.attrs = el.attrs.filter((a) => !['data-volume', 'data-va-volume', 'data-va-muted'].includes(a.name))
+      if (op.muted ?? track?.muted) {
+        setAttr(el, 'data-volume', '0')
+        setAttr(el, 'data-va-volume', level)
+        setAttr(el, 'data-va-muted', '')
+      } else setAttr(el, 'data-volume', level)
       return
     }
   }

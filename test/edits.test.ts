@@ -10,17 +10,23 @@ import { loadEdge } from './edge.js'
 import { tarGz } from './tarball.js'
 
 const fx = (f: string) => readFileSync(new URL(`./fixtures/contract1/${f}`, import.meta.url), 'utf8')
+const tone = () => new Uint8Array(readFileSync(new URL('./fixtures/audio/tone.mp3', import.meta.url)))
 
 let current: TestDeps | null = null
 vi.mock('@netlify/blobs', async () => (await import('./edge.js')).fakeBlobsModule(() => current?.blobs))
 const edge = async (url: string) =>
   (await loadEdge('preview'))(new Request(url), { deploy: { published: true } })
 
-/** A ready video whose v1 keeps contract v1 (the spike S8 fixture). */
-async function editableVideo(h: Harness) {
+/** A ready video whose v1 keeps contract v1 (the spike S8 fixture, or its copy with a music layer). */
+async function editableVideo(
+  h: Harness,
+  html = fx('index.html'),
+  extra: { name: string; body: string | Uint8Array }[] = [],
+) {
   h.deps.nextSource = tarGz([
-    { name: 'video/index.html', body: fx('index.html') },
+    { name: 'video/index.html', body: html },
     { name: 'video/summary.json', body: fx('summary.json') },
+    ...extra,
   ])
   const v = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }))
   await h.drive(4)
@@ -223,6 +229,69 @@ describe('edit drafts', () => {
     // Deleting the item from the library afterwards doesn't touch the rendered version's snapshot.
     await h.call('DELETE', `/api/v1/media/${logo.id}`, { as: h.member })
     expect((await h.deps.store.listVersionMedia(id, 2)).map((r) => r.mediaId)).toContain(logo.id)
+  })
+
+  it('swaps, levels and mutes the music: library audio only, served from the library, snapshotted', async () => {
+    const h = harness({ MAX_ACTIVE_RUNS: '0' })
+    current = h.deps
+    const music = readFileSync(new URL('./fixtures/contract1-music/index.html', import.meta.url), 'utf8')
+    const id = await editableVideo(h, music, [{ name: 'video/assets/media/poster.png', body: png(16, 16) }])
+    const up = async (bytes: Uint8Array, name: string) =>
+      h.json<{ id: string }>(await upload(h, h.member, bytes, `filename=${name}`))
+    const toneBytes = tone()
+    const track = await up(toneBytes, 'theme.mp3')
+    const picture = await up(png(64, 32), 'logo.png')
+    const e = await h.json<Edit & { composition: { audio: { id: string; src: string }[] } }>(
+      await open(h, id),
+    )
+    expect(e.composition.audio).toEqual([
+      {
+        id: 'music',
+        role: 'music',
+        label: 'Music',
+        src: 'assets/media/med_theme01.mp3',
+        volume: 0.8,
+        muted: false,
+        beat: null,
+      },
+    ])
+    const audio = (o: object) => ({ op: 'audio', id: 'music', ...o })
+
+    // Only a ready audio item from the library (or a sound file the video already has) can go in.
+    for (const bad of [
+      audio({ src: `assets/media/${picture.id}.png` }),
+      audio({ src: 'assets/media/med_nope.mp3' }),
+      audio({ src: 'assets/media/poster.png' }),
+      audio({ volume: 1.5 }),
+      audio({ id: 'nope', volume: 0.5 }),
+    ])
+      expect((await save(h, e.id, { rev: 0, ops: [bad] })).status).toBe(400)
+
+    const saved = await h.json<{ composition: { audio: unknown[] } }>(
+      await save(h, e.id, {
+        rev: 0,
+        ops: [audio({ src: `assets/media/${track.id}.mp3`, volume: 0.4, muted: true })],
+      }),
+    )
+    expect(saved.composition.audio).toEqual([
+      expect.objectContaining({ src: `assets/media/${track.id}.mp3`, volume: 0.4, muted: true }),
+    ])
+    const link = await h.json<{ url: string }>(
+      await h.call('GET', `/api/v1/edits/${e.id}/preview`, { as: h.member }),
+    )
+    const html = await (await edge(link.url)).text()
+    expect(html).toMatch(
+      new RegExp(`<audio id="music"[^>]*src="assets/media/${track.id}\\.mp3"[^>]*data-volume="0"`),
+    )
+    const file = await edge(link.url.replace('index.html', `assets/media/${track.id}.mp3`))
+    expect(file.status).toBe(200)
+    expect(new Uint8Array(await file.arrayBuffer())).toEqual(toneBytes)
+
+    expect((await h.call('POST', `/api/v1/edits/${e.id}/render`, { as: h.member })).status).toBe(202)
+    expect((await h.deps.store.listVersionMedia(id, 2)).map((r) => [r.mediaId, r.kind])).toContainEqual([
+      track.id,
+      'audio',
+    ])
   })
 
   it('discarding or expiring removes the draft and its bundle', async () => {

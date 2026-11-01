@@ -553,3 +553,14 @@ describe('contract: voice and ducking', () => {
     )
   })
 })
+
+describe('voice in the editor audio model', () => {
+  it('reads voice-over clips as voice tracks tied to their beats, next to the music', () => {
+    const c = read(load(voicedHtml()))
+    expect(c.audio.map((a) => [a.id, a.role, a.beat])).toEqual([
+      ['music', 'music', null],
+      ['voice-intro', 'voice', 'intro'],
+      ['voice-outro', 'voice', 'outro'],
+    ])
+  })
+})
