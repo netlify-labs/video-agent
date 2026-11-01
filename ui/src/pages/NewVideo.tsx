@@ -20,6 +20,7 @@ import { Status, VersionImage, relativeTime } from '../components/bits'
 import { MediaChips, type Media } from '../components/MediaPicker'
 import { PlanPanel } from '../components/PlanPanel'
 import { SoundControl, soundAfterPick, type Sound } from '../components/SoundControl'
+import { VOICE_OFF, VoiceoverControl, voiceInput, type VoiceState } from '../components/VoiceoverControl'
 import { brand } from '../theme'
 
 const EXAMPLES = [
@@ -162,6 +163,7 @@ export function NewVideoPage() {
   const [media, setMedia] = useState<Media[]>([])
   const [sound, setSound] = useState<Sound>('silent')
   const [soundTouched, setSoundTouched] = useState(false)
+  const [voice, setVoice] = useState<VoiceState>(VOICE_OFF)
   const { create, key } = useCreate()
   const config = $api.useQuery('get', '/api/v1/config')
   const canPlan = useCanCreate() && config.data?.planningAvailable === true
@@ -180,6 +182,8 @@ export function NewVideoPage() {
         ...(planId ? { planId } : {}),
         ...(media.length ? { mediaIds: media.map((m) => m.id) } : {}),
         sound,
+        // A plan carries the voice-over (with its narration), so only a direct create sends it.
+        ...(voice.enabled && !planId ? { voiceover: voiceInput(voice) } : {}),
       },
       params: { header: { 'idempotency-key': key } },
     })
@@ -319,6 +323,7 @@ export function NewVideoPage() {
                   setSoundTouched(true)
                 }}
               />
+              <VoiceoverControl value={voice} onChange={setVoice} disabled={planning} planning={canPlan} />
               <TextInput
                 label="Title"
                 description="Optional. The agent names it otherwise."
@@ -365,6 +370,7 @@ export function NewVideoPage() {
               durationSec={lengthMode === 'set' ? Number(seconds) : undefined}
               mediaIds={media.map((m) => m.id)}
               sound={sound}
+              voiceover={voice.enabled ? voiceInput(voice) : undefined}
               creating={create.isPending}
               onSuggestAspect={(a) => {
                 setShape(a)
@@ -402,7 +408,8 @@ export function NewVideoPage() {
                 Describe the ending: an end card, a call to action, a URL.
               </Text>
               <Text size="sm" c="var(--va-muted)">
-                Videos have captions and are silent unless you choose Music. Narration isn't supported yet.
+                Videos have captions and are silent unless you choose Music or a Voice-over. With a
+                voice-over, the captions follow the spoken words.
               </Text>
             </Stack>
           </Card>

@@ -173,7 +173,16 @@ export function installMock() {
     }
     if (p === '/api/openapi.json') return json(spec)
     // Plan it first (plan v2 §4): a router that asks two questions, then a brief.
-    if (p === '/api/v1/plans' && method === 'POST') return json(mockPlan(), 201)
+    if (p === '/api/v1/plans' && method === 'POST') {
+      // The plan remembers a voice-over, so the brief gets a narration line per beat.
+      const b = await readBody(init, input)
+      const vo = b.voiceover as
+        { enabled?: boolean; voice?: string; speed?: number; script?: string[] } | undefined
+      mockVoice = vo?.enabled
+        ? { voice: vo.voice ?? null, speed: vo.speed ?? null, script: vo.script ?? null }
+        : null
+      return json(mockPlan(), 201)
+    }
     if (/^\/api\/v1\/plans\/[^/]+\/questions$/.test(p)) return json(mockPlan('questions'))
     if (/^\/api\/v1\/plans\/[^/]+\/brief$/.test(p)) return json(mockPlan('brief'))
     if (/^\/api\/v1\/plans\/[^/]+$/.test(p) && method === 'PATCH')
@@ -518,6 +527,13 @@ export function installMock() {
   }
 }
 
+let mockVoice: { voice: string | null; speed: number | null; script: string[] | null } | null = null
+const NARRATION = [
+  'Every project used to need its own webhook.',
+  'Now one org webhook covers them all.',
+  'Read the docs to set it up.',
+]
+
 function mockPlan(stage: 'route' | 'questions' | 'brief' = 'route') {
   const questions = [
     {
@@ -560,7 +576,7 @@ function mockPlan(stage: 'route' | 'questions' | 'brief' = 'route') {
               { text: 'The problem: a webhook per project', seconds: 8 },
               { text: 'Org webhooks: subscribe once', seconds: 14 },
               { text: 'End card: Read the docs', seconds: 8 },
-            ],
+            ].map((b, i) => (mockVoice ? { ...b, narration: mockVoice.script?.[i] ?? NARRATION[i] } : b)),
             tone: 'Confident, plain',
             callToAction: 'Read the docs',
             mustInclude: ['logo'],
@@ -568,6 +584,7 @@ function mockPlan(stage: 'route' | 'questions' | 'brief' = 'route') {
           }
         : null,
     briefRev: stage === 'brief' ? 1 : 0,
+    voiceover: mockVoice,
     expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
   }
 }

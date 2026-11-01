@@ -599,6 +599,101 @@ test('a revision keeps the sound unless changed, and sends a new choice', async 
     .toBe('music')
 })
 
+test('New video sends a voice-over with a voice, a pace and a script per beat', async ({ page }) => {
+  await page.goto('/new')
+  await page
+    .getByLabel('What should the video show?')
+    .fill('A 20-second launch video for our new feature, ending with "Try it today".')
+  const voice = page.getByRole('switch', { name: /Voice-over/ })
+  await expect(voice).not.toBeChecked()
+  await expect(page.getByTestId('voiceover-options')).toHaveCount(0)
+  await voice.click()
+  await expect(page.getByTestId('voiceover-script')).toBeVisible()
+  await page.getByLabel('Voice', { exact: true }).first().click()
+  await page.getByRole('option', { name: /Michael/ }).click()
+  await page.getByText('Faster', { exact: true }).click()
+  await page.getByLabel('Line 1', { exact: true }).fill('Meet org webhooks.')
+  await page.getByRole('button', { name: 'Add a line' }).click()
+  await page.getByLabel('Line 2', { exact: true }).fill('One subscription for every project.')
+  await page.getByRole('button', { name: 'Add a line' }).click()
+  await page.getByRole('button', { name: 'Remove line 3' }).click()
+  await expect(page.getByLabel('Line 3', { exact: true })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Create now' }).click()
+  await expect(page).toHaveURL(/\/videos\//)
+  expect(await page.evaluate("window.__sent['/api/v1/videos'].voiceover")).toEqual({
+    enabled: true,
+    voice: 'am_michael',
+    speed: 1.1,
+    script: ['Meet org webhooks.', 'One subscription for every project.'],
+  })
+})
+
+test('a video without a voice-over sends none', async ({ page }) => {
+  await page.goto('/new')
+  await page
+    .getByLabel('What should the video show?')
+    .fill('A 20-second launch video for our new feature, ending with "Try it today".')
+  await page.getByRole('button', { name: 'Create now' }).click()
+  await expect(page).toHaveURL(/\/videos\//)
+  expect(await page.evaluate("'voiceover' in window.__sent['/api/v1/videos']")).toBe(false)
+})
+
+test('Plan it first with a voice-over shows an editable narration per beat and creates with the plan', async ({
+  page,
+}) => {
+  await page.goto('/new')
+  await page
+    .getByLabel('What should the video show?')
+    .fill('A 30-second launch video for org-wide webhooks, ending on our logo.')
+  await page.getByRole('switch', { name: /Voice-over/ }).click()
+  await expect(page.getByText('Leave it empty and the plan writes the narration.')).toBeVisible()
+  await page.getByRole('button', { name: 'Plan it first' }).click()
+  await expect(page.getByText('Who is this video for?')).toBeVisible()
+  expect(await page.evaluate("window.__sent['/api/v1/plans'].voiceover")).toEqual({ enabled: true })
+  // The voice-over can't change under a plan in progress.
+  await expect(page.getByRole('switch', { name: /Voice-over/ })).toBeDisabled()
+  await page.getByRole('checkbox', { name: 'Skip' }).first().check()
+  await page.getByRole('checkbox', { name: 'Skip' }).nth(1).check()
+  await page.getByRole('button', { name: 'Done: write the brief' }).click()
+  const first = page.getByLabel('Narration for beat 1')
+  await expect(first).toHaveValue('Every project used to need its own webhook.')
+  await expect(page.getByLabel('Narration for beat 3')).toHaveValue('Read the docs to set it up.')
+  await first.fill('One webhook per project? Not anymore.')
+  await page.getByRole('button', { name: 'Create video' }).click()
+  await expect(page).toHaveURL(/\/videos\//)
+  expect(await page.evaluate("window.__sent['/api/v1/plans/plan_mock'].brief.beats[0].narration")).toBe(
+    'One webhook per project? Not anymore.',
+  )
+  // The plan carries the voice-over and its narration; the create body doesn't repeat it.
+  expect(await page.evaluate("window.__sent['/api/v1/videos'].planId")).toBe('plan_mock')
+  expect(await page.evaluate("'voiceover' in window.__sent['/api/v1/videos']")).toBe(false)
+})
+
+test('a revision keeps the voice-over unless changed, and sends a new one', async ({ page }) => {
+  await page.goto('/videos/vid_teaser')
+  await page.getByLabel('What should change?').fill('Warmer colours')
+  const voice = page.getByRole('switch', { name: /Voice-over/ })
+  await expect(voice).not.toBeChecked()
+  // Opening the options and closing them again changes nothing.
+  await voice.click()
+  await page.getByRole('button', { name: 'Add a line' }).click()
+  await voice.click()
+  await page.getByRole('button', { name: /Make v\d+ now/ }).click()
+  await expect
+    .poll(() => page.evaluate("window.__sent?.['/api/v1/videos/vid_teaser/versions']?.prompt"))
+    .toBe('Warmer colours')
+  expect(await page.evaluate("'voiceover' in window.__sent['/api/v1/videos/vid_teaser/versions']")).toBe(
+    false,
+  )
+  await page.getByLabel('What should change?').fill('Add a narrator')
+  await page.getByRole('switch', { name: /Voice-over/ }).click()
+  await page.getByLabel('Line 1', { exact: true }).fill('Preview every change.')
+  await page.getByRole('button', { name: /Make v\d+ now/ }).click()
+  await expect
+    .poll(() => page.evaluate("window.__sent?.['/api/v1/videos/vid_teaser/versions']?.voiceover"))
+    .toEqual({ enabled: true, script: ['Preview every change.'] })
+})
+
 test('a media slot is replaced from the library, filtered to its kind, with a fit', async ({ page }) => {
   await page.goto('/videos/vid_teaser/edit/2')
   const logo = page.getByTestId('slot-logo')

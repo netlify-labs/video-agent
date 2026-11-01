@@ -19,6 +19,7 @@ import {
 import { useEffect, useState } from 'react'
 import { $api, errorMessage } from '../api/client'
 import type { paths } from '../api/schema'
+import type { VoiceoverInput } from './VoiceoverControl'
 
 type Plan = paths['/api/v1/plans/{id}']['get']['responses'][200]['content']['application/json']
 type Brief = NonNullable<Plan['brief']>
@@ -34,6 +35,8 @@ export interface PlanPanelProps {
   mediaIds?: string[] | undefined
   /** The Sound chosen next to the prompt; the planner plans for it. */
   sound?: 'silent' | 'music' | 'music_sfx' | undefined
+  /** The voice-over chosen next to the prompt; the brief then has a narration line per beat. */
+  voiceover?: VoiceoverInput | undefined
   /** Called with the plan id to create with it, or null to create without a plan. */
   onCreate: (planId: string | null) => void
   onSuggestAspect?: (aspect: Aspect) => void
@@ -95,6 +98,7 @@ export function PlanPanel(props: PlanPanelProps) {
         ...(props.revisionOf ? { revisionOf: props.revisionOf } : {}),
         ...(props.mediaIds?.length ? { mediaIds: props.mediaIds } : {}),
         ...(props.sound ? { sound: props.sound } : {}),
+        ...(props.voiceover ? { voiceover: props.voiceover } : {}),
       },
     })
     // Start once per panel; the prompt is fixed while planning.
@@ -280,32 +284,56 @@ export function PlanPanel(props: PlanPanelProps) {
               <Text size="sm" fw={500}>
                 Beats
               </Text>
+              {plan?.voiceover ? (
+                <Text size="xs" c="var(--va-faint)">
+                  Each beat's narration is read word for word, and the beat is made long enough for it.
+                </Text>
+              ) : null}
               {brief.beats.map((b, i) => (
-                <Group key={i} gap="xs" wrap="nowrap">
-                  <TextInput
-                    style={{ flex: 1 }}
-                    value={b.text}
-                    onChange={(e) => {
-                      const beats = brief.beats.map((x, j) =>
-                        j === i ? { ...x, text: e.currentTarget.value } : x,
-                      )
-                      editBrief({ beats })
-                    }}
-                  />
-                  <NumberInput
-                    w={84}
-                    min={0}
-                    max={600}
-                    suffix=" s"
-                    value={b.seconds}
-                    onChange={(v) => {
-                      const beats = brief.beats.map((x, j) =>
-                        j === i ? { ...x, seconds: Number(v) || 0 } : x,
-                      )
-                      editBrief({ beats })
-                    }}
-                  />
-                </Group>
+                <Stack key={i} gap={4}>
+                  <Group gap="xs" wrap="nowrap">
+                    <TextInput
+                      style={{ flex: 1 }}
+                      aria-label={`Beat ${i + 1}`}
+                      value={b.text}
+                      onChange={(e) => {
+                        const beats = brief.beats.map((x, j) =>
+                          j === i ? { ...x, text: e.currentTarget.value } : x,
+                        )
+                        editBrief({ beats })
+                      }}
+                    />
+                    <NumberInput
+                      w={84}
+                      min={0}
+                      max={600}
+                      suffix=" s"
+                      value={b.seconds}
+                      onChange={(v) => {
+                        const beats = brief.beats.map((x, j) =>
+                          j === i ? { ...x, seconds: Number(v) || 0 } : x,
+                        )
+                        editBrief({ beats })
+                      }}
+                    />
+                  </Group>
+                  {plan?.voiceover ? (
+                    <Textarea
+                      aria-label={`Narration for beat ${i + 1}`}
+                      placeholder="What the narrator says over this beat"
+                      autosize
+                      minRows={1}
+                      maxLength={600}
+                      size="xs"
+                      value={b.narration ?? ''}
+                      onChange={(e) => {
+                        const narration = e.currentTarget.value
+                        const beats = brief.beats.map((x, j) => (j === i ? { ...x, narration } : x))
+                        editBrief({ beats })
+                      }}
+                    />
+                  ) : null}
+                </Stack>
               ))}
             </Stack>
             <TextInput
