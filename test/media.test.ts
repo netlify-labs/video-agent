@@ -142,7 +142,9 @@ describe('media library', () => {
     expect(part.status).toBe(206)
     expect(part.headers.get('content-type')).toBe('video/mp4')
     expect((await part.arrayBuffer()).byteLength).toBe(10)
-    expect((await edge((m.urls?.file ?? '').replace(/sig=./, 'sig=0'))).status).toBe(403)
+    // Change the signature's first character (always to a different one).
+    const tampered = (m.urls?.file ?? '').replace(/sig=(.)/, (_, c: string) => `sig=${c === '0' ? '1' : '0'}`)
+    expect((await edge(tampered)).status).toBe(403)
     expect((await edge(`/media/${m.id}/file`)).status).toBe(403)
   })
 
