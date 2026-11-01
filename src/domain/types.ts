@@ -280,6 +280,8 @@ export interface PlanRow {
   prompt: string
   aspect: string | null
   durationSec: number | null
+  /** Library items attached while planning; the video made from the plan uses them. */
+  mediaIds: string[]
   inputsHash: string
   route: PlanRoute | null
   questions: PlanQuestion[] | null

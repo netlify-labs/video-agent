@@ -219,6 +219,7 @@ export const plans = pgTable(
     prompt: text('prompt').notNull(),
     aspect: text('aspect'),
     durationSec: integer('duration_sec'),
+    mediaIds: jsonb('media_ids').$type<string[]>().notNull().default([]),
     inputsHash: text('inputs_hash').notNull(),
     route: jsonb('route'),
     questions: jsonb('questions'),

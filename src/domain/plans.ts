@@ -12,7 +12,16 @@ import { ApiError } from '../lib/errors.js'
 import { planningContext } from '../generated/planning-context.js'
 import { clampModel, estimateCredits, FAST_MODEL } from './gateway-models.js'
 import { assertCan, type Principal } from './policy.js'
-import type { GatewayCallRow, PlanAnswer, PlanBrief, PlanQuestion, PlanRoute, PlanRow } from './types.js'
+import { MEDIA_PER_VERSION } from './media.js'
+import type {
+  GatewayCallRow,
+  MediaRow,
+  PlanAnswer,
+  PlanBrief,
+  PlanQuestion,
+  PlanRoute,
+  PlanRow,
+} from './types.js'
 import { loadJob } from './videos.js'
 
 export const PLAN_TTL_MS = 24 * 3600_000
@@ -20,6 +29,8 @@ export const ROUTE_DEADLINE_MS = 5_000
 export const MODEL_DEADLINE_MS = 25_000
 const MAX_PROMPT = 4_000
 const MAX_OTHER = 500
+/** Images the planner looks at (vision input); the rest are described by name and caption only. */
+const MAX_PLAN_IMAGES = 4
 
 const CHECKLISTS: Record<string, string> = {
   launch:
@@ -169,9 +180,56 @@ export function planDto(plan: PlanRow) {
     answers: plan.answers,
     brief: plan.brief,
     briefRev: plan.briefRev,
+    mediaIds: plan.mediaIds,
     expiresAt: plan.expiresAt,
   }
 }
+
+// ───────── attached media ─────────
+
+/** The attached items, which must be ready library items (deleted ones are refused). */
+async function loadPlanMedia(deps: Deps, ids: string[]): Promise<MediaRow[]> {
+  const unique = [...new Set(ids)]
+  if (unique.length > MEDIA_PER_VERSION)
+    throw new ApiError('invalid_request', `Attach at most ${MEDIA_PER_VERSION} media items.`)
+  const rows: MediaRow[] = []
+  for (const id of unique) {
+    const m = await deps.store.getMedia(id)
+    if (!m || m.deletedAt || m.status !== 'ready')
+      throw new ApiError('invalid_request', `Media ${id} isn't a ready item in the library.`)
+    rows.push(m)
+  }
+  return rows
+}
+
+/** What the planner is told about attached media (fenced data), plus the first few images to look at. */
+async function mediaContext(deps: Deps, plan: PlanRow) {
+  if (!plan.mediaIds.length) return { block: '', images: [] }
+  // Items deleted since the plan was made are skipped here; creating the video refuses them.
+  const rows = (await Promise.all(plan.mediaIds.map((id) => deps.store.getMedia(id)))).filter(
+    (m): m is MediaRow => !!m && !m.deletedAt && m.status === 'ready',
+  )
+  const images: { mime: string; base64: string }[] = []
+  for (const m of rows) {
+    if (m.kind !== 'image' || images.length >= MAX_PLAN_IMAGES) continue
+    const bytes = await deps.blobs.get('media', m.cleanKey)
+    if (bytes) images.push({ mime: m.mime, base64: Buffer.from(bytes).toString('base64') })
+  }
+  const block = dataBlock(
+    'attached_media',
+    rows.map((m) => ({
+      kind: m.kind,
+      filename: m.filename,
+      caption: m.caption,
+      ...(m.width ? { width: m.width, height: m.height } : {}),
+      ...(m.durationSec ? { seconds: m.durationSec } : {}),
+    })),
+  )
+  return { block, images }
+}
+
+const MEDIA_RULE =
+  'attached_media lists files the person chose for the video (logos, screenshots, clips, fonts); the attached images are the first of them, in order. Plan around them and never ask for something they already provide.'
 
 // ───────── operations ─────────
 
@@ -183,6 +241,7 @@ export async function createPlan(
     aspect?: string | undefined
     durationSec?: number | undefined
     revisionOf?: { videoId: string; version?: number | undefined } | undefined
+    mediaIds?: string[] | undefined
   },
 ) {
   assertCan(p, 'plan:create')
@@ -191,6 +250,7 @@ export async function createPlan(
   if (!prompt) throw new ApiError('invalid_request', 'Describe the video first.')
   if (prompt.length > MAX_PROMPT)
     throw new ApiError('invalid_request', `Keep the prompt under ${MAX_PROMPT} characters to plan it.`)
+  const mediaIds = (await loadPlanMedia(deps, input.mediaIds ?? [])).map((m) => m.id)
   let jobId: string | null = null
   let baseN: number | null = null
   if (input.revisionOf) {
@@ -243,6 +303,7 @@ export async function createPlan(
     prompt,
     aspect: input.aspect ?? null,
     durationSec: input.durationSec ?? null,
+    mediaIds,
     inputsHash: sha256Hex(
       JSON.stringify([
         prompt,
@@ -251,6 +312,7 @@ export async function createPlan(
         jobId,
         baseN,
         planningContext.hash,
+        mediaIds,
       ]),
     ),
     route,
@@ -278,6 +340,7 @@ async function callJson<T>(
   user: string,
   schema: z.ZodType<T>,
   maxTokens: number,
+  images: { mime: string; base64: string }[] = [],
 ): Promise<T> {
   const deadline = Date.now() + MODEL_DEADLINE_MS
   let lastError: unknown = null
@@ -287,7 +350,7 @@ async function callJson<T>(
     const started = Date.now()
     try {
       const r = await deps.gateway.messages(
-        { model: m, system, user, maxTokens },
+        { model: m, system, user, maxTokens, ...(images.length ? { images } : {}) },
         { signal: AbortSignal.timeout(left) },
       )
       await record(deps, p, plan.id, attempt === 0 ? kind : 'retry', r.model, started, { usage: r.usage })
@@ -321,22 +384,36 @@ export async function generateQuestions(deps: Deps, p: Principal, planId: string
       ? 'This is a revision: ask only about the change, and ask nothing for small, precise changes.'
       : '',
     DATA_RULE,
+    plan.mediaIds.length ? MEDIA_RULE : '',
     'Reply with JSON only: {"questions":[{"id":"q1","question":"…","why":"…","options":[{"id":"a","label":"…","description":"…"}],"multiSelect":false,"allowOther":true}]}',
     'Use 0–6 questions and 2–4 short options each. Return {"questions":[]} if nothing is open.',
   ]
     .filter(Boolean)
     .join('\n')
   const history = (await deps.store.listJobs({ ownerId: p.userId, limit: 5 })).map((j) => j.title)
+  const media = await mediaContext(deps, plan)
   const user = [
     dataBlock('request', plan.prompt),
     plan.aspect ? dataBlock('chosen_shape', plan.aspect) : '',
     plan.durationSec ? dataBlock('chosen_length_seconds', plan.durationSec) : '',
+    media.block,
     dataBlock('company_context', planningContext.text),
     dataBlock('their_recent_video_titles', history),
   ]
     .filter(Boolean)
     .join('\n')
-  const out = await callJson(deps, p, plan, 'questions', route.model, system, user, QuestionsOut, 1500)
+  const out = await callJson(
+    deps,
+    p,
+    plan,
+    'questions',
+    route.model,
+    system,
+    user,
+    QuestionsOut,
+    1500,
+    media.images,
+  )
   const questions: PlanQuestion[] = out.questions.map((q) => ({ ...q }))
   await deps.store.updatePlan(plan.id, { questions })
   return planDto({ ...plan, questions })
@@ -384,18 +461,34 @@ export async function generateBrief(deps: Deps, p: Principal, planId: string, an
     "Turn a video request and the person's answers into a short, concrete brief for an agent that builds HTML/CSS animated videos.",
     'Keep their intent; make reasonable choices for anything skipped. Beats are on-screen moments with a length in seconds.',
     DATA_RULE,
+    plan.mediaIds.length ? `${MEDIA_RULE} Say in the beats where each file appears.` : '',
     'Reply with JSON only: {"goal":"","audience":"","keyMessage":"","beats":[{"text":"","seconds":0}],"tone":"","callToAction":"","mustInclude":[],"avoid":[]}',
-  ].join('\n')
+  ]
+    .filter(Boolean)
+    .join('\n')
+  const media = await mediaContext(deps, plan)
   const user = [
     dataBlock('request', plan.prompt),
     plan.aspect ? dataBlock('chosen_shape', plan.aspect) : '',
     plan.durationSec ? dataBlock('chosen_length_seconds', plan.durationSec) : '',
+    media.block,
     dataBlock('answers', qa),
     dataBlock('company_context', planningContext.text),
   ]
     .filter(Boolean)
     .join('\n')
-  const brief = await callJson(deps, p, plan, 'brief', await deepModel(deps), system, user, BriefSchema, 1200)
+  const brief = await callJson(
+    deps,
+    p,
+    plan,
+    'brief',
+    await deepModel(deps),
+    system,
+    user,
+    BriefSchema,
+    1200,
+    media.images,
+  )
   await deps.store.updatePlan(plan.id, { answers, brief, briefRev: plan.briefRev + 1 })
   return planDto({ ...plan, answers, brief, briefRev: plan.briefRev + 1 })
 }

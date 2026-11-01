@@ -1,0 +1,1 @@
+ALTER TABLE "plans" ADD COLUMN "media_ids" jsonb DEFAULT '[]' NOT NULL;

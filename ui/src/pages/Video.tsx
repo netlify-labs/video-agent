@@ -20,6 +20,7 @@ import {
 import { modals } from '@mantine/modals'
 import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
+import { MediaChips, type Media } from '../components/MediaPicker'
 import { PlanPanel } from '../components/PlanPanel'
 import { CommentsCard, ReviewPlayer, VerdictBar, type Pin } from '../components/Review'
 import { CompositionPreview } from '../components/CompositionPreview'
@@ -359,7 +360,9 @@ export function VideoPage() {
   )
   const [selected, setSelected] = useState<number | null>(null)
   const [revision, setRevision] = useState('')
+  const [revMedia, setRevMedia] = useState<Media[]>([])
   const [revKey, setRevKey] = useState(newIdempotencyKey)
+  const revMediaBody = revMedia.length ? { mediaIds: revMedia.map((m) => m.id) } : {}
   const prevStatus = useRef<string | null>(null)
   const player = useRef<HTMLVideoElement>(null)
   const [picking, setPicking] = useState(false)
@@ -375,6 +378,7 @@ export function VideoPage() {
   const revise = $api.useMutation('post', '/api/v1/videos/{id}/versions', {
     onSuccess: () => {
       setRevision('')
+      setRevMedia([])
       setRevKey(newIdempotencyKey())
       setSelected(null)
       void qc.invalidateQueries()
@@ -735,7 +739,7 @@ export function VideoPage() {
                   }
                   revise.mutate({
                     params: { path: { id }, header: { 'idempotency-key': revKey } },
-                    body: { prompt: revision, fromVersion: v.n },
+                    body: { prompt: revision, fromVersion: v.n, ...revMediaBody },
                   })
                 }}
               >
@@ -761,6 +765,12 @@ export function VideoPage() {
                       setRevision(e.currentTarget.value)
                     }}
                   />
+                  <MediaChips
+                    value={revMedia}
+                    onChange={setRevMedia}
+                    disabled={busy || v.status !== 'ready' || planningRevision}
+                    label="Add media"
+                  />
                   <Group gap={0} className={canPlan ? 'va-split-button' : undefined}>
                     <Button
                       type="submit"
@@ -779,7 +789,7 @@ export function VideoPage() {
                         onClick={() => {
                           revise.mutate({
                             params: { path: { id }, header: { 'idempotency-key': revKey } },
-                            body: { prompt: revision, fromVersion: v.n },
+                            body: { prompt: revision, fromVersion: v.n, ...revMediaBody },
                           })
                         }}
                       >
@@ -796,6 +806,7 @@ export function VideoPage() {
               key={`${id}-${v.n}`}
               prompt={revision}
               revisionOf={{ videoId: id, version: v.n }}
+              mediaIds={revMedia.map((m) => m.id)}
               creating={revise.isPending}
               onClose={() => {
                 setPlanningRevision(false)
@@ -804,7 +815,12 @@ export function VideoPage() {
                 setPlanningRevision(false)
                 revise.mutate({
                   params: { path: { id }, header: { 'idempotency-key': revKey } },
-                  body: { prompt: revision, fromVersion: v.n, ...(planId ? { planId } : {}) },
+                  body: {
+                    prompt: revision,
+                    fromVersion: v.n,
+                    ...(planId ? { planId } : {}),
+                    ...revMediaBody,
+                  },
                 })
               }}
             />

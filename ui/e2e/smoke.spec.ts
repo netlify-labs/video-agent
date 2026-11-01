@@ -433,3 +433,52 @@ test('viewers browse the library but cannot upload', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Upload' })).toHaveCount(0)
   await expect(page.getByTestId('media-dropzone')).toHaveCount(0)
 })
+
+test('media picked on New video goes to the plan and the video; chips lock while planning', async ({
+  page,
+}) => {
+  await page.goto('/new')
+  await page
+    .getByLabel('What should the video show?')
+    .fill('A 30-second launch video for org-wide webhooks, ending on our logo.')
+  await page.getByRole('button', { name: 'Add media' }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByText('Nothing to pick yet.')).toBeVisible()
+  await dialog
+    .locator('input[type=file]')
+    .setInputFiles({ name: 'logo.png', mimeType: 'image/png', buffer: pngBytes })
+  await dialog.getByTestId('pick-med_mock0001').click()
+  await expect(dialog.getByText('1 of up to 12 picked')).toBeVisible()
+  await dialog.getByRole('button', { name: 'Done' }).click()
+  await expect(page.getByTestId('chip-med_mock0001')).toContainText('logo.png')
+
+  await page.getByRole('button', { name: 'Plan it first' }).click()
+  await expect(page.getByText('Who is this video for?')).toBeVisible()
+  expect(await page.evaluate("window.__sent['/api/v1/plans'].mediaIds")).toEqual(['med_mock0001'])
+  await expect(page.getByRole('button', { name: 'Remove logo.png' })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Close' }).click()
+  await page.getByRole('button', { name: 'Remove logo.png' }).click()
+  await expect(page.getByTestId('chip-med_mock0001')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Add media' }).click()
+  await page.getByRole('dialog').getByTestId('pick-med_mock0001').click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Done' }).click()
+  await page.getByRole('button', { name: 'Create now' }).click()
+  await expect(page).toHaveURL(/\/videos\//)
+  expect(await page.evaluate("window.__sent['/api/v1/videos'].mediaIds")).toEqual(['med_mock0001'])
+})
+
+test('a revision can add media', async ({ page }) => {
+  await page.goto('/videos/vid_teaser')
+  await page.getByLabel('What should change?').fill('Put our logo on the end card')
+  await page.getByRole('button', { name: 'Add media' }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog
+    .locator('input[type=file]')
+    .setInputFiles({ name: 'logo.png', mimeType: 'image/png', buffer: pngBytes })
+  await dialog.getByTestId('pick-med_mock0001').click()
+  await dialog.getByRole('button', { name: 'Done' }).click()
+  await page.getByRole('button', { name: /Make v\d+ now/ }).click()
+  await expect
+    .poll(() => page.evaluate("window.__sent?.['/api/v1/videos/vid_teaser/versions']?.mediaIds"))
+    .toEqual(['med_mock0001'])
+})

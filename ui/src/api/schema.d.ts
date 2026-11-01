@@ -5311,6 +5311,8 @@ export interface components {
                 avoid: string[];
             } | null;
             briefRev: number;
+            /** @description Library items attached while planning. */
+            mediaIds: string[];
             expiresAt: string;
         };
         CreatePlan: {
@@ -5322,6 +5324,8 @@ export interface components {
                 videoId: string;
                 version?: number;
             };
+            /** @description Library items to plan around. The planner sees the first few images; the video made from this plan uses them all. */
+            mediaIds?: string[];
         };
         PlanAnswers: {
             answers: {

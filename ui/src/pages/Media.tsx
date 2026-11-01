@@ -18,14 +18,13 @@ import {
 import { modals } from '@mantine/modals'
 import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
-import { IconDots, IconMovie, IconTypography, IconUpload } from '@tabler/icons-react'
+import { IconDots, IconUpload } from '@tabler/icons-react'
 import { useState } from 'react'
 import { $api, errorMessage, useCanCreate } from '../api/client'
-import type { paths } from '../api/schema'
 import { relativeTime } from '../components/bits'
+import { MEDIA_ACCEPT, Thumb, type Media } from '../components/MediaPicker'
 import { uploadFile, type UploadProgress } from '../lib/upload'
 
-type Media = paths['/api/v1/media/{id}']['get']['responses'][200]['content']['application/json']
 type Kind = 'all' | 'image' | 'svg' | 'video' | 'font'
 
 interface Job {
@@ -37,39 +36,6 @@ interface Job {
 }
 
 const mb = (n: number) => `${(n / 1048576).toFixed(n < 10 * 1048576 ? 1 : 0)} MB`
-
-function Thumb({ m }: { m: Media }) {
-  if (!m.urls)
-    return (
-      <div className="va-media-thumb">
-        <Text size="xs" c="var(--va-faint)">
-          {m.status === 'rejected' ? 'Rejected' : 'Checking…'}
-        </Text>
-      </div>
-    )
-  if (m.kind === 'image' || m.kind === 'svg')
-    return (
-      <div className="va-media-thumb">
-        <img src={m.urls.file} alt={m.caption ?? m.filename} loading="lazy" />
-      </div>
-    )
-  if (m.kind === 'video')
-    return (
-      <div className="va-media-thumb">
-        {m.urls.poster ? <img src={m.urls.poster} alt="" loading="lazy" /> : <IconMovie size={32} />}
-        {m.durationSec ? <span className="va-media-duration num">{Math.round(m.durationSec)} s</span> : null}
-      </div>
-    )
-  // A font shows a sample in itself.
-  const family = `va-media-${m.id}`
-  return (
-    <div className="va-media-thumb">
-      <style>{`@font-face { font-family: '${family}'; src: url('${m.urls.file}'); }`}</style>
-      <span style={{ fontFamily: `'${family}', system-ui`, fontSize: 40 }}>Aa</span>
-      <IconTypography size={14} style={{ position: 'absolute', right: 8, bottom: 8, opacity: 0.6 }} />
-    </div>
-  )
-}
 
 function MediaCard({ m }: { m: Media }) {
   const qc = useQueryClient()
@@ -240,11 +206,7 @@ export function MediaPage() {
           <div className="va-sub">Logos, screenshots, clips and fonts the agent can use in your videos.</div>
         </div>
         {canUpload ? (
-          <FileButton
-            multiple
-            accept="image/png,image/jpeg,image/webp,image/svg+xml,video/mp4,font/woff2,font/ttf,font/otf,.woff2,.ttf,.otf"
-            onChange={add}
-          >
+          <FileButton multiple accept={MEDIA_ACCEPT} onChange={add}>
             {(props) => (
               <Button {...props} leftSection={<IconUpload size={16} />}>
                 Upload

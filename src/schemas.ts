@@ -290,6 +290,7 @@ export const PlanSchema = z
     answers: z.array(PlanAnswerSchema).nullable(),
     brief: planBriefShape.nullable(),
     briefRev: z.number().int(),
+    mediaIds: z.array(z.string()).openapi({ description: 'Library items attached while planning.' }),
     expiresAt: z.string(),
   })
   .openapi('Plan')
@@ -299,6 +300,10 @@ export const CreatePlanSchema = z
     aspect: z.enum(['16:9', '9:16', '1:1', '4:5']).optional(),
     durationSec: z.number().int().min(3).max(600).optional(),
     revisionOf: z.object({ videoId: z.string(), version: z.number().int().optional() }).optional(),
+    mediaIds: z.array(z.string()).max(12).optional().openapi({
+      description:
+        'Library items to plan around. The planner sees the first few images; the video made from this plan uses them all.',
+    }),
   })
   .openapi('CreatePlan')
 export const PlanAnswersSchema = z

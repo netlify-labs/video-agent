@@ -81,6 +81,58 @@ describe('media in videos', () => {
     expect(m.media?.map((x) => x.filename)).toEqual([`${logo.id}.png`, `${typeface.id}.woff2`])
   })
 
+  it('plans take media: the planner sees images and the list as fenced data; the planned video uses them', async () => {
+    const h = harness()
+    const logo = await upload(h, png(), 'filename=logo.png&caption=Our%20logo')
+    const typeface = await upload(h, font(), 'filename=brand.woff2&caption=Brand%20font')
+    const created = await h.call('POST', '/api/v1/plans', {
+      as: h.member,
+      body: { prompt: PROMPT, mediaIds: [logo.id, typeface.id, logo.id] },
+    })
+    expect(created.status).toBe(201)
+    const plan = await h.json(created)
+    expect(plan.mediaIds).toEqual([logo.id, typeface.id])
+    h.deps.gateway.replies.push(JSON.stringify({ questions: [] }))
+    await h.call('POST', `/api/v1/plans/${plan.id}/questions`, { as: h.member })
+    const q = h.deps.gateway.calls.find((c) => c.kind === 'messages')
+    expect(q?.images).toBe(1)
+    expect(q?.system).toContain('never ask for something they already provide')
+    expect(q?.user).toContain('<data name="attached_media">')
+    expect(q?.user).toContain('"kind":"font","filename":"brand.woff2","caption":"Brand font"')
+    h.deps.gateway.replies.push(
+      JSON.stringify({
+        goal: 'g',
+        audience: 'a',
+        keyMessage: 'k',
+        beats: [{ text: 'Logo', seconds: 6 }],
+        tone: 't',
+        callToAction: 'c',
+        mustInclude: [],
+        avoid: [],
+      }),
+    )
+    await h.call('POST', `/api/v1/plans/${plan.id}/brief`, { as: h.member, body: { answers: [] } })
+    expect(h.deps.gateway.calls.filter((c) => c.kind === 'messages').at(-1)?.images).toBe(1)
+    // The video made from the plan uses the plan's media (picks on create are added, not doubled).
+    const v = await h.json(
+      await h.call('POST', '/api/v1/videos', {
+        as: h.member,
+        body: { prompt: PROMPT, planId: plan.id, mediaIds: [typeface.id] },
+      }),
+    )
+    expect((await h.deps.store.listVersionMedia(v.id, 1)).map((r) => r.mediaId)).toEqual([
+      logo.id,
+      typeface.id,
+    ])
+    // Unknown or deleted items can't be attached to a plan.
+    await h.call('DELETE', `/api/v1/media/${typeface.id}`, { as: h.member })
+    const bad = await h.call('POST', '/api/v1/plans', {
+      as: h.member,
+      body: { prompt: PROMPT, mediaIds: [typeface.id] },
+    })
+    expect(bad.status).toBe(400)
+  })
+
   it('refuses media that is deleted, pending or unknown', async () => {
     const h = harness()
     const logo = await upload(h, png(), 'filename=logo.png')

@@ -118,6 +118,27 @@ export function installMock() {
     const p = url.pathname
     if (!p.startsWith('/api/')) return real(input, init)
     await new Promise((r) => setTimeout(r, 120))
+    // JSON bodies the app sent, by path (window.__sent), so tests can check what a form submitted.
+    const sent =
+      input instanceof Request
+        ? input.headers.get('content-type')
+        : typeof init?.body === 'string'
+          ? 'json'
+          : ''
+    if (method !== 'GET' && sent?.includes('json')) {
+      const w = window as unknown as { __sent?: Record<string, unknown> }
+      try {
+        const text =
+          input instanceof Request
+            ? await input.clone().text()
+            : typeof init?.body === 'string'
+              ? init.body
+              : ''
+        w.__sent = { ...w.__sent, [p]: JSON.parse(text) as unknown }
+      } catch {
+        // not JSON
+      }
+    }
     if (p === '/api/health') {
       return json({
         ok: true,

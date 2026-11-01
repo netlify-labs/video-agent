@@ -774,6 +774,13 @@ Example: {"prompt": "A 30-second launch video for org webhooks, ending on our lo
         aspect: z.string().optional().describe('16:9, 9:16, 1:1 or 4:5, if the user already chose one.'),
         duration_sec: z.union([z.number(), z.string()]).optional(),
         video_id: z.string().optional().describe('Plan a revision of this video instead of a new one.'),
+        media_ids: z
+          .array(z.string())
+          .max(12)
+          .optional()
+          .describe(
+            "Optional. Library items (from list_media) to plan around; the video made from the plan uses them, so don't pass them again.",
+          ),
       },
     },
     async (args) =>
@@ -783,6 +790,7 @@ Example: {"prompt": "A 30-second launch video for org webhooks, ending on our lo
           aspect: normalizeAspect(args.aspect),
           durationSec: normalizeDuration(args.duration_sec),
           ...(args.video_id ? { revisionOf: { videoId: normalizeVideoId(args.video_id) } } : {}),
+          mediaIds: args.media_ids,
         })
         const plan = await planning.generateQuestions(deps, principal, created.id)
         return {

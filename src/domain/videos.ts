@@ -62,7 +62,7 @@ async function consumePlan(
   principal: Principal,
   planId: string,
   target: { jobId: string | null; n: number; newJobId: string },
-): Promise<{ frozen: FrozenPlan; aspect: Aspect | null; durationSec: number | null }> {
+): Promise<{ frozen: FrozenPlan; aspect: Aspect | null; durationSec: number | null; mediaIds: string[] }> {
   const plan = await repo.getPlan(planId, { lock: true })
   if (!plan || plan.userId !== principal.userId) throw new ApiError('not_found', 'Plan not found.')
   if (plan.consumedByJobId) throw new ApiError('conflict', 'This plan was already used to make a video.')
@@ -94,6 +94,7 @@ async function consumePlan(
     frozen: { planId: plan.id, brief: plan.brief, qa, contextHash: planningContext.hash },
     aspect: (plan.aspect as Aspect | null) ?? plan.route?.suggestedAspect ?? null,
     durationSec: plan.durationSec ?? (seconds > 0 ? Math.round(seconds) : null),
+    mediaIds: plan.mediaIds,
   }
 }
 
@@ -244,7 +245,10 @@ export async function createVideo(
         accessEpoch: 0,
       }
       await repo.insertJob(job)
-      await repo.insertVersionMedia(await snapshotMedia(repo, jobId, 1, input.mediaIds ?? [], []))
+      // Media attached while planning comes first, then any picked when creating.
+      await repo.insertVersionMedia(
+        await snapshotMedia(repo, jobId, 1, [...(planned?.mediaIds ?? []), ...(input.mediaIds ?? [])], []),
+      )
       await repo.insertVersion({
         jobId,
         n: 1,
@@ -346,7 +350,7 @@ export async function reviseVideo(
           repo,
           jobId,
           n,
-          input.mediaIds ?? [],
+          [...(planned?.mediaIds ?? []), ...(input.mediaIds ?? [])],
           await repo.listVersionMedia(jobId, parent.n),
         ),
       )

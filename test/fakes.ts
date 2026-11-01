@@ -230,7 +230,8 @@ export class FakeHttp implements HttpPort {
 /** Scripted AI Gateway: set `route`/`reply` or push errors; every call is recorded. */
 export class FakeGateway implements GatewayPort {
   isAvailable = true
-  calls: { kind: 'route' | 'messages'; model?: string; system?: string; user?: string }[] = []
+  calls: { kind: 'route' | 'messages'; model?: string; system?: string; user?: string; images?: number }[] =
+    []
   routeAnswers: RouteAnswers = {
     needs_questions: 'yes',
     template: 'launch',
@@ -252,10 +253,22 @@ export class FakeGateway implements GatewayPort {
     }
   }
   async messages(
-    req: { model: string; system: string; user: string; maxTokens: number },
+    req: {
+      model: string
+      system: string
+      user: string
+      maxTokens: number
+      images?: { mime: string; base64: string }[]
+    },
     opts: { signal: AbortSignal },
   ) {
-    this.calls.push({ kind: 'messages', model: req.model, system: req.system, user: req.user })
+    this.calls.push({
+      kind: 'messages',
+      model: req.model,
+      system: req.system,
+      user: req.user,
+      images: req.images?.length ?? 0,
+    })
     if (this.delayMs)
       await new Promise((resolve, reject) => {
         const t = setTimeout(resolve, this.delayMs)

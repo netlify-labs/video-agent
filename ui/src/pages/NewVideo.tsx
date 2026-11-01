@@ -16,6 +16,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { $api, errorMessage, newIdempotencyKey, useCanCreate } from '../api/client'
 import { Status, fileUrl, relativeTime } from '../components/bits'
+import { MediaChips, type Media } from '../components/MediaPicker'
 import { PlanPanel } from '../components/PlanPanel'
 import { brand } from '../theme'
 
@@ -152,6 +153,7 @@ export function NewVideoPage() {
   const [lengthMode, setLengthMode] = useState<'auto' | 'set'>('auto')
   const [seconds, setSeconds] = useState<number | string>(30)
   const [title, setTitle] = useState('')
+  const [media, setMedia] = useState<Media[]>([])
   const { create, key } = useCreate()
   const config = $api.useQuery('get', '/api/v1/config')
   const canPlan = useCanCreate() && config.data?.planningAvailable === true
@@ -168,6 +170,7 @@ export function NewVideoPage() {
         ...(lengthMode === 'set' ? { durationSec: Number(seconds) } : {}),
         ...(title.trim() ? { title: title.trim() } : {}),
         ...(planId ? { planId } : {}),
+        ...(media.length ? { mediaIds: media.map((m) => m.id) } : {}),
       },
       params: { header: { 'idempotency-key': key } },
     })
@@ -210,6 +213,7 @@ export function NewVideoPage() {
               <Text size="xs" c="var(--va-faint)" ta="right" mt={-16} className="num">
                 {prompt.length} / 4,000
               </Text>
+              <MediaChips value={media} onChange={setMedia} disabled={planning} />
               <div>
                 <Text size="sm" fw={500} mb={8} id="shape-label">
                   Shape
@@ -334,6 +338,7 @@ export function NewVideoPage() {
               prompt={prompt}
               aspect={shapeTouched ? shape : undefined}
               durationSec={lengthMode === 'set' ? Number(seconds) : undefined}
+              mediaIds={media.map((m) => m.id)}
               creating={create.isPending}
               onSuggestAspect={(a) => {
                 setShape(a)

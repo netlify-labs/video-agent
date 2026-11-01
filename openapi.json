@@ -1410,6 +1410,13 @@
           "briefRev": {
             "type": "integer"
           },
+          "mediaIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Library items attached while planning."
+          },
           "expiresAt": {
             "type": "string"
           }
@@ -1423,6 +1430,7 @@
           "answers",
           "brief",
           "briefRev",
+          "mediaIds",
           "expiresAt"
         ]
       },
@@ -1461,6 +1469,14 @@
             "required": [
               "videoId"
             ]
+          },
+          "mediaIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 12,
+            "description": "Library items to plan around. The planner sees the first few images; the video made from this plan uses them all."
           }
         },
         "required": [

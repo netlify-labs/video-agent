@@ -30,6 +30,8 @@ export interface PlanPanelProps {
   aspect?: Aspect | undefined
   durationSec?: number | undefined
   revisionOf?: { videoId: string; version?: number } | undefined
+  /** Library items to plan around; the planner sees the images. */
+  mediaIds?: string[] | undefined
   /** Called with the plan id to create with it, or null to create without a plan. */
   onCreate: (planId: string | null) => void
   onSuggestAspect?: (aspect: Aspect) => void
@@ -89,6 +91,7 @@ export function PlanPanel(props: PlanPanelProps) {
         ...(props.aspect ? { aspect: props.aspect } : {}),
         ...(props.durationSec ? { durationSec: props.durationSec } : {}),
         ...(props.revisionOf ? { revisionOf: props.revisionOf } : {}),
+        ...(props.mediaIds?.length ? { mediaIds: props.mediaIds } : {}),
       },
     })
     // Start once per panel; the prompt is fixed while planning.
