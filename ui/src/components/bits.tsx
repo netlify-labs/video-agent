@@ -1,6 +1,8 @@
 import { ActionIcon, CopyButton, Group, Text, TextInput, Tooltip } from '@mantine/core'
+import { modals } from '@mantine/modals'
+import { notifications } from '@mantine/notifications'
 import { IconCheck, IconCopy } from '@tabler/icons-react'
-import type { Version, Video } from '../api/client'
+import { errorMessage, type Version, type Video } from '../api/client'
 import { mockFile } from '../mock/server'
 
 const STATUS_WORD: Record<Video['status'], string> = {
@@ -11,6 +13,26 @@ const STATUS_WORD: Record<Video['status'], string> = {
   failed: 'Failed',
   cancelled: 'Cancelled',
   timed_out: 'Timed out',
+}
+
+/** Shows a failed request's message as a red toast. */
+export const showError = (e: unknown) => notifications.show({ color: 'red', message: errorMessage(e) })
+
+/** Asks before something that can't be taken back, with a red confirm button. */
+export function confirmDanger(o: {
+  title: string
+  body: string
+  confirm: string
+  cancel?: string
+  onConfirm: () => void
+}) {
+  modals.openConfirmModal({
+    title: o.title,
+    children: <Text size="sm">{o.body}</Text>,
+    labels: { confirm: o.confirm, cancel: o.cancel ?? 'Cancel' },
+    confirmProps: { color: 'red', variant: 'light' },
+    onConfirm: o.onConfirm,
+  })
 }
 
 export const inProgress = (s: Video['status']) => s === 'queued' || s === 'running' || s === 'finishing'

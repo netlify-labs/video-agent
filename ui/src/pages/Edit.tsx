@@ -19,7 +19,6 @@ import {
   Title,
   Tooltip,
 } from '@mantine/core'
-import { modals } from '@mantine/modals'
 import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
 import { IconArrowDown, IconArrowUp, IconMovie, IconPhoto, IconTrash } from '@tabler/icons-react'
@@ -27,6 +26,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { $api, errorMessage, fetchClient, newIdempotencyKey } from '../api/client'
 import type { paths } from '../api/schema'
+import { confirmDanger, showError } from '../components/bits'
 import { CompositionPreview, type PreviewCommand } from '../components/CompositionPreview'
 import { MediaLibraryModal, type Media } from '../components/MediaPicker'
 import { humanize, labelFor } from '../lib/labels'
@@ -112,7 +112,7 @@ export function EditPage() {
     } else if (response.status === 409) setProblem(errorMessage(error))
     else {
       // The edit can't be made: show why and go back to the last saved state.
-      notifications.show({ color: 'red', message: errorMessage(error) })
+      showError(error)
       setCur(draft.composition)
     }
   }, [draft, ops])
@@ -169,7 +169,7 @@ export function EditPage() {
       notifications.show({ color: 'teal', message: `Rendering v${v.latestVersion} with your edits.` })
       void navigate(`/videos/${id}`)
     },
-    onError: (e) => notifications.show({ color: 'red', message: errorMessage(e) }),
+    onError: showError,
   })
   const discard = $api.useMutation('delete', '/api/v1/edits/{id}', {
     onSuccess: () => void navigate(`/videos/${id}`),
@@ -209,11 +209,11 @@ export function EditPage() {
               variant="subtle"
               color="gray"
               onClick={() => {
-                modals.openConfirmModal({
+                confirmDanger({
                   title: 'Discard this draft?',
-                  children: <Text size="sm">Your edits are deleted. The video doesn't change.</Text>,
-                  labels: { confirm: 'Discard', cancel: 'Keep editing' },
-                  confirmProps: { color: 'red', variant: 'light' },
+                  body: "Your edits are deleted. The video doesn't change.",
+                  confirm: 'Discard',
+                  cancel: 'Keep editing',
                   onConfirm: () => {
                     discard.mutate({ params: { path: { id: draft.id } } })
                   },

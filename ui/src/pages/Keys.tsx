@@ -1,10 +1,8 @@
 import { Alert, Button, Card, Code, Group, Modal, Stack, Text, TextInput, Title } from '@mantine/core'
-import { modals } from '@mantine/modals'
-import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { $api, errorMessage } from '../api/client'
-import { CopyField, relativeTime } from '../components/bits'
+import { $api } from '../api/client'
+import { CopyField, confirmDanger, relativeTime, showError } from '../components/bits'
 import { WebhookCard } from '../components/WebhookCard'
 
 export function KeysPage() {
@@ -18,7 +16,7 @@ export function KeysPage() {
       setName('')
       void qc.invalidateQueries()
     },
-    onError: (e) => notifications.show({ color: 'red', message: errorMessage(e) }),
+    onError: showError,
   })
   const revoke = $api.useMutation('delete', '/api/v1/keys/{id}', {
     onSuccess: () => void qc.invalidateQueries(),
@@ -109,11 +107,10 @@ curl -L -H "Authorization: Bearer ${key}" \\
                           variant="subtle"
                           color="red"
                           onClick={() => {
-                            modals.openConfirmModal({
+                            confirmDanger({
                               title: `Revoke "${k.name}"?`,
-                              children: <Text size="sm">Scripts using it stop working immediately.</Text>,
-                              labels: { confirm: 'Revoke', cancel: 'Cancel' },
-                              confirmProps: { color: 'red', variant: 'light' },
+                              body: 'Scripts using it stop working immediately.',
+                              confirm: 'Revoke',
                               onConfirm: () => {
                                 revoke.mutate({ params: { path: { id: k.id } } })
                               },

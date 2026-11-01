@@ -4,8 +4,8 @@ import { WebhookCard } from '../components/WebhookCard'
 import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
 import { Link, Navigate } from 'react-router'
-import { $api, errorMessage } from '../api/client'
-import { relativeTime } from '../components/bits'
+import { $api } from '../api/client'
+import { relativeTime, showError } from '../components/bits'
 
 const STAGE: Record<string, string> = {
   starting: 'Starting',
@@ -31,20 +31,17 @@ export function AdminPage() {
   const isAdmin = me.data?.role === 'admin'
   const stats = $api.useQuery('get', '/api/v1/stats', {}, { refetchInterval: 15_000, enabled: isAdmin })
   const users = $api.useQuery('get', '/api/v1/users', {}, { enabled: isAdmin })
-  const onError = (e: unknown) => notifications.show({ color: 'red', message: errorMessage(e) })
   const done = () => void qc.invalidateQueries()
-  const update = $api.useMutation('patch', '/api/v1/users/{id}', { onSuccess: done, onError })
-  const resolve = $api.useMutation('post', '/api/v1/admin/attempts/{id}/resolve', {
-    onSuccess: done,
-    onError,
-  })
-  const resume = $api.useMutation('post', '/api/v1/admin/queue/resume', { onSuccess: done, onError })
+  const afterWrite = { onSuccess: done, onError: showError }
+  const update = $api.useMutation('patch', '/api/v1/users/{id}', afterWrite)
+  const resolve = $api.useMutation('post', '/api/v1/admin/attempts/{id}/resolve', afterWrite)
+  const resume = $api.useMutation('post', '/api/v1/admin/queue/resume', afterWrite)
   const transfer = $api.useMutation('post', '/api/v1/transfers', {
     onSuccess: (r) => {
       notifications.show({ message: `Transferred ${r.transferred} video${r.transferred === 1 ? '' : 's'}.` })
       done()
     },
-    onError,
+    onError: showError,
   })
   const openTransfer = (from: { id: string; email: string }) => {
     let to: string | null = null
@@ -76,10 +73,7 @@ export function AdminPage() {
       },
     })
   }
-  const cancel = $api.useMutation('post', '/api/v1/videos/{id}/versions/{n}/cancel', {
-    onSuccess: done,
-    onError,
-  })
+  const cancel = $api.useMutation('post', '/api/v1/videos/{id}/versions/{n}/cancel', afterWrite)
 
   if (me.data && !isAdmin) return <Navigate to="/" replace />
   const s = stats.data

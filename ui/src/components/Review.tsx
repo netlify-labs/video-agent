@@ -20,9 +20,9 @@ import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
 import { IconCheck, IconDots, IconMapPin, IconX } from '@tabler/icons-react'
 import { useEffect, useRef, useState, type RefObject } from 'react'
-import { $api, errorMessage, newIdempotencyKey, type Version, type Video } from '../api/client'
+import { $api, newIdempotencyKey, type Version, type Video } from '../api/client'
 import type { paths } from '../api/schema'
-import { fileUrl, relativeTime } from './bits'
+import { fileUrl, relativeTime, showError } from './bits'
 
 type Comment =
   paths['/api/v1/videos/{id}/comments']['get']['responses'][200]['content']['application/json']['items'][number]
@@ -190,7 +190,7 @@ export function VerdictBar({ video, v, canReview }: { video: Video; v: Version; 
   const qc = useQueryClient()
   const set = $api.useMutation('put', '/api/v1/videos/{id}/versions/{n}/verdict', {
     onSuccess: () => void qc.invalidateQueries(),
-    onError: (e) => notifications.show({ color: 'red', message: errorMessage(e) }),
+    onError: showError,
   })
   const { approved, changesRequested, mine } = v.verdicts
   if (!canReview && !approved && !changesRequested) return null
@@ -295,7 +295,7 @@ function IncorporateModal({
         message: `Making v${video.versions.length + 1} with the feedback.`,
       })
     },
-    onError: (e) => notifications.show({ color: 'red', message: errorMessage(e) }),
+    onError: showError,
   })
   return (
     <Modal
@@ -392,7 +392,6 @@ export function CommentsCard({
   const [body, setBody] = useState('')
   const [editing, setEditing] = useState<{ id: string; body: string } | null>(null)
   const refresh = () => void qc.invalidateQueries()
-  const onError = (e: unknown) => notifications.show({ color: 'red', message: errorMessage(e) })
   const add = $api.useMutation('post', '/api/v1/videos/{id}/comments', {
     onSuccess: () => {
       setBody('')
@@ -400,16 +399,19 @@ export function CommentsCard({
       setPicking(false)
       refresh()
     },
-    onError,
+    onError: showError,
   })
   const patch = $api.useMutation('patch', '/api/v1/comments/{id}', {
     onSuccess: () => {
       setEditing(null)
       refresh()
     },
-    onError,
+    onError: showError,
   })
-  const remove = $api.useMutation('delete', '/api/v1/comments/{id}', { onSuccess: refresh, onError })
+  const remove = $api.useMutation('delete', '/api/v1/comments/{id}', {
+    onSuccess: refresh,
+    onError: showError,
+  })
   const read = $api.useMutation('post', '/api/v1/videos/{id}/comments/read', { onSuccess: refresh })
 
   // Opening the video reads its comments.

@@ -3,8 +3,8 @@ import { Alert, Button, Card, Group, Stack, Text, TextInput } from '@mantine/cor
 import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
-import { $api, errorMessage } from '../api/client'
-import { CopyField } from './bits'
+import { $api } from '../api/client'
+import { CopyField, showError } from './bits'
 
 export function WebhookCard({ scope }: { scope: 'personal' | 'team' }) {
   const path = scope === 'personal' ? '/api/v1/me/webhook' : '/api/v1/admin/team-webhook'
@@ -15,14 +15,13 @@ export function WebhookCard({ scope }: { scope: 'personal' | 'team' }) {
   useEffect(() => {
     if (current.data?.url) setUrl(current.data.url)
   }, [current.data?.url])
-  const onError = (e: unknown) => notifications.show({ color: 'red', message: errorMessage(e) })
   const refresh = () => void qc.invalidateQueries()
   const save = $api.useMutation('put', path, {
     onSuccess: (r) => {
       setSecret(r?.secret ?? null)
       refresh()
     },
-    onError,
+    onError: showError,
   })
   const remove = $api.useMutation('delete', path, {
     onSuccess: () => {
@@ -30,7 +29,7 @@ export function WebhookCard({ scope }: { scope: 'personal' | 'team' }) {
       setSecret(null)
       refresh()
     },
-    onError,
+    onError: showError,
   })
   const test = $api.useMutation('post', `${path}/test`, {
     onSuccess: (r) =>
@@ -38,7 +37,7 @@ export function WebhookCard({ scope }: { scope: 'personal' | 'team' }) {
         color: r.ok ? 'teal' : 'red',
         message: r.ok ? `Delivered (${r.result})` : r.result,
       }),
-    onError,
+    onError: showError,
   })
   const has = Boolean(current.data)
   return (

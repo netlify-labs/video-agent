@@ -15,13 +15,11 @@ import {
   TextInput,
   Title,
 } from '@mantine/core'
-import { modals } from '@mantine/modals'
-import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
 import { IconDots, IconUpload } from '@tabler/icons-react'
 import { useState } from 'react'
-import { $api, errorMessage, useCanCreate } from '../api/client'
-import { relativeTime } from '../components/bits'
+import { $api, useCanCreate } from '../api/client'
+import { confirmDanger, relativeTime, showError } from '../components/bits'
 import { MEDIA_ACCEPT, Thumb, type Media } from '../components/MediaPicker'
 import { uploadFile, type UploadProgress } from '../lib/upload'
 
@@ -47,12 +45,9 @@ function MediaCard({ m }: { m: Media }) {
       setEditing(false)
       refresh()
     },
-    onError: (e) => notifications.show({ color: 'red', message: errorMessage(e) }),
+    onError: showError,
   })
-  const remove = $api.useMutation('delete', '/api/v1/media/{id}', {
-    onSuccess: refresh,
-    onError: (e) => notifications.show({ color: 'red', message: errorMessage(e) }),
-  })
+  const remove = $api.useMutation('delete', '/api/v1/media/{id}', { onSuccess: refresh, onError: showError })
   return (
     <Card padding={0} className="va-media-card" data-testid={`media-${m.id}`}>
       <Thumb m={m} />
@@ -79,13 +74,10 @@ function MediaCard({ m }: { m: Media }) {
                 <Menu.Item
                   color="red"
                   onClick={() => {
-                    modals.openConfirmModal({
+                    confirmDanger({
                       title: `Delete ${m.filename}?`,
-                      children: (
-                        <Text size="sm">It leaves the library. Videos that already use it keep it.</Text>
-                      ),
-                      labels: { confirm: 'Delete', cancel: 'Cancel' },
-                      confirmProps: { color: 'red', variant: 'light' },
+                      body: 'It leaves the library. Videos that already use it keep it.',
+                      confirm: 'Delete',
                       onConfirm: () => {
                         remove.mutate({ params: { path: { id: m.id } } })
                       },

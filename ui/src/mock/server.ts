@@ -8,6 +8,7 @@ import { ASSETS, people, stats, videos } from './data'
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
+const fail = (status: number, code: string, message: string) => json({ error: { code, message } }, status)
 // Tests switch roles with localStorage.mockRole (admin by default).
 const mockRole = () => {
   try {
@@ -309,10 +310,7 @@ export function installMock() {
     }
     if (p === '/api/v1/media' && method === 'POST') {
       if (me.role === 'viewer' || me.role === 'reviewer')
-        return json(
-          { error: { code: 'forbidden', message: `Your role (${me.role}) can't upload media.` } },
-          403,
-        )
+        return fail(403, 'forbidden', `Your role (${me.role}) can't upload media.`)
       const body = new Uint8Array(
         await (input instanceof Request
           ? input.clone().arrayBuffer()
@@ -321,14 +319,10 @@ export function installMock() {
       const name = url.searchParams.get('filename') ?? 'upload'
       const kind = mockKind(body)
       if (!kind)
-        return json(
-          {
-            error: {
-              code: 'invalid_request',
-              message: 'Upload PNG, JPEG, WebP or SVG images, MP4 clips, or WOFF2, TTF or OTF fonts.',
-            },
-          },
+        return fail(
           400,
+          'invalid_request',
+          'Upload PNG, JPEG, WebP or SVG images, MP4 clips, or WOFF2, TTF or OTF fonts.',
         )
       const m = mockItem(name, kind, body.byteLength)
       mockMedia.unshift(m)
@@ -354,7 +348,7 @@ export function installMock() {
     const up = /^\/api\/v1\/media\/uploads\/([^/]+)(?:\/parts\/(\d+)|\/(complete))?$/.exec(p)
     if (up?.[1]) {
       const s = mockUploads.get(up[1])
-      if (!s) return json({ error: { code: 'not_found', message: 'Upload not found.' } }, 404)
+      if (!s) return fail(404, 'not_found', 'Upload not found.')
       if (up[2] !== undefined) {
         const w = window as unknown as { __parts?: number }
         w.__parts = (w.__parts ?? 0) + 1
@@ -365,7 +359,7 @@ export function installMock() {
         } catch {
           // ignore
         }
-        if (failOnce) return json({ error: { code: 'internal', message: 'Network hiccup.' } }, 500)
+        if (failOnce) return fail(500, 'internal', 'Network hiccup.')
         if (!s.uploaded.includes(Number(up[2]))) s.uploaded.push(Number(up[2]))
         return json({ idx: Number(up[2]), sha256: 'x', duplicate: false })
       }
@@ -382,7 +376,7 @@ export function installMock() {
     if (mm?.[1]) {
       const i = mockMedia.findIndex((m) => m.id === mm[1])
       const m = mockMedia[i]
-      if (!m) return json({ error: { code: 'not_found', message: 'Media not found.' } }, 404)
+      if (!m) return fail(404, 'not_found', 'Media not found.')
       if (method === 'DELETE') {
         mockMedia.splice(i, 1)
         return new Response(null, { status: 204 })
@@ -411,7 +405,7 @@ export function installMock() {
         const vid = videos.find((x) => x.id === mockEdit?.videoId)
         const w = window as unknown as { __rendered?: number }
         w.__rendered = (w.__rendered ?? 0) + 1
-        if (!vid) return json({ error: { code: 'not_found', message: 'Video not found.' } }, 404)
+        if (!vid) return fail(404, 'not_found', 'Video not found.')
         return json({ ...withComments(vid), latestVersion: vid.versions.length + 1 }, 202)
       }
       if (method === 'DELETE') {
@@ -422,29 +416,13 @@ export function installMock() {
         const b = (await readBody(init, input)) as { rev: number; ops: EditOp[] }
         ;(window as unknown as { __lastEditOps?: unknown }).__lastEditOps = b.ops
         if (b.rev !== mockEdit.rev)
-          return json(
-            {
-              error: {
-                code: 'conflict',
-                message: 'This draft changed in another tab. Reload it to continue.',
-              },
-            },
-            409,
-          )
+          return fail(409, 'conflict', 'This draft changed in another tab. Reload it to continue.')
         try {
           const out = applyEdits(contractHtml, contractSummary, b.ops, { palette: mockPalette })
           mockEdit = { ...mockEdit, rev: mockEdit.rev + 1, ops: b.ops, composition: out.composition }
           return json(mockEdit)
         } catch (e) {
-          return json(
-            {
-              error: {
-                code: 'invalid_request',
-                message: `That edit can't be made: ${(e as Error).message}`,
-              },
-            },
-            400,
-          )
+          return fail(400, 'invalid_request', `That edit can't be made: ${(e as Error).message}`)
         }
       }
       return json(mockEdit)
@@ -477,8 +455,7 @@ export function installMock() {
       })
     }
     if (cm?.[1] && method === 'POST') {
-      if (me.role === 'viewer')
-        return json({ error: { code: 'forbidden', message: "Your role (viewer) can't comment." } }, 403)
+      if (me.role === 'viewer') return fail(403, 'forbidden', "Your role (viewer) can't comment.")
       const b = await readBody(init, input)
       const c: MockComment = {
         id: `c_${comments.length + 1}`,
@@ -502,7 +479,7 @@ export function installMock() {
     if (one?.[1]) {
       const i = comments.findIndex((c) => c.id === one[1])
       const c = comments[i]
-      if (!c) return json({ error: { code: 'not_found', message: 'Comment not found.' } }, 404)
+      if (!c) return fail(404, 'not_found', 'Comment not found.')
       if (method === 'DELETE') {
         comments.splice(i, 1)
         return new Response(null, { status: 204 })
@@ -517,7 +494,7 @@ export function installMock() {
       const b = await readBody(init, input)
       const vid = videos.find((x) => x.id === vm[1])
       const ver = vid?.versions.find((x) => x.n === Number(vm[2]))
-      if (!vid || !ver) return json({ error: { code: 'not_found', message: 'Video not found.' } }, 404)
+      if (!vid || !ver) return fail(404, 'not_found', 'Video not found.')
       const prev = ver.verdicts.mine
       const next = (b.verdict as 'approved' | 'changes_requested' | null) ?? null
       if (prev === 'approved') ver.verdicts.approved--
@@ -534,20 +511,16 @@ export function installMock() {
       const b = await readBody(init, input)
       ;(window as unknown as { __lastRevise?: unknown }).__lastRevise = b
       const vid = videos.find((x) => x.id === rv[1])
-      return vid
-        ? json(withComments(vid), 202)
-        : json({ error: { code: 'not_found', message: 'Video not found.' } }, 404)
+      return vid ? json(withComments(vid), 202) : fail(404, 'not_found', 'Video not found.')
     }
     const m = /^\/api\/v1\/videos\/([^/]+)(?:\/versions\/(\d+)\/(video|poster|gif|captions))?$/.exec(p)
     if (m?.[1] && m[3])
       return Response.redirect(new URL(mockFile(m[1], m[3] as 'video'), window.location.origin).href, 302)
     if (m?.[1]) {
       const v = videos.find((x) => x.id === m[1])
-      return v
-        ? json(withComments(v))
-        : json({ error: { code: 'not_found', message: 'Video not found.' } }, 404)
+      return v ? json(withComments(v)) : fail(404, 'not_found', 'Video not found.')
     }
-    return json({ error: { code: 'not_found', message: `Mock has no ${method} ${p}` } }, 404)
+    return fail(404, 'not_found', `Mock has no ${method} ${p}`)
   }
 }
 

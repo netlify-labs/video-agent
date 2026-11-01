@@ -22,7 +22,7 @@ import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
 import { MediaChips, type Media } from '../components/MediaPicker'
 import { PlanPanel } from '../components/PlanPanel'
-import { CommentsCard, ReviewPlayer, VerdictBar, type Pin } from '../components/Review'
+import { CommentsCard, ReviewPlayer, VerdictBar, clockTime, type Pin } from '../components/Review'
 import { CompositionPreview } from '../components/CompositionPreview'
 import { IconDots, IconDownload, IconExternalLink, IconLock, IconLockOpen } from '@tabler/icons-react'
 import { useEffect, useRef, useState } from 'react'
@@ -33,11 +33,13 @@ import {
   Meta,
   StageTrack,
   Status,
+  confirmDanger,
   credits,
   duration,
   fileUrl,
   inProgress,
   relativeTime,
+  showError,
 } from '../components/bits'
 
 const STAGE_WORDS: Record<string, string> = {
@@ -62,9 +64,20 @@ function useTicker() {
 }
 
 function clock(since: string | null | undefined): string {
-  if (!since) return '0:00'
-  const s = Math.max(0, (Date.now() - new Date(since).getTime()) / 1000)
-  return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
+  return since ? clockTime(Math.max(0, (Date.now() - new Date(since).getTime()) / 1000)) : '0:00'
+}
+
+/** Whether the person asked for a browser notification when a run ends, and still allows them. */
+function notifyOn(): boolean {
+  try {
+    return (
+      localStorage.getItem('notify') === '1' &&
+      'Notification' in window &&
+      Notification.permission === 'granted'
+    )
+  } catch {
+    return false
+  }
 }
 
 function updatedAgo(iso: string): string {
@@ -72,14 +85,17 @@ function updatedAgo(iso: string): string {
   return s < 5 ? 'updated just now' : s < 60 ? `updated ${s} s ago` : `updated ${relativeTime(iso)}`
 }
 
-/** Live narration (plan v2 §6 A1): polls /progress every 3 s while the tab is visible and the run is going. */
-function Narration({ video, v }: { video: Video; v: Version }) {
-  const progress = $api.useQuery(
+const useProgress = (video: Video, v: Version) =>
+  $api.useQuery(
     'get',
     '/api/v1/videos/{id}/progress',
     { params: { path: { id: video.id } } },
     { refetchInterval: 3000, refetchIntervalInBackground: false, enabled: inProgress(v.status) },
   )
+
+/** Live narration (plan v2 §6 A1): polls /progress every 3 s while the tab is visible and the run is going. */
+function Narration({ video, v }: { video: Video; v: Version }) {
+  const progress = useProgress(video, v)
   const p = progress.data?.versionN === v.n ? progress.data : null
   // The run's own milestones (checkpoints) read better than the SDK's step; render-job reports Rendering N%.
   const cp = p?.checkpoint
@@ -114,29 +130,14 @@ function Progress({ video, v, canCancel }: { video: Video; v: Version; canCancel
   useTicker()
   const qc = useQueryClient()
   // The agent's latest composition snapshot, when its checkpoints send one (plan v2 §6 A2). Same query as Narration.
-  const progress = $api.useQuery(
-    'get',
-    '/api/v1/videos/{id}/progress',
-    { params: { path: { id: video.id } } },
-    { refetchInterval: 3000, refetchIntervalInBackground: false, enabled: inProgress(v.status) },
-  )
+  const progress = useProgress(video, v)
   const snapshot =
     progress.data?.versionN === v.n && progress.data.checkpoint?.hasBundle ? progress.data.checkpoint : null
   const cancel = $api.useMutation('post', '/api/v1/videos/{id}/versions/{n}/cancel', {
     onSuccess: () => void qc.invalidateQueries(),
-    onError: (e) => notifications.show({ color: 'red', message: errorMessage(e) }),
+    onError: showError,
   })
-  const [notify, setNotify] = useState(() => {
-    try {
-      return (
-        localStorage.getItem('notify') === '1' &&
-        'Notification' in window &&
-        Notification.permission === 'granted'
-      )
-    } catch {
-      return false
-    }
-  })
+  const [notify, setNotify] = useState(notifyOn)
   return (
     <Card p={0} style={{ overflow: 'hidden' }}>
       {snapshot ? (
@@ -286,7 +287,7 @@ function PublicLink({ video, v, canPublish }: { video: Video; v: Version; canPub
   const qc = useQueryClient()
   const unpublish = $api.useMutation('delete', '/api/v1/videos/{id}/versions/{n}/publish', {
     onSuccess: () => void qc.invalidateQueries(),
-    onError: (e) => notifications.show({ color: 'red', message: errorMessage(e) }),
+    onError: showError,
   })
   const live = v.publications.find((p) => !p.unpublishedAt && p.urls)
   if (!live?.urls) return null
@@ -316,16 +317,11 @@ function PublicLink({ video, v, canPublish }: { video: Video; v: Version; canPub
               size="xs"
               loading={unpublish.isPending}
               onClick={() => {
-                modals.openConfirmModal({
+                confirmDanger({
                   title: 'Unpublish this version?',
-                  children: (
-                    <Text size="sm">
-                      The links stop working right away. Copies people already downloaded, and link previews
-                      already shown in Slack or social apps, can't be recalled.
-                    </Text>
-                  ),
-                  labels: { confirm: 'Unpublish', cancel: 'Keep it public' },
-                  confirmProps: { color: 'red', variant: 'light' },
+                  body: "The links stop working right away. Copies people already downloaded, and link previews already shown in Slack or social apps, can't be recalled.",
+                  confirm: 'Unpublish',
+                  cancel: 'Keep it public',
                   onConfirm: () => {
                     unpublish.mutate({ params: { path: { id: video.id, n: v.n } } })
                   },
@@ -374,7 +370,6 @@ export function VideoPage() {
     setPending(null)
   }
 
-  const onError = (e: unknown) => notifications.show({ color: 'red', message: errorMessage(e) })
   const revise = $api.useMutation('post', '/api/v1/videos/{id}/versions', {
     onSuccess: () => {
       setRevision('')
@@ -383,26 +378,18 @@ export function VideoPage() {
       setSelected(null)
       void qc.invalidateQueries()
     },
-    onError,
+    onError: showError,
   })
-  const retry = $api.useMutation('post', '/api/v1/videos/{id}/versions/{n}/retry', {
-    onSuccess: () => void qc.invalidateQueries(),
-    onError,
-  })
-  const publish = $api.useMutation('post', '/api/v1/videos/{id}/versions/{n}/publish', {
-    onSuccess: () => void qc.invalidateQueries(),
-    onError,
-  })
-  const rename = $api.useMutation('patch', '/api/v1/videos/{id}', {
-    onSuccess: () => void qc.invalidateQueries(),
-    onError,
-  })
+  const afterWrite = { onSuccess: () => void qc.invalidateQueries(), onError: showError }
+  const retry = $api.useMutation('post', '/api/v1/videos/{id}/versions/{n}/retry', afterWrite)
+  const publish = $api.useMutation('post', '/api/v1/videos/{id}/versions/{n}/publish', afterWrite)
+  const rename = $api.useMutation('patch', '/api/v1/videos/{id}', afterWrite)
   const remove = $api.useMutation('delete', '/api/v1/videos/{id}', {
     onSuccess: () => {
       void qc.invalidateQueries()
       void navigate('/')
     },
-    onError,
+    onError: showError,
   })
 
   const data = video.data
@@ -413,12 +400,7 @@ export function VideoPage() {
     if (was && inProgress(was as Video['status']) && !inProgress(data.status)) {
       const msg = data.status === 'ready' ? `"${data.title}" is ready.` : `"${data.title}" didn't finish.`
       try {
-        if (
-          localStorage.getItem('notify') === '1' &&
-          'Notification' in window &&
-          Notification.permission === 'granted'
-        )
-          new Notification(msg)
+        if (notifyOn()) new Notification(msg)
       } catch {
         // notifications unavailable
       }
@@ -476,6 +458,12 @@ export function VideoPage() {
   const canReview = me.data !== undefined && me.data.role !== 'viewer'
   const live = v.publications.find((p) => !p.unpublishedAt && p.urls)
   const showProgress = inProgress(latest.status) && (selected === null || selected === latest.n)
+  const makeRevision = (planId?: string | null) => {
+    revise.mutate({
+      params: { path: { id }, header: { 'idempotency-key': revKey } },
+      body: { prompt: revision, fromVersion: v.n, ...(planId ? { planId } : {}), ...revMediaBody },
+    })
+  }
 
   const sub = inProgress(latest.status)
     ? `Making v${latest.n}${latest.parentN ? ` from v${latest.parentN}` : ''}. ${data.versions.some((x) => x.status === 'ready') ? 'Earlier versions are below.' : 'Usually ready in 3 to 8 minutes.'}`
@@ -593,15 +581,10 @@ export function VideoPage() {
                 <Menu.Item
                   color="red"
                   onClick={() => {
-                    modals.openConfirmModal({
+                    confirmDanger({
                       title: 'Delete this video?',
-                      children: (
-                        <Text size="sm">
-                          Every version, file and public link is removed. This can't be undone.
-                        </Text>
-                      ),
-                      labels: { confirm: 'Delete', cancel: 'Cancel' },
-                      confirmProps: { color: 'red', variant: 'light' },
+                      body: "Every version, file and public link is removed. This can't be undone.",
+                      confirm: 'Delete',
                       onConfirm: () => {
                         remove.mutate({ params: { path: { id } } })
                       },
@@ -737,10 +720,7 @@ export function VideoPage() {
                     setPlanningRevision(true)
                     return
                   }
-                  revise.mutate({
-                    params: { path: { id }, header: { 'idempotency-key': revKey } },
-                    body: { prompt: revision, fromVersion: v.n, ...revMediaBody },
-                  })
+                  makeRevision()
                 }}
               >
                 <Stack gap="sm">
@@ -787,10 +767,7 @@ export function VideoPage() {
                         disabled={busy || v.status !== 'ready' || revision.trim().length < 3}
                         loading={revise.isPending && !planningRevision}
                         onClick={() => {
-                          revise.mutate({
-                            params: { path: { id }, header: { 'idempotency-key': revKey } },
-                            body: { prompt: revision, fromVersion: v.n, ...revMediaBody },
-                          })
+                          makeRevision()
                         }}
                       >
                         Make v{data.versions.length + 1} now
@@ -813,15 +790,7 @@ export function VideoPage() {
               }}
               onCreate={(planId) => {
                 setPlanningRevision(false)
-                revise.mutate({
-                  params: { path: { id }, header: { 'idempotency-key': revKey } },
-                  body: {
-                    prompt: revision,
-                    fromVersion: v.n,
-                    ...(planId ? { planId } : {}),
-                    ...revMediaBody,
-                  },
-                })
+                makeRevision(planId)
               }}
             />
           ) : null}
