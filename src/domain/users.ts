@@ -45,6 +45,7 @@ export async function updateUser(
     if (patch.disabled === true) {
       for (const k of await repo.listKeys(id))
         if (!k.revokedAt) await repo.updateKey(k.id, { revokedAt: deps.clock.now().toISOString() })
+      await repo.revokeOAuthGrants(id, deps.clock.now().toISOString())
     }
     return userDto({ ...u, ...next })
   })

@@ -165,6 +165,27 @@ test('API docs are embedded with the REST reference and MCP setup', async ({ pag
   await expect(page.getByText('create_video', { exact: true })).toBeVisible()
 })
 
+test('API docs show how to install the agent skill, with copy buttons', async ({ page }) => {
+  await page.goto('/docs?tab=skills')
+  await expect(page.getByRole('tab', { name: 'Agent skills' })).toHaveAttribute('aria-selected', 'true')
+  const origin = new URL(page.url()).origin
+  await expect(page.getByRole('textbox', { name: 'Skill package (zip)', exact: true })).toHaveValue(
+    `${origin}/skills/netlify-video.zip`,
+  )
+  await expect(page.getByRole('textbox', { name: 'Claude Code', exact: true })).toHaveValue(
+    `curl -fsSL ${origin}/skills/netlify-video.zip -o /tmp/netlify-video.zip && unzip -o /tmp/netlify-video.zip -d ~/.claude/skills/`,
+  )
+  await expect(page.getByRole('textbox', { name: 'Codex', exact: true })).toHaveValue(
+    /-d ~\/\.codex\/skills\/$/,
+  )
+  await expect(page.getByRole('button', { name: 'Copy Claude Code' })).toBeVisible()
+  await expect(page.getByText('pr_video', { exact: true })).toBeVisible()
+  await expect(page.getByRole('link', { name: '/skills/index.json' })).toHaveAttribute(
+    'href',
+    '/skills/index.json',
+  )
+})
+
 test('admin, keys and setup render', async ({ page }) => {
   await page.goto('/admin')
   await expect(
@@ -175,6 +196,27 @@ test('admin, keys and setup render', async ({ page }) => {
   await expect(page.getByText('Release pipeline')).toBeVisible()
   await page.goto('/setup')
   await expect(page.getByText('Everything needed is in place. People can make videos.')).toBeVisible()
+})
+
+test('keys page lists connected OAuth apps and revokes one', async ({ page }) => {
+  await page.goto('/keys')
+  const apps = page.getByRole('table', { name: 'Connected apps' })
+  await expect(page.getByText('Sign in with Netlify')).toBeVisible()
+  await expect(apps.getByRole('row')).toHaveCount(3)
+  const claude = apps.getByRole('row', { name: /Claude/ })
+  await expect(claude).toContainText('20 min ago')
+  await expect(apps.getByRole('row', { name: /Cursor/ })).toContainText('Never')
+  await claude.getByRole('button', { name: 'Revoke' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Revoke' }).click()
+  await expect(apps.getByRole('row', { name: /Claude/ })).toHaveCount(0)
+  await expect(apps.getByRole('row')).toHaveCount(2)
+})
+
+test('keys page hides connected apps when MCP OAuth is off', async ({ page }) => {
+  await mock(page, 'mockOAuth', '0')
+  await page.goto('/keys')
+  await expect(page.getByText('Release pipeline')).toBeVisible()
+  await expect(page.getByText('Connected apps')).toHaveCount(0)
 })
 
 // Review (plan v2 §5)

@@ -99,6 +99,58 @@ export interface UserRow {
   disabledAt: string | null
 }
 
+/** A client registered through Dynamic Client Registration (CIMD clients are fetched, not stored). */
+export interface OAuthClientRow {
+  id: string
+  name: string | null
+  redirectUris: string[]
+  createdAt: string
+}
+
+/**
+ * One authorization in progress: created at /oauth/authorize (keyed by the hash of the state sent upstream),
+ * given a user and a consent secret at the callback, then a code; kept until expiry to detect a reused code.
+ */
+export interface OAuthRequestRow {
+  id: string
+  clientId: string
+  clientName: string | null
+  redirectUri: string
+  resource: string
+  state: string
+  codeChallenge: string
+  userId: string | null
+  consentHash: string | null
+  codeHash: string | null
+  grantId: string | null
+  createdAt: string
+  expiresAt: string
+  usedAt: string | null
+}
+
+/** A connected app: one person's authorization of one client. Revoking it ends all of its tokens. */
+export interface OAuthGrantRow {
+  id: string
+  userId: string
+  clientId: string
+  clientName: string | null
+  resource: string
+  createdAt: string
+  lastUsedAt: string | null
+  expiresAt: string
+  revokedAt: string | null
+}
+
+/** An access or refresh token, stored as the SHA-256 of its value. */
+export interface OAuthTokenRow {
+  hash: string
+  kind: 'access' | 'refresh'
+  grantId: string
+  createdAt: string
+  expiresAt: string
+  usedAt: string | null
+}
+
 export interface ApiKeyRow {
   id: string
   ownerId: string

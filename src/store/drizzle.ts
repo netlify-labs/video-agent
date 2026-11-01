@@ -45,6 +45,10 @@ import type {
   GatewayCallRow,
   WebhookDeliveryRow,
   UserWebhookRow,
+  OAuthClientRow,
+  OAuthRequestRow,
+  OAuthGrantRow,
+  OAuthTokenRow,
 } from '../domain/types.js'
 import { addUsage, type UsageRow } from './memory.js'
 import type { Repo, Store } from './types.js'
@@ -676,6 +680,110 @@ function repoFor(db: Db): Repo {
         .limit(limit)) as CleanupRow[],
     updateCleanup: async (id, patch) => {
       await db.update(t.cleanup).set(patch).where(eq(t.cleanup.id, id))
+    },
+
+    insertOAuthClient: async (row) => {
+      await db.insert(t.oauthClients).values(row)
+    },
+    getOAuthClient: async (id) =>
+      one<OAuthClientRow>(await db.select().from(t.oauthClients).where(eq(t.oauthClients.id, id))),
+    insertOAuthRequest: async (row) => {
+      await db.insert(t.oauthRequests).values(row)
+    },
+    getOAuthRequest: async (id) =>
+      one<OAuthRequestRow>(await db.select().from(t.oauthRequests).where(eq(t.oauthRequests.id, id))),
+    findOAuthRequest: async (by, opts) => {
+      const where =
+        'consentHash' in by
+          ? eq(t.oauthRequests.consentHash, by.consentHash)
+          : eq(t.oauthRequests.codeHash, by.codeHash)
+      const q = db.select().from(t.oauthRequests).where(where)
+      return one<OAuthRequestRow>(opts?.lock ? await q.for('update') : await q)
+    },
+    updateOAuthRequest: async (id, patch) => {
+      await db.update(t.oauthRequests).set(patch).where(eq(t.oauthRequests.id, id))
+    },
+    insertOAuthGrant: async (row) => {
+      await db.insert(t.oauthGrants).values(row)
+    },
+    getOAuthGrant: async (id) =>
+      one<OAuthGrantRow>(await db.select().from(t.oauthGrants).where(eq(t.oauthGrants.id, id))),
+    listOAuthGrants: async (userId, now) =>
+      await db
+        .select()
+        .from(t.oauthGrants)
+        .where(
+          and(
+            eq(t.oauthGrants.userId, userId),
+            isNull(t.oauthGrants.revokedAt),
+            sql`${t.oauthGrants.expiresAt} > ${now}`,
+          ),
+        )
+        .orderBy(desc(t.oauthGrants.createdAt), desc(t.oauthGrants.id)),
+    updateOAuthGrant: async (id, patch) => {
+      await db.update(t.oauthGrants).set(patch).where(eq(t.oauthGrants.id, id))
+    },
+    revokeOAuthGrants: async (userId, at) => {
+      await db
+        .update(t.oauthGrants)
+        .set({ revokedAt: at })
+        .where(and(eq(t.oauthGrants.userId, userId), isNull(t.oauthGrants.revokedAt)))
+    },
+    insertOAuthToken: async (row) => {
+      await db.insert(t.oauthTokens).values(row)
+    },
+    getOAuthToken: async (hash, opts) => {
+      const q = db.select().from(t.oauthTokens).where(eq(t.oauthTokens.hash, hash))
+      return one<OAuthTokenRow>(opts?.lock ? await q.for('update') : await q)
+    },
+    updateOAuthToken: async (hash, patch) => {
+      await db.update(t.oauthTokens).set(patch).where(eq(t.oauthTokens.hash, hash))
+    },
+    deleteExpiredOAuth: async (now, clientsBefore) => {
+      const count = (rows: unknown[]) => rows.length
+      let n = count(
+        await db
+          .delete(t.oauthRequests)
+          .where(lte(t.oauthRequests.expiresAt, now))
+          .returning({ id: t.oauthRequests.id }),
+      )
+      n += count(
+        await db
+          .delete(t.oauthGrants)
+          .where(or(sql`${t.oauthGrants.revokedAt} is not null`, lte(t.oauthGrants.expiresAt, now)))
+          .returning({ id: t.oauthGrants.id }),
+      )
+      const liveGrant = db
+        .select({ one: sql`1` })
+        .from(t.oauthGrants)
+        .where(eq(t.oauthGrants.id, t.oauthTokens.grantId))
+      n += count(
+        await db
+          .delete(t.oauthTokens)
+          .where(or(lte(t.oauthTokens.expiresAt, now), sql`not ${exists(liveGrant)}`))
+          .returning({ hash: t.oauthTokens.hash }),
+      )
+      const grantUses = db
+        .select({ one: sql`1` })
+        .from(t.oauthGrants)
+        .where(eq(t.oauthGrants.clientId, t.oauthClients.id))
+      const requestUses = db
+        .select({ one: sql`1` })
+        .from(t.oauthRequests)
+        .where(eq(t.oauthRequests.clientId, t.oauthClients.id))
+      n += count(
+        await db
+          .delete(t.oauthClients)
+          .where(
+            and(
+              lt(t.oauthClients.createdAt, clientsBefore),
+              sql`not ${exists(grantUses)}`,
+              sql`not ${exists(requestUses)}`,
+            ),
+          )
+          .returning({ id: t.oauthClients.id }),
+      )
+      return n
     },
 
     usageSince: async (since) => {

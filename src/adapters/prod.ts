@@ -4,6 +4,7 @@ import { readConfig, type Deps } from '../deps.js'
 import { getSettings } from '../domain/settings.js'
 import { ids } from '../lib/ids.js'
 import { createLogger } from '../lib/log.js'
+import { boundedJson, netlifyUpstream } from '../auth/upstream.js'
 import { createDrizzleStore } from '../store/drizzle.js'
 import * as schema from '../../db/schema.js'
 import { netlifyBlobs } from './blobs.js'
@@ -39,6 +40,18 @@ export function prodDeps(): Deps {
     }),
     http: safeHttp,
     gateway: createGateway(env),
+    oauth: config.mcpOAuth
+      ? {
+          upstream: netlifyUpstream(config.mcpOAuth),
+          fetchClientMetadata: (url) =>
+            boundedJson(
+              'client_metadata',
+              url,
+              { headers: { accept: 'application/json' } },
+              { timeoutMs: 5_000, maxBytes: 16_384 },
+            ).catch(() => null),
+        }
+      : null,
     log: createLogger({ service: 'video-agent' }),
   }
   return deps

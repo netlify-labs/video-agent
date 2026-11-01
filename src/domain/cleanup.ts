@@ -1,4 +1,5 @@
 // Bounded cleanup in the sweep: delete every copy of tombstoned videos and reap abandoned uploads.
+import { CLIENT_IDLE_MS } from '../auth/oauth.js'
 import type { Deps } from '../deps.js'
 import { deleteExpiredEdits } from './edits.js'
 import { sweepUploads } from './media-uploads.js'
@@ -25,6 +26,10 @@ export async function runCleanup(
   }
   await deps.store.deleteExpiredIdempotency(now.toISOString())
   await deps.store.deleteExpiredPlans(now.toISOString())
+  await deps.store.deleteExpiredOAuth(
+    now.toISOString(),
+    new Date(now.getTime() - CLIENT_IDLE_MS).toISOString(),
+  )
   await deleteExpiredEdits(deps)
   await sweepUploads(deps)
   return done

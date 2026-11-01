@@ -30,6 +30,10 @@ import type {
   GatewayCallRow,
   WebhookDeliveryRow,
   UserWebhookRow,
+  OAuthClientRow,
+  OAuthRequestRow,
+  OAuthGrantRow,
+  OAuthTokenRow,
 } from '../domain/types.js'
 
 export interface JobQuery {
@@ -194,6 +198,33 @@ export interface Repo {
   insertCleanup(row: CleanupRow): Promise<void>
   listDueCleanup(now: string, limit: number): Promise<CleanupRow[]>
   updateCleanup(id: string, patch: Partial<CleanupRow>): Promise<void>
+
+  // MCP OAuth (used only when it's enabled)
+  insertOAuthClient(row: OAuthClientRow): Promise<void>
+  getOAuthClient(id: string): Promise<OAuthClientRow | null>
+  insertOAuthRequest(row: OAuthRequestRow): Promise<void>
+  getOAuthRequest(id: string): Promise<OAuthRequestRow | null>
+  /** By consent secret or code hash. With lock, the row is locked for the rest of the transaction. */
+  findOAuthRequest(
+    by: { consentHash: string } | { codeHash: string },
+    opts?: { lock?: boolean },
+  ): Promise<OAuthRequestRow | null>
+  updateOAuthRequest(id: string, patch: Partial<OAuthRequestRow>): Promise<void>
+  insertOAuthGrant(row: OAuthGrantRow): Promise<void>
+  getOAuthGrant(id: string): Promise<OAuthGrantRow | null>
+  /** The person's grants that are neither revoked nor expired, newest first. */
+  listOAuthGrants(userId: string, now: string): Promise<OAuthGrantRow[]>
+  updateOAuthGrant(id: string, patch: Partial<OAuthGrantRow>): Promise<void>
+  /** Revokes every live grant a person holds. */
+  revokeOAuthGrants(userId: string, at: string): Promise<void>
+  insertOAuthToken(row: OAuthTokenRow): Promise<void>
+  getOAuthToken(hash: string, opts?: { lock?: boolean }): Promise<OAuthTokenRow | null>
+  updateOAuthToken(hash: string, patch: Partial<OAuthTokenRow>): Promise<void>
+  /**
+   * Deletes expired requests and tokens, expired or revoked grants with their tokens, and registered clients
+   * created before `clientsBefore` that no grant or request uses.
+   */
+  deleteExpiredOAuth(now: string, clientsBefore: string): Promise<number>
 
   // stats
   usageSince(

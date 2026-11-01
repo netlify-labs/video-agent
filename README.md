@@ -111,18 +111,22 @@ Prompts are visible to your Netlify team in the project's Agent Runs page.
 
 ## Configuration
 
-| Variable                               | Default        | Meaning                                                                                                                             |
-| -------------------------------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `RUNNER_API_TOKEN`                     | —              | Personal access token for starting and watching runs.                                                                               |
-| `ALLOWED_EMAIL_DOMAINS`                | —              | Company domains, or `invite-only`.                                                                                                  |
-| `ADMIN_EMAILS`                         | —              | First admins.                                                                                                                       |
-| `MAX_ACTIVE_RUNS`                      | `3`            | Runs at once.                                                                                                                       |
-| `AGENT`, `AGENT_MODEL`, `AGENT_EFFORT` | runner default | Which agent makes videos.                                                                                                           |
-| `AUTHORING_DEADLINE_MIN`               | `22`           | Stop a run after this many minutes (the runner's ceiling is 25).                                                                    |
-| `QUEUE_TIMEOUT_MIN`                    | `60`           | Fail a video that waits in the queue longer than this.                                                                              |
-| `RENDER_QUALITY`                       | `standard`     | HyperFrames render quality (`looks`, `standard`, `delivery`).                                                                       |
-| `ALLOWED_ORIGINS`                      | —              | Origins allowed to call the API from a browser with an API key (CORS).                                                              |
-| `BRAND_ZIP_URL`                        | —              | A zip of your brand kit, used instead of committing it to `context/` ([how](context/README.md#keeping-your-brand-out-of-the-repo)). |
+| Variable                                                 | Default                 | Meaning                                                                                                                             |
+| -------------------------------------------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `RUNNER_API_TOKEN`                                       | —                       | Personal access token for starting and watching runs.                                                                               |
+| `ALLOWED_EMAIL_DOMAINS`                                  | —                       | Company domains, or `invite-only`.                                                                                                  |
+| `ADMIN_EMAILS`                                           | —                       | First admins.                                                                                                                       |
+| `MAX_ACTIVE_RUNS`                                        | `3`                     | Runs at once.                                                                                                                       |
+| `AGENT`, `AGENT_MODEL`, `AGENT_EFFORT`                   | runner default          | Which agent makes videos.                                                                                                           |
+| `AUTHORING_DEADLINE_MIN`                                 | `22`                    | Stop a run after this many minutes (the runner's ceiling is 25).                                                                    |
+| `QUEUE_TIMEOUT_MIN`                                      | `60`                    | Fail a video that waits in the queue longer than this.                                                                              |
+| `RENDER_QUALITY`                                         | `standard`              | HyperFrames render quality (`looks`, `standard`, `delivery`).                                                                       |
+| `ALLOWED_ORIGINS`                                        | —                       | Origins allowed to call the API from a browser with an API key (CORS).                                                              |
+| `BRAND_ZIP_URL`                                          | —                       | A zip of your brand kit, used instead of committing it to `context/` ([how](context/README.md#keeping-your-brand-out-of-the-repo)). |
+| `MCP_OAUTH_PROVIDER`                                     | —                       | `netlify` turns on OAuth for the MCP ([below](#sign-in-with-netlify-oauth)). Off unless this and both credentials are set.          |
+| `NETLIFY_OAUTH_CLIENT_ID`, `NETLIFY_OAUTH_CLIENT_SECRET` | —                       | The Netlify OAuth application used for that sign-in.                                                                                |
+| `MCP_OAUTH_ALLOWED_EMAIL_DOMAINS`                        | `ALLOWED_EMAIL_DOMAINS` | Email domains that may connect over OAuth. With neither set to domains (`invite-only`), only existing accounts can.                 |
+| `MCP_OAUTH_CIMD_HOSTS`                                   | `claude.ai,claude.com`  | Hosts whose https client ids (Client ID Metadata Documents) are fetched.                                                            |
 
 ## The API
 
@@ -148,12 +152,51 @@ The same video tasks are MCP tools, so people can ask Claude, Cursor or any MCP 
 `set_verdict`, and, when AI Gateway is available, `plan_video` and `plan_brief` (ask a few questions first, then
 create with the plan). Each key's tool list matches its owner's role: Reviewers see the read and review tools, Viewers read only.
 
-- Server URL: `https://<your-site>/mcp` (Streamable HTTP). Authenticate with an API key: `Authorization: Bearer nva_…`.
+- Server URL: `https://<your-site>/mcp` (Streamable HTTP). Authenticate with an API key: `Authorization: Bearer nva_…`,
+  or, when it's on, [Sign in with Netlify](#sign-in-with-netlify-oauth).
 - Claude Code: `claude mcp add --transport http video-agent https://<your-site>/mcp --header "Authorization: Bearer nva_…"`
 - Cursor and others (`mcp.json`): `{ "mcpServers": { "video-agent": { "url": "https://<your-site>/mcp", "headers": { "Authorization": "Bearer nva_…" } } } }`
 - Stdio-only clients: `npx -y mcp-remote https://<your-site>/mcp --header "Authorization: Bearer nva_…"`
 
 The web app's **API docs** page has the REST reference and these instructions with your site's URL filled in.
+
+### Agent skills and MCP prompts
+
+Each deployment serves a `netlify-video` [Agent Skill](https://agentskills.io) that teaches coding agents (Claude
+Code, Codex, Cursor, Gemini CLI) the good path: connecting, plan → create → follow → publish, asking before spending
+a run, reusing library media, and recipes for a pull request → demo video, release notes → changelog video, a
+15-second vertical cut, localising captions and a review loop. The source is `skills/netlify-video/`; the build
+packages it as `https://<your-site>/skills/netlify-video.zip` (listed with its sha256 in `/skills/index.json`) with
+your site's URL filled in, so forks serve their own. The zip is deterministic: the same sources and URL give the same
+bytes.
+
+```sh
+curl -fsSL https://<your-site>/skills/netlify-video.zip -o /tmp/netlify-video.zip \
+  && unzip -o /tmp/netlify-video.zip -d ~/.claude/skills/
+```
+
+The API docs page has the command for each agent. The same recipes are MCP prompts (`pr_video`, `changelog_video`,
+`social_cut`, `localize_video`, `review_video`) for clients without skills, filtered by role like the tools.
+
+### Sign in with Netlify (OAuth)
+
+Optional. With it on, clients that only do OAuth (Claude and ChatGPT web connectors) can connect with the URL alone:
+the person signs in with Netlify, approves the app, and the app acts as them with their role. API keys keep working
+exactly as before; with it off, nothing changes (the OAuth routes return 404).
+
+1. Create a Netlify OAuth application (User settings → Applications → OAuth → New OAuth app) with the redirect URI
+   `https://<your-site>/oauth/callback`.
+2. Set `MCP_OAUTH_PROVIDER=netlify`, `NETLIFY_OAUTH_CLIENT_ID` and `NETLIFY_OAUTH_CLIENT_SECRET` (mark the secret as
+   secret), and optionally `MCP_OAUTH_ALLOWED_EMAIL_DOMAINS`, then redeploy.
+
+The server advertises itself at `/.well-known/oauth-protected-resource` and `/.well-known/oauth-authorization-server`,
+takes Dynamic Client Registration (`/oauth/register`) and Client ID Metadata Documents from `MCP_OAUTH_CIMD_HOSTS`,
+and issues opaque tokens bound to `https://<your-site>/mcp`: access tokens last an hour, refresh tokens 30 days and
+rotate on every use (a reused one ends the connection). Public clients with PKCE (S256) only. A verified email maps to
+the person's account; a first-time address in an allowed domain gets an account with the Creator role, like web
+sign-up. People see and revoke their connected apps on the API keys page; disabling someone ends their connections.
+An account created this way is separate from a later web sign-up with the same address, so ask people to sign in to
+the web app first if they'll use both.
 
 ## Developing
 

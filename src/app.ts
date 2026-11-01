@@ -26,6 +26,14 @@ import {
 } from './domain/videos.js'
 import { signedFilePath } from './domain/files.js'
 import { handleMcp } from './mcp.js'
+import {
+  listGrants,
+  oauthEnabled,
+  principalFromAccessToken,
+  resourceMetadataUrl,
+  revokeGrant,
+} from './auth/oauth.js'
+import { oauthRoutes } from './auth/routes.js'
 import * as hooks from './domain/webhook-settings.js'
 import { listNotifications, markNotificationsRead } from './domain/notifications.js'
 import { getProgress } from './domain/progress.js'
@@ -228,6 +236,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
           admission: deps.config.allowedEmailDomains,
           siteUrl: deps.config.siteUrl,
           planningAvailable: deps.gateway.available(),
+          mcpOAuth: oauthEnabled(deps),
         },
         200,
       ),
@@ -560,6 +569,32 @@ export function createApp(deps: Deps, opts: AppOptions) {
     }),
     async (c) => {
       await revokeKey(deps, c.get('principal'), c.req.valid('param').id)
+      return c.body(null, 204)
+    },
+  )
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/v1/oauth/grants',
+      summary: 'Your connected OAuth apps (404 when MCP OAuth is off)',
+      tags: ['keys'],
+      security,
+      responses: { 200: json(z.array(s.OAuthGrantSchema), 'Connected apps'), ...errors },
+    }),
+    async (c) => c.json(await listGrants(deps, c.get('principal')), 200),
+  )
+  app.openapi(
+    createRoute({
+      method: 'delete',
+      path: '/api/v1/oauth/grants/{id}',
+      summary: 'Disconnect an OAuth app (its tokens stop working)',
+      tags: ['keys'],
+      security,
+      request: { params: IdParam },
+      responses: { 204: { description: 'Revoked' }, ...errors },
+    }),
+    async (c) => {
+      await revokeGrant(deps, c.get('principal'), c.req.valid('param').id)
       return c.body(null, 204)
     },
   )
@@ -1426,6 +1461,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
 
   // ───── MCP: the same operations as tools for AI clients (API keys only) ─────
   const mcp = async (c: Context<Env>) => {
+    if (oauthEnabled(deps)) return mcpWithOAuth(c)
     if (!c.req.header('authorization')) {
       return c.json(
         errorBody(
@@ -1442,9 +1478,40 @@ export function createApp(deps: Deps, opts: AppOptions) {
       kick(c)
     })
   }
+  // With OAuth on, other bearer tokens are tried as OAuth access tokens, and 401s point clients at the metadata.
+  const mcpWithOAuth = async (c: Context<Env>) => {
+    const challenge = (error?: string) => ({
+      'www-authenticate': `Bearer ${error ? `error="${error}", ` : ''}resource_metadata="${resourceMetadataUrl(deps)}"`,
+    })
+    if (!c.req.header('authorization')) {
+      return c.json(
+        errorBody(
+          'unauthorized',
+          'Connect with OAuth (Sign in with Netlify), or send an API key as "Authorization: Bearer nva_…".',
+        ),
+        401,
+        challenge(),
+      )
+    }
+    let principal: Principal
+    try {
+      principal = await principalFromRequest(deps, c.req.raw, {
+        otherBearer: (token) => principalFromAccessToken(deps, token),
+      })
+    } catch (e) {
+      if (e instanceof ApiError && e.code === 'unauthorized')
+        return c.json(errorBody(e.code, e.message), 401, challenge('invalid_token'))
+      throw e
+    }
+    if (principal.kind === 'user') throw new ApiError('unauthorized', 'MCP needs an API key or OAuth.')
+    return handleMcp(deps, principal, c.req.raw, () => {
+      kick(c)
+    })
+  }
   // /mcp is the short URL people paste into their clients; the function serves it directly.
   app.all('/api/mcp', mcp)
   app.all('/mcp', mcp)
+  if (oauthEnabled(deps)) app.route('/', oauthRoutes(deps))
 
   // ───── agent callback (hidden from the public spec) ─────
   app.openapi(

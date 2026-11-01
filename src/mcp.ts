@@ -1,6 +1,7 @@
 // MCP server: lets people make videos from their AI tools (Claude, Cursor, any MCP client).
 // Stateless Streamable HTTP at /api/mcp (alias /mcp), authenticated with the same API keys as the REST API.
-// Seven tools; inputs are forgiving (aspect names, "30s", pasted URLs) and every result says what to do next.
+// Thirteen tools and five recipe prompts (mcp-prompts.ts); inputs are forgiving (aspect names, "30s", pasted
+// URLs) and every result says what to do next.
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { z } from 'zod'
@@ -25,6 +26,7 @@ import {
 } from './domain/videos.js'
 import { ApiError } from './lib/errors.js'
 import { MEDIA_KINDS } from './lib/media/classify.js'
+import { registerPrompts } from './mcp-prompts.js'
 
 const SERVER_INSTRUCTIONS = `Make short videos from a prompt. Each video is made by an AI agent with HyperFrames (HTML/CSS/GSAP rendered to MP4) and takes 3 to 8 minutes.
 
@@ -37,7 +39,9 @@ Typical flow:
 
 Optional planning (when plan_video is listed): call plan_video with the prompt first. If it returns questions, ask your user (they can skip any), then call plan_brief with their answers, show the brief, and pass plan_id to create_video (or revise_video). Skip planning when the request is already specific.
 
-Videos have captions and are silent unless you pass sound ("music" or "music_sfx"); for music, pass an audio item from list_media in media_ids (else the brand's music is used, if it has one). The company's brand context is applied automatically. Don't create a new video to fix a small thing: revise it.`
+Videos have captions and are silent unless you pass sound ("music" or "music_sfx"); for music, pass an audio item from list_media in media_ids (else the brand's music is used, if it has one). The company's brand context is applied automatically. Don't create a new video to fix a small thing: revise it.
+
+Prompts: prompts/list has step-by-step recipes for what your role can do: pr_video (pull request to demo video), changelog_video (release notes to changelog video), social_cut (short vertical cut of a video), localize_video (captions and on-screen text in other languages) and review_video (read and add feedback, approve, revise).`
 
 // ───────────── forgiving inputs ─────────────
 
@@ -877,10 +881,16 @@ Example: {"plan_id": "plan_…", "answers": [{"question_id": "q1", "choice_ids":
   }
   if (!can(principal, 'verdict:set')) verdictTool.remove()
   if (!can(principal, 'comment:create')) addCommentTool.remove()
-  if (!can(principal, 'plan:create') || !deps.gateway.available()) {
+  const canPlan = can(principal, 'plan:create') && deps.gateway.available()
+  if (!canPlan) {
     planVideoTool.remove()
     planBriefTool.remove()
   }
+  registerPrompts(server, {
+    create: can(principal, 'video:create'),
+    review: can(principal, 'comment:create') && can(principal, 'verdict:set'),
+    planning: canPlan,
+  })
   return server
 }
 

@@ -3,6 +3,7 @@ import '@scalar/api-reference-react/style.css'
 import { Anchor, Card, Code, Stack, Tabs, Text, Title, useComputedColorScheme } from '@mantine/core'
 import { ApiReferenceReact } from '@scalar/api-reference-react'
 import { Link, useSearchParams } from 'react-router'
+import { $api } from '../api/client'
 import { CopyField } from '../components/bits'
 
 const TOOLS: [string, string][] = [
@@ -22,6 +23,24 @@ const TOOLS: [string, string][] = [
   ['set_verdict', 'Approve a version or request changes (not on your own version).'],
   ['plan_video', 'Optional: a few multiple-choice questions to plan the video first (needs AI Gateway).'],
   ['plan_brief', 'Turns the answers into a brief; pass its plan_id to create_video or revise_video.'],
+]
+
+const SKILL_AGENTS: [string, string][] = [
+  ['Claude Code', '~/.claude/skills'],
+  ['Codex', '~/.codex/skills'],
+  ['Cursor', '~/.cursor/skills'],
+  ['Gemini CLI', '~/.gemini/skills'],
+]
+
+const PROMPTS: [string, string][] = [
+  [
+    'pr_video',
+    'Pull request → demo or launch video: reads the diff and screenshots, writes a brief, creates.',
+  ],
+  ['changelog_video', 'Release notes → changelog video, one beat per change.'],
+  ['social_cut', 'A 15-second vertical cut of an existing video.'],
+  ['localize_video', 'Captions and on-screen text in other languages, one revision each.'],
+  ['review_video', 'Read and add feedback, approve or request changes, and revise with it.'],
 ]
 
 // Scalar themed with the app's role tokens (--va-*), which already switch between light and dark,
@@ -68,6 +87,7 @@ const SCALAR_CSS = `
 function McpGuide() {
   const origin = window.location.origin
   const url = `${origin}/mcp`
+  const config = $api.useQuery('get', '/api/v1/config')
   return (
     <Stack gap="md" maw={880}>
       <Text c="var(--va-muted)">
@@ -84,6 +104,12 @@ function McpGuide() {
           <Text size="sm" c="var(--va-muted)">
             Send the key as <Code>Authorization: Bearer nva_…</Code>. Create one on the API keys page.
           </Text>
+          {config.data?.mcpOAuth ? (
+            <Text size="sm" c="var(--va-muted)">
+              Or connect without a key: clients that support OAuth (Claude and ChatGPT connectors, Claude
+              Code) can add the URL alone and <b>Sign in with Netlify</b>.
+            </Text>
+          ) : null}
         </Stack>
       </Card>
       <Card>
@@ -135,10 +161,83 @@ function McpGuide() {
   )
 }
 
+// The netlify-video skill is built with the site (scripts/build.ts) and already points at this deployment.
+function SkillsGuide() {
+  const origin = window.location.origin
+  const zipUrl = `${origin}/skills/netlify-video.zip`
+  return (
+    <Stack gap="md" maw={880}>
+      <Text c="var(--va-muted)">
+        The <Code>netlify-video</Code> skill teaches your coding agent how to use this video agent: connecting
+        the MCP server, the plan, create, follow and publish flow, and recipes such as turning a pull request
+        into a demo video. It points at this site: install it, then connect the MCP server as shown under{' '}
+        <Anchor component={Link} to="/docs?tab=mcp" c="var(--va-text)">
+          MCP for AI tools
+        </Anchor>
+        .
+      </Text>
+      <Card>
+        <Stack gap="sm">
+          <CopyField label="Skill package (zip)" value={zipUrl} />
+          <Text size="sm" c="var(--va-muted)">
+            It unzips to one <Code>netlify-video/</Code> folder with <Code>SKILL.md</Code> and its references.
+            Names, sizes and checksums are in{' '}
+            <Anchor href="/skills/index.json" c="var(--va-text)">
+              /skills/index.json
+            </Anchor>
+            .
+          </Text>
+        </Stack>
+      </Card>
+      <Card>
+        <Text fw={600} mb="sm">
+          Install
+        </Text>
+        <Stack gap="sm">
+          {SKILL_AGENTS.map(([agent, dir]) => (
+            <CopyField
+              key={agent}
+              label={agent}
+              value={`curl -fsSL ${zipUrl} -o /tmp/netlify-video.zip && unzip -o /tmp/netlify-video.zip -d ${dir}/`}
+            />
+          ))}
+        </Stack>
+        <Text size="sm" c="var(--va-muted)" mt="sm">
+          For one project only, unzip into the project’s skills folder instead (for example{' '}
+          <Code>.claude/skills/</Code>). In the Claude apps, upload the zip under Settings → Capabilities →
+          Skills. Run the same command again to update.
+        </Text>
+      </Card>
+      <Card>
+        <Text fw={600} mb="sm">
+          The same recipes as MCP prompts
+        </Text>
+        <Text size="sm" c="var(--va-muted)" mb="sm">
+          Clients without skills get these from the MCP server (<Code>prompts/list</Code>), limited to what
+          your role can do.
+        </Text>
+        <table className="va-table">
+          <tbody>
+            {PROMPTS.map(([name, what]) => (
+              <tr key={name}>
+                <td style={{ width: 180 }}>
+                  <Code>{name}</Code>
+                </td>
+                <td style={{ color: 'var(--va-muted)' }}>{what}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Card>
+    </Stack>
+  )
+}
+
 export default function DocsPage() {
   const [params, setParams] = useSearchParams()
   const scheme = useComputedColorScheme('dark')
-  const tab = params.get('tab') === 'mcp' ? 'mcp' : 'rest'
+  const t = params.get('tab')
+  const tab = t === 'mcp' || t === 'skills' ? t : 'rest'
   return (
     <>
       <div className="va-title-row">
@@ -152,17 +251,20 @@ export default function DocsPage() {
       <Tabs
         value={tab}
         onChange={(v) => {
-          setParams(v === 'mcp' ? { tab: 'mcp' } : {}, { replace: true })
+          setParams(v === 'mcp' || v === 'skills' ? { tab: v } : {}, { replace: true })
         }}
         mb="lg"
       >
         <Tabs.List>
           <Tabs.Tab value="rest">REST API</Tabs.Tab>
           <Tabs.Tab value="mcp">MCP for AI tools</Tabs.Tab>
+          <Tabs.Tab value="skills">Agent skills</Tabs.Tab>
         </Tabs.List>
       </Tabs>
       {tab === 'mcp' ? (
         <McpGuide />
+      ) : tab === 'skills' ? (
+        <SkillsGuide />
       ) : (
         <div className="va-docs">
           <ApiReferenceReact

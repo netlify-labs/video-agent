@@ -3,7 +3,8 @@
 const SECRET_KEYS = /token|secret|password|authorization|cookie|handle|signature|sig|nf_jwt|apikey|api_key/i
 const BEARER = /\b(Bearer\s+)[A-Za-z0-9._~+/=-]+/g
 const KEY_PATTERN = /\bnva_[A-Za-z0-9_]+/g
-const SIG_PARAM = /([?&](?:sig|exp|token)=)[^&\s"]+/g
+const OAUTH_PATTERN = /\b(nvat|nvac|nvrt)_[A-Za-z0-9_-]+/g
+const SIG_PARAM = /([?&](?:sig|exp|token|code|state)=)[^&\s"]+/g
 
 export type LogFields = Record<string, unknown>
 
@@ -13,6 +14,7 @@ export function redact(value: unknown, depth = 0): unknown {
     return value
       .replace(BEARER, '$1[redacted]')
       .replace(KEY_PATTERN, 'nva_[redacted]')
+      .replace(OAUTH_PATTERN, '$1_[redacted]')
       .replace(SIG_PARAM, '$1[redacted]')
   }
   if (Array.isArray(value)) return value.map((v) => redact(v, depth + 1))

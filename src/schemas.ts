@@ -287,6 +287,15 @@ export const NewKeySchema = KeySchema.extend({
     .string()
     .openapi({ description: 'Signs webhooks for videos created with this key. Shown once.' }),
 }).openapi('NewApiKey')
+export const OAuthGrantSchema = z
+  .object({
+    id: z.string(),
+    clientId: z.string(),
+    clientName: z.string(),
+    createdAt: z.string(),
+    lastUsedAt: z.string().nullable(),
+  })
+  .openapi('OAuthGrant')
 export const CreateKeySchema = z.object({ name: z.string().min(1).max(80) }).openapi('CreateApiKey')
 
 export const RoleSchema = z.enum(['admin', 'creator', 'reviewer', 'viewer']).openapi('Role')
@@ -686,5 +695,8 @@ export const PublicConfigSchema = z
     admission: z.union([z.literal('invite-only'), z.array(z.string()), z.null()]),
     siteUrl: z.string(),
     planningAvailable: z.boolean().describe('AI Gateway is available, so Plan it first is offered.'),
+    mcpOAuth: z
+      .boolean()
+      .describe('MCP clients can connect with OAuth (Sign in with Netlify) as well as API keys.'),
   })
   .openapi('PublicConfig')

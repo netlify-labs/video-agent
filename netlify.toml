@@ -22,3 +22,10 @@
   for = "/assets/*"
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
+
+# Agent skills (scripts/build.ts): small, rebuilt on every deploy, so browsers and agents recheck often.
+[[headers]]
+  for = "/skills/*"
+  [headers.values]
+    Cache-Control = "public, max-age=300, must-revalidate"
+    Access-Control-Allow-Origin = "*"

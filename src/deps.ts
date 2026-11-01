@@ -4,6 +4,7 @@ import type { Logger } from './lib/log.js'
 import type { Ids } from './lib/ids.js'
 import type { Store } from './store/types.js'
 import type { Usage } from './domain/types.js'
+import type { UpstreamIdentity } from './auth/upstream.js'
 
 export interface Config {
   allowedEmailDomains: string[] | 'invite-only' | null
@@ -20,6 +21,43 @@ export interface Config {
   allowedOrigins: string[]
   runnerTokenPresent: boolean
   uploadMode: 'blobs' | 'signed'
+  /** Optional OAuth for the MCP; null (off) unless a provider and its credentials are set. */
+  mcpOAuth: McpOAuthConfig | null
+}
+
+export interface McpOAuthConfig {
+  provider: 'netlify'
+  clientId: string
+  clientSecret: string
+  /** Email domains that may connect; null admits only people who already have an account. */
+  allowedEmailDomains: string[] | null
+  /** Hosts whose https client ids (Client ID Metadata Documents) are fetched. */
+  cimdHosts: string[]
+}
+
+function readMcpOAuth(
+  env: Record<string, string | undefined>,
+  list: (v: string | undefined) => string[],
+  domains: string[] | 'invite-only' | null,
+): McpOAuthConfig | null {
+  const clientId = env.NETLIFY_OAUTH_CLIENT_ID?.trim()
+  const clientSecret = env.NETLIFY_OAUTH_CLIENT_SECRET?.trim()
+  if (env.MCP_OAUTH_PROVIDER?.trim().toLowerCase() !== 'netlify' || !clientId || !clientSecret) return null
+  const own = list(env.MCP_OAUTH_ALLOWED_EMAIL_DOMAINS)
+  const cimd = list(env.MCP_OAUTH_CIMD_HOSTS)
+  return {
+    provider: 'netlify',
+    clientId,
+    clientSecret,
+    allowedEmailDomains: own.includes('invite-only')
+      ? null
+      : own.length > 0
+        ? own
+        : Array.isArray(domains)
+          ? domains
+          : null,
+    cimdHosts: cimd.length > 0 ? cimd : ['claude.ai', 'claude.com'],
+  }
 }
 
 export function readConfig(env: Record<string, string | undefined>): Config {
@@ -29,11 +67,11 @@ export function readConfig(env: Record<string, string | undefined>): Config {
       .map((s) => s.trim().toLowerCase())
       .filter(Boolean)
   const domains = list(env.ALLOWED_EMAIL_DOMAINS)
+  const admission = domains.length === 0 ? null : domains.includes('invite-only') ? 'invite-only' : domains
   const num = (v: string | undefined, d: number) =>
     v && Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : d
   return {
-    allowedEmailDomains:
-      domains.length === 0 ? null : domains.includes('invite-only') ? 'invite-only' : domains,
+    allowedEmailDomains: admission,
     adminEmails: list(env.ADMIN_EMAILS),
     agent: env.AGENT ?? 'claude',
     agentModel: env.AGENT_MODEL ?? null,
@@ -47,6 +85,7 @@ export function readConfig(env: Record<string, string | undefined>): Config {
     allowedOrigins: list(env.ALLOWED_ORIGINS),
     runnerTokenPresent: Boolean(env.RUNNER_API_TOKEN),
     uploadMode: env.UPLOAD_MODE === 'signed' ? 'signed' : 'blobs',
+    mcpOAuth: readMcpOAuth(env, list, admission),
   }
 }
 
@@ -161,6 +200,13 @@ export interface HttpPort {
   ): Promise<{ status: number }>
 }
 
+/** What the MCP OAuth server needs from outside: the upstream sign-in and client metadata documents. */
+export interface OAuthPort {
+  upstream: UpstreamIdentity
+  /** A bounded GET of a Client ID Metadata Document; the caller has checked the host. Null on any failure. */
+  fetchClientMetadata(url: string): Promise<unknown>
+}
+
 export interface Clock {
   now(): Date
 }
@@ -174,6 +220,8 @@ export interface Deps {
   platform: PlatformPort
   http: HttpPort
   gateway: GatewayPort
+  /** Null unless config.mcpOAuth is set. */
+  oauth: OAuthPort | null
   clock: Clock
   ids: Ids
   log: Logger

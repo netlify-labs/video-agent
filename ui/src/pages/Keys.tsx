@@ -21,6 +21,8 @@ export function KeysPage() {
   const revoke = $api.useMutation('delete', '/api/v1/keys/{id}', {
     onSuccess: () => void qc.invalidateQueries(),
   })
+  const config = $api.useQuery('get', '/api/v1/config')
+  const oauth = config.data?.mcpOAuth === true
   const origin = window.location.origin
   const active = (keys.data ?? []).filter((k) => !k.revokedAt)
   const curl = (key: string) => `curl -X POST ${origin}/api/v1/videos \\
@@ -153,6 +155,8 @@ curl -L -H "Authorization: Bearer ${key}" \\
         </Card>
       </section>
 
+      {oauth ? <ConnectedApps mcpUrl={`${origin}/mcp`} /> : null}
+
       <section style={{ marginTop: 32 }}>
         <WebhookCard scope="personal" />
       </section>
@@ -180,5 +184,75 @@ curl -L -H "Authorization: Bearer ${key}" \\
         ) : null}
       </Modal>
     </>
+  )
+}
+
+/** MCP OAuth is on: clients can sign in with Netlify instead of using a key; the apps you connected, with Revoke. */
+function ConnectedApps({ mcpUrl }: { mcpUrl: string }) {
+  const qc = useQueryClient()
+  const grants = $api.useQuery('get', '/api/v1/oauth/grants')
+  const revoke = $api.useMutation('delete', '/api/v1/oauth/grants/{id}', {
+    onSuccess: () => void qc.invalidateQueries(),
+    onError: showError,
+  })
+  const list = grants.data ?? []
+  return (
+    <section className="va-setting">
+      <div>
+        <Text fw={500} size="lg">
+          Connected apps
+        </Text>
+        <Text size="sm" c="var(--va-muted)" mt={4}>
+          MCP clients can connect to <Code>{mcpUrl}</Code> with <b>Sign in with Netlify</b> (OAuth) or an API
+          key. Apps you connect act as you, with your role.
+        </Text>
+      </div>
+      <Card>
+        {list.length === 0 && !grants.isLoading ? (
+          <div className="va-empty">
+            No connected apps. Add {mcpUrl} as a connector in Claude or ChatGPT and sign in with Netlify.
+          </div>
+        ) : (
+          <table className="va-table" aria-label="Connected apps">
+            <thead>
+              <tr>
+                <th>App</th>
+                <th>Connected</th>
+                <th>Last used</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {list.map((g) => (
+                <tr key={g.id}>
+                  <td>{g.clientName}</td>
+                  <td className="num">{relativeTime(g.createdAt)}</td>
+                  <td className="num">{g.lastUsedAt ? relativeTime(g.lastUsedAt) : 'Never'}</td>
+                  <td style={{ textAlign: 'right' }}>
+                    <Button
+                      size="xs"
+                      variant="subtle"
+                      color="red"
+                      onClick={() => {
+                        confirmDanger({
+                          title: `Disconnect "${g.clientName}"?`,
+                          body: 'It stops working immediately. You can connect it again by signing in.',
+                          confirm: 'Revoke',
+                          onConfirm: () => {
+                            revoke.mutate({ params: { path: { id: g.id } } })
+                          },
+                        })
+                      }}
+                    >
+                      Revoke
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Card>
+    </section>
   )
 }
