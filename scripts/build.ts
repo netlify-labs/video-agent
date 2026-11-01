@@ -7,6 +7,7 @@ import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSy
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { repoRoot } from './lib/run-tools.js'
+import { buildSkills } from './lib/skills.js'
 import {
   buildContextDigest,
   PLANNING_CONTEXT_FILES,
@@ -132,4 +133,12 @@ if (agentRun && process.env.FORCE_UI_BUILD !== 'true') {
   // For compositions made before GSAP was vendored (the preview rewrites their CDN tag to this).
   copyFileSync(join(repoRoot, 'video/vendor/gsap.min.js'), join(repoRoot, 'ui/dist/_preview/gsap.js'))
   log('preview', { runtime: 'hyperframes/dist/hyperframe.runtime.iife.js' })
+  // Installable agent skills at /skills/<name>.zip and /skills/index.json, pointing at this deployment's URL (the
+  // same URL the API uses for links), so a fork serves skills for itself.
+  const skills = buildSkills(
+    join(repoRoot, 'skills'),
+    join(repoRoot, 'ui/dist/skills'),
+    process.env.URL ?? 'http://localhost:8888',
+  )
+  log('skills', { skills: skills.map((s) => ({ name: s.name, bytes: s.bytes, sha256: s.sha256 })) })
 }
