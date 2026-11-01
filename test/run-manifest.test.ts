@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { feedbackStills, prepare } from '../scripts/prepare-run.js'
-import { bundleManifest, excluded } from '../src/lib/bundle-manifest.js'
+import { bundleManifest, compositionFiles, excluded } from '../src/lib/bundle-manifest.js'
 import {
   RUN_MANIFEST_VERSION,
   runManifestKey,
@@ -86,17 +86,28 @@ describe('run manifest', () => {
 })
 
 describe('bundle manifest', () => {
-  it('hashes composition files and media digests, not media bytes, caches or renders', () => {
+  it('hashes composition files and media digests, not library media bytes, caches or renders', () => {
     const { root } = workspace({
       'index.html': '<div>hi</div>',
       'summary.json': '{}',
       'assets/logo.svg': '<svg/>',
-      'assets/media/clip.mp4': 'bytes',
+      'assets/media/med_abc123.mp4': 'library bytes',
+      // Files the agent made itself are part of the composition, clips included.
+      'assets/media/poster.png': 'agent bytes',
+      'assets/media/clip.mp4': 'agent clip',
+      'out.mp4': 'stray render',
       '.hyperframes/cache': 'x',
       'renders/out.mp4': 'x',
     })
     const m = bundleManifest(join(root, 'video'), [{ id: 'med_1', sha256: H('b') }])
-    expect(m.files.map((f) => f.path)).toEqual(['assets/logo.svg', 'index.html', 'summary.json'])
+    expect(m.files.map((f) => f.path)).toEqual([
+      'assets/logo.svg',
+      'assets/media/clip.mp4',
+      'assets/media/poster.png',
+      'index.html',
+      'summary.json',
+    ])
+    expect(compositionFiles(join(root, 'video'))).toEqual(m.files.map((f) => f.path))
     expect(bundleManifest(join(root, 'video'), [{ id: 'med_1', sha256: H('b') }]).hash).toBe(m.hash)
     expect(bundleManifest(join(root, 'video'), [{ id: 'med_1', sha256: H('c') }]).hash).not.toBe(m.hash)
     writeFileSync(join(root, 'video', 'index.html'), '<div>changed</div>')

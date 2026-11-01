@@ -1,7 +1,13 @@
 // Preview bundles (plan v2 §7): extracted from each ready version's source archive, validated, immutable, staged
 // then committed, and never resurrected for a deleted video.
 import { describe, expect, it } from 'vitest'
-import { bundleFileKey, bundleIndexKey, ensureBundle, readBundleIndex } from '../src/domain/bundles.js'
+import {
+  bundleFileKey,
+  bundleIndexKey,
+  ensureBundle,
+  missingLocalFiles,
+  readBundleIndex,
+} from '../src/domain/bundles.js'
 import { sha256Hex } from '../src/lib/crypto.js'
 import { readTarGz, TarError } from '../src/lib/tar.js'
 import { harness, PROMPT } from './helpers.js'
@@ -74,7 +80,7 @@ describe('preview bundles', () => {
     )
   })
 
-  it('extracts older versions on demand, skips MP4s and stills, and is idempotent', async () => {
+  it('extracts older versions on demand, keeps agent-made clips, skips stray renders and stills, and is idempotent', async () => {
     const h = harness()
     const v = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }))
     await h.drive(4)
@@ -83,13 +89,14 @@ describe('preview bundles', () => {
     const gz = tarGz([
       { name: 'video/index.html', body: '<h1 id="t">v1</h1>' },
       { name: 'video/assets/media/clip.mp4', body: 'mp4' },
+      { name: 'video/out.mp4', body: 'stray render' },
       { name: 'video/feedback/01-c.jpg', body: 'jpg' },
     ])
     await h.deps.blobs.set('sources', out?.sourceKey ?? '', gz)
     await h.deps.store.upsertOutput({ ...out!, sha256: { ...out!.sha256, 'source.tar.gz': sha256Hex(gz) } })
     for (const k of await h.deps.blobs.list('bundles', `${v.id}/v1/`)) await h.deps.blobs.delete('bundles', k)
     const index = await ensureBundle(h.deps, v.id, 1)
-    expect(index?.files.map((f) => f.path)).toEqual(['index.html'])
+    expect(index?.files.map((f) => f.path).sort()).toEqual(['assets/media/clip.mp4', 'index.html'])
     const again = await ensureBundle(h.deps, v.id, 1)
     expect(again?.createdAt).toBe(index?.createdAt)
   })
@@ -132,5 +139,19 @@ describe('preview bundles', () => {
     await h.call('DELETE', `/api/v1/videos/${v.id}`, { as: h.member })
     const due = await h.deps.store.listDueCleanup(new Date(Date.now() + 365 * 86400_000).toISOString(), 100)
     expect(due.some((c) => c.store === 'bundles' && c.prefix === `${v.id}/`)).toBe(true)
+  })
+
+  it('a contract-1 composition that uses files that were never saved is not editable', () => {
+    const html = (src: string) =>
+      new TextEncoder().encode(
+        `<div id="root" data-composition-id="x" data-va-contract="1"><img src="${src}"><img src="assets/media/med_abc.png"><script src="https://cdn.example.com/x.js"></script><img src="data:image/png;base64,AA"></div>`,
+      )
+    const files = new Map([['index.html', html('assets/media/poster.png')]])
+    expect(missingLocalFiles(files)).toEqual(['assets/media/poster.png'])
+    files.set('assets/media/poster.png', new Uint8Array([1]))
+    expect(missingLocalFiles(files)).toEqual([])
+    // CSS url() references count too.
+    files.set('style.css', new TextEncoder().encode("h1 { background: url('fonts/missing.woff2') }"))
+    expect(missingLocalFiles(files)).toEqual(['fonts/missing.woff2'])
   })
 })

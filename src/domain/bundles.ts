@@ -2,6 +2,7 @@
 // bundles store so the sandboxed preview can serve it file by file. Immutable once written. Files are staged first
 // and the manifest written last, so a half-written bundle is never served; a deletion that lands meanwhile wins.
 import type { Deps } from '../deps.js'
+import { excluded, isLibraryMedia } from '../lib/bundle-manifest.js'
 import { sha256Hex } from '../lib/crypto.js'
 import { validate, type Summary } from '../lib/contract.js'
 import { readTarGz, TarError } from '../lib/tar.js'
@@ -34,8 +35,31 @@ export const liveIndexKey = (jobId: string, n: number, seq: number) =>
 export const liveFileKey = (jobId: string, n: number, seq: number, path: string) =>
   `${livePrefix(jobId, n)}s${seq}/f/${path}`
 
-/** Rendered video and run inputs stay out: previews play the composition, not the MP4. */
-const keep = (path: string) => !path.endsWith('.mp4') && path !== 'feedback' && !path.startsWith('feedback/')
+/** The composition's own files: the same set the bundle manifest counts (run inputs and caches stay out). */
+const keep = (path: string) => !excluded(path)
+
+/**
+ * Local media files index.html and its stylesheets point at that aren't in the bundle (library media aside).
+ * A version saved before agent-made media was archived can reference files that were never kept.
+ */
+export function missingLocalFiles(files: Map<string, Uint8Array>): string[] {
+  const text = [...files]
+    .filter(([p]) => p === 'index.html' || p.endsWith('.css'))
+    .map(([, b]) => new TextDecoder().decode(b))
+    .join('\n')
+  const refs = [
+    // Media elements and posters (scripts and stylesheets come from the template), plus CSS url()s.
+    ...text.matchAll(/<(?:img|video|audio|source)\b[^>]*?\ssrc\s*=\s*["']([^"']+)["']/gi),
+    ...text.matchAll(/\sposter\s*=\s*["']([^"']+)["']/gi),
+    ...text.matchAll(/url\(\s*["']?([^"')]+)["']?\s*\)/gi),
+  ].map((m) => (m[1] ?? '').trim())
+  const local = refs
+    .filter((r) => r && !/^(?:[a-z][a-z0-9+.-]*:|\/\/|#|_hf\/)/i.test(r))
+    .map((r) => r.replace(/^\.\//, '').split(/[?#]/)[0] ?? '')
+    .filter((r) => r && !r.startsWith('/'))
+  // Library media is downloaded into every run from the version's snapshot, so only agent-made files can be missing.
+  return [...new Set(local)].filter((r) => !isLibraryMedia(r) && !files.has(decodeURI(r))).sort()
+}
 
 /** Whether a composition keeps the editing contract (plan v2 §8): only ones that declare it are checked. */
 export function contractOf(files: Map<string, Uint8Array>): { version: 1 | null; violations: string[] } {
@@ -96,7 +120,18 @@ export async function ensureBundle(
     versionN: n,
     files: files.map(([path, bytes]) => ({ path, size: bytes.byteLength, sha256: sha256Hex(bytes) })),
     createdAt: deps.clock.now().toISOString(),
-    contract: contractOf(new Map(files)),
+    contract: (() => {
+      const all = new Map(files)
+      const c = contractOf(all)
+      const missing = c.version === 1 ? missingLocalFiles(all) : []
+      // Editing renders the saved composition as is, so it must have every file it uses.
+      return missing.length
+        ? {
+            version: null,
+            violations: [`It uses files that weren't saved: ${missing.slice(0, 5).join(', ')}.`],
+          }
+        : c
+    })(),
   }
   await deps.blobs.set('bundles', bundleIndexKey(jobId, n), JSON.stringify(index), {
     contentType: 'application/json',

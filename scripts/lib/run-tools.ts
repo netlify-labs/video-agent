@@ -1,9 +1,10 @@
 // Helpers shared by render-job.ts and prepare-run.ts (run inside Agent Runner runs).
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, readFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { compositionFiles } from '../../src/lib/bundle-manifest.js'
 
 export const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
 
@@ -13,21 +14,21 @@ export const log = (step: string, fields: Record<string, unknown> = {}) => {
 
 export class StepError extends Error {}
 
-/** tar arguments for an archive of video/ without dependencies, caches, renders, feedback stills or MP4s. */
-export const videoTarArgs = (out: string) => [
-  '-czf',
-  out,
-  '--exclude=node_modules',
-  '--exclude=.hyperframes',
-  '--exclude=renders',
-  '--exclude=video/feedback',
-  // Library media is by reference (plan v2 §9): runs download it, so it never goes in an archive.
-  '--exclude=video/assets/media',
-  '--exclude=*.mp4',
-  '-C',
-  repoRoot,
-  'video',
-]
+/**
+ * tar arguments for an archive of video/: exactly the files the bundle manifest counts (no dependencies, caches,
+ * renders, feedback stills or library media, which runs download by reference). The file list is written next to
+ * `out`, so tar and the manifest can't disagree about what a composition is.
+ */
+export function videoTarArgs(out: string): string[] {
+  const list = `${out}.files`
+  writeFileSync(
+    list,
+    compositionFiles(join(repoRoot, 'video'))
+      .map((f) => `video/${f}\n`)
+      .join(''),
+  )
+  return ['-czf', out, '-C', repoRoot, '-T', list]
+}
 
 export function sha256File(path: string): string {
   return createHash('sha256').update(readFileSync(path)).digest('hex')
