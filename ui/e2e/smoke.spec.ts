@@ -325,13 +325,13 @@ test('editing text, timing, order and colour saves the matching ops; render make
   page,
 }) => {
   await page.goto('/videos/vid_teaser/edit/2')
-  await page.getByRole('textbox', { name: 'Length of intro' }).fill('4.5')
+  await page.getByRole('textbox', { name: 'Length of Opening' }).fill('4.5')
   await expect(page.getByTestId('edit-status')).toContainText('Draft saved')
   await expect(page.getByTestId('edit-status')).toContainText('10.5 s')
   expect(await lastOps(page)).toEqual([{ op: 'retime', beat: 'intro', duration: 4.5 }])
-  await page.getByRole('textbox', { name: 'outro-cta' }).fill('Start free today')
-  await page.getByRole('button', { name: 'Move outro earlier' }).click()
-  await page.getByRole('button', { name: 'Colour for accent' }).click()
+  await page.getByRole('textbox', { name: 'Call to action' }).fill('Start free today')
+  await page.getByRole('button', { name: 'Move Outro earlier' }).click()
+  await page.getByRole('button', { name: 'Colour for Accent' }).click()
   await page.getByRole('menuitem', { name: '#ff5a1f' }).click()
   await expect
     .poll(() => lastOps(page), { timeout: 5000 })
@@ -351,7 +351,7 @@ test('deleting beats stops at the last one', async ({ page }) => {
   await page.goto('/videos/vid_teaser/edit/2')
   await page.getByRole('button', { name: 'Delete demo' }).click()
   await page.getByRole('button', { name: 'Delete outro' }).click()
-  await expect(page.getByRole('button', { name: 'Delete intro' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Delete Opening' })).toBeDisabled()
   await expect
     .poll(() => lastOps(page), { timeout: 5000 })
     .toEqual([
@@ -366,7 +366,7 @@ test('clicking text in the preview focuses its field', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Play preview' })).toBeEnabled()
   // Dispatched to the element: the frame is CSS-scaled, which throws off pointer coordinates in tests.
   await frame.locator('[data-va-text="outro-cta"]').dispatchEvent('click')
-  await expect(page.getByRole('textbox', { name: 'outro-cta' })).toBeFocused()
+  await expect(page.getByRole('textbox', { name: 'Call to action' })).toBeFocused()
 })
 
 // Media library (plan v2 §9)
@@ -487,8 +487,8 @@ test('a media slot is replaced from the library, filtered to its kind, with a fi
   await page.goto('/videos/vid_teaser/edit/2')
   const logo = page.getByTestId('slot-logo')
   await expect(logo).toContainText('med_logo.svg')
-  await logo.getByRole('button', { name: 'Replace logo' }).click()
-  const dialog = page.getByRole('dialog', { name: 'Replace logo' })
+  await logo.getByRole('button', { name: 'Replace Logo' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Replace Logo' })
   // An image slot offers images and SVGs only.
   await expect(dialog.getByRole('radio', { name: 'Clips' })).toHaveCount(0)
   await dialog
@@ -505,8 +505,8 @@ test('a media slot is replaced from the library, filtered to its kind, with a fi
     ])
   await expect(page.getByTestId('edit-status')).toContainText('Draft saved')
   // A clip slot opens the picker on clips.
-  await page.getByTestId('slot-hero-clip').getByRole('button', { name: 'Replace hero-clip' }).click()
+  await page.getByTestId('slot-hero-clip').getByRole('button', { name: 'Replace Hero clip' }).click()
   await expect(
-    page.getByRole('dialog', { name: 'Replace hero-clip' }).getByText('Nothing to pick yet.'),
+    page.getByRole('dialog', { name: 'Replace Hero clip' }).getByText('Nothing to pick yet.'),
   ).toBeVisible()
 })

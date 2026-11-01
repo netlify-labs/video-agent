@@ -17,13 +17,22 @@ describe('contract validator', () => {
       ['demo', 3, 3],
       ['outro', 6, 3],
     ])
+    // data-va-label is read where the author gave one, and null elsewhere.
+    expect(c.beats.map((b) => b.label)).toEqual(['Opening', null, null])
     expect(c.beats[0]?.texts).toEqual([
-      { id: 'intro-kicker', text: 'Netlify' },
-      { id: 'intro-title', text: 'Org webhooks' },
+      { id: 'intro-kicker', text: 'Netlify', label: null },
+      { id: 'intro-title', text: 'Org webhooks', label: 'Headline' },
     ])
     expect(c.colors).toMatchObject({ bg: '#0b0d10', accent: '#14b8a6' })
     expect(c.beats[1]?.media).toEqual([
-      { slot: 'hero-clip', kind: 'video', src: 'assets/media/med_clip.mp4', beat: 'demo', fit: null },
+      {
+        slot: 'hero-clip',
+        label: null,
+        kind: 'video',
+        src: 'assets/media/med_clip.mp4',
+        beat: 'demo',
+        fit: null,
+      },
     ])
     expect(c.layers).toEqual(['glow'])
   })

@@ -5455,12 +5455,15 @@ export interface components {
                 start: number;
                 duration: number;
                 authoredDuration: number;
+                label: string | null;
                 texts: {
                     id: string;
                     text: string;
+                    label: string | null;
                 }[];
                 media: {
                     slot: string;
+                    label: string | null;
                     /** @enum {string} */
                     kind: "image" | "video";
                     src: string;

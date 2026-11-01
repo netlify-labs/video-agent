@@ -396,10 +396,12 @@ const CompositionSchema = z
         start: z.number(),
         duration: z.number(),
         authoredDuration: z.number(),
-        texts: z.array(z.object({ id: z.string(), text: z.string() })),
+        label: z.string().nullable(),
+        texts: z.array(z.object({ id: z.string(), text: z.string(), label: z.string().nullable() })),
         media: z.array(
           z.object({
             slot: z.string(),
+            label: z.string().nullable(),
             kind: z.enum(['image', 'video']),
             src: z.string(),
             beat: z.string().nullable(),

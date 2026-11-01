@@ -117,6 +117,9 @@ checks it, and `render-job` refuses a composition that declares the contract but
 - **Layers:** anything that spans the whole video (a background, a logo bug) is a direct child of the root with
   `data-va-layer="<name>"`, `data-track-index="1"` (or higher), `data-start="0"` and the full duration.
 - **Text:** every piece of on-screen text has a unique `data-va-text="<beat>-<name>"`.
+- **Labels:** give each beat, text and media slot a short `data-va-label` in plain words, as the person editing will
+  see it: `data-va-label="Opening"` on a beat, `"Headline"`, `"Command 1"` or `"Call to action"` on text, `"Logo"` on
+  a slot. Labels are display only; ids stay as they are.
 - **Colours:** declare the brand colours once on `#root` as `--va-color-<role>` (`bg`, `text`, `muted`, `accent`, …)
   and use only `var(--va-color-…)` for colour.
 - **Media:** images and video clips the person can swap are slots: `<img data-va-media="<slot>" data-va-kind="image" src="assets/media/…">`

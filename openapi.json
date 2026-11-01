@@ -2041,6 +2041,12 @@
                 "authoredDuration": {
                   "type": "number"
                 },
+                "label": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "texts": {
                   "type": "array",
                   "items": {
@@ -2051,11 +2057,18 @@
                       },
                       "text": {
                         "type": "string"
+                      },
+                      "label": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
                       }
                     },
                     "required": [
                       "id",
-                      "text"
+                      "text",
+                      "label"
                     ]
                   }
                 },
@@ -2066,6 +2079,12 @@
                     "properties": {
                       "slot": {
                         "type": "string"
+                      },
+                      "label": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
                       },
                       "kind": {
                         "type": "string",
@@ -2092,6 +2111,7 @@
                     },
                     "required": [
                       "slot",
+                      "label",
                       "kind",
                       "src",
                       "beat",
@@ -2105,6 +2125,7 @@
                 "start",
                 "duration",
                 "authoredDuration",
+                "label",
                 "texts",
                 "media"
               ]

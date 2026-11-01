@@ -29,6 +29,7 @@ import { $api, errorMessage, fetchClient, newIdempotencyKey } from '../api/clien
 import type { paths } from '../api/schema'
 import { CompositionPreview, type PreviewCommand } from '../components/CompositionPreview'
 import { MediaLibraryModal, type Media } from '../components/MediaPicker'
+import { humanize, labelFor } from '../lib/labels'
 
 type Edit = paths['/api/v1/edits/{id}']['get']['responses'][200]['content']['application/json']
 type Composition = Edit['composition']
@@ -277,14 +278,14 @@ export function EditPage() {
           </Text>
           <Stack gap="sm">
             {cur.beats.map((b, i) => (
-              <div key={b.id} className="va-beat" data-testid={`beat-${b.id}`}>
+              <div key={b.id} className="va-beat" data-testid={`beat-${b.id}`} title={b.id}>
                 <Group justify="space-between" wrap="nowrap" gap="xs">
                   <Text size="sm" fw={600}>
-                    {i + 1}. {b.id}
+                    {i + 1}. {labelFor(b.label, b.id)}
                   </Text>
                   <Group gap={4} wrap="nowrap">
                     <NumberInput
-                      aria-label={`Length of ${b.id}`}
+                      aria-label={`Length of ${labelFor(b.label, b.id)}`}
                       size="xs"
                       w={92}
                       min={0.5}
@@ -306,7 +307,7 @@ export function EditPage() {
                     <ActionIcon
                       variant="subtle"
                       color="gray"
-                      aria-label={`Move ${b.id} earlier`}
+                      aria-label={`Move ${labelFor(b.label, b.id)} earlier`}
                       disabled={i === 0}
                       onClick={() => {
                         move(i, -1)
@@ -317,7 +318,7 @@ export function EditPage() {
                     <ActionIcon
                       variant="subtle"
                       color="gray"
-                      aria-label={`Move ${b.id} later`}
+                      aria-label={`Move ${labelFor(b.label, b.id)} later`}
                       disabled={i === cur.beats.length - 1}
                       onClick={() => {
                         move(i, 1)
@@ -329,7 +330,7 @@ export function EditPage() {
                       <ActionIcon
                         variant="subtle"
                         color="red"
-                        aria-label={`Delete ${b.id}`}
+                        aria-label={`Delete ${labelFor(b.label, b.id)}`}
                         disabled={cur.beats.length <= 1}
                         onClick={() => {
                           update((c) => ({ ...c, beats: c.beats.filter((x) => x.id !== b.id) }))
@@ -345,7 +346,7 @@ export function EditPage() {
                     <TextInput
                       key={t.id}
                       size="xs"
-                      label={t.id}
+                      label={labelFor(t.label, t.id, b.id)}
                       maxLength={500}
                       value={t.text}
                       ref={(el) => {
@@ -360,6 +361,7 @@ export function EditPage() {
                   {b.media.map((m) => {
                     const file = m.src.split('/').pop() ?? m.src
                     const item = picked[file]
+                    const name = labelFor(m.label, m.slot, b.id)
                     return (
                       <div key={m.slot} className="va-slot" data-testid={`slot-${m.slot}`}>
                         <Group justify="space-between" wrap="nowrap" gap="xs">
@@ -377,7 +379,7 @@ export function EditPage() {
                             )}
                             <div style={{ minWidth: 0 }}>
                               <Text size="xs" fw={500}>
-                                {m.slot}
+                                {name}
                               </Text>
                               <Text size="xs" c="var(--va-faint)" truncate>
                                 {item?.filename ?? file}
@@ -387,7 +389,7 @@ export function EditPage() {
                           <Group gap={4} wrap="nowrap">
                             <SegmentedControl
                               size="xs"
-                              aria-label={`Fit for ${m.slot}`}
+                              aria-label={`Fit for ${name}`}
                               value={m.fit === 'cover' ? 'cover' : 'contain'}
                               onChange={(v) => {
                                 setSlot(m.slot, { fit: v })
@@ -400,7 +402,7 @@ export function EditPage() {
                             <Button
                               size="compact-xs"
                               variant="default"
-                              aria-label={`Replace ${m.slot}`}
+                              aria-label={`Replace ${name}`}
                               onClick={() => {
                                 setReplacing(m)
                               }}
@@ -424,13 +426,15 @@ export function EditPage() {
           <Stack gap={8}>
             {Object.entries(cur.colors).map(([role, value]) => (
               <Group key={role} justify="space-between">
-                <Text size="sm">{role}</Text>
+                <Text size="sm" title={role}>
+                  {humanize(role)}
+                </Text>
                 <Menu position="bottom-end">
                   <Menu.Target>
                     <Button
                       size="xs"
                       variant="default"
-                      aria-label={`Colour for ${role}`}
+                      aria-label={`Colour for ${humanize(role)}`}
                       leftSection={<ColorSwatch color={value} size={14} />}
                     >
                       {value}
@@ -459,7 +463,7 @@ export function EditPage() {
       {replacing ? (
         <MediaLibraryModal
           opened
-          title={`Replace ${replacing.slot}`}
+          title={`Replace ${labelFor(replacing.label, replacing.slot, replacing.beat ?? undefined)}`}
           kinds={replacing.kind === 'video' ? ['video'] : ['image', 'svg']}
           onClose={() => {
             setReplacing(null)

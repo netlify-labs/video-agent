@@ -41,14 +41,17 @@ export interface Summary {
 
 export interface Beat {
   id: string
+  /** A plain-words name the author gave (data-va-label), for the editor; null when there's none. */
+  label: string | null
   start: number
   duration: number
   authoredDuration: number
-  texts: { id: string; text: string }[]
+  texts: { id: string; text: string; label: string | null }[]
   media: MediaSlot[]
 }
 export interface MediaSlot {
   slot: string
+  label: string | null
   kind: 'image' | 'video'
   src: string
   beat: string | null
@@ -127,12 +130,13 @@ export function read(d: Doc): Composition {
     const inner = [...walk(b)]
     return {
       id,
+      label: labelOf(b),
       start: num(attr(b, 'data-start')),
       duration: num(attr(b, 'data-duration')),
       authoredDuration: num(attr(b, 'data-va-authored-duration') ?? attr(b, 'data-duration')),
       texts: inner
         .filter((e) => attr(e, 'data-va-text') !== null)
-        .map((e) => ({ id: attr(e, 'data-va-text') ?? '', text: textOf(e).trim() })),
+        .map((e) => ({ id: attr(e, 'data-va-text') ?? '', text: textOf(e).trim(), label: labelOf(e) })),
       media: inner.filter((e) => attr(e, 'data-va-media') !== null).map((e) => mediaOf(e, id)),
     }
   })
@@ -146,10 +150,16 @@ export function read(d: Doc): Composition {
   }
 }
 
+/** data-va-label, trimmed and bounded; it's display text only. */
+function labelOf(e: Element): string | null {
+  return attr(e, 'data-va-label')?.trim().slice(0, 80) || null
+}
+
 function mediaOf(e: Element, beat: string | null): MediaSlot {
   const style = attr(e, 'style') ?? ''
   return {
     slot: attr(e, 'data-va-media') ?? '',
+    label: labelOf(e),
     kind: attr(e, 'data-va-kind') === 'video' ? 'video' : 'image',
     src: attr(e, 'src') ?? '',
     beat,
