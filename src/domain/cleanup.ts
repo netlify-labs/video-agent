@@ -30,6 +30,7 @@ export async function runCleanup(
     now.toISOString(),
     new Date(now.getTime() - CLIENT_IDLE_MS).toISOString(),
   )
+  await deps.store.deleteExpiredSessions(now.toISOString())
   await deleteExpiredEdits(deps)
   await sweepUploads(deps)
   return done

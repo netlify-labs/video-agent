@@ -12,7 +12,8 @@ const app = createApp(prodDeps(), {
 
 export default handle(app)
 
-// The OAuth paths answer only when MCP OAuth is configured (src/auth); otherwise they 404.
+// The OAuth paths answer only when MCP OAuth is configured, and /auth/* only with Sign in with Netlify (src/auth);
+// otherwise they 404.
 export const config: Config = {
   path: [
     '/api/*',
@@ -21,5 +22,6 @@ export const config: Config = {
     '/.well-known/oauth-protected-resource/*',
     '/.well-known/oauth-authorization-server',
     '/oauth/*',
+    '/auth/*',
   ],
 }

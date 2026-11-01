@@ -356,6 +356,11 @@ export const UserSchema = z
     createdAt: z.string(),
     lastSeenAt: z.string(),
     disabled: z.boolean(),
+    signInMethods: z
+      .array(z.string())
+      .describe(
+        "How the person signs in: 'identity' (Netlify Identity) and/or 'netlify' (Sign in with Netlify).",
+      ),
   })
   .openapi('User')
 const PlanQuestionSchema = z.object({
@@ -796,5 +801,13 @@ export const PublicConfigSchema = z
     mcpOAuth: z
       .boolean()
       .describe('MCP clients can connect with OAuth (Sign in with Netlify) as well as API keys.'),
+    authProvider: z
+      .enum(['identity', 'netlify'])
+      .describe('How people sign in to the web app: Netlify Identity, or Sign in with Netlify.'),
+    requiredTeams: z
+      .array(z.string())
+      .describe(
+        'Netlify teams (slugs or ids) a Netlify sign-in must belong to; empty when there is no team rule.',
+      ),
   })
   .openapi('PublicConfig')

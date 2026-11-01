@@ -55,44 +55,8 @@ export async function setupChecks(
     }
   }
 
-  let identity
-  try {
-    identity = await deps.identity.settings()
-  } catch {
-    identity = undefined
-  }
-  if (identity === null || identity === undefined) {
-    add({
-      id: 'identity',
-      label: 'Netlify Identity',
-      status: identity === null ? 'fail' : 'unknown',
-      detail:
-        identity === null ? 'Identity is not enabled on this project.' : 'Could not read Identity settings.',
-      fix: `Enable Identity: ${siteSettings}/configuration/identity`,
-    })
-  } else {
-    const wantInviteOnly = mode === 'invite-only'
-    add({
-      id: 'identity-registration',
-      label: 'Identity registration',
-      status: wantInviteOnly && !identity.disableSignup ? 'fail' : 'ok',
-      detail: identity.disableSignup ? 'Invite only.' : 'Open (sign-ups are filtered by domain).',
-      ...(wantInviteOnly && !identity.disableSignup
-        ? { fix: `Set registration to "Invite only": ${siteSettings}/configuration/identity` }
-        : {}),
-    })
-    add({
-      id: 'identity-autoconfirm',
-      label: 'Email confirmation',
-      status: Array.isArray(mode) && identity.autoconfirm ? 'fail' : 'ok',
-      detail: identity.autoconfirm ? 'Autoconfirm is on.' : 'People must confirm their email.',
-      ...(Array.isArray(mode) && identity.autoconfirm
-        ? {
-            fix: `Turn off autoconfirm, otherwise anyone can claim an address at your domain: ${siteSettings}/configuration/identity`,
-          }
-        : {}),
-    })
-  }
+  if (deps.config.authProvider === 'netlify') netlifySignInChecks(deps, add, mode)
+  else await identityChecks(deps, add, mode, siteSettings)
 
   const facts = await deps.platform.setupFacts().catch(() => null)
   add({
@@ -161,4 +125,81 @@ export async function setupChecks(
     checks.every((c) => c.status !== 'fail') &&
     !checks.some((c) => ['runner-token', 'identity'].includes(c.id) && c.status === 'unknown')
   return { ready, checks }
+}
+
+async function identityChecks(
+  deps: Deps,
+  add: (c: Check) => void,
+  mode: Deps['config']['allowedEmailDomains'],
+  siteSettings: string,
+) {
+  let identity
+  try {
+    identity = await deps.identity.settings()
+  } catch {
+    identity = undefined
+  }
+  if (identity === null || identity === undefined) {
+    add({
+      id: 'identity',
+      label: 'Netlify Identity',
+      status: identity === null ? 'fail' : 'unknown',
+      detail:
+        identity === null ? 'Identity is not enabled on this project.' : 'Could not read Identity settings.',
+      fix: `Enable Identity: ${siteSettings}/configuration/identity`,
+    })
+  } else {
+    const wantInviteOnly = mode === 'invite-only'
+    add({
+      id: 'identity-registration',
+      label: 'Identity registration',
+      status: wantInviteOnly && !identity.disableSignup ? 'fail' : 'ok',
+      detail: identity.disableSignup ? 'Invite only.' : 'Open (sign-ups are filtered by domain).',
+      ...(wantInviteOnly && !identity.disableSignup
+        ? { fix: `Set registration to "Invite only": ${siteSettings}/configuration/identity` }
+        : {}),
+    })
+    add({
+      id: 'identity-autoconfirm',
+      label: 'Email confirmation',
+      status: Array.isArray(mode) && identity.autoconfirm ? 'fail' : 'ok',
+      detail: identity.autoconfirm ? 'Autoconfirm is on.' : 'People must confirm their email.',
+      ...(Array.isArray(mode) && identity.autoconfirm
+        ? {
+            fix: `Turn off autoconfirm, otherwise anyone can claim an address at your domain: ${siteSettings}/configuration/identity`,
+          }
+        : {}),
+    })
+  }
+}
+
+/** With Sign in with Netlify, Identity isn't used: the OAuth app, its redirect URI and the team rule are checked instead. */
+function netlifySignInChecks(
+  deps: Deps,
+  add: (c: Check) => void,
+  mode: Deps['config']['allowedEmailDomains'],
+) {
+  const redirect = `${deps.config.siteUrl}/oauth/callback`
+  add({
+    id: 'netlify-oauth',
+    label: 'Sign in with Netlify',
+    status: deps.config.netlifyOAuth ? 'ok' : 'fail',
+    detail: deps.config.netlifyOAuth
+      ? `OAuth app set. Its redirect URI must be ${redirect}.`
+      : 'NETLIFY_OAUTH_CLIENT_ID and NETLIFY_OAUTH_CLIENT_SECRET are not set.',
+    fix: `Create an OAuth application at https://app.netlify.com/user/applications with the redirect URI ${redirect}, set NETLIFY_OAUTH_CLIENT_ID and NETLIFY_OAUTH_CLIENT_SECRET, then redeploy.`,
+  })
+  const teams = deps.config.netlifyRequiredTeams
+  add({
+    id: 'netlify-team',
+    label: 'Netlify team rule',
+    status: teams.length > 0 ? 'ok' : 'warn',
+    detail:
+      teams.length > 0
+        ? `Members of the ${teams.join(' or ')} Netlify team, re-checked daily.`
+        : mode === 'invite-only'
+          ? 'No team rule: only people who already have an account (and ADMIN_EMAILS) can sign in.'
+          : 'No team rule: anyone with a Netlify account at an allowed email domain can sign in.',
+    fix: 'Set NETLIFY_REQUIRED_TEAM to your Netlify team slug or id (comma-separated for several), then redeploy.',
+  })
 }

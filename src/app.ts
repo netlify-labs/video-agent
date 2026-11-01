@@ -34,6 +34,7 @@ import {
   revokeGrant,
 } from './auth/oauth.js'
 import { oauthRoutes } from './auth/routes.js'
+import { webAuthRoutes, webSignInEnabled } from './auth/web.js'
 import * as hooks from './domain/webhook-settings.js'
 import { listNotifications, markNotificationsRead } from './domain/notifications.js'
 import { getProgress } from './domain/progress.js'
@@ -181,10 +182,16 @@ export function createApp(deps: Deps, opts: AppOptions) {
 
   const requireAuth: MiddlewareHandler<Env> = async (c, next) => {
     if (c.req.path === '/api/v1/config' || c.req.method === 'OPTIONS') return next()
-    const principal = await principalFromRequest(deps, c.req.raw)
+    const rotated: { cookie?: string } = {}
+    const principal = await principalFromRequest(deps, c.req.raw, {
+      setCookie: (v) => {
+        rotated.cookie = v
+      },
+    })
     assertSameOrigin(c.req.raw, principal)
     c.set('principal', principal)
     await next()
+    if (rotated.cookie) c.header('set-cookie', rotated.cookie, { append: true })
   }
   app.use('/api/v1/*', requireAuth)
   app.use('/api/v1/*', async (c, next) => {
@@ -237,6 +244,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
           siteUrl: deps.config.siteUrl,
           planningAvailable: deps.gateway.available(),
           mcpOAuth: oauthEnabled(deps),
+          authProvider: deps.config.authProvider,
+          requiredTeams: deps.config.netlifyRequiredTeams,
         },
         200,
       ),
@@ -1512,6 +1521,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
   app.all('/api/mcp', mcp)
   app.all('/mcp', mcp)
   if (oauthEnabled(deps)) app.route('/', oauthRoutes(deps))
+  if (webSignInEnabled(deps)) app.route('/', webAuthRoutes(deps, { withCallback: !oauthEnabled(deps) }))
 
   // ───── agent callback (hidden from the public spec) ─────
   app.openapi(
@@ -1585,8 +1595,11 @@ export function createApp(deps: Deps, opts: AppOptions) {
   app.openAPIRegistry.registerComponent('securitySchemes', 'cookieAuth', {
     type: 'apiKey',
     in: 'cookie',
-    name: 'nf_jwt',
-    description: 'The web app session (Netlify Identity). State-changing requests must be same-origin.',
+    name: deps.config.authProvider === 'netlify' ? 'va_session' : 'nf_jwt',
+    description:
+      deps.config.authProvider === 'netlify'
+        ? 'The web app session (Sign in with Netlify). State-changing requests must be same-origin.'
+        : 'The web app session (Netlify Identity). State-changing requests must be same-origin.',
   })
 
   const spec = () =>
