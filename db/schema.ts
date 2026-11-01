@@ -101,6 +101,8 @@ export const versions = pgTable(
     frozen: jsonb('frozen'),
     // 'silent', 'music' or 'music_sfx': what the run is asked to do with sound.
     sound: text('sound').notNull().default('silent'),
+    // { voice, speed, script } when the run speaks a voice-over; null when it doesn't.
+    voiceover: jsonb('voiceover'),
   },
   (t) => [primaryKey({ columns: [t.jobId, t.n] })],
 )
@@ -225,6 +227,8 @@ export const plans = pgTable(
     mediaIds: jsonb('media_ids').$type<string[]>().notNull().default([]),
     // The Sound chosen while planning; null when none was (the video then decides).
     sound: text('sound'),
+    // The voice-over chosen while planning; null when none was.
+    voiceover: jsonb('voiceover'),
     inputsHash: text('inputs_hash').notNull(),
     route: jsonb('route'),
     questions: jsonb('questions'),

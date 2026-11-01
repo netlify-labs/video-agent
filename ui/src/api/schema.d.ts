@@ -5171,6 +5171,12 @@ export interface components {
             parentN: number | null;
             targetDurationSec: number | null;
             sound: components["schemas"]["Sound"];
+            /** @description The voice-over, or null when there is none. */
+            voiceover: {
+                voice: string | null;
+                speed: number | null;
+                script: string[] | null;
+            } | null;
             createdAt: string;
             attempts: number;
             stage: components["schemas"]["Stage"];
@@ -5236,6 +5242,7 @@ export interface components {
             beats: {
                 text: string;
                 seconds: number;
+                narration?: string;
             }[];
             tone: string;
             callToAction: string;
@@ -5297,6 +5304,17 @@ export interface components {
             /** @description Library items (GET /api/v1/media) the agent should use: images, clips, fonts, audio. */
             mediaIds?: string[];
             sound?: components["schemas"]["Sound"] & unknown;
+            voiceover?: components["schemas"]["VoiceoverInput"];
+        };
+        /** @description A spoken narration with captions from its words. Omit for the plan's choice, else none. */
+        VoiceoverInput: {
+            enabled: boolean;
+            /** @description A Kokoro voice (af_heart, af_nova, af_sky, am_adam, am_michael, bf_emma, bf_isabella, bm_george, …) or, when the deployment has an ElevenLabs key, an ElevenLabs voice id. Default: af_heart (or the ElevenLabs default). */
+            voice?: string;
+            /** @description Default 1. */
+            speed?: number;
+            /** @description The narration, one line per beat in order, spoken word for word. Omit to let the plan's narration or the agent write it. */
+            script?: string[];
         };
         VideoList: {
             items: components["schemas"]["Video"][];
@@ -5316,6 +5334,7 @@ export interface components {
             /** @description Library items (GET /api/v1/media) the agent should use: images, clips, fonts, audio. */
             mediaIds?: string[];
             sound?: components["schemas"]["Sound"] & unknown;
+            voiceover?: components["schemas"]["VoiceoverInput"] & unknown;
             /** @description Incorporate feedback: open comments on the version being revised (owner or admin). prompt is your note. */
             commentIds?: string[];
         };
@@ -5425,6 +5444,7 @@ export interface components {
                 beats: {
                     text: string;
                     seconds: number;
+                    narration?: string;
                 }[];
                 tone: string;
                 callToAction: string;
@@ -5435,6 +5455,12 @@ export interface components {
             /** @description Library items attached while planning. */
             mediaIds: string[];
             sound: components["schemas"]["Sound"] & (string | null);
+            /** @description The voice-over chosen while planning, if any; the brief then has narration per beat. */
+            voiceover: {
+                voice: string | null;
+                speed: number | null;
+                script: string[] | null;
+            } | null;
             expiresAt: string;
         };
         CreatePlan: {
@@ -5449,6 +5475,7 @@ export interface components {
             /** @description Library items to plan around. The planner sees the first few images; the video made from this plan uses them all. */
             mediaIds?: string[];
             sound?: components["schemas"]["Sound"];
+            voiceover?: components["schemas"]["VoiceoverInput"];
         };
         PlanAnswers: {
             answers: {

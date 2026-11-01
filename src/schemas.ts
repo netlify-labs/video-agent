@@ -2,6 +2,7 @@
 // web app's generated client.
 import { z } from '@hono/zod-openapi'
 import { SOUNDS } from './domain/types.js'
+import { SPEED_RANGE, VOICE_ID } from './lib/voice.js'
 import { MEDIA_KINDS } from './lib/media/classify.js'
 
 export const ErrorSchema = z
@@ -18,6 +19,32 @@ export const AspectSchema = z.enum(['16:9', '9:16', '1:1', '4:5']).openapi('Aspe
 export const SoundSchema = z.enum(SOUNDS).openapi('Sound', {
   description:
     'silent: no audio (the default). music: a music bed (a picked audio item, else the brand music in context/, else none). music_sfx: music plus sound effects on visible actions.',
+})
+/** A voice-over request (SPIKES.md S9). `enabled: false` turns it off; omitted fields are left to the run. */
+export const VoiceoverInputSchema = z
+  .object({
+    enabled: z.boolean(),
+    voice: z.string().regex(VOICE_ID).optional().openapi({
+      description:
+        'A Kokoro voice (af_heart, af_nova, af_sky, am_adam, am_michael, bf_emma, bf_isabella, bm_george, …) or, when the deployment has an ElevenLabs key, an ElevenLabs voice id. Default: af_heart (or the ElevenLabs default).',
+    }),
+    speed: z
+      .number()
+      .min(SPEED_RANGE[0])
+      .max(SPEED_RANGE[1])
+      .optional()
+      .openapi({ description: 'Default 1.' }),
+    script: z.array(z.string().trim().min(1).max(600)).max(12).optional().openapi({
+      description:
+        "The narration, one line per beat in order, spoken word for word. Omit to let the plan's narration or the agent write it.",
+    }),
+  })
+  .openapi('VoiceoverInput')
+// Nullable spots use the plain shape (openapi-typescript can't express a nullable $ref).
+export const voiceoverShape = z.object({
+  voice: z.string().nullable(),
+  speed: z.number().nullable(),
+  script: z.array(z.string()).nullable(),
 })
 export const StatusSchema = z
   .enum(['queued', 'running', 'finishing', 'ready', 'failed', 'cancelled', 'timed_out'])
@@ -77,7 +104,16 @@ export const planBriefShape = z.object({
   goal: z.string().max(400),
   audience: z.string().max(300),
   keyMessage: z.string().max(300),
-  beats: z.array(z.object({ text: z.string().max(300), seconds: z.number().min(0).max(600) })).max(12),
+  beats: z
+    .array(
+      z.object({
+        text: z.string().max(300),
+        seconds: z.number().min(0).max(600),
+        // The spoken line for this beat when the video has a voice-over.
+        narration: z.string().max(600).optional(),
+      }),
+    )
+    .max(12),
   tone: z.string().max(200),
   callToAction: z.string().max(200),
   mustInclude: z.array(z.string().max(200)).max(10),
@@ -118,6 +154,9 @@ export const VersionSchema = z
     parentN: z.number().int().nullable(),
     targetDurationSec: z.number().nullable(),
     sound: SoundSchema,
+    voiceover: voiceoverShape
+      .nullable()
+      .openapi({ description: 'The voice-over, or null when there is none.' }),
     createdAt: z.string(),
     attempts: z.number().int(),
     stage: StageSchema.nullable(),
@@ -243,6 +282,9 @@ export const CreateVideoSchema = z
     sound: SoundSchema.optional().openapi({
       description: "Omit for the plan's choice, else music when an audio item is picked, else silent.",
     }),
+    voiceover: VoiceoverInputSchema.optional().openapi({
+      description: "A spoken narration with captions from its words. Omit for the plan's choice, else none.",
+    }),
   })
   .openapi('CreateVideo')
 
@@ -259,6 +301,10 @@ export const ReviseSchema = z
     sound: SoundSchema.optional().openapi({
       description:
         "Omit to keep the revised version's sound (or the plan's choice; a new audio pick on a silent video turns on music).",
+    }),
+    voiceover: VoiceoverInputSchema.optional().openapi({
+      description:
+        "Omit to keep the revised version's voice-over (or the plan's choice); unchanged lines keep their audio.",
     }),
     commentIds: z.array(z.string()).max(50).optional().openapi({
       description:
@@ -335,6 +381,11 @@ export const PlanSchema = z
     briefRev: z.number().int(),
     mediaIds: z.array(z.string()).openapi({ description: 'Library items attached while planning.' }),
     sound: SoundSchema.nullable().openapi({ description: 'The Sound chosen while planning, if any.' }),
+    voiceover: voiceoverShape
+      .nullable()
+      .openapi({
+        description: 'The voice-over chosen while planning, if any; the brief then has narration per beat.',
+      }),
     expiresAt: z.string(),
   })
   .openapi('Plan')
@@ -349,6 +400,7 @@ export const CreatePlanSchema = z
         'Library items to plan around. The planner sees the first few images; the video made from this plan uses them all.',
     }),
     sound: SoundSchema.optional(),
+    voiceover: VoiceoverInputSchema.optional(),
   })
   .openapi('CreatePlan')
 export const PlanAnswersSchema = z

@@ -380,6 +380,41 @@
           "sound": {
             "$ref": "#/components/schemas/Sound"
           },
+          "voiceover": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "voice": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "speed": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "script": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "voice",
+              "speed",
+              "script"
+            ],
+            "description": "The voice-over, or null when there is none."
+          },
           "createdAt": {
             "type": "string"
           },
@@ -644,6 +679,7 @@
           "parentN",
           "targetDurationSec",
           "sound",
+          "voiceover",
           "createdAt",
           "attempts",
           "stage",
@@ -686,6 +722,10 @@
                   "type": "number",
                   "minimum": 0,
                   "maximum": 600
+                },
+                "narration": {
+                  "type": "string",
+                  "maxLength": 600
                 }
               },
               "required": [
@@ -928,11 +968,47 @@
                 "description": "Omit for the plan's choice, else music when an audio item is picked, else silent."
               }
             ]
+          },
+          "voiceover": {
+            "$ref": "#/components/schemas/VoiceoverInput"
           }
         },
         "required": [
           "prompt"
         ]
+      },
+      "VoiceoverInput": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "voice": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,64}$",
+            "description": "A Kokoro voice (af_heart, af_nova, af_sky, am_adam, am_michael, bf_emma, bf_isabella, bm_george, …) or, when the deployment has an ElevenLabs key, an ElevenLabs voice id. Default: af_heart (or the ElevenLabs default)."
+          },
+          "speed": {
+            "type": "number",
+            "minimum": 0.7,
+            "maximum": 1.3,
+            "description": "Default 1."
+          },
+          "script": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 600
+            },
+            "maxItems": 12,
+            "description": "The narration, one line per beat in order, spoken word for word. Omit to let the plan's narration or the agent write it."
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "description": "A spoken narration with captions from its words. Omit for the plan's choice, else none."
       },
       "VideoList": {
         "type": "object",
@@ -1006,6 +1082,16 @@
               },
               {
                 "description": "Omit to keep the revised version's sound (or the plan's choice; a new audio pick on a silent video turns on music)."
+              }
+            ]
+          },
+          "voiceover": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/VoiceoverInput"
+              },
+              {
+                "description": "Omit to keep the revised version's voice-over (or the plan's choice); unchanged lines keep their audio."
               }
             ]
           },
@@ -1469,6 +1555,10 @@
                       "type": "number",
                       "minimum": 0,
                       "maximum": 600
+                    },
+                    "narration": {
+                      "type": "string",
+                      "maxLength": 600
                     }
                   },
                   "required": [
@@ -1538,6 +1628,41 @@
               }
             ]
           },
+          "voiceover": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "voice": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "speed": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "script": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "voice",
+              "speed",
+              "script"
+            ],
+            "description": "The voice-over chosen while planning, if any; the brief then has narration per beat."
+          },
           "expiresAt": {
             "type": "string"
           }
@@ -1553,6 +1678,7 @@
           "briefRev",
           "mediaIds",
           "sound",
+          "voiceover",
           "expiresAt"
         ]
       },
@@ -1602,6 +1728,9 @@
           },
           "sound": {
             "$ref": "#/components/schemas/Sound"
+          },
+          "voiceover": {
+            "$ref": "#/components/schemas/VoiceoverInput"
           }
         },
         "required": [

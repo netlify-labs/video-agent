@@ -24,6 +24,7 @@ import {
   type VideoDto,
 } from './domain/videos.js'
 import { ApiError } from './lib/errors.js'
+import { SPEED_RANGE, VOICE_ID } from './lib/voice.js'
 import { MEDIA_KINDS } from './lib/media/classify.js'
 
 const SERVER_INSTRUCTIONS = `Make short videos from a prompt. Each video is made by an AI agent with HyperFrames (HTML/CSS/GSAP rendered to MP4) and takes 3 to 8 minutes.
@@ -37,9 +38,42 @@ Typical flow:
 
 Optional planning (when plan_video is listed): call plan_video with the prompt first. If it returns questions, ask your user (they can skip any), then call plan_brief with their answers, show the brief, and pass plan_id to create_video (or revise_video). Skip planning when the request is already specific.
 
-Videos have captions and are silent unless you pass sound ("music" or "music_sfx"); for music, pass an audio item from list_media in media_ids (else the brand's music is used, if it has one). The company's brand context is applied automatically. Don't create a new video to fix a small thing: revise it.`
+Videos have captions and are silent unless you pass sound ("music" or "music_sfx"); for music, pass an audio item from list_media in media_ids (else the brand's music is used, if it has one). Pass voiceover (true, or a script with a line per beat) for a spoken narration; its captions follow the words. The company's brand context is applied automatically. Don't create a new video to fix a small thing: revise it.`
 
 // ───────────── forgiving inputs ─────────────
+
+/** The voice-over argument: true for the defaults, false to turn it off, or an object with a voice, speed and script. */
+function voiceoverArg(describe: string) {
+  return z
+    .union([
+      z.boolean(),
+      z.object({
+        voice: z
+          .string()
+          .regex(VOICE_ID)
+          .optional()
+          .describe(
+            'A Kokoro voice: af_heart (default), af_nova, af_sky, am_adam, am_michael, bf_emma, bm_george.',
+          ),
+        speed: z.number().min(SPEED_RANGE[0]).max(SPEED_RANGE[1]).optional().describe('0.7-1.3, default 1.'),
+        script: z
+          .array(z.string().min(1).max(600))
+          .max(12)
+          .optional()
+          .describe(
+            'The narration, one line per beat, spoken word for word. Omit to let the agent (or the plan) write it.',
+          ),
+      }),
+    ])
+    .optional()
+    .describe(describe)
+}
+const toVoiceover = (
+  v:
+    | boolean
+    | { voice?: string | undefined; speed?: number | undefined; script?: string[] | undefined }
+    | undefined,
+) => (v === undefined ? undefined : typeof v === 'boolean' ? { enabled: v } : { enabled: true, ...v })
 
 const ASPECT_ALIASES: Record<string, Aspect> = {
   '16:9': '16:9',
@@ -217,6 +251,7 @@ async function summarize(deps: Deps, v: VideoDto) {
       prompt: x.prompt,
       from_version: x.parentN,
       ...(x.sound !== 'silent' ? { sound: x.sound } : {}),
+      ...(x.voiceover ? { voiceover: x.voiceover } : {}),
       ...(x.error ? { error: x.error } : {}),
       ...(x.latestStep && x.status !== 'ready' ? { agent_activity: x.latestStep } : {}),
       ...(x.output
@@ -327,6 +362,9 @@ Example: {"prompt": "A 20-second launch video for our new webhooks feature, endi
           .describe(
             'Optional. "silent" (default), "music" (a music bed: an audio item from media_ids, else the brand\'s music, else none) or "music_sfx" (music plus sound effects on visible actions). Picking an audio item turns music on.',
           ),
+        voiceover: voiceoverArg(
+          'Optional. A spoken narration, with captions from its words: true, or {voice, speed, script}. Works with any sound; music dips under the voice.',
+        ),
         idempotency_key: z
           .string()
           .max(200)
@@ -354,6 +392,7 @@ Example: {"prompt": "A 20-second launch video for our new webhooks feature, endi
             planId: args.plan_id,
             mediaIds: args.media_ids,
             sound: args.sound,
+            voiceover: toVoiceover(args.voiceover),
           },
           args.idempotency_key,
         )
@@ -505,6 +544,9 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Make the end 
           .describe(
             'Optional. "silent", "music" or "music_sfx". Leave out to keep the sound of the version it revises.',
           ),
+        voiceover: voiceoverArg(
+          'Optional. true, false or {voice, speed, script}. Leave out to keep the voice-over of the version it revises; unchanged lines keep their audio.',
+        ),
       },
       annotations: {
         title: 'Revise a video',
@@ -525,6 +567,7 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Make the end 
           commentIds: args.comment_ids,
           mediaIds: args.media_ids,
           sound: args.sound,
+          voiceover: toVoiceover(args.voiceover),
         })
         if (!res.replayed) kick()
         return {
@@ -792,6 +835,9 @@ Example: {"prompt": "A 30-second launch video for org webhooks, ending on our lo
           .describe(
             'Optional. "silent", "music" or "music_sfx", if the user already chose; the video made from the plan uses it.',
           ),
+        voiceover: voiceoverArg(
+          'Optional. true or {voice, speed, script} for a voice-over: the brief then has a narration line per beat, which the video speaks.',
+        ),
       },
     },
     async (args) =>
@@ -803,6 +849,7 @@ Example: {"prompt": "A 30-second launch video for org webhooks, ending on our lo
           ...(args.video_id ? { revisionOf: { videoId: normalizeVideoId(args.video_id) } } : {}),
           mediaIds: args.media_ids,
           sound: args.sound,
+          voiceover: toVoiceover(args.voiceover),
         })
         const plan = await planning.generateQuestions(deps, principal, created.id)
         return {

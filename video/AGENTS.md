@@ -128,6 +128,9 @@ checks it, and `render-job` refuses a composition that declares the contract but
   where `start`/`end` are seconds in the video and `beatStart`/`beatEnd` are seconds into the beat.
 - **Sound** (only when the run asks for it): music is a layer, so it spans the video and follows retimes; effects
   live inside the beat whose action they mark. See "Sound" below.
+- **Voice** (only when the run asks for it): at most one `<audio data-va-voice="<beat id>">` per beat, a direct child
+  of it, with an `id`, `src="assets/voice/…"` and beat-local `data-start`/`data-duration` that end inside the beat.
+  Narration captions carry `"voice": true` instead of a `textId`. See "Voice-over" below.
 
 ## Sound (Video Agent)
 
@@ -150,7 +153,31 @@ Videos are silent unless the run's prompt says otherwise. When it asks for sound
   to check levels and that hits land on their pictures. Duck music under any voice with a `volume` lane in
   `data-automation` (about 0.3 while someone speaks). Don't tween volume with GSAP. The media-use skill's
   `references/mixing.md` has every attribute.
-- Say in the summary that the mix was measured, not heard. Captions are unchanged: they follow on-screen text.
+- Say in the summary that the mix was measured, not heard. Captions follow on-screen text, except in beats with a
+  voice-over, where they follow the words.
+
+## Voice-over (Video Agent)
+
+Only when the run's prompt asks for one. The narration is one line per beat, spoken by `scripts/voice.ts` in this
+run (Kokoro on this machine, or ElevenLabs when the deployment has a key). Never use another text-to-speech tool.
+
+1. Write `assets/voice/script.json`: `{ "lines": [{ "beat": "intro", "text": "Meet org webhooks." }, …] }`, one line
+   per beat id you will use (the person's lines word for word when the prompt gives them).
+2. From the repo root, run `npx tsx scripts/voice.ts` (with the `--voice`/`--speed` the prompt gives). It writes
+   `assets/voice/<beat>.wav` and `assets/voice/voice.json` (per beat: `duration`, `cues` and `words`, in seconds from
+   the start of that file), and prints the shortest each beat can be and its `<audio>` tag. Changed lines are
+   re-spoken; unchanged ones are kept.
+3. Make each voiced beat at least that long and put the printed tag in it, as a direct child:
+   `<audio id="voice-intro" data-va-voice="intro" src="assets/voice/intro.wav" data-start="0.3" data-duration="2.41" data-track-index="3" data-volume="1"></audio>`.
+   `data-start` is in the beat's clock; keep `data-duration` equal to the file's length. Time the beat's animation to
+   its cues (a cue's time in the beat = the voice's `data-start` + the cue's `start`): show each thing as it is said.
+4. With music, give the music layer `data-va-duck="0.3"` and don't write its volume lane yourself.
+5. When `index.html` is done, run `npx tsx scripts/voice.ts sync`. It checks every voice, writes the narration
+   captions (`"voice": true`, one per spoken phrase, exact to the audio) into `summary.json`, and writes the music's
+   ducking lane. Run it again after any timing change; `check-contract.ts` reports a stale lane.
+
+People can retime and reorder voiced beats in the editor: the voice moves with its beat, its captions keep their
+spoken times, the music's dip is rewritten, and a beat can't be made shorter than its voice.
 
 ## Key Rules
 
