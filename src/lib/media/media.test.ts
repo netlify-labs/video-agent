@@ -51,6 +51,45 @@ describe('classify', () => {
     expect(classify(fx('hevc.mp4'), { head: true }).kind).toBe('video')
   })
 
+  it.each([
+    ['tone.mp3', 'mp3', 'audio/mpeg', 1.5],
+    ['tone-cbr-raw.mp3', 'mp3', 'audio/mpeg', 1.57],
+    ['tone-vbr.mp3', 'mp3', 'audio/mpeg', 1.5],
+    ['tone.m4a', 'm4a', 'audio/mp4', 1.5],
+    ['tone.wav', 'wav', 'audio/wav', 1.5],
+    ['tone.ogg', 'ogg', 'audio/ogg', 1.5],
+    ['tone.opus', 'ogg', 'audio/ogg', 1.5],
+  ])('knows %s as audio by its bytes, with its length', (file, ext, mime, seconds) => {
+    const c = classify(fx(`audio/${file}`))
+    expect(c).toMatchObject({ kind: 'audio', ext, mime, width: null, height: null })
+    expect(c.durationSec).toBeCloseTo(seconds, 1)
+  })
+
+  it('keeps a clip with sound a video, and refuses audio over the caps', () => {
+    expect(classify(fx('audio/clip-with-audio.mp4'))).toMatchObject({ kind: 'video', width: 64, height: 36 })
+    const big = new Uint8Array(50 * 1024 * 1024 + 1)
+    big.set(fx('audio/tone.wav'))
+    expect(() => classify(big)).toThrow(/50 MB/)
+    // A WAV header claiming 11 minutes of 8 kHz mono PCM.
+    const wav = fx('audio/tone.wav').slice()
+    const view = new DataView(wav.buffer)
+    const rate = view.getUint32(28, true)
+    let o = 12
+    while (String.fromCharCode(...wav.subarray(o, o + 4)) !== 'data') o += 8 + view.getUint32(o + 4, true)
+    view.setUint32(28, Math.floor((wav.byteLength - o - 8) / 660), true)
+    expect(rate).toBe(16000)
+    expect(() => classify(wav)).toThrow(/10 minutes/)
+  })
+
+  it('refuses audio it cannot use: Ogg video, compressed WAV, stray sync bytes', () => {
+    const theora = bytes('OggS', [0, 2], new Array(20).fill(0), [1, 30], '\x80theora', new Array(22).fill(0))
+    expect(() => classify(theora)).toThrow(/Ogg video/)
+    const adpcm = fx('audio/tone.wav').slice()
+    adpcm[20] = 2
+    expect(() => classify(adpcm)).toThrow(/uncompressed PCM/)
+    expect(() => classify(bytes([0xff, 0xfb, 0x90, 0x00], new Array(600).fill(7)))).toThrow(/Upload PNG/)
+  })
+
   it('refuses anything else, whatever its name says', () => {
     expect(() => classify(bytes('<html><script>alert(1)</script>'))).toThrow(MediaError)
     expect(() => classify(bytes('GIF89a....'))).toThrow(/Upload PNG/)

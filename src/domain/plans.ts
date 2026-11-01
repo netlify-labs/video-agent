@@ -22,6 +22,7 @@ import type {
   PlanQuestion,
   PlanRoute,
   PlanRow,
+  VideoSound,
 } from './types.js'
 import { loadJob } from './videos.js'
 
@@ -171,6 +172,7 @@ export function planDto(plan: PlanRow) {
     brief: plan.brief,
     briefRev: plan.briefRev,
     mediaIds: plan.mediaIds,
+    sound: plan.sound ?? null,
     expiresAt: plan.expiresAt,
   }
 }
@@ -219,7 +221,14 @@ async function mediaContext(deps: Deps, plan: PlanRow) {
 }
 
 const MEDIA_RULE =
-  'attached_media lists files the person chose for the video (logos, screenshots, clips, fonts); the attached images are the first of them, in order. Plan around them and never ask for something they already provide.'
+  'attached_media lists files the person chose for the video (logos, screenshots, clips, fonts, music); the attached images are the first of them, in order. Plan around them and never ask for something they already provide.'
+
+/** How the planner hears the Sound choice (data, like the shape and length). */
+const SOUND_LABELS: Record<VideoSound, string> = {
+  silent: 'silent, no audio',
+  music: 'a music bed, no voice-over',
+  music_sfx: 'a music bed and sound effects on visible actions, no voice-over',
+}
 
 // ───────── operations ─────────
 
@@ -232,6 +241,7 @@ export async function createPlan(
     durationSec?: number | undefined
     revisionOf?: { videoId: string; version?: number | undefined } | undefined
     mediaIds?: string[] | undefined
+    sound?: VideoSound | undefined
   },
 ) {
   assertCan(p, 'plan:create')
@@ -294,6 +304,7 @@ export async function createPlan(
     aspect: input.aspect ?? null,
     durationSec: input.durationSec ?? null,
     mediaIds,
+    sound: input.sound ?? null,
     inputsHash: sha256Hex(
       JSON.stringify([
         prompt,
@@ -303,6 +314,7 @@ export async function createPlan(
         baseN,
         planningContext.hash,
         mediaIds,
+        ...(input.sound ? [input.sound] : []),
       ]),
     ),
     route,
@@ -386,6 +398,7 @@ export async function generateQuestions(deps: Deps, p: Principal, planId: string
     dataBlock('request', plan.prompt),
     plan.aspect ? dataBlock('chosen_shape', plan.aspect) : '',
     plan.durationSec ? dataBlock('chosen_length_seconds', plan.durationSec) : '',
+    plan.sound ? dataBlock('chosen_sound', SOUND_LABELS[plan.sound]) : '',
     media.block,
     dataBlock('company_context', planningContext.text),
     dataBlock('their_recent_video_titles', history),
@@ -452,6 +465,7 @@ export async function generateBrief(deps: Deps, p: Principal, planId: string, an
     dataBlock('request', plan.prompt),
     plan.aspect ? dataBlock('chosen_shape', plan.aspect) : '',
     plan.durationSec ? dataBlock('chosen_length_seconds', plan.durationSec) : '',
+    plan.sound ? dataBlock('chosen_sound', SOUND_LABELS[plan.sound]) : '',
     media.block,
     dataBlock('answers', qa),
     dataBlock('company_context', planningContext.text),

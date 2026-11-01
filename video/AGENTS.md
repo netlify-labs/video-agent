@@ -126,6 +126,31 @@ checks it, and `render-job` refuses a composition that declares the contract but
   or `<video id="…" data-va-media="<slot>" data-va-kind="video" src="assets/media/…" muted data-start="0" data-duration="<beat duration>">`.
 - **Captions** in `summary.json`, one per text cue: `{ "start", "end", "text", "beat", "textId", "beatStart", "beatEnd" }`,
   where `start`/`end` are seconds in the video and `beatStart`/`beatEnd` are seconds into the beat.
+- **Sound** (only when the run asks for it): music is a layer, so it spans the video and follows retimes; effects
+  live inside the beat whose action they mark. See "Sound" below.
+
+## Sound (Video Agent)
+
+Videos are silent unless the run's prompt says otherwise. When it asks for sound:
+
+- **Music** is one root layer:
+  `<audio id="music" data-va-layer="music" src="assets/media/…" data-start="0" data-duration="<root duration>" data-track-index="2" data-volume="0.8" data-fade-in="1" data-fade-out="1.5"></audio>`.
+  Every `<audio>` needs an `id` or it is left out of the mix. Use only the track the prompt names (a library item in
+  `assets/media/`, or the brand's music copied into `assets/audio/`). With neither, leave music out and say so in the
+  summary: never fetch music from a paid catalog, generate it, or download it from the web.
+- **Sound effects** (only when asked) mark actions you can see: a cursor click, a card or badge landing, a scene cut.
+  Each is its own `<audio id>` inside its beat, timed in the beat's clock, about `data-volume="0.35"`, peaking a
+  frame after the picture. Get them with `npx hyperframes media-use resolve --type sfx --intent "<effect>" --project .`
+  (CC0 or CC BY only), copy them into `assets/sfx/` (hidden folders such as `.media/` aren't saved with the video),
+  and list each CC BY credit in `summary.json` as `"credits": ["\"Title\" by Creator, CC BY 4.0, <link>"]`.
+- **Clips** in media slots stay `muted`. A clip whose own sound matters keeps it with `data-has-audio="true"`, and the
+  music ducks under it.
+- **Mix** for the web: about −14 LUFS integrated, true peak at or below −1 dBTP.
+  `npx hyperframes normalize-audio --target=music --lufs=-14 --write`, then `npx hyperframes audio --range 0,<duration> --json`
+  to check levels and that hits land on their pictures. Duck music under any voice with a `volume` lane in
+  `data-automation` (about 0.3 while someone speaks). Don't tween volume with GSAP. The media-use skill's
+  `references/mixing.md` has every attribute.
+- Say in the summary that the mix was measured, not heard. Captions are unchanged: they follow on-screen text.
 
 ## Key Rules
 

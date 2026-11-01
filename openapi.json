@@ -377,6 +377,9 @@
               "null"
             ]
           },
+          "sound": {
+            "$ref": "#/components/schemas/Sound"
+          },
           "createdAt": {
             "type": "string"
           },
@@ -640,6 +643,7 @@
           "authorId",
           "parentN",
           "targetDurationSec",
+          "sound",
           "createdAt",
           "attempts",
           "stage",
@@ -737,6 +741,15 @@
           "changes_requested",
           null
         ]
+      },
+      "Sound": {
+        "type": "string",
+        "enum": [
+          "silent",
+          "music",
+          "music_sfx"
+        ],
+        "description": "silent: no audio (the default). music: a music bed (a picked audio item, else the brand music in context/, else none). music_sfx: music plus sound effects on visible actions."
       },
       "Stage": {
         "type": [
@@ -904,7 +917,17 @@
               "type": "string"
             },
             "maxItems": 12,
-            "description": "Library items (GET /api/v1/media) the agent should use: images, clips, fonts."
+            "description": "Library items (GET /api/v1/media) the agent should use: images, clips, fonts, audio."
+          },
+          "sound": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Sound"
+              },
+              {
+                "description": "Omit for the plan's choice, else music when an audio item is picked, else silent."
+              }
+            ]
           }
         },
         "required": [
@@ -974,7 +997,17 @@
               "type": "string"
             },
             "maxItems": 12,
-            "description": "Library items (GET /api/v1/media) the agent should use: images, clips, fonts."
+            "description": "Library items (GET /api/v1/media) the agent should use: images, clips, fonts, audio."
+          },
+          "sound": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Sound"
+              },
+              {
+                "description": "Omit to keep the revised version's sound (or the plan's choice; a new audio pick on a silent video turns on music)."
+              }
+            ]
           },
           "commentIds": {
             "type": "array",
@@ -1491,6 +1524,20 @@
             },
             "description": "Library items attached while planning."
           },
+          "sound": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Sound"
+              },
+              {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "The Sound chosen while planning, if any."
+              }
+            ]
+          },
           "expiresAt": {
             "type": "string"
           }
@@ -1505,6 +1552,7 @@
           "brief",
           "briefRev",
           "mediaIds",
+          "sound",
           "expiresAt"
         ]
       },
@@ -1551,6 +1599,9 @@
             },
             "maxItems": 12,
             "description": "Library items to plan around. The planner sees the first few images; the video made from this plan uses them all."
+          },
+          "sound": {
+            "$ref": "#/components/schemas/Sound"
           }
         },
         "required": [
@@ -2407,7 +2458,8 @@
               "image",
               "svg",
               "video",
-              "font"
+              "font",
+              "audio"
             ]
           },
           "status": {
@@ -7250,7 +7302,8 @@
                 "image",
                 "svg",
                 "video",
-                "font"
+                "font",
+                "audio"
               ]
             },
             "required": false,

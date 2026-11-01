@@ -11,7 +11,7 @@ import { getProgress } from './domain/progress.js'
 import { listMedia } from './domain/media.js'
 import * as planning from './domain/plans.js'
 import { can, type Principal } from './domain/policy.js'
-import type { Aspect } from './domain/types.js'
+import { SOUNDS, type Aspect } from './domain/types.js'
 import {
   cancelVersion,
   createVideo,
@@ -24,6 +24,7 @@ import {
   type VideoDto,
 } from './domain/videos.js'
 import { ApiError } from './lib/errors.js'
+import { MEDIA_KINDS } from './lib/media/classify.js'
 
 const SERVER_INSTRUCTIONS = `Make short videos from a prompt. Each video is made by an AI agent with HyperFrames (HTML/CSS/GSAP rendered to MP4) and takes 3 to 8 minutes.
 
@@ -36,7 +37,7 @@ Typical flow:
 
 Optional planning (when plan_video is listed): call plan_video with the prompt first. If it returns questions, ask your user (they can skip any), then call plan_brief with their answers, show the brief, and pass plan_id to create_video (or revise_video). Skip planning when the request is already specific.
 
-Videos are silent, with captions. The company's brand context is applied automatically. Don't create a new video to fix a small thing: revise it.`
+Videos have captions and are silent unless you pass sound ("music" or "music_sfx"); for music, pass an audio item from list_media in media_ids (else the brand's music is used, if it has one). The company's brand context is applied automatically. Don't create a new video to fix a small thing: revise it.`
 
 // ───────────── forgiving inputs ─────────────
 
@@ -215,6 +216,7 @@ async function summarize(deps: Deps, v: VideoDto) {
       status: x.status,
       prompt: x.prompt,
       from_version: x.parentN,
+      ...(x.sound !== 'silent' ? { sound: x.sound } : {}),
       ...(x.error ? { error: x.error } : {}),
       ...(x.latestStep && x.status !== 'ready' ? { agent_activity: x.latestStep } : {}),
       ...(x.output
@@ -316,7 +318,15 @@ Example: {"prompt": "A 20-second launch video for our new webhooks feature, endi
           .array(z.string())
           .max(12)
           .optional()
-          .describe('Optional. Library items (from list_media) to use: logos, screenshots, clips, fonts.'),
+          .describe(
+            'Optional. Library items (from list_media) to use: logos, screenshots, clips, fonts, music (audio).',
+          ),
+        sound: z
+          .enum(SOUNDS)
+          .optional()
+          .describe(
+            'Optional. "silent" (default), "music" (a music bed: an audio item from media_ids, else the brand\'s music, else none) or "music_sfx" (music plus sound effects on visible actions). Picking an audio item turns music on.',
+          ),
         idempotency_key: z
           .string()
           .max(200)
@@ -343,6 +353,7 @@ Example: {"prompt": "A 20-second launch video for our new webhooks feature, endi
             title: args.title,
             planId: args.plan_id,
             mediaIds: args.media_ids,
+            sound: args.sound,
           },
           args.idempotency_key,
         )
@@ -488,6 +499,12 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Make the end 
           .describe(
             'Optional. More library items (from list_media); the version keeps the media it revises.',
           ),
+        sound: z
+          .enum(SOUNDS)
+          .optional()
+          .describe(
+            'Optional. "silent", "music" or "music_sfx". Leave out to keep the sound of the version it revises.',
+          ),
       },
       annotations: {
         title: 'Revise a video',
@@ -507,6 +524,7 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Make the end 
           durationSec: normalizeDuration(args.duration_sec),
           commentIds: args.comment_ids,
           mediaIds: args.media_ids,
+          sound: args.sound,
         })
         if (!res.replayed) kick()
         return {
@@ -690,11 +708,11 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "version": 2}`,
     'list_media',
     {
       title: 'List the media library',
-      description: `The team's uploaded media: logos, screenshots, clips and fonts, newest first. Pass media ids to create_video or revise_video (media_ids) so the agent uses them. A caption says what an item is.
+      description: `The team's uploaded media: logos, screenshots, clips, fonts and audio (music), newest first. Pass media ids to create_video or revise_video (media_ids) so the agent uses them. A caption says what an item is.
 
 Example: {"kind": "image"}`,
       inputSchema: {
-        kind: z.enum(['image', 'svg', 'video', 'font']).optional(),
+        kind: z.enum(MEDIA_KINDS).optional(),
         cursor: z.string().optional().describe('next_cursor from the previous page.'),
       },
       annotations: { title: 'List media', readOnlyHint: true, openWorldHint: false },
@@ -768,6 +786,12 @@ Example: {"prompt": "A 30-second launch video for org webhooks, ending on our lo
           .describe(
             "Optional. Library items (from list_media) to plan around; the video made from the plan uses them, so don't pass them again.",
           ),
+        sound: z
+          .enum(SOUNDS)
+          .optional()
+          .describe(
+            'Optional. "silent", "music" or "music_sfx", if the user already chose; the video made from the plan uses it.',
+          ),
       },
     },
     async (args) =>
@@ -778,6 +802,7 @@ Example: {"prompt": "A 30-second launch video for org webhooks, ending on our lo
           durationSec: normalizeDuration(args.duration_sec),
           ...(args.video_id ? { revisionOf: { videoId: normalizeVideoId(args.video_id) } } : {}),
           mediaIds: args.media_ids,
+          sound: args.sound,
         })
         const plan = await planning.generateQuestions(deps, principal, created.id)
         return {

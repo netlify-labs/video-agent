@@ -119,6 +119,30 @@ export function probeClip(path: string, name: string) {
     throw new StepError(`Clip ${name} is longer than 2 minutes. Stop and report this.`)
 }
 
+/** A second check of a library audio file with ffprobe: it has an audio stream and lasts at most 10 minutes. */
+export function probeAudio(path: string, name: string) {
+  let info: { streams?: { codec_type?: string }[]; format?: { duration?: string } }
+  try {
+    info = JSON.parse(
+      run(
+        'ffprobe',
+        ['-v', 'error', '-show_entries', 'stream=codec_type:format=duration', '-of', 'json', path],
+        {
+          timeoutMs: 60_000,
+        },
+      ),
+    ) as typeof info
+  } catch (e) {
+    throw new StepError(
+      `Audio ${name} can't be read (${e instanceof Error ? e.message.slice(0, 200) : 'ffprobe failed'}). Stop and report this.`,
+    )
+  }
+  if (!info.streams?.some((s) => s.codec_type === 'audio'))
+    throw new StepError(`Audio ${name} has no audio stream. Stop and report this.`)
+  if (Number(info.format?.duration) > 600.5)
+    throw new StepError(`Audio ${name} is longer than 10 minutes. Stop and report this.`)
+}
+
 export async function prepare(m: RunManifest, opts: { tmp: string; root?: string; fetch?: Fetch }) {
   const { tmp, root = repoRoot, fetch = download } = opts
   if (m.source) {
@@ -151,6 +175,7 @@ export async function prepare(m: RunManifest, opts: { tmp: string; root?: string
           `Media ${item.filename} doesn't match its hash (got ${actual}). Stop and report this.`,
         )
       if (item.kind === 'video') probeClip(to, item.filename)
+      if (item.kind === 'audio') probeAudio(to, item.filename)
     }
     log('media', { count: m.media.length, files: m.media.map((x) => x.filename) })
   }

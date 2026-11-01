@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { prepare, probeClip } from '../scripts/prepare-run.js'
+import { prepare, probeAudio, probeClip } from '../scripts/prepare-run.js'
 import { readBundleIndex } from '../src/domain/bundles.js'
 import { runManifestKey, verifyRunManifest } from '../src/lib/run-manifest.js'
 import { font, harness, png, PROMPT, upload as post, type Harness } from './helpers.js'
@@ -182,5 +182,12 @@ describe('media in videos', () => {
     const ok = join(process.cwd(), 'test/fixtures/a169.mp4')
     expect(() => probeClip(ok, 'a169.mp4')).not.toThrow()
     expect(() => probeClip(join(process.cwd(), 'test/fixtures/hevc.mp4'), 'hevc.mp4')).toThrow(/isn't H\.264/)
+  })
+
+  it('prepare-run checks audio again with ffprobe', () => {
+    expect(() => probeAudio(join(process.cwd(), 'test/fixtures/audio/tone.m4a'), 'tone.m4a')).not.toThrow()
+    expect(() => probeAudio(join(process.cwd(), 'test/fixtures/poster.jpg'), 'poster.jpg')).toThrow(
+      /no audio/,
+    )
   })
 })

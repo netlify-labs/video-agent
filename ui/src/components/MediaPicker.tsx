@@ -12,7 +12,7 @@ import {
   UnstyledButton,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
-import { IconMovie, IconPhoto, IconTypography, IconX } from '@tabler/icons-react'
+import { IconMovie, IconMusic, IconPhoto, IconTypography, IconX } from '@tabler/icons-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { $api, useCanCreate } from '../api/client'
@@ -22,8 +22,9 @@ import { uploadFile } from '../lib/upload'
 export type Media = paths['/api/v1/media/{id}']['get']['responses'][200]['content']['application/json']
 export type MediaKind = Media['kind']
 
+// A hint for the file dialog only: the server decides what a file is from its bytes.
 export const MEDIA_ACCEPT =
-  'image/png,image/jpeg,image/webp,image/svg+xml,video/mp4,font/woff2,font/ttf,font/otf,.woff2,.ttf,.otf'
+  'image/png,image/jpeg,image/webp,image/svg+xml,video/mp4,audio/mpeg,audio/mp4,audio/x-m4a,audio/aac,audio/wav,audio/x-wav,audio/ogg,font/woff2,font/ttf,font/otf,.mp3,.m4a,.wav,.ogg,.opus,.woff2,.ttf,.otf'
 const MAX_PICKS = 12
 
 export function Thumb({ m }: { m: Media }) {
@@ -48,6 +49,13 @@ export function Thumb({ m }: { m: Media }) {
         {m.durationSec ? <span className="va-media-duration num">{Math.round(m.durationSec)} s</span> : null}
       </div>
     )
+  if (m.kind === 'audio')
+    return (
+      <div className="va-media-thumb">
+        <IconMusic size={32} />
+        {m.durationSec ? <span className="va-media-duration num">{duration(m.durationSec)}</span> : null}
+      </div>
+    )
   // A font shows a sample in itself.
   const family = `va-media-${m.id}`
   return (
@@ -59,7 +67,19 @@ export function Thumb({ m }: { m: Media }) {
   )
 }
 
-const KIND_LABEL: Record<MediaKind, string> = { image: 'Images', svg: 'SVG', video: 'Clips', font: 'Fonts' }
+/** 95 → "1:35". */
+export const duration = (sec: number) => {
+  const s = Math.round(sec)
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+}
+
+export const KIND_LABEL: Record<MediaKind, string> = {
+  image: 'Images',
+  svg: 'SVG',
+  video: 'Clips',
+  audio: 'Audio',
+  font: 'Fonts',
+}
 
 /**
  * The library as a picker. With `multiple`, items toggle and Done returns them all; otherwise a click picks one and
@@ -74,7 +94,7 @@ export function MediaLibraryModal(props: {
   multiple?: boolean
   selected?: Media[]
 }) {
-  const kinds = props.kinds ?? (['image', 'svg', 'video', 'font'] as MediaKind[])
+  const kinds = props.kinds ?? (['image', 'svg', 'video', 'audio', 'font'] as MediaKind[])
   const [filter, setFilter] = useState<'all' | MediaKind>('all')
   const [picked, setPicked] = useState<Media[]>(props.selected ?? [])
   const [uploading, setUploading] = useState(false)
@@ -222,6 +242,8 @@ export function MediaChips(props: {
               <img src={m.kind === 'video' ? (m.urls.poster ?? '') : m.urls.file} alt="" />
             ) : m.kind === 'font' ? (
               <IconTypography size={14} />
+            ) : m.kind === 'audio' ? (
+              <IconMusic size={14} />
             ) : (
               <IconMovie size={14} />
             )}

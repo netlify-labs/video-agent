@@ -19,6 +19,7 @@ import { $api, errorMessage, newIdempotencyKey, useCanCreate } from '../api/clie
 import { Status, VersionImage, relativeTime } from '../components/bits'
 import { MediaChips, type Media } from '../components/MediaPicker'
 import { PlanPanel } from '../components/PlanPanel'
+import { SoundControl, soundAfterPick, type Sound } from '../components/SoundControl'
 import { brand } from '../theme'
 
 const EXAMPLES = [
@@ -159,6 +160,8 @@ export function NewVideoPage() {
   const [seconds, setSeconds] = useState<number | string>(30)
   const [title, setTitle] = useState('')
   const [media, setMedia] = useState<Media[]>([])
+  const [sound, setSound] = useState<Sound>('silent')
+  const [soundTouched, setSoundTouched] = useState(false)
   const { create, key } = useCreate()
   const config = $api.useQuery('get', '/api/v1/config')
   const canPlan = useCanCreate() && config.data?.planningAvailable === true
@@ -176,6 +179,7 @@ export function NewVideoPage() {
         ...(title.trim() ? { title: title.trim() } : {}),
         ...(planId ? { planId } : {}),
         ...(media.length ? { mediaIds: media.map((m) => m.id) } : {}),
+        sound,
       },
       params: { header: { 'idempotency-key': key } },
     })
@@ -218,7 +222,14 @@ export function NewVideoPage() {
               <Text size="xs" c="var(--va-faint)" ta="right" mt={-16} className="num">
                 {prompt.length} / 4,000
               </Text>
-              <MediaChips value={media} onChange={setMedia} disabled={planning} />
+              <MediaChips
+                value={media}
+                onChange={(next) => {
+                  setSound(soundAfterPick(sound, soundTouched, media, next))
+                  setMedia(next)
+                }}
+                disabled={planning}
+              />
               <div>
                 <Text size="sm" fw={500} mb={8} id="shape-label">
                   Shape
@@ -299,6 +310,15 @@ export function NewVideoPage() {
                   />
                 ) : null}
               </Group>
+              <SoundControl
+                value={sound}
+                media={media}
+                disabled={planning}
+                onChange={(s) => {
+                  setSound(s)
+                  setSoundTouched(true)
+                }}
+              />
               <TextInput
                 label="Title"
                 description="Optional. The agent names it otherwise."
@@ -344,6 +364,7 @@ export function NewVideoPage() {
               aspect={shapeTouched ? shape : undefined}
               durationSec={lengthMode === 'set' ? Number(seconds) : undefined}
               mediaIds={media.map((m) => m.id)}
+              sound={sound}
               creating={create.isPending}
               onSuggestAspect={(a) => {
                 setShape(a)
@@ -381,7 +402,7 @@ export function NewVideoPage() {
                 Describe the ending: an end card, a call to action, a URL.
               </Text>
               <Text size="sm" c="var(--va-muted)">
-                Videos are silent, with captions. Narration and music aren't supported yet.
+                Videos have captions and are silent unless you choose Music. Narration isn't supported yet.
               </Text>
             </Stack>
           </Card>

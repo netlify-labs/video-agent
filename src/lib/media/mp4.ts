@@ -79,7 +79,8 @@ function timescaleDuration(view: DataView, b: Box): { timescale: number; duratio
   return { timescale: view.getUint32(p + 12), duration: view.getUint32(p + 16) }
 }
 
-export function inspectMp4(bytes: Uint8Array): Mp4Info {
+/** Reads an MP4's tracks. With `audioOnly`, a file without a video track is fine (videoCodec is then ''). */
+export function inspectMp4(bytes: Uint8Array, opts: { audioOnly?: boolean } = {}): Mp4Info {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
   const counter = { n: 0 }
   const root: Box = { type: 'root', start: 0, headerSize: 0, size: bytes.byteLength }
@@ -126,7 +127,7 @@ export function inspectMp4(bytes: Uint8Array): Mp4Info {
     }
     videoCodec = sampleEntry(trak)
   }
-  if (!videoCodec) throw new Mp4Error('No video track')
+  if (!videoCodec && !opts.audioOnly) throw new Mp4Error('No video track')
   return {
     durationSec: duration / timescale,
     width,

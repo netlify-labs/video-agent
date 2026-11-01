@@ -320,6 +320,8 @@ export async function renderEdit(deps: Deps, p: Principal, id: string, idemKey?:
         mode: 'render_unchanged',
         editedFromN: e.baseN,
         frozen: { key, sha256: sha256Hex(archive), manifestHash: manifest, editId: e.id },
+        // The composition (and any audio in it) is the base's, so its sound is too.
+        sound: (await repo.getVersion(e.jobId, e.baseN))?.sound ?? 'silent',
       })
       await repo.insertVersionMedia(
         await snapshotMedia(repo, e.jobId, n, r.picks, await repo.listVersionMedia(e.jobId, e.baseN)),

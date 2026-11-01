@@ -10,6 +10,7 @@ import {
   serializeRunManifest,
 } from '../lib/run-manifest.js'
 import { getSettings } from './settings.js'
+import { contextMeta } from '../generated/context.js'
 import { PROMPT_TEMPLATE_VERSION, buildPrompt, buildRenderUnchangedPrompt } from './prompt.js'
 import { setStage } from './videos.js'
 import { emitTerminalEvent } from './webhooks.js'
@@ -252,12 +253,20 @@ async function startRequest(
     revision: revision && { parentN: revision.parentN },
     runManifestSha256,
     feedback,
-    media: versionMedia.map((m) => ({
-      file: `assets/media/${m.filename}`,
-      kind: m.kind,
-      caption: m.caption,
-    })),
+    media: await Promise.all(
+      versionMedia.map(async (m) => ({
+        file: `assets/media/${m.filename}`,
+        kind: m.kind,
+        caption: m.caption,
+        // A track's length helps place it; the library row outlives a soft delete.
+        ...(m.kind === 'audio'
+          ? { seconds: (await deps.store.getMedia(m.mediaId))?.durationSec ?? null }
+          : {}),
+      })),
+    ),
     plan: version.plan ? { brief: version.plan.brief, qa: version.plan.qa } : null,
+    sound: version.sound ?? 'silent',
+    brandMusic: contextMeta.music,
   })
   return result(prompt, revision?.sourceSha256 ?? null)
 }

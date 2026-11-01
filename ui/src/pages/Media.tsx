@@ -1,4 +1,4 @@
-// The media library (plan v2 §9): the team's logos, screenshots, clips and fonts. Creators and admins drop files in
+// The media library (plan v2 §9): the team's logos, screenshots, clips, music and fonts. Creators and admins drop files in
 // (bigger ones upload in resumable parts); everyone can browse and see where an item is used.
 import {
   ActionIcon,
@@ -23,7 +23,7 @@ import { confirmDanger, relativeTime, showError } from '../components/bits'
 import { MEDIA_ACCEPT, Thumb, type Media } from '../components/MediaPicker'
 import { uploadFile, type UploadProgress } from '../lib/upload'
 
-type Kind = 'all' | 'image' | 'svg' | 'video' | 'font'
+type Kind = 'all' | 'image' | 'svg' | 'video' | 'audio' | 'font'
 
 interface Job {
   key: string
@@ -51,6 +51,17 @@ function MediaCard({ m }: { m: Media }) {
   return (
     <Card padding={0} className="va-media-card" data-testid={`media-${m.id}`}>
       <Thumb m={m} />
+      {m.kind === 'audio' && m.urls ? (
+        // Plays from the signed URL; nothing loads until someone presses play.
+        <audio
+          className="va-media-audio"
+          controls
+          preload="none"
+          src={m.urls.file}
+          aria-label={`Play ${m.filename}`}
+          data-testid={`player-${m.id}`}
+        />
+      ) : null}
       <Stack gap={4} p="sm">
         <Group justify="space-between" wrap="nowrap" gap={4}>
           <Text size="sm" fw={600} truncate title={m.filename}>
@@ -195,7 +206,9 @@ export function MediaPage() {
       <div className="va-title-row">
         <div>
           <Title order={1}>Media</Title>
-          <div className="va-sub">Logos, screenshots, clips and fonts the agent can use in your videos.</div>
+          <div className="va-sub">
+            Logos, screenshots, clips, music and fonts the agent can use in your videos.
+          </div>
         </div>
         {canUpload ? (
           <FileButton multiple accept={MEDIA_ACCEPT} onChange={add}>
@@ -228,7 +241,8 @@ export function MediaPage() {
         >
           <Text size="sm" c="var(--va-muted)">
             Drop files here: PNG, JPEG, WebP or SVG images up to 5 MB, MP4 clips up to 100 MB and 2 minutes,
-            WOFF2, TTF or OTF fonts.
+            MP3, M4A, WAV or Ogg audio up to 50 MB and 10 minutes, WOFF2, TTF or OTF fonts. Only upload music
+            you have the rights to.
           </Text>
         </div>
       ) : null}
@@ -292,6 +306,7 @@ export function MediaPage() {
           { value: 'image', label: 'Images' },
           { value: 'svg', label: 'SVG' },
           { value: 'video', label: 'Clips' },
+          { value: 'audio', label: 'Audio' },
           { value: 'font', label: 'Fonts' },
         ]}
       />

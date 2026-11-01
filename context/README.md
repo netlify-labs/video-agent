@@ -9,7 +9,12 @@ it starts from.
 | `BRAND.md`              | Your brand: colors (hex), typography, logo usage, tone of voice, motion style, do's and don'ts.                                                                                                                                                                  |
 | `PRODUCT.md` (optional) | What your company and products are, names to use, claims you may and may not make.                                                                                                                                                                               |
 | `brand.json`            | Ships with neutral defaults. The web app uses it for its name and accent: `{ "name": "Acme Video", "primaryColor": "#ff5a1f", "logo": "assets/logo.svg" }`. Remove `"default": true` here (and the `video-agent:default` line in `BRAND.md`) once they're yours. |
-| `assets/`               | Logos (SVG preferred) and fonts (WOFF2) the agent may use. Only add files you have the rights to.                                                                                                                                                                |
+| `assets/`               | Logos (SVG preferred), fonts (WOFF2) and music the agent may use. Only add files you have the rights to.                                                                                                                                                         |
+
+**Brand music (optional).** Videos made with Sound set to Music use a track picked from the media library, or else
+this one. Add it to `brand.json` (MP3, M4A, WAV or Ogg, a file you have the rights to):
+`"music": { "file": "assets/music.mp3", "genre": "warm minimal electronic", "tempo": "110 bpm" }`. Without it (and
+without a picked track) those videos have no music: the agent never fetches music from elsewhere.
 
 Keep it short and concrete. The agent follows rules better than adjectives: "headlines are 96 px, white on
 #0b0d10, never more than 6 words" beats "bold and modern".

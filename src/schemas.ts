@@ -1,6 +1,8 @@
 // Request and response schemas: one definition drives validation, types, the OpenAPI spec and the
 // web app's generated client.
 import { z } from '@hono/zod-openapi'
+import { SOUNDS } from './domain/types.js'
+import { MEDIA_KINDS } from './lib/media/classify.js'
 
 export const ErrorSchema = z
   .object({
@@ -13,6 +15,10 @@ export const ErrorSchema = z
   .openapi('Error')
 
 export const AspectSchema = z.enum(['16:9', '9:16', '1:1', '4:5']).openapi('Aspect')
+export const SoundSchema = z.enum(SOUNDS).openapi('Sound', {
+  description:
+    'silent: no audio (the default). music: a music bed (a picked audio item, else the brand music in context/, else none). music_sfx: music plus sound effects on visible actions.',
+})
 export const StatusSchema = z
   .enum(['queued', 'running', 'finishing', 'ready', 'failed', 'cancelled', 'timed_out'])
   .openapi('VideoStatus')
@@ -111,6 +117,7 @@ export const VersionSchema = z
     authorId: z.string(),
     parentN: z.number().int().nullable(),
     targetDurationSec: z.number().nullable(),
+    sound: SoundSchema,
     createdAt: z.string(),
     attempts: z.number().int(),
     stage: StageSchema.nullable(),
@@ -231,7 +238,10 @@ export const CreateVideoSchema = z
       .optional()
       .openapi({ description: 'HTTPS URL for video.ready / video.failed events (API keys only).' }),
     mediaIds: z.array(z.string()).max(12).optional().openapi({
-      description: 'Library items (GET /api/v1/media) the agent should use: images, clips, fonts.',
+      description: 'Library items (GET /api/v1/media) the agent should use: images, clips, fonts, audio.',
+    }),
+    sound: SoundSchema.optional().openapi({
+      description: "Omit for the plan's choice, else music when an audio item is picked, else silent.",
     }),
   })
   .openapi('CreateVideo')
@@ -244,7 +254,11 @@ export const ReviseSchema = z
     webhookUrl: z.url().optional(),
     planId: z.string().optional(),
     mediaIds: z.array(z.string()).max(12).optional().openapi({
-      description: 'Library items (GET /api/v1/media) the agent should use: images, clips, fonts.',
+      description: 'Library items (GET /api/v1/media) the agent should use: images, clips, fonts, audio.',
+    }),
+    sound: SoundSchema.optional().openapi({
+      description:
+        "Omit to keep the revised version's sound (or the plan's choice; a new audio pick on a silent video turns on music).",
     }),
     commentIds: z.array(z.string()).max(50).optional().openapi({
       description:
@@ -320,6 +334,7 @@ export const PlanSchema = z
     brief: planBriefShape.nullable(),
     briefRev: z.number().int(),
     mediaIds: z.array(z.string()).openapi({ description: 'Library items attached while planning.' }),
+    sound: SoundSchema.nullable().openapi({ description: 'The Sound chosen while planning, if any.' }),
     expiresAt: z.string(),
   })
   .openapi('Plan')
@@ -333,6 +348,7 @@ export const CreatePlanSchema = z
       description:
         'Library items to plan around. The planner sees the first few images; the video made from this plan uses them all.',
     }),
+    sound: SoundSchema.optional(),
   })
   .openapi('CreatePlan')
 export const PlanAnswersSchema = z
@@ -360,7 +376,7 @@ export const MyUsageSchema = z
 export const MediaSchema = z
   .object({
     id: z.string(),
-    kind: z.enum(['image', 'svg', 'video', 'font']),
+    kind: z.enum(MEDIA_KINDS),
     status: z.enum(['uploading', 'verifying', 'ready', 'rejected']),
     rejectReason: z.string().nullable(),
     filename: z.string(),

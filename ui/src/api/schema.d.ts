@@ -3560,7 +3560,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    kind?: "image" | "svg" | "video" | "font";
+                    kind?: "image" | "svg" | "video" | "font" | "audio";
                     cursor?: string;
                     limit?: number;
                 };
@@ -5170,6 +5170,7 @@ export interface components {
             authorId: string;
             parentN: number | null;
             targetDurationSec: number | null;
+            sound: components["schemas"]["Sound"];
             createdAt: string;
             attempts: number;
             stage: components["schemas"]["Stage"];
@@ -5243,6 +5244,11 @@ export interface components {
         };
         /** @enum {string|null} */
         Verdict: "approved" | "changes_requested" | null;
+        /**
+         * @description silent: no audio (the default). music: a music bed (a picked audio item, else the brand music in context/, else none). music_sfx: music plus sound effects on visible actions.
+         * @enum {string}
+         */
+        Sound: "silent" | "music" | "music_sfx";
         /** @enum {string|null} */
         Stage: "queued" | "starting" | "running" | "cancelling" | "unresolved" | "finishing" | "ready" | "failed" | "cancelled" | "timed_out" | null;
         Usage: {
@@ -5288,8 +5294,9 @@ export interface components {
              * @description HTTPS URL for video.ready / video.failed events (API keys only).
              */
             webhookUrl?: string;
-            /** @description Library items (GET /api/v1/media) the agent should use: images, clips, fonts. */
+            /** @description Library items (GET /api/v1/media) the agent should use: images, clips, fonts, audio. */
             mediaIds?: string[];
+            sound?: components["schemas"]["Sound"] & unknown;
         };
         VideoList: {
             items: components["schemas"]["Video"][];
@@ -5306,8 +5313,9 @@ export interface components {
             /** Format: uri */
             webhookUrl?: string;
             planId?: string;
-            /** @description Library items (GET /api/v1/media) the agent should use: images, clips, fonts. */
+            /** @description Library items (GET /api/v1/media) the agent should use: images, clips, fonts, audio. */
             mediaIds?: string[];
+            sound?: components["schemas"]["Sound"] & unknown;
             /** @description Incorporate feedback: open comments on the version being revised (owner or admin). prompt is your note. */
             commentIds?: string[];
         };
@@ -5426,6 +5434,7 @@ export interface components {
             briefRev: number;
             /** @description Library items attached while planning. */
             mediaIds: string[];
+            sound: components["schemas"]["Sound"] & (string | null);
             expiresAt: string;
         };
         CreatePlan: {
@@ -5439,6 +5448,7 @@ export interface components {
             };
             /** @description Library items to plan around. The planner sees the first few images; the video made from this plan uses them all. */
             mediaIds?: string[];
+            sound?: components["schemas"]["Sound"];
         };
         PlanAnswers: {
             answers: {
@@ -5625,7 +5635,7 @@ export interface components {
         Media: {
             id: string;
             /** @enum {string} */
-            kind: "image" | "svg" | "video" | "font";
+            kind: "image" | "svg" | "video" | "font" | "audio";
             /** @enum {string} */
             status: "uploading" | "verifying" | "ready" | "rejected";
             rejectReason: string | null;

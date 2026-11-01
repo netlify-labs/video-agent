@@ -1,12 +1,15 @@
 // What an uploaded file really is (plan v2 §9, §14 rule 25): decided from its bytes, never from its name or the
-// declared type. Images are checked for size (40 megapixels at most); fonts and SVGs have their own caps.
+// declared type. Images are checked for size (40 megapixels at most); fonts, SVGs, clips and audio have their own caps.
+import { AudioError, sniffAudio } from './audio.js'
 import { inspectMp4, Mp4Error } from './mp4.js'
 
-export type MediaKind = 'image' | 'svg' | 'video' | 'font'
+export const MEDIA_KINDS = ['image', 'svg', 'video', 'font', 'audio'] as const
+export type MediaKind = (typeof MEDIA_KINDS)[number]
 
 export interface Classified {
   kind: MediaKind
-  ext: 'png' | 'jpg' | 'webp' | 'svg' | 'mp4' | 'woff2' | 'woff' | 'ttf' | 'otf'
+  ext:
+    'png' | 'jpg' | 'webp' | 'svg' | 'mp4' | 'woff2' | 'woff' | 'ttf' | 'otf' | 'mp3' | 'm4a' | 'wav' | 'ogg'
   mime: string
   width: number | null
   height: number | null
@@ -22,6 +25,19 @@ export const LIMITS = {
   fontBytes: 2 * 1024 * 1024,
   videoBytes: 100 * 1024 * 1024,
   videoSeconds: 120,
+  audioBytes: 50 * 1024 * 1024,
+  audioSeconds: 600,
+}
+
+const AUDIO_MIME = { mp3: 'audio/mpeg', m4a: 'audio/mp4', wav: 'audio/wav', ogg: 'audio/ogg' } as const
+
+function audio(ext: keyof typeof AUDIO_MIME, durationSec: number | null, bytes: number): Classified {
+  if (bytes > LIMITS.audioBytes) throw new MediaError('Audio files must be 50 MB or smaller.')
+  if (durationSec !== null && durationSec > LIMITS.audioSeconds + 0.5)
+    throw new MediaError('Audio files must be 10 minutes or shorter.')
+  const d =
+    durationSec !== null && Number.isFinite(durationSec) ? Math.round(durationSec * 1000) / 1000 : null
+  return { kind: 'audio', ext, mime: AUDIO_MIME[ext], width: null, height: null, durationSec: d }
 }
 
 const ascii = (b: Uint8Array, from: number, to: number) => String.fromCharCode(...b.subarray(from, to))
@@ -96,11 +112,18 @@ export function classify(b: Uint8Array, opts: { head?: boolean } = {}): Classifi
       return { kind: 'video', ext: 'mp4', mime: 'video/mp4', width: null, height: null, durationSec: null }
     let info
     try {
-      info = inspectMp4(b)
+      info = inspectMp4(b, { audioOnly: true })
     } catch (e) {
       throw new MediaError(
         `The MP4 couldn't be read: ${e instanceof Mp4Error ? e.message : 'unknown error'}.`,
       )
+    }
+    // No video track: M4A (AAC) audio. A clip with sound stays a video.
+    if (!info.videoCodec) {
+      if (!info.audioCodec) throw new MediaError('The MP4 has no video or audio track.')
+      if (info.audioCodec !== 'mp4a')
+        throw new MediaError(`M4A audio must be AAC (this file has ${info.audioCodec}).`)
+      return audio('m4a', info.durationSec > 0 ? info.durationSec : null, b.byteLength)
     }
     if (info.videoCodec !== 'avc1' && info.videoCodec !== 'avc3')
       throw new MediaError(`Video clips must be H.264 (this one is ${info.videoCodec || 'unknown'}).`)
@@ -119,6 +142,13 @@ export function classify(b: Uint8Array, opts: { head?: boolean } = {}): Classifi
       durationSec: info.durationSec,
     }
   }
+  let sound
+  try {
+    sound = sniffAudio(b)
+  } catch (e) {
+    throw new MediaError(e instanceof AudioError ? e.message : "The audio file couldn't be read.")
+  }
+  if (sound) return audio(sound.format, sound.durationSec, b.byteLength)
   const head = new TextDecoder()
     .decode(b.subarray(0, 2048))
     .replace(/^\uFEFF/, '')
@@ -127,5 +157,7 @@ export function classify(b: Uint8Array, opts: { head?: boolean } = {}): Classifi
     if (b.byteLength > LIMITS.svgBytes) throw new MediaError('SVGs must be 1 MB or smaller.')
     return { kind: 'svg', ext: 'svg', mime: 'image/svg+xml', width: null, height: null, durationSec: null }
   }
-  throw new MediaError('Upload PNG, JPEG, WebP or SVG images, MP4 clips, or WOFF2, TTF or OTF fonts.')
+  throw new MediaError(
+    'Upload PNG, JPEG, WebP or SVG images, MP4 clips, MP3, M4A, WAV or Ogg audio, or WOFF2, TTF or OTF fonts.',
+  )
 }

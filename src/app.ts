@@ -52,6 +52,7 @@ import * as planning from './domain/plans.js'
 import { addPreview } from './domain/previews.js'
 import { myUsage, planningByUserWeek } from './domain/usage.js'
 import { ApiError, errorBody } from './lib/errors.js'
+import { MEDIA_KINDS } from './lib/media/classify.js'
 import { PREVIEW_NAMES } from './lib/media/previews.js'
 import * as s from './schemas.js'
 
@@ -1002,7 +1003,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       security,
       request: {
         query: z.object({
-          kind: z.enum(['image', 'svg', 'video', 'font']).optional(),
+          kind: z.enum(MEDIA_KINDS).optional(),
           cursor: z.string().optional(),
           limit: z.coerce.number().int().min(1).max(100).optional(),
         }),

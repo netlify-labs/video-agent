@@ -67,6 +67,7 @@ function ready(
     authorId: o.author,
     parentN: o.parent ?? null,
     targetDurationSec: o.target ?? null,
+    sound: 'silent',
     createdAt: ago(o.at + 0.3),
     plan: null,
 
@@ -169,6 +170,7 @@ export const videos: Video[] = [
       authorId: people.priya.id,
       parentN: null,
       targetDurationSec: 20,
+      sound: 'silent',
       createdAt: ago(2.6),
       plan: null,
 
@@ -200,6 +202,7 @@ export const videos: Video[] = [
       authorId: people.marco.id,
       parentN: null,
       targetDurationSec: 30,
+      sound: 'silent',
       createdAt: ago(0.8),
       plan: null,
 
@@ -332,6 +335,7 @@ export const videos: Video[] = [
       authorId: people.ada.id,
       parentN: null,
       targetDurationSec: null,
+      sound: 'silent',
       createdAt: ago(2900),
       plan: null,
 

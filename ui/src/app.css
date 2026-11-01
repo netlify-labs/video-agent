@@ -735,6 +735,11 @@ body {
   height: 100%;
   object-fit: contain;
 }
+.va-media-audio {
+  display: block;
+  width: 100%;
+  height: 36px;
+}
 .va-media-duration {
   position: absolute;
   right: 8px;

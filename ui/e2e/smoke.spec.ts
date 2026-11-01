@@ -533,6 +533,72 @@ test('a revision can add media', async ({ page }) => {
     .toEqual(['med_mock0001'])
 })
 
+// Sound (idea 2): audio in the library, and the Sound choice on New video and Revise.
+const mp3File = (name = 'theme.mp3') => ({
+  name,
+  mimeType: 'audio/mpeg',
+  buffer: Buffer.from([0x49, 0x44, 0x33, 4, 0, 0, 0, 0, 0, 0, 0xff, 0xf3, 0x70, 0xc0]),
+})
+
+test('the media library takes audio: an Audio filter and a player in the card', async ({ page }) => {
+  await page.goto('/media')
+  await expect(page.getByText(/MP3,\s+M4A, WAV or Ogg audio up to 50 MB/)).toBeVisible()
+  await page.locator('input[type=file]').setInputFiles(pngFile())
+  await page.locator('input[type=file]').setInputFiles(mp3File())
+  const card = page.getByTestId('media-med_mock0002')
+  await expect(card.getByText('theme.mp3')).toBeVisible()
+  const player = card.getByTestId('player-med_mock0002')
+  await expect(player).toHaveAttribute('src', '/tone.mp3')
+  await expect(player).toHaveAttribute('controls', '')
+  expect(await prop<boolean>(player, 'muted')).toBe(false)
+  await expect(card.getByText('1:35')).toBeVisible()
+  await page.getByText('Audio', { exact: true }).click()
+  await expect(card).toBeVisible()
+  await expect(page.getByTestId('media-med_mock0001')).toHaveCount(0)
+  await page.getByText('Images', { exact: true }).click()
+  await expect(card).toHaveCount(0)
+  await expect(page.getByTestId('media-med_mock0001')).toBeVisible()
+})
+
+test('New video sends the Sound choice; picking a track turns music on', async ({ page }) => {
+  await page.goto('/new')
+  await page
+    .getByLabel('What should the video show?')
+    .fill('A 20-second launch video for our new feature, ending with "Try it today".')
+  await expect(page.getByRole('radio', { name: 'Silent' })).toBeChecked()
+  await page.getByRole('button', { name: 'Add media' }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.locator('input[type=file]').setInputFiles(mp3File())
+  await dialog.getByText('Audio', { exact: true }).click()
+  await dialog.getByTestId('pick-med_mock0001').click()
+  await dialog.getByRole('button', { name: 'Done' }).click()
+  await expect(page.getByTestId('chip-med_mock0001')).toContainText('theme.mp3')
+  await expect(page.getByRole('radio', { name: 'Music', exact: true })).toBeChecked()
+  await expect(page.getByText('Music: theme.mp3.')).toBeVisible()
+  await page.getByText('Music + effects', { exact: true }).click()
+  await page.getByRole('button', { name: 'Create now' }).click()
+  await expect(page).toHaveURL(/\/videos\//)
+  expect(await page.evaluate("window.__sent['/api/v1/videos'].sound")).toBe('music_sfx')
+  expect(await page.evaluate("window.__sent['/api/v1/videos'].mediaIds")).toEqual(['med_mock0001'])
+})
+
+test('a revision keeps the sound unless changed, and sends a new choice', async ({ page }) => {
+  await page.goto('/videos/vid_teaser')
+  await page.getByLabel('What should change?').fill('Warmer colours')
+  await expect(page.getByRole('radio', { name: 'Silent' })).toBeChecked()
+  await page.getByRole('button', { name: /Make v\d+ now/ }).click()
+  await expect
+    .poll(() => page.evaluate("window.__sent?.['/api/v1/videos/vid_teaser/versions']?.prompt"))
+    .toBe('Warmer colours')
+  expect(await page.evaluate("'sound' in window.__sent['/api/v1/videos/vid_teaser/versions']")).toBe(false)
+  await page.getByLabel('What should change?').fill('Add a music bed')
+  await page.getByText('Music', { exact: true }).click()
+  await page.getByRole('button', { name: /Make v\d+ now/ }).click()
+  await expect
+    .poll(() => page.evaluate("window.__sent?.['/api/v1/videos/vid_teaser/versions']?.sound"))
+    .toBe('music')
+})
+
 test('a media slot is replaced from the library, filtered to its kind, with a fit', async ({ page }) => {
   await page.goto('/videos/vid_teaser/edit/2')
   const logo = page.getByTestId('slot-logo')

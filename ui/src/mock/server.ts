@@ -316,7 +316,7 @@ export function installMock() {
         return fail(
           400,
           'invalid_request',
-          'Upload PNG, JPEG, WebP or SVG images, MP4 clips, or WOFF2, TTF or OTF fonts.',
+          'Upload PNG, JPEG, WebP or SVG images, MP4 clips, MP3, M4A, WAV or Ogg audio, or WOFF2, TTF or OTF fonts.',
         )
       const m = mockItem(name, kind, body.byteLength)
       mockMedia.unshift(m)
@@ -609,16 +609,20 @@ const mockUploads = new Map<
     expiresAt: string
   }
 >()
-function mockKind(b: Uint8Array): 'image' | 'svg' | 'video' | 'font' | null {
+type MockKind = MockMedia['kind']
+function mockKind(b: Uint8Array): MockKind | null {
   const head = String.fromCharCode(...b.subarray(0, 12))
   if (b[0] === 0x89 && head.slice(1, 4) === 'PNG') return 'image'
   if (b[0] === 0xff && b[1] === 0xd8) return 'image'
+  if (head.startsWith('ID3') || head.startsWith('OggS') || (b[0] === 0xff && ((b[1] ?? 0) & 0xe0) === 0xe0))
+    return 'audio'
+  if (head.startsWith('RIFF') && head.slice(8, 12) === 'WAVE') return 'audio'
   if (head.slice(4, 8) === 'ftyp') return 'video'
   if (head.startsWith('wOF2') || head.startsWith('OTTO')) return 'font'
   if (new TextDecoder().decode(b.subarray(0, 200)).includes('<svg')) return 'svg'
   return null
 }
-function mockItem(filename: string, kind: 'image' | 'svg' | 'video' | 'font', bytes: number): MockMedia {
+function mockItem(filename: string, kind: MockKind, bytes: number): MockMedia {
   const id = `med_mock${String(mockMedia.length + 1).padStart(4, '0')}`
   return {
     id,
@@ -627,17 +631,24 @@ function mockItem(filename: string, kind: 'image' | 'svg' | 'video' | 'font', by
     rejectReason: null,
     filename,
     caption: null,
-    mime: kind === 'video' ? 'video/mp4' : kind === 'svg' ? 'image/svg+xml' : 'image/png',
+    mime:
+      kind === 'video'
+        ? 'video/mp4'
+        : kind === 'svg'
+          ? 'image/svg+xml'
+          : kind === 'audio'
+            ? 'audio/mpeg'
+            : 'image/png',
     bytes,
-    width: kind === 'font' ? null : 1920,
-    height: kind === 'font' ? null : 1080,
-    durationSec: kind === 'video' ? 12 : null,
+    width: kind === 'font' || kind === 'audio' ? null : 1920,
+    height: kind === 'font' || kind === 'audio' ? null : 1080,
+    durationSec: kind === 'video' ? 12 : kind === 'audio' ? 95 : null,
     uploader: people.sam,
     createdAt: new Date().toISOString(),
     usedIn: 0,
     urls: {
-      file: '/teaser-v2.jpg',
-      original: '/teaser-v2.jpg',
+      file: kind === 'audio' ? '/tone.mp3' : '/teaser-v2.jpg',
+      original: kind === 'audio' ? '/tone.mp3' : '/teaser-v2.jpg',
       poster: kind === 'video' ? '/teaser-v2.jpg' : null,
     },
     canDelete: true,

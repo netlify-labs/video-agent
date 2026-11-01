@@ -140,6 +140,26 @@ async function main() {
     )
   if (statSync(video).size > MAX_BYTES)
     throw new StepError('The rendered MP4 is larger than 2 GB. Make the video shorter.')
+  // The MP4 keeps its sound; only the previews below drop it. A composition with <audio> and no track is logged.
+  const audioCodecs = run('ffprobe', [
+    '-v',
+    'error',
+    '-select_streams',
+    'a',
+    '-show_entries',
+    'stream=codec_name',
+    '-of',
+    'csv=p=0',
+    video,
+  ])
+    .split('\n')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  const wantsAudio = /<audio\b/i.test(indexHtml) || /data-has-audio\s*=\s*["']true["']/i.test(indexHtml)
+  log(wantsAudio && !audioCodecs.length ? 'render.audio_missing' : 'render.audio', {
+    codecs: audioCodecs,
+    composed: wantsAudio,
+  })
 
   const posterAt = posterTime(durationSec)
   run('ffmpeg', [

@@ -99,6 +99,8 @@ export const versions = pgTable(
     editedFromN: integer('edited_from_n'),
     // The frozen render input of a render_unchanged version: the archive in the sources store and its hashes.
     frozen: jsonb('frozen'),
+    // 'silent', 'music' or 'music_sfx': what the run is asked to do with sound.
+    sound: text('sound').notNull().default('silent'),
   },
   (t) => [primaryKey({ columns: [t.jobId, t.n] })],
 )
@@ -221,6 +223,8 @@ export const plans = pgTable(
     aspect: text('aspect'),
     durationSec: integer('duration_sec'),
     mediaIds: jsonb('media_ids').$type<string[]>().notNull().default([]),
+    // The Sound chosen while planning; null when none was (the video then decides).
+    sound: text('sound'),
     inputsHash: text('inputs_hash').notNull(),
     route: jsonb('route'),
     questions: jsonb('questions'),

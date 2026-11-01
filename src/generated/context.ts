@@ -6,6 +6,7 @@ export const contextMeta = {
   primaryColor: '#14b8a6',
   logo: null,
   logoLight: null,
+  music: null,
 } as {
   isDefault: boolean
   name: string
@@ -13,4 +14,5 @@ export const contextMeta = {
   primaryColor: string
   logo: string | null
   logoLight: string | null
+  music: { file: string; genre: string | null; tempo: string | null } | null
 }

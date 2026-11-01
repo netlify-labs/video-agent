@@ -2,6 +2,7 @@
 // the sources store and pins its sha256 in the prompt, so scripts/prepare-run.ts only ever follows keys the server
 // chose: nothing the model writes (or a request smuggles in) can point it somewhere else.
 import { createHash } from 'node:crypto'
+import { MEDIA_KINDS, type MediaKind } from './media/classify.js'
 
 export const RUN_MANIFEST_VERSION = 1
 
@@ -32,7 +33,7 @@ export interface RunMedia {
   sha256: string
   /** File name inside video/assets/media/. */
   filename: string
-  kind: 'image' | 'svg' | 'video' | 'font'
+  kind: MediaKind
 }
 
 export interface FeedbackPin {
@@ -102,7 +103,7 @@ export function verifyRunManifest(raw: string, expected: { attemptId: string; sh
         !/^med_[a-z0-9]{8,40}\/(original|clean)\.[a-z0-9]{2,5}$/.test(x.key) ||
         !HEX.test(x.sha256) ||
         !/^med_[a-z0-9]{8,40}\.[a-z0-9]{2,5}$/.test(x.filename) ||
-        !['image', 'svg', 'video', 'font'].includes(x.kind)
+        !(MEDIA_KINDS as readonly string[]).includes(x.kind)
       )
         throw new Error('The run manifest has a bad media entry.')
   }

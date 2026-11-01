@@ -1,8 +1,12 @@
 // Domain records. These mirror the database tables (db/schema.ts) and the in-memory store.
+import type { MediaKind } from '../lib/media/classify.js'
 import type { PreviewFile, Previews } from '../lib/media/previews.js'
 
 export type Role = 'admin' | 'creator' | 'reviewer' | 'viewer'
 export type Aspect = '16:9' | '9:16' | '1:1' | '4:5'
+/** What a run does with sound: nothing (the default), a music bed, or music plus effects on visible actions. */
+export const SOUNDS = ['silent', 'music', 'music_sfx'] as const
+export type VideoSound = (typeof SOUNDS)[number]
 
 export const ASPECTS: Record<Aspect, { width: number; height: number }> = {
   '16:9': { width: 1920, height: 1080 },
@@ -144,6 +148,8 @@ export interface VersionRow {
   editedFromN?: number | null
   /** The version-owned render input of a render_unchanged version. */
   frozen?: FrozenBundle | null
+  /** Missing on rows written before sound existed: silent. */
+  sound?: VideoSound
 }
 
 export type VersionMode = 'author' | 'render_unchanged'
@@ -285,6 +291,8 @@ export interface PlanRow {
   durationSec: number | null
   /** Library items attached while planning; the video made from the plan uses them. */
   mediaIds: string[]
+  /** The Sound chosen while planning, if any. */
+  sound?: VideoSound | null
   inputsHash: string
   route: PlanRoute | null
   questions: PlanQuestion[] | null
@@ -335,7 +343,7 @@ export type MediaStatus = 'uploading' | 'verifying' | 'ready' | 'rejected'
 export interface MediaRow {
   id: string
   uploaderId: string
-  kind: 'image' | 'svg' | 'video' | 'font'
+  kind: MediaKind
   status: MediaStatus
   rejectReason: string | null
   filename: string

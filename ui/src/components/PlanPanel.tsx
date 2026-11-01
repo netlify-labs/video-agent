@@ -32,6 +32,8 @@ export interface PlanPanelProps {
   revisionOf?: { videoId: string; version?: number } | undefined
   /** Library items to plan around; the planner sees the images. */
   mediaIds?: string[] | undefined
+  /** The Sound chosen next to the prompt; the planner plans for it. */
+  sound?: 'silent' | 'music' | 'music_sfx' | undefined
   /** Called with the plan id to create with it, or null to create without a plan. */
   onCreate: (planId: string | null) => void
   onSuggestAspect?: (aspect: Aspect) => void
@@ -92,6 +94,7 @@ export function PlanPanel(props: PlanPanelProps) {
         ...(props.durationSec ? { durationSec: props.durationSec } : {}),
         ...(props.revisionOf ? { revisionOf: props.revisionOf } : {}),
         ...(props.mediaIds?.length ? { mediaIds: props.mediaIds } : {}),
+        ...(props.sound ? { sound: props.sound } : {}),
       },
     })
     // Start once per panel; the prompt is fixed while planning.

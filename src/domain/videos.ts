@@ -24,6 +24,7 @@ import {
   type PublicationRow,
   type Stage,
   type VersionRow,
+  type VideoSound,
 } from './types.js'
 
 const IDEMPOTENCY_TTL_MS = 24 * 3600_000
@@ -36,6 +37,7 @@ export interface CreateVideoInput {
   webhookUrl?: string | undefined
   planId?: string | undefined
   mediaIds?: string[] | undefined
+  sound?: VideoSound | undefined
 }
 
 export interface ReviseInput {
@@ -48,6 +50,8 @@ export interface ReviseInput {
   commentIds?: string[] | undefined
   /** More library media for this version, on top of what it inherits from the version it revises. */
   mediaIds?: string[] | undefined
+  /** Omitted: the parent's sound, or music when a silent video gets a new audio pick. */
+  sound?: VideoSound | undefined
 }
 
 export const INCORPORATE_MAX_COMMENTS = 50
@@ -64,7 +68,13 @@ async function consumePlan(
   principal: Principal,
   planId: string,
   target: { jobId: string | null; n: number; newJobId: string },
-): Promise<{ frozen: FrozenPlan; aspect: Aspect | null; durationSec: number | null; mediaIds: string[] }> {
+): Promise<{
+  frozen: FrozenPlan
+  aspect: Aspect | null
+  durationSec: number | null
+  mediaIds: string[]
+  sound: VideoSound | null
+}> {
   const plan = await repo.getPlan(planId, { lock: true })
   if (!plan || plan.userId !== principal.userId) throw new ApiError('not_found', 'Plan not found.')
   if (plan.consumedByJobId) throw new ApiError('conflict', 'This plan was already used to make a video.')
@@ -97,6 +107,7 @@ async function consumePlan(
     aspect: (plan.aspect as Aspect | null) ?? plan.route?.suggestedAspect ?? null,
     durationSec: plan.durationSec ?? (seconds > 0 ? Math.round(seconds) : null),
     mediaIds: plan.mediaIds,
+    sound: plan.sound ?? null,
   }
 }
 
@@ -248,9 +259,14 @@ export async function createVideo(
       }
       await repo.insertJob(job)
       // Media attached while planning comes first, then any picked when creating.
-      await repo.insertVersionMedia(
-        await snapshotMedia(repo, jobId, 1, [...(planned?.mediaIds ?? []), ...(input.mediaIds ?? [])], []),
+      const media = await snapshotMedia(
+        repo,
+        jobId,
+        1,
+        [...(planned?.mediaIds ?? []), ...(input.mediaIds ?? [])],
+        [],
       )
+      await repo.insertVersionMedia(media)
       await repo.insertVersion({
         jobId,
         n: 1,
@@ -263,6 +279,8 @@ export async function createVideo(
         status: 'queued',
         createdAt: now,
         plan: planned?.frozen ?? null,
+        // A picked audio item means music unless the person chose otherwise.
+        sound: input.sound ?? planned?.sound ?? (media.some((m) => m.kind === 'audio') ? 'music' : 'silent'),
       })
       await repo.insertAttempt(newAttempt(deps, jobId, 1, now))
       return { status: 202, body: await videoDto(repo, deps, jobId, principal) }
@@ -327,6 +345,20 @@ export async function reviseVideo(
       const planned = input.planId
         ? await consumePlan(repo, deps, principal, input.planId, { jobId, n, newJobId: jobId })
         : null
+      // The parent's media comes along (even items deleted from the library since); new picks are added.
+      const inherited = await repo.listVersionMedia(jobId, parent.n)
+      const media = await snapshotMedia(
+        repo,
+        jobId,
+        n,
+        [...(planned?.mediaIds ?? []), ...(input.mediaIds ?? [])],
+        inherited,
+      )
+      // Sound is inherited unless changed; a new audio pick turns music on for a silent video.
+      const parentSound = parent.sound ?? 'silent'
+      const newAudio = media.some(
+        (m) => m.kind === 'audio' && !inherited.some((r) => r.mediaId === m.mediaId),
+      )
       await repo.insertVersion({
         jobId,
         n,
@@ -344,18 +376,11 @@ export async function reviseVideo(
         status: 'queued',
         createdAt: now,
         plan: planned?.frozen ?? null,
+        sound:
+          input.sound ?? planned?.sound ?? (parentSound === 'silent' && newAudio ? 'music' : parentSound),
       })
       await repo.insertVersionComments(feedback)
-      // The parent's media comes along (even items deleted from the library since); new picks are added.
-      await repo.insertVersionMedia(
-        await snapshotMedia(
-          repo,
-          jobId,
-          n,
-          [...(planned?.mediaIds ?? []), ...(input.mediaIds ?? [])],
-          await repo.listVersionMedia(jobId, parent.n),
-        ),
-      )
+      await repo.insertVersionMedia(media)
       await repo.insertAttempt(newAttempt(deps, jobId, n, now))
       await repo.updateJob(jobId, {
         latestVersion: n,
@@ -676,6 +701,7 @@ function versionDto(
     authorId: v.authorId,
     parentN: v.parentN,
     targetDurationSec: v.targetDurationSec,
+    sound: v.sound ?? 'silent',
     createdAt: v.createdAt,
     attempts: attemptsCount,
     stage: a?.stage ?? null,

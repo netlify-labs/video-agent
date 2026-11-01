@@ -149,6 +149,32 @@ describe('contract patcher', () => {
     ])
   })
 
+  it('takes music as a layer and effects inside beats; retimes keep the music spanning the video', () => {
+    const music =
+      '<audio id="music" data-va-layer="music" src="assets/media/med_abc12345.mp3" data-start="0" data-duration="9" data-track-index="2" data-volume="0.8" data-fade-in="1" data-fade-out="1.5"></audio>'
+    const sfx = '<audio id="sfx-pop" src="assets/sfx/pop.mp3" data-start="0.4" data-volume="0.35"></audio>'
+    const withSound = html
+      .replace('<section id="intro"', `${music}\n      <section id="intro"`)
+      .replace(
+        '<div class="kicker" data-va-text="intro-kicker">',
+        `${sfx}<div class="kicker" data-va-text="intro-kicker">`,
+      )
+    expect(validate(withSound, summary)).toEqual([])
+    const out = applyEdits(withSound, summary, [{ op: 'retime', beat: 'intro', duration: 4.5 }])
+    expect(out.html).toMatch(/data-va-layer="music"[^>]*data-start="0" data-duration="10.5"/)
+    expect(out.html).toContain('data-start="0.4" data-volume="0.35"')
+    // Timed audio on the root that isn't a layer breaks the contract.
+    expect(
+      validate(
+        html.replace(
+          '<section id="intro"',
+          `${music.replace(' data-va-layer="music"', '')}<section id="intro"`,
+        ),
+        summary,
+      ),
+    ).toContainEqual(expect.stringMatching(/<audio id="music"> is timed but is neither a beat nor a layer/))
+  })
+
   it('quantizes times to frames', () => {
     const out = applyEdits(html, summary, [{ op: 'retime', beat: 'demo', duration: 2.01 }])
     expect(out.composition.beats[1]?.duration).toBe(2)
