@@ -302,7 +302,11 @@ export interface TestDeps extends Deps {
   /** The source.tar.gz the next fake run uploads (once), instead of the default fixture. */
   nextSource: Uint8Array | null
   /** Preview variants (and placeholder) the next fake run uploads and lists in its manifest (once). */
-  nextPreviews: { files: Partial<Record<PreviewFile, Uint8Array>>; lqip?: string } | null
+  nextPreviews: {
+    files: Partial<Record<PreviewFile, Uint8Array>>
+    lqip?: string
+    skipped?: { name: string; reason: string }[]
+  } | null
 }
 
 export function makeDeps(env: Record<string, string> = {}, store?: Deps['store']): TestDeps {

@@ -50,6 +50,18 @@ describe('preview variants', () => {
     return h
   }
 
+  it("logs the variants the run couldn't make, with why, and stays ready", async () => {
+    const h = harness()
+    const { version } = await make(h, {
+      files: {},
+      skipped: [{ name: 'clip.webm', reason: 'libvpx-vp9 exited 1: invalid crf' }],
+    })
+    expect(version?.status).toBe('ready')
+    const line = h.deps.logs.find((l) => l.includes('finalize.previews_skipped_in_run')) ?? ''
+    expect(line).toContain('clip.webm')
+    expect(line).toContain('libvpx-vp9 exited 1: invalid crf')
+  })
+
   it('a version with every variant: signed sources best format first, the clip and the placeholder', async () => {
     const h = setup()
     const { id, version } = await make(h, { files: previewFixtures(), lqip: LQIP })

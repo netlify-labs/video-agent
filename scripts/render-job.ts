@@ -214,10 +214,9 @@ async function main() {
       )
       files[name] = entry(name)
     } catch (e) {
-      log('previews.upload_skipped', {
-        name,
-        error: e instanceof Error ? e.message.slice(0, 300) : String(e),
-      })
+      const error = e instanceof Error ? e.message.slice(0, 300) : String(e)
+      log('previews.upload_skipped', { name, error })
+      previews.skipped.push({ name, reason: `upload failed: ${error}` })
     }
   }
   log('upload.done', { ms: Date.now() - started })
@@ -229,6 +228,14 @@ async function main() {
     summary: typeof summary.summary === 'string' ? summary.summary.slice(0, 4000) : '',
     files,
     ...(previews.lqip ? { lqip: previews.lqip } : {}),
+    // Why a variant is missing, so the service can log it (the run's own output isn't kept).
+    ...(previews.skipped.length
+      ? {
+          previewsSkipped: previews.skipped
+            .slice(0, 12)
+            .map((s) => ({ name: s.name, reason: s.reason.slice(0, 300) })),
+        }
+      : {}),
     durationSec,
     width: stream.width,
     height: stream.height,

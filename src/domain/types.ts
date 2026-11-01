@@ -535,6 +535,8 @@ export interface Manifest {
     Partial<Record<PreviewFile, { sha256: string; bytes: number }>>
   /** The tiny poster placeholder as a data URI, when render-job could make one. */
   lqip?: string
+  /** Variants render-job couldn't make or upload, with why. */
+  previewsSkipped?: { name: string; reason: string }[]
   durationSec: number
   width: number
   height: number

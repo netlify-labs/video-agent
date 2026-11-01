@@ -74,7 +74,10 @@ export function harness(
         a.jobId,
         a.id,
         { ...files, ...previews?.files },
-        previews?.lqip ? { lqip: previews.lqip } : {},
+        {
+          ...(previews?.lqip ? { lqip: previews.lqip } : {}),
+          ...(previews?.skipped ? { previewsSkipped: previews.skipped } : {}),
+        },
       )
       const token = /--token (\S+)/.exec(req.prompt)?.[1] ?? null
       if (opts.autoCallback ?? true) await receiveCallback(deps, a.id, token, manifest)

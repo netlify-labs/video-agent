@@ -145,13 +145,17 @@ export function makePreviews(o: {
     '-pix_fmt',
     'yuv420p',
   ]
-  attempt(['clip.webm'], have.has('libvpx-vp9') ? null : 'ffmpeg has no libvpx-vp9 encoder', () =>
-    ff([
-      ...clip,
-      ...['-c:v', 'libvpx-vp9', '-crf', '46', '-b:v', '0', '-deadline', 'good', '-cpu-used', '2'],
-      ...['-row-mt', '1', join(o.out, 'clip.webm')],
-    ]),
-  )
+  // VP9 at "good" quality; if that fails on the runner, once more at the fastest settings before giving up.
+  const vp9 = (speed: string[]) =>
+    ff([...clip, ...['-c:v', 'libvpx-vp9', '-crf', '46', '-b:v', '0', ...speed, join(o.out, 'clip.webm')]])
+  attempt(['clip.webm'], have.has('libvpx-vp9') ? null : 'ffmpeg has no libvpx-vp9 encoder', () => {
+    try {
+      vp9(['-deadline', 'good', '-cpu-used', '2', '-row-mt', '1'])
+    } catch (e) {
+      skip('clip.webm', `good quality failed, retrying fast: ${e instanceof Error ? e.message : String(e)}`)
+      vp9(['-deadline', 'realtime', '-cpu-used', '8'])
+    }
+  })
   attempt(['clip.mp4'], have.has('libx264') ? null : 'ffmpeg has no libx264 encoder', () =>
     ff([
       ...clip,

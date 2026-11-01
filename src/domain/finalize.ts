@@ -255,6 +255,15 @@ async function storePreviews(
   sha256: Record<string, string>,
 ): Promise<Previews | null> {
   const out: Previews = { files: {}, lqip: isLqip(manifest.lqip) ? manifest.lqip : null }
+  // What the run couldn't make: logged here because the run's own output isn't kept. Untrusted, so bounded strings.
+  if (Array.isArray(manifest.previewsSkipped) && manifest.previewsSkipped.length)
+    deps.log.warn('finalize.previews_skipped_in_run', {
+      attemptId,
+      skipped: manifest.previewsSkipped.slice(0, 12).map((s: { name?: unknown; reason?: unknown }) => ({
+        name: typeof s.name === 'string' ? s.name.slice(0, 40) : '',
+        reason: typeof s.reason === 'string' ? s.reason.slice(0, 300) : '',
+      })),
+    })
   for (const name of PREVIEW_NAMES) {
     const want = manifest.files[name]
     if (!want) continue
