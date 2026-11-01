@@ -135,6 +135,9 @@ export interface OAuthRequestRow {
   createdAt: string
   expiresAt: string
   usedAt: string | null
+  /** The upstream access token (encrypted), kept only when a Netlify team is required. */
+  upstreamTokenEnc?: string | null
+  membershipCheckedAt?: string | null
 }
 
 /** A connected app: one person's authorization of one client. Revoking it ends all of its tokens. */
@@ -147,6 +150,35 @@ export interface OAuthGrantRow {
   createdAt: string
   lastUsedAt: string | null
   expiresAt: string
+  revokedAt: string | null
+  /** For the Netlify team re-check (src/auth/membership.ts): the encrypted upstream token and check times. */
+  upstreamTokenEnc?: string | null
+  membershipCheckedAt?: string | null
+  membershipFailedAt?: string | null
+}
+
+/** A sign-in identity (provider + subject) linked to a user row. */
+export interface UserIdentityRow {
+  provider: string
+  subject: string
+  userId: string
+  email: string
+  createdAt: string
+  lastSeenAt: string
+}
+
+/** A web session (Sign in with Netlify). `id` is the SHA-256 of the cookie's token. */
+export interface SessionRow {
+  id: string
+  userId: string
+  provider: string
+  createdAt: string
+  lastSeenAt: string
+  expiresAt: string
+  rotatedAt: string
+  upstreamTokenEnc: string | null
+  membershipCheckedAt: string | null
+  membershipFailedAt: string | null
   revokedAt: string | null
 }
 

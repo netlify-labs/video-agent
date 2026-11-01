@@ -34,6 +34,8 @@ import type {
   OAuthRequestRow,
   OAuthGrantRow,
   OAuthTokenRow,
+  SessionRow,
+  UserIdentityRow,
 } from '../domain/types.js'
 import type { JobQuery, Repo, Store } from './types.js'
 
@@ -71,6 +73,8 @@ interface State {
   oauthRequests: Map<string, OAuthRequestRow>
   oauthGrants: Map<string, OAuthGrantRow>
   oauthTokens: Map<string, OAuthTokenRow>
+  identities: Map<string, UserIdentityRow>
+  sessions: Map<string, SessionRow>
 }
 
 const empty = (): State => ({
@@ -107,10 +111,13 @@ const empty = (): State => ({
   oauthRequests: new Map(),
   oauthGrants: new Map(),
   oauthTokens: new Map(),
+  identities: new Map(),
+  sessions: new Map(),
 })
 
 const clone = <T>(v: T): T => structuredClone(v)
 const vkey = (jobId: string, n: number) => `${jobId}#${n}`
+const ikey = (provider: string, subject: string) => `${provider}\n${subject}`
 const live = (leaseUntil: string | null, now: string) => leaseUntil !== null && leaseUntil > now
 
 export function createMemoryStore(): Store & { reset(): void; dump(): State } {
@@ -626,6 +633,95 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
       for (const [id, c] of state.oauthClients)
         if (c.createdAt < clientsBefore && !used.has(id)) del(state.oauthClients, id)
       return n
+    },
+    getUserIdentity: async (provider, subject) =>
+      clone(state.identities.get(ikey(provider, subject)) ?? null),
+    insertUserIdentityIfAbsent: async (row) => {
+      const k = ikey(row.provider, row.subject)
+      if (!state.identities.has(k)) state.identities.set(k, clone(row))
+      return clone(state.identities.get(k) as UserIdentityRow)
+    },
+    updateUserIdentity: async (provider, subject, patch) => {
+      const r = state.identities.get(ikey(provider, subject))
+      if (r) Object.assign(r, clone(patch))
+    },
+    listUserIdentities: async () => clone([...state.identities.values()]),
+    insertSession: async (row) => {
+      state.sessions.set(row.id, clone(row))
+    },
+    getSession: async (id) => clone(state.sessions.get(id) ?? null),
+    updateSession: async (id, patch) => {
+      const r = state.sessions.get(id)
+      if (r) Object.assign(r, clone(patch))
+    },
+    revokeUserSessions: async (userId, at) => {
+      for (const r of state.sessions.values())
+        if (r.userId === userId && r.revokedAt === null) r.revokedAt = at
+    },
+    deleteExpiredSessions: async (now) => {
+      let n = 0
+      for (const [id, r] of state.sessions)
+        if (r.revokedAt !== null || r.expiresAt <= now) {
+          state.sessions.delete(id)
+          n++
+        }
+      return n
+    },
+    mergeUser: async (from, into) => {
+      const swap = (v: string) => (v === from ? into : v)
+      for (const k of state.keys.values()) k.ownerId = swap(k.ownerId)
+      for (const j of state.jobs.values()) j.ownerId = swap(j.ownerId)
+      for (const v of state.versions.values()) v.authorId = swap(v.authorId)
+      for (const p of state.publications.values()) p.publishedBy = swap(p.publishedBy)
+      for (const [k, r] of [...state.idem]) {
+        if (r.principalId !== from) continue
+        state.idem.delete(k)
+        const nk = `${into}|${r.operation}|${r.key}`
+        if (!state.idem.has(nk)) state.idem.set(nk, { ...r, principalId: into })
+      }
+      for (const p of state.plans.values()) p.userId = swap(p.userId)
+      for (const g of state.gatewayCalls) g.callerId = swap(g.callerId)
+      for (const c of state.comments.values()) {
+        c.authorId = swap(c.authorId)
+        if (c.resolvedBy) c.resolvedBy = swap(c.resolvedBy)
+      }
+      for (const m of state.media.values()) m.uploaderId = swap(m.uploaderId)
+      for (const u of state.uploads.values()) u.uploaderId = swap(u.uploaderId)
+      for (const e of state.edits.values()) e.authorId = swap(e.authorId)
+      for (const c of state.versionComments) c.authorId = swap(c.authorId)
+      for (const [k, at] of [...state.commentReads]) {
+        if (!k.startsWith(`${from}/`)) continue
+        state.commentReads.delete(k)
+        const nk = `${into}/${k.slice(from.length + 1)}`
+        if (!state.commentReads.has(nk)) state.commentReads.set(nk, at)
+      }
+      for (const n of state.notifications) {
+        n.userId = swap(n.userId)
+        n.actorId = swap(n.actorId)
+      }
+      const read = state.notificationReads.get(from)
+      state.notificationReads.delete(from)
+      if (read && !state.notificationReads.has(into)) state.notificationReads.set(into, read)
+      for (const t of state.transfers) {
+        t.fromUserId = swap(t.fromUserId)
+        t.toUserId = swap(t.toUserId)
+        t.byUserId = swap(t.byUserId)
+      }
+      for (const [k, v] of [...state.verdicts]) {
+        if (v.userId !== from) continue
+        state.verdicts.delete(k)
+        const nk = `${v.jobId}:${v.versionN}:${into}`
+        if (!state.verdicts.has(nk)) state.verdicts.set(nk, { ...v, userId: into })
+      }
+      for (const d of state.deliveries.values()) if (d.destKind === 'personal') d.destRef = swap(d.destRef)
+      const hook = state.userWebhooks.get(from)
+      state.userWebhooks.delete(from)
+      if (hook && !state.userWebhooks.has(into)) state.userWebhooks.set(into, { ...hook, userId: into })
+      for (const r of state.oauthRequests.values()) if (r.userId) r.userId = swap(r.userId)
+      for (const g of state.oauthGrants.values()) g.userId = swap(g.userId)
+      for (const r of state.sessions.values()) r.userId = swap(r.userId)
+      for (const r of state.identities.values()) r.userId = swap(r.userId)
+      state.users.delete(from)
     },
     failuresSince: async (since) => {
       const counts = new Map<string, number>()

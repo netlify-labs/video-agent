@@ -563,6 +563,9 @@ export const oauthRequests = pgTable(
     createdAt: ts('created_at').notNull(),
     expiresAt: ts('expires_at').notNull(),
     usedAt: ts('used_at'),
+    // The upstream access token (encrypted), kept only when a Netlify team is required, until the grant takes it.
+    upstreamTokenEnc: text('upstream_token_enc'),
+    membershipCheckedAt: ts('membership_checked_at'),
   },
   (t) => [
     uniqueIndex('oauth_requests_consent_idx').on(t.consentHash),
@@ -583,6 +586,9 @@ export const oauthGrants = pgTable(
     lastUsedAt: ts('last_used_at'),
     expiresAt: ts('expires_at').notNull(),
     revokedAt: ts('revoked_at'),
+    upstreamTokenEnc: text('upstream_token_enc'),
+    membershipCheckedAt: ts('membership_checked_at'),
+    membershipFailedAt: ts('membership_failed_at'),
   },
   (t) => [index('oauth_grants_user_idx').on(t.userId), index('oauth_grants_client_idx').on(t.clientId)],
 )
@@ -598,4 +604,37 @@ export const oauthTokens = pgTable(
     usedAt: ts('used_at'),
   },
   (t) => [index('oauth_tokens_grant_idx').on(t.grantId), index('oauth_tokens_expires_idx').on(t.expiresAt)],
+)
+
+// Sign-in identities linked to a user row (src/auth/accounts.ts): one account per person across the web app and MCP.
+export const userIdentities = pgTable(
+  'user_identities',
+  {
+    provider: text('provider').notNull(),
+    subject: text('subject').notNull(),
+    userId: text('user_id').notNull(),
+    email: text('email').notNull(),
+    createdAt: ts('created_at').notNull(),
+    lastSeenAt: ts('last_seen_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.provider, t.subject] }), index('user_identities_user_idx').on(t.userId)],
+)
+
+// Web sessions for Sign in with Netlify (src/auth/sessions.ts). The cookie holds a random token; only its hash is here.
+export const sessions = pgTable(
+  'sessions',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull(),
+    provider: text('provider').notNull(),
+    createdAt: ts('created_at').notNull(),
+    lastSeenAt: ts('last_seen_at').notNull(),
+    expiresAt: ts('expires_at').notNull(),
+    rotatedAt: ts('rotated_at').notNull(),
+    upstreamTokenEnc: text('upstream_token_enc'),
+    membershipCheckedAt: ts('membership_checked_at'),
+    membershipFailedAt: ts('membership_failed_at'),
+    revokedAt: ts('revoked_at'),
+  },
+  (t) => [index('sessions_user_idx').on(t.userId), index('sessions_expires_idx').on(t.expiresAt)],
 )
