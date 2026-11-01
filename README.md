@@ -64,8 +64,12 @@ production build from Git (the migrations are in `netlify/database/migrations/`)
 
 ## Who can sign in
 
-Sign-in uses [Netlify Identity](https://docs.netlify.com/manage/security/secure-access-to-sites/identity/overview/).
-`ALLOWED_EMAIL_DOMAINS` picks one of two modes:
+Sign-in uses [Netlify Identity](https://docs.netlify.com/manage/security/secure-access-to-sites/identity/overview/)
+by default. A deployment can use **Sign in with Netlify** (Netlify OAuth) instead, optionally limited to members of a
+Netlify team: see [Sign in with Netlify for the web app](#sign-in-with-netlify-for-the-web-app). Forks keep Identity
+unless they set `AUTH_PROVIDER=netlify`.
+
+With Identity, `ALLOWED_EMAIL_DOMAINS` picks one of two modes:
 
 - **Company domains** (`acme.com`): anyone with an `@acme.com` address can create an account and must confirm their email. Keep Identity's **autoconfirm off**, or people could claim addresses they don't own. Other domains are refused at sign-up and by the API.
 - **`invite-only`**: set Identity registration to **Invite only** and invite people from the Identity tab. Nobody else can sign up.
@@ -111,22 +115,24 @@ Prompts are visible to your Netlify team in the project's Agent Runs page.
 
 ## Configuration
 
-| Variable                                                 | Default                 | Meaning                                                                                                                             |
-| -------------------------------------------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `RUNNER_API_TOKEN`                                       | —                       | Personal access token for starting and watching runs.                                                                               |
-| `ALLOWED_EMAIL_DOMAINS`                                  | —                       | Company domains, or `invite-only`.                                                                                                  |
-| `ADMIN_EMAILS`                                           | —                       | First admins.                                                                                                                       |
-| `MAX_ACTIVE_RUNS`                                        | `3`                     | Runs at once.                                                                                                                       |
-| `AGENT`, `AGENT_MODEL`, `AGENT_EFFORT`                   | runner default          | Which agent makes videos.                                                                                                           |
-| `AUTHORING_DEADLINE_MIN`                                 | `22`                    | Stop a run after this many minutes (the runner's ceiling is 25).                                                                    |
-| `QUEUE_TIMEOUT_MIN`                                      | `60`                    | Fail a video that waits in the queue longer than this.                                                                              |
-| `RENDER_QUALITY`                                         | `standard`              | HyperFrames render quality (`looks`, `standard`, `delivery`).                                                                       |
-| `ALLOWED_ORIGINS`                                        | —                       | Origins allowed to call the API from a browser with an API key (CORS).                                                              |
-| `BRAND_ZIP_URL`                                          | —                       | A zip of your brand kit, used instead of committing it to `context/` ([how](context/README.md#keeping-your-brand-out-of-the-repo)). |
-| `MCP_OAUTH_PROVIDER`                                     | —                       | `netlify` turns on OAuth for the MCP ([below](#sign-in-with-netlify-oauth)). Off unless this and both credentials are set.          |
-| `NETLIFY_OAUTH_CLIENT_ID`, `NETLIFY_OAUTH_CLIENT_SECRET` | —                       | The Netlify OAuth application used for that sign-in.                                                                                |
-| `MCP_OAUTH_ALLOWED_EMAIL_DOMAINS`                        | `ALLOWED_EMAIL_DOMAINS` | Email domains that may connect over OAuth. With neither set to domains (`invite-only`), only existing accounts can.                 |
-| `MCP_OAUTH_CIMD_HOSTS`                                   | `claude.ai,claude.com`  | Hosts whose https client ids (Client ID Metadata Documents) are fetched.                                                            |
+| Variable                                                 | Default                                        | Meaning                                                                                                                                        |
+| -------------------------------------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `RUNNER_API_TOKEN`                                       | —                                              | Personal access token for starting and watching runs.                                                                                          |
+| `ALLOWED_EMAIL_DOMAINS`                                  | —                                              | Company domains, or `invite-only`.                                                                                                             |
+| `ADMIN_EMAILS`                                           | —                                              | First admins.                                                                                                                                  |
+| `MAX_ACTIVE_RUNS`                                        | `3`                                            | Runs at once.                                                                                                                                  |
+| `AGENT`, `AGENT_MODEL`, `AGENT_EFFORT`                   | runner default                                 | Which agent makes videos.                                                                                                                      |
+| `AUTHORING_DEADLINE_MIN`                                 | `22`                                           | Stop a run after this many minutes (the runner's ceiling is 25).                                                                               |
+| `QUEUE_TIMEOUT_MIN`                                      | `60`                                           | Fail a video that waits in the queue longer than this.                                                                                         |
+| `RENDER_QUALITY`                                         | `standard`                                     | HyperFrames render quality (`looks`, `standard`, `delivery`).                                                                                  |
+| `ALLOWED_ORIGINS`                                        | —                                              | Origins allowed to call the API from a browser with an API key (CORS).                                                                         |
+| `BRAND_ZIP_URL`                                          | —                                              | A zip of your brand kit, used instead of committing it to `context/` ([how](context/README.md#keeping-your-brand-out-of-the-repo)).            |
+| `AUTH_PROVIDER`                                          | `identity`                                     | How people sign in to the web app: `identity` (Netlify Identity) or `netlify` ([Sign in with Netlify](#sign-in-with-netlify-for-the-web-app)). |
+| `NETLIFY_REQUIRED_TEAM`                                  | —                                              | Netlify team slugs or ids (comma-separated). When set, every Netlify sign-in (web or MCP) must be a member of one; re-checked daily.           |
+| `MCP_OAUTH_PROVIDER`                                     | `netlify` with `AUTH_PROVIDER=netlify`, else — | `netlify` turns on OAuth for the MCP ([below](#sign-in-with-netlify-oauth)); `off` turns it off. Off unless both credentials are set.          |
+| `NETLIFY_OAUTH_CLIENT_ID`, `NETLIFY_OAUTH_CLIENT_SECRET` | —                                              | The Netlify OAuth application for Sign in with Netlify (web and MCP share it).                                                                 |
+| `MCP_OAUTH_ALLOWED_EMAIL_DOMAINS`                        | `ALLOWED_EMAIL_DOMAINS`                        | Email domains that may connect over OAuth. With neither set to domains (`invite-only`), only existing accounts can.                            |
+| `MCP_OAUTH_CIMD_HOSTS`                                   | `claude.ai,claude.com`                         | Hosts whose https client ids (Client ID Metadata Documents) are fetched.                                                                       |
 
 ## The API
 
@@ -195,8 +201,55 @@ and issues opaque tokens bound to `https://<your-site>/mcp`: access tokens last 
 rotate on every use (a reused one ends the connection). Public clients with PKCE (S256) only. A verified email maps to
 the person's account; a first-time address in an allowed domain gets an account with the Creator role, like web
 sign-up. People see and revoke their connected apps on the API keys page; disabling someone ends their connections.
-An account created this way is separate from a later web sign-up with the same address, so ask people to sign in to
-the web app first if they'll use both.
+Each Netlify sign-in is linked to one account per person: a person who signs up on the web later with the same
+address keeps one account, because their next Netlify sign-in merges the OAuth-created account into the web one (see
+below). With `NETLIFY_REQUIRED_TEAM` set, MCP sign-ins must be in that team too, whichever `AUTH_PROVIDER` is used.
+
+### Sign in with Netlify for the web app
+
+Set `AUTH_PROVIDER=netlify` and the web app signs people in with their Netlify account instead of Netlify Identity
+(Identity isn't used for sign-in at all, and the setup page checks the OAuth app instead of Identity). MCP OAuth
+turns on with it, using the same OAuth app.
+
+1. Create a Netlify OAuth application (User settings → Applications → OAuth → New OAuth app) with the redirect URI
+   `https://<your-site>/oauth/callback`. That one URI serves both the web sign-in and MCP OAuth (the web sign-in is
+   told apart by a signed cookie in the browser that started it), so it's the only one to register.
+2. Set `AUTH_PROVIDER=netlify`, `NETLIFY_OAUTH_CLIENT_ID` and `NETLIFY_OAUTH_CLIENT_SECRET` (mark the secret as secret).
+3. Keep `ALLOWED_EMAIL_DOMAINS` and `ADMIN_EMAILS`: they apply as before, to the email on the Netlify account.
+   `invite-only` admits only people who already have an account here, plus `ADMIN_EMAILS` (there are no invites
+   without Identity), so a team rule is usually the better fit.
+4. Optionally set `NETLIFY_REQUIRED_TEAM` to your Netlify team's slug (as in `app.netlify.com/teams/<slug>`) or id,
+   comma-separated for several. Then redeploy.
+
+How it behaves:
+
+- **Sign-in:** the button goes to `/auth/netlify/start`, Netlify, then `/oauth/callback`, which checks the email
+  domain and the team, links or creates the account and sets the session. A refused sign-in comes back to the
+  sign-in page with the reason.
+- **Sessions:** an opaque random token in the `va_session` cookie (httpOnly, Secure, SameSite=Lax), stored only as a
+  hash. A session lasts 30 days from its last use, its token is replaced daily, and it ends on Sign out
+  (`POST /auth/sign-out`) or when an admin disables the person (which also ends their MCP connections and API keys).
+  Requests that change something must come from the app's own origin, as with Identity.
+- **MCP single sign-on:** someone signed in to the web app who connects an MCP client goes straight to the consent
+  screen, without a second Netlify round-trip.
+- **Team re-check:** with `NETLIFY_REQUIRED_TEAM`, the person's Netlify access token is kept encrypted (AES-256-GCM,
+  with a key derived from the app's own data encryption key; never logged) and used to re-read
+  `api.netlify.com/api/v1/accounts` at most once a day while a web session or MCP connection is in use. Someone no
+  longer in the team ("You're no longer in the <team> Netlify team") loses their web sessions and MCP connections; a
+  token Netlify rejects (revoked app access) ends that session or connection. If Netlify can't answer (5xx,
+  timeouts), people stay signed in and the check is retried, for up to 7 days after the last good check; then they
+  have to sign in again. API keys are not re-checked against the team: disable someone who leaves to revoke theirs.
+- **API keys** keep working and no longer ask Identity; a key works while its owner's account is enabled and in an
+  allowed domain.
+
+**Existing Identity users carry over.** A person's first Netlify sign-in links to their existing account by its
+verified email (Identity accounts first), with the same role, videos, comments and keys. From then on the link is by
+their Netlify user id, so a later email change at Netlify doesn't split the account. If the person also has an
+account that an earlier MCP OAuth sign-in created (an `oauth_netlify_…` id), it's merged into the Identity account in
+one transaction: videos and versions, keys, connected apps, plans, comments, verdicts, notifications, media and edit
+drafts move over, and the merged account is deleted (it stays disabled if either was). The admin People table shows
+how each person signs in. Switching back to `AUTH_PROVIDER=identity` works too: accounts that came from Identity sign
+in as before, while accounts created by Sign in with Netlify can only use MCP OAuth and their API keys.
 
 ## Developing
 
