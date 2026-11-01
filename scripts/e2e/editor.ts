@@ -1,6 +1,6 @@
 // Live check for the editor (plan v2 §8, §13 C gate) and spike S4's numbers. Spends one render-unchanged run.
 //   VIDEO_AGENT_URL=https://<site> VIDEO_AGENT_KEY=nva_… VIDEO_ID=vid_… [FROM=n] [STRETCH_TO=60] npx tsx scripts/e2e/editor.ts
-// Opens a draft of an editable version, edits it (retime, text, reorder, colour within the palette; or stretches the
+// Opens a draft of an editable version, edits it (retime, text, reorder, [COLOR=1] colour within the palette; or stretches the
 // beats to STRETCH_TO seconds), checks the draft preview, renders it unchanged and waits. Passes when the new version
 // is ready, render_unchanged from the base, its MP4 length matches the edited composition, it is editable again and
 // its own preview carries the edit. Logs stage times and credits (S4). JSON lines; exits non-zero on failure.
@@ -114,7 +114,8 @@ if (stretchTo) {
   const other = accent
     ? draft.palette.find((c) => c !== draft.composition.colors[accent]?.toLowerCase())
     : undefined
-  if (accent && other) ops.push({ op: 'color', role: accent, value: other })
+  // A palette colour can fail hyperframes' contrast check (the run then stops by design): opt in with COLOR=1.
+  if (process.env.COLOR === '1' && accent && other) ops.push({ op: 'color', role: accent, value: other })
 }
 const saved = await api('PUT', `/api/v1/edits/${draft.id}`, { rev: draft.rev, ops })
 const edit = saved.json as Edit
