@@ -93,6 +93,32 @@ function restoreArchive(root: string, archive: string, sha256: string, what: str
 }
 
 /** Restores what the manifest lists. `root` and `fetch` are injectable for tests. */
+/** A second check of a clip with ffprobe (the upload was checked without it): H.264, AAC or no audio, ≤ 2 min. */
+export function probeClip(path: string, name: string) {
+  let info: { streams?: { codec_type?: string; codec_name?: string }[]; format?: { duration?: string } }
+  try {
+    info = JSON.parse(
+      run(
+        'ffprobe',
+        ['-v', 'error', '-show_entries', 'stream=codec_type,codec_name:format=duration', '-of', 'json', path],
+        { timeoutMs: 60_000 },
+      ),
+    ) as typeof info
+  } catch (e) {
+    throw new StepError(
+      `Clip ${name} can't be read (${e instanceof Error ? e.message.slice(0, 200) : 'ffprobe failed'}). Stop and report this.`,
+    )
+  }
+  const video = info.streams?.find((s) => s.codec_type === 'video')
+  const audio = info.streams?.filter((s) => s.codec_type === 'audio') ?? []
+  const duration = Number(info.format?.duration)
+  if (video?.codec_name !== 'h264') throw new StepError(`Clip ${name} isn't H.264. Stop and report this.`)
+  if (audio.some((s) => s.codec_name !== 'aac'))
+    throw new StepError(`Clip ${name} has non-AAC audio. Stop and report this.`)
+  if (!(duration > 0) || duration > 120.5)
+    throw new StepError(`Clip ${name} is longer than 2 minutes. Stop and report this.`)
+}
+
 export async function prepare(m: RunManifest, opts: { tmp: string; root?: string; fetch?: Fetch }) {
   const { tmp, root = repoRoot, fetch = download } = opts
   if (m.source) {
@@ -124,6 +150,7 @@ export async function prepare(m: RunManifest, opts: { tmp: string; root?: string
         throw new StepError(
           `Media ${item.filename} doesn't match its hash (got ${actual}). Stop and report this.`,
         )
+      if (item.kind === 'video') probeClip(to, item.filename)
     }
     log('media', { count: m.media.length, files: m.media.map((x) => x.filename) })
   }
