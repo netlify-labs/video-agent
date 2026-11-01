@@ -49,8 +49,10 @@ import {
   updateComment,
 } from './domain/comments.js'
 import * as planning from './domain/plans.js'
+import { addPreview } from './domain/previews.js'
 import { myUsage, planningByUserWeek } from './domain/usage.js'
 import { ApiError, errorBody } from './lib/errors.js'
+import { PREVIEW_NAMES } from './lib/media/previews.js'
 import * as s from './schemas.js'
 
 /** The bits of Netlify's function context the app uses. */
@@ -492,6 +494,32 @@ export function createApp(deps: Deps, opts: AppOptions) {
         }),
         302,
       )
+    },
+  )
+
+  app.openapi(
+    createRoute({
+      method: 'put',
+      path: '/api/v1/videos/{id}/versions/{n}/previews/{name}',
+      summary:
+        "Admins: add a preview variant (or the placeholder, name lqip) to a ready version that doesn't have it yet",
+      tags: ['versions'],
+      security,
+      request: {
+        params: VersionParam.extend({
+          name: z.enum(['lqip', ...PREVIEW_NAMES]).openapi({ param: { name: 'name', in: 'path' } }),
+        }),
+        body: {
+          content: { 'application/octet-stream': { schema: z.string().openapi({ format: 'binary' }) } },
+          required: true,
+        },
+      },
+      responses: { 201: json(z.object({ name: z.string(), bytes: z.number().int() }), 'Added'), ...errors },
+    }),
+    async (c) => {
+      const { id, n, name } = c.req.valid('param')
+      const bytes = new Uint8Array(await c.req.arrayBuffer())
+      return c.json(await addPreview(deps, c.get('principal'), id, n, name, bytes), 201)
     },
   )
 

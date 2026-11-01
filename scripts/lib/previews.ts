@@ -20,6 +20,10 @@ const CLIP_WIDTH = 480
 const CLIP_FPS = 24
 const STEP_TIMEOUT_MS = 2 * 60_000
 
+/** The second poster.jpg is taken at: 30% in, at least 0.5 s, and inside the video. */
+export const posterTime = (durationSec: number) =>
+  Math.min(Math.max(durationSec * 0.3, 0.5), Math.max(durationSec - 0.1, 0))
+
 /** Names of the encoders this ffmpeg has (libwebp, libaom-av1, libsvtav1, libvpx-vp9, libx264, ...). */
 export function encoders(ffmpeg = 'ffmpeg'): Set<string> {
   try {

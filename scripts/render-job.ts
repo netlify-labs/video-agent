@@ -11,7 +11,7 @@ import type { PreviewFile } from '../src/lib/media/previews.js'
 import type { RunManifest } from '../src/lib/run-manifest.js'
 import { postCheckpoint } from './checkpoint.js'
 import { toVtt } from './lib/captions.js'
-import { makePreviews } from './lib/previews.js'
+import { makePreviews, posterTime } from './lib/previews.js'
 import { RenderProgressReporter } from './lib/render-progress.js'
 import {
   StepError,
@@ -141,7 +141,7 @@ async function main() {
   if (statSync(video).size > MAX_BYTES)
     throw new StepError('The rendered MP4 is larger than 2 GB. Make the video shorter.')
 
-  const posterAt = Math.min(Math.max(durationSec * 0.3, 0.5), Math.max(durationSec - 0.1, 0))
+  const posterAt = posterTime(durationSec)
   run('ffmpeg', [
     '-y',
     '-loglevel',
