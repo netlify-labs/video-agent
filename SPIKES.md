@@ -193,3 +193,25 @@ the run stopped without rendering or editing, as designed.
 The upload check of clips is JavaScript (box parsing: H.264 sample entry, AAC or no audio, length, size); runs check
 again with ffprobe in `prepare-run`. Posters are captured in the browser at upload (owner decision: a poster
 fallback is fine).
+
+### S7: render in the browser (2026-11-01, `spikes/s7`, research only)
+
+Three ready videos on production (a 60 s edited version, a 20 s and a 15 s video, all type and motion, no clips),
+five frames each. Each frame is compared with the runner's MP4 frame at the same time (SSIM, 1 = identical):
+
+| Path | SSIM avg | SSIM min | Cost |
+| --- | --- | --- | --- |
+| `cdp`: browser paint (Playwright screenshot after `__player.seek(t)`) | 0.992 | 0.985 | n/a (needs CDP or an extension) |
+| `dom`: in-page DOM to image (html-to-image, SVG foreignObject) | 0.989 | 0.982 | 60-130 ms a frame once warm; 1-2 s for the first (font embedding) |
+
+WebCodecs encoders (H.264, VP9 and AV1 at 1080p30) are available in Chromium and WebKit.
+
+So the answer is "yes for type and motion, with caveats". Seeking the HyperFrames player and grabbing frames is
+faithful: SSIM 0.98-0.99 is about what the runner's own H.264 encoding costs. But a page can't screenshot itself, and
+the in-page path has known gaps we didn't hit here. It can't draw `<video>` frames (clips would need decoding with
+WebCodecs and compositing in a canvas), and it ignores some CSS (backdrop-filter, mix-blend-mode on some
+browsers). It also needs every font and image inlined. Its cost is about 100 ms a frame on a laptop, so a 60 s
+video at 30 fps takes about 3 minutes plus encoding, which is no faster than a render-unchanged run (S4). The
+runner's checks (`hyperframes check`, contrast, render validation) wouldn't run either. A browser render could
+serve a quick, unofficial "download draft" for clip-free compositions. It shouldn't replace the runner render. We
+are not building it.
