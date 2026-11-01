@@ -55,8 +55,9 @@ Netlify OAuth, plus an email-domain rule (reuse `ALLOWED_EMAIL_DOMAINS`; ours: n
 - Keys first, always: `principalFromRequest` keeps parsing `nva_…` keys exactly as now; any other bearer is tried as an
   OAuth token only when OAuth is configured. 401s add `WWW-Authenticate: Bearer resource_metadata=…` only when
   enabled, so API-key clients and docs see no difference.
-- Endpoints (only mounted when enabled): `/.well-known/oauth-protected-resource`, `/.well-known/oauth-authorization-
-server`, `/oauth/register` (DCR, public clients, PKCE S256 only), CIMD client ids with a host allowlist,
+- Endpoints (only mounted when enabled): `/.well-known/oauth-protected-resource`,
+  `/.well-known/oauth-authorization-server`, `/oauth/register` (DCR, public clients, PKCE S256 only), CIMD client ids
+  with a host allowlist,
   `/oauth/authorize` → Netlify `/authorize` → `/oauth/callback` (domain check) → code → `/oauth/token`
   (authorization_code + refresh_token). Tokens are opaque, stored hashed in Netlify DB, audience-bound to this site's
   `/mcp`, short access (1 h) and rotating refresh (30 days), revocable.
