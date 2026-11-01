@@ -11,8 +11,13 @@
 //   text        unique data-va-text ids
 //   media       data-va-media=<slot>, data-va-kind image|video, src under assets/media/; video slots have an id and
 //               beat-local data-start/data-duration
+//   voice       at most one <audio data-va-voice=<beat id>> per beat, a direct child of it: an id, src under
+//               assets/voice/, beat-local data-start/data-duration that end inside the beat (SPIKES.md S9)
+//   ducking     a layer with data-va-duck=<level> (the music) carries a volume lane that dips under every voice;
+//               the patcher rewrites it after retimes and reorders
 //   captions    summary.json captions carry beat, textId, beatStart, beatEnd (beat-relative) plus the absolute
-//               start, end and text render-job reads; the patcher keeps both in step
+//               start, end and text render-job reads; the patcher keeps both in step. Voice cues (voice: true) follow
+//               the spoken words instead of a text, and keep their times when a beat is stretched (audio isn't)
 import { parse, serialize, type DefaultTreeAdapterMap } from 'parse5'
 
 type Node = DefaultTreeAdapterMap['node']
@@ -31,6 +36,8 @@ export interface Caption {
   textId?: string
   beatStart?: number
   beatEnd?: number
+  /** A narration cue: it follows the beat's voice-over, not an on-screen text. */
+  voice?: boolean
 }
 export interface Summary {
   title?: string
@@ -48,6 +55,14 @@ export interface Beat {
   authoredDuration: number
   texts: { id: string; text: string; label: string | null }[]
   media: MediaSlot[]
+  /** The beat's voice-over clip, timed in the beat's clock; null when it has none. */
+  voice: VoiceClip | null
+}
+export interface VoiceClip {
+  id: string
+  src: string
+  start: number
+  duration: number
 }
 export interface MediaSlot {
   slot: string
@@ -138,6 +153,7 @@ export function read(d: Doc): Composition {
         .filter((e) => attr(e, 'data-va-text') !== null)
         .map((e) => ({ id: attr(e, 'data-va-text') ?? '', text: textOf(e).trim(), label: labelOf(e) })),
       media: inner.filter((e) => attr(e, 'data-va-media') !== null).map((e) => mediaOf(e, id)),
+      voice: voiceOf(b),
     }
   })
   return {
@@ -147,6 +163,19 @@ export function read(d: Doc): Composition {
     layers: kids(d.root)
       .filter((e) => attr(e, 'data-va-layer') !== null)
       .map((e) => attr(e, 'data-va-layer') ?? ''),
+  }
+}
+
+const voicesOf = (beat: Element) => kids(beat).filter((e) => attr(e, 'data-va-voice') !== null)
+
+function voiceOf(beat: Element): VoiceClip | null {
+  const e = voicesOf(beat)[0]
+  if (!e) return null
+  return {
+    id: attr(e, 'id') ?? '',
+    src: attr(e, 'src') ?? '',
+    start: num(attr(e, 'data-start')),
+    duration: num(attr(e, 'data-duration')),
   }
 }
 
@@ -250,14 +279,55 @@ export function validate(html: string, summary?: Summary): string[] {
       v.push(`Video slot "${slot}" needs an id, data-start and data-duration.`)
   }
 
+  for (const e of [...walk(root)].filter((x) => attr(x, 'data-va-voice') !== null)) {
+    const id = attr(e, 'data-va-voice') ?? ''
+    const parent = e.parentNode as Element | null
+    if (!parent || attr(parent, 'data-va-beat') !== id || !beats.includes(parent)) {
+      v.push(`Voice "${id}" must be a direct child of beat "${id}".`)
+      continue
+    }
+    if (e.tagName !== 'audio') v.push(`Voice "${id}" must be an <audio>.`)
+    if (!attr(e, 'id')) v.push(`Voice "${id}" needs an id (audio without one is left out of the mix).`)
+    if (!/^assets\/voice\/[A-Za-z0-9_.-]+$/.test(attr(e, 'src') ?? ''))
+      v.push(`Voice "${id}" must use a file in assets/voice/.`)
+    const start = num(attr(e, 'data-start'))
+    const dur = num(attr(e, 'data-duration'))
+    if (!(start >= 0) || !(dur > 0)) v.push(`Voice "${id}" needs data-start and a positive data-duration.`)
+    else {
+      const beatDur = num(attr(parent, 'data-duration'))
+      if (start + dur > beatDur + 0.5 / FPS)
+        v.push(
+          `Beat "${id}" is ${fmt(beatDur)}s but its voice-over runs to ${fmt(start + dur)}s; make the beat longer.`,
+        )
+    }
+  }
+  for (const b of beats)
+    if (voicesOf(b).length > 1) v.push(`Beat "${attr(b, 'data-va-beat') ?? ''}" has more than one voice.`)
+
+  for (const l of kids(root).filter((e) => attr(e, 'data-va-duck') !== null)) {
+    const want = duckPoints(d, num(attr(l, 'data-va-duck')))
+    if (!want) v.push(`data-va-duck on "${attr(l, 'data-va-layer') ?? ''}" must be a level between 0 and 1.`)
+    else if (!sameLane(volumeLane(attr(l, 'data-automation')), want))
+      v.push(
+        `The music's ducking doesn't match the voice-over; run npx tsx scripts/voice.ts sync (it rewrites the volume lane).`,
+      )
+  }
+
   const { colors } = readColors(d)
   if (Object.keys(colors).length === 0) v.push('Declare colours as --va-color-<role> on the root.')
 
   if (summary?.captions) {
-    const known = new Map(read(d).beats.flatMap((b) => b.texts.map((x) => [x.id, b.id] as const)))
+    const comp = read(d)
+    const known = new Map(comp.beats.flatMap((b) => b.texts.map((x) => [x.id, b.id] as const)))
+    const voiced = new Set(comp.beats.filter((b) => b.voice).map((b) => b.id))
     for (const c of summary.captions) {
+      if (c.voice) {
+        if (!c.beat || !voiced.has(c.beat))
+          v.push(`Voice caption "${c.text.slice(0, 40)}" needs the beat whose voice-over it follows.`)
+        continue
+      }
       if (!c.textId || !c.beat) {
-        v.push('Every caption needs beat and textId.')
+        v.push('Every caption needs beat and textId (or voice: true for narration).')
         break
       }
       if (known.get(c.textId) !== c.beat)
@@ -265,6 +335,78 @@ export function validate(html: string, summary?: Summary): string[] {
     }
   }
   return [...new Set(v)]
+}
+
+// ───── ducking ─────
+interface LanePoint {
+  t: number
+  v: number
+}
+const DUCK_DOWN = 0.25
+const DUCK_UP = 0.4
+
+/**
+ * The music's volume points for the voice-over: full level, down to `level` just before each voice, back up after
+ * it. Voices closer than a second apart share one dip. Null when the level isn't a number in 0-1.
+ */
+export function duckPoints(d: Doc, level: number): LanePoint[] | null {
+  if (!(level >= 0 && level <= 1)) return null
+  const comp = read(d)
+  const r = (n: number) => Math.round(n * 1000) / 1000
+  const spans: [number, number][] = []
+  let t = 0
+  for (const b of comp.beats) {
+    if (b.voice && b.voice.duration > 0) {
+      const s = t + b.voice.start
+      const e = s + b.voice.duration
+      const last = spans[spans.length - 1]
+      if (last && s - last[1] < 1) last[1] = e
+      else spans.push([s, e])
+    }
+    t += b.duration
+  }
+  const points: LanePoint[] = [{ t: 0, v: spans[0] && spans[0][0] <= DUCK_DOWN ? level : 1 }]
+  for (const [s, e] of spans) {
+    if (s > DUCK_DOWN) points.push({ t: r(s - DUCK_DOWN), v: 1 }, { t: r(s), v: level })
+    points.push({ t: r(e), v: level })
+    if (e + DUCK_UP < t) points.push({ t: r(e + DUCK_UP), v: 1 })
+  }
+  return points.filter((p, i) => i === 0 || p.t > (points[i - 1]?.t ?? -1))
+}
+
+function volumeLane(raw: string | null): LanePoint[] | null {
+  if (!raw) return null
+  try {
+    const a = JSON.parse(raw) as { lanes?: { target?: string; points?: LanePoint[] }[] }
+    return a.lanes?.find((l) => l.target === 'volume')?.points ?? null
+  } catch {
+    return null
+  }
+}
+
+const sameLane = (a: LanePoint[] | null, b: LanePoint[]) =>
+  !!a &&
+  a.length === b.length &&
+  a.every((p, i) => Math.abs(p.t - (b[i]?.t ?? NaN)) <= 0.02 && Math.abs(p.v - (b[i]?.v ?? NaN)) <= 0.01)
+
+/** Rewrites the volume lane of every ducked layer, keeping its other lanes. */
+export function applyDucking(d: Doc) {
+  for (const l of kids(d.root).filter((e) => attr(e, 'data-va-duck') !== null)) {
+    const points = duckPoints(d, num(attr(l, 'data-va-duck')))
+    if (!points) continue
+    let auto: { version?: number; lanes?: { target?: string }[] } = {}
+    try {
+      auto = JSON.parse(attr(l, 'data-automation') ?? '{}') as typeof auto
+    } catch {
+      auto = {}
+    }
+    const lanes = (auto.lanes ?? []).filter((x) => x.target !== 'volume')
+    setAttr(
+      l,
+      'data-automation',
+      JSON.stringify({ ...auto, version: 1, lanes: [...lanes, { target: 'volume', points }] }),
+    )
+  }
 }
 
 // ───── edits ─────
@@ -298,6 +440,7 @@ function relayout(d: Doc) {
     setAttr(l, 'data-start', '0')
     setAttr(l, 'data-duration', fmt(t))
   }
+  applyDucking(d)
 }
 
 /** Absolute caption times and texts from the beat-relative, keyed ones. */
@@ -311,7 +454,8 @@ function syncCaptions(d: Doc, summary: Summary): Summary {
     .map((c) => {
       const b = c.beat ? beats.get(c.beat) : undefined
       if (!b || c.beatStart === undefined || c.beatEnd === undefined) return c
-      const k = b.duration / b.authoredDuration // captions stretch with their beat
+      // Text captions stretch with their beat; voice ones follow the audio, which keeps its speed.
+      const k = c.voice ? 1 : b.duration / b.authoredDuration
       return {
         ...c,
         start: frames(b.start + c.beatStart * k),
