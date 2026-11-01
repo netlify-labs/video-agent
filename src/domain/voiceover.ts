@@ -15,9 +15,12 @@ export function voiceoverFrom(input: VoiceoverInput): Voiceover | null {
   return { voice: input.voice ?? null, speed: input.speed ?? null, script: script.length ? script : null }
 }
 
-/** A plan's voice-over, with the brief's narration as the script when the person didn't write one. */
+/**
+ * A plan's voice-over with the brief's narration as the script. The brief was written from the person's script when
+ * they gave one, and they may have edited it since, so its narration wins; the plan's script is the fallback.
+ */
 export function withPlanNarration(v: Voiceover | null, brief: PlanBrief | null): Voiceover | null {
-  if (!v || v.script?.length || !brief) return v
+  if (!v || !brief) return v
   const lines = brief.beats.map((b) => b.narration?.trim() ?? '').filter(Boolean)
   return lines.length ? { ...v, script: lines } : v
 }

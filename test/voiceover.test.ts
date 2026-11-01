@@ -139,6 +139,49 @@ describe('voice-over per version', () => {
     })
   })
 
+  it("the brief's narration wins over the plan's script (it was written from it, then maybe edited)", async () => {
+    const h = harness()
+    const plan = await h.json<{ id: string }>(
+      await h.call('POST', '/api/v1/plans', {
+        as: h.member,
+        body: { prompt: PROMPT, voiceover: { enabled: true, script: ['Line one.'] } },
+      }),
+    )
+    h.deps.gateway.replies.push(JSON.stringify({ questions: [] }))
+    await h.call('POST', `/api/v1/plans/${plan.id}/questions`, { as: h.member })
+    h.deps.gateway.replies.push(brief([{ text: 'x', seconds: 3, narration: 'Line one.' }]))
+    const briefed = await h.json<{ brief: Record<string, unknown>; briefRev: number }>(
+      await h.call('POST', `/api/v1/plans/${plan.id}/brief`, { as: h.member, body: { answers: [] } }),
+    )
+    await h.call('PATCH', `/api/v1/plans/${plan.id}`, {
+      as: h.member,
+      body: {
+        brief: { ...briefed.brief, beats: [{ text: 'x', seconds: 3, narration: 'Line one, edited.' }] },
+        briefRev: briefed.briefRev,
+      },
+    })
+    const v = await create(h, { planId: plan.id })
+    expect(await voiceOf(h, v.id, 1)).toMatchObject({ script: ['Line one, edited.'] })
+  })
+
+  it("a revision planned without a voice-over choice keeps the parent's", async () => {
+    const h = harness()
+    const v = await create(h, { voiceover: { enabled: true, voice: 'af_sky' } })
+    await h.drive(4)
+    const plan = await h.json<{ id: string }>(
+      await h.call('POST', '/api/v1/plans', {
+        as: h.member,
+        body: { prompt: 'Warmer.', revisionOf: { videoId: v.id } },
+      }),
+    )
+    h.deps.gateway.replies.push(JSON.stringify({ questions: [] }))
+    await h.call('POST', `/api/v1/plans/${plan.id}/questions`, { as: h.member })
+    h.deps.gateway.replies.push(brief([{ text: 'x', seconds: 3 }]))
+    await h.call('POST', `/api/v1/plans/${plan.id}/brief`, { as: h.member, body: { answers: [] } })
+    expect((await revise(h, v.id, { planId: plan.id })).status).toBe(202)
+    expect(await voiceOf(h, v.id, 2)).toMatchObject({ voice: 'af_sky' })
+  })
+
   it("a person's script on the plan reaches the planner as data", async () => {
     const h = harness()
     const plan = await h.json<{ id: string }>(

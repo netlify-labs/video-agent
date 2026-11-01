@@ -386,11 +386,10 @@ export async function reviseVideo(
         plan: planned?.frozen ?? null,
         sound:
           input.sound ?? planned?.sound ?? (parentSound === 'silent' && newAudio ? 'music' : parentSound),
+        // A plan without a voice-over choice keeps the parent's; turning it off is an explicit enabled: false.
         voiceover: input.voiceover
           ? voiceoverFrom(input.voiceover)
-          : planned
-            ? planned.voiceover
-            : (parent.voiceover ?? null),
+          : (planned?.voiceover ?? parent.voiceover ?? null),
       })
       await repo.insertVersionComments(feedback)
       await repo.insertVersionMedia(media)
