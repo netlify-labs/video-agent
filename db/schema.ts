@@ -84,7 +84,8 @@ export const versions = pgTable(
     prompt: text('prompt').notNull(),
     authorId: text('author_id').notNull(),
     apiKeyId: text('api_key_id'),
-    targetDurationSec: integer('target_duration_sec'),
+    // Seconds; a frame-accurate decimal for edited versions (plan v2 §14 rule 19).
+    targetDurationSec: doublePrecision('target_duration_sec'),
     parentN: integer('parent_n'),
     webhookUrl: text('webhook_url'),
     status: text('status').notNull(),
@@ -93,6 +94,11 @@ export const versions = pgTable(
     plan: jsonb('plan'),
     // Editing contract version the finished composition conforms to (plan v2 §8); null: not editable.
     contract: integer('contract'),
+    // 'author' (an agent writes the composition) or 'render_unchanged' (an edit draft, frozen, rendered as is).
+    mode: text('mode').notNull().default('author'),
+    editedFromN: integer('edited_from_n'),
+    // The frozen render input of a render_unchanged version: the archive in the sources store and its hashes.
+    frozen: jsonb('frozen'),
   },
   (t) => [primaryKey({ columns: [t.jobId, t.n] })],
 )

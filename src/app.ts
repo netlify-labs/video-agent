@@ -30,7 +30,7 @@ import * as hooks from './domain/webhook-settings.js'
 import { listNotifications, markNotificationsRead } from './domain/notifications.js'
 import { getProgress } from './domain/progress.js'
 import { previewLink } from './domain/preview.js'
-import { discardEdit, editPreviewLink, getEdit, openEdit, saveEdit } from './domain/edits.js'
+import { discardEdit, editPreviewLink, getEdit, openEdit, renderEdit, saveEdit } from './domain/edits.js'
 import { receiveCheckpoint } from './domain/checkpoints.js'
 import {
   addComment,
@@ -61,6 +61,7 @@ type Env = { Bindings: { context?: NetlifyContext }; Variables: { principal: Pri
 
 const SETUP_TTL_MS = 60_000
 const PAID_PATHS = [
+  /^\/api\/v1\/edits\/[^/]+\/render$/,
   /^\/api\/v1\/videos$/,
   /^\/api\/v1\/videos\/[^/]+\/versions$/,
   /^\/api\/v1\/videos\/[^/]+\/versions\/\d+\/retry$/,
@@ -882,6 +883,32 @@ export function createApp(deps: Deps, opts: AppOptions) {
     async (c) => {
       await discardEdit(deps, c.get('principal'), c.req.valid('param').id)
       return c.body(null, 204)
+    },
+  )
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/v1/edits/{id}/render',
+      summary:
+        'Render your draft as the next version, unchanged (the run checks and renders; it never redesigns)',
+      tags: ['editor'],
+      security,
+      request: {
+        params: EditParam,
+        headers: z.object({ 'idempotency-key': z.string().max(200).optional() }),
+      },
+      responses: { 202: json(s.VideoSchema, 'Queued'), ...errors, 503: err('Setup required') },
+    }),
+    async (c) => {
+      const res = await renderEdit(
+        deps,
+        c.get('principal'),
+        c.req.valid('param').id,
+        c.req.valid('header')['idempotency-key'],
+      )
+      c.header('location', res.body.links.self)
+      if (!res.replayed) kick(c)
+      return c.json(res.body, statusOf(res.status))
     },
   )
   app.openapi(

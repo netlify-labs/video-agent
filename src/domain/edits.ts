@@ -2,10 +2,11 @@
 // whole list of operations; the server re-applies them to the version's bundle with the same patcher the browser
 // uses and stores an immutable bundle for that rev, which the preview plays and a render freezes.
 import type { Deps } from '../deps.js'
-import { manifestHash } from '../lib/bundle-manifest.js'
+import { excluded, manifestHash } from '../lib/bundle-manifest.js'
 import { applyEdits, ContractError, type EditOp, type Summary } from '../lib/contract.js'
 import { signPath, sha256Hex } from '../lib/crypto.js'
 import { ApiError } from '../lib/errors.js'
+import { writeTarGz } from '../lib/tar.js'
 import { PREVIEW_TTL_SEC, previewScope } from '../lib/preview.js'
 import { contextMeta } from '../generated/context.js'
 import { bundleFileKey, bundlePrefix, contractOf, ensureBundle, type BundleIndex } from './bundles.js'
@@ -13,7 +14,7 @@ import { assertCan, type Principal } from './policy.js'
 import { getSettings } from './settings.js'
 import type { Repo } from '../store/types.js'
 import type { EditRow } from './types.js'
-import { loadJob } from './videos.js'
+import { hasUnfinished, loadJob, newAttempt, videoDto, withIdempotency } from './videos.js'
 
 export const EDIT_TTL_MS = 7 * 24 * 3600_000
 const MAX_OPS = 500
@@ -223,4 +224,62 @@ export async function deleteExpiredEdits(deps: Deps, limit = 20) {
       await deps.blobs.delete('bundles', k)
     await deps.store.deleteEdit(e.id)
   }
+}
+
+/**
+ * Renders the draft's current edits as the next version (plan v2 §8, §14 rules 19, 21): the composition is frozen
+ * into version-owned storage (kept until the version is deleted, so retries work after the draft expires) and one
+ * render-unchanged attempt is queued. The run restores and verifies it, checks it and renders it without changes.
+ */
+export async function renderEdit(deps: Deps, p: Principal, id: string, idemKey?: string) {
+  assertCan(p, 'edit:create')
+  return deps.store.tx(async (repo) => {
+    const e0 = await loadEdit(repo, deps, p, id)
+    return withIdempotency(repo, deps, p, `edits.render:${id}`, idemKey, { id }, async () => {
+      const e = await loadEdit(repo, deps, p, id, true)
+      if (e.renderedN !== null)
+        throw new ApiError('conflict', `This draft was already rendered as v${e.renderedN}.`)
+      const job = await loadJob(repo, p, e.jobId, true)
+      if (await hasUnfinished(repo, e.jobId))
+        throw new ApiError('conflict', 'Another version of this video is still in progress.')
+      const r = await computeRev(deps, e, e.ops as EditOp[])
+      const n = job.nextVersionN
+      // The same canonical manifest prepare-run and render-job verify: media bytes, caches and stills excluded.
+      const manifest = manifestHash(
+        r.list.filter((f) => !excluded(f.path)).map(({ path, sha256 }) => ({ path, sha256 })),
+        [],
+      )
+      const archive = writeTarGz(r.files)
+      const key = `${e.jobId}/v${n}/frozen.tar.gz`
+      await deps.blobs.set('sources', key, archive, { contentType: 'application/gzip' })
+      const now = deps.clock.now().toISOString()
+      await repo.insertVersion({
+        jobId: e.jobId,
+        n,
+        prompt: `Edited from v${e.baseN} in the browser.`,
+        authorId: p.userId,
+        apiKeyId: p.apiKeyId,
+        targetDurationSec: r.composition.duration,
+        parentN: e.baseN,
+        webhookUrl: null,
+        status: 'queued',
+        createdAt: now,
+        plan: null,
+        mode: 'render_unchanged',
+        editedFromN: e.baseN,
+        frozen: { key, sha256: sha256Hex(archive), manifestHash: manifest, editId: e.id },
+      })
+      await repo.insertAttempt(newAttempt(deps, e.jobId, n, now))
+      await repo.updateJob(e.jobId, {
+        latestVersion: n,
+        nextVersionN: n + 1,
+        status: 'queued',
+        updatedAt: now,
+        version: job.version + 1,
+      })
+      await repo.updateEdit(e.id, { renderedN: n, updatedAt: now })
+      deps.log.info('edit.render', { editId: e.id, jobId: e.jobId, n, ops: e.ops.length, base: e0.baseN })
+      return { status: 202, body: await videoDto(repo, deps, e.jobId, p) }
+    })
+  })
 }

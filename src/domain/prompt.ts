@@ -1,7 +1,7 @@
 // The run prompt: a fixed, versioned template plus the user's request, fenced as a creative brief.
 import { ASPECTS, type Aspect } from './types.js'
 
-export const PROMPT_TEMPLATE_VERSION = 7
+export const PROMPT_TEMPLATE_VERSION = 8
 
 export interface PromptInput {
   jobId: string
@@ -126,4 +126,36 @@ export function buildPrompt(p: PromptInput): string {
     'Never print environment variables. Never commit, push or open a pull request.',
   )
   return lines.join('\n')
+}
+
+/**
+ * The prompt for a render-unchanged run (plan v2 §8): someone edited the composition in the browser; the run
+ * restores that exact bundle, checks it and renders it. No authoring: if the check fails, it stops.
+ */
+export function buildRenderUnchangedPrompt(p: {
+  jobId: string
+  attemptId: string
+  versionN: number
+  editedFromN: number
+  runManifestSha256: string
+  callbackUrl: string
+  checkpointUrl: string
+  callbackToken: string
+  upload: { mode: 'blobs' } | { mode: 'signed'; url: string }
+}): string {
+  const uploadArg = p.upload.mode === 'blobs' ? '--upload blobs' : `--upload ${p.upload.url}`
+  return [
+    `You are rendering version ${p.versionN} of video ${p.jobId} (attempt ${p.attemptId}) exactly as someone edited it in the browser from version ${p.editedFromN}.`,
+    "Don't write, change or delete any file in video/. There is nothing to design: only restore, check and render.",
+    '',
+    `1. Run: npx tsx scripts/prepare-run.ts --job ${p.jobId} --attempt ${p.attemptId} --manifest ${p.runManifestSha256}`,
+    '   It restores video/ and verifies every file. If it fails, stop and report the error.',
+    '2. Run `npx hyperframes check` in video/. If it reports any error, stop: fix nothing, and end your answer with the errors.',
+    `3. Run: npx tsx scripts/render-job.ts --job ${p.jobId} --attempt ${p.attemptId} --callback ${p.callbackUrl} --token ${p.callbackToken} ${uploadArg}`,
+    '   It checks the files again before rendering. If it fails, stop and report the error; never edit files to make it pass.',
+    '4. End your answer with the fenced ```json block render-job.ts prints.',
+    '',
+    `Optional progress: npx tsx scripts/checkpoint.ts --attempt ${p.attemptId} --url ${p.checkpointUrl} --token ${p.callbackToken} --message "<what you are doing>"`,
+    'Never ask questions or request authorization. Never print environment variables. Never commit, push or open a pull request.',
+  ].join('\n')
 }

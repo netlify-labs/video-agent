@@ -339,6 +339,20 @@
             "type": "boolean",
             "description": "Ready and keeps editing contract v1, so it can be edited in the browser."
           },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "author",
+              "render_unchanged"
+            ],
+            "description": "render_unchanged: an edit made in the browser, rendered as is (no agent authoring)."
+          },
+          "editedFromN": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
           "n": {
             "type": "integer"
           },
@@ -359,7 +373,7 @@
           },
           "targetDurationSec": {
             "type": [
-              "integer",
+              "number",
               "null"
             ]
           },
@@ -549,6 +563,8 @@
           "verdicts",
           "incorporates",
           "editable",
+          "mode",
+          "editedFromN",
           "n",
           "status",
           "prompt",
@@ -6400,6 +6416,113 @@
           },
           "409": {
             "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/edits/{id}/render": {
+      "post": {
+        "summary": "Render your draft as the next version, unchanged (the run checks and renders; it never redesigns)",
+        "tags": [
+          "editor"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "required": false,
+            "name": "idempotency-key",
+            "in": "header"
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Video"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Setup required",
             "content": {
               "application/json": {
                 "schema": {

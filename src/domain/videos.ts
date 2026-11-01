@@ -180,7 +180,7 @@ export async function setStage(
   return true
 }
 
-async function withIdempotency<T>(
+export async function withIdempotency<T>(
   repo: Repo,
   deps: Deps,
   principal: Principal,
@@ -280,7 +280,7 @@ export async function loadJob(repo: Repo, p: Principal, id: string, lock = false
   return job
 }
 
-async function hasUnfinished(repo: Repo, jobId: string): Promise<boolean> {
+export async function hasUnfinished(repo: Repo, jobId: string): Promise<boolean> {
   return (await repo.listVersions(jobId)).some((v) => UNFINISHED_STATUSES.includes(v.status))
 }
 
@@ -634,6 +634,8 @@ function versionDto(
     plan: v.plan ? { planId: v.plan.planId, brief: v.plan.brief, answers: v.plan.qa } : null,
     incorporates,
     editable: v.status === 'ready' && v.contract === 1,
+    mode: v.mode ?? 'author',
+    editedFromN: v.editedFromN ?? null,
     n: v.n,
     status: v.status,
     prompt: v.prompt,

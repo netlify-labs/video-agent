@@ -1,7 +1,7 @@
 // A strict reader for the composition archives runs make (`tar -czf … video`), for preview bundles (plan v2 §7).
 // Only regular files and directories are accepted; links, devices and anything unusual stop extraction. Paths must
 // stay inside video/, and entry count and expanded size are capped, so a hostile archive can't escape or explode.
-import { gunzipSync } from 'node:zlib'
+import { gunzipSync, gzipSync } from 'node:zlib'
 
 export interface TarLimits {
   maxEntries: number
@@ -100,4 +100,38 @@ export function readTarGz(gz: Uint8Array, limits: TarLimits = BUNDLE_LIMITS): Ma
     files.set(path, body.slice())
   }
   return files
+}
+
+function header(name: string, size: number, type: '0' | 'L') {
+  const h = Buffer.alloc(512)
+  h.write(name.slice(0, 100), 0, 'utf8')
+  h.write('0000644\0', 100)
+  h.write('0000000\0', 108)
+  h.write('0000000\0', 116)
+  h.write(size.toString(8).padStart(11, '0') + '\0', 124)
+  h.write('00000000000\0', 136)
+  h.write('        ', 148)
+  h.write(type, 156)
+  h.write('ustar\0', 257)
+  h.write('00', 263)
+  let sum = 0
+  for (const b of h) sum += b
+  h.write(sum.toString(8).padStart(6, '0') + '\0 ', 148)
+  return h
+}
+
+/** A .tar.gz of `files` under video/ (regular files; GNU long names past 100 bytes), as runs make with tar. */
+export function writeTarGz(files: Map<string, Uint8Array>): Uint8Array {
+  const parts: Buffer[] = []
+  const pad = (n: number) => Buffer.alloc((512 - (n % 512)) % 512)
+  for (const [path, bytes] of [...files].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
+    const name = `video/${path}`
+    if (Buffer.byteLength(name) > 100) {
+      const long = Buffer.from(`${name}\0`)
+      parts.push(header('././@LongLink', long.length, 'L'), long, pad(long.length))
+    }
+    parts.push(header(name, bytes.byteLength, '0'), Buffer.from(bytes), pad(bytes.byteLength))
+  }
+  parts.push(Buffer.alloc(1024))
+  return new Uint8Array(gzipSync(Buffer.concat(parts)))
 }

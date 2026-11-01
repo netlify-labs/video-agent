@@ -97,12 +97,16 @@ export const VersionSchema = z
     editable: z
       .boolean()
       .describe('Ready and keeps editing contract v1, so it can be edited in the browser.'),
+    mode: z
+      .enum(['author', 'render_unchanged'])
+      .describe('render_unchanged: an edit made in the browser, rendered as is (no agent authoring).'),
+    editedFromN: z.number().int().nullable(),
     n: z.number().int(),
     status: StatusSchema,
     prompt: z.string(),
     authorId: z.string(),
     parentN: z.number().int().nullable(),
-    targetDurationSec: z.number().int().nullable(),
+    targetDurationSec: z.number().nullable(),
     createdAt: z.string(),
     attempts: z.number().int(),
     stage: StageSchema.nullable(),
@@ -360,13 +364,9 @@ export const EditSchema = z
     palette: z.array(z.string()),
     expiresAt: z.string(),
     renderedN: z.number().int().nullable(),
-    newerVersion: z
-      .number()
-      .int()
-      .nullable()
-      .openapi({
-        description: 'A newer version exists: start from it, or render this draft as the next version',
-      }),
+    newerVersion: z.number().int().nullable().openapi({
+      description: 'A newer version exists: start from it, or render this draft as the next version',
+    }),
   })
   .openapi('Edit')
 export const SaveEditSchema = z

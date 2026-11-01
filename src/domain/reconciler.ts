@@ -10,7 +10,7 @@ import {
   serializeRunManifest,
 } from '../lib/run-manifest.js'
 import { getSettings } from './settings.js'
-import { PROMPT_TEMPLATE_VERSION, buildPrompt } from './prompt.js'
+import { PROMPT_TEMPLATE_VERSION, buildPrompt, buildRenderUnchangedPrompt } from './prompt.js'
 import { setStage } from './videos.js'
 import { emitTerminalEvent } from './webhooks.js'
 import type { AttemptRow, FailureCategory } from './types.js'
@@ -135,6 +135,49 @@ async function startRequest(
   if (!job || !version) throw new Error('attempt without job/version')
   const author = await deps.store.getUser(version.authorId)
   let revision: { parentN: number; sourceKey: string; sourceSha256: string } | null = null
+  // An edit draft rendered as is (plan v2 §8): restore the frozen bundle, check it, render it, change nothing.
+  if (version.mode === 'render_unchanged' && version.frozen) {
+    const manifest = serializeRunManifest({
+      v: RUN_MANIFEST_VERSION,
+      jobId: a.jobId,
+      attemptId: a.id,
+      versionN: a.versionN,
+      kind: 'render_unchanged',
+      source: null,
+      bundle: {
+        key: version.frozen.key,
+        sha256: version.frozen.sha256,
+        manifestHash: version.frozen.manifestHash,
+      },
+      feedback: null,
+    })
+    await deps.blobs.set('sources', runManifestKey(a.jobId, a.id), manifest, {
+      contentType: 'application/json',
+    })
+    const prompt = buildRenderUnchangedPrompt({
+      jobId: a.jobId,
+      attemptId: a.id,
+      versionN: a.versionN,
+      editedFromN: version.editedFromN ?? version.parentN ?? 0,
+      runManifestSha256: sha256Hex(manifest),
+      callbackUrl: `${deps.config.siteUrl}/api/internal/runs/${a.id}/done`,
+      checkpointUrl: `${deps.config.siteUrl}/api/internal/runs/${a.id}/checkpoint`,
+      callbackToken,
+      upload: { mode: 'blobs' },
+    })
+    return {
+      req: {
+        requestId: a.id,
+        prompt,
+        deployId: a.deployId,
+        agent: a.agent,
+        model: a.model,
+        effort: a.effort,
+        deadlineMs: (deps.config.authoringDeadlineMin + 3) * MIN,
+      },
+      parentSha: null,
+    }
+  }
   if (version.parentN !== null) {
     const parent = await deps.store.getOutput(a.jobId, version.parentN)
     const sha = parent?.sha256['source.tar.gz']

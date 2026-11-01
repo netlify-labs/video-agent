@@ -56,6 +56,8 @@ function ready(
     verdicts: { approved: 0, changesRequested: 0, mine: null },
     incorporates: 0,
     editable: false,
+    mode: 'author',
+    editedFromN: null,
 
     attempts: 1,
     stage: 'ready',
@@ -163,6 +165,8 @@ export const videos: Video[] = [
       verdicts: { approved: 0, changesRequested: 0, mine: null },
       incorporates: 0,
       editable: false,
+      mode: 'author',
+      editedFromN: null,
 
       attempts: 1,
       stage: 'running',
@@ -191,6 +195,8 @@ export const videos: Video[] = [
       verdicts: { approved: 0, changesRequested: 0, mine: null },
       incorporates: 0,
       editable: false,
+      mode: 'author',
+      editedFromN: null,
 
       attempts: 1,
       stage: 'queued',
@@ -318,6 +324,8 @@ export const videos: Video[] = [
       verdicts: { approved: 0, changesRequested: 0, mine: null },
       incorporates: 0,
       editable: false,
+      mode: 'author',
+      editedFromN: null,
 
       attempts: 1,
       stage: 'failed',

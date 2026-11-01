@@ -136,6 +136,22 @@ export interface VersionRow {
   plan?: FrozenPlan | null
   /** Editing contract the finished composition conforms to (validated at finalize); null when it doesn't. */
   contract?: number | null
+  /** 'render_unchanged': an edit draft rendered as is (plan v2 §8). */
+  mode?: VersionMode
+  editedFromN?: number | null
+  /** The version-owned render input of a render_unchanged version. */
+  frozen?: FrozenBundle | null
+}
+
+export type VersionMode = 'author' | 'render_unchanged'
+
+export interface FrozenBundle {
+  /** Key in the sources store of a .tar.gz of video/. */
+  key: string
+  sha256: string
+  /** Canonical file manifest hash (src/lib/bundle-manifest.ts) prepare-run and render-job verify. */
+  manifestHash: string
+  editId: string
 }
 
 export interface FrozenPlan {
