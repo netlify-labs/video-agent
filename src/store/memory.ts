@@ -30,6 +30,10 @@ import type {
   GatewayCallRow,
   WebhookDeliveryRow,
   UserWebhookRow,
+  OAuthClientRow,
+  OAuthRequestRow,
+  OAuthGrantRow,
+  OAuthTokenRow,
 } from '../domain/types.js'
 import type { JobQuery, Repo, Store } from './types.js'
 
@@ -63,6 +67,10 @@ interface State {
   versionMedia: VersionMediaRow[]
   userWebhooks: Map<string, UserWebhookRow>
   cleanup: Map<string, CleanupRow>
+  oauthClients: Map<string, OAuthClientRow>
+  oauthRequests: Map<string, OAuthRequestRow>
+  oauthGrants: Map<string, OAuthGrantRow>
+  oauthTokens: Map<string, OAuthTokenRow>
 }
 
 const empty = (): State => ({
@@ -95,6 +103,10 @@ const empty = (): State => ({
   versionMedia: [],
   userWebhooks: new Map(),
   cleanup: new Map(),
+  oauthClients: new Map(),
+  oauthRequests: new Map(),
+  oauthGrants: new Map(),
+  oauthTokens: new Map(),
 })
 
 const clone = <T>(v: T): T => structuredClone(v)
@@ -551,6 +563,69 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
         if (v) addUsage(out, v.authorId, a.queuedAt, a.stage, a.usage?.totalCreditsCost)
       }
       return [...out.values()]
+    },
+    insertOAuthClient: async (row) => {
+      state.oauthClients.set(row.id, clone(row))
+    },
+    getOAuthClient: async (id) => clone(state.oauthClients.get(id) ?? null),
+    insertOAuthRequest: async (row) => {
+      state.oauthRequests.set(row.id, clone(row))
+    },
+    getOAuthRequest: async (id) => clone(state.oauthRequests.get(id) ?? null),
+    findOAuthRequest: async (by) => {
+      const hit = [...state.oauthRequests.values()].find((r) =>
+        'consentHash' in by ? r.consentHash === by.consentHash : r.codeHash === by.codeHash,
+      )
+      return clone(hit ?? null)
+    },
+    updateOAuthRequest: async (id, patch) => {
+      const r = state.oauthRequests.get(id)
+      if (r) Object.assign(r, clone(patch))
+    },
+    insertOAuthGrant: async (row) => {
+      state.oauthGrants.set(row.id, clone(row))
+    },
+    getOAuthGrant: async (id) => clone(state.oauthGrants.get(id) ?? null),
+    listOAuthGrants: async (userId, now) =>
+      clone(
+        [...state.oauthGrants.values()]
+          .filter((g) => g.userId === userId && g.revokedAt === null && g.expiresAt > now)
+          .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id)),
+      ),
+    updateOAuthGrant: async (id, patch) => {
+      const g = state.oauthGrants.get(id)
+      if (g) Object.assign(g, clone(patch))
+    },
+    revokeOAuthGrants: async (userId, at) => {
+      for (const g of state.oauthGrants.values())
+        if (g.userId === userId && g.revokedAt === null) g.revokedAt = at
+    },
+    insertOAuthToken: async (row) => {
+      state.oauthTokens.set(row.hash, clone(row))
+    },
+    getOAuthToken: async (hash) => clone(state.oauthTokens.get(hash) ?? null),
+    updateOAuthToken: async (hash, patch) => {
+      const t = state.oauthTokens.get(hash)
+      if (t) Object.assign(t, clone(patch))
+    },
+    deleteExpiredOAuth: async (now, clientsBefore) => {
+      let n = 0
+      const del = <T>(m: Map<string, T>, k: string) => {
+        m.delete(k)
+        n++
+      }
+      for (const [id, r] of state.oauthRequests) if (r.expiresAt <= now) del(state.oauthRequests, id)
+      for (const [id, g] of state.oauthGrants)
+        if (g.revokedAt !== null || g.expiresAt <= now) del(state.oauthGrants, id)
+      for (const [h, t] of state.oauthTokens)
+        if (t.expiresAt <= now || !state.oauthGrants.has(t.grantId)) del(state.oauthTokens, h)
+      const used = new Set([
+        ...[...state.oauthGrants.values()].map((g) => g.clientId),
+        ...[...state.oauthRequests.values()].map((r) => r.clientId),
+      ])
+      for (const [id, c] of state.oauthClients)
+        if (c.createdAt < clientsBefore && !used.has(id)) del(state.oauthClients, id)
+      return n
     },
     failuresSince: async (since) => {
       const counts = new Map<string, number>()

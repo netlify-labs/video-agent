@@ -529,3 +529,65 @@ export const cleanup = pgTable(
   },
   (t) => [uniqueIndex('cleanup_store_prefix_idx').on(t.store, t.prefix)],
 )
+
+// Optional MCP OAuth (src/auth): registered clients, authorizations in progress, grants and hashed tokens.
+export const oauthClients = pgTable('oauth_clients', {
+  id: text('id').primaryKey(),
+  name: text('name'),
+  redirectUris: jsonb('redirect_uris').$type<string[]>().notNull(),
+  createdAt: ts('created_at').notNull(),
+})
+
+export const oauthRequests = pgTable(
+  'oauth_requests',
+  {
+    id: text('id').primaryKey(),
+    clientId: text('client_id').notNull(),
+    clientName: text('client_name'),
+    redirectUri: text('redirect_uri').notNull(),
+    resource: text('resource').notNull(),
+    state: text('state').notNull(),
+    codeChallenge: text('code_challenge').notNull(),
+    userId: text('user_id'),
+    consentHash: text('consent_hash'),
+    codeHash: text('code_hash'),
+    grantId: text('grant_id'),
+    createdAt: ts('created_at').notNull(),
+    expiresAt: ts('expires_at').notNull(),
+    usedAt: ts('used_at'),
+  },
+  (t) => [
+    uniqueIndex('oauth_requests_consent_idx').on(t.consentHash),
+    uniqueIndex('oauth_requests_code_idx').on(t.codeHash),
+    index('oauth_requests_expires_idx').on(t.expiresAt),
+  ],
+)
+
+export const oauthGrants = pgTable(
+  'oauth_grants',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull(),
+    clientId: text('client_id').notNull(),
+    clientName: text('client_name'),
+    resource: text('resource').notNull(),
+    createdAt: ts('created_at').notNull(),
+    lastUsedAt: ts('last_used_at'),
+    expiresAt: ts('expires_at').notNull(),
+    revokedAt: ts('revoked_at'),
+  },
+  (t) => [index('oauth_grants_user_idx').on(t.userId), index('oauth_grants_client_idx').on(t.clientId)],
+)
+
+export const oauthTokens = pgTable(
+  'oauth_tokens',
+  {
+    hash: text('hash').primaryKey(),
+    kind: text('kind').notNull(),
+    grantId: text('grant_id').notNull(),
+    createdAt: ts('created_at').notNull(),
+    expiresAt: ts('expires_at').notNull(),
+    usedAt: ts('used_at'),
+  },
+  (t) => [index('oauth_tokens_grant_idx').on(t.grantId), index('oauth_tokens_expires_idx').on(t.expiresAt)],
+)
