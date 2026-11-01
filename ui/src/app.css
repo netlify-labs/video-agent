@@ -636,6 +636,58 @@ body {
 }
 
 /* Editor */
+.va-editor {
+  /* Fills the window under the 56 px header: cancels the shell's padding so the panel meets the nav and the edge. */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 440px);
+  height: calc(100dvh - 56px);
+  margin: calc(-1 * var(--mantine-spacing-lg));
+}
+.va-editor-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--mantine-spacing-lg);
+}
+/* The picture fits the height left under the title and above the controls, whatever its shape. */
+.va-editor-stage .va-preview-frame {
+  width: min(100%, calc((100dvh - 300px) * var(--va-aspect, 1.7778)));
+  margin-inline: auto;
+}
+.va-editor-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px 16px 72px;
+  border-left: 1px solid var(--va-rule);
+  background: var(--va-surface);
+}
+/* Cards keep their height; the panel scrolls instead of squeezing them. */
+.va-editor-panel > * {
+  flex-shrink: 0;
+}
+@media (max-width: 960px) {
+  .va-editor {
+    grid-template-columns: 1fr;
+    height: auto;
+    margin: 0;
+  }
+  .va-editor-stage {
+    overflow: visible;
+    padding: 0;
+  }
+  .va-editor-panel {
+    overflow: visible;
+    padding: 16px 0 72px;
+    border-left: 0;
+    background: none;
+  }
+}
 .va-beat {
   padding: 10px 12px;
   border-radius: 12px;

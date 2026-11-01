@@ -187,272 +187,274 @@ export function EditPage() {
   const total = cur.beats.reduce((s, b) => s + b.duration, 0)
   const next = video.data.versions.length + 1
 
+  // The preview stays put on the left with the actions above it; the controls scroll on their own on the right.
+  const aspect = video.data.dimensions.width / video.data.dimensions.height
   return (
-    <>
-      <Anchor component={Link} to={`/videos/${id}`} size="sm" c="var(--va-muted)">
-        {video.data.title}
-      </Anchor>
-      <div className="va-title-row" style={{ marginTop: 4 }}>
-        <div>
-          <Title order={1}>Edit v{draft.baseN}</Title>
-          <div className="va-sub num" data-testid="edit-status">
-            {Math.round(total * 10) / 10} s · {cur.beats.length} beats ·{' '}
-            {saving ? 'Saving…' : dirty ? 'Unsaved changes' : draft.rev ? 'Draft saved' : 'No changes yet'}
+    <div className="va-editor">
+      <div className="va-editor-stage" style={{ ['--va-aspect' as string]: aspect }}>
+        <Anchor component={Link} to={`/videos/${id}`} size="sm" c="var(--va-muted)">
+          {video.data.title}
+        </Anchor>
+        <div className="va-title-row" style={{ marginTop: 4, marginBottom: 0 }}>
+          <div>
+            <Title order={1}>Edit v{draft.baseN}</Title>
+            <div className="va-sub num" data-testid="edit-status">
+              {Math.round(total * 10) / 10} s · {cur.beats.length} beats ·{' '}
+              {saving ? 'Saving…' : dirty ? 'Unsaved changes' : draft.rev ? 'Draft saved' : 'No changes yet'}
+            </div>
           </div>
+          <Group gap="sm">
+            <Button
+              variant="subtle"
+              color="gray"
+              onClick={() => {
+                modals.openConfirmModal({
+                  title: 'Discard this draft?',
+                  children: <Text size="sm">Your edits are deleted. The video doesn't change.</Text>,
+                  labels: { confirm: 'Discard', cancel: 'Keep editing' },
+                  confirmProps: { color: 'red', variant: 'light' },
+                  onConfirm: () => {
+                    discard.mutate({ params: { path: { id: draft.id } } })
+                  },
+                })
+              }}
+            >
+              Discard
+            </Button>
+            <Button
+              disabled={!draft.rev || dirty || saving}
+              loading={render.isPending}
+              onClick={() => {
+                render.mutate({
+                  params: { path: { id: draft.id }, header: { 'idempotency-key': renderKey } },
+                })
+              }}
+            >
+              Render as v{next}
+            </Button>
+          </Group>
         </div>
-        <Group gap="sm">
-          <Button
-            variant="subtle"
-            color="gray"
-            onClick={() => {
-              modals.openConfirmModal({
-                title: 'Discard this draft?',
-                children: <Text size="sm">Your edits are deleted. The video doesn't change.</Text>,
-                labels: { confirm: 'Discard', cancel: 'Keep editing' },
-                confirmProps: { color: 'red', variant: 'light' },
-                onConfirm: () => {
-                  discard.mutate({ params: { path: { id: draft.id } } })
-                },
-              })
-            }}
-          >
-            Discard
-          </Button>
-          <Button
-            disabled={!draft.rev || dirty || saving}
-            loading={render.isPending}
-            onClick={() => {
-              render.mutate({ params: { path: { id: draft.id }, header: { 'idempotency-key': renderKey } } })
-            }}
-          >
-            Render as v{next}
-          </Button>
-        </Group>
+
+        {draft.newerVersion ? (
+          <Alert color="yellow" variant="light" mb="md">
+            v{draft.newerVersion} now exists.{' '}
+            <Anchor component={Link} to={`/videos/${id}/edit/${draft.newerVersion}`}>
+              Start from v{draft.newerVersion}
+            </Anchor>
+            , or render yours as v{next}.
+          </Alert>
+        ) : null}
+        {problem ? (
+          <Alert color="red" variant="light" mb="md">
+            {problem}{' '}
+            <Anchor
+              onClick={() => {
+                window.location.reload()
+              }}
+            >
+              Reload
+            </Anchor>
+          </Alert>
+        ) : null}
+
+        <CompositionPreview
+          videoId={id}
+          versionN={draft.baseN}
+          dimensions={video.data.dimensions}
+          draft={{ editId: draft.id, rev: draft.rev }}
+          onClick={onPreviewClick}
+          onReady={onReady}
+        />
+        <Text size="xs" c="var(--va-faint)">
+          Click any text in the preview to edit it. Text changes show at once; timing, order, colours and
+          media after the draft saves.
+        </Text>
       </div>
-
-      {draft.newerVersion ? (
-        <Alert color="yellow" variant="light" mb="md">
-          v{draft.newerVersion} now exists.{' '}
-          <Anchor component={Link} to={`/videos/${id}/edit/${draft.newerVersion}`}>
-            Start from v{draft.newerVersion}
-          </Anchor>
-          , or render yours as v{next}.
-        </Alert>
-      ) : null}
-      {problem ? (
-        <Alert color="red" variant="light" mb="md">
-          {problem}{' '}
-          <Anchor
-            onClick={() => {
-              window.location.reload()
-            }}
-          >
-            Reload
-          </Anchor>
-        </Alert>
-      ) : null}
-
-      <div className="va-split">
-        <div className="va-rail">
-          <CompositionPreview
-            videoId={id}
-            versionN={draft.baseN}
-            dimensions={video.data.dimensions}
-            draft={{ editId: draft.id, rev: draft.rev }}
-            onClick={onPreviewClick}
-            onReady={onReady}
-          />
-          <Text size="xs" c="var(--va-faint)">
-            Click any text in the preview to edit it. Text changes show at once; timing, order, colours and
-            media after the draft saves.
+      <div className="va-editor-panel" data-testid="edit-panel">
+        <Card>
+          <Text fw={600} mb="sm">
+            Beats
           </Text>
-        </div>
-        <div className="va-rail">
-          <Card>
-            <Text fw={600} mb="sm">
-              Beats
-            </Text>
-            <Stack gap="sm">
-              {cur.beats.map((b, i) => (
-                <div key={b.id} className="va-beat" data-testid={`beat-${b.id}`}>
-                  <Group justify="space-between" wrap="nowrap" gap="xs">
-                    <Text size="sm" fw={600}>
-                      {i + 1}. {b.id}
-                    </Text>
-                    <Group gap={4} wrap="nowrap">
-                      <NumberInput
-                        aria-label={`Length of ${b.id}`}
-                        size="xs"
-                        w={92}
-                        min={0.5}
-                        max={120}
-                        step={0.1}
-                        decimalScale={2}
-                        suffix=" s"
-                        value={Math.round(b.duration * 100) / 100}
-                        onChange={(v) => {
-                          const d = Number(v)
-                          if (d >= 0.5 && d <= 120)
-                            update((c) => {
-                              const x = c.beats.find((y) => y.id === b.id)
-                              if (x) x.duration = fps(d)
-                              return c
-                            })
-                        }}
-                      />
+          <Stack gap="sm">
+            {cur.beats.map((b, i) => (
+              <div key={b.id} className="va-beat" data-testid={`beat-${b.id}`}>
+                <Group justify="space-between" wrap="nowrap" gap="xs">
+                  <Text size="sm" fw={600}>
+                    {i + 1}. {b.id}
+                  </Text>
+                  <Group gap={4} wrap="nowrap">
+                    <NumberInput
+                      aria-label={`Length of ${b.id}`}
+                      size="xs"
+                      w={92}
+                      min={0.5}
+                      max={120}
+                      step={0.1}
+                      decimalScale={2}
+                      suffix=" s"
+                      value={Math.round(b.duration * 100) / 100}
+                      onChange={(v) => {
+                        const d = Number(v)
+                        if (d >= 0.5 && d <= 120)
+                          update((c) => {
+                            const x = c.beats.find((y) => y.id === b.id)
+                            if (x) x.duration = fps(d)
+                            return c
+                          })
+                      }}
+                    />
+                    <ActionIcon
+                      variant="subtle"
+                      color="gray"
+                      aria-label={`Move ${b.id} earlier`}
+                      disabled={i === 0}
+                      onClick={() => {
+                        move(i, -1)
+                      }}
+                    >
+                      <IconArrowUp size={14} />
+                    </ActionIcon>
+                    <ActionIcon
+                      variant="subtle"
+                      color="gray"
+                      aria-label={`Move ${b.id} later`}
+                      disabled={i === cur.beats.length - 1}
+                      onClick={() => {
+                        move(i, 1)
+                      }}
+                    >
+                      <IconArrowDown size={14} />
+                    </ActionIcon>
+                    <Tooltip label="The last beat can't be deleted" disabled={cur.beats.length > 1}>
                       <ActionIcon
                         variant="subtle"
-                        color="gray"
-                        aria-label={`Move ${b.id} earlier`}
-                        disabled={i === 0}
+                        color="red"
+                        aria-label={`Delete ${b.id}`}
+                        disabled={cur.beats.length <= 1}
                         onClick={() => {
-                          move(i, -1)
+                          update((c) => ({ ...c, beats: c.beats.filter((x) => x.id !== b.id) }))
                         }}
                       >
-                        <IconArrowUp size={14} />
+                        <IconTrash size={14} />
                       </ActionIcon>
-                      <ActionIcon
-                        variant="subtle"
-                        color="gray"
-                        aria-label={`Move ${b.id} later`}
-                        disabled={i === cur.beats.length - 1}
-                        onClick={() => {
-                          move(i, 1)
-                        }}
-                      >
-                        <IconArrowDown size={14} />
-                      </ActionIcon>
-                      <Tooltip label="The last beat can't be deleted" disabled={cur.beats.length > 1}>
-                        <ActionIcon
-                          variant="subtle"
-                          color="red"
-                          aria-label={`Delete ${b.id}`}
-                          disabled={cur.beats.length <= 1}
-                          onClick={() => {
-                            update((c) => ({ ...c, beats: c.beats.filter((x) => x.id !== b.id) }))
-                          }}
-                        >
-                          <IconTrash size={14} />
-                        </ActionIcon>
-                      </Tooltip>
-                    </Group>
+                    </Tooltip>
                   </Group>
-                  <Stack gap={6} mt={6}>
-                    {b.texts.map((t) => (
-                      <TextInput
-                        key={t.id}
-                        size="xs"
-                        label={t.id}
-                        maxLength={500}
-                        value={t.text}
-                        ref={(el) => {
-                          fields.current[t.id] = el
-                        }}
-                        data-text-id={t.id}
-                        onChange={(e) => {
-                          setText(t.id, e.currentTarget.value)
-                        }}
-                      />
-                    ))}
-                    {b.media.map((m) => {
-                      const file = m.src.split('/').pop() ?? m.src
-                      const item = picked[file]
-                      return (
-                        <div key={m.slot} className="va-slot" data-testid={`slot-${m.slot}`}>
-                          <Group justify="space-between" wrap="nowrap" gap="xs">
-                            <Group gap={8} wrap="nowrap" style={{ minWidth: 0 }}>
-                              {item?.urls && (item.kind !== 'video' || item.urls.poster) ? (
-                                <img
-                                  className="va-slot-thumb"
-                                  src={item.kind === 'video' ? (item.urls.poster ?? '') : item.urls.file}
-                                  alt=""
-                                />
-                              ) : m.kind === 'video' ? (
-                                <IconMovie size={18} />
-                              ) : (
-                                <IconPhoto size={18} />
-                              )}
-                              <div style={{ minWidth: 0 }}>
-                                <Text size="xs" fw={500}>
-                                  {m.slot}
-                                </Text>
-                                <Text size="xs" c="var(--va-faint)" truncate>
-                                  {item?.filename ?? file}
-                                </Text>
-                              </div>
-                            </Group>
-                            <Group gap={4} wrap="nowrap">
-                              <SegmentedControl
-                                size="xs"
-                                aria-label={`Fit for ${m.slot}`}
-                                value={m.fit === 'cover' ? 'cover' : 'contain'}
-                                onChange={(v) => {
-                                  setSlot(m.slot, { fit: v })
-                                }}
-                                data={[
-                                  { value: 'contain', label: 'Fit' },
-                                  { value: 'cover', label: 'Fill' },
-                                ]}
-                              />
-                              <Button
-                                size="compact-xs"
-                                variant="default"
-                                aria-label={`Replace ${m.slot}`}
-                                onClick={() => {
-                                  setReplacing(m)
-                                }}
-                              >
-                                Replace
-                              </Button>
-                            </Group>
-                          </Group>
-                        </div>
-                      )
-                    })}
-                  </Stack>
-                </div>
-              ))}
-            </Stack>
-          </Card>
-          <Card>
-            <Text fw={600} mb="sm">
-              Colours
-            </Text>
-            <Stack gap={8}>
-              {Object.entries(cur.colors).map(([role, value]) => (
-                <Group key={role} justify="space-between">
-                  <Text size="sm">{role}</Text>
-                  <Menu position="bottom-end">
-                    <Menu.Target>
-                      <Button
-                        size="xs"
-                        variant="default"
-                        aria-label={`Colour for ${role}`}
-                        leftSection={<ColorSwatch color={value} size={14} />}
-                      >
-                        {value}
-                      </Button>
-                    </Menu.Target>
-                    <Menu.Dropdown>
-                      <Menu.Label>Brand palette</Menu.Label>
-                      {draft.palette.map((c) => (
-                        <Menu.Item
-                          key={c}
-                          leftSection={<ColorSwatch color={c} size={14} />}
-                          onClick={() => {
-                            update((x) => ({ ...x, colors: { ...x.colors, [role]: c } }))
-                          }}
-                        >
-                          {c}
-                        </Menu.Item>
-                      ))}
-                    </Menu.Dropdown>
-                  </Menu>
                 </Group>
-              ))}
-            </Stack>
-          </Card>
-        </div>
+                <Stack gap={6} mt={6}>
+                  {b.texts.map((t) => (
+                    <TextInput
+                      key={t.id}
+                      size="xs"
+                      label={t.id}
+                      maxLength={500}
+                      value={t.text}
+                      ref={(el) => {
+                        fields.current[t.id] = el
+                      }}
+                      data-text-id={t.id}
+                      onChange={(e) => {
+                        setText(t.id, e.currentTarget.value)
+                      }}
+                    />
+                  ))}
+                  {b.media.map((m) => {
+                    const file = m.src.split('/').pop() ?? m.src
+                    const item = picked[file]
+                    return (
+                      <div key={m.slot} className="va-slot" data-testid={`slot-${m.slot}`}>
+                        <Group justify="space-between" wrap="nowrap" gap="xs">
+                          <Group gap={8} wrap="nowrap" style={{ minWidth: 0 }}>
+                            {item?.urls && (item.kind !== 'video' || item.urls.poster) ? (
+                              <img
+                                className="va-slot-thumb"
+                                src={item.kind === 'video' ? (item.urls.poster ?? '') : item.urls.file}
+                                alt=""
+                              />
+                            ) : m.kind === 'video' ? (
+                              <IconMovie size={18} />
+                            ) : (
+                              <IconPhoto size={18} />
+                            )}
+                            <div style={{ minWidth: 0 }}>
+                              <Text size="xs" fw={500}>
+                                {m.slot}
+                              </Text>
+                              <Text size="xs" c="var(--va-faint)" truncate>
+                                {item?.filename ?? file}
+                              </Text>
+                            </div>
+                          </Group>
+                          <Group gap={4} wrap="nowrap">
+                            <SegmentedControl
+                              size="xs"
+                              aria-label={`Fit for ${m.slot}`}
+                              value={m.fit === 'cover' ? 'cover' : 'contain'}
+                              onChange={(v) => {
+                                setSlot(m.slot, { fit: v })
+                              }}
+                              data={[
+                                { value: 'contain', label: 'Fit' },
+                                { value: 'cover', label: 'Fill' },
+                              ]}
+                            />
+                            <Button
+                              size="compact-xs"
+                              variant="default"
+                              aria-label={`Replace ${m.slot}`}
+                              onClick={() => {
+                                setReplacing(m)
+                              }}
+                            >
+                              Replace
+                            </Button>
+                          </Group>
+                        </Group>
+                      </div>
+                    )
+                  })}
+                </Stack>
+              </div>
+            ))}
+          </Stack>
+        </Card>
+        <Card>
+          <Text fw={600} mb="sm">
+            Colours
+          </Text>
+          <Stack gap={8}>
+            {Object.entries(cur.colors).map(([role, value]) => (
+              <Group key={role} justify="space-between">
+                <Text size="sm">{role}</Text>
+                <Menu position="bottom-end">
+                  <Menu.Target>
+                    <Button
+                      size="xs"
+                      variant="default"
+                      aria-label={`Colour for ${role}`}
+                      leftSection={<ColorSwatch color={value} size={14} />}
+                    >
+                      {value}
+                    </Button>
+                  </Menu.Target>
+                  <Menu.Dropdown>
+                    <Menu.Label>Brand palette</Menu.Label>
+                    {draft.palette.map((c) => (
+                      <Menu.Item
+                        key={c}
+                        leftSection={<ColorSwatch color={c} size={14} />}
+                        onClick={() => {
+                          update((x) => ({ ...x, colors: { ...x.colors, [role]: c } }))
+                        }}
+                      >
+                        {c}
+                      </Menu.Item>
+                    ))}
+                  </Menu.Dropdown>
+                </Menu>
+              </Group>
+            ))}
+          </Stack>
+        </Card>
       </div>
       {replacing ? (
         <MediaLibraryModal
@@ -471,6 +473,6 @@ export function EditPage() {
           }}
         />
       ) : null}
-    </>
+    </div>
   )
 }
