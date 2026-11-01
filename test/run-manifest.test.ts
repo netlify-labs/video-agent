@@ -26,6 +26,7 @@ const base: RunManifest = {
   kind: 'revision',
   source: { key: 'vid_1/v1/source.tar.gz', sha256: H('a'), parentN: 1 },
   bundle: null,
+  media: null,
   feedback: null,
 }
 const verify = (m: RunManifest, raw = serializeRunManifest(m)) =>

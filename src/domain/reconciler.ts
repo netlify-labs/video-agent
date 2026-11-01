@@ -135,6 +135,11 @@ async function startRequest(
   if (!job || !version) throw new Error('attempt without job/version')
   const author = await deps.store.getUser(version.authorId)
   let revision: { parentN: number; sourceKey: string; sourceSha256: string } | null = null
+  // Library media for this version, downloaded by prepare-run into video/assets/media/ (plan v2 §9).
+  const versionMedia = await deps.store.listVersionMedia(a.jobId, a.versionN)
+  const media = versionMedia.length
+    ? versionMedia.map((m) => ({ key: m.key, sha256: m.sha256, filename: m.filename, kind: m.kind }))
+    : null
   // An edit draft rendered as is (plan v2 §8): restore the frozen bundle, check it, render it, change nothing.
   if (version.mode === 'render_unchanged' && version.frozen) {
     const manifest = serializeRunManifest({
@@ -149,6 +154,7 @@ async function startRequest(
         sha256: version.frozen.sha256,
         manifestHash: version.frozen.manifestHash,
       },
+      media,
       feedback: null,
     })
     await deps.blobs.set('sources', runManifestKey(a.jobId, a.id), manifest, {
@@ -206,15 +212,20 @@ async function startRequest(
   })
   // Inputs to restore go in a server-written manifest the run verifies by hash (plan v2 §14 rule 21).
   let runManifestSha256: string | null = null
-  if (revision) {
+  if (revision || media) {
     const manifest = serializeRunManifest({
       v: RUN_MANIFEST_VERSION,
       jobId: a.jobId,
       attemptId: a.id,
       versionN: a.versionN,
-      kind: 'revision',
-      source: { key: revision.sourceKey, sha256: revision.sourceSha256, parentN: revision.parentN },
+      kind: revision ? 'revision' : 'author',
+      source: revision && {
+        key: revision.sourceKey,
+        sha256: revision.sourceSha256,
+        parentN: revision.parentN,
+      },
       bundle: null,
+      media,
       feedback: feedbackVideo && {
         video: feedbackVideo,
         pins: pins.map((c) => ({ commentId: c.commentId, timeSec: c.timeSec ?? 0, x: c.x, y: c.y })),
@@ -240,6 +251,11 @@ async function startRequest(
     revision: revision && { parentN: revision.parentN },
     runManifestSha256,
     feedback,
+    media: versionMedia.map((m) => ({
+      file: `assets/media/${m.filename}`,
+      kind: m.kind,
+      caption: m.caption,
+    })),
     plan: version.plan ? { brief: version.plan.brief, qa: version.plan.qa } : null,
   })
   return {

@@ -210,6 +210,7 @@ describe('MCP tools by role', () => {
         'create_video',
         'get_video',
         'list_comments',
+        'list_media',
         'list_videos',
         'plan_brief',
         'plan_video',
@@ -225,10 +226,17 @@ describe('MCP tools by role', () => {
       'cancel_video',
       'get_video',
       'list_comments',
+      'list_media',
       'list_videos',
       'set_verdict',
     ])
     const vic = await person(h, 'u_viewer', 'viewer')
-    expect(await names(vic)).toEqual(['cancel_video', 'get_video', 'list_comments', 'list_videos'])
+    expect(await names(vic)).toEqual([
+      'cancel_video',
+      'get_video',
+      'list_comments',
+      'list_media',
+      'list_videos',
+    ])
   })
 })

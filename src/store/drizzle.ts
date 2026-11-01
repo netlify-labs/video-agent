@@ -477,11 +477,11 @@ function repoFor(db: Db): Repo {
       await db.insert(t.mediaUploadParts).values(row).onConflictDoNothing()
     },
     listUploadParts: async (uploadId) =>
-      (await db
+      await db
         .select()
         .from(t.mediaUploadParts)
         .where(eq(t.mediaUploadParts.uploadId, uploadId))
-        .orderBy(asc(t.mediaUploadParts.idx))),
+        .orderBy(asc(t.mediaUploadParts.idx)),
     deleteUploadParts: async (uploadId) => {
       await db.delete(t.mediaUploadParts).where(eq(t.mediaUploadParts.uploadId, uploadId))
     },

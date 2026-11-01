@@ -74,6 +74,13 @@ export async function ensureBundle(
   if (!gz) return null
   if (sha256Hex(gz) !== want) throw new TarError("The saved composition doesn't match its hash.")
   const files = [...readTarGz(gz)].filter(([path]) => keep(path))
+  // Library media is by reference: the preview needs it next to the composition (plan v2 §14 rule 23).
+  for (const m of await deps.store.listVersionMedia(jobId, n)) {
+    const path = `assets/media/${m.filename}`
+    if (files.some(([p]) => p === path)) continue
+    const bytes = await deps.blobs.get('media', m.key)
+    if (bytes) files.push([path, bytes])
+  }
 
   for (const [path, bytes] of files) await deps.blobs.set('bundles', bundleFileKey(jobId, n, path), bytes)
   const index: BundleIndex = {

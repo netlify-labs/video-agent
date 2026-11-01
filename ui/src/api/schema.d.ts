@@ -5110,6 +5110,8 @@ export interface components {
              * @description HTTPS URL for video.ready / video.failed events (API keys only).
              */
             webhookUrl?: string;
+            /** @description Library items (GET /api/v1/media) the agent should use: images, clips, fonts. */
+            mediaIds?: string[];
         };
         VideoList: {
             items: components["schemas"]["Video"][];
@@ -5126,6 +5128,8 @@ export interface components {
             /** Format: uri */
             webhookUrl?: string;
             planId?: string;
+            /** @description Library items (GET /api/v1/media) the agent should use: images, clips, fonts. */
+            mediaIds?: string[];
             /** @description Incorporate feedback: open comments on the version being revised (owner or admin). prompt is your note. */
             commentIds?: string[];
         };

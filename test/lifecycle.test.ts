@@ -80,19 +80,20 @@ describe('video lifecycle', () => {
 
   it('finishes through the sweep when the callback never arrives (manifest from the final answer)', async () => {
     const h = harness({}, { autoCallback: false })
-    const video = await h.json(
-      await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }),
-    )
     // The agent's final answer carries the manifest json block.
     h.deps.runner.defaultScript = (req) => ({
       timeline: [running(), succeeded()],
       onTerminal: async () => {
         const { uploadAndManifest } = await import('./fakes.js')
-        const m = await uploadAndManifest(h.deps.blobs, video.id, req.requestId)
+        const jobId = (await h.deps.store.getAttempt(req.requestId))?.jobId ?? ''
+        const m = await uploadAndManifest(h.deps.blobs, jobId, req.requestId)
         const r = h.deps.runner.runs.get(req.requestId)
         if (r) r.script.timeline = [succeeded(`All done.\n\n\`\`\`json\n${JSON.stringify(m)}\n\`\`\``)]
       },
     })
+    const video = await h.json(
+      await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }),
+    )
     await h.drive(6)
     expect((await h.json(await h.call('GET', `/api/v1/videos/${video.id}`, { as: h.member }))).status).toBe(
       'ready',
@@ -247,9 +248,6 @@ describe('video lifecycle', () => {
 
   it('rejects outputs whose hash does not match the authenticated manifest', async () => {
     const h = harness({ FINALIZE_DEADLINE_MIN: '2' })
-    const video = await h.json(
-      await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }),
-    )
     h.deps.runner.defaultScript = ((orig) => (req) => {
       const s = orig(req)
       const inner = s.onTerminal
@@ -265,6 +263,9 @@ describe('video lifecycle', () => {
         },
       }
     })(h.deps.runner.defaultScript)
+    const video = await h.json(
+      await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }),
+    )
     await h.drive(8)
     const [a] = await h.attempts(video.id)
     expect(a?.stage).toBe('failed')
@@ -273,9 +274,6 @@ describe('video lifecycle', () => {
 
   it('rejects a video with the wrong dimensions', async () => {
     const h = harness()
-    const video = await h.json(
-      await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT, aspect: '9:16' } }),
-    )
     h.deps.runner.defaultScript = ((orig) => (req) => {
       const s = orig(req)
       return {
@@ -283,11 +281,15 @@ describe('video lifecycle', () => {
         onTerminal: async () => {
           const { fixtureFiles, uploadAndManifest } = await import('./fakes.js')
           const { receiveCallback } = await import('../src/domain/callback.js')
-          const m = await uploadAndManifest(h.deps.blobs, video.id, req.requestId, fixtureFiles('16:9'))
+          const jobId = (await h.deps.store.getAttempt(req.requestId))?.jobId ?? ''
+          const m = await uploadAndManifest(h.deps.blobs, jobId, req.requestId, fixtureFiles('16:9'))
           await receiveCallback(h.deps, req.requestId, /--token (\S+)/.exec(req.prompt)?.[1] ?? null, m)
         },
       }
     })(h.deps.runner.defaultScript)
+    const video = await h.json(
+      await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT, aspect: '9:16' } }),
+    )
     await h.drive(4)
     const [a] = await h.attempts(video.id)
     expect(a?.errorCategory).toBe('invalid_output')

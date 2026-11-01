@@ -177,6 +177,8 @@ async function main() {
     '--exclude=.hyperframes',
     '--exclude=renders',
     '--exclude=video/feedback',
+    // Library media is by reference (plan v2 §9): runs download it, so it never goes in the source archive.
+    '--exclude=video/assets/media',
     '--exclude=*.mp4',
     '-C',
     repoRoot,

@@ -8,6 +8,7 @@ import type { Deps } from './deps.js'
 import { PRIVATE_URL_TTL_SEC, signedFilePath } from './domain/files.js'
 import { addComment, listComments } from './domain/comments.js'
 import { getProgress } from './domain/progress.js'
+import { listMedia } from './domain/media.js'
 import * as planning from './domain/plans.js'
 import { can, type Principal } from './domain/policy.js'
 import type { Aspect } from './domain/types.js'
@@ -309,6 +310,11 @@ Example: {"prompt": "A 20-second launch video for our new webhooks feature, endi
           .string()
           .optional()
           .describe('Optional. A plan from plan_video + plan_brief; its brief is added to the run.'),
+        media_ids: z
+          .array(z.string())
+          .max(12)
+          .optional()
+          .describe('Optional. Library items (from list_media) to use: logos, screenshots, clips, fonts.'),
         idempotency_key: z
           .string()
           .max(200)
@@ -334,6 +340,7 @@ Example: {"prompt": "A 20-second launch video for our new webhooks feature, endi
             durationSec: normalizeDuration(args.duration_sec),
             title: args.title,
             planId: args.plan_id,
+            mediaIds: args.media_ids,
           },
           args.idempotency_key,
         )
@@ -477,6 +484,13 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Make the end 
           .max(50)
           .optional()
           .describe('Optional. Comments to incorporate (owner or admin), from list_comments.'),
+        media_ids: z
+          .array(z.string())
+          .max(12)
+          .optional()
+          .describe(
+            'Optional. More library items (from list_media); the version keeps the media it revises.',
+          ),
       },
       annotations: {
         title: 'Revise a video',
@@ -495,6 +509,7 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Make the end 
           planId: args.plan_id,
           durationSec: normalizeDuration(args.duration_sec),
           commentIds: args.comment_ids,
+          mediaIds: args.media_ids,
         })
         if (!res.replayed) kick()
         return {
@@ -682,6 +697,39 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "version": 2}`,
           next_cursor: page.nextCursor,
         }
       }, args.video_id),
+  )
+
+  server.registerTool(
+    'list_media',
+    {
+      title: 'List the media library',
+      description: `The team's uploaded media: logos, screenshots, clips and fonts, newest first. Pass media ids to create_video or revise_video (media_ids) so the agent uses them. A caption says what an item is.
+
+Example: {"kind": "image"}`,
+      inputSchema: {
+        kind: z.enum(['image', 'svg', 'video', 'font']).optional(),
+        cursor: z.string().optional().describe('next_cursor from the previous page.'),
+      },
+      annotations: { title: 'List media', readOnlyHint: true, openWorldHint: false },
+    },
+    async (args) =>
+      run(async () => {
+        const page = await listMedia(deps, principal, { kind: args.kind, cursor: args.cursor })
+        return {
+          media: page.items
+            .filter((m) => m.status === 'ready')
+            .map((m) => ({
+              id: m.id,
+              kind: m.kind,
+              filename: m.filename,
+              caption: m.caption,
+              width: m.width,
+              height: m.height,
+              duration_sec: m.durationSec,
+            })),
+          next_cursor: page.nextCursor,
+        }
+      }),
   )
 
   const addCommentTool = server.registerTool(

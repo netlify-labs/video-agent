@@ -1,7 +1,7 @@
 // The run prompt: a fixed, versioned template plus the user's request, fenced as a creative brief.
 import { ASPECTS, type Aspect } from './types.js'
 
-export const PROMPT_TEMPLATE_VERSION = 8
+export const PROMPT_TEMPLATE_VERSION = 9
 
 export interface PromptInput {
   jobId: string
@@ -19,6 +19,8 @@ export interface PromptInput {
   revision: { parentN: number } | null
   /** sha256 of the run manifest the server wrote for this attempt; set when the run has inputs to restore. */
   runManifestSha256: string | null
+  /** Library media in video/assets/media/ (plan v2 §9). */
+  media?: { file: string; kind: string; caption: string | null }[]
   /** Comments to incorporate (plan v2 §5), snapshotted on the version; `still` is set for pinned ones. */
   feedback?: FeedbackItem[] | null
   /** The accepted plan from the questions (plan v2 §4), frozen on the version. */
@@ -79,6 +81,16 @@ export function buildPrompt(p: PromptInput): string {
       'Plan (from the questions they answered before creating it), as JSON. Follow it where the request leaves room:',
       FENCE_OPEN,
       sanitizeBrief(JSON.stringify({ brief: p.plan.brief, answers: p.plan.qa })),
+      FENCE_CLOSE,
+    )
+  }
+  if (p.media?.length) {
+    // Captions are the uploader's words: data in their own fence (§14 rule 3).
+    lines.push(
+      '',
+      'Media from the team library, already in video/ at these paths (prepare-run puts them there). Use them where they fit the request; a caption says what an item is. Put images and clips in media slots (data-va-media, see video/AGENTS.md); load fonts with @font-face from their path. Never download other media.',
+      FENCE_OPEN,
+      sanitizeBrief(JSON.stringify(p.media)),
       FENCE_CLOSE,
     )
   }

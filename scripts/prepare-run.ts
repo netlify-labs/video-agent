@@ -3,7 +3,7 @@
 // The manifest lives in the sources store at <jobId>/runs/<attempt>.json and must match the hash in the prompt.
 // Only keys inside it are followed. Revisions restore the parent's source archive; render-unchanged runs restore
 // a frozen bundle and verify its canonical file manifest; incorporate-feedback runs also get one still per pinned
-// comment in video/feedback/. Never falls back to the template: on any failure it
+// comment in video/feedback/, and library media is downloaded into video/assets/media/. Never falls back to the template: on any failure it
 // exits non-zero and the agent must stop. Writes the verified manifest to .render/run-manifest.json for render-job.
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -26,7 +26,7 @@ import {
   withRetries,
 } from './lib/run-tools.js'
 
-type Fetch = (key: string, to: string, store?: 'sources' | 'videos') => Promise<void>
+type Fetch = (key: string, to: string, store?: 'sources' | 'videos' | 'media') => Promise<void>
 
 const download: Fetch = async (key, to, store = 'sources') => {
   const [bin, ...pre] = netlifyCli() as [string, ...string[]]
@@ -111,6 +111,21 @@ export async function prepare(m: RunManifest, opts: { tmp: string; root?: string
         `The restored bundle's files don't match its manifest (got ${actual}). Stop and report this.`,
       )
     log('restored', { kind: 'bundle', key: m.bundle.key, manifestHash: actual })
+  }
+  // Library media by reference (plan v2 §9): exactly the snapshotted bytes, each one verified.
+  if (m.media?.length) {
+    const dir = join(root, 'video', 'assets', 'media')
+    mkdirSync(dir, { recursive: true })
+    for (const item of m.media) {
+      const to = join(dir, item.filename)
+      await fetch(item.key, to, 'media')
+      const actual = sha256File(to)
+      if (actual !== item.sha256)
+        throw new StepError(
+          `Media ${item.filename} doesn't match its hash (got ${actual}). Stop and report this.`,
+        )
+    }
+    log('media', { count: m.media.length, files: m.media.map((x) => x.filename) })
   }
   // After any restore, so the stills land in the restored video/.
   if (m.feedback) {

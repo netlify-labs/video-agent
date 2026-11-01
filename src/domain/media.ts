@@ -8,7 +8,8 @@ import { classify, MediaError, type Classified } from '../lib/media/classify.js'
 import { sanitizeSvg, SvgError } from '../lib/media/svg.js'
 import { assertCan, type Principal } from './policy.js'
 import { getSettings } from './settings.js'
-import type { MediaRow } from './types.js'
+import type { Repo } from '../store/types.js'
+import type { MediaRow, VersionMediaRow } from './types.js'
 import { canSee } from './videos.js'
 
 /** One request carries at most this much (Netlify's request limit is about 4.5 MB); bigger files use sessions. */
@@ -245,4 +246,45 @@ export async function deleteMedia(deps: Deps, p: Principal, id: string) {
   if (m.uploaderId !== p.userId && p.role !== 'admin')
     throw new ApiError('forbidden', 'Only the uploader or an admin can delete this item.')
   await deps.store.updateMedia(id, { deletedAt: deps.clock.now().toISOString() })
+}
+
+export const MEDIA_PER_VERSION = 12
+const MEDIA_BYTES_PER_VERSION = 300 * 1024 * 1024
+
+/**
+ * The media a new version is made with (plan v2 §9, §14 rule 27): what it inherits, plus new picks, which must be
+ * ready library items. Snapshotted (key, hash, caption) so later library changes never alter what the run gets.
+ */
+export async function snapshotMedia(
+  repo: Repo,
+  jobId: string,
+  n: number,
+  picks: string[],
+  inherited: VersionMediaRow[],
+): Promise<VersionMediaRow[]> {
+  const rows: VersionMediaRow[] = inherited.map((r, i) => ({ ...r, jobId, versionN: n, position: i }))
+  for (const id of [...new Set(picks)]) {
+    if (rows.some((r) => r.mediaId === id)) continue
+    const m = await repo.getMedia(id)
+    if (!m || m.deletedAt || m.status !== 'ready')
+      throw new ApiError('invalid_request', `Media ${id} isn't a ready item in the library.`)
+    rows.push({
+      jobId,
+      versionN: n,
+      mediaId: m.id,
+      position: rows.length,
+      kind: m.kind,
+      key: m.cleanKey,
+      sha256: m.cleanSha256,
+      filename: `${m.id}.${m.ext}`,
+      caption: m.caption,
+    })
+  }
+  if (rows.length > MEDIA_PER_VERSION)
+    throw new ApiError('invalid_request', `Use at most ${MEDIA_PER_VERSION} media items in one version.`)
+  let bytes = 0
+  for (const r of rows) bytes += (await repo.getMedia(r.mediaId))?.bytes ?? 0
+  if (bytes > MEDIA_BYTES_PER_VERSION)
+    throw new ApiError('invalid_request', 'That media adds up to more than 300 MB.')
+  return rows
 }

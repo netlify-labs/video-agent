@@ -91,7 +91,14 @@ export function harness(
       headers,
       ...(o.body !== undefined ? { body: JSON.stringify(o.body) } : {}),
     })
-    return app.fetch(req, { context: { deploy: { published: true }, waitUntil: () => undefined } })
+    // Background work the request hands to waitUntil (the sweep kick) finishes before the call returns, so tests
+    // see the same state however many awaits a step takes.
+    const pending: Promise<unknown>[] = []
+    const res = await app.fetch(req, {
+      context: { deploy: { published: true }, waitUntil: (p: Promise<unknown>) => void pending.push(p) },
+    })
+    await Promise.all(pending)
+    return res
   }
   const drive = async (n = 10) => {
     for (let i = 0; i < n; i++) {

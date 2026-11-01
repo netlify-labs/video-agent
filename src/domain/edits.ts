@@ -11,6 +11,7 @@ import { PREVIEW_TTL_SEC, previewScope } from '../lib/preview.js'
 import { contextMeta } from '../generated/context.js'
 import { bundleFileKey, bundlePrefix, contractOf, ensureBundle, type BundleIndex } from './bundles.js'
 import { assertCan, type Principal } from './policy.js'
+import { snapshotMedia } from './media.js'
 import { getSettings } from './settings.js'
 import type { Repo } from '../store/types.js'
 import type { EditRow } from './types.js'
@@ -253,7 +254,8 @@ export async function renderEdit(deps: Deps, p: Principal, id: string, idemKey?:
         r.list.filter((f) => !excluded(f.path)).map(({ path, sha256 }) => ({ path, sha256 })),
         [],
       )
-      const archive = writeTarGz(r.files)
+      // Media stays by reference: the run downloads it from the version's snapshot.
+      const archive = writeTarGz(new Map([...r.files].filter(([path]) => !path.startsWith('assets/media/'))))
       const key = `${e.jobId}/v${n}/frozen.tar.gz`
       await deps.blobs.set('sources', key, archive, { contentType: 'application/gzip' })
       const now = deps.clock.now().toISOString()
@@ -273,6 +275,9 @@ export async function renderEdit(deps: Deps, p: Principal, id: string, idemKey?:
         editedFromN: e.baseN,
         frozen: { key, sha256: sha256Hex(archive), manifestHash: manifest, editId: e.id },
       })
+      await repo.insertVersionMedia(
+        await snapshotMedia(repo, e.jobId, n, [], await repo.listVersionMedia(e.jobId, e.baseN)),
+      )
       await repo.insertAttempt(newAttempt(deps, e.jobId, n, now))
       await repo.updateJob(e.jobId, {
         latestVersion: n,

@@ -201,6 +201,9 @@ export const CreateVideoSchema = z
       .url()
       .optional()
       .openapi({ description: 'HTTPS URL for video.ready / video.failed events (API keys only).' }),
+    mediaIds: z.array(z.string()).max(12).optional().openapi({
+      description: 'Library items (GET /api/v1/media) the agent should use: images, clips, fonts.',
+    }),
   })
   .openapi('CreateVideo')
 
@@ -211,6 +214,9 @@ export const ReviseSchema = z
     durationSec: z.number().int().positive().optional(),
     webhookUrl: z.url().optional(),
     planId: z.string().optional(),
+    mediaIds: z.array(z.string()).max(12).optional().openapi({
+      description: 'Library items (GET /api/v1/media) the agent should use: images, clips, fonts.',
+    }),
     commentIds: z.array(z.string()).max(50).optional().openapi({
       description:
         'Incorporate feedback: open comments on the version being revised (owner or admin). prompt is your note.',

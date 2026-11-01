@@ -823,6 +823,14 @@
             "type": "string",
             "format": "uri",
             "description": "HTTPS URL for video.ready / video.failed events (API keys only)."
+          },
+          "mediaIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 12,
+            "description": "Library items (GET /api/v1/media) the agent should use: images, clips, fonts."
           }
         },
         "required": [
@@ -885,6 +893,14 @@
           },
           "planId": {
             "type": "string"
+          },
+          "mediaIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 12,
+            "description": "Library items (GET /api/v1/media) the agent should use: images, clips, fonts."
           },
           "commentIds": {
             "type": "array",

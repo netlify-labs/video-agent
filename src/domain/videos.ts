@@ -3,6 +3,7 @@ import type { Deps } from '../deps.js'
 import { sha256Hex } from '../lib/crypto.js'
 import { accessKey, writeAccessMirror } from './files.js'
 import { emitEvent } from './webhooks.js'
+import { snapshotMedia } from './media.js'
 import { notifyOwner } from './notifications.js'
 import { ApiError } from '../lib/errors.js'
 import type { CommentCounts, Repo } from '../store/types.js'
@@ -32,6 +33,7 @@ export interface CreateVideoInput {
   title?: string | undefined
   webhookUrl?: string | undefined
   planId?: string | undefined
+  mediaIds?: string[] | undefined
 }
 
 export interface ReviseInput {
@@ -42,6 +44,8 @@ export interface ReviseInput {
   planId?: string | undefined
   /** Incorporate feedback (plan v2 §5): open comments on the version being revised. Owner or admin. */
   commentIds?: string[] | undefined
+  /** More library media for this version, on top of what it inherits from the version it revises. */
+  mediaIds?: string[] | undefined
 }
 
 export const INCORPORATE_MAX_COMMENTS = 50
@@ -240,6 +244,7 @@ export async function createVideo(
         accessEpoch: 0,
       }
       await repo.insertJob(job)
+      await repo.insertVersionMedia(await snapshotMedia(repo, jobId, 1, input.mediaIds ?? [], []))
       await repo.insertVersion({
         jobId,
         n: 1,
@@ -335,6 +340,16 @@ export async function reviseVideo(
         plan: planned?.frozen ?? null,
       })
       await repo.insertVersionComments(feedback)
+      // The parent's media comes along (even items deleted from the library since); new picks are added.
+      await repo.insertVersionMedia(
+        await snapshotMedia(
+          repo,
+          jobId,
+          n,
+          input.mediaIds ?? [],
+          await repo.listVersionMedia(jobId, parent.n),
+        ),
+      )
       await repo.insertAttempt(newAttempt(deps, jobId, n, now))
       await repo.updateJob(jobId, {
         latestVersion: n,

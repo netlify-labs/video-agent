@@ -17,11 +17,22 @@ export interface RunManifest {
   source: { key: string; sha256: string; parentN: number } | null
   /** A version-owned frozen bundle (render-unchanged runs): archive hash plus the canonical file manifest hash. */
   bundle: { key: string; sha256: string; manifestHash: string } | null
+  /** Library media to download into video/assets/media/ (plan v2 §9, §14 rule 27). */
+  media: RunMedia[] | null
   /** Incorporate-feedback runs: the parent MP4 and the pinned comments to make stills of (plan v2 §5). */
   feedback: {
     video: { key: string; sha256: string }
     pins: FeedbackPin[]
   } | null
+}
+
+export interface RunMedia {
+  /** Key in the media store. */
+  key: string
+  sha256: string
+  /** File name inside video/assets/media/. */
+  filename: string
+  kind: 'image' | 'svg' | 'video' | 'font'
 }
 
 export interface FeedbackPin {
@@ -50,6 +61,8 @@ export function serializeRunManifest(m: RunManifest): string {
     kind: m.kind,
     source: m.source && { key: m.source.key, sha256: m.source.sha256, parentN: m.source.parentN },
     bundle: m.bundle && { key: m.bundle.key, sha256: m.bundle.sha256, manifestHash: m.bundle.manifestHash },
+    media:
+      m.media && m.media.map((x) => ({ key: x.key, sha256: x.sha256, filename: x.filename, kind: x.kind })),
     feedback: m.feedback && {
       video: { key: m.feedback.video.key, sha256: m.feedback.video.sha256 },
       pins: m.feedback.pins.map((p) => ({ commentId: p.commentId, timeSec: p.timeSec, x: p.x, y: p.y })),
@@ -82,6 +95,17 @@ export function verifyRunManifest(raw: string, expected: { attemptId: string; sh
     throw new Error('The run manifest has a bad source entry.')
   if (m.bundle && (!own(m.bundle.key) || !HEX.test(m.bundle.sha256) || !HEX.test(m.bundle.manifestHash)))
     throw new Error('The run manifest has a bad bundle entry.')
+  if (m.media) {
+    if (!Array.isArray(m.media) || m.media.length > 50) throw new Error('The run manifest has bad media.')
+    for (const x of m.media)
+      if (
+        !/^med_[a-z0-9]{8,40}\/(original|clean)\.[a-z0-9]{2,5}$/.test(x.key) ||
+        !HEX.test(x.sha256) ||
+        !/^med_[a-z0-9]{8,40}\.[a-z0-9]{2,5}$/.test(x.filename) ||
+        !['image', 'svg', 'video', 'font'].includes(x.kind)
+      )
+        throw new Error('The run manifest has a bad media entry.')
+  }
   if (m.feedback) {
     const f = m.feedback
     if (!own(f.video.key) || !HEX.test(f.video.sha256))

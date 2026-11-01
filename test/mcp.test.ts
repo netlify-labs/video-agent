@@ -39,10 +39,10 @@ describe('MCP', () => {
     const { h, key } = await setup()
     const r = await rpc(h, key, 'tools/list', {}, 1, '/mcp')
     expect(r.status).toBe(200)
-    expect((r.body as { result: { tools: unknown[] } }).result.tools).toHaveLength(12)
+    expect((r.body as { result: { tools: unknown[] } }).result.tools).toHaveLength(13)
   })
 
-  it('initializes and lists twelve tools with instructions', async () => {
+  it('initializes and lists thirteen tools with instructions', async () => {
     const { h, key } = await setup()
     const init = await rpc(h, key, 'initialize', {
       protocolVersion: '2025-06-18',
@@ -59,6 +59,7 @@ describe('MCP', () => {
       'create_video',
       'get_video',
       'list_comments',
+      'list_media',
       'list_videos',
       'plan_brief',
       'plan_video',
