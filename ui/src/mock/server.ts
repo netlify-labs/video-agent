@@ -14,6 +14,14 @@ import { mockFile } from './files'
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
 const fail = (status: number, code: string, message: string) => json({ error: { code, message } }, status)
+// Tests pick the sign-in provider with localStorage.mockAuthProvider (identity by default).
+export const mockAuthProvider = (): 'identity' | 'netlify' => {
+  try {
+    return localStorage.getItem('mockAuthProvider') === 'netlify' ? 'netlify' : 'identity'
+  } catch {
+    return 'identity'
+  }
+}
 // Tests switch roles with localStorage.mockRole (admin by default).
 const mockRole = () => {
   try {
@@ -229,6 +237,8 @@ export function installMock() {
         siteUrl: window.location.origin,
         planningAvailable: true,
         mcpOAuth: mockOAuth(),
+        authProvider: mockAuthProvider(),
+        requiredTeams: mockAuthProvider() === 'netlify' ? ['acme'] : [],
       })
     if (p === '/api/v1/oauth/grants')
       return mockOAuth() ? json(grants) : fail(404, 'not_found', 'OAuth is not enabled on this video agent.')
@@ -250,6 +260,7 @@ export function installMock() {
           createdAt: new Date(Date.now() - (30 - i * 6) * 86400_000).toISOString(),
           lastSeenAt: new Date().toISOString(),
           disabled: false,
+          signInMethods: i === 0 ? ['identity', 'netlify'] : i % 2 ? ['netlify'] : ['identity'],
         })),
       )
     }
