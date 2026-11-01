@@ -276,6 +276,57 @@ export const comments = pgTable(
   (t) => [index('comments_job_idx').on(t.jobId, t.createdAt)],
 )
 
+// The team media library (plan v2 §9). Bytes live in the media store: the original as uploaded and, for SVGs, a
+// sanitized clean copy that is the only one runs and previews use. Soft delete keeps bytes while referenced.
+export const media = pgTable(
+  'media',
+  {
+    id: text('id').primaryKey(),
+    uploaderId: text('uploader_id').notNull(),
+    kind: text('kind').notNull(),
+    status: text('status').notNull(),
+    rejectReason: text('reject_reason'),
+    filename: text('filename').notNull(),
+    caption: text('caption'),
+    mime: text('mime').notNull(),
+    ext: text('ext').notNull(),
+    bytes: bigint('bytes', { mode: 'number' }).notNull(),
+    originalKey: text('original_key').notNull(),
+    originalSha256: text('original_sha256').notNull(),
+    cleanKey: text('clean_key').notNull(),
+    cleanSha256: text('clean_sha256').notNull(),
+    width: integer('width'),
+    height: integer('height'),
+    durationSec: doublePrecision('duration_sec'),
+    posterKey: text('poster_key'),
+    createdAt: ts('created_at').notNull(),
+    updatedAt: ts('updated_at').notNull(),
+    deletedAt: ts('deleted_at'),
+  },
+  (t) => [index('media_created_idx').on(t.createdAt), index('media_uploader_idx').on(t.uploaderId)],
+)
+
+// Media a version was made with, snapshotted when it was queued (plan v2 §9): the run downloads exactly these
+// bytes, even if the item is later soft-deleted. Revisions and edits inherit their parent's.
+export const versionMedia = pgTable(
+  'version_media',
+  {
+    jobId: text('job_id').notNull(),
+    versionN: integer('version_n').notNull(),
+    mediaId: text('media_id').notNull(),
+    position: integer('position').notNull(),
+    kind: text('kind').notNull(),
+    key: text('key').notNull(),
+    sha256: text('sha256').notNull(),
+    filename: text('filename').notNull(),
+    caption: text('caption'),
+  },
+  (t) => [
+    primaryKey({ columns: [t.jobId, t.versionN, t.mediaId] }),
+    index('version_media_media_idx').on(t.mediaId),
+  ],
+)
+
 // Edit drafts (plan v2 §8): one person's edits on one version, re-applied by the server on every save. Each rev has
 // an immutable bundle in the bundles store; a render freezes the draft's latest rev into the new version.
 export const edits = pgTable(

@@ -317,6 +317,33 @@ export const MyUsageSchema = z
   })
   .openapi('MyUsage')
 
+export const MediaSchema = z
+  .object({
+    id: z.string(),
+    kind: z.enum(['image', 'svg', 'video', 'font']),
+    status: z.enum(['uploading', 'verifying', 'ready', 'rejected']),
+    rejectReason: z.string().nullable(),
+    filename: z.string(),
+    caption: z.string().nullable(),
+    mime: z.string(),
+    bytes: z.number().int(),
+    width: z.number().int().nullable(),
+    height: z.number().int().nullable(),
+    durationSec: z.number().nullable(),
+    uploader: z.object({ id: z.string(), name: z.string().nullable(), email: z.string().nullable() }),
+    createdAt: z.string(),
+    usedIn: z.number().int().openapi({ description: 'Videos you can see that use it' }),
+    urls: z
+      .object({ file: z.string(), original: z.string(), poster: z.string().nullable() })
+      .nullable()
+      .openapi({ description: 'Signed for 10 minutes; null until the item is ready' }),
+    canDelete: z.boolean(),
+  })
+  .openapi('Media')
+export const MediaListSchema = z
+  .object({ items: z.array(MediaSchema), nextCursor: z.string().nullable() })
+  .openapi('MediaList')
+
 const EditOpSchema = z.discriminatedUnion('op', [
   z.object({ op: z.literal('text'), id: z.string().max(80), text: z.string().max(500) }),
   z.object({ op: z.literal('retime'), beat: z.string().max(80), duration: z.number().min(0.5).max(120) }),

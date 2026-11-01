@@ -37,6 +37,8 @@ import type {
   CommentRow,
   CheckpointRow,
   EditRow,
+  MediaRow,
+  VersionMediaRow,
   GatewayCallRow,
   WebhookDeliveryRow,
   UserWebhookRow,
@@ -394,6 +396,56 @@ function repoFor(db: Db): Repo {
         .where(and(inArray(c.jobId, jobIds), isNull(c.deletedAt)))
         .groupBy(c.jobId, r.readAt)
       return Object.fromEntries(rows.map((x) => [x.jobId, { count: x.count, unread: x.unread }]))
+    },
+    insertMedia: async (row) => {
+      await db.insert(t.media).values(row)
+    },
+    getMedia: async (id) => one<MediaRow>(await db.select().from(t.media).where(eq(t.media.id, id))),
+    updateMedia: async (id, patch) => {
+      await db.update(t.media).set(patch).where(eq(t.media.id, id))
+    },
+    listMedia: async (q) => {
+      const m = t.media
+      const visible = q.includePendingOf
+        ? or(eq(m.status, 'ready'), eq(m.uploaderId, q.includePendingOf))
+        : eq(m.status, 'ready')
+      return (await db
+        .select()
+        .from(m)
+        .where(
+          and(
+            isNull(m.deletedAt),
+            visible,
+            q.kind ? eq(m.kind, q.kind) : undefined,
+            q.before
+              ? or(
+                  lt(m.createdAt, q.before.createdAt),
+                  and(eq(m.createdAt, q.before.createdAt), lt(m.id, q.before.id)),
+                )
+              : undefined,
+          ),
+        )
+        .orderBy(desc(m.createdAt), desc(m.id))
+        .limit(q.limit)) as MediaRow[]
+    },
+    insertVersionMedia: async (rows) => {
+      if (rows.length) await db.insert(t.versionMedia).values(rows)
+    },
+    listVersionMedia: async (jobId, n) =>
+      (await db
+        .select()
+        .from(t.versionMedia)
+        .where(and(eq(t.versionMedia.jobId, jobId), eq(t.versionMedia.versionN, n)))
+        .orderBy(asc(t.versionMedia.position))) as VersionMediaRow[],
+    mediaUsage: async (ids) => {
+      if (ids.length === 0) return {}
+      const rows = await db
+        .selectDistinct({ mediaId: t.versionMedia.mediaId, jobId: t.versionMedia.jobId })
+        .from(t.versionMedia)
+        .where(inArray(t.versionMedia.mediaId, ids))
+      const out: Record<string, string[]> = {}
+      for (const r of rows) (out[r.mediaId] ??= []).push(r.jobId)
+      return out
     },
     insertEdit: async (row) => {
       await db.insert(t.edits).values(row)

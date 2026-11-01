@@ -30,6 +30,14 @@ import * as hooks from './domain/webhook-settings.js'
 import { listNotifications, markNotificationsRead } from './domain/notifications.js'
 import { getProgress } from './domain/progress.js'
 import { previewLink } from './domain/preview.js'
+import {
+  deleteMedia,
+  getMedia,
+  listMedia,
+  SINGLE_UPLOAD_MAX,
+  updateMedia,
+  uploadMedia,
+} from './domain/media.js'
 import { discardEdit, editPreviewLink, getEdit, openEdit, renderEdit, saveEdit } from './domain/edits.js'
 import { receiveCheckpoint } from './domain/checkpoints.js'
 import {
@@ -922,6 +930,101 @@ export function createApp(deps: Deps, opts: AppOptions) {
       responses: { 200: json(s.PreviewLinkSchema, 'Preview link'), ...errors },
     }),
     async (c) => c.json(await editPreviewLink(deps, c.get('principal'), c.req.valid('param').id), 200),
+  )
+  // ───── media library (plan v2 §9) ─────
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/v1/media',
+      summary:
+        'Upload one file up to 4 MB as the request body (images, SVG, fonts, short clips); bigger files use upload sessions',
+      tags: ['media'],
+      security,
+      request: {
+        query: z.object({
+          filename: z.string().max(200).optional(),
+          caption: z.string().max(500).optional(),
+        }),
+        body: {
+          content: { 'application/octet-stream': { schema: z.string().openapi({ format: 'binary' }) } },
+          required: true,
+        },
+      },
+      responses: { 201: json(s.MediaSchema, 'Uploaded'), ...errors },
+    }),
+    async (c) => {
+      const declared = Number(c.req.header('content-length') ?? 0)
+      if (declared > SINGLE_UPLOAD_MAX + 1024)
+        throw new ApiError('invalid_request', 'Files over 4 MB upload in parts: start an upload session.')
+      const bytes = new Uint8Array(await c.req.arrayBuffer())
+      const q = c.req.valid('query')
+      return c.json(await uploadMedia(deps, c.get('principal'), bytes, q), 201)
+    },
+  )
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/v1/media',
+      summary: "The team's media library, newest first (plus your own uploads still being checked)",
+      tags: ['media'],
+      security,
+      request: {
+        query: z.object({
+          kind: z.enum(['image', 'svg', 'video', 'font']).optional(),
+          cursor: z.string().optional(),
+          limit: z.coerce.number().int().min(1).max(100).optional(),
+        }),
+      },
+      responses: { 200: json(s.MediaListSchema, 'Media'), ...errors },
+    }),
+    async (c) => c.json(await listMedia(deps, c.get('principal'), c.req.valid('query')), 200),
+  )
+  const MediaParam = z.object({ id: z.string() })
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/v1/media/{id}',
+      summary: 'One media item',
+      tags: ['media'],
+      security,
+      request: { params: MediaParam },
+      responses: { 200: json(s.MediaSchema, 'Media'), ...errors },
+    }),
+    async (c) => c.json(await getMedia(deps, c.get('principal'), c.req.valid('param').id), 200),
+  )
+  app.openapi(
+    createRoute({
+      method: 'patch',
+      path: '/api/v1/media/{id}',
+      summary: 'Change the caption (uploader or admin)',
+      tags: ['media'],
+      security,
+      request: {
+        params: MediaParam,
+        body: {
+          content: { 'application/json': { schema: z.object({ caption: z.string().max(500).nullable() }) } },
+          required: true,
+        },
+      },
+      responses: { 200: json(s.MediaSchema, 'Updated'), ...errors },
+    }),
+    async (c) =>
+      c.json(await updateMedia(deps, c.get('principal'), c.req.valid('param').id, c.req.valid('json')), 200),
+  )
+  app.openapi(
+    createRoute({
+      method: 'delete',
+      path: '/api/v1/media/{id}',
+      summary: 'Remove it from the library (uploader or admin); versions that used it keep it',
+      tags: ['media'],
+      security,
+      request: { params: MediaParam },
+      responses: { 204: { description: 'Deleted' }, ...errors },
+    }),
+    async (c) => {
+      await deleteMedia(deps, c.get('principal'), c.req.valid('param').id)
+      return c.body(null, 204)
+    },
   )
   const CommentParam = z.object({ id: z.string() })
   app.openapi(

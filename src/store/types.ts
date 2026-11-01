@@ -23,6 +23,8 @@ import type {
   VersionCommentRow,
   CheckpointRow,
   EditRow,
+  MediaRow,
+  VersionMediaRow,
   GatewayCallRow,
   WebhookDeliveryRow,
   UserWebhookRow,
@@ -115,6 +117,20 @@ export interface Repo {
   /** Not deleted, oldest first; optionally one version. */
   listComments(jobId: string, versionN?: number): Promise<CommentRow[]>
   getCommentReadAt(userId: string, jobId: string): Promise<string | null>
+  insertMedia(row: MediaRow): Promise<void>
+  getMedia(id: string): Promise<MediaRow | null>
+  updateMedia(id: string, patch: Partial<MediaRow>): Promise<void>
+  /** Newest first: ready, undeleted items, plus `includePendingOf`'s own items in any state. */
+  listMedia(q: {
+    kind?: MediaRow['kind'] | undefined
+    includePendingOf?: string | undefined
+    before?: { createdAt: string; id: string } | undefined
+    limit: number
+  }): Promise<MediaRow[]>
+  insertVersionMedia(rows: VersionMediaRow[]): Promise<void>
+  listVersionMedia(jobId: string, versionN: number): Promise<VersionMediaRow[]>
+  /** Per media id, the distinct videos (job ids) whose versions use it. */
+  mediaUsage(mediaIds: string[]): Promise<Record<string, string[]>>
   insertEdit(row: EditRow): Promise<void>
   getEdit(id: string, opts?: { lock?: boolean }): Promise<EditRow | null>
   updateEdit(id: string, patch: Partial<EditRow>): Promise<void>

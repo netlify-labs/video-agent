@@ -22,6 +22,8 @@ import type {
   VersionCommentRow,
   CheckpointRow,
   EditRow,
+  MediaRow,
+  VersionMediaRow,
   GatewayCallRow,
   WebhookDeliveryRow,
   UserWebhookRow,
@@ -52,6 +54,8 @@ interface State {
   versionComments: VersionCommentRow[]
   checkpoints: Map<string, CheckpointRow>
   edits: Map<string, EditRow>
+  media: Map<string, MediaRow>
+  versionMedia: VersionMediaRow[]
   userWebhooks: Map<string, UserWebhookRow>
   cleanup: Map<string, CleanupRow>
 }
@@ -80,6 +84,8 @@ const empty = (): State => ({
   versionComments: [],
   checkpoints: new Map(),
   edits: new Map(),
+  media: new Map(),
+  versionMedia: [],
   userWebhooks: new Map(),
   cleanup: new Map(),
 })
@@ -333,6 +339,45 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
         o.count++
         if (userId && c.authorId !== userId && (readAt === null || c.createdAt > readAt)) o.unread++
       }
+      return out
+    },
+    insertMedia: async (row) => {
+      state.media.set(row.id, clone(row))
+    },
+    getMedia: async (id) => clone(state.media.get(id) ?? null),
+    updateMedia: async (id, patch) => {
+      const m = state.media.get(id)
+      if (m) Object.assign(m, clone(patch))
+    },
+    listMedia: async (q) =>
+      clone(
+        [...state.media.values()]
+          .filter(
+            (m) =>
+              !m.deletedAt &&
+              (m.status === 'ready' || m.uploaderId === q.includePendingOf) &&
+              (!q.kind || m.kind === q.kind) &&
+              (!q.before ||
+                m.createdAt < q.before.createdAt ||
+                (m.createdAt === q.before.createdAt && m.id < q.before.id)),
+          )
+          .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))
+          .slice(0, q.limit),
+      ),
+    insertVersionMedia: async (rows) => {
+      state.versionMedia.push(...clone(rows))
+    },
+    listVersionMedia: async (jobId, n) =>
+      clone(
+        state.versionMedia
+          .filter((r) => r.jobId === jobId && r.versionN === n)
+          .sort((a, b) => a.position - b.position),
+      ),
+    mediaUsage: async (ids) => {
+      const out: Record<string, string[]> = {}
+      for (const r of state.versionMedia)
+        if (ids.includes(r.mediaId) && !(out[r.mediaId] ??= []).includes(r.jobId))
+          out[r.mediaId]?.push(r.jobId)
       return out
     },
     insertEdit: async (row) => {

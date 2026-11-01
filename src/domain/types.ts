@@ -325,6 +325,46 @@ export interface CommentRow {
   deletedAt: string | null
 }
 
+export type MediaStatus = 'uploading' | 'verifying' | 'ready' | 'rejected'
+
+export interface MediaRow {
+  id: string
+  uploaderId: string
+  kind: 'image' | 'svg' | 'video' | 'font'
+  status: MediaStatus
+  rejectReason: string | null
+  filename: string
+  caption: string | null
+  mime: string
+  ext: string
+  bytes: number
+  originalKey: string
+  originalSha256: string
+  /** The copy runs and previews use: sanitized for SVGs, the original otherwise. */
+  cleanKey: string
+  cleanSha256: string
+  width: number | null
+  height: number | null
+  durationSec: number | null
+  posterKey: string | null
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+}
+
+export interface VersionMediaRow {
+  jobId: string
+  versionN: number
+  mediaId: string
+  position: number
+  kind: MediaRow['kind']
+  key: string
+  sha256: string
+  /** File name inside video/assets/media/. */
+  filename: string
+  caption: string | null
+}
+
 export interface EditRow {
   id: string
   jobId: string
@@ -445,7 +485,7 @@ export interface UserWebhookRow {
 export interface CleanupRow {
   id: string
   kind: 'delete_prefix'
-  store: 'videos' | 'sources' | 'uploads' | 'internal' | 'checkpoints' | 'bundles'
+  store: 'videos' | 'sources' | 'uploads' | 'internal' | 'checkpoints' | 'bundles' | 'media'
   prefix: string
   nextActionAt: string
   doneAt: string | null
