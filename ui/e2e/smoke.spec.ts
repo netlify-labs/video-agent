@@ -368,3 +368,68 @@ test('clicking text in the preview focuses its field', async ({ page }) => {
   await frame.locator('[data-va-text="outro-cta"]').dispatchEvent('click')
   await expect(page.getByRole('textbox', { name: 'outro-cta' })).toBeFocused()
 })
+
+// Media library (plan v2 §9)
+const pngBytes = Buffer.from([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, 0, 0, 2, 128, 0, 0, 1,
+  104, 8, 6, 0, 0, 0,
+])
+
+test('the media library starts empty, uploads a file, edits its caption and deletes it', async ({ page }) => {
+  await page.goto('/media')
+  await expect(page.getByText('Nothing here yet')).toBeVisible()
+  await page
+    .locator('input[type=file]')
+    .setInputFiles({ name: 'logo.png', mimeType: 'image/png', buffer: pngBytes })
+  const card = page.getByTestId('media-med_mock0001')
+  await expect(card.getByText('logo.png')).toBeVisible()
+  await card.getByRole('button', { name: 'Actions for logo.png' }).click()
+  await page.getByRole('menuitem', { name: 'Edit caption' }).click()
+  await card.getByRole('textbox', { name: 'Caption' }).fill('Main logo')
+  await card.getByRole('button', { name: 'Save' }).click()
+  await expect(card.getByText('Main logo')).toBeVisible()
+  await card.getByRole('button', { name: 'Actions for logo.png' }).click()
+  await page.getByRole('menuitem', { name: 'Delete' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click()
+  await expect(page.getByText('Nothing here yet')).toBeVisible()
+})
+
+test('a rejected file says why and can be retried or dismissed', async ({ page }) => {
+  await page.goto('/media')
+  await page
+    .locator('input[type=file]')
+    .setInputFiles({ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('just text') })
+  const job = page.getByTestId('upload-job')
+  await expect(job).toContainText('Upload PNG, JPEG, WebP or SVG images')
+  await expect(job.getByRole('button', { name: 'Try again' })).toBeVisible()
+  await job.getByRole('button', { name: 'Dismiss' }).click()
+  await expect(job).toHaveCount(0)
+})
+
+test('big files upload in parts and resume after a failed part', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('mockFailPart', '1')
+  })
+  await page.goto('/media')
+  const big = Buffer.alloc(5 * 1024 * 1024, 1)
+  await page
+    .locator('input[type=file]')
+    .setInputFiles({ name: 'clip.bin', mimeType: 'application/octet-stream', buffer: big })
+  const job = page.getByTestId('upload-job')
+  await expect(job).toContainText('Network hiccup.')
+  await job.getByRole('button', { name: 'Try again' }).click()
+  await expect(page.getByText('clip.bin')).toBeVisible()
+  await expect(job).toHaveCount(0)
+  // Two parts, one retried: the resume sent only the part that failed.
+  expect(await page.evaluate<number>('window.__parts ?? 0')).toBe(3)
+})
+
+test('viewers browse the library but cannot upload', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('mockRole', 'viewer')
+  })
+  await page.goto('/media')
+  await expect(page.getByText('Creators can upload logos, screenshots and clips here.')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Upload' })).toHaveCount(0)
+  await expect(page.getByTestId('media-dropzone')).toHaveCount(0)
+})

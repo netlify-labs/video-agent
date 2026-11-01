@@ -16,6 +16,7 @@ import {
   IconBook,
   IconKey,
   IconLayoutGrid,
+  IconPhoto,
   IconLogout,
   IconMoon,
   IconPlus,
@@ -123,6 +124,7 @@ export function Layout() {
       <AppShell.Navbar p="xs">
         {canCreate ? link('/new', 'New video', <IconPlus size={18} />) : null}
         {link('/', 'Library', <IconLayoutGrid size={18} />)}
+        {link('/media', 'Media', <IconPhoto size={18} />)}
         {link('/keys', 'API keys', <IconKey size={18} />)}
         {isAdmin ? link('/admin', 'Admin', <IconShieldLock size={18} />) : null}
         {isAdmin ? link('/setup', 'Setup', <IconSettings size={18} />) : null}

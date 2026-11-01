@@ -1,5 +1,6 @@
 // Mock mode: answers /api/* from mock/data.ts by replacing window.fetch. Loaded only when VITE_MOCK=1.
 import spec from '../../../openapi.json'
+import type { paths } from '../api/schema'
 import { applyEdits, type EditOp } from '../../../src/lib/contract'
 import contractHtml from '../../../test/fixtures/contract1/index.html?raw'
 import contractSummary from '../../../test/fixtures/contract1/summary.json'
@@ -280,6 +281,97 @@ export function installMock() {
             : null,
       })
     }
+    // Media library (plan v2 §9): in memory. localStorage.mockFailPart=1 fails one part once, to test resume.
+    if (p === '/api/v1/media' && method === 'GET') {
+      const kind = url.searchParams.get('kind')
+      return json({ items: mockMedia.filter((m) => !kind || m.kind === kind), nextCursor: null })
+    }
+    if (p === '/api/v1/media' && method === 'POST') {
+      if (me.role === 'viewer' || me.role === 'reviewer')
+        return json(
+          { error: { code: 'forbidden', message: `Your role (${me.role}) can't upload media.` } },
+          403,
+        )
+      const body = new Uint8Array(
+        await (input instanceof Request
+          ? input.clone().arrayBuffer()
+          : new Response(init?.body as BodyInit).arrayBuffer()),
+      )
+      const name = url.searchParams.get('filename') ?? 'upload'
+      const kind = mockKind(body)
+      if (!kind)
+        return json(
+          {
+            error: {
+              code: 'invalid_request',
+              message: 'Upload PNG, JPEG, WebP or SVG images, MP4 clips, or WOFF2, TTF or OTF fonts.',
+            },
+          },
+          400,
+        )
+      const m = mockItem(name, kind, body.byteLength)
+      mockMedia.unshift(m)
+      return json(m, 201)
+    }
+    if (p === '/api/v1/media/uploads' && method === 'POST') {
+      const b = (await readBody(init, input)) as { filename: string; size: number }
+      const s = {
+        id: `upl_${mockUploads.size + 1}`,
+        filename: b.filename,
+        size: b.size,
+        partSize: 4 * 1024 * 1024,
+        partCount: Math.ceil(b.size / (4 * 1024 * 1024)),
+        uploaded: [] as number[],
+        status: 'open',
+        mediaId: null as string | null,
+        error: null,
+        expiresAt: new Date(Date.now() + 86400_000).toISOString(),
+      }
+      mockUploads.set(s.id, s)
+      return json(s, 201)
+    }
+    const up = /^\/api\/v1\/media\/uploads\/([^/]+)(?:\/parts\/(\d+)|\/(complete))?$/.exec(p)
+    if (up?.[1]) {
+      const s = mockUploads.get(up[1])
+      if (!s) return json({ error: { code: 'not_found', message: 'Upload not found.' } }, 404)
+      if (up[2] !== undefined) {
+        const w = window as unknown as { __parts?: number }
+        w.__parts = (w.__parts ?? 0) + 1
+        let failOnce = false
+        try {
+          failOnce = Number(up[2]) === 1 && localStorage.getItem('mockFailPart') === '1'
+          if (failOnce) localStorage.removeItem('mockFailPart')
+        } catch {
+          // ignore
+        }
+        if (failOnce) return json({ error: { code: 'internal', message: 'Network hiccup.' } }, 500)
+        if (!s.uploaded.includes(Number(up[2]))) s.uploaded.push(Number(up[2]))
+        return json({ idx: Number(up[2]), sha256: 'x', duplicate: false })
+      }
+      if (up[3]) {
+        const m = mockItem(s.filename, 'video', s.size)
+        mockMedia.unshift(m)
+        s.status = 'done'
+        s.mediaId = m.id
+        return json(s, 202)
+      }
+      return json(s)
+    }
+    const mm = /^\/api\/v1\/media\/([^/]+)$/.exec(p)
+    if (mm?.[1]) {
+      const i = mockMedia.findIndex((m) => m.id === mm[1])
+      const m = mockMedia[i]
+      if (!m) return json({ error: { code: 'not_found', message: 'Media not found.' } }, 404)
+      if (method === 'DELETE') {
+        mockMedia.splice(i, 1)
+        return new Response(null, { status: 204 })
+      }
+      if (method === 'PATCH') {
+        const b = (await readBody(init, input)) as { caption: string | null }
+        m.caption = b.caption?.trim() || null
+      }
+      return json(m)
+    }
     // Editor (plan v2 §8): drafts run on the real patcher over the spike S8 fixture. window.__lastEditOps records saves.
     const ed = /^\/api\/v1\/videos\/([^/]+)\/versions\/(\d+)\/edits$/.exec(p)
     const edit = /^\/api\/v1\/edits\/([^/]+)(\/render|\/preview)?$/.exec(p)
@@ -509,5 +601,57 @@ function newMockEdit(videoId: string, baseN: number) {
     expiresAt: new Date(Date.now() + 7 * 86400_000).toISOString(),
     renderedN: null,
     newerVersion: null,
+  }
+}
+
+type MockMedia = paths['/api/v1/media/{id}']['get']['responses'][200]['content']['application/json']
+const mockMedia: MockMedia[] = []
+const mockUploads = new Map<
+  string,
+  {
+    id: string
+    filename: string
+    size: number
+    partSize: number
+    partCount: number
+    uploaded: number[]
+    status: string
+    mediaId: string | null
+    error: null
+    expiresAt: string
+  }
+>()
+function mockKind(b: Uint8Array): 'image' | 'svg' | 'video' | 'font' | null {
+  const head = String.fromCharCode(...b.subarray(0, 12))
+  if (b[0] === 0x89 && head.slice(1, 4) === 'PNG') return 'image'
+  if (b[0] === 0xff && b[1] === 0xd8) return 'image'
+  if (head.slice(4, 8) === 'ftyp') return 'video'
+  if (head.startsWith('wOF2') || head.startsWith('OTTO')) return 'font'
+  if (new TextDecoder().decode(b.subarray(0, 200)).includes('<svg')) return 'svg'
+  return null
+}
+function mockItem(filename: string, kind: 'image' | 'svg' | 'video' | 'font', bytes: number): MockMedia {
+  const id = `med_mock${String(mockMedia.length + 1).padStart(4, '0')}`
+  return {
+    id,
+    kind,
+    status: 'ready',
+    rejectReason: null,
+    filename,
+    caption: null,
+    mime: kind === 'video' ? 'video/mp4' : kind === 'svg' ? 'image/svg+xml' : 'image/png',
+    bytes,
+    width: kind === 'font' ? null : 1920,
+    height: kind === 'font' ? null : 1080,
+    durationSec: kind === 'video' ? 12 : null,
+    uploader: people.sam,
+    createdAt: new Date().toISOString(),
+    usedIn: 0,
+    urls: {
+      file: '/teaser-v2.jpg',
+      original: '/teaser-v2.jpg',
+      poster: kind === 'video' ? '/teaser-v2.jpg' : null,
+    },
+    canDelete: true,
   }
 }
