@@ -165,6 +165,27 @@ test('API docs are embedded with the REST reference and MCP setup', async ({ pag
   await expect(page.getByText('create_video', { exact: true })).toBeVisible()
 })
 
+test('API docs show how to install the agent skill, with copy buttons', async ({ page }) => {
+  await page.goto('/docs?tab=skills')
+  await expect(page.getByRole('tab', { name: 'Agent skills' })).toHaveAttribute('aria-selected', 'true')
+  const origin = new URL(page.url()).origin
+  await expect(page.getByRole('textbox', { name: 'Skill package (zip)', exact: true })).toHaveValue(
+    `${origin}/skills/netlify-video.zip`,
+  )
+  await expect(page.getByRole('textbox', { name: 'Claude Code', exact: true })).toHaveValue(
+    `curl -fsSL ${origin}/skills/netlify-video.zip -o /tmp/netlify-video.zip && unzip -o /tmp/netlify-video.zip -d ~/.claude/skills/`,
+  )
+  await expect(page.getByRole('textbox', { name: 'Codex', exact: true })).toHaveValue(
+    /-d ~\/\.codex\/skills\/$/,
+  )
+  await expect(page.getByRole('button', { name: 'Copy Claude Code' })).toBeVisible()
+  await expect(page.getByText('pr_video', { exact: true })).toBeVisible()
+  await expect(page.getByRole('link', { name: '/skills/index.json' })).toHaveAttribute(
+    'href',
+    '/skills/index.json',
+  )
+})
+
 test('admin, keys and setup render', async ({ page }) => {
   await page.goto('/admin')
   await expect(

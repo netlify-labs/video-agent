@@ -160,6 +160,24 @@ create with the plan). Each key's tool list matches its owner's role: Reviewers 
 
 The web app's **API docs** page has the REST reference and these instructions with your site's URL filled in.
 
+### Agent skills and MCP prompts
+
+Each deployment serves a `netlify-video` [Agent Skill](https://agentskills.io) that teaches coding agents (Claude
+Code, Codex, Cursor, Gemini CLI) the good path: connecting, plan → create → follow → publish, asking before spending
+a run, reusing library media, and recipes for a pull request → demo video, release notes → changelog video, a
+15-second vertical cut, localising captions and a review loop. The source is `skills/netlify-video/`; the build
+packages it as `https://<your-site>/skills/netlify-video.zip` (listed with its sha256 in `/skills/index.json`) with
+your site's URL filled in, so forks serve their own. The zip is deterministic: the same sources and URL give the same
+bytes.
+
+```sh
+curl -fsSL https://<your-site>/skills/netlify-video.zip -o /tmp/netlify-video.zip \
+  && unzip -o /tmp/netlify-video.zip -d ~/.claude/skills/
+```
+
+The API docs page has the command for each agent. The same recipes are MCP prompts (`pr_video`, `changelog_video`,
+`social_cut`, `localize_video`, `review_video`) for clients without skills, filtered by role like the tools.
+
 ### Sign in with Netlify (OAuth)
 
 Optional. With it on, clients that only do OAuth (Claude and ChatGPT web connectors) can connect with the URL alone:
