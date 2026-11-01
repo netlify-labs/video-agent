@@ -1,15 +1,17 @@
 // Run by the agent inside an Agent Runner run, after `hyperframes check` passes:
 //   npx tsx scripts/render-job.ts --job <id> --attempt <id> --callback <url> --token <t> --upload blobs
-// Renders video/, checks the file, makes the poster, GIF preview, captions and source archive,
-// uploads everything to the uploads store under the attempt id, and notifies the service.
+// Renders video/, checks the file, makes the poster, GIF preview, captions and source archive (plus optional preview
+// variants: small WebP/AVIF posters, a placeholder and a hover clip), uploads everything to the uploads store under the attempt id, and notifies the service.
 // Prints the manifest as a fenced json block on stdout. Logs JSON lines on stderr.
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { bundleManifest } from '../src/lib/bundle-manifest.js'
 import { validate, type Summary } from '../src/lib/contract.js'
+import type { PreviewFile } from '../src/lib/media/previews.js'
 import type { RunManifest } from '../src/lib/run-manifest.js'
 import { postCheckpoint } from './checkpoint.js'
 import { toVtt } from './lib/captions.js'
+import { makePreviews } from './lib/previews.js'
 import { RenderProgressReporter } from './lib/render-progress.js'
 import {
   StepError,
@@ -172,14 +174,20 @@ async function main() {
   ])
   writeFileSync(join(out, 'captions.vtt'), toVtt(summary.captions, durationSec))
   run('tar', videoTarArgs(join(out, 'source.tar.gz')))
-  log('assets.done', { durationSec, width: stream.width, height: stream.height })
+  // Best effort: a variant that can't be made is left out, and the service falls back to the poster and GIF.
+  const previews = makePreviews({ video, out, posterAt, durationSec })
+  if (previews.skipped.length) log('previews.skipped', { skipped: previews.skipped })
+  log('assets.done', { durationSec, width: stream.width, height: stream.height, previews: previews.files })
 
-  const files = Object.fromEntries(
-    OUTPUTS.map((name) => [
-      name,
-      { sha256: sha256File(join(out, name)), bytes: statSync(join(out, name)).size },
-    ]),
-  ) as Record<(typeof OUTPUTS)[number], { sha256: string; bytes: number }>
+  const entry = (name: string) => ({
+    sha256: sha256File(join(out, name)),
+    bytes: statSync(join(out, name)).size,
+  })
+  const files = Object.fromEntries(OUTPUTS.map((name) => [name, entry(name)])) as Record<
+    (typeof OUTPUTS)[number],
+    { sha256: string; bytes: number }
+  > &
+    Partial<Record<PreviewFile, { sha256: string; bytes: number }>>
 
   const cli = netlifyCli()
   for (const name of OUTPUTS) {
@@ -192,6 +200,26 @@ async function main() {
       ),
     )
   }
+  for (const name of previews.files) {
+    const [bin, ...pre] = cli as [string, ...string[]]
+    try {
+      await withRetries(`upload ${name}`, 2, () =>
+        run(
+          bin,
+          [...pre, 'blobs:set', 'uploads', `${attempt}/${name}`, '--input', join(out, name), '--force'],
+          {
+            timeoutMs: 2 * 60_000,
+          },
+        ),
+      )
+      files[name] = entry(name)
+    } catch (e) {
+      log('previews.upload_skipped', {
+        name,
+        error: e instanceof Error ? e.message.slice(0, 300) : String(e),
+      })
+    }
+  }
   log('upload.done', { ms: Date.now() - started })
 
   const manifest = {
@@ -200,6 +228,7 @@ async function main() {
     title: typeof summary.title === 'string' ? summary.title.slice(0, 120) : '',
     summary: typeof summary.summary === 'string' ? summary.summary.slice(0, 4000) : '',
     files,
+    ...(previews.lqip ? { lqip: previews.lqip } : {}),
     durationSec,
     width: stream.width,
     height: stream.height,

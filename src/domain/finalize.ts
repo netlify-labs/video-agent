@@ -3,6 +3,14 @@
 import type { Deps } from '../deps.js'
 import { decrypt, sha256Hex } from '../lib/crypto.js'
 import { inspectMp4, Mp4Error, sniff } from '../lib/media/mp4.js'
+import {
+  MAX_PREVIEW_BYTES,
+  PREVIEW_FILES,
+  PREVIEW_NAMES,
+  isLqip,
+  sniffPreview,
+  type Previews,
+} from '../lib/media/previews.js'
 import { ensureBundle } from './bundles.js'
 import { getSettings } from './settings.js'
 import { setStage } from './videos.js'
@@ -154,7 +162,10 @@ export async function finalizeAttempt(deps: Deps, attemptId: string): Promise<Fi
     })
     await deps.blobs.set('sources', keys.source, files['source.tar.gz'], { contentType: 'application/gzip' })
 
-    const sha256 = Object.fromEntries(OUTPUT_FILES.map((f) => [f, manifest.files[f].sha256]))
+    const sha256: Record<string, string> = Object.fromEntries(
+      OUTPUT_FILES.map((f) => [f, manifest.files[f].sha256]),
+    )
+    const previews = await storePreviews(deps, a.id, prefix, manifest, sha256)
     const result = await finish(deps, a, 'ready', null, {
       jobId: a.jobId,
       versionN: a.versionN,
@@ -170,6 +181,7 @@ export async function finalizeAttempt(deps: Deps, attemptId: string): Promise<Fi
       height: info.height,
       title: manifest.title.slice(0, 120),
       agentSummary: manifest.summary.slice(0, 4000),
+      previews,
     })
     // The preview bundle (plan v2 §7). Best effort: a version without one is still ready and is extracted later.
     if (result === 'ready') {
@@ -229,6 +241,40 @@ export async function finalizeAttempt(deps: Deps, attemptId: string): Promise<Fi
     )
     throw e
   }
+}
+
+/**
+ * Copies the optional preview variants the manifest lists, each checked like the required files. One that is missing,
+ * doesn't match or fails to copy is skipped: the version is still ready and falls back to poster.jpg/preview.gif.
+ */
+async function storePreviews(
+  deps: Deps,
+  attemptId: string,
+  prefix: string,
+  manifest: Manifest,
+  sha256: Record<string, string>,
+): Promise<Previews | null> {
+  const out: Previews = { files: {}, lqip: isLqip(manifest.lqip) ? manifest.lqip : null }
+  for (const name of PREVIEW_NAMES) {
+    const want = manifest.files[name]
+    if (!want) continue
+    try {
+      const bytes = await deps.blobs.get('uploads', `${attemptId}/${name}`)
+      if (!bytes) throw new Error('not uploaded')
+      if (sha256Hex(bytes) !== want.sha256) throw new Error("doesn't match the manifest hash")
+      if (bytes.byteLength > MAX_PREVIEW_BYTES || !sniffPreview(name, bytes))
+        throw new Error('too large or not the right format')
+      await deps.blobs.set('videos', `${prefix}/${name}`, bytes, {
+        contentType: PREVIEW_FILES[name],
+        size: String(bytes.byteLength),
+      })
+      out.files[name] = { bytes: bytes.byteLength }
+      sha256[name] = want.sha256
+    } catch (e) {
+      deps.log.warn('finalize.preview_skipped', { attemptId, file: name, error: e })
+    }
+  }
+  return Object.keys(out.files).length || out.lqip ? out : null
 }
 
 async function finish(

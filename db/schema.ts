@@ -167,6 +167,7 @@ export const outputs = pgTable(
     height: integer('height').notNull(),
     title: text('title').notNull(),
     agentSummary: text('agent_summary').notNull(),
+    previews: jsonb('previews'),
   },
   (t) => [primaryKey({ columns: [t.jobId, t.versionN] })],
 )

@@ -1,4 +1,8 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Locator, type Page } from '@playwright/test'
+
+/** A DOM property of the element (the specs aren't typechecked against the DOM library). */
+const prop = <T>(l: Locator, name: string) =>
+  l.evaluate((el, n) => (el as unknown as Record<string, unknown>)[n], name) as Promise<T>
 
 /** Sets a mock API switch in localStorage before the app loads. */
 const mock = (page: Page, key: string, value = '1') =>
@@ -11,6 +15,68 @@ test('library shows videos, progress and the badge', async ({ page }) => {
   await expect(page.getByText('Making v1')).toBeVisible()
   await expect(page.getByText('Org webhooks launch')).toBeVisible()
   await expect(page.getByRole('link', { name: 'Powered by Netlify Agent Runners' })).toBeVisible()
+})
+
+test('library tiles: small AVIF/WebP posters, and the hover clip is fetched only on hover', async ({
+  page,
+}) => {
+  const clipRequests: string[] = []
+  page.on('request', (r) => {
+    if (r.url().includes('-clip.')) clipRequests.push(r.url())
+  })
+  await page.goto('/')
+  const tile = page.locator('a.va-card', { hasText: 'Ship faster with preview deploys' })
+  const picture = tile.locator('picture')
+  await expect(picture.locator('source').first()).toHaveAttribute('type', 'image/avif')
+  await expect(picture.locator('source[type="image/avif"]')).toHaveAttribute(
+    'srcset',
+    '/teaser-v2-poster-480.avif 480w, /teaser-v2-poster-960.avif 960w',
+  )
+  await expect(picture.locator('source[type="image/webp"]')).toHaveAttribute(
+    'sizes',
+    /\(max-width: 520px\) 100vw/,
+  )
+  // The JPEG stays the fallback, and the placeholder goes once the poster has decoded.
+  const img = picture.locator('img')
+  await expect(img).toHaveAttribute('src', '/teaser-v2.jpg')
+  await expect(img).toHaveAttribute('alt', '')
+  await expect.poll(() => prop<string>(img, 'currentSrc')).toMatch(/teaser-v2-poster-\d+\.(avif|webp)$/)
+  await expect(img).not.toHaveClass(/va-lqip/)
+  await expect(tile.locator('video')).toHaveCount(0)
+  expect(clipRequests).toEqual([])
+
+  await tile.hover()
+  const clip = tile.locator('video')
+  await expect(clip).toHaveAttribute('data-playing', 'true')
+  await expect(clip).toHaveAttribute('aria-hidden', 'true')
+  await expect(clip.locator('source')).toHaveCount(2)
+  await expect(clip.locator('source').first()).toHaveAttribute('type', 'video/webm')
+  await expect(clip.locator('source').last()).toHaveAttribute('src', '/teaser-v2-clip.mp4')
+  for (const p of ['muted', 'loop', 'playsInline']) expect(await prop<boolean>(clip, p)).toBe(true)
+  await expect.poll(() => clipRequests.length).toBeGreaterThan(0)
+
+  // Leaving pauses and hides it; it stays mounted, so the next hover doesn't fetch again.
+  await page.mouse.move(0, 0)
+  await expect(clip).not.toHaveAttribute('data-playing', 'true')
+  await expect.poll(() => prop<boolean>(clip, 'paused')).toBe(true)
+})
+
+test('library tiles without a clip keep the GIF on hover', async ({ page }) => {
+  await page.goto('/')
+  const tile = page.locator('a.va-card', { hasText: 'Org webhooks launch' })
+  await expect(tile.locator('picture')).toHaveCount(0)
+  await expect(tile.locator('img')).toHaveAttribute('src', '/launch-webhooks.jpg')
+  await tile.hover()
+  await expect(tile.locator('img')).toHaveAttribute('src', '/launch-webhooks.gif')
+  await expect(tile.locator('video')).toHaveCount(0)
+})
+
+test('the versions list uses the small poster for versions that have one', async ({ page }) => {
+  await page.goto('/videos/vid_teaser')
+  const v2 = page.getByRole('button', { name: /v2 from v1/ })
+  await expect(v2.locator('source[type="image/webp"]')).toHaveAttribute('sizes', '112px')
+  await expect.poll(() => prop<string>(v2.locator('img'), 'currentSrc')).toMatch(/-poster-480\./)
+  await expect(page.getByRole('button', { name: /^v1/ }).locator('picture')).toHaveCount(0)
 })
 
 test('search narrows the library', async ({ page }) => {

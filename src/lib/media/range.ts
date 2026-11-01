@@ -66,6 +66,9 @@ export const CONTENT_TYPES: Record<string, string> = {
   jpg: 'image/jpeg',
   gif: 'image/gif',
   vtt: 'text/vtt; charset=utf-8',
+  webp: 'image/webp',
+  avif: 'image/avif',
+  webm: 'video/webm',
 }
 
 export interface MediaSource {

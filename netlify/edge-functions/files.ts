@@ -14,9 +14,10 @@ export default async (req: Request, context: Context) => {
   if (context.deploy?.published !== true && Netlify.env.get('ALLOW_NON_PRODUCTION') !== 'true')
     return notFound()
   const url = new URL(req.url)
-  const m = /^\/files\/(vid_[a-z0-9]+)\/v(\d+)\/(video\.mp4|poster\.jpg|preview\.gif|captions\.vtt)$/.exec(
-    url.pathname,
-  )
+  const m =
+    /^\/files\/(vid_[a-z0-9]+)\/v(\d+)\/(video\.mp4|poster\.jpg|preview\.gif|captions\.vtt|poster-(?:480|960)\.(?:webp|avif)|clip\.(?:webm|mp4))$/.exec(
+      url.pathname,
+    )
   if (!m) return notFound()
   const internal = getStore({ name: 'internal', consistency: 'strong' })
   const cfg = (await internal.get('edge-config.json', { type: 'json' })) as {

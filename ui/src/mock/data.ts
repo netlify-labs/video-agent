@@ -22,6 +22,20 @@ const agent = {
   promptTemplateVersion: 1,
 }
 
+const previewFiles = (base: string): V['files'] => ({
+  poster: `/${base}.jpg`,
+  gif: `/${base}.gif`,
+  posterSources: (['avif', 'webp'] as const).map((fmt) => ({
+    type: `image/${fmt}` as const,
+    srcset: `/${base}-poster-480.${fmt} 480w, /${base}-poster-960.${fmt} 960w`,
+  })),
+  clip: [
+    { type: 'video/webm', src: `/${base}-clip.webm` },
+    { type: 'video/mp4', src: `/${base}-clip.mp4` },
+  ],
+  lqip: 'data:image/webp;base64,UklGRjoAAABXRUJQVlA4IC4AAAAQAwCdASoUAAwAPu1iqU2ppaOiMAgBMB2JaQAAW+qmVoQA/vKXwUEy/9fLrcAA',
+})
+
 function ready(
   id: string,
   n: number,
@@ -41,6 +55,8 @@ function ready(
     target?: number | null
     pub?: string
     editable?: boolean
+    /** Preview variants made from ui/mock-assets/teaser-v2.mp4 (the real render-job output for that file). */
+    previews?: boolean
   },
 ): V {
   const startedAt = ago(o.at)
@@ -81,7 +97,7 @@ function ready(
       summary: o.summary,
     },
     links: files(id, n),
-    files: null,
+    files: o.previews ? previewFiles('teaser-v2') : null,
     publications: o.pub
       ? [
           {
@@ -96,7 +112,7 @@ function ready(
               gif: `${SITE}/v/${o.pub}.gif`,
               captions: `${SITE}/v/${o.pub}.vtt`,
             },
-            embed: `<video controls playsinline poster="${SITE}/v/${o.pub}.jpg" src="${SITE}/v/${o.pub}.mp4"><track kind="captions" src="${SITE}/v/${o.pub}.vtt" srclang="en" label="Captions"></video>`,
+            embed: `<video controls playsinline preload="metadata" width="${o.w}" height="${o.h}" style="max-width:100%;height:auto" poster="${SITE}/v/${o.pub}.jpg"><source src="${SITE}/v/${o.pub}.mp4" type="video/mp4"><track kind="captions" src="${SITE}/v/${o.pub}.vtt" srclang="en" label="Captions"></video>`,
           },
         ]
       : [],
@@ -229,6 +245,7 @@ export const videos: Video[] = [
       target: 8,
       pub: 'q4czcinsu9',
       editable: true,
+      previews: true,
       summary:
         'An 8-second, calm product teaser on a dark background. "Ship faster" fades in with a teal accent line, then "with preview deploys", and the film ends on a card that reads "Start free today".',
     }),

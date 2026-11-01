@@ -1,6 +1,7 @@
 // Signed, expiring URLs for a version's files (served by the files edge function).
 import type { Deps } from '../deps.js'
 import { signPath } from '../lib/crypto.js'
+import { isPreviewFile, type PreviewFile } from '../lib/media/previews.js'
 import type { JobRow } from './types.js'
 import { getSettings } from './settings.js'
 
@@ -31,15 +32,16 @@ export function stableExp(nowSec: number, ttlSec: number): number {
 export const fileTtl = (job: Pick<JobRow, 'private'>, ttlSec: number) =>
   job.private ? Math.min(ttlSec, PRIVATE_URL_TTL_SEC) : ttlSec
 
-/** Signs one file path for a known expiry (the job's access epoch is bound in for private videos). */
+/** Signs one file path for a known expiry (the job's access epoch is bound in for private videos). Preview variants
+ * are named by their file name. */
 export function signFile(
   secret: string,
   job: Pick<JobRow, 'id' | 'private' | 'accessEpoch'>,
   n: number,
-  file: FileKind,
+  file: FileKind | PreviewFile,
   exp: number,
 ): string {
-  const path = `/files/${job.id}/v${n}/${FILE_NAMES[file]}`
+  const path = `/files/${job.id}/v${n}/${isPreviewFile(file) ? file : FILE_NAMES[file]}`
   const epoch = job.private ? job.accessEpoch : undefined
   const sig = signPath(secret, path, exp, epoch)
   return `${path}?exp=${exp}${epoch === undefined ? '' : `&e=${epoch}`}&sig=${sig}`

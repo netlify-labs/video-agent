@@ -27,6 +27,7 @@ import { createMemoryStore } from '../src/store/memory.js'
 import { resetAuthCache } from '../src/domain/auth.js'
 import { resetSettingsCache } from '../src/domain/settings.js'
 import type { Manifest } from '../src/domain/types.js'
+import { PREVIEW_FILES, PREVIEW_NAMES, type PreviewFile } from '../src/lib/media/previews.js'
 
 export class FakeClock implements Clock {
   constructor(public t = Date.parse('2026-11-02T10:00:00.000Z')) {}
@@ -300,6 +301,8 @@ export interface TestDeps extends Deps {
   logs: string[]
   /** The source.tar.gz the next fake run uploads (once), instead of the default fixture. */
   nextSource: Uint8Array | null
+  /** Preview variants (and placeholder) the next fake run uploads and lists in its manifest (once). */
+  nextPreviews: { files: Partial<Record<PreviewFile, Uint8Array>>; lqip?: string } | null
 }
 
 export function makeDeps(env: Record<string, string> = {}, store?: Deps['store']): TestDeps {
@@ -320,6 +323,7 @@ export function makeDeps(env: Record<string, string> = {}, store?: Deps['store']
     config,
     store: store ?? createMemoryStore(),
     nextSource: null,
+    nextPreviews: null,
     blobs: new FakeBlobs(),
     identity: new FakeIdentity(),
     runner: new FakeRunner(),
@@ -353,11 +357,30 @@ export function fixtureFiles(aspect: '16:9' | '9:16' | '1:1' | '4:5' = '16:9') {
   }
 }
 
+/** Preview variants with the right magic bytes (finalize checks those, not the pixels). */
+export function previewFixtures(
+  names: PreviewFile[] = PREVIEW_NAMES,
+): Partial<Record<PreviewFile, Uint8Array>> {
+  const enc = (s: string) => new TextEncoder().encode(s)
+  const body = {
+    'image/webp': () => enc(`RIFF\x10\x00\x00\x00WEBPVP8 ${randomUUID()}`),
+    'image/avif': () => enc(`\x00\x00\x00\x1cftypavif\x00\x00\x00\x00avifmif1${randomUUID()}`),
+    'video/webm': () => new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, ...enc(randomUUID())]),
+    'video/mp4': () => enc(`\x00\x00\x00\x18ftypisom${randomUUID()}`),
+  }
+  return Object.fromEntries(names.map((n) => [n, body[PREVIEW_FILES[n]]()]))
+}
+
+/** A real 20px WebP placeholder, as render-job inlines it. */
+export const LQIP =
+  'data:image/webp;base64,UklGRjgAAABXRUJQVlA4ICwAAADwAgCdASoUAAwAPu1iqU2ppaOiMAgBMB2JZQCdAC0kAAD+7tO5LfGkxkwAAA=='
+
 export async function uploadAndManifest(
   blobs: FakeBlobs,
   jobId: string,
   attemptId: string,
-  files = fixtureFiles(),
+  files: Record<string, Uint8Array> = fixtureFiles(),
+  extra: { lqip?: string } = {},
 ): Promise<Manifest> {
   const entries = Object.entries(files) as [keyof Manifest['files'], Uint8Array][]
   for (const [name, bytes] of entries) await blobs.set('uploads', `${attemptId}/${name}`, bytes)
@@ -369,6 +392,7 @@ export async function uploadAndManifest(
     files: Object.fromEntries(
       entries.map(([n, b]) => [n, { sha256: sha(b), bytes: b.byteLength }]),
     ) as Manifest['files'],
+    ...extra,
     durationSec: 2,
     width: 1920,
     height: 1080,

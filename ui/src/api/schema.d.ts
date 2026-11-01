@@ -5119,6 +5119,20 @@ export interface components {
             files: {
                 poster: string;
                 gif: string;
+                /** @description Smaller poster images (480 and 960 px wide), best format first, ready for <picture><source>. Only for versions rendered with them. */
+                posterSources?: {
+                    /** @enum {string} */
+                    type: "image/avif" | "image/webp";
+                    srcset: string;
+                }[];
+                /** @description A short muted preview clip (480 px wide, a few seconds), best format first, ready for <video><source>. Use instead of the GIF when present. */
+                clip?: {
+                    /** @enum {string} */
+                    type: "video/webm" | "video/mp4";
+                    src: string;
+                }[];
+                /** @description A tiny blurred poster as a data URI, to show while the poster loads. */
+                lqip?: string;
             } | null;
             publications: components["schemas"]["Publication"][];
         };
@@ -5155,6 +5169,8 @@ export interface components {
                 poster: string;
                 gif: string;
                 captions: string;
+                /** @description A 960px-wide WebP poster, for versions rendered with preview variants. */
+                posterWebp?: string;
             } | null;
             embed: string | null;
         };

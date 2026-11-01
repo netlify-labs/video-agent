@@ -52,6 +52,10 @@ export const PublicationSchema = z
         poster: z.string(),
         gif: z.string(),
         captions: z.string(),
+        posterWebp: z
+          .string()
+          .optional()
+          .describe('A 960px-wide WebP poster, for versions rendered with preview variants.'),
       })
       .nullable(),
     embed: z.string().nullable(),
@@ -148,7 +152,26 @@ export const VersionSchema = z
       netlifyRun: z.string().nullable(),
     }),
     files: z
-      .object({ poster: z.string(), gif: z.string() })
+      .object({
+        poster: z.string(),
+        gif: z.string(),
+        posterSources: z
+          .array(z.object({ type: z.enum(['image/avif', 'image/webp']), srcset: z.string() }))
+          .optional()
+          .describe(
+            'Smaller poster images (480 and 960 px wide), best format first, ready for <picture><source>. Only for versions rendered with them.',
+          ),
+        clip: z
+          .array(z.object({ type: z.enum(['video/webm', 'video/mp4']), src: z.string() }))
+          .optional()
+          .describe(
+            'A short muted preview clip (480 px wide, a few seconds), best format first, ready for <video><source>. Use instead of the GIF when present.',
+          ),
+        lqip: z
+          .string()
+          .optional()
+          .describe('A tiny blurred poster as a data URI, to show while the poster loads.'),
+      })
       .nullable()
       .describe(
         'Signed URLs for the poster and preview GIF, once the version has files (30 to 60 minutes; 5 to 10 for private videos). Use links for a fresh one.',

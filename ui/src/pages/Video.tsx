@@ -253,7 +253,7 @@ function Filmstrip({
             >
               <div className="va-poster">
                 {x.status === 'ready' ? (
-                  <VersionImage videoId={video.id} v={x} file="poster" />
+                  <VersionImage videoId={video.id} v={x} file="poster" sizes="112px" />
                 ) : (
                   <StageTrack version={x} />
                 )}

@@ -562,6 +562,56 @@
               },
               "gif": {
                 "type": "string"
+              },
+              "posterSources": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "image/avif",
+                        "image/webp"
+                      ]
+                    },
+                    "srcset": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "srcset"
+                  ]
+                },
+                "description": "Smaller poster images (480 and 960 px wide), best format first, ready for <picture><source>. Only for versions rendered with them."
+              },
+              "clip": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "video/webm",
+                        "video/mp4"
+                      ]
+                    },
+                    "src": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "src"
+                  ]
+                },
+                "description": "A short muted preview clip (480 px wide, a few seconds), best format first, ready for <video><source>. Use instead of the GIF when present."
+              },
+              "lqip": {
+                "type": "string",
+                "description": "A tiny blurred poster as a data URI, to show while the poster loads."
               }
             },
             "required": [
@@ -762,6 +812,10 @@
               },
               "captions": {
                 "type": "string"
+              },
+              "posterWebp": {
+                "type": "string",
+                "description": "A 960px-wide WebP poster, for versions rendered with preview variants."
               }
             },
             "required": [

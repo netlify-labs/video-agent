@@ -5,7 +5,7 @@ import type { FakeBlobs } from './fakes.js'
 
 export type EdgeHandler = (req: Request, ctx: { deploy: { published: boolean } }) => Promise<Response>
 
-export const loadEdge = async (name: 'files' | 'media' | 'preview') => {
+export const loadEdge = async (name: 'files' | 'media' | 'preview' | 'public') => {
   const path = `../netlify/edge-functions/${name}.ts`
   return ((await import(/* @vite-ignore */ path)) as { default: EdgeHandler }).default
 }

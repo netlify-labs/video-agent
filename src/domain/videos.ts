@@ -1,6 +1,7 @@
 // Creating, revising, retrying, cancelling, renaming, deleting and publishing videos.
 import type { Deps } from '../deps.js'
 import { sha256Hex } from '../lib/crypto.js'
+import type { PreviewFile, Previews } from '../lib/media/previews.js'
 import { PUBLIC_URL_TTL_SEC, accessKey, fileTtl, signFile, stableExp, writeAccessMirror } from './files.js'
 import { getSettings } from './settings.js'
 import { emitEvent } from './webhooks.js'
@@ -556,7 +557,7 @@ export interface PublicationMirror {
 }
 
 export async function publishVersion(deps: Deps, principal: Principal, jobId: string, n: number) {
-  const { pub, mirror } = await deps.store.tx(async (repo) => {
+  const { pub, mirror, output } = await deps.store.tx(async (repo) => {
     const job = await loadJob(repo, principal, jobId, true)
     assertCan(principal, 'video:publish', { ownerId: job.ownerId })
     const output = await repo.getOutput(jobId, n)
@@ -564,7 +565,7 @@ export async function publishVersion(deps: Deps, principal: Principal, jobId: st
     if (!version || version.status !== 'ready' || !output)
       throw new ApiError('not_ready', 'Only ready versions can be published.')
     const active = (await repo.listPublications(jobId)).find((p) => p.versionN === n && !p.unpublishedAt)
-    if (active) return { pub: active, mirror: mirrorFor(active, job, output) }
+    if (active) return { pub: active, mirror: mirrorFor(active, job, output), output }
     const row: PublicationRow = {
       slug: deps.ids.slug(),
       jobId,
@@ -574,10 +575,10 @@ export async function publishVersion(deps: Deps, principal: Principal, jobId: st
       unpublishedAt: null,
     }
     await repo.insertPublication(row)
-    return { pub: row, mirror: mirrorFor(row, job, output) }
+    return { pub: row, mirror: mirrorFor(row, job, output), output }
   })
   await deps.blobs.set('internal', pubKey(pub.slug), JSON.stringify(mirror))
-  return publicationDto(deps, pub)
+  return publicationDto(deps, pub, output)
 }
 
 function mirrorFor(p: PublicationRow, job: JobRow, o: OutputRow): PublicationMirror {
@@ -608,8 +609,14 @@ export async function unpublishVersion(deps: Deps, principal: Principal, jobId: 
 
 // ───────────── DTOs ─────────────
 
-export function publicationDto(deps: Pick<Deps, 'config'>, p: PublicationRow) {
+export function publicationDto(
+  deps: Pick<Deps, 'config'>,
+  p: PublicationRow,
+  o: Pick<OutputRow, 'width' | 'height' | 'previews'> | null = null,
+) {
   const base = `${deps.config.siteUrl}/v/${p.slug}`
+  // The 960w WebP poster is public only as /v/{slug}.webp, for a published version that has one.
+  const webp = o?.previews?.files['poster-960.webp'] ? `${base}.webp` : null
   return {
     slug: p.slug,
     versionN: p.versionN,
@@ -623,11 +630,17 @@ export function publicationDto(deps: Pick<Deps, 'config'>, p: PublicationRow) {
           poster: `${base}.jpg`,
           gif: `${base}.gif`,
           captions: `${base}.vtt`,
+          ...(webp ? { posterWebp: webp } : {}),
         },
-    embed: p.unpublishedAt
-      ? null
-      : `<video controls playsinline poster="${base}.jpg" src="${base}.mp4"><track kind="captions" src="${base}.vtt" srclang="en" label="Captions"></video>`,
+    embed: p.unpublishedAt ? null : embedHtml(base, webp, o),
   }
+}
+
+/** The embed snippet: only the metadata loads until play, the box is sized before it does, and the poster is the
+ * small WebP when the version has one. The MP4 is the only full-length file, so it is the one source. */
+function embedHtml(base: string, webp: string | null, o: Pick<OutputRow, 'width' | 'height'> | null) {
+  const size = o ? ` width="${o.width}" height="${o.height}" style="max-width:100%;height:auto"` : ''
+  return `<video controls playsinline preload="metadata"${size} poster="${webp ?? `${base}.jpg`}"><source src="${base}.mp4" type="video/mp4"><track kind="captions" src="${base}.vtt" srclang="en" label="Captions"></video>`
 }
 
 function versionDto(
@@ -699,14 +712,40 @@ function versionDto(
       netlifyRun: a?.runnerId ? deps.runner.runUrl(a.runnerId, a.sessionId) : null,
     },
     // Signed image URLs, so the UI skips the redirect. One expiry per DTO keeps them stable for the browser cache.
-    files:
-      o && signing
-        ? {
-            poster: `${deps.config.siteUrl}${signFile(signing.secret, signing.job, v.n, 'poster', signing.exp)}`,
-            gif: `${deps.config.siteUrl}${signFile(signing.secret, signing.job, v.n, 'gif', signing.exp)}`,
-          }
-        : null,
-    publications: pubs.filter((p) => p.versionN === v.n).map((p) => publicationDto(deps, p)),
+    files: o && signing ? signedFiles(deps.config.siteUrl, signing, v.n, o.previews ?? null) : null,
+    publications: pubs.filter((p) => p.versionN === v.n).map((p) => publicationDto(deps, p, o)),
+  }
+}
+
+/** Signed poster and GIF URLs, plus the preview variants and placeholder for versions that have them. */
+function signedFiles(
+  site: string,
+  signing: { secret: string; job: JobRow; exp: number },
+  n: number,
+  previews: Previews | null,
+) {
+  const url = (file: Parameters<typeof signFile>[3]) =>
+    `${site}${signFile(signing.secret, signing.job, n, file, signing.exp)}`
+  const has = (f: PreviewFile) => Boolean(previews?.files[f])
+  // Best format first, as <picture> and <video> pick the first source the browser supports.
+  const posterSources = (['avif', 'webp'] as const)
+    .map((fmt) => ({
+      type: `image/${fmt}` as const,
+      srcset: ([480, 960] as const)
+        .filter((w) => has(`poster-${w}.${fmt}`))
+        .map((w) => `${url(`poster-${w}.${fmt}`)} ${w}w`)
+        .join(', '),
+    }))
+    .filter((s) => s.srcset)
+  const clip = (['clip.webm', 'clip.mp4'] as const)
+    .filter(has)
+    .map((f) => ({ type: f === 'clip.webm' ? ('video/webm' as const) : ('video/mp4' as const), src: url(f) }))
+  return {
+    poster: url('poster'),
+    gif: url('gif'),
+    ...(posterSources.length ? { posterSources } : {}),
+    ...(clip.length ? { clip } : {}),
+    ...(previews?.lqip ? { lqip: previews.lqip } : {}),
   }
 }
 

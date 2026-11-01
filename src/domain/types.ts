@@ -1,4 +1,5 @@
 // Domain records. These mirror the database tables (db/schema.ts) and the in-memory store.
+import type { PreviewFile, Previews } from '../lib/media/previews.js'
 
 export type Role = 'admin' | 'creator' | 'reviewer' | 'viewer'
 export type Aspect = '16:9' | '9:16' | '1:1' | '4:5'
@@ -214,6 +215,8 @@ export interface OutputRow {
   height: number
   title: string
   agentSummary: string
+  /** Optional preview variants (WebP/AVIF posters, hover clip, LQIP). Null for versions rendered without them. */
+  previews?: Previews | null
 }
 
 export interface PublicationRow {
@@ -528,7 +531,10 @@ export interface Manifest {
   files: Record<
     'video.mp4' | 'poster.jpg' | 'preview.gif' | 'captions.vtt' | 'source.tar.gz',
     { sha256: string; bytes: number }
-  >
+  > &
+    Partial<Record<PreviewFile, { sha256: string; bytes: number }>>
+  /** The tiny poster placeholder as a data URI, when render-job could make one. */
+  lqip?: string
   durationSec: number
   width: number
   height: number

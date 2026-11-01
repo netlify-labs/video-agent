@@ -208,10 +208,29 @@ body {
   overflow: hidden;
   position: relative;
 }
+.va-poster picture {
+  display: contents;
+}
 .va-poster img {
   width: 100%;
   height: 100%;
   object-fit: contain;
+}
+/* The tiny placeholder, upscaled (and so blurred) by the browser until the poster decodes. */
+.va-poster img.va-lqip {
+  background: center / contain no-repeat;
+}
+.va-clip {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  opacity: 0;
+  pointer-events: none;
+}
+.va-clip[data-playing] {
+  opacity: 1;
 }
 .va-card-body {
   padding: 12px 16px 16px;

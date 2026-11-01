@@ -11,12 +11,20 @@ import {
   TextInput,
   Title,
 } from '@mantine/core'
-import { useDebouncedValue, useHotkeys } from '@mantine/hooks'
+import { useDebouncedValue, useHotkeys, useReducedMotion } from '@mantine/hooks'
 import { IconLock, IconMessage, IconSearch } from '@tabler/icons-react'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { $api, errorMessage, useCanCreate, type Video } from '../api/client'
-import { StageTrack, Status, VersionImage, duration, inProgress, relativeTime } from '../components/bits'
+import {
+  StageTrack,
+  Status,
+  VersionImage,
+  duration,
+  inProgress,
+  localUrl,
+  relativeTime,
+} from '../components/bits'
 import { QuickCreate } from './NewVideo'
 
 function elapsed(iso: string | null | undefined): string {
@@ -25,10 +33,50 @@ function elapsed(iso: string | null | undefined): string {
   return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
 }
 
+/** How wide a tile is at each breakpoint of .va-grid, so the browser picks the 480 or 960 px poster. */
+const TILE_SIZES =
+  '(max-width: 520px) 100vw, (max-width: 820px) 50vw, (max-width: 1100px) 33vw, (max-width: 1680px) 25vw, 20vw'
+
+type Clip = NonNullable<NonNullable<Video['versions'][number]['files']>['clip']>
+
+/** The muted hover clip over the poster. Mounted on the first hover only, so nothing is fetched before. */
+function HoverClip({ sources, playing }: { sources: Clip; playing: boolean }) {
+  const ref = useRef<HTMLVideoElement>(null)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.muted = true
+    if (playing) void el.play().catch(() => undefined)
+    else el.pause()
+  }, [playing])
+  return (
+    <video
+      ref={ref}
+      className="va-clip"
+      data-playing={playing ? 'true' : undefined}
+      muted
+      loop
+      playsInline
+      preload="auto"
+      disablePictureInPicture
+      aria-hidden
+      tabIndex={-1}
+    >
+      {sources.map((s) => (
+        <source key={s.type} src={localUrl(s.src)} type={s.type} />
+      ))}
+    </video>
+  )
+}
+
 function VideoCard({ v }: { v: Video }) {
   const ready = v.versions.find((x) => x.status === 'ready')
   const latest = v.versions[0]
   const [hover, setHover] = useState(false)
+  // The clip replaces the GIF for versions that have one; it isn't created before the first hover.
+  const [armed, setArmed] = useState(false)
+  const reduceMotion = useReducedMotion()
+  const clip = reduceMotion ? undefined : ready?.files?.clip
   const working = latest && inProgress(latest.status)
   const live = v.versions.some((x) => x.publications.some((p) => !p.unpublishedAt))
   const approved = v.versions.reduce((n, x) => n + x.verdicts.approved, 0)
@@ -38,6 +86,7 @@ function VideoCard({ v }: { v: Video }) {
       className="va-card"
       onMouseEnter={() => {
         setHover(true)
+        setArmed(true)
       }}
       onMouseLeave={() => {
         setHover(false)
@@ -45,7 +94,14 @@ function VideoCard({ v }: { v: Video }) {
     >
       <div className="va-poster">
         {ready && !working ? (
-          <VersionImage videoId={v.id} v={ready} file={hover ? 'gif' : 'poster'} />
+          clip ? (
+            <>
+              <VersionImage videoId={v.id} v={ready} file="poster" sizes={TILE_SIZES} />
+              {armed ? <HoverClip sources={clip} playing={hover} /> : null}
+            </>
+          ) : (
+            <VersionImage videoId={v.id} v={ready} file={hover ? 'gif' : 'poster'} sizes={TILE_SIZES} />
+          )
         ) : working ? (
           <Stack gap={10} w="70%">
             <Group justify="space-between">

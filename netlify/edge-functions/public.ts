@@ -1,4 +1,5 @@
-// Published versions: /v/{slug} share page, and /v/{slug}.mp4 | .jpg | .gif | .vtt.
+// Published versions: /v/{slug} share page, and /v/{slug}.mp4 | .jpg | .gif | .vtt | .webp (the 960w poster, when the
+// version has one).
 // Every request checks the publication, so unpublishing takes effect immediately (no caching in v1).
 import type { Config, Context } from '@netlify/edge-functions'
 import { getStore } from '@netlify/blobs'
@@ -6,6 +7,8 @@ import { CONTENT_TYPES, mediaResponse } from '../../src/lib/media/range.ts'
 
 interface Mirror {
   slug: string
+  jobId: string
+  versionN: number
   title: string
   width: number
   height: number
@@ -27,7 +30,7 @@ export default async (req: Request, context: Context) => {
   if (context.deploy?.published !== true && Netlify.env.get('ALLOW_NON_PRODUCTION') !== 'true')
     return notFound()
   const url = new URL(req.url)
-  const m = /^\/v\/([a-z2-9]{6,32})(?:\.(mp4|jpg|gif|vtt))?$/.exec(url.pathname)
+  const m = /^\/v\/([a-z2-9]{6,32})(?:\.(mp4|jpg|gif|vtt|webp))?$/.exec(url.pathname)
   if (!m?.[1]) return notFound()
   const slug = m[1]
   const ext = m[2]
@@ -35,12 +38,18 @@ export default async (req: Request, context: Context) => {
     type: 'json',
   })) as Mirror | null
   if (!pub) return notFound()
+  const videos = getStore({ name: 'videos', consistency: 'strong' })
+  // Preview variants sit next to the version's other files; older versions have none (404, and no WebP poster).
+  const webpKey = `${pub.jobId}/v${pub.versionN}/poster-960.webp`
 
   if (ext) {
-    const key = { mp4: pub.keys.video, jpg: pub.keys.poster, gif: pub.keys.gif, vtt: pub.keys.captions }[
-      ext as 'mp4'
-    ]
-    const videos = getStore({ name: 'videos', consistency: 'strong' })
+    const key = {
+      mp4: pub.keys.video,
+      jpg: pub.keys.poster,
+      gif: pub.keys.gif,
+      vtt: pub.keys.captions,
+      webp: webpKey,
+    }[ext as 'mp4']
     const meta = await videos.getMetadata(key)
     if (!meta) return notFound()
     return mediaResponse(
@@ -57,6 +66,7 @@ export default async (req: Request, context: Context) => {
 
   const base = `${url.origin}/v/${slug}`
   const title = esc(pub.title || 'Video')
+  const poster = (await videos.getMetadata(webpKey)) ? `${base}.webp` : `${base}.jpg`
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${title}</title>
@@ -70,7 +80,7 @@ export default async (req: Request, context: Context) => {
 <style>:root{color-scheme:dark light}html,body{margin:0;height:100%;background:#0b0d10;color:#e6e8eb;font:16px/1.5 system-ui,sans-serif}
 main{min-height:100%;display:grid;place-items:center;padding:16px;box-sizing:border-box}figure{margin:0;max-width:min(100%,calc(85vh*${pub.width}/${pub.height}))}
 video{width:100%;height:auto;border-radius:12px;background:#000;display:block}figcaption{margin-top:12px;opacity:.8}</style></head>
-<body><main><figure><video controls playsinline preload="metadata" poster="${base}.jpg" src="${base}.mp4" width="${pub.width}" height="${pub.height}">
+<body><main><figure><video controls playsinline preload="metadata" poster="${poster}" src="${base}.mp4" width="${pub.width}" height="${pub.height}">
 <track kind="captions" src="${base}.vtt" srclang="en" label="Captions"></video><figcaption>${title}</figcaption></figure></main></body></html>`
   return new Response(html, { headers: { ...NO_STORE, 'content-type': 'text/html; charset=utf-8' } })
 }

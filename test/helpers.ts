@@ -67,7 +67,15 @@ export function harness(
         files['source.tar.gz'] = deps.nextSource
         deps.nextSource = null
       }
-      const manifest = await uploadAndManifest(deps.blobs, a.jobId, a.id, files)
+      const previews = deps.nextPreviews
+      deps.nextPreviews = null
+      const manifest = await uploadAndManifest(
+        deps.blobs,
+        a.jobId,
+        a.id,
+        { ...files, ...previews?.files },
+        previews?.lqip ? { lqip: previews.lqip } : {},
+      )
       const token = /--token (\S+)/.exec(req.prompt)?.[1] ?? null
       if (opts.autoCallback ?? true) await receiveCallback(deps, a.id, token, manifest)
     },

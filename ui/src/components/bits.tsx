@@ -2,6 +2,7 @@ import { ActionIcon, CopyButton, Group, Text, TextInput, Tooltip } from '@mantin
 import { modals } from '@mantine/modals'
 import { notifications } from '@mantine/notifications'
 import { IconCheck, IconCopy } from '@tabler/icons-react'
+import { useState } from 'react'
 import { errorMessage, type Version, type Video } from '../api/client'
 import { mockFile } from '../mock/server'
 
@@ -171,29 +172,71 @@ export const fileUrl = (
     ? mockFile(videoId, file)
     : `/api/v1/videos/${videoId}/versions/${n}/${file}${download ? '?download=1' : ''}`
 
-/** A version's poster or GIF straight from the signed URL in its DTO: no redirect, and stable enough for the browser
- * cache. Same-origin path, like the redirect gives. */
-export const imageUrl = (videoId: string, v: Version, file: 'poster' | 'gif') => {
-  const signed = import.meta.env.VITE_MOCK ? null : v.files?.[file]
-  if (!signed) return fileUrl(videoId, v.n, file)
+/** A signed URL from the DTO as a same-origin path, like the redirect gives. */
+export const localUrl = (signed: string) => {
   const u = new URL(signed, window.location.origin)
   return u.pathname + u.search
 }
 
-/** The version image, falling back once to the redirect if its signed URL expired on a page left open. */
-export function VersionImage({ videoId, v, file }: { videoId: string; v: Version; file: 'poster' | 'gif' }) {
-  return (
+/** A version's poster or GIF straight from the signed URL in its DTO: no redirect, and stable enough for the browser
+ * cache. */
+export const imageUrl = (videoId: string, v: Version, file: 'poster' | 'gif') => {
+  const signed = import.meta.env.VITE_MOCK ? null : v.files?.[file]
+  return signed ? localUrl(signed) : fileUrl(videoId, v.n, file)
+}
+
+const localSrcset = (srcset: string) =>
+  srcset
+    .split(', ')
+    .map((part) => {
+      const [url = '', w = ''] = part.split(' ')
+      return `${localUrl(url)} ${w}`
+    })
+    .join(', ')
+
+/**
+ * The version image, falling back once to the redirect if its signed URL expired on a page left open. A poster uses
+ * the small AVIF/WebP variants picked by `sizes` (the JPEG stays the fallback) and shows the tiny blurred placeholder
+ * until it decodes, for versions that have them.
+ */
+export function VersionImage({
+  videoId,
+  v,
+  file,
+  sizes,
+}: {
+  videoId: string
+  v: Version
+  file: 'poster' | 'gif'
+  sizes?: string
+}) {
+  const [fallback, setFallback] = useState(false)
+  const [loaded, setLoaded] = useState(false)
+  const sources = file === 'poster' && sizes && !fallback ? (v.files?.posterSources ?? []) : []
+  const lqip = file === 'poster' && !loaded ? v.files?.lqip : undefined
+  const img = (
     <img
-      src={imageUrl(videoId, v, file)}
+      src={fallback ? fileUrl(videoId, v.n, file) : imageUrl(videoId, v, file)}
       alt=""
       loading="lazy"
       decoding="async"
-      onError={(e) => {
-        const img = e.currentTarget
-        if (img.dataset.fallback) return
-        img.dataset.fallback = '1'
-        img.src = fileUrl(videoId, v.n, file)
+      className={lqip ? 'va-lqip' : undefined}
+      style={lqip ? { backgroundImage: `url("${lqip}")` } : undefined}
+      onLoad={() => {
+        setLoaded(true)
+      }}
+      onError={() => {
+        setFallback(true)
       }}
     />
+  )
+  if (!sources.length) return img
+  return (
+    <picture>
+      {sources.map((s) => (
+        <source key={s.type} type={s.type} srcSet={localSrcset(s.srcset)} sizes={sizes} />
+      ))}
+      {img}
+    </picture>
   )
 }

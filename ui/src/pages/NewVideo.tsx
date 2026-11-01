@@ -125,7 +125,7 @@ function RecentMine() {
                 style={{ textDecoration: 'none' }}
               >
                 <div className="va-poster">
-                  {ready ? <VersionImage videoId={v.id} v={ready} file="poster" /> : null}
+                  {ready ? <VersionImage videoId={v.id} v={ready} file="poster" sizes="112px" /> : null}
                 </div>
                 <div style={{ minWidth: 0 }}>
                   <Text size="sm" fw={500} truncate>
