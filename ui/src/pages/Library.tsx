@@ -13,9 +13,10 @@ import {
 } from '@mantine/core'
 import { useDebouncedValue, useHotkeys, useReducedMotion } from '@mantine/hooks'
 import { IconLock, IconMessage, IconSearch } from '@tabler/icons-react'
-import { useEffect, useRef, useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
-import { $api, errorMessage, useCanCreate, type Video } from '../api/client'
+import { useQueryClient } from '@tanstack/react-query'
+import { $api, commentsInit, errorMessage, useCanCreate, videoInit, type Video } from '../api/client'
 import {
   StageTrack,
   Status,
@@ -25,7 +26,10 @@ import {
   localUrl,
   relativeTime,
 } from '../components/bits'
-import { QuickCreate } from './NewVideo'
+import { lazyPage, newVideoRoute, videoRoute } from '../routes'
+
+// Shown only in an empty library, so the form's code loads only then.
+const QuickCreate = lazyPage(newVideoRoute, (m) => m.QuickCreate)
 
 function elapsed(iso: string | null | undefined): string {
   if (!iso) return ''
@@ -36,6 +40,9 @@ function elapsed(iso: string | null | undefined): string {
 /** How wide a tile is at each breakpoint of .va-grid, so the browser picks the 480 or 960 px poster. */
 const TILE_SIZES =
   '(max-width: 520px) 100vw, (max-width: 820px) 50vw, (max-width: 1100px) 33vw, (max-width: 1680px) 25vw, 20vw'
+
+/** Tiles in the first row at the widest breakpoints; their posters are the page's largest paint. */
+const FIRST_ROW = 4
 
 type Clip = NonNullable<NonNullable<Video['versions'][number]['files']>['clip']>
 
@@ -69,7 +76,20 @@ function HoverClip({ sources, playing }: { sources: Clip; playing: boolean }) {
   )
 }
 
-function VideoCard({ v }: { v: Video }) {
+/** Warms a video's page when a tile is hovered or focused: its code, the video and its comments, as the very queries
+ * the page makes (fresh ones aren't fetched again). */
+function usePrefetchVideo(id: string) {
+  const qc = useQueryClient()
+  return () => {
+    void videoRoute.load().catch(() => undefined)
+    void qc.query($api.queryOptions('get', '/api/v1/videos/{id}', videoInit(id))).catch(() => undefined)
+    void qc
+      .query($api.queryOptions('get', '/api/v1/videos/{id}/comments', commentsInit(id)))
+      .catch(() => undefined)
+  }
+}
+
+function VideoCard({ v, priority }: { v: Video; priority: boolean }) {
   const ready = v.versions.find((x) => x.status === 'ready')
   const latest = v.versions[0]
   const [hover, setHover] = useState(false)
@@ -80,13 +100,17 @@ function VideoCard({ v }: { v: Video }) {
   const working = latest && inProgress(latest.status)
   const live = v.versions.some((x) => x.publications.some((p) => !p.unpublishedAt))
   const approved = v.versions.reduce((n, x) => n + x.verdicts.approved, 0)
+  const prefetch = usePrefetchVideo(v.id)
   return (
     <Link
       to={`/videos/${v.id}`}
       className="va-card"
+      onFocus={prefetch}
+      onTouchStart={prefetch}
       onMouseEnter={() => {
         setHover(true)
         setArmed(true)
+        prefetch()
       }}
       onMouseLeave={() => {
         setHover(false)
@@ -96,11 +120,17 @@ function VideoCard({ v }: { v: Video }) {
         {ready && !working ? (
           clip ? (
             <>
-              <VersionImage videoId={v.id} v={ready} file="poster" sizes={TILE_SIZES} />
+              <VersionImage videoId={v.id} v={ready} file="poster" sizes={TILE_SIZES} priority={priority} />
               {armed ? <HoverClip sources={clip} playing={hover} /> : null}
             </>
           ) : (
-            <VersionImage videoId={v.id} v={ready} file={hover ? 'gif' : 'poster'} sizes={TILE_SIZES} />
+            <VersionImage
+              videoId={v.id}
+              v={ready}
+              file={hover ? 'gif' : 'poster'}
+              sizes={TILE_SIZES}
+              priority={priority}
+            />
           )
         ) : working ? (
           <Stack gap={10} w="70%">
@@ -320,7 +350,9 @@ export function LibraryPage() {
         </div>
       ) : items.length === 0 && !filtered ? (
         canCreate ? (
-          <QuickCreate />
+          <Suspense fallback={null}>
+            <QuickCreate />
+          </Suspense>
         ) : (
           <div className="va-empty">No videos yet. Creators' videos will show up here.</div>
         )
@@ -328,8 +360,8 @@ export function LibraryPage() {
         <div className="va-empty">No videos match. Clear a filter or search for other words.</div>
       ) : (
         <div className="va-grid">
-          {items.map((v) => (
-            <VideoCard key={v.id} v={v} />
+          {items.map((v, i) => (
+            <VideoCard key={v.id} v={v} priority={i < FIRST_ROW} />
           ))}
         </div>
       )}

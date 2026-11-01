@@ -12,6 +12,7 @@ import {
   UnstyledButton,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
+import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { $api, errorMessage, newIdempotencyKey, useCanCreate } from '../api/client'
@@ -37,8 +38,12 @@ type Shape = (typeof SHAPES)[number]['value']
 function useCreate() {
   const navigate = useNavigate()
   const [key] = useState(newIdempotencyKey)
+  const qc = useQueryClient()
   const create = $api.useMutation('post', '/api/v1/videos', {
-    onSuccess: (v) => void navigate(`/videos/${v.id}`),
+    onSuccess: (v) => {
+      void qc.invalidateQueries()
+      void navigate(`/videos/${v.id}`)
+    },
     onError: (e) =>
       notifications.show({ color: 'red', title: "Couldn't start the video", message: errorMessage(e) }),
   })

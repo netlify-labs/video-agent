@@ -27,7 +27,7 @@ import { CompositionPreview } from '../components/CompositionPreview'
 import { IconDots, IconDownload, IconExternalLink, IconLock, IconLockOpen } from '@tabler/icons-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
-import { $api, errorMessage, newIdempotencyKey, type Version, type Video } from '../api/client'
+import { $api, errorMessage, newIdempotencyKey, videoInit, type Version, type Video } from '../api/client'
 import {
   CopyField,
   Meta,
@@ -347,14 +347,9 @@ export function VideoPage() {
   const config = $api.useQuery('get', '/api/v1/config')
   const canPlan = canCreate && config.data?.planningAvailable === true
   const [planningRevision, setPlanningRevision] = useState(false)
-  const video = $api.useQuery(
-    'get',
-    '/api/v1/videos/{id}',
-    { params: { path: { id } } },
-    {
-      refetchInterval: (q) => (q.state.data && inProgress(q.state.data.status) ? 5000 : false),
-    },
-  )
+  const video = $api.useQuery('get', '/api/v1/videos/{id}', videoInit(id), {
+    refetchInterval: (q) => (q.state.data && inProgress(q.state.data.status) ? 5000 : false),
+  })
   const [selected, setSelected] = useState<number | null>(null)
   const [revision, setRevision] = useState('')
   const [revMedia, setRevMedia] = useState<Media[]>([])

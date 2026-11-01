@@ -4,7 +4,7 @@ import { notifications } from '@mantine/notifications'
 import { IconCheck, IconCopy } from '@tabler/icons-react'
 import { useState } from 'react'
 import { errorMessage, type Version, type Video } from '../api/client'
-import { mockFile } from '../mock/server'
+import { mockFile } from '../mock/files'
 
 const STATUS_WORD: Record<Video['status'], string> = {
   queued: 'Queued',
@@ -204,11 +204,14 @@ export function VersionImage({
   v,
   file,
   sizes,
+  priority = false,
 }: {
   videoId: string
   v: Version
   file: 'poster' | 'gif'
   sizes?: string
+  /** Above the fold (the library's first row): fetched at once and first, instead of lazily. */
+  priority?: boolean
 }) {
   const [fallback, setFallback] = useState(false)
   const [loaded, setLoaded] = useState(false)
@@ -218,7 +221,8 @@ export function VersionImage({
     <img
       src={fallback ? fileUrl(videoId, v.n, file) : imageUrl(videoId, v, file)}
       alt=""
-      loading="lazy"
+      loading={priority ? 'eager' : 'lazy'}
+      fetchPriority={priority ? 'high' : 'auto'}
       decoding="async"
       className={lqip ? 'va-lqip' : undefined}
       style={lqip ? { backgroundImage: `url("${lqip}")` } : undefined}

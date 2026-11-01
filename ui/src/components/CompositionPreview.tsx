@@ -5,21 +5,22 @@
 import { ActionIcon, Group, Slider, Stack, Text } from '@mantine/core'
 import { IconPlayerPauseFilled, IconPlayerPlayFilled } from '@tabler/icons-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { z } from 'zod'
+// zod/mini: the same validation as classic zod at a fraction of the bundle size.
+import * as z from 'zod/mini'
 import { fetchClient } from '../api/client'
 
 const Msg = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('ready'), channel: z.string(), duration: z.number().nonnegative() }),
-  z.object({ type: z.literal('time'), channel: z.string(), time: z.number().nonnegative() }),
+  z.object({ type: z.literal('ready'), channel: z.string(), duration: z.number().check(z.nonnegative()) }),
+  z.object({ type: z.literal('time'), channel: z.string(), time: z.number().check(z.nonnegative()) }),
   z.object({
     type: z.literal('click'),
     channel: z.string(),
-    x: z.number().min(0).max(1),
-    y: z.number().min(0).max(1),
-    textId: z.string().max(200).nullable(),
+    x: z.number().check(z.minimum(0), z.maximum(1)),
+    y: z.number().check(z.minimum(0), z.maximum(1)),
+    textId: z.nullable(z.string().check(z.maxLength(200))),
   }),
-  z.object({ type: z.literal('error'), channel: z.string(), message: z.string().max(300) }),
-  z.object({ type: z.literal('edits-applied'), channel: z.string(), count: z.number().int() }),
+  z.object({ type: z.literal('error'), channel: z.string(), message: z.string().check(z.maxLength(300)) }),
+  z.object({ type: z.literal('edits-applied'), channel: z.string(), count: z.int() }),
 ])
 export type PreviewMessage = z.infer<typeof Msg>
 

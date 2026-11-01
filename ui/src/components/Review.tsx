@@ -20,7 +20,7 @@ import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
 import { IconCheck, IconDots, IconMapPin, IconX } from '@tabler/icons-react'
 import { useEffect, useRef, useState, type RefObject } from 'react'
-import { $api, newIdempotencyKey, type Version, type Video } from '../api/client'
+import { $api, commentsInit, newIdempotencyKey, type Version, type Video } from '../api/client'
 import type { paths } from '../api/schema'
 import { fileUrl, imageUrl, relativeTime, showError } from './bits'
 
@@ -49,9 +49,7 @@ export function clockTime(sec: number) {
 }
 
 function useComments(videoId: string) {
-  return $api.useQuery('get', '/api/v1/videos/{id}/comments', {
-    params: { path: { id: videoId }, query: { limit: 200 } },
-  })
+  return $api.useQuery('get', '/api/v1/videos/{id}/comments', commentsInit(videoId))
 }
 
 export function ReviewPlayer({
@@ -412,7 +410,13 @@ export function CommentsCard({
     onSuccess: refresh,
     onError: showError,
   })
-  const read = $api.useMutation('post', '/api/v1/videos/{id}/comments/read', { onSuccess: refresh })
+  // Reading changes only unread counts (comments, videos, the bell), not the account, usage or config.
+  const read = $api.useMutation('post', '/api/v1/videos/{id}/comments/read', {
+    onSuccess: () =>
+      void qc.invalidateQueries({
+        predicate: (q) => /^\/api\/v1\/(videos|notifications)/.test(String(q.queryKey[1])),
+      }),
+  })
 
   // Opening the video reads its comments.
   const unread = comments.data?.unreadCount ?? 0

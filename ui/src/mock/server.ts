@@ -4,7 +4,8 @@ import type { paths } from '../api/schema'
 import { applyEdits, type EditOp } from '../../../src/lib/contract'
 import contractHtml from '../../../test/fixtures/contract1/index.html?raw'
 import contractSummary from '../../../test/fixtures/contract1/summary.json'
-import { ASSETS, people, stats, videos } from './data'
+import { people, stats, videos } from './data'
+import { mockFile } from './files'
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
@@ -99,13 +100,6 @@ const readBody = async (init?: RequestInit, input?: RequestInfo | URL) => {
     // no body
   }
   return {}
-}
-
-export function mockFile(videoId: string, file: 'video' | 'poster' | 'gif' | 'captions'): string {
-  const base = ASSETS[videoId] ?? 'teaser-v2'
-  const ext = { video: 'mp4', poster: 'jpg', gif: 'gif', captions: 'vtt' }[file]
-  if (file === 'video' && base === 'sales-vertical') return '/sales-vertical.mp4'
-  return `/${file === 'video' || file === 'captions' ? 'teaser-v2' : base}.${ext}`
 }
 
 export function installMock() {

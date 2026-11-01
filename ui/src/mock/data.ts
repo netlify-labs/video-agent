@@ -159,14 +159,6 @@ export const people = {
   ada: { id: 'u_ada', name: 'Ada Okafor', email: 'ada@acme.com' },
 }
 
-/** Which mock asset stands in for each video's files. */
-export const ASSETS: Record<string, string> = {
-  vid_teaser: 'teaser-v2',
-  vid_webhooks: 'launch-webhooks',
-  vid_sales: 'sales-vertical',
-  vid_docs: 'docs-envvars',
-}
-
 export const videos: Video[] = [
   video('vid_making', 'Deploy rollbacks in one click', '16:9', people.priya, [
     {

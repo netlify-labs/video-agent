@@ -13,6 +13,7 @@ import {
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { IconMovie, IconPhoto, IconTypography, IconX } from '@tabler/icons-react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { $api, useCanCreate } from '../api/client'
 import type { paths } from '../api/schema'
@@ -78,6 +79,7 @@ export function MediaLibraryModal(props: {
   const [picked, setPicked] = useState<Media[]>(props.selected ?? [])
   const [uploading, setUploading] = useState(false)
   const canUpload = useCanCreate()
+  const qc = useQueryClient()
   const list = $api.useQuery(
     'get',
     '/api/v1/media',
@@ -117,7 +119,8 @@ export function MediaLibraryModal(props: {
       }
     }
     setUploading(false)
-    void list.refetch()
+    // Also marks the Media page's list stale, which would otherwise keep its cached copy for a while.
+    void qc.invalidateQueries({ queryKey: ['get', '/api/v1/media'] })
   }
 
   return (

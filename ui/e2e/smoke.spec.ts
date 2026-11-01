@@ -558,3 +558,137 @@ test('a media slot is replaced from the library, filtered to its kind, with a fi
     page.getByRole('dialog', { name: 'Replace Hero clip' }).getByText('Nothing to pick yet.'),
   ).toBeVisible()
 })
+
+// Client-side caching and code splitting.
+
+/** Records the app's /api paths (window.__api) by wrapping whatever fetch the mock installs. */
+const recordApi = (page: Page) =>
+  page.addInitScript(() => {
+    type Fetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
+    const w = globalThis as unknown as { __api: string[]; fetch: Fetch; location: { href: string } }
+    let inner = w.fetch
+    w.__api = []
+    Object.defineProperty(w, 'fetch', {
+      configurable: true,
+      get: (): Fetch => (input, init) => {
+        const url = new URL(input instanceof Request ? input.url : String(input), w.location.href)
+        if (url.pathname.startsWith('/api/')) w.__api.push(url.pathname)
+        return inner(input, init)
+      },
+      set: (v: Fetch) => {
+        inner = v
+      },
+    })
+  })
+const apiCalls = (page: Page) =>
+  page.evaluate(() => (globalThis as unknown as { __api: string[] }).__api.slice())
+
+test('pages other than the library load on demand, as their own chunks', async ({ page, request }) => {
+  const html = await (await request.get('/')).text()
+  expect(html).not.toMatch(/Admin-[\w-]+\.js/)
+  expect(html).not.toMatch(/Edit-[\w-]+\.js/)
+  const chunks: string[] = []
+  page.on('request', (r) => {
+    if (/\/assets\/(Admin|Edit)-[\w-]+\.js$/.test(r.url())) chunks.push(r.url())
+  })
+  await page.goto('/admin')
+  await expect(page.getByText('1 of 3 run slots in use', { exact: false })).toBeVisible()
+  await page.goto('/videos/vid_teaser/edit/2')
+  await expect(page.getByRole('textbox', { name: 'Length of Opening' })).toBeVisible()
+  expect(chunks.some((u) => u.includes('/Admin-'))).toBe(true)
+  expect(chunks.some((u) => u.includes('/Edit-'))).toBe(true)
+})
+
+test('hovering a library tile prefetches the video, so opening it needs no new request', async ({ page }) => {
+  await recordApi(page)
+  await page.goto('/')
+  // A video without unread comments: opening one with unread comments marks them read, which refetches it.
+  const tile = page.locator('a.va-card', { hasText: 'Org webhooks launch' })
+  await expect(tile).toBeVisible()
+  await tile.hover()
+  await expect.poll(() => apiCalls(page)).toContain('/api/v1/videos/vid_webhooks')
+  const before = (await apiCalls(page)).length
+  await tile.click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Org webhooks launch' })).toBeVisible()
+  const opened = (await apiCalls(page)).slice(before)
+  expect(opened).not.toContain('/api/v1/videos/vid_webhooks')
+  expect(opened).not.toContain('/api/v1/videos/vid_webhooks/comments')
+  expect(opened).not.toContain('/api/v1/me')
+  // Back in the library, the list is still fresh.
+  await page.goBack()
+  await expect(page.getByText('7 videos, 2 in progress.')).toBeVisible()
+  expect((await apiCalls(page)).slice(before)).not.toContain('/api/v1/videos')
+})
+
+test('the media worker keeps signed version files by path and leaves everything else alone', async ({
+  page,
+  request,
+}) => {
+  test.skip(test.info().project.name !== 'desktop', 'One browser profile is enough.')
+  // The mock preview server answers /files like the edge and logs what reached it (vite.config.ts).
+  const network = async (prefix: string) =>
+    ((await (await request.get('/__files-log')).json()) as string[]).filter((u) => u.startsWith(prefix))
+  await page.goto('/teaser-v2.jpg')
+  // The page's worker and cache APIs (the specs aren't typechecked against the DOM library).
+  interface Browser {
+    navigator: {
+      serviceWorker: {
+        register(url: string, o: { scope: string }): Promise<unknown>
+        ready: Promise<unknown>
+        controller: unknown
+      }
+    }
+    caches: { open(name: string): Promise<{ keys(): Promise<{ url: string }[]> }> }
+  }
+  await page.evaluate(async () => {
+    const { serviceWorker } = (globalThis as unknown as Browser).navigator
+    await serviceWorker.register('/sw.js', { scope: '/' })
+    await serviceWorker.ready
+  })
+  await page.waitForFunction(
+    () => (globalThis as unknown as Browser).navigator.serviceWorker.controller !== null,
+  )
+  const get = (path: string, headers: Record<string, string> = {}) =>
+    page.evaluate(
+      async ({ p, h }) => {
+        const r = await fetch(p, { headers: h })
+        return {
+          status: r.status,
+          range: r.headers.get('content-range'),
+          size: (await r.arrayBuffer()).byteLength,
+        }
+      },
+      { p: path, h: headers },
+    )
+  const cached = () =>
+    page.evaluate(async () => {
+      const cache = await (globalThis as unknown as Browser).caches.open('va-media-v1')
+      return (await cache.keys()).map((r) => new URL(r.url).pathname).sort()
+    })
+  const id = `vid_e2e${Date.now().toString(36)}`
+  const poster = `/files/${id}/v1/poster.jpg`
+  // A refused signature isn't kept.
+  expect((await get(`${poster}?exp=1&sig=bad`)).status).toBe(403)
+  // The first good URL goes to the network; a later signature for the same file comes from the cache.
+  expect(await get(`${poster}?exp=1&sig=a`)).toMatchObject({ status: 200, size: 12072 })
+  await expect.poll(cached).toEqual([poster])
+  expect(await get(`${poster}?exp=2&e=1&sig=b`)).toMatchObject({ status: 200, size: 12072 })
+  expect(await network(poster)).toEqual([`${poster}?exp=1&sig=bad`, `${poster}?exp=1&sig=a`])
+  // A clip's range request gets a 206 cut from the whole file, which is kept for the next range.
+  const clip = `/files/${id}/v1/clip.mp4`
+  expect(await get(`${clip}?exp=1&sig=a`, { range: 'bytes=10-19' })).toEqual({
+    status: 206,
+    range: 'bytes 10-19/12166',
+    size: 10,
+  })
+  expect(await get(`${clip}?exp=3&sig=c`, { range: 'bytes=0-' })).toMatchObject({ status: 206, size: 12166 })
+  expect(await network(clip)).toHaveLength(1)
+  // The full video and unsigned URLs always go to the network, and aren't kept.
+  const video = `/files/${id}/v1/video.mp4`
+  await get(`${video}?exp=1&sig=a`)
+  await get(`${video}?exp=2&sig=b`)
+  await get(`/files/${id}/v1/preview.gif`)
+  expect(await network(video)).toHaveLength(2)
+  expect(await network(`/files/${id}/v1/preview.gif`)).toHaveLength(1)
+  expect(await cached()).toEqual([clip, poster])
+})

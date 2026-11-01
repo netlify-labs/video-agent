@@ -10,8 +10,10 @@ import {
   updateUser,
   type User,
 } from '@netlify/identity'
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { endSession, onSessionLost, refreshIfNeeded, startSession } from './session'
+import { clearMediaCache } from './sw/register'
 
 interface AuthState {
   user: User | null
@@ -36,6 +38,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false)
   const [pending, setPending] = useState<AuthState['pending']>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const qc = useQueryClient()
+  const lastUserId = useRef<string | null>(null)
+
+  // Cached responses belong to whoever fetched them, and stay fresh for a while: after sign-out or a switch to
+  // someone else, start from an empty cache.
+  const userId = user?.id ?? null
+  useEffect(() => {
+    if (lastUserId.current && lastUserId.current !== userId) void qc.resetQueries()
+    lastUserId.current = userId
+  }, [userId, qc])
 
   useEffect(() => {
     if (import.meta.env.VITE_MOCK) {
@@ -51,6 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // instead of a signed-in shell whose requests all fail.
     const offLost = onSessionLost(() => {
       endSession()
+      void clearMediaCache()
       void logout().catch(() => undefined)
       setUser(null)
       setNotice('Your session ended. Sign in again.')
@@ -98,6 +111,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signup,
       logout: async () => {
         endSession()
+        // Cached posters and clips belong to this person; the next one to sign in starts empty.
+        await clearMediaCache()
         await logout()
       },
       requestPasswordRecovery,

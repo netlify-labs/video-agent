@@ -1,25 +1,48 @@
 import { Center, Loader } from '@mantine/core'
-import { Suspense, lazy } from 'react'
+import { Suspense, useEffect, type ReactNode } from 'react'
 import { Navigate, Route, Routes } from 'react-router'
 import { $api } from './api/client'
 import { useAuth } from './auth'
 import { Layout } from './components/Layout'
-import { AdminPage } from './pages/Admin'
-import { KeysPage } from './pages/Keys'
 import { LibraryPage } from './pages/Library'
-import { NewVideoPage } from './pages/NewVideo'
-import { SetupPage } from './pages/Setup'
 import { AuthPages } from './pages/SignIn'
-import { VideoPage } from './pages/Video'
-import { EditPage } from './pages/Edit'
-import { MediaPage } from './pages/Media'
+import * as routes from './routes'
+import { claimMediaCache, registerMediaCache } from './sw/register'
 
-// The API reference is large; load it only when someone opens it.
-const DocsPage = lazy(() => import('./pages/Docs'))
+// The library and sign-in are in the main bundle; every other page is its own chunk (the API reference
+// and the editor's contract code are large).
+const VideoPage = routes.lazyPage(routes.videoRoute, (m) => m.VideoPage)
+const NewVideoPage = routes.lazyPage(routes.newVideoRoute, (m) => m.NewVideoPage)
+const EditPage = routes.lazyPage(routes.editRoute, (m) => m.EditPage)
+const MediaPage = routes.lazyPage(routes.mediaRoute, (m) => m.MediaPage)
+const KeysPage = routes.lazyPage(routes.keysRoute, (m) => m.KeysPage)
+const AdminPage = routes.lazyPage(routes.adminRoute, (m) => m.AdminPage)
+const SetupPage = routes.lazyPage(routes.setupRoute, (m) => m.SetupPage)
+const DocsPage = routes.lazyPage(routes.docsRoute, (m) => m.default)
+
+function Page({ children }: { children: ReactNode }) {
+  return (
+    <Suspense
+      fallback={
+        <Center p="xl">
+          <Loader size="sm" />
+        </Center>
+      }
+    >
+      {children}
+    </Suspense>
+  )
+}
 
 export function App() {
   const auth = useAuth()
   const health = $api.useQuery('get', '/api/health', {}, { staleTime: 60_000 })
+  const userId = auth.ready && !auth.pending ? auth.user?.id : undefined
+  useEffect(() => {
+    if (!userId) return
+    routes.warmRoutes()
+    void claimMediaCache(userId).then(registerMediaCache)
+  }, [userId])
 
   if (!auth.ready) {
     return (
@@ -31,7 +54,14 @@ export function App() {
   if (auth.pending || !auth.user) {
     return (
       <Routes>
-        <Route path="/setup" element={<SetupPage standalone />} />
+        <Route
+          path="/setup"
+          element={
+            <Page>
+              <SetupPage standalone />
+            </Page>
+          }
+        />
         <Route path="*" element={<AuthPages setupReady={health.data?.ready ?? true} />} />
       </Routes>
     )
@@ -40,25 +70,68 @@ export function App() {
     <Routes>
       <Route element={<Layout />}>
         <Route index element={<LibraryPage />} />
-        <Route path="/new" element={<NewVideoPage />} />
-        <Route path="/videos/:id" element={<VideoPage />} />
-        <Route path="/videos/:id/edit/:n" element={<EditPage />} />
-        <Route path="/media" element={<MediaPage />} />
-        <Route path="/keys" element={<KeysPage />} />
-        <Route path="/admin" element={<AdminPage />} />
-        <Route path="/setup" element={<SetupPage />} />
+        <Route
+          path="/new"
+          element={
+            <Page>
+              <NewVideoPage />
+            </Page>
+          }
+        />
+        <Route
+          path="/videos/:id"
+          element={
+            <Page>
+              <VideoPage />
+            </Page>
+          }
+        />
+        <Route
+          path="/videos/:id/edit/:n"
+          element={
+            <Page>
+              <EditPage />
+            </Page>
+          }
+        />
+        <Route
+          path="/media"
+          element={
+            <Page>
+              <MediaPage />
+            </Page>
+          }
+        />
+        <Route
+          path="/keys"
+          element={
+            <Page>
+              <KeysPage />
+            </Page>
+          }
+        />
+        <Route
+          path="/admin"
+          element={
+            <Page>
+              <AdminPage />
+            </Page>
+          }
+        />
+        <Route
+          path="/setup"
+          element={
+            <Page>
+              <SetupPage />
+            </Page>
+          }
+        />
         <Route
           path="/docs"
           element={
-            <Suspense
-              fallback={
-                <Center p="xl">
-                  <Loader size="sm" />
-                </Center>
-              }
-            >
+            <Page>
               <DocsPage />
-            </Suspense>
+            </Page>
           }
         />
         <Route path="*" element={<Navigate to="/" replace />} />

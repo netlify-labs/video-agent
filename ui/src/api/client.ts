@@ -24,6 +24,10 @@ export const fetchClient = createFetchClient<paths>({
 })
 export const $api = createClient(fetchClient)
 
+/** The video page's queries, shared so a prefetch fills the same cache entries the page reads. */
+export const videoInit = (id: string) => ({ params: { path: { id } } })
+export const commentsInit = (id: string) => ({ params: { path: { id }, query: { limit: 200 } } })
+
 export type Video = NonNullable<
   paths['/api/v1/videos/{id}']['get']['responses'][200]['content']['application/json']
 >
