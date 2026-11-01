@@ -7,9 +7,23 @@
 //   npx tsx scripts/voice.ts sync
 //     After video/index.html places the voices: checks each <audio data-va-voice> against voice.json, writes the
 //     narration captions into video/summary.json and the music's ducking lane into index.html.
+//   npx tsx scripts/voice.ts revoice
+//     Render-unchanged runs of an edit that changed narration: re-speaks exactly the beats whose voice is marked
+//     data-va-revoice, with the video's provider, voice and speed from voice.json, then does what sync does for them.
+//     A beat grows only when its new, longer line no longer fits (later beats move with it); nothing else changes.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { applyDucking, load, read, save, type Summary } from '../src/lib/contract.js'
+import {
+  applyDucking,
+  applyRevoice,
+  load,
+  markedForRevoice,
+  read,
+  save,
+  type Composition,
+  type Summary,
+} from '../src/lib/contract.js'
+import { revoiceLines } from '../src/lib/revoice.js'
 import {
   DEFAULT_LEAD,
   FPS_TOLERANCE,
@@ -39,7 +53,14 @@ import { StepError, log, parseArgs, repoRoot } from './lib/run-tools.js'
 export async function generateVoice(
   videoDir: string,
   script: VoiceScript,
-  opts: { provider: VoiceProvider; voice: string; speed: number; toPcm?: (s: Speech) => Uint8Array },
+  opts: {
+    provider: VoiceProvider
+    voice: string
+    speed: number
+    toPcm?: (s: Speech) => Uint8Array
+    /** Speak only these beats; every other line keeps its audio as it is (re-voicing). */
+    only?: readonly string[]
+  },
 ): Promise<VoiceFile> {
   const toPcm = opts.toPcm ?? ffmpegPcm
   const dir = join(videoDir, VOICE_DIR)
@@ -51,6 +72,12 @@ export async function generateVoice(
     const hash = lineHash(opts.provider.name, opts.voice, opts.speed, text)
     const file = `${VOICE_DIR}/${line.beat}.wav`
     const old = previous?.beats.find((b) => b.beat === line.beat)
+    if (opts.only && !opts.only.includes(line.beat)) {
+      if (!old || !existsSync(join(videoDir, old.file)))
+        throw new StepError(`Beat "${line.beat}" has no voice to keep in ${VOICE_JSON}.`)
+      beats.push(old)
+      continue
+    }
     if (old?.hash === hash && old.file === file && existsSync(join(videoDir, file))) {
       beats.push(old)
       log('voice.reused', { beat: line.beat })
@@ -115,6 +142,32 @@ export function syncVoice(videoDir: string): string[] {
   const htmlPath = join(videoDir, 'index.html')
   const d = load(readFileSync(htmlPath, 'utf8'))
   const comp = read(d)
+  const problems = voiceProblems(comp, voice)
+  if (problems.length) return problems
+
+  const summaryPath = join(videoDir, 'summary.json')
+  let summary: Summary = {}
+  if (existsSync(summaryPath)) {
+    try {
+      summary = JSON.parse(readFileSync(summaryPath, 'utf8')) as Summary
+    } catch {
+      return ['video/summary.json is not valid JSON.']
+    }
+  }
+  const voiced = new Set(voice.beats.map((v) => v.beat))
+  const kept = (summary.captions ?? []).filter((c) => !c.voice && !(c.beat && voiced.has(c.beat)))
+  const captions = [...kept, ...voiceCaptions(comp.beats, voice)].sort((a, b) => a.start - b.start)
+  writeFileSync(summaryPath, JSON.stringify({ ...summary, captions }, null, 2))
+  const before = save(d)
+  applyDucking(d)
+  const after = save(d)
+  if (after !== before) writeFileSync(htmlPath, after)
+  log('voice.synced', { captions: captions.length, ducked: after !== before })
+  return []
+}
+
+/** How the composition's voices disagree with voice.json. */
+function voiceProblems(comp: Composition, voice: VoiceFile): string[] {
   const problems: string[] = []
   for (const v of voice.beats) {
     const b = comp.beats.find((x) => x.id === v.beat)
@@ -139,32 +192,83 @@ export function syncVoice(videoDir: string): string[] {
   for (const b of comp.beats)
     if (b.voice && !voice.beats.some((v) => v.beat === b.id))
       problems.push(`Beat "${b.id}" has a voice but no line in voice.json.`)
-  if (problems.length) return problems
+  return problems
+}
 
+/**
+ * Re-voices the beats marked data-va-revoice (an edit changed their line in script.json): speaks only those, with
+ * the provider, voice and speed voice.json already has, then updates index.html and summary.json with applyRevoice.
+ * `provider` must be the one voice.json names. Returns the beats and any that grew; throws StepError on a problem
+ * and writes nothing to index.html or summary.json then.
+ */
+export async function revoiceVideo(
+  videoDir: string,
+  opts: { provider: VoiceProvider; toPcm?: (s: Speech) => Uint8Array },
+) {
+  const htmlPath = join(videoDir, 'index.html')
   const summaryPath = join(videoDir, 'summary.json')
-  let summary: Summary = {}
-  if (existsSync(summaryPath)) {
-    try {
-      summary = JSON.parse(readFileSync(summaryPath, 'utf8')) as Summary
-    } catch {
-      return ['video/summary.json is not valid JSON.']
-    }
+  const html = readFileSync(htmlPath, 'utf8')
+  const beats = markedForRevoice(load(html))
+  if (!beats.length) return { beats, lengthened: [] }
+  const previous = readVoice(videoDir)
+  if (!previous) throw new StepError(`${VOICE_JSON} is missing, so there's no voice to re-voice.`)
+  if (opts.provider.name !== previous.provider)
+    throw new StepError(
+      `This video was voiced with ${previous.provider}, which isn't available here, so its lines can't be re-voiced in the same voice.`,
+    )
+  let script: VoiceScript
+  try {
+    script = parseScript(readFileSync(join(videoDir, VOICE_SCRIPT), 'utf8'))
+  } catch (e) {
+    throw new StepError(`video/${VOICE_SCRIPT}: ${e instanceof Error ? e.message : String(e)}`)
   }
-  const voiced = new Set(voice.beats.map((v) => v.beat))
-  const kept = (summary.captions ?? []).filter((c) => !c.voice && !(c.beat && voiced.has(c.beat)))
-  const captions = [...kept, ...voiceCaptions(comp.beats, voice)].sort((a, b) => a.start - b.start)
-  writeFileSync(summaryPath, JSON.stringify({ ...summary, captions }, null, 2))
-  const before = save(d)
-  applyDucking(d)
-  const after = save(d)
-  if (after !== before) writeFileSync(htmlPath, after)
-  log('voice.synced', { captions: captions.length, ducked: after !== before })
-  return []
+  for (const b of beats)
+    if (!script.lines.some((l) => l.beat === b))
+      throw new StepError(`Beat "${b}" has no line in ${VOICE_SCRIPT}.`)
+  const summary = JSON.parse(readFileSync(summaryPath, 'utf8')) as Summary
+  const voice = await generateVoice(videoDir, script, {
+    provider: opts.provider,
+    voice: previous.voice,
+    speed: previous.speed,
+    only: beats,
+    ...(opts.toPcm ? { toPcm: opts.toPcm } : {}),
+  })
+  let out
+  try {
+    out = applyRevoice(html, summary, revoiceLines(html, voice, beats))
+  } catch (e) {
+    throw new StepError(`Re-voicing broke the composition: ${e instanceof Error ? e.message : String(e)}`)
+  }
+  const problems = voiceProblems(read(load(out.html)), voice)
+  if (problems.length) throw new StepError(problems.join(' '))
+  writeFileSync(htmlPath, out.html)
+  writeFileSync(summaryPath, JSON.stringify(out.summary, null, 2))
+  log('voice.revoiced', { beats, lengthened: out.lengthened })
+  return { beats, lengthened: out.lengthened }
 }
 
 async function main() {
   const args = parseArgs(process.argv.slice(2))
   const videoDir = join(repoRoot, 'video')
+  if (process.argv[2] === 'revoice') {
+    const was = readVoice(videoDir)
+    if (!was) throw new StepError(`video/${VOICE_JSON} is missing, so there's no voice to re-voice.`)
+    const picked = pickProvider(was.voice, process.env, videoDir)
+    const r = await revoiceVideo(videoDir, { provider: picked.provider })
+    if (!r.beats.length) {
+      console.log('No lines are marked for re-voicing. Nothing changed.')
+      return
+    }
+    console.log(`Re-voiced ${r.beats.join(', ')} (${was.provider}, ${was.voice}, speed ${was.speed}).`)
+    for (const l of r.lengthened)
+      console.log(
+        `- Beat "${l.beat}" grew from ${l.from}s to ${l.to}s to fit its new line; later beats moved with it.`,
+      )
+    console.log(
+      'Narration captions and the music ducking are updated. Run npx hyperframes check in video/ next.',
+    )
+    return
+  }
   if (process.argv[2] === 'sync') {
     const problems = syncVoice(videoDir)
     if (problems.length) {
