@@ -14,7 +14,7 @@ const fx = (f: string) => readFileSync(new URL(`./fixtures/contract1/${f}`, impo
 
 let current: TestDeps | null = null
 vi.mock('@netlify/blobs', () => ({
-  getStore: ({ name }: { name: 'internal' | 'bundles' }) => ({
+  getStore: ({ name }: { name: 'internal' | 'bundles' | 'media' }) => ({
     get: async (key: string, o?: { type?: string }) => {
       const b = await current?.blobs.get(name, key)
       if (!b) return null
@@ -197,6 +197,78 @@ describe('edit drafts', () => {
     expect((await edge(version.url.replace('index.html', `e/${e.id}/r1/index.html`))).status).toBe(403)
     const bob = await person(h, 'u_bob')
     expect((await h.call('GET', `/api/v1/edits/${e.id}/preview`, { as: bob })).status).toBe(404)
+  })
+
+  it('swaps a media slot for a library item: served from the library, snapshotted when rendered', async () => {
+    const h = harness({ MAX_ACTIVE_RUNS: '0' })
+    current = h.deps
+    const id = await editableVideo(h)
+    const up = async (bytes: Uint8Array, name: string) =>
+      (await (
+        await h.app.fetch(
+          new Request(`https://video.example.com/api/v1/media?filename=${name}`, {
+            method: 'POST',
+            headers: {
+              cookie: h.member,
+              origin: 'https://video.example.com',
+              'content-type': 'application/octet-stream',
+            },
+            body: bytes,
+          }),
+          { context: { deploy: { published: true }, waitUntil: () => undefined } },
+        )
+      ).json()) as { id: string }
+    const be32 = (n: number) => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255]
+    const pngBytes = new Uint8Array([
+      0x89,
+      ...Buffer.from('PNG\r\n\x1a\n', 'latin1'),
+      ...be32(13),
+      ...Buffer.from('IHDR'),
+      ...be32(64),
+      ...be32(32),
+      8,
+      6,
+      0,
+      0,
+      0,
+    ])
+    const logo = await up(pngBytes, 'logo.png')
+    const typeface = await up(new Uint8Array([...Buffer.from('wOF2'), 1, 2, 3, 4]), 'brand.woff2')
+    const e = await h.json<Edit>(await open(h, id))
+    const swap = (src: string, kind = 'image') => ({ op: 'media', slot: 'logo', src, kind, fit: 'cover' })
+
+    // Only a ready item of the slot's kind can go in.
+    for (const bad of [
+      swap(`assets/media/${typeface.id}.woff2`),
+      swap('assets/media/med_nope.png'),
+      swap(`assets/media/${logo.id}.png`, 'video'),
+    ])
+      expect((await save(h, e.id, { rev: 0, ops: [bad] })).status).toBe(400)
+
+    const saved = await save(h, e.id, { rev: 0, ops: [swap(`assets/media/${logo.id}.png`)] })
+    expect(saved.status).toBe(200)
+    // A save writes only what changed; the swapped-in file is served from the library.
+    expect((await h.deps.blobs.list('bundles', `${editRevPrefix(id, 1, e.id, 1)}f/`)).sort()).toEqual([
+      `${editRevPrefix(id, 1, e.id, 1)}f/index.html`,
+      `${editRevPrefix(id, 1, e.id, 1)}f/summary.json`,
+    ])
+    const link = await h.json<{ url: string }>(
+      await h.call('GET', `/api/v1/edits/${e.id}/preview`, { as: h.member }),
+    )
+    const html = await (await edge(link.url)).text()
+    expect(html).toMatch(new RegExp(`src="assets/media/${logo.id}\\.png"[^>]*object-fit: cover`))
+    const img = await edge(link.url.replace('index.html', `assets/media/${logo.id}.png`))
+    expect(img.status).toBe(200)
+    expect(new Uint8Array(await img.arrayBuffer())).toEqual(pngBytes)
+    // Unchanged files still come from the base version.
+    expect((await edge(link.url.replace('index.html', 'summary.json'))).status).toBe(200)
+
+    const res = await h.call('POST', `/api/v1/edits/${e.id}/render`, { as: h.member })
+    expect(res.status).toBe(202)
+    expect((await h.deps.store.listVersionMedia(id, 2)).map((r) => r.mediaId)).toContain(logo.id)
+    // Deleting the item from the library afterwards doesn't touch the rendered version's snapshot.
+    await h.call('DELETE', `/api/v1/media/${logo.id}`, { as: h.member })
+    expect((await h.deps.store.listVersionMedia(id, 2)).map((r) => r.mediaId)).toContain(logo.id)
   })
 
   it('discarding or expiring removes the draft and its bundle', async () => {

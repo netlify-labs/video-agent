@@ -1,4 +1,5 @@
-// The browser editor (plan v2 §8): change text, beat timing, colours and beat order on a finished contract-1 version,
+// The browser editor (plan v2 §8): change text, beat timing, colours, beat order and media slots on a finished
+// contract-1 version,
 // see it in the sandboxed preview, and render it unchanged as the next version. The page holds the composition the
 // person wants; the op list sent on each save is its difference from the version, so saves are idempotent.
 import {
@@ -11,6 +12,7 @@ import {
   Group,
   Menu,
   NumberInput,
+  SegmentedControl,
   Stack,
   Text,
   TextInput,
@@ -20,21 +22,23 @@ import {
 import { modals } from '@mantine/modals'
 import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
-import { IconArrowDown, IconArrowUp, IconTrash } from '@tabler/icons-react'
+import { IconArrowDown, IconArrowUp, IconMovie, IconPhoto, IconTrash } from '@tabler/icons-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { $api, errorMessage, fetchClient, newIdempotencyKey } from '../api/client'
 import type { paths } from '../api/schema'
 import { CompositionPreview, type PreviewCommand } from '../components/CompositionPreview'
+import { MediaLibraryModal, type Media } from '../components/MediaPicker'
 
 type Edit = paths['/api/v1/edits/{id}']['get']['responses'][200]['content']['application/json']
 type Composition = Edit['composition']
 type Op = Edit['ops'][number]
+type Slot = Composition['beats'][number]['media'][number]
 
 const fps = (s: number) => Math.round(s * 30) / 30
 const sameNumber = (a: number, b: number) => Math.abs(a - b) < 1e-6
 
-/** The ops that turn `base` into `cur`, in the order the patcher needs: deletes, order, timing, text, colour. */
+/** The ops that turn `base` into `cur`, in the order the patcher needs: deletes, order, timing, text, colour, media. */
 export function diffOps(base: Composition, cur: Composition): Op[] {
   const ops: Op[] = []
   const curIds = cur.beats.map((b) => b.id)
@@ -51,6 +55,13 @@ export function diffOps(base: Composition, cur: Composition): Op[] {
     if (baseTexts.get(t.id) !== t.text) ops.push({ op: 'text', id: t.id, text: t.text })
   for (const [role, value] of Object.entries(cur.colors))
     if (base.colors[role]?.toLowerCase() !== value.toLowerCase()) ops.push({ op: 'color', role, value })
+  const baseSlots = new Map(base.beats.flatMap((b) => b.media.map((m) => [m.slot, m] as const)))
+  for (const m of cur.beats.flatMap((b) => b.media)) {
+    const was = baseSlots.get(m.slot)
+    const fit = m.fit === 'cover' ? 'cover' : 'contain'
+    if (was && (was.src !== m.src || (was.fit ?? 'contain') !== fit))
+      ops.push({ op: 'media', slot: m.slot, src: m.src, kind: m.kind, fit })
+  }
   return ops
 }
 
@@ -67,6 +78,9 @@ export function EditPage() {
   const [renderKey] = useState(newIdempotencyKey)
   const sendRef = useRef<((c: PreviewCommand) => void) | null>(null)
   const fields = useRef<Record<string, HTMLInputElement | null>>({})
+  // The slot being replaced, and the library items picked so far (for their thumbnails).
+  const [replacing, setReplacing] = useState<Slot | null>(null)
+  const [picked, setPicked] = useState<Record<string, Media>>({})
 
   useEffect(() => {
     void (async () => {
@@ -121,6 +135,12 @@ export function EditPage() {
     })
     // Text shows up in the preview right away; everything else after the save.
     sendRef.current?.({ type: 'apply-edits', edits: [{ id: textId, text }] })
+  }
+  const setSlot = (slot: string, patch: Partial<Slot>) => {
+    update((c) => {
+      for (const b of c.beats) for (const m of b.media) if (m.slot === slot) Object.assign(m, patch)
+      return c
+    })
   }
   const move = (i: number, by: number) => {
     update((c) => {
@@ -243,8 +263,8 @@ export function EditPage() {
             onReady={onReady}
           />
           <Text size="xs" c="var(--va-faint)">
-            Click any text in the preview to edit it. Text changes show at once; timing, order and colours
-            after the draft saves.
+            Click any text in the preview to edit it. Text changes show at once; timing, order, colours and
+            media after the draft saves.
           </Text>
         </div>
         <div className="va-rail">
@@ -334,6 +354,61 @@ export function EditPage() {
                         }}
                       />
                     ))}
+                    {b.media.map((m) => {
+                      const file = m.src.split('/').pop() ?? m.src
+                      const item = picked[file]
+                      return (
+                        <div key={m.slot} className="va-slot" data-testid={`slot-${m.slot}`}>
+                          <Group justify="space-between" wrap="nowrap" gap="xs">
+                            <Group gap={8} wrap="nowrap" style={{ minWidth: 0 }}>
+                              {item?.urls && (item.kind !== 'video' || item.urls.poster) ? (
+                                <img
+                                  className="va-slot-thumb"
+                                  src={item.kind === 'video' ? (item.urls.poster ?? '') : item.urls.file}
+                                  alt=""
+                                />
+                              ) : m.kind === 'video' ? (
+                                <IconMovie size={18} />
+                              ) : (
+                                <IconPhoto size={18} />
+                              )}
+                              <div style={{ minWidth: 0 }}>
+                                <Text size="xs" fw={500}>
+                                  {m.slot}
+                                </Text>
+                                <Text size="xs" c="var(--va-faint)" truncate>
+                                  {item?.filename ?? file}
+                                </Text>
+                              </div>
+                            </Group>
+                            <Group gap={4} wrap="nowrap">
+                              <SegmentedControl
+                                size="xs"
+                                aria-label={`Fit for ${m.slot}`}
+                                value={m.fit === 'cover' ? 'cover' : 'contain'}
+                                onChange={(v) => {
+                                  setSlot(m.slot, { fit: v })
+                                }}
+                                data={[
+                                  { value: 'contain', label: 'Fit' },
+                                  { value: 'cover', label: 'Fill' },
+                                ]}
+                              />
+                              <Button
+                                size="compact-xs"
+                                variant="default"
+                                aria-label={`Replace ${m.slot}`}
+                                onClick={() => {
+                                  setReplacing(m)
+                                }}
+                              >
+                                Replace
+                              </Button>
+                            </Group>
+                          </Group>
+                        </div>
+                      )
+                    })}
                   </Stack>
                 </div>
               ))}
@@ -379,6 +454,23 @@ export function EditPage() {
           </Card>
         </div>
       </div>
+      {replacing ? (
+        <MediaLibraryModal
+          opened
+          title={`Replace ${replacing.slot}`}
+          kinds={replacing.kind === 'video' ? ['video'] : ['image', 'svg']}
+          onClose={() => {
+            setReplacing(null)
+          }}
+          onPick={([m]) => {
+            if (!m) return
+            // Library files sit in assets/media/ as <id>.<ext>; the filename keeps the extension.
+            const file = `${m.id}.${m.filename.split('.').pop() ?? ''}`
+            setPicked((p) => ({ ...p, [file]: m }))
+            setSlot(replacing.slot, { src: `assets/media/${file}` })
+          }}
+        />
+      ) : null}
     </>
   )
 }

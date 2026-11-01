@@ -691,6 +691,18 @@ body {
   opacity: 0.5;
   cursor: default;
 }
+.va-slot {
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: var(--va-raised);
+}
+.va-slot-thumb {
+  width: 32px;
+  height: 24px;
+  border-radius: 4px;
+  object-fit: cover;
+  flex: none;
+}
 .va-media-chip {
   display: inline-flex;
   align-items: center;

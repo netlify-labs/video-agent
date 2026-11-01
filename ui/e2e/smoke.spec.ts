@@ -482,3 +482,31 @@ test('a revision can add media', async ({ page }) => {
     .poll(() => page.evaluate("window.__sent?.['/api/v1/videos/vid_teaser/versions']?.mediaIds"))
     .toEqual(['med_mock0001'])
 })
+
+test('a media slot is replaced from the library, filtered to its kind, with a fit', async ({ page }) => {
+  await page.goto('/videos/vid_teaser/edit/2')
+  const logo = page.getByTestId('slot-logo')
+  await expect(logo).toContainText('med_logo.svg')
+  await logo.getByRole('button', { name: 'Replace logo' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Replace logo' })
+  // An image slot offers images and SVGs only.
+  await expect(dialog.getByRole('radio', { name: 'Clips' })).toHaveCount(0)
+  await dialog
+    .locator('input[type=file]')
+    .setInputFiles({ name: 'new-logo.png', mimeType: 'image/png', buffer: pngBytes })
+  await dialog.getByTestId('pick-med_mock0001').click()
+  await expect(dialog).toHaveCount(0)
+  await expect(logo).toContainText('new-logo.png')
+  await logo.getByText('Fill').click()
+  await expect
+    .poll(() => lastOps(page), { timeout: 5000 })
+    .toEqual([
+      { op: 'media', slot: 'logo', src: 'assets/media/med_mock0001.png', kind: 'image', fit: 'cover' },
+    ])
+  await expect(page.getByTestId('edit-status')).toContainText('Draft saved')
+  // A clip slot opens the picker on clips.
+  await page.getByTestId('slot-hero-clip').getByRole('button', { name: 'Replace hero-clip' }).click()
+  await expect(
+    page.getByRole('dialog', { name: 'Replace hero-clip' }).getByText('Nothing to pick yet.'),
+  ).toBeVisible()
+})

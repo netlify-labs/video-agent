@@ -9,7 +9,14 @@ import { ApiError } from '../lib/errors.js'
 import { writeTarGz } from '../lib/tar.js'
 import { PREVIEW_TTL_SEC, previewScope } from '../lib/preview.js'
 import { contextMeta } from '../generated/context.js'
-import { bundleFileKey, bundlePrefix, contractOf, ensureBundle, type BundleIndex } from './bundles.js'
+import {
+  bundleFileKey,
+  bundlePrefix,
+  contractOf,
+  ensureBundle,
+  type BundleEntry,
+  type BundleIndex,
+} from './bundles.js'
 import { assertCan, type Principal } from './policy.js'
 import { snapshotMedia } from './media.js'
 import { getSettings } from './settings.js'
@@ -27,17 +34,17 @@ export const editRevPrefix = (jobId: string, n: number, editId: string, rev: num
 /** What a draft preview capability signs: one draft, never the version or other drafts. */
 export const editScope = (jobId: string, n: number, editId: string) => `${previewScope(jobId, n)}/e/${editId}`
 
-/** The base version's composition files, from its preview bundle. */
-async function baseFiles(deps: Deps, jobId: string, n: number) {
+/** The base version's preview bundle. */
+async function baseIndex(deps: Deps, jobId: string, n: number) {
   const index = await ensureBundle(deps, jobId, n)
   if (!index) throw new ApiError('not_found', "This version's composition isn't available.")
-  const files = new Map<string, Uint8Array>()
-  for (const f of index.files) {
-    const b = await deps.blobs.get('bundles', bundleFileKey(jobId, n, f.path))
-    if (!b) throw new ApiError('conflict', "This version's composition is incomplete. Try again later.")
-    files.set(f.path, b)
-  }
-  return files
+  return index
+}
+
+async function readEntry(deps: Deps, f: BundleEntry) {
+  const b = f.src ? await deps.blobs.get(f.src.store, f.src.key) : null
+  if (!b) throw new ApiError('conflict', "This version's composition is incomplete. Try again later.")
+  return b
 }
 
 const text = (b: Uint8Array | undefined) => (b ? new TextDecoder().decode(b) : '')
@@ -52,9 +59,20 @@ export function paletteOf(colors: Record<string, string>) {
  * break the composition.
  */
 async function computeRev(deps: Deps, e: Pick<EditRow, 'jobId' | 'baseN'>, ops: EditOp[]) {
-  const files = await baseFiles(deps, e.jobId, e.baseN)
-  const html = text(files.get('index.html'))
-  const summary = JSON.parse(text(files.get('summary.json')) || '{}') as Summary
+  const index = await baseIndex(deps, e.jobId, e.baseN)
+  // Unchanged files are served from where they already are; only index.html and summary.json are rewritten.
+  const entries = new Map<string, BundleEntry>(
+    index.files.map((f) => [
+      f.path,
+      { ...f, src: f.src ?? { store: 'bundles', key: bundleFileKey(e.jobId, e.baseN, f.path) } },
+    ]),
+  )
+  const read = async (path: string) => {
+    const f = entries.get(path)
+    return f ? text(await readEntry(deps, f)) : ''
+  }
+  const html = await read('index.html')
+  const summary = JSON.parse((await read('summary.json')) || '{}') as Summary
   const base = applyEdits(html, summary, [], {})
   const palette = paletteOf(base.composition.colors)
   const baseComposition = base.composition
@@ -68,12 +86,37 @@ async function computeRev(deps: Deps, e: Pick<EditRow, 'jobId' | 'baseN'>, ops: 
       })
     throw err
   }
-  files.set('index.html', new TextEncoder().encode(out.html))
-  files.set('summary.json', new TextEncoder().encode(JSON.stringify(out.summary, null, 2)))
-  const list = [...files].map(([path, bytes]) => ({ path, size: bytes.byteLength, sha256: sha256Hex(bytes) }))
+  const changed = new Map<string, Uint8Array>([
+    ['index.html', new TextEncoder().encode(out.html)],
+    ['summary.json', new TextEncoder().encode(JSON.stringify(out.summary, null, 2))],
+  ])
+  for (const [path, bytes] of changed)
+    entries.set(path, { path, size: bytes.byteLength, sha256: sha256Hex(bytes) })
+  // Media swapped in from the library (plan v2 §8): ready items only, of the slot's kind, served from the library.
+  const picks: string[] = []
+  for (const op of ops) {
+    if (op.op !== 'media' || entries.has(op.src)) continue
+    const file = op.src.slice('assets/media/'.length)
+    const m = await deps.store.getMedia(file.split('.')[0] ?? '')
+    const fits = op.kind === 'video' ? m?.kind === 'video' : m?.kind === 'image' || m?.kind === 'svg'
+    if (!m || m.deletedAt || m.status !== 'ready' || `${m.id}.${m.ext}` !== file || !fits)
+      throw new ApiError(
+        'invalid_request',
+        `That edit can't be made: ${file} isn't a ready ${op.kind} in the library.`,
+      )
+    entries.set(op.src, {
+      path: op.src,
+      size: m.bytes,
+      sha256: m.cleanSha256,
+      src: { store: 'media', key: m.cleanKey },
+    })
+    picks.push(m.id)
+  }
+  const list = [...entries.values()]
   return {
-    files,
+    changed,
     list,
+    picks,
     composition: out.composition,
     base: baseComposition,
     palette,
@@ -88,16 +131,16 @@ type Rev = Awaited<ReturnType<typeof computeRev>>
 /** Computes the rev and writes its immutable bundle (the newest rev only is kept). */
 async function buildRev(deps: Deps, e: Pick<EditRow, 'id' | 'jobId' | 'baseN'>, rev: number, ops: EditOp[]) {
   const r = await computeRev(deps, e, ops)
-  const { files, list } = r
+  const { changed, list } = r
   const prefix = editRevPrefix(e.jobId, e.baseN, e.id, rev)
-  for (const [path, bytes] of files) await deps.blobs.set('bundles', `${prefix}f/${path}`, bytes)
+  for (const [path, bytes] of changed) await deps.blobs.set('bundles', `${prefix}f/${path}`, bytes)
   const index: BundleIndex = {
     v: 1,
     jobId: e.jobId,
     versionN: e.baseN,
     files: list,
     createdAt: deps.clock.now().toISOString(),
-    contract: contractOf(files),
+    contract: contractOf(changed),
   }
   await deps.blobs.set('bundles', `${prefix}manifest.json`, JSON.stringify(index), {
     contentType: 'application/json',
@@ -255,7 +298,10 @@ export async function renderEdit(deps: Deps, p: Principal, id: string, idemKey?:
         [],
       )
       // Media stays by reference: the run downloads it from the version's snapshot.
-      const archive = writeTarGz(new Map([...r.files].filter(([path]) => !path.startsWith('assets/media/'))))
+      const files = new Map(r.changed)
+      for (const f of r.list)
+        if (!files.has(f.path) && !excluded(f.path)) files.set(f.path, await readEntry(deps, f))
+      const archive = writeTarGz(files)
       const key = `${e.jobId}/v${n}/frozen.tar.gz`
       await deps.blobs.set('sources', key, archive, { contentType: 'application/gzip' })
       const now = deps.clock.now().toISOString()
@@ -276,7 +322,7 @@ export async function renderEdit(deps: Deps, p: Principal, id: string, idemKey?:
         frozen: { key, sha256: sha256Hex(archive), manifestHash: manifest, editId: e.id },
       })
       await repo.insertVersionMedia(
-        await snapshotMedia(repo, e.jobId, n, [], await repo.listVersionMedia(e.jobId, e.baseN)),
+        await snapshotMedia(repo, e.jobId, n, r.picks, await repo.listVersionMedia(e.jobId, e.baseN)),
       )
       await repo.insertAttempt(newAttempt(deps, e.jobId, n, now))
       await repo.updateJob(e.jobId, {

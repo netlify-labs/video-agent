@@ -21,8 +21,10 @@ const plain = (status: number, text: string) =>
   new Response(text, { status, headers: { 'cache-control': 'no-store', 'content-type': 'text/plain' } })
 
 interface BundleIndex {
-  files: { path: string; size: number; sha256: string }[]
+  files: { path: string; size: number; sha256: string; src?: { store: string; key: string } }[]
 }
+/** Stores a draft's manifest may point into: the base version's bundle, or a library item. */
+const SRC_STORES = new Set(['bundles', 'media'])
 
 export default async (req: Request, context: Context) => {
   if (req.method !== 'GET' && req.method !== 'HEAD')
@@ -87,8 +89,13 @@ export default async (req: Request, context: Context) => {
     {
       size: entry.size,
       etag: `"${entry.sha256.slice(0, 32)}"`,
-      open: async () =>
-        (await bundles.get(`${prefix}f/${path}`, { type: 'stream' })) as ReadableStream<Uint8Array> | null,
+      open: async () => {
+        const src = entry.src && SRC_STORES.has(entry.src.store) ? entry.src : null
+        const store = src ? getStore({ name: src.store, consistency: 'strong' }) : bundles
+        return (await store.get(src?.key ?? `${prefix}f/${path}`, {
+          type: 'stream',
+        })) as ReadableStream<Uint8Array> | null
+      },
     },
     type,
     previewHeaders(base, type),

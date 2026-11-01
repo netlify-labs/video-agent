@@ -6,11 +6,18 @@ import { sha256Hex } from '../lib/crypto.js'
 import { validate, type Summary } from '../lib/contract.js'
 import { readTarGz, TarError } from '../lib/tar.js'
 
+export interface BundleEntry {
+  path: string
+  size: number
+  sha256: string
+  /** Where an edit draft's unchanged or library file already is; otherwise it's under the bundle's own f/. */
+  src?: { store: 'bundles' | 'media'; key: string }
+}
 export interface BundleIndex {
   v: 1
   jobId: string
   versionN: number
-  files: { path: string; size: number; sha256: string }[]
+  files: BundleEntry[]
   createdAt: string
   /** Editing contract the composition conforms to, or null (with why), checked when the bundle was made. */
   contract?: { version: 1 | null; violations: string[] }
