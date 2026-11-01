@@ -68,6 +68,7 @@ function ready(
     parentN: o.parent ?? null,
     targetDurationSec: o.target ?? null,
     sound: 'silent',
+    voiceover: null,
     createdAt: ago(o.at + 0.3),
     plan: null,
 
@@ -171,6 +172,7 @@ export const videos: Video[] = [
       parentN: null,
       targetDurationSec: 20,
       sound: 'silent',
+      voiceover: null,
       createdAt: ago(2.6),
       plan: null,
 
@@ -203,6 +205,7 @@ export const videos: Video[] = [
       parentN: null,
       targetDurationSec: 30,
       sound: 'silent',
+      voiceover: null,
       createdAt: ago(0.8),
       plan: null,
 
@@ -336,6 +339,7 @@ export const videos: Video[] = [
       parentN: null,
       targetDurationSec: null,
       sound: 'silent',
+      voiceover: null,
       createdAt: ago(2900),
       plan: null,
 

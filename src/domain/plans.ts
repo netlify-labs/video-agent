@@ -23,8 +23,10 @@ import type {
   PlanRoute,
   PlanRow,
   VideoSound,
+  Voiceover,
 } from './types.js'
 import { loadJob } from './videos.js'
+import { voiceoverFrom, type VoiceoverInput } from './voiceover.js'
 
 export const PLAN_TTL_MS = 24 * 3600_000
 export const ROUTE_DEADLINE_MS = 5_000
@@ -173,6 +175,7 @@ export function planDto(plan: PlanRow) {
     briefRev: plan.briefRev,
     mediaIds: plan.mediaIds,
     sound: plan.sound ?? null,
+    voiceover: plan.voiceover ?? null,
     expiresAt: plan.expiresAt,
   }
 }
@@ -223,12 +226,24 @@ async function mediaContext(deps: Deps, plan: PlanRow) {
 const MEDIA_RULE =
   'attached_media lists files the person chose for the video (logos, screenshots, clips, fonts, music); the attached images are the first of them, in order. Plan around them and never ask for something they already provide.'
 
-/** How the planner hears the Sound choice (data, like the shape and length). */
-const SOUND_LABELS: Record<VideoSound, string> = {
-  silent: 'silent, no audio',
-  music: 'a music bed, no voice-over',
-  music_sfx: 'a music bed and sound effects on visible actions, no voice-over',
+/** How the planner hears the Sound and voice-over choices (data, like the shape and length). */
+function soundLabel(
+  sound: VideoSound | null | undefined,
+  voice: Voiceover | null | undefined,
+): string | null {
+  const music =
+    sound === 'music'
+      ? 'a music bed'
+      : sound === 'music_sfx'
+        ? 'a music bed and sound effects on visible actions'
+        : null
+  if (voice) return `a spoken voice-over with captions from its words${music ? `, ${music}` : ', no music'}`
+  if (music) return `${music}, no voice-over`
+  return sound === 'silent' ? 'silent, no audio' : null
 }
+
+const NARRATION_RULE =
+  'The video has a voice-over: give every beat a "narration", the line spoken over it (about 2.5 words a second of the beat, plain spoken words; say what the picture can\'t rather than reading the on-screen text). If person_script is given, use its lines word for word, one per beat, in order.'
 
 // ───────── operations ─────────
 
@@ -242,6 +257,7 @@ export async function createPlan(
     revisionOf?: { videoId: string; version?: number | undefined } | undefined
     mediaIds?: string[] | undefined
     sound?: VideoSound | undefined
+    voiceover?: VoiceoverInput | undefined
   },
 ) {
   assertCan(p, 'plan:create')
@@ -295,6 +311,7 @@ export async function createPlan(
   }
 
   const now = deps.clock.now()
+  const voiceover = input.voiceover ? voiceoverFrom(input.voiceover) : null
   const plan: PlanRow = {
     id: `plan_${deps.ids.uuid().replace(/-/g, '').slice(0, 20)}`,
     userId: p.userId,
@@ -305,6 +322,7 @@ export async function createPlan(
     durationSec: input.durationSec ?? null,
     mediaIds,
     sound: input.sound ?? null,
+    voiceover,
     inputsHash: sha256Hex(
       JSON.stringify([
         prompt,
@@ -315,6 +333,7 @@ export async function createPlan(
         planningContext.hash,
         mediaIds,
         ...(input.sound ? [input.sound] : []),
+        ...(voiceover ? [voiceover] : []),
       ]),
     ),
     route,
@@ -379,7 +398,9 @@ export async function generateQuestions(deps: Deps, p: Principal, planId: string
   if (plan.questions) return planDto(plan)
   const route = plan.route ?? { template: 'other', model: FAST_MODEL }
   const system = [
-    "You're storyboarding a short marketing or product video made with HTML/CSS animation (no filmed footage, no voiceover).",
+    plan.voiceover
+      ? "You're storyboarding a short marketing or product video made with HTML/CSS animation and a spoken voice-over (no filmed footage)."
+      : "You're storyboarding a short marketing or product video made with HTML/CSS animation (no filmed footage, no voiceover).",
     'Ask only questions whose answers would change the video. Skip anything the request or context already answers.',
     `Consider: ${CHECKLISTS[route.template] ?? CHECKLISTS.other}.`,
     plan.jobId
@@ -398,7 +419,9 @@ export async function generateQuestions(deps: Deps, p: Principal, planId: string
     dataBlock('request', plan.prompt),
     plan.aspect ? dataBlock('chosen_shape', plan.aspect) : '',
     plan.durationSec ? dataBlock('chosen_length_seconds', plan.durationSec) : '',
-    plan.sound ? dataBlock('chosen_sound', SOUND_LABELS[plan.sound]) : '',
+    soundLabel(plan.sound, plan.voiceover)
+      ? dataBlock('chosen_sound', soundLabel(plan.sound, plan.voiceover))
+      : '',
     media.block,
     dataBlock('company_context', planningContext.text),
     dataBlock('their_recent_video_titles', history),
@@ -456,7 +479,10 @@ export async function generateBrief(deps: Deps, p: Principal, planId: string, an
     'Keep their intent; make reasonable choices for anything skipped. Beats are on-screen moments with a length in seconds.',
     DATA_RULE,
     plan.mediaIds.length ? `${MEDIA_RULE} Say in the beats where each file appears.` : '',
-    'Reply with JSON only: {"goal":"","audience":"","keyMessage":"","beats":[{"text":"","seconds":0}],"tone":"","callToAction":"","mustInclude":[],"avoid":[]}',
+    plan.voiceover ? NARRATION_RULE : '',
+    plan.voiceover
+      ? 'Reply with JSON only: {"goal":"","audience":"","keyMessage":"","beats":[{"text":"","seconds":0,"narration":""}],"tone":"","callToAction":"","mustInclude":[],"avoid":[]}'
+      : 'Reply with JSON only: {"goal":"","audience":"","keyMessage":"","beats":[{"text":"","seconds":0}],"tone":"","callToAction":"","mustInclude":[],"avoid":[]}',
   ]
     .filter(Boolean)
     .join('\n')
@@ -465,7 +491,10 @@ export async function generateBrief(deps: Deps, p: Principal, planId: string, an
     dataBlock('request', plan.prompt),
     plan.aspect ? dataBlock('chosen_shape', plan.aspect) : '',
     plan.durationSec ? dataBlock('chosen_length_seconds', plan.durationSec) : '',
-    plan.sound ? dataBlock('chosen_sound', SOUND_LABELS[plan.sound]) : '',
+    soundLabel(plan.sound, plan.voiceover)
+      ? dataBlock('chosen_sound', soundLabel(plan.sound, plan.voiceover))
+      : '',
+    plan.voiceover?.script ? dataBlock('person_script', plan.voiceover.script) : '',
     media.block,
     dataBlock('answers', qa),
     dataBlock('company_context', planningContext.text),

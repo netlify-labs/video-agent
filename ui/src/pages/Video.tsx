@@ -23,6 +23,13 @@ import { useQueryClient } from '@tanstack/react-query'
 import { MediaChips, type Media } from '../components/MediaPicker'
 import { PlanPanel } from '../components/PlanPanel'
 import { SoundControl, soundAfterPick, type Sound } from '../components/SoundControl'
+import {
+  VoiceoverControl,
+  sameVoice,
+  voiceInput,
+  voiceStateFrom,
+  type VoiceState,
+} from '../components/VoiceoverControl'
 import { CommentsCard, ReviewPlayer, VerdictBar, clockTime, type Pin } from '../components/Review'
 import { CompositionPreview } from '../components/CompositionPreview'
 import { IconDots, IconDownload, IconExternalLink, IconLock, IconLockOpen } from '@tabler/icons-react'
@@ -356,6 +363,8 @@ export function VideoPage() {
   const [revMedia, setRevMedia] = useState<Media[]>([])
   // null keeps the sound of the version being revised.
   const [revSound, setRevSound] = useState<Sound | null>(null)
+  // null keeps the voice-over of the version being revised.
+  const [revVoice, setRevVoice] = useState<VoiceState | null>(null)
   const [revKey, setRevKey] = useState(newIdempotencyKey)
   const revMediaBody = revMedia.length ? { mediaIds: revMedia.map((m) => m.id) } : {}
   const prevStatus = useRef<string | null>(null)
@@ -366,6 +375,7 @@ export function VideoPage() {
   const select = (n: number) => {
     setSelected(n)
     setRevSound(null)
+    setRevVoice(null)
     setPicking(false)
     setPending(null)
   }
@@ -375,6 +385,7 @@ export function VideoPage() {
       setRevision('')
       setRevMedia([])
       setRevSound(null)
+      setRevVoice(null)
       setRevKey(newIdempotencyKey())
       setSelected(null)
       void qc.invalidateQueries()
@@ -459,6 +470,9 @@ export function VideoPage() {
   const canReview = me.data !== undefined && me.data.role !== 'viewer'
   const live = v.publications.find((p) => !p.unpublishedAt && p.urls)
   const showProgress = inProgress(latest.status) && (selected === null || selected === latest.n)
+  const sound = revSound ?? v.sound
+  const voice = revVoice ?? voiceStateFrom(v.voiceover)
+  const voiceChanged = revVoice !== null && !sameVoice(revVoice, voiceStateFrom(v.voiceover))
   const makeRevision = (planId?: string | null) => {
     revise.mutate({
       params: { path: { id }, header: { 'idempotency-key': revKey } },
@@ -468,10 +482,11 @@ export function VideoPage() {
         ...(planId ? { planId } : {}),
         ...revMediaBody,
         ...(revSound ? { sound: revSound } : {}),
+        // Sent only when changed. A plan carries a voice-over it was given; turning it off is always sent.
+        ...(voiceChanged && (!planId || !voice.enabled) ? { voiceover: voiceInput(voice) } : {}),
       },
     })
   }
-  const sound = revSound ?? v.sound
 
   const sub = inProgress(latest.status)
     ? `Making v${latest.n}${latest.parentN ? ` from v${latest.parentN}` : ''}. ${data.versions.some((x) => x.status === 'ready') ? 'Earlier versions are below.' : 'Usually ready in 3 to 8 minutes.'}`
@@ -771,6 +786,12 @@ export function VideoPage() {
                       setRevSound(s === v.sound ? null : s)
                     }}
                   />
+                  <VoiceoverControl
+                    value={voice}
+                    disabled={busy || v.status !== 'ready' || planningRevision}
+                    planning={canPlan}
+                    onChange={setRevVoice}
+                  />
                   <Group gap={0} className={canPlan ? 'va-split-button' : undefined}>
                     <Button
                       type="submit"
@@ -805,6 +826,7 @@ export function VideoPage() {
               revisionOf={{ videoId: id, version: v.n }}
               mediaIds={revMedia.map((m) => m.id)}
               sound={sound}
+              voiceover={voice.enabled ? voiceInput(voice) : undefined}
               creating={revise.isPending}
               onClose={() => {
                 setPlanningRevision(false)

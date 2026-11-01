@@ -7,6 +7,15 @@ export type Aspect = '16:9' | '9:16' | '1:1' | '4:5'
 /** What a run does with sound: nothing (the default), a music bed, or music plus effects on visible actions. */
 export const SOUNDS = ['silent', 'music', 'music_sfx'] as const
 export type VideoSound = (typeof SOUNDS)[number]
+/**
+ * A voice-over (SPIKES.md S9): the run speaks a narration line per beat with scripts/voice.ts. Null fields are left to
+ * the run: the default voice and speed, and a script the agent writes (or the plan's narration).
+ */
+export interface Voiceover {
+  voice: string | null
+  speed: number | null
+  script: string[] | null
+}
 
 export const ASPECTS: Record<Aspect, { width: number; height: number }> = {
   '16:9': { width: 1920, height: 1080 },
@@ -202,6 +211,8 @@ export interface VersionRow {
   frozen?: FrozenBundle | null
   /** Missing on rows written before sound existed: silent. */
   sound?: VideoSound
+  /** Null (or missing) when the version has no voice-over. */
+  voiceover?: Voiceover | null
 }
 
 export type VersionMode = 'author' | 'render_unchanged'
@@ -320,7 +331,7 @@ export interface PlanBrief {
   goal: string
   audience: string
   keyMessage: string
-  beats: { text: string; seconds: number }[]
+  beats: { text: string; seconds: number; narration?: string | undefined }[]
   tone: string
   callToAction: string
   mustInclude: string[]
@@ -345,6 +356,8 @@ export interface PlanRow {
   mediaIds: string[]
   /** The Sound chosen while planning, if any. */
   sound?: VideoSound | null
+  /** The voice-over chosen while planning, if any; the brief then gets narration per beat. */
+  voiceover?: Voiceover | null
   inputsHash: string
   route: PlanRoute | null
   questions: PlanQuestion[] | null

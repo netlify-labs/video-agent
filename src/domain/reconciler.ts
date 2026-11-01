@@ -266,6 +266,7 @@ async function startRequest(
     ),
     plan: version.plan ? { brief: version.plan.brief, qa: version.plan.qa } : null,
     sound: version.sound ?? 'silent',
+    voiceover: version.voiceover ?? null,
     brandMusic: contextMeta.music,
   })
   return result(prompt, revision?.sourceSha256 ?? null)

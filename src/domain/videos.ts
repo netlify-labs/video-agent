@@ -25,7 +25,9 @@ import {
   type Stage,
   type VersionRow,
   type VideoSound,
+  type Voiceover,
 } from './types.js'
+import { voiceoverFrom, withPlanNarration, type VoiceoverInput } from './voiceover.js'
 
 const IDEMPOTENCY_TTL_MS = 24 * 3600_000
 
@@ -38,6 +40,7 @@ export interface CreateVideoInput {
   planId?: string | undefined
   mediaIds?: string[] | undefined
   sound?: VideoSound | undefined
+  voiceover?: VoiceoverInput | undefined
 }
 
 export interface ReviseInput {
@@ -52,6 +55,8 @@ export interface ReviseInput {
   mediaIds?: string[] | undefined
   /** Omitted: the parent's sound, or music when a silent video gets a new audio pick. */
   sound?: VideoSound | undefined
+  /** Omitted: the plan's voice-over, else the parent's. */
+  voiceover?: VoiceoverInput | undefined
 }
 
 export const INCORPORATE_MAX_COMMENTS = 50
@@ -74,6 +79,7 @@ async function consumePlan(
   durationSec: number | null
   mediaIds: string[]
   sound: VideoSound | null
+  voiceover: Voiceover | null
 }> {
   const plan = await repo.getPlan(planId, { lock: true })
   if (!plan || plan.userId !== principal.userId) throw new ApiError('not_found', 'Plan not found.')
@@ -108,6 +114,7 @@ async function consumePlan(
     durationSec: plan.durationSec ?? (seconds > 0 ? Math.round(seconds) : null),
     mediaIds: plan.mediaIds,
     sound: plan.sound ?? null,
+    voiceover: withPlanNarration(plan.voiceover ?? null, plan.brief),
   }
 }
 
@@ -281,6 +288,7 @@ export async function createVideo(
         plan: planned?.frozen ?? null,
         // A picked audio item means music unless the person chose otherwise.
         sound: input.sound ?? planned?.sound ?? (media.some((m) => m.kind === 'audio') ? 'music' : 'silent'),
+        voiceover: input.voiceover ? voiceoverFrom(input.voiceover) : (planned?.voiceover ?? null),
       })
       await repo.insertAttempt(newAttempt(deps, jobId, 1, now))
       return { status: 202, body: await videoDto(repo, deps, jobId, principal) }
@@ -378,6 +386,10 @@ export async function reviseVideo(
         plan: planned?.frozen ?? null,
         sound:
           input.sound ?? planned?.sound ?? (parentSound === 'silent' && newAudio ? 'music' : parentSound),
+        // A plan without a voice-over choice keeps the parent's; turning it off is an explicit enabled: false.
+        voiceover: input.voiceover
+          ? voiceoverFrom(input.voiceover)
+          : (planned?.voiceover ?? parent.voiceover ?? null),
       })
       await repo.insertVersionComments(feedback)
       await repo.insertVersionMedia(media)
@@ -702,6 +714,7 @@ function versionDto(
     parentN: v.parentN,
     targetDurationSec: v.targetDurationSec,
     sound: v.sound ?? 'silent',
+    voiceover: v.voiceover ?? null,
     createdAt: v.createdAt,
     attempts: attemptsCount,
     stage: a?.stage ?? null,

@@ -10,6 +10,8 @@ run, these rules apply on top of your prompt.
 - Write `video/summary.json`: `{ "title", "summary", "captions": [{ "start", "end", "text" }] }`, one caption cue per piece of on-screen text, in seconds.
 - When your prompt says so, run `scripts/prepare-run.ts` first, exactly as written. If it fails, stop.
 - Keep the editing contract ("Editing contract v1" in `video/AGENTS.md`); check it with `scripts/check-contract.ts`.
+- When your prompt asks for a voice-over, speak it with `scripts/voice.ts` and sync it with `scripts/voice.ts sync`
+  ("Voice-over" in `video/AGENTS.md`). Never use another text-to-speech tool.
 - Post milestones with `scripts/checkpoint.ts` as your prompt describes. It's best effort: never retry it or wait for it.
 - Render, upload and report with `scripts/render-job.ts`, exactly as your prompt says. If it fails, fix the composition and run it again.
 - End your answer with the fenced json block that render-job prints.

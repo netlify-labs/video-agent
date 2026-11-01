@@ -305,6 +305,7 @@ export async function renderEdit(deps: Deps, p: Principal, id: string, idemKey?:
       const key = `${e.jobId}/v${n}/frozen.tar.gz`
       await deps.blobs.set('sources', key, archive, { contentType: 'application/gzip' })
       const now = deps.clock.now().toISOString()
+      const base = await repo.getVersion(e.jobId, e.baseN)
       await repo.insertVersion({
         jobId: e.jobId,
         n,
@@ -320,8 +321,9 @@ export async function renderEdit(deps: Deps, p: Principal, id: string, idemKey?:
         mode: 'render_unchanged',
         editedFromN: e.baseN,
         frozen: { key, sha256: sha256Hex(archive), manifestHash: manifest, editId: e.id },
-        // The composition (and any audio in it) is the base's, so its sound is too.
-        sound: (await repo.getVersion(e.jobId, e.baseN))?.sound ?? 'silent',
+        // The composition (and any audio in it) is the base's, so its sound and voice-over are too.
+        sound: base?.sound ?? 'silent',
+        voiceover: base?.voiceover ?? null,
       })
       await repo.insertVersionMedia(
         await snapshotMedia(repo, e.jobId, n, r.picks, await repo.listVersionMedia(e.jobId, e.baseN)),
