@@ -160,3 +160,16 @@ Findings that shaped contract v1 (`src/lib/contract.ts`, the validator and patch
 - Times are frame-quantized (30 fps) and written with six decimals.
 - Quality: the contract trades range for editability (beats sit back to back on one track; transitions belong to a
   beat, not between beats). A rendered-unchanged run with the canonical manifest is verified by the live editor e2e.
+
+### S4: cost and time of a render-unchanged run (2026-11-01, `scripts/e2e/editor.ts` on production)
+
+| Composition | Total (queued → ready) | Run | Finalize | Credits | MP4 |
+| --- | --- | --- | --- | --- | --- |
+| 16 s (retime + text + reorder) | 143 s | 133 s | 5 s | 34.4 | 16.0 s |
+| 60 s (every beat stretched) | 187 s | 178 s | 5 s | 33.6 | 60.0 s |
+
+For comparison, an authoring run on the same video took 4-5 minutes and 240-250 credits. Render-unchanged cost is
+flat (the agent only restores, checks and renders; most credits are the run's fixed overhead) and time grows by
+about 1 s per extra second of video. The hash-mismatch stop is covered by `test/run-manifest.test.ts` (prepare-run)
+and render-job's re-check; the live stop path was seen when a palette colour failed `hyperframes check` contrast:
+the run stopped without rendering or editing, as designed.
