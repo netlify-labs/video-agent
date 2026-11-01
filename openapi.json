@@ -1938,116 +1938,10 @@
             }
           },
           "composition": {
-            "type": "object",
-            "properties": {
-              "duration": {
-                "type": "number"
-              },
-              "colors": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
-              },
-              "beats": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "start": {
-                      "type": "number"
-                    },
-                    "duration": {
-                      "type": "number"
-                    },
-                    "authoredDuration": {
-                      "type": "number"
-                    },
-                    "texts": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string"
-                          },
-                          "text": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "text"
-                        ]
-                      }
-                    },
-                    "media": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "slot": {
-                            "type": "string"
-                          },
-                          "kind": {
-                            "type": "string",
-                            "enum": [
-                              "image",
-                              "video"
-                            ]
-                          },
-                          "src": {
-                            "type": "string"
-                          },
-                          "beat": {
-                            "type": [
-                              "string",
-                              "null"
-                            ]
-                          },
-                          "fit": {
-                            "type": [
-                              "string",
-                              "null"
-                            ]
-                          }
-                        },
-                        "required": [
-                          "slot",
-                          "kind",
-                          "src",
-                          "beat",
-                          "fit"
-                        ]
-                      }
-                    }
-                  },
-                  "required": [
-                    "id",
-                    "start",
-                    "duration",
-                    "authoredDuration",
-                    "texts",
-                    "media"
-                  ]
-                }
-              },
-              "layers": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              }
-            },
-            "required": [
-              "duration",
-              "colors",
-              "beats",
-              "layers"
-            ]
+            "$ref": "#/components/schemas/Composition"
+          },
+          "base": {
+            "$ref": "#/components/schemas/Composition"
           },
           "palette": {
             "type": "array",
@@ -2079,10 +1973,123 @@
           "rev",
           "ops",
           "composition",
+          "base",
           "palette",
           "expiresAt",
           "renderedN",
           "newerVersion"
+        ]
+      },
+      "Composition": {
+        "type": "object",
+        "properties": {
+          "duration": {
+            "type": "number"
+          },
+          "colors": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "beats": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "start": {
+                  "type": "number"
+                },
+                "duration": {
+                  "type": "number"
+                },
+                "authoredDuration": {
+                  "type": "number"
+                },
+                "texts": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "text": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "text"
+                    ]
+                  }
+                },
+                "media": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "slot": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "image",
+                          "video"
+                        ]
+                      },
+                      "src": {
+                        "type": "string"
+                      },
+                      "beat": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "fit": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "slot",
+                      "kind",
+                      "src",
+                      "beat",
+                      "fit"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "start",
+                "duration",
+                "authoredDuration",
+                "texts",
+                "media"
+              ]
+            }
+          },
+          "layers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "duration",
+          "colors",
+          "beats",
+          "layers"
         ]
       },
       "SaveEdit": {

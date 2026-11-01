@@ -331,6 +331,32 @@ const EditOpSchema = z.discriminatedUnion('op', [
     fit: z.enum(['cover', 'contain']),
   }),
 ])
+const CompositionSchema = z
+  .object({
+    duration: z.number(),
+    colors: z.record(z.string(), z.string()),
+    beats: z.array(
+      z.object({
+        id: z.string(),
+        start: z.number(),
+        duration: z.number(),
+        authoredDuration: z.number(),
+        texts: z.array(z.object({ id: z.string(), text: z.string() })),
+        media: z.array(
+          z.object({
+            slot: z.string(),
+            kind: z.enum(['image', 'video']),
+            src: z.string(),
+            beat: z.string().nullable(),
+            fit: z.string().nullable(),
+          }),
+        ),
+      }),
+    ),
+    layers: z.array(z.string()),
+  })
+  .openapi('Composition')
+
 export const EditSchema = z
   .object({
     id: z.string(),
@@ -338,29 +364,8 @@ export const EditSchema = z
     baseN: z.number().int(),
     rev: z.number().int(),
     ops: z.array(EditOpSchema),
-    composition: z.object({
-      duration: z.number(),
-      colors: z.record(z.string(), z.string()),
-      beats: z.array(
-        z.object({
-          id: z.string(),
-          start: z.number(),
-          duration: z.number(),
-          authoredDuration: z.number(),
-          texts: z.array(z.object({ id: z.string(), text: z.string() })),
-          media: z.array(
-            z.object({
-              slot: z.string(),
-              kind: z.enum(['image', 'video']),
-              src: z.string(),
-              beat: z.string().nullable(),
-              fit: z.string().nullable(),
-            }),
-          ),
-        }),
-      ),
-      layers: z.array(z.string()),
-    }),
+    composition: CompositionSchema,
+    base: CompositionSchema,
     palette: z.array(z.string()),
     expiresAt: z.string(),
     renderedN: z.number().int().nullable(),

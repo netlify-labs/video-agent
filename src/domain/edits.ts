@@ -56,6 +56,7 @@ async function computeRev(deps: Deps, e: Pick<EditRow, 'jobId' | 'baseN'>, ops: 
   const summary = JSON.parse(text(files.get('summary.json')) || '{}') as Summary
   const base = applyEdits(html, summary, [], {})
   const palette = paletteOf(base.composition.colors)
+  const baseComposition = base.composition
   let out
   try {
     out = applyEdits(html, summary, ops, { palette })
@@ -73,6 +74,7 @@ async function computeRev(deps: Deps, e: Pick<EditRow, 'jobId' | 'baseN'>, ops: 
     files,
     list,
     composition: out.composition,
+    base: baseComposition,
     palette,
     bundleSha256: manifestHash(
       list.map(({ path, sha256 }) => ({ path, sha256 })),
@@ -116,6 +118,8 @@ async function editDto(deps: Deps, e: EditRow, built?: Rev) {
     rev: e.rev,
     ops: e.ops as EditOp[],
     composition: b.composition,
+    // The version as it was: the editor diffs against it to build the op list.
+    base: b.base,
     palette: b.palette,
     expiresAt: e.expiresAt,
     renderedN: e.renderedN,

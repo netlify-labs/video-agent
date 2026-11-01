@@ -1,5 +1,8 @@
 // Mock mode: answers /api/* from mock/data.ts by replacing window.fetch. Loaded only when VITE_MOCK=1.
 import spec from '../../../openapi.json'
+import { applyEdits, type EditOp } from '../../../src/lib/contract'
+import contractHtml from '../../../test/fixtures/contract1/index.html?raw'
+import contractSummary from '../../../test/fixtures/contract1/summary.json'
 import { ASSETS, people, stats, videos } from './data'
 
 const json = (body: unknown, status = 200) =>
@@ -277,6 +280,62 @@ export function installMock() {
             : null,
       })
     }
+    // Editor (plan v2 §8): drafts run on the real patcher over the spike S8 fixture. window.__lastEditOps records saves.
+    const ed = /^\/api\/v1\/videos\/([^/]+)\/versions\/(\d+)\/edits$/.exec(p)
+    const edit = /^\/api\/v1\/edits\/([^/]+)(\/render|\/preview)?$/.exec(p)
+    if (ed?.[1] && method === 'POST') {
+      mockEdit = mockEdit ?? newMockEdit(ed[1], Number(ed[2]))
+      return json(mockEdit, mockEdit.rev === 0 ? 201 : 200)
+    }
+    if (edit?.[1] && mockEdit && edit[1] === mockEdit.id) {
+      if (edit[2] === '/preview')
+        return json({
+          url: `${window.location.origin}/mock-preview/contract.html?draft=${mockEdit.rev}`,
+          expiresAt: new Date(Date.now() + 600_000).toISOString(),
+          seq: mockEdit.rev,
+        })
+      if (edit[2] === '/render') {
+        const vid = videos.find((x) => x.id === mockEdit?.videoId)
+        const w = window as unknown as { __rendered?: number }
+        w.__rendered = (w.__rendered ?? 0) + 1
+        if (!vid) return json({ error: { code: 'not_found', message: 'Video not found.' } }, 404)
+        return json({ ...withComments(vid), latestVersion: vid.versions.length + 1 }, 202)
+      }
+      if (method === 'DELETE') {
+        mockEdit = null
+        return new Response(null, { status: 204 })
+      }
+      if (method === 'PUT') {
+        const b = (await readBody(init, input)) as { rev: number; ops: EditOp[] }
+        ;(window as unknown as { __lastEditOps?: unknown }).__lastEditOps = b.ops
+        if (b.rev !== mockEdit.rev)
+          return json(
+            {
+              error: {
+                code: 'conflict',
+                message: 'This draft changed in another tab. Reload it to continue.',
+              },
+            },
+            409,
+          )
+        try {
+          const out = applyEdits(contractHtml, contractSummary, b.ops, { palette: mockPalette })
+          mockEdit = { ...mockEdit, rev: mockEdit.rev + 1, ops: b.ops, composition: out.composition }
+          return json(mockEdit)
+        } catch (e) {
+          return json(
+            {
+              error: {
+                code: 'invalid_request',
+                message: `That edit can't be made: ${(e as Error).message}`,
+              },
+            },
+            400,
+          )
+        }
+      }
+      return json(mockEdit)
+    }
     // Composition preview links (plan v2 §7): a stand-in page with the bridge protocol. Short-lived, so the renewal
     // path runs in tests; window.__previewLinks counts how many were minted.
     if (/^\/api\/v1\/videos\/[^/]+\/versions\/\d+\/preview$/.test(p)) {
@@ -430,5 +489,25 @@ function mockPlan(stage: 'route' | 'questions' | 'brief' = 'route') {
         : null,
     briefRev: stage === 'brief' ? 1 : 0,
     expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+  }
+}
+
+const mockPalette = ['#0b0d10', '#f4f5f7', '#9aa3ad', '#14b8a6', '#ff5a1f']
+type MockEdit = ReturnType<typeof newMockEdit>
+let mockEdit: MockEdit | null = null
+function newMockEdit(videoId: string, baseN: number) {
+  const base = applyEdits(contractHtml, contractSummary, []).composition
+  return {
+    id: '00000000-0000-4000-8000-00000000ed17',
+    videoId,
+    baseN,
+    rev: 0,
+    ops: [] as EditOp[],
+    composition: base,
+    base,
+    palette: mockPalette,
+    expiresAt: new Date(Date.now() + 7 * 86400_000).toISOString(),
+    renderedN: null,
+    newerVersion: null,
   }
 }

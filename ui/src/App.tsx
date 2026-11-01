@@ -11,6 +11,7 @@ import { NewVideoPage } from './pages/NewVideo'
 import { SetupPage } from './pages/Setup'
 import { AuthPages } from './pages/SignIn'
 import { VideoPage } from './pages/Video'
+import { EditPage } from './pages/Edit'
 
 // The API reference is large; load it only when someone opens it.
 const DocsPage = lazy(() => import('./pages/Docs'))
@@ -40,6 +41,7 @@ export function App() {
         <Route index element={<LibraryPage />} />
         <Route path="/new" element={<NewVideoPage />} />
         <Route path="/videos/:id" element={<VideoPage />} />
+        <Route path="/videos/:id/edit/:n" element={<EditPage />} />
         <Route path="/keys" element={<KeysPage />} />
         <Route path="/admin" element={<AdminPage />} />
         <Route path="/setup" element={<SetupPage />} />

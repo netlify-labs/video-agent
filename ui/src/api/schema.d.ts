@@ -4620,36 +4620,38 @@ export interface components {
                 /** @enum {string} */
                 fit: "cover" | "contain";
             })[];
-            composition: {
-                duration: number;
-                colors: {
-                    [key: string]: string;
-                };
-                beats: {
-                    id: string;
-                    start: number;
-                    duration: number;
-                    authoredDuration: number;
-                    texts: {
-                        id: string;
-                        text: string;
-                    }[];
-                    media: {
-                        slot: string;
-                        /** @enum {string} */
-                        kind: "image" | "video";
-                        src: string;
-                        beat: string | null;
-                        fit: string | null;
-                    }[];
-                }[];
-                layers: string[];
-            };
+            composition: components["schemas"]["Composition"];
+            base: components["schemas"]["Composition"];
             palette: string[];
             expiresAt: string;
             renderedN: number | null;
             /** @description A newer version exists: start from it, or render this draft as the next version */
             newerVersion: number | null;
+        };
+        Composition: {
+            duration: number;
+            colors: {
+                [key: string]: string;
+            };
+            beats: {
+                id: string;
+                start: number;
+                duration: number;
+                authoredDuration: number;
+                texts: {
+                    id: string;
+                    text: string;
+                }[];
+                media: {
+                    slot: string;
+                    /** @enum {string} */
+                    kind: "image" | "video";
+                    src: string;
+                    beat: string | null;
+                    fit: string | null;
+                }[];
+            }[];
+            layers: string[];
         };
         SaveEdit: {
             ops: ({

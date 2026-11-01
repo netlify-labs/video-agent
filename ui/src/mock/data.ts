@@ -40,6 +40,7 @@ function ready(
     parent?: number
     target?: number | null
     pub?: string
+    editable?: boolean
   },
 ): V {
   const startedAt = ago(o.at)
@@ -55,7 +56,7 @@ function ready(
 
     verdicts: { approved: 0, changesRequested: 0, mine: null },
     incorporates: 0,
-    editable: false,
+    editable: o.editable ?? false,
     mode: 'author',
     editedFromN: null,
 
@@ -224,6 +225,7 @@ export const videos: Video[] = [
       parent: 1,
       target: 8,
       pub: 'q4czcinsu9',
+      editable: true,
       summary:
         'An 8-second, calm product teaser on a dark background. "Ship faster" fades in with a teal accent line, then "with preview deploys", and the film ends on a card that reads "Start free today".',
     }),

@@ -1,4 +1,4 @@
-/* global window, document, parent, location, URLSearchParams, requestAnimationFrame, innerWidth, innerHeight, setTimeout */
+/* global window, document, parent, location, URLSearchParams, requestAnimationFrame, innerWidth, innerHeight, setTimeout, CSS */
 // Message bridge for the sandboxed composition preview (plan v2 §7). Injected last into the composition document
 // by the /preview edge function. Talks only to its parent, only on its channel (from the URL fragment), and only in
 // the shapes the app accepts: ready, time, click{x,y,textId}, error, edits-applied. Takes play, pause, seek and
@@ -31,7 +31,11 @@
     else if (m.type === 'apply-edits' && Array.isArray(m.edits)) {
       let applied = 0
       for (const ed of m.edits.slice(0, 500)) {
-        const el = ed && typeof ed.id === 'string' ? document.getElementById(ed.id) : null
+        const el =
+          ed && typeof ed.id === 'string'
+            ? document.querySelector('[data-va-text="' + CSS.escape(ed.id) + '"]') ||
+              document.getElementById(ed.id)
+            : null
         if (el && typeof ed.text === 'string') {
           el.textContent = ed.text // text nodes only, never HTML
           applied++
@@ -43,12 +47,15 @@
   document.addEventListener(
     'click',
     (ev) => {
-      const el = ev.target && ev.target.closest ? ev.target.closest('[id]') : null
+      // Contract text is keyed by data-va-text (plan v2 §8); anything else reports its element id.
+      const t = ev.target && ev.target.closest ? ev.target.closest('[data-va-text]') : null
+      const el = t || (ev.target && ev.target.closest ? ev.target.closest('[id]') : null)
+      const key = t ? t.getAttribute('data-va-text') : el ? el.id : null
       post({
         type: 'click',
         x: Math.min(1, Math.max(0, ev.clientX / innerWidth)),
         y: Math.min(1, Math.max(0, ev.clientY / innerHeight)),
-        textId: el ? String(el.id).slice(0, 200) : null,
+        textId: key ? String(key).slice(0, 200) : null,
       })
     },
     true,

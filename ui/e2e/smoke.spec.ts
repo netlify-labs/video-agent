@@ -305,3 +305,66 @@ test('a running version shows the agent’s latest composition snapshot, refresh
     .poll(() => snap.getByTestId('composition-preview').getAttribute('src'), { timeout: 15_000 })
     .not.toBe(first)
 })
+
+// Editor (plan v2 §8)
+const lastOps = (page: import('@playwright/test').Page) =>
+  page.evaluate<unknown[]>('window.__lastEditOps ?? []')
+
+test('Edit opens the editor for an editable version; others say to revise instead', async ({ page }) => {
+  await page.goto('/videos/vid_webhooks')
+  await expect(page.getByRole('button', { name: 'Edit', exact: true })).toBeDisabled()
+  await page.goto('/videos/vid_teaser')
+  await page.getByRole('button', { name: 'Edit', exact: true }).click()
+  await expect(page).toHaveURL(/\/videos\/vid_teaser\/edit\/2$/)
+  await expect(page.getByRole('heading', { name: 'Edit v2' })).toBeVisible()
+  for (const b of ['intro', 'demo', 'outro']) await expect(page.getByTestId(`beat-${b}`)).toBeVisible()
+  await expect(page.getByTestId('edit-status')).toContainText('9 s · 3 beats · No changes yet')
+})
+
+test('editing text, timing, order and colour saves the matching ops; render makes the next version', async ({
+  page,
+}) => {
+  await page.goto('/videos/vid_teaser/edit/2')
+  await page.getByRole('textbox', { name: 'Length of intro' }).fill('4.5')
+  await expect(page.getByTestId('edit-status')).toContainText('Draft saved')
+  await expect(page.getByTestId('edit-status')).toContainText('10.5 s')
+  expect(await lastOps(page)).toEqual([{ op: 'retime', beat: 'intro', duration: 4.5 }])
+  await page.getByRole('textbox', { name: 'outro-cta' }).fill('Start free today')
+  await page.getByRole('button', { name: 'Move outro earlier' }).click()
+  await page.getByRole('button', { name: 'Colour for accent' }).click()
+  await page.getByRole('menuitem', { name: '#ff5a1f' }).click()
+  await expect
+    .poll(() => lastOps(page), { timeout: 5000 })
+    .toEqual([
+      { op: 'reorder', order: ['intro', 'outro', 'demo'] },
+      { op: 'retime', beat: 'intro', duration: 4.5 },
+      { op: 'text', id: 'outro-cta', text: 'Start free today' },
+      { op: 'color', role: 'accent', value: '#ff5a1f' },
+    ])
+  await expect(page.getByTestId('edit-status')).toContainText('Draft saved')
+  await page.getByRole('button', { name: 'Render as v3' }).click()
+  await expect(page).toHaveURL(/\/videos\/vid_teaser$/)
+  expect(await page.evaluate<number>('window.__rendered ?? 0')).toBe(1)
+})
+
+test('deleting beats stops at the last one', async ({ page }) => {
+  await page.goto('/videos/vid_teaser/edit/2')
+  await page.getByRole('button', { name: 'Delete demo' }).click()
+  await page.getByRole('button', { name: 'Delete outro' }).click()
+  await expect(page.getByRole('button', { name: 'Delete intro' })).toBeDisabled()
+  await expect
+    .poll(() => lastOps(page), { timeout: 5000 })
+    .toEqual([
+      { op: 'delete', beat: 'demo' },
+      { op: 'delete', beat: 'outro' },
+    ])
+})
+
+test('clicking text in the preview focuses its field', async ({ page }) => {
+  await page.goto('/videos/vid_teaser/edit/2')
+  const frame = page.frameLocator('[data-testid="composition-preview"]')
+  await expect(page.getByRole('button', { name: 'Play preview' })).toBeEnabled()
+  // Dispatched to the element: the frame is CSS-scaled, which throws off pointer coordinates in tests.
+  await frame.locator('[data-va-text="outro-cta"]').dispatchEvent('click')
+  await expect(page.getByRole('textbox', { name: 'outro-cta' })).toBeFocused()
+})

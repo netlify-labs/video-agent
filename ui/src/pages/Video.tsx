@@ -15,6 +15,7 @@ import {
   TextInput,
   Textarea,
   Title,
+  Tooltip,
 } from '@mantine/core'
 import { modals } from '@mantine/modals'
 import { notifications } from '@mantine/notifications'
@@ -491,6 +492,22 @@ export function VideoPage() {
           <div className="va-sub num">{sub}</div>
         </div>
         <Group gap="sm">
+          {v.status === 'ready' && canCreate ? (
+            <Tooltip
+              label="This version can't be edited in the browser. Ask for a revision instead."
+              disabled={v.editable}
+            >
+              <Button
+                variant="default"
+                disabled={!v.editable}
+                onClick={() => {
+                  void navigate(`/videos/${data.id}/edit/${v.n}`)
+                }}
+              >
+                Edit
+              </Button>
+            </Tooltip>
+          ) : null}
           {v.status === 'ready' ? (
             <Button
               component="a"

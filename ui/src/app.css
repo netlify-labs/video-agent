@@ -634,3 +634,10 @@ body {
   border: 0;
   display: block;
 }
+
+/* Editor */
+.va-beat {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--va-raised);
+}
