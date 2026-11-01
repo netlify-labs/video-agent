@@ -16,8 +16,16 @@ export interface RunManifest {
   kind: RunKind
   /** The parent version's source archive (revisions). */
   source: { key: string; sha256: string; parentN: number } | null
-  /** A version-owned frozen bundle (render-unchanged runs): archive hash plus the canonical file manifest hash. */
-  bundle: { key: string; sha256: string; manifestHash: string } | null
+  /**
+   * A version-owned frozen bundle (render-unchanged runs): archive hash plus the canonical file manifest hash. With
+   * `revoice`, the run re-speaks those beats' lines and every other file must still match `keptHash` (src/lib/revoice.ts).
+   */
+  bundle: {
+    key: string
+    sha256: string
+    manifestHash: string
+    revoice?: { beats: string[]; keptHash: string } | undefined
+  } | null
   /** Library media to download into video/assets/media/ (plan v2 §9, §14 rule 27). */
   media: RunMedia[] | null
   /** Incorporate-feedback runs: the parent MP4 and the pinned comments to make stills of (plan v2 §5). */
@@ -61,7 +69,15 @@ export function serializeRunManifest(m: RunManifest): string {
     versionN: m.versionN,
     kind: m.kind,
     source: m.source && { key: m.source.key, sha256: m.source.sha256, parentN: m.source.parentN },
-    bundle: m.bundle && { key: m.bundle.key, sha256: m.bundle.sha256, manifestHash: m.bundle.manifestHash },
+    bundle: m.bundle && {
+      key: m.bundle.key,
+      sha256: m.bundle.sha256,
+      manifestHash: m.bundle.manifestHash,
+      // Only when there are lines to re-voice, so every other manifest keeps its bytes.
+      ...(m.bundle.revoice
+        ? { revoice: { beats: [...m.bundle.revoice.beats], keptHash: m.bundle.revoice.keptHash } }
+        : {}),
+    },
     media:
       m.media && m.media.map((x) => ({ key: x.key, sha256: x.sha256, filename: x.filename, kind: x.kind })),
     feedback: m.feedback && {
@@ -96,6 +112,17 @@ export function verifyRunManifest(raw: string, expected: { attemptId: string; sh
     throw new Error('The run manifest has a bad source entry.')
   if (m.bundle && (!own(m.bundle.key) || !HEX.test(m.bundle.sha256) || !HEX.test(m.bundle.manifestHash)))
     throw new Error('The run manifest has a bad bundle entry.')
+  const rv = m.bundle?.revoice
+  if (
+    rv !== undefined &&
+    (!rv ||
+      !HEX.test(rv.keptHash) ||
+      !Array.isArray(rv.beats) ||
+      rv.beats.length === 0 ||
+      rv.beats.length > 100 ||
+      !rv.beats.every((b) => typeof b === 'string' && /^[a-z0-9][a-z0-9-]{0,40}$/.test(b)))
+  )
+    throw new Error('The run manifest has a bad re-voice entry.')
   if (m.media) {
     if (!Array.isArray(m.media) || m.media.length > 50) throw new Error('The run manifest has bad media.')
     for (const x of m.media)

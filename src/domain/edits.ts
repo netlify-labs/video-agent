@@ -4,6 +4,8 @@
 import type { Deps } from '../deps.js'
 import { excluded, manifestHash } from '../lib/bundle-manifest.js'
 import { applyEdits, ContractError, type EditOp, type Summary } from '../lib/contract.js'
+import { keptHash } from '../lib/revoice.js'
+import { VOICE_JSON, VOICE_SCRIPT, type VoiceFile, type VoiceScript } from '../lib/voice.js'
 import { signPath, sha256Hex } from '../lib/crypto.js'
 import { ApiError } from '../lib/errors.js'
 import { writeTarGz } from '../lib/tar.js'
@@ -49,6 +51,13 @@ async function readEntry(deps: Deps, f: BundleEntry) {
 }
 
 const text = (b: Uint8Array | undefined) => (b ? new TextDecoder().decode(b) : '')
+function parseJson<T>(raw: string): T | null {
+  try {
+    return raw ? (JSON.parse(raw) as T) : null
+  } catch {
+    return null
+  }
+}
 
 /** Colours a role may take: the ones the composition already uses, plus the brand's primary colour. */
 export function paletteOf(colors: Record<string, string>) {
@@ -74,12 +83,17 @@ async function computeRev(deps: Deps, e: Pick<EditRow, 'jobId' | 'baseN'>, ops: 
   }
   const html = await read('index.html')
   const summary = JSON.parse((await read('summary.json')) || '{}') as Summary
-  const base = applyEdits(html, summary, [], {})
+  // Each voiced beat's line as it was spoken, which voice ops change and the editor shows.
+  const voice = parseJson<VoiceFile>(await read(VOICE_JSON))
+  const narration = voice?.beats.length
+    ? Object.fromEntries(voice.beats.map((b) => [b.beat, b.text]))
+    : undefined
+  const base = applyEdits(html, summary, [], { ...(narration ? { narration } : {}) })
   const palette = paletteOf(base.composition.colors)
   const baseComposition = base.composition
   let out
   try {
-    out = applyEdits(html, summary, ops, { palette })
+    out = applyEdits(html, summary, ops, { palette, ...(narration ? { narration } : {}) })
   } catch (err) {
     if (err instanceof ContractError)
       throw new ApiError('invalid_request', `That edit can't be made: ${err.violations.join(' ')}`, {
@@ -91,6 +105,23 @@ async function computeRev(deps: Deps, e: Pick<EditRow, 'jobId' | 'baseN'>, ops: 
     ['index.html', new TextEncoder().encode(out.html)],
     ['summary.json', new TextEncoder().encode(JSON.stringify(out.summary, null, 2))],
   ])
+  // Changed lines go into the voice script, where the render run's scripts/voice.ts revoice reads them.
+  const revoiced = out.composition.narration.filter((n) => n.revoice)
+  if (voice && revoiced.length) {
+    const was = parseJson<VoiceScript>(await read(VOICE_SCRIPT))
+    const lines = was?.lines?.length
+      ? was.lines.map((l) => ({ ...l }))
+      : voice.beats.map((b) => ({ beat: b.beat, text: b.text }))
+    for (const n of revoiced) {
+      const line = lines.find((l) => l.beat === n.beat)
+      if (line) line.text = n.text
+      else lines.push({ beat: n.beat, text: n.text })
+    }
+    const script: VoiceScript = was?.lines?.length
+      ? { ...was, lines }
+      : { voice: voice.voice, speed: voice.speed, lines }
+    changed.set(VOICE_SCRIPT, new TextEncoder().encode(JSON.stringify(script, null, 2)))
+  }
   for (const [path, bytes] of changed)
     entries.set(path, { path, size: bytes.byteLength, sha256: sha256Hex(bytes) })
   // Media and music swapped in from the library (plan v2 §8): ready items only, of the slot's (or audio's) kind,
@@ -307,6 +338,17 @@ export async function renderEdit(deps: Deps, p: Principal, id: string, idemKey?:
         r.list.filter((f) => !excluded(f.path)).map(({ path, sha256 }) => ({ path, sha256 })),
         [],
       )
+      // Lines to re-voice in the run; every file but the ones re-voicing writes must come out as frozen.
+      const beats = r.composition.narration.filter((l) => l.revoice).map((l) => l.beat)
+      const revoice = beats.length
+        ? {
+            beats,
+            keptHash: keptHash(
+              r.list.map(({ path, sha256 }) => ({ path, sha256 })),
+              beats,
+            ),
+          }
+        : null
       // Media stays by reference: the run downloads it from the version's snapshot.
       const files = new Map(r.changed)
       for (const f of r.list)
@@ -322,7 +364,8 @@ export async function renderEdit(deps: Deps, p: Principal, id: string, idemKey?:
         prompt: `Edited from v${e.baseN} in the browser.`,
         authorId: p.userId,
         apiKeyId: p.apiKeyId,
-        targetDurationSec: r.composition.duration,
+        // A re-voiced line may lengthen its beat, so the length is only known once the run has spoken it.
+        targetDurationSec: revoice ? null : r.composition.duration,
         parentN: e.baseN,
         webhookUrl: null,
         status: 'queued',
@@ -330,7 +373,13 @@ export async function renderEdit(deps: Deps, p: Principal, id: string, idemKey?:
         plan: null,
         mode: 'render_unchanged',
         editedFromN: e.baseN,
-        frozen: { key, sha256: sha256Hex(archive), manifestHash: manifest, editId: e.id },
+        frozen: {
+          key,
+          sha256: sha256Hex(archive),
+          manifestHash: manifest,
+          editId: e.id,
+          ...(revoice ? { revoice } : {}),
+        },
         // The composition (and any audio in it) is the base's, so its sound and voice-over are too.
         sound: base?.sound ?? 'silent',
         voiceover: base?.voiceover ?? null,

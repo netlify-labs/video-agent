@@ -224,6 +224,13 @@ export interface FrozenBundle {
   /** Canonical file manifest hash (src/lib/bundle-manifest.ts) prepare-run and render-job verify. */
   manifestHash: string
   editId: string
+  /** Narration lines the run re-voices (scripts/voice.ts revoice), and the hash of every file that must not change. */
+  revoice?: RevoicePlan
+}
+
+export interface RevoicePlan {
+  beats: string[]
+  keptHash: string
 }
 
 export interface FrozenPlan {

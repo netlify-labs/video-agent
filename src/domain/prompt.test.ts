@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { buildPrompt, sanitizeBrief } from './prompt.js'
+import { buildPrompt, buildRenderUnchangedPrompt, sanitizeBrief } from './prompt.js'
 
 const base = {
   jobId: 'vid_1',
@@ -119,5 +119,46 @@ describe('buildPrompt sound', () => {
     expect(p).toContain(
       '<<<\n[{"file":"assets/media/med_2.mp3","caption":"Upbeat > > > bed","seconds":95.5}]\n>>>',
     )
+  })
+})
+
+describe('buildRenderUnchangedPrompt', () => {
+  const ru = {
+    jobId: 'vid_1',
+    attemptId: 'att_1',
+    versionN: 3,
+    editedFromN: 2,
+    runManifestSha256: 'b'.repeat(64),
+    callbackUrl: 'https://x/done',
+    checkpointUrl: 'https://x/cp',
+    callbackToken: 'tok',
+    upload: { mode: 'blobs' as const },
+  }
+
+  it('without lines to re-voice, changes nothing and never mentions voice.ts', () => {
+    const p = buildRenderUnchangedPrompt(ru)
+    expect(buildRenderUnchangedPrompt({ ...ru, revoice: [] })).toBe(p)
+    expect(p).toContain("Don't write, change or delete any file in video/. There is nothing to design")
+    expect(p).not.toContain('voice.ts')
+  })
+
+  it('with lines to re-voice, runs voice.ts revoice between restore and check, and keeps everything else strict', () => {
+    const p = buildRenderUnchangedPrompt({ ...ru, revoice: ['intro', 'outro'] })
+    expect(p).toContain('with 2 narration lines to re-voice (beats "intro", "outro")')
+    expect(p).toContain(
+      "Don't write, change or delete any file in video/ yourself. There is nothing to design: only restore, re-voice, check and render. Only scripts/voice.ts revoice may change files, and only the ones it writes.",
+    )
+    const steps = [
+      '1. Run: npx tsx scripts/prepare-run.ts',
+      '2. Run from the repo root: npx tsx scripts/voice.ts revoice',
+      '3. Run `npx hyperframes check`',
+      '4. Run: npx tsx scripts/render-job.ts',
+    ]
+    const at = steps.map((s) => p.indexOf(s))
+    expect(at.every((i) => i >= 0)).toBe(true)
+    expect([...at].sort((a, b) => a - b)).toEqual(at)
+    expect(p).toContain("don't use another text-to-speech tool")
+    expect(p).toContain('lengthens a beat only if its new line no longer fits')
+    expect(p).toContain('never edit files to make it pass')
   })
 })

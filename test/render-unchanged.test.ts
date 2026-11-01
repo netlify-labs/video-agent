@@ -4,10 +4,15 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { prepare } from '../scripts/prepare-run.js'
+import { revoiceVideo } from '../scripts/voice.js'
+import { editRevPrefix } from '../src/domain/edits.js'
 import { runCleanup } from '../src/domain/cleanup.js'
 import { excluded, manifestHash } from '../src/lib/bundle-manifest.js'
 import { sha256Hex } from '../src/lib/crypto.js'
+import { load, read } from '../src/lib/contract.js'
+import { checkRevoiced, FROZEN_DIR } from '../src/lib/revoice.js'
 import { runManifestKey, verifyRunManifest } from '../src/lib/run-manifest.js'
+import { SAMPLE_RATE, wav, type VoiceProvider } from '../src/lib/voice.js'
 import { readTarGz } from '../src/lib/tar.js'
 import type { Role } from '../src/domain/types.js'
 import { failedSnap, running, succeeded } from './fakes.js'
@@ -175,5 +180,144 @@ describe('render unchanged', () => {
     expect(v.versions[0].error.message).toContain("The edited composition didn't pass its check")
     expect(v.versions[0].error.message).toContain('failed on one contrast error')
     expect(v.versions[0].error.message).toContain('Edit it again or ask for a revision instead.')
+  })
+})
+
+describe('render unchanged with re-voiced lines', () => {
+  const vfx = (f: string) => readFileSync(new URL(`./fixtures/contract1-voice/${f}`, import.meta.url), 'utf8')
+  const silence = (seconds: number) => wav(new Uint8Array(Math.round(seconds * SAMPLE_RATE) * 2))
+  /** 0.1 s of sound per word, named like the provider that voiced the fixture. */
+  const kokoroFake: VoiceProvider = {
+    name: 'kokoro',
+    synthesize: (text) =>
+      Promise.resolve({
+        audio: new Uint8Array(Math.round(text.split(' ').length * 0.1 * SAMPLE_RATE) * 2),
+        format: 'pcm',
+      }),
+  }
+  interface Line {
+    beat: string
+    text: string
+    revoice: boolean
+  }
+
+  async function voicedDraft(h: Harness) {
+    h.deps.nextSource = tarGz([
+      { name: 'video/index.html', body: vfx('index.html') },
+      { name: 'video/summary.json', body: vfx('summary.json') },
+      { name: 'video/assets/voice/voice.json', body: vfx('assets/voice/voice.json') },
+      { name: 'video/assets/voice/script.json', body: vfx('assets/voice/script.json') },
+      { name: 'video/assets/voice/intro.wav', body: silence(2.2) },
+      { name: 'video/assets/voice/outro.wav', body: silence(1.5) },
+    ])
+    const v = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }))
+    await h.drive(4)
+    const e = await h.json<{ id: string; composition: { narration: Line[] } }>(
+      await h.call('POST', `/api/v1/videos/${v.id}/versions/1/edits`, { as: h.member }),
+    )
+    return { id: v.id as string, edit: e }
+  }
+  const longer =
+    'Org webhooks send every event you care about. They reach your endpoint in one place. Signed and retried for you.'
+
+  it('the draft shows the lines, saves a changed one into the voice script and marks it; bad lines are refused', async () => {
+    const h = harness({ MAX_ACTIVE_RUNS: '0' })
+    const { id, edit } = await voicedDraft(h)
+    expect(edit.composition.narration).toEqual([
+      { beat: 'intro', text: 'Meet org webhooks. One place for every event.', revoice: false },
+      { beat: 'outro', text: 'Read the docs.', revoice: false },
+    ])
+    const res = await h.call('PUT', `/api/v1/edits/${edit.id}`, {
+      as: h.member,
+      body: { rev: 0, ops: [{ op: 'voice', beat: 'intro', text: longer }] },
+    })
+    expect(res.status).toBe(200)
+    const saved = await h.json<{ ops: unknown[]; composition: { narration: Line[] } }>(res)
+    expect(saved.ops).toEqual([{ op: 'voice', beat: 'intro', text: longer }])
+    expect(saved.composition.narration[0]).toEqual({ beat: 'intro', text: longer, revoice: true })
+    // The rev's bundle carries the new line in script.json; the audio is still the old one for the preview.
+    const prefix = editRevPrefix(id, 1, edit.id, 1)
+    const script = JSON.parse(
+      new TextDecoder().decode(await h.deps.blobs.get('bundles', `${prefix}f/assets/voice/script.json`)),
+    ) as { voice: string; lines: { beat: string; text: string }[] }
+    expect(script).toEqual({
+      voice: 'af_heart',
+      speed: 1,
+      lines: [
+        { beat: 'intro', text: longer },
+        { beat: 'outro', text: 'Read the docs.' },
+      ],
+    })
+    expect(await h.deps.blobs.get('bundles', `${prefix}f/assets/voice/intro.wav`)).toBeFalsy()
+    // A beat without a voice, or markup in a line, is refused with the reason.
+    for (const op of [
+      { op: 'voice', beat: 'demo', text: 'Hi.' },
+      { op: 'voice', beat: 'outro', text: 'Read <b>the</b> docs.' },
+    ]) {
+      const bad = await h.call('PUT', `/api/v1/edits/${edit.id}`, {
+        as: h.member,
+        body: { rev: 1, ops: [op] },
+      })
+      expect(bad.status).toBe(400)
+    }
+  })
+
+  it('freezes the marked lines, and the run re-voices exactly those and passes the check', async () => {
+    const h = harness()
+    const { id, edit } = await voicedDraft(h)
+    await h.call('PUT', `/api/v1/edits/${edit.id}`, {
+      as: h.member,
+      body: {
+        rev: 0,
+        ops: [
+          { op: 'text', id: 'outro-cta', text: 'Start free today' },
+          { op: 'voice', beat: 'intro', text: longer },
+        ],
+      },
+    })
+    expect((await h.call('POST', `/api/v1/edits/${edit.id}/render`, { as: h.member })).status).toBe(202)
+    const version = await h.deps.store.getVersion(id, 2)
+    // A longer line may lengthen its beat, so the target length is left to the run.
+    expect(version?.targetDurationSec).toBeNull()
+    expect(version?.frozen?.revoice).toEqual({
+      beats: ['intro'],
+      keptHash: expect.stringMatching(/^[0-9a-f]{64}$/),
+    })
+    const files = readTarGz((await h.deps.blobs.get('sources', version!.frozen!.key))!)
+    expect(new TextDecoder().decode(files.get('index.html'))).toMatch(
+      /data-va-voice="intro"[^>]*data-va-revoice/,
+    )
+    expect(new TextDecoder().decode(files.get('assets/voice/script.json'))).toContain(longer)
+
+    await h.drive(2)
+    const req = h.deps.runner.starts[1]
+    expect(req?.prompt).toContain('with one narration line to re-voice (beat "intro")')
+    expect(req?.prompt).toContain('2. Run from the repo root: npx tsx scripts/voice.ts revoice')
+    expect(req?.prompt).toContain("Don't write, change or delete any file in video/ yourself.")
+    const sha = /--manifest ([0-9a-f]{64})/.exec(req?.prompt ?? '')?.[1] ?? ''
+    const raw = new TextDecoder().decode(
+      await h.deps.blobs.get('sources', runManifestKey(id, req?.requestId ?? '')),
+    )
+    const m = verifyRunManifest(raw, { attemptId: req?.requestId ?? '', sha256: sha })
+    expect(m.bundle?.revoice).toEqual(version?.frozen?.revoice)
+
+    // The run: prepare-run restores and keeps the frozen copies, voice.ts revoice re-speaks the intro, render-job checks.
+    const root = mkdtempSync(join(tmpdir(), 'va-rv-'))
+    await prepare(m, {
+      tmp: root,
+      root,
+      fetch: async (key, to) => {
+        const { writeFileSync } = await import('node:fs')
+        writeFileSync(to, (await h.deps.blobs.get('sources', key))!)
+      },
+    })
+    expect(readFileSync(join(root, FROZEN_DIR, 'index.html'), 'utf8')).toContain('data-va-revoice')
+    const video = join(root, 'video')
+    const r = await revoiceVideo(video, { provider: kokoroFake })
+    expect(r).toEqual({ beats: ['intro'], lengthened: [{ beat: 'intro', from: 3, to: 3.3 }] })
+    const html = readFileSync(join(video, 'index.html'), 'utf8')
+    expect(html).toContain('Start free today')
+    expect(read(load(html)).duration).toBe(9.3)
+    expect(checkRevoiced(video, join(root, FROZEN_DIR), m.bundle!.revoice!)).toEqual([])
   })
 })
