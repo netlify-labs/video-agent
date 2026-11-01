@@ -143,12 +143,12 @@ registered through a vendored seek adapter, `vendor/va-contract.js` (`vaBeat(id,
 animations sit in an inner timeline that the registered one time-stretches by `data-duration` /
 `data-va-authored-duration`, so a retime needs no script change. Rendered and sampled frame by frame:
 
-| Variant | Length | What the frames show |
-| --- | --- | --- |
-| base | 9.0 s | intro 0-3, demo (video slot) 3-6, outro 6-9 |
-| intro stretched to 4.5 s | 10.5 s | intro holds to 4.5 s, demo from 4.5 s; the intro title fades in 1.5× slower |
-| reorder (outro before demo) | 9.0 s | outro 3-6, demo 6-9 |
-| delete demo | 6.0 s | outro 3-6, video ends at 6 s |
+| Variant                                                                | Length | What the frames show                                                                          |
+| ---------------------------------------------------------------------- | ------ | --------------------------------------------------------------------------------------------- |
+| base                                                                   | 9.0 s  | intro 0-3, demo (video slot) 3-6, outro 6-9                                                   |
+| intro stretched to 4.5 s                                               | 10.5 s | intro holds to 4.5 s, demo from 4.5 s; the intro title fades in 1.5× slower                   |
+| reorder (outro before demo)                                            | 9.0 s  | outro 3-6, demo 6-9                                                                           |
+| delete demo                                                            | 6.0 s  | outro 3-6, video ends at 6 s                                                                  |
 | patcher output (stretch + reorder + text + accent colour + image swap) | 10.5 s | intro to 4.5, outro 4.5-7.5 in the new accent, demo 7.5-10.5; captions moved with their beats |
 
 Findings that shaped contract v1 (`src/lib/contract.ts`, the validator and patcher):
@@ -163,10 +163,10 @@ Findings that shaped contract v1 (`src/lib/contract.ts`, the validator and patch
 
 ### S4: cost and time of a render-unchanged run (2026-11-01, `scripts/e2e/editor.ts` on production)
 
-| Composition | Total (queued → ready) | Run | Finalize | Credits | MP4 |
-| --- | --- | --- | --- | --- | --- |
-| 16 s (retime + text + reorder) | 143 s | 133 s | 5 s | 34.4 | 16.0 s |
-| 60 s (every beat stretched) | 187 s | 178 s | 5 s | 33.6 | 60.0 s |
+| Composition                    | Total (queued → ready) | Run   | Finalize | Credits | MP4    |
+| ------------------------------ | ---------------------- | ----- | -------- | ------- | ------ |
+| 16 s (retime + text + reorder) | 143 s                  | 133 s | 5 s      | 34.4    | 16.0 s |
+| 60 s (every beat stretched)    | 187 s                  | 178 s | 5 s      | 33.6    | 60.0 s |
 
 For comparison, an authoring run on the same video took 4-5 minutes and 240-250 credits. Render-unchanged cost is
 flat (the agent only restores, checks and renders; most credits are the run's fixed overhead) and time grows by
@@ -176,19 +176,19 @@ the run stopped without rendering or editing, as designed.
 
 ### S5: upload sessions, MP4 checks and the SVG sanitizer (2026-11-01, `scripts/e2e/media.ts` on production)
 
-| Check | Result |
-| --- | --- |
-| One-request upload, 3.9 MB | 201 |
-| 4.4 MB | 400 from the API ("upload in parts") |
-| 6 MB | 413 from Netlify before the function runs (the platform limit sits between 4.4 and 6 MB) |
-| 97.6 MB H.264/AAC clip, 70 s 1080p | 24 parts of 4 MB, 2.7 MB/s from a laptop, 4 parts in parallel |
-| Duplicate / changed duplicate / corrupted part | 200 duplicate / 409 / 400 |
-| Complete with a part missing | 409, then resumed from the session's part list |
-| Two completions at once | both 202, one item, one assembly |
-| Assembly in the background function | 13.6 s to ready (join 24 parts, whole sha256, JS MP4 inspection) |
-| Range playback through `/media` | 206 at the start and mid-file, bytes match |
-| Quota | 10 × 100 MB sessions reserved, the 11th refused (429); cancelling freed it at once |
-| Malicious SVG | stored, served clean (no script, handlers, foreignObject or external URLs) under a sandbox CSP |
+| Check                                          | Result                                                                                         |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| One-request upload, 3.9 MB                     | 201                                                                                            |
+| 4.4 MB                                         | 400 from the API ("upload in parts")                                                           |
+| 6 MB                                           | 413 from Netlify before the function runs (the platform limit sits between 4.4 and 6 MB)       |
+| 97.6 MB H.264/AAC clip, 70 s 1080p             | 24 parts of 4 MB, 2.7 MB/s from a laptop, 4 parts in parallel                                  |
+| Duplicate / changed duplicate / corrupted part | 200 duplicate / 409 / 400                                                                      |
+| Complete with a part missing                   | 409, then resumed from the session's part list                                                 |
+| Two completions at once                        | both 202, one item, one assembly                                                               |
+| Assembly in the background function            | 13.6 s to ready (join 24 parts, whole sha256, JS MP4 inspection)                               |
+| Range playback through `/media`                | 206 at the start and mid-file, bytes match                                                     |
+| Quota                                          | 10 × 100 MB sessions reserved, the 11th refused (429); cancelling freed it at once             |
+| Malicious SVG                                  | stored, served clean (no script, handlers, foreignObject or external URLs) under a sandbox CSP |
 
 The upload check of clips is JavaScript (box parsing: H.264 sample entry, AAC or no audio, length, size); runs check
 again with ffprobe in `prepare-run`. Posters are captured in the browser at upload (owner decision: a poster
@@ -199,10 +199,10 @@ fallback is fine).
 Three ready videos on production (a 60 s edited version, a 20 s and a 15 s video, all type and motion, no clips),
 five frames each. Each frame is compared with the runner's MP4 frame at the same time (SSIM, 1 = identical):
 
-| Path | SSIM avg | SSIM min | Cost |
-| --- | --- | --- | --- |
-| `cdp`: browser paint (Playwright screenshot after `__player.seek(t)`) | 0.992 | 0.985 | n/a (needs CDP or an extension) |
-| `dom`: in-page DOM to image (html-to-image, SVG foreignObject) | 0.989 | 0.982 | 60-130 ms a frame once warm; 1-2 s for the first (font embedding) |
+| Path                                                                  | SSIM avg | SSIM min | Cost                                                              |
+| --------------------------------------------------------------------- | -------- | -------- | ----------------------------------------------------------------- |
+| `cdp`: browser paint (Playwright screenshot after `__player.seek(t)`) | 0.992    | 0.985    | n/a (needs CDP or an extension)                                   |
+| `dom`: in-page DOM to image (html-to-image, SVG foreignObject)        | 0.989    | 0.982    | 60-130 ms a frame once warm; 1-2 s for the first (font embedding) |
 
 WebCodecs encoders (H.264, VP9 and AV1 at 1080p30) are available in Chromium and WebKit.
 
