@@ -439,6 +439,19 @@ const EditOpSchema = z.discriminatedUnion('op', [
     kind: z.enum(['image', 'video']),
     fit: z.enum(['cover', 'contain']),
   }),
+  z
+    .object({
+      op: z.literal('audio'),
+      id: z.string().max(80),
+      src: z
+        .string()
+        .max(200)
+        .optional()
+        .openapi({ description: 'A ready audio item from the library, as assets/media/<media id>.<ext>' }),
+      volume: z.number().min(0).max(1).optional(),
+      muted: z.boolean().optional(),
+    })
+    .openapi({ description: "Swap an audio track's file, set its level or mute it, by its id" }),
 ])
 const CompositionSchema = z
   .object({
@@ -465,6 +478,17 @@ const CompositionSchema = z
       }),
     ),
     layers: z.array(z.string()),
+    audio: z.array(
+      z.object({
+        id: z.string(),
+        role: z.enum(['music', 'voice', 'sfx']),
+        label: z.string().nullable(),
+        src: z.string(),
+        volume: z.number().openapi({ description: 'The level set, 0-1, kept while muted' }),
+        muted: z.boolean(),
+        beat: z.string().nullable().openapi({ description: 'The beat it plays in; null for music' }),
+      }),
+    ),
   })
   .openapi('Composition')
 

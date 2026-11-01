@@ -340,7 +340,13 @@ export type EditOp =
   | { op: 'delete'; beat: string }
   | { op: 'color'; role: string; value: string }
   | { op: 'media'; slot: string; src: string; kind: 'image' | 'video'; fit: 'cover' | 'contain' }
-  | { op: 'audio'; id: string; src?: string; volume?: number; muted?: boolean }
+  | {
+      op: 'audio'
+      id: string
+      src?: string | undefined
+      volume?: number | undefined
+      muted?: boolean | undefined
+    }
 
 export interface EditOptions {
   /** Colours a role may take (the brand palette). Empty: any #rgb/#rrggbb. */
