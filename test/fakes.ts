@@ -28,7 +28,12 @@ import { createMemoryStore } from '../src/store/memory.js'
 import { resetAuthCache } from '../src/domain/auth.js'
 import { resetSettingsCache } from '../src/domain/settings.js'
 import { resetOAuthCaches } from '../src/auth/oauth.js'
-import { UpstreamError, type UpstreamIdentity, type UpstreamUser } from '../src/auth/upstream.js'
+import {
+  UpstreamError,
+  type UpstreamIdentity,
+  type UpstreamTeam,
+  type UpstreamUser,
+} from '../src/auth/upstream.js'
 import type { Manifest } from '../src/domain/types.js'
 import { PREVIEW_FILES, PREVIEW_NAMES, type PreviewFile } from '../src/lib/media/previews.js'
 
@@ -293,11 +298,26 @@ export class FakeGateway implements GatewayPort {
   }
 }
 
-/** The upstream identity provider: signIn() hands out a code the callback can trade for that person. */
+/**
+ * The upstream identity provider: signIn() hands out a code the callback can trade for that person (and an access
+ * token). The accounts endpoint answers from `teamsOf` by email; `revoked` tokens and `teamsError` make it fail.
+ */
 export class FakeUpstream implements UpstreamIdentity {
   codes = new Map<string, UpstreamUser>()
   exchanges: { code: string; redirectUri: string }[] = []
   failNext = false
+  tokens = new Map<string, string>() // access token -> email
+  teamsOf = new Map<string, UpstreamTeam[]>()
+  revoked = new Set<string>()
+  teamsError: 'unavailable' | 'timeout' | null = null
+  teamCalls: string[] = []
+  async teams(accessToken: string) {
+    this.teamCalls.push(accessToken)
+    if (this.teamsError) throw new UpstreamError(this.teamsError, 'accounts')
+    const email = this.tokens.get(accessToken)
+    if (!email || this.revoked.has(accessToken)) throw new UpstreamError('rejected', 'accounts')
+    return this.teamsOf.get(email) ?? []
+  }
   authorizeUrl(input: { state: string; redirectUri: string }) {
     const u = new URL('https://upstream.example/authorize')
     u.searchParams.set('state', input.state)
@@ -316,7 +336,9 @@ export class FakeUpstream implements UpstreamIdentity {
   }
   signIn(u: Partial<UpstreamUser> & { email: string }) {
     const code = `up_${randomUUID()}`
-    this.codes.set(code, { subject: `sub-${u.email}`, emailVerified: true, ...u })
+    const accessToken = `upat_${randomUUID()}`
+    this.tokens.set(accessToken, u.email.toLowerCase())
+    this.codes.set(code, { subject: `sub-${u.email}`, emailVerified: true, accessToken, ...u })
     return code
   }
 }
