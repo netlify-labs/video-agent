@@ -10,7 +10,11 @@ import type { OAuthGrantRow, OAuthTokenRow, UserRow } from '../domain/types.js'
 import { safeEqual, sha256Hex } from '../lib/crypto.js'
 import { ApiError } from '../lib/errors.js'
 import type { Repo } from '../store/types.js'
+import { OAUTH_USER_PREFIX, linkUpstreamUser, type Admission } from './accounts.js'
+import { checkTeams, freshMembership, recheckMembership, teamLabel, teamRequired } from './membership.js'
 import type { UpstreamUser } from './upstream.js'
+
+export { OAUTH_USER_PREFIX }
 
 export const ACCESS_TTL_SEC = 3600
 const REFRESH_TTL_MS = 30 * 86400_000
@@ -19,8 +23,6 @@ const CODE_TTL_MS = 5 * 60_000
 const CIMD_TTL_MS = 10 * 60_000
 /** Registered clients that no grant or request has used for this long are deleted by the sweep. */
 export const CLIENT_IDLE_MS = 90 * 86400_000
-/** User rows created by an OAuth sign-in (not backed by Netlify Identity) have ids with this prefix. */
-export const OAUTH_USER_PREFIX = 'oauth_'
 
 export type OAuthDeps = Deps & { config: Deps['config'] & { mcpOAuth: McpOAuthConfig }; oauth: OAuthPort }
 
@@ -212,8 +214,22 @@ function back(deps: Deps, redirectUri: string, params: Record<string, string | n
   return { kind: 'redirect', url: url.toString() }
 }
 
-/** GET /oauth/authorize: validates the request, remembers it for ten minutes and sends the browser upstream. */
-export async function startAuthorization(deps: OAuthDeps, params: URLSearchParams): Promise<Outcome> {
+/** A person already signed in to the web app (Sign in with Netlify), for single sign-on at /oauth/authorize. */
+export interface SignedIn {
+  row: UserRow
+  upstreamTokenEnc: string | null
+  membershipCheckedAt: string | null
+}
+
+/**
+ * GET /oauth/authorize: validates the request, remembers it for ten minutes and sends the browser upstream. With a
+ * web session (`signedIn`), it skips the upstream round-trip and asks that person for consent straight away.
+ */
+export async function startAuthorization(
+  deps: OAuthDeps,
+  params: URLSearchParams,
+  signedIn?: () => Promise<SignedIn | null>,
+): Promise<Outcome> {
   const one = (k: string) => {
     const v = params.getAll(k)
     return v.length === 1 && v[0] ? v[0] : null
@@ -240,7 +256,7 @@ export async function startAuthorization(deps: OAuthDeps, params: URLSearchParam
   if (resource !== resourceUrl(deps))
     return fail('invalid_target', `The resource parameter must be ${resourceUrl(deps)}.`)
   const upstreamState = deps.ids.secret(32)
-  await deps.store.insertOAuthRequest({
+  const request = {
     id: sha(upstreamState),
     clientId: client.id,
     clientName: client.name,
@@ -255,7 +271,30 @@ export async function startAuthorization(deps: OAuthDeps, params: URLSearchParam
     createdAt: deps.clock.now().toISOString(),
     expiresAt: later(deps, REQUEST_TTL_MS),
     usedAt: null,
-  })
+  }
+  const person = signedIn ? await signedIn() : null
+  if (person) {
+    const domains = deps.config.mcpOAuth.allowedEmailDomains
+    if (domains && !domains.includes(emailDomain(person.row.email)))
+      return fail('access_denied', `Only ${domains.join(', ')} addresses can connect.`)
+    const consent = deps.ids.secret(32)
+    await deps.store.insertOAuthRequest({
+      ...request,
+      userId: person.row.id,
+      consentHash: sha(consent),
+      upstreamTokenEnc: person.upstreamTokenEnc,
+      membershipCheckedAt: person.membershipCheckedAt,
+    })
+    deps.log.info('oauth.single_sign_on', { clientId: client.id, userId: person.row.id })
+    return {
+      kind: 'consent',
+      consent,
+      clientName: client.name ?? 'An app',
+      clientHost: new URL(redirectUri).host,
+      email: person.row.email,
+    }
+  }
+  await deps.store.insertOAuthRequest(request)
   return {
     kind: 'redirect',
     url: deps.oauth.upstream.authorizeUrl({ state: upstreamState, redirectUri: callbackUrl(deps) }),
@@ -300,8 +339,27 @@ export async function finishUpstream(deps: OAuthDeps, params: URLSearchParams): 
     })
     return deny(mapped.reason)
   }
+  if (teamRequired(deps)) {
+    const verdict = await checkTeams(deps, user.accessToken)
+    if (verdict !== 'member') {
+      deps.log.info('oauth.denied', { clientId: req.clientId, userId: mapped.row.id, why: `team_${verdict}` })
+      if (verdict === 'unavailable') {
+        await deps.store.updateOAuthRequest(req.id, { usedAt: now })
+        return back(deps, req.redirectUri, {
+          error: 'temporarily_unavailable',
+          error_description: 'Could not check your Netlify team membership right now. Try again shortly.',
+          state: req.state,
+        })
+      }
+      return deny(`You're not in the ${teamLabel(deps)} Netlify team.`)
+    }
+  }
   const consent = deps.ids.secret(32)
-  await deps.store.updateOAuthRequest(req.id, { userId: mapped.row.id, consentHash: sha(consent) })
+  await deps.store.updateOAuthRequest(req.id, {
+    userId: mapped.row.id,
+    consentHash: sha(consent),
+    ...(await freshMembership(deps, user.accessToken)),
+  })
   return {
     kind: 'consent',
     consent,
@@ -312,53 +370,19 @@ export async function finishUpstream(deps: OAuthDeps, params: URLSearchParams): 
 }
 
 /**
- * The verified email maps to the person's existing account (same role, privacy and ownership). A first-time email
- * that passes the domain rule gets an account with the default role, as web sign-up does.
+ * The person's account, shared with the web app (src/auth/accounts.ts): the linked Netlify identity, else the
+ * verified email's existing account (same role, privacy and ownership). A first-time email that passes the domain
+ * rule gets an account with the default role, as web sign-up does.
  */
-async function mapIdentity(
-  deps: OAuthDeps,
-  u: UpstreamUser,
-): Promise<{ ok: true; row: UserRow } | { ok: false; code: string; reason: string }> {
-  if (!u.emailVerified)
-    return { ok: false, code: 'unverified', reason: 'Your email address is not verified.' }
-  const email = u.email.trim().toLowerCase()
+function mapIdentity(deps: OAuthDeps, u: UpstreamUser) {
   const domains = deps.config.mcpOAuth.allowedEmailDomains
-  if (domains && !domains.includes(emailDomain(email)))
-    return { ok: false, code: 'domain', reason: `Only ${domains.join(', ')} addresses can connect.` }
-  // Identity-backed rows first, then the most recently seen.
-  const existing = (await deps.store.listUsers())
-    .filter((r) => r.email === email)
-    .sort(
-      (a, b) =>
-        Number(a.id.startsWith(OAUTH_USER_PREFIX)) - Number(b.id.startsWith(OAUTH_USER_PREFIX)) ||
-        b.lastSeenAt.localeCompare(a.lastSeenAt),
-    )[0]
-  const disabled = {
-    ok: false as const,
-    code: 'disabled',
-    reason: 'Your account has been disabled by an admin.',
+  const admission: Admission = {
+    domains,
+    adminsMayJoin: false,
+    domainReason: domains ? `Only ${domains.join(', ')} addresses can connect.` : '',
+    noAccountReason: 'This video agent is invite-only. Accept your invite and sign in to the web app first.',
   }
-  if (existing) return existing.disabledAt ? disabled : { ok: true, row: existing }
-  if (!domains)
-    return {
-      ok: false,
-      code: 'no_account',
-      reason: 'This video agent is invite-only. Accept your invite and sign in to the web app first.',
-    }
-  const now = deps.clock.now().toISOString()
-  const row = await deps.store.insertUserIfAbsent({
-    id: `${OAUTH_USER_PREFIX}${deps.config.mcpOAuth.provider}_${u.subject}`,
-    email,
-    name: null,
-    role: deps.config.adminEmails.includes(email) ? 'admin' : 'creator',
-    admittedVia: 'domain',
-    createdAt: now,
-    lastSeenAt: now,
-    disabledAt: null,
-  })
-  if (row.disabledAt) return disabled
-  deps.log.info('oauth.user_created', { userId: row.id })
-  return { ok: true, row }
+  return linkUpstreamUser(deps, deps.config.mcpOAuth.provider, u, admission)
 }
 
 /** POST /oauth/consent: Allow issues a one-time code back to the client; Deny tells it access_denied. */
@@ -488,9 +512,12 @@ async function exchangeCode(deps: OAuthDeps, form: URLSearchParams, clientId: st
       lastUsedAt: null,
       expiresAt: later(deps, REFRESH_TTL_MS),
       revokedAt: null,
+      upstreamTokenEnc: req.upstreamTokenEnc ?? null,
+      membershipCheckedAt: req.membershipCheckedAt ?? null,
+      membershipFailedAt: null,
     }
     await repo.insertOAuthGrant(grant)
-    await repo.updateOAuthRequest(req.id, { usedAt: now, grantId: grant.id })
+    await repo.updateOAuthRequest(req.id, { usedAt: now, grantId: grant.id, upstreamTokenEnc: null })
     deps.log.info('oauth.grant_created', { grantId: grant.id, clientId: grant.clientId, userId: user.id })
     return { tokens: await issueTokens(deps, repo, grant.id) }
   })
@@ -547,10 +574,21 @@ export async function principalFromAccessToken(deps: Deps, token: string): Promi
   const domains = deps.config.mcpOAuth?.allowedEmailDomains
   if (domains && !domains.includes(emailDomain(row.email)))
     throw new ApiError('unauthorized', 'Your email address is no longer in an allowed domain.')
-  if (!row.id.startsWith(OAUTH_USER_PREFIX)) {
+  if (!row.id.startsWith(OAUTH_USER_PREFIX) && deps.config.authProvider === 'identity') {
     const live = await liveIdentityUser(deps, row.id)
     if (!live?.confirmed) throw new ApiError('unauthorized', 'Your account no longer exists.')
   }
+  const check = await recheckMembership(deps, grant)
+  if (!check.ok) {
+    await deps.store.updateOAuthGrant(grant.id, { revokedAt: now })
+    if (check.why === 'not_member') {
+      await deps.store.revokeOAuthGrants(row.id, now)
+      await deps.store.revokeUserSessions(row.id, now)
+    }
+    deps.log.info('oauth.grant_revoked', { grantId: grant.id, by: 'team_check', why: check.why })
+    throw new ApiError('unauthorized', check.reason)
+  }
+  if (check.patch) await deps.store.updateOAuthGrant(grant.id, check.patch)
   if (!grant.lastUsedAt || now.slice(0, 15) !== grant.lastUsedAt.slice(0, 15))
     await deps.store.updateOAuthGrant(grant.id, { lastUsedAt: now })
   return {
