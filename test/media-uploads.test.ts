@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 import { runCleanup } from '../src/domain/cleanup.js'
 import { PART_SIZE } from '../src/domain/media-uploads.js'
 import type { TestDeps } from './fakes.js'
-import { harness, type Harness } from './helpers.js'
+import { harness, pgStore, type Harness } from './helpers.js'
 
 const sha = (b: Uint8Array) => createHash('sha256').update(b).digest('hex')
 
@@ -203,5 +203,39 @@ describe('upload sessions', () => {
     expect(await h.deps.store.getUpload(abandoned.id)).toBeNull()
     expect(await partsInStore(h.deps, abandoned.id)).toEqual([])
     expect(h.deps.platform.assemblies).toEqual([stuck.id, stuck.id])
+  })
+
+  it('works on Postgres: sessions, parts, quota, assembly, library listing and usage', async () => {
+    const h = harness({}, { store: await pgStore() })
+    const file = bigClip()
+    const s = await start(h, h.member, file)
+    for (let i = 0; i < 3; i++) await part(h, h.member, s.id, i, file)
+    expect(await h.deps.store.reservedUploadBytes('u_member')).toBe(file.byteLength)
+    expect(await h.json(await part(h, h.member, s.id, 0, file))).toMatchObject({ duplicate: true })
+    const done = await h.json<Session>(await complete(h, h.member, s.id))
+    expect(done.status).toBe('done')
+    expect(await h.deps.store.reservedUploadBytes('u_member')).toBe(0)
+    const list = await h.json<{ items: { id: string; kind: string; usedIn: number }[] }>(
+      await h.call('GET', '/api/v1/media?kind=video', { as: h.member }),
+    )
+    expect(list.items.map((m) => m.id)).toEqual([done.mediaId])
+    await h.deps.store.insertVersionMedia([
+      {
+        jobId: 'vid_x',
+        versionN: 1,
+        mediaId: done.mediaId ?? '',
+        position: 0,
+        kind: 'video',
+        key: 'k',
+        sha256: 's',
+        filename: 'f.mp4',
+        caption: null,
+      },
+    ])
+    expect(await h.deps.store.mediaUsage([done.mediaId ?? ''])).toEqual({ [done.mediaId ?? '']: ['vid_x'] })
+    h.deps.clock.advance(25 * 3600_000)
+    expect(
+      (await h.deps.store.listStaleUploads(h.deps.clock.now().toISOString(), 10)).map((u) => u.id),
+    ).toEqual([s.id])
   })
 })
