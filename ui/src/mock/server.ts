@@ -44,6 +44,31 @@ interface MockComment {
   addressedInN: number | null
   unread?: boolean
 }
+// Connected OAuth apps (MCP OAuth is on in mock mode unless localStorage.mockOAuth is '0').
+const mockOAuth = () => {
+  try {
+    return localStorage.getItem('mockOAuth') !== '0'
+  } catch {
+    return true
+  }
+}
+const grants = [
+  {
+    id: 'grt_claude',
+    clientId: 'https://claude.ai/oauth/mcp-oauth-client-metadata',
+    clientName: 'Claude',
+    createdAt: new Date(Date.now() - 3 * 86400_000).toISOString(),
+    lastUsedAt: new Date(Date.now() - 20 * 60_000).toISOString(),
+  },
+  {
+    id: 'grt_cursor',
+    clientId: 'nvc_cursor',
+    clientName: 'Cursor',
+    createdAt: new Date(Date.now() - 9 * 86400_000).toISOString(),
+    lastUsedAt: null,
+  },
+]
+
 // Ada left two comments on Sam's teaser; one is unread.
 const comments: MockComment[] = [
   {
@@ -186,7 +211,21 @@ export function installMock() {
       })
     if (p === '/api/v1/notifications') return json({ items: [], unreadCount: 0, nextCursor: null })
     if (p === '/api/v1/config')
-      return json({ admission: ['acme.com'], siteUrl: window.location.origin, planningAvailable: true })
+      return json({
+        admission: ['acme.com'],
+        siteUrl: window.location.origin,
+        planningAvailable: true,
+        mcpOAuth: mockOAuth(),
+      })
+    if (p === '/api/v1/oauth/grants')
+      return mockOAuth() ? json(grants) : fail(404, 'not_found', 'OAuth is not enabled on this video agent.')
+    const grant = /^\/api\/v1\/oauth\/grants\/([^/]+)$/.exec(p)
+    if (grant && method === 'DELETE') {
+      const i = grants.findIndex((g) => g.id === grant[1])
+      if (i < 0) return fail(404, 'not_found', 'Connected app not found.')
+      grants.splice(i, 1)
+      return new Response(null, { status: 204 })
+    }
     if (p === '/api/v1/me') return json(me)
     if (p === '/api/v1/stats') return json(stats)
     if (p === '/api/v1/users') {

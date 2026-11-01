@@ -177,6 +177,27 @@ test('admin, keys and setup render', async ({ page }) => {
   await expect(page.getByText('Everything needed is in place. People can make videos.')).toBeVisible()
 })
 
+test('keys page lists connected OAuth apps and revokes one', async ({ page }) => {
+  await page.goto('/keys')
+  const apps = page.getByRole('table', { name: 'Connected apps' })
+  await expect(page.getByText('Sign in with Netlify')).toBeVisible()
+  await expect(apps.getByRole('row')).toHaveCount(3)
+  const claude = apps.getByRole('row', { name: /Claude/ })
+  await expect(claude).toContainText('20 min ago')
+  await expect(apps.getByRole('row', { name: /Cursor/ })).toContainText('Never')
+  await claude.getByRole('button', { name: 'Revoke' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Revoke' }).click()
+  await expect(apps.getByRole('row', { name: /Claude/ })).toHaveCount(0)
+  await expect(apps.getByRole('row')).toHaveCount(2)
+})
+
+test('keys page hides connected apps when MCP OAuth is off', async ({ page }) => {
+  await mock(page, 'mockOAuth', '0')
+  await page.goto('/keys')
+  await expect(page.getByText('Release pipeline')).toBeVisible()
+  await expect(page.getByText('Connected apps')).toHaveCount(0)
+})
+
 // Review (plan v2 §5)
 test('comments show on the video, markers seek, and the library shows the unread badge', async ({ page }) => {
   await page.goto('/')

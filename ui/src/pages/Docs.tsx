@@ -3,6 +3,7 @@ import '@scalar/api-reference-react/style.css'
 import { Anchor, Card, Code, Stack, Tabs, Text, Title, useComputedColorScheme } from '@mantine/core'
 import { ApiReferenceReact } from '@scalar/api-reference-react'
 import { Link, useSearchParams } from 'react-router'
+import { $api } from '../api/client'
 import { CopyField } from '../components/bits'
 
 const TOOLS: [string, string][] = [
@@ -68,6 +69,7 @@ const SCALAR_CSS = `
 function McpGuide() {
   const origin = window.location.origin
   const url = `${origin}/mcp`
+  const config = $api.useQuery('get', '/api/v1/config')
   return (
     <Stack gap="md" maw={880}>
       <Text c="var(--va-muted)">
@@ -84,6 +86,12 @@ function McpGuide() {
           <Text size="sm" c="var(--va-muted)">
             Send the key as <Code>Authorization: Bearer nva_…</Code>. Create one on the API keys page.
           </Text>
+          {config.data?.mcpOAuth ? (
+            <Text size="sm" c="var(--va-muted)">
+              Or connect without a key: clients that support OAuth (Claude and ChatGPT connectors, Claude
+              Code) can add the URL alone and <b>Sign in with Netlify</b>.
+            </Text>
+          ) : null}
         </Stack>
       </Card>
       <Card>
