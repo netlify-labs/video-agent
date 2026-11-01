@@ -74,13 +74,22 @@ export interface MediaSource {
   open(): Promise<ReadableStream<Uint8Array> | null>
 }
 
-/** Builds the response for GET/HEAD with Range support. */
+/** Weak comparison (RFC 9110 §8.8.3.2) of an If-None-Match header against an entity tag. */
+export function etagMatches(header: string | null, etag: string | null): boolean {
+  if (!header || !etag) return false
+  const opaque = (t: string) => t.trim().replace(/^W\//, '')
+  return header.split(',').some((t) => t.trim() === '*' || opaque(t) === opaque(etag))
+}
+
+/** Builds the response for GET/HEAD with Range and If-None-Match support. Callers check access first. */
 export async function mediaResponse(
   req: Request,
   src: MediaSource,
   contentType: string,
   headers: Record<string, string>,
 ): Promise<Response> {
+  if (src.etag && etagMatches(req.headers.get('if-none-match'), src.etag))
+    return new Response(null, { status: 304, headers: { ...headers, etag: src.etag } })
   const base: Record<string, string> = { 'content-type': contentType, 'accept-ranges': 'bytes', ...headers }
   if (src.etag) base.etag = src.etag
   const range = parseRange(req.headers.get('range'), src.size)

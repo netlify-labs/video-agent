@@ -170,3 +170,30 @@ export const fileUrl = (
   import.meta.env.VITE_MOCK
     ? mockFile(videoId, file)
     : `/api/v1/videos/${videoId}/versions/${n}/${file}${download ? '?download=1' : ''}`
+
+/** A version's poster or GIF straight from the signed URL in its DTO: no redirect, and stable enough for the browser
+ * cache. Same-origin path, like the redirect gives. */
+export const imageUrl = (videoId: string, v: Version, file: 'poster' | 'gif') => {
+  const signed = import.meta.env.VITE_MOCK ? null : v.files?.[file]
+  if (!signed) return fileUrl(videoId, v.n, file)
+  const u = new URL(signed, window.location.origin)
+  return u.pathname + u.search
+}
+
+/** The version image, falling back once to the redirect if its signed URL expired on a page left open. */
+export function VersionImage({ videoId, v, file }: { videoId: string; v: Version; file: 'poster' | 'gif' }) {
+  return (
+    <img
+      src={imageUrl(videoId, v, file)}
+      alt=""
+      loading="lazy"
+      decoding="async"
+      onError={(e) => {
+        const img = e.currentTarget
+        if (img.dataset.fallback) return
+        img.dataset.fallback = '1'
+        img.src = fileUrl(videoId, v.n, file)
+      }}
+    />
+  )
+}

@@ -22,7 +22,7 @@ import { IconCheck, IconDots, IconMapPin, IconX } from '@tabler/icons-react'
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import { $api, newIdempotencyKey, type Version, type Video } from '../api/client'
 import type { paths } from '../api/schema'
-import { fileUrl, relativeTime, showError } from './bits'
+import { fileUrl, imageUrl, relativeTime, showError } from './bits'
 
 type Comment =
   paths['/api/v1/videos/{id}/comments']['get']['responses'][200]['content']['application/json']['items'][number]
@@ -121,7 +121,7 @@ export function ReviewPlayer({
           key={`${video.id}-${v.n}`}
           controls={!picking}
           playsInline
-          poster={fileUrl(video.id, v.n, 'poster')}
+          poster={imageUrl(video.id, v, 'poster')}
           src={fileUrl(video.id, v.n, 'video')}
         >
           <track kind="captions" src={fileUrl(video.id, v.n, 'captions')} srcLang="en" label="Captions" />

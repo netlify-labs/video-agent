@@ -81,6 +81,7 @@ function ready(
       summary: o.summary,
     },
     links: files(id, n),
+    files: null,
     publications: o.pub
       ? [
           {
@@ -178,6 +179,7 @@ export const videos: Video[] = [
       timings: { queuedAt: ago(2.6), startedAt: ago(2.4), finishingAt: null, endedAt: null },
       output: null,
       links: files('vid_making', 1),
+      files: null,
       publications: [],
     },
   ]),
@@ -208,6 +210,7 @@ export const videos: Video[] = [
       timings: { queuedAt: ago(0.8), startedAt: null, finishingAt: null, endedAt: null },
       output: null,
       links: files('vid_queued', 1),
+      files: null,
       publications: [],
     },
   ]),
@@ -341,6 +344,7 @@ export const videos: Video[] = [
       timings: { queuedAt: ago(2900), startedAt: ago(2899.7), finishingAt: null, endedAt: ago(2896) },
       output: null,
       links: files('vid_failed', 1),
+      files: null,
       publications: [],
     },
   ]),

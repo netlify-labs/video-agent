@@ -298,9 +298,12 @@ export function createApp(deps: Deps, opts: AppOptions) {
       await loadJob(deps.store, c.get('principal'), c.req.valid('param').id)
       assertCan(c.get('principal'), 'video:read')
       const dto = await videoDto(deps.store, deps, c.req.valid('param').id, c.get('principal'))
-      c.header('etag', dto.etag)
+      // The signed file URLs' expiry is part of the HTTP validator, so a 304 never revives expired URLs.
+      const exp = /[?&]exp=(\d+)/.exec(dto.versions.find((v) => v.files)?.files?.poster ?? '')?.[1]
+      const etag = exp ? dto.etag.replace(/"$/, `-${exp}"`) : dto.etag
+      c.header('etag', etag)
       c.header('cache-control', 'private, no-cache')
-      if (c.req.header('if-none-match') === dto.etag) return c.body(null, 304)
+      if (c.req.header('if-none-match') === etag) return c.body(null, 304)
       return c.json(dto, 200)
     },
   )
@@ -469,7 +472,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/videos/{id}/versions/{n}/{file}',
-      summary: 'Download a file: redirects to a signed URL valid for 10 minutes',
+      summary: 'Download a file: redirects to a signed URL valid for 5 to 10 minutes',
       tags: ['versions'],
       security,
       request: { params: FileParam, query: z.object({ download: z.enum(['1']).optional() }) },
@@ -483,7 +486,10 @@ export function createApp(deps: Deps, opts: AppOptions) {
       if (!out) throw new ApiError('not_ready', 'This version has no files yet.')
       c.header('cache-control', 'private, no-store')
       return c.redirect(
-        await signedFilePath(deps, job, n, file, 600, c.req.valid('query').download === '1'),
+        await signedFilePath(deps, job, n, file, {
+          download: c.req.valid('query').download === '1',
+          stable: true,
+        }),
         302,
       )
     },

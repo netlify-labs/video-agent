@@ -551,6 +551,25 @@
               "netlifyRun"
             ]
           },
+          "files": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "poster": {
+                "type": "string"
+              },
+              "gif": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "poster",
+              "gif"
+            ],
+            "description": "Signed URLs for the poster and preview GIF, once the version has files (30 to 60 minutes; 5 to 10 for private videos). Use links for a fresh one."
+          },
           "publications": {
             "type": "array",
             "items": {
@@ -581,6 +600,7 @@
           "timings",
           "output",
           "links",
+          "files",
           "publications"
         ]
       },
@@ -4289,7 +4309,7 @@
     },
     "/api/v1/videos/{id}/versions/{n}/{file}": {
       "get": {
-        "summary": "Download a file: redirects to a signed URL valid for 10 minutes",
+        "summary": "Download a file: redirects to a signed URL valid for 5 to 10 minutes",
         "tags": [
           "versions"
         ],

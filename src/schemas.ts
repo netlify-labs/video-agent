@@ -147,6 +147,12 @@ export const VersionSchema = z
       captions: z.string(),
       netlifyRun: z.string().nullable(),
     }),
+    files: z
+      .object({ poster: z.string(), gif: z.string() })
+      .nullable()
+      .describe(
+        'Signed URLs for the poster and preview GIF, once the version has files (30 to 60 minutes; 5 to 10 for private videos). Use links for a fresh one.',
+      ),
     publications: z.array(PublicationSchema),
   })
   .openapi('Version')

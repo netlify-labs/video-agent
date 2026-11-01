@@ -16,7 +16,7 @@ import { IconLock, IconMessage, IconSearch } from '@tabler/icons-react'
 import { useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { $api, errorMessage, useCanCreate, type Video } from '../api/client'
-import { StageTrack, Status, duration, fileUrl, inProgress, relativeTime } from '../components/bits'
+import { StageTrack, Status, VersionImage, duration, inProgress, relativeTime } from '../components/bits'
 import { QuickCreate } from './NewVideo'
 
 function elapsed(iso: string | null | undefined): string {
@@ -45,7 +45,7 @@ function VideoCard({ v }: { v: Video }) {
     >
       <div className="va-poster">
         {ready && !working ? (
-          <img src={fileUrl(v.id, ready.n, hover ? 'gif' : 'poster')} alt="" loading="lazy" />
+          <VersionImage videoId={v.id} v={ready} file={hover ? 'gif' : 'poster'} />
         ) : working ? (
           <Stack gap={10} w="70%">
             <Group justify="space-between">

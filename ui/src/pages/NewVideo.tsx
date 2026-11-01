@@ -15,7 +15,7 @@ import { notifications } from '@mantine/notifications'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { $api, errorMessage, newIdempotencyKey, useCanCreate } from '../api/client'
-import { Status, fileUrl, relativeTime } from '../components/bits'
+import { Status, VersionImage, relativeTime } from '../components/bits'
 import { MediaChips, type Media } from '../components/MediaPicker'
 import { PlanPanel } from '../components/PlanPanel'
 import { brand } from '../theme'
@@ -125,7 +125,7 @@ function RecentMine() {
                 style={{ textDecoration: 'none' }}
               >
                 <div className="va-poster">
-                  {ready ? <img src={fileUrl(v.id, ready.n, 'poster')} alt="" loading="lazy" /> : null}
+                  {ready ? <VersionImage videoId={v.id} v={ready} file="poster" /> : null}
                 </div>
                 <div style={{ minWidth: 0 }}>
                   <Text size="sm" fw={500} truncate>

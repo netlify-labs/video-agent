@@ -227,10 +227,10 @@ async function summarize(deps: Deps, v: VideoDto) {
               summary: x.output.summary,
             },
             downloads: {
-              mp4: `${deps.config.siteUrl}${await signedFilePath(deps, job, x.n, 'video', ttl, true)}`,
-              poster: `${deps.config.siteUrl}${await signedFilePath(deps, job, x.n, 'poster', ttl)}`,
-              gif: `${deps.config.siteUrl}${await signedFilePath(deps, job, x.n, 'gif', ttl)}`,
-              captions: `${deps.config.siteUrl}${await signedFilePath(deps, job, x.n, 'captions', ttl)}`,
+              mp4: `${deps.config.siteUrl}${await signedFilePath(deps, job, x.n, 'video', { ttlSec: ttl, download: true })}`,
+              poster: `${deps.config.siteUrl}${await signedFilePath(deps, job, x.n, 'poster', { ttlSec: ttl })}`,
+              gif: `${deps.config.siteUrl}${await signedFilePath(deps, job, x.n, 'gif', { ttlSec: ttl })}`,
+              captions: `${deps.config.siteUrl}${await signedFilePath(deps, job, x.n, 'captions', { ttlSec: ttl })}`,
               expires_in_sec: ttl,
             },
           }

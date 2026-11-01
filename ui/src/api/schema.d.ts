@@ -1078,7 +1078,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Download a file: redirects to a signed URL valid for 10 minutes */
+        /** Download a file: redirects to a signed URL valid for 5 to 10 minutes */
         get: {
             parameters: {
                 query?: {
@@ -5115,6 +5115,11 @@ export interface components {
                 captions: string;
                 netlifyRun: string | null;
             };
+            /** @description Signed URLs for the poster and preview GIF, once the version has files (30 to 60 minutes; 5 to 10 for private videos). Use links for a fresh one. */
+            files: {
+                poster: string;
+                gif: string;
+            } | null;
             publications: components["schemas"]["Publication"][];
         };
         PlanBrief: {

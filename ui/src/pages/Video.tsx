@@ -33,6 +33,7 @@ import {
   Meta,
   StageTrack,
   Status,
+  VersionImage,
   confirmDanger,
   credits,
   duration,
@@ -252,7 +253,7 @@ function Filmstrip({
             >
               <div className="va-poster">
                 {x.status === 'ready' ? (
-                  <img src={fileUrl(video.id, x.n, 'poster')} alt="" loading="lazy" />
+                  <VersionImage videoId={video.id} v={x} file="poster" />
                 ) : (
                   <StageTrack version={x} />
                 )}

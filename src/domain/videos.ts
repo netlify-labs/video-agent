@@ -1,7 +1,8 @@
 // Creating, revising, retrying, cancelling, renaming, deleting and publishing videos.
 import type { Deps } from '../deps.js'
 import { sha256Hex } from '../lib/crypto.js'
-import { accessKey, writeAccessMirror } from './files.js'
+import { PUBLIC_URL_TTL_SEC, accessKey, fileTtl, signFile, stableExp, writeAccessMirror } from './files.js'
+import { getSettings } from './settings.js'
 import { emitEvent } from './webhooks.js'
 import { snapshotMedia } from './media.js'
 import { notifyOwner } from './notifications.js'
@@ -640,6 +641,7 @@ function versionDto(
   verdicts: VerdictRow[] = [],
   viewerId: string | null = null,
   incorporates = 0,
+  signing: { secret: string; job: JobRow; exp: number } | null = null,
 ) {
   const mineV = verdicts.find((x) => x.versionN === v.n && x.userId === viewerId)
   const fileBase = `${deps.config.siteUrl}/api/v1/videos/${jobId}/versions/${v.n}`
@@ -696,6 +698,14 @@ function versionDto(
       captions: `${fileBase}/captions`,
       netlifyRun: a?.runnerId ? deps.runner.runUrl(a.runnerId, a.sessionId) : null,
     },
+    // Signed image URLs, so the UI skips the redirect. One expiry per DTO keeps them stable for the browser cache.
+    files:
+      o && signing
+        ? {
+            poster: `${deps.config.siteUrl}${signFile(signing.secret, signing.job, v.n, 'poster', signing.exp)}`,
+            gif: `${deps.config.siteUrl}${signFile(signing.secret, signing.job, v.n, 'gif', signing.exp)}`,
+          }
+        : null,
     publications: pubs.filter((p) => p.versionN === v.n).map((p) => publicationDto(deps, p)),
   }
 }
@@ -704,7 +714,33 @@ function versionDto(
  * server-side uses that already decided who receives it. */
 export async function videoDto(
   repo: Repo,
+  deps: DtoDeps,
+  jobId: string,
+  viewer: Principal,
+  prefetched?: { verdicts: VerdictRow[]; comments: Record<string, CommentCounts> },
+): Promise<VideoDtoShape>
+export async function videoDto(
+  repo: Repo,
   deps: Pick<Deps, 'config' | 'runner'>,
+  jobId: string,
+  viewer: 'system',
+): Promise<VideoDtoShape>
+export async function videoDto(
+  repo: Repo,
+  deps: Pick<Deps, 'config' | 'runner'> & Partial<DtoDeps>,
+  jobId: string,
+  viewer: Principal | 'system',
+  prefetched?: { verdicts: VerdictRow[]; comments: Record<string, CommentCounts> },
+) {
+  return buildVideoDto(repo, deps, jobId, viewer, prefetched)
+}
+
+type DtoDeps = Pick<Deps, 'config' | 'runner' | 'store' | 'ids' | 'clock' | 'blobs'>
+type VideoDtoShape = Awaited<ReturnType<typeof buildVideoDto>>
+
+async function buildVideoDto(
+  repo: Repo,
+  deps: Pick<Deps, 'config' | 'runner'> & Partial<DtoDeps>,
   jobId: string,
   viewer: Principal | 'system',
   prefetched?: { verdicts: VerdictRow[]; comments: Record<string, CommentCounts> },
@@ -719,6 +755,16 @@ export async function videoDto(
     prefetched ? prefetched.verdicts.filter((x) => x.jobId === jobId) : repo.listVerdicts([jobId]),
     repo.listVersionComments(jobId),
   ])
+  // Webhooks ('system') get no signed URLs: they'd expire long before anyone used them.
+  const { store, ids, clock, blobs } = deps
+  const signing =
+    viewer === 'system' || !store || !ids || !clock || !blobs
+      ? null
+      : {
+          secret: (await getSettings({ store, ids, clock, blobs })).fileSigningSecret,
+          job,
+          exp: stableExp(clock.now().getTime() / 1000, fileTtl(job, PUBLIC_URL_TTL_SEC)),
+        }
   const out = await Promise.all(
     versions.map(async (v) => {
       const mine = attempts.filter((a) => a.versionN === v.n)
@@ -733,6 +779,7 @@ export async function videoDto(
         verdicts,
         viewer === 'system' ? null : viewer.userId,
         fed.filter((c) => c.versionN === v.n).length,
+        signing,
       )
     }),
   )
@@ -760,7 +807,7 @@ export async function videoDto(
   }
 }
 
-export type VideoDto = Awaited<ReturnType<typeof videoDto>>
+export type VideoDto = VideoDtoShape
 
 type Cursor = { createdAt: string; id: string }
 

@@ -15,21 +15,48 @@ export type FileKind = keyof typeof FILE_NAMES
 /** Private-video file URLs last at most this long (plan v2 §14 rule 4). */
 export const PRIVATE_URL_TTL_SEC = 600
 
+/** File URLs in the video DTO last this long for public videos (private ones: PRIVATE_URL_TTL_SEC). */
+export const PUBLIC_URL_TTL_SEC = 3600
+
+/**
+ * An expiry snapped to a window of ttl/2, so every URL minted in the same window is identical and the browser can
+ * cache the file. The lifetime stays in (ttl/2, ttl]: never longer than an unsnapped URL.
+ */
+export function stableExp(nowSec: number, ttlSec: number): number {
+  const window = Math.max(1, Math.floor(ttlSec / 2))
+  return Math.floor((Math.floor(nowSec) + ttlSec) / window) * window
+}
+
+/** The signed-URL lifetime for a job: `ttlSec`, capped for private videos. */
+export const fileTtl = (job: Pick<JobRow, 'private'>, ttlSec: number) =>
+  job.private ? Math.min(ttlSec, PRIVATE_URL_TTL_SEC) : ttlSec
+
+/** Signs one file path for a known expiry (the job's access epoch is bound in for private videos). */
+export function signFile(
+  secret: string,
+  job: Pick<JobRow, 'id' | 'private' | 'accessEpoch'>,
+  n: number,
+  file: FileKind,
+  exp: number,
+): string {
+  const path = `/files/${job.id}/v${n}/${FILE_NAMES[file]}`
+  const epoch = job.private ? job.accessEpoch : undefined
+  const sig = signPath(secret, path, exp, epoch)
+  return `${path}?exp=${exp}${epoch === undefined ? '' : `&e=${epoch}`}&sig=${sig}`
+}
+
 export async function signedFilePath(
   deps: Pick<Deps, 'store' | 'ids' | 'clock' | 'blobs'>,
   job: Pick<JobRow, 'id' | 'private' | 'accessEpoch'>,
   n: number,
   file: FileKind,
-  ttlSec = 600,
-  download = false,
+  o: { ttlSec?: number; download?: boolean; stable?: boolean } = {},
 ): Promise<string> {
   const { fileSigningSecret } = await getSettings(deps)
-  const path = `/files/${job.id}/v${n}/${FILE_NAMES[file]}`
-  const ttl = job.private ? Math.min(ttlSec, PRIVATE_URL_TTL_SEC) : ttlSec
-  const exp = Math.floor(deps.clock.now().getTime() / 1000) + ttl
-  const epoch = job.private ? job.accessEpoch : undefined
-  const sig = signPath(fileSigningSecret, path, exp, epoch)
-  return `${path}?exp=${exp}${epoch === undefined ? '' : `&e=${epoch}`}&sig=${sig}${download ? '&download=1' : ''}`
+  const ttl = fileTtl(job, o.ttlSec ?? 600)
+  const nowSec = Math.floor(deps.clock.now().getTime() / 1000)
+  const exp = o.stable ? stableExp(nowSec, ttl) : nowSec + ttl
+  return `${signFile(fileSigningSecret, job, n, file, exp)}${o.download ? '&download=1' : ''}`
 }
 
 export const accessKey = (jobId: string) => `access/${jobId}.json`
