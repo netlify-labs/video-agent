@@ -278,6 +278,11 @@ export function AdminPage() {
                     <td style={{ color: u.disabled ? 'var(--va-faint)' : undefined }}>
                       {u.email}
                       {u.id === me.data?.id ? <span style={{ color: 'var(--va-faint)' }}> (you)</span> : null}
+                      {u.signInMethods.length > 0 ? (
+                        <Text size="xs" c="var(--va-faint)">
+                          {u.signInMethods.map(signInLabel).join(' · ')}
+                        </Text>
+                      ) : null}
                     </td>
                     <td className="num">{relativeTime(u.createdAt)}</td>
                     <td>
@@ -383,4 +388,11 @@ export function AdminPage() {
       </Stack>
     </>
   )
+}
+
+/** How a person signs in, as the People table shows it. */
+function signInLabel(method: string): string {
+  if (method === 'identity') return 'Netlify Identity'
+  if (method === 'netlify') return 'Sign in with Netlify'
+  return method
 }

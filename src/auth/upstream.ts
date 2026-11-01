@@ -8,12 +8,22 @@ export interface UpstreamIdentity {
   authorizeUrl(input: { state: string; redirectUri: string; codeChallenge?: string }): string
   /** Trades the callback's code for the signed-in person. Throws UpstreamError. */
   exchange(code: string, redirectUri: string): Promise<UpstreamUser>
+  /** The teams the token's owner belongs to. Throws UpstreamError ('rejected' when the token no longer works). */
+  teams(accessToken: string): Promise<UpstreamTeam[]>
 }
 
 export interface UpstreamUser {
   subject: string
   email: string
   emailVerified: boolean
+  /** The upstream access token, used only for team checks. Never logged. */
+  accessToken?: string
+}
+
+export interface UpstreamTeam {
+  id: string
+  slug: string | null
+  name: string | null
 }
 
 export class UpstreamError extends Error {
@@ -65,9 +75,19 @@ export async function boundedJson(
 const NETLIFY_AUTHORIZE = 'https://app.netlify.com/authorize'
 const NETLIFY_TOKEN = 'https://api.netlify.com/oauth/token'
 const NETLIFY_USER = 'https://api.netlify.com/api/v1/user'
+const NETLIFY_ACCOUNTS = 'https://api.netlify.com/api/v1/accounts'
 
 const NetlifyToken = z.object({ access_token: z.string().min(1).max(8192) })
 const NetlifyUser = z.object({ id: z.string().min(1).max(256), email: z.string().min(3).max(320) })
+const NetlifyAccounts = z
+  .array(
+    z.object({
+      id: z.string().min(1).max(256),
+      slug: z.string().max(256).nullish(),
+      name: z.string().max(512).nullish(),
+    }),
+  )
+  .max(1000)
 
 export function netlifyUpstream(
   config: Pick<McpOAuthConfig, 'clientId' | 'clientSecret'>,
@@ -116,7 +136,25 @@ export function netlifyUpstream(
       if (!user.success) throw new UpstreamError('malformed', 'user')
       // Netlify's user record has no verification flag; a Netlify sign-in is taken as proof of the address,
       // as in gtm-services' mcp-gateway.
-      return { subject: user.data.id, email: user.data.email.trim().toLowerCase(), emailVerified: true }
+      return {
+        subject: user.data.id,
+        email: user.data.email.trim().toLowerCase(),
+        emailVerified: true,
+        accessToken: token.data.access_token,
+      }
+    },
+    async teams(accessToken) {
+      // Account records are large (capabilities, billing), so the list gets a bigger size limit.
+      const accounts = NetlifyAccounts.safeParse(
+        await boundedJson(
+          'accounts',
+          NETLIFY_ACCOUNTS,
+          { headers: { accept: 'application/json', authorization: `Bearer ${accessToken}` } },
+          { ...opts, maxBytes: 8 * 1024 * 1024 },
+        ),
+      )
+      if (!accounts.success) throw new UpstreamError('malformed', 'accounts')
+      return accounts.data.map((a) => ({ id: a.id, slug: a.slug ?? null, name: a.name ?? null }))
     },
   }
 }

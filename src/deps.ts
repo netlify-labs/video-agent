@@ -23,6 +23,12 @@ export interface Config {
   uploadMode: 'blobs' | 'signed'
   /** Optional OAuth for the MCP; null (off) unless a provider and its credentials are set. */
   mcpOAuth: McpOAuthConfig | null
+  /** How people sign in to the web app: Netlify Identity (the default) or Sign in with Netlify. */
+  authProvider: 'identity' | 'netlify'
+  /** The Netlify OAuth app (web sign-in and MCP OAuth share it); null unless both values are set. */
+  netlifyOAuth: { clientId: string; clientSecret: string } | null
+  /** Netlify teams (slugs or ids) a Netlify sign-in must belong to; empty for no team rule. */
+  netlifyRequiredTeams: string[]
 }
 
 export interface McpOAuthConfig {
@@ -42,7 +48,11 @@ function readMcpOAuth(
 ): McpOAuthConfig | null {
   const clientId = env.NETLIFY_OAUTH_CLIENT_ID?.trim()
   const clientSecret = env.NETLIFY_OAUTH_CLIENT_SECRET?.trim()
-  if (env.MCP_OAUTH_PROVIDER?.trim().toLowerCase() !== 'netlify' || !clientId || !clientSecret) return null
+  // With Sign in with Netlify on the web, MCP OAuth is on too unless MCP_OAUTH_PROVIDER says otherwise.
+  const provider =
+    env.MCP_OAUTH_PROVIDER?.trim().toLowerCase() ||
+    (env.AUTH_PROVIDER?.trim().toLowerCase() === 'netlify' ? 'netlify' : '')
+  if (provider !== 'netlify' || !clientId || !clientSecret) return null
   const own = list(env.MCP_OAUTH_ALLOWED_EMAIL_DOMAINS)
   const cimd = list(env.MCP_OAUTH_CIMD_HOSTS)
   return {
@@ -86,6 +96,15 @@ export function readConfig(env: Record<string, string | undefined>): Config {
     runnerTokenPresent: Boolean(env.RUNNER_API_TOKEN),
     uploadMode: env.UPLOAD_MODE === 'signed' ? 'signed' : 'blobs',
     mcpOAuth: readMcpOAuth(env, list, admission),
+    authProvider: env.AUTH_PROVIDER?.trim().toLowerCase() === 'netlify' ? 'netlify' : 'identity',
+    netlifyOAuth:
+      env.NETLIFY_OAUTH_CLIENT_ID?.trim() && env.NETLIFY_OAUTH_CLIENT_SECRET?.trim()
+        ? {
+            clientId: env.NETLIFY_OAUTH_CLIENT_ID.trim(),
+            clientSecret: env.NETLIFY_OAUTH_CLIENT_SECRET.trim(),
+          }
+        : null,
+    netlifyRequiredTeams: list(env.NETLIFY_REQUIRED_TEAM),
   }
 }
 
@@ -200,7 +219,10 @@ export interface HttpPort {
   ): Promise<{ status: number }>
 }
 
-/** What the MCP OAuth server needs from outside: the upstream sign-in and client metadata documents. */
+/**
+ * What the MCP OAuth server and Sign in with Netlify need from outside: the upstream sign-in and client metadata
+ * documents.
+ */
 export interface OAuthPort {
   upstream: UpstreamIdentity
   /** A bounded GET of a Client ID Metadata Document; the caller has checked the host. Null on any failure. */
@@ -220,7 +242,7 @@ export interface Deps {
   platform: PlatformPort
   http: HttpPort
   gateway: GatewayPort
-  /** Null unless config.mcpOAuth is set. */
+  /** Null unless config.mcpOAuth is set or the web app signs in with Netlify. */
   oauth: OAuthPort | null
   clock: Clock
   ids: Ids

@@ -5267,6 +5267,13 @@ export interface components {
             planningAvailable: boolean;
             /** @description MCP clients can connect with OAuth (Sign in with Netlify) as well as API keys. */
             mcpOAuth: boolean;
+            /**
+             * @description How people sign in to the web app: Netlify Identity, or Sign in with Netlify.
+             * @enum {string}
+             */
+            authProvider: "identity" | "netlify";
+            /** @description Netlify teams (slugs or ids) a Netlify sign-in must belong to; empty when there is no team rule. */
+            requiredTeams: string[];
         };
         Video: {
             /** @example vid_01jc8k0000000000000000000 */
@@ -5556,6 +5563,8 @@ export interface components {
             createdAt: string;
             lastSeenAt: string;
             disabled: boolean;
+            /** @description How the person signs in: 'identity' (Netlify Identity) and/or 'netlify' (Sign in with Netlify). */
+            signInMethods: string[];
         };
         UpdateUser: {
             role?: components["schemas"]["Role"];

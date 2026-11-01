@@ -34,6 +34,8 @@ import type {
   OAuthRequestRow,
   OAuthGrantRow,
   OAuthTokenRow,
+  SessionRow,
+  UserIdentityRow,
 } from '../domain/types.js'
 
 export interface JobQuery {
@@ -225,6 +227,25 @@ export interface Repo {
    * created before `clientsBefore` that no grant or request uses.
    */
   deleteExpiredOAuth(now: string, clientsBefore: string): Promise<number>
+
+  // sign-in identities and web sessions (src/auth)
+  getUserIdentity(provider: string, subject: string): Promise<UserIdentityRow | null>
+  /** Returns the stored row, which is another person's when the (provider, subject) was already linked. */
+  insertUserIdentityIfAbsent(row: UserIdentityRow): Promise<UserIdentityRow>
+  updateUserIdentity(provider: string, subject: string, patch: Partial<UserIdentityRow>): Promise<void>
+  listUserIdentities(): Promise<UserIdentityRow[]>
+  insertSession(row: SessionRow): Promise<void>
+  getSession(id: string): Promise<SessionRow | null>
+  updateSession(id: string, patch: Partial<SessionRow>): Promise<void>
+  /** Ends every live session a person holds. */
+  revokeUserSessions(userId: string, at: string): Promise<void>
+  /** Deletes expired and revoked sessions. */
+  deleteExpiredSessions(now: string): Promise<number>
+  /**
+   * Moves everything `fromId` owns, wrote or holds to `intoId` and deletes the `fromId` user row. Where both have
+   * a row under the same key (a verdict, a read watermark, a personal webhook), `intoId`'s is kept. Call in `tx`.
+   */
+  mergeUser(fromId: string, intoId: string): Promise<void>
 
   // stats
   usageSince(

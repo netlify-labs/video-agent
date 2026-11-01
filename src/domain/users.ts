@@ -1,9 +1,10 @@
+import { signInMethods } from '../auth/accounts.js'
 import type { Deps } from '../deps.js'
 import { ApiError } from '../lib/errors.js'
 import { assertCan, type Principal } from './policy.js'
 import type { Role, UserRow } from './types.js'
 
-export const userDto = (u: UserRow) => ({
+export const userDto = (u: UserRow, methods: string[] = []) => ({
   id: u.id,
   email: u.email,
   name: u.name,
@@ -12,11 +13,13 @@ export const userDto = (u: UserRow) => ({
   createdAt: u.createdAt,
   lastSeenAt: u.lastSeenAt,
   disabled: u.disabledAt !== null,
+  signInMethods: methods,
 })
 
 export async function listUsers(deps: Deps, p: Principal) {
   assertCan(p, 'users:manage')
-  return (await deps.store.listUsers()).map(userDto)
+  const methods = await signInMethods(deps)
+  return (await deps.store.listUsers()).map((u) => userDto(u, methods.get(u.id)))
 }
 
 export async function updateUser(
@@ -26,6 +29,7 @@ export async function updateUser(
   patch: { role?: Role | undefined; disabled?: boolean | undefined },
 ) {
   assertCan(p, 'users:manage')
+  const methods = (await signInMethods(deps)).get(id)
   return deps.store.tx(async (repo) => {
     // Serialize role and disable changes, so two concurrent changes can't remove the last enabled admin.
     await repo.lockQueueControl()
@@ -46,7 +50,8 @@ export async function updateUser(
       for (const k of await repo.listKeys(id))
         if (!k.revokedAt) await repo.updateKey(k.id, { revokedAt: deps.clock.now().toISOString() })
       await repo.revokeOAuthGrants(id, deps.clock.now().toISOString())
+      await repo.revokeUserSessions(id, deps.clock.now().toISOString())
     }
-    return userDto({ ...u, ...next })
+    return userDto({ ...u, ...next }, methods)
   })
 }

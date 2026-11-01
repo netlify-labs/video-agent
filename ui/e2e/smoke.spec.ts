@@ -199,6 +199,47 @@ test('admin, keys and setup render', async ({ page }) => {
   await expect(page.getByText('Everything needed is in place. People can make videos.')).toBeVisible()
 })
 
+test('Sign in with Netlify: one button that returns here, and the rule in plain words', async ({ page }) => {
+  await mock(page, 'mockAuthProvider', 'netlify')
+  await mock(page, 'mockSignedOut')
+  await page.goto('/videos/vid_1?tab=comments')
+  const button = page.getByRole('link', { name: 'Sign in with Netlify' })
+  await expect(button).toBeVisible()
+  await expect(button).toHaveAttribute(
+    'href',
+    '/auth/netlify/start?return_to=%2Fvideos%2Fvid_1%3Ftab%3Dcomments',
+  )
+  await expect(
+    page.getByText(
+      'Use the Netlify account for your acme.com email address. You need to be a member of the acme Netlify team.',
+    ),
+  ).toBeVisible()
+  await expect(page.getByLabel('Password')).toHaveCount(0)
+  await expect(page.getByRole('tab', { name: 'Create account' })).toHaveCount(0)
+})
+
+test('a refused Netlify sign-in says why, once', async ({ page }) => {
+  await mock(page, 'mockAuthProvider', 'netlify')
+  await mock(page, 'mockSignedOut')
+  await page.goto(`/?signin_error=${encodeURIComponent("You're not in the acme Netlify team.")}`)
+  await expect(
+    page.getByRole('alert').filter({ hasText: "You're not in the acme Netlify team." }),
+  ).toBeVisible()
+  await expect(page).toHaveURL(/\/$/)
+})
+
+test('Identity keeps its email and password sign-in', async ({ page }) => {
+  await mock(page, 'mockSignedOut')
+  await page.goto('/')
+  await expect(page.getByLabel('Password').first()).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Sign in with Netlify' })).toHaveCount(0)
+})
+
+test('the People table shows how each person signs in', async ({ page }) => {
+  await page.goto('/admin')
+  await expect(page.getByText('Netlify Identity · Sign in with Netlify')).toBeVisible()
+})
+
 test('keys page lists connected OAuth apps and revokes one', async ({ page }) => {
   await page.goto('/keys')
   const apps = page.getByRole('table', { name: 'Connected apps' })

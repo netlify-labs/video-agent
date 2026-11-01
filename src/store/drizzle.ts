@@ -49,6 +49,8 @@ import type {
   OAuthRequestRow,
   OAuthGrantRow,
   OAuthTokenRow,
+  SessionRow,
+  UserIdentityRow,
 } from '../domain/types.js'
 import { addUsage, type UsageRow } from './memory.js'
 import type { Repo, Store } from './types.js'
@@ -784,6 +786,100 @@ function repoFor(db: Db): Repo {
           .returning({ id: t.oauthClients.id }),
       )
       return n
+    },
+
+    getUserIdentity: async (provider, subject) =>
+      one<UserIdentityRow>(
+        await db
+          .select()
+          .from(t.userIdentities)
+          .where(and(eq(t.userIdentities.provider, provider), eq(t.userIdentities.subject, subject))),
+      ),
+    insertUserIdentityIfAbsent: async (row) => {
+      await db.insert(t.userIdentities).values(row).onConflictDoNothing()
+      return one<UserIdentityRow>(
+        await db
+          .select()
+          .from(t.userIdentities)
+          .where(and(eq(t.userIdentities.provider, row.provider), eq(t.userIdentities.subject, row.subject))),
+      ) as UserIdentityRow
+    },
+    updateUserIdentity: async (provider, subject, patch) => {
+      await db
+        .update(t.userIdentities)
+        .set(patch)
+        .where(and(eq(t.userIdentities.provider, provider), eq(t.userIdentities.subject, subject)))
+    },
+    listUserIdentities: async () => await db.select().from(t.userIdentities),
+    insertSession: async (row) => {
+      await db.insert(t.sessions).values(row)
+    },
+    getSession: async (id) =>
+      one<SessionRow>(await db.select().from(t.sessions).where(eq(t.sessions.id, id))),
+    updateSession: async (id, patch) => {
+      await db.update(t.sessions).set(patch).where(eq(t.sessions.id, id))
+    },
+    revokeUserSessions: async (userId, at) => {
+      await db
+        .update(t.sessions)
+        .set({ revokedAt: at })
+        .where(and(eq(t.sessions.userId, userId), isNull(t.sessions.revokedAt)))
+    },
+    deleteExpiredSessions: async (now) =>
+      (
+        await db
+          .delete(t.sessions)
+          .where(or(sql`${t.sessions.revokedAt} is not null`, lte(t.sessions.expiresAt, now)))
+          .returning({ id: t.sessions.id })
+      ).length,
+    mergeUser: async (from, into) => {
+      // Rows keyed by the user id: drop the ones `into` already has a row for, then move the rest.
+      await db.execute(sql`delete from idempotency_keys f where principal_id = ${from} and exists
+        (select 1 from idempotency_keys i where i.principal_id = ${into} and i.operation = f.operation and i.key = f.key)`)
+      await db.execute(sql`delete from comment_reads f where user_id = ${from} and exists
+        (select 1 from comment_reads i where i.user_id = ${into} and i.job_id = f.job_id)`)
+      await db.execute(sql`delete from verdicts f where user_id = ${from} and exists
+        (select 1 from verdicts i where i.user_id = ${into} and i.job_id = f.job_id and i.version_n = f.version_n)`)
+      await db.execute(sql`delete from notification_reads where user_id = ${from} and exists
+        (select 1 from notification_reads i where i.user_id = ${into})`)
+      await db.execute(sql`delete from user_webhooks where user_id = ${from} and exists
+        (select 1 from user_webhooks i where i.user_id = ${into})`)
+      const moves: [string, string][] = [
+        ['api_keys', 'owner_id'],
+        ['jobs', 'owner_id'],
+        ['versions', 'author_id'],
+        ['publications', 'published_by'],
+        ['idempotency_keys', 'principal_id'],
+        ['plans', 'user_id'],
+        ['gateway_calls', 'caller_id'],
+        ['comments', 'author_id'],
+        ['comments', 'resolved_by'],
+        ['media', 'uploader_id'],
+        ['media_uploads', 'uploader_id'],
+        ['edits', 'author_id'],
+        ['version_comments', 'author_id'],
+        ['comment_reads', 'user_id'],
+        ['notifications', 'user_id'],
+        ['notifications', 'actor_id'],
+        ['notification_reads', 'user_id'],
+        ['ownership_transfers', 'from_user_id'],
+        ['ownership_transfers', 'to_user_id'],
+        ['ownership_transfers', 'by_user_id'],
+        ['verdicts', 'user_id'],
+        ['user_webhooks', 'user_id'],
+        ['oauth_requests', 'user_id'],
+        ['oauth_grants', 'user_id'],
+        ['sessions', 'user_id'],
+        ['user_identities', 'user_id'],
+      ]
+      for (const [table, col] of moves)
+        await db.execute(
+          sql`update ${sql.identifier(table)} set ${sql.identifier(col)} = ${into} where ${sql.identifier(col)} = ${from}`,
+        )
+      await db.execute(
+        sql`update webhook_deliveries set dest_ref = ${into} where dest_kind = 'personal' and dest_ref = ${from}`,
+      )
+      await db.delete(t.users).where(eq(t.users.id, from))
     },
 
     usageSince: async (since) => {

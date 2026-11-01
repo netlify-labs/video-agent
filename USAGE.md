@@ -16,4 +16,10 @@ API key, create a Netlify OAuth app with the redirect URI `https://<your-site>/o
 `MCP_OAUTH_PROVIDER=netlify`, `NETLIFY_OAUTH_CLIENT_ID` and `NETLIFY_OAUTH_CLIENT_SECRET` (see the README, "Sign in with
 Netlify (OAuth)"). `MCP_OAUTH_ALLOWED_EMAIL_DOMAINS` narrows who can connect; it defaults to `ALLOWED_EMAIL_DOMAINS`.
 
+Instead of Netlify Identity, the web app can use **Sign in with Netlify**, optionally limited to members of your
+Netlify team: create the OAuth app as above (the same redirect URI) and set `AUTH_PROVIDER=netlify`,
+`NETLIFY_OAUTH_CLIENT_ID`, `NETLIFY_OAUTH_CLIENT_SECRET` and, for the team rule, `NETLIFY_REQUIRED_TEAM` (your team's
+slug or id). Skip steps 1 and 3: the first sign-in from an `ADMIN_EMAILS` address becomes an admin. See the README,
+"Sign in with Netlify for the web app".
+
 Put your brand guide, logos and fonts in `context/` in the new repo so every video follows them.

@@ -12,7 +12,10 @@ import {
   tokenRequest,
   type OAuthDeps,
   type Outcome,
+  type SignedIn,
 } from './oauth.js'
+import { liveSession, readCookie, SESSION_COOKIE } from './sessions.js'
+import { webCallback, webSignInEnabled } from './web.js'
 
 const MAX_BODY = 16 * 1024
 const NO_STORE = { 'cache-control': 'no-store' }
@@ -161,12 +164,29 @@ export function oauthRoutes(deps: OAuthDeps) {
     }
   })
 
+  // Single sign-on: someone signed in to the web app with Netlify goes straight to consent. A session that no longer
+  // holds (expired, disabled, out of the team) falls back to the upstream sign-in.
+  const signedIn = (c: Context) => async (): Promise<SignedIn | null> => {
+    if (!webSignInEnabled(deps) || !readCookie(c.req.raw, SESSION_COOKIE)) return null
+    try {
+      const { session, user } = await liveSession(deps, c.req.raw)
+      return {
+        row: user,
+        upstreamTokenEnc: session.upstreamTokenEnc,
+        membershipCheckedAt: session.membershipCheckedAt,
+      }
+    } catch {
+      return null
+    }
+  }
   app.get('/oauth/authorize', async (c) =>
-    respond(c, await startAuthorization(deps, new URL(c.req.url).searchParams)),
+    respond(c, await startAuthorization(deps, new URL(c.req.url).searchParams, signedIn(c))),
   )
-  app.get('/oauth/callback', async (c) =>
-    respond(c, await finishUpstream(deps, new URL(c.req.url).searchParams)),
-  )
+  app.get('/oauth/callback', async (c) => {
+    // The web app's Sign in with Netlify shares this redirect URI; its browser-bound cookie claims the callback.
+    const web = webSignInEnabled(deps) ? await webCallback(deps, c) : null
+    return web ?? respond(c, await finishUpstream(deps, new URL(c.req.url).searchParams))
+  })
   app.post('/oauth/consent', async (c) => {
     const origin = c.req.header('origin')
     if (origin && origin !== new URL(site).origin)

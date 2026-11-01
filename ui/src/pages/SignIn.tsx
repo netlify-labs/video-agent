@@ -13,7 +13,7 @@ import {
   Title,
   useComputedColorScheme,
 } from '@mantine/core'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { $api } from '../api/client'
 import { useAuth } from '../auth'
@@ -26,7 +26,16 @@ export function AuthPages({ setupReady }: { setupReady: boolean }) {
   const config = $api.useQuery('get', '/api/v1/config')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState<string | null>(null)
+  // A Sign in with Netlify that was refused comes back as ?signin_error=… (src/auth/web.ts).
+  const [error, setError] = useState<string | null>(() =>
+    new URLSearchParams(window.location.search).get('signin_error'),
+  )
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    if (!url.searchParams.has('signin_error')) return
+    url.searchParams.delete('signin_error')
+    history.replaceState(null, '', url.pathname + url.search + url.hash)
+  }, [])
   const [info, setInfo] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const admission = config.data?.admission
@@ -60,7 +69,11 @@ export function AuthPages({ setupReady }: { setupReady: boolean }) {
             </Text>
           </div>
           {auth.notice ? (
-            <Alert color="green" withCloseButton onClose={auth.clearNotice}>
+            <Alert
+              color={auth.noticeTone === 'warn' ? 'yellow' : 'green'}
+              withCloseButton
+              onClose={auth.clearNotice}
+            >
               {auth.notice}
             </Alert>
           ) : null}
@@ -81,6 +94,26 @@ export function AuthPages({ setupReady }: { setupReady: boolean }) {
       <PoweredBy />
     </Center>
   )
+
+  if (auth.provider === 'netlify') {
+    const teams = config.data?.requiredTeams ?? []
+    const back = window.location.pathname + window.location.search
+    return card(
+      <Stack>
+        <Button
+          component="a"
+          href={`/auth/netlify/start?return_to=${encodeURIComponent(back)}`}
+          size="md"
+          leftSection={<NetlifyMark />}
+        >
+          Sign in with Netlify
+        </Button>
+        <Text size="sm" c="dimmed">
+          {signInRule(admission, teams)}
+        </Text>
+      </Stack>,
+    )
+  }
 
   if (auth.pending) {
     const invite = auth.pending.kind === 'invite'
@@ -215,5 +248,22 @@ export function AuthPages({ setupReady }: { setupReady: boolean }) {
         </form>
       </Tabs.Panel>
     </Tabs>,
+  )
+}
+
+/** Who can sign in with Netlify here, in plain words. */
+function signInRule(admission: string[] | 'invite-only' | null | undefined, teams: string[]): string {
+  const team = teams.length > 0 ? ` You need to be a member of the ${teams.join(' or ')} Netlify team.` : ''
+  if (Array.isArray(admission))
+    return `Use the Netlify account for your ${admission.join(' or ')} email address.${team}`
+  if (admission === 'invite-only') return `Only people who already have an account here can sign in.${team}`
+  return `Use your Netlify account.${team}`
+}
+
+function NetlifyMark() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
+      <path d="M12 2 2 12l10 10 10-10L12 2Zm0 4.2L17.8 12 12 17.8 6.2 12 12 6.2Z" />
+    </svg>
   )
 }

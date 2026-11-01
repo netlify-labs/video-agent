@@ -1,5 +1,7 @@
 // Turning a request into a Principal: Identity cookie sessions or API keys, with fail-closed
 // admission and a live account check (getUser() can fall back to token claims during an outage).
+// With AUTH_PROVIDER=netlify, the cookie is a Sign in with Netlify session instead (src/auth/sessions.ts).
+import { principalFromSession } from '../auth/sessions.js'
 import type { Deps, IdentityUser } from '../deps.js'
 import { safeEqual, sha256Hex } from '../lib/crypto.js'
 import { ApiError } from '../lib/errors.js'
@@ -93,13 +95,28 @@ export function parseApiKey(raw: string): { keyId: string; secret: string } | nu
   return { keyId: rest.slice(0, i), secret: rest.slice(i + 1) }
 }
 
+/** With Sign in with Netlify, a key works while its owner's row is enabled and admissible; Identity isn't asked. */
+async function keyOwnerRow(deps: Deps, ownerId: string): Promise<UserRow> {
+  const row = await deps.store.getUser(ownerId)
+  if (!row) throw new ApiError('unauthorized', "This key's owner no longer has an account.")
+  if (row.disabledAt) throw new ApiError('forbidden', 'Your account has been disabled by an admin.')
+  const mode = deps.config.allowedEmailDomains
+  if (row.admittedVia === 'domain' && Array.isArray(mode) && !mode.includes(emailDomain(row.email)))
+    throw new ApiError('forbidden', 'Your email address is no longer in an allowed domain.')
+  return row
+}
+
 /**
  * API keys are checked first. `otherBearer` (the MCP when OAuth is on) resolves bearer tokens that aren't API keys.
+ * `setCookie` receives a rotated Sign in with Netlify session cookie for the response.
  */
 export async function principalFromRequest(
   deps: Deps,
   req: Request,
-  opts: { otherBearer?: (token: string) => Promise<Principal> } = {},
+  opts: {
+    otherBearer?: (token: string) => Promise<Principal>
+    setCookie?: (value: string) => void
+  } = {},
 ): Promise<Principal> {
   const auth = req.headers.get('authorization')
   if (auth) {
@@ -112,9 +129,13 @@ export async function principalFromRequest(
     if (!key || key.revokedAt || !safeEqual(key.secretHash, sha256Hex(parsed.secret))) {
       throw new ApiError('unauthorized', 'Invalid API key.')
     }
-    const live = await liveIdentityUser(deps, key.ownerId)
-    if (!live?.confirmed) throw new ApiError('unauthorized', "This key's owner no longer has an account.")
-    const row = await ensureUserRow(deps, live)
+    let row: UserRow
+    if (deps.config.authProvider === 'netlify') row = await keyOwnerRow(deps, key.ownerId)
+    else {
+      const live = await liveIdentityUser(deps, key.ownerId)
+      if (!live?.confirmed) throw new ApiError('unauthorized', "This key's owner no longer has an account.")
+      row = await ensureUserRow(deps, live)
+    }
     const now = deps.clock.now().toISOString()
     if (!key.lastUsedAt || now.slice(0, 15) !== key.lastUsedAt.slice(0, 15))
       await deps.store.updateKey(key.id, { lastUsedAt: now })
@@ -128,6 +149,7 @@ export async function principalFromRequest(
     }
   }
 
+  if (deps.config.authProvider === 'netlify') return principalFromSession(deps, req, opts.setCookie)
   const session = await deps.identity.sessionUser(req)
   if (!session) throw new ApiError('unauthorized', 'Sign in first.')
   const live = await liveIdentityUser(deps, session.id)

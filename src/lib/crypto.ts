@@ -4,6 +4,7 @@ import {
   createDecipheriv,
   createHash,
   createHmac,
+  hkdfSync,
   randomBytes,
   timingSafeEqual,
 } from 'node:crypto'
@@ -42,6 +43,13 @@ export function verifyPath(
 /** Webhook signature header value: t=<unix>,v1=<hex hmac of "t.body">. */
 export function webhookSignature(secret: string, body: string, tSec: number): string {
   return `t=${tSec},v1=${hmacHex(secret, `${tSec}.${body}`)}`
+}
+
+/** A separate 32-byte key for one purpose, derived from a base64url secret with HKDF-SHA256. */
+export function deriveKey(secretB64: string, purpose: string): string {
+  return Buffer.from(hkdfSync('sha256', Buffer.from(secretB64, 'base64url'), '', purpose, 32)).toString(
+    'base64url',
+  )
 }
 
 export function encrypt(keyB64: string, plaintext: string): string {

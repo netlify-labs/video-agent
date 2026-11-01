@@ -110,13 +110,30 @@
           "mcpOAuth": {
             "type": "boolean",
             "description": "MCP clients can connect with OAuth (Sign in with Netlify) as well as API keys."
+          },
+          "authProvider": {
+            "type": "string",
+            "enum": [
+              "identity",
+              "netlify"
+            ],
+            "description": "How people sign in to the web app: Netlify Identity, or Sign in with Netlify."
+          },
+          "requiredTeams": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Netlify teams (slugs or ids) a Netlify sign-in must belong to; empty when there is no team rule."
           }
         },
         "required": [
           "admission",
           "siteUrl",
           "planningAvailable",
-          "mcpOAuth"
+          "mcpOAuth",
+          "authProvider",
+          "requiredTeams"
         ]
       },
       "Video": {
@@ -1328,6 +1345,13 @@
           },
           "disabled": {
             "type": "boolean"
+          },
+          "signInMethods": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "How the person signs in: 'identity' (Netlify Identity) and/or 'netlify' (Sign in with Netlify)."
           }
         },
         "required": [
@@ -1338,7 +1362,8 @@
           "admittedVia",
           "createdAt",
           "lastSeenAt",
-          "disabled"
+          "disabled",
+          "signInMethods"
         ]
       },
       "UpdateUser": {

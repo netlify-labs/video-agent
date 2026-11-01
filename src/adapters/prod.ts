@@ -40,18 +40,19 @@ export function prodDeps(): Deps {
     }),
     http: safeHttp,
     gateway: createGateway(env),
-    oauth: config.mcpOAuth
-      ? {
-          upstream: netlifyUpstream(config.mcpOAuth),
-          fetchClientMetadata: (url) =>
-            boundedJson(
-              'client_metadata',
-              url,
-              { headers: { accept: 'application/json' } },
-              { timeoutMs: 5_000, maxBytes: 16_384 },
-            ).catch(() => null),
-        }
-      : null,
+    oauth:
+      config.netlifyOAuth && (config.mcpOAuth || config.authProvider === 'netlify')
+        ? {
+            upstream: netlifyUpstream(config.netlifyOAuth),
+            fetchClientMetadata: (url) =>
+              boundedJson(
+                'client_metadata',
+                url,
+                { headers: { accept: 'application/json' } },
+                { timeoutMs: 5_000, maxBytes: 16_384 },
+              ).catch(() => null),
+          }
+        : null,
     log: createLogger({ service: 'video-agent' }),
   }
   return deps
