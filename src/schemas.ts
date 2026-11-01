@@ -63,7 +63,7 @@ export const SetVerdictSchema = z
   .object({ verdict: VerdictSchema.nullable(), note: z.string().max(500).optional() })
   .openapi('SetVerdict')
 
-const planBriefShape = z.object({
+export const planBriefShape = z.object({
   goal: z.string().max(400),
   audience: z.string().max(300),
   keyMessage: z.string().max(300),
@@ -267,7 +267,7 @@ const PlanQuestionSchema = z.object({
   multiSelect: z.boolean(),
   allowOther: z.boolean(),
 })
-const PlanAnswerSchema = z.object({
+export const PlanAnswerSchema = z.object({
   questionId: z.string(),
   optionIds: z.array(z.string()).max(4).optional(),
   other: z.string().max(500).optional(),
@@ -588,30 +588,21 @@ export const MeSchema = z
   })
   .openapi('Me')
 
+const inFlightShape = z.object({
+  attemptId: z.string(),
+  jobId: z.string(),
+  title: z.string(),
+  versionN: z.number().int(),
+  stage: StageSchema,
+  startedAt: z.string().nullable(),
+  runUrl: z.string().nullable(),
+})
 export const StatsSchema = z
   .object({
-    inFlight: z.array(
-      z.object({
-        attemptId: z.string(),
-        jobId: z.string(),
-        title: z.string(),
-        versionN: z.number().int(),
-        stage: StageSchema,
-        startedAt: z.string().nullable(),
-        runUrl: z.string().nullable(),
-      }),
-    ),
+    inFlight: z.array(inFlightShape),
     queued: z.number().int(),
     oldestQueuedAt: z.string().nullable(),
-    unresolved: z.array(
-      z.object({
-        attemptId: z.string(),
-        jobId: z.string(),
-        title: z.string(),
-        versionN: z.number().int(),
-        runUrl: z.string().nullable(),
-      }),
-    ),
+    unresolved: z.array(inFlightShape.omit({ stage: true, startedAt: true })),
     failuresThisWeek: z.array(z.object({ category: z.string(), count: z.number().int() })),
     usage: z.array(
       z.object({

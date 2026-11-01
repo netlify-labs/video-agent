@@ -76,14 +76,11 @@ const PAID_PATHS = [
   /^\/api\/v1\/videos\/[^/]+\/versions\/\d+\/retry$/,
 ]
 
-const err = (desc: string) => ({
-  content: { 'application/json': { schema: s.ErrorSchema } },
-  description: desc,
-})
 const json = <T extends z.ZodType>(schema: T, description: string) => ({
   content: { 'application/json': { schema } },
   description,
 })
+const err = (desc: string) => json(s.ErrorSchema, desc)
 const errors = {
   400: err('Invalid request'),
   401: err('Not signed in'),

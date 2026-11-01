@@ -11,6 +11,7 @@ import type {
   PublicationRow,
   ReceiptRow,
   SettingsRow,
+  Stage,
   UserRow,
   VersionRow,
   WebhookEventRow,
@@ -543,23 +544,11 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
     },
 
     usageSince: async (since) => {
-      const out = new Map<string, { userId: string; week: string; credits: number | null; videos: number }>()
+      const out = new Map<string, UsageRow>()
       for (const a of state.attempts.values()) {
         if (a.queuedAt < since) continue
         const v = state.versions.get(vkey(a.jobId, a.versionN))
-        if (!v) continue
-        const week = isoWeek(a.queuedAt)
-        const k = `${v.authorId}|${week}`
-        const row = out.get(k) ?? { userId: v.authorId, week, credits: 0, videos: 0 }
-        const c = a.usage?.totalCreditsCost
-        row.credits =
-          row.credits === null || c === undefined
-            ? isTerminal(a.stage)
-              ? null
-              : row.credits
-            : row.credits + c
-        row.videos += 1
-        out.set(k, row)
+        if (v) addUsage(out, v.authorId, a.queuedAt, a.stage, a.usage?.totalCreditsCost)
       }
       return [...out.values()]
     },
@@ -601,6 +590,25 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
     },
   }
   return store
+}
+
+export type UsageRow = { userId: string; week: string; credits: number | null; videos: number }
+
+/** Counts one attempt in its author's weekly row. Credits become unknown once a finished attempt reports none. */
+export function addUsage(
+  out: Map<string, UsageRow>,
+  authorId: string,
+  queuedAt: string,
+  stage: Stage,
+  c: number | undefined,
+) {
+  const week = isoWeek(queuedAt)
+  const k = `${authorId}|${week}`
+  const row = out.get(k) ?? { userId: authorId, week, credits: 0, videos: 0 }
+  if (row.credits !== null)
+    row.credits = c === undefined ? (isTerminal(stage) ? null : row.credits) : row.credits + c
+  row.videos += 1
+  out.set(k, row)
 }
 
 export function isoWeek(iso: string): string {

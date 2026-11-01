@@ -28,6 +28,7 @@ import type {
   PublicationRow,
   ReceiptRow,
   SettingsRow,
+  Stage,
   UserRow,
   VersionRow,
   WebhookEventRow,
@@ -45,7 +46,7 @@ import type {
   WebhookDeliveryRow,
   UserWebhookRow,
 } from '../domain/types.js'
-import { isoWeek } from './memory.js'
+import { addUsage, type UsageRow } from './memory.js'
 import type { Repo, Store } from './types.js'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- driver-agnostic (netlify-db, pglite)
@@ -691,21 +692,10 @@ function repoFor(db: Db): Repo {
           and(eq(t.versions.jobId, t.attempts.jobId), eq(t.versions.n, t.attempts.versionN)),
         )
         .where(gte(t.attempts.queuedAt, since))
-      const out = new Map<string, { userId: string; week: string; credits: number | null; videos: number }>()
+      const out = new Map<string, UsageRow>()
       for (const r of rows) {
-        const week = isoWeek(r.queuedAt)
-        const k = `${r.authorId}|${week}`
-        const row = out.get(k) ?? { userId: r.authorId, week, credits: 0, videos: 0 }
         const c = (r.usage as { totalCreditsCost?: number } | null)?.totalCreditsCost
-        if (row.credits !== null)
-          row.credits =
-            c === undefined
-              ? TERMINAL_STAGES.includes(r.stage as never)
-                ? null
-                : row.credits
-              : row.credits + c
-        row.videos += 1
-        out.set(k, row)
+        addUsage(out, r.authorId, r.queuedAt, r.stage as Stage, c)
       }
       return [...out.values()]
     },

@@ -8,7 +8,7 @@ import type { Repo } from '../store/types.js'
 import { notifyOwner } from './notifications.js'
 import { assertCan, can, type Principal } from './policy.js'
 import type { CommentRow, JobRow } from './types.js'
-import { loadJob } from './videos.js'
+import { decodeCursor, loadJob, nextCursor } from './videos.js'
 import { emitEvent } from './webhooks.js'
 
 export const COMMENT_MAX = 2000
@@ -92,17 +92,7 @@ export async function listComments(
   const job = await loadJob(deps.store, p, jobId)
   assertCan(p, 'video:read')
   const limit = Math.min(Math.max(q.limit ?? 100, 1), PAGE_MAX)
-  let after: { createdAt: string; id: string } | null = null
-  if (q.cursor) {
-    try {
-      after = JSON.parse(Buffer.from(q.cursor, 'base64url').toString('utf8')) as {
-        createdAt: string
-        id: string
-      }
-    } catch {
-      throw new ApiError('invalid_request', 'Invalid cursor.')
-    }
-  }
+  const after = decodeCursor(q.cursor)
   const all = await deps.store.listComments(jobId, q.versionN)
   const rest = after
     ? all.filter((c) => c.createdAt > after.createdAt || (c.createdAt === after.createdAt && c.id > after.id))
@@ -112,15 +102,11 @@ export async function listComments(
   const unreadCount = (q.versionN === undefined ? all : await deps.store.listComments(jobId)).filter(
     (c) => c.authorId !== p.userId && (readAt === null || c.createdAt > readAt),
   ).length
-  const last = page.at(-1)
   return {
     items: await Promise.all(page.map((c) => commentDto(deps.store, p, job, c))),
     unreadCount,
     readAt,
-    nextCursor:
-      rest.length > limit && last
-        ? Buffer.from(JSON.stringify({ createdAt: last.createdAt, id: last.id })).toString('base64url')
-        : null,
+    nextCursor: nextCursor(rest.length, limit, page),
   }
 }
 

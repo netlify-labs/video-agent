@@ -169,6 +169,8 @@ function fromApiError(e: ApiError, videoId?: string): ToolError {
   )
 }
 
+const optionalVersion = (description: string) => z.number().int().positive().optional().describe(description)
+
 type ToolResult = {
   content: { type: 'text'; text: string }[]
   structuredContent?: Record<string, unknown>
@@ -469,12 +471,7 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Make the end 
           .string()
           .optional()
           .describe('Optional. A revision plan from plan_video (with video_id) + plan_brief.'),
-        from_version: z
-          .number()
-          .int()
-          .positive()
-          .optional()
-          .describe('Which ready version to start from (default: the latest ready one).'),
+        from_version: optionalVersion('Which ready version to start from (default: the latest ready one).'),
         duration_sec: z
           .union([z.number(), z.string()])
           .optional()
@@ -533,12 +530,7 @@ Only the video's owner or an admin can publish. Publishing a version that is alr
 Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w"}`,
       inputSchema: {
         video_id: z.string().describe('The video id (vid_…) or its web URL.'),
-        version: z
-          .number()
-          .int()
-          .positive()
-          .optional()
-          .describe('Which version (default: the latest ready one).'),
+        version: optionalVersion('Which version (default: the latest ready one).'),
       },
       annotations: {
         title: 'Publish a video',
@@ -578,12 +570,7 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w"}`,
 Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "version": 2}`,
       inputSchema: {
         video_id: z.string().describe('The video id (vid_…) or its web URL.'),
-        version: z
-          .number()
-          .int()
-          .positive()
-          .optional()
-          .describe('Which version (default: whichever version is public).'),
+        version: optionalVersion('Which version (default: whichever version is public).'),
       },
       annotations: {
         title: 'Unpublish a video',

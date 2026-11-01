@@ -10,7 +10,7 @@ import { assertCan, type Principal } from './policy.js'
 import { getSettings } from './settings.js'
 import type { Repo } from '../store/types.js'
 import type { MediaRow, VersionMediaRow } from './types.js'
-import { canSee } from './videos.js'
+import { canSee, decodeCursor, nextCursor } from './videos.js'
 
 /** One request carries at most this much (Netlify's request limit is about 4.5 MB); bigger files use sessions. */
 export const SINGLE_UPLOAD_MAX = 4 * 1024 * 1024
@@ -190,17 +190,7 @@ export async function listMedia(
 ) {
   assertCan(p, 'video:read')
   const limit = Math.min(Math.max(q.limit ?? 48, 1), 100)
-  let before: { createdAt: string; id: string } | undefined
-  if (q.cursor) {
-    try {
-      before = JSON.parse(Buffer.from(q.cursor, 'base64url').toString('utf8')) as {
-        createdAt: string
-        id: string
-      }
-    } catch {
-      throw new ApiError('invalid_request', 'Invalid cursor.')
-    }
-  }
+  const before = decodeCursor(q.cursor)
   const rows = await deps.store.listMedia({
     kind: q.kind,
     includePendingOf: p.userId,
@@ -209,13 +199,9 @@ export async function listMedia(
   })
   const page = rows.slice(0, limit)
   const usage = await deps.store.mediaUsage(page.map((m) => m.id))
-  const last = page.at(-1)
   return {
     items: await Promise.all(page.map((m) => mediaDto(deps, p, m, usage))),
-    nextCursor:
-      rows.length > limit && last
-        ? Buffer.from(JSON.stringify({ createdAt: last.createdAt, id: last.id })).toString('base64url')
-        : null,
+    nextCursor: nextCursor(rows.length, limit, page),
   }
 }
 

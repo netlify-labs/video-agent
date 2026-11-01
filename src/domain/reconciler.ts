@@ -140,6 +140,18 @@ async function startRequest(
   const media = versionMedia.length
     ? versionMedia.map((m) => ({ key: m.key, sha256: m.sha256, filename: m.filename, kind: m.kind }))
     : null
+  const result = (prompt: string, parentSha: string | null) => ({
+    req: {
+      requestId: a.id,
+      prompt,
+      deployId: a.deployId,
+      agent: a.agent,
+      model: a.model,
+      effort: a.effort,
+      deadlineMs: (deps.config.authoringDeadlineMin + 3) * MIN,
+    },
+    parentSha,
+  })
   // An edit draft rendered as is (plan v2 §8): restore the frozen bundle, check it, render it, change nothing.
   if (version.mode === 'render_unchanged' && version.frozen) {
     const manifest = serializeRunManifest({
@@ -171,18 +183,7 @@ async function startRequest(
       callbackToken,
       upload: { mode: 'blobs' },
     })
-    return {
-      req: {
-        requestId: a.id,
-        prompt,
-        deployId: a.deployId,
-        agent: a.agent,
-        model: a.model,
-        effort: a.effort,
-        deadlineMs: (deps.config.authoringDeadlineMin + 3) * MIN,
-      },
-      parentSha: null,
-    }
+    return result(prompt, null)
   }
   if (version.parentN !== null) {
     const parent = await deps.store.getOutput(a.jobId, version.parentN)
@@ -258,18 +259,7 @@ async function startRequest(
     })),
     plan: version.plan ? { brief: version.plan.brief, qa: version.plan.qa } : null,
   })
-  return {
-    req: {
-      requestId: a.id,
-      prompt,
-      deployId: a.deployId,
-      agent: a.agent,
-      model: a.model,
-      effort: a.effort,
-      deadlineMs: (deps.config.authoringDeadlineMin + 3) * MIN,
-    },
-    parentSha: revision?.sourceSha256 ?? null,
-  }
+  return result(prompt, revision?.sourceSha256 ?? null)
 }
 
 class SourceUnavailable extends Error {}
@@ -421,7 +411,13 @@ async function poll(deps: Deps, a: AttemptRow): Promise<void> {
       leaseUntil: null,
       nextActionAt: iso(now.getTime() + MIN),
     }
-    if (snap.state === 'await_input') {
+    const reason =
+      snap.state === 'await_input'
+        ? 'needs_input'
+        : a.authoringDeadlineAt && now.toISOString() > a.authoringDeadlineAt
+          ? 'deadline'
+          : null
+    if (reason) {
       await deps.store.tx((repo) =>
         setStage(
           repo,
@@ -430,31 +426,13 @@ async function poll(deps: Deps, a: AttemptRow): Promise<void> {
           {
             ...patch,
             cancelRequestedAt: now.toISOString(),
-            cancelReason: 'needs_input',
+            cancelReason: reason,
             nextActionAt: now.toISOString(),
           },
           now.toISOString(),
         ),
       )
-      deps.log.warn('attempt.needs_input', { attemptId: a.id })
-      return
-    }
-    if (a.authoringDeadlineAt && now.toISOString() > a.authoringDeadlineAt) {
-      await deps.store.tx((repo) =>
-        setStage(
-          repo,
-          a,
-          'cancelling',
-          {
-            ...patch,
-            cancelRequestedAt: now.toISOString(),
-            cancelReason: 'deadline',
-            nextActionAt: now.toISOString(),
-          },
-          now.toISOString(),
-        ),
-      )
-      deps.log.warn('attempt.deadline', { attemptId: a.id })
+      deps.log.warn(`attempt.${reason}`, { attemptId: a.id })
       return
     }
     await deps.store.updateAttempt(a.id, patch)

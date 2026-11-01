@@ -78,36 +78,26 @@ export async function emitEvent(
   }
 }
 
-/** video.ready / video.failed for an attempt that just reached a terminal stage. */
 /** Every path that ends an attempt calls this: the terminal webhook, plus cleanup of its progress cache and
  * checkpoint bundles. */
 export async function emitTerminalEvent(repo: Repo, deps: EmitDeps, attemptId: string) {
   const a = await repo.getAttempt(attemptId)
   if (!a) return
-  await repo.insertCleanup({
-    id: deps.ids.uuid(),
-    kind: 'delete_prefix',
-    store: 'internal',
-    prefix: progressKey(attemptId),
-    nextActionAt: deps.clock.now().toISOString(),
-    doneAt: null,
-  })
-  await repo.insertCleanup({
-    id: deps.ids.uuid(),
-    kind: 'delete_prefix',
-    store: 'checkpoints',
-    prefix: `${attemptId}/`,
-    nextActionAt: deps.clock.now().toISOString(),
-    doneAt: null,
-  })
-  await repo.insertCleanup({
-    id: deps.ids.uuid(),
-    kind: 'delete_prefix',
-    store: 'bundles',
-    prefix: livePrefix(a.jobId, a.versionN),
-    nextActionAt: deps.clock.now().toISOString(),
-    doneAt: null,
-  })
+  const prefixes = [
+    ['internal', progressKey(attemptId)],
+    ['checkpoints', `${attemptId}/`],
+    ['bundles', livePrefix(a.jobId, a.versionN)],
+  ] as const
+  for (const [store, prefix] of prefixes) {
+    await repo.insertCleanup({
+      id: deps.ids.uuid(),
+      kind: 'delete_prefix',
+      store,
+      prefix,
+      nextActionAt: deps.clock.now().toISOString(),
+      doneAt: null,
+    })
+  }
   await emitEvent(repo, deps, {
     type: a.stage === 'ready' ? 'video.ready' : 'video.failed',
     jobId: a.jobId,

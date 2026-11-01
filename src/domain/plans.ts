@@ -10,6 +10,7 @@ import type { Deps, GatewayUsage } from '../deps.js'
 import { sha256Hex } from '../lib/crypto.js'
 import { ApiError } from '../lib/errors.js'
 import { planningContext } from '../generated/planning-context.js'
+import { PlanAnswerSchema, planBriefShape } from '../schemas.js'
 import { clampModel, estimateCredits, FAST_MODEL } from './gateway-models.js'
 import { assertCan, type Principal } from './policy.js'
 import { MEDIA_PER_VERSION } from './media.js'
@@ -28,7 +29,6 @@ export const PLAN_TTL_MS = 24 * 3600_000
 export const ROUTE_DEADLINE_MS = 5_000
 export const MODEL_DEADLINE_MS = 25_000
 const MAX_PROMPT = 4_000
-const MAX_OTHER = 500
 /** Images the planner looks at (vision input); the rest are described by name and caption only. */
 const MAX_PLAN_IMAGES = 4
 
@@ -89,16 +89,6 @@ const QuestionsOut = z.object({
       }),
     )
     .max(6),
-})
-export const BriefSchema = z.object({
-  goal: z.string().max(400),
-  audience: z.string().max(300),
-  keyMessage: z.string().max(300),
-  beats: z.array(z.object({ text: z.string().max(300), seconds: z.number().min(0).max(600) })).max(12),
-  tone: z.string().max(200),
-  callToAction: z.string().max(200),
-  mustInclude: z.array(z.string().max(200)).max(10),
-  avoid: z.array(z.string().max(200)).max(10),
 })
 
 function parseJson(text: string): unknown {
@@ -419,16 +409,7 @@ export async function generateQuestions(deps: Deps, p: Principal, planId: string
   return planDto({ ...plan, questions })
 }
 
-const AnswersSchema = z
-  .array(
-    z.object({
-      questionId: z.string(),
-      optionIds: z.array(z.string()).max(4).optional(),
-      other: z.string().max(MAX_OTHER).optional(),
-      skipped: z.boolean().optional(),
-    }),
-  )
-  .max(6)
+const AnswersSchema = z.array(PlanAnswerSchema).max(6)
 
 export async function generateBrief(deps: Deps, p: Principal, planId: string, answers: PlanAnswer[]) {
   assertCan(p, 'plan:create')
@@ -485,7 +466,7 @@ export async function generateBrief(deps: Deps, p: Principal, planId: string, an
     await deepModel(deps),
     system,
     user,
-    BriefSchema,
+    planBriefShape,
     1200,
     media.images,
   )
@@ -511,7 +492,7 @@ export async function updatePlanBrief(
       throw new ApiError('conflict', 'The brief changed since you loaded it. Reload and try again.', {
         briefRev: plan.briefRev,
       })
-    const parsed = BriefSchema.safeParse(brief)
+    const parsed = planBriefShape.safeParse(brief)
     if (!parsed.success) throw new ApiError('invalid_request', 'Invalid brief.')
     await repo.updatePlan(planId, { brief: parsed.data, briefRev: plan.briefRev + 1 })
     return planDto({ ...plan, brief: parsed.data, briefRev: plan.briefRev + 1 })

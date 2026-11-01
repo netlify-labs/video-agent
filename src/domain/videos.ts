@@ -762,6 +762,26 @@ export async function videoDto(
 
 export type VideoDto = Awaited<ReturnType<typeof videoDto>>
 
+type Cursor = { createdAt: string; id: string }
+
+/** Reads an opaque list cursor; a malformed one is a 400. */
+export function decodeCursor(raw: string | undefined): Cursor | undefined {
+  if (!raw) return undefined
+  try {
+    return JSON.parse(Buffer.from(raw, 'base64url').toString('utf8')) as Cursor
+  } catch {
+    throw new ApiError('invalid_request', 'Invalid cursor.')
+  }
+}
+
+/** The cursor after the last row of `page`, or null when `total` fits in `limit`. */
+export function nextCursor(total: number, limit: number, page: Cursor[]): string | null {
+  const last = page.at(-1)
+  return total > limit && last
+    ? Buffer.from(JSON.stringify({ createdAt: last.createdAt, id: last.id })).toString('base64url')
+    : null
+}
+
 export async function listVideos(
   deps: Deps,
   principal: Principal,
@@ -776,17 +796,7 @@ export async function listVideos(
 ) {
   assertCan(principal, 'video:read')
   const limit = Math.min(Math.max(q.limit ?? 24, 1), 50)
-  let cursor: { createdAt: string; id: string } | undefined
-  if (q.cursor && q.cursor !== 'undefined') {
-    try {
-      cursor = JSON.parse(Buffer.from(q.cursor, 'base64url').toString('utf8')) as {
-        createdAt: string
-        id: string
-      }
-    } catch {
-      throw new ApiError('invalid_request', 'Invalid cursor.')
-    }
-  }
+  const cursor = decodeCursor(q.cursor === 'undefined' ? undefined : q.cursor)
   const rows = await deps.store.listJobs({
     ...(q.owner === 'me' ? { ownerId: principal.userId } : {}),
     ...(q.status ? { status: q.status } : {}),
@@ -806,14 +816,7 @@ export async function listVideos(
   const items = await Promise.all(
     page.map((j) => videoDto(deps.store, deps, j.id, principal, { verdicts, comments })),
   )
-  const last = page.at(-1)
-  return {
-    items,
-    nextCursor:
-      rows.length > limit && last
-        ? Buffer.from(JSON.stringify({ createdAt: last.createdAt, id: last.id })).toString('base64url')
-        : null,
-  }
+  return { items, nextCursor: nextCursor(rows.length, limit, page) }
 }
 
 /** Approved / Changes requested on a ready version (plan v2 §3, §14 rule 8). Never on your own version. */
