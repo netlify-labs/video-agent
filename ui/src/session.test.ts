@@ -56,21 +56,25 @@ const cookieToken = () => decodeURIComponent(cookies.nf_jwt ?? '')
 describe('session', () => {
   it('copies a newer SDK token into the nf_jwt cookie, and keeps a newer cookie', async () => {
     const { sessionToken } = await import('./session')
+    // Each token is made once: jwt() stamps the current second, which can tick between calls.
+    const fresh = jwt(3600, 'new')
+    const newest = jwt(7200, 'newest')
     cookies.nf_jwt = encodeURIComponent(jwt(10, 'old'))
-    sdkStores(jwt(3600, 'new'))
-    expect(sessionToken()).toBe(jwt(3600, 'new'))
-    expect(cookieToken()).toBe(jwt(3600, 'new'))
+    sdkStores(fresh)
+    expect(sessionToken()).toBe(fresh)
+    expect(cookieToken()).toBe(fresh)
     expect(decodeURIComponent(cookies.nf_refresh ?? '')).toBe('r1')
 
-    cookies.nf_jwt = encodeURIComponent(jwt(7200, 'newest'))
-    expect(sessionToken()).toBe(jwt(7200, 'newest'))
+    cookies.nf_jwt = encodeURIComponent(newest)
+    expect(sessionToken()).toBe(newest)
   })
 
   it('refreshes before a request when the token is about to expire', async () => {
     const { sessionFetch } = await import('./api/client')
+    const refreshed = jwt(3600, 'refreshed')
     sdkStores(jwt(30, 'expiring'))
     sdk.refreshSession.mockImplementation(async () => {
-      sdkStores(jwt(3600, 'refreshed'), 'r2')
+      sdkStores(refreshed, 'r2')
       return null
     })
     const fetch = vi.fn(async () => new Response('{}', { status: 200 }))
@@ -78,14 +82,15 @@ describe('session', () => {
     const res = await sessionFetch(new Request('https://example.com/api/v1/me'))
     expect(res.status).toBe(200)
     expect(sdk.refreshSession).toHaveBeenCalledTimes(1)
-    expect(cookieToken()).toBe(jwt(3600, 'refreshed'))
+    expect(cookieToken()).toBe(refreshed)
   })
 
   it('refreshes and retries once after a 401', async () => {
     const { sessionFetch } = await import('./api/client')
+    const second = jwt(3600, 'second')
     sdkStores(jwt(3600, 'server-rejected'))
     sdk.refreshSession.mockImplementation(async () => {
-      sdkStores(jwt(3600, 'second'), 'r2')
+      sdkStores(second, 'r2')
       return null
     })
     const seen: string[] = []
@@ -101,7 +106,7 @@ describe('session', () => {
     )
     expect(res.status).toBe(200)
     expect(seen).toEqual(['/api/v1/videos', '/api/v1/videos'])
-    expect(cookieToken()).toBe(jwt(3600, 'second'))
+    expect(cookieToken()).toBe(second)
   })
 
   it('signs out when Identity rejects the session, and keeps it on a network error', async () => {

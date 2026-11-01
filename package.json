@@ -9,7 +9,7 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p ui/tsconfig.json --noEmit",
-    "lint": "eslint .",
+    "lint": "NODE_OPTIONS=--max-old-space-size=6144 eslint .",
     "format": "prettier --write .",
     "test": "vitest run",
     "openapi:gen": "tsx scripts/gen-openapi.ts && npx -y openapi-typescript@7.13.0 openapi.json -o ui/src/api/schema.d.ts",
