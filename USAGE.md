@@ -11,4 +11,9 @@ Three things finish the setup. The app's `/setup` page checks each one and links
    - Invite-only: invite each `ADMIN_EMAILS` address (including your own) from the Identity tab, then accept the invite from the email.
 4. **Open `https://<your-site>/setup`**, fix anything it marks, and make your first video.
 
+Optional: to let OAuth-only MCP clients (Claude and ChatGPT connectors) connect with **Sign in with Netlify** instead of an
+API key, create a Netlify OAuth app with the redirect URI `https://<your-site>/oauth/callback` and set
+`MCP_OAUTH_PROVIDER=netlify`, `NETLIFY_OAUTH_CLIENT_ID` and `NETLIFY_OAUTH_CLIENT_SECRET` (see the README, "Sign in with
+Netlify (OAuth)"). `MCP_OAUTH_ALLOWED_EMAIL_DOMAINS` narrows who can connect; it defaults to `ALLOWED_EMAIL_DOMAINS`.
+
 Put your brand guide, logos and fonts in `context/` in the new repo so every video follows them.
