@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { normalizeAspect, normalizeDuration, normalizeVideoId } from '../src/mcp.js'
-import { apiKey, harness, type Harness } from './helpers.js'
+import { apiKey, harness, mcpCall, person, type Harness } from './helpers.js'
 
 async function rpc(
   h: Harness,
@@ -200,5 +200,109 @@ describe('MCP input normalization', () => {
     const list = await rpc(h, key, 'tools/list')
     const names = (list.body as { result: { tools: { name: string }[] } }).result.tools.map((t) => t.name)
     expect(names).not.toContain('plan_video')
+  })
+})
+
+describe('MCP prompts', () => {
+  const promptNames = async (h: Harness, cookie: string) => {
+    const { prompts } = (await mcpCall(h, await apiKey(h, cookie), 'prompts/list', {})) as {
+      prompts: { name: string; arguments?: { name: string; required?: boolean }[] }[]
+    }
+    return prompts
+  }
+
+  it('lists the recipes each role can use', async () => {
+    const h = harness()
+    const creator = await promptNames(h, h.member)
+    expect(creator.map((p) => p.name).sort()).toEqual([
+      'changelog_video',
+      'localize_video',
+      'pr_video',
+      'review_video',
+      'social_cut',
+    ])
+    expect(creator.find((p) => p.name === 'pr_video')?.arguments).toEqual([
+      expect.objectContaining({ name: 'pr_url', required: true }),
+      expect.objectContaining({ name: 'audience', required: false }),
+      expect.objectContaining({ name: 'aspect', required: false }),
+    ])
+    const reviewer = await person(h, 'u_reviewer', 'reviewer')
+    expect((await promptNames(h, reviewer)).map((p) => p.name)).toEqual(['review_video'])
+    const viewer = await person(h, 'u_viewer', 'viewer')
+    expect(await promptNames(h, viewer)).toEqual([])
+  })
+
+  it('returns a user message that walks through tools the caller has', async () => {
+    const h = harness()
+    const key = await apiKey(h, h.member)
+    const { tools } = (await mcpCall(h, key, 'tools/list', {})) as { tools: { name: string }[] }
+    const toolNames = new Set(tools.map((t) => t.name))
+    const get = async (k: string, name: string, args: Record<string, string>) => {
+      const r = (await mcpCall(h, k, 'prompts/get', { name, arguments: args })) as {
+        messages: { role: string; content: { type: string; text: string } }[]
+      }
+      expect(r.messages).toHaveLength(1)
+      expect(r.messages[0]?.role).toBe('user')
+      return r.messages[0]?.content.text ?? ''
+    }
+    const mentionsOnly = (text: string, allowed: Set<string>) => {
+      const named = [
+        ...text.matchAll(/\b(?:[a-z]+_)+(?:video|videos|brief|media|comments|comment|verdict)\b/g),
+      ]
+        .map((m) => m[0])
+        .filter((w) => /^(create|get|list|revise|publish|unpublish|cancel|plan|add|set)_/.test(w))
+      for (const w of named) expect(allowed, `prompt names ${w}`).toContain(w)
+      return named
+    }
+
+    const pr = await get(key, 'pr_video', { pr_url: 'https://github.com/acme/app/pull/42' })
+    expect(pr).toContain('https://github.com/acme/app/pull/42')
+    expect(pr).toContain('create_video')
+    expect(pr).toContain('plan_video')
+    expect(pr).toContain('wait for my go-ahead')
+    mentionsOnly(pr, toolNames)
+
+    const loc = await get(key, 'localize_video', {
+      video_id: 'vid_abc',
+      languages: 'German, French ,Japanese',
+    })
+    expect(loc).toContain('into German, French, Japanese')
+    expect(loc).toContain('3 runs, one per language')
+    expect(loc).toContain('revise_video with from_version')
+    mentionsOnly(loc, toolNames)
+
+    const cut = await get(key, 'social_cut', { video_id: 'vid_abc' })
+    expect(cut).toContain('15-second 9:16 social cut')
+    mentionsOnly(cut, toolNames)
+    mentionsOnly(await get(key, 'changelog_video', { notes: '- Faster deploys' }), toolNames)
+
+    // Without AI Gateway the recipes skip planning; reviewers aren't told to revise.
+    h.deps.gateway.isAvailable = false
+    expect(await get(key, 'pr_video', { pr_url: 'https://github.com/acme/app/pull/42' })).not.toContain(
+      'plan_video',
+    )
+    const rita = await apiKey(h, await person(h, 'u_reviewer', 'reviewer'))
+    const { tools: reviewerTools } = (await mcpCall(h, rita, 'tools/list', {})) as {
+      tools: { name: string }[]
+    }
+    const review = await get(rita, 'review_video', { video_id: 'vid_abc', version: '2' })
+    expect(review).toContain('version 2')
+    expect(review).toContain('set_verdict')
+    expect(review).not.toContain('revise_video')
+    mentionsOnly(review, new Set(reviewerTools.map((t) => t.name)))
+    expect(await get(key, 'review_video', { video_id: 'vid_abc' })).toContain(
+      'revise_video with the comment_ids',
+    )
+  })
+
+  it('says so in the server instructions', async () => {
+    const h = harness()
+    const init = (await mcpCall(h, await apiKey(h, h.member), 'initialize', {
+      protocolVersion: '2025-06-18',
+      capabilities: {},
+      clientInfo: { name: 'test', version: '1' },
+    })) as { instructions: string; capabilities: Record<string, unknown> }
+    expect(init.capabilities.prompts).toBeDefined()
+    expect(init.instructions).toContain('prompts/list')
   })
 })
