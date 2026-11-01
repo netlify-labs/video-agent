@@ -1,10 +1,11 @@
-// The browser editor (plan v2 §8): change text, beat timing, colours, beat order, media slots and music on a
-// finished contract-1 version, see it in the sandboxed preview, and render it unchanged as the next version. The page holds the composition the
+// The browser editor (plan v2 §8): change text, beat timing, colours, beat order, media slots, music and narration
+// lines on a finished contract-1 version, see it in the sandboxed preview, and render it unchanged as the next version. The page holds the composition the
 // person wants; the op list sent on each save is its difference from the version, so saves are idempotent.
 import {
   ActionIcon,
   Alert,
   Anchor,
+  Badge,
   Button,
   Card,
   ColorSwatch,
@@ -15,6 +16,7 @@ import {
   Slider,
   Stack,
   Text,
+  Textarea,
   TextInput,
   Title,
   Tooltip,
@@ -24,6 +26,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import {
   IconArrowDown,
   IconArrowUp,
+  IconMicrophone,
   IconMovie,
   IconMusic,
   IconPhoto,
@@ -45,13 +48,21 @@ type Composition = Edit['composition']
 type Op = Edit['ops'][number]
 type Slot = Composition['beats'][number]['media'][number]
 type Track = Composition['audio'][number]
+type Line = Composition['narration'][number]
 
 const fps = (s: number) => Math.round(s * 30) / 30
 const sameNumber = (a: number, b: number) => Math.abs(a - b) < 1e-6
+/** Narration as it is spoken: one line, single spaces (the patcher compares lines the same way). */
+const spoken = (text: string) => text.replace(/\s+/g, ' ').trim()
+/** Whether a line differs from the version's, so the render re-voices it. */
+const relined = (base: Composition, line: Line) => {
+  const was = base.narration.find((x) => x.beat === line.beat)
+  return !!was && spoken(was.text) !== spoken(line.text)
+}
 
 /**
  * The ops that turn `base` into `cur`, in the order the patcher needs: deletes, order, timing, text, colour, media,
- * audio.
+ * audio, narration.
  */
 export function diffOps(base: Composition, cur: Composition): Op[] {
   const ops: Op[] = []
@@ -87,6 +98,9 @@ export function diffOps(base: Composition, cur: Composition): Op[] {
     }
     if (Object.keys(change).length) ops.push({ op: 'audio', id: a.id, ...change })
   }
+  for (const l of cur.narration)
+    if (curIds.includes(l.beat) && spoken(l.text) && relined(base, l))
+      ops.push({ op: 'voice', beat: l.beat, text: l.text })
   return ops
 }
 
@@ -175,6 +189,50 @@ function AudioRow({
   )
 }
 
+/** One voiced beat's narration line; a changed line is re-voiced when the draft renders. */
+function VoiceRow({
+  line,
+  name,
+  changed,
+  onChange,
+}: {
+  line: Line
+  name: string
+  changed: boolean
+  onChange: (text: string) => void
+}) {
+  return (
+    <div className="va-slot" data-testid={`voice-${line.beat}`}>
+      <Group justify="space-between" wrap="nowrap" gap="xs" mb={6}>
+        <Group gap={8} wrap="nowrap">
+          <IconMicrophone size={16} />
+          <Text size="xs" fw={500}>
+            {name}
+          </Text>
+        </Group>
+        {changed ? (
+          <Badge size="xs" variant="light" color="teal">
+            Re-voice on render
+          </Badge>
+        ) : null}
+      </Group>
+      <Textarea
+        size="xs"
+        aria-label={`Narration for ${name}`}
+        autosize
+        minRows={1}
+        maxRows={5}
+        maxLength={600}
+        value={line.text}
+        error={spoken(line.text) ? undefined : 'A line needs some words'}
+        onChange={(e) => {
+          onChange(e.currentTarget.value)
+        }}
+      />
+    </div>
+  )
+}
+
 export function EditPage() {
   const { id = '', n = '' } = useParams()
   const versionN = Number(n)
@@ -259,6 +317,12 @@ export function EditPage() {
       return c
     })
   }
+  const setLine = (beat: string, text: string) => {
+    update((c) => {
+      for (const l of c.narration) if (l.beat === beat) l.text = text
+      return c
+    })
+  }
   const move = (i: number, by: number) => {
     update((c) => {
       const [b] = c.beats.splice(i, 1)
@@ -302,8 +366,9 @@ export function EditPage() {
     )
   if (!draft || !cur || !video.data) return <Text c="var(--va-muted)">Opening the editor…</Text>
   const total = cur.beats.reduce((s, b) => s + b.duration, 0)
-  // Music for now; voice lines and effects get their own rows later.
+  // Music, then each voiced beat's line (effects get their own rows later).
   const music = cur.audio.filter((a) => a.role === 'music')
+  const lines = cur.narration.filter((l) => cur.beats.some((b) => b.id === l.beat))
   const next = video.data.versions.length + 1
 
   // The preview stays put on the left with the actions above it; the controls scroll on their own on the right.
@@ -537,7 +602,7 @@ export function EditPage() {
             ))}
           </Stack>
         </Card>
-        {music.length ? (
+        {music.length || lines.length ? (
           <Card data-testid="audio-card">
             <Text fw={600} mb="sm">
               Audio
@@ -556,6 +621,33 @@ export function EditPage() {
                   }}
                 />
               ))}
+              {lines.length ? (
+                <div data-testid="voice-section">
+                  <Text size="sm" fw={600} mb={4}>
+                    Voice
+                  </Text>
+                  <Text size="xs" c="var(--va-faint)" mb="xs">
+                    Changed lines are spoken again when you render. The preview plays the old voice until
+                    then, and a beat grows only if its new line no longer fits.
+                  </Text>
+                  <Stack gap="xs">
+                    {lines.map((l) => {
+                      const b = cur.beats.find((x) => x.id === l.beat)
+                      return (
+                        <VoiceRow
+                          key={l.beat}
+                          line={l}
+                          name={labelFor(b?.label ?? null, l.beat)}
+                          changed={relined(draft.base, l)}
+                          onChange={(text) => {
+                            setLine(l.beat, text)
+                          }}
+                        />
+                      )
+                    })}
+                  </Stack>
+                </div>
+              ) : null}
             </Stack>
           </Card>
         ) : null}
