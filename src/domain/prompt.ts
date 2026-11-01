@@ -1,7 +1,7 @@
 // The run prompt: a fixed, versioned template plus the user's request, fenced as a creative brief.
 import { ASPECTS, type Aspect, type VideoSound, type Voiceover } from './types.js'
 
-export const PROMPT_TEMPLATE_VERSION = 11
+export const PROMPT_TEMPLATE_VERSION = 12
 
 export interface PromptInput {
   jobId: string
@@ -279,6 +279,8 @@ export function buildRenderUnchangedPrompt(p: {
   attemptId: string
   versionN: number
   editedFromN: number
+  /** Beats whose narration line was changed in the editor: the run re-voices exactly these (and nothing else). */
+  revoice?: string[]
   runManifestSha256: string
   callbackUrl: string
   checkpointUrl: string
@@ -286,16 +288,37 @@ export function buildRenderUnchangedPrompt(p: {
   upload: { mode: 'blobs' } | { mode: 'signed'; url: string }
 }): string {
   const uploadArg = p.upload.mode === 'blobs' ? '--upload blobs' : `--upload ${p.upload.url}`
+  const revoice = p.revoice ?? []
+  const render = `npx tsx scripts/render-job.ts --job ${p.jobId} --attempt ${p.attemptId} --callback ${p.callbackUrl} --token ${p.callbackToken} ${uploadArg}`
+  if (!revoice.length)
+    return [
+      `You are rendering version ${p.versionN} of video ${p.jobId} (attempt ${p.attemptId}) exactly as someone edited it in the browser from version ${p.editedFromN}.`,
+      "Don't write, change or delete any file in video/. There is nothing to design: only restore, check and render.",
+      '',
+      `1. Run: npx tsx scripts/prepare-run.ts --job ${p.jobId} --attempt ${p.attemptId} --manifest ${p.runManifestSha256}`,
+      '   It restores video/ and verifies every file. If it fails, stop and report the error.',
+      '2. Run `npx hyperframes check` in video/. If it reports any error, stop: fix nothing, and end your answer with the errors.',
+      `3. Run: ${render}`,
+      '   It checks the files again before rendering. If it fails, stop and report the error; never edit files to make it pass.',
+      '4. End your answer with the fenced ```json block render-job.ts prints.',
+      '',
+      `Optional progress: npx tsx scripts/checkpoint.ts --attempt ${p.attemptId} --url ${p.checkpointUrl} --token ${p.callbackToken} --message "<what you are doing>"`,
+      'Never ask questions or request authorization. Never print environment variables. Never commit, push or open a pull request.',
+    ].join('\n')
+  // Beat ids are checked ([a-z0-9-]) before they get here, so they can go in the prompt as they are.
+  const beats = revoice.map((b) => `"${b}"`).join(', ')
   return [
-    `You are rendering version ${p.versionN} of video ${p.jobId} (attempt ${p.attemptId}) exactly as someone edited it in the browser from version ${p.editedFromN}.`,
-    "Don't write, change or delete any file in video/. There is nothing to design: only restore, check and render.",
+    `You are rendering version ${p.versionN} of video ${p.jobId} (attempt ${p.attemptId}) exactly as someone edited it in the browser from version ${p.editedFromN}, with ${revoice.length === 1 ? 'one narration line' : `${revoice.length} narration lines`} to re-voice (beat${revoice.length === 1 ? '' : 's'} ${beats}).`,
+    "Don't write, change or delete any file in video/ yourself. There is nothing to design: only restore, re-voice, check and render. Only scripts/voice.ts revoice may change files, and only the ones it writes.",
     '',
     `1. Run: npx tsx scripts/prepare-run.ts --job ${p.jobId} --attempt ${p.attemptId} --manifest ${p.runManifestSha256}`,
     '   It restores video/ and verifies every file. If it fails, stop and report the error.',
-    '2. Run `npx hyperframes check` in video/. If it reports any error, stop: fix nothing, and end your answer with the errors.',
-    `3. Run: npx tsx scripts/render-job.ts --job ${p.jobId} --attempt ${p.attemptId} --callback ${p.callbackUrl} --token ${p.callbackToken} ${uploadArg}`,
-    '   It checks the files again before rendering. If it fails, stop and report the error; never edit files to make it pass.',
-    '4. End your answer with the fenced ```json block render-job.ts prints.',
+    '2. Run from the repo root: npx tsx scripts/voice.ts revoice',
+    "   It re-speaks exactly the marked lines with the video's own voice and speed, lengthens a beat only if its new line no longer fits (later beats move with it), and updates the narration captions and the music's ducking. If it fails, stop and report the error. Don't run it twice, don't use another text-to-speech tool, and don't run voice.ts any other way.",
+    '3. Run `npx hyperframes check` in video/. If it reports any error, stop: fix nothing, and end your answer with the errors.',
+    `4. Run: ${render}`,
+    '   It checks that only the re-voiced lines changed before rendering. If it fails, stop and report the error; never edit files to make it pass.',
+    '5. End your answer with the fenced ```json block render-job.ts prints.',
     '',
     `Optional progress: npx tsx scripts/checkpoint.ts --attempt ${p.attemptId} --url ${p.checkpointUrl} --token ${p.callbackToken} --message "<what you are doing>"`,
     'Never ask questions or request authorization. Never print environment variables. Never commit, push or open a pull request.',

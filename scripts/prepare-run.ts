@@ -2,12 +2,13 @@
 //   npx tsx scripts/prepare-run.ts --job <jobId> --attempt <id> --manifest <sha256>
 // The manifest lives in the sources store at <jobId>/runs/<attempt>.json and must match the hash in the prompt.
 // Only keys inside it are followed. Revisions restore the parent's source archive; render-unchanged runs restore
-// a frozen bundle and verify its canonical file manifest; incorporate-feedback runs also get one still per pinned
+// a frozen bundle and verify its canonical file manifest (keeping copies of the files a re-voice may rewrite); incorporate-feedback runs also get one still per pinned
 // comment in video/feedback/, and library media is downloaded into video/assets/media/. Never falls back to the template: on any failure it
 // exits non-zero and the agent must stop. Writes the verified manifest to .render/run-manifest.json for render-job.
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { bundleManifest } from '../src/lib/bundle-manifest.js'
+import { FROZEN_DIR, FROZEN_FILES, keptHash } from '../src/lib/revoice.js'
 import {
   feedbackStillPath,
   runManifestKey,
@@ -155,12 +156,28 @@ export async function prepare(m: RunManifest, opts: { tmp: string; root?: string
     const archive = join(tmp, 'bundle.tar.gz')
     await fetch(m.bundle.key, archive)
     restoreArchive(root, archive, m.bundle.sha256, 'bundle')
-    const actual = bundleManifest(join(root, 'video')).hash
+    const restored = bundleManifest(join(root, 'video'))
+    const actual = restored.hash
     if (actual !== m.bundle.manifestHash)
       throw new StepError(
         `The restored bundle's files don't match its manifest (got ${actual}). Stop and report this.`,
       )
     log('restored', { kind: 'bundle', key: m.bundle.key, manifestHash: actual })
+    // Lines to re-voice: keep the frozen copies of the files voice.ts revoice rewrites, for render-job's check.
+    const frozen = join(root, FROZEN_DIR)
+    rmSync(frozen, { recursive: true, force: true })
+    if (m.bundle.revoice) {
+      if (keptHash(restored.files, m.bundle.revoice.beats) !== m.bundle.revoice.keptHash)
+        throw new StepError("The restored bundle doesn't match its re-voice manifest. Stop and report this.")
+      for (const p of FROZEN_FILES) {
+        const from = join(root, 'video', p)
+        if (!existsSync(from))
+          throw new StepError(`The restored bundle has no video/${p} to re-voice from. Stop and report this.`)
+        mkdirSync(dirname(join(frozen, p)), { recursive: true })
+        copyFileSync(from, join(frozen, p))
+      }
+      log('revoice.planned', { beats: m.bundle.revoice.beats })
+    }
   }
   // Library media by reference (plan v2 §9): exactly the snapshotted bytes, each one verified.
   if (m.media?.length) {

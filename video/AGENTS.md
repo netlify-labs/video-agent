@@ -181,6 +181,13 @@ run (Kokoro on this machine, or ElevenLabs when the deployment has a key). Never
 People can retime and reorder voiced beats in the editor: the voice moves with its beat, its captions keep their
 spoken times, the music's dip is rewritten, and a beat can't be made shorter than its voice.
 
+They can also change a voiced beat's line. The editor writes the new line into `assets/voice/script.json` and marks
+the clip `data-va-revoice`; the render-unchanged run then runs `npx tsx scripts/voice.ts revoice`, which re-speaks
+only the marked lines with the provider, voice and speed in `voice.json`, removes the marks, and rewrites those
+beats' captions and the ducking. A beat grows only when its new line is longer and no longer fits (lead + voice +
+0.4 s); later beats move with it. A shorter line never shortens a beat. `render-job` refuses a composition that
+still has a mark, and checks that nothing else changed.
+
 ## Key Rules
 
 1. Every timed element needs `data-start` and a duration. `data-start` is what marks it as timed; `data-track-index` is an optional Studio display lane the render never reads

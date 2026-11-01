@@ -5,6 +5,9 @@ import { applyEdits, type EditOp } from '../../../src/lib/contract'
 import plainHtml from '../../../test/fixtures/contract1/index.html?raw'
 import musicHtml from '../../../test/fixtures/contract1-music/index.html?raw'
 import contractSummary from '../../../test/fixtures/contract1/summary.json'
+import voiceHtml from '../../../test/fixtures/contract1-voice/index.html?raw'
+import voiceSummary from '../../../test/fixtures/contract1-voice/summary.json'
+import voiceFile from '../../../test/fixtures/contract1-voice/assets/voice/voice.json'
 import { people, stats, videos } from './data'
 import { mockFile } from './files'
 
@@ -461,7 +464,10 @@ export function installMock() {
         if (b.rev !== mockEdit.rev)
           return fail(409, 'conflict', 'This draft changed in another tab. Reload it to continue.')
         try {
-          const out = applyEdits(contractHtml(), contractSummary, b.ops, { palette: mockPalette })
+          const out = applyEdits(contractHtml(), mockSummary(), b.ops, {
+            palette: mockPalette,
+            ...mockNarration(),
+          })
           mockEdit = { ...mockEdit, rev: mockEdit.rev + 1, ops: b.ops, composition: out.composition }
           return json(mockEdit)
         } catch (e) {
@@ -632,15 +638,25 @@ function mockPlan(stage: 'route' | 'questions' | 'brief' = 'route') {
 const mockPalette = ['#0b0d10', '#f4f5f7', '#9aa3ad', '#14b8a6', '#ff5a1f']
 type MockEdit = ReturnType<typeof newMockEdit>
 let mockEdit: MockEdit | null = null
-/** localStorage.mockMusic=1 edits the copy of the fixture with a music layer, whose track is in the library. */
+/**
+ * localStorage.mockMusic=1 edits the copy of the fixture with a music layer, whose track is in the library;
+ * localStorage.mockVoice=1 the copy that also has a voice-over in two beats.
+ */
 function contractHtml() {
-  if (!localStorage.getItem('mockMusic')) return plainHtml
+  const voice = !!localStorage.getItem('mockVoice')
+  if (!voice && !localStorage.getItem('mockMusic')) return plainHtml
   if (!mockMedia.some((m) => m.id === 'med_theme01'))
     mockMedia.push({ ...mockItem('Upbeat theme.mp3', 'audio', 2_400_000), id: 'med_theme01' })
-  return musicHtml
+  return voice ? voiceHtml : musicHtml
 }
+const mockSummary = () => (localStorage.getItem('mockVoice') ? voiceSummary : contractSummary)
+/** The voiced fixture's spoken lines, as the server reads them from voice.json. */
+const mockNarration = () =>
+  localStorage.getItem('mockVoice')
+    ? { narration: Object.fromEntries(voiceFile.beats.map((b) => [b.beat, b.text])) }
+    : {}
 function newMockEdit(videoId: string, baseN: number) {
-  const base = applyEdits(contractHtml(), contractSummary, []).composition
+  const base = applyEdits(contractHtml(), mockSummary(), [], mockNarration()).composition
   return {
     id: '00000000-0000-4000-8000-00000000ed17',
     videoId,

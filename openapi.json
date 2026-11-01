@@ -2287,6 +2287,32 @@
                     "id"
                   ],
                   "description": "Swap an audio track's file, set its level or mute it, by its id"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "enum": [
+                        "voice"
+                      ]
+                    },
+                    "beat": {
+                      "type": "string",
+                      "maxLength": 80
+                    },
+                    "text": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 600
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "beat",
+                    "text"
+                  ],
+                  "description": "Change a voiced beat's narration line (plain text). The draft preview keeps the old audio; the render re-voices the line, lengthening the beat only if the new line no longer fits"
                 }
               ]
             }
@@ -2509,6 +2535,30 @@
                 "beat"
               ]
             }
+          },
+          "narration": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "beat": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                },
+                "revoice": {
+                  "type": "boolean",
+                  "description": "The line changed since it was spoken; the render re-voices it"
+                }
+              },
+              "required": [
+                "beat",
+                "text",
+                "revoice"
+              ]
+            },
+            "description": "Each voiced beat's narration line, in beat order"
           }
         },
         "required": [
@@ -2516,7 +2566,8 @@
           "colors",
           "beats",
           "layers",
-          "audio"
+          "audio",
+          "narration"
         ]
       },
       "SaveEdit": {
@@ -2713,6 +2764,32 @@
                     "id"
                   ],
                   "description": "Swap an audio track's file, set its level or mute it, by its id"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "enum": [
+                        "voice"
+                      ]
+                    },
+                    "beat": {
+                      "type": "string",
+                      "maxLength": 80
+                    },
+                    "text": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 600
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "beat",
+                    "text"
+                  ],
+                  "description": "Change a voiced beat's narration line (plain text). The draft preview keeps the old audio; the render re-voices the line, lengthening the beat only if the new line no longer fits"
                 }
               ]
             },

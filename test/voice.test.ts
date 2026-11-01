@@ -4,9 +4,10 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { generateVoice, readVoice, syncVoice } from '../scripts/voice.js'
+import { generateVoice, readVoice, revoiceVideo, syncVoice } from '../scripts/voice.js'
 import { elevenlabs, pickProvider } from '../scripts/lib/voice-providers.js'
-import { compositionFiles } from '../src/lib/bundle-manifest.js'
+import { bundleManifest, compositionFiles } from '../src/lib/bundle-manifest.js'
+import { checkRevoiced, FROZEN_FILES, keptHash } from '../src/lib/revoice.js'
 import { applyEdits, duckPoints, load, read, validate, type Summary } from '../src/lib/contract.js'
 import {
   SAMPLE_RATE,
@@ -18,6 +19,7 @@ import {
   pauseAfter,
   splitPhrases,
   voiceCaptions,
+  wav,
   wordsFromCharacters,
   type Speech,
   type VoiceProvider,
@@ -562,5 +564,135 @@ describe('voice in the editor audio model', () => {
       ['voice-intro', 'voice', 'intro'],
       ['voice-outro', 'voice', 'outro'],
     ])
+  })
+})
+
+describe('scripts/voice.ts revoice (lines changed in the editor)', () => {
+  const vfx = (f: string) => readFileSync(new URL(`./fixtures/contract1-voice/${f}`, import.meta.url), 'utf8')
+  let dir: string
+  let frozen: string
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'va-revoice-'))
+    frozen = mkdtempSync(join(tmpdir(), 'va-frozen-'))
+  })
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true })
+    rmSync(frozen, { recursive: true, force: true })
+  })
+
+  const silence = (seconds: number) => wav(new Uint8Array(Math.round(seconds * SAMPLE_RATE) * 2))
+  /** The voiced fixture with its audio, then the draft's edits as the server freezes them (lines in script.json). */
+  function frozenDraft(lines: Record<string, string>) {
+    mkdirSync(join(dir, 'assets/voice'), { recursive: true })
+    const voice = vfx('assets/voice/voice.json')
+    writeFileSync(join(dir, 'assets/voice/voice.json'), voice)
+    writeFileSync(join(dir, 'assets/voice/intro.wav'), silence(2.2))
+    writeFileSync(join(dir, 'assets/voice/outro.wav'), silence(1.5))
+    const spoken = Object.fromEntries(
+      (JSON.parse(voice) as { beats: { beat: string; text: string }[] }).beats.map((b) => [b.beat, b.text]),
+    )
+    const out = applyEdits(
+      vfx('index.html'),
+      JSON.parse(vfx('summary.json')) as Summary,
+      Object.entries(lines).map(([beat, text]) => ({ op: 'voice' as const, beat, text })),
+      { narration: spoken },
+    )
+    const script = JSON.parse(vfx('assets/voice/script.json')) as { lines: { beat: string; text: string }[] }
+    for (const l of script.lines) l.text = lines[l.beat] ?? l.text
+    writeFileSync(join(dir, 'assets/voice/script.json'), JSON.stringify(script))
+    writeFileSync(join(dir, 'index.html'), out.html)
+    writeFileSync(join(dir, 'summary.json'), JSON.stringify(out.summary, null, 2))
+    // What prepare-run keeps for render-job's check.
+    for (const f of FROZEN_FILES) {
+      mkdirSync(join(frozen, f, '..'), { recursive: true })
+      writeFileSync(join(frozen, f), readFileSync(join(dir, f)))
+    }
+    const beats = Object.keys(lines)
+    return { beats, keptHash: keptHash(bundleManifest(dir).files, beats) }
+  }
+
+  it('re-speaks only the marked beat; a longer line grows its beat and moves the rest, and the check passes', async () => {
+    const longer =
+      'Org webhooks send every event you care about. They reach your endpoint in one place. Signed and retried for you.'
+    const plan = frozenDraft({ intro: longer })
+    const fake = fakeProvider('kokoro')
+    const r = await revoiceVideo(dir, { provider: fake.provider })
+    expect(r.beats).toEqual(['intro'])
+    // Only the intro's three sentences were spoken; the outro kept its audio.
+    expect(fake.calls).toEqual(splitPhrases(longer))
+    const voice = readVoice(dir)
+    expect(voice).toMatchObject({ provider: 'kokoro', voice: 'af_heart', speed: 1 })
+    expect(voice?.beats.map((b) => [b.beat, b.text, b.duration])).toEqual([
+      ['intro', longer, 2.6], // 8, 7 and 5 words at 0.1 s + 2 × 0.3 s pauses
+      ['outro', 'Read the docs.', 1.5],
+    ])
+    // 0.3 s lead + 2.6 s + 0.4 s quiet after no longer fits in 3 s.
+    expect(r.lengthened).toEqual([{ beat: 'intro', from: 3, to: 3.3 }])
+    const html = readFileSync(join(dir, 'index.html'), 'utf8')
+    const summary = JSON.parse(readFileSync(join(dir, 'summary.json'), 'utf8')) as Summary
+    const c = read(load(html))
+    expect(c.beats.map((b) => [b.id, b.start, b.duration])).toEqual([
+      ['intro', 0, 3.3],
+      ['demo', 3.3, 3],
+      ['outro', 6.3, 3],
+    ])
+    expect(c.beats[0]?.voice?.duration).toBe(2.6)
+    expect(html).not.toContain('data-va-revoice')
+    expect(validate(html, summary)).toEqual([])
+    // The intro's captions are its new phrases at their spoken times; the others moved with their beats.
+    expect(summary.captions?.map((x) => [x.beat, x.start, x.voice ?? false])).toEqual([
+      ['intro', 0.3, true],
+      ['intro', 1.4, true],
+      ['intro', 2.4, true],
+      ['demo', 3.8, false],
+      ['outro', 6.5, true],
+    ])
+    expect(checkRevoiced(dir, frozen, plan)).toEqual([])
+  })
+
+  it('a line that still fits keeps every beat where it was', async () => {
+    const plan = frozenDraft({ outro: 'Read the docs today.' })
+    const r = await revoiceVideo(dir, { provider: fakeProvider('kokoro').provider })
+    expect(r.lengthened).toEqual([])
+    expect(read(load(readFileSync(join(dir, 'index.html'), 'utf8'))).duration).toBe(9)
+    expect(checkRevoiced(dir, frozen, plan)).toEqual([])
+  })
+
+  it('refuses another provider than the one that voiced the video, and does nothing without marks', async () => {
+    frozenDraft({ outro: 'Read the docs today.' })
+    await expect(revoiceVideo(dir, { provider: fakeProvider('elevenlabs').provider })).rejects.toThrow(
+      /voiced with kokoro/,
+    )
+    const fresh = mkdtempSync(join(tmpdir(), 'va-plain-'))
+    writeFileSync(join(fresh, 'index.html'), vfx('index.html'))
+    expect(await revoiceVideo(fresh, { provider: fakeProvider('kokoro').provider })).toEqual({
+      beats: [],
+      lengthened: [],
+    })
+    rmSync(fresh, { recursive: true, force: true })
+  })
+
+  it("render-job's check catches any change re-voicing doesn't explain", async () => {
+    const plan = frozenDraft({ outro: 'Read the docs today.' })
+    await revoiceVideo(dir, { provider: fakeProvider('kokoro').provider })
+    const html = readFileSync(join(dir, 'index.html'), 'utf8')
+    writeFileSync(join(dir, 'index.html'), html.replace('Org webhooks</h1>', 'Org hooks</h1>'))
+    expect(checkRevoiced(dir, frozen, plan)).toContainEqual(expect.stringMatching(/index.html differs/))
+    writeFileSync(join(dir, 'index.html'), html)
+    expect(checkRevoiced(dir, frozen, plan)).toEqual([])
+    // An unmarked beat's audio, or any other file, must stay as frozen.
+    writeFileSync(join(dir, 'assets/voice/intro.wav'), silence(1))
+    expect(checkRevoiced(dir, frozen, plan)).toContainEqual(expect.stringMatching(/Files other than/))
+    writeFileSync(join(dir, 'assets/voice/intro.wav'), silence(2.2))
+    // voice.json may change only for the marked beat.
+    const voice = readVoice(dir)!
+    writeFileSync(
+      join(dir, 'assets/voice/voice.json'),
+      JSON.stringify({
+        ...voice,
+        beats: voice.beats.map((b) => (b.beat === 'intro' ? { ...b, hash: 'x' } : b)),
+      }),
+    )
+    expect(checkRevoiced(dir, frozen, plan)).toContainEqual(expect.stringMatching(/"intro" wasn't marked/))
   })
 })

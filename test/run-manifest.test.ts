@@ -45,6 +45,24 @@ function workspace(files: Record<string, string>) {
 }
 
 describe('run manifest', () => {
+  it('carries lines to re-voice only when there are some, and checks them', () => {
+    const ru: RunManifest = {
+      ...base,
+      kind: 'render_unchanged',
+      source: null,
+      bundle: { key: 'vid_1/v2/frozen.tar.gz', sha256: H('b'), manifestHash: H('c') },
+    }
+    expect(serializeRunManifest(ru)).not.toContain('revoice')
+    const withLines = { ...ru, bundle: { ...ru.bundle!, revoice: { beats: ['intro'], keptHash: H('d') } } }
+    expect(verify(withLines).bundle?.revoice).toEqual({ beats: ['intro'], keptHash: H('d') })
+    for (const revoice of [
+      { beats: [], keptHash: H('d') },
+      { beats: ['Intro!'], keptHash: H('d') },
+      { beats: ['intro'], keptHash: 'nope' },
+    ])
+      expect(() => verify({ ...ru, bundle: { ...ru.bundle!, revoice } })).toThrow(/re-voice/)
+  })
+
   it('accepts a well-formed manifest whose hash matches the prompt', () => {
     expect(verify(base).source?.key).toBe('vid_1/v1/source.tar.gz')
   })

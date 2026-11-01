@@ -123,6 +123,10 @@ re-runs TTS for just that line. Renders stay render-unchanged (no agent rewrite)
 **Why.** The most common feedback on narrated videos is "change that word" and "music's too loud"; today both need a
 full revision. **Confidence: medium** — depends on 2 and 3 landing first, and on TTS being callable outside a run
 (server-side or a small render-unchanged step).
+**Status:** built. Track swap, volume and mute shipped first; re-voicing a line happens in the edit's render run
+(`scripts/voice.ts revoice`), because neither Kokoro nor the AI Gateway can speak inside a Function. A longer line
+grows its beat only when it no longer fits; render-job checks that only the re-voiced files changed
+(`src/lib/revoice.ts`).
 
 ## Next 10, and why
 

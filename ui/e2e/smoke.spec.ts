@@ -815,6 +815,40 @@ test('the Audio card shows only with music; Replace is filtered to audio; volume
   await expect(page.getByTestId('edit-status')).toContainText('Draft saved')
 })
 
+test('the Voice section lists each voiced line; a changed line is marked for re-voicing and saves a voice op', async ({
+  page,
+}) => {
+  // Without a voice-over there is no Voice section.
+  await mock(page, 'mockMusic')
+  await page.goto('/videos/vid_teaser/edit/2')
+  await expect(page.getByTestId('audio-music')).toBeVisible()
+  await expect(page.getByTestId('voice-section')).toHaveCount(0)
+
+  await mock(page, 'mockVoice')
+  await page.goto('/videos/vid_teaser/edit/2')
+  const section = page.getByTestId('voice-section')
+  await expect(page.getByTestId('audio-music')).toBeVisible()
+  await expect(section.getByTestId('voice-intro')).toContainText('Opening')
+  await expect(section.getByRole('textbox', { name: 'Narration for Opening' })).toHaveValue(
+    'Meet org webhooks. One place for every event.',
+  )
+  await expect(section.getByRole('textbox', { name: 'Narration for Outro' })).toHaveValue('Read the docs.')
+  await expect(section.getByText('Re-voice on render')).toHaveCount(0)
+
+  const outro = section.getByRole('textbox', { name: 'Narration for Outro' })
+  await outro.fill('Read the docs today.')
+  await expect(section.getByTestId('voice-outro')).toContainText('Re-voice on render')
+  await expect
+    .poll(() => lastOps(page), { timeout: 5000 })
+    .toEqual([{ op: 'voice', beat: 'outro', text: 'Read the docs today.' }])
+  await expect(page.getByTestId('edit-status')).toContainText('Draft saved')
+
+  // Back to the spoken words: no op, nothing to re-voice.
+  await outro.fill('Read the docs.')
+  await expect(section.getByText('Re-voice on render')).toHaveCount(0)
+  await expect.poll(() => lastOps(page), { timeout: 5000 }).toEqual([])
+})
+
 test('the preview frame may play sound once the person presses play', async ({ page }) => {
   await page.goto('/videos/vid_teaser/edit/2')
   await expect(page.getByTestId('composition-preview')).toHaveAttribute('allow', 'autoplay')

@@ -5765,6 +5765,11 @@ export interface components {
                 src?: string;
                 volume?: number;
                 muted?: boolean;
+            } | {
+                /** @enum {string} */
+                op: "voice";
+                beat: string;
+                text: string;
             })[];
             composition: components["schemas"]["Composition"];
             base: components["schemas"]["Composition"];
@@ -5813,6 +5818,13 @@ export interface components {
                 /** @description The beat it plays in; null for music */
                 beat: string | null;
             }[];
+            /** @description Each voiced beat's narration line, in beat order */
+            narration: {
+                beat: string;
+                text: string;
+                /** @description The line changed since it was spoken; the render re-voices it */
+                revoice: boolean;
+            }[];
         };
         SaveEdit: {
             ops: ({
@@ -5855,6 +5867,11 @@ export interface components {
                 src?: string;
                 volume?: number;
                 muted?: boolean;
+            } | {
+                /** @enum {string} */
+                op: "voice";
+                beat: string;
+                text: string;
             })[];
             rev: number;
         };

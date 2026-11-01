@@ -1,0 +1,14 @@
+{
+  "voice": "af_heart",
+  "speed": 1,
+  "lines": [
+    {
+      "beat": "intro",
+      "text": "Meet org webhooks. One place for every event."
+    },
+    {
+      "beat": "outro",
+      "text": "Read the docs."
+    }
+  ]
+}

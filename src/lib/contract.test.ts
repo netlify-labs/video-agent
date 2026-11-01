@@ -1,7 +1,16 @@
 // Editing contract v1 (plan v2 §8, §14 rules 18-20): the validator and the patcher on the spike S8 fixture.
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { applyEdits, ContractError, load, read, validate, type EditOp, type Summary } from './contract.js'
+import {
+  applyEdits,
+  applyRevoice,
+  ContractError,
+  load,
+  read,
+  validate,
+  type EditOp,
+  type Summary,
+} from './contract.js'
 
 const fx = (f: string) => readFileSync(new URL(`../../test/fixtures/contract1/${f}`, import.meta.url), 'utf8')
 const html = fx('index.html')
@@ -429,5 +438,115 @@ describe('contract audio', () => {
       muted: true,
       beat: 'intro',
     })
+  })
+})
+
+describe('narration lines and re-voicing', () => {
+  const vfx = (f: string) =>
+    readFileSync(new URL(`../../test/fixtures/contract1-voice/${f}`, import.meta.url), 'utf8')
+  const vHtml = vfx('index.html')
+  const vSummary = JSON.parse(vfx('summary.json')) as Summary
+  const narration = {
+    intro: 'Meet org webhooks. One place for every event.',
+    outro: 'Read the docs.',
+  }
+  const voiceOp = (beat: string, text: string): EditOp => ({ op: 'voice', beat, text })
+
+  it("shows each voiced beat's line, and none without the voice script", () => {
+    expect(applyEdits(vHtml, vSummary, [], { narration }).composition.narration).toEqual([
+      { beat: 'intro', text: narration.intro, revoice: false },
+      { beat: 'outro', text: 'Read the docs.', revoice: false },
+    ])
+    expect(read(load(vHtml)).narration).toEqual([])
+  })
+
+  it('a voice op records the line and marks the clip; the old audio stays for the preview', () => {
+    const out = applyEdits(vHtml, vSummary, [voiceOp('outro', '  Read the   docs today. ')], { narration })
+    expect(out.narration).toEqual({ ...narration, outro: 'Read the docs today.' })
+    expect(out.composition.narration[1]).toEqual({
+      beat: 'outro',
+      text: 'Read the docs today.',
+      revoice: true,
+    })
+    expect(out.html).toMatch(/data-va-voice="outro"[^>]*data-va-revoice=""/)
+    // Same file, same length, same captions: the draft plays as before.
+    expect(out.composition.beats[2]?.voice).toEqual(read(load(vHtml)).beats[2]?.voice)
+    expect(out.summary).toEqual(vSummary)
+    expect(validate(out.html, out.summary)).toEqual([])
+    // Back to the spoken words (whitespace aside): nothing to re-voice.
+    const back = applyEdits(out.html, out.summary, [voiceOp('outro', 'Read  the docs.')], { narration })
+    expect(back.html).not.toContain('data-va-revoice')
+  })
+
+  it('refuses lines for beats without a voice, empty, too long, or with markup', () => {
+    const bad =
+      (op: EditOp, opts = { narration }) =>
+      () =>
+        applyEdits(vHtml, vSummary, [op], opts)
+    expect(bad(voiceOp('demo', 'Hi.'))).toThrow(/no narration/)
+    expect(bad(voiceOp('nope', 'Hi.'))).toThrow(/no beat "nope"/)
+    expect(bad(voiceOp('intro', 'Hi.'), { narration: {} as typeof narration })).toThrow(/no narration/)
+    expect(bad(voiceOp('intro', '   '))).toThrow(/needs some words/)
+    expect(bad(voiceOp('intro', 'a'.repeat(601)))).toThrow(/under 600/)
+    expect(bad(voiceOp('intro', 'Pause <break time="1s"/> here'))).toThrow(/plain text/)
+    expect(bad(voiceOp('intro', 'Bell \u0007 here'))).toThrow(/plain text/)
+    // The mark only goes on a voice.
+    expect(
+      validate(vHtml.replace('data-va-text="demo-sub"', 'data-va-text="demo-sub" data-va-revoice'), vSummary),
+    ).toContainEqual(expect.stringMatching(/only goes on a voice/))
+  })
+
+  it('applyRevoice: a longer line that no longer fits grows its beat; later beats, captions and the dip follow', () => {
+    const marked = applyEdits(vHtml, vSummary, [voiceOp('intro', 'A much longer opening line.')], {
+      narration,
+    })
+    const cues = [
+      { text: 'A much longer', start: 0.3, end: 1.8 },
+      { text: 'opening line.', start: 2.1, end: 3.5 },
+    ]
+    const out = applyRevoice(marked.html, marked.summary, [
+      { beat: 'intro', file: 'assets/voice/intro.wav', duration: 3.2, minBeat: 3.9, cues },
+    ])
+    expect(out.lengthened).toEqual([{ beat: 'intro', from: 3, to: 3.9 }])
+    const c = read(load(out.html))
+    expect(c.beats.map((b) => [b.id, b.start, b.duration])).toEqual([
+      ['intro', 0, 3.9],
+      ['demo', 3.9, 3],
+      ['outro', 6.9, 3],
+    ])
+    expect(c.duration).toBe(9.9)
+    expect(c.beats[0]?.voice).toMatchObject({ start: 0.3, duration: 3.2 })
+    expect(out.html).not.toContain('data-va-revoice')
+    expect(out.summary.captions?.map((x) => [x.beat, x.text, x.start, x.end])).toEqual([
+      ['intro', 'A much longer', 0.3, 1.8],
+      ['intro', 'opening line.', 2.1, 3.5],
+      ['demo', 'One subscription for every project', 4.4, 6.9],
+      ['outro', 'Read the docs.', 7.1, 8.6],
+    ])
+    expect(validate(out.html, out.summary)).toEqual([])
+    // The music layer spans the longer video.
+    expect(out.html).toMatch(/id="music"[^>]*data-duration="9.9"/)
+  })
+
+  it('applyRevoice: a shorter line keeps its beat, and every mark must be re-voiced', () => {
+    const marked = applyEdits(
+      vHtml,
+      vSummary,
+      [voiceOp('intro', 'Org webhooks.'), voiceOp('outro', 'Docs.')],
+      {
+        narration,
+      },
+    )
+    const line = { beat: 'intro', file: 'assets/voice/intro.wav', duration: 1, minBeat: 1.7, cues: [] }
+    expect(() => applyRevoice(marked.html, marked.summary, [line])).toThrow(
+      /"outro" is marked but wasn't re-voiced/,
+    )
+    const out = applyRevoice(marked.html, marked.summary, [
+      line,
+      { ...line, beat: 'outro', file: 'assets/voice/outro.wav', duration: 0.5, minBeat: 1.1 },
+    ])
+    expect(out.lengthened).toEqual([])
+    expect(read(load(out.html)).duration).toBe(9)
+    expect(() => applyRevoice(vHtml, vSummary, [line])).toThrow(/isn't marked/)
   })
 })

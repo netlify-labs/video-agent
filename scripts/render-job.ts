@@ -7,6 +7,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } 
 import { join } from 'node:path'
 import { bundleManifest } from '../src/lib/bundle-manifest.js'
 import { validate, type Summary } from '../src/lib/contract.js'
+import { checkRevoiced, FROZEN_DIR } from '../src/lib/revoice.js'
 import type { PreviewFile } from '../src/lib/media/previews.js'
 import type { RunManifest } from '../src/lib/run-manifest.js'
 import { postCheckpoint } from './checkpoint.js'
@@ -72,6 +73,10 @@ async function main() {
       throw new StepError(
         `The composition breaks the editing contract (see "Editing contract v1" in video/AGENTS.md):\n- ${violations.join('\n- ')}`,
       )
+    if (/data-va-revoice/.test(indexHtml))
+      throw new StepError(
+        'Some narration lines are still marked for re-voicing (data-va-revoice). Run npx tsx scripts/voice.ts revoice first.',
+      )
     log('contract.ok')
   } else log('contract.absent', { note: 'This video will not be editable in the browser.' })
 
@@ -79,7 +84,15 @@ async function main() {
   const runManifestPath = join(repoRoot, '.render', 'run-manifest.json')
   if (existsSync(runManifestPath)) {
     const m = JSON.parse(readFileSync(runManifestPath, 'utf8')) as RunManifest
-    if (m.attemptId === attempt && m.kind === 'render_unchanged' && m.bundle) {
+    if (m.attemptId === attempt && m.kind === 'render_unchanged' && m.bundle?.revoice) {
+      // Re-voiced lines: only the files voice.ts revoice writes may differ, and exactly as it writes them.
+      const problems = checkRevoiced(videoDir, join(repoRoot, FROZEN_DIR), m.bundle.revoice)
+      if (problems.length)
+        throw new StepError(
+          `video/ changed in ways re-voicing doesn't explain. Render-unchanged runs must not edit files. Stop and report this.\n- ${problems.join('\n- ')}`,
+        )
+      log('bundle.verified', { revoiced: m.bundle.revoice.beats })
+    } else if (m.attemptId === attempt && m.kind === 'render_unchanged' && m.bundle) {
       const actual = bundleManifest(videoDir).hash
       if (actual !== m.bundle.manifestHash)
         throw new StepError(
