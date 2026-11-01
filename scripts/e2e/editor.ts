@@ -142,28 +142,30 @@ for (let i = 0; i < 120; i++) {
   v = ((await api('GET', `/api/v1/videos/${id}`)).json as Video).versions.find((x) => x.n === n)
   if (v && ['ready', 'failed', 'timed_out', 'cancelled'].includes(v.status)) break
 }
-if (!v || v.status !== 'ready')
-  fail('The render-unchanged run did not finish.', { status: v?.status, error: v?.error })
-const t = v.timings
+const done: Version =
+  v?.status === 'ready'
+    ? v
+    : fail('The render-unchanged run did not finish.', { status: v?.status, error: v?.error })
+const t = done.timings
 const sec = (a?: string | null, b?: string | null) =>
   a && b ? Math.round((Date.parse(b) - Date.parse(a)) / 1000) : null
 log('ready', {
   n,
-  mode: v.mode,
-  editedFromN: v.editedFromN,
-  editable: v.editable,
+  mode: done.mode,
+  editedFromN: done.editedFromN,
+  editable: done.editable,
   composition: edit.composition.duration,
-  mp4: v.output?.durationSec,
-  credits: v.usage?.totalCreditsCost ?? null,
+  mp4: done.output?.durationSec,
+  credits: done.usage?.totalCreditsCost ?? null,
   queuedToStart: sec(t?.queuedAt, t?.startedAt),
   run: sec(t?.startedAt, t?.finishingAt),
   finalize: sec(t?.finishingAt, t?.endedAt),
   total: sec(t?.queuedAt, t?.endedAt),
 })
-if (v.mode !== 'render_unchanged' || v.editedFromN !== from) fail('Wrong mode or base.')
-if (Math.abs((v.output?.durationSec ?? 0) - edit.composition.duration) > 0.25)
+if (done.mode !== 'render_unchanged' || done.editedFromN !== from) fail('Wrong mode or base.')
+if (Math.abs((done.output?.durationSec ?? 0) - edit.composition.duration) > 0.25)
   fail('The MP4 length does not match the edited composition.')
-if (!v.editable) fail('The edited version should keep the contract.')
+if (!done.editable) fail('The edited version should keep the contract.')
 if (newText) {
   const own = (await api('GET', `/api/v1/videos/${id}/versions/${n}/preview`)).json as { url: string }
   if (!(await (await fetch(own.url)).text()).includes(newText.replaceAll('&', '&amp;')))
