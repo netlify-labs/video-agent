@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { expect, test, type Locator, type Page } from '@playwright/test'
 
 /** A DOM property of the element (the specs aren't typechecked against the DOM library). */
@@ -665,6 +666,63 @@ test('a media slot is replaced from the library, filtered to its kind, with a fi
   await expect(
     page.getByRole('dialog', { name: 'Replace Hero clip' }).getByText('Nothing to pick yet.'),
   ).toBeVisible()
+})
+
+test('the Audio card shows only with music; Replace is filtered to audio; volume and mute save audio ops', async ({
+  page,
+}) => {
+  await page.goto('/videos/vid_teaser/edit/2')
+  await expect(page.getByTestId('beat-intro')).toBeVisible()
+  await expect(page.getByTestId('audio-card')).toHaveCount(0)
+
+  await mock(page, 'mockMusic')
+  await page.goto('/videos/vid_teaser/edit/2')
+  const row = page.getByTestId('audio-music')
+  // The track's library name, not its id.
+  await expect(row).toContainText('Music')
+  await expect(row).toContainText('Upbeat theme.mp3')
+  await expect(page.getByTestId('audio-card')).toContainText('80%')
+
+  // Two steps down on the keyboard: 80% to 70%.
+  await row.getByRole('slider', { name: 'Volume of Music' }).focus()
+  await page.keyboard.press('ArrowLeft')
+  await page.keyboard.press('ArrowLeft')
+  await expect(page.getByTestId('audio-card')).toContainText('70%')
+  await expect
+    .poll(() => lastOps(page), { timeout: 5000 })
+    .toEqual([{ op: 'audio', id: 'music', volume: 0.7 }])
+  await expect(page.getByTestId('edit-status')).toContainText('Draft saved')
+
+  await row.getByRole('button', { name: 'Mute Music' }).click()
+  await expect(row.getByRole('button', { name: 'Mute Music' })).toHaveAttribute('aria-pressed', 'true')
+  await expect
+    .poll(() => lastOps(page), { timeout: 5000 })
+    .toEqual([{ op: 'audio', id: 'music', volume: 0.7, muted: true }])
+  await expect(page.getByTestId('edit-status')).toContainText('Draft saved')
+
+  await row.getByRole('button', { name: 'Replace Music' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Replace Music' })
+  // Audio only: no images or clips to pick.
+  await expect(dialog.getByTestId('pick-med_theme01')).toBeVisible()
+  await expect(dialog.getByRole('radio', { name: 'Images' })).toHaveCount(0)
+  await expect(dialog.getByRole('radio', { name: 'Clips' })).toHaveCount(0)
+  await dialog.locator('input[type=file]').setInputFiles({
+    name: 'calm.mp3',
+    mimeType: 'audio/mpeg',
+    buffer: readFileSync(new URL('../../test/fixtures/audio/tone.mp3', import.meta.url)),
+  })
+  await dialog.getByTestId('pick-med_mock0002').click()
+  await expect(dialog).toHaveCount(0)
+  await expect(row).toContainText('calm.mp3')
+  await expect
+    .poll(() => lastOps(page), { timeout: 5000 })
+    .toEqual([{ op: 'audio', id: 'music', src: 'assets/media/med_mock0002.mp3', volume: 0.7, muted: true }])
+  await expect(page.getByTestId('edit-status')).toContainText('Draft saved')
+})
+
+test('the preview frame may play sound once the person presses play', async ({ page }) => {
+  await page.goto('/videos/vid_teaser/edit/2')
+  await expect(page.getByTestId('composition-preview')).toHaveAttribute('allow', 'autoplay')
 })
 
 // Client-side caching and code splitting.

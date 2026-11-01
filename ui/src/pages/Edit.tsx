@@ -1,6 +1,5 @@
-// The browser editor (plan v2 §8): change text, beat timing, colours, beat order and media slots on a finished
-// contract-1 version,
-// see it in the sandboxed preview, and render it unchanged as the next version. The page holds the composition the
+// The browser editor (plan v2 §8): change text, beat timing, colours, beat order, media slots and music on a
+// finished contract-1 version, see it in the sandboxed preview, and render it unchanged as the next version. The page holds the composition the
 // person wants; the op list sent on each save is its difference from the version, so saves are idempotent.
 import {
   ActionIcon,
@@ -13,6 +12,7 @@ import {
   Menu,
   NumberInput,
   SegmentedControl,
+  Slider,
   Stack,
   Text,
   TextInput,
@@ -21,7 +21,16 @@ import {
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
-import { IconArrowDown, IconArrowUp, IconMovie, IconPhoto, IconTrash } from '@tabler/icons-react'
+import {
+  IconArrowDown,
+  IconArrowUp,
+  IconMovie,
+  IconMusic,
+  IconPhoto,
+  IconTrash,
+  IconVolume,
+  IconVolumeOff,
+} from '@tabler/icons-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { $api, errorMessage, fetchClient, newIdempotencyKey } from '../api/client'
@@ -35,11 +44,15 @@ type Edit = paths['/api/v1/edits/{id}']['get']['responses'][200]['content']['app
 type Composition = Edit['composition']
 type Op = Edit['ops'][number]
 type Slot = Composition['beats'][number]['media'][number]
+type Track = Composition['audio'][number]
 
 const fps = (s: number) => Math.round(s * 30) / 30
 const sameNumber = (a: number, b: number) => Math.abs(a - b) < 1e-6
 
-/** The ops that turn `base` into `cur`, in the order the patcher needs: deletes, order, timing, text, colour, media. */
+/**
+ * The ops that turn `base` into `cur`, in the order the patcher needs: deletes, order, timing, text, colour, media,
+ * audio.
+ */
 export function diffOps(base: Composition, cur: Composition): Op[] {
   const ops: Op[] = []
   const curIds = cur.beats.map((b) => b.id)
@@ -63,7 +76,103 @@ export function diffOps(base: Composition, cur: Composition): Op[] {
     if (was && (was.src !== m.src || (was.fit ?? 'contain') !== fit))
       ops.push({ op: 'media', slot: m.slot, src: m.src, kind: m.kind, fit })
   }
+  const baseAudio = new Map(base.audio.map((a) => [a.id, a] as const))
+  for (const a of cur.audio) {
+    const was = baseAudio.get(a.id)
+    if (!was) continue
+    const change = {
+      ...(was.src !== a.src ? { src: a.src } : {}),
+      ...(!sameNumber(was.volume, a.volume) ? { volume: a.volume } : {}),
+      ...(was.muted !== a.muted ? { muted: a.muted } : {}),
+    }
+    if (Object.keys(change).length) ops.push({ op: 'audio', id: a.id, ...change })
+  }
   return ops
+}
+
+/** Library files sit in assets/media/ as <media id>.<ext>. */
+const libraryId = (src: string) => /^assets\/media\/(med_[A-Za-z0-9]+)\.[A-Za-z0-9]+$/.exec(src)?.[1] ?? null
+
+/** One audio track: its file's name, Replace, a level and Mute. */
+function AudioRow({
+  track,
+  item,
+  onChange,
+  onReplace,
+}: {
+  track: Track
+  /** The library item picked in this session, if any. */
+  item: Media | undefined
+  onChange: (patch: Partial<Track>) => void
+  onReplace: () => void
+}) {
+  const id = libraryId(track.src)
+  // The library's name for the file (not just its id); a deleted or hidden item falls back to the file name.
+  const lib = $api.useQuery(
+    'get',
+    '/api/v1/media/{id}',
+    { params: { path: { id: id ?? '' } } },
+    { enabled: !!id && !item, retry: false, staleTime: Infinity },
+  )
+  const name = labelFor(track.label, track.id)
+  const file = item?.filename ?? lib.data?.filename ?? track.src.split('/').pop() ?? track.src
+  return (
+    <div className="va-slot" data-testid={`audio-${track.id}`}>
+      <Group justify="space-between" wrap="nowrap" gap="xs">
+        <Group gap={8} wrap="nowrap" style={{ minWidth: 0 }}>
+          <IconMusic size={18} />
+          <div style={{ minWidth: 0 }}>
+            <Text size="xs" fw={500}>
+              {name}
+            </Text>
+            <Text size="xs" c="var(--va-faint)" truncate title={file}>
+              {file}
+            </Text>
+          </div>
+        </Group>
+        <Group gap={4} wrap="nowrap">
+          <Tooltip label={track.muted ? 'Unmute' : 'Mute'}>
+            <ActionIcon
+              variant={track.muted ? 'light' : 'subtle'}
+              color={track.muted ? 'red' : 'gray'}
+              aria-label={`Mute ${name}`}
+              aria-pressed={track.muted}
+              onClick={() => {
+                onChange({ muted: !track.muted })
+              }}
+            >
+              {track.muted ? <IconVolumeOff size={14} /> : <IconVolume size={14} />}
+            </ActionIcon>
+          </Tooltip>
+          <Button size="compact-xs" variant="default" aria-label={`Replace ${name}`} onClick={onReplace}>
+            Replace
+          </Button>
+        </Group>
+      </Group>
+      <Group gap="xs" wrap="nowrap" mt={8}>
+        <Text size="xs" c="var(--va-faint)" w={52}>
+          Volume
+        </Text>
+        <Slider
+          style={{ flex: 1 }}
+          size="sm"
+          min={0}
+          max={1}
+          step={0.05}
+          value={track.volume}
+          disabled={track.muted}
+          label={(v) => `${Math.round(v * 100)}%`}
+          thumbLabel={`Volume of ${name}`}
+          onChange={(v) => {
+            onChange({ volume: Math.round(v * 100) / 100 })
+          }}
+        />
+        <Text size="xs" c="var(--va-faint)" className="num" w={36} ta="right">
+          {track.muted ? 'Off' : `${Math.round(track.volume * 100)}%`}
+        </Text>
+      </Group>
+    </div>
+  )
 }
 
 export function EditPage() {
@@ -81,6 +190,7 @@ export function EditPage() {
   const fields = useRef<Record<string, HTMLInputElement | null>>({})
   // The slot being replaced, and the library items picked so far (for their thumbnails).
   const [replacing, setReplacing] = useState<Slot | null>(null)
+  const [replacingAudio, setReplacingAudio] = useState<Track | null>(null)
   const [picked, setPicked] = useState<Record<string, Media>>({})
 
   useEffect(() => {
@@ -143,6 +253,12 @@ export function EditPage() {
       return c
     })
   }
+  const setTrack = (trackId: string, patch: Partial<Track>) => {
+    update((c) => {
+      for (const a of c.audio) if (a.id === trackId) Object.assign(a, patch)
+      return c
+    })
+  }
   const move = (i: number, by: number) => {
     update((c) => {
       const [b] = c.beats.splice(i, 1)
@@ -186,6 +302,8 @@ export function EditPage() {
     )
   if (!draft || !cur || !video.data) return <Text c="var(--va-muted)">Opening the editor…</Text>
   const total = cur.beats.reduce((s, b) => s + b.duration, 0)
+  // Music for now; voice lines and effects get their own rows later.
+  const music = cur.audio.filter((a) => a.role === 'music')
   const next = video.data.versions.length + 1
 
   // The preview stays put on the left with the actions above it; the controls scroll on their own on the right.
@@ -267,8 +385,8 @@ export function EditPage() {
           onReady={onReady}
         />
         <Text size="xs" c="var(--va-faint)">
-          Click any text in the preview to edit it. Text changes show at once; timing, order, colours and
-          media after the draft saves.
+          Click any text in the preview to edit it. Text changes show at once; timing, order, colours, media
+          and audio after the draft saves.
         </Text>
       </div>
       <div className="va-editor-panel" data-testid="edit-panel">
@@ -419,6 +537,28 @@ export function EditPage() {
             ))}
           </Stack>
         </Card>
+        {music.length ? (
+          <Card data-testid="audio-card">
+            <Text fw={600} mb="sm">
+              Audio
+            </Text>
+            <Stack gap="sm">
+              {music.map((a) => (
+                <AudioRow
+                  key={a.id}
+                  track={a}
+                  item={picked[a.src.split('/').pop() ?? '']}
+                  onChange={(patch) => {
+                    setTrack(a.id, patch)
+                  }}
+                  onReplace={() => {
+                    setReplacingAudio(a)
+                  }}
+                />
+              ))}
+            </Stack>
+          </Card>
+        ) : null}
         <Card>
           <Text fw={600} mb="sm">
             Colours
@@ -474,6 +614,22 @@ export function EditPage() {
             const file = `${m.id}.${m.filename.split('.').pop() ?? ''}`
             setPicked((p) => ({ ...p, [file]: m }))
             setSlot(replacing.slot, { src: `assets/media/${file}` })
+          }}
+        />
+      ) : null}
+      {replacingAudio ? (
+        <MediaLibraryModal
+          opened
+          title={`Replace ${labelFor(replacingAudio.label, replacingAudio.id)}`}
+          kinds={['audio']}
+          onClose={() => {
+            setReplacingAudio(null)
+          }}
+          onPick={([m]) => {
+            if (!m) return
+            const file = `${m.id}.${m.filename.split('.').pop() ?? ''}`
+            setPicked((p) => ({ ...p, [file]: m }))
+            setTrack(replacingAudio.id, { src: `assets/media/${file}` })
           }}
         />
       ) : null}
