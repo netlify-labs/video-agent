@@ -10,7 +10,7 @@ import { sha256Hex } from '../src/lib/crypto.js'
 import { runManifestKey, verifyRunManifest } from '../src/lib/run-manifest.js'
 import { readTarGz } from '../src/lib/tar.js'
 import type { Role } from '../src/domain/types.js'
-import { failedSnap, running } from './fakes.js'
+import { failedSnap, running, succeeded } from './fakes.js'
 import { harness, type Harness } from './helpers.js'
 import { tarGz } from './tarball.js'
 
@@ -88,7 +88,7 @@ describe('render unchanged', () => {
     expect(req?.prompt).toContain("Don't write, change or delete any file in video/.")
     const sha = /--manifest ([0-9a-f]{64})/.exec(req?.prompt ?? '')?.[1] ?? ''
     const raw = new TextDecoder().decode(
-      (await h.deps.blobs.get('sources', runManifestKey(id, req?.requestId ?? ''))),
+      await h.deps.blobs.get('sources', runManifestKey(id, req?.requestId ?? '')),
     )
     const m = verifyRunManifest(raw, { attemptId: req?.requestId ?? '', sha256: sha })
     expect(m).toMatchObject({ kind: 'render_unchanged', source: null })
@@ -155,5 +155,26 @@ describe('render unchanged', () => {
     await h.call('GET', '/api/v1/me', { as: rita })
     await h.call('PATCH', '/api/v1/users/u_rita', { as: h.admin, body: { role: 'reviewer' satisfies Role } })
     expect((await h.call('POST', `/api/v1/edits/${bobs.id}/render`, { as: rita })).status).toBe(403)
+  })
+
+  it("a run that stops on a failed check fails soon, with the agent's reason", async () => {
+    const h = harness()
+    const { id, editId } = await draft(h)
+    h.deps.runner.nextScripts.push({
+      timeline: [
+        running(),
+        succeeded(
+          'Version 2 was not rendered.\n\nThe restore step worked. `npx hyperframes check` failed on one contrast error, so the run stopped before render-job.ts as instructed. Nothing was edited.',
+        ),
+      ],
+    })
+    await render(h, editId)
+    await h.drive(6)
+    const v = await h.json(await h.call('GET', `/api/v1/videos/${id}`, { as: h.member }))
+    expect(v.versions[0]).toMatchObject({ n: 2, status: 'failed', mode: 'render_unchanged' })
+    expect(v.versions[0].error.category).toBe('check_failed')
+    expect(v.versions[0].error.message).toContain("The edited composition didn't pass its check")
+    expect(v.versions[0].error.message).toContain('failed on one contrast error')
+    expect(v.versions[0].error.message).toContain('Edit it again or ask for a revision instead.')
   })
 })

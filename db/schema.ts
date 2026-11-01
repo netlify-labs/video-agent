@@ -128,6 +128,8 @@ export const attempts = pgTable(
     cancelRequestedAt: ts('cancel_requested_at'),
     cancelReason: text('cancel_reason'),
     latestStep: text('latest_step'),
+    // The agent's final answer (truncated): why a run ended without a video, when it did.
+    resultText: text('result_text'),
     usage: jsonb('usage'),
     errorCategory: text('error_category'),
     errorMessage: text('error_message'),

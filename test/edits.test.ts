@@ -115,7 +115,7 @@ describe('edit drafts', () => {
     expect(saved.composition.duration).toBe(10.5)
     expect(saved.composition.beats.map((b) => b.start)).toEqual([0, 4.5, 7.5])
     const html = new TextDecoder().decode(
-      (await h.deps.blobs.get('bundles', `${editRevPrefix(id, 1, e.id, 1)}f/index.html`)),
+      await h.deps.blobs.get('bundles', `${editRevPrefix(id, 1, e.id, 1)}f/index.html`),
     )
     expect(html).toMatch(/data-va-beat="intro"[^>]*data-duration="4.5"/)
     // Only the newest rev's bundle is kept.

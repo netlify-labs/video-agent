@@ -188,8 +188,28 @@ export async function finalizeAttempt(deps: Deps, attemptId: string): Promise<Fi
     if (e instanceof NotYet) {
       log.warn('finalize.not_yet', { reason: e.message })
       const finishingSince = a.finishingAt ? new Date(a.finishingAt).getTime() : deps.clock.now().getTime()
-      if (deps.clock.now().getTime() - finishingSince > deps.config.finalizeDeadlineMin * MIN) {
-        return finish(deps, a, 'failed', { category: 'artifacts_missing', message: e.message }, null)
+      // A render-unchanged run that ends without a callback stopped on purpose (the edited composition failed
+      // its check, plan v2 §8): say so soon, with the agent's reason, instead of waiting out the deadline.
+      const version = await deps.store.getVersion(a.jobId, a.versionN)
+      const edited = version?.mode === 'render_unchanged'
+      const deadline = (edited ? 2 : deps.config.finalizeDeadlineMin) * MIN
+      if (deps.clock.now().getTime() - finishingSince > deadline) {
+        const reason = summarizeResult(a.resultText ?? null)
+        return finish(
+          deps,
+          a,
+          'failed',
+          edited
+            ? {
+                category: 'check_failed',
+                message: `The edited composition didn't pass its check, so nothing was rendered.${reason ? ` ${reason}` : ''} Edit it again or ask for a revision instead.`,
+              }
+            : {
+                category: 'artifacts_missing',
+                message: reason ? `The run ended without saving a video. ${reason}` : e.message,
+              },
+          null,
+        )
       }
       await deps.store.updateAttempt(
         a.id,
@@ -252,4 +272,18 @@ async function finish(
     deps.log.info('finalize.done', { attemptId: a.id, outcome: final })
     return final
   })
+}
+
+/** The agent's explanation, trimmed to its first sentences, for a failure message. */
+export function summarizeResult(text: string | null): string | null {
+  if (!text) return null
+  const plain = text
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/[`*_#>]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!plain) return null
+  const sentences = plain.match(/[^.!?]+[.!?]+/g) ?? [plain]
+  const out = sentences.slice(0, 3).join(' ').trim()
+  return out.length > 400 ? `${out.slice(0, 397)}...` : out
 }

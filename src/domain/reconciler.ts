@@ -481,6 +481,7 @@ async function onTerminal(deps: Deps, a: AttemptRow, snap: Extract<RunnerSnapsho
       )
       await repo.updateAttempt(a.id, {
         latestStep: snap.resultText ? 'Finished authoring' : fresh.latestStep,
+        resultText: snap.resultText?.slice(0, 4000) ?? null,
       })
       return
     }

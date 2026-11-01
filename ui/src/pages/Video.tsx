@@ -682,7 +682,18 @@ export function VideoPage() {
                       ? ' A shorter target length usually fixes this.'
                       : ''}
                   </Text>
-                  {v.n === latest.n && canRetry(v.authorId) ? (
+                  {v.mode === 'render_unchanged' && v.editedFromN && canCreate ? (
+                    // Retrying renders the same edit again: going back to the editor is what helps.
+                    <Group mt="xs">
+                      <Button
+                        onClick={() => {
+                          void navigate(`/videos/${data.id}/edit/${v.editedFromN ?? 1}`)
+                        }}
+                      >
+                        Edit v{v.editedFromN} again
+                      </Button>
+                    </Group>
+                  ) : v.n === latest.n && canRetry(v.authorId) ? (
                     <Group mt="xs">
                       <Button
                         loading={retry.isPending}

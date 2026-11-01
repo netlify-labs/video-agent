@@ -61,6 +61,8 @@ export type FailureCategory =
   | 'unresolved_start'
   | 'runner_failed'
   | 'queue_timeout'
+  /** A render-unchanged run stopped because the edited composition failed `hyperframes check` (plan v2 §8). */
+  | 'check_failed'
 
 export interface Usage {
   totalCreditsCost?: number
@@ -185,6 +187,8 @@ export interface AttemptRow {
   cancelRequestedAt: string | null
   cancelReason: CancelReason | null
   latestStep: string | null
+  /** The agent's final answer, truncated. */
+  resultText?: string | null
   usage: Usage | null
   errorCategory: FailureCategory | null
   errorMessage: string | null
