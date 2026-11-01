@@ -2,10 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { verifyPath, webhookSignature } from '../src/lib/crypto.js'
 import { RunnerError } from '../src/deps.js'
 import { getSettings } from '../src/domain/settings.js'
-import { harness } from './helpers.js'
+import { harness, PROMPT } from './helpers.js'
 import { failedSnap, running, succeeded } from './fakes.js'
-
-const PROMPT = 'A short launch video for org webhooks, with three beats and an end card.'
 
 describe('video lifecycle', () => {
   it('creates, runs, finalizes, serves, revises and publishes a video', async () => {

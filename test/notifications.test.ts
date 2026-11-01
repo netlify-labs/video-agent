@@ -1,23 +1,6 @@
 // In-app notifications (plan v2 §3, §14 rule 13).
-import { readdirSync, readFileSync } from 'node:fs'
-import { PGlite } from '@electric-sql/pglite'
-import { drizzle } from 'drizzle-orm/pglite'
 import { describe, expect, it } from 'vitest'
-import * as schema from '../db/schema.js'
-import { createDrizzleStore } from '../src/store/drizzle.js'
-import { harness, type Harness } from './helpers.js'
-
-const PROMPT = 'A short launch video for org webhooks, with three beats and an end card.'
-
-async function pgStore() {
-  const pg = new PGlite()
-  const dir = new URL('../netlify/database/migrations/', import.meta.url)
-  for (const m of readdirSync(dir).sort()) {
-    const sql = readFileSync(new URL(`${m}/migration.sql`, dir), 'utf8')
-    for (const stmt of sql.split('--> statement-breakpoint')) if (stmt.trim()) await pg.exec(stmt)
-  }
-  return createDrizzleStore(drizzle({ client: pg, schema }))
-}
+import { harness, pgStore, PROMPT, type Harness } from './helpers.js'
 
 async function setup(h: Harness) {
   const bob = h.deps.identity.addUser({ id: 'u_bob', email: 'bob@acme.com', name: 'Bob' }).cookie

@@ -2,10 +2,9 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { readBundleIndex } from '../src/domain/bundles.js'
-import { harness } from './helpers.js'
+import { harness, PROMPT } from './helpers.js'
 import { tarGz } from './tarball.js'
 
-const PROMPT = 'A short launch video for org webhooks, with three beats and an end card.'
 const fx = (f: string) => readFileSync(new URL(`./fixtures/contract1/${f}`, import.meta.url), 'utf8')
 
 describe('contract on versions', () => {

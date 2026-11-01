@@ -4,10 +4,8 @@ import { describe, expect, it } from 'vitest'
 import { bundleFileKey, bundleIndexKey, ensureBundle, readBundleIndex } from '../src/domain/bundles.js'
 import { sha256Hex } from '../src/lib/crypto.js'
 import { readTarGz, TarError } from '../src/lib/tar.js'
-import { harness } from './helpers.js'
+import { harness, PROMPT } from './helpers.js'
 import { tarGz } from './tarball.js'
-
-const PROMPT = 'A short launch video for org webhooks, with three beats and an end card.'
 
 describe('tar reader', () => {
   it('reads regular files under video/, with GNU long names and pax paths', () => {

@@ -2,24 +2,9 @@
 //   VIDEO_AGENT_URL=https://<site> VIDEO_AGENT_KEY=nva_… npx tsx scripts/e2e/contract.ts
 // Creates a short video and waits for it: passes when version 1 is ready and editable (finalize validated the
 // composition against the contract). Logs JSON lines; exits non-zero on the first failure.
-const base = (process.env.VIDEO_AGENT_URL ?? '').replace(/\/$/, '')
-const key = process.env.VIDEO_AGENT_KEY ?? ''
+import { base, fail, key, log } from './lib.js'
+
 if (!base || !key) throw new Error('Set VIDEO_AGENT_URL and VIDEO_AGENT_KEY.')
-const started = Date.now()
-const log = (step: string, f: Record<string, unknown> = {}) => {
-  console.log(
-    JSON.stringify({
-      ts: new Date().toISOString(),
-      s: Math.round((Date.now() - started) / 1000),
-      step,
-      ...f,
-    }),
-  )
-}
-const fail = (msg: string, f: Record<string, unknown> = {}): never => {
-  log('FAIL', { msg, ...f })
-  process.exit(1)
-}
 interface Video {
   id: string
   versions: {

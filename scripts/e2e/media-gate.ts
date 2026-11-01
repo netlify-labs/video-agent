@@ -6,28 +6,12 @@
 // exits non-zero on failure.
 import { readFileSync } from 'node:fs'
 import { basename } from 'node:path'
+import { api, base, fail, key, log, started } from './lib.js'
 
-const base = (process.env.VIDEO_AGENT_URL ?? '').replace(/\/$/, '')
-const key = process.env.VIDEO_AGENT_KEY ?? ''
 const clipId = process.env.CLIP_ID ?? ''
 const fontPath =
   process.env.FONT ?? 'node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-500-normal.woff2'
 if (!base || !key || !clipId) throw new Error('Set VIDEO_AGENT_URL, VIDEO_AGENT_KEY and CLIP_ID.')
-const started = Date.now()
-const log = (step: string, f: Record<string, unknown> = {}) => {
-  console.log(
-    JSON.stringify({
-      ts: new Date().toISOString(),
-      s: Math.round((Date.now() - started) / 1000),
-      step,
-      ...f,
-    }),
-  )
-}
-const fail = (msg: string, f: Record<string, unknown> = {}): never => {
-  log('FAIL', { msg, ...f })
-  process.exit(1)
-}
 
 interface Media {
   id: string
@@ -47,20 +31,6 @@ interface Video {
   id: string
   latestVersion: number
   versions: Version[]
-}
-
-async function api(method: string, path: string, body?: unknown, extra: Record<string, string> = {}) {
-  const res = await fetch(`${base}${path}`, {
-    method,
-    headers: {
-      authorization: `Bearer ${key}`,
-      ...(body ? { 'content-type': 'application/json' } : {}),
-      ...extra,
-    },
-    ...(body ? { body: JSON.stringify(body) } : {}),
-  })
-  const text = await res.text()
-  return { status: res.status, json: (text ? JSON.parse(text) : {}) as unknown }
 }
 
 async function waitReady(videoId: string, n: number) {

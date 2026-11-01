@@ -8,8 +8,10 @@ import { tick } from '../src/domain/reconciler.js'
 import { finalizeAttempt } from '../src/domain/finalize.js'
 import { assembleUpload } from '../src/domain/media-uploads.js'
 import { receiveCallback } from '../src/domain/callback.js'
-import type { AttemptRow } from '../src/domain/types.js'
+import type { AttemptRow, Role } from '../src/domain/types.js'
 import { fixtureFiles, makeDeps, uploadAndManifest, type TestDeps } from './fakes.js'
+
+export const PROMPT = 'A short launch video for org webhooks, with three beats and an end card.'
 
 export interface Harness {
   deps: TestDeps
@@ -118,6 +120,81 @@ export function harness(
     attempts: (jobId) => deps.store.listAttempts(jobId),
   }
 }
+
+/** Signs a new person in (which creates their row) and, if asked, has the admin set their role. */
+export async function person(h: Harness, id: string, role?: Role) {
+  const cookie = h.deps.identity.addUser({ id, email: `${id}@acme.com`, name: id }).cookie
+  await h.call('GET', '/api/v1/me', { as: cookie })
+  if (role) await h.call('PATCH', `/api/v1/users/${id}`, { as: h.admin, body: { role } })
+  return cookie
+}
+
+/** Creates a video and drives it until v1 is ready; returns its id. */
+export async function readyVideo(h: Harness, as = h.member) {
+  const v = await h.json(await h.call('POST', '/api/v1/videos', { as, body: { prompt: PROMPT } }))
+  await h.drive(4)
+  return v.id as string
+}
+
+/** Creates an API key for the signed-in person; returns the secret. */
+export const apiKey = async (h: Harness, as: string, name = 'k') =>
+  (await h.json(await h.call('POST', '/api/v1/keys', { as, body: { name } }))).key as string
+
+/** One MCP JSON-RPC request with an API key; returns its result. */
+export async function mcpCall(h: Harness, key: string, method: string, params: unknown) {
+  const res = await h.call('POST', '/api/mcp', {
+    origin: null,
+    headers: { accept: 'application/json, text/event-stream', authorization: `Bearer ${key}` },
+    body: { jsonrpc: '2.0', id: 1, method, params },
+  })
+  return ((await res.json()) as { result: any }).result
+}
+
+/** A request with a raw byte body, the way the Media page sends files. Background work isn't awaited. */
+export function raw(
+  h: Harness,
+  as: string,
+  method: string,
+  path: string,
+  body: Uint8Array,
+  headers: Record<string, string> = {},
+) {
+  return h.app.fetch(
+    new Request(`https://video.example.com${path}`, {
+      method,
+      headers: {
+        cookie: as,
+        origin: 'https://video.example.com',
+        'content-type': 'application/octet-stream',
+        ...headers,
+      },
+      body,
+    }),
+    { context: { deploy: { published: true }, waitUntil: () => undefined } },
+  )
+}
+
+/** A one-request media upload. */
+export const upload = (h: Harness, as: string, bytes: Uint8Array, q = 'filename=logo.png') =>
+  raw(h, as, 'POST', `/api/v1/media?${q}`, bytes)
+
+const be32 = (n: number) => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255]
+/** A PNG header with the given dimensions: enough for upload sniffing. */
+export const png = (w = 640, h = 360) =>
+  new Uint8Array([
+    0x89,
+    ...Buffer.from('PNG\r\n\x1a\n', 'latin1'),
+    ...be32(13),
+    ...Buffer.from('IHDR'),
+    ...be32(w),
+    ...be32(h),
+    8,
+    6,
+    0,
+    0,
+    0,
+  ])
+export const font = () => new Uint8Array([...Buffer.from('wOF2'), 1, 2, 3, 4])
 
 /** A Drizzle store on PGlite with every committed migration applied. */
 export async function pgStore() {

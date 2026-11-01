@@ -7,26 +7,10 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { parseArgs } from '../lib/run-tools.js'
+import { base, fail, key, log, started } from './lib.js'
 
-const base = (process.env.VIDEO_AGENT_URL ?? '').replace(/\/$/, '')
-const key = process.env.VIDEO_AGENT_KEY ?? ''
 if (!base || !key) throw new Error('Set VIDEO_AGENT_URL and VIDEO_AGENT_KEY.')
 const args = parseArgs(process.argv.slice(2))
-const started = Date.now()
-const log = (step: string, f: Record<string, unknown> = {}) => {
-  console.log(
-    JSON.stringify({
-      ts: new Date().toISOString(),
-      s: Math.round((Date.now() - started) / 1000),
-      step,
-      ...f,
-    }),
-  )
-}
-const fail = (msg: string, f: Record<string, unknown> = {}): never => {
-  log('FAIL', { msg, ...f })
-  process.exit(1)
-}
 
 interface Version {
   n: number

@@ -5,24 +5,9 @@
 // milestone carries a composition snapshot, the live preview link is minted and its index.html fetched (200 with the
 // preview CSP); the agent sends snapshots by choice, so their absence is logged, not failed.
 // Logs every distinct step, milestone and render percent as JSON lines.
-const base = (process.env.VIDEO_AGENT_URL ?? '').replace(/\/$/, '')
-const key = process.env.VIDEO_AGENT_KEY ?? ''
+import { api as request, base, fail, key, log } from './lib.js'
+
 if (!base || !key) throw new Error('Set VIDEO_AGENT_URL and VIDEO_AGENT_KEY.')
-const started = Date.now()
-const log = (step: string, f: Record<string, unknown> = {}) => {
-  console.log(
-    JSON.stringify({
-      ts: new Date().toISOString(),
-      s: Math.round((Date.now() - started) / 1000),
-      step,
-      ...f,
-    }),
-  )
-}
-const fail = (msg: string, f: Record<string, unknown> = {}): never => {
-  log('FAIL', { msg, ...f })
-  process.exit(1)
-}
 
 interface Video {
   id: string
@@ -41,19 +26,8 @@ interface Progress {
   checkpoint: { seq: number; message: string | null; renderPercent: number | null; hasBundle: boolean } | null
 }
 
-async function api(method: string, path: string, body?: unknown): Promise<{ status: number; json: unknown }> {
-  const res = await fetch(`${base}${path}`, {
-    method,
-    headers: {
-      authorization: `Bearer ${key}`,
-      'idempotency-key': crypto.randomUUID(),
-      ...(body ? { 'content-type': 'application/json' } : {}),
-    },
-    ...(body ? { body: JSON.stringify(body) } : {}),
-  })
-  const text = await res.text()
-  return { status: res.status, json: text ? (JSON.parse(text) as unknown) : {} }
-}
+const api = (method: string, path: string, body?: unknown) =>
+  request(method, path, body, { 'idempotency-key': crypto.randomUUID() })
 
 let id = process.env.VIDEO_ID ?? ''
 if (!id) {

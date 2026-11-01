@@ -5,9 +5,8 @@
 import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { chromium, webkit } from '@playwright/test'
+import { base, key } from './lib.js'
 
-const base = (process.env.VIDEO_AGENT_URL ?? '').replace(/\/$/, '')
-const key = process.env.VIDEO_AGENT_KEY ?? ''
 const id = process.env.VIDEO_ID ?? ''
 if (!base || !key || !id) throw new Error('Set VIDEO_AGENT_URL, VIDEO_AGENT_KEY and VIDEO_ID.')
 const log = (step: string, f: Record<string, unknown> = {}) => {

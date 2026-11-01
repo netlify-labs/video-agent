@@ -20,6 +20,7 @@ import {
   run,
   runStreaming,
   sha256File,
+  videoTarArgs,
   which,
   withRetries,
 } from './lib/run-tools.js'
@@ -170,20 +171,7 @@ async function main() {
     join(out, 'preview.gif'),
   ])
   writeFileSync(join(out, 'captions.vtt'), toVtt(summary.captions, durationSec))
-  run('tar', [
-    '-czf',
-    join(out, 'source.tar.gz'),
-    '--exclude=node_modules',
-    '--exclude=.hyperframes',
-    '--exclude=renders',
-    '--exclude=video/feedback',
-    // Library media is by reference (plan v2 §9): runs download it, so it never goes in the source archive.
-    '--exclude=video/assets/media',
-    '--exclude=*.mp4',
-    '-C',
-    repoRoot,
-    'video',
-  ])
+  run('tar', videoTarArgs(join(out, 'source.tar.gz')))
   log('assets.done', { durationSec, width: stream.width, height: stream.height })
 
   const files = Object.fromEntries(

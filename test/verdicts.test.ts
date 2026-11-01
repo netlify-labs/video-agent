@@ -3,23 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { encrypt } from '../src/lib/crypto.js'
 import { getSettings } from '../src/domain/settings.js'
 import { deliverWebhooks } from '../src/domain/webhooks.js'
-import type { Role } from '../src/domain/types.js'
-import { harness, type Harness } from './helpers.js'
-
-const PROMPT = 'A short launch video for org webhooks, with three beats and an end card.'
-
-async function person(h: Harness, id: string, role?: Role) {
-  const cookie = h.deps.identity.addUser({ id, email: `${id}@acme.com`, name: id }).cookie
-  await h.call('GET', '/api/v1/me', { as: cookie })
-  if (role) await h.call('PATCH', `/api/v1/users/${id}`, { as: h.admin, body: { role } })
-  return cookie
-}
-
-async function readyVideo(h: Harness, as: string) {
-  const v = await h.json(await h.call('POST', '/api/v1/videos', { as, body: { prompt: PROMPT } }))
-  await h.drive(4)
-  return v.id as string
-}
+import { apiKey, harness, mcpCall, person, PROMPT, readyVideo, type Harness } from './helpers.js'
 
 const verdict = (h: Harness, as: string, id: string, n: number, body: unknown) =>
   h.call('PUT', `/api/v1/videos/${id}/versions/${n}/verdict`, { as, body })
@@ -106,16 +90,8 @@ describe('verdicts', () => {
     const rita = await person(h, 'u_rita', 'reviewer')
     const vic = await person(h, 'u_vic', 'viewer')
     const id = await readyVideo(h, h.member)
-    const mcp = async (cookie: string, method: string, params: unknown) => {
-      const key = (await h.json(await h.call('POST', '/api/v1/keys', { as: cookie, body: { name: 'k' } })))
-        .key
-      const res = await h.call('POST', '/api/mcp', {
-        origin: null,
-        headers: { accept: 'application/json, text/event-stream', authorization: `Bearer ${key}` },
-        body: { jsonrpc: '2.0', id: 1, method, params },
-      })
-      return ((await res.json()) as { result: any }).result
-    }
+    const mcp = async (cookie: string, method: string, params: unknown) =>
+      mcpCall(h, await apiKey(h, cookie), method, params)
     const r = await mcp(rita, 'tools/call', {
       name: 'set_verdict',
       arguments: { video_id: id, version: 1, verdict: 'approved' },

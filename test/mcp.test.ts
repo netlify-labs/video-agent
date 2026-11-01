@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { normalizeAspect, normalizeDuration, normalizeVideoId } from '../src/mcp.js'
-import { harness, type Harness } from './helpers.js'
+import { apiKey, harness, type Harness } from './helpers.js'
 
 async function rpc(
   h: Harness,
@@ -29,8 +29,7 @@ async function tool(h: Harness, key: string, name: string, args: Record<string, 
 
 async function setup() {
   const h = harness()
-  const key = (await h.json(await h.call('POST', '/api/v1/keys', { as: h.member, body: { name: 'claude' } })))
-    .key as string
+  const key = await apiKey(h, h.member, 'claude')
   return { h, key }
 }
 

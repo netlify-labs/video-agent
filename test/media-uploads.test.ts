@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 import { runCleanup } from '../src/domain/cleanup.js'
 import { PART_SIZE } from '../src/domain/media-uploads.js'
 import type { TestDeps } from './fakes.js'
-import { harness, pgStore, type Harness } from './helpers.js'
+import { harness, pgStore, raw, type Harness } from './helpers.js'
 
 const sha = (b: Uint8Array) => createHash('sha256').update(b).digest('hex')
 
@@ -19,29 +19,6 @@ function bigClip(total = 9 * 1024 * 1024) {
   new DataView(out.buffer).setUint32(clip.byteLength, pad)
   out.set(new TextEncoder().encode('free'), clip.byteLength + 4)
   return out
-}
-
-function raw(
-  h: Harness,
-  as: string,
-  method: string,
-  path: string,
-  body: Uint8Array,
-  headers: Record<string, string> = {},
-) {
-  return h.app.fetch(
-    new Request(`https://video.example.com${path}`, {
-      method,
-      headers: {
-        cookie: as,
-        origin: 'https://video.example.com',
-        'content-type': 'application/octet-stream',
-        ...headers,
-      },
-      body,
-    }),
-    { context: { deploy: { published: true }, waitUntil: () => undefined } },
-  )
 }
 
 interface Session {

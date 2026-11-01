@@ -1,8 +1,6 @@
 // The same lifecycle against real Postgres semantics (PGlite + the committed migrations).
 import { describe, expect, it } from 'vitest'
-import { harness, pgStore } from './helpers.js'
-
-const PROMPT = 'A short launch video for org webhooks, with three beats and an end card.'
+import { harness, pgStore, PROMPT } from './helpers.js'
 
 describe('postgres store', () => {
   it('runs create → ready → revise → publish → list → delete', async () => {

@@ -1,23 +1,6 @@
 // Private videos (plan v2 §3, §14 rules 3 and 6): visible only to the owner and admins, 404 for everyone else.
-import { readdirSync, readFileSync } from 'node:fs'
-import { PGlite } from '@electric-sql/pglite'
-import { drizzle } from 'drizzle-orm/pglite'
 import { describe, expect, it } from 'vitest'
-import * as schema from '../db/schema.js'
-import { createDrizzleStore } from '../src/store/drizzle.js'
-import { harness, type Harness } from './helpers.js'
-
-const PROMPT = 'A short launch video for org webhooks, with three beats and an end card.'
-
-async function pgStore() {
-  const pg = new PGlite()
-  const dir = new URL('../netlify/database/migrations/', import.meta.url)
-  for (const m of readdirSync(dir).sort()) {
-    const sql = readFileSync(new URL(`${m}/migration.sql`, dir), 'utf8')
-    for (const stmt of sql.split('--> statement-breakpoint')) if (stmt.trim()) await pg.exec(stmt)
-  }
-  return createDrizzleStore(drizzle({ client: pg, schema }))
-}
+import { apiKey, harness, mcpCall, pgStore, PROMPT, type Harness } from './helpers.js'
 
 async function setup(h: Harness) {
   const bob = h.deps.identity.addUser({ id: 'u_bob', email: 'bob@acme.com', name: 'Bob' }).cookie
@@ -106,15 +89,9 @@ describe('private videos', () => {
     const h = harness()
     const { bob, id } = await setup(h)
     await makePrivate(h, id)
-    const key = (await h.json(await h.call('POST', '/api/v1/keys', { as: bob, body: { name: 'mcp' } }))).key
-    const call = async (name: string, args: Record<string, unknown>) => {
-      const res = await h.call('POST', '/api/mcp', {
-        origin: null,
-        headers: { accept: 'application/json, text/event-stream', authorization: `Bearer ${key}` },
-        body: { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } },
-      })
-      return ((await res.json()) as { result: { isError?: boolean; structuredContent?: any } }).result
-    }
+    const key = await apiKey(h, bob, 'mcp')
+    const call = (name: string, args: Record<string, unknown>) =>
+      mcpCall(h, key, 'tools/call', { name, arguments: args })
     expect((await call('get_video', { video_id: id })).isError).toBe(true)
     const list = await call('list_videos', { scope: 'everyone' })
     expect(JSON.stringify(list.structuredContent ?? {})).not.toContain(id)

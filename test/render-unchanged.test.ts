@@ -11,10 +11,9 @@ import { runManifestKey, verifyRunManifest } from '../src/lib/run-manifest.js'
 import { readTarGz } from '../src/lib/tar.js'
 import type { Role } from '../src/domain/types.js'
 import { failedSnap, running, succeeded } from './fakes.js'
-import { harness, type Harness } from './helpers.js'
+import { harness, PROMPT, type Harness } from './helpers.js'
 import { tarGz } from './tarball.js'
 
-const PROMPT = 'A short launch video for org webhooks, with three beats and an end card.'
 const fx = (f: string) => readFileSync(new URL(`./fixtures/contract1/${f}`, import.meta.url), 'utf8')
 
 async function draft(h: Harness) {

@@ -4,9 +4,8 @@ import { describe, expect, it } from 'vitest'
 import type { RunnerSnapshot } from '../src/deps.js'
 import { progressKey, SNAPSHOT_EVERY_MS } from '../src/domain/progress.js'
 import { failedSnap, running } from './fakes.js'
-import { harness, type Harness } from './helpers.js'
+import { apiKey, harness, mcpCall, PROMPT, type Harness } from './helpers.js'
 
-const PROMPT = 'A short launch video for org webhooks, with three beats and an end card.'
 const step = (latestStep: string, stepsCount: number, totalCreditsCost: number): RunnerSnapshot => ({
   kind: 'running',
   state: 'running',
@@ -157,19 +156,10 @@ describe('progress', () => {
   it('MCP get_video includes progress while a version is in progress', async () => {
     const h = harness()
     const { id } = await runningVideo(h)
-    const key = (await h.json(await h.call('POST', '/api/v1/keys', { as: h.member, body: { name: 'k' } })))
-      .key
-    const res = await h.call('POST', '/api/mcp', {
-      origin: null,
-      headers: { accept: 'application/json, text/event-stream', authorization: `Bearer ${key}` },
-      body: {
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'tools/call',
-        params: { name: 'get_video', arguments: { video_id: id } },
-      },
+    const r = await mcpCall(h, await apiKey(h, h.member), 'tools/call', {
+      name: 'get_video',
+      arguments: { video_id: id },
     })
-    const r = ((await res.json()) as { result: { structuredContent: { progress: unknown } } }).result
     expect(r.structuredContent.progress).toMatchObject({
       step: 'Writing the end card',
       steps: 7,

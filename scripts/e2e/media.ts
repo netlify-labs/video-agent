@@ -6,26 +6,10 @@
 // exits non-zero on the first failure. Prints the media id for the next gate.
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
+import { base, fail, key, log } from './lib.js'
 
-const base = (process.env.VIDEO_AGENT_URL ?? '').replace(/\/$/, '')
-const key = process.env.VIDEO_AGENT_KEY ?? ''
 const clipPath = process.env.CLIP ?? ''
 if (!base || !key || !clipPath) throw new Error('Set VIDEO_AGENT_URL, VIDEO_AGENT_KEY and CLIP.')
-const started = Date.now()
-const log = (step: string, f: Record<string, unknown> = {}) => {
-  console.log(
-    JSON.stringify({
-      ts: new Date().toISOString(),
-      s: Math.round((Date.now() - started) / 1000),
-      step,
-      ...f,
-    }),
-  )
-}
-const fail = (msg: string, f: Record<string, unknown> = {}): never => {
-  log('FAIL', { msg, ...f })
-  process.exit(1)
-}
 const sha = (b: Uint8Array) => createHash('sha256').update(b).digest('hex')
 const auth = { authorization: `Bearer ${key}` }
 

@@ -5,24 +5,9 @@
 // A ready result means prepare-run verified the parent MP4 and made the still (any failure there stops the run);
 // steps that mention video/feedback/ are logged as evidence the agent looked at it.
 // Logs JSON lines; exits non-zero on the first failure.
-const base = (process.env.VIDEO_AGENT_URL ?? '').replace(/\/$/, '')
-const key = process.env.VIDEO_AGENT_KEY ?? ''
+import { api as request, base, fail, key, log } from './lib.js'
+
 if (!base || !key) throw new Error('Set VIDEO_AGENT_URL and VIDEO_AGENT_KEY.')
-const started = Date.now()
-const log = (step: string, f: Record<string, unknown> = {}) => {
-  console.log(
-    JSON.stringify({
-      ts: new Date().toISOString(),
-      s: Math.round((Date.now() - started) / 1000),
-      step,
-      ...f,
-    }),
-  )
-}
-const fail = (msg: string, f: Record<string, unknown> = {}): never => {
-  log('FAIL', { msg, ...f })
-  process.exit(1)
-}
 
 interface Version {
   n: number
@@ -48,19 +33,8 @@ interface Json extends Video, Comment {
   error?: { message?: string }
 }
 
-async function api(method: string, path: string, body?: unknown): Promise<{ status: number; json: Json }> {
-  const res = await fetch(`${base}${path}`, {
-    method,
-    headers: {
-      authorization: `Bearer ${key}`,
-      'idempotency-key': crypto.randomUUID(),
-      ...(body ? { 'content-type': 'application/json' } : {}),
-    },
-    ...(body ? { body: JSON.stringify(body) } : {}),
-  })
-  const text = await res.text()
-  return { status: res.status, json: (text ? JSON.parse(text) : {}) as Json }
-}
+const api = (method: string, path: string, body?: unknown) =>
+  request<Json>(method, path, body, { 'idempotency-key': crypto.randomUUID() })
 
 let id = process.env.VIDEO_ID ?? ''
 if (!id) {

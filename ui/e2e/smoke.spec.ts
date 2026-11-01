@@ -1,4 +1,8 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
+
+/** Sets a mock API switch in localStorage before the app loads. */
+const mock = (page: Page, key: string, value = '1') =>
+  page.addInitScript(({ k, v }) => localStorage.setItem(k, v), { k: key, v: value })
 
 test('library shows videos, progress and the badge', async ({ page }) => {
   await page.goto('/')
@@ -170,9 +174,7 @@ test("approve someone else's version with a note; counts update", async ({ page 
 })
 
 test('viewers read comments but cannot comment or approve', async ({ page }) => {
-  await page.addInitScript(() => {
-    localStorage.setItem('mockRole', 'viewer')
-  })
+  await mock(page, 'mockRole', 'viewer')
   await page.goto('/videos/vid_teaser')
   await expect(page.getByText('The logo here is too small to read on a phone.')).toBeVisible()
   await expect(page.getByRole('textbox', { name: 'Add a comment' })).toHaveCount(0)
@@ -197,9 +199,7 @@ test('the owner incorporates feedback: open comments all checked, plus a note', 
 })
 
 test('viewers and non-owners get no Incorporate button', async ({ page }) => {
-  await page.addInitScript(() => {
-    localStorage.setItem('mockRole', 'viewer')
-  })
+  await mock(page, 'mockRole', 'viewer')
   await page.goto('/videos/vid_teaser')
   await expect(page.getByText('Love the end card.')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Incorporate feedback' })).toHaveCount(0)
@@ -232,18 +232,14 @@ test('narration polling pauses while the tab is hidden', async ({ page }) => {
 })
 
 test('a stale update says so', async ({ page }) => {
-  await page.addInitScript(() => {
-    localStorage.setItem('mockStale', '1')
-  })
+  await mock(page, 'mockStale')
   await page.goto('/videos/vid_making')
   await expect(page.getByTestId('narration')).toContainText("couldn't reach the run, showing the last update")
   await expect(page.getByTestId('narration')).toContainText('updated 1 min ago')
 })
 
 test('render progress shows as Rendering N%', async ({ page }) => {
-  await page.addInitScript(() => {
-    localStorage.setItem('mockRender', '1')
-  })
+  await mock(page, 'mockRender')
   await page.goto('/videos/vid_making')
   await expect(page.getByTestId('narration')).toContainText(/Rendering \d+%/)
 })
@@ -292,9 +288,7 @@ test('the preview link is renewed before it expires, keeping the playhead', asyn
 test('a running version shows the agent’s latest composition snapshot, refreshed on new checkpoints', async ({
   page,
 }) => {
-  await page.addInitScript(() => {
-    localStorage.setItem('mockLive', '1')
-  })
+  await mock(page, 'mockLive')
   await page.goto('/videos/vid_making')
   const snap = page.getByTestId('live-snapshot')
   await expect(snap.getByTestId('composition-preview')).toHaveAttribute('src', /live=1/)
@@ -307,8 +301,7 @@ test('a running version shows the agent’s latest composition snapshot, refresh
 })
 
 // Editor (plan v2 §8)
-const lastOps = (page: import('@playwright/test').Page) =>
-  page.evaluate<unknown[]>('window.__lastEditOps ?? []')
+const lastOps = (page: Page) => page.evaluate<unknown[]>('window.__lastEditOps ?? []')
 
 test('Edit opens the editor for an editable version; others say to revise instead', async ({ page }) => {
   await page.goto('/videos/vid_webhooks')
@@ -374,13 +367,12 @@ const pngBytes = Buffer.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, 0, 0, 2, 128, 0, 0, 1,
   104, 8, 6, 0, 0, 0,
 ])
+const pngFile = (name = 'logo.png') => ({ name, mimeType: 'image/png', buffer: pngBytes })
 
 test('the media library starts empty, uploads a file, edits its caption and deletes it', async ({ page }) => {
   await page.goto('/media')
   await expect(page.getByText('Nothing here yet')).toBeVisible()
-  await page
-    .locator('input[type=file]')
-    .setInputFiles({ name: 'logo.png', mimeType: 'image/png', buffer: pngBytes })
+  await page.locator('input[type=file]').setInputFiles(pngFile())
   const card = page.getByTestId('media-med_mock0001')
   await expect(card.getByText('logo.png')).toBeVisible()
   await card.getByRole('button', { name: 'Actions for logo.png' }).click()
@@ -407,9 +399,7 @@ test('a rejected file says why and can be retried or dismissed', async ({ page }
 })
 
 test('big files upload in parts and resume after a failed part', async ({ page }) => {
-  await page.addInitScript(() => {
-    localStorage.setItem('mockFailPart', '1')
-  })
+  await mock(page, 'mockFailPart')
   await page.goto('/media')
   const big = Buffer.alloc(5 * 1024 * 1024, 1)
   await page
@@ -425,9 +415,7 @@ test('big files upload in parts and resume after a failed part', async ({ page }
 })
 
 test('viewers browse the library but cannot upload', async ({ page }) => {
-  await page.addInitScript(() => {
-    localStorage.setItem('mockRole', 'viewer')
-  })
+  await mock(page, 'mockRole', 'viewer')
   await page.goto('/media')
   await expect(page.getByText('Creators can upload logos, screenshots and clips here.')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Upload' })).toHaveCount(0)
@@ -444,9 +432,7 @@ test('media picked on New video goes to the plan and the video; chips lock while
   await page.getByRole('button', { name: 'Add media' }).click()
   const dialog = page.getByRole('dialog')
   await expect(dialog.getByText('Nothing to pick yet.')).toBeVisible()
-  await dialog
-    .locator('input[type=file]')
-    .setInputFiles({ name: 'logo.png', mimeType: 'image/png', buffer: pngBytes })
+  await dialog.locator('input[type=file]').setInputFiles(pngFile())
   await dialog.getByTestId('pick-med_mock0001').click()
   await expect(dialog.getByText('1 of up to 12 picked')).toBeVisible()
   await dialog.getByRole('button', { name: 'Done' }).click()
@@ -472,9 +458,7 @@ test('a revision can add media', async ({ page }) => {
   await page.getByLabel('What should change?').fill('Put our logo on the end card')
   await page.getByRole('button', { name: 'Add media' }).click()
   const dialog = page.getByRole('dialog')
-  await dialog
-    .locator('input[type=file]')
-    .setInputFiles({ name: 'logo.png', mimeType: 'image/png', buffer: pngBytes })
+  await dialog.locator('input[type=file]').setInputFiles(pngFile())
   await dialog.getByTestId('pick-med_mock0001').click()
   await dialog.getByRole('button', { name: 'Done' }).click()
   await page.getByRole('button', { name: /Make v\d+ now/ }).click()
@@ -491,9 +475,7 @@ test('a media slot is replaced from the library, filtered to its kind, with a fi
   const dialog = page.getByRole('dialog', { name: 'Replace Logo' })
   // An image slot offers images and SVGs only.
   await expect(dialog.getByRole('radio', { name: 'Clips' })).toHaveCount(0)
-  await dialog
-    .locator('input[type=file]')
-    .setInputFiles({ name: 'new-logo.png', mimeType: 'image/png', buffer: pngBytes })
+  await dialog.locator('input[type=file]').setInputFiles(pngFile('new-logo.png'))
   await dialog.getByTestId('pick-med_mock0001').click()
   await expect(dialog).toHaveCount(0)
   await expect(logo).toContainText('new-logo.png')

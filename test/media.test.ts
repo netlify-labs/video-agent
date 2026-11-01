@@ -2,76 +2,20 @@
 // visibility, captions, soft delete, usage counts, and the signed /media edge route.
 import { readFileSync } from 'node:fs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Role } from '../src/domain/types.js'
+import { loadEdge } from './edge.js'
 import type { TestDeps } from './fakes.js'
-import { harness, type Harness } from './helpers.js'
+import { harness, person, png, PROMPT, upload } from './helpers.js'
 
-const PROMPT = 'A short launch video for org webhooks, with three beats and an end card.'
-const be32 = (n: number) => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255]
-const png = (w = 640, h = 360) =>
-  new Uint8Array([
-    0x89,
-    ...Buffer.from('PNG\r\n\x1a\n', 'latin1'),
-    ...be32(13),
-    ...Buffer.from('IHDR'),
-    ...be32(w),
-    ...be32(h),
-    8,
-    6,
-    0,
-    0,
-    0,
-  ])
 const evilSvg = new TextEncoder().encode(
   '<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"><script>alert(2)</script><rect width="5" height="5"/></svg>',
 )
 
 let current: TestDeps | null = null
-vi.mock('@netlify/blobs', () => ({
-  getStore: ({ name }: { name: 'internal' | 'media' }) => ({
-    get: async (key: string, o?: { type?: string }) => {
-      const b = await current?.blobs.get(name, key)
-      if (!b) return null
-      if (o?.type === 'json') return JSON.parse(new TextDecoder().decode(b)) as unknown
-      if (o?.type === 'stream') return new Blob([b]).stream()
-      return b
-    },
-    getMetadata: async (key: string) => {
-      const b = await current?.blobs.get(name, key)
-      return b ? { etag: '"e"', metadata: current?.blobs.meta.get(`${name}:${key}`) ?? {} } : null
-    },
-  }),
-}))
-type EdgeHandler = (req: Request, ctx: { deploy: { published: boolean } }) => Promise<Response>
-const EDGE = '../netlify/edge-functions/media.ts'
+vi.mock('@netlify/blobs', async () => (await import('./edge.js')).fakeBlobsModule(() => current?.blobs))
 const edge = async (url: string, init: RequestInit = {}) =>
-  ((await import(/* @vite-ignore */ EDGE)) as { default: EdgeHandler }).default(
-    new Request(`https://video.example.com${url}`, init),
-    { deploy: { published: true } },
-  )
-
-async function person(h: Harness, id: string, role?: Role) {
-  const cookie = h.deps.identity.addUser({ id, email: `${id}@acme.com`, name: id }).cookie
-  await h.call('GET', '/api/v1/me', { as: cookie })
-  if (role) await h.call('PATCH', `/api/v1/users/${id}`, { as: h.admin, body: { role } })
-  return cookie
-}
-
-/** A raw upload, the way the Media page sends a file. */
-function upload(h: Harness, as: string, bytes: Uint8Array, q = 'filename=logo.png') {
-  return h.app.fetch(
-    new Request(`https://video.example.com/api/v1/media?${q}`, {
-      method: 'POST',
-      headers: {
-        cookie: as,
-        origin: 'https://video.example.com',
-        'content-type': 'application/octet-stream',
-      },
-      body: bytes,
-    }),
-    { context: { deploy: { published: true }, waitUntil: () => undefined } },
-  )
-}
+  (await loadEdge('media'))(new Request(`https://video.example.com${url}`, init), {
+    deploy: { published: true },
+  })
 
 interface Media {
   id: string

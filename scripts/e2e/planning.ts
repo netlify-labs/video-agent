@@ -2,24 +2,9 @@
 //   VIDEO_AGENT_URL=https://<site> VIDEO_AGENT_KEY=nva_… npx tsx scripts/e2e/planning.ts
 // Steps: plan → questions → answer one, skip one, add an Other → brief → edit the brief (If-Match) → create with
 // planId → wait for ready → the version carries the plan → planning credits show in my usage.
-const base = (process.env.VIDEO_AGENT_URL ?? '').replace(/\/$/, '')
-const key = process.env.VIDEO_AGENT_KEY ?? ''
+import { api, base, fail, key, log } from './lib.js'
+
 if (!base || !key) throw new Error('Set VIDEO_AGENT_URL and VIDEO_AGENT_KEY.')
-const started = Date.now()
-const log = (step: string, f: Record<string, unknown> = {}) => {
-  console.log(
-    JSON.stringify({
-      ts: new Date().toISOString(),
-      s: Math.round((Date.now() - started) / 1000),
-      step,
-      ...f,
-    }),
-  )
-}
-const fail = (msg: string, f: Record<string, unknown> = {}): never => {
-  log('FAIL', { msg, ...f })
-  process.exit(1)
-}
 
 interface Question {
   id: string
@@ -47,35 +32,15 @@ interface Json {
   planning?: { credits: number; calls: number }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- the caller names the response type
-async function api<T>(
-  method: string,
-  path: string,
-  body?: unknown,
-  headers: Record<string, string> = {},
-): Promise<{ status: number; json: T & Json }> {
-  const res = await fetch(`${base}${path}`, {
-    method,
-    headers: {
-      authorization: `Bearer ${key}`,
-      ...(body ? { 'content-type': 'application/json' } : {}),
-      ...headers,
-    },
-    ...(body ? { body: JSON.stringify(body) } : {}),
-  })
-  const text = await res.text()
-  return { status: res.status, json: (text ? JSON.parse(text) : {}) as T & Json }
-}
-
 const prompt =
   'A 20-second announcement video for a new feature: teams can now get one webhook for events from every project in their organization. Show the problem, the fix, and an end card.'
 let t = Date.now()
-const created = await api<Plan>('POST', '/api/v1/plans', { prompt, aspect: '16:9' })
+const created = await api<Plan & Json>('POST', '/api/v1/plans', { prompt, aspect: '16:9' })
 if (created.status !== 201) fail('plan create', { status: created.status, error: created.json.error })
 log('route', { ms: Date.now() - t, route: created.json.route })
 const planId = created.json.id
 t = Date.now()
-const asked = await api<Plan>('POST', `/api/v1/plans/${planId}/questions`)
+const asked = await api<Plan & Json>('POST', `/api/v1/plans/${planId}/questions`)
 if (asked.status !== 200) fail('questions', { status: asked.status, error: asked.json.error })
 const qs = asked.json.questions ?? []
 log('questions', { ms: Date.now() - t, count: qs.length, questions: qs.map((q) => q.question) })
@@ -91,12 +56,12 @@ const answers = qs.map((q, i) =>
       : { questionId: q.id, optionIds: [q.options[0]?.id ?? ''] },
 )
 t = Date.now()
-const briefed = await api<Plan>('POST', `/api/v1/plans/${planId}/brief`, { answers })
+const briefed = await api<Plan & Json>('POST', `/api/v1/plans/${planId}/brief`, { answers })
 if (briefed.status !== 200 || !briefed.json.brief)
   fail('brief', { status: briefed.status, error: briefed.json.error })
 log('brief', { ms: Date.now() - t, brief: briefed.json.brief })
 const edited = { ...briefed.json.brief, callToAction: 'Read the docs' }
-const saved = await api<Plan>('PATCH', `/api/v1/plans/${planId}`, {
+const saved = await api<Plan & Json>('PATCH', `/api/v1/plans/${planId}`, {
   brief: edited,
   briefRev: briefed.json.briefRev,
 })

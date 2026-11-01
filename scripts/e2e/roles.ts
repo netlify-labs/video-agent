@@ -7,21 +7,10 @@
 //   - the Reviewer can list videos and approve someone else's version, but create_video isn't offered and the REST
 //     create returns the role error; a private video is 404 to them
 // Logs JSON lines; exits non-zero on the first failure. Restores the video's privacy before exiting.
-const base = (process.env.VIDEO_AGENT_URL ?? '').replace(/\/$/, '')
-const key = process.env.VIDEO_AGENT_KEY ?? ''
+import { base, key, log } from './lib.js'
+
 const reviewerKey = process.env.REVIEWER_KEY ?? ''
 if (!base || !key) throw new Error('Set VIDEO_AGENT_URL and VIDEO_AGENT_KEY.')
-const started = Date.now()
-const log = (step: string, f: Record<string, unknown> = {}) => {
-  console.log(
-    JSON.stringify({
-      ts: new Date().toISOString(),
-      s: Math.round((Date.now() - started) / 1000),
-      step,
-      ...f,
-    }),
-  )
-}
 let restore: (() => Promise<void>) | null = null
 const fail = async (msg: string, f: Record<string, unknown> = {}): Promise<never> => {
   log('FAIL', { msg, ...f })

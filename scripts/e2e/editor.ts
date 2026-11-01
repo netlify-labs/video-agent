@@ -4,26 +4,11 @@
 // beats to STRETCH_TO seconds), checks the draft preview, renders it unchanged and waits. Passes when the new version
 // is ready, render_unchanged from the base, its MP4 length matches the edited composition, it is editable again and
 // its own preview carries the edit. Logs stage times and credits (S4). JSON lines; exits non-zero on failure.
-const base = (process.env.VIDEO_AGENT_URL ?? '').replace(/\/$/, '')
-const key = process.env.VIDEO_AGENT_KEY ?? ''
+import { api, base, fail, key, log } from './lib.js'
+
 const id = process.env.VIDEO_ID ?? ''
 if (!base || !key || !id) throw new Error('Set VIDEO_AGENT_URL, VIDEO_AGENT_KEY and VIDEO_ID.')
 const stretchTo = process.env.STRETCH_TO ? Number(process.env.STRETCH_TO) : null
-const started = Date.now()
-const log = (step: string, f: Record<string, unknown> = {}) => {
-  console.log(
-    JSON.stringify({
-      ts: new Date().toISOString(),
-      s: Math.round((Date.now() - started) / 1000),
-      step,
-      ...f,
-    }),
-  )
-}
-const fail = (msg: string, f: Record<string, unknown> = {}): never => {
-  log('FAIL', { msg, ...f })
-  process.exit(1)
-}
 
 interface Beat {
   id: string
@@ -57,20 +42,6 @@ interface Video {
   latestVersion: number
   versions: Version[]
   error?: { message?: string }
-}
-
-async function api(method: string, path: string, body?: unknown, extra: Record<string, string> = {}) {
-  const res = await fetch(`${base}${path}`, {
-    method,
-    headers: {
-      authorization: `Bearer ${key}`,
-      ...(body ? { 'content-type': 'application/json' } : {}),
-      ...extra,
-    },
-    ...(body ? { body: JSON.stringify(body) } : {}),
-  })
-  const text = await res.text()
-  return { status: res.status, json: (text ? JSON.parse(text) : {}) as unknown }
 }
 
 const video = (await api('GET', `/api/v1/videos/${id}`)).json as Video

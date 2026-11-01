@@ -4,9 +4,7 @@ import { PGlite } from '@electric-sql/pglite'
 import { describe, expect, it } from 'vitest'
 import { can, ROLES, type Action, type Principal } from '../src/domain/policy.js'
 import type { Role } from '../src/domain/types.js'
-import { harness, type Harness } from './helpers.js'
-
-const PROMPT = 'A short launch video for org webhooks, with three beats and an end card.'
+import { apiKey, harness, mcpCall, PROMPT, type Harness } from './helpers.js'
 
 /** Signs a new person in (which creates their row) and, if asked, has the admin set their role. */
 async function person(h: Harness, id: string, role?: Role) {
@@ -19,19 +17,8 @@ async function person(h: Harness, id: string, role?: Role) {
   return cookie
 }
 
-async function mcpCreate(h: Harness, key: string) {
-  const res = await h.call('POST', '/api/mcp', {
-    origin: null,
-    headers: { accept: 'application/json, text/event-stream', authorization: `Bearer ${key}` },
-    body: {
-      jsonrpc: '2.0',
-      id: 1,
-      method: 'tools/call',
-      params: { name: 'create_video', arguments: { prompt: PROMPT } },
-    },
-  })
-  return (await res.json()) as { result: { isError?: boolean; content: { text: string }[] } }
-}
+const mcpCreate = (h: Harness, key: string) =>
+  mcpCall(h, key, 'tools/call', { name: 'create_video', arguments: { prompt: PROMPT } })
 
 describe('roles', () => {
   it('new people join as creators and can make videos', async () => {
@@ -67,15 +54,14 @@ describe('roles', () => {
       ).toBe(403)
 
       // Keys inherit the role.
-      const key = (await h.json(await h.call('POST', '/api/v1/keys', { as: cookie, body: { name: role } })))
-        .key
+      const key = await apiKey(h, cookie, role)
       expect(
         (await h.call('POST', '/api/v1/videos', { key, origin: null, body: { prompt: PROMPT } })).status,
       ).toBe(403)
       const mcp = await mcpCreate(h, key)
-      expect(mcp.result.isError).toBe(true)
+      expect(mcp.isError).toBe(true)
       // The tool isn't even listed for this role, so calling it fails as unknown.
-      expect(mcp.result.content[0]?.text).toContain('create_video')
+      expect(mcp.content[0]?.text).toContain('create_video')
     }
   })
 
@@ -192,16 +178,10 @@ describe('MCP tools by role', () => {
   it('reviewers and viewers see only the tools their role can use', async () => {
     const h = harness()
     const names = async (cookie: string) => {
-      const key = (await h.json(await h.call('POST', '/api/v1/keys', { as: cookie, body: { name: 'k' } })))
-        .key
-      const res = await h.call('POST', '/api/mcp', {
-        origin: null,
-        headers: { accept: 'application/json, text/event-stream', authorization: `Bearer ${key}` },
-        body: { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} },
-      })
-      return ((await res.json()) as { result: { tools: { name: string }[] } }).result.tools
-        .map((t) => t.name)
-        .sort()
+      const { tools } = (await mcpCall(h, await apiKey(h, cookie), 'tools/list', {})) as {
+        tools: { name: string }[]
+      }
+      return tools.map((t) => t.name).sort()
     }
     expect(await names(h.member)).toEqual(
       [

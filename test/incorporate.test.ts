@@ -2,19 +2,9 @@
 // queued with snapshots of them; the run gets stills and a fenced feedback list; comments count as addressed only
 // when that version succeeds.
 import { describe, expect, it } from 'vitest'
-import type { Role } from '../src/domain/types.js'
 import { runManifestKey, verifyRunManifest } from '../src/lib/run-manifest.js'
 import { failedSnap, running } from './fakes.js'
-import { harness, pgStore, type Harness } from './helpers.js'
-
-const PROMPT = 'A short launch video for org webhooks, with three beats and an end card.'
-
-async function person(h: Harness, id: string, role?: Role) {
-  const cookie = h.deps.identity.addUser({ id, email: `${id}@acme.com`, name: id }).cookie
-  await h.call('GET', '/api/v1/me', { as: cookie })
-  if (role) await h.call('PATCH', `/api/v1/users/${id}`, { as: h.admin, body: { role } })
-  return cookie
-}
+import { apiKey, harness, mcpCall, person, pgStore, PROMPT, type Harness } from './helpers.js'
 
 async function setup(h = harness()) {
   const bob = await person(h, 'u_bob')
@@ -135,22 +125,10 @@ describe('incorporate feedback', () => {
 
   it('MCP revise_video takes comment_ids', async () => {
     const { h, id, pinned } = await setup()
-    const key = (await h.json(await h.call('POST', '/api/v1/keys', { as: h.member, body: { name: 'k' } })))
-      .key
-    const res = await h.call('POST', '/api/mcp', {
-      origin: null,
-      headers: { accept: 'application/json, text/event-stream', authorization: `Bearer ${key}` },
-      body: {
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'tools/call',
-        params: {
-          name: 'revise_video',
-          arguments: { video_id: id, change: 'Incorporate the feedback.', comment_ids: [pinned] },
-        },
-      },
+    const r = await mcpCall(h, await apiKey(h, h.member), 'tools/call', {
+      name: 'revise_video',
+      arguments: { video_id: id, change: 'Incorporate the feedback.', comment_ids: [pinned] },
     })
-    const r = ((await res.json()) as { result: { isError?: boolean } }).result
     expect(r.isError).toBeFalsy()
     const v = await h.json(await h.call('GET', `/api/v1/videos/${id}`, { as: h.member }))
     expect(v.versions[0].incorporates).toBe(1)

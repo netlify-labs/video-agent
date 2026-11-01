@@ -6,7 +6,7 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { log, parseArgs, repoRoot } from './lib/run-tools.js'
+import { log, parseArgs, repoRoot, videoTarArgs } from './lib/run-tools.js'
 
 const BUNDLE_MAX = 2 * 1024 * 1024
 
@@ -22,19 +22,7 @@ function nextSeq(attempt: string): number {
 /** A .tar.gz of video/ (no media bytes, caches, renders or stills), or null when it would be over 2 MB. */
 function bundleVideo(attempt: string): string | null {
   const out = join(repoRoot, '.render', `checkpoint-${attempt}.tar.gz`)
-  execFileSync('tar', [
-    '-czf',
-    out,
-    '--exclude=node_modules',
-    '--exclude=.hyperframes',
-    '--exclude=renders',
-    '--exclude=video/feedback',
-    '--exclude=video/assets/media',
-    '--exclude=*.mp4',
-    '-C',
-    repoRoot,
-    'video',
-  ])
+  execFileSync('tar', videoTarArgs(out))
   if (statSync(out).size > BUNDLE_MAX) return null
   return readFileSync(out).toString('base64')
 }

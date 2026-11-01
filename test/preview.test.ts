@@ -4,42 +4,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TestDeps } from './fakes.js'
 import { injectPreviewScripts, parsePreviewPath, previewCsp, previewContentType } from '../src/lib/preview.js'
 import { running } from './fakes.js'
-import { harness, type Harness } from './helpers.js'
+import { harness, PROMPT, readyVideo, type Harness } from './helpers.js'
+import { loadEdge } from './edge.js'
 import { tarGz } from './tarball.js'
-
-const PROMPT = 'A short launch video for org webhooks, with three beats and an end card.'
 
 // The edge function reads Blobs through @netlify/blobs: back it with the test's fake store.
 let current: TestDeps | null = null
-vi.mock('@netlify/blobs', () => ({
-  getStore: ({ name }: { name: 'internal' | 'bundles' }) => ({
-    get: async (key: string, o?: { type?: string }) => {
-      const b = await current?.blobs.get(name, key)
-      if (!b) return null
-      const text = new TextDecoder().decode(b)
-      if (o?.type === 'json') return JSON.parse(text) as unknown
-      if (o?.type === 'text') return text
-      if (o?.type === 'stream') return new Blob([b]).stream()
-      return b
-    },
-  }),
-}))
+vi.mock('@netlify/blobs', async () => (await import('./edge.js')).fakeBlobsModule(() => current?.blobs))
 
 const mint = async (h: Harness, id: string, as = h.member) =>
   h.json<{ url: string }>(await h.call('GET', `/api/v1/videos/${id}/versions/1/preview`, { as }))
 
-async function readyVideo(h: Harness) {
-  const v = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }))
-  await h.drive(4)
-  return v.id as string
-}
-
-// Imported by a variable path: the edge file uses Deno-style .ts imports the typecheck doesn't follow.
-type EdgeHandler = (req: Request, ctx: { deploy: { published: boolean } }) => Promise<Response>
-const EDGE = '../netlify/edge-functions/preview.ts'
-const loadEdge = async () => ((await import(/* @vite-ignore */ EDGE)) as { default: EdgeHandler }).default
 async function edge(url: string, init: RequestInit = {}) {
-  return (await loadEdge())(new Request(url, init), { deploy: { published: true } })
+  return (await loadEdge('preview'))(new Request(url, init), { deploy: { published: true } })
 }
 
 describe('preview helpers', () => {
@@ -169,7 +146,7 @@ describe('preview links and the edge function', () => {
     )
     await h.drive(4)
     const link = await mint(h, v.id)
-    const handler = await loadEdge()
+    const handler = await loadEdge('preview')
     expect((await handler(new Request(link.url), { deploy: { published: false } })).status).toBe(404)
   })
 

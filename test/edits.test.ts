@@ -4,41 +4,17 @@ import { readFileSync } from 'node:fs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { runCleanup } from '../src/domain/cleanup.js'
 import { editRevPrefix } from '../src/domain/edits.js'
-import type { Role } from '../src/domain/types.js'
 import type { TestDeps } from './fakes.js'
-import { harness, type Harness } from './helpers.js'
+import { font, harness, person, png, PROMPT, upload, type Harness } from './helpers.js'
+import { loadEdge } from './edge.js'
 import { tarGz } from './tarball.js'
 
-const PROMPT = 'A short launch video for org webhooks, with three beats and an end card.'
 const fx = (f: string) => readFileSync(new URL(`./fixtures/contract1/${f}`, import.meta.url), 'utf8')
 
 let current: TestDeps | null = null
-vi.mock('@netlify/blobs', () => ({
-  getStore: ({ name }: { name: 'internal' | 'bundles' | 'media' }) => ({
-    get: async (key: string, o?: { type?: string }) => {
-      const b = await current?.blobs.get(name, key)
-      if (!b) return null
-      const text = new TextDecoder().decode(b)
-      if (o?.type === 'json') return JSON.parse(text) as unknown
-      if (o?.type === 'text') return text
-      if (o?.type === 'stream') return new Blob([b]).stream()
-      return b
-    },
-  }),
-}))
-type EdgeHandler = (req: Request, ctx: { deploy: { published: boolean } }) => Promise<Response>
-const EDGE = '../netlify/edge-functions/preview.ts'
+vi.mock('@netlify/blobs', async () => (await import('./edge.js')).fakeBlobsModule(() => current?.blobs))
 const edge = async (url: string) =>
-  ((await import(/* @vite-ignore */ EDGE)) as { default: EdgeHandler }).default(new Request(url), {
-    deploy: { published: true },
-  })
-
-async function person(h: Harness, id: string, role?: Role) {
-  const cookie = h.deps.identity.addUser({ id, email: `${id}@acme.com`, name: id }).cookie
-  await h.call('GET', '/api/v1/me', { as: cookie })
-  if (role) await h.call('PATCH', `/api/v1/users/${id}`, { as: h.admin, body: { role } })
-  return cookie
-}
+  (await loadEdge('preview'))(new Request(url), { deploy: { published: true } })
 
 /** A ready video whose v1 keeps contract v1 (the spike S8 fixture). */
 async function editableVideo(h: Harness) {
@@ -208,36 +184,10 @@ describe('edit drafts', () => {
     current = h.deps
     const id = await editableVideo(h)
     const up = async (bytes: Uint8Array, name: string) =>
-      (await (
-        await h.app.fetch(
-          new Request(`https://video.example.com/api/v1/media?filename=${name}`, {
-            method: 'POST',
-            headers: {
-              cookie: h.member,
-              origin: 'https://video.example.com',
-              'content-type': 'application/octet-stream',
-            },
-            body: bytes,
-          }),
-          { context: { deploy: { published: true }, waitUntil: () => undefined } },
-        )
-      ).json()) as { id: string }
-    const be32 = (n: number) => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255]
-    const pngBytes = new Uint8Array([
-      0x89,
-      ...Buffer.from('PNG\r\n\x1a\n', 'latin1'),
-      ...be32(13),
-      ...Buffer.from('IHDR'),
-      ...be32(64),
-      ...be32(32),
-      8,
-      6,
-      0,
-      0,
-      0,
-    ])
+      h.json<{ id: string }>(await upload(h, h.member, bytes, `filename=${name}`))
+    const pngBytes = png(64, 32)
     const logo = await up(pngBytes, 'logo.png')
-    const typeface = await up(new Uint8Array([...Buffer.from('wOF2'), 1, 2, 3, 4]), 'brand.woff2')
+    const typeface = await up(font(), 'brand.woff2')
     const e = await h.json<Edit>(await open(h, id))
     const swap = (src: string, kind = 'image') => ({ op: 'media', slot: 'logo', src, kind, fit: 'cover' })
 

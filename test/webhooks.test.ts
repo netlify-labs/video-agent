@@ -9,9 +9,8 @@ import { encrypt, webhookSignature } from '../src/lib/crypto.js'
 import { getSettings } from '../src/domain/settings.js'
 import { deliverWebhooks } from '../src/domain/webhooks.js'
 import { createDrizzleStore } from '../src/store/drizzle.js'
-import { harness, type Harness } from './helpers.js'
+import { harness, PROMPT, type Harness } from './helpers.js'
 
-const PROMPT = 'A short launch video for org webhooks, with three beats and an end card.'
 const MIGRATIONS = new URL('../netlify/database/migrations/', import.meta.url)
 
 async function pgClient(upTo?: string) {

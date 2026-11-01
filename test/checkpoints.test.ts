@@ -4,11 +4,9 @@ import { describe, expect, it } from 'vitest'
 import { postCheckpoint } from '../scripts/checkpoint.js'
 import { checkpointBundleKey } from '../src/domain/checkpoints.js'
 import { failedSnap, running } from './fakes.js'
-import { harness, type Harness } from './helpers.js'
+import { harness, PROMPT, type Harness } from './helpers.js'
 import { tarGz } from './tarball.js'
 import { liveIndexKey } from '../src/domain/bundles.js'
-
-const PROMPT = 'A short launch video for org webhooks, with three beats and an end card.'
 
 async function runningAttempt(h: Harness) {
   h.deps.runner.nextScripts.push({ timeline: [running()] })
