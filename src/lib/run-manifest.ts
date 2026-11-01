@@ -112,10 +112,12 @@ export function verifyRunManifest(raw: string, expected: { attemptId: string; sh
     throw new Error('The run manifest has a bad source entry.')
   if (m.bundle && (!own(m.bundle.key) || !HEX.test(m.bundle.sha256) || !HEX.test(m.bundle.manifestHash)))
     throw new Error('The run manifest has a bad bundle entry.')
-  const rv = m.bundle?.revoice
+  // Parsed JSON: check the shape rather than trust the type.
+  const rv = m.bundle?.revoice as { beats?: unknown; keptHash?: unknown } | null | undefined
   if (
     rv !== undefined &&
-    (!rv ||
+    (rv === null ||
+      typeof rv.keptHash !== 'string' ||
       !HEX.test(rv.keptHash) ||
       !Array.isArray(rv.beats) ||
       rv.beats.length === 0 ||

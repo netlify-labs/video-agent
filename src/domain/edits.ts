@@ -5,7 +5,7 @@ import type { Deps } from '../deps.js'
 import { excluded, manifestHash } from '../lib/bundle-manifest.js'
 import { applyEdits, ContractError, type EditOp, type Summary } from '../lib/contract.js'
 import { keptHash } from '../lib/revoice.js'
-import { VOICE_JSON, VOICE_SCRIPT, type VoiceFile, type VoiceScript } from '../lib/voice.js'
+import { parseScript, VOICE_JSON, VOICE_SCRIPT, type VoiceFile, type VoiceScript } from '../lib/voice.js'
 import { signPath, sha256Hex } from '../lib/crypto.js'
 import { ApiError } from '../lib/errors.js'
 import { writeTarGz } from '../lib/tar.js'
@@ -51,9 +51,18 @@ async function readEntry(deps: Deps, f: BundleEntry) {
 }
 
 const text = (b: Uint8Array | undefined) => (b ? new TextDecoder().decode(b) : '')
-function parseJson<T>(raw: string): T | null {
+/** voice.json as voice.ts writes it, or null. */
+function parseVoice(raw: string): VoiceFile | null {
   try {
-    return raw ? (JSON.parse(raw) as T) : null
+    const v = JSON.parse(raw || 'null') as Partial<VoiceFile> | null
+    return v?.v === 1 && Array.isArray(v.beats) ? (v as VoiceFile) : null
+  } catch {
+    return null
+  }
+}
+function parseVoiceScript(raw: string): VoiceScript | null {
+  try {
+    return parseScript(raw)
   } catch {
     return null
   }
@@ -84,7 +93,7 @@ async function computeRev(deps: Deps, e: Pick<EditRow, 'jobId' | 'baseN'>, ops: 
   const html = await read('index.html')
   const summary = JSON.parse((await read('summary.json')) || '{}') as Summary
   // Each voiced beat's line as it was spoken, which voice ops change and the editor shows.
-  const voice = parseJson<VoiceFile>(await read(VOICE_JSON))
+  const voice = parseVoice(await read(VOICE_JSON))
   const narration = voice?.beats.length
     ? Object.fromEntries(voice.beats.map((b) => [b.beat, b.text]))
     : undefined
@@ -108,8 +117,8 @@ async function computeRev(deps: Deps, e: Pick<EditRow, 'jobId' | 'baseN'>, ops: 
   // Changed lines go into the voice script, where the render run's scripts/voice.ts revoice reads them.
   const revoiced = out.composition.narration.filter((n) => n.revoice)
   if (voice && revoiced.length) {
-    const was = parseJson<VoiceScript>(await read(VOICE_SCRIPT))
-    const lines = was?.lines?.length
+    const was = parseVoiceScript(await read(VOICE_SCRIPT))
+    const lines = was
       ? was.lines.map((l) => ({ ...l }))
       : voice.beats.map((b) => ({ beat: b.beat, text: b.text }))
     for (const n of revoiced) {
@@ -117,9 +126,7 @@ async function computeRev(deps: Deps, e: Pick<EditRow, 'jobId' | 'baseN'>, ops: 
       if (line) line.text = n.text
       else lines.push({ beat: n.beat, text: n.text })
     }
-    const script: VoiceScript = was?.lines?.length
-      ? { ...was, lines }
-      : { voice: voice.voice, speed: voice.speed, lines }
+    const script: VoiceScript = was ? { ...was, lines } : { voice: voice.voice, speed: voice.speed, lines }
     changed.set(VOICE_SCRIPT, new TextEncoder().encode(JSON.stringify(script, null, 2)))
   }
   for (const [path, bytes] of changed)
