@@ -19,6 +19,9 @@
 //               data-va-layer="music"; voice (data-va-audio="voice") and effects live inside beats. A muted track
 //               keeps data-volume="0" (HyperFrames' silence; the render mixes every timed <audio>, muted or not) and
 //               its level in data-va-volume
+//   narration   each voiced beat's line lives in assets/voice/script.json (the server passes it in); a voice op
+//               records a new line and marks the clip data-va-revoice, and the render run re-speaks exactly the
+//               marked clips (scripts/voice.ts revoice), lengthening a beat only when its new line no longer fits
 //   captions    summary.json captions carry beat, textId, beatStart, beatEnd (beat-relative) plus the absolute
 //               start, end and text render-job reads; the patcher keeps both in step. Voice cues (voice: true) follow
 //               the spoken words instead of a text, and keep their times when a beat is stretched (audio isn't)
@@ -88,12 +91,21 @@ export interface AudioTrack {
   /** The beat it plays in; null for the music layer. */
   beat: string | null
 }
+/** A voiced beat's narration line, for the editor. */
+export interface NarrationLine {
+  beat: string
+  text: string
+  /** The line changed since it was spoken: the render re-voices it, and the preview still plays the old audio. */
+  revoice: boolean
+}
 export interface Composition {
   duration: number
   colors: Record<string, string>
   beats: Beat[]
   layers: string[]
   audio: AudioTrack[]
+  /** Voiced beats whose line is known (from the voice script), in beat order. */
+  narration: NarrationLine[]
 }
 
 export class ContractError extends Error {
@@ -155,7 +167,21 @@ function readColors(d: Doc): { colors: Record<string, string>; styles: Element[]
   return { colors, styles }
 }
 
-export function read(d: Doc): Composition {
+/** The longest narration line (scripts/voice.ts refuses longer ones too). */
+export const MAX_NARRATION = 600
+const REVOICE = 'data-va-revoice'
+/** Narration as voice.ts speaks it: one line, single spaces. */
+export const normalizeLine = (text: string) => text.replace(/\s+/g, ' ').trim()
+
+/** Beats whose voice is marked for re-voicing, in beat order. */
+export function markedForRevoice(d: Doc): string[] {
+  return beatsOf(d.root)
+    .filter((b) => voicesOf(b).some((e) => attr(e, REVOICE) !== null))
+    .map((b) => attr(b, 'data-va-beat') ?? '')
+}
+
+/** `lines` is each voiced beat's current narration (from the voice script); without it, narration is empty. */
+export function read(d: Doc, lines?: Record<string, string>): Composition {
   const { colors } = readColors(d)
   const beats = beatsOf(d.root).map((b): Beat => {
     const id = attr(b, 'data-va-beat') ?? ''
@@ -181,7 +207,16 @@ export function read(d: Doc): Composition {
       .filter((e) => attr(e, 'data-va-layer') !== null)
       .map((e) => attr(e, 'data-va-layer') ?? ''),
     audio: audioOf(d.root),
+    narration: lines ? narrationOf(d, beats, lines) : [],
   }
+}
+
+function narrationOf(d: Doc, beats: Beat[], lines: Record<string, string>): NarrationLine[] {
+  const marked = new Set(markedForRevoice(d))
+  return beats.flatMap((b) => {
+    const text = Object.hasOwn(lines, b.id) ? lines[b.id] : undefined
+    return b.voice && text !== undefined ? [{ beat: b.id, text, revoice: marked.has(b.id) }] : []
+  })
 }
 
 const voicesOf = (beat: Element) => kids(beat).filter((e) => attr(e, 'data-va-voice') !== null)
@@ -353,6 +388,12 @@ export function validate(html: string, summary?: Summary): string[] {
         )
     }
   }
+  for (const e of [...walk(root)].filter(
+    (x) => attr(x, REVOICE) !== null && attr(x, 'data-va-voice') === null,
+  ))
+    v.push(
+      `<${e.tagName}${attr(e, 'id') ? ` id="${attr(e, 'id') ?? ''}"` : ''}> has ${REVOICE}, which only goes on a voice.`,
+    )
   for (const b of beats)
     if (voicesOf(b).length > 1) v.push(`Beat "${attr(b, 'data-va-beat') ?? ''}" has more than one voice.`)
 
@@ -495,10 +536,13 @@ export type EditOp =
       volume?: number | undefined
       muted?: boolean | undefined
     }
+  | { op: 'voice'; beat: string; text: string }
 
 export interface EditOptions {
   /** Colours a role may take (the brand palette). Empty: any #rgb/#rrggbb. */
   palette?: string[]
+  /** Each voiced beat's line as it was spoken (from the voice script); voice ops need it. */
+  narration?: Record<string, string>
 }
 
 /** Lays the beats back to back from 0 and sets the root, layer and video-slot durations to match. */
@@ -553,16 +597,18 @@ export function applyEdits(html: string, summary: Summary, ops: EditOp[], opts: 
   const before = validate(html, summary)
   if (before.length) throw new ContractError(before)
   const d = load(html)
-  for (const op of ops) applyOne(d, op, opts)
+  // The lines after the edits: voice ops replace them, and the caller writes them back to the voice script.
+  const narration = opts.narration ? { ...opts.narration } : undefined
+  for (const op of ops) applyOne(d, op, opts, narration)
   relayout(d)
   const out = save(d)
   const nextSummary = syncCaptions(d, summary)
   const after = validate(out, nextSummary)
   if (after.length) throw new ContractError(after)
-  return { html: out, summary: nextSummary, composition: read(load(out)) }
+  return { html: out, summary: nextSummary, composition: read(load(out), narration), narration }
 }
 
-function applyOne(d: Doc, op: EditOp, opts: EditOptions) {
+function applyOne(d: Doc, op: EditOp, opts: EditOptions, narration: Record<string, string> | undefined) {
   const beats = beatsOf(d.root)
   const beat = (id: string) => {
     const b = beats.find((x) => attr(x, 'data-va-beat') === id)
@@ -662,5 +708,90 @@ function applyOne(d: Doc, op: EditOp, opts: EditOptions) {
       } else setAttr(el, 'data-volume', level)
       return
     }
+    case 'voice': {
+      const el = voicesOf(beat(op.beat))[0]
+      const spoken =
+        opts.narration && Object.hasOwn(opts.narration, op.beat) ? opts.narration[op.beat] : undefined
+      if (!el || spoken === undefined || !narration)
+        throw new ContractError([`Beat "${op.beat}" has no narration to change.`])
+      const text = normalizeLine(op.text)
+      if (!text) throw new ContractError(['A narration line needs some words.'])
+      if (text.length > MAX_NARRATION)
+        throw new ContractError([`Keep a narration line under ${MAX_NARRATION} characters.`])
+      // eslint-disable-next-line no-control-regex
+      if (/[\u0000-\u001f\u007f<>]/.test(text))
+        throw new ContractError(['A narration line is plain text: no < or > and no control characters.'])
+      narration[op.beat] = text
+      // Back to the spoken words: nothing to re-voice.
+      if (text === normalizeLine(spoken)) el.attrs = el.attrs.filter((a) => a.name !== REVOICE)
+      else setAttr(el, REVOICE, '')
+      return
+    }
   }
+}
+
+/** A re-spoken line for applyRevoice: the new file's length, the shortest its beat can be, and its cues. */
+export interface RevoicedLine {
+  beat: string
+  file: string
+  duration: number
+  /** The beat's length before, and the shortest it can be with this voice (lead + voice + quiet after). */
+  minBeat: number
+  /** The cues, in seconds into the beat. */
+  cues: { text: string; start: number; end: number }[]
+}
+
+/**
+ * The composition after re-voicing (scripts/voice.ts revoice; render-job recomputes it to check the run changed
+ * nothing else): each marked clip takes its new file length and loses the mark, and a beat whose new line is longer
+ * than the old one grows to fit it when it no longer does (later beats move, captions keep in step, the music's dip
+ * follows). A shorter line never shortens its beat. The re-voiced beats' narration captions are replaced by the new
+ * cues. Throws ContractError when a marked clip isn't re-voiced or a line is for a clip that isn't marked.
+ */
+export function applyRevoice(html: string, summary: Summary, lines: RevoicedLine[]) {
+  const before = validate(html, summary)
+  if (before.length) throw new ContractError(before)
+  const d = load(html)
+  const lengthened: { beat: string; from: number; to: number }[] = []
+  const marked = markedForRevoice(d)
+  for (const id of marked)
+    if (!lines.some((l) => l.beat === id))
+      throw new ContractError([`Beat "${id}" is marked but wasn't re-voiced.`])
+  for (const l of lines) {
+    const b = beatsOf(d.root).find((x) => attr(x, 'data-va-beat') === l.beat)
+    const el = b && voicesOf(b)[0]
+    if (!b || !el || attr(el, REVOICE) === null)
+      throw new ContractError([`Beat "${l.beat}" isn't marked for re-voicing.`])
+    const old = num(attr(el, 'data-duration'))
+    setAttr(el, 'src', l.file)
+    setAttr(el, 'data-duration', fmt(l.duration))
+    el.attrs = el.attrs.filter((a) => a.name !== REVOICE)
+    const dur = num(attr(b, 'data-duration'))
+    if (l.duration > old && dur < l.minBeat) {
+      const to = Math.ceil(l.minBeat * FPS - 1e-6) / FPS
+      setAttr(b, 'data-duration', fmt(to))
+      lengthened.push({ beat: l.beat, from: dur, to: frames(to) })
+    }
+  }
+  relayout(d)
+  const out = save(d)
+  const redone = new Set(lines.map((l) => l.beat))
+  const captions = [
+    ...(summary.captions ?? []).filter((c) => !(c.voice && c.beat && redone.has(c.beat))),
+    ...lines.flatMap((l) =>
+      l.cues.map((c) => ({
+        start: 0,
+        end: 0,
+        text: c.text,
+        beat: l.beat,
+        voice: true,
+        beatStart: c.start,
+        beatEnd: c.end,
+      })),
+    ),
+  ]
+  const nextSummary = syncCaptions(d, { ...summary, captions })
+  const after = validate(out, nextSummary)
+  if (after.length) throw new ContractError(after)
+  return { html: out, summary: nextSummary, lengthened }
 }

@@ -2,6 +2,7 @@
 // web app's generated client.
 import { z } from '@hono/zod-openapi'
 import { SOUNDS } from './domain/types.js'
+import { MAX_NARRATION } from './lib/contract.js'
 import { SPEED_RANGE, VOICE_ID } from './lib/voice.js'
 import { MEDIA_KINDS } from './lib/media/classify.js'
 
@@ -390,11 +391,9 @@ export const PlanSchema = z
     briefRev: z.number().int(),
     mediaIds: z.array(z.string()).openapi({ description: 'Library items attached while planning.' }),
     sound: SoundSchema.nullable().openapi({ description: 'The Sound chosen while planning, if any.' }),
-    voiceover: voiceoverShape
-      .nullable()
-      .openapi({
-        description: 'The voice-over chosen while planning, if any; the brief then has narration per beat.',
-      }),
+    voiceover: voiceoverShape.nullable().openapi({
+      description: 'The voice-over chosen while planning, if any; the brief then has narration per beat.',
+    }),
     expiresAt: z.string(),
   })
   .openapi('Plan')
@@ -504,6 +503,16 @@ const EditOpSchema = z.discriminatedUnion('op', [
       muted: z.boolean().optional(),
     })
     .openapi({ description: "Swap an audio track's file, set its level or mute it, by its id" }),
+  z
+    .object({
+      op: z.literal('voice'),
+      beat: z.string().max(80),
+      text: z.string().min(1).max(MAX_NARRATION),
+    })
+    .openapi({
+      description:
+        "Change a voiced beat's narration line (plain text). The draft preview keeps the old audio; the render re-voices the line, lengthening the beat only if the new line no longer fits",
+    }),
 ])
 const CompositionSchema = z
   .object({
@@ -541,6 +550,17 @@ const CompositionSchema = z
         beat: z.string().nullable().openapi({ description: 'The beat it plays in; null for music' }),
       }),
     ),
+    narration: z
+      .array(
+        z.object({
+          beat: z.string(),
+          text: z.string(),
+          revoice: z
+            .boolean()
+            .openapi({ description: 'The line changed since it was spoken; the render re-voices it' }),
+        }),
+      )
+      .openapi({ description: "Each voiced beat's narration line, in beat order" }),
   })
   .openapi('Composition')
 
