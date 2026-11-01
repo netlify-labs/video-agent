@@ -177,7 +177,7 @@ function soundLines(
   ]
   if (music)
     out.push(
-      '- Music: one <audio id="music" data-va-layer="music"> layer on the root (data-start="0", data-duration = the root\'s, data-track-index 1 or higher, data-volume, data-fade-in about 1 s, data-fade-out about 1.5 s), so it ends with the video, also after edits. Enter at a strong bar, not a quiet intro, and land the payoff on a strong beat (npx hyperframes beats).',
+      '- Music: one <audio id="music" data-va-layer="music" data-va-label="Music"> layer on the root (data-start="0", data-duration = the root\'s, data-track-index 1 or higher, data-volume from 0 to 1, data-fade-in about 1 s, data-fade-out about 1.5 s), so it ends with the video, also after edits. Enter at a strong bar, not a quiet intro, and land the payoff on a strong beat (npx hyperframes beats).',
     )
   if (tracks.length) {
     out.push(

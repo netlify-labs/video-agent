@@ -82,7 +82,7 @@ describe('buildPrompt sound', () => {
     )
     // The visual media list stays as it was, without the track.
     expect(p).toContain('<<<\n[{"file":"assets/media/med_1.png","kind":"image","caption":"Logo"}]\n>>>')
-    expect(p).toContain('<audio id="music" data-va-layer="music">')
+    expect(p).toContain('<audio id="music" data-va-layer="music" data-va-label="Music">')
     expect(p).toContain('data-fade-in about 1 s, data-fade-out about 1.5 s')
     expect(p).toContain('-14 LUFS integrated, true peak at or below -1 dBTP')
     expect(p).toContain('normalize-audio --target=music --lufs=-14 --write')

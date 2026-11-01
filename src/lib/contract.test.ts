@@ -6,6 +6,10 @@ import { applyEdits, ContractError, load, read, validate, type EditOp, type Summ
 const fx = (f: string) => readFileSync(new URL(`../../test/fixtures/contract1/${f}`, import.meta.url), 'utf8')
 const html = fx('index.html')
 const summary = JSON.parse(fx('summary.json')) as Summary
+const musicHtml = readFileSync(
+  new URL('../../test/fixtures/contract1-music/index.html', import.meta.url),
+  'utf8',
+)
 
 describe('contract validator', () => {
   it('accepts the fixture and reads its beats, texts, colours and slots', () => {
@@ -35,6 +39,7 @@ describe('contract validator', () => {
       },
     ])
     expect(c.layers).toEqual(['glow'])
+    expect(c.audio).toEqual([])
   })
 
   it.each([
@@ -268,5 +273,154 @@ describe('contract patcher', () => {
         cur = next
       }
     }
+  })
+})
+
+describe('contract audio', () => {
+  const sfx = '<audio id="sfx-pop" src="assets/sfx/pop.mp3" data-start="0.4" data-volume="0.35"></audio>'
+  const withSfx = musicHtml.replace(
+    '<div class="kicker" data-va-text="intro-kicker">',
+    `${sfx}<div class="kicker" data-va-text="intro-kicker">`,
+  )
+  const music = (h: string) => read(load(h)).audio.find((a) => a.id === 'music')
+
+  it('reads the music layer and effects as audio tracks', () => {
+    expect(validate(withSfx, summary)).toEqual([])
+    const c = read(load(withSfx))
+    expect(c.layers).toEqual(['music', 'glow'])
+    expect(c.audio).toEqual([
+      {
+        id: 'music',
+        role: 'music',
+        label: 'Music',
+        src: 'assets/media/med_theme01.mp3',
+        volume: 0.8,
+        muted: false,
+        beat: null,
+      },
+      {
+        id: 'sfx-pop',
+        role: 'sfx',
+        label: null,
+        src: 'assets/sfx/pop.mp3',
+        volume: 0.35,
+        muted: false,
+        beat: 'intro',
+      },
+    ])
+    // A voice line names its role; audio without an id isn't in the mix, so it isn't listed.
+    const voice = withSfx.replace(
+      sfx,
+      '<audio id="vo-intro" data-va-audio="voice" src="assets/voice/intro.mp3" data-start="0"></audio><audio src="assets/sfx/x.mp3"></audio>',
+    )
+    expect(read(load(voice)).audio.map((a) => [a.id, a.role, a.volume, a.beat])).toEqual([
+      ['music', 'music', 0.8, null],
+      ['vo-intro', 'voice', 1, 'intro'],
+    ])
+  })
+
+  it.each([
+    [
+      'audio outside assets/',
+      (h: string) => h.replace('assets/media/med_theme01.mp3', 'https://cdn.example.com/a.mp3'),
+      /must use a file in assets\//,
+    ],
+    [
+      'a way out of assets/',
+      (h: string) => h.replace('assets/media/med_theme01.mp3', 'assets/../secret.mp3'),
+      /must use a file in assets\//,
+    ],
+    [
+      'volume above 1',
+      (h: string) => h.replace('data-volume="0.8"', 'data-volume="1.5"'),
+      /data-volume between 0 and 1/,
+    ],
+    [
+      'an unknown role',
+      (h: string) => h.replace('data-va-layer="music"', 'data-va-layer="music" data-va-audio="drums"'),
+      /use music, voice or sfx/,
+    ],
+    [
+      'muted but audible',
+      (h: string) => h.replace('data-volume="0.8"', 'data-volume="0.8" data-va-muted'),
+      /needs data-volume="0"/,
+    ],
+    [
+      'a music layer without an id',
+      (h: string) => h.replace('<audio id="music"', '<audio'),
+      /music layer must be an <audio> with an id/,
+    ],
+    [
+      'duplicate audio ids',
+      (h: string) =>
+        h.replace(
+          '<div class="kicker"',
+          '<audio id="music" src="assets/sfx/a.mp3"></audio><div class="kicker"',
+        ),
+      /Audio id "music" is used twice/,
+    ],
+  ])('rejects %s', (_n, mutate, msg) => {
+    expect(validate(mutate(musicHtml)).join(' ')).toMatch(msg)
+  })
+
+  it('swaps the music for a library file, dropping the old trim point', () => {
+    const trimmed = musicHtml.replace('data-volume="0.8"', 'data-volume="0.8" data-media-start="12"')
+    const out = applyEdits(trimmed, summary, [
+      { op: 'audio', id: 'music', src: 'assets/media/med_other02.m4a' },
+    ])
+    expect(music(out.html)).toMatchObject({ src: 'assets/media/med_other02.m4a', volume: 0.8, muted: false })
+    expect(out.html).not.toContain('data-media-start')
+    // Fades and the layer span stay.
+    expect(out.html).toMatch(/<audio id="music"[^>]*data-fade-in="1" data-fade-out="1.5"/)
+    expect(() =>
+      applyEdits(musicHtml, summary, [{ op: 'audio', id: 'music', src: '../../etc/passwd' }]),
+    ).toThrow(/assets\/media/)
+    expect(() => applyEdits(musicHtml, summary, [{ op: 'audio', id: 'nope', volume: 0.5 }])).toThrow(
+      /no audio "nope"/,
+    )
+  })
+
+  it('sets the volume as data-volume, which HyperFrames applies in preview and render', () => {
+    const out = applyEdits(musicHtml, summary, [{ op: 'audio', id: 'music', volume: 0.456 }])
+    expect(out.html).toMatch(/<audio id="music"[^>]*data-volume="0.46"/)
+    expect(music(out.html)?.volume).toBe(0.46)
+    for (const volume of [-0.1, 1.2, Number.NaN])
+      expect(() => applyEdits(musicHtml, summary, [{ op: 'audio', id: 'music', volume }])).toThrow(/0 to 1/)
+  })
+
+  it('mutes with data-volume="0", keeps the level, and unmutes back to it', () => {
+    const muted = applyEdits(musicHtml, summary, [{ op: 'audio', id: 'music', muted: true }])
+    expect(muted.html).toMatch(/<audio id="music"[^>]*data-volume="0" data-va-volume="0.8" data-va-muted=""/)
+    expect(music(muted.html)).toMatchObject({ volume: 0.8, muted: true })
+    // The element stays (with its src), so it can come back.
+    expect(muted.composition.layers).toContain('music')
+    const quieter = applyEdits(muted.html, muted.summary, [{ op: 'audio', id: 'music', volume: 0.3 }])
+    expect(music(quieter.html)).toMatchObject({ volume: 0.3, muted: true })
+    expect(quieter.html).toMatch(/data-volume="0"/)
+    const back = applyEdits(quieter.html, quieter.summary, [{ op: 'audio', id: 'music', muted: false }])
+    expect(music(back.html)).toMatchObject({ volume: 0.3, muted: false })
+    expect(back.html).toMatch(/<audio id="music"[^>]*data-volume="0.3"/)
+    expect(back.html).not.toMatch(/data-va-muted|data-va-volume/)
+  })
+
+  it('keeps the music spanning the video through retimes, deletes and reorders', () => {
+    const out = applyEdits(musicHtml, summary, [
+      { op: 'audio', id: 'music', src: 'assets/media/med_other02.mp3', volume: 0.5 },
+      { op: 'retime', beat: 'intro', duration: 4.5 },
+      { op: 'delete', beat: 'demo' },
+      { op: 'reorder', order: ['outro', 'intro'] },
+    ])
+    expect(out.composition.duration).toBe(7.5)
+    expect(out.html).toMatch(/<audio id="music"[^>]*data-start="0" data-duration="7.5"/)
+    expect(validate(out.html, out.summary)).toEqual([])
+  })
+
+  it('edits effects inside beats by id too', () => {
+    const out = applyEdits(withSfx, summary, [{ op: 'audio', id: 'sfx-pop', muted: true }])
+    expect(read(load(out.html)).audio.find((a) => a.id === 'sfx-pop')).toMatchObject({
+      volume: 0.35,
+      muted: true,
+      beat: 'intro',
+    })
   })
 })
