@@ -13,7 +13,8 @@ export function resetAuthCache() {
   liveCache.clear()
 }
 
-async function liveUser(deps: Deps, id: string): Promise<IdentityUser | null> {
+/** The live Identity account, cached for five minutes. */
+export async function liveIdentityUser(deps: Deps, id: string): Promise<IdentityUser | null> {
   const now = deps.clock.now().getTime()
   const hit = liveCache.get(id)
   if (hit && now - hit.at < LIVE_TTL_MS) return hit.user
@@ -92,17 +93,26 @@ export function parseApiKey(raw: string): { keyId: string; secret: string } | nu
   return { keyId: rest.slice(0, i), secret: rest.slice(i + 1) }
 }
 
-export async function principalFromRequest(deps: Deps, req: Request): Promise<Principal> {
+/**
+ * API keys are checked first. `otherBearer` (the MCP when OAuth is on) resolves bearer tokens that aren't API keys.
+ */
+export async function principalFromRequest(
+  deps: Deps,
+  req: Request,
+  opts: { otherBearer?: (token: string) => Promise<Principal> } = {},
+): Promise<Principal> {
   const auth = req.headers.get('authorization')
   if (auth) {
     const m = /^Bearer\s+(\S+)$/i.exec(auth)
-    const parsed = m?.[1] ? parseApiKey(m[1]) : null
+    const token = m?.[1]
+    if (token && opts.otherBearer && !token.startsWith(API_KEY_PREFIX)) return opts.otherBearer(token)
+    const parsed = token ? parseApiKey(token) : null
     if (!parsed) throw new ApiError('unauthorized', 'Invalid API key.')
     const key = await deps.store.getKey(parsed.keyId)
     if (!key || key.revokedAt || !safeEqual(key.secretHash, sha256Hex(parsed.secret))) {
       throw new ApiError('unauthorized', 'Invalid API key.')
     }
-    const live = await liveUser(deps, key.ownerId)
+    const live = await liveIdentityUser(deps, key.ownerId)
     if (!live?.confirmed) throw new ApiError('unauthorized', "This key's owner no longer has an account.")
     const row = await ensureUserRow(deps, live)
     const now = deps.clock.now().toISOString()
@@ -120,7 +130,7 @@ export async function principalFromRequest(deps: Deps, req: Request): Promise<Pr
 
   const session = await deps.identity.sessionUser(req)
   if (!session) throw new ApiError('unauthorized', 'Sign in first.')
-  const live = await liveUser(deps, session.id)
+  const live = await liveIdentityUser(deps, session.id)
   if (!live) throw new ApiError('unauthorized', 'Your account no longer exists.')
   if (!live.confirmed) throw new ApiError('unauthorized', 'Confirm your email address first.')
   const row = await ensureUserRow(deps, live)

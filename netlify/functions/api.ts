@@ -12,4 +12,14 @@ const app = createApp(prodDeps(), {
 
 export default handle(app)
 
-export const config: Config = { path: ['/api/*', '/mcp'] }
+// The OAuth paths answer only when MCP OAuth is configured (src/auth); otherwise they 404.
+export const config: Config = {
+  path: [
+    '/api/*',
+    '/mcp',
+    '/.well-known/oauth-protected-resource',
+    '/.well-known/oauth-protected-resource/*',
+    '/.well-known/oauth-authorization-server',
+    '/oauth/*',
+  ],
+}

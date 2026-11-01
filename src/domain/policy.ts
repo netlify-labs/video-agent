@@ -4,12 +4,15 @@ import { ApiError } from '../lib/errors.js'
 import type { Role } from './types.js'
 
 export interface Principal {
-  kind: 'user' | 'apiKey'
+  kind: 'user' | 'apiKey' | 'oauth'
   userId: string
   email: string
   name: string | null
   role: Role
   apiKeyId: string | null
+  /** For kind 'oauth' (MCP only): the connected app's grant and client. */
+  oauthGrantId?: string
+  oauthClientId?: string
 }
 
 export type Action =

@@ -709,7 +709,7 @@ function repoFor(db: Db): Repo {
     getOAuthGrant: async (id) =>
       one<OAuthGrantRow>(await db.select().from(t.oauthGrants).where(eq(t.oauthGrants.id, id))),
     listOAuthGrants: async (userId, now) =>
-      (await db
+      await db
         .select()
         .from(t.oauthGrants)
         .where(
@@ -719,7 +719,7 @@ function repoFor(db: Db): Repo {
             sql`${t.oauthGrants.expiresAt} > ${now}`,
           ),
         )
-        .orderBy(desc(t.oauthGrants.createdAt), desc(t.oauthGrants.id))) as OAuthGrantRow[],
+        .orderBy(desc(t.oauthGrants.createdAt), desc(t.oauthGrants.id)),
     updateOAuthGrant: async (id, patch) => {
       await db.update(t.oauthGrants).set(patch).where(eq(t.oauthGrants.id, id))
     },

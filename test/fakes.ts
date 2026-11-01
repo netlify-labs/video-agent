@@ -18,6 +18,7 @@ import type {
   RunnerSnapshot,
   StartRequest,
   GatewayPort,
+  OAuthPort,
   RouteAnswers,
 } from '../src/deps.js'
 import { RunnerError, readConfig } from '../src/deps.js'
@@ -26,6 +27,8 @@ import { createLogger, type Logger } from '../src/lib/log.js'
 import { createMemoryStore } from '../src/store/memory.js'
 import { resetAuthCache } from '../src/domain/auth.js'
 import { resetSettingsCache } from '../src/domain/settings.js'
+import { resetOAuthCaches } from '../src/auth/oauth.js'
+import { UpstreamError, type UpstreamIdentity, type UpstreamUser } from '../src/auth/upstream.js'
 import type { Manifest } from '../src/domain/types.js'
 import { PREVIEW_FILES, PREVIEW_NAMES, type PreviewFile } from '../src/lib/media/previews.js'
 
@@ -290,6 +293,44 @@ export class FakeGateway implements GatewayPort {
   }
 }
 
+/** The upstream identity provider: signIn() hands out a code the callback can trade for that person. */
+export class FakeUpstream implements UpstreamIdentity {
+  codes = new Map<string, UpstreamUser>()
+  exchanges: { code: string; redirectUri: string }[] = []
+  failNext = false
+  authorizeUrl(input: { state: string; redirectUri: string }) {
+    const u = new URL('https://upstream.example/authorize')
+    u.searchParams.set('state', input.state)
+    u.searchParams.set('redirect_uri', input.redirectUri)
+    return u.toString()
+  }
+  async exchange(code: string, redirectUri: string) {
+    this.exchanges.push({ code, redirectUri })
+    if (this.failNext) {
+      this.failNext = false
+      throw new UpstreamError('unavailable', 'token')
+    }
+    const u = this.codes.get(code)
+    if (!u) throw new UpstreamError('rejected', 'token')
+    return u
+  }
+  signIn(u: Partial<UpstreamUser> & { email: string }) {
+    const code = `up_${randomUUID()}`
+    this.codes.set(code, { subject: `sub-${u.email}`, emailVerified: true, ...u })
+    return code
+  }
+}
+
+export class FakeOAuth implements OAuthPort {
+  upstream = new FakeUpstream()
+  documents = new Map<string, unknown>()
+  fetched: string[] = []
+  async fetchClientMetadata(url: string) {
+    this.fetched.push(url)
+    return this.documents.get(url) ?? null
+  }
+}
+
 export interface TestDeps extends Deps {
   clock: FakeClock
   blobs: FakeBlobs
@@ -298,6 +339,7 @@ export interface TestDeps extends Deps {
   platform: FakePlatform
   http: FakeHttp
   gateway: FakeGateway
+  oauth: FakeOAuth
   logs: string[]
   /** The source.tar.gz the next fake run uploads (once), instead of the default fixture. */
   nextSource: Uint8Array | null
@@ -312,6 +354,7 @@ export interface TestDeps extends Deps {
 export function makeDeps(env: Record<string, string> = {}, store?: Deps['store']): TestDeps {
   resetAuthCache()
   resetSettingsCache()
+  resetOAuthCaches()
   const logs: string[] = []
   const log: Logger = createLogger({}, (l) => logs.push(l))
   const config: Config = readConfig({
@@ -334,6 +377,7 @@ export function makeDeps(env: Record<string, string> = {}, store?: Deps['store']
     platform: new FakePlatform(),
     http: new FakeHttp(),
     gateway: new FakeGateway(),
+    oauth: new FakeOAuth(),
     clock,
     ids: { ...realIds, videoId: () => `vid_${String(++n).padStart(4, '0')}` },
     log,
