@@ -138,6 +138,8 @@ export interface PlatformPort {
   productionDeployId(): Promise<string | null>
   /** Asks the platform to run finalize-background for an attempt. */
   dispatchFinalize(attemptId: string): Promise<void>
+  /** Asks the platform to assemble one finished upload session (media-assemble-background). */
+  dispatchMediaAssembly(uploadId: string): Promise<void>
   /** Checks for /setup: plan, agent runners, token, identity. */
   setupFacts(): Promise<SetupFacts>
 }

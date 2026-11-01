@@ -340,6 +340,23 @@ export const MediaSchema = z
     canDelete: z.boolean(),
   })
   .openapi('Media')
+export const UploadSessionSchema = z
+  .object({
+    id: z.string(),
+    filename: z.string(),
+    size: z.number().int(),
+    partSize: z.number().int(),
+    partCount: z.number().int(),
+    uploaded: z
+      .array(z.number().int())
+      .openapi({ description: 'Part indexes already received (resume from here)' }),
+    status: z.enum(['open', 'assembling', 'done', 'failed']),
+    mediaId: z.string().nullable(),
+    error: z.string().nullable(),
+    expiresAt: z.string(),
+  })
+  .openapi('UploadSession')
+
 export const MediaListSchema = z
   .object({ items: z.array(MediaSchema), nextCursor: z.string().nullable() })
   .openapi('MediaList')

@@ -23,6 +23,8 @@ import type {
   CheckpointRow,
   EditRow,
   MediaRow,
+  MediaUploadRow,
+  MediaUploadPartRow,
   VersionMediaRow,
   GatewayCallRow,
   WebhookDeliveryRow,
@@ -55,6 +57,8 @@ interface State {
   checkpoints: Map<string, CheckpointRow>
   edits: Map<string, EditRow>
   media: Map<string, MediaRow>
+  uploads: Map<string, MediaUploadRow>
+  uploadParts: Map<string, MediaUploadPartRow>
   versionMedia: VersionMediaRow[]
   userWebhooks: Map<string, UserWebhookRow>
   cleanup: Map<string, CleanupRow>
@@ -85,6 +89,8 @@ const empty = (): State => ({
   checkpoints: new Map(),
   edits: new Map(),
   media: new Map(),
+  uploads: new Map(),
+  uploadParts: new Map(),
   versionMedia: [],
   userWebhooks: new Map(),
   cleanup: new Map(),
@@ -364,6 +370,45 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
           .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))
           .slice(0, q.limit),
       ),
+    insertUpload: async (row) => {
+      state.uploads.set(row.id, clone(row))
+    },
+    getUpload: async (id) => clone(state.uploads.get(id) ?? null),
+    updateUpload: async (id, patch) => {
+      const u = state.uploads.get(id)
+      if (u) Object.assign(u, clone(patch))
+    },
+    deleteUpload: async (id) => {
+      state.uploads.delete(id)
+    },
+    reservedUploadBytes: async (uploaderId) =>
+      [...state.uploads.values()]
+        .filter((u) => u.uploaderId === uploaderId && (u.status === 'open' || u.status === 'assembling'))
+        .reduce((s, u) => s + u.size, 0),
+    listStaleUploads: async (now, limit) =>
+      clone(
+        [...state.uploads.values()]
+          .filter(
+            (u) =>
+              (u.status === 'open' && u.expiresAt < now) ||
+              (u.status === 'assembling' && (u.leaseUntil ?? '') < now) ||
+              ((u.status === 'done' || u.status === 'failed') && u.expiresAt < now),
+          )
+          .slice(0, limit),
+      ),
+    getUploadPart: async (uploadId, idx) => clone(state.uploadParts.get(`${uploadId}/${idx}`) ?? null),
+    insertUploadPart: async (row) => {
+      const k = `${row.uploadId}/${row.idx}`
+      if (!state.uploadParts.has(k)) state.uploadParts.set(k, clone(row))
+    },
+    listUploadParts: async (uploadId) =>
+      clone(
+        [...state.uploadParts.values()].filter((p) => p.uploadId === uploadId).sort((a, b) => a.idx - b.idx),
+      ),
+    deleteUploadParts: async (uploadId) => {
+      for (const k of [...state.uploadParts.keys()])
+        if (k.startsWith(`${uploadId}/`)) state.uploadParts.delete(k)
+    },
     insertVersionMedia: async (rows) => {
       state.versionMedia.push(...clone(rows))
     },

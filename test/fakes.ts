@@ -207,6 +207,12 @@ export class FakePlatform implements PlatformPort {
     this.dispatched.push(attemptId)
     if (this.onDispatch) await this.onDispatch(attemptId)
   }
+  assemblies: string[] = []
+  onAssemble: ((uploadId: string) => Promise<void>) | null = null
+  async dispatchMediaAssembly(uploadId: string) {
+    this.assemblies.push(uploadId)
+    if (this.onAssemble) await this.onAssemble(uploadId)
+  }
   async setupFacts() {
     return { tokenValid: true, tokenError: null, agentRunnersAvailable: true, identityEnabled: true }
   }

@@ -352,6 +352,32 @@ export interface MediaRow {
   deletedAt: string | null
 }
 
+export type UploadStatus = 'open' | 'assembling' | 'done' | 'failed'
+
+export interface MediaUploadRow {
+  id: string
+  uploaderId: string
+  filename: string
+  caption: string | null
+  size: number
+  sha256: string
+  partSize: number
+  partCount: number
+  status: UploadStatus
+  mediaId: string | null
+  error: string | null
+  leaseUntil: string | null
+  createdAt: string
+  expiresAt: string
+}
+
+export interface MediaUploadPartRow {
+  uploadId: string
+  idx: number
+  size: number
+  sha256: string
+}
+
 export interface VersionMediaRow {
   jobId: string
   versionN: number

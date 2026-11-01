@@ -306,6 +306,43 @@ export const media = pgTable(
   (t) => [index('media_created_idx').on(t.createdAt), index('media_uploader_idx').on(t.uploaderId)],
 )
 
+// Upload sessions for files over 4 MB (plan v2 §14 rule 24): bound to the uploader, expiring, with the whole file's
+// size and hash declared up front and quota reserved at creation. Parts are immutable once received.
+export const mediaUploads = pgTable(
+  'media_uploads',
+  {
+    id: text('id').primaryKey(),
+    uploaderId: text('uploader_id').notNull(),
+    filename: text('filename').notNull(),
+    caption: text('caption'),
+    size: bigint('size', { mode: 'number' }).notNull(),
+    sha256: text('sha256').notNull(),
+    partSize: integer('part_size').notNull(),
+    partCount: integer('part_count').notNull(),
+    status: text('status').notNull(),
+    mediaId: text('media_id'),
+    error: text('error'),
+    leaseUntil: ts('lease_until'),
+    createdAt: ts('created_at').notNull(),
+    expiresAt: ts('expires_at').notNull(),
+  },
+  (t) => [
+    index('media_uploads_uploader_idx').on(t.uploaderId, t.status),
+    index('media_uploads_expires_idx').on(t.expiresAt),
+  ],
+)
+
+export const mediaUploadParts = pgTable(
+  'media_upload_parts',
+  {
+    uploadId: text('upload_id').notNull(),
+    idx: integer('idx').notNull(),
+    size: integer('size').notNull(),
+    sha256: text('sha256').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.uploadId, t.idx] })],
+)
+
 // Media a version was made with, snapshotted when it was queued (plan v2 §9): the run downloads exactly these
 // bytes, even if the item is later soft-deleted. Revisions and edits inherit their parent's.
 export const versionMedia = pgTable(

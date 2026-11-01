@@ -30,6 +30,7 @@ import * as hooks from './domain/webhook-settings.js'
 import { listNotifications, markNotificationsRead } from './domain/notifications.js'
 import { getProgress } from './domain/progress.js'
 import { previewLink } from './domain/preview.js'
+import { completeUpload, createUpload, getUpload, putPart } from './domain/media-uploads.js'
 import {
   deleteMedia,
   getMedia,
@@ -978,6 +979,116 @@ export function createApp(deps: Deps, opts: AppOptions) {
       responses: { 200: json(s.MediaListSchema, 'Media'), ...errors },
     }),
     async (c) => c.json(await listMedia(deps, c.get('principal'), c.req.valid('query')), 200),
+  )
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/v1/media/uploads',
+      summary:
+        'Start an upload session for a file over 4 MB (declare its size and sha256; quota is reserved)',
+      tags: ['media'],
+      security,
+      request: {
+        body: {
+          content: {
+            'application/json': {
+              schema: z.object({
+                filename: z.string().min(1).max(200),
+                size: z.number().int().positive(),
+                sha256: z.string().regex(/^[0-9a-f]{64}$/),
+                caption: z.string().max(500).optional(),
+              }),
+            },
+          },
+          required: true,
+        },
+      },
+      responses: {
+        201: json(s.UploadSessionSchema, 'Session'),
+        ...errors,
+        429: err('Too many uploads in progress'),
+      },
+    }),
+    async (c) => c.json(await createUpload(deps, c.get('principal'), c.req.valid('json')), 201),
+  )
+  const UploadParam = z.object({ id: z.string() })
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/v1/media/uploads/{id}',
+      summary: 'An upload session: which parts arrived (to resume) and its status',
+      tags: ['media'],
+      security,
+      request: { params: UploadParam },
+      responses: { 200: json(s.UploadSessionSchema, 'Session'), ...errors },
+    }),
+    async (c) => c.json(await getUpload(deps, c.get('principal'), c.req.valid('param').id), 200),
+  )
+  app.openapi(
+    createRoute({
+      method: 'put',
+      path: '/api/v1/media/uploads/{id}/parts/{index}',
+      summary: 'Send one part (at most 4 MB) as the request body; x-part-sha256 guards against corruption',
+      tags: ['media'],
+      security,
+      request: {
+        params: z.object({ id: z.string(), index: z.coerce.number().int().min(0) }),
+        headers: z.object({
+          'x-part-sha256': z
+            .string()
+            .regex(/^[0-9a-f]{64}$/)
+            .optional(),
+        }),
+        body: {
+          content: { 'application/octet-stream': { schema: z.string().openapi({ format: 'binary' }) } },
+          required: true,
+        },
+      },
+      responses: {
+        200: json(z.object({ idx: z.number().int(), sha256: z.string(), duplicate: z.boolean() }), 'Stored'),
+        ...errors,
+      },
+    }),
+    async (c) => {
+      const p = c.req.valid('param')
+      const bytes = new Uint8Array(await c.req.arrayBuffer())
+      return c.json(
+        await putPart(deps, c.get('principal'), p.id, p.index, bytes, c.req.valid('header')['x-part-sha256']),
+        200,
+      )
+    },
+  )
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/v1/media/uploads/{id}/complete',
+      summary:
+        'Finish the upload: the file is assembled and checked in the background (poll the session or the item)',
+      tags: ['media'],
+      security,
+      request: {
+        params: UploadParam,
+        body: {
+          content: {
+            'application/json': {
+              schema: z.object({
+                poster: z
+                  .string()
+                  .max(700_000)
+                  .optional()
+                  .openapi({ description: 'Base64 JPEG poster for a clip' }),
+              }),
+            },
+          },
+          required: false,
+        },
+      },
+      responses: { 202: json(s.UploadSessionSchema, 'Assembling'), ...errors },
+    }),
+    async (c) => {
+      const body = (await c.req.json().catch(() => ({}))) as { poster?: string }
+      return c.json(await completeUpload(deps, c.get('principal'), c.req.valid('param').id, body), 202)
+    },
   )
   const MediaParam = z.object({ id: z.string() })
   app.openapi(

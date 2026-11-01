@@ -35,6 +35,16 @@ export function createPlatform(opts: {
       })
       if (res.status !== 202) throw new Error(`finalize dispatch returned ${res.status}`)
     },
+    async dispatchMediaAssembly(uploadId) {
+      const sig = hmacHex(await opts.signingSecret(), `assemble:${uploadId}`)
+      const res = await fetch(`${opts.siteUrl}/.netlify/functions/media-assemble-background`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-assemble-signature': sig },
+        body: JSON.stringify({ uploadId }),
+        signal: AbortSignal.timeout(8000),
+      })
+      if (res.status !== 202) throw new Error(`assembly dispatch returned ${res.status}`)
+    },
     async setupFacts() {
       const out = {
         tokenValid: null as boolean | null,

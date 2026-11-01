@@ -6,6 +6,7 @@ import { createApp } from '../src/app.js'
 import { createDrizzleStore } from '../src/store/drizzle.js'
 import { tick } from '../src/domain/reconciler.js'
 import { finalizeAttempt } from '../src/domain/finalize.js'
+import { assembleUpload } from '../src/domain/media-uploads.js'
 import { receiveCallback } from '../src/domain/callback.js'
 import type { AttemptRow } from '../src/domain/types.js'
 import { fixtureFiles, makeDeps, uploadAndManifest, type TestDeps } from './fakes.js'
@@ -69,6 +70,9 @@ export function harness(
       if (opts.autoCallback ?? true) await receiveCallback(deps, a.id, token, manifest)
     },
   })
+  deps.platform.onAssemble = async (id) => {
+    await assembleUpload(deps, id)
+  }
   if (opts.autoFinalize ?? true) {
     deps.platform.onDispatch = async (id) => {
       await finalizeAttempt(deps, id)

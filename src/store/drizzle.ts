@@ -38,6 +38,8 @@ import type {
   CheckpointRow,
   EditRow,
   MediaRow,
+  MediaUploadRow,
+  MediaUploadPartRow,
   VersionMediaRow,
   GatewayCallRow,
   WebhookDeliveryRow,
@@ -427,6 +429,61 @@ function repoFor(db: Db): Repo {
         )
         .orderBy(desc(m.createdAt), desc(m.id))
         .limit(q.limit)) as MediaRow[]
+    },
+    insertUpload: async (row) => {
+      await db.insert(t.mediaUploads).values(row)
+    },
+    getUpload: async (id, opts) => {
+      const q = db.select().from(t.mediaUploads).where(eq(t.mediaUploads.id, id))
+      return one<MediaUploadRow>(opts?.lock ? await q.for('update') : await q)
+    },
+    updateUpload: async (id, patch) => {
+      await db.update(t.mediaUploads).set(patch).where(eq(t.mediaUploads.id, id))
+    },
+    deleteUpload: async (id) => {
+      await db.delete(t.mediaUploads).where(eq(t.mediaUploads.id, id))
+    },
+    reservedUploadBytes: async (uploaderId) => {
+      const u = t.mediaUploads
+      const rows = await db
+        // bigint sums come back as strings from Postgres.
+        .select({ total: sql<string | number>`coalesce(sum(${u.size}), 0)::bigint` })
+        .from(u)
+        .where(and(eq(u.uploaderId, uploaderId), inArray(u.status, ['open', 'assembling'])))
+      return Number(rows[0]?.total ?? 0)
+    },
+    listStaleUploads: async (now, limit) => {
+      const u = t.mediaUploads
+      return (await db
+        .select()
+        .from(u)
+        .where(
+          or(
+            and(eq(u.status, 'open'), lt(u.expiresAt, now)),
+            and(eq(u.status, 'assembling'), lt(u.leaseUntil, now)),
+            and(inArray(u.status, ['done', 'failed']), lt(u.expiresAt, now)),
+          ),
+        )
+        .limit(limit)) as MediaUploadRow[]
+    },
+    getUploadPart: async (uploadId, idx) =>
+      one<MediaUploadPartRow>(
+        await db
+          .select()
+          .from(t.mediaUploadParts)
+          .where(and(eq(t.mediaUploadParts.uploadId, uploadId), eq(t.mediaUploadParts.idx, idx))),
+      ),
+    insertUploadPart: async (row) => {
+      await db.insert(t.mediaUploadParts).values(row).onConflictDoNothing()
+    },
+    listUploadParts: async (uploadId) =>
+      (await db
+        .select()
+        .from(t.mediaUploadParts)
+        .where(eq(t.mediaUploadParts.uploadId, uploadId))
+        .orderBy(asc(t.mediaUploadParts.idx))),
+    deleteUploadParts: async (uploadId) => {
+      await db.delete(t.mediaUploadParts).where(eq(t.mediaUploadParts.uploadId, uploadId))
     },
     insertVersionMedia: async (rows) => {
       if (rows.length) await db.insert(t.versionMedia).values(rows)

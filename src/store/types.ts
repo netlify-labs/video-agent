@@ -24,6 +24,8 @@ import type {
   CheckpointRow,
   EditRow,
   MediaRow,
+  MediaUploadRow,
+  MediaUploadPartRow,
   VersionMediaRow,
   GatewayCallRow,
   WebhookDeliveryRow,
@@ -127,6 +129,17 @@ export interface Repo {
     before?: { createdAt: string; id: string } | undefined
     limit: number
   }): Promise<MediaRow[]>
+  insertUpload(row: MediaUploadRow): Promise<void>
+  getUpload(id: string, opts?: { lock?: boolean }): Promise<MediaUploadRow | null>
+  updateUpload(id: string, patch: Partial<MediaUploadRow>): Promise<void>
+  deleteUpload(id: string): Promise<void>
+  /** Bytes reserved by the person's open and assembling sessions. */
+  reservedUploadBytes(uploaderId: string): Promise<number>
+  listStaleUploads(now: string, limit: number): Promise<MediaUploadRow[]>
+  getUploadPart(uploadId: string, idx: number): Promise<MediaUploadPartRow | null>
+  insertUploadPart(row: MediaUploadPartRow): Promise<void>
+  listUploadParts(uploadId: string): Promise<MediaUploadPartRow[]>
+  deleteUploadParts(uploadId: string): Promise<void>
   insertVersionMedia(rows: VersionMediaRow[]): Promise<void>
   listVersionMedia(jobId: string, versionN: number): Promise<VersionMediaRow[]>
   /** Per media id, the distinct videos (job ids) whose versions use it. */
