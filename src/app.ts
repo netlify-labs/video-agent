@@ -30,7 +30,7 @@ import * as hooks from './domain/webhook-settings.js'
 import { listNotifications, markNotificationsRead } from './domain/notifications.js'
 import { getProgress } from './domain/progress.js'
 import { previewLink } from './domain/preview.js'
-import { completeUpload, createUpload, getUpload, putPart } from './domain/media-uploads.js'
+import { cancelUpload, completeUpload, createUpload, getUpload, putPart } from './domain/media-uploads.js'
 import {
   deleteMedia,
   getMedia,
@@ -1088,6 +1088,21 @@ export function createApp(deps: Deps, opts: AppOptions) {
     async (c) => {
       const body = (await c.req.json().catch(() => ({}))) as { poster?: string }
       return c.json(await completeUpload(deps, c.get('principal'), c.req.valid('param').id, body), 202)
+    },
+  )
+  app.openapi(
+    createRoute({
+      method: 'delete',
+      path: '/api/v1/media/uploads/{id}',
+      summary: 'Cancel an unfinished upload session (frees its parts and quota)',
+      tags: ['media'],
+      security,
+      request: { params: UploadParam },
+      responses: { 204: { description: 'Cancelled' }, ...errors },
+    }),
+    async (c) => {
+      await cancelUpload(deps, c.get('principal'), c.req.valid('param').id)
+      return c.body(null, 204)
     },
   )
   const MediaParam = z.object({ id: z.string() })

@@ -270,6 +270,15 @@ async function dropParts(deps: Deps, u: MediaUploadRow) {
   await deps.store.deleteUploadParts(u.id)
 }
 
+/** Cancels an unfinished upload: its parts and quota are freed at once. */
+export async function cancelUpload(deps: Deps, p: Principal, id: string) {
+  const u = await loadUpload(deps, p, id)
+  if (u.status === 'assembling')
+    throw new ApiError('conflict', "This upload is being checked; it can't be cancelled now.")
+  await dropParts(deps, u)
+  await deps.store.deleteUpload(id)
+}
+
 /** Sweep: abandoned sessions free their parts and quota; a stuck assembly is dispatched again. */
 export async function sweepUploads(deps: Deps, limit = 20) {
   const now = deps.clock.now()

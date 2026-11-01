@@ -189,6 +189,18 @@ describe('upload sessions', () => {
     ).toBe(400)
   })
 
+  it('cancelling frees the parts and the quota', async () => {
+    const h = harness()
+    const file = bigClip()
+    const s = await start(h, h.member, file)
+    await part(h, h.member, s.id, 0, file)
+    expect(await h.deps.store.reservedUploadBytes('u_member')).toBe(file.byteLength)
+    expect((await h.call('DELETE', `/api/v1/media/uploads/${s.id}`, { as: h.member })).status).toBe(204)
+    expect(await h.deps.store.reservedUploadBytes('u_member')).toBe(0)
+    expect(await partsInStore(h.deps, s.id)).toEqual([])
+    expect((await h.call('GET', `/api/v1/media/uploads/${s.id}`, { as: h.member })).status).toBe(404)
+  })
+
   it('the sweep removes abandoned sessions and re-dispatches stuck assemblies', async () => {
     const h = harness()
     const file = bigClip()
