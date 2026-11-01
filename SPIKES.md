@@ -215,3 +215,49 @@ video at 30 fps takes about 3 minutes plus encoding, which is no faster than a r
 runner's checks (`hyperframes check`, contrast, render validation) wouldn't run either. A browser render could
 serve a quick, unofficial "download draft" for clip-free compositions. It shouldn't replace the runner render. We
 are not building it.
+
+### S9: voice providers (2026-11-01, one Agent Runner run and four draft deploys, since deleted)
+
+**Runner (run `6ae78a43e2327820c2eebd42`, session `6ae78a43e2327820c2eebd44`, 100 s, 16.1 credits, nothing changed):**
+
+| Check                                          | Result                                                                                       |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Image                                          | Ubuntu 24.04.5, x86_64, 4 CPUs, 15.6 GB RAM, 45 GB free in `~`                               |
+| Python / pip                                   | Python 3.14.3, pip 26.0.1 (mise); `git`, `cmake`, `gcc`, `make` present; no `uv`, no `espeak-ng` |
+| `pip3 install --user kokoro-onnx soundfile`    | **7.2 s** (kokoro-onnx 0.4.7, onnxruntime 1.31.1); no externally-managed-environment error   |
+| First `npx hyperframes tts` (model download)   | **8.1 s** for 4.2 s of speech (af_heart); `~/.cache/hyperframes` grows to 599 MB             |
+| Second `tts`, model cached                     | **2.3 s** for 2.4 s of speech (about real time on 4 CPUs)                                    |
+| Output                                         | WAV, ~48 KB per second of speech; ffprobe length matches the `--json` `durationSeconds`      |
+| `npx hyperframes transcribe --model tiny.en`   | **Fails at once**: `whisper_unavailable` (suggests `hyperframes models install parakeet`)    |
+
+So Kokoro costs about 15 s the first time in a run (install + model) and about real time per line after that, only
+in runs that use a voice. Word timings don't come from the runner: Kokoro returns none and `transcribe` has no engine
+there (Parakeet's install time is unmeasured; whisper.cpp would be built from source).
+
+**AI Gateway (draft deploys `6ae78a61…`, `6ae78a7e…`, `6ae78aa1…`, `6ae78ae6…` of this project, deleted after):**
+draft deploys do get the Gateway variables (`OPENAI_*`, `ANTHROPIC_*`, `GEMINI_API_KEY`, `GOOGLE_GEMINI_BASE_URL`,
+`TYPESAFE_*`, `NETLIFY_AI_GATEWAY_*`, all pointing at `/.netlify/ai`).
+
+| Call through `/.netlify/ai`                                                   | Result                                                                  |
+| ----------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `POST /chat/completions` (gpt-4o-mini, control)                               | 200 in 0.5 s                                                            |
+| `POST /audio/speech` (gpt-4o-mini-tts, tts-1), also under `/v1` and `/openai` | **404** (HTML page)                                                     |
+| `POST /audio/transcriptions` (whisper-1, gpt-4o(-mini)-transcribe), multipart | **400** "Invalid Content-Type header value, must contain application/json" |
+| Chat completions with audio output (gpt-4o-mini-audio-preview)                | **400** "not a valid model ID"                                          |
+| Gemini TTS (gemini-2.5-flash-preview-tts, gemini-3.8-flash-tts)               | **400** "unable to find suitable provider" (`unknown_model`)            |
+
+The Gateway has no speech or transcription path today, so server-side TTS through it isn't possible.
+
+**Decision:**
+
+- **Generate the voice in the run**, with `scripts/voice.ts` behind a `VoiceProvider` interface: **Kokoro** (`npx
+  hyperframes tts`, free, installed on demand only when a video has a voice-over) by default; **ElevenLabs** when the
+  deployer sets `ELEVENLABS_API_KEY` (site variables reach runs), using its with-timestamps endpoint for exact word
+  times. Gateway OpenAI TTS is out until the Gateway proxies `/audio/speech` (re-check then; the interface takes it
+  as a third provider). A direct OpenAI key isn't offered: `OPENAI_API_KEY` is the Gateway's own variable.
+- **Timings without transcription:** the script speaks each caption phrase as its own clip and joins a beat's phrases
+  with measured pauses, so every caption cue starts and ends exactly where its audio does (sample-accurate). Word
+  times inside a phrase come from the provider when it has them (ElevenLabs) and are otherwise spread by letters
+  (marked `estimated`), good enough for a highlight, never used for cue boundaries.
+- Voice files are files the agent made (`video/assets/voice/`), so the source archive and frozen edit bundles keep
+  them like any composition file; a revision reuses each beat's audio while its line, voice and speed are unchanged.
