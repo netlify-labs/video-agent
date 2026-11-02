@@ -17,6 +17,10 @@ test('library shows videos, progress and the badge', async ({ page }) => {
   await expect(page.getByText('Making v1')).toBeVisible()
   await expect(page.getByText('Org webhooks launch')).toBeVisible()
   await expect(page.getByRole('link', { name: 'Powered by Netlify Agent Runners' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Powered by Netlify Agent Runners' })).toHaveAttribute(
+    'href',
+    '/how-we-built-it/',
+  )
 })
 
 test('library tiles: small AVIF/WebP posters, and the hover clip is fetched only on hover', async ({

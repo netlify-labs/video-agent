@@ -95,13 +95,15 @@ export function Mark({ size = 22 }: { size?: number }) {
   )
 }
 
+/** The corner badge: opens the story of how this app was built on Agent Runners (static/how-we-built-it). */
 export function PoweredBy() {
   return (
     <a
       className="va-powered"
-      href="https://docs.netlify.com/build/build-with-ai/agent-runners/overview/"
+      href="/how-we-built-it/"
       target="_blank"
       rel="noreferrer"
+      title="How we built Video Agent"
     >
       <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden>
         <path d="M12 2 2 12l10 10 10-10z" fill="var(--va-accent)" />
