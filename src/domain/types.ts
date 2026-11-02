@@ -323,6 +323,12 @@ export interface AttemptRow {
 /** Where a pre-run music pick is: searching Openverse, importing the chosen track, done (picked) or given up. */
 export type MusicPickStatus = 'searching' | 'importing' | 'picked' | 'skipped'
 
+/** One search a music pick tried: failed (Openverse errored), empty (nothing importable), or the one it chose from. */
+export interface MusicPickTry {
+  query: string
+  outcome: 'searching' | 'failed' | 'empty' | 'chosen' | 'import_failed'
+}
+
 export interface MusicPick {
   status: MusicPickStatus
   startedAt: string
@@ -332,6 +338,10 @@ export interface MusicPick {
   querySource: 'gateway' | 'heuristic' | null
   /** True once the fallback query is the one being searched. */
   usedFallback: boolean
+  /** Each search tried so far, in order, and how it went (bounded; absent on picks from before it existed). */
+  tried?: MusicPickTry[]
+  /** Where the track came from: an Openverse search, or the team's library when Openverse found none in time. */
+  source?: 'openverse' | 'library' | null
   searchJobId: string | null
   importJobId: string | null
   openverseId: string | null

@@ -5767,6 +5767,20 @@ export interface components {
             mediaId: string | null;
             /** @description Why the pick was skipped */
             reason: string | null;
+            /**
+             * @description Where the picked track came from: an Openverse search, or the team's library when Openverse found none in time. Null until picked
+             * @enum {string|null}
+             */
+            source: "openverse" | "library" | null;
+            /** @description The Openverse searches tried so far, in order (at most 7) */
+            tried: {
+                query: string;
+                /**
+                 * @description searching: in progress. failed: Openverse didn't answer. empty: nothing importable. chosen: a track was chosen from it. import_failed: that track couldn't be imported
+                 * @enum {string}
+                 */
+                outcome: "searching" | "failed" | "empty" | "chosen" | "import_failed";
+            }[];
         } | null;
         Usage: {
             totalCreditsCost?: number;

@@ -128,6 +128,13 @@ test('the track the server picked shows in the progress card and the details', a
   await expect(page.getByText('Bright Horizons (picked from Openverse)')).toBeVisible()
 })
 
+test('a track from the library (Openverse found none in time) says so', async ({ page }) => {
+  await mock(page, 'mockMusic', 'library')
+  await page.goto('/videos/vid_making')
+  await expect(page.getByTestId('picked-music')).toHaveText('Music: Quiet Lake (from your library)')
+  await expect(page.getByText('Quiet Lake (from your library)', { exact: true })).toBeVisible()
+})
+
 test('a failed video explains why and offers Try again', async ({ page }) => {
   await page.goto('/videos/vid_failed')
   await expect(page.getByText(/stopped to ask a question/).first()).toBeVisible()

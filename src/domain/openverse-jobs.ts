@@ -288,7 +288,17 @@ export async function runOpenverseJob(deps: Deps, id: string): Promise<'skipped'
       apiKeyId: null,
     }
     assertCan(p, 'media:upload')
-    const opts: CallOpts = { ...openverseTiming.job, deadline: AbortSignal.timeout(JOB_DEADLINE_MS) }
+    // A music pick asks for fewer retries (it moves on to other words instead); never more than the default.
+    const asked = job.params.retries
+    const retries =
+      typeof asked === 'number' && asked >= 0
+        ? Math.min(Math.trunc(asked), openverseTiming.job.retries)
+        : openverseTiming.job.retries
+    const opts: CallOpts = {
+      ...openverseTiming.job,
+      retries,
+      deadline: AbortSignal.timeout(JOB_DEADLINE_MS),
+    }
     let result: SearchPage | ImportResult
     if (job.kind === 'search') {
       result = await fetchSearch(deps, searchRequest(job.params as unknown as SearchQuery), opts)

@@ -168,9 +168,31 @@ Openverse API.
   `finding_music`) while background Openverse jobs search with a short query (from the AI Gateway's fast model when
   it's available, else mood words in the request) and import the best CC0 or CC BY track, long enough for the video
   if possible. It joins the version's media like a picked track, owned by the version's author, so it's credited the
-  same way. If that fails or takes over 5 minutes, the run starts anyway and finds music itself (below). Revisions
-  inherit the track; a version can be cancelled while it's finding music.
-- **In runs.** When the server's pick found nothing (or the version predates it), the agent finds a track itself with
+  same way. A search that fails or finds nothing importable moves on to the next words, one at a time: the query,
+  its fallback, then broad searches ("upbeat electronic", "ambient", "corporate", "acoustic", "cinematic") ordered to
+  suit the request's mood; each is listed in the pick's `tried`. These searches don't retry, since a query Openverse
+  times out on usually keeps timing out. When no Openverse track is chosen within 5 minutes, every search is spent or
+  three fail in a row, the server uses the best audio already in the team library instead (ready items only, the
+  ones everyone in the team sees): Openverse imports first, since they're licensed and credited, then titles and
+  captions that match the mood, then tracks long enough for the video, then the most recently used or added. The pick
+  shows `source: "library"` and the video page "Music: _title_ (from your library)". Only an empty library (no audio
+  at all) starts the run without a track, and it finds music itself (below). Revisions inherit the track; a version
+  can be cancelled while it's finding music.
+- **Starter music.** To give that fallback something to use, seed the library with CC0 tracks across moods
+  (upbeat, ambient, corporate, cinematic, acoustic, playful, inspiring, lofi). It's optional and not part of
+  `npm run setup`:
+
+  ```sh
+  VIDEO_AGENT_KEY=<a Creator's or admin's API key> npm run seed:music -- --site <your project or its https URL> [--count 12]
+  ```
+
+  It goes through the site's own Openverse endpoints like Find music: searches each mood for CC0 tracks of 30 seconds
+  to 4 minutes the library can take, imports them with captions naming the mood (which the fallback matches), follows
+  `202` jobs, waits out 429s and slow answers with backoff, skips tracks already in the library, and prints what it
+  imported (title, creator, licence, length). CC0 only, so seeded tracks never need a credit. A project id or name is
+  looked up with your Netlify login; an https URL is used as is.
+
+- **In runs.** When the server's pick found nothing, not even in the library (or the version predates it), the agent finds a track itself with
   `scripts/openverse.ts` (same licence rules, files over HTTPS up to 10 MB so they fit the preview bundle, CC0 first).
   The script records each file's licence in the composition's `assets/music/credits.json`; finalize reads it from the
   saved composition, keeps only valid CC0/CC BY entries for files an `<audio>` plays, and stores them on the version,

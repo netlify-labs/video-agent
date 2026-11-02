@@ -57,10 +57,25 @@ const MusicPickSchema = z
     title: z.string().nullable().openapi({ description: "The chosen track's title, once one is chosen" }),
     mediaId: z.string().nullable().openapi({ description: 'The library item the track became, once picked' }),
     reason: z.string().nullable().openapi({ description: 'Why the pick was skipped' }),
+    source: z.enum(['openverse', 'library']).nullable().openapi({
+      description:
+        "Where the picked track came from: an Openverse search, or the team's library when Openverse found none in time. Null until picked",
+    }),
+    tried: z
+      .array(
+        z.object({
+          query: z.string(),
+          outcome: z.enum(['searching', 'failed', 'empty', 'chosen', 'import_failed']).openapi({
+            description:
+              "searching: in progress. failed: Openverse didn't answer. empty: nothing importable. chosen: a track was chosen from it. import_failed: that track couldn't be imported",
+          }),
+        }),
+      )
+      .openapi({ description: 'The Openverse searches tried so far, in order (at most 7)' }),
   })
   .openapi('MusicPick', {
     description:
-      'Music the server picked on Openverse before the run, because the version asked for music and had no track.',
+      "Music the server picked before the run, because the version asked for music and had no track: from Openverse, or from the team's library when Openverse found none in time.",
   })
 export const StageSchema = z
   .enum([

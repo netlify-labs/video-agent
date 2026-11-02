@@ -19,6 +19,7 @@
     "build:ui": "vite build ui",
     "setup": "tsx scripts/setup.ts",
     "setup:openverse": "tsx scripts/setup-openverse.ts",
+    "seed:music": "tsx scripts/seed-music.ts",
     "postinstall": "netlify-agent-kit install --strict",
     "openapi:check": "tsx scripts/gen-openapi.ts --check && npx -y openapi-typescript@7.13.0 openapi.json --check -o ui/src/api/schema.d.ts",
     "test:ui": "playwright test"

@@ -887,6 +887,45 @@
               "null"
             ],
             "description": "Why the pick was skipped"
+          },
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "openverse",
+              "library",
+              null
+            ],
+            "description": "Where the picked track came from: an Openverse search, or the team's library when Openverse found none in time. Null until picked"
+          },
+          "tried": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "query": {
+                  "type": "string"
+                },
+                "outcome": {
+                  "type": "string",
+                  "enum": [
+                    "searching",
+                    "failed",
+                    "empty",
+                    "chosen",
+                    "import_failed"
+                  ],
+                  "description": "searching: in progress. failed: Openverse didn't answer. empty: nothing importable. chosen: a track was chosen from it. import_failed: that track couldn't be imported"
+                }
+              },
+              "required": [
+                "query",
+                "outcome"
+              ]
+            },
+            "description": "The Openverse searches tried so far, in order (at most 7)"
           }
         },
         "required": [
@@ -894,7 +933,9 @@
           "query",
           "title",
           "mediaId",
-          "reason"
+          "reason",
+          "source",
+          "tried"
         ],
         "description": "The music the server picked before the run (null when none was needed)."
       },

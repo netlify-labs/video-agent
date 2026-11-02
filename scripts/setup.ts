@@ -151,6 +151,10 @@ Last step: connect this project to your GitHub copy of the template.
       ? `\nReady: ${site.ssl_url}`
       : `\nAlmost there. Fix the items above, then open ${site.ssl_url}/setup.`,
   )
+  // Optional: music the pre-run pick falls back to when Openverse is slow or down.
+  log(
+    `\nOptional: seed the media library with CC0 music (with an API key from Settings → API keys):\n  VIDEO_AGENT_KEY=… npm run seed:music -- --site ${site.ssl_url}`,
+  )
 }
 
 main().catch((e: unknown) => {
