@@ -25,7 +25,7 @@
         if (m.type === 'pause') { clearInterval(timer); timer = null }
         if (m.type === 'seek') { t = m.time; post({ type: 'time', time: t }) }
         if (m.type === 'apply-edits') {
-          for (const ed of m.edits) { const el = document.getElementById(ed.id); if (el) el.textContent = ed.text }
+          for (const ed of m.edits) { const el = document.querySelector('[data-va-text="' + CSS.escape(ed.id) + '"]') || document.getElementById(ed.id); if (el) el.textContent = ed.text }
           post({ type: 'edits-applied', count: m.edits.length })
         }
       })

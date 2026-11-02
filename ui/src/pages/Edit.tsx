@@ -264,6 +264,13 @@ export function EditPage() {
   }, [id, versionN])
 
   const ops = useMemo(() => (draft && cur ? diffOps(draft.base, cur) : []), [draft, cur])
+  // The preview shows text as it's typed and plays the old voice until render, so only other saved changes reload it.
+  const previewKey = useMemo(
+    () => JSON.stringify((draft?.ops ?? []).filter((o) => o.op !== 'text' && o.op !== 'voice')),
+    [draft?.ops],
+  )
+  const curRef = useRef(cur)
+  curRef.current = cur
   const dirty = !!draft && JSON.stringify(ops) !== JSON.stringify(draft.ops)
 
   const save = useCallback(async () => {
@@ -341,6 +348,9 @@ export function EditPage() {
   }, [])
   const onReady = useCallback((send: (c: PreviewCommand) => void) => {
     sendRef.current = send
+    // A frame that loaded while someone typed shows the text as saved then: bring it up to date.
+    const edits = (curRef.current?.beats ?? []).flatMap((b) => b.texts.map((t) => ({ id: t.id, text: t.text })))
+    if (edits.length) send({ type: 'apply-edits', edits })
   }, [])
 
   const render = $api.useMutation('post', '/api/v1/edits/{id}/render', {
@@ -445,7 +455,7 @@ export function EditPage() {
           videoId={id}
           versionN={draft.baseN}
           dimensions={video.data.dimensions}
-          draft={{ editId: draft.id, rev: draft.rev }}
+          draft={{ editId: draft.id, key: previewKey }}
           onClick={onPreviewClick}
           onReady={onReady}
         />

@@ -655,6 +655,45 @@ test('deleting beats stops at the last one', async ({ page }) => {
     ])
 })
 
+test('saving text keeps the preview frame; other saves swap in the new one without a blank moment', async ({
+  page,
+}) => {
+  await page.goto('/videos/vid_teaser/edit/2')
+  const frame = page.getByTestId('composition-preview')
+  await expect(page.getByRole('button', { name: 'Play preview' })).toBeEnabled()
+  // Count the frames on every change to the stage: there must always be one showing.
+  await page.evaluate(`{
+    const stage = document.querySelector('.va-preview-frame')
+    window.__minFrames = 9
+    new MutationObserver(() => {
+      window.__minFrames = Math.min(window.__minFrames, stage.querySelectorAll('iframe').length)
+    }).observe(stage, { childList: true })
+  }`)
+  const src = await frame.getAttribute('src')
+  // Text shows at once and its save doesn't reload the frame.
+  await page.getByRole('textbox', { name: 'Call to action' }).fill('Start free today')
+  await expect(page.getByTestId('edit-status')).toContainText('Draft saved')
+  await expect(
+    page.frameLocator('[data-testid="composition-preview"]').locator('[data-va-text="outro-cta"]'),
+  ).toHaveText('Start free today')
+  expect(await frame.getAttribute('src')).toBe(src)
+  // Move the playhead, then retime: a new frame replaces the old at the same moment, with the typed text.
+  const clock = page.getByText(/^\d+:\d\d \/ \d+:\d\d$/)
+  const seconds = async () => Number((await clock.textContent())?.split(' / ')[0]?.split(':')[1])
+  await page.getByRole('button', { name: 'Play preview' }).click()
+  await expect.poll(seconds).toBeGreaterThanOrEqual(1)
+  await page.getByRole('button', { name: 'Pause preview' }).click()
+  const at = await seconds()
+  await page.getByRole('textbox', { name: 'Length of Opening' }).fill('4.5')
+  await expect.poll(() => frame.getAttribute('src')).not.toBe(src)
+  await expect(page.getByTestId('composition-preview-next')).toHaveCount(0)
+  await expect(
+    page.frameLocator('[data-testid="composition-preview"]').locator('[data-va-text="outro-cta"]'),
+  ).toHaveText('Start free today')
+  expect(await seconds()).toBeGreaterThanOrEqual(at)
+  expect(await page.evaluate<number>('window.__minFrames')).toBeGreaterThan(0)
+})
+
 test('clicking text in the preview focuses its field', async ({ page }) => {
   await page.goto('/videos/vid_teaser/edit/2')
   const frame = page.frameLocator('[data-testid="composition-preview"]')
@@ -1498,7 +1537,8 @@ test('a playing preview has a timeline to click, drag or step through', async ({
   await page.locator('audio').evaluate((a) => {
     ;(a as unknown as { loop: boolean }).loop = true
   })
-  const position = () => page.locator('audio').evaluate((a) => (a as unknown as { currentTime: number }).currentTime)
+  const position = () =>
+    page.locator('audio').evaluate((a) => (a as unknown as { currentTime: number }).currentTime)
   // Clicking near the end of the bar jumps there.
   const bar = timeline.locator('.mantine-Slider-root')
   const box = await bar.boundingBox()
