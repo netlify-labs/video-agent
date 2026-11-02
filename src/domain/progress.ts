@@ -8,6 +8,7 @@ import { assertCan, type Principal } from './policy.js'
 import { getSettings } from './settings.js'
 import type { AttemptRow, Stage } from './types.js'
 import { loadJob } from './videos.js'
+import { musicPickDto } from './music-pick.js'
 
 export const SNAPSHOT_EVERY_MS = 5_000
 /** One instance fetches while the others keep serving the cache. */
@@ -21,6 +22,8 @@ export interface Progress {
   step: string | null
   steps: number | null
   credits: number | null
+  /** The music the server is picking before the run (src/domain/music-pick.ts). */
+  music: ReturnType<typeof musicPickDto>
   /** When the runner was last read for this value (null when it comes from stored rows). */
   observedAt: string | null
   stale: boolean
@@ -52,6 +55,7 @@ function fromRow(a: AttemptRow, stale: boolean): Progress {
     step: a.latestStep,
     steps: a.usage?.stepsCount ?? null,
     credits: a.usage?.totalCreditsCost ?? null,
+    music: musicPickDto(a.musicPick),
     observedAt: null,
     stale,
     checkpoint: null,
@@ -66,6 +70,7 @@ function fromCache(a: AttemptRow, c: CacheEntry, stale: boolean): Progress {
     step: c.step ?? a.latestStep,
     steps: c.steps ?? a.usage?.stepsCount ?? null,
     credits: c.credits ?? a.usage?.totalCreditsCost ?? null,
+    music: musicPickDto(a.musicPick),
     observedAt: new Date(c.observedAt).toISOString(),
     stale,
     checkpoint: null,
@@ -114,6 +119,7 @@ async function snapshotProgress(deps: Deps, p: Principal, jobId: string): Promis
       step: null,
       steps: null,
       credits: null,
+      music: null,
       observedAt: null,
       stale: false,
       checkpoint: null,

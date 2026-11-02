@@ -6,6 +6,7 @@ import { PUBLIC_URL_TTL_SEC, accessKey, fileTtl, signFile, stableExp, writeAcces
 import { getSettings } from './settings.js'
 import { emitEvent } from './webhooks.js'
 import { snapshotMedia } from './media.js'
+import { musicPickDto } from './music-pick.js'
 import { versionCredits, type Credit } from './credits.js'
 import { creditHtml } from '../lib/credit-html.js'
 import { notifyOwner } from './notifications.js'
@@ -489,7 +490,7 @@ export async function cancelVersion(deps: Deps, principal: Principal, jobId: str
   })
 }
 
-/** Queued: cancel now. Running: persist intent; the sweep stops the session. */
+/** Queued or finding music (no run yet): cancel now. Running: persist intent; the sweep stops the session. */
 export async function requestCancel(
   repo: Repo,
   deps: Pick<Deps, 'clock'>,
@@ -497,12 +498,12 @@ export async function requestCancel(
   reason: 'user' | 'needs_input' | 'deadline',
 ) {
   const now = deps.clock.now().toISOString()
-  if (attempt.stage === 'queued') {
+  if (attempt.stage === 'queued' || attempt.stage === 'finding_music') {
     await setStage(
       repo,
       attempt,
       'cancelled',
-      { endedAt: now, cancelRequestedAt: now, cancelReason: reason, nextActionAt: null },
+      { endedAt: now, cancelRequestedAt: now, cancelReason: reason, nextActionAt: null, leaseUntil: null },
       now,
     )
     return
@@ -735,6 +736,7 @@ function versionDto(
     attempts: attemptsCount,
     stage: a?.stage ?? null,
     latestStep: a?.latestStep ?? null,
+    music: musicPickDto(a?.musicPick),
     error: a?.errorCategory ? { category: a.errorCategory, message: a.errorMessage ?? '' } : null,
     agent: a
       ? {

@@ -8,6 +8,7 @@ import { tick } from '../src/domain/reconciler.js'
 import { finalizeAttempt } from '../src/domain/finalize.js'
 import { assembleUpload } from '../src/domain/media-uploads.js'
 import { receiveCallback } from '../src/domain/callback.js'
+import { runOpenverseJob } from '../src/domain/openverse-jobs.js'
 import type { AttemptRow, Role } from '../src/domain/types.js'
 import { fixtureFiles, makeDeps, uploadAndManifest, type TestDeps } from './fakes.js'
 
@@ -85,6 +86,12 @@ export function harness(
   })
   deps.platform.onAssemble = async (id) => {
     await assembleUpload(deps, id)
+  }
+  // The Openverse jobs a run's music pick queues run right away (against deps.outbound, 404 unless a test scripts it),
+  // like a background function that finishes before the next look. Jobs people start stay queued for tests to run.
+  deps.platform.onOpenverseJob = async (id) => {
+    if (typeof (await deps.store.getOpenverseJob(id))?.params.attemptId === 'string')
+      await runOpenverseJob(deps, id)
   }
   if (opts.autoFinalize ?? true) {
     deps.platform.onDispatch = async (id) => {

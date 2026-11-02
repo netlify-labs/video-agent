@@ -8,6 +8,7 @@ import contractSummary from '../../../test/fixtures/contract1/summary.json'
 import voiceHtml from '../../../test/fixtures/contract1-voice/index.html?raw'
 import voiceSummary from '../../../test/fixtures/contract1-voice/summary.json'
 import voiceFile from '../../../test/fixtures/contract1-voice/assets/voice/voice.json'
+import type { Video } from '../api/client'
 import { people, stats, videos } from './data'
 import { mockFile } from './files'
 
@@ -125,9 +126,41 @@ const commentDto = (c: MockComment) => {
     can: { edit: mine && me.role !== 'viewer', delete: mine || moderate, resolve: moderate },
   }
 }
-const withComments = <T extends { id: string; comments: { count: number; unread: number } }>(v: T): T => {
+/** localStorage.mockMusic=searching|picked: the in-progress video is finding music before its run, or has found it. */
+function mockMusic(): 'searching' | 'picked' | null {
+  try {
+    const m = localStorage.getItem('mockMusic')
+    return m === 'searching' || m === 'picked' ? m : null
+  } catch {
+    return null
+  }
+}
+const withMusic = <T extends { id: string; versions: Video['versions'] }>(v: T): T => {
+  const m = mockMusic()
+  const latest = v.versions[0]
+  if (!m || v.id !== 'vid_making' || latest?.status !== 'running') return v
+  const music = {
+    status: m,
+    query: 'upbeat electronic',
+    title: m === 'picked' ? 'Bright Horizons' : null,
+    mediaId: m === 'picked' ? 'med_music_auto' : null,
+    reason: null,
+  }
+  return {
+    ...v,
+    versions: [
+      { ...latest, sound: 'music', stage: 'finding_music', latestStep: null, music },
+      ...v.versions.slice(1),
+    ],
+  }
+}
+const withComments = <
+  T extends { id: string; versions: Video['versions']; comments: { count: number; unread: number } },
+>(
+  v: T,
+): T => {
   const mine = comments.filter((c) => c.videoId === v.id)
-  return { ...v, comments: { count: mine.length, unread: mine.filter((c) => c.unread).length } }
+  return withMusic({ ...v, comments: { count: mine.length, unread: mine.filter((c) => c.unread).length } })
 }
 const readBody = async (init?: RequestInit, input?: RequestInfo | URL) => {
   try {
@@ -314,7 +347,8 @@ export function installMock() {
     if (pg?.[1]) {
       const w = window as unknown as { __progressCalls?: number }
       w.__progressCalls = (w.__progressCalls ?? 0) + 1
-      const vid = videos.find((x) => x.id === pg[1])
+      const found = videos.find((x) => x.id === pg[1])
+      const vid = found && withMusic(found)
       const latest = vid?.versions[0]
       const steps = [
         'Reading context/',
@@ -336,7 +370,8 @@ export function installMock() {
         attemptId: latest ? `att_${vid.id}_${latest.n}` : null,
         versionN: latest?.n ?? null,
         stage: latest?.stage ?? null,
-        step: steps[(w.__progressCalls - 1) % steps.length],
+        music: latest?.music ?? null,
+        step: latest?.stage === 'finding_music' ? null : steps[(w.__progressCalls - 1) % steps.length],
         steps: 10 + w.__progressCalls,
         credits: 30 + w.__progressCalls * 2,
         observedAt: new Date(Date.now() - (stale ? 90_000 : 2000)).toISOString(),

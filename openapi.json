@@ -452,6 +452,9 @@
               "null"
             ]
           },
+          "music": {
+            "$ref": "#/components/schemas/MusicPick"
+          },
           "error": {
             "type": [
               "object",
@@ -713,6 +716,7 @@
           "attempts",
           "stage",
           "latestStep",
+          "music",
           "error",
           "agent",
           "usage",
@@ -828,6 +832,7 @@
         ],
         "enum": [
           "queued",
+          "finding_music",
           "starting",
           "running",
           "cancelling",
@@ -839,6 +844,59 @@
           "timed_out",
           null
         ]
+      },
+      "MusicPick": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "searching",
+              "importing",
+              "picked",
+              "skipped"
+            ]
+          },
+          "query": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The Openverse search words"
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The chosen track's title, once one is chosen"
+          },
+          "mediaId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The library item the track became, once picked"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why the pick was skipped"
+          }
+        },
+        "required": [
+          "status",
+          "query",
+          "title",
+          "mediaId",
+          "reason"
+        ],
+        "description": "The music the server picked before the run (null when none was needed)."
       },
       "Usage": {
         "type": [
@@ -2124,6 +2182,16 @@
             ],
             "description": "The agent's latest step, in its own words"
           },
+          "music": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MusicPick"
+              },
+              {
+                "description": "The music the server is picking (or picked) before the run; null when none was needed."
+              }
+            ]
+          },
           "steps": {
             "type": [
               "integer",
@@ -2192,6 +2260,7 @@
           "versionN",
           "stage",
           "step",
+          "music",
           "steps",
           "credits",
           "observedAt",

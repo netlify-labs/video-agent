@@ -5675,6 +5675,7 @@ export interface components {
             attempts: number;
             stage: components["schemas"]["Stage"];
             latestStep: string | null;
+            music: components["schemas"]["MusicPick"];
             error: {
                 category: string;
                 message: string;
@@ -5753,7 +5754,20 @@ export interface components {
          */
         Sound: "silent" | "music" | "music_sfx";
         /** @enum {string|null} */
-        Stage: "queued" | "starting" | "running" | "cancelling" | "unresolved" | "finishing" | "ready" | "failed" | "cancelled" | "timed_out" | null;
+        Stage: "queued" | "finding_music" | "starting" | "running" | "cancelling" | "unresolved" | "finishing" | "ready" | "failed" | "cancelled" | "timed_out" | null;
+        /** @description The music the server picked before the run (null when none was needed). */
+        MusicPick: {
+            /** @enum {string} */
+            status: "searching" | "importing" | "picked" | "skipped";
+            /** @description The Openverse search words */
+            query: string | null;
+            /** @description The chosen track's title, once one is chosen */
+            title: string | null;
+            /** @description The library item the track became, once picked */
+            mediaId: string | null;
+            /** @description Why the pick was skipped */
+            reason: string | null;
+        } | null;
         Usage: {
             totalCreditsCost?: number;
             totalTokens?: number;
@@ -6060,6 +6074,7 @@ export interface components {
             stage: components["schemas"]["Stage"];
             /** @description The agent's latest step, in its own words */
             step: string | null;
+            music: components["schemas"]["MusicPick"] & unknown;
             /** @description Agent steps so far (a count, not a percentage) */
             steps: number | null;
             /** @description Credits used so far */
