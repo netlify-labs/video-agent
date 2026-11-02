@@ -95,8 +95,9 @@
   .stage .hud { position: absolute; left: 12px; top: 10px; font: 12px ui-monospace, Menlo, monospace; color: rgba(255, 255, 255, .55); }
   .timeline { margin-top: 14px; }
   .lanes { position: relative; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-bottom: 8px; }
-  .lanes span { font-size: 12px; text-align: center; padding: 5px 0; border-radius: 6px; background: var(--raised); color: var(--muted); transition: background .25s var(--ease), color .25s var(--ease); }
-  .lanes span.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .lanes button { font-size: 12px; text-align: center; padding: 0 4px; min-height: 32px; border: 0; border-radius: 6px; background: var(--raised); color: var(--muted); cursor: pointer; transition: background .25s var(--ease), color .25s var(--ease); }
+  .lanes button:hover { color: var(--text); }
+  .lanes button.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
   input[type=range] { width: 100%; accent-color: var(--accent); height: 28px; }
   .readout { display: flex; justify-content: space-between; color: var(--faint); font-size: 13px; }
 
@@ -156,6 +157,11 @@
   .cta { margin-top: 72px; background: var(--surface); border: 1px solid var(--rule); border-radius: 18px; padding: 32px; display: flex; flex-wrap: wrap; gap: 20px; align-items: center; justify-content: space-between; }
   .cta h2 { margin: 0 0 6px; }
   .cta p { margin: 0; color: var(--muted); }
+  .copy-prompt { position: fixed; right: 16px; bottom: 16px; z-index: 10; display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 14px; border: 1px solid var(--rule); border-radius: 999px;
+    background: var(--surface); color: var(--text); font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: 0 8px 24px -10px rgba(0, 0, 0, .45); transition: transform .3s var(--spring), border-color .2s; }
+  .copy-prompt:hover { transform: translateY(-2px); border-color: var(--accent); }
+  .copy-prompt svg { width: 14px; height: 14px; }
+  .copy-prompt.copied { color: var(--ok); border-color: var(--ok); }
   footer { color: var(--faint); font-size: 14px; border-top: 1px solid var(--rule); padding: 24px 0 64px; margin-top: 56px; }
 
   /* Entrances */
@@ -260,7 +266,7 @@
           <div class="scene s3"><div><b>Live in seconds</b><span>netlify.com</span></div></div>
         </div>
         <div class="timeline">
-          <div class="lanes" aria-hidden="true"><span>Scene 1 · 0–3 s</span><span>Scene 2 · 3–6 s</span><span>Scene 3 · 6–9 s</span></div>
+          <div class="lanes" role="group" aria-label="Jump to a scene"><button type="button" data-at="0">Scene 1 · 0–3 s</button><button type="button" data-at="3">Scene 2 · 3–6 s</button><button type="button" data-at="6">Scene 3 · 6–9 s</button></div>
           <div class="controls">
             <button class="icon-btn" id="scrub-play" aria-label="Play the composition">
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg>
@@ -453,6 +459,11 @@
   </div>
 </section>
 
+<button type="button" class="copy-prompt" id="copy-prompt" title="Copies a prompt that sets your AI agent up to make videos with Video Agent">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+  <span>Copy prompt for your agent</span>
+</button>
+
 <footer>Built by Netlify GTM Engineering with Claude Code, on Netlify Agent Runners and HyperFrames.</footer>
 </div>
 
@@ -491,7 +502,7 @@
   const DUR = 9, FPS = 30
   const scrub = $('#scrub'), stage = $('#stage')
   const s1 = $('.s1', stage), s2 = $('.s2', stage), s3 = $('.s3', stage)
-  const lines = $$('.code div'), lanes = $$('.lanes span')
+  const lines = $$('.code div'), lanes = $$('.lanes button')
   const draw = (t) => {
     const scene = t < 3 ? 0 : t < 6 ? 1 : 2
     const show = (el, on, local) => {
@@ -527,6 +538,17 @@
   }
   scrub.addEventListener('input', () => { setPlaying(false); draw(Number(scrub.value)) })
   scrubBtn.addEventListener('click', () => setPlaying(!playing))
+  // A scene's label jumps to its start.
+  lanes.forEach((l) => l.addEventListener('click', () => {
+    setPlaying(false)
+    scrub.value = l.dataset.at
+    draw(Number(l.dataset.at))
+  }))
+  // So does clicking a scene's lines of HTML.
+  lines.forEach((l) => {
+    l.style.cursor = 'pointer'
+    l.addEventListener('click', () => lanes[Number(l.dataset.line)].click())
+  })
   draw(0)
   // Plays on its own the first time it's on screen (not with reduced motion), and stops when scrolled away.
   let autoplayed = false
@@ -611,6 +633,32 @@
   }
   $$('.toggle button').forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode)))
   setMode('after')
+
+  // A prompt to paste into Claude Code or any agent: connect, install the skill, then make a video with you.
+  const PROMPT = `Set me up to make videos with Netlify Video Agent (${location.origin}).
+
+1. Add its MCP server: ${location.origin}/mcp (Streamable HTTP). In Claude Code: claude mcp add --transport http video-agent ${location.origin}/mcp
+   When it asks, I'll sign in with Netlify and approve it.
+2. Install its agent skill, which has the good path and recipes:
+   curl -fsSL ${location.origin}/skills/netlify-video.zip -o /tmp/netlify-video.zip && unzip -o /tmp/netlify-video.zip -d ~/.claude/skills/
+3. Then ask me what the video should show. Use plan_video to ask me a few questions and write a brief, show me the brief, and create it with create_video once I'm happy.
+
+Ask me before starting any video: each one is an agent run that uses AI credits. While it renders, check on it with get_video and send me the link when it's ready.`
+  const copyBtn = $('#copy-prompt'), copyLabel = $('span', copyBtn)
+  copyBtn.addEventListener('click', async () => {
+    let ok = false
+    try { await navigator.clipboard.writeText(PROMPT); ok = true } catch {
+      // Clipboard API blocked: copy through a selected textarea instead.
+      const ta = Object.assign(document.createElement('textarea'), { value: PROMPT })
+      ta.style.cssText = 'position:fixed;opacity:0'
+      document.body.append(ta); ta.select()
+      try { ok = document.execCommand('copy') } catch { ok = false }
+      ta.remove()
+    }
+    copyLabel.textContent = ok ? 'Copied: paste it into your agent' : "Couldn't copy"
+    copyBtn.classList.toggle('copied', ok)
+    setTimeout(() => { copyLabel.textContent = 'Copy prompt for your agent'; copyBtn.classList.remove('copied') }, 2600)
+  })
 })()
 </script>
 </body>
