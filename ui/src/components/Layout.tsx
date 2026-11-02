@@ -12,6 +12,7 @@ import {
   useMantineColorScheme,
 } from '@mantine/core'
 import { useDisclosure, useHotkeys } from '@mantine/hooks'
+import { useState } from 'react'
 import {
   IconBook,
   IconKey,
@@ -45,7 +46,16 @@ export function Layout() {
   const canCreate = isAdmin || me.data?.role === 'creator'
   useHotkeys(canCreate ? [['n', () => void navigate('/new')]] : [])
 
-  const link = (to: string, label: string, icon: React.ReactNode) => (
+  // The API docs group opens whenever a docs page is open, and can be folded by hand.
+  const onDocs = pathname === '/docs' || pathname.startsWith('/docs/')
+  const [docsOpened, setDocsOpened] = useState(onDocs)
+  const [wasOnDocs, setWasOnDocs] = useState(onDocs)
+  if (onDocs !== wasOnDocs) {
+    setWasOnDocs(onDocs)
+    if (onDocs) setDocsOpened(true)
+  }
+
+  const link = (to: string, label: string, icon?: React.ReactNode) => (
     <NavLink
       component={RouterLink}
       to={to}
@@ -128,7 +138,21 @@ export function Layout() {
         {link('/keys', 'API keys', <IconKey size={18} />)}
         {isAdmin ? link('/admin', 'Admin', <IconShieldLock size={18} />) : null}
         {isAdmin ? link('/setup', 'Setup', <IconSettings size={18} />) : null}
-        {link('/docs', 'API docs', <IconBook size={18} />)}
+        <NavLink
+          component="button"
+          type="button"
+          label="API docs"
+          leftSection={<IconBook size={18} />}
+          className="va-navlink"
+          opened={docsOpened}
+          onChange={setDocsOpened}
+          active={onDocs && !docsOpened}
+          childrenOffset={28}
+        >
+          {link('/docs/api', 'REST API')}
+          {link('/docs/mcp', 'MCP for AI tools')}
+          {link('/docs/skills', 'Agent skills')}
+        </NavLink>
         {canCreate ? (
           <Text size="xs" c="var(--va-faint)" mt="auto" p="xs">
             Press N for a new video

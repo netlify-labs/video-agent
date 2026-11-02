@@ -79,5 +79,5 @@ curl -fsS -X POST "{{SITE_URL}}/api/v1/media?filename=checkout.png&caption=New%2
 
 The item is checked before it can be used: `GET {{SITE_URL}}/api/v1/media/<id>` until `status` is `ready` (a
 `rejected` item says why in `rejectReason`). A caption tells the video agent what the item is. Bigger files use upload
-sessions; the full REST reference is at {{SITE_URL}}/docs. OAuth connections are for the MCP only, so uploading needs
+sessions; the full REST reference is at {{SITE_URL}}/docs/api. OAuth connections are for the MCP only, so uploading needs
 a key.

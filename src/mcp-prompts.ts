@@ -49,7 +49,7 @@ export function registerPrompts(server: McpServer, access: PromptAccess) {
         [
           `Make a demo video of the pull request ${a.pr_url} with the video agent, for ${a.audience ?? 'people who use the product'}.`,
           '1. Read the PR: title, description, linked issues, the diff and any screenshots (for example `gh pr view` and `gh pr diff`). Work out what users can do now that they could not before, and the one or two screens that show it. Leave out refactors, tests and internals.',
-          '2. Check list_media for the logo and product shots. If the PR has screenshots and you have an API key, upload them to the media library (POST /api/v1/media, see the API docs) with a caption each, and keep their ids for media_ids.',
+          '2. Check list_media for the logo and product shots. If the PR has screenshots and you have an API key, upload them to the media library (POST /api/v1/media, see the REST API docs at /docs/api) with a caption each, and keep their ids for media_ids.',
           `3. Write a prompt: who it is for, the one message, three or four beats, exact on-screen text in quotes, and an end card.${plan(access)}`,
           `4. ${CONFIRM} Call create_video with the prompt, aspect ${a.aspect ?? '16:9'}, duration_sec 20 to 45, media_ids, and the PR URL as idempotency_key.`,
           `5. ${FOLLOW} Offer publish_video for a share page or GIF to paste into the PR.`,

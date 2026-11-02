@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { expect, test, type Locator, type Page } from '@playwright/test'
+import { MCP_TOOLS } from '../../src/mcp-catalog.js'
 
 /** A DOM property of the element (the specs aren't typechecked against the DOM library). */
 const prop = <T>(l: Locator, name: string) =>
@@ -181,18 +182,142 @@ test('Create now skips planning', async ({ page }) => {
   await expect(page).toHaveURL(/\/videos\//)
 })
 
-test('API docs are embedded with the REST reference and MCP setup', async ({ page }) => {
+/** Opens the navbar on phones (behind the burger); a no-op on desktop. */
+async function openNav(page: Page) {
+  const burger = page.getByRole('banner').getByRole('button', { name: 'Menu' })
+  if (await burger.isVisible()) await burger.click()
+}
+
+const navbar = (page: Page) => page.locator('.mantine-AppShell-navbar')
+
+test('/docs opens the REST reference, and the sidebar groups the three docs pages', async ({ page }) => {
   await page.goto('/docs')
-  await expect(page.getByRole('heading', { level: 1, name: 'API docs' })).toBeVisible()
+  await expect(page).toHaveURL(/\/docs\/api$/)
+  await expect(page.getByRole('heading', { level: 1, name: 'REST API' })).toBeVisible()
   await expect(page.getByText('Video Agent API').first()).toBeVisible({ timeout: 15_000 })
-  await page.getByRole('tab', { name: 'MCP for AI tools' }).click()
+  await expect(page.getByRole('tab', { name: 'MCP for AI tools' })).toHaveCount(0)
+  await openNav(page)
+  const nav = navbar(page)
+  await expect(nav.getByRole('button', { name: 'API docs' })).toHaveAttribute('aria-expanded', 'true')
+  await expect(nav.getByRole('link', { name: 'REST API' })).toHaveAttribute('aria-current', 'page')
+  await expect(nav.getByRole('link', { name: 'MCP for AI tools' })).not.toHaveAttribute(
+    'aria-current',
+    'page',
+  )
+  await expect(nav.getByRole('link', { name: 'Agent skills' })).toBeVisible()
+  await nav.getByRole('link', { name: 'MCP for AI tools' }).click()
+  await expect(page).toHaveURL(/\/docs\/mcp$/)
+  await expect(page.getByRole('heading', { level: 1, name: 'MCP for AI tools' })).toBeVisible()
+  // On phones the navbar closes on navigation.
+  if (test.info().project.name === 'phone') await expect(nav).not.toBeInViewport()
+  await openNav(page)
+  await expect(nav.getByRole('link', { name: 'MCP for AI tools' })).toHaveAttribute('aria-current', 'page')
+  await expect(nav.getByRole('link', { name: 'REST API' })).not.toHaveAttribute('aria-current', 'page')
+})
+
+test('the API docs group folds and opens from the keyboard, and stays shut elsewhere', async ({ page }) => {
+  test.skip(test.info().project.name !== 'desktop', 'Keyboard only.')
+  await page.goto('/media')
+  const group = navbar(page).getByRole('button', { name: 'API docs' })
+  await expect(group).toHaveAttribute('aria-expanded', 'false')
+  await expect(navbar(page).getByRole('link', { name: 'REST API' })).toHaveCount(0)
+  await group.focus()
+  await page.keyboard.press('Enter')
+  await expect(group).toHaveAttribute('aria-expanded', 'true')
+  await page.keyboard.press('Space')
+  await expect(group).toHaveAttribute('aria-expanded', 'false')
+  await page.keyboard.press('Space')
+  await expect(group).toHaveAttribute('aria-expanded', 'true')
+  await expect(navbar(page).getByRole('link', { name: 'REST API' })).toBeVisible()
+  await page.keyboard.press('Tab')
+  await expect(navbar(page).getByRole('link', { name: 'REST API' })).toBeFocused()
+})
+
+test('old ?tab= links redirect to the docs pages, replacing the history entry', async ({ page }) => {
+  await page.goto('/media')
+  await page.goto('/docs?tab=mcp')
+  await expect(page).toHaveURL(/\/docs\/mcp$/)
+  await page.goBack()
+  await expect(page).toHaveURL(/\/media$/)
+  await page.goto('/docs?tab=skills#install')
+  await expect(page).toHaveURL(/\/docs\/skills#install$/)
+})
+
+test('the MCP page lists sections with MCP tools first, and the contents follow clicks and the hash', async ({
+  page,
+}) => {
+  await page.goto('/docs/mcp')
+  const toc = page.getByRole('navigation', { name: 'On this page' })
+  await expect(toc.getByRole('link')).toHaveText([
+    'MCP tools',
+    'Connect',
+    'Client setup',
+    'Prompts',
+    'Example asks',
+  ])
+  await expect(toc.getByRole('link', { name: 'MCP tools' })).toHaveAttribute('aria-current', 'location')
+  const tools = page.getByRole('table', { name: 'MCP tools' })
+  for (const t of MCP_TOOLS) await expect(tools.getByText(t.name, { exact: true })).toBeVisible()
   await expect(page.getByText('claude mcp add --transport http video-agent', { exact: false })).toBeVisible()
-  await expect(page.getByText('create_video', { exact: true })).toBeVisible()
+  await expect(page.getByText('claude_desktop_config.json', { exact: false })).toBeVisible()
+
+  await toc.getByRole('link', { name: 'Client setup' }).click()
+  await expect(page).toHaveURL(/\/docs\/mcp#clients$/)
+  await expect(page.getByRole('heading', { level: 2, name: 'Client setup' })).toBeInViewport()
+  await expect(toc.getByRole('link', { name: 'Client setup' })).toHaveAttribute('aria-current', 'location')
+  await expect(page.getByRole('heading', { level: 2, name: 'MCP tools' })).not.toBeInViewport()
+})
+
+test('a deep link opens the MCP page at its section', async ({ page }) => {
+  await page.goto('/docs/mcp#connect')
+  await expect(page.getByRole('heading', { level: 2, name: 'Connect' })).toBeInViewport()
+  await expect(page.getByRole('textbox', { name: 'Server URL (Streamable HTTP)' })).toBeInViewport()
+  const toc = page.getByRole('navigation', { name: 'On this page' })
+  await expect(toc.getByRole('link', { name: 'Connect' })).toHaveAttribute('aria-current', 'location')
+  expect(await page.evaluate<number>('window.scrollY')).toBeGreaterThan(0)
+})
+
+test('the MCP and skills pages do not load the API reference', async ({ page }) => {
+  const scripts: string[] = []
+  page.on('request', (r) => {
+    if (r.resourceType() === 'script' || r.resourceType() === 'stylesheet') scripts.push(r.url())
+  })
+  await page.goto('/docs/mcp')
+  await expect(page.getByRole('table', { name: 'MCP tools' })).toBeVisible()
+  await page.goto('/docs/skills')
+  await expect(page.getByRole('textbox', { name: 'Skill package (zip)', exact: true })).toBeVisible()
+  await page.waitForLoadState('networkidle')
+  expect(scripts.some((u) => /McpGuide/.test(u))).toBe(true)
+  expect(scripts.filter((u) => /ApiReference|Scalar/.test(u))).toEqual([])
+  await page.goto('/docs/api')
+  await expect(page.getByText('Video Agent API').first()).toBeVisible({ timeout: 15_000 })
+  expect(scripts.some((u) => /ApiReference/.test(u))).toBe(true)
+})
+
+test('narrow screens get a row of section chips instead of the sticky contents', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/docs/mcp')
+  await expect(page.locator('.va-docs-toc')).toBeHidden()
+  const chips = page.locator('.va-docs-chips')
+  await expect(chips).toBeVisible()
+  await expect(chips.getByRole('link').first()).toHaveText('MCP tools')
+  await chips.getByRole('link', { name: 'Prompts' }).click()
+  await expect(page).toHaveURL(/#prompts$/)
+  await expect(page.getByRole('heading', { level: 2, name: 'Prompts' })).toBeInViewport()
+  expect(await page.evaluate<number>('document.documentElement.scrollWidth')).toBeLessThanOrEqual(390)
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await expect(page.locator('.va-docs-toc')).toBeVisible()
+  await expect(chips).toBeHidden()
 })
 
 test('API docs show how to install the agent skill, with copy buttons', async ({ page }) => {
-  await page.goto('/docs?tab=skills')
-  await expect(page.getByRole('tab', { name: 'Agent skills' })).toHaveAttribute('aria-selected', 'true')
+  await page.goto('/docs/skills')
+  await expect(page.getByRole('heading', { level: 1, name: 'Agent skills' })).toBeVisible()
+  await expect(page.getByRole('navigation', { name: 'On this page' }).getByRole('link')).toHaveText([
+    'Skill package',
+    'Install',
+    'MCP prompts',
+  ])
   const origin = new URL(page.url()).origin
   await expect(page.getByRole('textbox', { name: 'Skill package (zip)', exact: true })).toHaveValue(
     `${origin}/skills/netlify-video.zip`,
@@ -209,6 +334,9 @@ test('API docs show how to install the agent skill, with copy buttons', async ({
     'href',
     '/skills/index.json',
   )
+  await page.getByRole('link', { name: 'MCP for AI tools' }).last().click()
+  await expect(page).toHaveURL(/\/docs\/mcp#connect$/)
+  await expect(page.getByRole('heading', { level: 2, name: 'Connect' })).toBeInViewport()
 })
 
 test('admin, keys and setup render', async ({ page }) => {

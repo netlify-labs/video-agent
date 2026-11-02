@@ -29,7 +29,7 @@ const queryClient = new QueryClient({
   },
 })
 
-preloadRoute(window.location.pathname)
+preloadRoute(window.location.pathname, window.location.search)
 
 // The mock API (and the contract code it uses) is loaded only in mock builds, before the app's first request.
 const ready = import.meta.env.VITE_MOCK

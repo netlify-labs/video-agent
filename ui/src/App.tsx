@@ -1,6 +1,6 @@
 import { Center, Loader } from '@mantine/core'
 import { Suspense, useEffect, type ReactNode } from 'react'
-import { Navigate, Route, Routes } from 'react-router'
+import { Navigate, Route, Routes, useLocation } from 'react-router'
 import { $api } from './api/client'
 import { useAuth } from './auth'
 import { Layout } from './components/Layout'
@@ -18,7 +18,15 @@ const MediaPage = routes.lazyPage(routes.mediaRoute, (m) => m.MediaPage)
 const KeysPage = routes.lazyPage(routes.keysRoute, (m) => m.KeysPage)
 const AdminPage = routes.lazyPage(routes.adminRoute, (m) => m.AdminPage)
 const SetupPage = routes.lazyPage(routes.setupRoute, (m) => m.SetupPage)
-const DocsPage = routes.lazyPage(routes.docsRoute, (m) => m.default)
+const DocsApiPage = routes.lazyPage(routes.docsApiRoute, (m) => m.default)
+const DocsMcpPage = routes.lazyPage(routes.docsMcpRoute, (m) => m.default)
+const DocsSkillsPage = routes.lazyPage(routes.docsSkillsRoute, (m) => m.default)
+
+/** /docs opens the REST reference; old /docs?tab=mcp|skills links open their page, keeping the hash. */
+function DocsRedirect() {
+  const { search, hash } = useLocation()
+  return <Navigate to={{ pathname: routes.docsPath(search), hash }} replace />
+}
 
 function Page({ children }: { children: ReactNode }) {
   return (
@@ -126,14 +134,32 @@ export function App() {
             </Page>
           }
         />
+        <Route path="/docs" element={<DocsRedirect />} />
         <Route
-          path="/docs"
+          path="/docs/api"
           element={
             <Page>
-              <DocsPage />
+              <DocsApiPage />
             </Page>
           }
         />
+        <Route
+          path="/docs/mcp"
+          element={
+            <Page>
+              <DocsMcpPage />
+            </Page>
+          }
+        />
+        <Route
+          path="/docs/skills"
+          element={
+            <Page>
+              <DocsSkillsPage />
+            </Page>
+          }
+        />
+        <Route path="/docs/*" element={<Navigate to="/docs/api" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

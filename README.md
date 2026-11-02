@@ -218,7 +218,7 @@ Openverse API.
 
 ## The API
 
-Reference: the app's **API docs** page (`/docs`), built from the OpenAPI spec at `/api/openapi.json` (committed as
+Reference: the app's **API docs → REST API** page (`/docs/api`), built from the OpenAPI spec at `/api/openapi.json` (committed as
 [`openapi.json`](openapi.json)). A standalone copy is at `/api/docs`.
 
 ```sh
@@ -237,7 +237,8 @@ is HMAC-SHA256 of `"<t>.<raw body>"` with the key's webhook secret (shown once w
 
 The same video tasks are MCP tools, so people can ask Claude, Cursor or any MCP client for a video:
 `create_video`, `get_video`, `list_videos`, `revise_video`, `publish_video`, `unpublish_video`, `cancel_video`,
-`set_verdict`, `list_media`, `search_music`, `import_music` and `get_music_job` (CC0 and CC BY music from Openverse),
+`set_verdict`, `list_comments`, `add_comment`, `list_media`, `search_music`, `import_music` and `get_music_job` (CC0
+and CC BY music from Openverse),
 and, when AI Gateway is available, `plan_video` and `plan_brief` (ask a few questions first, then create with the plan). Each key's tool list matches its owner's role: Reviewers see the read and review tools, Viewers read only.
 
 - Server URL: `https://<your-site>/mcp` (Streamable HTTP). Authenticate with an API key: `Authorization: Bearer nva_…`,
@@ -246,7 +247,8 @@ and, when AI Gateway is available, `plan_video` and `plan_brief` (ask a few ques
 - Cursor and others (`mcp.json`): `{ "mcpServers": { "video-agent": { "url": "https://<your-site>/mcp", "headers": { "Authorization": "Bearer nva_…" } } } }`
 - Stdio-only clients: `npx -y mcp-remote https://<your-site>/mcp --header "Authorization: Bearer nva_…"`
 
-The web app's **API docs** page has the REST reference and these instructions with your site's URL filled in.
+The web app's **API docs → MCP for AI tools** page (`/docs/mcp`) has these instructions with your site's URL filled in,
+and the tool list from [`src/mcp-catalog.ts`](src/mcp-catalog.ts), which a test keeps in step with the server.
 
 ### Agent skills and MCP prompts
 
@@ -263,7 +265,7 @@ curl -fsSL https://<your-site>/skills/netlify-video.zip -o /tmp/netlify-video.zi
   && unzip -o /tmp/netlify-video.zip -d ~/.claude/skills/
 ```
 
-The API docs page has the command for each agent. The same recipes are MCP prompts (`pr_video`, `changelog_video`,
+The **API docs → Agent skills** page (`/docs/skills`) has the command for each agent. The same recipes are MCP prompts (`pr_video`, `changelog_video`,
 `social_cut`, `localize_video`, `review_video`) for clients without skills, filtered by role like the tools.
 
 ### Sign in with Netlify (OAuth)
