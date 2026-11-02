@@ -647,7 +647,9 @@ test('a running version shows the agent’s latest composition snapshot, refresh
   await page.goto('/videos/vid_making')
   const snap = page.getByTestId('live-snapshot')
   await expect(snap.getByTestId('composition-preview')).toHaveAttribute('src', /live=1/)
-  await expect(snap.getByText('a work in progress, not the final video')).toBeVisible()
+  // Marked as the agent's draft, on the picture and under it, so it isn't mistaken for the video.
+  await expect(snap.getByTestId('live-draft-badge')).toHaveText('Live draft')
+  await expect(snap.getByText('The real video appears here when the render finishes.')).toBeVisible()
   const first = await snap.getByTestId('composition-preview').getAttribute('src')
   // The mock's checkpoint seq moves every third poll (3 s apart): a new snapshot remounts the frame.
   await expect
@@ -792,6 +794,17 @@ test('changed fields show what they were and revert; returning to a draft asks t
   await resume.getByRole('button', { name: 'Start over' }).click()
   await expect(cta).toHaveValue('Read the docs')
   await expect.poll(() => lastOps(page), { timeout: 5000 }).toEqual([])
+})
+
+test('a ready version and the editor show no Live draft badge', async ({ page }) => {
+  await page.goto('/videos/vid_teaser')
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Ship faster with preview deploys' }),
+  ).toBeVisible()
+  await expect(page.getByTestId('live-draft-badge')).toHaveCount(0)
+  await page.goto('/videos/vid_teaser/edit/2')
+  await expect(page.getByRole('button', { name: 'Play preview' })).toBeEnabled()
+  await expect(page.getByTestId('live-draft-badge')).toHaveCount(0)
 })
 
 test('clicking text in the preview focuses its field', async ({ page }) => {
@@ -1691,7 +1704,9 @@ test('signed in, a missing run token shows a banner with where to fix it', async
   await mock(page, 'mockMissingSettings', 'RUNNER_API_TOKEN')
   await page.goto('/')
   const banner = page.getByTestId('missing-settings-banner')
-  await expect(banner).toContainText("Videos can't be made yet: RUNNER_API_TOKEN isn't set. Add it in Netlify")
+  await expect(banner).toContainText(
+    "Videos can't be made yet: RUNNER_API_TOKEN isn't set. Add it in Netlify",
+  )
   await expect(banner.getByRole('link', { name: 'Setup checklist' })).toBeVisible()
 })
 

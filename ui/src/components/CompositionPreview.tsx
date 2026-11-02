@@ -217,6 +217,13 @@ export function CompositionPreview({
         className="va-preview-frame"
         style={{ aspectRatio: `${dimensions.width} / ${dimensions.height}` }}
       >
+        {live ? (
+          // A running version's snapshot is the agent's draft, not the video: say so on the picture itself.
+          <span className="va-live-badge" data-testid="live-draft-badge">
+            <i aria-hidden />
+            Live draft
+          </span>
+        ) : null}
         {link ? (
           // Same parent, same order: the shown frame first, the loading one after. Promoting drops the first, so the
           // loaded frame never moves in the DOM (moving an iframe reloads it). It sits underneath until then.
@@ -284,7 +291,7 @@ export function CompositionPreview({
         {error
           ? `Preview problem: ${error}`
           : live
-            ? 'The composition as the agent last saved it: a work in progress, not the final video.'
+            ? 'Live draft: what the agent has written so far, played in your browser. The real video appears here when the render finishes.'
             : 'A live preview of the composition: close to, not exactly, the final video.'}
       </Text>
     </Stack>
