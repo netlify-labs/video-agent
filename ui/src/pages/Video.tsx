@@ -10,7 +10,6 @@ import {
   SegmentedControl,
   Skeleton,
   Stack,
-  Switch,
   Text,
   TextInput,
   Textarea,
@@ -32,7 +31,15 @@ import {
 } from '../components/VoiceoverControl'
 import { CommentsCard, ReviewPlayer, VerdictBar, clockTime, type Pin } from '../components/Review'
 import { CompositionPreview } from '../components/CompositionPreview'
-import { IconDots, IconDownload, IconExternalLink, IconLock, IconLockOpen } from '@tabler/icons-react'
+import {
+  IconBell,
+  IconBellRinging,
+  IconDots,
+  IconDownload,
+  IconExternalLink,
+  IconLock,
+  IconLockOpen,
+} from '@tabler/icons-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { $api, errorMessage, newIdempotencyKey, videoInit, type Version, type Video } from '../api/client'
@@ -147,6 +154,9 @@ function Progress({ video, v, canCancel }: { video: Video; v: Version; canCancel
     onError: showError,
   })
   const [notify, setNotify] = useState(notifyOn)
+  const [notifyBlocked, setNotifyBlocked] = useState(
+    () => 'Notification' in window && Notification.permission === 'denied',
+  )
   return (
     <Card p={0} style={{ overflow: 'hidden' }}>
       {snapshot ? (
@@ -185,43 +195,74 @@ function Progress({ video, v, canCancel }: { video: Video; v: Version; canCancel
           <Narration video={video} v={v} />
           <Group justify="space-between" mt="xs">
             {'Notification' in window ? (
-              <Switch
-                size="sm"
-                label="Notify me when it's done"
-                checked={notify}
-                onChange={(e) => {
-                  const on = e.currentTarget.checked
-                  const save = (x: boolean) => {
-                    setNotify(x)
-                    try {
-                      localStorage.setItem('notify', x ? '1' : '0')
-                    } catch {
-                      // private mode
+              <Tooltip
+                label="Notifications are blocked for this site. Allow them in your browser's site settings."
+                disabled={!notifyBlocked}
+                multiline
+                w={260}
+              >
+                <Button
+                  size="xs"
+                  variant={notify ? 'filled' : 'light'}
+                  leftSection={notify ? <IconBellRinging size={16} /> : <IconBell size={16} />}
+                  aria-pressed={notify}
+                  data-testid="notify-toggle"
+                  onClick={() => {
+                    const on = !notify
+                    const save = (x: boolean) => {
+                      setNotify(x)
+                      try {
+                        localStorage.setItem('notify', x ? '1' : '0')
+                      } catch {
+                        // private mode
+                      }
                     }
-                  }
-                  if (on && Notification.permission !== 'granted')
-                    void Notification.requestPermission().then((p) => {
-                      save(p === 'granted')
-                    })
-                  else save(on)
-                }}
-              />
+                    if (on && Notification.permission !== 'granted')
+                      void Notification.requestPermission().then((p) => {
+                        setNotifyBlocked(p === 'denied')
+                        save(p === 'granted')
+                      })
+                    else save(on)
+                  }}
+                >
+                  {notify
+                    ? "You'll be notified"
+                    : notifyBlocked
+                      ? 'Notifications blocked'
+                      : "Notify me when it's done"}
+                </Button>
+              </Tooltip>
             ) : (
               <span />
             )}
-            {canCancel ? (
-              <Button
-                variant="default"
-                size="xs"
-                loading={cancel.isPending}
-                disabled={v.stage === 'cancelling' || v.stage === 'unresolved'}
-                onClick={() => {
-                  cancel.mutate({ params: { path: { id: video.id, n: v.n } } })
-                }}
-              >
-                {v.stage === 'cancelling' ? 'Stopping…' : 'Cancel'}
-              </Button>
-            ) : null}
+            <Group gap="sm">
+              {v.links.netlifyRun ? (
+                <Anchor
+                  href={v.links.netlifyRun}
+                  target="_blank"
+                  size="xs"
+                  c="var(--va-muted)"
+                  data-testid="progress-run-link"
+                >
+                  <Group gap={4} wrap="nowrap">
+                    View agent run <IconExternalLink size={12} />
+                  </Group>
+                </Anchor>
+              ) : null}
+              {canCancel ? (
+                <Button
+                  variant="default"
+                  size="xs"
+                  loading={cancel.isPending}
+                  disabled={v.stage === 'cancelling' || v.stage === 'unresolved'}
+                  onClick={() => {
+                    cancel.mutate({ params: { path: { id: video.id, n: v.n } } })
+                  }}
+                >
+                  {v.stage === 'cancelling' ? 'Stopping…' : 'Cancel'}
+                </Button>
+              ) : null}
+            </Group>
           </Group>
         </Stack>
       </div>

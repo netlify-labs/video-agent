@@ -1154,3 +1154,23 @@ test('a version with a CC BY track credits it on the page and in the embed', asy
   ).toBeVisible()
   await expect(page.getByTestId('version-credits')).toHaveCount(0)
 })
+
+test('while a video renders: a clear Notify button and a link to the agent run', async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(['notifications'])
+  await page.goto('/videos/vid_making')
+  const notify = page.getByTestId('notify-toggle')
+  await expect(notify).toHaveText("Notify me when it's done")
+  await expect(notify).toHaveAttribute('aria-pressed', 'false')
+  await notify.click()
+  await expect(notify).toHaveText("You'll be notified")
+  await expect(notify).toHaveAttribute('aria-pressed', 'true')
+  await notify.click()
+  await expect(notify).toHaveText("Notify me when it's done")
+  const run = page.getByTestId('progress-run-link')
+  await expect(run).toHaveText(/View agent run/)
+  await expect(run).toHaveAttribute('href', /app\.netlify\.com\/projects\/.+\/agent-runs\//)
+  await expect(run).toHaveAttribute('target', '_blank')
+})
