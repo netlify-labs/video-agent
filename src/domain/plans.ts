@@ -88,8 +88,9 @@ const QuestionsOut = z.object({
           .min(2)
           .max(4),
         multiSelect: z.boolean().default(false),
-        // Every question takes free text (another answer, or more context), whatever the model said.
-        allowOther: z.unknown().transform((): true => true),
+        // Every question takes free text (another answer, or more context), whatever the model said. Optional:
+        // the reply format doesn't ask for it, and without .optional() zod 4 rejects a reply that leaves it out.
+        allowOther: z.unknown().optional().transform((): true => true),
       }),
     )
     .max(6),
