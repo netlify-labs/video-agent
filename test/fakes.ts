@@ -27,6 +27,7 @@ import { createLogger, type Logger } from '../src/lib/log.js'
 import { createMemoryStore } from '../src/store/memory.js'
 import { resetAuthCache } from '../src/domain/auth.js'
 import { resetSettingsCache } from '../src/domain/settings.js'
+import { resetOpenverseCache } from '../src/domain/openverse.js'
 import { resetOAuthCaches } from '../src/auth/oauth.js'
 import {
   UpstreamError,
@@ -236,6 +237,27 @@ export class FakeHttp implements HttpPort {
   }
 }
 
+/**
+ * Outbound fetch for tests (Openverse): `handler` answers each request (404 by default); every call is recorded.
+ * Like production, it refuses anything but https.
+ */
+export class FakeFetch {
+  calls: { url: string; method: string; headers: Record<string, string>; body: string | null }[] = []
+  handler: (url: URL, init: RequestInit) => Response | Promise<Response> = () =>
+    new Response('', { status: 404 })
+  fetch = async (url: string, init: RequestInit = {}) => {
+    const u = new URL(url)
+    if (u.protocol !== 'https:') throw new Error('only https URLs are fetched')
+    this.calls.push({
+      url,
+      method: init.method ?? 'GET',
+      headers: Object.fromEntries(new Headers(init.headers).entries()),
+      body: typeof init.body === 'string' ? init.body : null,
+    })
+    return this.handler(u, init)
+  }
+}
+
 /** Scripted AI Gateway: set `route`/`reply` or push errors; every call is recorded. */
 export class FakeGateway implements GatewayPort {
   isAvailable = true
@@ -360,6 +382,8 @@ export interface TestDeps extends Deps {
   runner: FakeRunner
   platform: FakePlatform
   http: FakeHttp
+  /** Answers deps.fetch (Openverse). */
+  outbound: FakeFetch
   gateway: FakeGateway
   oauth: FakeOAuth
   logs: string[]
@@ -377,6 +401,8 @@ export function makeDeps(env: Record<string, string> = {}, store?: Deps['store']
   resetAuthCache()
   resetSettingsCache()
   resetOAuthCaches()
+  resetOpenverseCache()
+  const outbound = new FakeFetch()
   const logs: string[] = []
   const log: Logger = createLogger({}, (l) => logs.push(l))
   const config: Config = readConfig({
@@ -398,6 +424,8 @@ export function makeDeps(env: Record<string, string> = {}, store?: Deps['store']
     runner: new FakeRunner(),
     platform: new FakePlatform(),
     http: new FakeHttp(),
+    fetch: outbound.fetch,
+    outbound,
     gateway: new FakeGateway(),
     oauth: new FakeOAuth(),
     clock,

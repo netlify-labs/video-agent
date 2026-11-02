@@ -680,6 +680,13 @@
             ],
             "description": "Signed URLs for the poster and preview GIF, once the version has files (30 to 60 minutes; 5 to 10 for private videos). Use links for a fresh one."
           },
+          "credits": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Credit"
+            },
+            "description": "CC BY media this version was made with (from the library, e.g. Openverse music): show the credit wherever the video is shown"
+          },
           "publications": {
             "type": "array",
             "items": {
@@ -713,6 +720,7 @@
           "output",
           "links",
           "files",
+          "credits",
           "publications"
         ]
       },
@@ -849,6 +857,86 @@
           }
         }
       },
+      "Credit": {
+        "type": "object",
+        "properties": {
+          "mediaId": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "image",
+              "svg",
+              "video",
+              "font",
+              "audio"
+            ]
+          },
+          "role": {
+            "type": "string",
+            "example": "Music"
+          },
+          "title": {
+            "type": "string"
+          },
+          "creator": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "creatorUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "license": {
+            "type": "string",
+            "example": "by"
+          },
+          "licenseLabel": {
+            "type": "string",
+            "example": "CC BY 4.0"
+          },
+          "licenseUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sourceUrl": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The work on its source site"
+          },
+          "source": {
+            "type": "string",
+            "example": "openverse"
+          },
+          "text": {
+            "type": "string",
+            "example": "\"Calm Piano\" by Ada, CC BY 4.0, https://www.jamendo.com/track/1"
+          }
+        },
+        "required": [
+          "mediaId",
+          "kind",
+          "role",
+          "title",
+          "creator",
+          "creatorUrl",
+          "license",
+          "licenseLabel",
+          "licenseUrl",
+          "sourceUrl",
+          "source",
+          "text"
+        ]
+      },
       "Publication": {
         "type": "object",
         "properties": {
@@ -905,7 +993,8 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "HTML to embed the video; with CC BY media it includes the credit line as a caption"
           }
         },
         "required": [
@@ -2954,6 +3043,9 @@
           },
           "canDelete": {
             "type": "boolean"
+          },
+          "source": {
+            "$ref": "#/components/schemas/MediaSource"
           }
         },
         "required": [
@@ -2972,8 +3064,98 @@
           "createdAt",
           "usedIn",
           "urls",
-          "canDelete"
+          "canDelete",
+          "source"
         ]
+      },
+      "MediaSource": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": [
+              "openverse"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "description": "Its id at the source"
+          },
+          "url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The landing page of the work"
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "creator": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "creatorUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "license": {
+            "type": "string",
+            "description": "cc0 or by"
+          },
+          "licenseVersion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "licenseLabel": {
+            "type": "string",
+            "example": "CC BY 4.0"
+          },
+          "licenseUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "attribution": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The source's own attribution text"
+          },
+          "creditRequired": {
+            "type": "boolean",
+            "description": "True for CC BY: videos that use it credit it (CC0 needs no credit)"
+          }
+        },
+        "required": [
+          "name",
+          "id",
+          "url",
+          "title",
+          "creator",
+          "creatorUrl",
+          "license",
+          "licenseVersion",
+          "licenseLabel",
+          "licenseUrl",
+          "attribution",
+          "creditRequired"
+        ],
+        "description": "Where an imported item came from (Openverse), with its licence; null for uploads"
       },
       "MediaList": {
         "type": "object",
@@ -3057,6 +3239,168 @@
           "mediaId",
           "error",
           "expiresAt"
+        ]
+      },
+      "OpenverseSearch": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OpenverseTrack"
+            }
+          },
+          "page": {
+            "type": "integer"
+          },
+          "pageCount": {
+            "type": "integer"
+          },
+          "total": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "pageCount",
+          "total"
+        ]
+      },
+      "OpenverseTrack": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Openverse audio id (pass it to import)"
+          },
+          "title": {
+            "type": "string"
+          },
+          "creator": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "creatorUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "durationSec": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "license": {
+            "type": "string",
+            "enum": [
+              "cc0",
+              "by"
+            ]
+          },
+          "licenseVersion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "licenseLabel": {
+            "type": "string",
+            "example": "CC BY 4.0"
+          },
+          "licenseUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "attribution": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "landingUrl": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The work on its source site"
+          },
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": "jamendo"
+          },
+          "category": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "genres": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "previewUrl": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The provider's file (https), to listen to before importing"
+          },
+          "filetype": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "filesize": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "importable": {
+            "type": "boolean",
+            "description": "False when no file fits the library (type, 50 MB, 10 minutes)"
+          },
+          "mediaId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The library item, when it was already imported"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "creator",
+          "creatorUrl",
+          "durationSec",
+          "license",
+          "licenseVersion",
+          "licenseLabel",
+          "licenseUrl",
+          "attribution",
+          "landingUrl",
+          "source",
+          "category",
+          "genres",
+          "previewUrl",
+          "filetype",
+          "filesize",
+          "importable",
+          "mediaId"
         ]
       },
       "CommentList": {
@@ -8458,6 +8802,288 @@
           },
           "409": {
             "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/media/openverse/search": {
+      "get": {
+        "summary": "Search Openverse for CC0 or CC BY audio (music by default); NC, ND and SA licences are never returned (Creators and admins)",
+        "tags": [
+          "media"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "q",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "cc0",
+                "cc0,by"
+              ],
+              "description": "cc0 (no credit needed) or cc0,by (the default; CC BY tracks are credited)"
+            },
+            "required": false,
+            "description": "cc0 (no credit needed) or cc0,by (the default; CC BY tracks are credited)",
+            "name": "license",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "music",
+                "sound_effect",
+                "all"
+              ],
+              "description": "music (the default), sound_effect, or all audio"
+            },
+            "required": false,
+            "description": "music (the default), sound_effect, or all audio",
+            "name": "category",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10
+            },
+            "required": false,
+            "name": "page",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tracks",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenverseSearch"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Openverse is busy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Openverse didn't answer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/media/openverse/import": {
+      "post": {
+        "summary": "Import an Openverse track into the library by its id: re-read from Openverse, licence checked, file downloaded and verified as audio. Importing it again returns the same item",
+        "tags": [
+          "media"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "description": "The Openverse audio id"
+                  },
+                  "caption": {
+                    "type": "string",
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Already in the library",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Media"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Imported",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Media"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Openverse is busy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Openverse or the track's host didn't answer",
             "content": {
               "application/json": {
                 "schema": {

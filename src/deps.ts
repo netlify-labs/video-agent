@@ -29,6 +29,8 @@ export interface Config {
   netlifyOAuth: { clientId: string; clientSecret: string } | null
   /** Netlify teams (slugs or ids) a Netlify sign-in must belong to; empty for no team rule. */
   netlifyRequiredTeams: string[]
+  /** A registered Openverse app (higher rate limits); null for anonymous access. */
+  openverse: { clientId: string; clientSecret: string } | null
 }
 
 export interface McpOAuthConfig {
@@ -105,6 +107,10 @@ export function readConfig(env: Record<string, string | undefined>): Config {
           }
         : null,
     netlifyRequiredTeams: list(env.NETLIFY_REQUIRED_TEAM),
+    openverse:
+      env.OPENVERSE_CLIENT_ID?.trim() && env.OPENVERSE_CLIENT_SECRET?.trim()
+        ? { clientId: env.OPENVERSE_CLIENT_ID.trim(), clientSecret: env.OPENVERSE_CLIENT_SECRET.trim() }
+        : null,
   }
 }
 
@@ -220,6 +226,12 @@ export interface HttpPort {
 }
 
 /**
+ * Outbound fetch for third-party APIs and downloads (Openverse). Production refuses hosts that resolve to private
+ * addresses; callers follow redirects themselves (redirect: 'manual') so they can check every hop.
+ */
+export type FetchPort = (url: string, init?: RequestInit) => Promise<Response>
+
+/**
  * What the MCP OAuth server and Sign in with Netlify need from outside: the upstream sign-in and client metadata
  * documents.
  */
@@ -241,6 +253,8 @@ export interface Deps {
   runner: RunnerPort
   platform: PlatformPort
   http: HttpPort
+  /** Openverse search, item lookups and file downloads. */
+  fetch: FetchPort
   gateway: GatewayPort
   /** Null unless config.mcpOAuth is set or the web app signs in with Netlify. */
   oauth: OAuthPort | null

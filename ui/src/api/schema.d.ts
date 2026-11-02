@@ -4299,6 +4299,228 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/media/openverse/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search Openverse for CC0 or CC BY audio (music by default); NC, ND and SA licences are never returned (Creators and admins) */
+        get: {
+            parameters: {
+                query: {
+                    q: string;
+                    /** @description cc0 (no credit needed) or cc0,by (the default; CC BY tracks are credited) */
+                    license?: "cc0" | "cc0,by";
+                    /** @description music (the default), sound_effect, or all audio */
+                    category?: "music" | "sound_effect" | "all";
+                    page?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Tracks */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["OpenverseSearch"];
+                    };
+                };
+                /** @description Invalid request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not signed in */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not allowed */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Conflict or not ready */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Openverse is busy */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Openverse didn't answer */
+                502: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/media/openverse/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import an Openverse track into the library by its id: re-read from Openverse, licence checked, file downloaded and verified as audio. Importing it again returns the same item */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @description The Openverse audio id */
+                        id: string;
+                        caption?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Already in the library */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Media"];
+                    };
+                };
+                /** @description Imported */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Media"];
+                    };
+                };
+                /** @description Invalid request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not signed in */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not allowed */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Conflict or not ready */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Openverse is busy */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Openverse or the track's host didn't answer */
+                502: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/media/{id}": {
         parameters: {
             query?: never;
@@ -5404,6 +5626,8 @@ export interface components {
                 /** @description A tiny blurred poster as a data URI, to show while the poster loads. */
                 lqip?: string;
             } | null;
+            /** @description CC BY media this version was made with (from the library, e.g. Openverse music): show the credit wherever the video is shown */
+            credits: components["schemas"]["Credit"][];
             publications: components["schemas"]["Publication"][];
         };
         PlanBrief: {
@@ -5434,6 +5658,27 @@ export interface components {
             totalTokens?: number;
             stepsCount?: number;
         } | null;
+        Credit: {
+            mediaId: string;
+            /** @enum {string} */
+            kind: "image" | "svg" | "video" | "font" | "audio";
+            /** @example Music */
+            role: string;
+            title: string;
+            creator: string | null;
+            creatorUrl: string | null;
+            /** @example by */
+            license: string;
+            /** @example CC BY 4.0 */
+            licenseLabel: string;
+            licenseUrl: string | null;
+            /** @description The work on its source site */
+            sourceUrl: string | null;
+            /** @example openverse */
+            source: string;
+            /** @example "Calm Piano" by Ada, CC BY 4.0, https://www.jamendo.com/track/1 */
+            text: string;
+        };
         Publication: {
             slug: string;
             versionN: number;
@@ -5448,6 +5693,7 @@ export interface components {
                 /** @description A 960px-wide WebP poster, for versions rendered with preview variants. */
                 posterWebp?: string;
             } | null;
+            /** @description HTML to embed the video; with CC BY media it includes the credit line as a caption */
             embed: string | null;
         };
         Error: {
@@ -5913,7 +6159,30 @@ export interface components {
                 poster: string | null;
             } | null;
             canDelete: boolean;
+            source: components["schemas"]["MediaSource"];
         };
+        /** @description Where an imported item came from (Openverse), with its licence; null for uploads */
+        MediaSource: {
+            /** @enum {string} */
+            name: "openverse";
+            /** @description Its id at the source */
+            id: string;
+            /** @description The landing page of the work */
+            url: string | null;
+            title: string | null;
+            creator: string | null;
+            creatorUrl: string | null;
+            /** @description cc0 or by */
+            license: string;
+            licenseVersion: string | null;
+            /** @example CC BY 4.0 */
+            licenseLabel: string;
+            licenseUrl: string | null;
+            /** @description The source's own attribution text */
+            attribution: string | null;
+            /** @description True for CC BY: videos that use it credit it (CC0 needs no credit) */
+            creditRequired: boolean;
+        } | null;
         MediaList: {
             items: components["schemas"]["Media"][];
             nextCursor: string | null;
@@ -5931,6 +6200,41 @@ export interface components {
             mediaId: string | null;
             error: string | null;
             expiresAt: string;
+        };
+        OpenverseSearch: {
+            items: components["schemas"]["OpenverseTrack"][];
+            page: number;
+            pageCount: number;
+            total: number;
+        };
+        OpenverseTrack: {
+            /** @description Openverse audio id (pass it to import) */
+            id: string;
+            title: string;
+            creator: string | null;
+            creatorUrl: string | null;
+            durationSec: number | null;
+            /** @enum {string} */
+            license: "cc0" | "by";
+            licenseVersion: string | null;
+            /** @example CC BY 4.0 */
+            licenseLabel: string;
+            licenseUrl: string | null;
+            attribution: string | null;
+            /** @description The work on its source site */
+            landingUrl: string | null;
+            /** @example jamendo */
+            source: string | null;
+            category: string | null;
+            genres: string[];
+            /** @description The provider's file (https), to listen to before importing */
+            previewUrl: string | null;
+            filetype: string | null;
+            filesize: number | null;
+            /** @description False when no file fits the library (type, 50 MB, 10 minutes) */
+            importable: boolean;
+            /** @description The library item, when it was already imported */
+            mediaId: string | null;
         };
         CommentList: {
             items: components["schemas"]["Comment"][];

@@ -4,7 +4,7 @@
 import { lookup as dnsLookup } from 'node:dns/promises'
 import { request } from 'node:https'
 import { isIP } from 'node:net'
-import type { HttpPort } from '../deps.js'
+import type { FetchPort, HttpPort } from '../deps.js'
 
 /** Expands an IPv6 address to 8 hextets (handles `::`, embedded dotted IPv4 and zone ids). */
 export function expandIPv6(ip: string): number[] | null {
@@ -121,3 +121,16 @@ export function createSafeHttp(resolver: Resolver = defaultResolver): HttpPort {
 }
 
 export const safeHttp: HttpPort = createSafeHttp()
+
+/**
+ * fetch for third-party APIs and downloads: HTTPS only, and the host must resolve to public addresses only. Callers
+ * pass redirect: 'manual' and check each hop, so every request comes through here.
+ */
+export function createPublicFetch(resolver: Resolver = defaultResolver): FetchPort {
+  return async (url, init) => {
+    const u = new URL(url)
+    if (u.protocol !== 'https:') throw new Error('only https URLs are fetched')
+    await resolvePublic(u.hostname.replace(/^\[|\]$/g, ''), resolver)
+    return fetch(u, { ...init, redirect: 'manual' })
+  }
+}
