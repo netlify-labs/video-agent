@@ -13,6 +13,7 @@ import {
   Loader,
   Modal,
   SegmentedControl,
+  Slider,
   Stack,
   Text,
   TextInput,
@@ -78,6 +79,8 @@ export function FindMusicModal(props: {
   const [license, setLicense] = useState<License>('cc0,by')
   const [category, setCategory] = useState<Category>('music')
   const [playing, setPlaying] = useState<string | null>(null)
+  // Where the playing preview is, for the timeline under its row.
+  const [clock, setClock] = useState({ at: 0, length: 0 })
   // Set while the search waits on a background job (Openverse was slow).
   const [slow, setSlow] = useState(false)
   // Tracks being imported, and those imported here (shown as in the library before the search refreshes).
@@ -170,6 +173,7 @@ export function FindMusicModal(props: {
     if (!el || !url) return
     if (playing === key) return stop()
     el.src = url
+    setClock({ at: 0, length: 0 })
     setPlaying(key)
     el.play().catch((e: unknown) => {
       // Switching tracks interrupts the last play(); only a real failure of this one says so.
@@ -194,6 +198,42 @@ export function FindMusicModal(props: {
       {playing === key ? <IconPlayerStopFilled size={14} /> : <IconPlayerPlayFilled size={14} />}
     </ActionIcon>
   )
+
+  /** The playing preview's timeline: click or drag to jump; arrow keys step 5 s. */
+  const timeline = (title: string, knownLength: number | null | undefined) => {
+    const length = clock.length || knownLength || 0
+    return (
+      <Group gap="xs" wrap="nowrap" mt={6} data-testid="preview-timeline">
+        <Text size="xs" c="var(--va-faint)" className="num" w={34}>
+          {duration(Math.min(clock.at, length))}
+        </Text>
+        <Slider
+          flex={1}
+          size="sm"
+          min={0}
+          max={Math.max(length, 0.1)}
+          step={0.1}
+          value={Math.min(clock.at, length)}
+          disabled={!length}
+          label={(v) => duration(v)}
+          thumbLabel={`Position in ${title}`}
+          onChange={(v) => {
+            setClock((c) => ({ ...c, at: v }))
+            if (audio.current) audio.current.currentTime = v
+          }}
+          onKeyDown={(e) => {
+            const el = audio.current
+            if (!el || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return
+            e.preventDefault()
+            el.currentTime = Math.max(0, Math.min(length, el.currentTime + (e.key === 'ArrowRight' ? 5 : -5)))
+          }}
+        />
+        <Text size="xs" c="var(--va-faint)" className="num" w={34} ta="right">
+          {length ? duration(length) : '–:––'}
+        </Text>
+      </Group>
+    )
+  }
 
   const items = results.data?.items ?? []
   const owned = library.data ?? []
@@ -278,6 +318,14 @@ export function FindMusicModal(props: {
           onEnded={() => {
             setPlaying(null)
           }}
+          onLoadedMetadata={(e) => {
+            const length = e.currentTarget.duration
+            setClock((c) => ({ ...c, length: Number.isFinite(length) ? length : 0 }))
+          }}
+          onTimeUpdate={(e) => {
+            const at = e.currentTarget.currentTime
+            setClock((c) => (Math.abs(c.at - at) >= 0.2 ? { ...c, at } : c))
+          }}
           hidden
         />
         {owned.length ? (
@@ -305,6 +353,7 @@ export function FindMusicModal(props: {
                         .filter(Boolean)
                         .join(' · ')}
                     </Text>
+                    {playing === m.id ? timeline(title, m.durationSec) : null}
                   </Stack>
                   {m.source?.licenseLabel ? (
                     <Badge size="sm" variant="light" color={m.source.license === 'cc0' ? 'teal' : 'blue'}>
@@ -400,6 +449,7 @@ export function FindMusicModal(props: {
                         .filter(Boolean)
                         .join(' · ')}
                     </Text>
+                    {playing === t.id ? timeline(t.title, t.durationSec) : null}
                   </Stack>
                   <Badge
                     size="sm"

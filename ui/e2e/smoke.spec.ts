@@ -1482,3 +1482,35 @@ test('Find music lists other places to find music, each opening in a new tab', a
     await expect(link).toHaveAttribute('rel', /noopener/)
   }
 })
+
+test('a playing preview has a timeline to click, drag or step through', async ({ page }) => {
+  await page.goto('/media')
+  await page.getByRole('button', { name: 'Find music' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Find music on Openverse' })
+  await dialog.getByLabel('Search music').fill('piano music')
+  await dialog.getByRole('button', { name: 'Search' }).click()
+  const row = dialog.getByTestId(`track-${MORNING}`)
+  await expect(row.getByTestId('preview-timeline')).toHaveCount(0)
+  await row.getByRole('button', { name: /^Play / }).click()
+  const timeline = row.getByTestId('preview-timeline')
+  await expect(timeline).toBeVisible()
+  // The 1.5 s fixture would end (and close the timeline) mid-test on a slow machine.
+  await page.locator('audio').evaluate((a) => {
+    ;(a as unknown as { loop: boolean }).loop = true
+  })
+  const position = () => page.locator('audio').evaluate((a) => (a as unknown as { currentTime: number }).currentTime)
+  // Clicking near the end of the bar jumps there.
+  const bar = timeline.locator('.mantine-Slider-root')
+  const box = await bar.boundingBox()
+  if (!box) throw new Error('no slider')
+  await page.mouse.click(box.x + box.width * 0.8, box.y + box.height / 2)
+  await expect.poll(position).toBeGreaterThan(0.5)
+  const after = await position()
+  // The arrow keys step back.
+  await timeline.getByRole('slider').focus()
+  await page.keyboard.press('ArrowLeft')
+  await expect.poll(position).toBeLessThan(after)
+  // Only the playing row has a timeline, and stopping removes it.
+  await row.getByRole('button', { name: /^Stop / }).click()
+  await expect(dialog.getByTestId('preview-timeline')).toHaveCount(0)
+})
