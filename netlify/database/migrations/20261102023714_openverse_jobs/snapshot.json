@@ -1,9 +1,9 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "41cd69c5-e72e-4d5d-ad30-33dcbc1f63b3",
+  "id": "d26287f6-6f9f-490e-9bdc-9643c7ca5d2b",
   "prevIds": [
-    "f23b9d59-ccd1-4761-a4a4-a1a92acba712"
+    "e227c933-f0b4-42f2-8790-a8663d2102d8"
   ],
   "ddl": [
     {
@@ -3370,6 +3370,19 @@
       "generated": null,
       "identity": null,
       "name": "previews",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "outputs"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "run_credits",
       "entityType": "columns",
       "schema": "public",
       "table": "outputs"

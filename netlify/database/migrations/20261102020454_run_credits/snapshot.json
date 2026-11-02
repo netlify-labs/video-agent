@@ -1,9 +1,9 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "9ce72c46-83e1-4f77-a785-f45a9d1cbd9f",
+  "id": "e227c933-f0b4-42f2-8790-a8663d2102d8",
   "prevIds": [
-    "41cd69c5-e72e-4d5d-ad30-33dcbc1f63b3"
+    "f23b9d59-ccd1-4761-a4a4-a1a92acba712"
   ],
   "ddl": [
     {
@@ -123,12 +123,6 @@
     {
       "isRlsEnabled": false,
       "name": "oauth_tokens",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "openverse_jobs",
       "entityType": "tables",
       "schema": "public"
     },
@@ -3044,149 +3038,6 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "openverse_jobs"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "user_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "openverse_jobs"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "kind",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "openverse_jobs"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "key",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "openverse_jobs"
-    },
-    {
-      "type": "jsonb",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "params",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "openverse_jobs"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "status",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "openverse_jobs"
-    },
-    {
-      "type": "jsonb",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "result",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "openverse_jobs"
-    },
-    {
-      "type": "jsonb",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "error",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "openverse_jobs"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "created_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "openverse_jobs"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "updated_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "openverse_jobs"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "expires_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "openverse_jobs"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
       "name": "job_id",
       "entityType": "columns",
       "schema": "public",
@@ -5709,125 +5560,6 @@
           "opclass": null
         },
         {
-          "value": "kind",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "key",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": true,
-      "where": "\"status\" in ('queued', 'running')",
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "openverse_jobs_inflight_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "openverse_jobs"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "kind",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "key",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "updated_at",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "openverse_jobs_key_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "openverse_jobs"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "user_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "created_at",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "openverse_jobs_user_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "openverse_jobs"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "expires_at",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "openverse_jobs_expires_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "openverse_jobs"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "user_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
           "value": "created_at",
           "isExpression": false,
           "asc": true,
@@ -6298,16 +6030,6 @@
       "name": "oauth_tokens_pkey",
       "schema": "public",
       "table": "oauth_tokens",
-      "entityType": "pks"
-    },
-    {
-      "columns": [
-        "id"
-      ],
-      "nameExplicit": false,
-      "name": "openverse_jobs_pkey",
-      "schema": "public",
-      "table": "openverse_jobs",
       "entityType": "pks"
     },
     {
