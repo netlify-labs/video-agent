@@ -117,6 +117,7 @@ export interface Repo {
   // callback receipts and idempotency
   getReceipt(attemptId: string): Promise<ReceiptRow | null>
   insertReceipt(row: ReceiptRow): Promise<void>
+  replaceReceipt(row: ReceiptRow): Promise<void>
   getIdempotency(principalId: string, operation: string, key: string): Promise<IdempotencyRow | null>
   insertIdempotency(row: IdempotencyRow): Promise<void>
   deleteExpiredIdempotency(now: string): Promise<number>

@@ -301,6 +301,9 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
       if (state.receipts.has(row.attemptId)) throw new Error('duplicate receipt')
       state.receipts.set(row.attemptId, clone(row))
     },
+    replaceReceipt: async (row) => {
+      state.receipts.set(row.attemptId, clone(row))
+    },
     getIdempotency: async (p, op, key) => clone(state.idem.get(`${p}|${op}|${key}`) ?? null),
     insertIdempotency: async (row) => {
       state.idem.set(`${row.principalId}|${row.operation}|${row.key}`, clone(row))

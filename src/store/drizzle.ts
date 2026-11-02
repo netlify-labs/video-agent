@@ -294,6 +294,12 @@ function repoFor(db: Db): Repo {
     insertReceipt: async (row) => {
       await db.insert(t.callbackReceipts).values(row)
     },
+    replaceReceipt: async (row) => {
+      await db
+        .update(t.callbackReceipts)
+        .set({ manifest: row.manifest, manifestHash: row.manifestHash, receivedAt: row.receivedAt })
+        .where(eq(t.callbackReceipts.attemptId, row.attemptId))
+    },
     getIdempotency: async (p, op, key) =>
       one<IdempotencyRow>(
         await db

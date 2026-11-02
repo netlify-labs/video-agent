@@ -1,7 +1,7 @@
 // The run prompt: a fixed, versioned template plus the user's request, fenced as a creative brief.
 import { ASPECTS, type Aspect, type VideoSound, type Voiceover } from './types.js'
 
-export const PROMPT_TEMPLATE_VERSION = 13
+export const PROMPT_TEMPLATE_VERSION = 14
 
 export interface PromptInput {
   jobId: string
@@ -170,6 +170,7 @@ export function buildPrompt(p: PromptInput): string {
     `5. Run: ${renderCmd}`,
     '   If it fails, read its error, fix the composition, and run it again.',
     '6. End your answer with the fenced ```json block render-job.ts prints.',
+    `   Once it has succeeded, never run render-job.ts again: if its json block is out of view, print it with cat .render/${p.attemptId}/manifest.json.`,
     '',
     `Progress (optional, best effort): at milestones (after reading context/, after each scene, before each check round) run: npx tsx scripts/checkpoint.ts --attempt ${p.attemptId} --url ${p.checkpointUrl} --token ${p.callbackToken} --message "<what you are doing, in a few words>". Add --bundle once video/index.html exists, so people can watch it take shape. It never fails the run; don't retry it or wait for it.`,
     '',
@@ -325,6 +326,7 @@ export function buildRenderUnchangedPrompt(p: {
       `3. Run: ${render}`,
       '   It checks the files again before rendering. If it fails, stop and report the error; never edit files to make it pass.',
       '4. End your answer with the fenced ```json block render-job.ts prints.',
+      `   Once it has succeeded, never run render-job.ts again: if its json block is out of view, print it with cat .render/${p.attemptId}/manifest.json.`,
       '',
       `Optional progress: npx tsx scripts/checkpoint.ts --attempt ${p.attemptId} --url ${p.checkpointUrl} --token ${p.callbackToken} --message "<what you are doing>"`,
       'Never ask questions or request authorization. Never print environment variables. Never commit, push or open a pull request.',
@@ -343,6 +345,7 @@ export function buildRenderUnchangedPrompt(p: {
     `4. Run: ${render}`,
     '   It checks that only the re-voiced lines changed before rendering. If it fails, stop and report the error; never edit files to make it pass.',
     '5. End your answer with the fenced ```json block render-job.ts prints.',
+    `   Once it has succeeded, never run render-job.ts again: if its json block is out of view, print it with cat .render/${p.attemptId}/manifest.json.`,
     '',
     `Optional progress: npx tsx scripts/checkpoint.ts --attempt ${p.attemptId} --url ${p.checkpointUrl} --token ${p.callbackToken} --message "<what you are doing>"`,
     'Never ask questions or request authorization. Never print environment variables. Never commit, push or open a pull request.',

@@ -25,17 +25,14 @@ export async function receiveCallback(
   const hash = sha256Hex(JSON.stringify(body))
   await deps.store.tx(async (repo) => {
     const prior = await repo.getReceipt(attemptId)
-    if (prior) {
-      if (prior.manifestHash !== hash)
-        throw new ApiError('conflict', 'A different manifest was already received for this attempt.')
-      return
-    }
-    await repo.insertReceipt({
-      attemptId,
-      manifest: body,
-      manifestHash: hash,
-      receivedAt: deps.clock.now().toISOString(),
-    })
+    if (prior?.manifestHash === hash) return
+    // A finished video keeps the files it was made from.
+    if (prior && a.stage === 'ready')
+      throw new ApiError('conflict', 'A different manifest was already received for this attempt.')
+    const row = { attemptId, manifest: body, manifestHash: hash, receivedAt: deps.clock.now().toISOString() }
+    // An agent that renders again overwrites the uploads, so its newest manifest is the one that matches them.
+    if (prior) await repo.replaceReceipt(row)
+    else await repo.insertReceipt(row)
     if (!isTerminal(a.stage))
       await repo.updateAttempt(attemptId, { nextActionAt: deps.clock.now().toISOString() })
   })

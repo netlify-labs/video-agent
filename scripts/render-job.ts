@@ -279,6 +279,9 @@ async function main() {
     },
   }
 
+  // Kept on disk too, so the agent can print it again without rendering again (a second render overwrites the uploads).
+  writeFileSync(join(out, 'manifest.json'), JSON.stringify(manifest, null, 2))
+
   const status = await withRetries('callback', 5, async () => {
     const res = await fetch(callback, {
       method: 'POST',

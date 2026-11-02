@@ -41,6 +41,7 @@ Never ask questions or request authorization. If something is unclear, make a re
 5. Run: npx tsx scripts/render-job.ts --job vid_1 --attempt a --callback https://x/done --token tok --upload blobs
    If it fails, read its error, fix the composition, and run it again.
 6. End your answer with the fenced ```json block render-job.ts prints.
+   Once it has succeeded, never run render-job.ts again: if its json block is out of view, print it with cat .render/a/manifest.json.
 
 Progress (optional, best effort): at milestones (after reading context/, after each scene, before each check round) run: npx tsx scripts/checkpoint.ts --attempt a --url https://x/cp --token tok --message "<what you are doing, in a few words>". Add --bundle once video/index.html exists, so people can watch it take shape. It never fails the run; don't retry it or wait for it.
 

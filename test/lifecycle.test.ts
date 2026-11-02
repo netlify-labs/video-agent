@@ -270,6 +270,69 @@ describe('video lifecycle', () => {
     expect(a?.errorCategory).toBe('artifacts_missing')
   })
 
+  it('an agent that renders twice finishes with the second render: its manifest replaces the first', async () => {
+    // Live on 11-02: a second render-job overwrote the uploads, its callback was refused as a different manifest, and
+    // the version waited out the deadline on the first manifest's hashes (artifacts_missing).
+    const h = harness()
+    const codes: number[] = []
+    h.deps.runner.defaultScript = ((orig) => (req) => {
+      const s = orig(req)
+      return {
+        ...s,
+        onTerminal: async () => {
+          const { fixtureFiles, uploadAndManifest } = await import('./fakes.js')
+          const a = await h.deps.store.getAttempt(req.requestId)
+          const token = /--token (\S+)/.exec(req.prompt)?.[1]
+          const post = async (files: Record<string, Uint8Array>) => {
+            const m = await uploadAndManifest(h.deps.blobs, a?.jobId ?? '', req.requestId, files)
+            const res = await h.call('POST', `/api/internal/runs/${req.requestId}/done`, {
+              origin: null,
+              headers: { authorization: `Bearer ${token}` },
+              body: m,
+            })
+            codes.push(res.status)
+            return m
+          }
+          await post(fixtureFiles())
+          const second = {
+            ...fixtureFiles(),
+            'captions.vtt': new TextEncoder().encode('WEBVTT\n\nre-rendered\n'),
+          }
+          const m = await post(second)
+          // The same manifest again is accepted as a repeat.
+          await h.call('POST', `/api/internal/runs/${req.requestId}/done`, {
+            origin: null,
+            headers: { authorization: `Bearer ${token}` },
+            body: m,
+          })
+        },
+      }
+    })(h.deps.runner.defaultScript)
+    const video = await h.json(
+      await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }),
+    )
+    await h.drive(4)
+    expect(codes).toEqual([202, 202])
+    const [a] = await h.attempts(video.id)
+    expect(a?.stage).toBe('ready')
+    const receipt = await h.deps.store.getReceipt(a?.id ?? '')
+    const vtt = new TextEncoder().encode('WEBVTT\n\nre-rendered\n')
+    const { createHash } = await import('node:crypto')
+    expect(receipt?.manifest.files['captions.vtt']?.sha256).toBe(
+      createHash('sha256').update(vtt).digest('hex'),
+    )
+    // Once the video is made from a manifest, a different one is refused.
+    const token = /--token (\S+)/.exec(h.deps.runner.starts[0]?.prompt ?? '')?.[1]
+    const { fixtureFiles, uploadAndManifest } = await import('./fakes.js')
+    const late = await uploadAndManifest(h.deps.blobs, video.id, a?.id ?? '', fixtureFiles())
+    const res = await h.call('POST', `/api/internal/runs/${a?.id}/done`, {
+      origin: null,
+      headers: { authorization: `Bearer ${token}` },
+      body: late,
+    })
+    expect(res.status).toBe(409)
+  })
+
   it('rejects a video with the wrong dimensions', async () => {
     const h = harness()
     h.deps.runner.defaultScript = ((orig) => (req) => {
