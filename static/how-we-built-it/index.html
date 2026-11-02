@@ -149,11 +149,17 @@
   .axis { display: flex; justify-content: space-between; color: var(--faint); font-size: 12px; }
   .verdict { margin: 16px 0 0; font-size: 15px; }
 
-  /* Cards, tables, lessons */
+  /* Cards, tables, examples */
   .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
   .grid4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
   .card { background: var(--surface); border: 1px solid var(--rule); border-radius: 14px; padding: 18px; }
   .card p { color: var(--muted); font-size: 15px; margin: 0; }
+  .example { margin: 0; padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+  .example video { display: block; width: 100%; aspect-ratio: 16 / 9; background: var(--stage); }
+  .example figcaption { padding: 16px 18px 18px; }
+  .example figcaption p { margin-bottom: 10px; }
+  .example figcaption a { font-size: 14px; font-weight: 600; }
+  .card.featured { border-color: var(--accent); background: linear-gradient(135deg, var(--accent-soft), var(--surface) 70%); }
   .pill { display: inline-block; font-size: 13px; font-weight: 700; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 3px 12px; }
   .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 0; padding: 0; list-style: none; }
   .chips li { background: var(--raised); border-radius: 999px; padding: 4px 12px; font-size: 14px; color: var(--muted); }
@@ -163,9 +169,6 @@
   th { color: var(--faint); font-weight: 500; font-size: 13px; }
   td:first-child { font-weight: 600; white-space: nowrap; }
   .table-wrap { overflow-x: auto; }
-  .lessons { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-  .lessons li { background: var(--surface); border: 1px solid var(--rule); border-radius: 14px; padding: 18px; }
-  .lessons p { color: var(--muted); margin: 0; font-size: 15px; }
   .cta { margin-top: 72px; background: var(--surface); border: 1px solid var(--rule); border-radius: 18px; padding: 32px; display: flex; flex-wrap: wrap; gap: 20px; align-items: center; justify-content: space-between; }
   .cta h2 { margin: 0 0 6px; }
   .cta p { margin: 0; color: var(--muted); }
@@ -187,13 +190,13 @@
   @media (max-width: 960px) {
     .hero, .scrub, .two { grid-template-columns: minmax(0, 1fr); }
     .hero { gap: 28px; }
-    .grid3, .grid4, .lessons { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid3, .grid4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
   @media (max-width: 640px) {
     .wrap { padding: 0 16px; }
     .hero { padding-top: 40px; }
     .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .grid3, .grid4, .lessons { grid-template-columns: minmax(0, 1fr); }
+    .grid3, .grid4 { grid-template-columns: minmax(0, 1fr); }
     .grid4[style] { grid-template-columns: minmax(0, 1fr) !important; }
     .panel { padding: 16px; }
     /* The pipeline runs down the page on phones. */
@@ -226,7 +229,7 @@
   <a href="#netlify">Built on Netlify</a>
   <a href="#use-it">Use it</a>
   <a href="#features">What it can do</a>
-  <a href="#lessons">Lessons</a>
+  <a href="#examples">Examples</a>
   <a href="#beyond">Beyond websites</a>
 </nav>
 <div class="content">
@@ -394,26 +397,32 @@
   <div class="two">
     <div class="reveal">
       <p class="kicker">Anyone can use it</p>
-      <h2>Four ways in, one set of permissions</h2>
+      <h2>Five ways in, one set of permissions</h2>
       <div class="grid4" style="grid-template-columns:1fr 1fr">
+        <div class="card featured" style="grid-column:1 / -1"><h3>Claude connector</h3><p>The quickest way: in Claude,
+        open <b>Settings → Connectors → Add custom connector</b>, paste the MCP URL, then Connect and sign in with
+        Netlify. Now ask Claude for a video, in chat. (If your organization has already added it, just press
+        Connect.)</p></div>
         <div class="card"><h3>Web app</h3><p>Sign in with Netlify. Create, watch, edit, comment, approve and
         publish.</p></div>
         <div class="card"><h3>API</h3><p>API keys and signed webhooks for scripts and CI.</p></div>
-        <div class="card"><h3>MCP</h3><p>Ask Claude, Cursor or any MCP client. OAuth or an API key.</p></div>
+        <div class="card"><h3>Other AI tools</h3><p>Claude Code, Cursor or any MCP client: sign in with Netlify, or use an
+        API key.</p></div>
         <div class="card"><h3>Agent skill</h3><p>Recipes for coding agents, like a pull request into a demo
         video.</p></div>
       </div>
     </div>
     <div class="reveal">
-      <p class="muted" style="margin-top:6px">Connect your AI tool. Clients with OAuth only need the URL: sign in with
-      Netlify and approve.</p>
+      <p class="muted" style="margin-top:6px">The MCP URL, for the Claude connector or any AI tool. Clients with OAuth only
+      need the URL: sign in with Netlify and approve. Your first sign-in creates your account.</p>
       <pre><code>https://netlify-video-agent.netlify.app/mcp</code></pre>
       <p class="muted">In Claude Code:</p>
       <pre><code>claude mcp add --transport http video-agent https://netlify-video-agent.netlify.app/mcp</code></pre>
       <p class="muted">Install the skill:</p>
       <pre><code>curl -fsSL https://netlify-video-agent.netlify.app/skills/netlify-video.zip -o /tmp/netlify-video.zip \
   &amp;&amp; unzip -o /tmp/netlify-video.zip -d ~/.claude/skills/</code></pre>
-      <p class="muted">The app's <a href="/docs/mcp">MCP page</a> and <a href="/docs/skills">Agent skills page</a> cover
+      <p class="muted">Or press <b>Copy prompt for your agent</b> (bottom right) and paste it into your AI tool: it walks you
+      through connecting, whichever tool you use. The app's <a href="/docs/mcp">MCP page</a> and <a href="/docs/skills">Agent skills page</a> cover
       other tools.</p>
     </div>
   </div>
@@ -451,31 +460,29 @@
     </table>
     </div>
   </div>
-</section>
 
-<section id="lessons">
-  <div class="prose reveal">
-    <p class="kicker">What we learned the hard way</p>
-    <h2>Lessons from real runs</h2>
+  <div id="examples" class="prose reveal" style="margin-top:56px;scroll-margin-top:24px">
+    <p class="kicker">Examples</p>
+    <h2>Made with Video Agent</h2>
+    <p class="section-lede">Each one from a single prompt, with a narrated voice-over, captions and music.</p>
   </div>
-  <ul class="lessons">
-    <li class="reveal"><h3>Don't count on the agent's last words</h3><p>Agents often didn't end with the JSON list of
-    files we asked for. The render script now posts a signed callback itself; the final answer is only a
-    fallback.</p></li>
-    <li class="reveal"><h3>An agent may render twice</h3><p>One run rendered, lost sight of its output and rendered
-    again, overwriting the uploads, and the app rejected the second file list. Now the newest list wins until the video
-    is ready, and the agent is told not to render twice.</p></li>
-    <li class="reveal"><h3>Finish when the files arrive</h3><p>A run keeps going for minutes after rendering. The app
-    now finishes the video as soon as the render reports its files (see above).</p></li>
-    <li class="reveal"><h3>Keep the video; add a note</h3><p>A narrated video came out 55 seconds instead of 42 and was
-    thrown away. Runs cost real credits, so a video of the wrong length is now kept with a notice.</p></li>
-    <li class="reveal"><h3>Check everything a run hands back</h3><p>A run can write to any Blobs store on the site, so
-    hashes against the authenticated callback and a real MP4 check are what make a video trustworthy.</p></li>
-    <li class="reveal"><h3>Make it editable by design</h3><p>Scenes register through a small seek adapter that stretches
-    their animations, so changing a scene's length needs no code change. That's what makes a browser editor possible on
-    agent-written video.</p></li>
-  </ul>
-
+  <div class="grid3 examples">
+    <figure class="card example reveal">
+      <video controls playsinline preload="none" poster="/v/975emw6par.jpg" src="/v/975emw6par.mp4"></video>
+      <figcaption><h3>Netlify AI Gateway</h3><p>A 55-second product film: provider accounts and keys pile up, then collapse
+      into one gateway with every frontier model and no keys to wire up.</p><a href="/v/975emw6par">Share page</a></figcaption>
+    </figure>
+    <figure class="card example reveal">
+      <video controls playsinline preload="none" poster="/v/6cj4zma5e7.jpg" src="/v/6cj4zma5e7.mp4"></video>
+      <figcaption><h3>What are webhooks?</h3><p>A 55-second explainer for sales and customer success: instant notifications
+      instead of constant checking, and the Netlify events that send them.</p><a href="/v/6cj4zma5e7">Share page</a></figcaption>
+    </figure>
+    <figure class="card example reveal">
+      <video controls playsinline preload="none" poster="/v/x3546u2aab.jpg" src="/v/x3546u2aab.mp4"></video>
+      <figcaption><h3>The agent now speaks</h3><p>A 15-second announcement with a waveform drawn from the real narration,
+      lighting up as it plays. Edited in the browser after the first render.</p><a href="/v/x3546u2aab">Share page</a></figcaption>
+    </figure>
+  </div>
 </section>
 
 <section id="beyond">
@@ -747,13 +754,16 @@
   const SITE = document.documentElement.dataset.site || location.origin
   const PROMPT = `Set me up to make videos with Netlify Video Agent (${SITE}).
 
-1. Add its MCP server: ${SITE}/mcp (Streamable HTTP). In Claude Code: claude mcp add --transport http video-agent ${SITE}/mcp
-   When it asks, I'll sign in with Netlify and approve it.
-2. Install its agent skill, which has the good path and recipes:
+1. Connect to its MCP server: ${SITE}/mcp (Streamable HTTP). Signing in with Netlify creates my account the first time.
+   - Claude (web or desktop): you can't add connectors yourself, so tell me to open Settings → Connectors → Add custom connector, paste ${SITE}/mcp, then press Connect and sign in with Netlify. If my organization already added it, I only need to press Connect.
+   - Claude Code: run claude mcp add --transport http video-agent ${SITE}/mcp, then /mcp to sign in.
+   - Cursor and other MCP clients: add ${SITE}/mcp as a remote (HTTP) MCP server and sign in when asked. Clients that only run local servers: npx -y mcp-remote ${SITE}/mcp
+   - Without OAuth: I can create an API key at ${SITE}/keys; send it as Authorization: Bearer <key>.
+2. If you can install skills (Claude Code, Codex, Cursor, Gemini CLI), install the netlify-video skill, which has the good path and recipes:
    curl -fsSL ${SITE}/skills/netlify-video.zip -o /tmp/netlify-video.zip && unzip -o /tmp/netlify-video.zip -d ~/.claude/skills/
 3. Then ask me what the video should show. Use plan_video to ask me a few questions and write a brief, show me the brief, and create it with create_video once I'm happy.
 
-Ask me before starting any video: each one is an agent run that uses AI credits. While it renders, check on it with get_video and send me the link when it's ready.`
+Ask me before starting any video: each one is an agent run that uses AI credits. While it renders, check on it with get_video and send me the link when it's ready. To change it later, use revise_video; to share it, publish_video.`
   const copyBtn = $('#copy-prompt'), copyLabel = $('span', copyBtn)
   copyBtn.addEventListener('click', async () => {
     let ok = false
