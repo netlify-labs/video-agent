@@ -188,6 +188,7 @@ describe('MCP tools by role', () => {
         'add_comment',
         'cancel_video',
         'create_video',
+        'get_music_job',
         'get_video',
         'import_music',
         'list_comments',

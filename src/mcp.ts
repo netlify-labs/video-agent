@@ -10,7 +10,16 @@ import { PRIVATE_URL_TTL_SEC, signedFilePath } from './domain/files.js'
 import { addComment, listComments } from './domain/comments.js'
 import { getProgress } from './domain/progress.js'
 import { listMedia } from './domain/media.js'
-import { AUDIO_CATEGORIES, importOpenverse, LICENSE_FILTERS, searchOpenverse } from './domain/openverse.js'
+import { AUDIO_CATEGORIES, LICENSE_FILTERS, openverseTiming } from './domain/openverse.js'
+import {
+  getOpenverseJob,
+  jobError,
+  startOpenverseImport,
+  startOpenverseSearch,
+  waitForOpenverseJob,
+  type OpenverseJobDto,
+  type SearchResult,
+} from './domain/openverse-jobs.js'
 import * as planning from './domain/plans.js'
 import { can, type Principal } from './domain/policy.js'
 import { SOUNDS, type Aspect } from './domain/types.js'
@@ -41,7 +50,7 @@ Typical flow:
 
 Optional planning (when plan_video is listed): call plan_video with the prompt first. If it returns questions, ask your user (they can skip any), then call plan_brief with their answers, show the brief, and pass plan_id to create_video (or revise_video). Skip planning when the request is already specific.
 
-Videos have captions and are silent unless you pass sound ("music" or "music_sfx"); for music, pass an audio item from list_media in media_ids (else the brand's music is used, if it has one); when search_music is listed, it finds CC0 and CC BY music on Openverse to import with import_music. Pass voiceover (true, or a script with a line per beat) for a spoken narration; its captions follow the words. The company's brand context is applied automatically. Don't create a new video to fix a small thing: revise it.
+Videos have captions and are silent unless you pass sound ("music" or "music_sfx"); for music, pass an audio item from list_media in media_ids (else the brand's music is used, if it has one); when search_music is listed, it finds CC0 and CC BY music on Openverse to import with import_music (when Openverse is slow they answer status "pending" with a job_id: call get_music_job until it's done). Pass voiceover (true, or a script with a line per beat) for a spoken narration; its captions follow the words. The company's brand context is applied automatically. Don't create a new video to fix a small thing: revise it.
 
 Prompts: prompts/list has step-by-step recipes for what your role can do: pr_video (pull request to demo video), changelog_video (release notes to changelog video), social_cut (short vertical cut of a video), localize_video (captions and on-screen text in other languages) and review_video (read and add feedback, approve, revise).`
 
@@ -789,6 +798,62 @@ Example: {"kind": "image"}`,
       }),
   )
 
+  // Openverse can take a minute: the music tools wait a few seconds, then hand back a job to poll with get_music_job.
+  const trackList = (r: SearchResult) => ({
+    status: 'done',
+    tracks: r.items
+      .filter((t) => t.importable)
+      .map((t) => ({
+        id: t.id,
+        title: t.title,
+        creator: t.creator,
+        duration_sec: t.durationSec === null ? null : Math.round(t.durationSec),
+        license: t.licenseLabel,
+        credit_required: t.license === 'by',
+        genres: t.genres,
+        preview_url: t.previewUrl,
+        landing_url: t.landingUrl,
+        ...(t.mediaId ? { media_id: t.mediaId } : {}),
+      })),
+    page: r.page,
+    page_count: r.pageCount,
+    next_actions: [
+      'Pick a track (media_id means it is already in the library), then call import_music with its id.',
+    ],
+  })
+  const imported = (r: { created: boolean; media: OpenverseJobDto['media'] & {} }) => {
+    const m = r.media
+    return {
+      status: 'done',
+      media_id: m.id,
+      already_in_library: !r.created,
+      filename: m.filename,
+      duration_sec: m.durationSec,
+      license: m.source?.licenseLabel ?? null,
+      credit_required: m.source?.creditRequired ?? false,
+      next_actions: [`Pass media_ids ["${m.id}"] with sound "music" to create_video or revise_video.`],
+    }
+  }
+  /** A job's answer for an agent: the result, its error (thrown), or "pending" with the call to make next. */
+  const jobResult = (job: OpenverseJobDto) => {
+    if (job.status === 'failed') throw jobError(job)
+    if (job.status === 'done' && job.search) return trackList(job.search)
+    if (job.status === 'done' && job.media)
+      return imported({ created: job.created ?? true, media: job.media })
+    return {
+      status: 'pending',
+      job_id: job.id,
+      kind: job.kind,
+      next: 'call get_music_job',
+      next_actions: [
+        `Openverse is slow right now. Call get_music_job with job_id "${job.id}" (wait_seconds: 8) until status is "done".`,
+      ],
+      suggested_tool_calls: [{ name: 'get_music_job', arguments: { job_id: job.id, wait_seconds: 8 } }],
+    }
+  }
+  const settle = async (started: number, job: OpenverseJobDto) =>
+    jobResult(await waitForOpenverseJob(deps, principal, job.id, started + openverseTiming.mcpWaitMs))
+
   const searchMusicTool = server.registerTool(
     'search_music',
     {
@@ -796,6 +861,7 @@ Example: {"kind": "image"}`,
       description: `Search Openverse for openly licensed music (or sound effects) that is free for commercial videos and edits: only CC0 and CC BY, never NC, ND or SA. Results aren't in the library yet: pass a track's id to import_music, then use the returned media id in create_video or revise_video (media_ids) with sound "music". CC BY tracks are credited on the video and its share page automatically.
 
 When to use: the user wants music and the library (list_media, kind "audio") has nothing that fits. Listen links are in preview_url.
+Openverse is sometimes slow: then the answer is {"status": "pending", "job_id": …}; call get_music_job with that job_id until it's done.
 
 Example: {"query": "calm piano", "license": "cc0,by"}`,
       inputSchema: {
@@ -813,33 +879,14 @@ Example: {"query": "calm piano", "license": "cc0,by"}`,
     },
     async (args) =>
       run(async () => {
-        const r = await searchOpenverse(deps, principal, {
+        const started = Date.now()
+        const r = await startOpenverseSearch(deps, principal, {
           q: args.query,
           license: args.license,
           category: args.category,
           page: args.page,
         })
-        return {
-          tracks: r.items
-            .filter((t) => t.importable)
-            .map((t) => ({
-              id: t.id,
-              title: t.title,
-              creator: t.creator,
-              duration_sec: t.durationSec === null ? null : Math.round(t.durationSec),
-              license: t.licenseLabel,
-              credit_required: t.license === 'by',
-              genres: t.genres,
-              preview_url: t.previewUrl,
-              landing_url: t.landingUrl,
-              ...(t.mediaId ? { media_id: t.mediaId } : {}),
-            })),
-          page: r.page,
-          page_count: r.pageCount,
-          next_actions: [
-            'Pick a track (media_id means it is already in the library), then call import_music with its id.',
-          ],
-        }
+        return r.job ? settle(started, r.job) : trackList(r.done)
       }),
   )
 
@@ -848,6 +895,7 @@ Example: {"query": "calm piano", "license": "cc0,by"}`,
     {
       title: 'Import an Openverse track',
       description: `Import a track found with search_music into the team's media library (it's downloaded and checked; importing it again returns the same item). Returns the media id to pass in media_ids.
+When Openverse is slow the answer is {"status": "pending", "job_id": …}; call get_music_job with that job_id until it's done.
 
 Example: {"id": "8c0e3c1e-1a2b-4c3d-9e8f-0123456789ab"}`,
       inputSchema: {
@@ -858,17 +906,38 @@ Example: {"id": "8c0e3c1e-1a2b-4c3d-9e8f-0123456789ab"}`,
     },
     async (args) =>
       run(async () => {
-        const r = await importOpenverse(deps, principal, { id: args.id, caption: args.caption })
-        const m = r.media
-        return {
-          media_id: m.id,
-          already_in_library: !r.created,
-          filename: m.filename,
-          duration_sec: m.durationSec,
-          license: m.source?.licenseLabel ?? null,
-          credit_required: m.source?.creditRequired ?? false,
-          next_actions: [`Pass media_ids ["${m.id}"] with sound "music" to create_video or revise_video.`],
-        }
+        const started = Date.now()
+        const r = await startOpenverseImport(deps, principal, { id: args.id, caption: args.caption })
+        return r.job ? settle(started, r.job) : imported(r.done)
+      }),
+  )
+
+  const musicJobTool = server.registerTool(
+    'get_music_job',
+    {
+      title: 'Check a music search or import',
+      description: `Check a search_music or import_music call that answered "pending" because Openverse was slow. Returns the same result that tool returns once the job is done (status "done"), or "pending" again.
+wait_seconds (0-8) waits in this call for it to finish, so you can poll less often. Jobs are kept for 30 minutes.
+
+Example: {"job_id": "ovj_3f2a9c0d1e2b4a5c6d7e8f90", "wait_seconds": 8}`,
+      inputSchema: {
+        job_id: z.string().min(1).max(64).describe('The job_id from search_music or import_music.'),
+        wait_seconds: z
+          .number()
+          .min(0)
+          .max(8)
+          .optional()
+          .describe('Wait up to this many seconds for the job to finish (max 8).'),
+      },
+      annotations: { title: 'Check music job', readOnlyHint: true, openWorldHint: false },
+    },
+    async (args) =>
+      run(async () => {
+        const wait = Math.min(args.wait_seconds ?? 0, 8) * 1000
+        const job = wait
+          ? await waitForOpenverseJob(deps, principal, args.job_id, Date.now() + wait)
+          : await getOpenverseJob(deps, principal, args.job_id)
+        return jobResult(job)
       }),
   )
 
@@ -1017,6 +1086,7 @@ Example: {"plan_id": "plan_…", "answers": [{"question_id": "q1", "choice_ids":
   if (!can(principal, 'media:upload')) {
     searchMusicTool.remove()
     importMusicTool.remove()
+    musicJobTool.remove()
   }
   if (!can(principal, 'verdict:set')) verdictTool.remove()
   if (!can(principal, 'comment:create')) addCommentTool.remove()

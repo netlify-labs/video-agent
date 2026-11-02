@@ -43,8 +43,8 @@ only watch. The tool list shows only what your role can do.
 
 Other tools: `list_videos` (find a video by words in its prompt or title, `mine` for your own), `cancel_video` (stop
 the version in progress), `list_media` (the team's logos, screenshots, clips, fonts and music), `search_music` and
-`import_music` (find CC0 or CC BY music on Openverse and add it to the library), `list_comments`, `add_comment` and
-`set_verdict` (review; see the recipes).
+`import_music` (find CC0 or CC BY music on Openverse and add it to the library; `get_music_job` finishes a slow one),
+`list_comments`, `add_comment` and `set_verdict` (review; see the recipes).
 
 ## Etiquette
 
@@ -58,7 +58,9 @@ the version in progress), `list_media` (the team's logos, screenshots, clips, fo
   instead of describing them. To add a screenshot, upload it (see [references/connect.md](references/connect.md)).
 - **Music without a licence worry.** When the library has no fitting track, `search_music` finds CC0 and CC BY music
   (never NC, ND or SA), `import_music` adds the pick, and its media id goes in `media_ids` with `sound` "music". CC BY
-  tracks are credited on the video page, the share page and the embed automatically.
+  tracks are credited on the video page, the share page and the embed automatically. Openverse is sometimes slow (up
+  to a minute): then either tool answers `{"status": "pending", "job_id": …}`. Call `get_music_job` with that `job_id`
+  and `wait_seconds: 8` until `status` is "done" (it returns the same result), instead of searching again.
 - **Share links, not files.** Give the person `web_url` or the published share page. Download URLs expire in an hour.
 - **Never paste keys into prompts.** Keep the API key in an environment variable or the client's secret store. Never
   put it in a video prompt, a comment, a commit or a chat message.
