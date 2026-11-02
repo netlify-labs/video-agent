@@ -27,6 +27,7 @@ import type {
   MediaUploadRow,
   MediaUploadPartRow,
   VersionMediaRow,
+  VersionProvenanceRow,
   GatewayCallRow,
   WebhookDeliveryRow,
   UserWebhookRow,
@@ -150,6 +151,10 @@ export interface Repo {
   listVersionMedia(jobId: string, versionN: number): Promise<VersionMediaRow[]>
   /** Per media id, the distinct videos (job ids) whose versions use it. */
   mediaUsage(mediaIds: string[]): Promise<Record<string, string[]>>
+  /** Undeleted items imported from `source` with one of these ids there, newest first. */
+  mediaBySource(source: string, sourceIds: string[]): Promise<MediaRow[]>
+  /** Every version's imported media (the item's provenance with the version and kind), in version order. */
+  versionProvenance(jobId: string): Promise<VersionProvenanceRow[]>
   insertEdit(row: EditRow): Promise<void>
   getEdit(id: string, opts?: { lock?: boolean }): Promise<EditRow | null>
   updateEdit(id: string, patch: Partial<EditRow>): Promise<void>

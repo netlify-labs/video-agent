@@ -20,7 +20,14 @@ export interface PromptInput {
   /** sha256 of the run manifest the server wrote for this attempt; set when the run has inputs to restore. */
   runManifestSha256: string | null
   /** Library media in video/assets/media/ (plan v2 §9). Audio items carry their length when it's known. */
-  media?: { file: string; kind: string; caption: string | null; seconds?: number | null }[]
+  media?: {
+    file: string
+    kind: string
+    caption: string | null
+    seconds?: number | null
+    /** For a CC BY track: its credit line (the app shows it on the video and share pages). */
+    credit?: string
+  }[]
   /** What to do with sound; silent when missing (the prompt is then exactly as before sound existed). */
   sound?: VideoSound
   /** A voice-over (SPIKES.md S9): off when missing, and the prompt is then exactly as before voice existed. */
@@ -101,7 +108,12 @@ export function buildPrompt(p: PromptInput): string {
       ? []
       : (p.media ?? [])
           .filter((m) => m.kind === 'audio')
-          .map((m) => ({ file: m.file, caption: m.caption, seconds: m.seconds ?? null }))
+          .map((m) => ({
+            file: m.file,
+            caption: m.caption,
+            seconds: m.seconds ?? null,
+            ...(m.credit ? { credit: m.credit } : {}),
+          }))
   if (visual.length) {
     // Captions are the uploader's words: data in their own fence (§14 rule 3).
     lines.push(
@@ -182,7 +194,7 @@ function soundName(sound: VideoSound, voice: boolean): string {
  */
 function soundLines(
   sound: VideoSound,
-  tracks: { file: string; caption: string | null; seconds: number | null }[],
+  tracks: { file: string; caption: string | null; seconds: number | null; credit?: string }[],
   brandMusic: { file: string; genre: string | null; tempo: string | null } | null,
   voice: boolean,
 ): string[] {
@@ -212,6 +224,10 @@ function soundLines(
       sanitizeBrief(JSON.stringify(tracks)),
       FENCE_CLOSE,
     )
+    if (tracks.some((t) => t.credit))
+      out.push(
+        '- A track with a credit is CC BY: the app credits it under the video and on its share page, so leave it off the picture unless the request asks for on-screen credits.',
+      )
   } else if (brandMusic) {
     out.push(
       `- No track was picked: use the brand's music, ${brandMusic.file} (copy it into video/assets/audio/ and use it from there). Its feel, as JSON:`,

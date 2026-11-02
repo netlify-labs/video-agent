@@ -10,6 +10,7 @@ import { PRIVATE_URL_TTL_SEC, signedFilePath } from './domain/files.js'
 import { addComment, listComments } from './domain/comments.js'
 import { getProgress } from './domain/progress.js'
 import { listMedia } from './domain/media.js'
+import { AUDIO_CATEGORIES, importOpenverse, LICENSE_FILTERS, searchOpenverse } from './domain/openverse.js'
 import * as planning from './domain/plans.js'
 import { can, type Principal } from './domain/policy.js'
 import { SOUNDS, type Aspect } from './domain/types.js'
@@ -40,7 +41,7 @@ Typical flow:
 
 Optional planning (when plan_video is listed): call plan_video with the prompt first. If it returns questions, ask your user (they can skip any), then call plan_brief with their answers, show the brief, and pass plan_id to create_video (or revise_video). Skip planning when the request is already specific.
 
-Videos have captions and are silent unless you pass sound ("music" or "music_sfx"); for music, pass an audio item from list_media in media_ids (else the brand's music is used, if it has one). Pass voiceover (true, or a script with a line per beat) for a spoken narration; its captions follow the words. The company's brand context is applied automatically. Don't create a new video to fix a small thing: revise it.
+Videos have captions and are silent unless you pass sound ("music" or "music_sfx"); for music, pass an audio item from list_media in media_ids (else the brand's music is used, if it has one); when search_music is listed, it finds CC0 and CC BY music on Openverse to import with import_music. Pass voiceover (true, or a script with a line per beat) for a spoken narration; its captions follow the words. The company's brand context is applied automatically. Don't create a new video to fix a small thing: revise it.
 
 Prompts: prompts/list has step-by-step recipes for what your role can do: pr_video (pull request to demo video), changelog_video (release notes to changelog video), social_cut (short vertical cut of a video), localize_video (captions and on-screen text in other languages) and review_video (read and add feedback, approve, revise).`
 
@@ -191,6 +192,8 @@ function fromApiError(e: ApiError, videoId?: string): ToolError {
       { fix_hint: 'An admin needs to finish setup at /setup before videos can be made.' },
     ],
     invalid_request: ['INVALID_ARGUMENT', {}],
+    rate_limited: ['RATE_LIMITED', { fix_hint: 'Wait a minute, then try again.' }],
+    upstream_error: ['UPSTREAM_ERROR', { fix_hint: 'Try again shortly.' }],
     unauthorized: [
       'UNAUTHORIZED',
       {
@@ -277,6 +280,8 @@ async function summarize(deps: Deps, v: VideoDto) {
           }
         : {}),
       ...(x.publications.some((p) => p.urls) ? { public: x.publications.find((p) => p.urls) } : {}),
+      // CC BY media it uses: show these lines wherever the video is shared.
+      ...(x.credits.length ? { attribution: x.credits.map((c) => c.text) } : {}),
       credits: x.usage?.totalCreditsCost ?? null,
     })),
   )
@@ -784,6 +789,89 @@ Example: {"kind": "image"}`,
       }),
   )
 
+  const searchMusicTool = server.registerTool(
+    'search_music',
+    {
+      title: 'Find music on Openverse',
+      description: `Search Openverse for openly licensed music (or sound effects) that is free for commercial videos and edits: only CC0 and CC BY, never NC, ND or SA. Results aren't in the library yet: pass a track's id to import_music, then use the returned media id in create_video or revise_video (media_ids) with sound "music". CC BY tracks are credited on the video and its share page automatically.
+
+When to use: the user wants music and the library (list_media, kind "audio") has nothing that fits. Listen links are in preview_url.
+
+Example: {"query": "calm piano", "license": "cc0,by"}`,
+      inputSchema: {
+        query: z.string().min(1).max(200).describe('What it should sound like: mood, genre, instruments.'),
+        license: z
+          .enum(LICENSE_FILTERS)
+          .optional()
+          .describe(
+            '"cc0,by" (default; CC BY needs a credit, shown automatically) or "cc0" (no credit at all).',
+          ),
+        category: z.enum(AUDIO_CATEGORIES).optional().describe('"music" (default), "sound_effect" or "all".'),
+        page: z.number().int().min(1).max(10).optional(),
+      },
+      annotations: { title: 'Search music', readOnlyHint: true, openWorldHint: true },
+    },
+    async (args) =>
+      run(async () => {
+        const r = await searchOpenverse(deps, principal, {
+          q: args.query,
+          license: args.license,
+          category: args.category,
+          page: args.page,
+        })
+        return {
+          tracks: r.items
+            .filter((t) => t.importable)
+            .map((t) => ({
+              id: t.id,
+              title: t.title,
+              creator: t.creator,
+              duration_sec: t.durationSec === null ? null : Math.round(t.durationSec),
+              license: t.licenseLabel,
+              credit_required: t.license === 'by',
+              genres: t.genres,
+              preview_url: t.previewUrl,
+              landing_url: t.landingUrl,
+              ...(t.mediaId ? { media_id: t.mediaId } : {}),
+            })),
+          page: r.page,
+          page_count: r.pageCount,
+          next_actions: [
+            'Pick a track (media_id means it is already in the library), then call import_music with its id.',
+          ],
+        }
+      }),
+  )
+
+  const importMusicTool = server.registerTool(
+    'import_music',
+    {
+      title: 'Import an Openverse track',
+      description: `Import a track found with search_music into the team's media library (it's downloaded and checked; importing it again returns the same item). Returns the media id to pass in media_ids.
+
+Example: {"id": "8c0e3c1e-1a2b-4c3d-9e8f-0123456789ab"}`,
+      inputSchema: {
+        id: z.string().min(1).max(64).describe('The track id from search_music.'),
+        caption: z.string().max(500).optional().describe('Optional note on how to use it.'),
+      },
+      annotations: { title: 'Import music', readOnlyHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    async (args) =>
+      run(async () => {
+        const r = await importOpenverse(deps, principal, { id: args.id, caption: args.caption })
+        const m = r.media
+        return {
+          media_id: m.id,
+          already_in_library: !r.created,
+          filename: m.filename,
+          duration_sec: m.durationSec,
+          license: m.source?.licenseLabel ?? null,
+          credit_required: m.source?.creditRequired ?? false,
+          next_actions: [`Pass media_ids ["${m.id}"] with sound "music" to create_video or revise_video.`],
+        }
+      }),
+  )
+
   const addCommentTool = server.registerTool(
     'add_comment',
     {
@@ -925,6 +1013,10 @@ Example: {"plan_id": "plan_…", "answers": [{"question_id": "q1", "choice_ids":
   // Keys inherit their owner's role, so the tool list shows only what that role can do (plan v2 §3).
   if (!can(principal, 'video:create')) {
     for (const t of [createTool, reviseTool, publishTool, unpublishTool]) t.remove()
+  }
+  if (!can(principal, 'media:upload')) {
+    searchMusicTool.remove()
+    importMusicTool.remove()
   }
   if (!can(principal, 'verdict:set')) verdictTool.remove()
   if (!can(principal, 'comment:create')) addCommentTool.remove()

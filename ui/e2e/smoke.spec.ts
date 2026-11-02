@@ -1049,3 +1049,108 @@ test('voice previews play a sample, one at a time, without picking the voice', a
   await page.keyboard.press('Escape')
   await expect(page.getByRole('combobox', { name: 'Voice' })).toHaveValue('Default (Heart)')
 })
+
+// Openverse (Find music): search through the mock API, preview, import into the library, and the credit line.
+const MORNING = '00000001-0000-4000-8000-000000000001'
+const HARBOR = '00000002-0000-4000-8000-000000000002'
+
+test('Find music searches Openverse, previews a track, and imports it into the library', async ({ page }) => {
+  await page.goto('/media')
+  await page.getByRole('button', { name: 'Find music' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Find music on Openverse' })
+  await dialog.getByLabel('Search music').fill('piano music')
+  await dialog.getByRole('button', { name: 'Search' }).click()
+  const row = dialog.getByTestId(`track-${MORNING}`)
+  await expect(row).toContainText('Morning Light')
+  await expect(row).toContainText('Lena Park · 2:34')
+  await expect(row.getByText('CC BY 4.0')).toBeVisible()
+  await expect(dialog.getByTestId(`track-${HARBOR}`).getByText('CC0 1.0')).toBeVisible()
+
+  // One preview at a time; pressing again stops it.
+  const play = dialog.getByTestId(`preview-${MORNING}`)
+  await play.click()
+  await expect(play).toHaveAttribute('aria-pressed', 'true')
+  await expect(play).toHaveAccessibleName('Stop Morning Light')
+  await dialog.getByTestId(`preview-${HARBOR}`).click()
+  await expect(play).toHaveAttribute('aria-pressed', 'false')
+  await expect(dialog.getByTestId(`preview-${HARBOR}`)).toHaveAttribute('aria-pressed', 'true')
+  await dialog.getByTestId(`preview-${HARBOR}`).click()
+  await expect(dialog.getByTestId(`preview-${HARBOR}`)).toHaveAttribute('aria-pressed', 'false')
+
+  // CC0 only hides the CC BY tracks.
+  await dialog.getByText('CC0 only', { exact: true }).click()
+  await expect(dialog.getByTestId(`track-${MORNING}`)).toHaveCount(0)
+  await expect(dialog.getByTestId(`track-${HARBOR}`)).toBeVisible()
+  await dialog.getByText('CC0 + CC BY', { exact: true }).click()
+
+  await row.getByRole('button', { name: 'Import' }).click()
+  await expect(row.getByText('In library')).toBeVisible()
+  await page.keyboard.press('Escape')
+  const card = page.getByTestId('media-med_mock0001')
+  await expect(card.getByText('Morning Light - Lena Park.mp3')).toBeVisible()
+  const source = card.getByTestId('media-source')
+  await expect(source.getByText('CC BY 4.0')).toBeVisible()
+  await expect(source.getByRole('link', { name: 'Lena Park' })).toHaveAttribute(
+    'href',
+    'https://www.jamendo.com/artist/1001',
+  )
+  await expect(source.getByRole('link', { name: 'Openverse' })).toHaveAttribute(
+    'href',
+    'https://www.jamendo.com/track/2001',
+  )
+})
+
+test('a track imported from the picker is picked straight away', async ({ page }) => {
+  await page.goto('/new')
+  await page.getByRole('button', { name: 'Add media' }).click()
+  const picker = page.getByRole('dialog', { name: 'Add media' })
+  await picker.getByRole('button', { name: 'Find music' }).click()
+  const find = page.getByRole('dialog', { name: 'Find music on Openverse' })
+  await find.getByLabel('Search music').fill('music')
+  await find.getByRole('button', { name: 'Search' }).click()
+  await find.getByTestId(`track-${HARBOR}`).getByRole('button', { name: 'Import' }).click()
+  await expect(find).toHaveCount(0)
+  await expect(picker.getByTestId('pick-med_mock0001')).toHaveAttribute('aria-pressed', 'true')
+  await picker.getByRole('button', { name: 'Done' }).click()
+  await expect(page.getByTestId('chip-med_mock0001')).toContainText('Quiet Harbor')
+})
+
+test('a busy Openverse says so', async ({ page }) => {
+  await mock(page, 'mockOpenverseBusy')
+  await page.goto('/media')
+  await page.getByRole('button', { name: 'Find music' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Find music on Openverse' })
+  await dialog.getByLabel('Search music').fill('calm')
+  await dialog.getByRole('button', { name: 'Search' }).click()
+  await expect(dialog.getByTestId('openverse-error')).toHaveText('Openverse is busy, try again in a minute.')
+})
+
+test('viewers get no Find music button', async ({ page }) => {
+  await mock(page, 'mockRole', 'viewer')
+  await page.goto('/media')
+  await expect(page.getByRole('heading', { level: 1, name: 'Media' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Find music' })).toHaveCount(0)
+})
+
+test('a version with a CC BY track credits it on the page and in the embed', async ({ page }) => {
+  await page.goto('/videos/vid_webhooks')
+  const credits = page.getByTestId('version-credits')
+  await expect(credits).toContainText('Music: Morning Light by Lena Park, CC BY 4.0')
+  await expect(credits.getByRole('link', { name: 'Morning Light' })).toHaveAttribute(
+    'href',
+    'https://www.jamendo.com/track/2002',
+  )
+  await expect(credits.getByRole('link', { name: 'CC BY 4.0' })).toHaveAttribute(
+    'href',
+    'https://creativecommons.org/licenses/by/4.0/',
+  )
+  await expect(page.getByRole('textbox', { name: 'Embed' })).toHaveValue(
+    /<figcaption[^>]*>Music: <a href="https:\/\/www\.jamendo\.com\/track\/2002"/,
+  )
+  // Versions without one show no credits.
+  await page.goto('/videos/vid_teaser')
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Ship faster with preview deploys' }),
+  ).toBeVisible()
+  await expect(page.getByTestId('version-credits')).toHaveCount(0)
+})

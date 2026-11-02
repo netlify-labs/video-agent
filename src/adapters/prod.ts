@@ -9,7 +9,7 @@ import { createDrizzleStore } from '../store/drizzle.js'
 import * as schema from '../../db/schema.js'
 import { netlifyBlobs } from './blobs.js'
 import { createGateway } from './gateway.js'
-import { safeHttp } from './http.js'
+import { createPublicFetch, safeHttp } from './http.js'
 import { netlifyIdentity } from './identity.js'
 import { createPlatform } from './platform.js'
 import { createRunner } from './runner.js'
@@ -39,6 +39,7 @@ export function prodDeps(): Deps {
       signingSecret: async () => (await getSettings(partial)).fileSigningSecret,
     }),
     http: safeHttp,
+    fetch: createPublicFetch(),
     gateway: createGateway(env),
     oauth:
       config.netlifyOAuth && (config.mcpOAuth || config.authProvider === 'netlify')

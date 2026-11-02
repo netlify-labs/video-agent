@@ -17,6 +17,8 @@ API key.
 - **An API** with API keys and signed webhooks, so CI and scripts can make videos too. Its reference is built into the app (**API docs**).
 - **MCP tools**, so people can ask Claude, Cursor or any MCP client for a video.
 - **Your brand:** put your brand guide, logos and fonts in [`context/`](context/README.md). Every video follows it.
+- **A media library** of logos, screenshots, clips, fonts and music, with **Find music**: CC0 and CC BY tracks from
+  [Openverse](https://openverse.org), credited automatically ([below](#music-from-openverse)).
 
 ## Before you deploy
 
@@ -133,6 +135,33 @@ Prompts are visible to your Netlify team in the project's Agent Runs page.
 | `NETLIFY_OAUTH_CLIENT_ID`, `NETLIFY_OAUTH_CLIENT_SECRET` | —                                              | The Netlify OAuth application for Sign in with Netlify (web and MCP share it).                                                                 |
 | `MCP_OAUTH_ALLOWED_EMAIL_DOMAINS`                        | `ALLOWED_EMAIL_DOMAINS`                        | Email domains that may connect over OAuth. With neither set to domains (`invite-only`), only existing accounts can.                            |
 | `MCP_OAUTH_CIMD_HOSTS`                                   | `claude.ai,claude.com`                         | Hosts whose https client ids (Client ID Metadata Documents) are fetched.                                                                       |
+| `OPENVERSE_CLIENT_ID`, `OPENVERSE_CLIENT_SECRET`         | —                                              | A registered Openverse app for Find music (higher rate limits). Without them, searches are anonymous ([below](#music-from-openverse)).         |
+
+## Music from Openverse
+
+Creators and admins can search [Openverse](https://openverse.org) from the Media page (**Find music**), the media
+picker, or the MCP tools `search_music` and `import_music`. Every call goes through the server
+(`GET /api/v1/media/openverse/search`, `POST /api/v1/media/openverse/import`); the browser never talks to the
+Openverse API.
+
+- **Licences: CC0 and CC BY only.** NC (non-commercial), ND (no derivatives) and SA (share-alike) tracks are never
+  shown or imported, whatever Openverse returns: videos are often commercial, they're edited and re-cut, and a
+  share-alike track would put its licence on the whole video. CC0 needs no credit; CC BY needs one, which the app adds.
+- **Import** takes only the Openverse id. The server reads the track from Openverse again, checks the licence,
+  downloads the file over HTTPS (at most 3 redirects, 50 MB, 25 seconds; hosts that resolve to private addresses are
+  refused) and keeps it only if its bytes are MP3, M4A, WAV or Ogg audio of 10 minutes or less. It becomes a normal
+  library item with its source, licence, creator and Openverse's attribution recorded. Importing the same track again
+  returns the same item.
+- **Attribution** comes from the library, not from the agent: a version made with a CC BY item lists it in the
+  version's `credits`, the video page shows "Music: _title_ by _creator_, CC BY 4.0" with links, and the public share
+  page and the embed snippet carry the same line. A silent version isn't credited for a track it never used.
+- **Previews** play from the track's source site (Jamendo, Freesound, Wikimedia Commons) when someone presses play.
+- **Rate limits.** Anonymous Openverse access is limited per IP address, and Netlify Functions share outbound
+  addresses, so register an app for steady use: `POST https://api.openverse.org/v1/auth_tokens/register/` with a
+  name, description and email ([docs](https://api.openverse.org/v1/#tag/auth)), confirm the email, then set
+  `OPENVERSE_CLIENT_ID` and `OPENVERSE_CLIENT_SECRET`. The server swaps them for a token and keeps it until it
+  expires. Searches are cached for 5 minutes, and when Openverse says it's busy the app waits before asking again
+  and says "Openverse is busy, try again in a minute."
 
 ## The API
 
@@ -155,8 +184,8 @@ is HMAC-SHA256 of `"<t>.<raw body>"` with the key's webhook secret (shown once w
 
 The same video tasks are MCP tools, so people can ask Claude, Cursor or any MCP client for a video:
 `create_video`, `get_video`, `list_videos`, `revise_video`, `publish_video`, `unpublish_video`, `cancel_video`,
-`set_verdict`, and, when AI Gateway is available, `plan_video` and `plan_brief` (ask a few questions first, then
-create with the plan). Each key's tool list matches its owner's role: Reviewers see the read and review tools, Viewers read only.
+`set_verdict`, `list_media`, `search_music` and `import_music` (CC0 and CC BY music from Openverse), and, when AI
+Gateway is available, `plan_video` and `plan_brief` (ask a few questions first, then create with the plan). Each key's tool list matches its owner's role: Reviewers see the read and review tools, Viewers read only.
 
 - Server URL: `https://<your-site>/mcp` (Streamable HTTP). Authenticate with an API key: `Authorization: Bearer nva_…`,
   or, when it's on, [Sign in with Netlify](#sign-in-with-netlify-oauth).

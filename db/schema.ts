@@ -312,8 +312,23 @@ export const media = pgTable(
     createdAt: ts('created_at').notNull(),
     updatedAt: ts('updated_at').notNull(),
     deletedAt: ts('deleted_at'),
+    // Where an imported item came from (Openverse): its id there, landing page, licence and credit. Null for uploads.
+    source: text('source'),
+    sourceId: text('source_id'),
+    sourceUrl: text('source_url'),
+    sourceTitle: text('source_title'),
+    license: text('license'),
+    licenseVersion: text('license_version'),
+    licenseUrl: text('license_url'),
+    creator: text('creator'),
+    creatorUrl: text('creator_url'),
+    attribution: text('attribution'),
   },
-  (t) => [index('media_created_idx').on(t.createdAt), index('media_uploader_idx').on(t.uploaderId)],
+  (t) => [
+    index('media_created_idx').on(t.createdAt),
+    index('media_uploader_idx').on(t.uploaderId),
+    index('media_source_idx').on(t.source, t.sourceId),
+  ],
 )
 
 // Upload sessions for files over 4 MB (plan v2 §14 rule 24): bound to the uploader, expiring, with the whole file's

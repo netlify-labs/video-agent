@@ -292,6 +292,38 @@ function Filmstrip({
   )
 }
 
+/** CC BY media this version uses, credited the way the share page and embed credit it. */
+function VersionCredits({ v }: { v: Version }) {
+  if (!v.credits.length) return null
+  const link = (text: string, url: string | null) =>
+    url ? (
+      <Anchor href={url} target="_blank" rel="noopener" size="sm" c="inherit" td="underline">
+        {text}
+      </Anchor>
+    ) : (
+      text
+    )
+  return (
+    <Card data-testid="version-credits">
+      <Text fw={600} mb={6}>
+        Credits
+      </Text>
+      <Stack gap={4}>
+        {v.credits.map((c) => (
+          <Text key={c.mediaId} size="sm" c="var(--va-muted)">
+            {c.role}: {link(c.title, c.sourceUrl)}
+            {c.creator ? <> by {link(c.creator, c.creatorUrl)}</> : null},{' '}
+            {link(c.licenseLabel, c.licenseUrl)}
+          </Text>
+        ))}
+      </Stack>
+      <Text size="xs" c="var(--va-faint)" mt={6}>
+        Shown on the share page and in the embed. Keep it with the video wherever you post it.
+      </Text>
+    </Card>
+  )
+}
+
 function PublicLink({ video, v, canPublish }: { video: Video; v: Version; canPublish: boolean }) {
   const qc = useQueryClient()
   const unpublish = $api.useMutation('delete', '/api/v1/videos/{id}/versions/{n}/publish', {
@@ -846,6 +878,7 @@ export function VideoPage() {
               {v.output?.summary ?? v.prompt}
             </Text>
           </Card>
+          <VersionCredits v={v} />
         </div>
 
         <div className="va-rail">

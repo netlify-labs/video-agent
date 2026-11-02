@@ -1,5 +1,6 @@
 // The reconciler owns every attempt outcome. The sweep calls `tick` every minute; callbacks only
 // wake it up. Each step is persisted so a crash resumes instead of restarting.
+import { creditFor } from './credits.js'
 import type { Deps, RunnerSnapshot, StartRequest } from '../deps.js'
 import { RunnerError } from '../deps.js'
 import { decrypt, encrypt, sha256Hex } from '../lib/crypto.js'
@@ -260,10 +261,8 @@ async function startRequest(
         file: `assets/media/${m.filename}`,
         kind: m.kind,
         caption: m.caption,
-        // A track's length helps place it; the library row outlives a soft delete.
-        ...(m.kind === 'audio'
-          ? { seconds: (await deps.store.getMedia(m.mediaId))?.durationSec ?? null }
-          : {}),
+        // A track's length helps place it, and a CC BY track says so; the library row outlives a soft delete.
+        ...(m.kind === 'audio' ? await trackFacts(deps, m.mediaId) : {}),
       })),
     ),
     plan: version.plan ? { brief: version.plan.brief, qa: version.plan.qa } : null,
@@ -272,6 +271,12 @@ async function startRequest(
     brandMusic: contextMeta.music,
   })
   return result(prompt, revision?.sourceSha256 ?? null)
+}
+
+async function trackFacts(deps: Deps, mediaId: string) {
+  const m = await deps.store.getMedia(mediaId)
+  const credit = m ? creditFor(m.id, m.kind, m) : null
+  return { seconds: m?.durationSec ?? null, ...(credit ? { credit: credit.text } : {}) }
 }
 
 class SourceUnavailable extends Error {}

@@ -27,6 +27,7 @@ import type {
   MediaUploadRow,
   MediaUploadPartRow,
   VersionMediaRow,
+  VersionProvenanceRow,
   GatewayCallRow,
   WebhookDeliveryRow,
   UserWebhookRow,
@@ -445,6 +446,24 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
           out[r.mediaId]?.push(r.jobId)
       return out
     },
+    mediaBySource: async (source, ids) =>
+      clone(
+        [...state.media.values()]
+          .filter(
+            (m) => m.source === source && m.sourceId !== null && ids.includes(m.sourceId) && !m.deletedAt,
+          )
+          .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+      ),
+    versionProvenance: async (jobId) =>
+      state.versionMedia
+        .filter((r) => r.jobId === jobId)
+        .sort((a, b) => a.versionN - b.versionN || a.position - b.position)
+        .flatMap((r) => {
+          const m = state.media.get(r.mediaId)
+          if (!m?.source) return []
+          const { versionN, mediaId, position, kind } = r
+          return [{ versionN, mediaId, position, kind, ...pickProvenance(m) }]
+        }),
     insertEdit: async (row) => {
       state.edits.set(row.id, clone(row))
     },
@@ -787,4 +806,21 @@ export function isoWeek(iso: string): string {
   const day = (d.getUTCDay() + 6) % 7
   d.setUTCDate(d.getUTCDate() - day)
   return d.toISOString().slice(0, 10)
+}
+
+function pickProvenance(
+  m: MediaRow,
+): Omit<VersionProvenanceRow, 'versionN' | 'mediaId' | 'position' | 'kind'> {
+  return {
+    source: m.source,
+    sourceId: m.sourceId,
+    sourceUrl: m.sourceUrl,
+    sourceTitle: m.sourceTitle,
+    license: m.license,
+    licenseVersion: m.licenseVersion,
+    licenseUrl: m.licenseUrl,
+    creator: m.creator,
+    creatorUrl: m.creatorUrl,
+    attribution: m.attribution,
+  }
 }

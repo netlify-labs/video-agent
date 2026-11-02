@@ -6,6 +6,8 @@ import { PUBLIC_URL_TTL_SEC, accessKey, fileTtl, signFile, stableExp, writeAcces
 import { getSettings } from './settings.js'
 import { emitEvent } from './webhooks.js'
 import { snapshotMedia } from './media.js'
+import { versionCredits, type Credit } from './credits.js'
+import { creditHtml } from '../lib/credit-html.js'
 import { notifyOwner } from './notifications.js'
 import { ApiError } from '../lib/errors.js'
 import type { CommentCounts, Repo } from '../store/types.js'
@@ -591,6 +593,8 @@ export interface PublicationMirror {
   height: number
   durationSec: number
   keys: { video: string; poster: string; gif: string; captions: string }
+  /** CC BY media the version was made with; mirrors written before credits existed have none. */
+  credits?: Credit[]
 }
 
 export async function publishVersion(deps: Deps, principal: Principal, jobId: string, n: number) {
@@ -601,8 +605,9 @@ export async function publishVersion(deps: Deps, principal: Principal, jobId: st
     const version = await repo.getVersion(jobId, n)
     if (!version || version.status !== 'ready' || !output)
       throw new ApiError('not_ready', 'Only ready versions can be published.')
+    const credits = versionCredits(await repo.versionProvenance(jobId), version)
     const active = (await repo.listPublications(jobId)).find((p) => p.versionN === n && !p.unpublishedAt)
-    if (active) return { pub: active, mirror: mirrorFor(active, job, output), output }
+    if (active) return { pub: active, mirror: mirrorFor(active, job, output, credits), output }
     const row: PublicationRow = {
       slug: deps.ids.slug(),
       jobId,
@@ -612,13 +617,13 @@ export async function publishVersion(deps: Deps, principal: Principal, jobId: st
       unpublishedAt: null,
     }
     await repo.insertPublication(row)
-    return { pub: row, mirror: mirrorFor(row, job, output), output }
+    return { pub: row, mirror: mirrorFor(row, job, output, credits), output }
   })
   await deps.blobs.set('internal', pubKey(pub.slug), JSON.stringify(mirror))
-  return publicationDto(deps, pub, output)
+  return publicationDto(deps, pub, output, mirror.credits)
 }
 
-function mirrorFor(p: PublicationRow, job: JobRow, o: OutputRow): PublicationMirror {
+function mirrorFor(p: PublicationRow, job: JobRow, o: OutputRow, credits: Credit[]): PublicationMirror {
   return {
     slug: p.slug,
     jobId: job.id,
@@ -628,6 +633,7 @@ function mirrorFor(p: PublicationRow, job: JobRow, o: OutputRow): PublicationMir
     height: o.height,
     durationSec: o.durationSec,
     keys: { video: o.videoKey, poster: o.posterKey, gif: o.gifKey, captions: o.captionsKey },
+    credits,
   }
 }
 
@@ -650,6 +656,7 @@ export function publicationDto(
   deps: Pick<Deps, 'config'>,
   p: PublicationRow,
   o: Pick<OutputRow, 'width' | 'height' | 'previews'> | null = null,
+  credits: Credit[] = [],
 ) {
   const base = `${deps.config.siteUrl}/v/${p.slug}`
   // The 960w WebP poster is public only as /v/{slug}.webp, for a published version that has one.
@@ -669,15 +676,23 @@ export function publicationDto(
           captions: `${base}.vtt`,
           ...(webp ? { posterWebp: webp } : {}),
         },
-    embed: p.unpublishedAt ? null : embedHtml(base, webp, o),
+    embed: p.unpublishedAt ? null : embedHtml(base, webp, o, credits),
   }
 }
 
 /** The embed snippet: only the metadata loads until play, the box is sized before it does, and the poster is the
- * small WebP when the version has one. The MP4 is the only full-length file, so it is the one source. */
-function embedHtml(base: string, webp: string | null, o: Pick<OutputRow, 'width' | 'height'> | null) {
+ * small WebP when the version has one. The MP4 is the only full-length file, so it is the one source. A version
+ * with CC BY media carries its credit line as a caption, as the licence asks. */
+function embedHtml(
+  base: string,
+  webp: string | null,
+  o: Pick<OutputRow, 'width' | 'height'> | null,
+  credits: Credit[],
+) {
   const size = o ? ` width="${o.width}" height="${o.height}" style="max-width:100%;height:auto"` : ''
-  return `<video controls playsinline preload="metadata"${size} poster="${webp ?? `${base}.jpg`}"><source src="${base}.mp4" type="video/mp4"><track kind="captions" src="${base}.vtt" srclang="en" label="Captions"></video>`
+  const video = `<video controls playsinline preload="metadata"${size} poster="${webp ?? `${base}.jpg`}"><source src="${base}.mp4" type="video/mp4"><track kind="captions" src="${base}.vtt" srclang="en" label="Captions"></video>`
+  if (!credits.length) return video
+  return `<figure style="margin:0">${video}<figcaption style="font:12px/1.4 system-ui,sans-serif;opacity:.8">${creditHtml(credits)}</figcaption></figure>`
 }
 
 function versionDto(
@@ -692,6 +707,7 @@ function versionDto(
   viewerId: string | null = null,
   incorporates = 0,
   signing: { secret: string; job: JobRow; exp: number } | null = null,
+  credits: Credit[] = [],
 ) {
   const mineV = verdicts.find((x) => x.versionN === v.n && x.userId === viewerId)
   const fileBase = `${deps.config.siteUrl}/api/v1/videos/${jobId}/versions/${v.n}`
@@ -752,7 +768,9 @@ function versionDto(
     },
     // Signed image URLs, so the UI skips the redirect. One expiry per DTO keeps them stable for the browser cache.
     files: o && signing ? signedFiles(deps.config.siteUrl, signing, v.n, o.previews ?? null) : null,
-    publications: pubs.filter((p) => p.versionN === v.n).map((p) => publicationDto(deps, p, o)),
+    // CC BY media it was made with, from the library's provenance (never from the agent).
+    credits,
+    publications: pubs.filter((p) => p.versionN === v.n).map((p) => publicationDto(deps, p, o, credits)),
   }
 }
 
@@ -826,12 +844,13 @@ async function buildVideoDto(
   const job = await repo.getJob(jobId)
   if (!job || job.deletedAt || (viewer !== 'system' && !canSee(viewer, job)))
     throw new ApiError('not_found', 'Video not found.')
-  const [versions, attempts, pubs, verdicts, fed] = await Promise.all([
+  const [versions, attempts, pubs, verdicts, fed, provenance] = await Promise.all([
     repo.listVersions(jobId),
     repo.listAttempts(jobId),
     repo.listPublications(jobId),
     prefetched ? prefetched.verdicts.filter((x) => x.jobId === jobId) : repo.listVerdicts([jobId]),
     repo.listVersionComments(jobId),
+    repo.versionProvenance(jobId),
   ])
   // Webhooks ('system') get no signed URLs: they'd expire long before anyone used them.
   const { store, ids, clock, blobs } = deps
@@ -858,6 +877,7 @@ async function buildVideoDto(
         viewer === 'system' ? null : viewer.userId,
         fed.filter((c) => c.versionN === v.n).length,
         signing,
+        versionCredits(provenance, v),
       )
     }),
   )

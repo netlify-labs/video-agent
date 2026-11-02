@@ -62,6 +62,7 @@ import { addPreview } from './domain/previews.js'
 import { myUsage, planningByUserWeek } from './domain/usage.js'
 import { ApiError, errorBody } from './lib/errors.js'
 import { MEDIA_KINDS } from './lib/media/classify.js'
+import { AUDIO_CATEGORIES, importOpenverse, LICENSE_FILTERS, searchOpenverse } from './domain/openverse.js'
 import { PREVIEW_NAMES } from './lib/media/previews.js'
 import * as s from './schemas.js'
 
@@ -1179,6 +1180,74 @@ export function createApp(deps: Deps, opts: AppOptions) {
     async (c) => {
       await cancelUpload(deps, c.get('principal'), c.req.valid('param').id)
       return c.body(null, 204)
+    },
+  )
+  // ───── Openverse: find openly licensed music and import it (CC0 and CC BY only) ─────
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/v1/media/openverse/search',
+      summary:
+        'Search Openverse for CC0 or CC BY audio (music by default); NC, ND and SA licences are never returned (Creators and admins)',
+      tags: ['media'],
+      security,
+      request: {
+        query: z.object({
+          q: z.string().min(1).max(200),
+          license: z
+            .enum(LICENSE_FILTERS)
+            .optional()
+            .openapi({
+              description: 'cc0 (no credit needed) or cc0,by (the default; CC BY tracks are credited)',
+            }),
+          category: z
+            .enum(AUDIO_CATEGORIES)
+            .optional()
+            .openapi({ description: 'music (the default), sound_effect, or all audio' }),
+          page: z.coerce.number().int().min(1).max(10).optional(),
+        }),
+      },
+      responses: {
+        200: json(s.OpenverseSearchSchema, 'Tracks'),
+        ...errors,
+        429: err('Openverse is busy'),
+        502: err("Openverse didn't answer"),
+      },
+    }),
+    async (c) => c.json(await searchOpenverse(deps, c.get('principal'), c.req.valid('query')), 200),
+  )
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/v1/media/openverse/import',
+      summary:
+        'Import an Openverse track into the library by its id: re-read from Openverse, licence checked, file downloaded and verified as audio. Importing it again returns the same item',
+      tags: ['media'],
+      security,
+      request: {
+        body: {
+          content: {
+            'application/json': {
+              schema: z.object({
+                id: z.string().min(1).max(64).openapi({ description: 'The Openverse audio id' }),
+                caption: z.string().max(500).optional(),
+              }),
+            },
+          },
+          required: true,
+        },
+      },
+      responses: {
+        200: json(s.MediaSchema, 'Already in the library'),
+        201: json(s.MediaSchema, 'Imported'),
+        ...errors,
+        429: err('Openverse is busy'),
+        502: err("Openverse or the track's host didn't answer"),
+      },
+    }),
+    async (c) => {
+      const r = await importOpenverse(deps, c.get('principal'), c.req.valid('json'))
+      return r.created ? c.json(r.media, 201) : c.json(r.media, 200)
     },
   )
   const MediaParam = z.object({ id: z.string() })

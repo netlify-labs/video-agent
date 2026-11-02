@@ -73,6 +73,23 @@ const UsageSchema = z
   })
   .openapi('Usage')
 
+export const CreditSchema = z
+  .object({
+    mediaId: z.string(),
+    kind: z.enum(MEDIA_KINDS),
+    role: z.string().openapi({ example: 'Music' }),
+    title: z.string(),
+    creator: z.string().nullable(),
+    creatorUrl: z.string().nullable(),
+    license: z.string().openapi({ example: 'by' }),
+    licenseLabel: z.string().openapi({ example: 'CC BY 4.0' }),
+    licenseUrl: z.string().nullable(),
+    sourceUrl: z.string().nullable().openapi({ description: 'The work on its source site' }),
+    source: z.string().openapi({ example: 'openverse' }),
+    text: z.string().openapi({ example: '"Calm Piano" by Ada, CC BY 4.0, https://www.jamendo.com/track/1' }),
+  })
+  .openapi('Credit')
+
 export const PublicationSchema = z
   .object({
     slug: z.string(),
@@ -92,7 +109,12 @@ export const PublicationSchema = z
           .describe('A 960px-wide WebP poster, for versions rendered with preview variants.'),
       })
       .nullable(),
-    embed: z.string().nullable(),
+    embed: z
+      .string()
+      .nullable()
+      .openapi({
+        description: 'HTML to embed the video; with CC BY media it includes the credit line as a caption',
+      }),
   })
   .openapi('Publication')
 
@@ -223,6 +245,10 @@ export const VersionSchema = z
       .describe(
         'Signed URLs for the poster and preview GIF, once the version has files (30 to 60 minutes; 5 to 10 for private videos). Use links for a fresh one.',
       ),
+    credits: z.array(CreditSchema).openapi({
+      description:
+        'CC BY media this version was made with (from the library, e.g. Openverse music): show the credit wherever the video is shown',
+    }),
     publications: z.array(PublicationSchema),
   })
   .openapi('Version')
@@ -438,6 +464,25 @@ export const MyUsageSchema = z
   })
   .openapi('MyUsage')
 
+export const MediaSourceSchema = z
+  .object({
+    name: z.enum(['openverse']),
+    id: z.string().openapi({ description: 'Its id at the source' }),
+    url: z.string().nullable().openapi({ description: 'The landing page of the work' }),
+    title: z.string().nullable(),
+    creator: z.string().nullable(),
+    creatorUrl: z.string().nullable(),
+    license: z.string().openapi({ description: 'cc0 or by' }),
+    licenseVersion: z.string().nullable(),
+    licenseLabel: z.string().openapi({ example: 'CC BY 4.0' }),
+    licenseUrl: z.string().nullable(),
+    attribution: z.string().nullable().openapi({ description: "The source's own attribution text" }),
+    creditRequired: z
+      .boolean()
+      .openapi({ description: 'True for CC BY: videos that use it credit it (CC0 needs no credit)' }),
+  })
+  .openapi('MediaSource')
+
 export const MediaSchema = z
   .object({
     id: z.string(),
@@ -459,6 +504,9 @@ export const MediaSchema = z
       .nullable()
       .openapi({ description: 'Signed for 10 minutes; null until the item is ready' }),
     canDelete: z.boolean(),
+    source: MediaSourceSchema.nullable().openapi({
+      description: 'Where an imported item came from (Openverse), with its licence; null for uploads',
+    }),
   })
   .openapi('Media')
 export const UploadSessionSchema = z
@@ -477,6 +525,44 @@ export const UploadSessionSchema = z
     expiresAt: z.string(),
   })
   .openapi('UploadSession')
+
+export const OpenverseTrackSchema = z
+  .object({
+    id: z.string().openapi({ description: 'Openverse audio id (pass it to import)' }),
+    title: z.string(),
+    creator: z.string().nullable(),
+    creatorUrl: z.string().nullable(),
+    durationSec: z.number().nullable(),
+    license: z.enum(['cc0', 'by']),
+    licenseVersion: z.string().nullable(),
+    licenseLabel: z.string().openapi({ example: 'CC BY 4.0' }),
+    licenseUrl: z.string().nullable(),
+    attribution: z.string().nullable(),
+    landingUrl: z.string().nullable().openapi({ description: 'The work on its source site' }),
+    source: z.string().nullable().openapi({ example: 'jamendo' }),
+    category: z.string().nullable(),
+    genres: z.array(z.string()),
+    previewUrl: z
+      .string()
+      .nullable()
+      .openapi({ description: "The provider's file (https), to listen to before importing" }),
+    filetype: z.string().nullable(),
+    filesize: z.number().int().nullable(),
+    importable: z
+      .boolean()
+      .openapi({ description: 'False when no file fits the library (type, 50 MB, 10 minutes)' }),
+    mediaId: z.string().nullable().openapi({ description: 'The library item, when it was already imported' }),
+  })
+  .openapi('OpenverseTrack')
+
+export const OpenverseSearchSchema = z
+  .object({
+    items: z.array(OpenverseTrackSchema),
+    page: z.number().int(),
+    pageCount: z.number().int(),
+    total: z.number().int(),
+  })
+  .openapi('OpenverseSearch')
 
 export const MediaListSchema = z
   .object({ items: z.array(MediaSchema), nextCursor: z.string().nullable() })

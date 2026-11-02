@@ -9,7 +9,8 @@ import { sanitizeSvg, SvgError } from '../lib/media/svg.js'
 import { assertCan, type Principal } from './policy.js'
 import { getSettings } from './settings.js'
 import type { Repo } from '../store/types.js'
-import type { MediaRow, VersionMediaRow } from './types.js'
+import { NO_PROVENANCE, type MediaProvenance, type MediaRow, type VersionMediaRow } from './types.js'
+import { licenseLabel, safeUrl } from './credits.js'
 import { canSee, decodeCursor, nextCursor } from './videos.js'
 
 /** One request carries at most this much (Netlify's request limit is about 4.5 MB); bigger files use sessions. */
@@ -46,6 +47,7 @@ export async function storeMedia(
     caption?: string | undefined
     id?: string
     poster?: Uint8Array | null
+    provenance?: MediaProvenance
   },
 ) {
   const id = meta.id ?? `med_${deps.ids.uuid().replaceAll('-', '').slice(0, 24)}`
@@ -112,6 +114,7 @@ export async function storeMedia(
     createdAt: now,
     updatedAt: now,
     deletedAt: null,
+    ...(meta.provenance ?? NO_PROVENANCE),
   }
   return row
 }
@@ -179,6 +182,26 @@ export async function mediaDto(deps: Deps, p: Principal, m: MediaRow, usage?: Re
         }
       : null,
     canDelete: m.uploaderId === p.userId || p.role === 'admin',
+    source: sourceDto(m),
+  }
+}
+
+/** Where an imported item came from, its licence and whether a credit is required; null for uploads. */
+function sourceDto(m: MediaProvenance) {
+  if (!m.source || !m.sourceId) return null
+  return {
+    name: m.source,
+    id: m.sourceId,
+    url: safeUrl(m.sourceUrl),
+    title: m.sourceTitle,
+    creator: m.creator,
+    creatorUrl: safeUrl(m.creatorUrl),
+    license: m.license ?? '',
+    licenseVersion: m.licenseVersion,
+    licenseLabel: licenseLabel(m.license, m.licenseVersion),
+    licenseUrl: safeUrl(m.licenseUrl),
+    attribution: m.attribution,
+    creditRequired: m.license === 'by',
   }
 }
 
