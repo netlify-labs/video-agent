@@ -18,6 +18,7 @@ import {
   parseScript,
   pauseAfter,
   splitPhrases,
+  spokenText,
   voiceCaptions,
   wav,
   wordsFromCharacters,
@@ -202,6 +203,23 @@ describe('phrases and timing', () => {
   })
 })
 
+describe('spoken forms', () => {
+  it('swaps whole terms only, keeping everything else as written', () => {
+    expect(spokenText('Two CLIs, the CLI and an A/B test, 24/7.')).toBe(
+      "Two C-L-I's, the CLI and an A-B test, twenty four seven.",
+    )
+    expect(spokenText('Edit .env, e.g. on Vite vs. Deno.')).toBe(
+      'Edit dot env, for example on veet versus dee-no.',
+    )
+    expect(spokenText('Loads in 1.5 ms or 50ms.')).toBe('Loads in 1.5 milliseconds or 50 milliseconds.')
+    // Not inside other words, and case matters.
+    expect(spokenText('Visit Vitesse, saas.dev, an ISRs list, items, forms and ARRow.')).toBe(
+      'Visit Vitesse, saas.dev, an ISRs list, items, forms and ARRow.',
+    )
+    expect(spokenText('Meet org webhooks.')).toBe('Meet org webhooks.')
+  })
+})
+
 describe('captions from the voice', () => {
   it('makes one cue per phrase, offset by the beat start and the voice lead', () => {
     const caps = voiceCaptions(
@@ -319,6 +337,30 @@ describe('scripts/voice.ts', () => {
       { text: 'Hi', start: 0, end: 0.09 },
       { text: 'there.', start: 0.1, end: 0.19 },
     ])
+  })
+
+  it('speaks tricky terms as SPOKEN_AS says, and captions keep the written words', async () => {
+    const fake = fakeProvider('fake', true)
+    const v = await generateVoice(
+      dir,
+      { lines: [{ beat: 'intro', text: 'Ship SaaS with CI/CD in 50ms. Read the docs.' }] },
+      { provider: fake.provider, voice: 'x', speed: 1 },
+    )
+    expect(fake.calls).toEqual(['Ship sass with CI CD in 50 milliseconds.', 'Read the docs.'])
+    expect(v.beats[0]?.cues.map((c) => c.text)).toEqual(['Ship SaaS with CI/CD in 50ms.', 'Read the docs.'])
+    // The provider's words were for the spoken phrase, so that phrase's words are spread over its written ones.
+    expect(v.beats[0]?.words.map((w) => w.text)).toEqual([
+      'Ship',
+      'SaaS',
+      'with',
+      'CI/CD',
+      'in',
+      '50ms.',
+      'Read',
+      'the',
+      'docs.',
+    ])
+    expect(v.beats[0]?.estimated).toBe(true)
   })
 
   it('voice files are part of the composition (kept in the source archive and frozen bundles)', async () => {

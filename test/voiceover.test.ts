@@ -3,6 +3,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { buildPrompt } from '../src/domain/prompt.js'
+import { ONE_WAY_WORDS } from '../src/lib/voice.js'
 import { apiKey, harness, mcpCall, PROMPT, type Harness } from './helpers.js'
 import { tarGz } from './tarball.js'
 
@@ -131,6 +132,7 @@ describe('voice-over per version', () => {
     expect(briefed.brief.beats[0]?.narration).toBe('Meet org webhooks.')
     const b = h.deps.gateway.calls.filter((c) => c.kind === 'messages').at(-1)
     expect(b?.system).toContain('"narration"')
+    expect(b?.system).toContain(ONE_WAY_WORDS)
     const v = await create(h, { planId: plan.id })
     expect(await voiceOf(h, v.id, 1)).toEqual({
       voice: 'bf_emma',

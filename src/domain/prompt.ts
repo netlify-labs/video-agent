@@ -1,4 +1,5 @@
 // The run prompt: a fixed, versioned template plus the user's request, fenced as a creative brief.
+import { ONE_WAY_WORDS } from '../lib/voice.js'
 import { ASPECTS, type Aspect, type VideoSound, type Voiceover } from './types.js'
 
 export const PROMPT_TEMPLATE_VERSION = 14
@@ -283,7 +284,7 @@ function voiceLines(voice: Voiceover | null): string[] {
     )
   else
     out.push(
-      "- Script: write the narration yourself, one short spoken line per beat (about 2.5 words a second, plain words, said the way a person would say them). Use the plan's beats where there is a plan. Don't read every on-screen word aloud: say what the picture can't.",
+      `- Script: write the narration yourself, one short spoken line per beat (about 2.5 words a second, plain words, said the way a person would say them). Use the plan's beats where there is a plan. Don't read every on-screen word aloud: say what the picture can't. ${ONE_WAY_WORDS}`,
     )
   out.push(
     `- Write video/assets/voice/script.json as {"lines":[{"beat":"<beat id>","text":"<line>"}]}, then run: npx tsx scripts/voice.ts${flags}`,

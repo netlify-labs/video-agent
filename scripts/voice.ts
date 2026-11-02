@@ -39,6 +39,7 @@ import {
   minBeatSeconds,
   parseScript,
   splitPhrases,
+  spokenText,
   voiceCaptions,
   type BeatVoice,
   type Speech,
@@ -69,7 +70,8 @@ export async function generateVoice(
   const beats: BeatVoice[] = []
   for (const line of script.lines) {
     const text = line.text.replace(/\s+/g, ' ').trim()
-    const hash = lineHash(opts.provider.name, opts.voice, opts.speed, text)
+    // Hashed as spoken, so a line re-speaks when SPOKEN_AS changes how it sounds.
+    const hash = lineHash(opts.provider.name, opts.voice, opts.speed, spokenText(text))
     const file = `${VOICE_DIR}/${line.beat}.wav`
     const old = previous?.beats.find((b) => b.beat === line.beat)
     if (opts.only && !opts.only.includes(line.beat)) {
@@ -86,9 +88,13 @@ export async function generateVoice(
     const started = Date.now()
     const clips: { text: string; seconds: number; words?: Speech['words']; pcm: Uint8Array }[] = []
     for (const phrase of splitPhrases(text)) {
-      const speech = await opts.provider.synthesize(phrase, { voice: opts.voice, speed: opts.speed })
+      // The caption keeps the written phrase. When the spoken one differs, the provider's words don't match the
+      // caption's, so they're dropped and the words are spread over the phrase instead.
+      const spoken = spokenText(phrase)
+      const speech = await opts.provider.synthesize(spoken, { voice: opts.voice, speed: opts.speed })
       const pcm = toPcm(speech)
-      clips.push({ text: phrase, seconds: pcm.length / 2 / SAMPLE_RATE, words: speech.words, pcm })
+      const words = spoken === phrase ? speech.words : undefined
+      clips.push({ text: phrase, seconds: pcm.length / 2 / SAMPLE_RATE, words, pcm })
     }
     const laid = layoutBeat(clips)
     writeFileSync(

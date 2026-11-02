@@ -9,6 +9,7 @@ import { z } from 'zod'
 import type { Deps, GatewayUsage } from '../deps.js'
 import { sha256Hex } from '../lib/crypto.js'
 import { ApiError } from '../lib/errors.js'
+import { ONE_WAY_WORDS } from '../lib/voice.js'
 import { planningContext } from '../generated/planning-context.js'
 import { PlanAnswerSchema, planBriefShape } from '../schemas.js'
 import { clampModel, estimateCredits, FAST_MODEL } from './gateway-models.js'
@@ -90,7 +91,10 @@ const QuestionsOut = z.object({
         multiSelect: z.boolean().default(false),
         // Every question takes free text (another answer, or more context), whatever the model said. Optional:
         // the reply format doesn't ask for it, and without .optional() zod 4 rejects a reply that leaves it out.
-        allowOther: z.unknown().optional().transform((): true => true),
+        allowOther: z
+          .unknown()
+          .optional()
+          .transform((): true => true),
       }),
     )
     .max(6),
@@ -244,8 +248,7 @@ function soundLabel(
   return sound === 'silent' ? 'silent, no audio' : null
 }
 
-const NARRATION_RULE =
-  'The video has a voice-over: give every beat a "narration", the line spoken over it (about 2.5 words a second of the beat, plain spoken words; say what the picture can\'t rather than reading the on-screen text). If person_script is given, use its lines word for word, one per beat, in order.'
+const NARRATION_RULE = `The video has a voice-over: give every beat a "narration", the line spoken over it (about 2.5 words a second of the beat, plain spoken words; say what the picture can't rather than reading the on-screen text). ${ONE_WAY_WORDS} If person_script is given, use its lines word for word, one per beat, in order.`
 
 // ───────── operations ─────────
 

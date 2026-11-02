@@ -39,7 +39,7 @@ import {
   type VideoDto,
 } from './domain/videos.js'
 import { ApiError } from './lib/errors.js'
-import { SPEED_RANGE, VOICE_ID } from './lib/voice.js'
+import { ONE_WAY_WORDS, SPEED_RANGE, VOICE_ID } from './lib/voice.js'
 import { MEDIA_KINDS } from './lib/media/classify.js'
 import { registerPrompts } from './mcp-prompts.js'
 
@@ -79,7 +79,7 @@ function voiceoverArg(describe: string) {
           .max(12)
           .optional()
           .describe(
-            'The narration, one line per beat, spoken word for word. Omit to let the agent (or the plan) write it.',
+            `The narration, one line per beat, spoken word for word. Omit to let the agent (or the plan) write it. ${ONE_WAY_WORDS}`,
           ),
       }),
     ])

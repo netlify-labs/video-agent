@@ -24,6 +24,57 @@ export const SPEED_RANGE = [0.7, 1.3] as const
 export const FPS_TOLERANCE = 1 / 30
 const MAX_PHRASE_WORDS = 12
 
+/** For anyone writing narration: text-to-speech guesses how to say a word from its spelling, so a word with two
+ * pronunciations ("a live demo" / "we live here") is sometimes spoken the wrong way. */
+export const ONE_WAY_WORDS =
+  'Use only words that can be said one way: no words spelled the same but said differently by meaning (live, read, lead, close, record, present, content, minute, object, produce, wind, tear). Pick another word or phrase, for example "online" or "up and running" for "live", "finished reading" for "read".'
+
+/**
+ * How the voice says terms that Kokoro reads wrong from their spelling, checked against its espeak phonemes in a
+ * sentence. Most acronyms (API, CLI, SQL, SDK, PR, JSON, npm) it already spells, so they aren't here. Letters are
+ * joined with hyphens: periods ("C.L.I.") add pauses, and a spaced "A" is read as the article. Only the audio
+ * changes; captions keep the written words. Add a term when a video says one wrong.
+ */
+export const SPOKEN_AS: Readonly<Record<string, string>> = {
+  'CI/CD': 'CI CD',
+  'A/B': 'A-B',
+  CLIs: "C-L-I's",
+  SaaS: 'sass',
+  ISR: 'I-S-R',
+  ESM: 'E-S-M',
+  ARR: 'A-R-R',
+  IoT: 'I-O-T',
+  DDoS: 'dee-doss',
+  Vite: 'veet',
+  Vitest: 'vee-test',
+  Deno: 'dee-no',
+  Qwik: 'quick',
+  Redis: 'red-iss',
+  shadcn: 'shad-C-N',
+  LLaMA: 'llama',
+  '.env': 'dot env',
+  '24/7': 'twenty four seven',
+  'e.g.': 'for example',
+  'i.e.': 'that is',
+  'vs.': 'versus',
+  vs: 'versus',
+}
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')
+const SPOKEN_RE = new RegExp(
+  `(?<![\\p{L}\\p{N}.])(${Object.keys(SPOKEN_AS)
+    .sort((a, b) => b.length - a.length)
+    .map(escapeRe)
+    .join('|')})(?![\\p{L}\\p{N}])`,
+  'gu',
+)
+
+/** A phrase as the voice should say it: terms from SPOKEN_AS, and "50ms" as "50 milliseconds". */
+export function spokenText(text: string): string {
+  return text
+    .replace(SPOKEN_RE, (t) => SPOKEN_AS[t] ?? t)
+    .replace(/(?<![\p{L}\p{N}])(\d+(?:\.\d+)?) ?ms(?![\p{L}\p{N}])/gu, '$1 milliseconds')
+}
+
 export interface Word {
   text: string
   start: number

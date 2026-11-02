@@ -175,7 +175,11 @@ Only when the run's prompt asks for one. The narration is one line per beat, spo
 run (Kokoro on this machine, or ElevenLabs when the deployment has a key). Never use another text-to-speech tool.
 
 1. Write `assets/voice/script.json`: `{ "lines": [{ "beat": "intro", "text": "Meet org webhooks." }, …] }`, one line
-   per beat id you will use (the person's lines word for word when the prompt gives them).
+   per beat id you will use (the person's lines word for word when the prompt gives them). When you write the lines,
+   use only words that can be said one way: the voice guesses from the spelling, so a word spelled the same but said
+   differently by meaning (live, read, lead, close, record, present, content, minute) is sometimes spoken wrong. Say
+   "online" or "up and running" instead of "live". Write product names and acronyms the usual way (API, CLI, CI/CD,
+   SaaS, Vite): `voice.ts` says the tricky ones right, and the captions show what you wrote, so don't spell them out.
 2. From the repo root, run `npx tsx scripts/voice.ts` (with the `--voice`/`--speed` the prompt gives). It writes
    `assets/voice/<beat>.wav` and `assets/voice/voice.json` (per beat: `duration`, `cues` and `words`, in seconds from
    the start of that file), and prints the shortest each beat can be and its `<audio>` tag. Changed lines are

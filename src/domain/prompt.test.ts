@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
+import { ONE_WAY_WORDS } from '../lib/voice.js'
 import { buildPrompt, buildRenderUnchangedPrompt, sanitizeBrief } from './prompt.js'
 
 const base = {
@@ -122,6 +123,22 @@ describe('buildPrompt sound', () => {
     expect(
       buildPrompt({ ...base, sound: 'silent', voiceover: { voice: null, speed: null, script: null } }),
     ).not.toContain('openverse.ts')
+  })
+
+  it("a voice-over the agent writes avoids words that can be said two ways; a person's script is spoken as written", () => {
+    const own = buildPrompt({
+      ...base,
+      sound: 'silent',
+      voiceover: { voice: null, speed: null, script: null },
+    })
+    expect(own).toContain(ONE_WAY_WORDS)
+    const theirs = buildPrompt({
+      ...base,
+      sound: 'silent',
+      voiceover: { voice: null, speed: null, script: ['Your site is live.'] },
+    })
+    expect(theirs).not.toContain(ONE_WAY_WORDS)
+    expect(theirs).toContain('word for word')
   })
 
   it('music and effects without a track may get effects from Openverse too', () => {
