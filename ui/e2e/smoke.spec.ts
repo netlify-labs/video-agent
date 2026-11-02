@@ -1196,6 +1196,77 @@ test('a search Openverse never finishes gives up after two minutes and offers Re
   await expect(dialog.getByTestId(`track-${HARBOR}`)).toContainText('Quiet Harbor')
 })
 
+test('library matches show at once, above a slow Openverse search, and play from the library', async ({
+  page,
+}) => {
+  await mock(page, 'mockLibraryMusic')
+  await mock(page, 'mockOpenverseSlow', 'stuck')
+  await page.goto('/media')
+  await page.getByRole('button', { name: 'Find music' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Find music on Openverse' })
+  await dialog.getByLabel('Search music').fill('calm piano')
+  await dialog.getByRole('button', { name: 'Search' }).click()
+  const mine = dialog.getByTestId('library-med_libpiano')
+  await expect(mine).toContainText('Quiet Piano Morning')
+  await expect(mine).toContainText('Ada Keys')
+  await expect(mine.getByText('In library')).toBeVisible()
+  // Openverse is still searching: only its part spins.
+  await expect(dialog.getByTestId('openverse-searching')).toContainText('slow right now')
+  await expect(dialog.getByTestId('library-matches')).toContainText('In your library')
+  const play = dialog.getByTestId('preview-med_libpiano')
+  await play.click()
+  await expect(play).toHaveAttribute('aria-pressed', 'true')
+  await play.click()
+  await expect(play).toHaveAttribute('aria-pressed', 'false')
+})
+
+test('a library match is picked with Use in the media picker', async ({ page }) => {
+  await mock(page, 'mockLibraryMusic')
+  await mock(page, 'mockOpenverseSlow', 'stuck')
+  await page.goto('/new')
+  await page.getByRole('button', { name: 'Add media' }).click()
+  const picker = page.getByRole('dialog', { name: 'Add media' })
+  await picker.getByRole('button', { name: 'Find music' }).click()
+  const find = page.getByRole('dialog', { name: 'Find music on Openverse' })
+  await find.getByLabel('Search music').fill('piano')
+  await find.getByRole('button', { name: 'Search' }).click()
+  await find.getByTestId('library-med_libpiano').getByRole('button', { name: 'Use' }).click()
+  await expect(find).toHaveCount(0)
+  await expect(picker.getByTestId('pick-med_libpiano')).toHaveAttribute('aria-pressed', 'true')
+})
+
+test('quick searches answer at once from the stored searches, even when Openverse is slow', async ({
+  page,
+}) => {
+  await mock(page, 'mockOpenverseSlow', 'stuck')
+  await page.goto('/media')
+  await page.getByRole('button', { name: 'Find music' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Find music on Openverse' })
+  const chips = dialog.getByRole('group', { name: 'Quick searches' })
+  await chips.getByRole('button', { name: 'piano', exact: true }).click()
+  await expect(dialog.getByTestId(`track-${MORNING}`)).toContainText('Morning Light')
+  await expect(chips.getByRole('button', { name: 'piano', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+  await expect(dialog.getByLabel('Search music')).toHaveValue('piano')
+  await expect(dialog.getByTestId('openverse-searching')).toHaveCount(0)
+  // Fresh results don't say when they were fetched.
+  await expect(dialog.getByTestId('openverse-updated')).toHaveCount(0)
+})
+
+test('a stale stored search is shown at once with when it was updated', async ({ page }) => {
+  await mock(page, 'mockOpenverseStale')
+  await page.goto('/media')
+  await page.getByRole('button', { name: 'Find music' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Find music on Openverse' })
+  await dialog.getByRole('group', { name: 'Quick searches' }).getByRole('button', { name: 'ambient' }).click()
+  await expect(dialog.getByTestId(`track-${MORNING}`)).toBeVisible()
+  await expect(dialog.getByTestId('openverse-updated')).toHaveText(
+    'Updated 1 d ago · refreshing in the background',
+  )
+})
+
 test('viewers get no Find music button', async ({ page }) => {
   await mock(page, 'mockRole', 'viewer')
   await page.goto('/media')

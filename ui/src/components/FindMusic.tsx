@@ -1,7 +1,9 @@
 // Find music on Openverse: search CC0 and CC BY tracks through the server, listen before importing, and import one into
-// the library. Previews play the provider's file in one shared <audio>, one at a time, only when someone presses play.
-// Openverse is often slow: then the server answers 202 with a job, which this polls (1 s, backing off to 3 s) for up to
-// two minutes before offering Retry.
+// the library. Matching audio already in the library shows first, at once; Openverse's tracks follow. Previews play in
+// one shared <audio>, one at a time, only when someone presses play. Searches are stored on the server, so common ones
+// (the quick picks) answer at once; a stored one over a day old says when it was updated. Otherwise Openverse is often
+// slow: then the server answers 202 with a job, which this polls (1 s, backing off to 3 s) for up to two minutes before
+// offering Retry.
 import {
   ActionIcon,
   Anchor,
@@ -22,6 +24,7 @@ import { useEffect, useRef, useState } from 'react'
 import { errorMessage, fetchClient } from '../api/client'
 import type { paths } from '../api/schema'
 import { MUSIC_SOURCES } from '../lib/music-sources'
+import { relativeTime } from './bits'
 import { duration, type Media } from './MediaPicker'
 
 type Search = paths['/api/v1/media/openverse/search']['get']
@@ -34,6 +37,8 @@ type Category = NonNullable<NonNullable<Search['parameters']['query']>['category
 /** How long to wait for a slow Openverse before giving up (the job may still finish; Retry picks it up). */
 const GIVE_UP_MS = 2 * 60_000
 const TOO_SLOW = 'Openverse is taking too long to answer. Try again in a minute.'
+/** Results older than this (stored on the server) say when they were fetched. */
+const HOUR = 3600_000
 
 const wait = (ms: number, signal?: AbortSignal) =>
   new Promise<void>((resolve, reject) => {
@@ -98,6 +103,34 @@ export function FindMusicModal(props: {
       return job.search
     },
   })
+  // Audio already in the library that matches: no Openverse call, so it shows at once.
+  const library = useQuery({
+    queryKey: ['openverse-library', query],
+    enabled: props.opened && query.length > 0,
+    retry: false,
+    queryFn: async ({ signal }): Promise<Media[]> => {
+      const r = await fetchClient.GET('/api/v1/media/openverse/library', {
+        params: { query: { q: query } },
+        signal,
+      })
+      if (r.error) throw new Error(errorMessage(r.error))
+      return r.data.items
+    },
+  })
+  const common = useQuery({
+    queryKey: ['openverse-common'],
+    enabled: props.opened,
+    staleTime: Infinity,
+    queryFn: async (): Promise<string[]> => {
+      const r = await fetchClient.GET('/api/v1/media/openverse/common')
+      return r.data?.queries ?? []
+    },
+  })
+  const run = (q: string) => {
+    stop()
+    setDraft(q)
+    setQuery(q)
+  }
 
   const importIt = async (t: Track) => {
     setImporting((s) => new Set(s).add(t.id))
@@ -109,6 +142,7 @@ export function FindMusicModal(props: {
       if (!m) throw new Error(TOO_SLOW)
       setImported((x) => ({ ...x, [t.id]: m.id }))
       void qc.invalidateQueries({ queryKey: ['get', '/api/v1/media'] })
+      void qc.invalidateQueries({ queryKey: ['openverse-library'] })
       notifications.show({ message: `${m.source?.title ?? m.filename} is in the library.` })
       props.onImported?.(m)
     } catch (e) {
@@ -130,29 +164,46 @@ export function FindMusicModal(props: {
   useEffect(() => {
     if (!props.opened) stop()
   }, [props.opened])
-  const toggle = (t: Track) => {
+  /** Plays (or stops) one preview: an Openverse track by its id, a library item by its media id. */
+  const toggle = (key: string, url: string | null | undefined) => {
     const el = audio.current
-    if (!el || !t.previewUrl) return
-    if (playing === t.id) return stop()
-    el.src = t.previewUrl
-    setPlaying(t.id)
+    if (!el || !url) return
+    if (playing === key) return stop()
+    el.src = url
+    setPlaying(key)
     el.play().catch((e: unknown) => {
       // Switching tracks interrupts the last play(); only a real failure of this one says so.
       if (e instanceof DOMException && e.name === 'AbortError') return
-      setPlaying((p) => (p === t.id ? null : p))
+      setPlaying((p) => (p === key ? null : p))
       notifications.show({ color: 'red', message: "This preview couldn't play." })
     })
   }
+  const playButton = (key: string, url: string | null | undefined, title: string) => (
+    <ActionIcon
+      variant={playing === key ? 'filled' : 'default'}
+      radius="xl"
+      size="lg"
+      disabled={!url}
+      aria-label={`${playing === key ? 'Stop' : 'Play'} ${title}`}
+      aria-pressed={playing === key}
+      onClick={() => {
+        toggle(key, url)
+      }}
+      data-testid={`preview-${key}`}
+    >
+      {playing === key ? <IconPlayerStopFilled size={14} /> : <IconPlayerPlayFilled size={14} />}
+    </ActionIcon>
+  )
 
   const items = results.data?.items ?? []
+  const owned = library.data ?? []
   return (
     <Modal opened={props.opened} onClose={props.onClose} title="Find music on Openverse" size="lg">
       <Stack gap="sm">
         <form
           onSubmit={(e) => {
             e.preventDefault()
-            stop()
-            setQuery(draft.trim())
+            run(draft.trim())
           }}
         >
           <Group gap="xs" wrap="nowrap">
@@ -172,6 +223,24 @@ export function FindMusicModal(props: {
             </Button>
           </Group>
         </form>
+        {common.data?.length ? (
+          <Group gap={6} role="group" aria-label="Quick searches" data-testid="quick-searches">
+            {common.data.map((q) => (
+              <Button
+                key={q}
+                size="compact-xs"
+                radius="xl"
+                variant={query === q ? 'filled' : 'default'}
+                aria-pressed={query === q}
+                onClick={() => {
+                  run(q)
+                }}
+              >
+                {q}
+              </Button>
+            ))}
+          </Group>
+        ) : null}
         <Group gap="xs" justify="space-between">
           <SegmentedControl
             size="xs"
@@ -211,6 +280,67 @@ export function FindMusicModal(props: {
           }}
           hidden
         />
+        {owned.length ? (
+          <Stack gap={6} data-testid="library-matches">
+            <Text size="xs" fw={600} c="var(--va-muted)">
+              In your library
+            </Text>
+            {owned.map((m) => {
+              const title = m.source?.title ?? m.caption ?? m.filename
+              return (
+                <Group
+                  key={m.id}
+                  wrap="nowrap"
+                  gap="sm"
+                  className="va-openverse-row"
+                  data-testid={`library-${m.id}`}
+                >
+                  {playButton(m.id, m.urls?.file, title)}
+                  <Stack gap={0} flex={1} miw={0}>
+                    <Text size="sm" fw={600} truncate title={title}>
+                      {title}
+                    </Text>
+                    <Text size="xs" c="var(--va-muted)" truncate>
+                      {[m.source?.creator, m.durationSec ? duration(m.durationSec) : null, m.filename]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </Text>
+                  </Stack>
+                  {m.source?.licenseLabel ? (
+                    <Badge size="sm" variant="light" color={m.source.license === 'cc0' ? 'teal' : 'blue'}>
+                      {m.source.licenseLabel}
+                    </Badge>
+                  ) : null}
+                  {props.onImported ? (
+                    <Button
+                      size="compact-sm"
+                      variant="default"
+                      onClick={() => {
+                        props.onImported?.(m)
+                      }}
+                    >
+                      Use
+                    </Button>
+                  ) : (
+                    <Badge size="sm" variant="outline" color="gray">
+                      In library
+                    </Badge>
+                  )}
+                </Group>
+              )
+            })}
+            <Text size="xs" fw={600} c="var(--va-muted)" mt={4}>
+              On Openverse
+            </Text>
+          </Stack>
+        ) : null}
+        {results.data?.fetchedAt &&
+        (results.data.stale || Date.now() - Date.parse(results.data.fetchedAt) > HOUR) ? (
+          <Text size="xs" c="var(--va-faint)" data-testid="openverse-updated">
+            Updated {relativeTime(results.data.fetchedAt)}
+            {results.data.stale ? ' · refreshing in the background' : ''}
+          </Text>
+        ) : null}
         {results.error ? (
           <Group gap="sm" wrap="nowrap">
             <Text size="sm" c="red" data-testid="openverse-error">
@@ -250,24 +380,7 @@ export function FindMusicModal(props: {
                   className="va-openverse-row"
                   data-testid={`track-${t.id}`}
                 >
-                  <ActionIcon
-                    variant={playing === t.id ? 'filled' : 'default'}
-                    radius="xl"
-                    size="lg"
-                    disabled={!t.previewUrl}
-                    aria-label={`${playing === t.id ? 'Stop' : 'Play'} ${t.title}`}
-                    aria-pressed={playing === t.id}
-                    onClick={() => {
-                      toggle(t)
-                    }}
-                    data-testid={`preview-${t.id}`}
-                  >
-                    {playing === t.id ? (
-                      <IconPlayerStopFilled size={14} />
-                    ) : (
-                      <IconPlayerPlayFilled size={14} />
-                    )}
-                  </ActionIcon>
+                  {playButton(t.id, t.previewUrl, t.title)}
                   <Stack gap={0} flex={1} miw={0}>
                     <Text size="sm" fw={600} truncate title={t.title}>
                       {t.landingUrl ? (
