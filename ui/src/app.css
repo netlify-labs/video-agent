@@ -1082,3 +1082,37 @@ body {
     display: none;
   }
 }
+
+/* The plan's brief: the essentials beside the scenes, so it reads without a long scroll. */
+.va-brief {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  gap: 28px;
+  align-items: start;
+}
+.va-brief-scene {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.va-brief-n {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--va-raised);
+  color: var(--va-muted);
+  font-size: 12px;
+  display: grid;
+  place-items: center;
+}
+.va-brief-audio {
+  border-top: 1px solid var(--va-rule);
+  padding-top: 12px;
+}
+@media (max-width: 900px) {
+  .va-brief {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

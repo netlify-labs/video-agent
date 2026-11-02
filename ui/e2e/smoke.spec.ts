@@ -1715,3 +1715,47 @@ test('a set-up deployment shows no missing-settings notices', async ({ page }) =
   await expect(page.getByRole('heading', { level: 1, name: 'Library' })).toBeVisible()
   await expect(page.getByTestId('missing-settings-banner')).toHaveCount(0)
 })
+
+test('a request for music and a voice-over wins over Sound and Voice-over left untouched', async ({
+  page,
+}) => {
+  await page.goto('/new')
+  await page
+    .getByLabel('What should the video show?')
+    .fill('A 30-second launch video for org webhooks with a voice-over and upbeat music.')
+  await planFirst(page)
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByText('Who is this video for?')).toBeVisible()
+  // Untouched Sound isn't sent, so the plan takes it from the request.
+  expect(await page.evaluate("'sound' in window.__sent['/api/v1/plans']")).toBe(false)
+  await dialog.getByRole('checkbox', { name: 'Skip' }).check()
+  await dialog.getByRole('button', { name: 'Next' }).click()
+  await dialog.getByRole('checkbox', { name: 'Skip' }).check()
+  await dialog.getByRole('button', { name: 'Write the brief' }).click()
+  const audio = dialog.getByTestId('brief-audio')
+  await expect(audio).toContainText('From your request')
+  await expect(audio.getByRole('radio', { name: 'Music', exact: true })).toBeChecked()
+  await expect(audio.getByRole('switch', { name: 'Voice-over' })).toBeChecked()
+  await expect(dialog.getByLabel('Narration for scene 1')).not.toHaveValue('')
+  await dialog.getByRole('button', { name: 'Create with this brief' }).click()
+  await expect(page).toHaveURL(/\/videos\//)
+  expect(await page.evaluate("'sound' in window.__sent['/api/v1/videos']")).toBe(false)
+})
+
+test('a Sound the person picked is sent, and the brief takes nothing from the request', async ({ page }) => {
+  await page.goto('/new')
+  await page.getByLabel('What should the video show?').fill('A 30-second launch video with upbeat music.')
+  await page.getByText('Music', { exact: true }).click()
+  await planFirst(page)
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByText('Who is this video for?')).toBeVisible()
+  expect(await page.evaluate("window.__sent['/api/v1/plans'].sound")).toBe('music')
+  await dialog.getByRole('checkbox', { name: 'Skip' }).check()
+  await dialog.getByRole('button', { name: 'Next' }).click()
+  await dialog.getByRole('button', { name: 'Write the brief' }).click()
+  await expect(dialog.getByLabel('Call to action')).toBeVisible()
+  await expect(dialog.getByTestId('brief-audio')).toContainText('Voice-over')
+  await expect(
+    dialog.getByTestId('brief-audio').getByRole('radio', { name: 'Music', exact: true }),
+  ).toHaveCount(0)
+})

@@ -178,6 +178,9 @@ export function NewVideoPage() {
   const valid =
     prompt.trim().length >= 10 && prompt.length <= 4000 && (lengthMode === 'auto' || Number(seconds) >= 3)
 
+  // A Sound the person set (or that picking an audio file set): otherwise a plan takes it from the request.
+  const chosenSound = soundTouched || sound !== 'silent' ? sound : undefined
+
   const submit = (planId: string | null = null) => {
     create.mutate({
       body: {
@@ -187,7 +190,8 @@ export function NewVideoPage() {
         ...(title.trim() ? { title: title.trim() } : {}),
         ...(planId ? { planId } : {}),
         ...(media.length ? { mediaIds: media.map((m) => m.id) } : {}),
-        sound,
+        // With a plan, an untouched Sound is the plan's (from the request); without one there's nothing else to go on.
+        ...(planId && !chosenSound ? {} : { sound }),
         // A plan carries the voice-over (with its narration), so only a direct create sends it.
         ...(voice.enabled && !planId ? { voiceover: voiceInput(voice) } : {}),
       },
@@ -396,7 +400,8 @@ export function NewVideoPage() {
           setDialog(null)
         }}
         title={dialog === 'plan' ? 'Plan your video' : 'Create your video'}
-        size={dialog === 'plan' ? 'xl' : 'lg'}
+        // Planning shows a question or a long brief at a time: most of the window, so neither is cramped.
+        size={dialog === 'plan' ? '85%' : 'lg'}
         fullScreen={phone}
         closeButtonProps={{ 'aria-label': 'Close' }}
         centered
@@ -408,7 +413,7 @@ export function NewVideoPage() {
             aspect={shapeTouched ? shape : undefined}
             durationSec={lengthMode === 'set' ? Number(seconds) : undefined}
             mediaIds={media.map((m) => m.id)}
-            sound={sound}
+            sound={chosenSound}
             voiceover={voice.enabled ? voiceInput(voice) : undefined}
             creating={create.isPending}
             onSuggestAspect={(a) => {

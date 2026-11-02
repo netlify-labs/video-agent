@@ -123,8 +123,12 @@ async function consumePlan(
     aspect: (plan.aspect as Aspect | null) ?? plan.route?.suggestedAspect ?? null,
     durationSec: plan.durationSec ?? (seconds > 0 ? Math.round(seconds) : null),
     mediaIds: plan.mediaIds,
-    sound: plan.sound ?? null,
-    voiceover: withPlanNarration(plan.voiceover ?? null, plan.brief),
+    // The person's choice, else what the brief took from the request.
+    sound: plan.sound ?? plan.brief.sound ?? null,
+    voiceover: withPlanNarration(
+      plan.voiceover ?? (plan.brief.voiceover ? { voice: null, speed: null, script: null } : null),
+      plan.brief,
+    ),
   }
 }
 

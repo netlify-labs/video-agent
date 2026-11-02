@@ -6126,6 +6126,9 @@ export interface components {
             callToAction: string;
             mustInclude: string[];
             avoid: string[];
+            /** @enum {string} */
+            sound?: "silent" | "music" | "music_sfx";
+            voiceover?: boolean;
         };
         /** @enum {string|null} */
         Verdict: "approved" | "changes_requested" | null;
@@ -6387,6 +6390,9 @@ export interface components {
                 callToAction: string;
                 mustInclude: string[];
                 avoid: string[];
+                /** @enum {string} */
+                sound?: "silent" | "music" | "music_sfx";
+                voiceover?: boolean;
             } | null;
             briefRev: number;
             /** @description Library items attached while planning. */

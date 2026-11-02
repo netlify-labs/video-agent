@@ -10,8 +10,10 @@ import {
   Loader,
   NumberInput,
   Radio,
+  SegmentedControl,
   Stack,
   Stepper,
+  Switch,
   TagsInput,
   Text,
   TextInput,
@@ -133,100 +135,160 @@ function QuestionCard({
   )
 }
 
-/** The brief the planner wrote, every field editable. */
+/** The brief the planner wrote, every field editable: the essentials on the left, the scenes on the right. */
 function BriefEditor({
   brief,
   voiceover,
   edit,
 }: {
   brief: Brief
+  /** The person turned the voice-over on before planning. */
   voiceover: boolean
   edit: (patch: Partial<Brief>) => void
 }) {
+  const spoken = voiceover || brief.voiceover === true
+  const decided = brief.sound !== undefined || brief.voiceover !== undefined
   return (
     <Stack gap="sm">
       <Text size="sm" c="var(--va-muted)">
         The brief goes to the agent with your prompt. Edit anything.
       </Text>
-      <Textarea
-        label="Goal"
-        autosize
-        minRows={2}
-        value={brief.goal}
-        onChange={(e) => edit({ goal: e.currentTarget.value })}
-      />
-      <TextInput
-        label="Audience"
-        value={brief.audience}
-        onChange={(e) => edit({ audience: e.currentTarget.value })}
-      />
-      <TextInput
-        label="Key message"
-        value={brief.keyMessage}
-        onChange={(e) => edit({ keyMessage: e.currentTarget.value })}
-      />
-      <Stack gap={6}>
-        <Text size="sm" fw={500}>
-          Scenes
-        </Text>
-        {voiceover ? (
-          <Text size="xs" c="var(--va-faint)">
-            Each scene's narration is read word for word, and the scene is made long enough for it.
+      <div className="va-brief">
+        <Stack gap="sm">
+          <Textarea
+            label="Goal"
+            autosize
+            minRows={2}
+            value={brief.goal}
+            onChange={(e) => edit({ goal: e.currentTarget.value })}
+          />
+          <Textarea
+            label="Audience"
+            autosize
+            minRows={1}
+            value={brief.audience}
+            onChange={(e) => edit({ audience: e.currentTarget.value })}
+          />
+          <Textarea
+            label="Key message"
+            autosize
+            minRows={1}
+            value={brief.keyMessage}
+            onChange={(e) => edit({ keyMessage: e.currentTarget.value })}
+          />
+          <TextInput
+            label="Tone"
+            value={brief.tone}
+            onChange={(e) => edit({ tone: e.currentTarget.value })}
+          />
+          <TextInput
+            label="Call to action"
+            value={brief.callToAction}
+            onChange={(e) => edit({ callToAction: e.currentTarget.value })}
+          />
+          <TagsInput
+            label="Must include"
+            value={brief.mustInclude}
+            onChange={(v) => edit({ mustInclude: v })}
+          />
+          <TagsInput label="Avoid" value={brief.avoid} onChange={(v) => edit({ avoid: v })} />
+          {decided ? (
+            // What the planner took from the request because the form's settings were left as they were.
+            <div className="va-brief-audio" data-testid="brief-audio">
+              <Text size="sm" fw={500}>
+                Sound
+              </Text>
+              <Text size="xs" c="var(--va-faint)" mb={6}>
+                From your request. Change it here.
+              </Text>
+              <Group gap="md" wrap="wrap">
+                {brief.sound !== undefined ? (
+                  <SegmentedControl
+                    size="xs"
+                    aria-label="Sound"
+                    value={brief.sound}
+                    onChange={(v) => edit({ sound: v })}
+                    data={[
+                      { value: 'silent', label: 'Silent' },
+                      { value: 'music', label: 'Music' },
+                      { value: 'music_sfx', label: 'Music + effects' },
+                    ]}
+                  />
+                ) : null}
+                {brief.voiceover !== undefined ? (
+                  <Switch
+                    label="Voice-over"
+                    checked={brief.voiceover}
+                    onChange={(e) => edit({ voiceover: e.currentTarget.checked })}
+                  />
+                ) : null}
+              </Group>
+            </div>
+          ) : null}
+        </Stack>
+        <Stack gap={8}>
+          <Text size="sm" fw={500}>
+            Scenes
           </Text>
-        ) : null}
-        {brief.beats.map((b, i) => (
-          <Stack key={i} gap={4}>
-            <Group gap="xs" wrap="nowrap">
-              <TextInput
-                style={{ flex: 1 }}
-                aria-label={`Scene ${i + 1}`}
-                value={b.text}
-                onChange={(e) => {
-                  const beats = brief.beats.map((x, j) =>
-                    j === i ? { ...x, text: e.currentTarget.value } : x,
-                  )
-                  edit({ beats })
-                }}
-              />
-              <NumberInput
-                w={84}
-                min={0}
-                max={600}
-                suffix=" s"
-                value={b.seconds}
-                onChange={(v) => {
-                  const beats = brief.beats.map((x, j) => (j === i ? { ...x, seconds: Number(v) || 0 } : x))
-                  edit({ beats })
-                }}
-              />
-            </Group>
-            {voiceover ? (
-              <Textarea
-                aria-label={`Narration for scene ${i + 1}`}
-                placeholder="What the narrator says over this scene"
-                autosize
-                minRows={1}
-                maxLength={600}
-                size="xs"
-                value={b.narration ?? ''}
-                onChange={(e) => {
-                  const narration = e.currentTarget.value
-                  const beats = brief.beats.map((x, j) => (j === i ? { ...x, narration } : x))
-                  edit({ beats })
-                }}
-              />
-            ) : null}
-          </Stack>
-        ))}
-      </Stack>
-      <TextInput label="Tone" value={brief.tone} onChange={(e) => edit({ tone: e.currentTarget.value })} />
-      <TextInput
-        label="Call to action"
-        value={brief.callToAction}
-        onChange={(e) => edit({ callToAction: e.currentTarget.value })}
-      />
-      <TagsInput label="Must include" value={brief.mustInclude} onChange={(v) => edit({ mustInclude: v })} />
-      <TagsInput label="Avoid" value={brief.avoid} onChange={(v) => edit({ avoid: v })} />
+          {spoken ? (
+            <Text size="xs" c="var(--va-faint)">
+              Each scene's narration is read word for word, and the scene is made long enough for it.
+            </Text>
+          ) : null}
+          {brief.beats.map((b, i) => (
+            <div key={i} className="va-brief-scene">
+              <span className="va-brief-n num">{i + 1}</span>
+              <Stack gap={6} style={{ flex: 1, minWidth: 0 }}>
+                <Group gap="xs" wrap="nowrap" align="flex-start">
+                  <Textarea
+                    style={{ flex: 1 }}
+                    aria-label={`Scene ${i + 1}`}
+                    autosize
+                    minRows={1}
+                    value={b.text}
+                    onChange={(e) => {
+                      const beats = brief.beats.map((x, j) =>
+                        j === i ? { ...x, text: e.currentTarget.value } : x,
+                      )
+                      edit({ beats })
+                    }}
+                  />
+                  <NumberInput
+                    w={84}
+                    min={0}
+                    max={600}
+                    suffix=" s"
+                    aria-label={`Length of scene ${i + 1}`}
+                    value={b.seconds}
+                    onChange={(v) => {
+                      const beats = brief.beats.map((x, j) =>
+                        j === i ? { ...x, seconds: Number(v) || 0 } : x,
+                      )
+                      edit({ beats })
+                    }}
+                  />
+                </Group>
+                {spoken ? (
+                  <Textarea
+                    aria-label={`Narration for scene ${i + 1}`}
+                    placeholder="What the narrator says over this scene"
+                    autosize
+                    minRows={1}
+                    maxLength={600}
+                    size="xs"
+                    value={b.narration ?? ''}
+                    onChange={(e) => {
+                      const narration = e.currentTarget.value
+                      const beats = brief.beats.map((x, j) => (j === i ? { ...x, narration } : x))
+                      edit({ beats })
+                    }}
+                  />
+                ) : null}
+              </Stack>
+            </div>
+          ))}
+        </Stack>
+      </div>
     </Stack>
   )
 }
@@ -358,13 +420,15 @@ export function PlanPanel(props: PlanPanelProps) {
           <Stepper
             active={step}
             size="sm"
+            // Up to seven steps: short labels on one line (Q1…Q6, Brief), never wrapping to a second row.
+            wrap={false}
             allowNextStepsSelect={false}
             onStepClick={(i) => {
               if (!busy) setStep(i)
             }}
           >
             {questions.map((q, i) => (
-              <Stepper.Step key={q.id} label={`Question ${i + 1}`} />
+              <Stepper.Step key={q.id} label={`Q${i + 1}`} aria-label={`Question ${i + 1}`} />
             ))}
             <Stepper.Step label="Brief" />
           </Stepper>

@@ -423,6 +423,10 @@ export interface PlanBrief {
   callToAction: string
   mustInclude: string[]
   avoid: string[]
+  /** Taken from the request when the person left Sound untouched. */
+  sound?: VideoSound | undefined
+  /** Taken from the request when the person left Voice-over untouched. */
+  voiceover?: boolean | undefined
 }
 export interface PlanRoute {
   needsQuestions: boolean

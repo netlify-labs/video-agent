@@ -118,7 +118,9 @@ describe('voice-over per version', () => {
     await h.call('POST', `/api/v1/plans/${plan.id}/questions`, { as: h.member })
     const q = h.deps.gateway.calls.filter((c) => c.kind === 'messages').at(-1)
     expect(q?.system).toContain('a spoken voice-over')
-    expect(q?.user).toContain('a spoken voice-over with captions from its words, no music')
+    expect(q?.user).toContain('a spoken voice-over with captions from its words')
+    // Sound wasn't chosen, so the request may still ask for music.
+    expect(q?.user).not.toContain('no music')
     h.deps.gateway.replies.push(
       brief([
         { text: 'Title', seconds: 3, narration: 'Meet org webhooks.' },
@@ -139,6 +141,56 @@ describe('voice-over per version', () => {
       speed: null,
       script: ['Meet org webhooks.', 'Read the docs.'],
     })
+  })
+
+  it('a request for a voice-over and music wins over Sound and Voice-over left untouched', async () => {
+    // Live on 11-02: the planner asked whether "the chosen_sound data says 'silent'" or the request's voice-over was right.
+    const h = harness()
+    const plan = await h.json<{ id: string }>(
+      await h.call('POST', '/api/v1/plans', {
+        as: h.member,
+        body: { prompt: 'A 20-second launch video with a voice-over and upbeat music.' },
+      }),
+    )
+    h.deps.gateway.replies.push(JSON.stringify({ questions: [] }))
+    await h.call('POST', `/api/v1/plans/${plan.id}/questions`, { as: h.member })
+    const q = h.deps.gateway.calls.filter((c) => c.kind === 'messages').at(-1)
+    expect(q?.system).toContain('The request wins over the chosen settings')
+    expect(q?.user).not.toContain('chosen_sound')
+    h.deps.gateway.replies.push(
+      JSON.stringify({
+        ...JSON.parse(brief([{ text: 'Title', seconds: 3, narration: 'Meet org webhooks.' }])),
+        sound: 'music',
+        voiceover: true,
+      }),
+    )
+    await h.call('POST', `/api/v1/plans/${plan.id}/brief`, { as: h.member, body: { answers: [] } })
+    const b = h.deps.gateway.calls.filter((c) => c.kind === 'messages').at(-1)
+    expect(b?.system).toContain('Set "sound" from the request')
+    expect(b?.system).toContain('Set "voiceover" to true only if')
+    const v = await create(h, { planId: plan.id })
+    expect((await h.deps.store.getVersion(v.id, 1))?.sound).toBe('music')
+    expect(await voiceOf(h, v.id, 1)).toEqual({ voice: null, speed: null, script: ['Meet org webhooks.'] })
+  })
+
+  it('a setting the person chose wins over the request', async () => {
+    const h = harness()
+    const plan = await h.json<{ id: string }>(
+      await h.call('POST', '/api/v1/plans', {
+        as: h.member,
+        body: { prompt: 'A 20-second launch video with upbeat music.', sound: 'silent' },
+      }),
+    )
+    h.deps.gateway.replies.push(JSON.stringify({ questions: [] }))
+    await h.call('POST', `/api/v1/plans/${plan.id}/questions`, { as: h.member })
+    h.deps.gateway.replies.push(
+      JSON.stringify({ ...JSON.parse(brief([{ text: 'x', seconds: 3 }])), sound: 'music' }),
+    )
+    await h.call('POST', `/api/v1/plans/${plan.id}/brief`, { as: h.member, body: { answers: [] } })
+    const b = h.deps.gateway.calls.filter((c) => c.kind === 'messages').at(-1)
+    expect(b?.system).not.toContain('Set "sound" from the request')
+    const v = await create(h, { planId: plan.id })
+    expect((await h.deps.store.getVersion(v.id, 1))?.sound).toBe('silent')
   })
 
   it("the brief's narration wins over the plan's script (it was written from it, then maybe edited)", async () => {

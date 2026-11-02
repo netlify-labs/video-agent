@@ -880,6 +880,17 @@
               "maxLength": 200
             },
             "maxItems": 10
+          },
+          "sound": {
+            "type": "string",
+            "enum": [
+              "silent",
+              "music",
+              "music_sfx"
+            ]
+          },
+          "voiceover": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1931,6 +1942,17 @@
                   "maxLength": 200
                 },
                 "maxItems": 10
+              },
+              "sound": {
+                "type": "string",
+                "enum": [
+                  "silent",
+                  "music",
+                  "music_sfx"
+                ]
+              },
+              "voiceover": {
+                "type": "boolean"
               }
             },
             "required": [

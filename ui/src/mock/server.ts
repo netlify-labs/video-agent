@@ -273,6 +273,11 @@ export function installMock() {
       mockVoice = vo?.enabled
         ? { voice: vo.voice ?? null, speed: vo.speed ?? null, script: vo.script ?? null }
         : null
+      const prompt = typeof b.prompt === 'string' ? b.prompt : ''
+      mockAudio = {
+        ...(b.sound === undefined ? { sound: /music|soundtrack/i.test(prompt) ? 'music' : 'silent' } : {}),
+        ...(vo?.enabled ? {} : { voiceover: /voice-?over|narrat/i.test(prompt) }),
+      }
       return json(mockPlan(), 201)
     }
     if (/^\/api\/v1\/plans\/[^/]+\/questions$/.test(p)) return json(mockPlan('questions'))
@@ -698,6 +703,8 @@ export function installMock() {
 }
 
 let mockVoice: { voice: string | null; speed: number | null; script: string[] | null } | null = null
+// What the mock planner takes from the request for settings left untouched (like the real one: the request wins).
+let mockAudio: { sound?: 'silent' | 'music' | 'music_sfx'; voiceover?: boolean } = {}
 const NARRATION = [
   'Every project used to need its own webhook.',
   'Now one org webhook covers them all.',
@@ -746,11 +753,16 @@ function mockPlan(stage: 'route' | 'questions' | 'brief' = 'route') {
               { text: 'The problem: a webhook per project', seconds: 8 },
               { text: 'Org webhooks: subscribe once', seconds: 14 },
               { text: 'End card: Read the docs', seconds: 8 },
-            ].map((b, i) => (mockVoice ? { ...b, narration: mockVoice.script?.[i] ?? NARRATION[i] } : b)),
+            ].map((b, i) =>
+              mockVoice || mockAudio.voiceover
+                ? { ...b, narration: mockVoice?.script?.[i] ?? NARRATION[i] }
+                : b,
+            ),
             tone: 'Confident, plain',
             callToAction: 'Read the docs',
             mustInclude: ['logo'],
             avoid: [],
+            ...mockAudio,
           }
         : null,
     briefRev: stage === 'brief' ? 1 : 0,

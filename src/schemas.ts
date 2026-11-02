@@ -169,6 +169,9 @@ export const planBriefShape = z.object({
   callToAction: z.string().max(200),
   mustInclude: z.array(z.string().max(200)).max(10),
   avoid: z.array(z.string().max(200)).max(10),
+  // Set by the planner from the request when the person left Sound or Voice-over untouched: the request wins.
+  sound: z.enum(['silent', 'music', 'music_sfx']).optional(),
+  voiceover: z.boolean().optional(),
 })
 // Registered for non-null uses; nullable spots use the plain shape (openapi-typescript can't express a nullable $ref).
 export const PlanBriefSchema = planBriefShape.openapi('PlanBrief')

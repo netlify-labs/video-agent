@@ -243,7 +243,8 @@ function soundLabel(
       : sound === 'music_sfx'
         ? 'a music bed and sound effects on visible actions'
         : null
-  if (voice) return `a spoken voice-over with captions from its words${music ? `, ${music}` : ', no music'}`
+  if (voice)
+    return `a spoken voice-over with captions from its words${music ? `, ${music}` : sound === 'silent' ? ', no music' : ''}`
   if (music) return `${music}, no voice-over`
   return sound === 'silent' ? 'silent, no audio' : null
 }
@@ -415,6 +416,9 @@ export async function generateQuestions(deps: Deps, p: Principal, planId: string
     plan.mediaIds.length ? MEDIA_RULE : '',
     'Reply with JSON only: {"questions":[{"id":"q1","question":"…","why":"…","options":[{"id":"a","label":"…","description":"…"}],"multiSelect":false}]}',
     'Use 0–6 questions and 2–4 short options each. Return {"questions":[]} if nothing is open.',
+    'The request wins over the chosen settings: never ask about sound, music or a voice-over the request already asks for or rules out.',
+    // Seen live: "the chosen_sound data says 'silent, no audio'".
+    'Write for the person, never about the data: don\'t name the tags (chosen_sound, request…). Say "the sound you picked" or "your request".',
   ]
     .filter(Boolean)
     .join('\n')
@@ -479,15 +483,33 @@ export async function generateBrief(deps: Deps, p: Principal, planId: string, an
             ),
     }
   })
+  // What the person didn't choose in the form, the request decides: "with a voice-over and upbeat music" wins over
+  // the defaults they never touched.
+  const decideSound = !plan.sound
+  const decideVoice = !plan.voiceover
+  const audio = [
+    decideSound
+      ? 'Set "sound" from the request: "music" if it asks for music or a soundtrack, "music_sfx" for music and sound effects, else "silent".'
+      : '',
+    decideVoice
+      ? `Set "voiceover" to true only if the request or the answers ask for a voice-over, narrator or spoken script, else false. When it's true: ${NARRATION_RULE}`
+      : '',
+  ].filter(Boolean)
+  const fields = [
+    '"goal":"","audience":"","keyMessage":""',
+    `"beats":[{"text":"","seconds":0${plan.voiceover || decideVoice ? ',"narration":""' : ''}}]`,
+    '"tone":"","callToAction":"","mustInclude":[],"avoid":[]',
+    decideSound ? '"sound":"silent"' : '',
+    decideVoice ? '"voiceover":false' : '',
+  ].filter(Boolean)
   const system = [
     "Turn a video request and the person's answers into a short, concrete brief for an agent that builds HTML/CSS animated videos.",
     'Keep their intent; make reasonable choices for anything skipped. Beats are on-screen moments with a length in seconds.',
     DATA_RULE,
     plan.mediaIds.length ? `${MEDIA_RULE} Say in the beats where each file appears.` : '',
     plan.voiceover ? NARRATION_RULE : '',
-    plan.voiceover
-      ? 'Reply with JSON only: {"goal":"","audience":"","keyMessage":"","beats":[{"text":"","seconds":0,"narration":""}],"tone":"","callToAction":"","mustInclude":[],"avoid":[]}'
-      : 'Reply with JSON only: {"goal":"","audience":"","keyMessage":"","beats":[{"text":"","seconds":0}],"tone":"","callToAction":"","mustInclude":[],"avoid":[]}',
+    ...audio,
+    `Reply with JSON only: {${fields.join(',')}}`,
   ]
     .filter(Boolean)
     .join('\n')
