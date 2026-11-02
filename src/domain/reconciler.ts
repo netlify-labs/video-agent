@@ -527,6 +527,22 @@ async function poll(deps: Deps, a: AttemptRow): Promise<void> {
       deps.log.warn(`attempt.${reason}`, { attemptId: a.id })
       return
     }
+    // render-job has reported the uploaded files: finish now rather than after the run's wrap-up (writing its results,
+    // the runner's preview deploy), which can take minutes more. Finalize reads the files from the receipt.
+    if (await deps.store.getReceipt(a.id)) {
+      await deps.store.tx((repo) =>
+        setStage(
+          repo,
+          a,
+          'finishing',
+          { ...patch, finishingAt: now.toISOString(), nextActionAt: now.toISOString() },
+          now.toISOString(),
+        ),
+      )
+      await deps.store.updateAttempt(a.id, { leaseUntil: iso(now.getTime() + 2 * MIN) })
+      await deps.platform.dispatchFinalize(a.id)
+      return
+    }
     await deps.store.updateAttempt(a.id, patch)
     return
   }

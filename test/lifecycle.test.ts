@@ -270,6 +270,32 @@ describe('video lifecycle', () => {
     expect(a?.errorCategory).toBe('artifacts_missing')
   })
 
+  it('finishes as soon as render-job reports the files, without waiting for the run to wrap up', async () => {
+    // Live on 11-02 the run spent minutes writing results and deploying its preview after the render, while the page
+    // still said "Making version 1".
+    const h = harness()
+    h.deps.runner.nextScripts.push({ timeline: [running('running', 'Deploying preview')] })
+    const video = await h.json(
+      await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }),
+    )
+    await h.drive(2)
+    const [a] = await h.attempts(video.id)
+    expect(a?.stage).toBe('running')
+    const { fixtureFiles, uploadAndManifest } = await import('./fakes.js')
+    const m = await uploadAndManifest(h.deps.blobs, video.id, a?.id ?? '', fixtureFiles())
+    const token = /--token (\S+)/.exec(h.deps.runner.starts[0]?.prompt ?? '')?.[1]
+    const res = await h.call('POST', `/api/internal/runs/${a?.id}/done`, {
+      origin: null,
+      headers: { authorization: `Bearer ${token}` },
+      body: m,
+    })
+    expect(res.status).toBe(202)
+    await h.drive(2)
+    const [done] = await h.attempts(video.id)
+    expect(done?.stage).toBe('ready')
+    expect(h.deps.runner.stopCalls).toBe(0)
+  })
+
   it('an agent that renders twice finishes with the second render: its manifest replaces the first', async () => {
     // Live on 11-02: a second render-job overwrote the uploads, its callback was refused as a different manifest, and
     // the version waited out the deadline on the first manifest's hashes (artifacts_missing).
