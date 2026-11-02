@@ -568,8 +568,9 @@ export const OpenverseJobSchema = z
       .openapi({ description: 'Poll GET /api/v1/media/openverse/jobs/{id} until done or failed' }),
     kind: z.enum(['search', 'import']),
     status: z.enum(['queued', 'running', 'done', 'failed']),
-    search: OpenverseSearchSchema.nullable().openapi({ description: 'A finished search: the tracks' }),
-    media: MediaSchema.nullable().openapi({ description: 'A finished import: the library item' }),
+    // A finished search has its tracks in search; a finished import, its library item in media.
+    search: z.union([OpenverseSearchSchema, z.null()]),
+    media: z.union([MediaSchema, z.null()]),
     created: z
       .boolean()
       .nullable()

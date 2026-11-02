@@ -6344,8 +6344,8 @@ export interface components {
             kind: "search" | "import";
             /** @enum {string} */
             status: "queued" | "running" | "done" | "failed";
-            search: components["schemas"]["OpenverseSearch"] & (Record<string, never> | null);
-            media: components["schemas"]["Media"] & (Record<string, never> | null);
+            search: components["schemas"]["OpenverseSearch"] | null;
+            media: components["schemas"]["Media"] | null;
             /** @description A finished import: false when the track was already in the library */
             created: boolean | null;
             error: {

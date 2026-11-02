@@ -3427,30 +3427,22 @@
             ]
           },
           "search": {
-            "allOf": [
+            "anyOf": [
               {
                 "$ref": "#/components/schemas/OpenverseSearch"
               },
               {
-                "type": [
-                  "object",
-                  "null"
-                ],
-                "description": "A finished search: the tracks"
+                "type": "null"
               }
             ]
           },
           "media": {
-            "allOf": [
+            "anyOf": [
               {
                 "$ref": "#/components/schemas/Media"
               },
               {
-                "type": [
-                  "object",
-                  "null"
-                ],
-                "description": "A finished import: the library item"
+                "type": "null"
               }
             ]
           },
