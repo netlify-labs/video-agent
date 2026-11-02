@@ -26,6 +26,9 @@ import type {
   MediaRow,
   MediaUploadRow,
   MediaUploadPartRow,
+  OpenverseJobRow,
+  OpenverseJobKind,
+  OpenverseJobStatus,
   VersionMediaRow,
   VersionProvenanceRow,
   GatewayCallRow,
@@ -147,6 +150,32 @@ export interface Repo {
   insertUploadPart(row: MediaUploadPartRow): Promise<void>
   listUploadParts(uploadId: string): Promise<MediaUploadPartRow[]>
   deleteUploadParts(uploadId: string): Promise<void>
+  /**
+   * Inserts a job unless the same person already has a queued or running job for the same kind and key; returns the
+   * stored row (that other job when there was one).
+   */
+  insertOpenverseJobIfAbsent(row: OpenverseJobRow): Promise<OpenverseJobRow>
+  getOpenverseJob(id: string): Promise<OpenverseJobRow | null>
+  /** The newest job for this kind and key in one of these states, updated at or after `since` (anyone's, or one person's). */
+  findOpenverseJob(q: {
+    kind: OpenverseJobKind
+    key: string
+    statuses: OpenverseJobStatus[]
+    since: string
+    userId?: string
+  }): Promise<OpenverseJobRow | null>
+  /** Jobs the person started at or after `since` (for the per-person rate limit). */
+  countOpenverseJobs(userId: string, since: string): Promise<number>
+  /** Moves a queued job to running; false when it isn't queued (another invocation took it, or it finished). */
+  claimOpenverseJob(id: string, now: string): Promise<boolean>
+  updateOpenverseJob(id: string, patch: Partial<OpenverseJobRow>): Promise<void>
+  /** Queued jobs last touched before `queuedBefore` and running ones last touched before `runningBefore`. */
+  listStaleOpenverseJobs(q: {
+    queuedBefore: string
+    runningBefore: string
+    limit: number
+  }): Promise<OpenverseJobRow[]>
+  deleteExpiredOpenverseJobs(now: string): Promise<number>
   insertVersionMedia(rows: VersionMediaRow[]): Promise<void>
   listVersionMedia(jobId: string, versionN: number): Promise<VersionMediaRow[]>
   /** Per media id, the distinct videos (job ids) whose versions use it. */

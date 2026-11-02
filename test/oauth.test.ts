@@ -319,7 +319,7 @@ describe('MCP OAuth: authorize, consent and tokens', () => {
     const t = await connect(h, 'MIA@acme.com')
     expect(t.tokens).toMatchObject({ token_type: 'Bearer', expires_in: 3600, scope: 'mcp' })
     expect(t.access).toMatch(/^nvat_/)
-    expect(await toolNames(h, t.access)).toHaveLength(15)
+    expect(await toolNames(h, t.access)).toHaveLength(16)
     const res = await rpc(h, t.access, 'tools/call', {
       name: 'create_video',
       arguments: { prompt: 'A 10-second teaser that says "Ship faster".' },
@@ -532,7 +532,7 @@ describe('MCP OAuth: authorize, consent and tokens', () => {
   it('still takes API keys, but not cookie sessions or OAuth tokens on the REST API', async () => {
     const h = await on()
     const key = await apiKey(h, h.member)
-    expect(await toolNames(h, key)).toHaveLength(15)
+    expect(await toolNames(h, key)).toHaveLength(16)
     const cookie = await send(h, 'POST', '/mcp', {
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
       headers: {
@@ -597,7 +597,7 @@ describe('MCP OAuth on Postgres', () => {
   it('runs the flow, rotation, reuse detection, connected apps and the sweep', async () => {
     const h = await on({}, await pgStore())
     const t = await connect(h, 'mia@acme.com')
-    expect(await toolNames(h, t.access)).toHaveLength(15)
+    expect(await toolNames(h, t.access)).toHaveLength(16)
     const again = await exchange(h, t)
     expect(again.status).toBe(400)
     expect((await rpc(h, t.access, 'tools/list')).status).toBe(401)

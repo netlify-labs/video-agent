@@ -3407,6 +3407,98 @@
           "mediaId"
         ]
       },
+      "OpenverseJob": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Poll GET /api/v1/media/openverse/jobs/{id} until done or failed"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "search",
+              "import"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "done",
+              "failed"
+            ]
+          },
+          "search": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OpenverseSearch"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "media": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Media"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "A finished import: false when the track was already in the library"
+          },
+          "error": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ]
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string",
+            "description": "The job can be read until then (30 minutes)"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "status",
+          "search",
+          "media",
+          "created",
+          "error",
+          "createdAt",
+          "updatedAt",
+          "expiresAt"
+        ]
+      },
       "CommentList": {
         "type": "object",
         "properties": {
@@ -8819,7 +8911,7 @@
     },
     "/api/v1/media/openverse/search": {
       "get": {
-        "summary": "Search Openverse for CC0 or CC BY audio (music by default); NC, ND and SA licences are never returned (Creators and admins)",
+        "summary": "Search Openverse for CC0 or CC BY audio (music by default); NC, ND and SA licences are never returned (Creators and admins). When Openverse is slow, answers 202 with a job to poll",
         "tags": [
           "media"
         ],
@@ -8884,11 +8976,21 @@
         ],
         "responses": {
           "200": {
-            "description": "Tracks",
+            "description": "Tracks (fresh, or from a recent identical search)",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/OpenverseSearch"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Openverse is slow: poll the job (the Location header) for the tracks",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenverseJob"
                 }
               }
             }
@@ -8944,7 +9046,7 @@
             }
           },
           "429": {
-            "description": "Openverse is busy",
+            "description": "Openverse is busy, or too many searches this minute",
             "content": {
               "application/json": {
                 "schema": {
@@ -8968,7 +9070,7 @@
     },
     "/api/v1/media/openverse/import": {
       "post": {
-        "summary": "Import an Openverse track into the library by its id: re-read from Openverse, licence checked, file downloaded and verified as audio. Importing it again returns the same item",
+        "summary": "Import an Openverse track into the library by its id: re-read from Openverse, licence checked, file downloaded and verified as audio. Importing it again returns the same item. When Openverse is slow, answers 202 with a job to poll",
         "tags": [
           "media"
         ],
@@ -9026,6 +9128,16 @@
               }
             }
           },
+          "202": {
+            "description": "Importing in the background: poll the job (the Location header)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenverseJob"
+                }
+              }
+            }
+          },
           "400": {
             "description": "Invalid request",
             "content": {
@@ -9077,7 +9189,7 @@
             }
           },
           "429": {
-            "description": "Openverse is busy",
+            "description": "Openverse is busy, or too many imports this minute",
             "content": {
               "application/json": {
                 "schema": {
@@ -9088,6 +9200,94 @@
           },
           "502": {
             "description": "Openverse or the track's host didn't answer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/media/openverse/jobs/{id}": {
+      "get": {
+        "summary": "An Openverse search or import that is running in the background: its status, then the tracks or the library item (only for the person who started it)",
+        "tags": [
+          "media"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The job",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenverseJob"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or not ready",
             "content": {
               "application/json": {
                 "schema": {

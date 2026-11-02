@@ -1125,6 +1125,53 @@ test('a busy Openverse says so', async ({ page }) => {
   await expect(dialog.getByTestId('openverse-error')).toHaveText('Openverse is busy, try again in a minute.')
 })
 
+test('a slow Openverse search shows a spinner, then the results; a slow import shows Importing…', async ({
+  page,
+}) => {
+  await mock(page, 'mockOpenverseSlow')
+  await page.goto('/media')
+  await page.getByRole('button', { name: 'Find music' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Find music on Openverse' })
+  await dialog.getByLabel('Search music').fill('piano music')
+  await dialog.getByRole('button', { name: 'Search' }).click()
+  await expect(dialog.getByTestId('openverse-searching')).toContainText('Searching Openverse…')
+  await expect(dialog.getByTestId('openverse-searching')).toContainText('slow right now')
+  const row = dialog.getByTestId(`track-${MORNING}`)
+  await expect(row).toContainText('Morning Light')
+  await expect(dialog.getByTestId('openverse-searching')).toHaveCount(0)
+
+  await row.getByRole('button', { name: 'Import' }).click()
+  await expect(row.getByRole('button', { name: 'Importing…' })).toBeDisabled()
+  await expect(row.getByText('In library')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(
+    page.getByTestId('media-med_mock0001').getByText('Morning Light - Lena Park.mp3'),
+  ).toBeVisible()
+})
+
+test('a search Openverse never finishes gives up after two minutes and offers Retry', async ({ page }) => {
+  await page.clock.install()
+  await mock(page, 'mockOpenverseSlow', 'stuck')
+  await page.goto('/media')
+  await page.getByRole('button', { name: 'Find music' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Find music on Openverse' })
+  await dialog.getByLabel('Search music').fill('music')
+  await dialog.getByRole('button', { name: 'Search' }).click()
+  // The server handed the search to a job; two minutes pass without it finishing.
+  await expect(dialog.getByTestId('openverse-searching')).toContainText('slow right now')
+  await page.clock.fastForward('02:05')
+  await expect(dialog.getByTestId('openverse-error')).toHaveText(
+    'Openverse is taking too long to answer. Try again in a minute.',
+  )
+  // Openverse recovers: Retry searches again and shows the tracks.
+  await page.evaluate(() => {
+    localStorage.setItem('mockOpenverseSlow', '1')
+  })
+  await dialog.getByRole('button', { name: 'Retry' }).click()
+  await expect(dialog.getByTestId('openverse-searching')).toBeVisible()
+  await expect(dialog.getByTestId(`track-${HARBOR}`)).toContainText('Quiet Harbor')
+})
+
 test('viewers get no Find music button', async ({ page }) => {
   await mock(page, 'mockRole', 'viewer')
   await page.goto('/media')

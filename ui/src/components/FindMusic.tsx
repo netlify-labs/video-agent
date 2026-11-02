@@ -1,11 +1,14 @@
 // Find music on Openverse: search CC0 and CC BY tracks through the server, listen before importing, and import one into
 // the library. Previews play the provider's file in one shared <audio>, one at a time, only when someone presses play.
+// Openverse is often slow: then the server answers 202 with a job, which this polls (1 s, backing off to 3 s) for up to
+// two minutes before offering Retry.
 import {
   ActionIcon,
   Anchor,
   Badge,
   Button,
   Group,
+  Loader,
   Modal,
   SegmentedControl,
   Stack,
@@ -14,16 +17,48 @@ import {
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { IconPlayerPlayFilled, IconPlayerStopFilled, IconSearch } from '@tabler/icons-react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
-import { $api, errorMessage } from '../api/client'
+import { errorMessage, fetchClient } from '../api/client'
 import type { paths } from '../api/schema'
 import { duration, type Media } from './MediaPicker'
 
 type Search = paths['/api/v1/media/openverse/search']['get']
-export type Track = Search['responses'][200]['content']['application/json']['items'][number]
+type SearchResult = Search['responses'][200]['content']['application/json']
+export type Track = SearchResult['items'][number]
+type Job = paths['/api/v1/media/openverse/jobs/{id}']['get']['responses'][200]['content']['application/json']
 type License = NonNullable<NonNullable<Search['parameters']['query']>['license']>
 type Category = NonNullable<NonNullable<Search['parameters']['query']>['category']>
+
+/** How long to wait for a slow Openverse before giving up (the job may still finish; Retry picks it up). */
+const GIVE_UP_MS = 2 * 60_000
+const TOO_SLOW = 'Openverse is taking too long to answer. Try again in a minute.'
+
+const wait = (ms: number, signal?: AbortSignal) =>
+  new Promise<void>((resolve, reject) => {
+    const t = setTimeout(resolve, ms)
+    signal?.addEventListener('abort', () => {
+      clearTimeout(t)
+      reject(new DOMException('Aborted', 'AbortError'))
+    })
+  })
+
+/** Polls a job until it's done (backing off from 1 s to 3 s), failing with its error or after GIVE_UP_MS. */
+async function finished(job: Job, signal?: AbortSignal): Promise<Job> {
+  const started = Date.now()
+  for (let delay = 1000; ; delay = Math.min(delay + 500, 3000)) {
+    if (job.status === 'done') return job
+    if (job.status === 'failed') throw new Error(job.error?.message ?? TOO_SLOW)
+    if (Date.now() - started >= GIVE_UP_MS) throw new Error(TOO_SLOW)
+    await wait(delay, signal)
+    const r = await fetchClient.GET('/api/v1/media/openverse/jobs/{id}', {
+      params: { path: { id: job.id } },
+      ...(signal ? { signal } : {}),
+    })
+    if (r.error) throw new Error(errorMessage(r.error))
+    job = r.data
+  }
+}
 
 export function FindMusicModal(props: {
   opened: boolean
@@ -37,22 +72,54 @@ export function FindMusicModal(props: {
   const [license, setLicense] = useState<License>('cc0,by')
   const [category, setCategory] = useState<Category>('music')
   const [playing, setPlaying] = useState<string | null>(null)
+  // Set while the search waits on a background job (Openverse was slow).
+  const [slow, setSlow] = useState(false)
+  // Tracks being imported, and those imported here (shown as in the library before the search refreshes).
+  const [importing, setImporting] = useState<ReadonlySet<string>>(new Set())
+  const [imported, setImported] = useState<Record<string, string>>({})
   const audio = useRef<HTMLAudioElement | null>(null)
-  const results = $api.useQuery(
-    'get',
-    '/api/v1/media/openverse/search',
-    { params: { query: { q: query, license, category } } },
-    { enabled: props.opened && query.length > 0, retry: false, staleTime: 5 * 60_000 },
-  )
-  const importIt = $api.useMutation('post', '/api/v1/media/openverse/import', {
-    onSuccess: (m) => {
+  const results = useQuery({
+    queryKey: ['openverse-search', query, license, category],
+    enabled: props.opened && query.length > 0,
+    retry: false,
+    staleTime: 5 * 60_000,
+    queryFn: async ({ signal }): Promise<SearchResult> => {
+      setSlow(false)
+      const r = await fetchClient.GET('/api/v1/media/openverse/search', {
+        params: { query: { q: query, license, category } },
+        signal,
+      })
+      if (r.error) throw new Error(errorMessage(r.error))
+      if ('items' in r.data) return r.data
+      setSlow(true)
+      const job = await finished(r.data, signal)
+      if (!job.search) throw new Error(TOO_SLOW)
+      return job.search
+    },
+  })
+
+  const importIt = async (t: Track) => {
+    setImporting((s) => new Set(s).add(t.id))
+    try {
+      const r = await fetchClient.POST('/api/v1/media/openverse/import', { body: { id: t.id } })
+      if (r.error) throw new Error(errorMessage(r.error))
+      // 202: importing in the background.
+      const m = 'search' in r.data ? (await finished(r.data)).media : r.data
+      if (!m) throw new Error(TOO_SLOW)
+      setImported((x) => ({ ...x, [t.id]: m.id }))
       void qc.invalidateQueries({ queryKey: ['get', '/api/v1/media'] })
-      void qc.invalidateQueries({ queryKey: ['get', '/api/v1/media/openverse/search'] })
       notifications.show({ message: `${m.source?.title ?? m.filename} is in the library.` })
       props.onImported?.(m)
-    },
-    onError: (e) => notifications.show({ color: 'red', message: errorMessage(e) }),
-  })
+    } catch (e) {
+      notifications.show({ color: 'red', message: errorMessage(e) })
+    } finally {
+      setImporting((s) => {
+        const next = new Set(s)
+        next.delete(t.id)
+        return next
+      })
+    }
+  }
 
   const stop = () => {
     audio.current?.pause()
@@ -144,93 +211,114 @@ export function FindMusicModal(props: {
           hidden
         />
         {results.error ? (
-          <Text size="sm" c="red" data-testid="openverse-error">
-            {errorMessage(results.error)}
-          </Text>
-        ) : results.isFetching ? (
-          <Text size="sm" c="var(--va-muted)">
-            Searching…
-          </Text>
+          <Group gap="sm" wrap="nowrap">
+            <Text size="sm" c="red" data-testid="openverse-error">
+              {errorMessage(results.error)}
+            </Text>
+            <Button
+              size="compact-sm"
+              variant="default"
+              onClick={() => {
+                void results.refetch()
+              }}
+            >
+              Retry
+            </Button>
+          </Group>
+        ) : results.isFetching && !results.data ? (
+          <Group gap="xs" wrap="nowrap" data-testid="openverse-searching" role="status">
+            <Loader size="xs" />
+            <Text size="sm" c="var(--va-muted)">
+              Searching Openverse…
+              {slow ? ' It’s slow right now; this can take up to a minute.' : ''}
+            </Text>
+          </Group>
         ) : query && items.length === 0 ? (
           <Text size="sm" c="var(--va-muted)">
             No tracks found. Try other words.
           </Text>
         ) : (
           <Stack gap={6} className="va-openverse-list">
-            {items.map((t) => (
-              <Group
-                key={t.id}
-                wrap="nowrap"
-                gap="sm"
-                className="va-openverse-row"
-                data-testid={`track-${t.id}`}
-              >
-                <ActionIcon
-                  variant={playing === t.id ? 'filled' : 'default'}
-                  radius="xl"
-                  size="lg"
-                  disabled={!t.previewUrl}
-                  aria-label={`${playing === t.id ? 'Stop' : 'Play'} ${t.title}`}
-                  aria-pressed={playing === t.id}
-                  onClick={() => {
-                    toggle(t)
-                  }}
-                  data-testid={`preview-${t.id}`}
+            {items
+              .map((t) => ({ ...t, mediaId: t.mediaId ?? imported[t.id] ?? null }))
+              .map((t) => (
+                <Group
+                  key={t.id}
+                  wrap="nowrap"
+                  gap="sm"
+                  className="va-openverse-row"
+                  data-testid={`track-${t.id}`}
                 >
-                  {playing === t.id ? <IconPlayerStopFilled size={14} /> : <IconPlayerPlayFilled size={14} />}
-                </ActionIcon>
-                <Stack gap={0} flex={1} miw={0}>
-                  <Text size="sm" fw={600} truncate title={t.title}>
-                    {t.landingUrl ? (
-                      <Anchor href={t.landingUrl} target="_blank" rel="noopener" c="inherit">
-                        {t.title}
-                      </Anchor>
-                    ) : (
-                      t.title
-                    )}
-                  </Text>
-                  <Text size="xs" c="var(--va-muted)" truncate>
-                    {[
-                      t.creator,
-                      t.durationSec ? duration(t.durationSec) : null,
-                      t.genres.slice(0, 2).join(', '),
-                    ]
-                      .filter(Boolean)
-                      .join(' · ')}
-                  </Text>
-                </Stack>
-                <Badge
-                  size="sm"
-                  variant="light"
-                  color={t.license === 'cc0' ? 'teal' : 'blue'}
-                  title={t.license === 'by' ? 'Credit required (added automatically)' : 'No credit needed'}
-                >
-                  {t.licenseLabel}
-                </Badge>
-                {t.mediaId ? (
-                  <Badge size="sm" variant="outline" color="gray">
-                    In library
-                  </Badge>
-                ) : (
-                  <Button
-                    size="compact-sm"
-                    variant="default"
-                    disabled={!t.importable || (importIt.isPending && importIt.variables.body.id !== t.id)}
-                    loading={importIt.isPending && importIt.variables.body.id === t.id}
-                    title={
-                      t.importable
-                        ? undefined
-                        : "This track's file doesn't fit the library (type, size or length)."
-                    }
+                  <ActionIcon
+                    variant={playing === t.id ? 'filled' : 'default'}
+                    radius="xl"
+                    size="lg"
+                    disabled={!t.previewUrl}
+                    aria-label={`${playing === t.id ? 'Stop' : 'Play'} ${t.title}`}
+                    aria-pressed={playing === t.id}
                     onClick={() => {
-                      importIt.mutate({ body: { id: t.id } })
+                      toggle(t)
                     }}
+                    data-testid={`preview-${t.id}`}
                   >
-                    Import
-                  </Button>
-                )}
-              </Group>
-            ))}
+                    {playing === t.id ? (
+                      <IconPlayerStopFilled size={14} />
+                    ) : (
+                      <IconPlayerPlayFilled size={14} />
+                    )}
+                  </ActionIcon>
+                  <Stack gap={0} flex={1} miw={0}>
+                    <Text size="sm" fw={600} truncate title={t.title}>
+                      {t.landingUrl ? (
+                        <Anchor href={t.landingUrl} target="_blank" rel="noopener" c="inherit">
+                          {t.title}
+                        </Anchor>
+                      ) : (
+                        t.title
+                      )}
+                    </Text>
+                    <Text size="xs" c="var(--va-muted)" truncate>
+                      {[
+                        t.creator,
+                        t.durationSec ? duration(t.durationSec) : null,
+                        t.genres.slice(0, 2).join(', '),
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </Text>
+                  </Stack>
+                  <Badge
+                    size="sm"
+                    variant="light"
+                    color={t.license === 'cc0' ? 'teal' : 'blue'}
+                    title={t.license === 'by' ? 'Credit required (added automatically)' : 'No credit needed'}
+                  >
+                    {t.licenseLabel}
+                  </Badge>
+                  {t.mediaId ? (
+                    <Badge size="sm" variant="outline" color="gray">
+                      In library
+                    </Badge>
+                  ) : (
+                    <Button
+                      size="compact-sm"
+                      variant="default"
+                      disabled={!t.importable || importing.has(t.id)}
+                      leftSection={importing.has(t.id) ? <Loader size={12} /> : undefined}
+                      title={
+                        t.importable
+                          ? undefined
+                          : "This track's file doesn't fit the library (type, size or length)."
+                      }
+                      onClick={() => {
+                        void importIt(t)
+                      }}
+                    >
+                      {importing.has(t.id) ? 'Importing…' : 'Import'}
+                    </Button>
+                  )}
+                </Group>
+              ))}
           </Stack>
         )}
         <Text size="xs" c="var(--va-faint)">

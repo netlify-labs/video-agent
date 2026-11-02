@@ -62,7 +62,8 @@ import { addPreview } from './domain/previews.js'
 import { myUsage, planningByUserWeek } from './domain/usage.js'
 import { ApiError, errorBody } from './lib/errors.js'
 import { MEDIA_KINDS } from './lib/media/classify.js'
-import { AUDIO_CATEGORIES, importOpenverse, LICENSE_FILTERS, searchOpenverse } from './domain/openverse.js'
+import { AUDIO_CATEGORIES, LICENSE_FILTERS } from './domain/openverse.js'
+import { getOpenverseJob, startOpenverseImport, startOpenverseSearch } from './domain/openverse-jobs.js'
 import { PREVIEW_NAMES } from './lib/media/previews.js'
 import * as s from './schemas.js'
 
@@ -1188,18 +1189,15 @@ export function createApp(deps: Deps, opts: AppOptions) {
       method: 'get',
       path: '/api/v1/media/openverse/search',
       summary:
-        'Search Openverse for CC0 or CC BY audio (music by default); NC, ND and SA licences are never returned (Creators and admins)',
+        'Search Openverse for CC0 or CC BY audio (music by default); NC, ND and SA licences are never returned (Creators and admins). When Openverse is slow, answers 202 with a job to poll',
       tags: ['media'],
       security,
       request: {
         query: z.object({
           q: z.string().min(1).max(200),
-          license: z
-            .enum(LICENSE_FILTERS)
-            .optional()
-            .openapi({
-              description: 'cc0 (no credit needed) or cc0,by (the default; CC BY tracks are credited)',
-            }),
+          license: z.enum(LICENSE_FILTERS).optional().openapi({
+            description: 'cc0 (no credit needed) or cc0,by (the default; CC BY tracks are credited)',
+          }),
           category: z
             .enum(AUDIO_CATEGORIES)
             .optional()
@@ -1208,20 +1206,28 @@ export function createApp(deps: Deps, opts: AppOptions) {
         }),
       },
       responses: {
-        200: json(s.OpenverseSearchSchema, 'Tracks'),
+        200: json(s.OpenverseSearchSchema, 'Tracks (fresh, or from a recent identical search)'),
+        202: json(
+          s.OpenverseJobSchema,
+          'Openverse is slow: poll the job (the Location header) for the tracks',
+        ),
         ...errors,
-        429: err('Openverse is busy'),
+        429: err('Openverse is busy, or too many searches this minute'),
         502: err("Openverse didn't answer"),
       },
     }),
-    async (c) => c.json(await searchOpenverse(deps, c.get('principal'), c.req.valid('query')), 200),
+    async (c) => {
+      const r = await startOpenverseSearch(deps, c.get('principal'), c.req.valid('query'))
+      if (r.job) return c.json(r.job, 202, { location: `/api/v1/media/openverse/jobs/${r.job.id}` })
+      return c.json(r.done, 200)
+    },
   )
   app.openapi(
     createRoute({
       method: 'post',
       path: '/api/v1/media/openverse/import',
       summary:
-        'Import an Openverse track into the library by its id: re-read from Openverse, licence checked, file downloaded and verified as audio. Importing it again returns the same item',
+        'Import an Openverse track into the library by its id: re-read from Openverse, licence checked, file downloaded and verified as audio. Importing it again returns the same item. When Openverse is slow, answers 202 with a job to poll',
       tags: ['media'],
       security,
       request: {
@@ -1240,15 +1246,30 @@ export function createApp(deps: Deps, opts: AppOptions) {
       responses: {
         200: json(s.MediaSchema, 'Already in the library'),
         201: json(s.MediaSchema, 'Imported'),
+        202: json(s.OpenverseJobSchema, 'Importing in the background: poll the job (the Location header)'),
         ...errors,
-        429: err('Openverse is busy'),
+        429: err('Openverse is busy, or too many imports this minute'),
         502: err("Openverse or the track's host didn't answer"),
       },
     }),
     async (c) => {
-      const r = await importOpenverse(deps, c.get('principal'), c.req.valid('json'))
-      return r.created ? c.json(r.media, 201) : c.json(r.media, 200)
+      const r = await startOpenverseImport(deps, c.get('principal'), c.req.valid('json'))
+      if (r.job) return c.json(r.job, 202, { location: `/api/v1/media/openverse/jobs/${r.job.id}` })
+      return r.done.created ? c.json(r.done.media, 201) : c.json(r.done.media, 200)
     },
+  )
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/v1/media/openverse/jobs/{id}',
+      summary:
+        'An Openverse search or import that is running in the background: its status, then the tracks or the library item (only for the person who started it)',
+      tags: ['media'],
+      security,
+      request: { params: z.object({ id: z.string() }) },
+      responses: { 200: json(s.OpenverseJobSchema, 'The job'), ...errors },
+    }),
+    async (c) => c.json(await getOpenverseJob(deps, c.get('principal'), c.req.valid('param').id), 200),
   )
   const MediaParam = z.object({ id: z.string() })
   app.openapi(

@@ -564,6 +564,27 @@ export const OpenverseSearchSchema = z
   })
   .openapi('OpenverseSearch')
 
+export const OpenverseJobSchema = z
+  .object({
+    id: z
+      .string()
+      .openapi({ description: 'Poll GET /api/v1/media/openverse/jobs/{id} until done or failed' }),
+    kind: z.enum(['search', 'import']),
+    status: z.enum(['queued', 'running', 'done', 'failed']),
+    // A finished search has its tracks in search; a finished import, its library item in media.
+    search: z.union([OpenverseSearchSchema, z.null()]),
+    media: z.union([MediaSchema, z.null()]),
+    created: z
+      .boolean()
+      .nullable()
+      .openapi({ description: 'A finished import: false when the track was already in the library' }),
+    error: z.object({ code: z.string(), message: z.string() }).nullable(),
+    createdAt: z.string(),
+    updatedAt: z.string(),
+    expiresAt: z.string().openapi({ description: 'The job can be read until then (30 minutes)' }),
+  })
+  .openapi('OpenverseJob')
+
 export const MediaListSchema = z
   .object({ items: z.array(MediaSchema), nextCursor: z.string().nullable() })
   .openapi('MediaList')

@@ -204,6 +204,8 @@ export interface PlatformPort {
   dispatchFinalize(attemptId: string): Promise<void>
   /** Asks the platform to assemble one finished upload session (media-assemble-background). */
   dispatchMediaAssembly(uploadId: string): Promise<void>
+  /** Asks the platform to run one Openverse search or import job (openverse-background). */
+  dispatchOpenverseJob(jobId: string): Promise<void>
   /** Checks for /setup: plan, agent runners, token, identity. */
   setupFacts(): Promise<SetupFacts>
 }

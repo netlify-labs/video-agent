@@ -504,6 +504,25 @@ export const NO_PROVENANCE: MediaProvenance = {
 
 export type UploadStatus = 'open' | 'assembling' | 'done' | 'failed'
 
+export type OpenverseJobKind = 'search' | 'import'
+export type OpenverseJobStatus = 'queued' | 'running' | 'done' | 'failed'
+
+/** A search or import run by openverse-background (src/domain/openverse-jobs.ts). */
+export interface OpenverseJobRow {
+  id: string
+  userId: string
+  kind: OpenverseJobKind
+  /** The normalized request: the search's query string, or the track id. Identical requests share a job. */
+  key: string
+  params: Record<string, unknown>
+  status: OpenverseJobStatus
+  result: unknown
+  error: { code: string; message: string } | null
+  createdAt: string
+  updatedAt: string
+  expiresAt: string
+}
+
 export interface MediaUploadRow {
   id: string
   uploaderId: string

@@ -441,24 +441,33 @@ export function installMock() {
       if (busy) return fail(429, 'rate_limited', 'Openverse is busy, try again in a minute.')
       const q = (url.searchParams.get('q') ?? '').toLowerCase()
       const cc0Only = url.searchParams.get('license') === 'cc0'
-      const items = mockTracks
-        .filter(
-          (t) =>
-            (!cc0Only || t.license === 'cc0') &&
-            (q === '' ||
-              `${t.title} ${t.genres.join(' ')} music`
-                .toLowerCase()
-                .split(/\s+/)
-                .some((w) => q.includes(w))),
-        )
-        .map((t) => ({ ...t, mediaId: mockMedia.find((m) => m.source?.id === t.id)?.id ?? null }))
-      return json({ items, page: 1, pageCount: 1, total: items.length })
+      if (mockOpenverseSlow()) return mockJobStart('search', { q, cc0Only })
+      return json(mockSearch(q, cc0Only))
     }
     if (p === '/api/v1/media/openverse/import' && method === 'POST') {
       const b = (await readBody(init, input)) as { id: string }
+      if (!mockTracks.some((t) => t.id === b.id))
+        return fail(404, 'not_found', "That track isn't on Openverse (any more).")
+      const existing = mockMedia.find((m) => m.source?.id === b.id)
+      if (mockOpenverseSlow() && !existing) return mockJobStart('import', { id: b.id })
       const r = mockImport(b.id)
       if (!r) return fail(404, 'not_found', "That track isn't on Openverse (any more).")
       return json(r.item, r.created ? 201 : 200)
+    }
+    const oj = /^\/api\/v1\/media\/openverse\/jobs\/([^/]+)$/.exec(p)
+    if (oj?.[1] && method === 'GET') {
+      const j = mockJobs.get(oj[1])
+      if (!j)
+        return fail(404, 'not_found', 'Job not found. Jobs are kept for 30 minutes; start the search again.')
+      // A job finishes on its second poll, unless Openverse is stuck (mockOpenverseSlow=stuck).
+      j.polls++
+      if (j.polls >= 2 && mockOpenverseSlow() !== 'stuck') {
+        if (j.kind === 'search')
+          return json(mockJob(j, 'done', { search: mockSearch(j.q ?? '', j.cc0Only ?? false) }))
+        const r = mockImport(j.trackId ?? '')
+        return json(mockJob(j, 'done', { media: r?.item ?? null, created: r?.created ?? null }))
+      }
+      return json(mockJob(j, 'running'))
     }
     const mm = /^\/api\/v1\/media\/([^/]+)$/.exec(p)
     if (mm?.[1]) {
@@ -779,7 +788,8 @@ function mockItem(filename: string, kind: MockKind, bytes: number): MockMedia {
 }
 
 // Openverse (Find music): fixture tracks, filtered like the server (CC0 + CC BY only). localStorage.mockOpenverseBusy=1
-// answers searches with the rate-limit error.
+// answers searches with the rate-limit error; mockOpenverseSlow=1 answers searches and imports with a job (202) that
+// finishes on its second poll, and mockOpenverseSlow=stuck with one that never finishes.
 type MockTrack =
   paths['/api/v1/media/openverse/search']['get']['responses'][200]['content']['application/json']['items'][number]
 const track = (
@@ -818,6 +828,68 @@ const mockTracks: MockTrack[] = [
   track(2, 'Quiet Harbor', 'Tomas Reyes', 'cc0', 201, ['acoustic']),
   track(3, 'Night Drive', 'Kai Morgan', 'by', 187, ['electronic', 'synthwave']),
 ]
+const mockOpenverseSlow = () => {
+  try {
+    return localStorage.getItem('mockOpenverseSlow')
+  } catch {
+    return null
+  }
+}
+function mockSearch(q: string, cc0Only: boolean) {
+  const items = mockTracks
+    .filter(
+      (t) =>
+        (!cc0Only || t.license === 'cc0') &&
+        (q === '' ||
+          `${t.title} ${t.genres.join(' ')} music`
+            .toLowerCase()
+            .split(/\s+/)
+            .some((w) => q.includes(w))),
+    )
+    .map((t) => ({ ...t, mediaId: mockMedia.find((m) => m.source?.id === t.id)?.id ?? null }))
+  return { items, page: 1, pageCount: 1, total: items.length }
+}
+interface MockJob {
+  id: string
+  kind: 'search' | 'import'
+  polls: number
+  q?: string
+  cc0Only?: boolean
+  trackId?: string
+  createdAt: string
+}
+const mockJobs = new Map<string, MockJob>()
+function mockJob(j: MockJob, status: 'queued' | 'running' | 'done', result: Record<string, unknown> = {}) {
+  return {
+    id: j.id,
+    kind: j.kind,
+    status,
+    search: null,
+    media: null,
+    created: null,
+    error: null,
+    createdAt: j.createdAt,
+    updatedAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 30 * 60_000).toISOString(),
+    ...result,
+  }
+}
+function mockJobStart(kind: 'search' | 'import', o: { q?: string; cc0Only?: boolean; id?: string }) {
+  const j: MockJob = {
+    id: `ovj_mock${String(mockJobs.size + 1).padStart(4, '0')}`,
+    kind,
+    polls: 0,
+    ...(o.q !== undefined ? { q: o.q } : {}),
+    ...(o.cc0Only !== undefined ? { cc0Only: o.cc0Only } : {}),
+    ...(o.id !== undefined ? { trackId: o.id } : {}),
+    createdAt: new Date().toISOString(),
+  }
+  mockJobs.set(j.id, j)
+  return new Response(JSON.stringify(mockJob(j, 'queued')), {
+    status: 202,
+    headers: { 'content-type': 'application/json', location: `/api/v1/media/openverse/jobs/${j.id}` },
+  })
+}
 function mockImport(id: string): { item: MockMedia; created: boolean } | null {
   const t = mockTracks.find((x) => x.id === id)
   if (!t) return null

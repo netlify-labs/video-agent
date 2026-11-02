@@ -247,11 +247,11 @@ describe('Openverse search', () => {
     expect(calls(h, /\/v1\/audio\/\?/)).toHaveLength(1)
     h.deps.clock.advance(31_000)
     expect((await search(h, 'q=other')).status).toBe(200)
-    // An outage is a 502 with a plain message.
+    // An outage hands the search to a background job (test/openverse-jobs.test.ts) instead of failing.
     ov.searchStatus = 503
     const down = await search(h, 'q=third')
-    expect(down.status).toBe(502)
-    expect((await h.json(down)).error.message).toMatch(/Openverse didn't answer/)
+    expect(down.status).toBe(202)
+    expect((await h.json(down)).status).toBe('queued')
   })
 
   it('uses a registered app’s token, cached until it expires, and renews it on a 401', async () => {

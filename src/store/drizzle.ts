@@ -42,6 +42,7 @@ import type {
   MediaRow,
   MediaUploadRow,
   MediaUploadPartRow,
+  OpenverseJobRow,
   VersionMediaRow,
   VersionProvenanceRow,
   GatewayCallRow,
@@ -494,6 +495,86 @@ function repoFor(db: Db): Repo {
     deleteUploadParts: async (uploadId) => {
       await db.delete(t.mediaUploadParts).where(eq(t.mediaUploadParts.uploadId, uploadId))
     },
+    insertOpenverseJobIfAbsent: async (row) => {
+      // A clash with the in-flight index means an identical job is queued or running: return that one.
+      const j = t.openverseJobs
+      const inserted = await db.insert(j).values(row).onConflictDoNothing().returning()
+      if (inserted[0]) return inserted[0] as OpenverseJobRow
+      return one<OpenverseJobRow>(
+        await db
+          .select()
+          .from(j)
+          .where(
+            and(
+              eq(j.userId, row.userId),
+              eq(j.kind, row.kind),
+              eq(j.key, row.key),
+              inArray(j.status, ['queued', 'running']),
+            ),
+          ),
+      ) as OpenverseJobRow
+    },
+    getOpenverseJob: async (id) =>
+      one<OpenverseJobRow>(await db.select().from(t.openverseJobs).where(eq(t.openverseJobs.id, id))),
+    findOpenverseJob: async (q) => {
+      const j = t.openverseJobs
+      return one<OpenverseJobRow>(
+        await db
+          .select()
+          .from(j)
+          .where(
+            and(
+              eq(j.kind, q.kind),
+              eq(j.key, q.key),
+              inArray(j.status, q.statuses),
+              gte(j.updatedAt, q.since),
+              q.userId ? eq(j.userId, q.userId) : undefined,
+            ),
+          )
+          .orderBy(desc(j.updatedAt))
+          .limit(1),
+      )
+    },
+    countOpenverseJobs: async (userId, since) => {
+      const j = t.openverseJobs
+      const rows = await db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(j)
+        .where(and(eq(j.userId, userId), gte(j.createdAt, since)))
+      return rows[0]?.n ?? 0
+    },
+    claimOpenverseJob: async (id, now) => {
+      const j = t.openverseJobs
+      const rows = await db
+        .update(j)
+        .set({ status: 'running', updatedAt: now })
+        .where(and(eq(j.id, id), eq(j.status, 'queued')))
+        .returning({ id: j.id })
+      return rows.length > 0
+    },
+    updateOpenverseJob: async (id, patch) => {
+      await db.update(t.openverseJobs).set(patch).where(eq(t.openverseJobs.id, id))
+    },
+    listStaleOpenverseJobs: async (q) => {
+      const j = t.openverseJobs
+      return (await db
+        .select()
+        .from(j)
+        .where(
+          or(
+            and(eq(j.status, 'queued'), lt(j.updatedAt, q.queuedBefore)),
+            and(eq(j.status, 'running'), lt(j.updatedAt, q.runningBefore)),
+          ),
+        )
+        .limit(q.limit)) as OpenverseJobRow[]
+    },
+    deleteExpiredOpenverseJobs: async (now) =>
+      (
+        await db
+          .delete(t.openverseJobs)
+          .where(lte(t.openverseJobs.expiresAt, now))
+          .returning({ id: t.openverseJobs.id })
+      ).length,
     insertVersionMedia: async (rows) => {
       if (rows.length) await db.insert(t.versionMedia).values(rows)
     },
@@ -880,6 +961,9 @@ function repoFor(db: Db): Repo {
         (select 1 from notification_reads i where i.user_id = ${into})`)
       await db.execute(sql`delete from user_webhooks where user_id = ${from} and exists
         (select 1 from user_webhooks i where i.user_id = ${into})`)
+      await db.execute(sql`delete from openverse_jobs f where user_id = ${from} and status in ('queued', 'running')
+        and exists (select 1 from openverse_jobs i where i.user_id = ${into} and i.kind = f.kind and i.key = f.key
+        and i.status in ('queued', 'running'))`)
       const moves: [string, string][] = [
         ['api_keys', 'owner_id'],
         ['jobs', 'owner_id'],
@@ -892,6 +976,7 @@ function repoFor(db: Db): Repo {
         ['comments', 'resolved_by'],
         ['media', 'uploader_id'],
         ['media_uploads', 'uploader_id'],
+        ['openverse_jobs', 'user_id'],
         ['edits', 'author_id'],
         ['version_comments', 'author_id'],
         ['comment_reads', 'user_id'],

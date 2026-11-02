@@ -66,7 +66,8 @@ npx -y mcp-remote {{SITE_URL}}/mcp --header "Authorization: Bearer $VIDEO_AGENT_
 
 ## Uploading media (screenshots, logos, clips)
 
-The MCP tools read the media library (`list_media`) and import Openverse music (`import_music`), but don't upload
+The MCP tools read the media library (`list_media`) and import Openverse music (`import_music`, finished by
+`get_music_job` when Openverse is slow), but don't upload
 files. With an API key, upload a file of up to 4 MB through the REST API, then pass the returned `id` in `media_ids`:
 
 ```sh

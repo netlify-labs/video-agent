@@ -26,6 +26,7 @@ import type {
   MediaRow,
   MediaUploadRow,
   MediaUploadPartRow,
+  OpenverseJobRow,
   VersionMediaRow,
   VersionProvenanceRow,
   GatewayCallRow,
@@ -67,6 +68,7 @@ interface State {
   media: Map<string, MediaRow>
   uploads: Map<string, MediaUploadRow>
   uploadParts: Map<string, MediaUploadPartRow>
+  openverseJobs: Map<string, OpenverseJobRow>
   versionMedia: VersionMediaRow[]
   userWebhooks: Map<string, UserWebhookRow>
   cleanup: Map<string, CleanupRow>
@@ -105,6 +107,7 @@ const empty = (): State => ({
   media: new Map(),
   uploads: new Map(),
   uploadParts: new Map(),
+  openverseJobs: new Map(),
   versionMedia: [],
   userWebhooks: new Map(),
   cleanup: new Map(),
@@ -430,6 +433,61 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
       for (const k of [...state.uploadParts.keys()])
         if (k.startsWith(`${uploadId}/`)) state.uploadParts.delete(k)
     },
+    insertOpenverseJobIfAbsent: async (row) => {
+      const inflight = (j: OpenverseJobRow) => j.status === 'queued' || j.status === 'running'
+      const live = [...state.openverseJobs.values()].find(
+        (j) =>
+          inflight(row) && j.userId === row.userId && j.kind === row.kind && j.key === row.key && inflight(j),
+      )
+      if (live) return clone(live)
+      state.openverseJobs.set(row.id, clone(row))
+      return clone(row)
+    },
+    getOpenverseJob: async (id) => clone(state.openverseJobs.get(id) ?? null),
+    findOpenverseJob: async (q) =>
+      clone(
+        [...state.openverseJobs.values()]
+          .filter(
+            (j) =>
+              j.kind === q.kind &&
+              j.key === q.key &&
+              q.statuses.includes(j.status) &&
+              j.updatedAt >= q.since &&
+              (!q.userId || j.userId === q.userId),
+          )
+          .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0] ?? null,
+      ),
+    countOpenverseJobs: async (userId, since) =>
+      [...state.openverseJobs.values()].filter((j) => j.userId === userId && j.createdAt >= since).length,
+    claimOpenverseJob: async (id, now) => {
+      const j = state.openverseJobs.get(id)
+      if (!j || j.status !== 'queued') return false
+      Object.assign(j, { status: 'running', updatedAt: now })
+      return true
+    },
+    updateOpenverseJob: async (id, patch) => {
+      const j = state.openverseJobs.get(id)
+      if (j) Object.assign(j, clone(patch))
+    },
+    listStaleOpenverseJobs: async (q) =>
+      clone(
+        [...state.openverseJobs.values()]
+          .filter(
+            (j) =>
+              (j.status === 'queued' && j.updatedAt < q.queuedBefore) ||
+              (j.status === 'running' && j.updatedAt < q.runningBefore),
+          )
+          .slice(0, q.limit),
+      ),
+    deleteExpiredOpenverseJobs: async (now) => {
+      let n = 0
+      for (const [id, j] of state.openverseJobs)
+        if (j.expiresAt <= now) {
+          state.openverseJobs.delete(id)
+          n++
+        }
+      return n
+    },
     insertVersionMedia: async (rows) => {
       state.versionMedia.push(...clone(rows))
     },
@@ -706,6 +764,7 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
       }
       for (const m of state.media.values()) m.uploaderId = swap(m.uploaderId)
       for (const u of state.uploads.values()) u.uploaderId = swap(u.uploaderId)
+      for (const j of state.openverseJobs.values()) j.userId = swap(j.userId)
       for (const e of state.edits.values()) e.authorId = swap(e.authorId)
       for (const c of state.versionComments) c.authorId = swap(c.authorId)
       for (const [k, at] of [...state.commentReads]) {
