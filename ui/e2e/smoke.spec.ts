@@ -237,8 +237,13 @@ const navbar = (page: Page) => page.locator('.mantine-AppShell-navbar')
 test('/docs opens the REST reference, and the sidebar groups the three docs pages', async ({ page }) => {
   await page.goto('/docs')
   await expect(page).toHaveURL(/\/docs\/api$/)
-  await expect(page.getByRole('heading', { level: 1, name: 'REST API' })).toBeVisible()
+  // The reference is the whole content area: no page title, flush with the navigation and the window's edge.
   await expect(page.getByText('Video Agent API').first()).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByRole('heading', { level: 1, name: 'REST API' })).toHaveCount(0)
+  const full = await page.locator('.va-docs-full').boundingBox()
+  const vw = page.viewportSize()?.width ?? 0
+  expect(full?.x).toBeLessThanOrEqual(vw > 720 ? 260 : 1)
+  expect(Math.round((full?.x ?? 0) + (full?.width ?? 0))).toBe(vw)
   await expect(page.getByRole('tab', { name: 'MCP for AI tools' })).toHaveCount(0)
   await openNav(page)
   const nav = navbar(page)

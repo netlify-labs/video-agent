@@ -1735,7 +1735,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
       info: {
         title: 'Video Agent API',
         version: '1.0.0',
-        description: 'Make videos from a prompt with Netlify Agent Runners and HyperFrames.',
+        description:
+          'Make videos from a prompt with Netlify Agent Runners and HyperFrames. Everything the web app does is in this API: authenticate with a key from the [API keys](/keys) page.',
       },
       servers: [{ url: deps.config.siteUrl }],
     })

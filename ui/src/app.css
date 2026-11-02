@@ -799,6 +799,11 @@ body {
 }
 
 /* Editor */
+/* The REST reference fills the content area: cancels the shell's padding, like the editor. */
+.va-docs-full {
+  margin: calc(-1 * var(--mantine-spacing-lg));
+  min-height: calc(100dvh - 56px);
+}
 .va-editor {
   /* Fills the window under the 56 px header: cancels the shell's padding so the panel meets the nav and the edge. */
   display: grid;
