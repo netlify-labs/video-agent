@@ -368,6 +368,34 @@ export const mediaUploadParts = pgTable(
   (t) => [primaryKey({ columns: [t.uploadId, t.idx] })],
 )
 
+// Openverse searches and imports that outlive one API request: Openverse can take a minute to answer, so a job runs
+// in openverse-background. A finished search doubles as a cache shared by every function instance. At most one queued
+// or running job per person and request (the partial unique index), so identical requests share it.
+export const openverseJobs = pgTable(
+  'openverse_jobs',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull(),
+    kind: text('kind').notNull(),
+    key: text('key').notNull(),
+    params: jsonb('params').notNull(),
+    status: text('status').notNull(),
+    result: jsonb('result'),
+    error: jsonb('error'),
+    createdAt: ts('created_at').notNull(),
+    updatedAt: ts('updated_at').notNull(),
+    expiresAt: ts('expires_at').notNull(),
+  },
+  (t) => [
+    uniqueIndex('openverse_jobs_inflight_idx')
+      .on(t.userId, t.kind, t.key)
+      .where(sql`${t.status} in ('queued', 'running')`),
+    index('openverse_jobs_key_idx').on(t.kind, t.key, t.updatedAt),
+    index('openverse_jobs_user_idx').on(t.userId, t.createdAt),
+    index('openverse_jobs_expires_idx').on(t.expiresAt),
+  ],
+)
+
 // Media a version was made with, snapshotted when it was queued (plan v2 §9): the run downloads exactly these
 // bytes, even if the item is later soft-deleted. Revisions and edits inherit their parent's.
 export const versionMedia = pgTable(
