@@ -196,9 +196,12 @@ describe('Openverse search', () => {
       raw(3, { filesize: 80 * 1024 * 1024 }),
       raw(4, { duration: 11 * 60_000 }),
       raw(5, { url: 'http://insecure.example.org/t5.mp3' }),
+      // Jamendo names its MP3s by bitrate.
+      raw(6, { filetype: 'mp32' }),
     ])
     const { items } = await h.json<{ items: Track[] }>(await search(h, 'q=x'))
-    expect(items.map((t) => t.importable)).toEqual([false, true, false, false, false])
+    expect(items.map((t) => t.importable)).toEqual([false, true, false, false, false, true])
+    expect(items[5]?.filetype).toBe('mp3')
     expect(items[4]?.previewUrl).toBeNull()
   })
 

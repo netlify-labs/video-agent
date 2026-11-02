@@ -27,6 +27,8 @@ export type AudioCategory = (typeof AUDIO_CATEGORIES)[number]
 
 // File types the audio classifier takes; anything else (FLAC, AIFF) isn't offered for import.
 const IMPORTABLE_TYPES = new Set(['mp3', 'mpeg', 'ogg', 'oga', 'opus', 'wav', 'm4a'])
+/** Provider-specific names for the same formats: Jamendo labels its MP3s by bitrate (mp31, mp32). */
+const TYPE_ALIASES: Record<string, string> = { mp31: 'mp3', mp32: 'mp3' }
 
 interface RawFile {
   url?: string | null
@@ -184,7 +186,8 @@ function pickFile(a: RawAudio): { url: string; filetype: string | null; filesize
   for (const [i, f] of files.entries()) {
     const url = safeUrl(f.url)
     if (!url?.startsWith('https:')) continue
-    const type = f.filetype?.toLowerCase() ?? null
+    const raw = f.filetype?.toLowerCase() ?? null
+    const type = raw ? (TYPE_ALIASES[raw] ?? raw) : null
     // An unknown type is only tried for the main file; the bytes decide.
     if (type ? !IMPORTABLE_TYPES.has(type) : i > 0) continue
     const size = typeof f.filesize === 'number' && f.filesize > 0 ? f.filesize : null
