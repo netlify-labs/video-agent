@@ -68,6 +68,13 @@
   .btn { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 10px 20px; border-radius: 999px; font-weight: 600; text-decoration: none; font-size: 15px; border: 0; cursor: pointer; }
   .btn.primary { background: var(--text); color: var(--ground); }
   .btn.secondary { background: var(--raised); color: var(--text); }
+  /* The hero's second action: in the accent, so it stands out from the grey ground in light mode. */
+  .btn.accent { background: var(--accent-soft); color: var(--accent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent); }
+  .btn.accent:hover { background: color-mix(in srgb, var(--accent) 22%, var(--surface)); }
+  .theme-toggle { position: fixed; top: 14px; right: 16px; z-index: 11; width: 40px; height: 40px; display: grid; place-items: center; border: 0; background: none; color: var(--muted); cursor: pointer; }
+  .theme-toggle:hover { color: var(--text); }
+  .theme-toggle svg { width: 20px; height: 20px; transition: transform .45s var(--spring); }
+  .theme-toggle:hover svg { transform: rotate(-20deg); }
   .hero-video { position: relative; aspect-ratio: 16 / 9; border-radius: 18px; overflow: hidden; background: var(--stage); box-shadow: 0 30px 80px -30px rgba(0, 0, 0, .55), 0 0 0 1px var(--rule); }
   .hero-video video { display: block; width: 100%; height: 100%; object-fit: cover; }
   .hero-video .pending { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 24px; color: #c5ced8;
@@ -217,8 +224,13 @@
     .node.link::after { animation: none; }
   }
 </style>
+<script>
+  // The theme chosen with the switch (top right), before the page paints; otherwise the system's.
+  try { const t = localStorage.getItem('va-story-theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t } catch {}
+</script>
 </head>
 <body>
+<button type="button" class="theme-toggle" id="theme-toggle" aria-label="Switch to light theme"></button>
 <div class="wrap page">
 <nav class="toc" aria-label="On this page">
   <p>On this page</p>
@@ -243,12 +255,12 @@
     use it, and so can scripts and AI tools.</p>
     <div class="actions">
       <a class="btn primary" href="/">Open Video Agent</a>
-      <a class="btn secondary" href="#use-it">Connect your AI tools</a>
+      <a class="btn accent" href="#use-it">Connect your AI tools</a>
     </div>
   </div>
   <figure style="margin:0">
     <!-- The hero video, made with Video Agent itself. data-src is its public MP4; until then the panel says so. -->
-    <div class="hero-video" id="hero-video" data-src="/v/uc5sgjj42p.mp4" data-poster="/v/uc5sgjj42p.jpg" data-captions="/v/uc5sgjj42p.vtt">
+    <div class="hero-video" id="hero-video" data-name="Hero: How we built Video Agent" data-src="/v/uc5sgjj42p.mp4" data-poster="/v/uc5sgjj42p.jpg" data-captions="/v/uc5sgjj42p.vtt">
       <div class="pending"><div><b>This video is being made by Video Agent</b>A narrated tour of how it works, made
       from one prompt.</div></div>
     </div>
@@ -303,7 +315,7 @@
             <button class="icon-btn" id="scrub-play" aria-label="Play the composition">
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg>
             </button>
-            <input type="range" id="scrub" min="0" max="9" step="0.0333" value="0" aria-label="Time in the composition" style="flex:1">
+            <input type="range" id="scrub" min="0" max="9" step="any" value="0" aria-label="Time in the composition" style="flex:1">
           </div>
           <div class="readout num"><span id="time">0.00 s</span><span>30 frames a second</span></div>
         </div>
@@ -468,17 +480,17 @@
   </div>
   <div class="grid3 examples">
     <figure class="card example reveal">
-      <video controls playsinline preload="none" poster="/v/975emw6par.jpg" src="/v/975emw6par.mp4"></video>
+      <video data-name="Example: Netlify AI Gateway" controls playsinline preload="none" poster="/v/975emw6par.jpg" src="/v/975emw6par.mp4"></video>
       <figcaption><h3>Netlify AI Gateway</h3><p>A 55-second product film: provider accounts and keys pile up, then collapse
       into one gateway with every frontier model and no keys to wire up.</p><a href="/v/975emw6par">Share page</a></figcaption>
     </figure>
     <figure class="card example reveal">
-      <video controls playsinline preload="none" poster="/v/6cj4zma5e7.jpg" src="/v/6cj4zma5e7.mp4"></video>
+      <video data-name="Example: What are webhooks?" controls playsinline preload="none" poster="/v/6cj4zma5e7.jpg" src="/v/6cj4zma5e7.mp4"></video>
       <figcaption><h3>What are webhooks?</h3><p>A 55-second explainer for sales and customer success: instant notifications
       instead of constant checking, and the Netlify events that send them.</p><a href="/v/6cj4zma5e7">Share page</a></figcaption>
     </figure>
     <figure class="card example reveal">
-      <video controls playsinline preload="none" poster="/v/x3546u2aab.jpg" src="/v/x3546u2aab.mp4"></video>
+      <video data-name="Example: The agent now speaks" controls playsinline preload="none" poster="/v/x3546u2aab.jpg" src="/v/x3546u2aab.mp4"></video>
       <figcaption><h3>The agent now speaks</h3><p>A 15-second announcement with a waveform drawn from the real narration,
       lighting up as it plays. Edited in the browser after the first render.</p><a href="/v/x3546u2aab">Share page</a></figcaption>
     </figure>
@@ -558,8 +570,28 @@
   const $$ = (s, r = document) => [...r.querySelectorAll(s)]
   const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x))
   const ease = (x) => 1 - Math.pow(1 - clamp(x), 3)
+  // Interactions a click listener can't see go to the employees' copy's tracking (a no-op on the public page).
+  const report = (label) => { try { window.artifactTrack?.(label) } catch {} }
   const PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg>'
   const PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>'
+
+  // Theme switch: a sun in dark mode (go light), a moon in light mode (go dark). Remembered on this device.
+  const SUN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6"/></svg>'
+  const MOON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5a8.5 8.5 0 1 0 10.7 10.7z"/></svg>'
+  const themeBtn = $('#theme-toggle')
+  const isDark = () => document.documentElement.dataset.theme ? document.documentElement.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches
+  const paintToggle = () => {
+    themeBtn.innerHTML = isDark() ? SUN : MOON
+    themeBtn.setAttribute('aria-label', isDark() ? 'Switch to light theme' : 'Switch to dark theme')
+  }
+  themeBtn.addEventListener('click', () => {
+    const next = isDark() ? 'light' : 'dark'
+    document.documentElement.dataset.theme = next
+    try { localStorage.setItem('va-story-theme', next) } catch {}
+    paintToggle()
+  })
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', paintToggle)
+  paintToggle()
 
   // Entrances: each block fades up the first time it scrolls into view.
   const io = new IntersectionObserver((es) => {
@@ -610,8 +642,18 @@
       Object.assign(tr, { kind: 'captions', srclang: 'en', label: 'English', src: hero.dataset.captions })
       v.append(tr)
     }
+    v.dataset.name = hero.dataset.name
     hero.append(v)
   }
+  // Every video reports when it's played, reaches halfway, and finishes.
+  $$('video[data-name]').forEach((v) => {
+    let half = false
+    v.addEventListener('play', () => report(`Played ${v.dataset.name}`))
+    v.addEventListener('timeupdate', () => {
+      if (!half && v.duration && v.currentTime / v.duration >= 0.5) { half = true; report(`Watched half of ${v.dataset.name}`) }
+    })
+    v.addEventListener('ended', () => report(`Finished ${v.dataset.name}`))
+  })
 
   // A video is a page plus time: every scene is a pure function of t, like a HyperFrames seek.
   const DUR = 9, FPS = 30
@@ -636,7 +678,9 @@
     $('#hud').textContent = `frame ${frame} / ${DUR * FPS}`
     $('#time').textContent = `${t.toFixed(2)} s`
   }
-  let playing = false, last = 0, raf = 0
+  // The playhead lives here, not in the slider: a slider rounds to its step, and a 60 Hz frame (16 ms) is less than one
+  // video frame, so reading it back each frame never moved.
+  let t0 = 0, playing = false, last = 0, raf = 0
   const scrubBtn = $('#scrub-play')
   const setPlaying = (on) => {
     playing = on
@@ -645,23 +689,26 @@
     if (on) { last = performance.now(); raf = requestAnimationFrame(tick) } else cancelAnimationFrame(raf)
   }
   const tick = (now) => {
-    let t = Number(scrub.value) + (now - last) / 1000
+    t0 += (now - last) / 1000
     last = now
-    if (t >= DUR) t = 0
-    scrub.value = String(t); draw(t)
+    if (t0 >= DUR) t0 = 0
+    scrub.value = String(t0); draw(t0)
     if (playing) raf = requestAnimationFrame(tick)
   }
-  scrub.addEventListener('input', () => { setPlaying(false); draw(Number(scrub.value)) })
+  scrub.addEventListener('input', () => { setPlaying(false); t0 = Number(scrub.value); draw(t0) })
+  scrub.addEventListener('change', () => report(`Dragged the timeline to ${t0.toFixed(1)} s`))
   scrubBtn.addEventListener('click', () => setPlaying(!playing))
   // A scene's label jumps to its start.
   lanes.forEach((l) => l.addEventListener('click', () => {
     setPlaying(false)
+    t0 = Number(l.dataset.at)
     scrub.value = l.dataset.at
-    draw(Number(l.dataset.at))
+    draw(t0)
   }))
   // So does clicking a scene's lines of HTML.
   lines.forEach((l) => {
     l.style.cursor = 'pointer'
+    l.setAttribute('data-track', `HTML line: jump to scene ${Number(l.dataset.line) + 1}`)
     l.addEventListener('click', () => lanes[Number(l.dataset.line)].click())
   })
   draw(0)
@@ -725,8 +772,8 @@
   $('#prev').addEventListener('click', () => { stopSteps(); go(step - 1) })
   $('#next').addEventListener('click', () => { stopSteps(); go(step + 1) })
   $('#stepper').addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowRight') { e.preventDefault(); stopSteps(); go(step + 1) }
-    if (e.key === 'ArrowLeft') { e.preventDefault(); stopSteps(); go(step - 1) }
+    if (e.key === 'ArrowRight') { e.preventDefault(); stopSteps(); go(step + 1); report(`Pipeline: arrow key to step ${step + 1}`) }
+    if (e.key === 'ArrowLeft') { e.preventDefault(); stopSteps(); go(step - 1); report(`Pipeline: arrow key to step ${step + 1}`) }
   })
   go(0)
   let stepsStarted = false
@@ -775,6 +822,7 @@ Ask me before starting any video: each one is an agent run that uses AI credits.
       try { ok = document.execCommand('copy') } catch { ok = false }
       ta.remove()
     }
+    report(ok ? 'Copied the agent prompt' : "Couldn't copy the agent prompt")
     copyLabel.textContent = ok ? 'Copied: paste it into your agent' : "Couldn't copy"
     copyBtn.classList.toggle('copied', ok)
     setTimeout(() => { copyLabel.textContent = 'Copy prompt for your agent'; copyBtn.classList.remove('copied') }, 2600)
