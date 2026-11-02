@@ -1,13 +1,13 @@
 # Video Agent
 
+[![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/netlify-labs/video-agent)
+
 Your company's own video agent on Netlify. Your team signs in, describes a video, and gets an MP4 a few
 minutes later, made by an AI agent with [HyperFrames](https://hyperframes.heygen.com) (an open-source HTML-to-video renderer;
 no account needed) in a
 [Netlify Agent Runner](https://docs.netlify.com/build/build-with-ai/agent-runners/overview/). Revise it
 in plain words, publish it to a public link with a share page, or drive everything from scripts with an
 API key.
-
-[![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/netlify-labs/video-agent)
 
 ## What you get
 
@@ -117,25 +117,26 @@ Prompts are visible to your Netlify team in the project's Agent Runs page.
 
 ## Configuration
 
-| Variable                                                 | Default                                        | Meaning                                                                                                                                                |
-| -------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `RUNNER_API_TOKEN`                                       | —                                              | Personal access token for starting and watching runs.                                                                                                  |
-| `ALLOWED_EMAIL_DOMAINS`                                  | —                                              | Company domains, or `invite-only`.                                                                                                                     |
-| `ADMIN_EMAILS`                                           | —                                              | First admins.                                                                                                                                          |
-| `MAX_ACTIVE_RUNS`                                        | `3`                                            | Runs at once.                                                                                                                                          |
-| `AGENT`, `AGENT_MODEL`, `AGENT_EFFORT`                   | runner default                                 | Which agent makes videos.                                                                                                                              |
-| `AUTHORING_DEADLINE_MIN`                                 | `22`                                           | Stop a run after this many minutes (the runner's ceiling is 25).                                                                                       |
-| `QUEUE_TIMEOUT_MIN`                                      | `60`                                           | Fail a video that waits in the queue longer than this.                                                                                                 |
-| `RENDER_QUALITY`                                         | `standard`                                     | HyperFrames render quality (`looks`, `standard`, `delivery`).                                                                                          |
-| `ALLOWED_ORIGINS`                                        | —                                              | Origins allowed to call the API from a browser with an API key (CORS).                                                                                 |
-| `BRAND_ZIP_URL`                                          | —                                              | A zip of your brand kit, used instead of committing it to `context/` ([how](context/README.md#keeping-your-brand-out-of-the-repo)).                    |
-| `AUTH_PROVIDER`                                          | `identity`                                     | How people sign in to the web app: `identity` (Netlify Identity) or `netlify` ([Sign in with Netlify](#sign-in-with-netlify-for-the-web-app)).         |
-| `NETLIFY_REQUIRED_TEAM`                                  | —                                              | Netlify team slugs or ids (comma-separated). When set, every Netlify sign-in (web or MCP) must be a member of one; re-checked daily.                   |
-| `MCP_OAUTH_PROVIDER`                                     | `netlify` with `AUTH_PROVIDER=netlify`, else — | `netlify` turns on OAuth for the MCP ([below](#sign-in-with-netlify-oauth)); `off` turns it off. Off unless both credentials are set.                  |
-| `NETLIFY_OAUTH_CLIENT_ID`, `NETLIFY_OAUTH_CLIENT_SECRET` | —                                              | The Netlify OAuth application for Sign in with Netlify (web and MCP share it).                                                                         |
-| `MCP_OAUTH_ALLOWED_EMAIL_DOMAINS`                        | `ALLOWED_EMAIL_DOMAINS`                        | Email domains that may connect over OAuth. With neither set to domains (`invite-only`), only existing accounts can.                                    |
-| `MCP_OAUTH_CIMD_HOSTS`                                   | `claude.ai,claude.com`                         | Hosts whose https client ids (Client ID Metadata Documents) are fetched.                                                                               |
-| `OPENVERSE_CLIENT_ID`, `OPENVERSE_CLIENT_SECRET`         | —                                              | A registered Openverse app for Find music and runs' music (higher rate limits). Without them, searches are anonymous ([below](#music-from-openverse)). |
+| Variable                                                 | Required?                                      | Default                                        | Meaning                                                                                                                                                  |
+| -------------------------------------------------------- | ---------------------------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `RUNNER_API_TOKEN`                                       | **Required**                                   | —                                              | Personal access token for starting and watching runs.                                                                                                    |
+| `ALLOWED_EMAIL_DOMAINS`                                  | **Required**                                   | —                                              | Company domains, or `invite-only`.                                                                                                                       |
+| `ADMIN_EMAILS`                                           | **Required**                                   | —                                              | First admins.                                                                                                                                            |
+| `MAX_ACTIVE_RUNS`                                        | Optional                                       | `3`                                            | Runs at once.                                                                                                                                            |
+| `AGENT`, `AGENT_MODEL`, `AGENT_EFFORT`                   | Optional                                       | runner default                                 | Which agent makes videos.                                                                                                                                |
+| `AUTHORING_DEADLINE_MIN`                                 | Optional                                       | `22`                                           | Stop a run after this many minutes (the runner's ceiling is 25).                                                                                         |
+| `QUEUE_TIMEOUT_MIN`                                      | Optional                                       | `60`                                           | Fail a video that waits in the queue longer than this.                                                                                                   |
+| `RENDER_QUALITY`                                         | Optional                                       | `standard`                                     | HyperFrames render quality (`looks`, `standard`, `delivery`).                                                                                            |
+| `ALLOWED_ORIGINS`                                        | Optional                                       | —                                              | Origins allowed to call the API from a browser with an API key (CORS).                                                                                   |
+| `BRAND_ZIP_URL`                                          | Optional                                       | —                                              | A zip of your brand kit, used instead of committing it to `context/` ([how](context/README.md#keeping-your-brand-out-of-the-repo)).                      |
+| `AUTH_PROVIDER`                                          | Optional                                       | `identity`                                     | How people sign in to the web app: `identity` (Netlify Identity) or `netlify` ([Sign in with Netlify](#sign-in-with-netlify-for-the-web-app)).           |
+| `NETLIFY_REQUIRED_TEAM`                                  | Optional                                       | —                                              | Netlify team slugs or ids (comma-separated). When set, every Netlify sign-in (web or MCP) must be a member of one; re-checked daily.                     |
+| `MCP_OAUTH_PROVIDER`                                     | Optional                                       | `netlify` with `AUTH_PROVIDER=netlify`, else — | `netlify` turns on OAuth for the MCP ([below](#sign-in-with-netlify-oauth)); `off` turns it off. Off unless both credentials are set.                    |
+| `NETLIFY_OAUTH_CLIENT_ID`, `NETLIFY_OAUTH_CLIENT_SECRET` | Optional (needed with `AUTH_PROVIDER=netlify`) | —                                              | The Netlify OAuth application for Sign in with Netlify (web and MCP share it).                                                                           |
+| `MCP_OAUTH_ALLOWED_EMAIL_DOMAINS`                        | Optional                                       | `ALLOWED_EMAIL_DOMAINS`                        | Email domains that may connect over OAuth. With neither set to domains (`invite-only`), only existing accounts can.                                      |
+| `MCP_OAUTH_CIMD_HOSTS`                                   | Optional                                       | `claude.ai,claude.com`                         | Hosts whose https client ids (Client ID Metadata Documents) are fetched.                                                                                 |
+| `OPENVERSE_CLIENT_ID`, `OPENVERSE_CLIENT_SECRET`         | Optional                                       | —                                              | A registered Openverse app for Find music and runs' music (higher rate limits). Without them, searches are anonymous ([below](#music-from-openverse)).   |
+| `ELEVENLABS_API_KEY`                                     | Optional                                       | —                                              | ElevenLabs voices (with word timings) for voice-overs. Without it, voice-overs use Kokoro, which is built in. Agent runs read it, so scope it to builds. |
 
 ## Music from Openverse
 

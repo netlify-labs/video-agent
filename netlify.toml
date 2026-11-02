@@ -5,11 +5,24 @@
 [build.environment]
   NODE_VERSION = "24"
 
-# The Deploy to Netlify button asks for these. Everything else has defaults (see README).
+# The Deploy to Netlify button asks for these. Netlify makes every variable listed here a required field, so only
+# the settings a new deployment can't work without are listed.
 [template.environment]
-  RUNNER_API_TOKEN = "A Netlify personal access token used to start agent runs (ideally from a dedicated account in this team)"
-  ALLOWED_EMAIL_DOMAINS = "Who can sign up: your company email domains, comma-separated (e.g. acme.com), or invite-only"
-  ADMIN_EMAILS = "Email addresses of the first admins, comma-separated"
+  RUNNER_API_TOKEN = "Required. A Netlify personal access token that starts agent runs (ideally from a dedicated account in this team)"
+  ALLOWED_EMAIL_DOMAINS = "Required. Who can sign up: your company's email domains, comma-separated (e.g. acme.com), or invite-only"
+  ADMIN_EMAILS = "Required. The first admins' email addresses, comma-separated"
+
+# Everything else is optional and has a default; set it later under Project configuration > Environment variables.
+# The README's Configuration table describes each one:
+#   AUTH_PROVIDER (optional)                    identity (default) or netlify: Sign in with Netlify
+#   NETLIFY_OAUTH_CLIENT_ID / _SECRET (optional) the OAuth app for Sign in with Netlify (web and MCP)
+#   NETLIFY_REQUIRED_TEAM (optional)            only members of these Netlify teams can sign in
+#   OPENVERSE_CLIENT_ID / _SECRET (optional)     a registered Openverse app for music search (npm run setup:openverse)
+#   ELEVENLABS_API_KEY (optional)               ElevenLabs voices for voice-overs (Kokoro is built in)
+#   BRAND_ZIP_URL (optional)                    your brand kit as a zip, instead of committing it to context/
+#   MAX_ACTIVE_RUNS (optional, 3)               runs at once
+#   AGENT, AGENT_MODEL, AGENT_EFFORT (optional) which agent makes videos
+#   RENDER_QUALITY (optional, standard)         HyperFrames render quality
 
 # The web app is a single-page app. API, file and share routes are served by functions and edge
 # functions, which take precedence over this fallback.
