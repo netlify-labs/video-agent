@@ -195,6 +195,23 @@ describe('contract patcher', () => {
     expect(out.composition.beats[2]?.start).toBe(5)
   })
 
+  it('edits a composition whose beats are between frames (3.85 s is 115.5 frames)', () => {
+    // An agent-authored video had intro 3.85 s and the next beat at 3.85; snapping only the starts made it uneditable.
+    const offFrame = html
+      .replace(/(data-va-beat="intro"[^>]*?)data-duration="3"/, '$1data-duration="3.85"')
+      .replace(/(data-va-beat="demo"[^>]*?)data-start="3"/, '$1data-start="3.85"')
+      .replace(/(data-va-beat="demo"[^>]*?)data-duration="3"/, '$1data-duration="2.15"')
+    expect(validate(offFrame, summary)).toEqual([])
+    const out = applyEdits(offFrame, summary, [])
+    const c = read(load(out.html))
+    expect(c.beats.map((b) => [b.start, b.duration])).toEqual([
+      [0, 3.866667],
+      [3.866667, 2.133333],
+      [6, 3],
+    ])
+    expect(c.duration).toBe(9)
+  })
+
   it('reorders and deletes beats, refusing to delete the last one', () => {
     const re = applyEdits(html, summary, [{ op: 'reorder', order: ['intro', 'outro', 'demo'] }])
     expect(re.composition.beats.map((b) => [b.id, b.start])).toEqual([

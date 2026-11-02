@@ -549,17 +549,21 @@ export interface EditOptions {
   narration?: Record<string, string>
 }
 
-/** Lays the beats back to back from 0 and sets the root, layer and video-slot durations to match. */
+/** Lays the beats back to back from 0 in whole frames and sets the root, layer and video-slot durations to match. */
 function relayout(d: Doc) {
   let t = 0
+  let end = 0 // where the beats end unsnapped, so snapping doesn't add a frame per beat to the total
   for (const b of beatsOf(d.root)) {
     setAttr(b, 'data-start', fmt(t))
-    const dur = num(attr(b, 'data-duration'))
+    // Whole frames, so the starts land where validate expects even when the agent wrote, say, 3.85 s (115.5 frames).
+    end += num(attr(b, 'data-duration'))
+    const dur = frames(end) - t
+    setAttr(b, 'data-duration', fmt(dur))
     for (const vid of [...walk(b)].filter((e) => attr(e, 'data-va-kind') === 'video')) {
       setAttr(vid, 'data-start', '0')
       setAttr(vid, 'data-duration', fmt(dur)) // longer clips are trimmed to the beat
     }
-    t = frames(t + dur)
+    t = frames(end)
   }
   setAttr(d.root, 'data-duration', fmt(t))
   for (const l of kids(d.root).filter((e) => attr(e, 'data-va-layer') !== null)) {
