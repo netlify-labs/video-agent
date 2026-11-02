@@ -1,6 +1,19 @@
 // The Voice-over choice (SPIKES.md S9) for create, revise and plans: on or off, a voice, a pace and an optional script
 // with one line per beat. Without a script, the plan's narration or the agent's own words are spoken.
-import { Button, Group, SegmentedControl, Select, Stack, Switch, Text, Textarea } from '@mantine/core'
+import {
+  ActionIcon,
+  Button,
+  Group,
+  SegmentedControl,
+  Select,
+  Stack,
+  Switch,
+  Text,
+  Textarea,
+  Tooltip,
+} from '@mantine/core'
+import { IconPlayerPlay, IconPlayerStop } from '@tabler/icons-react'
+import { useEffect, useRef, useState } from 'react'
 import type { components } from '../api/schema'
 
 export type VoiceoverInput = components['schemas']['VoiceoverInput']
@@ -27,6 +40,69 @@ const VOICES = [
   { value: 'bf_isabella', label: 'Isabella · UK, soft' },
   { value: 'bm_george', label: 'George · UK, steady' },
 ]
+// Short samples of each voice, made once with the same Kokoro voices the runs use, so previews cost nothing.
+const SAMPLES = Object.fromEntries(
+  Object.entries(
+    import.meta.glob<string>('../assets/voices/*.mp3', { eager: true, query: '?url', import: 'default' }),
+  ).map(([path, url]) => [path.replace(/^.*\/|\.mp3$/g, ''), url]),
+)
+const DEFAULT_VOICE = 'af_heart'
+
+/** One sample plays at a time; returns the voice playing and a toggle. */
+function usePreview() {
+  const audio = useRef<HTMLAudioElement | null>(null)
+  const [playing, setPlaying] = useState<string | null>(null)
+  useEffect(
+    () => () => {
+      audio.current?.pause()
+    },
+    [],
+  )
+  const toggle = (voice: string) => {
+    const url = SAMPLES[voice]
+    audio.current?.pause()
+    if (!url || playing === voice) {
+      setPlaying(null)
+      return
+    }
+    const a = new Audio(url)
+    a.onended = () => {
+      setPlaying((p) => (p === voice ? null : p))
+    }
+    audio.current = a
+    setPlaying(voice)
+    void a.play().catch(() => {
+      setPlaying(null)
+    })
+  }
+  return { playing, toggle }
+}
+
+function PreviewButton(props: { voice: string; label: string; playing: boolean; onToggle: () => void }) {
+  return (
+    <Tooltip label={props.playing ? 'Stop' : `Hear ${props.label}`} withinPortal>
+      <ActionIcon
+        variant="subtle"
+        color="gray"
+        size="sm"
+        aria-label={props.playing ? `Stop ${props.label}` : `Hear ${props.label}`}
+        data-testid={`voice-preview-${props.voice}`}
+        // Inside the dropdown, a press must play the sample, not pick the voice.
+        onMouseDown={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+        }}
+        onClick={(e) => {
+          e.stopPropagation()
+          props.onToggle()
+        }}
+      >
+        {props.playing ? <IconPlayerStop size={14} /> : <IconPlayerPlay size={14} />}
+      </ActionIcon>
+    </Tooltip>
+  )
+}
+
 const PACES = [
   { value: '0.9', label: 'Slower' },
   { value: '1', label: 'Normal' },
@@ -66,6 +142,10 @@ export function VoiceoverControl(props: {
     props.onChange({ ...v, ...patch })
   }
   const lines = v.script.length ? v.script : ['']
+  const preview = usePreview()
+  const chosen = v.voice || DEFAULT_VOICE
+  const nameOf = (voice: string) =>
+    (VOICES.find((x) => x.value === voice)?.label ?? voice).split(' · ')[0] ?? voice
   return (
     <div>
       <Switch
@@ -81,17 +161,49 @@ export function VoiceoverControl(props: {
       {v.enabled ? (
         <Stack gap="sm" mt="sm" data-testid="voiceover-options">
           <Group gap="sm" align="end">
-            <Select
-              label="Voice"
-              data={VOICES}
-              value={v.voice}
-              allowDeselect={false}
-              disabled={props.disabled === true}
-              onChange={(x) => {
-                set({ voice: x ?? '' })
-              }}
-              w={220}
-            />
+            <Group gap={4} align="end" wrap="nowrap">
+              <Select
+                label="Voice"
+                data={VOICES}
+                value={v.voice}
+                allowDeselect={false}
+                disabled={props.disabled === true}
+                onChange={(x) => {
+                  set({ voice: x ?? '' })
+                }}
+                w={220}
+                renderOption={({ option }) => {
+                  const voice = option.value || DEFAULT_VOICE
+                  return (
+                    <Group justify="space-between" wrap="nowrap" w="100%" gap="xs">
+                      <span>{option.label}</span>
+                      {option.value && SAMPLES[voice] ? (
+                        <PreviewButton
+                          voice={voice}
+                          label={nameOf(voice)}
+                          playing={preview.playing === voice}
+                          onToggle={() => {
+                            preview.toggle(voice)
+                          }}
+                        />
+                      ) : null}
+                    </Group>
+                  )
+                }}
+              />
+              {SAMPLES[chosen] ? (
+                <div style={{ paddingBottom: 6 }}>
+                  <PreviewButton
+                    voice={`chosen-${chosen}`}
+                    label={nameOf(chosen)}
+                    playing={preview.playing === chosen}
+                    onToggle={() => {
+                      preview.toggle(chosen)
+                    }}
+                  />
+                </div>
+              ) : null}
+            </Group>
             <div>
               <Text size="sm" fw={500} mb={4} id="pace-label">
                 Pace

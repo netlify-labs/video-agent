@@ -1028,3 +1028,24 @@ test('the media worker keeps signed version files by path and leaves everything 
   expect(await network(`/files/${id}/v1/preview.gif`)).toHaveLength(1)
   expect(await cached()).toEqual([clip, poster])
 })
+
+test('voice previews play a sample, one at a time, without picking the voice', async ({ page }) => {
+  await page.goto('/new')
+  await page.getByTestId('voiceover-switch').check()
+  const samples: string[] = []
+  page.on('request', (r) => {
+    if (r.url().endsWith('.mp3')) samples.push(r.url())
+  })
+  // The button beside the select plays the chosen voice (the default is Heart).
+  await page.getByRole('button', { name: 'Hear Heart' }).click()
+  await expect(page.getByRole('button', { name: 'Stop Heart' })).toBeVisible()
+  await expect.poll(() => samples.some((u) => /af_heart.*\.mp3$/.test(u))).toBe(true)
+  await page.getByRole('button', { name: 'Stop Heart' }).click()
+  await expect(page.getByRole('button', { name: 'Hear Heart' })).toBeVisible()
+  // In the list, a preview plays that voice and leaves the choice alone.
+  await page.getByRole('combobox', { name: 'Voice' }).click()
+  await page.getByTestId('voice-preview-am_michael').click()
+  await expect.poll(() => samples.some((u) => /am_michael.*\.mp3$/.test(u))).toBe(true)
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('combobox', { name: 'Voice' })).toHaveValue('Default (Heart)')
+})
