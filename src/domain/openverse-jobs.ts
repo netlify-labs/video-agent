@@ -1,25 +1,33 @@
 // Openverse searches and imports that survive a slow Openverse. Its audio search often takes 20 to 60 seconds, longer
 // than an API request may run, so a request tries for a few seconds itself and then hands the work to a job that
-// openverse-background runs with minutes to spare. A finished search is also the cache every instance shares; identical
-// requests from one person share a job; each person starts a limited number per minute; the sweep reaps old jobs.
+// openverse-background runs with minutes to spare. Every finished search is stored for every instance (openverse.ts):
+// fresh for a day, then served stale at once while a background job refreshes it, for up to two weeks. A daily warm-up
+// refreshes common and popular searches. Identical requests from one person share a job; each person starts a limited
+// number per minute; the sweep reaps old jobs and searches.
 import type { Deps } from '../deps.js'
 import { ApiError, type ErrorCode } from '../lib/errors.js'
 import { mediaDto } from './media.js'
 import {
-  CACHE_TTL_MS,
   cachedSearch,
-  fetchSearch,
+  fetchSearchAt,
   importedTrack,
   importOpenverse,
+  isStale,
   openverseTiming,
   OpenverseUnavailable,
+  requestFromKey,
+  SEARCH_FRESH_MS,
+  SEARCH_USABLE_MS,
   searchRequest,
+  storedSearch,
   SYNC_CALL,
   trackId,
   withLibrary,
   type CallOpts,
+  type FetchedPage,
   type SearchPage,
   type SearchQuery,
+  type SearchRequest,
 } from './openverse.js'
 import { assertCan, type Principal } from './policy.js'
 import type { OpenverseJobKind, OpenverseJobRow } from './types.js'
@@ -35,6 +43,37 @@ const REDISPATCH_AFTER_MS = 30_000
 const GIVE_UP_QUEUED_MS = 5 * 60_000
 /** A running job not finished by now was cut off with its function. */
 const RUNNING_STALE_MS = 16 * 60_000
+/** Who the server's own refresh and warm-up jobs belong to: no person, so no one's rate limit and one job per search. */
+export const SYSTEM_USER_ID = 'system:openverse'
+/** A stale search isn't refreshed again this soon after a refresh was queued (one that failed included). */
+const REFRESH_AGAIN_MS = 10 * 60_000
+/** The most searches the sweep keeps, and the most used searches the warm-up refreshes besides the common ones. */
+export const MAX_STORED_SEARCHES = 5_000
+const WARM_TOP = 15
+/** The warm-up refreshes searches older than this, so a daily run finds yesterday's still a little short of stale. */
+const WARM_OLDER_THAN_MS = SEARCH_FRESH_MS - 4 * 60 * 60_000
+
+/** Searches people often start with: offered as quick picks in Find music and kept warm every day. */
+export const COMMON_SEARCHES = [
+  'upbeat',
+  'ambient',
+  'corporate',
+  'cinematic',
+  'acoustic',
+  'guitar',
+  'piano',
+  'lofi',
+  'electronic',
+  'inspiring',
+  'happy',
+  'calm',
+  'energetic',
+  'hip hop',
+  'rock',
+  'jazz',
+  'orchestral',
+  'chill',
+] as const
 
 type ImportResult = { mediaId: string; created: boolean }
 type MediaDto = Awaited<ReturnType<typeof mediaDto>>
@@ -42,7 +81,8 @@ export type SearchResult = Awaited<ReturnType<typeof withLibrary>>
 
 export interface OpenverseJobDto {
   id: string
-  kind: OpenverseJobKind
+  /** Warm-up jobs are the server's own and never shown. */
+  kind: Exclude<OpenverseJobKind, 'warmup'>
   status: OpenverseJobRow['status']
   search: SearchResult | null
   media: MediaDto | null
@@ -57,6 +97,7 @@ export interface OpenverseJobDto {
 export type Started<T> = { done: T; job?: never } | { job: OpenverseJobDto; done?: never }
 
 const iso = (ms: number) => new Date(ms).toISOString()
+const day = (ms: number) => iso(ms).slice(0, 10)
 
 /** One short try inside an API request: everything in it must finish within the inline budget. */
 const inline = (): CallOpts => ({
@@ -141,10 +182,18 @@ export async function queueOpenverseJob(
   key: string,
   params: Record<string, unknown>,
 ): Promise<OpenverseJobRow> {
-  if (kind === 'search') {
-    const since = iso(deps.clock.now().getTime() - CACHE_TTL_MS)
-    const recent = await deps.store.findOpenverseJob({ kind, key, statuses: ['done'], since })
-    if (recent) return recent
+  const req = kind === 'search' ? requestFromKey(key) : null
+  const known = req && (cachedSearch(deps, req) ?? (await storedSearch(deps, req)))
+  if (req && known) {
+    // A stored search answers at once (refreshed in the background when stale), as a finished job like any other.
+    if (isStale(deps, known.fetchedAt)) await queueRefresh(deps, req)
+    const row = {
+      ...newRow(deps, { userId }, kind, key, params),
+      status: 'done' as const,
+      result: known.page,
+    }
+    await deps.store.insertOpenverseJobIfAbsent(row)
+    return row
   }
   const row = newRow(deps, { userId }, kind, key, params)
   const stored = await deps.store.insertOpenverseJobIfAbsent(row)
@@ -156,7 +205,52 @@ export async function queueOpenverseJob(
   return stored
 }
 
-/** A search: from a cache when someone searched the same recently, else a short try, else a job. */
+/** The params a search job runs with: the request's own fields, read back from its key. */
+const searchParams = (req: SearchRequest) => {
+  const p = new URLSearchParams(req.key)
+  return { q: p.get('q'), license: p.get('license'), category: p.get('category') ?? 'all', page: req.page }
+}
+
+/**
+ * Queues the server's own refresh of a stale search, unless one is queued or running already or was queued in the last
+ * few minutes (so a down Openverse isn't asked again on every request). Never fails the request that noticed.
+ */
+export async function queueRefresh(deps: Deps, req: SearchRequest) {
+  try {
+    const recent = await deps.store.findOpenverseJob({
+      kind: 'search',
+      key: req.key,
+      userId: SYSTEM_USER_ID,
+      statuses: ['queued', 'running', 'failed', 'done'],
+      since: iso(deps.clock.now().getTime() - REFRESH_AGAIN_MS),
+    })
+    if (recent) return
+    const row = newRow(deps, { userId: SYSTEM_USER_ID }, 'search', req.key, searchParams(req))
+    const stored = await deps.store.insertOpenverseJobIfAbsent(row)
+    if (stored.id !== row.id) return
+    deps.log.info('openverse.refresh_queued', { jobId: row.id })
+    await dispatch(deps, row.id)
+  } catch (e) {
+    deps.log.warn('openverse.refresh_failed', { error: e })
+  }
+}
+
+/** Counts a person's first-page search, for the warm-up's most used searches. Best effort. */
+async function recordUse(deps: Deps, req: SearchRequest) {
+  if (req.page !== 1) return
+  await deps.store.addOpenverseSearchUse(req.key, day(deps.clock.now().getTime())).catch((e: unknown) => {
+    deps.log.warn('openverse.use_failed', { error: e })
+  })
+}
+
+/** A finished page as the API answers it: the library checked now, and how old the page is. */
+const answer = (deps: Deps, r: FetchedPage) =>
+  withLibrary(deps, r.page, { fetchedAt: r.fetchedAt, stale: isStale(deps, r.fetchedAt) })
+
+/**
+ * A search: from the stored searches when anyone searched the same in the last two weeks (a stale one is answered at
+ * once and refreshed in the background), else a short try, else a job.
+ */
 export async function startOpenverseSearch(
   deps: Deps,
   p: Principal,
@@ -164,36 +258,21 @@ export async function startOpenverseSearch(
 ): Promise<Started<SearchResult>> {
   assertCan(p, 'media:upload')
   const req = searchRequest(q)
-  const now = deps.clock.now().getTime()
-  const recent =
-    cachedSearch(deps, req) ??
-    ((
-      await deps.store.findOpenverseJob({
-        kind: 'search',
-        key: req.key,
-        statuses: ['done'],
-        since: iso(now - CACHE_TTL_MS),
-      })
-    )?.result as SearchPage | undefined) ??
-    null
-  if (recent) return { done: await withLibrary(deps, recent) }
+  await recordUse(deps, req)
+  const known = cachedSearch(deps, req) ?? (await storedSearch(deps, req))
+  if (known) {
+    if (isStale(deps, known.fetchedAt)) await queueRefresh(deps, req)
+    return { done: await answer(deps, known) }
+  }
   const running = await inflight(deps, p, 'search', req.key)
   if (running) return { job: await jobDto(deps, p, running) }
   await assertRate(deps, p)
-  const params = { q: q.q.trim().slice(0, 200), license: q.license, category: q.category, page: req.page }
   try {
-    const page = await fetchSearch(deps, req, inline())
-    // Kept as a finished job, so other instances answer the same search from it.
-    await deps.store.insertOpenverseJobIfAbsent({
-      ...newRow(deps, p, 'search', req.key, params),
-      status: 'done',
-      result: page,
-    })
-    return { done: await withLibrary(deps, page) }
+    return { done: await answer(deps, await fetchSearchAt(deps, req, inline())) }
   } catch (e) {
     if (!(e instanceof OpenverseUnavailable)) throw e
   }
-  return { job: await enqueue(deps, p, 'search', req.key, params) }
+  return { job: await enqueue(deps, p, 'search', req.key, searchParams(req)) }
 }
 
 /** An import: the item already imported, else a short try, else a job. */
@@ -220,7 +299,7 @@ export async function startOpenverseImport(
 export async function jobDto(deps: Deps, p: Principal, j: OpenverseJobRow): Promise<OpenverseJobDto> {
   const out: OpenverseJobDto = {
     id: j.id,
-    kind: j.kind,
+    kind: j.kind === 'import' ? 'import' : 'search',
     status: j.status,
     search: null,
     media: null,
@@ -231,7 +310,11 @@ export async function jobDto(deps: Deps, p: Principal, j: OpenverseJobRow): Prom
     expiresAt: j.expiresAt,
   }
   if (j.status !== 'done' || !j.result) return out
-  if (j.kind === 'search') return { ...out, search: await withLibrary(deps, j.result as SearchPage) }
+  if (j.kind === 'search')
+    return {
+      ...out,
+      search: await withLibrary(deps, j.result as SearchPage, { fetchedAt: j.updatedAt, stale: false }),
+    }
   const r = j.result as ImportResult
   const m = await deps.store.getMedia(r.mediaId)
   if (!m || m.deletedAt)
@@ -276,18 +359,7 @@ export async function runOpenverseJob(deps: Deps, id: string): Promise<'skipped'
   if (!job) return 'skipped'
   const started = Date.now()
   try {
-    // The person's role now, not when they asked.
-    const user = await deps.store.getUser(job.userId)
-    if (!user || user.disabledAt) throw new ApiError('forbidden', 'Your account is no longer active.')
-    const p: Principal = {
-      kind: 'user',
-      userId: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
-      apiKeyId: null,
-    }
-    assertCan(p, 'media:upload')
+    const p = await jobPrincipal(deps, job)
     // A music pick asks for fewer retries (it moves on to other words instead); never more than the default.
     const asked = job.params.retries
     const retries =
@@ -299,10 +371,13 @@ export async function runOpenverseJob(deps: Deps, id: string): Promise<'skipped'
       retries,
       deadline: AbortSignal.timeout(JOB_DEADLINE_MS),
     }
-    let result: SearchPage | ImportResult
-    if (job.kind === 'search') {
-      result = await fetchSearch(deps, searchRequest(job.params as unknown as SearchQuery), opts)
+    let result: SearchPage | ImportResult | WarmupResult
+    if (job.kind === 'warmup') {
+      result = await runWarmup(deps, job.params.keys, opts)
+    } else if (job.kind === 'search') {
+      result = (await fetchSearchAt(deps, searchRequest(job.params as unknown as SearchQuery), opts)).page
     } else {
+      if (!p) throw new ApiError('forbidden', 'Only a person can import.')
       const params = job.params as { id: string; caption?: string }
       const r = await importOpenverse(deps, p, params, opts)
       result = { mediaId: r.media.id, created: r.created }
@@ -331,6 +406,109 @@ export async function runOpenverseJob(deps: Deps, id: string): Promise<'skipped'
   }
 }
 
+/** The person a job runs for (their role now, not when they asked), or null for the server's own jobs. */
+async function jobPrincipal(deps: Deps, job: OpenverseJobRow): Promise<Principal | null> {
+  if (job.userId === SYSTEM_USER_ID) return null
+  const user = await deps.store.getUser(job.userId)
+  if (!user || user.disabledAt) throw new ApiError('forbidden', 'Your account is no longer active.')
+  const p: Principal = {
+    kind: 'user',
+    userId: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    apiKeyId: null,
+  }
+  assertCan(p, 'media:upload')
+  return p
+}
+
+// ───────── daily warm-up ─────────
+
+type WarmupResult = { refreshed: number; skipped: number; failed: number; left: number }
+
+/**
+ * The searches the warm-up should refresh: the common ones (music, CC0 and CC BY, first page) and the most used first
+ * pages of the last two weeks, those missing or no longer fresh.
+ */
+export async function planWarmup(deps: Deps): Promise<string[]> {
+  const now = deps.clock.now().getTime()
+  const common = COMMON_SEARCHES.map((q) => searchRequest({ q, license: 'cc0,by', category: 'music' }).key)
+  const top = await deps.store.topOpenverseSearches(day(now - SEARCH_USABLE_MS), WARM_TOP)
+  const keys = [...new Set([...common, ...top.map((t) => t.key)])].filter((k) => requestFromKey(k))
+  const out: string[] = []
+  for (const key of keys) {
+    const row = await deps.store.getOpenverseSearch(key)
+    if (!row || Date.parse(row.fetchedAt) < now - WARM_OLDER_THAN_MS) out.push(key)
+  }
+  return out
+}
+
+/**
+ * Starts the daily warm-up (the openverse-warmup schedule): one background job that refreshes the planned searches,
+ * spaced out. Idempotent: nothing is queued when every search is fresh or a warm-up is already queued or running.
+ */
+export async function startWarmup(deps: Deps): Promise<{ jobId: string | null; keys: number }> {
+  const keys = await planWarmup(deps)
+  if (!keys.length) return { jobId: null, keys: 0 }
+  const row = newRow(deps, { userId: SYSTEM_USER_ID }, 'warmup', 'daily', { keys })
+  const stored = await deps.store.insertOpenverseJobIfAbsent(row)
+  if (stored.id !== row.id) return { jobId: stored.id, keys: 0 }
+  deps.log.info('openverse.warmup_queued', { jobId: row.id, keys: keys.length })
+  await dispatch(deps, row.id)
+  return { jobId: row.id, keys: keys.length }
+}
+
+/**
+ * Refreshes stored searches from Openverse, a few at a time, each started at least `warmGapMs` after the one before
+ * (the app's rate limit is shared with people searching). Skips searches refreshed meanwhile, keeps going past
+ * failures, and stops when Openverse says it's busy or the job's deadline nears.
+ */
+async function runWarmup(deps: Deps, raw: unknown, opts: CallOpts): Promise<WarmupResult> {
+  const keys = (Array.isArray(raw) ? raw : []).filter((k): k is string => typeof k === 'string').slice(0, 100)
+  const r: WarmupResult = { refreshed: 0, skipped: 0, failed: 0, left: 0 }
+  const { warmGapMs, warmConcurrency } = openverseTiming
+  const call: CallOpts = { ...opts, retries: Math.min(opts.retries, 1) }
+  let next = 0
+  let stop = false
+  let lastStart = -Infinity
+  let gate = Promise.resolve()
+  // Starts are serialized through the gate, so they stay spaced however many run at once.
+  const spaced = () => {
+    const turn = gate.then(async () => {
+      const wait = lastStart + warmGapMs - deps.clock.now().getTime()
+      if (wait > 0) await openverseTiming.sleep(wait)
+      lastStart = deps.clock.now().getTime()
+    })
+    gate = turn.catch(() => {})
+    return turn
+  }
+  const worker = async () => {
+    while (!stop && next < keys.length) {
+      const req = requestFromKey(keys[next++] ?? '')
+      const row = req && (await deps.store.getOpenverseSearch(req.key))
+      if (!req || (row && Date.parse(row.fetchedAt) >= deps.clock.now().getTime() - WARM_OLDER_THAN_MS)) {
+        r.skipped++
+        continue
+      }
+      await spaced()
+      if (stop || opts.deadline?.aborted) break
+      try {
+        await fetchSearchAt(deps, req, call)
+        r.refreshed++
+      } catch (e) {
+        r.failed++
+        deps.log.warn('openverse.warmup_search_failed', { error: e })
+        if ((e instanceof ApiError && e.code === 'rate_limited') || opts.deadline?.aborted) stop = true
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.max(1, warmConcurrency) }, worker))
+  r.left = Math.max(0, keys.length - next)
+  deps.log.info('openverse.warmup_done', r)
+  return r
+}
+
 /** Sweep: dispatch lost jobs again, fail the ones that were cut off or never started, and delete expired ones. */
 export async function sweepOpenverseJobs(deps: Deps, limit = 20) {
   const now = deps.clock.now().getTime()
@@ -351,5 +529,11 @@ export async function sweepOpenverseJobs(deps: Deps, limit = 20) {
     await deps.store.updateOpenverseJob(j.id, { updatedAt: iso(now) })
     await dispatch(deps, j.id)
   }
+  // Searches too old to serve, and use counts older than the warm-up looks at.
+  await deps.store.deleteOldOpenverseSearches({
+    fetchedBefore: iso(now - SEARCH_USABLE_MS),
+    keep: MAX_STORED_SEARCHES,
+  })
+  await deps.store.deleteOpenverseSearchUses(day(now - SEARCH_USABLE_MS))
   return deps.store.deleteExpiredOpenverseJobs(iso(now))
 }

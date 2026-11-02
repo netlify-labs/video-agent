@@ -339,8 +339,8 @@ describe('Openverse jobs in Postgres', () => {
     ov.mode = 'ok'
     expect(await runOpenverseJob(h.deps, job.id)).toBe('done')
     expect((await h.json<Job>(await getJob(h, job.id))).search?.total).toBe(2)
-    // A finished job doesn't block a new identical one later.
-    h.deps.clock.advance(6 * 60_000)
+    // A finished job doesn't block a new identical one once the stored search is too old to serve.
+    h.deps.clock.advance(15 * 24 * 60 * 60_000)
     resetOpenverseCache()
     fastTiming(h)
     ov.mode = 'hang'

@@ -28,6 +28,9 @@ const MAX_REDIRECTS = 3
 const PAGE_SIZE = 20
 export const CACHE_TTL_MS = 5 * 60_000
 const CACHE_MAX = 200
+/** A stored search is served as is for a day, then served stale (and refreshed in the background) for two weeks. */
+export const SEARCH_FRESH_MS = 24 * 60 * 60_000
+export const SEARCH_USABLE_MS = 14 * 24 * 60 * 60_000
 const BUSY = 'Openverse is busy, try again in a minute.'
 const NO_ANSWER = "Openverse didn't answer. Try again shortly."
 
@@ -58,6 +61,9 @@ export const openverseTiming = {
   job: { timeoutMs: 60_000, downloadMs: 180_000, retries: 3, maxWaitMs: 120_000 } as CallOpts,
   /** Waits before each retry of a timeout or 5xx. */
   backoffMs: [2_000, 5_000, 15_000],
+  /** The daily warm-up: at least this long between the starts of its searches, and at most this many at once. */
+  warmGapMs: 4_000,
+  warmConcurrency: 3,
   /** How long an MCP tool waits for a job (requests must answer within ~10 s), and how often it looks. */
   mcpWaitMs: 8_000,
   pollMs: 1_000,
@@ -286,7 +292,8 @@ export interface SearchPage {
 
 /** The normalized search: Openverse's query string (also the cache and job key), the page and the licences kept. */
 export function searchRequest(q: SearchQuery) {
-  const query = q.q.trim().slice(0, 200)
+  // Openverse ignores case and extra spaces, so the key (shared by everyone's searches) does too.
+  const query = q.q.trim().replace(/\s+/g, ' ').toLowerCase().slice(0, 200)
   if (!query) throw new ApiError('invalid_request', 'Type something to search for.')
   const license: LicenseFilter = q.license ?? 'cc0,by'
   const category = q.category ?? 'music'
@@ -311,11 +318,66 @@ function toPage(req: SearchRequest, data: unknown): SearchPage {
   }
 }
 
-/** The page from this instance's short cache, or null. */
-export function cachedSearch(deps: Deps, req: SearchRequest): SearchPage | null {
-  const hit = cache.get(req.key)
-  return hit && hit.at + CACHE_TTL_MS >= now(deps) ? toPage(req, hit.data) : null
+/** The request a stored key stands for (the key is the request's own query string), or null for one that can't be. */
+export function requestFromKey(key: string): SearchRequest | null {
+  const p = new URLSearchParams(key)
+  const license = p.get('license')
+  const category = p.get('category') ?? 'all'
+  if (!(LICENSE_FILTERS as readonly string[]).includes(license ?? '')) return null
+  if (!(AUDIO_CATEGORIES as readonly string[]).includes(category)) return null
+  try {
+    const req = searchRequest({
+      q: p.get('q') ?? '',
+      license: license as LicenseFilter,
+      category: category as AudioCategory,
+      page: Number(p.get('page')) || 1,
+    })
+    return req.key === key ? req : null
+  } catch {
+    return null
+  }
 }
+
+/** A page with when it was fetched from Openverse. */
+export interface FetchedPage {
+  page: SearchPage
+  fetchedAt: string
+}
+
+/** The page from this instance's short cache, or null. */
+export function cachedSearch(deps: Deps, req: SearchRequest): FetchedPage | null {
+  const hit = cache.get(req.key)
+  return hit && hit.at + CACHE_TTL_MS >= now(deps)
+    ? { page: toPage(req, hit.data), fetchedAt: new Date(hit.at).toISOString() }
+    : null
+}
+
+/** The stored search every instance shares, when it's young enough to serve (fresh or stale), else null. */
+export async function storedSearch(deps: Deps, req: SearchRequest): Promise<FetchedPage | null> {
+  const row = await deps.store.getOpenverseSearch(req.key).catch((e: unknown) => {
+    deps.log.warn('openverse.cache_read_failed', { error: e })
+    return null
+  })
+  if (!row || Date.parse(row.fetchedAt) < now(deps) - SEARCH_USABLE_MS) return null
+  const r = row.result as Partial<SearchPage> | null
+  // Filter again on the way out, like toPage: nothing outside the chosen licences is ever offered.
+  const items = (Array.isArray(r?.items) ? r.items : []).filter(
+    (t) => isImportLicense(t.license) && req.allowed.includes(t.license),
+  )
+  return {
+    page: {
+      items,
+      page: req.page,
+      pageCount: Number(r?.pageCount) || 1,
+      total: Number(r?.total) || items.length,
+    },
+    fetchedAt: row.fetchedAt,
+  }
+}
+
+/** True when a page fetched at `fetchedAt` is past the fresh window. */
+export const isStale = (deps: Pick<Deps, 'clock'>, fetchedAt: string) =>
+  Date.parse(fetchedAt) < now(deps) - SEARCH_FRESH_MS
 
 /** One search page from Openverse, through a short cache that keeps repeats (and paging back) inside its rate limits. */
 export async function fetchSearch(
@@ -323,33 +385,57 @@ export async function fetchSearch(
   req: SearchRequest,
   opts: CallOpts = SYNC_CALL,
 ): Promise<SearchPage> {
+  return (await fetchSearchAt(deps, req, opts)).page
+}
+
+/** fetchSearch with when the page was fetched. Every answer from Openverse is also stored for every instance. */
+export async function fetchSearchAt(
+  deps: Deps,
+  req: SearchRequest,
+  opts: CallOpts = SYNC_CALL,
+): Promise<FetchedPage> {
   const cached = cachedSearch(deps, req)
   if (cached) return cached
   const hit = { at: now(deps), data: await apiGet(deps, `/audio/?${req.key}`, opts) }
   cache.delete(req.key)
   cache.set(req.key, hit)
   while (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value as string)
-  return toPage(req, hit.data)
+  const page = toPage(req, hit.data)
+  const fetchedAt = new Date(hit.at).toISOString()
+  // Only the tracks: whether one is in the library is looked up for each request.
+  await deps.store.putOpenverseSearch({ key: req.key, result: page, fetchedAt }).catch((e: unknown) => {
+    deps.log.warn('openverse.cache_write_failed', { error: e })
+  })
+  return { page, fetchedAt }
 }
 
-/** Marks the tracks already in the library with their media id. */
-export async function withLibrary(deps: Deps, r: SearchPage) {
+/** Marks the tracks already in the library with their media id, and says how old the page is. */
+export async function withLibrary(
+  deps: Deps,
+  r: SearchPage,
+  meta: { fetchedAt: string | null; stale: boolean } = { fetchedAt: null, stale: false },
+) {
   const imported = await deps.store.mediaBySource(
     'openverse',
     r.items.map((t) => t.id),
   )
   return {
-    ...r,
     items: r.items.map((t) => ({
       ...t,
       mediaId: imported.find((m) => m.sourceId === t.id && m.status === 'ready')?.id ?? null,
     })),
+    page: r.page,
+    pageCount: r.pageCount,
+    total: r.total,
+    fetchedAt: meta.fetchedAt,
+    stale: meta.stale,
   }
 }
 
 export async function searchOpenverse(deps: Deps, p: Principal, q: SearchQuery, opts: CallOpts = SYNC_CALL) {
   assertCan(p, 'media:upload')
-  return withLibrary(deps, await fetchSearch(deps, searchRequest(q), opts))
+  const r = await fetchSearchAt(deps, searchRequest(q), opts)
+  return withLibrary(deps, r.page, { fetchedAt: r.fetchedAt, stale: false })
 }
 
 /** Downloads a file: https only, at most 3 redirects, a size cap and a deadline. */
