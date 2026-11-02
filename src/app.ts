@@ -1457,7 +1457,10 @@ export function createApp(deps: Deps, opts: AppOptions) {
       const weekAgo = new Date(now.getTime() - 7 * 86400_000).toISOString()
       const monthAgo = new Date(now.getTime() - 35 * 86400_000).toISOString()
       const [inFlight, queued, unresolved, failures, usage, users, settings] = await Promise.all([
-        deps.store.listAttemptsByStage(['starting', 'running', 'cancelling', 'finishing'], 100),
+        deps.store.listAttemptsByStage(
+          ['finding_music', 'starting', 'running', 'cancelling', 'finishing'],
+          100,
+        ),
         deps.store.listAttemptsByStage(['queued'], 1000),
         deps.store.listAttemptsByStage(['unresolved'], 100),
         deps.store.failuresSince(weekAgo),

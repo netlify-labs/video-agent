@@ -50,9 +50,22 @@ export const voiceoverShape = z.object({
 export const StatusSchema = z
   .enum(['queued', 'running', 'finishing', 'ready', 'failed', 'cancelled', 'timed_out'])
   .openapi('VideoStatus')
+const MusicPickSchema = z
+  .object({
+    status: z.enum(['searching', 'importing', 'picked', 'skipped']),
+    query: z.string().nullable().openapi({ description: 'The Openverse search words' }),
+    title: z.string().nullable().openapi({ description: "The chosen track's title, once one is chosen" }),
+    mediaId: z.string().nullable().openapi({ description: 'The library item the track became, once picked' }),
+    reason: z.string().nullable().openapi({ description: 'Why the pick was skipped' }),
+  })
+  .openapi('MusicPick', {
+    description:
+      'Music the server picked on Openverse before the run, because the version asked for music and had no track.',
+  })
 export const StageSchema = z
   .enum([
     'queued',
+    'finding_music',
     'starting',
     'running',
     'cancelling',
@@ -184,6 +197,9 @@ export const VersionSchema = z
     attempts: z.number().int(),
     stage: StageSchema.nullable(),
     latestStep: z.string().nullable(),
+    music: MusicPickSchema.nullable().openapi({
+      description: 'The music the server picked before the run (null when none was needed).',
+    }),
     error: z.object({ category: z.string(), message: z.string() }).nullable(),
     agent: z
       .object({
@@ -719,6 +735,9 @@ export const ProgressSchema = z
     versionN: z.number().int().nullable(),
     stage: StageSchema.nullable(),
     step: z.string().nullable().openapi({ description: "The agent's latest step, in its own words" }),
+    music: MusicPickSchema.nullable().openapi({
+      description: 'The music the server is picking (or picked) before the run; null when none was needed.',
+    }),
     steps: z
       .number()
       .int()
