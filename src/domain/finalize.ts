@@ -11,6 +11,8 @@ import {
   sniffPreview,
   type Previews,
 } from '../lib/media/previews.js'
+import { readRunCredits, RUN_CREDITS_FILE, type RunCredit } from '../lib/openverse-rules.js'
+import { readTarGz, type TarLimits } from '../lib/tar.js'
 import { ensureBundle } from './bundles.js'
 import { getSettings } from './settings.js'
 import { setStage } from './videos.js'
@@ -166,6 +168,7 @@ export async function finalizeAttempt(deps: Deps, attemptId: string): Promise<Fi
       OUTPUT_FILES.map((f) => [f, manifest.files[f].sha256]),
     )
     const previews = await storePreviews(deps, a.id, prefix, manifest, sha256)
+    const runCredits = runCreditsOf(deps, a.id, files['source.tar.gz'])
     const result = await finish(deps, a, 'ready', null, {
       jobId: a.jobId,
       versionN: a.versionN,
@@ -182,6 +185,7 @@ export async function finalizeAttempt(deps: Deps, attemptId: string): Promise<Fi
       title: manifest.title.slice(0, 120),
       agentSummary: manifest.summary.slice(0, 4000),
       previews,
+      runCredits,
     })
     // The preview bundle (plan v2 §7). Best effort: a version without one is still ready and is extracted later.
     if (result === 'ready') {
@@ -284,6 +288,35 @@ async function storePreviews(
     }
   }
   return Object.keys(out.files).length || out.lqip ? out : null
+}
+
+// Reading a saved composition for its credits only: wider than the preview bundle's limits, so a large file the run
+// made can't cost a CC BY work its credit, and still bounded.
+const SOURCE_READ_LIMITS: TarLimits = {
+  maxEntries: 5000,
+  maxTotalBytes: 160 * 1024 * 1024,
+  maxFileBytes: 60 * 1024 * 1024,
+}
+
+/**
+ * Credits for the Openverse files the run fetched itself (scripts/openverse.ts records them in
+ * video/assets/music/credits.json, saved with the composition). The file is the agent's, so it is checked strictly:
+ * entries that fail are dropped and logged, and an unreadable archive or file gives none. Revisions and edits carry
+ * the file in their source, so their credits are read the same way.
+ */
+export function runCreditsOf(deps: Pick<Deps, 'log'>, attemptId: string, gz: Uint8Array): RunCredit[] | null {
+  let files: Map<string, Uint8Array>
+  try {
+    files = readTarGz(gz, SOURCE_READ_LIMITS)
+  } catch (e) {
+    deps.log.warn('finalize.run_credits_unreadable', { attemptId, error: e })
+    return null
+  }
+  const raw = files.get(RUN_CREDITS_FILE)
+  if (!raw) return null
+  const { credits, dropped } = readRunCredits(new TextDecoder().decode(raw), files)
+  if (dropped) deps.log.warn('finalize.run_credits_dropped', { attemptId, dropped, kept: credits.length })
+  return credits.length ? credits : null
 }
 
 async function finish(

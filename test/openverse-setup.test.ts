@@ -53,10 +53,14 @@ describe('setup:openverse', () => {
     })
     const posts = calls.filter((c) => c.method === 'POST' && c.url.includes('/env?site_id=site_1'))
     expect(posts.map((c) => (c.body as { key: string }[])[0])).toEqual([
-      { key: 'OPENVERSE_CLIENT_ID', scopes: ['functions'], values: [{ value: 'cid_123', context: 'all' }] },
+      {
+        key: 'OPENVERSE_CLIENT_ID',
+        scopes: ['builds', 'functions', 'runtime'],
+        values: [{ value: 'cid_123', context: 'all' }],
+      },
       {
         key: 'OPENVERSE_CLIENT_SECRET',
-        scopes: ['functions'],
+        scopes: ['builds', 'functions', 'runtime'],
         is_secret: true,
         values: ['production', 'deploy-preview', 'branch-deploy'].map((context) => ({
           value: 'shh_456',

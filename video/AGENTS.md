@@ -140,14 +140,25 @@ Videos are silent unless the run's prompt says otherwise. When it asks for sound
 
 - **Music** is one root layer:
   `<audio id="music" data-va-layer="music" data-va-label="Music" src="assets/media/…" data-start="0" data-duration="<root duration>" data-track-index="2" data-volume="0.8" data-fade-in="1" data-fade-out="1.5"></audio>`.
-  Every `<audio>` needs an `id` or it is left out of the mix. Use only the track the prompt names (a library item in
-  `assets/media/`, or the brand's music copied into `assets/audio/`). With neither, leave music out and say so in the
-  summary: never fetch music from a paid catalog, generate it, or download it from the web.
+  Every `<audio>` needs an `id` or it is left out of the mix. Use the track the prompt names (a library item in
+  `assets/media/`, or the brand's music copied into `assets/audio/`). With neither, the prompt has you find one on
+  Openverse with the helper, from the repo root:
+  - `npx tsx scripts/openverse.ts search "<mood, genre, tempo>" --min-seconds <video length>` prints CC0 and CC BY
+    candidates as JSON (`id`, `title`, `creator`, `seconds`, `license`, `genres`, `tags`). Prefer CC0, then CC BY; pick
+    one at least as long as the video, or one that loops cleanly.
+  - `npx tsx scripts/openverse.ts fetch <id> --name <slug>` checks the licence again, saves the file as
+    `assets/music/<slug>.<ext>` and records its credit in `assets/music/credits.json`. Keep that file and don't edit
+    it: the app reads it to credit CC BY works under the video and on its share page. Use the file as the music
+    layer's `src` and name the track in the summary.
+  - If the script fails twice, make the video without music and say why. Music comes only from the prompt's track, the
+    brand's, or this script: never from a paid catalog, a generator or anywhere else on the web.
 - **Sound effects** (only when asked) mark actions you can see: a cursor click, a card or badge landing, a scene cut.
   Each is its own `<audio id>` inside its beat, timed in the beat's clock, about `data-volume="0.35"`, peaking a
   frame after the picture. Get them with `npx hyperframes media-use resolve --type sfx --intent "<effect>" --project .`
   (CC0 or CC BY only), copy them into `assets/sfx/` (hidden folders such as `.media/` aren't saved with the video),
-  and list each CC BY credit in `summary.json` as `"credits": ["\"Title\" by Creator, CC BY 4.0, <link>"]`.
+  and list each CC BY credit in `summary.json` as `"credits": ["\"Title\" by Creator, CC BY 4.0, <link>"]`. Or use
+  `npx tsx scripts/openverse.ts search "<effect>" --category sound_effect` and `fetch <id>`: it saves the effect in
+  `assets/sfx/` and records its credit in `assets/music/credits.json` for you.
 - **Clips** in media slots stay `muted`. A clip whose own sound matters keeps it with `data-has-audio="true"`, and the
   music ducks under it.
 - **Mix** for the web: about −14 LUFS integrated, true peak at or below −1 dBTP.

@@ -5,10 +5,20 @@
 import type { Deps } from '../deps.js'
 import { ApiError } from '../lib/errors.js'
 import { classify, LIMITS, MediaError } from '../lib/media/classify.js'
-import { isImportLicense, licenseLabel, safeUrl, type ImportLicense } from './credits.js'
+import {
+  isImportLicense,
+  licenseLabel,
+  normalizeTrack,
+  pickFile,
+  type OpenverseTrack,
+  type RawAudio,
+} from '../lib/openverse-rules.js'
 import { mediaDto, storeMedia } from './media.js'
 import { assertCan, type Principal } from './policy.js'
 import type { MediaProvenance } from './types.js'
+
+// The licence and normalization rules live in src/lib/openverse-rules.ts, shared with the run's scripts/openverse.ts.
+export { normalizeTrack, type OpenverseTrack }
 
 export const OPENVERSE_API = 'https://api.openverse.org/v1'
 const USER_AGENT = 'VideoAgent/1.0 (Netlify video agent template; media library music search)'
@@ -24,58 +34,6 @@ export const LICENSE_FILTERS = ['cc0', 'cc0,by'] as const
 export type LicenseFilter = (typeof LICENSE_FILTERS)[number]
 export const AUDIO_CATEGORIES = ['music', 'sound_effect', 'all'] as const
 export type AudioCategory = (typeof AUDIO_CATEGORIES)[number]
-
-// File types the audio classifier takes; anything else (FLAC, AIFF) isn't offered for import.
-const IMPORTABLE_TYPES = new Set(['mp3', 'mpeg', 'ogg', 'oga', 'opus', 'wav', 'm4a'])
-/** Provider-specific names for the same formats: Jamendo labels its MP3s by bitrate (mp31, mp32). */
-const TYPE_ALIASES: Record<string, string> = { mp31: 'mp3', mp32: 'mp3' }
-
-interface RawFile {
-  url?: string | null
-  filetype?: string | null
-  filesize?: number | null
-}
-interface RawAudio extends RawFile {
-  id?: string
-  title?: string | null
-  creator?: string | null
-  creator_url?: string | null
-  license?: string
-  license_version?: string | null
-  license_url?: string | null
-  foreign_landing_url?: string | null
-  attribution?: string | null
-  provider?: string | null
-  source?: string | null
-  category?: string | null
-  genres?: string[] | null
-  duration?: number | null
-  mature?: boolean
-  alt_files?: RawFile[] | null
-}
-
-export interface OpenverseTrack {
-  id: string
-  title: string
-  creator: string | null
-  creatorUrl: string | null
-  durationSec: number | null
-  license: ImportLicense
-  licenseVersion: string | null
-  licenseLabel: string
-  licenseUrl: string | null
-  attribution: string | null
-  landingUrl: string | null
-  source: string | null
-  category: string | null
-  genres: string[]
-  /** The file to listen to before importing (https only), straight from the provider. */
-  previewUrl: string | null
-  filetype: string | null
-  filesize: number | null
-  /** False when no file is one the library can take (type, size or length). */
-  importable: boolean
-}
 
 // ───────── module state: token, response cache, back-off (per function instance) ─────────
 
@@ -190,55 +148,6 @@ async function apiGet(deps: Deps, path: string): Promise<unknown> {
   if (!body || typeof body !== 'object')
     throw new ApiError('upstream_error', 'Openverse sent something unexpected. Try again shortly.')
   return body
-}
-
-/** The first file of an item the library can take: the main file, else an alternative (smaller or another type). */
-function pickFile(a: RawAudio): { url: string; filetype: string | null; filesize: number | null } | null {
-  const files: RawFile[] = [a, ...(Array.isArray(a.alt_files) ? a.alt_files : [])]
-  for (const [i, f] of files.entries()) {
-    const url = safeUrl(f.url)
-    if (!url?.startsWith('https:')) continue
-    const raw = f.filetype?.toLowerCase() ?? null
-    const type = raw ? (TYPE_ALIASES[raw] ?? raw) : null
-    // An unknown type is only tried for the main file; the bytes decide.
-    if (type ? !IMPORTABLE_TYPES.has(type) : i > 0) continue
-    const size = typeof f.filesize === 'number' && f.filesize > 0 ? f.filesize : null
-    if (size !== null && size > LIMITS.audioBytes) continue
-    return { url, filetype: type, filesize: size }
-  }
-  return null
-}
-
-const text = (v: unknown, max = 300) =>
-  typeof v === 'string' && v.trim() ? v.trim().replace(/\s+/g, ' ').slice(0, max) : null
-
-/** A normalized track, or null for anything outside CC0 and CC BY (or marked mature, or malformed). */
-export function normalizeTrack(a: RawAudio): OpenverseTrack | null {
-  const license = a.license?.toLowerCase()
-  if (!a.id || !/^[0-9a-f-]{36}$/i.test(a.id) || !isImportLicense(license) || a.mature === true) return null
-  const durationSec = typeof a.duration === 'number' && a.duration > 0 ? a.duration / 1000 : null
-  const file = pickFile(a)
-  const preview = safeUrl(a.url)
-  return {
-    id: a.id.toLowerCase(),
-    title: text(a.title, 200) ?? 'Untitled',
-    creator: text(a.creator, 200),
-    creatorUrl: safeUrl(a.creator_url),
-    durationSec,
-    license,
-    licenseVersion: text(a.license_version, 25),
-    licenseLabel: licenseLabel(license, text(a.license_version, 25)),
-    licenseUrl: safeUrl(a.license_url),
-    attribution: text(a.attribution, 1000),
-    landingUrl: safeUrl(a.foreign_landing_url),
-    source: text(a.source, 80) ?? text(a.provider, 80),
-    category: text(a.category, 80),
-    genres: Array.isArray(a.genres) ? a.genres.flatMap((g) => text(g, 80) ?? []).slice(0, 5) : [],
-    previewUrl: preview?.startsWith('https:') ? preview : null,
-    filetype: file?.filetype ?? text(a.filetype, 20),
-    filesize: file?.filesize ?? null,
-    importable: file !== null && (durationSec === null || durationSec <= LIMITS.audioSeconds + 0.5),
-  }
 }
 
 export async function searchOpenverse(

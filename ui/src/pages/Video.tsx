@@ -310,7 +310,7 @@ function VersionCredits({ v }: { v: Version }) {
       </Text>
       <Stack gap={4}>
         {v.credits.map((c) => (
-          <Text key={c.mediaId} size="sm" c="var(--va-muted)">
+          <Text key={c.mediaId ?? c.text} size="sm" c="var(--va-muted)">
             {c.role}: {link(c.title, c.sourceUrl)}
             {c.creator ? <> by {link(c.creator, c.creatorUrl)}</> : null},{' '}
             {link(c.licenseLabel, c.licenseUrl)}

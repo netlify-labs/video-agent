@@ -1,7 +1,7 @@
 // The run prompt: a fixed, versioned template plus the user's request, fenced as a creative brief.
 import { ASPECTS, type Aspect, type VideoSound, type Voiceover } from './types.js'
 
-export const PROMPT_TEMPLATE_VERSION = 12
+export const PROMPT_TEMPLATE_VERSION = 13
 
 export interface PromptInput {
   jobId: string
@@ -190,7 +190,8 @@ function soundName(sound: VideoSound, voice: boolean): string {
 
 /**
  * The sound rules for a run with sound (HyperFrames: one <audio id> per track, fades, a web loudness target). Picked
- * tracks and the brand's music are data in their own fences; with neither, music is left out, never fetched.
+ * tracks and the brand's music are data in their own fences; with neither, the run finds a CC0 or CC BY track on
+ * Openverse with scripts/openverse.ts (which records its credit), and never fetches music any other way.
  */
 function soundLines(
   sound: VideoSound,
@@ -199,7 +200,9 @@ function soundLines(
   voice: boolean,
 ): string[] {
   if (sound === 'silent' && !voice) return []
-  const music = sound !== 'silent' && (tracks.length > 0 || brandMusic !== null)
+  // Music is always on with sound: a picked track, the brand's, or one from Openverse.
+  const music = sound !== 'silent'
+  const openverse = music && !tracks.length && !brandMusic
   const out = [
     '',
     'Sound: follow "Sound (Video Agent)" in video/AGENTS.md (the media-use skill\'s references/mixing.md has the attributes).',
@@ -235,14 +238,19 @@ function soundLines(
       sanitizeBrief(JSON.stringify({ genre: brandMusic.genre, tempo: brandMusic.tempo })),
       FENCE_CLOSE,
     )
-  } else {
+  } else if (openverse) {
     out.push(
-      "- No music: no track was picked and the brand has none, so leave music out. Don't use a paid music catalog or generate music, and never download music from the web. Say in your summary that the video has no music because none was provided, and that a track can be picked from the media library.",
+      '- No track was picked and the brand has none: find one on Openverse (CC0 and CC BY only) with the helper, run from the repo root:',
+      '  npx tsx scripts/openverse.ts search "<the mood, genre and tempo the video needs, e.g. calm ambient piano>" --min-seconds <the video\'s length>',
+      "  It prints candidates as JSON (id, title, creator, seconds, licence, genres, tags). Pick one that fits the mood and pace: prefer CC0, then CC BY; it should last at least the video's length (or loop cleanly). If nothing fits, try another query (drop --min-seconds for a loopable bed).",
+      '  Then run: npx tsx scripts/openverse.ts fetch <id> --name <short-slug>. It checks the licence again, saves the file to video/assets/music/<slug>.<ext> and records its credit in video/assets/music/credits.json. Keep that file: the app credits CC BY tracks from it under the video and on its share page, so leave credits off the picture unless the request asks.',
+      '  Use the file as the music layer: src="assets/music/<file>". Name the track (title, creator, licence) in your summary.',
+      '- If openverse.ts fails twice, make the video without music and say why in your summary. Get music only through openverse.ts: never download music from anywhere else, use a paid music catalog or generate music.',
     )
   }
   if (sound === 'music_sfx') {
     out.push(
-      '- Sound effects: few and exact, only on actions you can see (a cursor click, a card or badge landing, a scene cut), each its own <audio id> inside the beat where its action happens (timed in that beat\'s clock) at about 0.35 volume, peaking one frame after its picture. Get them with npx hyperframes media-use resolve --type sfx --intent "<effect>" --project . in video/ (add --local-only if the network fails), then copy each into video/assets/sfx/ and use it from there (hidden folders like .media/ aren\'t saved with the video). Use only what it returns (CC0 or CC BY); never download sounds from anywhere else. Put each CC BY credit (title, creator, licence, link) in summary.json "credits".',
+      '- Sound effects: few and exact, only on actions you can see (a cursor click, a card or badge landing, a scene cut), each its own <audio id> inside the beat where its action happens (timed in that beat\'s clock) at about 0.35 volume, peaking one frame after its picture. Get them with npx hyperframes media-use resolve --type sfx --intent "<effect>" --project . in video/ (add --local-only if the network fails), then copy each into video/assets/sfx/ and use it from there (hidden folders like .media/ aren\'t saved with the video). Put each CC BY credit (title, creator, licence, link) from it in summary.json "credits". Or, from the repo root, npx tsx scripts/openverse.ts search "<effect>" --category sound_effect, then fetch <id> --name <slug>: it saves the effect in video/assets/sfx/ and records its credit in video/assets/music/credits.json itself. Use only what these return (CC0 or CC BY); never download sounds from anywhere else.',
     )
   }
   const duck = voice

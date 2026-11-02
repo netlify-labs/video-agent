@@ -91,7 +91,7 @@ describe('buildPrompt sound', () => {
     expect(p).not.toContain('"credits"')
   })
 
-  it('music without a track uses the brand music, else leaves music out and never fetches it', () => {
+  it('music without a track uses the brand music, else finds one on Openverse with the helper script', () => {
     const brand = buildPrompt({
       ...base,
       sound: 'music',
@@ -99,14 +99,35 @@ describe('buildPrompt sound', () => {
     })
     expect(brand).toContain("use the brand's music, context/brand/assets/music.mp3")
     expect(brand).toContain('<<<\n{"genre":"warm electronic","tempo":"110 bpm"}\n>>>')
-    const none = buildPrompt({ ...base, sound: 'music' })
-    expect(none).toContain('leave music out')
+    expect(brand).not.toContain('openverse.ts')
+    const none = buildPrompt({ ...base, sound: 'music', targetDurationSec: 30 })
+    expect(none).toContain('npx tsx scripts/openverse.ts search "<the mood, genre and tempo')
+    expect(none).toContain("--min-seconds <the video's length>")
+    expect(none).toContain('prefer CC0, then CC BY')
+    expect(none).toContain('npx tsx scripts/openverse.ts fetch <id> --name <short-slug>')
+    expect(none).toContain('video/assets/music/credits.json. Keep that file')
+    expect(none).toContain('src="assets/music/<file>"')
+    expect(none).toContain('Name the track (title, creator, licence) in your summary.')
+    expect(none).toContain('If openverse.ts fails twice, make the video without music and say why')
     expect(none).toContain(
-      "Don't use a paid music catalog or generate music, and never download music from the web.",
+      'never download music from anywhere else, use a paid music catalog or generate music',
     )
-    expect(none).not.toContain('<audio id="music"')
-    expect(none).not.toContain('normalize-audio')
+    // It is still the music layer, normalized like any other track.
+    expect(none).toContain('<audio id="music" data-va-layer="music" data-va-label="Music">')
+    expect(none).toContain('normalize-audio --target=music')
     expect(none).not.toMatch(/scrape/i)
+    // Not offered when a library track was picked, nor to a silent run.
+    expect(buildPrompt({ ...base, sound: 'music', media: [track] })).not.toContain('openverse.ts')
+    expect(buildPrompt({ ...base, sound: 'silent' })).not.toContain('openverse.ts')
+    expect(
+      buildPrompt({ ...base, sound: 'silent', voiceover: { voice: null, speed: null, script: null } }),
+    ).not.toContain('openverse.ts')
+  })
+
+  it('music and effects without a track may get effects from Openverse too', () => {
+    const p = buildPrompt({ ...base, sound: 'music_sfx' })
+    expect(p).toContain('openverse.ts search "<effect>" --category sound_effect')
+    expect(p).toContain('saves the effect in video/assets/sfx/ and records its credit')
   })
 
   it('music and effects adds effects on visible actions with credits in summary.json', () => {

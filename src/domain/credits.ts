@@ -1,36 +1,22 @@
-// Credits for imported media (Openverse). The server derives them from the provenance of the media a version was made
-// with, never from what the agent wrote, so a CC BY track is always credited on the video, its share page and embed.
+// Credits for Openverse media. Library items are credited from the provenance of the media a version was made with;
+// music and effects a run fetched itself (scripts/openverse.ts) from the credits.json finalize read from the run's
+// saved composition and checked strictly (src/lib/openverse-rules.ts). Either way a CC BY work is credited on the
+// video, its share page and embed.
+import { licenseLabel, safeUrl, type RunCredit } from '../lib/openverse-rules.js'
 import type { MediaProvenance, MediaRow, VersionProvenanceRow, VersionRow } from './types.js'
 
-/** The only licences imported: free for commercial use and edits. CC BY needs a credit; CC0 doesn't. */
-export const IMPORT_LICENSES = ['cc0', 'by'] as const
-export type ImportLicense = (typeof IMPORT_LICENSES)[number]
-
-export const isImportLicense = (l: string | null | undefined): l is ImportLicense =>
-  (IMPORT_LICENSES as readonly string[]).includes(l ?? '')
-
-/** "CC BY 4.0", "CC0 1.0", or the slug in capitals for anything else. */
-export function licenseLabel(license: string | null, version: string | null): string {
-  if (!license) return ''
-  const v = version ? ` ${version}` : ''
-  if (license === 'cc0') return `CC0${v || ' 1.0'}`
-  if (license === 'pdm') return 'Public Domain Mark'
-  return `CC ${license.toUpperCase()}${v}`
-}
-
-/** An http(s) URL as given, or null: anything else never becomes a link. */
-export function safeUrl(u: string | null | undefined): string | null {
-  if (!u) return null
-  try {
-    const url = new URL(u)
-    return url.protocol === 'https:' || url.protocol === 'http:' ? url.toString() : null
-  } catch {
-    return null
-  }
-}
+// The licence helpers are shared with the Openverse search and the run's helper script; re-exported for callers here.
+export {
+  IMPORT_LICENSES,
+  isImportLicense,
+  licenseLabel,
+  safeUrl,
+  type ImportLicense,
+} from '../lib/openverse-rules.js'
 
 export interface Credit {
-  mediaId: string
+  /** The library item, or null for a file the run fetched from Openverse itself. */
+  mediaId: string | null
   kind: MediaRow['kind']
   /** "Music" for audio, "Media" otherwise. */
   role: string
@@ -47,7 +33,7 @@ export interface Credit {
   text: string
 }
 
-export function creditFor(mediaId: string, kind: MediaRow['kind'], p: MediaProvenance): Credit | null {
+export function creditFor(mediaId: string | null, kind: MediaRow['kind'], p: MediaProvenance): Credit | null {
   if (!p.source || p.license !== 'by') return null
   const title = p.sourceTitle?.trim() || 'Untitled'
   const label = licenseLabel(p.license, p.licenseVersion)
@@ -71,20 +57,48 @@ export function creditFor(mediaId: string, kind: MediaRow['kind'], p: MediaProve
   }
 }
 
+/** The credit for a file a run fetched itself (CC BY only; CC0 needs none). */
+export function runCreditFor(c: RunCredit): Credit | null {
+  const credit = creditFor(null, 'audio', {
+    source: 'openverse',
+    sourceId: c.openverseId,
+    sourceUrl: c.sourceUrl,
+    sourceTitle: c.title,
+    license: c.license,
+    licenseVersion: c.licenseVersion,
+    licenseUrl: c.licenseUrl,
+    creator: c.creator,
+    creatorUrl: c.creatorUrl,
+    attribution: c.attribution,
+  })
+  return credit && c.file.startsWith('assets/sfx/') ? { ...credit, role: 'Sound effect' } : credit
+}
+
 /**
  * The credits one version needs. Audio is only given to runs with sound (or a voice-over, where the editor can swap a
- * track in), so a silent version's picked track isn't credited; anything else it was made with is.
+ * track in), so a silent version's picked track isn't credited; anything else it was made with is. Then the files
+ * the run fetched itself (`run`, from its output), skipping any Openverse work the library already credits.
  */
 export function versionCredits(
   rows: VersionProvenanceRow[],
   v: Pick<VersionRow, 'n' | 'sound' | 'voiceover'>,
+  run: RunCredit[] | null | undefined = null,
 ): Credit[] {
   const audible = (v.sound ?? 'silent') !== 'silent' || Boolean(v.voiceover)
   const out: Credit[] = []
+  const seen = new Set<string>()
   for (const r of rows) {
     if (r.versionN !== v.n || (r.kind === 'audio' && !audible)) continue
+    if (r.source === 'openverse' && r.sourceId) seen.add(r.sourceId)
     const c = creditFor(r.mediaId, r.kind, r)
     if (c && !out.some((x) => x.mediaId === c.mediaId)) out.push(c)
+  }
+  // Run credits were checked when the version was recorded: each plays in the composition.
+  for (const r of run ?? []) {
+    if (seen.has(r.openverseId)) continue
+    seen.add(r.openverseId)
+    const c = runCreditFor(r)
+    if (c) out.push(c)
   }
   return out
 }
