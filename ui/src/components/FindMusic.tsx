@@ -16,11 +16,12 @@ import {
   TextInput,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
-import { IconPlayerPlayFilled, IconPlayerStopFilled, IconSearch } from '@tabler/icons-react'
+import { IconExternalLink, IconPlayerPlayFilled, IconPlayerStopFilled, IconSearch } from '@tabler/icons-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { errorMessage, fetchClient } from '../api/client'
 import type { paths } from '../api/schema'
+import { MUSIC_SOURCES } from '../lib/music-sources'
 import { duration, type Media } from './MediaPicker'
 
 type Search = paths['/api/v1/media/openverse/search']['get']
@@ -328,7 +329,43 @@ export function FindMusicModal(props: {
           </Anchor>
           . Previews play from the track’s source site.
         </Text>
+        <MoreMusicSources />
       </Stack>
     </Modal>
+  )
+}
+
+/** Other sites with music to download, each opening in a new tab; the file then goes in with Upload. */
+export function MoreMusicSources() {
+  return (
+    <details className="va-music-sources" data-testid="music-sources">
+      <summary>
+        <Text component="span" size="sm" fw={500}>
+          More places to find music
+        </Text>
+      </summary>
+      <Text size="xs" c="var(--va-muted)" mt={6} mb={8}>
+        Download a track there, then add it with Upload on the Media page. Check each track’s licence: avoid
+        NC (non-commercial) and ND (no-derivatives), and put any required credit in the caption.
+      </Text>
+      <Stack gap={8}>
+        {MUSIC_SOURCES.map((s) => (
+          <div key={s.url}>
+            <Group gap={6} wrap="nowrap">
+              <Anchor href={s.url} target="_blank" rel="noopener noreferrer" size="sm" fw={500}>
+                {s.name}
+              </Anchor>
+              <IconExternalLink size={12} color="var(--va-faint)" />
+              <Badge size="xs" variant="light" color="gray">
+                {s.licence}
+              </Badge>
+            </Group>
+            <Text size="xs" c="var(--va-faint)">
+              {s.note}
+            </Text>
+          </div>
+        ))}
+      </Stack>
+    </details>
   )
 }

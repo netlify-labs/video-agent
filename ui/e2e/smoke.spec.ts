@@ -1264,3 +1264,22 @@ test('the Notify button says when the browser blocks notifications', async ({ pa
   await page.goto('/videos/vid_making')
   await expect(page.getByTestId('notify-toggle')).toHaveText('Notifications blocked')
 })
+
+test('Find music lists other places to find music, each opening in a new tab', async ({ page }) => {
+  await page.goto('/media')
+  await page.getByRole('button', { name: 'Find music' }).click()
+  const dialog = page.getByRole('dialog', { name: /Find music/ })
+  const sources = dialog.getByTestId('music-sources')
+  await sources.getByText('More places to find music').click()
+  const links = sources.getByRole('link')
+  await expect(links).toHaveCount(10)
+  await expect(sources.getByRole('link', { name: 'Pixabay Music' })).toHaveAttribute(
+    'href',
+    'https://pixabay.com/music/',
+  )
+  await expect(sources.getByRole('link', { name: 'YouTube Audio Library' })).toBeVisible()
+  for (const link of await links.all()) {
+    await expect(link).toHaveAttribute('target', '_blank')
+    await expect(link).toHaveAttribute('rel', /noopener/)
+  }
+})

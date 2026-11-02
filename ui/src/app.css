@@ -820,3 +820,12 @@ body {
   border-color: var(--va-accent);
   background: var(--va-accent-tint);
 }
+
+/* Find music: other sites to download music from. */
+.va-music-sources {
+  border-top: 1px solid var(--va-rule);
+  padding-top: 10px;
+}
+.va-music-sources summary {
+  cursor: pointer;
+}
