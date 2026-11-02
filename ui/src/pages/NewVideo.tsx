@@ -210,7 +210,7 @@ export function NewVideoPage() {
           <form
             onSubmit={(e) => {
               e.preventDefault()
-              if (!valid) return
+              if (!valid || config.isPending) return
               if (canPlan) setDialog('choose')
               else submit()
             }}
@@ -340,7 +340,13 @@ export function NewVideoPage() {
                 }}
               />
               <Group>
-                <Button type="submit" size="md" disabled={!valid} loading={create.isPending && !dialog}>
+                {/* Waits for the config: before it loads, a click would skip the choice and create at once. */}
+                <Button
+                  type="submit"
+                  size="md"
+                  disabled={!valid || config.isPending}
+                  loading={create.isPending && !dialog}
+                >
                   Create video
                 </Button>
                 <Text size="sm" c="var(--va-faint)">
