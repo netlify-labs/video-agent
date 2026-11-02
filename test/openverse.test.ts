@@ -493,6 +493,9 @@ describe('Openverse import', () => {
       await h.call('GET', `/api/v1/videos/${v.id}`, { as: h.member }),
     )
     expect(got.versions[0]?.credits.map((c) => c.mediaId)).toEqual([a.id])
+    // The library list (batched, store.videoPage) carries the same credits.
+    const list = await h.json<{ items: unknown[] }>(await h.call('GET', '/api/v1/videos', { as: h.member }))
+    expect(list.items).toContainEqual(got)
   })
 })
 

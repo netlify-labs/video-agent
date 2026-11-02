@@ -11,9 +11,16 @@ import { versionCredits, type Credit } from './credits.js'
 import { creditHtml } from '../lib/credit-html.js'
 import { notifyOwner } from './notifications.js'
 import { ApiError } from '../lib/errors.js'
-import type { CommentCounts, Repo } from '../store/types.js'
+import type { CommentCounts, Repo, VideoPageRows } from '../store/types.js'
 import { assertCan, type Principal } from './policy.js'
-import type { CommentRow, FrozenPlan, Verdict, VerdictRow, VersionCommentRow } from './types.js'
+import type {
+  CommentRow,
+  FrozenPlan,
+  Verdict,
+  VerdictRow,
+  VersionCommentRow,
+  VersionProvenanceRow,
+} from './types.js'
 import { planningContext } from '../generated/planning-context.js'
 import {
   ASPECTS,
@@ -931,6 +938,36 @@ export function nextCursor(total: number, limit: number, page: Cursor[]): string
     : null
 }
 
+/**
+ * A repo that answers a page's per-video reads from rows loaded for the whole page at once (store.videoPage), and
+ * passes everything else to the store. The library's 24 videos took over 250 queries one by one; now a handful.
+ */
+function pageRepo(store: Repo, rows: VideoPageRows): Repo {
+  const of = <T extends { jobId: string }>(list: T[], jobId: string) => list.filter((r) => r.jobId === jobId)
+  const reads: Partial<Repo> = {
+    getJob: async (id, opts) =>
+      opts?.lock ? store.getJob(id, opts) : (rows.jobs.find((j) => j.id === id) ?? null),
+    listVersions: async (jobId) => of(rows.versions, jobId),
+    listAttempts: async (jobId) => of(rows.attempts, jobId),
+    listPublications: async (jobId) => of(rows.publications, jobId),
+    getOutput: async (jobId, n) => rows.outputs.find((o) => o.jobId === jobId && o.versionN === n) ?? null,
+    listVersionComments: async (jobId, n) =>
+      of(rows.versionComments, jobId).filter((r) => n === undefined || r.versionN === n),
+    // The per-video query doesn't return jobId; neither does this.
+    versionProvenance: async (jobId) =>
+      of(rows.provenance, jobId).map((r) => {
+        const row: Partial<typeof r> = { ...r }
+        delete row.jobId
+        return row as VersionProvenanceRow
+      }),
+    getUser: async (id) => rows.owners.find((u) => u.id === id) ?? store.getUser(id),
+  }
+  return new Proxy(store, {
+    get: (target, key, receiver): unknown =>
+      Object.hasOwn(reads, key) ? reads[key as keyof Repo] : Reflect.get(target, key, receiver),
+  })
+}
+
 export async function listVideos(
   deps: Deps,
   principal: Principal,
@@ -958,12 +995,14 @@ export async function listVideos(
   const page = rows.slice(0, limit)
   // Verdict counts for the whole page in one query.
   const ids = page.map((j) => j.id)
-  const [verdicts, comments] = await Promise.all([
+  const [verdicts, comments, pageRows] = await Promise.all([
     deps.store.listVerdicts(ids),
     deps.store.commentCounts(ids, principal.userId),
+    deps.store.videoPage(ids),
   ])
+  const repo = pageRepo(deps.store, pageRows)
   const items = await Promise.all(
-    page.map((j) => videoDto(deps.store, deps, j.id, principal, { verdicts, comments })),
+    page.map((j) => videoDto(repo, deps, j.id, principal, { verdicts, comments })),
   )
   return { items, nextCursor: nextCursor(rows.length, limit, page) }
 }

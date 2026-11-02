@@ -692,6 +692,78 @@ function repoFor(db: Db): Repo {
         .where(and(eq(v.jobId, jobId), isNotNull(m.source)))
         .orderBy(asc(v.versionN), asc(v.position))) as VersionProvenanceRow[]
     },
+    videoPage: async (jobIds) => {
+      if (jobIds.length === 0)
+        return {
+          jobs: [],
+          versions: [],
+          attempts: [],
+          publications: [],
+          outputs: [],
+          versionComments: [],
+          provenance: [],
+          owners: [],
+        }
+      const v = t.versionMedia
+      const m = t.media
+      const [jobs, versions, attempts, publications, outputs, versionComments, provenance] =
+        await Promise.all([
+          db.select().from(t.jobs).where(inArray(t.jobs.id, jobIds)),
+          db.select().from(t.versions).where(inArray(t.versions.jobId, jobIds)).orderBy(desc(t.versions.n)),
+          db
+            .select()
+            .from(t.attempts)
+            .where(inArray(t.attempts.jobId, jobIds))
+            .orderBy(desc(t.attempts.queuedAt)),
+          db
+            .select()
+            .from(t.publications)
+            .where(inArray(t.publications.jobId, jobIds))
+            .orderBy(desc(t.publications.publishedAt)),
+          db.select().from(t.outputs).where(inArray(t.outputs.jobId, jobIds)),
+          db
+            .select()
+            .from(t.versionComments)
+            .where(inArray(t.versionComments.jobId, jobIds))
+            .orderBy(asc(t.versionComments.versionN), asc(t.versionComments.position)),
+          db
+            .select({
+              jobId: v.jobId,
+              versionN: v.versionN,
+              mediaId: v.mediaId,
+              position: v.position,
+              kind: v.kind,
+              source: m.source,
+              sourceId: m.sourceId,
+              sourceUrl: m.sourceUrl,
+              sourceTitle: m.sourceTitle,
+              license: m.license,
+              licenseVersion: m.licenseVersion,
+              licenseUrl: m.licenseUrl,
+              creator: m.creator,
+              creatorUrl: m.creatorUrl,
+              attribution: m.attribution,
+            })
+            .from(v)
+            .innerJoin(m, eq(m.id, v.mediaId))
+            .where(and(inArray(v.jobId, jobIds), isNotNull(m.source)))
+            .orderBy(asc(v.versionN), asc(v.position)),
+        ])
+      const ownerIds = [...new Set(jobs.map((j) => j.ownerId))]
+      const owners = ownerIds.length
+        ? await db.select().from(t.users).where(inArray(t.users.id, ownerIds))
+        : []
+      return {
+        jobs: jobs as JobRow[],
+        versions: versions as VersionRow[],
+        attempts: attempts as AttemptRow[],
+        publications,
+        outputs: outputs as OutputRow[],
+        versionComments,
+        provenance: provenance as (VersionProvenanceRow & { jobId: string })[],
+        owners: owners as UserRow[],
+      }
+    },
     insertEdit: async (row) => {
       await db.insert(t.edits).values(row)
     },

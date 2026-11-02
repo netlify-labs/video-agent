@@ -59,6 +59,17 @@ export interface CommentCounts {
   unread: number
 }
 
+export interface VideoPageRows {
+  jobs: JobRow[]
+  versions: VersionRow[]
+  attempts: AttemptRow[]
+  publications: PublicationRow[]
+  outputs: OutputRow[]
+  versionComments: VersionCommentRow[]
+  provenance: (VersionProvenanceRow & { jobId: string })[]
+  owners: UserRow[]
+}
+
 export interface Repo {
   // settings
   getSettings(): Promise<SettingsRow | null>
@@ -196,6 +207,11 @@ export interface Repo {
   mediaBySource(source: string, sourceIds: string[]): Promise<MediaRow[]>
   /** Every version's imported media (the item's provenance with the version and kind), in version order. */
   versionProvenance(jobId: string): Promise<VersionProvenanceRow[]>
+  /**
+   * Everything a page of videos shows, for all of them at once (a handful of queries instead of a dozen per video),
+   * each list in the order its per-video method returns.
+   */
+  videoPage(jobIds: string[]): Promise<VideoPageRows>
   insertEdit(row: EditRow): Promise<void>
   getEdit(id: string, opts?: { lock?: boolean }): Promise<EditRow | null>
   updateEdit(id: string, patch: Partial<EditRow>): Promise<void>

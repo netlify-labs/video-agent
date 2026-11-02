@@ -604,6 +604,44 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
     insertVersionComments: async (rows) => {
       state.versionComments.push(...clone(rows))
     },
+    videoPage: async (jobIds) => {
+      const has = (id: string) => jobIds.includes(id)
+      const jobs = clone([...state.jobs.values()].filter((j) => has(j.id)))
+      const owners = [...new Set(jobs.map((j) => j.ownerId))].flatMap((id) => {
+        const u = state.users.get(id)
+        return u ? [clone(u)] : []
+      })
+      return {
+        jobs,
+        versions: clone([...state.versions.values()].filter((v) => has(v.jobId)).sort((a, b) => b.n - a.n)),
+        attempts: clone(
+          [...state.attempts.values()]
+            .filter((a) => has(a.jobId))
+            .sort((a, b) => b.queuedAt.localeCompare(a.queuedAt)),
+        ),
+        publications: clone(
+          [...state.publications.values()]
+            .filter((p) => has(p.jobId))
+            .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt)),
+        ),
+        outputs: clone([...state.outputs.values()].filter((o) => has(o.jobId))),
+        versionComments: clone(
+          state.versionComments
+            .filter((r) => has(r.jobId))
+            .sort((a, b) => a.versionN - b.versionN || a.position - b.position),
+        ),
+        provenance: state.versionMedia
+          .filter((r) => has(r.jobId))
+          .sort((a, b) => a.versionN - b.versionN || a.position - b.position)
+          .flatMap((r) => {
+            const m = state.media.get(r.mediaId)
+            if (!m?.source) return []
+            const { jobId, versionN, mediaId, position, kind } = r
+            return [{ jobId, versionN, mediaId, position, kind, ...pickProvenance(m) }]
+          }),
+        owners,
+      }
+    },
     listVersionComments: async (jobId, n) =>
       clone(
         state.versionComments
