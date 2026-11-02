@@ -3,6 +3,7 @@ import {
   Button,
   Center,
   Group,
+  Loader,
   Select,
   SegmentedControl,
   Skeleton,
@@ -17,15 +18,7 @@ import { Suspense, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { $api, commentsInit, errorMessage, useCanCreate, videoInit, type Video } from '../api/client'
-import {
-  StageTrack,
-  Status,
-  VersionImage,
-  duration,
-  inProgress,
-  localUrl,
-  relativeTime,
-} from '../components/bits'
+import { Status, VersionImage, duration, inProgress, localUrl, relativeTime } from '../components/bits'
 import { lazyPage, newVideoRoute, videoRoute } from '../routes'
 
 // Shown only in an empty library, so the form's code loads only then.
@@ -133,20 +126,20 @@ function VideoCard({ v, priority }: { v: Video; priority: boolean }) {
             />
           )
         ) : working ? (
-          <Stack gap={10} w="70%">
-            <Group justify="space-between">
-              <Text size="sm" fw={500}>
-                {latest.status === 'queued'
-                  ? 'Waiting for a slot'
-                  : latest.status === 'finishing'
-                    ? 'Saving the files'
-                    : `Making v${latest.n}`}
-              </Text>
-              <Text size="sm" c="var(--va-muted)" className="num">
-                {elapsed(latest.timings?.queuedAt)}
-              </Text>
-            </Group>
-            <StageTrack version={latest} />
+          // A loading state, so a video being made never looks like a finished one: a spinner, what's happening,
+          // and how long it's been going, over a slow sweep of light.
+          <Stack gap={10} align="center" className="va-card-working" data-testid="card-working">
+            <Loader size={30} color="var(--va-accent)" aria-hidden />
+            <Text size="sm" fw={500} role="status">
+              {latest.status === 'queued'
+                ? 'Waiting for a slot'
+                : latest.status === 'finishing'
+                  ? 'Saving the files'
+                  : `Making v${latest.n}`}
+            </Text>
+            <Text size="sm" c="var(--va-muted)" className="num" aria-label="Elapsed">
+              {elapsed(latest.timings?.queuedAt)}
+            </Text>
           </Stack>
         ) : (
           <Text size="sm" c="var(--va-faint)">

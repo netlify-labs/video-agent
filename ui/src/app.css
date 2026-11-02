@@ -208,6 +208,38 @@ body {
   overflow: hidden;
   position: relative;
 }
+.va-poster:has(.va-card-working)::before {
+  /* A slow sweep of light across a tile whose video is being made. */
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 30%,
+    color-mix(in srgb, var(--va-accent) 9%, transparent) 50%,
+    transparent 70%
+  );
+  background-size: 250% 100%;
+  animation: va-sweep 2.4s ease-in-out infinite;
+}
+.va-card-working {
+  position: relative;
+}
+@keyframes va-sweep {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -120% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .va-poster:has(.va-card-working)::before,
+  .va-card-working .mantine-Loader-root,
+  .va-card-working .mantine-Loader-root::after {
+    animation: none;
+  }
+}
 .va-poster picture {
   display: contents;
 }
