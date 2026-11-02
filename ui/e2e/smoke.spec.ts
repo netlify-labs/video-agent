@@ -1202,11 +1202,24 @@ test('a version with a CC BY track credits it on the page and in the embed', asy
   await expect(page.getByTestId('version-credits')).toHaveCount(0)
 })
 
-test('while a video renders: a clear Notify button and a link to the agent run', async ({
-  page,
-  context,
-}) => {
-  await context.grantPermissions(['notifications'])
+/** A Notification API whose permission the test sets (headless browsers differ on the default). */
+const stubNotifications = (page: import('@playwright/test').Page, permission: 'default' | 'denied') =>
+  page.addInitScript((initial) => {
+    let current: string = initial
+    const FakeNotification = {
+      get permission() {
+        return current
+      },
+      requestPermission() {
+        if (current === 'default') current = 'granted'
+        return Promise.resolve(current)
+      },
+    }
+    Object.defineProperty(globalThis, 'Notification', { value: FakeNotification, configurable: true })
+  }, permission)
+
+test('while a video renders: a clear Notify button and a link to the agent run', async ({ page }) => {
+  await stubNotifications(page, 'default')
   await page.goto('/videos/vid_making')
   const notify = page.getByTestId('notify-toggle')
   await expect(notify).toHaveText("Notify me when it's done")
@@ -1220,4 +1233,10 @@ test('while a video renders: a clear Notify button and a link to the agent run',
   await expect(run).toHaveText(/View agent run/)
   await expect(run).toHaveAttribute('href', /app\.netlify\.com\/projects\/.+\/agent-runs\//)
   await expect(run).toHaveAttribute('target', '_blank')
+})
+
+test('the Notify button says when the browser blocks notifications', async ({ page }) => {
+  await stubNotifications(page, 'denied')
+  await page.goto('/videos/vid_making')
+  await expect(page.getByTestId('notify-toggle')).toHaveText('Notifications blocked')
 })
