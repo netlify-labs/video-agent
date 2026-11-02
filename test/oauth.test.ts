@@ -414,6 +414,32 @@ describe('MCP OAuth: authorize, consent and tokens', () => {
       { origin: 'https://evil.example' },
     )
     expect(crossSite.status).toBe(400)
+    for (const headers of [
+      { origin: 'null', 'sec-fetch-site': 'cross-site' },
+      { origin: 'null', 'sec-fetch-site': 'same-site' },
+      { origin: SITE, 'sec-fetch-site': 'cross-site' },
+    ]) {
+      const res = await post(h, '/oauth/consent', { consent: 'x', decision: 'allow' }, headers)
+      expect(await res.text()).toContain('Cross-site request.')
+    }
+  })
+
+  it('takes Allow from its own page when the browser sends Origin: null', async () => {
+    // Live on 11-02 from claude.ai: Chrome posted the consent form with Origin: null and Sec-Fetch-Site: same-origin,
+    // and it was refused as cross-site.
+    const h = await on()
+    const s = await signIn(h, 'mia@acme.com')
+    expect(s.cb.status).toBe(200)
+    expect(s.cb.headers.get('referrer-policy')).toBe('same-origin')
+    const consent = /name="consent" value="([^"]+)"/.exec(await s.cb.text())?.[1] ?? ''
+    const res = await post(
+      h,
+      '/oauth/consent',
+      { consent, decision: 'allow' },
+      { origin: 'null', 'sec-fetch-site': 'same-origin' },
+    )
+    expect(res.status).toBe(303)
+    expect(location(res).searchParams.get('code')).toBeTruthy()
   })
 
   it('requires PKCE S256, state and the exact resource at authorize', async () => {

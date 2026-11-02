@@ -29,7 +29,8 @@ const PAGE_HEADERS = {
   ...NO_STORE,
   'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'",
   'x-frame-options': 'DENY',
-  'referrer-policy': 'no-referrer',
+  // Not no-referrer: with it, browsers post this page's own forms with Origin: null (live on 11-02, consent was refused).
+  'referrer-policy': 'same-origin',
 }
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
@@ -188,8 +189,11 @@ export function oauthRoutes(deps: OAuthDeps) {
     return web ?? respond(c, await finishUpstream(deps, new URL(c.req.url).searchParams))
   })
   app.post('/oauth/consent', async (c) => {
+    // Sec-Fetch-Site says where the form was posted from, even when Origin is null (a page with no referrer, some
+    // privacy settings); browsers without it are checked by Origin.
+    const fetchSite = c.req.header('sec-fetch-site')
     const origin = c.req.header('origin')
-    if (origin && origin !== new URL(site).origin)
+    if (fetchSite ? fetchSite !== 'same-origin' : origin && origin !== new URL(site).origin)
       return respond(c, {
         kind: 'page',
         status: 400,
