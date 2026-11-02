@@ -27,7 +27,10 @@ export const mediaRoute = route(() => import('./pages/Media'))
 export const keysRoute = route(() => import('./pages/Keys'))
 export const adminRoute = route(() => import('./pages/Admin'))
 export const setupRoute = route(() => import('./pages/Setup'))
-export const docsRoute = route(() => import('./pages/Docs'))
+// The REST reference is its own module (Scalar is large); the MCP and skills guides stay light.
+export const docsApiRoute = route(() => import('./pages/docs/ApiReference'))
+export const docsMcpRoute = route(() => import('./pages/docs/McpGuide'))
+export const docsSkillsRoute = route(() => import('./pages/docs/SkillsGuide'))
 
 /**
  * A page component from a route module: the module's component when it has loaded, else a React.lazy one that
@@ -51,20 +54,29 @@ const BY_PATH: Record<string, RouteModule<unknown>> = {
   '/keys': keysRoute,
   '/admin': adminRoute,
   '/setup': setupRoute,
-  '/docs': docsRoute,
+  '/docs/api': docsApiRoute,
+  '/docs/mcp': docsMcpRoute,
+  '/docs/skills': docsSkillsRoute,
+}
+
+/** Where /docs and the old /docs?tab=mcp|skills links go now. */
+export function docsPath(search: string) {
+  const tab = new URLSearchParams(search).get('tab')
+  return tab === 'mcp' || tab === 'skills' ? `/docs/${tab}` : '/docs/api'
 }
 
 /** On a direct visit to a page, starts loading its module alongside the app instead of after the app has rendered. */
-export function preloadRoute(path: string) {
-  const r = /^\/videos\/[^/]+\/edit\//.test(path)
+export function preloadRoute(path: string, search = '') {
+  const page = path === '/docs' || path === '/docs/' ? docsPath(search) : path.replace(/\/$/, '')
+  const r = /^\/videos\/[^/]+\/edit\//.test(page)
     ? editRoute
-    : path.startsWith('/videos/')
+    : page.startsWith('/videos/')
       ? videoRoute
-      : BY_PATH[path]
+      : BY_PATH[page]
   void r?.load().catch(() => undefined)
 }
 
-/** Fetches the routes people open most once the browser is idle (not Docs, the API reference is large). */
+/** Fetches the routes people open most once the browser is idle (not the docs; the API reference is large). */
 export function warmRoutes() {
   const warm = () => {
     for (const r of [videoRoute, newVideoRoute, mediaRoute, keysRoute, adminRoute, editRoute])

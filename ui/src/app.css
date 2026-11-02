@@ -350,6 +350,123 @@ body {
   }
 }
 
+/* Docs pages: sections beside a sticky "On this page" list (under the 56 px header), chips on narrow screens. */
+.va-docs-layout {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 40px;
+  align-items: start;
+}
+.va-docs-toc {
+  position: sticky;
+  top: 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.va-docs-toc-label {
+  color: var(--va-faint);
+  font-size: 12px;
+  line-height: 16px;
+  margin: 0 0 8px 12px;
+}
+.va-docs-toc-link {
+  display: block;
+  padding: 6px 12px;
+  border-left: 2px solid var(--va-rule);
+  color: var(--va-muted);
+  font-size: 14px;
+  line-height: 20px;
+  text-decoration: none;
+}
+.va-docs-toc-link:hover {
+  color: var(--va-text);
+}
+.va-docs-toc-link[data-active] {
+  border-left-color: var(--va-accent);
+  color: var(--va-text);
+  font-weight: 500;
+}
+.va-docs-chips {
+  display: none;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  margin-bottom: 8px;
+  scrollbar-width: none;
+}
+.va-docs-chip {
+  flex: none;
+  padding: 4px 12px;
+  border: 1px solid var(--va-rule);
+  border-radius: 999px;
+  color: var(--va-muted);
+  font-size: 13px;
+  line-height: 20px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.va-docs-chip[data-active] {
+  background: var(--va-raised);
+  color: var(--va-text);
+}
+.va-docs-toc-link:focus-visible,
+.va-docs-chip:focus-visible {
+  outline: 2px solid var(--va-accent);
+  outline-offset: 2px;
+}
+.va-docs-sections {
+  max-width: 880px;
+  min-width: 0;
+}
+/* The same rules and rhythm as .va-setting, stacked: the title above its cards. */
+.va-doc-section {
+  padding: 32px 0;
+  border-top: 1px solid var(--va-rule);
+  scroll-margin-top: 80px;
+}
+.va-doc-section:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+.va-doc-section:focus:not(:focus-visible) {
+  outline: none;
+}
+.va-doc-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 16px;
+}
+.va-table-scroll {
+  overflow-x: auto;
+}
+.va-docs-examples {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--va-muted);
+  font-size: 14px;
+  line-height: 22px;
+}
+.va-docs-examples li + li {
+  margin-top: 8px;
+}
+@media (max-width: 960px) {
+  .va-docs-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+  .va-docs-toc {
+    display: none;
+  }
+  .va-docs-chips {
+    display: flex;
+  }
+  .va-doc-section {
+    scroll-margin-top: 72px;
+  }
+}
+
 /* Tables: rules and alignment, 12px grey sentence-case headers, no zebra. */
 .va-table {
   width: 100%;
