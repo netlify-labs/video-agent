@@ -4,6 +4,7 @@
 import type { Config, Context } from '@netlify/edge-functions'
 import { getStore } from '@netlify/blobs'
 import { CONTENT_TYPES, mediaResponse } from '../../src/lib/media/range.ts'
+import { creditHtml, type CreditLine } from '../../src/lib/credit-html.ts'
 
 interface Mirror {
   slug: string
@@ -14,6 +15,8 @@ interface Mirror {
   height: number
   durationSec: number
   keys: { video: string; poster: string; gif: string; captions: string }
+  /** CC BY media the version was made with (absent on mirrors written before credits). */
+  credits?: CreditLine[]
 }
 
 const NO_STORE = { 'cache-control': 'no-store' }
@@ -67,6 +70,7 @@ export default async (req: Request, context: Context) => {
   const base = `${url.origin}/v/${slug}`
   const title = esc(pub.title || 'Video')
   const poster = (await videos.getMetadata(webpKey)) ? `${base}.webp` : `${base}.jpg`
+  const credits = Array.isArray(pub.credits) && pub.credits.length ? creditHtml(pub.credits) : ''
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${title}</title>
@@ -79,9 +83,10 @@ export default async (req: Request, context: Context) => {
 <link rel="alternate" type="application/json+oembed" href="${base}.json">
 <style>:root{color-scheme:dark light}html,body{margin:0;height:100%;background:#0b0d10;color:#e6e8eb;font:16px/1.5 system-ui,sans-serif}
 main{min-height:100%;display:grid;place-items:center;padding:16px;box-sizing:border-box}figure{margin:0;max-width:min(100%,calc(85vh*${pub.width}/${pub.height}))}
-video{width:100%;height:auto;border-radius:12px;background:#000;display:block}figcaption{margin-top:12px;opacity:.8}</style></head>
+video{width:100%;height:auto;border-radius:12px;background:#000;display:block}figcaption{margin-top:12px;opacity:.8}
+.credits{display:block;margin-top:4px;font-size:13px;opacity:.75}.credits a{color:inherit}</style></head>
 <body><main><figure><video controls playsinline preload="metadata" poster="${poster}" src="${base}.mp4" width="${pub.width}" height="${pub.height}">
-<track kind="captions" src="${base}.vtt" srclang="en" label="Captions"></video><figcaption>${title}</figcaption></figure></main></body></html>`
+<track kind="captions" src="${base}.vtt" srclang="en" label="Captions"></video><figcaption>${title}${credits ? `<small class="credits" data-credits>${credits}</small>` : ''}</figcaption></figure></main></body></html>`
   return new Response(html, { headers: { ...NO_STORE, 'content-type': 'text/html; charset=utf-8' } })
 }
 
