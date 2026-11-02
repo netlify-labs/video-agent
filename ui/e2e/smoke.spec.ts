@@ -657,7 +657,7 @@ test('Edit opens the editor for an editable version; others say to revise instea
   await expect(page).toHaveURL(/\/videos\/vid_teaser\/edit\/2$/)
   await expect(page.getByRole('heading', { name: 'Edit v2' })).toBeVisible()
   for (const b of ['intro', 'demo', 'outro']) await expect(page.getByTestId(`beat-${b}`)).toBeVisible()
-  await expect(page.getByTestId('edit-status')).toContainText('9 s · 3 beats · No changes yet')
+  await expect(page.getByTestId('edit-status')).toContainText('9 s · 3 scenes · No changes yet')
 })
 
 test('editing text, timing, order and colour saves the matching ops; render makes the next version', async ({
@@ -1020,9 +1020,9 @@ test('Plan it first with a voice-over shows an editable narration per beat and c
   await dialog.getByRole('button', { name: 'Next' }).click()
   await dialog.getByRole('checkbox', { name: 'Skip' }).check()
   await dialog.getByRole('button', { name: 'Write the brief' }).click()
-  const first = dialog.getByLabel('Narration for beat 1')
+  const first = dialog.getByLabel('Narration for scene 1')
   await expect(first).toHaveValue('Every project used to need its own webhook.')
-  await expect(dialog.getByLabel('Narration for beat 3')).toHaveValue('Read the docs to set it up.')
+  await expect(dialog.getByLabel('Narration for scene 3')).toHaveValue('Read the docs to set it up.')
   await first.fill('One webhook per project? Not anymore.')
   await dialog.getByRole('button', { name: 'Create with this brief' }).click()
   await expect(page).toHaveURL(/\/videos\//)

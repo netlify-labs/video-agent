@@ -150,7 +150,7 @@ export function VoiceoverControl(props: {
     <div>
       <Switch
         label="Voice-over"
-        description="A narrator reads a line per beat; captions follow the words."
+        description="A narrator reads a line per scene; captions follow the words."
         checked={v.enabled}
         disabled={props.disabled === true}
         onChange={(e) => {
@@ -225,8 +225,8 @@ export function VoiceoverControl(props: {
             </Text>
             <Text size="xs" c="var(--va-faint)" mb={6}>
               {props.planning
-                ? 'Optional. One line per beat, read word for word. Leave it empty and the plan writes the narration.'
-                : 'Optional. One line per beat, read word for word. Leave it empty and the agent writes the narration.'}
+                ? 'Optional. One line per scene, read word for word. Leave it empty and the plan writes the narration.'
+                : 'Optional. One line per scene, read word for word. Leave it empty and the agent writes the narration.'}
             </Text>
             <Stack gap={6}>
               {lines.map((line, i) => (

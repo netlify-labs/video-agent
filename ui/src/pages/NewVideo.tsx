@@ -28,7 +28,7 @@ import { brand } from '../theme'
 
 const EXAMPLES = [
   'A 20-second launch video for our new webhooks feature: what it is, one example event, and an end card with "Available today".',
-  'A vertical 15-second clip for sales: "Preview every pull request" in three quick beats, ending with "Book a demo".',
+  'A vertical 15-second clip for sales: "Preview every pull request" in three quick scenes, ending with "Book a demo".',
   'A one-minute docs tutorial: how to add an environment variable to a project and redeploy it, in three steps.',
 ]
 

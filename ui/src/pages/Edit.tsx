@@ -484,8 +484,15 @@ export function EditPage() {
           <div>
             <Title order={1}>Edit v{draft.baseN}</Title>
             <div className="va-sub num" data-testid="edit-status">
-              {Math.round(total * 10) / 10} s · {cur.beats.length} beats ·{' '}
-              {saving ? 'Saving…' : dirty ? 'Unsaved changes' : draft.ops.length ? 'Draft saved' : 'No changes yet'}
+              {Math.round(total * 10) / 10} s · {cur.beats.length}{' '}
+              {cur.beats.length === 1 ? 'scene' : 'scenes'} ·{' '}
+              {saving
+                ? 'Saving…'
+                : dirty
+                  ? 'Unsaved changes'
+                  : draft.ops.length
+                    ? 'Draft saved'
+                    : 'No changes yet'}
             </div>
           </div>
           <Group gap="sm">
@@ -597,12 +604,12 @@ export function EditPage() {
       <div className="va-editor-panel" data-testid="edit-panel">
         <Card>
           <Text fw={600} mb="sm">
-            Beats
+            Scenes
           </Text>
           {reordered ? (
             <Was
               value={`order ${base.beats.map((b) => labelFor(b.label, b.id)).join(', ')}`}
-              name="beat order"
+              name="scene order"
               onRevert={() => {
                 update((c) => {
                   const at = (bid: string) => base.beats.findIndex((b) => b.id === bid)
@@ -691,7 +698,7 @@ export function EditPage() {
                     >
                       <IconArrowDown size={14} />
                     </ActionIcon>
-                    <Tooltip label="The last beat can't be deleted" disabled={cur.beats.length > 1}>
+                    <Tooltip label="The last scene can't be deleted" disabled={cur.beats.length > 1}>
                       <ActionIcon
                         variant="subtle"
                         color="red"
@@ -859,7 +866,7 @@ export function EditPage() {
                   </Text>
                   <Text size="xs" c="var(--va-faint)" mb="xs">
                     Changed lines are spoken again when you render. The preview plays the old voice until
-                    then, and a beat grows only if its new line no longer fits.
+                    then, and a scene grows only if its new line no longer fits.
                   </Text>
                   <Stack gap="xs">
                     {lines.map((l) => {

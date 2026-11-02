@@ -622,8 +622,9 @@ export function VideoPage() {
               href={fileUrl(data.id, v.n, 'video', true)}
               variant="default"
               leftSection={<IconDownload size={16} />}
+              title="Download the MP4"
             >
-              MP4
+              Download
             </Button>
           ) : null}
           {v.status === 'ready' && canPublish && !live ? (

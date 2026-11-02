@@ -167,11 +167,11 @@ function BriefEditor({
       />
       <Stack gap={6}>
         <Text size="sm" fw={500}>
-          Beats
+          Scenes
         </Text>
         {voiceover ? (
           <Text size="xs" c="var(--va-faint)">
-            Each beat's narration is read word for word, and the beat is made long enough for it.
+            Each scene's narration is read word for word, and the scene is made long enough for it.
           </Text>
         ) : null}
         {brief.beats.map((b, i) => (
@@ -179,7 +179,7 @@ function BriefEditor({
             <Group gap="xs" wrap="nowrap">
               <TextInput
                 style={{ flex: 1 }}
-                aria-label={`Beat ${i + 1}`}
+                aria-label={`Scene ${i + 1}`}
                 value={b.text}
                 onChange={(e) => {
                   const beats = brief.beats.map((x, j) =>
@@ -202,8 +202,8 @@ function BriefEditor({
             </Group>
             {voiceover ? (
               <Textarea
-                aria-label={`Narration for beat ${i + 1}`}
-                placeholder="What the narrator says over this beat"
+                aria-label={`Narration for scene ${i + 1}`}
+                placeholder="What the narrator says over this scene"
                 autosize
                 minRows={1}
                 maxLength={600}
