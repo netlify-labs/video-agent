@@ -444,7 +444,7 @@ export interface CommentRow {
 
 export type MediaStatus = 'uploading' | 'verifying' | 'ready' | 'rejected'
 
-export interface MediaRow {
+export interface MediaRow extends MediaProvenance {
   id: string
   uploaderId: string
   kind: MediaKind
@@ -467,6 +467,36 @@ export interface MediaRow {
   createdAt: string
   updatedAt: string
   deletedAt: string | null
+}
+
+/** Where an imported item came from, with its licence and credit; all null for uploads. */
+export interface MediaProvenance {
+  source: 'openverse' | null
+  sourceId: string | null
+  /** The work's landing page. */
+  sourceUrl: string | null
+  sourceTitle: string | null
+  /** Openverse licence slug: 'cc0' or 'by' (nothing else is imported). */
+  license: string | null
+  licenseVersion: string | null
+  licenseUrl: string | null
+  creator: string | null
+  creatorUrl: string | null
+  /** Openverse's own attribution text. */
+  attribution: string | null
+}
+
+export const NO_PROVENANCE: MediaProvenance = {
+  source: null,
+  sourceId: null,
+  sourceUrl: null,
+  sourceTitle: null,
+  license: null,
+  licenseVersion: null,
+  licenseUrl: null,
+  creator: null,
+  creatorUrl: null,
+  attribution: null,
 }
 
 export type UploadStatus = 'open' | 'assembling' | 'done' | 'failed'
@@ -506,6 +536,14 @@ export interface VersionMediaRow {
   /** File name inside video/assets/media/. */
   filename: string
   caption: string | null
+}
+
+/** One imported item a version was made with: its provenance, as the credits on that version need it. */
+export interface VersionProvenanceRow extends MediaProvenance {
+  versionN: number
+  mediaId: string
+  position: number
+  kind: MediaRow['kind']
 }
 
 export interface EditRow {

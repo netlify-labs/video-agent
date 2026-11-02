@@ -9,7 +9,7 @@ import { ApiError } from '../lib/errors.js'
 import { classify, LIMITS, MediaError } from '../lib/media/classify.js'
 import { mediaDto, storeMedia } from './media.js'
 import { assertCan, type Principal } from './policy.js'
-import type { MediaRow, MediaUploadRow } from './types.js'
+import { NO_PROVENANCE, type MediaRow, type MediaUploadRow } from './types.js'
 
 export const PART_SIZE = 4 * 1024 * 1024
 export const UPLOAD_QUOTA_BYTES = 1024 * 1024 * 1024
@@ -183,6 +183,7 @@ export async function completeUpload(
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
       deletedAt: null,
+      ...NO_PROVENANCE,
     }
     await repo.insertMedia(pending)
     await repo.updateUpload(id, {

@@ -7,6 +7,7 @@ import {
   gte,
   ilike,
   inArray,
+  isNotNull,
   isNull,
   lt,
   lte,
@@ -42,6 +43,7 @@ import type {
   MediaUploadRow,
   MediaUploadPartRow,
   VersionMediaRow,
+  VersionProvenanceRow,
   GatewayCallRow,
   WebhookDeliveryRow,
   UserWebhookRow,
@@ -510,6 +512,40 @@ function repoFor(db: Db): Repo {
       const out: Record<string, string[]> = {}
       for (const r of rows) (out[r.mediaId] ??= []).push(r.jobId)
       return out
+    },
+    mediaBySource: async (source, ids) => {
+      if (!ids.length) return []
+      const m = t.media
+      return (await db
+        .select()
+        .from(m)
+        .where(and(eq(m.source, source), inArray(m.sourceId, ids), isNull(m.deletedAt)))
+        .orderBy(desc(m.createdAt))) as MediaRow[]
+    },
+    versionProvenance: async (jobId) => {
+      const v = t.versionMedia
+      const m = t.media
+      return (await db
+        .select({
+          versionN: v.versionN,
+          mediaId: v.mediaId,
+          position: v.position,
+          kind: v.kind,
+          source: m.source,
+          sourceId: m.sourceId,
+          sourceUrl: m.sourceUrl,
+          sourceTitle: m.sourceTitle,
+          license: m.license,
+          licenseVersion: m.licenseVersion,
+          licenseUrl: m.licenseUrl,
+          creator: m.creator,
+          creatorUrl: m.creatorUrl,
+          attribution: m.attribution,
+        })
+        .from(v)
+        .innerJoin(m, eq(m.id, v.mediaId))
+        .where(and(eq(v.jobId, jobId), isNotNull(m.source)))
+        .orderBy(asc(v.versionN), asc(v.position))) as VersionProvenanceRow[]
     },
     insertEdit: async (row) => {
       await db.insert(t.edits).values(row)
