@@ -38,10 +38,10 @@ describe('MCP', () => {
     const { h, key } = await setup()
     const r = await rpc(h, key, 'tools/list', {}, 1, '/mcp')
     expect(r.status).toBe(200)
-    expect((r.body as { result: { tools: unknown[] } }).result.tools).toHaveLength(13)
+    expect((r.body as { result: { tools: unknown[] } }).result.tools).toHaveLength(15)
   })
 
-  it('initializes and lists thirteen tools with instructions', async () => {
+  it('initializes and lists fifteen tools with instructions', async () => {
     const { h, key } = await setup()
     const init = await rpc(h, key, 'initialize', {
       protocolVersion: '2025-06-18',
@@ -57,6 +57,7 @@ describe('MCP', () => {
       'cancel_video',
       'create_video',
       'get_video',
+      'import_music',
       'list_comments',
       'list_media',
       'list_videos',
@@ -64,6 +65,7 @@ describe('MCP', () => {
       'plan_video',
       'publish_video',
       'revise_video',
+      'search_music',
       'set_verdict',
       'unpublish_video',
     ])
