@@ -39,14 +39,26 @@ interface AuthState {
 const Ctx = createContext<AuthState | null>(null)
 const AUTH_HASH = /^#(confirmation_token|recovery_token|invite_token|email_change_token|access_token)=/
 
-/** The deployment's sign-in provider; Identity when the config can't be read (the default for forks). */
-async function readProvider(): Promise<AuthMode> {
+/** The deployment's sign-in provider, or null when the config can't be read. */
+async function readProvider(): Promise<AuthMode | null> {
   try {
     const res = await fetch('/api/v1/config', { credentials: 'same-origin' })
+    if (!res.ok) return null
     const body = (await res.json()) as { authProvider?: unknown }
     return body.authProvider === 'netlify' ? 'netlify' : 'identity'
   } catch {
-    return 'identity'
+    return null
+  }
+}
+
+// The provider the config gave last time, so the session check starts at once instead of after /config.
+const PROVIDER_KEY = 'va-auth-provider'
+const rememberedProvider = (): AuthMode | null => {
+  try {
+    const p = localStorage.getItem(PROVIDER_KEY)
+    return p === 'netlify' || p === 'identity' ? p : null
+  } catch {
+    return null
   }
 }
 
@@ -96,11 +108,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     let cancelled = false
     let stopIdentity: (() => void) | null = null
-    void readProvider().then((p) => {
-      if (cancelled) return
+    const start = (p: AuthMode) => {
       setAuthMode(p)
       setProvider(p)
       stopIdentity = p === 'netlify' ? startCookieSession() : startIdentitySession()
+    }
+    const remembered = rememberedProvider()
+    if (remembered) start(remembered)
+    // Still read the config: the first visit starts from it (Identity if it can't be read, the default for forks),
+    // and a deployment that changed provider since is picked up with a reload.
+    void readProvider().then((p) => {
+      if (cancelled) return
+      if (p) {
+        try {
+          localStorage.setItem(PROVIDER_KEY, p)
+        } catch {
+          // No storage: the next visit reads the config first again.
+        }
+      }
+      if (!remembered) start(p ?? 'identity')
+      else if (p && p !== remembered) window.location.reload()
     })
     return () => {
       cancelled = true

@@ -1209,6 +1209,16 @@ const recordApi = (page: Page) =>
 const apiCalls = (page: Page) =>
   page.evaluate(() => (globalThis as unknown as { __api: string[] }).__api.slice())
 
+test('the home page asks for the library at startup, once, and renders from it', async ({ page }) => {
+  await recordApi(page)
+  await page.goto('/')
+  await expect(page.getByText('Org webhooks launch')).toBeVisible()
+  const calls = await apiCalls(page)
+  // Requested before the page's other calls, and shared with the page's own list query.
+  expect(calls[0]).toBe('/api/v1/videos')
+  expect(calls.filter((c) => c === '/api/v1/videos')).toHaveLength(1)
+})
+
 test('pages other than the library load on demand, as their own chunks', async ({ page, request }) => {
   const html = await (await request.get('/')).text()
   expect(html).not.toMatch(/Admin-[\w-]+\.js/)

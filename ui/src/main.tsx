@@ -12,6 +12,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router'
+import { fetchClient } from './api/client'
 import { App } from './App'
 import { AuthProvider } from './auth'
 import { preloadRoute } from './routes'
@@ -38,9 +39,30 @@ const ready = import.meta.env.VITE_MOCK
     })
   : Promise.resolve()
 
+// The library is the home page: ask for its first page now, alongside the sign-in check, instead of after it. Same key
+// and request as the Library page's list (no filters), so the page renders from it; signed out, the 401 is ignored.
+const prefetchLibrary = () => {
+  if (window.location.pathname !== '/' || window.location.search) return
+  const init = { params: { query: { owner: 'all' as const, limit: 24 } } }
+  void queryClient
+    .infiniteQuery({
+      queryKey: ['get', '/api/v1/videos', init],
+      initialPageParam: '',
+      queryFn: async ({ pageParam }) => {
+        const { data, error } = await fetchClient.GET('/api/v1/videos', {
+          params: { query: { ...init.params.query, cursor: pageParam } },
+        })
+        if (error) throw new Error('The library could not load early; the page asks again.')
+        return data
+      },
+    })
+    .catch(() => undefined)
+}
+
 const root = document.getElementById('root')
 if (root) {
   void ready.then(() => {
+    prefetchLibrary()
     createRoot(root).render(
       <StrictMode>
         <MantineProvider theme={theme} cssVariablesResolver={resolver} defaultColorScheme="dark">
