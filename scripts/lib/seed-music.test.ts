@@ -54,6 +54,12 @@ const job = (id: string, status: string, extra: Record<string, unknown> = {}) =>
 })
 
 describe('choosing tracks', () => {
+  it('takes CC BY too by default, CC0 first; with cc0 only, CC BY is refused', () => {
+    const items = [track(1, { license: 'by' }), track(2, { license: 'by' }), track(3)]
+    expect(chooseSeedTracks(items, 2, fresh()).chosen.map((t) => t.id)).toEqual(['ov-3', 'ov-1'])
+    expect(chooseSeedTracks(items, 2, fresh(), 'cc0').chosen.map((t) => t.id)).toEqual(['ov-3'])
+  })
+
   it('keeps importable CC0 tracks of 30 s to 4 min without vocals, in order, up to the quota', () => {
     const items = [
       track(1, { license: 'by' }),
@@ -152,7 +158,7 @@ describe('waiting for Openverse', () => {
 })
 
 describe('seeding', () => {
-  it('searches each mood, imports new CC0 tracks with mood captions, and reports duplicates and failures', async () => {
+  it('with --cc0-only: searches each mood, imports new CC0 tracks with mood captions, reports duplicates and failures', async () => {
     const imports: { id: string; caption: string }[] = []
     const byQuery: Record<string, SeedTrack[]> = {
       'upbeat electronic': [track(1), track(2, { license: 'by' }), track(3)],
@@ -184,7 +190,7 @@ describe('seeding', () => {
       }
       return { status: 404, json: {} }
     }
-    const rows = await seedMusic(call, 4, quiet())
+    const rows = await seedMusic(call, 4, quiet(), 'cc0')
     expect(imports).toEqual([{ id: 'ov-3', caption: 'Track 3 by Artist 3 (upbeat, electronic)' }])
     expect(rows.map((r) => [r.mood, r.title, r.outcome])).toEqual([
       ['upbeat', 'Track 1', 'in_library'],

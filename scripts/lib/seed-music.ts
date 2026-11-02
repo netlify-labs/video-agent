@@ -46,14 +46,18 @@ const norm = (s: string | null) =>
 /** Two listings of the same work (one artist often uploads a track more than once). */
 export const workKey = (t: Pick<SeedTrack, 'title' | 'creator'>) => `${norm(t.title)}|${norm(t.creator)}`
 
-export type Rejection = 'not_cc0' | 'not_importable' | 'length' | 'vocals' | 'in_library' | 'duplicate'
+export type Rejection = 'licence' | 'not_importable' | 'length' | 'vocals' | 'in_library' | 'duplicate'
 
-/** Why a track can't be seeded, or null when it can. CC0 only, so seeded tracks never need a credit. */
+/** CC0 and CC BY by default (CC BY tracks are credited automatically when a video uses them); `cc0` for no credits. */
+export type SeedLicences = 'cc0' | 'cc0,by'
+
+/** Why a track can't be seeded, or null when it can. */
 export function rejection(
   t: SeedTrack,
   seen: { ids: Set<string>; works: Set<string>; librarySourceIds: Set<string> },
+  licences: SeedLicences = 'cc0,by',
 ): Rejection | null {
-  if (t.license !== 'cc0') return 'not_cc0'
+  if (!licences.split(',').includes(t.license)) return 'licence'
   if (!t.importable) return 'not_importable'
   if (t.durationSec === null || t.durationSec < MIN_SECONDS || t.durationSec > MAX_SECONDS) return 'length'
   if (VOCALS.test([t.title, ...t.genres].join(' '))) return 'vocals'
@@ -67,11 +71,14 @@ export function chooseSeedTracks(
   items: SeedTrack[],
   take: number,
   seen: { ids: Set<string>; works: Set<string>; librarySourceIds: Set<string> },
+  licences: SeedLicences = 'cc0,by',
 ): { chosen: SeedTrack[]; inLibrary: SeedTrack[] } {
   const chosen: SeedTrack[] = []
   const inLibrary: SeedTrack[] = []
-  for (const t of items) {
-    const why = rejection(t, seen)
+  // CC0 first (no credit needed), then CC BY, otherwise in Openverse's order.
+  const ordered = [...items].sort((a, b) => Number(b.license === 'cc0') - Number(a.license === 'cc0'))
+  for (const t of ordered) {
+    const why = rejection(t, seen, licences)
     if (why === 'in_library') inLibrary.push(t)
     if (why || chosen.length >= take) continue
     chosen.push(t)
@@ -198,8 +205,13 @@ export async function librarySourceIds(call: Call): Promise<Set<string>> {
   return ids
 }
 
-/** Searches each mood and imports its share of CC0 tracks, one call at a time. Never throws for one track. */
-export async function seedMusic(call: Call, count: number, p: Patience = PATIENCE): Promise<SeedRow[]> {
+/** Searches each mood and imports its share of tracks (CC0 first), one call at a time. Never throws for one track. */
+export async function seedMusic(
+  call: Call,
+  count: number,
+  p: Patience = PATIENCE,
+  licences: SeedLicences = 'cc0,by',
+): Promise<SeedRow[]> {
   const seen = {
     ids: new Set<string>(),
     works: new Set<string>(),
@@ -224,7 +236,7 @@ export async function seedMusic(call: Call, count: number, p: Patience = PATIENC
       try {
         const q = new URLSearchParams({
           q: mood.query,
-          license: 'cc0',
+          license: licences,
           category: 'music',
           page: String(page),
         })
@@ -240,7 +252,7 @@ export async function seedMusic(call: Call, count: number, p: Patience = PATIENC
         p.log(`  Skipped ${mood.mood}: ${e instanceof Error ? e.message : String(e)}`)
         break
       }
-      const found = chooseSeedTracks(items, take - chosen.length, seen)
+      const found = chooseSeedTracks(items, take - chosen.length, seen, licences)
       chosen.push(...found.chosen)
       for (const t of found.inLibrary) {
         if (rows.some((r) => r.outcome === 'in_library' && r.title === t.title && r.creator === t.creator))
@@ -249,7 +261,10 @@ export async function seedMusic(call: Call, count: number, p: Patience = PATIENC
       }
       if (items.length < 20) break
     }
-    if (!chosen.length) p.log(`  No new CC0 ${mood.mood} tracks of 30 s to 4 min found.`)
+    if (!chosen.length)
+      p.log(
+        `  No new ${licences === 'cc0' ? 'CC0' : 'CC0 or CC BY'} ${mood.mood} tracks of 30 s to 4 min found.`,
+      )
     for (const t of chosen) {
       p.log(`  Importing "${t.title}"${t.creator ? ` by ${t.creator}` : ''}…`)
       try {
@@ -282,6 +297,8 @@ export function summary(rows: SeedRow[]): string {
   return [
     `Imported ${n('imported')}, already in the library ${n('in_library')}, failed ${n('failed')}.`,
     ...lines,
-    'All seeded tracks are CC0: no credit is needed when a video uses them.',
+    rows.some((r) => r.outcome === 'imported' && r.license === 'by')
+      ? 'CC BY tracks are credited automatically on videos that use them; CC0 tracks need no credit.'
+      : 'Imported tracks are CC0: no credit is needed when a video uses them.',
   ].join('\n')
 }

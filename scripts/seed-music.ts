@@ -1,9 +1,9 @@
-// npm run seed:music -- --site <site id, name or https URL> [--count 12]
-// Imports a starter set of CC0 music into the team media library across moods (upbeat, ambient, corporate, cinematic,
-// acoustic, playful, inspiring, lofi) through the site's own Openverse endpoints: search, choose CC0 tracks of 30 s
-// to 4 min the library can take, import. The server's music pick falls back to these when Openverse is slow or down.
-// Patient: follows 202 jobs, waits out 429s and 5xx with backoff, skips tracks already in the library. CC0 only, so
-// seeded tracks never need a credit. Optional, and never run by npm run setup.
+// npm run seed:music -- --site <site id, name or https URL> [--count 12] [--cc0-only]
+// Imports a starter set of music into the team media library across moods (upbeat, ambient, corporate, cinematic,
+// acoustic, playful, inspiring, lofi) through the site's own Openverse endpoints: search, choose tracks of 30 s to
+// 4 min the library can take (CC0 first, then CC BY, which videos credit automatically; --cc0-only for no credits),
+// import. The server's music pick falls back to these when Openverse is slow or down. Patient: follows 202 jobs,
+// waits out 429s and 5xx with backoff, skips tracks already in the library. Optional, never run by npm run setup.
 // Needs VIDEO_AGENT_KEY: an API key of a Creator or admin (Settings → API keys). A site id or name is looked up with
 // your Netlify CLI login (`npx netlify login`); an https URL is used as is. Never prints the key.
 import { cliToken, getSite } from './lib/netlify-setup.js'
@@ -22,7 +22,10 @@ async function main() {
   const base = /^https?:\/\//.test(siteArg)
     ? siteArg.replace(/\/+$/, '')
     : (await getSite(cliToken(), siteArg)).ssl_url.replace(/\/+$/, '')
-  console.log(`Seeding ${count} CC0 tracks into the library of ${base}…`)
+  const licences = args['cc0-only'] === 'true' ? 'cc0' : 'cc0,by'
+  console.log(
+    `Seeding ${count} ${licences === 'cc0' ? 'CC0' : 'CC0 and CC BY'} tracks into the library of ${base}…`,
+  )
 
   const call: Call = async (method, path, body) => {
     const res = await fetch(`${base}${path}`, {
@@ -46,7 +49,7 @@ async function main() {
   const who = await call('GET', '/api/v1/me')
   if (who.status === 401) throw new Error('VIDEO_AGENT_KEY was refused by this site.')
 
-  const rows = await seedMusic(call, count)
+  const rows = await seedMusic(call, count, undefined, licences)
   console.log(`\n${summary(rows)}`)
   if (!rows.some((r) => r.outcome !== 'failed')) process.exitCode = 1
 }

@@ -178,18 +178,19 @@ Openverse API.
   shows `source: "library"` and the video page "Music: _title_ (from your library)". Only an empty library (no audio
   at all) starts the run without a track, and it finds music itself (below). Revisions inherit the track; a version
   can be cancelled while it's finding music.
-- **Starter music.** To give that fallback something to use, seed the library with CC0 tracks across moods
+- **Starter music.** To give that fallback something to use, seed the library with tracks across moods
   (upbeat, ambient, corporate, cinematic, acoustic, playful, inspiring, lofi). It's optional and not part of
   `npm run setup`:
 
   ```sh
-  VIDEO_AGENT_KEY=<a Creator's or admin's API key> npm run seed:music -- --site <your project or its https URL> [--count 12]
+  VIDEO_AGENT_KEY=<a Creator's or admin's API key> npm run seed:music -- --site <your project or its https URL> [--count 12] [--cc0-only]
   ```
 
-  It goes through the site's own Openverse endpoints like Find music: searches each mood for CC0 tracks of 30 seconds
-  to 4 minutes the library can take, imports them with captions naming the mood (which the fallback matches), follows
+  It goes through the site's own Openverse endpoints like Find music: searches each mood for CC0 and CC BY tracks of 30
+  seconds to 4 minutes the library can take (CC0 first), imports them with captions naming the mood (which the fallback matches), follows
   `202` jobs, waits out 429s and slow answers with backoff, skips tracks already in the library, and prints what it
-  imported (title, creator, licence, length). CC0 only, so seeded tracks never need a credit. A project id or name is
+  imported (title, creator, licence, length). CC BY tracks are credited automatically on videos that use them (most music on
+  Openverse is CC BY); pass `--cc0-only` if you want no credit lines. A project id or name is
   looked up with your Netlify login; an https URL is used as is.
 
 - **In runs.** When the server's pick found nothing, not even in the library (or the version predates it), the agent finds a track itself with
