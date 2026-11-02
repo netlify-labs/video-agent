@@ -13,6 +13,12 @@ export const defaultDescription = (site: Site) =>
   `its video library. Attribution for CC BY tracks is shown on published videos. Searches go through the ` +
   `deployment's server, a few per person per session.`
 
+/**
+ * Functions search for Find music; Agent Runner runs (scripts/openverse.ts) run in the build system and see variables
+ * scoped to builds. Runtime covers edge and other runtime readers.
+ */
+export const OPENVERSE_SCOPES = ['builds', 'functions', 'runtime']
+
 export class OpenverseSetupError extends Error {}
 
 /**
@@ -54,8 +60,8 @@ export async function registerOpenverse(o: {
     o.netlifyToken,
     o.site,
     [
-      { key: 'OPENVERSE_CLIENT_ID', value: body.client_id },
-      { key: 'OPENVERSE_CLIENT_SECRET', value: body.client_secret, secret: true },
+      { key: 'OPENVERSE_CLIENT_ID', value: body.client_id, scopes: OPENVERSE_SCOPES },
+      { key: 'OPENVERSE_CLIENT_SECRET', value: body.client_secret, secret: true, scopes: OPENVERSE_SCOPES },
     ],
     fetchImpl,
   )
