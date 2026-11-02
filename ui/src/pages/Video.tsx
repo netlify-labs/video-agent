@@ -70,7 +70,8 @@ const STAGE_WORDS: Record<string, string> = {
 
 /** The music the server picked before the run, for the version details. */
 function musicWords(m: NonNullable<Version['music']>): string {
-  if (m.status === 'picked') return `${m.title ?? 'A track'} (picked from Openverse)`
+  if (m.status === 'picked')
+    return `${m.title ?? 'A track'} (${m.source === 'library' ? 'from your library' : 'picked from Openverse'})`
   if (m.status === 'skipped') return 'None found in time; the agent looked itself'
   return m.title ? `Adding ${m.title}…` : 'Finding music…'
 }
@@ -208,6 +209,7 @@ function Progress({ video, v, canCancel }: { video: Video; v: Version; canCancel
             <Text size="sm" c="var(--va-muted)" lineClamp={1} data-testid="picked-music">
               Music: {music.title}
               {music.status === 'importing' ? ' (adding it to the library)' : ''}
+              {music.status === 'picked' && music.source === 'library' ? ' (from your library)' : ''}
             </Text>
           ) : null}
           <Narration video={video} v={v} />

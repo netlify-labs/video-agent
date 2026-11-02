@@ -126,11 +126,14 @@ const commentDto = (c: MockComment) => {
     can: { edit: mine && me.role !== 'viewer', delete: mine || moderate, resolve: moderate },
   }
 }
-/** localStorage.mockMusic=searching|picked: the in-progress video is finding music before its run, or has found it. */
-function mockMusic(): 'searching' | 'picked' | null {
+/**
+ * localStorage.mockMusic=searching|picked|library: the in-progress video is finding music before its run, or has found
+ * it (on Openverse, or in the library after Openverse found none).
+ */
+function mockMusic(): 'searching' | 'picked' | 'library' | null {
   try {
     const m = localStorage.getItem('mockMusic')
-    return m === 'searching' || m === 'picked' ? m : null
+    return m === 'searching' || m === 'picked' || m === 'library' ? m : null
   } catch {
     return null
   }
@@ -140,11 +143,19 @@ const withMusic = <T extends { id: string; versions: Video['versions'] }>(v: T):
   const latest = v.versions[0]
   if (!m || v.id !== 'vid_making' || latest?.status !== 'running') return v
   const music = {
-    status: m,
-    query: 'upbeat electronic',
-    title: m === 'picked' ? 'Bright Horizons' : null,
-    mediaId: m === 'picked' ? 'med_music_auto' : null,
+    status: m === 'searching' ? m : 'picked',
+    query: m === 'library' ? 'corporate' : 'upbeat electronic',
+    title: m === 'picked' ? 'Bright Horizons' : m === 'library' ? 'Quiet Lake' : null,
+    mediaId: m === 'searching' ? null : 'med_music_auto',
     reason: null,
+    source: m === 'searching' ? null : m === 'library' ? 'library' : 'openverse',
+    tried:
+      m === 'library'
+        ? ['upbeat electronic', 'background instrumental', 'corporate'].map((query) => ({
+            query,
+            outcome: 'failed',
+          }))
+        : [{ query: 'upbeat electronic', outcome: m === 'picked' ? 'chosen' : 'searching' }],
   }
   return {
     ...v,
