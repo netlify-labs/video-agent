@@ -86,8 +86,10 @@ export async function getSite(
     undefined,
     fetchImpl,
   )
-  if (r.status !== 200) throw new Error(`Project ${idOrName} not found (HTTP ${r.status}).`)
-  return r.data
+  if (r.status === 200) return r.data
+  // The API takes an id or a domain; a bare project name is its netlify.app domain.
+  if (r.status === 404 && !idOrName.includes('.')) return getSite(token, `${idOrName}.netlify.app`, fetchImpl)
+  throw new Error(`Project ${idOrName} not found (HTTP ${r.status}).`)
 }
 
 /** The names of the site's own variables (values are never read). */
