@@ -24,6 +24,7 @@ import {
 import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
 import {
+  IconArrowBackUp,
   IconArrowDown,
   IconArrowUp,
   IconMicrophone,
@@ -104,17 +105,44 @@ export function diffOps(base: Composition, cur: Composition): Op[] {
   return ops
 }
 
+/** Under a changed field: what the version had, and a button to put it back. */
+function Was({ value, name, onRevert }: { value: string; name: string; onRevert: () => void }) {
+  return (
+    <Group gap={6} wrap="nowrap" data-testid="was">
+      <Text size="xs" c="var(--va-faint)" truncate title={value} style={{ flex: 1, minWidth: 0 }}>
+        Was: {value || '(empty)'}
+      </Text>
+      <Button
+        size="compact-xs"
+        variant="subtle"
+        color="gray"
+        leftSection={<IconArrowBackUp size={12} />}
+        aria-label={`Revert ${name}`}
+        onClick={onRevert}
+      >
+        Revert
+      </Button>
+    </Group>
+  )
+}
+
+const percent = (v: number) => `${Math.round(v * 100)}%`
+const fileOf = (src: string) => src.split('/').pop() ?? src
+
 /** Library files sit in assets/media/ as <media id>.<ext>. */
 const libraryId = (src: string) => /^assets\/media\/(med_[A-Za-z0-9]+)\.[A-Za-z0-9]+$/.exec(src)?.[1] ?? null
 
 /** One audio track: its file's name, Replace, a level and Mute. */
 function AudioRow({
   track,
+  was,
   item,
   onChange,
   onReplace,
 }: {
   track: Track
+  /** The track in the version, to show and revert to when this one differs. */
+  was: Track | undefined
   /** The library item picked in this session, if any. */
   item: Media | undefined
   onChange: (patch: Partial<Track>) => void
@@ -129,7 +157,17 @@ function AudioRow({
     { enabled: !!id && !item, retry: false, staleTime: Infinity },
   )
   const name = labelFor(track.label, track.id)
-  const file = item?.filename ?? lib.data?.filename ?? track.src.split('/').pop() ?? track.src
+  const file = item?.filename ?? lib.data?.filename ?? fileOf(track.src)
+  const before = was
+    ? [
+        was.src !== track.src ? fileOf(was.src) : null,
+        was.muted !== track.muted || !sameNumber(was.volume, track.volume)
+          ? was.muted
+            ? 'muted'
+            : `volume ${percent(was.volume)}`
+          : null,
+      ].filter((x) => x !== null)
+    : []
   return (
     <div className="va-slot" data-testid={`audio-${track.id}`}>
       <Group justify="space-between" wrap="nowrap" gap="xs">
@@ -182,9 +220,18 @@ function AudioRow({
           }}
         />
         <Text size="xs" c="var(--va-faint)" className="num" w={36} ta="right">
-          {track.muted ? 'Off' : `${Math.round(track.volume * 100)}%`}
+          {track.muted ? 'Off' : percent(track.volume)}
         </Text>
       </Group>
+      {was && before.length ? (
+        <Was
+          value={before.join(', ')}
+          name={name}
+          onRevert={() => {
+            onChange({ src: was.src, volume: was.volume, muted: was.muted })
+          }}
+        />
+      ) : null}
     </div>
   )
 }
@@ -193,12 +240,13 @@ function AudioRow({
 function VoiceRow({
   line,
   name,
-  changed,
+  was,
   onChange,
 }: {
   line: Line
   name: string
-  changed: boolean
+  /** The line as the version speaks it, when this one differs (and is re-voiced on render). */
+  was: string | null
   onChange: (text: string) => void
 }) {
   return (
@@ -210,7 +258,7 @@ function VoiceRow({
             {name}
           </Text>
         </Group>
-        {changed ? (
+        {was !== null ? (
           <Badge size="xs" variant="light" color="teal">
             Re-voice on render
           </Badge>
@@ -229,6 +277,15 @@ function VoiceRow({
           onChange(e.currentTarget.value)
         }}
       />
+      {was !== null ? (
+        <Was
+          value={was}
+          name={`narration for ${name}`}
+          onRevert={() => {
+            onChange(was)
+          }}
+        />
+      ) : null}
     </div>
   )
 }
@@ -250,6 +307,8 @@ export function EditPage() {
   const [replacing, setReplacing] = useState<Slot | null>(null)
   const [replacingAudio, setReplacingAudio] = useState<Track | null>(null)
   const [picked, setPicked] = useState<Record<string, Media>>({})
+  // Edits left from an earlier visit (or a refresh): asked once whether to keep them or start over.
+  const [resumed, setResumed] = useState(0)
 
   useEffect(() => {
     void (async () => {
@@ -259,6 +318,7 @@ export function EditPage() {
       if (data) {
         setDraft(data)
         setCur(data.composition)
+        setResumed(data.ops.length)
       } else setProblem(errorMessage(error))
     })()
   }, [id, versionN])
@@ -291,6 +351,18 @@ export function EditPage() {
       setCur(draft.composition)
     }
   }, [draft, ops])
+
+  // Edits are kept as a draft on the server, so leaving only loses the last moment's changes before they save.
+  useEffect(() => {
+    if (!dirty && !saving) return
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+    }
+    window.addEventListener('beforeunload', warn)
+    return () => {
+      window.removeEventListener('beforeunload', warn)
+    }
+  }, [dirty, saving])
 
   // Save shortly after the last change.
   useEffect(() => {
@@ -330,6 +402,15 @@ export function EditPage() {
       return c
     })
   }
+  /** Back to the version as it was: every field, beat and colour (the save then clears the draft's edits). */
+  const revertAll = () => {
+    if (!draft) return
+    setCur(structuredClone(draft.base))
+    sendRef.current?.({
+      type: 'apply-edits',
+      edits: draft.base.beats.flatMap((b) => b.texts.map((t) => ({ id: t.id, text: t.text }))),
+    })
+  }
   const move = (i: number, by: number) => {
     update((c) => {
       const [b] = c.beats.splice(i, 1)
@@ -349,7 +430,9 @@ export function EditPage() {
   const onReady = useCallback((send: (c: PreviewCommand) => void) => {
     sendRef.current = send
     // A frame that loaded while someone typed shows the text as saved then: bring it up to date.
-    const edits = (curRef.current?.beats ?? []).flatMap((b) => b.texts.map((t) => ({ id: t.id, text: t.text })))
+    const edits = (curRef.current?.beats ?? []).flatMap((b) =>
+      b.texts.map((t) => ({ id: t.id, text: t.text })),
+    )
     if (edits.length) send({ type: 'apply-edits', edits })
   }, [])
 
@@ -380,6 +463,14 @@ export function EditPage() {
   const music = cur.audio.filter((a) => a.role === 'music')
   const lines = cur.narration.filter((l) => cur.beats.some((b) => b.id === l.beat))
   const next = video.data.versions.length + 1
+  // The version's values, for "Was: …" under each changed field.
+  const base = draft.base
+  const baseBeat = new Map(base.beats.map((b) => [b.id, b] as const))
+  const baseText = new Map(base.beats.flatMap((b) => b.texts.map((t) => [t.id, t.text] as const)))
+  const baseSlot = new Map(base.beats.flatMap((b) => b.media.map((m) => [m.slot, m] as const)))
+  const deleted = base.beats.filter((b) => !cur.beats.some((x) => x.id === b.id))
+  const kept = base.beats.map((b) => b.id).filter((bid) => cur.beats.some((x) => x.id === bid))
+  const reordered = kept.join() !== cur.beats.map((b) => b.id).join()
 
   // The preview stays put on the left with the actions above it; the controls scroll on their own on the right.
   const aspect = video.data.dimensions.width / video.data.dimensions.height
@@ -394,10 +485,19 @@ export function EditPage() {
             <Title order={1}>Edit v{draft.baseN}</Title>
             <div className="va-sub num" data-testid="edit-status">
               {Math.round(total * 10) / 10} s · {cur.beats.length} beats ·{' '}
-              {saving ? 'Saving…' : dirty ? 'Unsaved changes' : draft.rev ? 'Draft saved' : 'No changes yet'}
+              {saving ? 'Saving…' : dirty ? 'Unsaved changes' : draft.ops.length ? 'Draft saved' : 'No changes yet'}
             </div>
           </div>
           <Group gap="sm">
+            <Button
+              variant="subtle"
+              color="gray"
+              leftSection={<IconArrowBackUp size={14} />}
+              disabled={!ops.length}
+              onClick={revertAll}
+            >
+              Revert all
+            </Button>
             <Button
               variant="subtle"
               color="gray"
@@ -429,6 +529,36 @@ export function EditPage() {
           </Group>
         </div>
 
+        {resumed ? (
+          <Alert color="blue" variant="light" mb="md" data-testid="resume-draft">
+            <Group justify="space-between" gap="sm">
+              <Text size="sm">
+                You have {resumed} unrendered {resumed === 1 ? 'change' : 'changes'} to v{draft.baseN} from
+                before. Keep them, or start again from v{draft.baseN}?
+              </Text>
+              <Group gap="xs">
+                <Button
+                  size="xs"
+                  variant="default"
+                  onClick={() => {
+                    revertAll()
+                    setResumed(0)
+                  }}
+                >
+                  Start over
+                </Button>
+                <Button
+                  size="xs"
+                  onClick={() => {
+                    setResumed(0)
+                  }}
+                >
+                  Keep my changes
+                </Button>
+              </Group>
+            </Group>
+          </Alert>
+        ) : null}
         {draft.newerVersion ? (
           <Alert color="yellow" variant="light" mb="md">
             v{draft.newerVersion} now exists.{' '}
@@ -469,7 +599,49 @@ export function EditPage() {
           <Text fw={600} mb="sm">
             Beats
           </Text>
-          <Stack gap="sm">
+          {reordered ? (
+            <Was
+              value={`order ${base.beats.map((b) => labelFor(b.label, b.id)).join(', ')}`}
+              name="beat order"
+              onRevert={() => {
+                update((c) => {
+                  const at = (bid: string) => base.beats.findIndex((b) => b.id === bid)
+                  c.beats.sort((a, b) => at(a.id) - at(b.id))
+                  return c
+                })
+              }}
+            />
+          ) : null}
+          {deleted.map((b) => (
+            <Group key={b.id} gap={6} wrap="nowrap" data-testid={`deleted-${b.id}`}>
+              <Text size="xs" c="var(--va-faint)" style={{ flex: 1 }}>
+                Deleted: {labelFor(b.label, b.id)}
+              </Text>
+              <Button
+                size="compact-xs"
+                variant="subtle"
+                color="gray"
+                leftSection={<IconArrowBackUp size={12} />}
+                aria-label={`Restore ${labelFor(b.label, b.id)}`}
+                onClick={() => {
+                  update((c) => {
+                    // Back where it was among the beats still there, as the version had it.
+                    const i = base.beats.indexOf(b)
+                    const after = c.beats.findIndex((x) => base.beats.findIndex((y) => y.id === x.id) > i)
+                    c.beats.splice(after === -1 ? c.beats.length : after, 0, structuredClone(b))
+                    return c
+                  })
+                  sendRef.current?.({
+                    type: 'apply-edits',
+                    edits: b.texts.map((t) => ({ id: t.id, text: t.text })),
+                  })
+                }}
+              >
+                Restore
+              </Button>
+            </Group>
+          ))}
+          <Stack gap="sm" mt={reordered || deleted.length ? 'xs' : 0}>
             {cur.beats.map((b, i) => (
               <div key={b.id} className="va-beat" data-testid={`beat-${b.id}`} title={b.id}>
                 <Group justify="space-between" wrap="nowrap" gap="xs">
@@ -535,22 +707,52 @@ export function EditPage() {
                   </Group>
                 </Group>
                 <Stack gap={6} mt={6}>
-                  {b.texts.map((t) => (
-                    <TextInput
-                      key={t.id}
-                      size="xs"
-                      label={labelFor(t.label, t.id, b.id)}
-                      maxLength={500}
-                      value={t.text}
-                      ref={(el) => {
-                        fields.current[t.id] = el
-                      }}
-                      data-text-id={t.id}
-                      onChange={(e) => {
-                        setText(t.id, e.currentTarget.value)
-                      }}
-                    />
-                  ))}
+                  {(() => {
+                    const was = baseBeat.get(b.id)
+                    return was && !sameNumber(was.duration, b.duration) ? (
+                      <Was
+                        value={`${Math.round(was.duration * 100) / 100} s`}
+                        name={`length of ${labelFor(b.label, b.id)}`}
+                        onRevert={() => {
+                          update((c) => {
+                            const x = c.beats.find((y) => y.id === b.id)
+                            if (x) x.duration = was.duration
+                            return c
+                          })
+                        }}
+                      />
+                    ) : null
+                  })()}
+                  {b.texts.map((t) => {
+                    const was = baseText.get(t.id)
+                    const label = labelFor(t.label, t.id, b.id)
+                    return (
+                      <div key={t.id}>
+                        <TextInput
+                          size="xs"
+                          label={label}
+                          maxLength={500}
+                          value={t.text}
+                          ref={(el) => {
+                            fields.current[t.id] = el
+                          }}
+                          data-text-id={t.id}
+                          onChange={(e) => {
+                            setText(t.id, e.currentTarget.value)
+                          }}
+                        />
+                        {was !== undefined && was !== t.text ? (
+                          <Was
+                            value={was}
+                            name={label}
+                            onRevert={() => {
+                              setText(t.id, was)
+                            }}
+                          />
+                        ) : null}
+                      </div>
+                    )
+                  })}
                   {b.media.map((m) => {
                     const file = m.src.split('/').pop() ?? m.src
                     const item = picked[file]
@@ -604,6 +806,24 @@ export function EditPage() {
                             </Button>
                           </Group>
                         </Group>
+                        {(() => {
+                          const was = baseSlot.get(m.slot)
+                          if (!was) return null
+                          const fit = (f: string | null | undefined) => (f === 'cover' ? 'Fill' : 'Fit')
+                          const parts = [
+                            was.src !== m.src ? fileOf(was.src) : null,
+                            fit(was.fit) !== fit(m.fit) ? fit(was.fit) : null,
+                          ].filter((x) => x !== null)
+                          return parts.length ? (
+                            <Was
+                              value={parts.join(', ')}
+                              name={name}
+                              onRevert={() => {
+                                setSlot(m.slot, { src: was.src, fit: was.fit })
+                              }}
+                            />
+                          ) : null
+                        })()}
                       </div>
                     )
                   })}
@@ -622,6 +842,7 @@ export function EditPage() {
                 <AudioRow
                   key={a.id}
                   track={a}
+                  was={base.audio.find((x) => x.id === a.id)}
                   item={picked[a.src.split('/').pop() ?? '']}
                   onChange={(patch) => {
                     setTrack(a.id, patch)
@@ -648,7 +869,11 @@ export function EditPage() {
                           key={l.beat}
                           line={l}
                           name={labelFor(b?.label ?? null, l.beat)}
-                          changed={relined(draft.base, l)}
+                          was={
+                            relined(base, l)
+                              ? (base.narration.find((x) => x.beat === l.beat)?.text ?? null)
+                              : null
+                          }
                           onChange={(text) => {
                             setLine(l.beat, text)
                           }}
@@ -671,6 +896,23 @@ export function EditPage() {
                 <Text size="sm" title={role}>
                   {humanize(role)}
                 </Text>
+                {base.colors[role] && base.colors[role].toLowerCase() !== value.toLowerCase() ? (
+                  <Tooltip label={`Was ${base.colors[role]}`}>
+                    <Button
+                      size="compact-xs"
+                      variant="subtle"
+                      color="gray"
+                      ml="auto"
+                      leftSection={<ColorSwatch color={base.colors[role]} size={12} />}
+                      aria-label={`Revert ${humanize(role)} to ${base.colors[role]}`}
+                      onClick={() => {
+                        update((x) => ({ ...x, colors: { ...x.colors, [role]: base.colors[role] ?? value } }))
+                      }}
+                    >
+                      Revert
+                    </Button>
+                  </Tooltip>
+                ) : null}
                 <Menu position="bottom-end">
                   <Menu.Target>
                     <Button

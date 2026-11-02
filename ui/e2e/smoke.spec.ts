@@ -694,6 +694,53 @@ test('saving text keeps the preview frame; other saves swap in the new one witho
   expect(await page.evaluate<number>('window.__minFrames')).toBeGreaterThan(0)
 })
 
+test('changed fields show what they were and revert; returning to a draft asks to keep it or start over', async ({
+  page,
+}) => {
+  await page.goto('/videos/vid_teaser/edit/2')
+  const panel = page.getByTestId('edit-panel')
+  const cta = page.getByRole('textbox', { name: 'Call to action' })
+  await expect(panel.getByTestId('was')).toHaveCount(0)
+  // A text field: the old value under it, and Revert puts it back (in the preview too).
+  await cta.fill('Start free today')
+  await expect(panel.getByText('Was: Read the docs')).toBeVisible()
+  await page.getByRole('button', { name: 'Revert Call to action' }).click()
+  await expect(cta).toHaveValue('Read the docs')
+  await expect(
+    page.frameLocator('[data-testid="composition-preview"]').locator('[data-va-text="outro-cta"]'),
+  ).toHaveText('Read the docs')
+  await expect(panel.getByTestId('was')).toHaveCount(0)
+  // A length, a deleted beat and a colour.
+  await page.getByRole('textbox', { name: 'Length of Opening' }).fill('4.5')
+  await expect(panel.getByText('Was: 3 s')).toBeVisible()
+  await page.getByRole('button', { name: 'Revert length of Opening' }).click()
+  await expect(page.getByRole('textbox', { name: 'Length of Opening' })).toHaveValue('3 s')
+  await page.getByRole('button', { name: 'Delete Outro' }).click()
+  await expect(page.getByTestId('beat-outro')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Restore Outro' }).click()
+  await expect(page.getByTestId('beat-outro')).toBeVisible()
+  await page.getByRole('button', { name: 'Colour for Accent' }).click()
+  await page.getByRole('menuitem', { name: '#ff5a1f' }).click()
+  await page.getByRole('button', { name: /^Revert Accent to / }).click()
+  await expect.poll(() => lastOps(page), { timeout: 5000 }).toEqual([])
+  await expect(page.getByTestId('edit-status')).toContainText('No changes yet')
+  // Edits left in the draft: coming back asks whether to keep them.
+  await cta.fill('Start free today')
+  await expect(page.getByTestId('edit-status')).toContainText('Draft saved')
+  await page.getByRole('link', { name: 'Ship faster with preview deploys' }).first().click()
+  await page.getByRole('button', { name: 'Edit', exact: true }).click()
+  const resume = page.getByTestId('resume-draft')
+  await expect(resume).toContainText('1 unrendered change to v2')
+  await resume.getByRole('button', { name: 'Keep my changes' }).click()
+  await expect(resume).toHaveCount(0)
+  await expect(cta).toHaveValue('Start free today')
+  await page.getByRole('link', { name: 'Ship faster with preview deploys' }).first().click()
+  await page.getByRole('button', { name: 'Edit', exact: true }).click()
+  await resume.getByRole('button', { name: 'Start over' }).click()
+  await expect(cta).toHaveValue('Read the docs')
+  await expect.poll(() => lastOps(page), { timeout: 5000 }).toEqual([])
+})
+
 test('clicking text in the preview focuses its field', async ({ page }) => {
   await page.goto('/videos/vid_teaser/edit/2')
   const frame = page.frameLocator('[data-testid="composition-preview"]')
