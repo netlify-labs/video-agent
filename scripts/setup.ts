@@ -2,64 +2,27 @@
 //   npm run setup -- --site <site id or name>   (use an existing project)
 //   npm run setup -- --team <team slug>          (create a project in that team)
 // Asks for RUNNER_API_TOKEN, ALLOWED_EMAIL_DOMAINS and ADMIN_EMAILS (or reads them from the environment),
-// sets them as site-scoped variables, enables Identity, starts a production build from the project's connected
+// sets them as site-scoped variables, enables Identity, offers to register an Openverse app for music search
+// (npm run setup:openverse does just that step), starts a production build from the project's connected
 // GitHub repo, and runs the /setup checks. It builds from Git rather than uploading from this machine: Agent
 // Runners need a Git-connected project, and Netlify Database applies migrations only on Git builds.
 // Uses your Netlify CLI login (`npx netlify login`). Never prints secret values.
-import { readFileSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { join } from 'node:path'
 import { createInterface } from 'node:readline/promises'
 import { parseArgs } from './lib/run-tools.js'
+import {
+  ask,
+  buildAndWait,
+  cliToken,
+  getSite,
+  netlifyApi as api,
+  setSiteVars,
+  siteVarNames,
+  type Site,
+} from './lib/netlify-setup.js'
+import { defaultAppName, defaultDescription, registerOpenverse } from './lib/openverse-setup.js'
 
-const API = 'https://api.netlify.com/api/v1'
 const log = (msg: string) => {
   console.log(msg)
-}
-
-function cliToken(): string {
-  if (process.env.NETLIFY_AUTH_TOKEN) return process.env.NETLIFY_AUTH_TOKEN
-  const paths = [
-    join(homedir(), 'Library/Preferences/netlify/config.json'),
-    join(homedir(), '.config/netlify/config.json'),
-  ]
-  for (const p of paths) {
-    try {
-      const cfg = JSON.parse(readFileSync(p, 'utf8')) as {
-        userId?: string
-        users?: Record<string, { auth?: { token?: string } }>
-      }
-      const token = cfg.userId ? cfg.users?.[cfg.userId]?.auth?.token : undefined
-      if (token) return token
-    } catch {
-      // try the next location
-    }
-  }
-  throw new Error('Not logged in to Netlify. Run `npx netlify login` first.')
-}
-
-// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- the caller names the response type
-async function api<T>(
-  token: string,
-  method: string,
-  path: string,
-  body?: unknown,
-): Promise<{ status: number; data: T }> {
-  const res = await fetch(`${API}${path}`, {
-    method,
-    headers: { authorization: `Bearer ${token}`, ...(body ? { 'content-type': 'application/json' } : {}) },
-    ...(body ? { body: JSON.stringify(body) } : {}),
-  })
-  const text = await res.text()
-  return { status: res.status, data: (text ? JSON.parse(text) : null) as T }
-}
-
-async function ask(rl: ReturnType<typeof createInterface>, label: string, envName: string): Promise<string> {
-  const fromEnv = process.env[envName]
-  if (fromEnv) return fromEnv
-  const v = (await rl.question(`${label}: `)).trim()
-  if (!v) throw new Error(`${envName} is required.`)
-  return v
 }
 
 async function main() {
@@ -67,20 +30,9 @@ async function main() {
   const token = cliToken()
   const rl = createInterface({ input: process.stdin, output: process.stdout })
 
-  type Site = {
-    id: string
-    name: string
-    account_id: string
-    account_slug: string
-    ssl_url: string
-    admin_url: string
-    build_settings?: { repo_url?: string; repo_branch?: string }
-  }
   let site: Site
   if (args.site) {
-    const r = await api<Site>(token, 'GET', `/sites/${encodeURIComponent(args.site)}`)
-    if (r.status !== 200) throw new Error(`Project ${args.site} not found (HTTP ${r.status}).`)
-    site = r.data
+    site = await getSite(token, args.site)
   } else {
     const team = args.team ?? (await rl.question('Team slug to create the project in: ')).trim()
     const name = args.name ?? `video-agent-${Math.random().toString(36).slice(2, 7)}`
@@ -105,29 +57,50 @@ async function main() {
     'ALLOWED_EMAIL_DOMAINS',
   )
   const admins = await ask(rl, 'First admin emails, comma-separated (ADMIN_EMAILS)', 'ADMIN_EMAILS')
-  rl.close()
 
-  const vars = [
-    {
-      key: 'RUNNER_API_TOKEN',
-      scopes: ['functions'],
-      is_secret: true,
-      values: [{ value: runnerToken, context: 'production' }],
-    },
-    {
-      key: 'ALLOWED_EMAIL_DOMAINS',
-      scopes: ['functions', 'builds'],
-      values: [{ value: domains, context: 'all' }],
-    },
-    { key: 'ADMIN_EMAILS', scopes: ['functions'], values: [{ value: admins, context: 'all' }] },
-  ]
-  for (const v of vars) {
-    // Site-scoped: omitting site_id would create a team-wide variable.
-    await api(token, 'DELETE', `/accounts/${site.account_id}/env/${v.key}?site_id=${site.id}`)
-    const r = await api(token, 'POST', `/accounts/${site.account_id}/env?site_id=${site.id}`, [v])
-    if (r.status >= 300) throw new Error(`Could not set ${v.key} (HTTP ${r.status}).`)
-    log(`Set ${v.key}.`)
+  await setSiteVars(token, site, [
+    { key: 'RUNNER_API_TOKEN', value: runnerToken, secret: true },
+    { key: 'ALLOWED_EMAIL_DOMAINS', value: domains, scopes: ['functions', 'builds'] },
+    { key: 'ADMIN_EMAILS', value: admins },
+  ])
+  log('Set RUNNER_API_TOKEN, ALLOWED_EMAIL_DOMAINS and ADMIN_EMAILS.')
+
+  // Optional: a registered Openverse app for music search (anonymous limits are shared by outbound address).
+  if (
+    !(await siteVarNames(token, site)).includes('OPENVERSE_CLIENT_ID') &&
+    process.env.OPENVERSE_SETUP !== 'no'
+  ) {
+    const want = process.env.OPENVERSE_EMAIL
+      ? 'y'
+      : (
+          await rl.question(
+            'Register an Openverse app for music search? It needs an email to verify. [Y/n]: ',
+          )
+        )
+          .trim()
+          .toLowerCase()
+    if (want === '' || want.startsWith('y')) {
+      const email = await ask(rl, 'Email for Openverse', 'OPENVERSE_EMAIL', admins.split(',')[0]?.trim())
+      try {
+        const app = await registerOpenverse({
+          netlifyToken: token,
+          site,
+          name: defaultAppName(site),
+          description: defaultDescription(site),
+          email,
+        })
+        log(
+          `Registered the Openverse app "${app.name}". Click the link Openverse emailed to ${email} to verify it.`,
+        )
+      } catch (e) {
+        // Music search still works anonymously; this is never a reason to stop setup.
+        log(
+          `Skipped Openverse: ${e instanceof Error ? e.message : String(e)} (run npm run setup:openverse later).`,
+        )
+      }
+    }
   }
+  rl.close()
 
   const identity = await api<{ id?: string }>(token, 'GET', `/sites/${site.id}/identity`)
   if (identity.status === 404) {
@@ -155,20 +128,7 @@ Last step: connect this project to your GitHub copy of the template.
   }
 
   log(`Building ${repo} (${site.build_settings?.repo_branch ?? 'default branch'}) for production…`)
-  const build = await api<{ deploy_id: string }>(token, 'POST', `/sites/${site.id}/builds`, {})
-  if (build.status >= 300) throw new Error(`Could not start a build (HTTP ${build.status}).`)
-  for (;;) {
-    await new Promise((r) => setTimeout(r, 10_000))
-    const d = await api<{ state: string; error_message?: string }>(
-      token,
-      'GET',
-      `/deploys/${build.data.deploy_id}`,
-    )
-    if (d.data.state === 'ready') break
-    if (d.data.state === 'error')
-      throw new Error(`The build failed: ${d.data.error_message ?? 'see the deploy log'}`)
-    log(`  ${d.data.state}…`)
-  }
+  await buildAndWait(token, site, log)
   log('Deployed.')
 
   const health = await fetch(`${site.ssl_url}/api/health?fresh=1`)

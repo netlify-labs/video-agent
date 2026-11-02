@@ -1,5 +1,6 @@
 // Setup readiness: everything a stranger's deployment needs, with one actionable message per item.
 import type { Deps } from '../deps.js'
+import { openverseStatus } from './openverse.js'
 import { getSettings, syncEdgeConfig } from './settings.js'
 
 export type CheckStatus = 'ok' | 'fail' | 'warn' | 'unknown'
@@ -119,6 +120,21 @@ export async function setupChecks(
       ? 'Available: people can plan a video with a few questions first.'
       : "Not available on this team's plan, so planning with questions is off. Videos work as usual.",
     fix: 'AI Gateway comes with credit-based plans; Enterprise teams can ask their account manager to enable it.',
+  })
+
+  // Optional: music search works anonymously; a registered Openverse app gets its own rate limits.
+  const music = await openverseStatus(deps)
+  add({
+    id: 'openverse',
+    label: 'Openverse music search (optional)',
+    status: music === 'registered' ? 'ok' : 'warn',
+    detail: {
+      registered: 'Registered app: searches use its own rate limits (once its email is verified).',
+      anonymous: 'Searching anonymously, with rate limits shared by every site on the same outbound address.',
+      rejected: 'Openverse refused OPENVERSE_CLIENT_ID/SECRET, so searches run anonymously.',
+      unknown: "Couldn't reach Openverse to check the app.",
+    }[music],
+    fix: 'Run npm run setup:openverse -- --site <your site> --deploy, then click the link Openverse emails you.',
   })
 
   const ready =

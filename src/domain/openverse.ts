@@ -136,6 +136,18 @@ async function bearer(deps: Deps): Promise<string | null> {
   return tokenPending
 }
 
+/** For the setup page: whether music search runs as a registered app (a token is issued) or anonymously. */
+export async function openverseStatus(
+  deps: Deps,
+): Promise<'anonymous' | 'registered' | 'rejected' | 'unknown'> {
+  if (!deps.config.openverse) return 'anonymous'
+  try {
+    return (await bearer(deps)) ? 'registered' : 'rejected'
+  } catch {
+    return 'unknown'
+  }
+}
+
 /** GET one Openverse API path as JSON, with the app's token when there is one. Maps rate limits and outages. */
 async function apiGet(deps: Deps, path: string): Promise<unknown> {
   if (busyUntil > now(deps)) throw new ApiError('rate_limited', BUSY)

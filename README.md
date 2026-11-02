@@ -56,8 +56,8 @@ npx netlify login
 npm run setup -- --team <your-team-slug>   # or --site <existing project> to reuse one
 ```
 
-`npm run setup` creates (or reuses) the project, asks for the three values above, saves them, enables Identity
-and, once the project is connected to your GitHub repo, starts a production build and runs the setup checks. The
+`npm run setup` creates (or reuses) the project, asks for the three values above, saves them, enables Identity,
+offers to register an Openverse app for music search and, once the project is connected to your GitHub repo, starts a production build and runs the setup checks. The
 first time, it stops and tells you where to link the repo; run it again with the `--site` it prints. Then
 follow steps 1 and 3 of [`USAGE.md`](USAGE.md) for the registration mode and the first admin.
 
@@ -157,9 +157,18 @@ Openverse API.
   page and the embed snippet carry the same line. A silent version isn't credited for a track it never used.
 - **Previews** play from the track's source site (Jamendo, Freesound, Wikimedia Commons) when someone presses play.
 - **Rate limits.** Anonymous Openverse access is limited per IP address, and Netlify Functions share outbound
-  addresses, so register an app for steady use: `POST https://api.openverse.org/v1/auth_tokens/register/` with a
-  name, description and email ([docs](https://api.openverse.org/v1/#tag/auth)), confirm the email, then set
-  `OPENVERSE_CLIENT_ID` and `OPENVERSE_CLIENT_SECRET`. The server swaps them for a token and keeps it until it
+  addresses, so register an app for steady use. One command does it and stores the credentials on your project
+  (the secret is never printed):
+
+  ```sh
+  npm run setup:openverse -- --site <your project> --deploy
+  ```
+
+  It asks for an email (or reads `OPENVERSE_EMAIL`), registers an app named after your site (names are unique
+  across Openverse; pass `--name` to choose another), sets `OPENVERSE_CLIENT_ID` and `OPENVERSE_CLIENT_SECRET`,
+  and with `--deploy` redeploys so the functions pick them up. Then click the verification link Openverse emails
+  you: until then the app has anonymous limits. `npm run setup` offers the same step, and the setup page shows
+  whether searches run as a registered app. The server swaps the credentials for a token and keeps it until it
   expires. Searches are cached for 5 minutes, and when Openverse says it's busy the app waits before asking again
   and says "Openverse is busy, try again in a minute."
 

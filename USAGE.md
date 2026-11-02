@@ -24,7 +24,7 @@ slug or id). Skip steps 1 and 3: the first sign-in from an `ADMIN_EMAILS` addres
 
 Optional: **Find music** on the Media page searches Openverse for CC0 and CC BY tracks (CC BY ones are credited on the
 video, its share page and the embed automatically). It works anonymously; for steady use, register an Openverse app
-(`POST https://api.openverse.org/v1/auth_tokens/register/`, see https://api.openverse.org/v1/#tag/auth), confirm the
-email, and set `OPENVERSE_CLIENT_ID` and `OPENVERSE_CLIENT_SECRET`.
+with `npm run setup:openverse -- --site <your project> --deploy` (it sets `OPENVERSE_CLIENT_ID` and
+`OPENVERSE_CLIENT_SECRET` for you), then click the verification link Openverse emails you.
 
 Put your brand guide, logos and fonts in `context/` in the new repo so every video follows them.
