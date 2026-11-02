@@ -27,6 +27,7 @@ import type {
   MediaUploadRow,
   MediaUploadPartRow,
   OpenverseJobRow,
+  OpenverseSearchRow,
   VersionMediaRow,
   VersionProvenanceRow,
   GatewayCallRow,
@@ -69,6 +70,8 @@ interface State {
   uploads: Map<string, MediaUploadRow>
   uploadParts: Map<string, MediaUploadPartRow>
   openverseJobs: Map<string, OpenverseJobRow>
+  openverseSearches: Map<string, OpenverseSearchRow>
+  openverseSearchUses: Map<string, { key: string; day: string; count: number }>
   versionMedia: VersionMediaRow[]
   userWebhooks: Map<string, UserWebhookRow>
   cleanup: Map<string, CleanupRow>
@@ -108,6 +111,8 @@ const empty = (): State => ({
   uploads: new Map(),
   uploadParts: new Map(),
   openverseJobs: new Map(),
+  openverseSearches: new Map(),
+  openverseSearchUses: new Map(),
   versionMedia: [],
   userWebhooks: new Map(),
   cleanup: new Map(),
@@ -484,6 +489,42 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
       for (const [id, j] of state.openverseJobs)
         if (j.expiresAt <= now) {
           state.openverseJobs.delete(id)
+          n++
+        }
+      return n
+    },
+    getOpenverseSearch: async (key) => clone(state.openverseSearches.get(key) ?? null),
+    putOpenverseSearch: async (row) => {
+      state.openverseSearches.set(row.key, clone(row))
+    },
+    deleteOldOpenverseSearches: async (q) => {
+      const rows = [...state.openverseSearches.values()].sort((a, b) =>
+        b.fetchedAt.localeCompare(a.fetchedAt),
+      )
+      const gone = rows.filter((r, i) => r.fetchedAt < q.fetchedBefore || i >= q.keep)
+      for (const r of gone) state.openverseSearches.delete(r.key)
+      return gone.length
+    },
+    addOpenverseSearchUse: async (key, day) => {
+      const k = `${day}/${key}`
+      const u = state.openverseSearchUses.get(k)
+      if (u) u.count++
+      else state.openverseSearchUses.set(k, { key, day, count: 1 })
+    },
+    topOpenverseSearches: async (sinceDay, limit) => {
+      const counts = new Map<string, number>()
+      for (const u of state.openverseSearchUses.values())
+        if (u.day >= sinceDay) counts.set(u.key, (counts.get(u.key) ?? 0) + u.count)
+      return [...counts]
+        .map(([key, count]) => ({ key, count }))
+        .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key))
+        .slice(0, limit)
+    },
+    deleteOpenverseSearchUses: async (beforeDay) => {
+      let n = 0
+      for (const [k, u] of state.openverseSearchUses)
+        if (u.day < beforeDay) {
+          state.openverseSearchUses.delete(k)
           n++
         }
       return n
