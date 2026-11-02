@@ -6,6 +6,7 @@ import { execFileSync } from 'node:child_process'
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { videoRunOf, writeVideoRunPreview } from './lib/agent-preview.js'
 import { repoRoot } from './lib/run-tools.js'
 import { buildSkills } from './lib/skills.js'
 import {
@@ -131,13 +132,17 @@ log('build-env', {
     .filter((k) => /AGENT/.test(k))
     .sort(),
 })
-if (agentRun && process.env.FORCE_UI_BUILD !== 'true') {
-  mkdirSync(join(repoRoot, 'ui/dist'), { recursive: true })
-  writeFileSync(
-    join(repoRoot, 'ui/dist/index.html'),
-    '<!doctype html><title>Agent run preview</title><p>Agent run preview: the web app is not built here.</p>\n',
-  )
-  log('ui', { skipped: true })
+// A video run's preview shows the video it rendered instead of the app; any other agent run (someone changing the app)
+// builds the app as usual. FORCE_UI_BUILD=true builds the app for a video run too.
+const videoRun = agentRun ? videoRunOf(repoRoot) : null
+if (videoRun && process.env.FORCE_UI_BUILD !== 'true') {
+  const { embedded } = writeVideoRunPreview({
+    root: repoRoot,
+    outDir: join(repoRoot, 'ui/dist'),
+    run: videoRun,
+    siteUrl: process.env.URL ?? null,
+  })
+  log('ui', { skipped: true, videoPreview: { jobId: videoRun.jobId, embedded } })
 } else {
   execFileSync('npx', ['vite', 'build', 'ui'], { stdio: 'inherit', cwd: repoRoot })
   log('ui', { skipped: false })
