@@ -4306,7 +4306,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Search Openverse for CC0 or CC BY audio (music by default); NC, ND and SA licences are never returned (Creators and admins) */
+        /** Search Openverse for CC0 or CC BY audio (music by default); NC, ND and SA licences are never returned (Creators and admins). When Openverse is slow, answers 202 with a job to poll */
         get: {
             parameters: {
                 query: {
@@ -4323,13 +4323,22 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Tracks */
+                /** @description Tracks (fresh, or from a recent identical search) */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
                         "application/json": components["schemas"]["OpenverseSearch"];
+                    };
+                };
+                /** @description Openverse is slow: poll the job (the Location header) for the tracks */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["OpenverseJob"];
                     };
                 };
                 /** @description Invalid request */
@@ -4377,7 +4386,7 @@ export interface paths {
                         "application/json": components["schemas"]["Error"];
                     };
                 };
-                /** @description Openverse is busy */
+                /** @description Openverse is busy, or too many searches this minute */
                 429: {
                     headers: {
                         [name: string]: unknown;
@@ -4414,7 +4423,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Import an Openverse track into the library by its id: re-read from Openverse, licence checked, file downloaded and verified as audio. Importing it again returns the same item */
+        /** Import an Openverse track into the library by its id: re-read from Openverse, licence checked, file downloaded and verified as audio. Importing it again returns the same item. When Openverse is slow, answers 202 with a job to poll */
         post: {
             parameters: {
                 query?: never;
@@ -4448,6 +4457,15 @@ export interface paths {
                     };
                     content: {
                         "application/json": components["schemas"]["Media"];
+                    };
+                };
+                /** @description Importing in the background: poll the job (the Location header) */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["OpenverseJob"];
                     };
                 };
                 /** @description Invalid request */
@@ -4495,7 +4513,7 @@ export interface paths {
                         "application/json": components["schemas"]["Error"];
                     };
                 };
-                /** @description Openverse is busy */
+                /** @description Openverse is busy, or too many imports this minute */
                 429: {
                     headers: {
                         [name: string]: unknown;
@@ -4515,6 +4533,89 @@ export interface paths {
                 };
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/media/openverse/jobs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** An Openverse search or import that is running in the background: its status, then the tracks or the library item (only for the person who started it) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The job */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["OpenverseJob"];
+                    };
+                };
+                /** @description Invalid request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not signed in */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not allowed */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Conflict or not ready */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -6235,6 +6336,26 @@ export interface components {
             importable: boolean;
             /** @description The library item, when it was already imported */
             mediaId: string | null;
+        };
+        OpenverseJob: {
+            /** @description Poll GET /api/v1/media/openverse/jobs/{id} until done or failed */
+            id: string;
+            /** @enum {string} */
+            kind: "search" | "import";
+            /** @enum {string} */
+            status: "queued" | "running" | "done" | "failed";
+            search: components["schemas"]["OpenverseSearch"] & (Record<string, never> | null);
+            media: components["schemas"]["Media"] & (Record<string, never> | null);
+            /** @description A finished import: false when the track was already in the library */
+            created: boolean | null;
+            error: {
+                code: string;
+                message: string;
+            } | null;
+            createdAt: string;
+            updatedAt: string;
+            /** @description The job can be read until then (30 minutes) */
+            expiresAt: string;
         };
         CommentList: {
             items: components["schemas"]["Comment"][];

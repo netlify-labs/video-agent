@@ -223,6 +223,12 @@ export class FakePlatform implements PlatformPort {
     this.assemblies.push(uploadId)
     if (this.onAssemble) await this.onAssemble(uploadId)
   }
+  openverseJobs: string[] = []
+  onOpenverseJob: ((jobId: string) => Promise<void>) | null = null
+  async dispatchOpenverseJob(jobId: string) {
+    this.openverseJobs.push(jobId)
+    if (this.onOpenverseJob) await this.onOpenverseJob(jobId)
+  }
   async setupFacts() {
     return { tokenValid: true, tokenError: null, agentRunnersAvailable: true, identityEnabled: true }
   }

@@ -1,8 +1,9 @@
-// Bounded cleanup in the sweep: delete every copy of tombstoned videos and reap abandoned uploads.
+// Bounded cleanup in the sweep: delete every copy of tombstoned videos, reap abandoned uploads and old Openverse jobs.
 import { CLIENT_IDLE_MS } from '../auth/oauth.js'
 import type { Deps } from '../deps.js'
 import { deleteExpiredEdits } from './edits.js'
 import { sweepUploads } from './media-uploads.js'
+import { sweepOpenverseJobs } from './openverse-jobs.js'
 
 export async function runCleanup(
   deps: Deps,
@@ -33,5 +34,6 @@ export async function runCleanup(
   await deps.store.deleteExpiredSessions(now.toISOString())
   await deleteExpiredEdits(deps)
   await sweepUploads(deps)
+  await sweepOpenverseJobs(deps)
   return done
 }

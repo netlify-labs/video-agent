@@ -434,12 +434,10 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
         if (k.startsWith(`${uploadId}/`)) state.uploadParts.delete(k)
     },
     insertOpenverseJobIfAbsent: async (row) => {
+      const inflight = (j: OpenverseJobRow) => j.status === 'queued' || j.status === 'running'
       const live = [...state.openverseJobs.values()].find(
         (j) =>
-          j.userId === row.userId &&
-          j.kind === row.kind &&
-          j.key === row.key &&
-          (j.status === 'queued' || j.status === 'running'),
+          inflight(row) && j.userId === row.userId && j.kind === row.kind && j.key === row.key && inflight(j),
       )
       if (live) return clone(live)
       state.openverseJobs.set(row.id, clone(row))

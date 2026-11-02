@@ -144,12 +144,20 @@ picker, or the MCP tools `search_music` and `import_music`. Every call goes thro
 (`GET /api/v1/media/openverse/search`, `POST /api/v1/media/openverse/import`); the browser never talks to the
 Openverse API.
 
+- **Slow Openverse.** Openverse's audio search can take a minute, longer than an API request may run. A request
+  tries for 6 seconds; if Openverse hasn't answered by then, it answers `202` with a job (and a `Location` header,
+  `/api/v1/media/openverse/jobs/{id}`). The `openverse-background` function runs it with 60-second calls, retries
+  timeouts and 5xx with backoff, and waits out a 429's `Retry-After`. Poll the job until `status` is `done` (with
+  `search` or `media`) or `failed` (with `error`). Only the person who started a job can read it; jobs are kept for 30
+  minutes. Identical requests share a job, each person can start 12 searches or imports a minute, and a finished
+  search answers the same search from anyone instantly for 5 minutes. The MCP tools wait about 8 seconds, then answer
+  `status: "pending"` with a `job_id` for `get_music_job`.
 - **Licences: CC0 and CC BY only.** NC (non-commercial), ND (no derivatives) and SA (share-alike) tracks are never
   shown or imported, whatever Openverse returns: videos are often commercial, they're edited and re-cut, and a
   share-alike track would put its licence on the whole video. CC0 needs no credit; CC BY needs one, which the app adds.
 - **Import** takes only the Openverse id. The server reads the track from Openverse again, checks the licence,
-  downloads the file over HTTPS (at most 3 redirects, 50 MB, 25 seconds; hosts that resolve to private addresses are
-  refused) and keeps it only if its bytes are MP3, M4A, WAV or Ogg audio of 10 minutes or less. It becomes a normal
+  downloads the file over HTTPS (at most 3 redirects, 50 MB, 25 seconds or 3 minutes in a job; hosts that resolve to
+  private addresses are refused) and keeps it only if its bytes are MP3, M4A, WAV or Ogg audio of 10 minutes or less. It becomes a normal
   library item with its source, licence, creator and Openverse's attribution recorded. Importing the same track again
   returns the same item.
 - **Attribution** comes from the library, not from the agent: a version made with a CC BY item lists it in the
@@ -193,8 +201,8 @@ is HMAC-SHA256 of `"<t>.<raw body>"` with the key's webhook secret (shown once w
 
 The same video tasks are MCP tools, so people can ask Claude, Cursor or any MCP client for a video:
 `create_video`, `get_video`, `list_videos`, `revise_video`, `publish_video`, `unpublish_video`, `cancel_video`,
-`set_verdict`, `list_media`, `search_music` and `import_music` (CC0 and CC BY music from Openverse), and, when AI
-Gateway is available, `plan_video` and `plan_brief` (ask a few questions first, then create with the plan). Each key's tool list matches its owner's role: Reviewers see the read and review tools, Viewers read only.
+`set_verdict`, `list_media`, `search_music`, `import_music` and `get_music_job` (CC0 and CC BY music from Openverse),
+and, when AI Gateway is available, `plan_video` and `plan_brief` (ask a few questions first, then create with the plan). Each key's tool list matches its owner's role: Reviewers see the read and review tools, Viewers read only.
 
 - Server URL: `https://<your-site>/mcp` (Streamable HTTP). Authenticate with an API key: `Authorization: Bearer nva_…`,
   or, when it's on, [Sign in with Netlify](#sign-in-with-netlify-oauth).

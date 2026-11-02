@@ -48,6 +48,9 @@ export const openverseTiming = {
   job: { timeoutMs: 60_000, downloadMs: 180_000, retries: 3, maxWaitMs: 120_000 } as CallOpts,
   /** Waits before each retry of a timeout or 5xx. */
   backoffMs: [2_000, 5_000, 15_000],
+  /** How long an MCP tool waits for a job (requests must answer within ~10 s), and how often it looks. */
+  mcpWaitMs: 8_000,
+  pollMs: 1_000,
   sleep: (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
 }
 const DEFAULT_TIMING = structuredClone({ ...openverseTiming, sleep: undefined })

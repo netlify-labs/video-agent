@@ -1,4 +1,4 @@
-// Netlify API facts (production deploy, token, Agent Runners) and finalize dispatch.
+// Netlify API facts (production deploy, token, Agent Runners) and background function dispatch.
 import type { PlatformPort } from '../deps.js'
 import { hmacHex } from '../lib/crypto.js'
 
@@ -44,6 +44,17 @@ export function createPlatform(opts: {
         signal: AbortSignal.timeout(8000),
       })
       if (res.status !== 202) throw new Error(`assembly dispatch returned ${res.status}`)
+    },
+    async dispatchOpenverseJob(jobId) {
+      const sig = hmacHex(await opts.signingSecret(), `openverse:${jobId}`)
+      // Short: the API request that dispatches has already spent seconds trying Openverse itself.
+      const res = await fetch(`${opts.siteUrl}/.netlify/functions/openverse-background`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-openverse-signature': sig },
+        body: JSON.stringify({ jobId }),
+        signal: AbortSignal.timeout(3000),
+      })
+      if (res.status !== 202) throw new Error(`openverse dispatch returned ${res.status}`)
     },
     async setupFacts() {
       const out = {

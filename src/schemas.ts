@@ -109,12 +109,9 @@ export const PublicationSchema = z
           .describe('A 960px-wide WebP poster, for versions rendered with preview variants.'),
       })
       .nullable(),
-    embed: z
-      .string()
-      .nullable()
-      .openapi({
-        description: 'HTML to embed the video; with CC BY media it includes the credit line as a caption',
-      }),
+    embed: z.string().nullable().openapi({
+      description: 'HTML to embed the video; with CC BY media it includes the credit line as a caption',
+    }),
   })
   .openapi('Publication')
 
@@ -563,6 +560,26 @@ export const OpenverseSearchSchema = z
     total: z.number().int(),
   })
   .openapi('OpenverseSearch')
+
+export const OpenverseJobSchema = z
+  .object({
+    id: z
+      .string()
+      .openapi({ description: 'Poll GET /api/v1/media/openverse/jobs/{id} until done or failed' }),
+    kind: z.enum(['search', 'import']),
+    status: z.enum(['queued', 'running', 'done', 'failed']),
+    search: OpenverseSearchSchema.nullable().openapi({ description: 'A finished search: the tracks' }),
+    media: MediaSchema.nullable().openapi({ description: 'A finished import: the library item' }),
+    created: z
+      .boolean()
+      .nullable()
+      .openapi({ description: 'A finished import: false when the track was already in the library' }),
+    error: z.object({ code: z.string(), message: z.string() }).nullable(),
+    createdAt: z.string(),
+    updatedAt: z.string(),
+    expiresAt: z.string().openapi({ description: 'The job can be read until then (30 minutes)' }),
+  })
+  .openapi('OpenverseJob')
 
 export const MediaListSchema = z
   .object({ items: z.array(MediaSchema), nextCursor: z.string().nullable() })

@@ -541,7 +541,7 @@ function repoFor(db: Db): Repo {
         .select({ n: sql<number>`count(*)::int` })
         .from(j)
         .where(and(eq(j.userId, userId), gte(j.createdAt, since)))
-      return Number(rows[0]?.n ?? 0)
+      return rows[0]?.n ?? 0
     },
     claimOpenverseJob: async (id, now) => {
       const j = t.openverseJobs
