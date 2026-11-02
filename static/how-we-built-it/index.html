@@ -168,6 +168,7 @@
   .grid4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
   .card { background: var(--surface); border: 1px solid var(--rule); border-radius: 14px; padding: 18px; }
   .card p { color: var(--muted); font-size: 15px; margin: 0; }
+  .grid3.examples { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .example { margin: 0; padding: 0; overflow: hidden; display: flex; flex-direction: column; }
   .example video { display: block; width: 100%; aspect-ratio: 16 / 9; background: var(--stage); }
   .example figcaption { padding: 16px 18px 18px; }
@@ -210,7 +211,7 @@
     .wrap { padding: 0 16px; }
     .hero { padding-top: 40px; }
     .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .grid3, .grid4 { grid-template-columns: minmax(0, 1fr); }
+    .grid3, .grid4, .grid3.examples { grid-template-columns: minmax(0, 1fr); }
     .grid4[style] { grid-template-columns: minmax(0, 1fr) !important; }
     .panel { padding: 16px; }
     /* The pipeline runs down the page on phones. */
@@ -488,6 +489,12 @@
     <p class="section-lede">Each one from a single prompt, with a narrated voice-over, captions and music.</p>
   </div>
   <div class="grid3 examples">
+    <figure class="card example reveal">
+      <video data-name="Example: Every AI primitive you need" controls playsinline preload="none" poster="/v/xz5mga69kb.jpg" src="/v/xz5mga69kb.mp4"></video>
+      <figcaption><h3>Every AI primitive you need</h3><p>A 55-second film for engineering and business leaders: AI Gateway,
+      agents and the rest of Netlify's AI primitives on one platform. Version 3, after two rounds of plain-words
+      revisions.</p><a href="/v/xz5mga69kb">Share page</a></figcaption>
+    </figure>
     <figure class="card example reveal">
       <video data-name="Example: Netlify AI Gateway" controls playsinline preload="none" poster="/v/975emw6par.jpg" src="/v/975emw6par.mp4"></video>
       <figcaption><h3>Netlify AI Gateway</h3><p>A 55-second product film: provider accounts and keys pile up, then collapse
