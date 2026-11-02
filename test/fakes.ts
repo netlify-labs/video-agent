@@ -39,7 +39,9 @@ import type { Manifest } from '../src/domain/types.js'
 import { PREVIEW_FILES, PREVIEW_NAMES, type PreviewFile } from '../src/lib/media/previews.js'
 
 export class FakeClock implements Clock {
-  constructor(public t = Date.parse('2026-11-02T10:00:00.000Z')) {}
+  // Starts at the real time: the edge function checks link expiry against the real clock, so a fixed date here made
+  // every preview test fail once that date had passed. Whole seconds, as signatures count in seconds.
+  constructor(public t = Math.floor(Date.now() / 1000) * 1000) {}
   now() {
     return new Date(this.t)
   }
