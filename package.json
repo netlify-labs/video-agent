@@ -27,6 +27,7 @@
   "dependencies": {
     "@hono/netlify": "1.0.2",
     "@hono/zod-openapi": "1.6.3",
+    "@modelcontextprotocol/ext-apps": "1.7.5",
     "@modelcontextprotocol/sdk": "1.32.2",
     "@netlify/blobs": "11.1.7",
     "@netlify/database": "2.0.1",
@@ -59,6 +60,7 @@
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.2",
     "drizzle-kit": "1.0.0-beta.22",
+    "esbuild": "0.28.2",
     "eslint": "10.14.0",
     "hyperframes": "0.8.222",
     "netlify-agent-kit": "0.4.0",

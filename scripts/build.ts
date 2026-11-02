@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { videoRunOf, writeVideoRunPreview } from './lib/agent-preview.js'
 import { repoRoot } from './lib/run-tools.js'
+import { buildMcpApp } from './lib/mcp-app.js'
 import { buildSkills } from './lib/skills.js'
 import {
   buildContextDigest,
@@ -123,6 +124,7 @@ log('context', {
   planningHash: planning.hash,
   source: fromZip ? 'BRAND_ZIP_URL' : 'context/',
 })
+log('mcp-app', await buildMcpApp(repoRoot))
 
 const agentRun = Object.keys(process.env).some((k) => k.startsWith('NETLIFY_AGENT_RUNNER_'))
 log('build-env', {

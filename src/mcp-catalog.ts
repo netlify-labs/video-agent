@@ -32,6 +32,12 @@ export const MCP_TOOLS: readonly McpCatalogEntry[] = [
     access: 'everyone',
   },
   {
+    name: 'show_video',
+    summary:
+      'Show a video in the chat: live progress while it’s made, then a player (in clients that show MCP Apps).',
+    access: 'everyone',
+  },
+  {
     name: 'list_videos',
     summary: 'Find videos by words in their prompt or title, yours or everyone’s.',
     access: 'everyone',

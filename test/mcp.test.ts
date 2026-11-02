@@ -38,10 +38,10 @@ describe('MCP', () => {
     const { h, key } = await setup()
     const r = await rpc(h, key, 'tools/list', {}, 1, '/mcp')
     expect(r.status).toBe(200)
-    expect((r.body as { result: { tools: unknown[] } }).result.tools).toHaveLength(16)
+    expect((r.body as { result: { tools: unknown[] } }).result.tools).toHaveLength(17)
   })
 
-  it('initializes and lists sixteen tools with instructions', async () => {
+  it('initializes and lists seventeen tools with instructions', async () => {
     const { h, key } = await setup()
     const init = await rpc(h, key, 'initialize', {
       protocolVersion: '2025-06-18',
@@ -68,6 +68,7 @@ describe('MCP', () => {
       'revise_video',
       'search_music',
       'set_verdict',
+      'show_video',
       'unpublish_video',
     ])
   })
@@ -108,6 +109,35 @@ describe('MCP', () => {
     expect(list.data.videos[0]).toMatchObject({ video_id: id, public: true, versions: 2 })
     const un = await tool(h, key, 'unpublish_video', { video_id: id })
     expect(un.data.unpublished).toBe(true)
+  })
+
+  it('shows the video card for create, revise and show, and tells agents to keep checking', async () => {
+    const { h, key } = await setup()
+    const card = 'ui://video-agent/video-card.html'
+    const { tools } = ((await rpc(h, key, 'tools/list')).body as any).result as {
+      tools: { name: string; _meta?: { ui?: { resourceUri?: string } } }[]
+    }
+    const withCard = tools.filter((t) => t._meta?.ui?.resourceUri === card).map((t) => t.name)
+    // Not get_video: agents call it over and over, and each call would add a card to the chat.
+    expect(withCard.sort()).toEqual(['create_video', 'revise_video', 'show_video'])
+
+    const read = ((await rpc(h, key, 'resources/read', { uri: card })).body as any).result as {
+      contents: { mimeType: string; text: string; _meta: { ui: { csp: { resourceDomains: string[] } } } }[]
+    }
+    expect(read.contents[0]?.mimeType).toBe('text/html;profile=mcp-app')
+    expect(read.contents[0]?.text).toMatch(/^<!doctype html>/)
+    expect(read.contents[0]?._meta.ui.csp.resourceDomains).toEqual(['https://video.example.com'])
+
+    const created = await tool(h, key, 'create_video', {
+      prompt: 'A 10-second teaser that says "Ship faster".',
+    })
+    const id = created.data.video_id as string
+    expect(created.data.next_actions[0]).toContain('Keep checking without asking')
+    expect(created.data.next_actions[0]).toContain('wait_seconds 8')
+    await h.drive(4)
+    const shown = await tool(h, key, 'show_video', { video_id: id })
+    expect(shown.data).toMatchObject({ video_id: id, status: 'ready' })
+    expect(shown.data.versions[0].downloads.mp4).toContain(`/files/${id}/v1/video.mp4`)
   })
 
   it('returns helpful errors instead of failing', async () => {

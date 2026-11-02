@@ -250,10 +250,17 @@ is HMAC-SHA256 of `"<t>.<raw body>"` with the key's webhook secret (shown once w
 ## Use it from AI tools (MCP)
 
 The same video tasks are MCP tools, so people can ask Claude, Cursor or any MCP client for a video:
-`create_video`, `get_video`, `list_videos`, `revise_video`, `publish_video`, `unpublish_video`, `cancel_video`,
+`create_video`, `get_video`, `show_video`, `list_videos`, `revise_video`, `publish_video`, `unpublish_video`, `cancel_video`,
 `set_verdict`, `list_comments`, `add_comment`, `list_media`, `search_music`, `import_music` and `get_music_job` (CC0
 and CC BY music from Openverse),
 and, when AI Gateway is available, `plan_video` and `plan_brief` (ask a few questions first, then create with the plan). Each key's tool list matches its owner's role: Reviewers see the read and review tools, Viewers read only.
+
+In clients that show [MCP Apps](https://github.com/modelcontextprotocol/ext-apps) (Claude, for one), `create_video`,
+`revise_video` and `show_video` also show a **video card** in the chat. It follows the run with `get_video` and plays
+the video when it's ready, with Download, Open in Video Agent, and full screen or picture-in-picture where the
+client offers them. Other clients get the same JSON, and every result in progress tells the agent to keep checking
+until the video is done. The card is `ui/src/mcp-app/video-card.ts`, bundled into `src/generated/video-card.ts` by
+the build.
 
 - Server URL: `https://<your-site>/mcp` (Streamable HTTP). Authenticate with an API key: `Authorization: Bearer nva_…`,
   or, when it's on, [Sign in with Netlify](#sign-in-with-netlify-oauth).

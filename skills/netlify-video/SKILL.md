@@ -32,11 +32,12 @@ only watch. The tool list shows only what your role can do.
 2. **Create.** `create_video` with `prompt` (quote exact on-screen text), and optionally `aspect` (16:9, 9:16, 1:1,
    4:5), `duration_sec`, `title`, `plan_id`, `media_ids` and an `idempotency_key`. It returns at once with status
    "queued" and a `video_id`.
-3. **Follow.** `get_video` with `video_id` and `wait_seconds: 8`, about once a minute, until the status is "ready" or
-   "failed". While it runs, the result carries `progress` (stage and step); tell the person what the agent is doing
+3. **Follow.** `get_video` with `video_id` and `wait_seconds: 8`, again each time it's still in progress, until the
+   status is "ready" or "failed", without asking the person whether to keep checking. While it runs, the result carries `progress` (stage and step); tell the person what the agent is doing
    rather than polling silently.
 4. **Deliver.** A ready video has signed download URLs (MP4, poster, GIF, captions; valid 1 hour) and a `web_url` in
-   the app. For a permanent public link, `publish_video` returns a share page that unfurls in Slack, the MP4, a GIF and
+   the app. `show_video` plays it in the chat in clients that show MCP Apps (Claude, for one); `create_video` and
+   `revise_video` show the same card while it's being made. For a permanent public link, `publish_video` returns a share page that unfurls in Slack, the MP4, a GIF and
    an embed snippet. `unpublish_video` takes it down.
 5. **Change.** `revise_video` with `video_id` and `change` (only what should change). Pass `from_version` to branch
    from an earlier ready version, `comment_ids` to fold in feedback, and `media_ids` to add library items.

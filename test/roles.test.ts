@@ -200,6 +200,7 @@ describe('MCP tools by role', () => {
         'revise_video',
         'search_music',
         'set_verdict',
+        'show_video',
         'unpublish_video',
       ].sort(),
     )
@@ -212,6 +213,7 @@ describe('MCP tools by role', () => {
       'list_media',
       'list_videos',
       'set_verdict',
+      'show_video',
     ])
     const vic = await person(h, 'u_viewer', 'viewer')
     expect(await names(vic)).toEqual([
@@ -220,6 +222,7 @@ describe('MCP tools by role', () => {
       'list_comments',
       'list_media',
       'list_videos',
+      'show_video',
     ])
   })
 })

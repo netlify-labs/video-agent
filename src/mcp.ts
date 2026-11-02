@@ -1,7 +1,9 @@
 // MCP server: lets people make videos from their AI tools (Claude, Cursor, any MCP client).
 // Stateless Streamable HTTP at /api/mcp (alias /mcp), authenticated with the same API keys as the REST API.
-// Thirteen tools and five recipe prompts (mcp-prompts.ts); inputs are forgiving (aspect names, "30s", pasted
-// URLs) and every result says what to do next.
+// Seventeen tools and five recipe prompts (mcp-prompts.ts); inputs are forgiving (aspect names, "30s", pasted
+// URLs) and every result says what to do next. create_video, revise_video and show_video carry the video card, an
+// MCP App (ui/src/mcp-app) that clients like Claude show in the chat: it follows progress, then plays the video.
+import { RESOURCE_MIME_TYPE, registerAppResource } from '@modelcontextprotocol/ext-apps/server'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { z } from 'zod'
@@ -10,6 +12,7 @@ import { PRIVATE_URL_TTL_SEC, signedFilePath } from './domain/files.js'
 import { addComment, listComments } from './domain/comments.js'
 import { getProgress } from './domain/progress.js'
 import { listMedia } from './domain/media.js'
+import { videoCardHtml } from './generated/video-card.js'
 import { libraryMatches } from './domain/music-library.js'
 import { AUDIO_CATEGORIES, LICENSE_FILTERS, openverseTiming } from './domain/openverse.js'
 import {
@@ -44,8 +47,8 @@ const SERVER_INSTRUCTIONS = `Make short videos from a prompt. Each video is made
 
 Typical flow:
 1. create_video with a prompt (quote any exact on-screen text). It returns immediately with status "queued".
-2. get_video with the id every minute or so (wait_seconds up to 8 to wait in one call) until status is "ready" or "failed".
-3. When ready, the result has signed download URLs (valid 1 hour) and the web page for the video.
+2. Keep checking without asking: call get_video with the id and wait_seconds 8, again and again, until status is "ready" or "failed". Then tell your user it's done, with the web page link. In clients that show MCP Apps, create_video, revise_video and show_video also show a video card that follows progress and plays the video when it's ready.
+3. When ready, the result has signed download URLs (valid 1 hour) and the web page for the video. To play it in the chat again later, call show_video.
 4. revise_video to change something ("make the end card orange"); it creates the next version from the latest ready one.
 5. publish_video to get a public share page, MP4 URL and embed snippet.
 
@@ -256,6 +259,14 @@ async function run(fn: () => Promise<Record<string, unknown>>, videoId?: string)
 
 // ───────────── results shaped for agents ─────────────
 
+/** What to do while a version is being made: keep checking in the same turn, then say it's done. */
+const KEEP_CHECKING = (id: string) =>
+  `Keep checking without asking your user: call get_video with video_id "${id}" and wait_seconds 8, and call it again each time it's still in progress, until status is "ready" or "failed". Then tell your user it's done, with web_url.`
+
+const VIDEO_CARD_URI = 'ui://video-agent/video-card.html'
+/** Tool metadata that shows the video card (both keys: older MCP Apps hosts read the flat one). */
+const VIDEO_CARD = { ui: { resourceUri: VIDEO_CARD_URI }, 'ui/resourceUri': VIDEO_CARD_URI }
+
 async function summarize(deps: Deps, v: VideoDto) {
   const job = (await deps.store.getJob(v.id)) ?? { id: v.id, private: v.private, accessEpoch: 0 }
   const ttl = v.private ? PRIVATE_URL_TTL_SEC : 3600
@@ -297,9 +308,7 @@ async function summarize(deps: Deps, v: VideoDto) {
   )
   const next: string[] = []
   if (latest && ['queued', 'running', 'finishing'].includes(latest.status)) {
-    next.push(
-      `Version ${latest.n} is ${latest.status}. Call get_video with video_id "${v.id}" again in about a minute (wait_seconds: 8 waits in this call).`,
-    )
+    next.push(`Version ${latest.n} is ${latest.status}. ${KEEP_CHECKING(v.id)}`)
   } else if (latest?.status === 'ready') {
     next.push(
       'Share the downloads.mp4 URL, or call publish_video for a permanent public link and embed snippet.',
@@ -390,6 +399,7 @@ Example: {"prompt": "A 20-second launch video for our new webhooks feature, endi
           .optional()
           .describe('Optional. Reusing the same key returns the same video instead of a duplicate.'),
       },
+      _meta: VIDEO_CARD,
       annotations: {
         title: 'Create a video',
         readOnlyHint: false,
@@ -418,9 +428,7 @@ Example: {"prompt": "A 20-second launch video for our new webhooks feature, endi
         if (!res.replayed) kick()
         return {
           ...(await summarize(deps, res.body)),
-          next_actions: [
-            `Call get_video with video_id "${res.body.id}" in about a minute. It usually takes 3 to 8 minutes.`,
-          ],
+          next_actions: [`It usually takes 3 to 8 minutes. ${KEEP_CHECKING(res.body.id)}`],
         }
       }),
   )
@@ -474,6 +482,42 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "wait_seconds": 8}`,
           },
         }
       }, args.video_id),
+  )
+
+  // The video card's page. Its video and poster links are signed file URLs on this site.
+  registerAppResource(
+    server,
+    'Video card',
+    VIDEO_CARD_URI,
+    { description: 'Follows a video while it is being made, then plays it.' },
+    async () => ({
+      contents: [
+        {
+          uri: VIDEO_CARD_URI,
+          mimeType: RESOURCE_MIME_TYPE,
+          text: videoCardHtml,
+          _meta: { ui: { csp: { resourceDomains: [deps.config.siteUrl] }, prefersBorder: true } },
+        },
+      ],
+    }),
+  )
+
+  server.registerTool(
+    'show_video',
+    {
+      title: 'Show a video',
+      description: `Show a video in the chat: it plays when it's ready, and shows live progress while it's being made. Returns the same result as get_video.
+
+When to use: the user wants to watch or see a video ("show me the video", "play it"). NOT for checking progress over and over: use get_video for that, so the chat doesn't fill with cards.
+
+Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w"}`,
+      inputSchema: {
+        video_id: z.string().describe('The video id (vid_…) or its web URL.'),
+      },
+      _meta: VIDEO_CARD,
+      annotations: { title: 'Show a video', readOnlyHint: true, openWorldHint: false },
+    },
+    (args) => run(async () => summarize(deps, await load(normalizeVideoId(args.video_id))), args.video_id),
   )
 
   server.registerTool(
@@ -567,6 +611,7 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Make the end 
           'Optional. true, false or {voice, speed, script}. Leave out to keep the voice-over of the version it revises; unchanged lines keep their audio.',
         ),
       },
+      _meta: VIDEO_CARD,
       annotations: {
         title: 'Revise a video',
         readOnlyHint: false,
@@ -592,7 +637,7 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Make the end 
         return {
           ...(await summarize(deps, res.body)),
           next_actions: [
-            `Call get_video with video_id "${id}" in about a minute to follow version ${res.body.latestVersion}.`,
+            `Version ${res.body.latestVersion} usually takes 3 to 8 minutes. ${KEEP_CHECKING(id)}`,
           ],
         }
       }, args.video_id),
