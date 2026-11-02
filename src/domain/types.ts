@@ -25,9 +25,11 @@ export const ASPECTS: Record<Aspect, { width: number; height: number }> = {
   '4:5': { width: 1080, height: 1350 },
 }
 
-/** Attempt stages. Slot holders are starting, running, cancelling and unresolved. */
+/** Attempt stages. Slot holders are finding_music, starting, running, cancelling and unresolved. */
 export type Stage =
   | 'queued'
+  /** Before a run that needs music and has none: the server picks a track on Openverse (src/domain/music-pick.ts). */
+  | 'finding_music'
   | 'starting'
   | 'running'
   | 'cancelling'
@@ -38,7 +40,13 @@ export type Stage =
   | 'cancelled'
   | 'timed_out'
 
-export const SLOT_STAGES: readonly Stage[] = ['starting', 'running', 'cancelling', 'unresolved']
+export const SLOT_STAGES: readonly Stage[] = [
+  'finding_music',
+  'starting',
+  'running',
+  'cancelling',
+  'unresolved',
+]
 export const TERMINAL_STAGES: readonly Stage[] = ['ready', 'failed', 'cancelled', 'timed_out']
 export const isTerminal = (s: Stage) => TERMINAL_STAGES.includes(s)
 
@@ -50,6 +58,7 @@ export function statusForStage(stage: Stage): VersionStatus {
   switch (stage) {
     case 'queued':
       return 'queued'
+    case 'finding_music':
     case 'starting':
     case 'running':
     case 'cancelling':
@@ -307,6 +316,30 @@ export interface AttemptRow {
   finishingAt: string | null
   endedAt: string | null
   authoringDeadlineAt: string | null
+  /** The music the server picked before the run (null: none was needed). */
+  musicPick?: MusicPick | null
+}
+
+/** Where a pre-run music pick is: searching Openverse, importing the chosen track, done (picked) or given up. */
+export type MusicPickStatus = 'searching' | 'importing' | 'picked' | 'skipped'
+
+export interface MusicPick {
+  status: MusicPickStatus
+  startedAt: string
+  /** The Openverse search words, and where they came from. */
+  query: string | null
+  fallbackQuery: string | null
+  querySource: 'gateway' | 'heuristic' | null
+  /** True once the fallback query is the one being searched. */
+  usedFallback: boolean
+  searchJobId: string | null
+  importJobId: string | null
+  openverseId: string | null
+  title: string | null
+  mediaId: string | null
+  /** Why it was skipped. */
+  reason: string | null
+  endedAt: string | null
 }
 
 export interface OutputRow {
@@ -415,7 +448,7 @@ export interface GatewayCallRow {
   id: string
   callerId: string
   planId: string | null
-  kind: 'router' | 'questions' | 'brief' | 'retry'
+  kind: 'router' | 'questions' | 'brief' | 'retry' | 'music_query'
   model: string
   inputTokens: number
   outputTokens: number

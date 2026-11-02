@@ -142,6 +142,8 @@ export const attempts = pgTable(
     finishingAt: ts('finishing_at'),
     endedAt: ts('ended_at'),
     authoringDeadlineAt: ts('authoring_deadline_at'),
+    // The music the server picked on Openverse before the run (src/domain/music-pick.ts); null when none was needed.
+    musicPick: jsonb('music_pick'),
   },
   (t) => [
     index('attempts_due_idx')
