@@ -14,6 +14,7 @@ import { getSettings } from './settings.js'
 import { contextMeta } from '../generated/context.js'
 import { PROMPT_TEMPLATE_VERSION, buildPrompt, buildRenderUnchangedPrompt } from './prompt.js'
 import { setStage } from './videos.js'
+import { MUSIC_POLL_MS, advanceMusicPick, attachTrack, needsMusicPick, newMusicPick } from './music-pick.js'
 import { emitTerminalEvent } from './webhooks.js'
 import type { AttemptRow, FailureCategory } from './types.js'
 
@@ -109,6 +110,8 @@ export async function tick(deps: Deps, budget: TickBudget): Promise<{ claimed: n
 
 export async function step(deps: Deps, a: AttemptRow): Promise<void> {
   switch (a.stage) {
+    case 'finding_music':
+      return findingMusic(deps, a)
     case 'starting':
       return start(deps, a)
     case 'running':
@@ -325,6 +328,19 @@ async function start(deps: Deps, a: AttemptRow): Promise<void> {
     return
   }
 
+  // A run that needs music and has none waits for the server to pick a track first (src/domain/music-pick.ts).
+  if (await needsMusicPick(deps, a)) {
+    const pick = newMusicPick(now)
+    const ok = await deps.store.tx((repo) =>
+      setStage(repo, a, 'finding_music', { musicPick: pick }, now.toISOString()),
+    )
+    if (ok) {
+      deps.log.info('attempt.finding_music', { attemptId: a.id })
+      await findingMusic(deps, { ...a, stage: 'finding_music', musicPick: pick })
+    }
+    return
+  }
+
   // Persist the start intent before any network I/O.
   const token = deps.ids.secret(32)
   const deployId = a.deployId ?? (await deps.platform.productionDeployId())
@@ -415,6 +431,59 @@ async function start(deps: Deps, a: AttemptRow): Promise<void> {
       await emitTerminalEvent(repo, deps, a.id)
     })
     deps.log.error('attempt.start_failed', { attemptId: a.id, credits, error: e })
+  }
+}
+
+/** Moves a music pick on; once it's picked (the track joins the version's media) or skipped, the run starts. */
+async function findingMusic(deps: Deps, a: AttemptRow): Promise<void> {
+  let pick = await advanceMusicPick(deps, a)
+  const now = deps.clock.now()
+  if (pick.status === 'searching' || pick.status === 'importing') {
+    await deps.store.updateAttempt(
+      a.id,
+      { musicPick: pick, leaseUntil: null, nextActionAt: iso(now.getTime() + MUSIC_POLL_MS) },
+      'finding_music',
+    )
+    return
+  }
+  const ok = await deps.store.tx(async (repo) => {
+    const fresh = await repo.getAttempt(a.id, { lock: true })
+    if (fresh?.stage !== 'finding_music') return false
+    if (pick.status === 'picked' && pick.mediaId && !(await attachTrack(repo, a, pick.mediaId)))
+      pick = { ...pick, status: 'skipped', reason: "The track didn't fit in the version's media." }
+    return setStage(
+      repo,
+      a,
+      'starting',
+      { musicPick: pick, nextActionAt: now.toISOString() },
+      now.toISOString(),
+    )
+  })
+  if (!ok) return
+  deps.log.info('attempt.music_done', { attemptId: a.id, status: pick.status, mediaId: pick.mediaId })
+  await start(deps, { ...a, stage: 'starting', musicPick: pick })
+}
+
+/**
+ * openverse-background finished a job a music pick waits on: step that attempt now instead of at the next sweep. The
+ * lease keeps it from racing a sweep.
+ */
+export async function wakeMusicPick(deps: Deps, openverseJobId: string): Promise<void> {
+  const job = await deps.store.getOpenverseJob(openverseJobId)
+  const attemptId = job?.params.attemptId
+  if (typeof attemptId !== 'string') return
+  const a = await deps.store.getAttempt(attemptId)
+  if (a?.stage !== 'finding_music') return
+  const leased = await lease(deps, a, 2 * MIN)
+  if (!leased) return
+  try {
+    await step(deps, leased)
+  } catch (e) {
+    deps.log.error('reconciler.step_failed', { attemptId: a.id, stage: a.stage, error: e })
+    await deps.store.updateAttempt(a.id, {
+      leaseUntil: null,
+      nextActionAt: iso(deps.clock.now().getTime() + MIN),
+    })
   }
 }
 

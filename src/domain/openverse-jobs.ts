@@ -84,7 +84,7 @@ async function inflight(deps: Deps, p: Principal, kind: OpenverseJobKind, key: s
 
 function newRow(
   deps: Deps,
-  p: Principal,
+  p: Pick<Principal, 'userId'>,
   kind: OpenverseJobKind,
   key: string,
   params: Record<string, unknown>,
@@ -127,6 +127,33 @@ async function enqueue(
     await dispatch(deps, row.id)
   }
   return jobDto(deps, p, stored)
+}
+
+/**
+ * A job the server starts for itself (a run's music pick, src/domain/music-pick.ts) on the person's behalf: no inline
+ * try and no rate limit. A finished identical search from the last few minutes is returned as is, and an identical job
+ * already queued or running for this person is shared.
+ */
+export async function queueOpenverseJob(
+  deps: Deps,
+  userId: string,
+  kind: OpenverseJobKind,
+  key: string,
+  params: Record<string, unknown>,
+): Promise<OpenverseJobRow> {
+  if (kind === 'search') {
+    const since = iso(deps.clock.now().getTime() - CACHE_TTL_MS)
+    const recent = await deps.store.findOpenverseJob({ kind, key, statuses: ['done'], since })
+    if (recent) return recent
+  }
+  const row = newRow(deps, { userId }, kind, key, params)
+  const stored = await deps.store.insertOpenverseJobIfAbsent(row)
+  if (stored.id === row.id) {
+    deps.log.info('openverse.job_queued', { jobId: row.id, kind, by: 'server' })
+    await dispatch(deps, row.id)
+    return (await deps.store.getOpenverseJob(row.id)) ?? stored
+  }
+  return stored
 }
 
 /** A search: from a cache when someone searched the same recently, else a short try, else a job. */
