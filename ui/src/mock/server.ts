@@ -429,6 +429,37 @@ export function installMock() {
       }
       return json(s)
     }
+    if (p === '/api/v1/media/openverse/search' && method === 'GET') {
+      if (me.role === 'viewer' || me.role === 'reviewer')
+        return fail(403, 'forbidden', `Your role (${me.role}) can't upload media.`)
+      let busy = false
+      try {
+        busy = localStorage.getItem('mockOpenverseBusy') === '1'
+      } catch {
+        // ignore
+      }
+      if (busy) return fail(429, 'rate_limited', 'Openverse is busy, try again in a minute.')
+      const q = (url.searchParams.get('q') ?? '').toLowerCase()
+      const cc0Only = url.searchParams.get('license') === 'cc0'
+      const items = mockTracks
+        .filter(
+          (t) =>
+            (!cc0Only || t.license === 'cc0') &&
+            (q === '' ||
+              `${t.title} ${t.genres.join(' ')} music`
+                .toLowerCase()
+                .split(/\s+/)
+                .some((w) => q.includes(w))),
+        )
+        .map((t) => ({ ...t, mediaId: mockMedia.find((m) => m.source?.id === t.id)?.id ?? null }))
+      return json({ items, page: 1, pageCount: 1, total: items.length })
+    }
+    if (p === '/api/v1/media/openverse/import' && method === 'POST') {
+      const b = (await readBody(init, input)) as { id: string }
+      const r = mockImport(b.id)
+      if (!r) return fail(404, 'not_found', "That track isn't on Openverse (any more).")
+      return json(r.item, r.created ? 201 : 200)
+    }
     const mm = /^\/api\/v1\/media\/([^/]+)$/.exec(p)
     if (mm?.[1]) {
       const i = mockMedia.findIndex((m) => m.id === mm[1])
@@ -743,5 +774,72 @@ function mockItem(filename: string, kind: MockKind, bytes: number): MockMedia {
       poster: kind === 'video' ? '/teaser-v2.jpg' : null,
     },
     canDelete: true,
+    source: null,
   }
+}
+
+// Openverse (Find music): fixture tracks, filtered like the server (CC0 + CC BY only). localStorage.mockOpenverseBusy=1
+// answers searches with the rate-limit error.
+type MockTrack =
+  paths['/api/v1/media/openverse/search']['get']['responses'][200]['content']['application/json']['items'][number]
+const track = (
+  n: number,
+  title: string,
+  creator: string,
+  license: 'cc0' | 'by',
+  sec: number,
+  genres: string[],
+): MockTrack => ({
+  id: `0000000${n}-0000-4000-8000-00000000000${n}`,
+  title,
+  creator,
+  creatorUrl: `https://www.jamendo.com/artist/100${n}`,
+  durationSec: sec,
+  license,
+  licenseVersion: license === 'cc0' ? '1.0' : '4.0',
+  licenseLabel: license === 'cc0' ? 'CC0 1.0' : 'CC BY 4.0',
+  licenseUrl:
+    license === 'cc0'
+      ? 'https://creativecommons.org/publicdomain/zero/1.0/'
+      : 'https://creativecommons.org/licenses/by/4.0/',
+  attribution: `"${title}" by ${creator} is licensed under ${license === 'cc0' ? 'CC0 1.0' : 'CC BY 4.0'}.`,
+  landingUrl: `https://www.jamendo.com/track/200${n}`,
+  source: 'jamendo',
+  category: 'music',
+  genres,
+  previewUrl: '/tone.mp3',
+  filetype: 'mp3',
+  filesize: 3_400_000,
+  importable: true,
+  mediaId: null,
+})
+const mockTracks: MockTrack[] = [
+  track(1, 'Morning Light', 'Lena Park', 'by', 154, ['ambient', 'piano']),
+  track(2, 'Quiet Harbor', 'Tomas Reyes', 'cc0', 201, ['acoustic']),
+  track(3, 'Night Drive', 'Kai Morgan', 'by', 187, ['electronic', 'synthwave']),
+]
+function mockImport(id: string): { item: MockMedia; created: boolean } | null {
+  const t = mockTracks.find((x) => x.id === id)
+  if (!t) return null
+  const existing = mockMedia.find((m) => m.source?.id === id)
+  if (existing) return { item: existing, created: false }
+  const m = mockItem(`${t.title} - ${t.creator ?? ''}.mp3`, 'audio', t.filesize ?? 0)
+  m.caption = `${t.title} by ${t.creator ?? ''}`
+  m.durationSec = t.durationSec
+  m.source = {
+    name: 'openverse',
+    id: t.id,
+    url: t.landingUrl,
+    title: t.title,
+    creator: t.creator,
+    creatorUrl: t.creatorUrl,
+    license: t.license,
+    licenseVersion: t.licenseVersion,
+    licenseLabel: t.licenseLabel,
+    licenseUrl: t.licenseUrl,
+    attribution: t.attribution,
+    creditRequired: t.license === 'by',
+  }
+  mockMedia.unshift(m)
+  return { item: m, created: true }
 }

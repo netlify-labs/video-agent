@@ -2,6 +2,7 @@
 // (bigger ones upload in resumable parts); everyone can browse and see where an item is used.
 import {
   ActionIcon,
+  Anchor,
   Badge,
   Button,
   Card,
@@ -16,10 +17,11 @@ import {
   Title,
 } from '@mantine/core'
 import { useQueryClient } from '@tanstack/react-query'
-import { IconDots, IconUpload } from '@tabler/icons-react'
+import { IconDots, IconMusic, IconUpload } from '@tabler/icons-react'
 import { useState } from 'react'
 import { $api, useCanCreate } from '../api/client'
 import { confirmDanger, relativeTime, showError } from '../components/bits'
+import { FindMusicModal } from '../components/FindMusic'
 import { MEDIA_ACCEPT, Thumb, type Media } from '../components/MediaPicker'
 import { uploadFile, type UploadProgress } from '../lib/upload'
 
@@ -132,6 +134,7 @@ function MediaCard({ m }: { m: Media }) {
             {m.caption ?? 'No caption'}
           </Text>
         )}
+        {m.source ? <SourceLine source={m.source} /> : null}
         {m.status === 'rejected' ? (
           <Text size="xs" c="red">
             {m.rejectReason}
@@ -153,12 +156,48 @@ function MediaCard({ m }: { m: Media }) {
   )
 }
 
+/** An imported item's licence, creator and a link to the work. */
+function SourceLine({ source }: { source: NonNullable<Media['source']> }) {
+  return (
+    <Group gap={6} wrap="nowrap" data-testid="media-source">
+      <Badge
+        size="xs"
+        variant="light"
+        color={source.creditRequired ? 'blue' : 'teal'}
+        title={source.creditRequired ? 'Videos that use it credit it automatically' : 'No credit needed'}
+      >
+        {source.licenseLabel}
+      </Badge>
+      <Text size="xs" c="var(--va-muted)" truncate>
+        {source.creator ? (
+          source.creatorUrl ? (
+            <Anchor href={source.creatorUrl} target="_blank" rel="noopener" c="inherit" size="xs">
+              {source.creator}
+            </Anchor>
+          ) : (
+            source.creator
+          )
+        ) : null}
+        {source.creator ? ' · ' : ''}
+        {source.url ? (
+          <Anchor href={source.url} target="_blank" rel="noopener" c="inherit" size="xs">
+            Openverse
+          </Anchor>
+        ) : (
+          'Openverse'
+        )}
+      </Text>
+    </Group>
+  )
+}
+
 export function MediaPage() {
   const qc = useQueryClient()
   const canUpload = useCanCreate()
   const [kind, setKind] = useState<Kind>('all')
   const [jobs, setJobs] = useState<Job[]>([])
   const [dragging, setDragging] = useState(false)
+  const [finding, setFinding] = useState(false)
   const list = $api.useQuery(
     'get',
     '/api/v1/media',
@@ -211,15 +250,34 @@ export function MediaPage() {
           </div>
         </div>
         {canUpload ? (
-          <FileButton multiple accept={MEDIA_ACCEPT} onChange={add}>
-            {(props) => (
-              <Button {...props} leftSection={<IconUpload size={16} />}>
-                Upload
-              </Button>
-            )}
-          </FileButton>
+          <Group gap="xs">
+            <Button
+              variant="default"
+              leftSection={<IconMusic size={16} />}
+              onClick={() => {
+                setFinding(true)
+              }}
+            >
+              Find music
+            </Button>
+            <FileButton multiple accept={MEDIA_ACCEPT} onChange={add}>
+              {(props) => (
+                <Button {...props} leftSection={<IconUpload size={16} />}>
+                  Upload
+                </Button>
+              )}
+            </FileButton>
+          </Group>
         ) : null}
       </div>
+      {canUpload ? (
+        <FindMusicModal
+          opened={finding}
+          onClose={() => {
+            setFinding(false)
+          }}
+        />
+      ) : null}
 
       {canUpload ? (
         <div
@@ -242,7 +300,7 @@ export function MediaPage() {
           <Text size="sm" c="var(--va-muted)">
             Drop files here: PNG, JPEG, WebP or SVG images up to 5 MB, MP4 clips up to 100 MB and 2 minutes,
             MP3, M4A, WAV or Ogg audio up to 50 MB and 10 minutes, WOFF2, TTF or OTF fonts. Only upload music
-            you have the rights to.
+            you have the rights to, or use Find music for CC0 and CC BY tracks from Openverse.
           </Text>
         </div>
       ) : null}

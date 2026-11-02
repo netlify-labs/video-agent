@@ -57,6 +57,8 @@ function ready(
     editable?: boolean
     /** Preview variants made from ui/mock-assets/teaser-v2.mp4 (the real render-job output for that file). */
     previews?: boolean
+    /** CC BY music it was made with (Openverse), credited on the page and in the embed. */
+    music?: V['credits']
   },
 ): V {
   const startedAt = ago(o.at)
@@ -67,10 +69,11 @@ function ready(
     authorId: o.author,
     parentN: o.parent ?? null,
     targetDurationSec: o.target ?? null,
-    sound: 'silent',
+    sound: o.music?.length ? 'music' : 'silent',
     voiceover: null,
     createdAt: ago(o.at + 0.3),
     plan: null,
+    credits: o.music ?? [],
 
     verdicts: { approved: 0, changesRequested: 0, mine: null },
     incorporates: 0,
@@ -114,11 +117,39 @@ function ready(
               gif: `${SITE}/v/${o.pub}.gif`,
               captions: `${SITE}/v/${o.pub}.vtt`,
             },
-            embed: `<video controls playsinline preload="metadata" width="${o.w}" height="${o.h}" style="max-width:100%;height:auto" poster="${SITE}/v/${o.pub}.jpg"><source src="${SITE}/v/${o.pub}.mp4" type="video/mp4"><track kind="captions" src="${SITE}/v/${o.pub}.vtt" srclang="en" label="Captions"></video>`,
+            embed: embed(o.pub, o.w, o.h, o.music ?? []),
           },
         ]
       : [],
   }
+}
+
+function embed(slug: string, w: number, h: number, credits: V['credits']) {
+  const v = `<video controls playsinline preload="metadata" width="${w}" height="${h}" style="max-width:100%;height:auto" poster="${SITE}/v/${slug}.jpg"><source src="${SITE}/v/${slug}.mp4" type="video/mp4"><track kind="captions" src="${SITE}/v/${slug}.vtt" srclang="en" label="Captions"></video>`
+  if (!credits.length) return v
+  const line = credits
+    .map(
+      (c) =>
+        `${c.role}: <a href="${c.sourceUrl}" rel="noopener" target="_blank">${c.title}</a> by <a href="${c.creatorUrl}" rel="noopener" target="_blank">${c.creator}</a>, <a href="${c.licenseUrl}" rel="noopener" target="_blank">${c.licenseLabel}</a>`,
+    )
+    .join('; ')
+  return `<figure style="margin:0">${v}<figcaption style="font:12px/1.4 system-ui,sans-serif;opacity:.8">${line}</figcaption></figure>`
+}
+
+/** A CC BY track from Openverse, as the server credits it. */
+export const mockCredit: V['credits'][number] = {
+  mediaId: 'med_mockopenverse',
+  kind: 'audio',
+  role: 'Music',
+  title: 'Morning Light',
+  creator: 'Lena Park',
+  creatorUrl: 'https://www.jamendo.com/artist/1001',
+  license: 'by',
+  licenseLabel: 'CC BY 4.0',
+  licenseUrl: 'https://creativecommons.org/licenses/by/4.0/',
+  sourceUrl: 'https://www.jamendo.com/track/2002',
+  source: 'openverse',
+  text: '"Morning Light" by Lena Park, CC BY 4.0, https://www.jamendo.com/track/2002',
 }
 
 function video(
@@ -193,6 +224,7 @@ export const videos: Video[] = [
       links: files('vid_making', 1),
       files: null,
       publications: [],
+      credits: [],
     },
   ]),
   video('vid_queued', 'Edge functions explainer, vertical', '9:16', people.marco, [
@@ -226,6 +258,7 @@ export const videos: Video[] = [
       links: files('vid_queued', 1),
       files: null,
       publications: [],
+      credits: [],
     },
   ]),
   video('vid_teaser', 'Ship faster with preview deploys', '16:9', people.sam, [
@@ -283,6 +316,7 @@ export const videos: Video[] = [
         title: 'Org webhooks',
         author: people.ada.id,
         pub: 'h7m2q9xwka',
+        music: [mockCredit],
         summary:
           'A 22.5-second before-and-after story: twelve project tiles collapse into one organization webhook, then events from nine projects arrive at one endpoint. Ends on an end card pointing to Organization settings → Webhooks.',
       },
@@ -363,6 +397,7 @@ export const videos: Video[] = [
       links: files('vid_failed', 1),
       files: null,
       publications: [],
+      credits: [],
     },
   ]),
 ]

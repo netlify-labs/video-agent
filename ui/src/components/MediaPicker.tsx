@@ -18,6 +18,7 @@ import { useState } from 'react'
 import { $api, useCanCreate } from '../api/client'
 import type { paths } from '../api/schema'
 import { uploadFile } from '../lib/upload'
+import { FindMusicModal } from './FindMusic'
 
 export type Media = paths['/api/v1/media/{id}']['get']['responses'][200]['content']['application/json']
 export type MediaKind = Media['kind']
@@ -98,6 +99,7 @@ export function MediaLibraryModal(props: {
   const [filter, setFilter] = useState<'all' | MediaKind>('all')
   const [picked, setPicked] = useState<Media[]>(props.selected ?? [])
   const [uploading, setUploading] = useState(false)
+  const [finding, setFinding] = useState(false)
   const canUpload = useCanCreate()
   const qc = useQueryClient()
   const list = $api.useQuery(
@@ -163,13 +165,26 @@ export function MediaLibraryModal(props: {
             <span />
           )}
           {canUpload ? (
-            <FileButton multiple accept={MEDIA_ACCEPT} onChange={(fs) => void upload(fs)}>
-              {(p) => (
-                <Button {...p} size="xs" variant="default" loading={uploading}>
-                  Upload
+            <Group gap="xs">
+              {kinds.includes('audio') ? (
+                <Button
+                  size="xs"
+                  variant="default"
+                  onClick={() => {
+                    setFinding(true)
+                  }}
+                >
+                  Find music
                 </Button>
-              )}
-            </FileButton>
+              ) : null}
+              <FileButton multiple accept={MEDIA_ACCEPT} onChange={(fs) => void upload(fs)}>
+                {(p) => (
+                  <Button {...p} size="xs" variant="default" loading={uploading}>
+                    Upload
+                  </Button>
+                )}
+              </FileButton>
+            </Group>
           ) : null}
         </Group>
         {!list.isLoading && items.length === 0 ? (
@@ -205,6 +220,23 @@ export function MediaLibraryModal(props: {
             })}
           </div>
         )}
+        {canUpload && kinds.includes('audio') ? (
+          <FindMusicModal
+            opened={finding}
+            onClose={() => {
+              setFinding(false)
+            }}
+            onImported={(m) => {
+              // An imported track is picked straight away (it's already in the list above, too).
+              setFinding(false)
+              if (!props.multiple) {
+                props.onPick([m])
+                props.onClose()
+              } else if (!picked.some((x) => x.id === m.id) && picked.length < MAX_PICKS)
+                setPicked((ps) => [...ps, m])
+            }}
+          />
+        ) : null}
         {props.multiple ? (
           <Group justify="space-between">
             <Text size="xs" c="var(--va-faint)">
