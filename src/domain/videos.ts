@@ -605,7 +605,7 @@ export async function publishVersion(deps: Deps, principal: Principal, jobId: st
     const version = await repo.getVersion(jobId, n)
     if (!version || version.status !== 'ready' || !output)
       throw new ApiError('not_ready', 'Only ready versions can be published.')
-    const credits = versionCredits(await repo.versionProvenance(jobId), version)
+    const credits = versionCredits(await repo.versionProvenance(jobId), version, output.runCredits)
     const active = (await repo.listPublications(jobId)).find((p) => p.versionN === n && !p.unpublishedAt)
     if (active) return { pub: active, mirror: mirrorFor(active, job, output, credits), output }
     const row: PublicationRow = {
@@ -768,7 +768,7 @@ function versionDto(
     },
     // Signed image URLs, so the UI skips the redirect. One expiry per DTO keeps them stable for the browser cache.
     files: o && signing ? signedFiles(deps.config.siteUrl, signing, v.n, o.previews ?? null) : null,
-    // CC BY media it was made with, from the library's provenance (never from the agent).
+    // CC BY media it was made with: the library's provenance, plus Openverse files the run fetched (checked by finalize).
     credits,
     publications: pubs.filter((p) => p.versionN === v.n).map((p) => publicationDto(deps, p, o, credits)),
   }
@@ -865,19 +865,20 @@ async function buildVideoDto(
   const out = await Promise.all(
     versions.map(async (v) => {
       const mine = attempts.filter((a) => a.versionN === v.n)
+      const output = await repo.getOutput(jobId, v.n)
       return versionDto(
         deps,
         jobId,
         v,
         mine[0] ?? null,
         mine.length,
-        await repo.getOutput(jobId, v.n),
+        output,
         pubs,
         verdicts,
         viewer === 'system' ? null : viewer.userId,
         fed.filter((c) => c.versionN === v.n).length,
         signing,
-        versionCredits(provenance, v),
+        versionCredits(provenance, v, output?.runCredits),
       )
     }),
   )

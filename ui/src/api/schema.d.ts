@@ -5626,7 +5626,7 @@ export interface components {
                 /** @description A tiny blurred poster as a data URI, to show while the poster loads. */
                 lqip?: string;
             } | null;
-            /** @description CC BY media this version was made with (from the library, e.g. Openverse music): show the credit wherever the video is shown */
+            /** @description CC BY media this version was made with (Openverse music from the library, or fetched by the run itself): show the credit wherever the video is shown */
             credits: components["schemas"]["Credit"][];
             publications: components["schemas"]["Publication"][];
         };
@@ -5659,7 +5659,8 @@ export interface components {
             stepsCount?: number;
         } | null;
         Credit: {
-            mediaId: string;
+            /** @description The library item, or null for music or a sound effect the run fetched from Openverse itself */
+            mediaId: string | null;
             /** @enum {string} */
             kind: "image" | "svg" | "video" | "font" | "audio";
             /** @example Music */

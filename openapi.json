@@ -685,7 +685,7 @@
             "items": {
               "$ref": "#/components/schemas/Credit"
             },
-            "description": "CC BY media this version was made with (from the library, e.g. Openverse music): show the credit wherever the video is shown"
+            "description": "CC BY media this version was made with (Openverse music from the library, or fetched by the run itself): show the credit wherever the video is shown"
           },
           "publications": {
             "type": "array",
@@ -861,7 +861,11 @@
         "type": "object",
         "properties": {
           "mediaId": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The library item, or null for music or a sound effect the run fetched from Openverse itself"
           },
           "kind": {
             "type": "string",

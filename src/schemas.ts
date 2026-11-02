@@ -75,7 +75,10 @@ const UsageSchema = z
 
 export const CreditSchema = z
   .object({
-    mediaId: z.string(),
+    mediaId: z.string().nullable().openapi({
+      description:
+        'The library item, or null for music or a sound effect the run fetched from Openverse itself',
+    }),
     kind: z.enum(MEDIA_KINDS),
     role: z.string().openapi({ example: 'Music' }),
     title: z.string(),
@@ -109,12 +112,9 @@ export const PublicationSchema = z
           .describe('A 960px-wide WebP poster, for versions rendered with preview variants.'),
       })
       .nullable(),
-    embed: z
-      .string()
-      .nullable()
-      .openapi({
-        description: 'HTML to embed the video; with CC BY media it includes the credit line as a caption',
-      }),
+    embed: z.string().nullable().openapi({
+      description: 'HTML to embed the video; with CC BY media it includes the credit line as a caption',
+    }),
   })
   .openapi('Publication')
 
@@ -247,7 +247,7 @@ export const VersionSchema = z
       ),
     credits: z.array(CreditSchema).openapi({
       description:
-        'CC BY media this version was made with (from the library, e.g. Openverse music): show the credit wherever the video is shown',
+        'CC BY media this version was made with (Openverse music from the library, or fetched by the run itself): show the credit wherever the video is shown',
     }),
     publications: z.array(PublicationSchema),
   })

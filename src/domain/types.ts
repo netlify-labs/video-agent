@@ -1,6 +1,7 @@
 // Domain records. These mirror the database tables (db/schema.ts) and the in-memory store.
 import type { MediaKind } from '../lib/media/classify.js'
 import type { PreviewFile, Previews } from '../lib/media/previews.js'
+import type { RunCredit } from '../lib/openverse-rules.js'
 
 export type Role = 'admin' | 'creator' | 'reviewer' | 'viewer'
 export type Aspect = '16:9' | '9:16' | '1:1' | '4:5'
@@ -325,6 +326,8 @@ export interface OutputRow {
   agentSummary: string
   /** Optional preview variants (WebP/AVIF posters, hover clip, LQIP). Null for versions rendered without them. */
   previews?: Previews | null
+  /** Openverse files the run fetched itself, from its video/assets/music/credits.json as finalize checked it. */
+  runCredits?: RunCredit[] | null
 }
 
 export interface PublicationRow {

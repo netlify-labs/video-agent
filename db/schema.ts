@@ -172,6 +172,7 @@ export const outputs = pgTable(
     title: text('title').notNull(),
     agentSummary: text('agent_summary').notNull(),
     previews: jsonb('previews'),
+    runCredits: jsonb('run_credits'),
   },
   (t) => [primaryKey({ columns: [t.jobId, t.versionN] })],
 )
