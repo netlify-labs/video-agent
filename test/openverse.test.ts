@@ -129,6 +129,7 @@ interface Track {
   mediaId: string | null
   durationSec: number | null
   creator: string | null
+  filetype: string | null
 }
 
 describe('Openverse search', () => {
