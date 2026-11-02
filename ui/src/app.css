@@ -429,7 +429,8 @@ body {
   border-top: 0;
   padding-top: 0;
 }
-.va-doc-section:focus:not(:focus-visible) {
+/* Sections take focus only to move the keyboard's starting point; the contents list shows where you are. */
+.va-doc-section:focus {
   outline: none;
 }
 .va-doc-section-body {
@@ -440,6 +441,32 @@ body {
 }
 .va-table-scroll {
   overflow-x: auto;
+}
+/* On phones each catalog row stacks: name, then what it does and who gets it. */
+@media (max-width: 720px) {
+  .va-table.va-catalog thead {
+    display: none;
+  }
+  .va-table.va-catalog tr,
+  .va-table.va-catalog td {
+    display: block;
+  }
+  .va-table.va-catalog tr {
+    padding: 12px 0;
+    border-top: 1px solid var(--va-rule);
+  }
+  .va-table.va-catalog tr:first-child {
+    border-top: 0;
+    padding-top: 0;
+  }
+  .va-table.va-catalog td {
+    height: auto;
+    padding: 0;
+    border-top: 0;
+  }
+  .va-table.va-catalog td + td {
+    margin-top: 4px;
+  }
 }
 .va-docs-examples {
   margin: 0;

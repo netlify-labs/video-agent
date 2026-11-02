@@ -161,7 +161,7 @@ export function DocSections({
 export function CatalogTable({ entries, label }: { entries: readonly McpCatalogEntry[]; label: string }) {
   return (
     <div className="va-table-scroll">
-      <table className="va-table" aria-label={label}>
+      <table className="va-table va-catalog" aria-label={label}>
         <thead>
           <tr>
             <th>Name</th>

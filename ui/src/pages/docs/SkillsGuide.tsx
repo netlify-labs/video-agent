@@ -81,11 +81,11 @@ export default function SkillsGuidePage() {
           },
           {
             id: 'prompts',
-            title: 'The same recipes as MCP prompts',
+            title: 'MCP prompts',
             description: (
               <>
-                Clients without skills get these from the MCP server (<Code>prompts/list</Code>), limited to
-                what your role can do.
+                The same recipes for clients without skills, from the MCP server (<Code>prompts/list</Code>),
+                limited to what your role can do.
               </>
             ),
             children: (

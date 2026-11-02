@@ -316,7 +316,7 @@ test('API docs show how to install the agent skill, with copy buttons', async ({
   await expect(page.getByRole('navigation', { name: 'On this page' }).getByRole('link')).toHaveText([
     'Skill package',
     'Install',
-    'The same recipes as MCP prompts',
+    'MCP prompts',
   ])
   const origin = new URL(page.url()).origin
   await expect(page.getByRole('textbox', { name: 'Skill package (zip)', exact: true })).toHaveValue(
