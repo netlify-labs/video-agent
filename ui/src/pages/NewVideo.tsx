@@ -2,6 +2,7 @@ import {
   Button,
   Card,
   Group,
+  Modal,
   NumberInput,
   SegmentedControl,
   Stack,
@@ -11,7 +12,9 @@ import {
   Title,
   UnstyledButton,
 } from '@mantine/core'
+import { useMediaQuery } from '@mantine/hooks'
 import { notifications } from '@mantine/notifications'
+import { IconBolt, IconListCheck } from '@tabler/icons-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router'
@@ -167,7 +170,10 @@ export function NewVideoPage() {
   const { create, key } = useCreate()
   const config = $api.useQuery('get', '/api/v1/config')
   const canPlan = useCanCreate() && config.data?.planningAvailable === true
-  const [planning, setPlanning] = useState(false)
+  // The Create dialog: choosing how to start, then the plan's questions and brief as steps.
+  const [dialog, setDialog] = useState<null | 'choose' | 'plan'>(null)
+  const planning = dialog === 'plan'
+  const phone = useMediaQuery('(max-width: 48em)')
   const [shapeTouched, setShapeTouched] = useState(false)
   const valid =
     prompt.trim().length >= 10 && prompt.length <= 4000 && (lengthMode === 'auto' || Number(seconds) >= 3)
@@ -205,7 +211,7 @@ export function NewVideoPage() {
             onSubmit={(e) => {
               e.preventDefault()
               if (!valid) return
-              if (canPlan) setPlanning(true)
+              if (canPlan) setDialog('choose')
               else submit()
             }}
           >
@@ -334,27 +340,9 @@ export function NewVideoPage() {
                 }}
               />
               <Group>
-                {canPlan ? (
-                  <Group gap={0} className="va-split-button">
-                    <Button type="submit" disabled={!valid || planning}>
-                      Plan it first
-                    </Button>
-                    <Button
-                      variant="default"
-                      disabled={!valid}
-                      loading={create.isPending && !planning}
-                      onClick={() => {
-                        submit()
-                      }}
-                    >
-                      Create now
-                    </Button>
-                  </Group>
-                ) : (
-                  <Button type="submit" disabled={!valid} loading={create.isPending}>
-                    Make the video
-                  </Button>
-                )}
+                <Button type="submit" size="md" disabled={!valid} loading={create.isPending && !dialog}>
+                  Create video
+                </Button>
                 <Text size="sm" c="var(--va-faint)">
                   You can revise it in plain words afterwards.
                 </Text>
@@ -363,26 +351,6 @@ export function NewVideoPage() {
           </form>
         </Card>
         <div className="va-rail">
-          {planning ? (
-            <PlanPanel
-              prompt={prompt}
-              aspect={shapeTouched ? shape : undefined}
-              durationSec={lengthMode === 'set' ? Number(seconds) : undefined}
-              mediaIds={media.map((m) => m.id)}
-              sound={sound}
-              voiceover={voice.enabled ? voiceInput(voice) : undefined}
-              creating={create.isPending}
-              onSuggestAspect={(a) => {
-                setShape(a)
-              }}
-              onClose={() => {
-                setPlanning(false)
-              }}
-              onCreate={(planId) => {
-                submit(planId)
-              }}
-            />
-          ) : null}
           <Card>
             <Text fw={600} mb={8}>
               {brand.isDefault ? 'Brand context: the neutral default' : `${brand.name} brand context`}
@@ -416,6 +384,74 @@ export function NewVideoPage() {
           <RecentMine />
         </div>
       </div>
+      <Modal
+        opened={dialog !== null}
+        onClose={() => {
+          setDialog(null)
+        }}
+        title={dialog === 'plan' ? 'Plan your video' : 'Create your video'}
+        size={dialog === 'plan' ? 'xl' : 'lg'}
+        fullScreen={phone}
+        closeButtonProps={{ 'aria-label': 'Close' }}
+        centered
+      >
+        {dialog === 'plan' ? (
+          <PlanPanel
+            steps
+            prompt={prompt}
+            aspect={shapeTouched ? shape : undefined}
+            durationSec={lengthMode === 'set' ? Number(seconds) : undefined}
+            mediaIds={media.map((m) => m.id)}
+            sound={sound}
+            voiceover={voice.enabled ? voiceInput(voice) : undefined}
+            creating={create.isPending}
+            onSuggestAspect={(a) => {
+              setShape(a)
+            }}
+            onClose={() => {
+              setDialog(null)
+            }}
+            onCreate={(planId) => {
+              submit(planId)
+            }}
+          />
+        ) : (
+          <div className="va-create-choice">
+            <UnstyledButton
+              className="va-raised va-choice"
+              p="lg"
+              onClick={() => {
+                setDialog('plan')
+              }}
+            >
+              <IconListCheck size={22} />
+              <Text fw={600} mt="sm">
+                Plan it first
+              </Text>
+              <Text size="sm" c="var(--va-muted)" mt={4}>
+                Answer a few quick questions about the audience and message, then check a short brief before
+                the agent starts.
+              </Text>
+            </UnstyledButton>
+            <UnstyledButton
+              className="va-raised va-choice"
+              p="lg"
+              disabled={create.isPending}
+              onClick={() => {
+                submit()
+              }}
+            >
+              <IconBolt size={22} />
+              <Text fw={600} mt="sm">
+                {create.isPending ? 'Starting…' : 'Create it now'}
+              </Text>
+              <Text size="sm" c="var(--va-muted)" mt={4}>
+                Start straight away from your prompt. Usually ready in 3 to 8 minutes.
+              </Text>
+            </UnstyledButton>
+          </div>
+        )}
+      </Modal>
     </>
   )
 }

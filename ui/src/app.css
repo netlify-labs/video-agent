@@ -973,3 +973,45 @@ body {
 .va-music-sources summary {
   cursor: pointer;
 }
+
+/* New video: the Create dialog's two ways to start */
+.va-create-choice {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.va-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  text-align: left;
+  border: 1px solid var(--va-rule);
+  transition: border-color 120ms ease;
+}
+.va-choice:hover,
+.va-choice:focus-visible {
+  border-color: var(--va-text);
+}
+/* The plan's steps: a steady height so the dialog doesn't jump between questions; numbers only on phones. */
+.va-plan-steps {
+  min-height: 420px;
+}
+.va-plan-steps .va-plan-footer {
+  margin-top: auto;
+  position: sticky;
+  bottom: 0;
+  padding-block: 12px;
+  background: var(--mantine-color-body);
+}
+.mantine-Modal-content:has(.va-plan-steps) {
+  background: var(--mantine-color-body);
+}
+@media (max-width: 48em) {
+  .va-create-choice {
+    grid-template-columns: 1fr;
+  }
+  .va-plan-steps .mantine-Stepper-stepBody {
+    display: none;
+  }
+}

@@ -144,7 +144,7 @@ test('a failed video explains why and offers Try again', async ({ page }) => {
 
 test('new video form validates and picks a shape', async ({ page }) => {
   await page.goto('/new')
-  const make = page.getByRole('button', { name: 'Plan it first' })
+  const make = page.getByRole('button', { name: 'Create video', exact: true })
   await expect(make).toBeDisabled()
   await page
     .getByLabel('What should the video show?')
@@ -161,16 +161,42 @@ test('Plan it first asks questions, writes an editable brief, and creates the vi
   await page
     .getByLabel('What should the video show?')
     .fill('A 30-second launch video for org-wide webhooks, ending on our logo.')
-  await page.getByRole('button', { name: 'Plan it first' }).click()
-  await expect(page.getByText('Who is this video for?')).toBeVisible()
-  await page.getByRole('radio', { name: /Developers/ }).click()
-  await page.getByPlaceholder('Other…').first().fill('Platform engineers too')
-  await page.getByRole('checkbox', { name: 'Skip' }).nth(1).check()
-  await page.getByRole('button', { name: 'Done: write the brief' }).click()
-  await expect(page.getByLabel('Call to action')).toHaveValue('Read the docs')
-  await page.getByLabel('Call to action').fill('Start free today')
-  await page.getByRole('button', { name: 'Create video' }).click()
+  await planFirst(page)
+  // One question at a time in the dialog, each with free text for another answer or more context.
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByText('Who is this video for?')).toBeVisible()
+  await dialog.getByRole('radio', { name: /Developers/ }).click()
+  await dialog.getByPlaceholder('Other, or more context…').fill('Platform engineers too')
+  await dialog.getByRole('button', { name: 'Next' }).click()
+  await expect(dialog.getByText('How should it end?')).toBeVisible()
+  await dialog.getByRole('checkbox', { name: 'Skip' }).check()
+  await expect(dialog.getByPlaceholder('Other, or more context…')).toBeVisible()
+  // Back keeps the answers.
+  await dialog.getByRole('button', { name: 'Back' }).click()
+  await expect(dialog.getByPlaceholder('Other, or more context…')).toHaveValue('Platform engineers too')
+  await dialog.getByRole('button', { name: 'Next' }).click()
+  await dialog.getByRole('button', { name: 'Write the brief' }).click()
+  await expect(dialog.getByLabel('Call to action')).toHaveValue('Read the docs')
+  expect(await page.evaluate("window.__sent['/api/v1/plans/plan_mock/brief'].answers")).toEqual([
+    { questionId: 'q1', optionIds: ['a'], other: 'Platform engineers too' },
+    { questionId: 'q2', skipped: true },
+  ])
+  await dialog.getByLabel('Call to action').fill('Start free today')
+  await dialog.getByRole('button', { name: 'Create with this brief' }).click()
   await expect(page).toHaveURL(/\/videos\//)
+})
+
+test('the Create dialog can start the video from any step of the plan', async ({ page }) => {
+  await page.goto('/new')
+  await page
+    .getByLabel('What should the video show?')
+    .fill('A 30-second launch video for org-wide webhooks, ending on our logo.')
+  await planFirst(page)
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByText('Who is this video for?')).toBeVisible()
+  await dialog.getByRole('button', { name: 'Create video now' }).click()
+  await expect(page).toHaveURL(/\/videos\//)
+  expect(await page.evaluate("'planId' in window.__sent['/api/v1/videos']")).toBe(false)
 })
 
 test('Create now skips planning', async ({ page }) => {
@@ -178,9 +204,27 @@ test('Create now skips planning', async ({ page }) => {
   await page
     .getByLabel('What should the video show?')
     .fill('A 20-second launch video for our new feature, ending with "Try it today".')
-  await page.getByRole('button', { name: 'Create now' }).click()
+  await createNow(page)
   await expect(page).toHaveURL(/\/videos\//)
 })
+
+/** New video: Create video, then Create it now in the dialog. */
+async function createNow(page: Page) {
+  await page.getByRole('button', { name: 'Create video', exact: true }).click()
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: /^Create it now/ })
+    .click()
+}
+
+/** New video: Create video, then Plan it first in the dialog. */
+async function planFirst(page: Page) {
+  await page.getByRole('button', { name: 'Create video', exact: true }).click()
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: /^Plan it first/ })
+    .click()
+}
 
 /** Opens the navbar on phones (behind the burger); a no-op on desktop. */
 async function openNav(page: Page) {
@@ -826,17 +870,16 @@ test('media picked on New video goes to the plan and the video; chips lock while
   await dialog.getByRole('button', { name: 'Done' }).click()
   await expect(page.getByTestId('chip-med_mock0001')).toContainText('logo.png')
 
-  await page.getByRole('button', { name: 'Plan it first' }).click()
+  await planFirst(page)
   await expect(page.getByText('Who is this video for?')).toBeVisible()
   expect(await page.evaluate("window.__sent['/api/v1/plans'].mediaIds")).toEqual(['med_mock0001'])
-  await expect(page.getByRole('button', { name: 'Remove logo.png' })).toHaveCount(0)
-  await page.getByRole('button', { name: 'Close' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Close' }).click()
   await page.getByRole('button', { name: 'Remove logo.png' }).click()
   await expect(page.getByTestId('chip-med_mock0001')).toHaveCount(0)
   await page.getByRole('button', { name: 'Add media' }).click()
   await page.getByRole('dialog').getByTestId('pick-med_mock0001').click()
   await page.getByRole('dialog').getByRole('button', { name: 'Done' }).click()
-  await page.getByRole('button', { name: 'Create now' }).click()
+  await createNow(page)
   await expect(page).toHaveURL(/\/videos\//)
   expect(await page.evaluate("window.__sent['/api/v1/videos'].mediaIds")).toEqual(['med_mock0001'])
 })
@@ -898,7 +941,7 @@ test('New video sends the Sound choice; picking a track turns music on', async (
   await expect(page.getByRole('radio', { name: 'Music', exact: true })).toBeChecked()
   await expect(page.getByText('Music: theme.mp3.')).toBeVisible()
   await page.getByText('Music + effects', { exact: true }).click()
-  await page.getByRole('button', { name: 'Create now' }).click()
+  await createNow(page)
   await expect(page).toHaveURL(/\/videos\//)
   expect(await page.evaluate("window.__sent['/api/v1/videos'].sound")).toBe('music_sfx')
   expect(await page.evaluate("window.__sent['/api/v1/videos'].mediaIds")).toEqual(['med_mock0001'])
@@ -940,7 +983,7 @@ test('New video sends a voice-over with a voice, a pace and a script per beat', 
   await page.getByRole('button', { name: 'Add a line' }).click()
   await page.getByRole('button', { name: 'Remove line 3' }).click()
   await expect(page.getByLabel('Line 3', { exact: true })).toHaveCount(0)
-  await page.getByRole('button', { name: 'Create now' }).click()
+  await createNow(page)
   await expect(page).toHaveURL(/\/videos\//)
   expect(await page.evaluate("window.__sent['/api/v1/videos'].voiceover")).toEqual({
     enabled: true,
@@ -955,7 +998,7 @@ test('a video without a voice-over sends none', async ({ page }) => {
   await page
     .getByLabel('What should the video show?')
     .fill('A 20-second launch video for our new feature, ending with "Try it today".')
-  await page.getByRole('button', { name: 'Create now' }).click()
+  await createNow(page)
   await expect(page).toHaveURL(/\/videos\//)
   expect(await page.evaluate("'voiceover' in window.__sent['/api/v1/videos']")).toBe(false)
 })
@@ -969,19 +1012,19 @@ test('Plan it first with a voice-over shows an editable narration per beat and c
     .fill('A 30-second launch video for org-wide webhooks, ending on our logo.')
   await page.getByRole('switch', { name: /Voice-over/ }).click()
   await expect(page.getByText('Leave it empty and the plan writes the narration.')).toBeVisible()
-  await page.getByRole('button', { name: 'Plan it first' }).click()
-  await expect(page.getByText('Who is this video for?')).toBeVisible()
+  await planFirst(page)
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByText('Who is this video for?')).toBeVisible()
   expect(await page.evaluate("window.__sent['/api/v1/plans'].voiceover")).toEqual({ enabled: true })
-  // The voice-over can't change under a plan in progress.
-  await expect(page.getByRole('switch', { name: /Voice-over/ })).toBeDisabled()
-  await page.getByRole('checkbox', { name: 'Skip' }).first().check()
-  await page.getByRole('checkbox', { name: 'Skip' }).nth(1).check()
-  await page.getByRole('button', { name: 'Done: write the brief' }).click()
-  const first = page.getByLabel('Narration for beat 1')
+  await dialog.getByRole('checkbox', { name: 'Skip' }).check()
+  await dialog.getByRole('button', { name: 'Next' }).click()
+  await dialog.getByRole('checkbox', { name: 'Skip' }).check()
+  await dialog.getByRole('button', { name: 'Write the brief' }).click()
+  const first = dialog.getByLabel('Narration for beat 1')
   await expect(first).toHaveValue('Every project used to need its own webhook.')
-  await expect(page.getByLabel('Narration for beat 3')).toHaveValue('Read the docs to set it up.')
+  await expect(dialog.getByLabel('Narration for beat 3')).toHaveValue('Read the docs to set it up.')
   await first.fill('One webhook per project? Not anymore.')
-  await page.getByRole('button', { name: 'Create video' }).click()
+  await dialog.getByRole('button', { name: 'Create with this brief' }).click()
   await expect(page).toHaveURL(/\/videos\//)
   expect(await page.evaluate("window.__sent['/api/v1/plans/plan_mock'].brief.beats[0].narration")).toBe(
     'One webhook per project? Not anymore.',
