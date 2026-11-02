@@ -6,7 +6,7 @@ import { useState } from 'react'
 import { errorMessage, type Version, type Video } from '../api/client'
 import { mockFile } from '../mock/files'
 
-const STATUS_WORD: Record<Video['status'], string> = {
+export const STATUS_WORD: Record<Video['status'], string> = {
   queued: 'Queued',
   running: 'Making',
   finishing: 'Saving',

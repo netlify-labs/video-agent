@@ -6,6 +6,7 @@ import {
   Card,
   CopyButton,
   Group,
+  Loader,
   Menu,
   SegmentedControl,
   Skeleton,
@@ -46,6 +47,7 @@ import { $api, errorMessage, newIdempotencyKey, videoInit, type Version, type Vi
 import {
   CopyField,
   Meta,
+  STATUS_WORD,
   StageTrack,
   Status,
   VersionImage,
@@ -193,15 +195,24 @@ function Progress({ video, v, canCancel }: { video: Video; v: Version; canCancel
         }}
       >
         <Stack gap="md" w="min(520px, 100%)">
-          <Group justify="space-between" align="baseline">
-            <Text fw={600} size="lg">
-              {v.status === 'queued' ? `Version ${v.n} is queued` : `Making version ${v.n}`}
-            </Text>
+          <Group justify="space-between" align="center" wrap="nowrap">
+            <Group gap="sm" wrap="nowrap">
+              {/* A real loading state: a spinner beside what's happening (its label is the stage, for screen readers). */}
+              <div
+                role="img"
+                aria-label={`Stage: ${stage === 'finding_music' ? 'Finding music' : STATUS_WORD[v.status]}`}
+                style={{ display: 'grid' }}
+              >
+                <Loader size={26} color="var(--va-accent)" />
+              </div>
+              <Text fw={600} size="lg">
+                {v.status === 'queued' ? `Version ${v.n} is queued` : `Making version ${v.n}`}
+              </Text>
+            </Group>
             <Text size="xl" fw={500} className="num" aria-label="Elapsed">
               {clock(v.timings?.queuedAt)}
             </Text>
           </Group>
-          <StageTrack version={{ status: v.status, stage }} />
           <Text size="sm" c="var(--va-muted)" data-testid="stage-words">
             {STAGE_WORDS[stage] ?? 'Working'}
           </Text>
