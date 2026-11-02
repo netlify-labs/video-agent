@@ -29,6 +29,7 @@ import type {
   OpenverseJobRow,
   OpenverseJobKind,
   OpenverseJobStatus,
+  OpenverseSearchRow,
   VersionMediaRow,
   VersionProvenanceRow,
   GatewayCallRow,
@@ -176,6 +177,16 @@ export interface Repo {
     limit: number
   }): Promise<OpenverseJobRow[]>
   deleteExpiredOpenverseJobs(now: string): Promise<number>
+  getOpenverseSearch(key: string): Promise<OpenverseSearchRow | null>
+  /** Inserts or replaces the stored search for its key. */
+  putOpenverseSearch(row: OpenverseSearchRow): Promise<void>
+  /** Deletes searches fetched before `fetchedBefore`, then all but the `keep` most recently fetched. */
+  deleteOldOpenverseSearches(q: { fetchedBefore: string; keep: number }): Promise<number>
+  /** Counts one more use of a search on a UTC day (YYYY-MM-DD). */
+  addOpenverseSearchUse(key: string, day: string): Promise<void>
+  /** The most used searches on or after `sinceDay`, most used first. */
+  topOpenverseSearches(sinceDay: string, limit: number): Promise<{ key: string; count: number }[]>
+  deleteOpenverseSearchUses(beforeDay: string): Promise<number>
   insertVersionMedia(rows: VersionMediaRow[]): Promise<void>
   listVersionMedia(jobId: string, versionN: number): Promise<VersionMediaRow[]>
   /** Per media id, the distinct videos (job ids) whose versions use it. */

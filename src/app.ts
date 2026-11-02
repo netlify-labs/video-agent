@@ -63,7 +63,13 @@ import { myUsage, planningByUserWeek } from './domain/usage.js'
 import { ApiError, errorBody } from './lib/errors.js'
 import { MEDIA_KINDS } from './lib/media/classify.js'
 import { AUDIO_CATEGORIES, LICENSE_FILTERS } from './domain/openverse.js'
-import { getOpenverseJob, startOpenverseImport, startOpenverseSearch } from './domain/openverse-jobs.js'
+import {
+  COMMON_SEARCHES,
+  getOpenverseJob,
+  startOpenverseImport,
+  startOpenverseSearch,
+} from './domain/openverse-jobs.js'
+import { libraryMatches } from './domain/music-library.js'
 import { PREVIEW_NAMES } from './lib/media/previews.js'
 import * as s from './schemas.js'
 
@@ -1206,7 +1212,10 @@ export function createApp(deps: Deps, opts: AppOptions) {
         }),
       },
       responses: {
-        200: json(s.OpenverseSearchSchema, 'Tracks (fresh, or from a recent identical search)'),
+        200: json(
+          s.OpenverseSearchSchema,
+          'Tracks: fresh, or from an identical search in the last two weeks (stale after a day, then refreshed in the background)',
+        ),
         202: json(
           s.OpenverseJobSchema,
           'Openverse is slow: poll the job (the Location header) for the tracks',
@@ -1221,6 +1230,31 @@ export function createApp(deps: Deps, opts: AppOptions) {
       if (r.job) return c.json(r.job, 202, { location: `/api/v1/media/openverse/jobs/${r.job.id}` })
       return c.json(r.done, 200)
     },
+  )
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/v1/media/openverse/library',
+      summary:
+        'Audio already in the team library that matches music search words (title, caption, filename, creator or source), answered at once without asking Openverse',
+      tags: ['media'],
+      security,
+      request: { query: z.object({ q: z.string().min(1).max(200) }) },
+      responses: { 200: json(s.MusicLibraryMatchesSchema, 'Matching library audio'), ...errors },
+    }),
+    async (c) =>
+      c.json({ items: await libraryMatches(deps, c.get('principal'), c.req.valid('query').q) }, 200),
+  )
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/v1/media/openverse/common',
+      summary: 'Common music searches, kept warm every day: quick picks that answer at once',
+      tags: ['media'],
+      security,
+      responses: { 200: json(s.OpenverseCommonSchema, 'The searches'), ...errors },
+    }),
+    async (c) => c.json({ queries: [...COMMON_SEARCHES] }, 200),
   )
   app.openapi(
     createRoute({

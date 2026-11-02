@@ -10,6 +10,7 @@ import { PRIVATE_URL_TTL_SEC, signedFilePath } from './domain/files.js'
 import { addComment, listComments } from './domain/comments.js'
 import { getProgress } from './domain/progress.js'
 import { listMedia } from './domain/media.js'
+import { libraryMatches } from './domain/music-library.js'
 import { AUDIO_CATEGORIES, LICENSE_FILTERS, openverseTiming } from './domain/openverse.js'
 import {
   getOpenverseJob,
@@ -799,6 +800,15 @@ Example: {"kind": "image"}`,
   )
 
   // Openverse can take a minute: the music tools wait a few seconds, then hand back a job to poll with get_music_job.
+  /** Library audio matching a search, for agents to reuse before importing anything new. */
+  const inLibrary = async (query: string) =>
+    (await libraryMatches(deps, principal, query, 5)).map((m) => ({
+      media_id: m.id,
+      title: m.source?.title ?? m.caption ?? m.filename,
+      creator: m.source?.creator ?? null,
+      duration_sec: m.durationSec === null ? null : Math.round(m.durationSec),
+      license: m.source?.licenseLabel ?? null,
+    }))
   const trackList = (r: SearchResult) => ({
     status: 'done',
     tracks: r.items
@@ -817,6 +827,7 @@ Example: {"kind": "image"}`,
       })),
     page: r.page,
     page_count: r.pageCount,
+    ...(r.stale && r.fetchedAt ? { fetched_at: r.fetchedAt } : {}),
     next_actions: [
       'Pick a track (media_id means it is already in the library), then call import_music with its id.',
     ],
@@ -860,8 +871,8 @@ Example: {"kind": "image"}`,
       title: 'Find music on Openverse',
       description: `Search Openverse for openly licensed music (or sound effects) that is free for commercial videos and edits: only CC0 and CC BY, never NC, ND or SA. Results aren't in the library yet: pass a track's id to import_music, then use the returned media id in create_video or revise_video (media_ids) with sound "music". CC BY tracks are credited on the video and its share page automatically.
 
-When to use: the user wants music and the library (list_media, kind "audio") has nothing that fits. Listen links are in preview_url.
-Openverse is sometimes slow: then the answer is {"status": "pending", "job_id": …}; call get_music_job with that job_id until it's done.
+When to use: the user wants music and the library (list_media, kind "audio") has nothing that fits. Listen links are in preview_url. in_library lists audio already in the library that matches the words: prefer one of those (pass its media_id) over importing.
+Searches are shared and stored, so common ones answer at once. Openverse is sometimes slow: then the answer is {"status": "pending", "job_id": …}; call get_music_job with that job_id until it's done.
 
 Example: {"query": "calm piano", "license": "cc0,by"}`,
       inputSchema: {
@@ -886,7 +897,17 @@ Example: {"query": "calm piano", "license": "cc0,by"}`,
           category: args.category,
           page: args.page,
         })
-        return r.job ? settle(started, r.job) : trackList(r.done)
+        const out = r.job ? await settle(started, r.job) : trackList(r.done)
+        const library = await inLibrary(args.query)
+        if (!library.length) return out
+        return {
+          ...out,
+          in_library: library,
+          next_actions: [
+            `In the library already: ${library.map((m) => `"${m.title}" (media_id ${m.media_id})`).join(', ')}. Pass one in media_ids with sound "music", or pick an Openverse track to import.`,
+            ...out.next_actions,
+          ],
+        }
       }),
   )
 

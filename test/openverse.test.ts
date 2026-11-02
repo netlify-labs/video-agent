@@ -219,7 +219,7 @@ describe('Openverse search', () => {
     expect(calls(h, /openverse/)).toHaveLength(0)
   })
 
-  it('caches a search for a few minutes', async () => {
+  it('caches a search, and keys it by the normalized request', async () => {
     const h = harness()
     openverse(h, [raw(1)])
     await search(h, 'q=calm')
@@ -227,9 +227,10 @@ describe('Openverse search', () => {
     expect(calls(h, /\/v1\/audio\/\?/)).toHaveLength(1)
     await search(h, 'q=calm&page=2')
     expect(calls(h, /\/v1\/audio\/\?/)).toHaveLength(2)
+    // Past the in-memory minutes, the stored search still answers within its fresh day.
     h.deps.clock.advance(6 * 60_000)
-    await search(h, 'q=calm')
-    expect(calls(h, /\/v1\/audio\/\?/)).toHaveLength(3)
+    await search(h, 'q=++calm+&license=cc0,by&category=music&page=1')
+    expect(calls(h, /\/v1\/audio\/\?/)).toHaveLength(2)
   })
 
   it('says Openverse is busy when rate-limited, and waits before asking again', async () => {

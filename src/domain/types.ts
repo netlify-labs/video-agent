@@ -547,7 +547,8 @@ export const NO_PROVENANCE: MediaProvenance = {
 
 export type UploadStatus = 'open' | 'assembling' | 'done' | 'failed'
 
-export type OpenverseJobKind = 'search' | 'import'
+/** warmup: the daily refresh of common searches (src/domain/openverse-jobs.ts), run by the server for itself. */
+export type OpenverseJobKind = 'search' | 'import' | 'warmup'
 export type OpenverseJobStatus = 'queued' | 'running' | 'done' | 'failed'
 
 /** A search or import run by openverse-background (src/domain/openverse-jobs.ts). */
@@ -564,6 +565,13 @@ export interface OpenverseJobRow {
   createdAt: string
   updatedAt: string
   expiresAt: string
+}
+
+/** A finished Openverse search page (normalized, before it's checked against the library). */
+export interface OpenverseSearchRow {
+  key: string
+  result: unknown
+  fetchedAt: string
 }
 
 export interface MediaUploadRow {

@@ -592,8 +592,22 @@ export const OpenverseSearchSchema = z
     page: z.number().int(),
     pageCount: z.number().int(),
     total: z.number().int(),
+    fetchedAt: z
+      .string()
+      .nullable()
+      .openapi({
+        description: 'When these tracks were fetched from Openverse (searches are shared and stored)',
+      }),
+    stale: z.boolean().openapi({
+      description:
+        'True when the stored search is over a day old: it is answered at once and refreshed in the background',
+    }),
   })
   .openapi('OpenverseSearch')
+
+export const OpenverseCommonSchema = z
+  .object({ queries: z.array(z.string()).openapi({ example: ['upbeat', 'ambient', 'cinematic'] }) })
+  .openapi('OpenverseCommon')
 
 export const OpenverseJobSchema = z
   .object({
@@ -615,6 +629,14 @@ export const OpenverseJobSchema = z
     expiresAt: z.string().openapi({ description: 'The job can be read until then (30 minutes)' }),
   })
   .openapi('OpenverseJob')
+
+export const MusicLibraryMatchesSchema = z
+  .object({
+    items: z
+      .array(MediaSchema)
+      .openapi({ description: 'Ready audio in the library matching the words, Openverse imports first' }),
+  })
+  .openapi('MusicLibraryMatches')
 
 export const MediaListSchema = z
   .object({ items: z.array(MediaSchema), nextCursor: z.string().nullable() })

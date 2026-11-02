@@ -149,9 +149,23 @@ Openverse API.
   `/api/v1/media/openverse/jobs/{id}`). The `openverse-background` function runs it with 60-second calls, retries
   timeouts and 5xx with backoff, and waits out a 429's `Retry-After`. Poll the job until `status` is `done` (with
   `search` or `media`) or `failed` (with `error`). Only the person who started a job can read it; jobs are kept for 30
-  minutes. Identical requests share a job, each person can start 12 searches or imports a minute, and a finished
-  search answers the same search from anyone instantly for 5 minutes. The MCP tools wait about 8 seconds, then answer
-  `status: "pending"` with a `job_id` for `get_music_job`.
+  minutes. Identical requests share a job, and each person can start 12 searches or imports a minute. The MCP tools
+  wait about 8 seconds, then answer `status: "pending"` with a `job_id` for `get_music_job`.
+- **Stored searches.** Every search Openverse answers is stored in the database (`openverse_searches`, keyed by the
+  search with case, spaces, licence, kind and page normalized) and answers the same search from anyone, on any
+  function instance, at once: fresh for 24 hours, then for up to 14 days marked `stale: true` (with `fetchedAt`) while
+  one background job refreshes it. Only the tracks are stored; whether one is in the library (`mediaId`) is looked up
+  for every request. The server's music picks use the same stored searches. The sweep deletes searches older than 14
+  days and keeps at most 5,000.
+- **Daily warm-up.** The `openverse-warmup` function (daily, 05:17 UTC) queues one background job that refreshes the
+  common searches (`GET /api/v1/media/openverse/common`: upbeat, ambient, corporate, cinematic, acoustic, piano, lofi
+  and more; music, CC0 and CC BY, first page) and the 15 most used first-page searches of the last 14 days, skipping
+  any fetched in the last 20 hours. It runs three at a time, starts each at least 4 seconds after the last, and stops
+  when Openverse says it's busy. Find music offers the common searches as quick picks.
+- **Library first.** `GET /api/v1/media/openverse/library?q=` returns ready audio already in the library whose title,
+  caption, filename, creator or source title matches the words (every word matched first, then Openverse imports),
+  without asking Openverse. Find music shows them at once under **In your library**, above Openverse's tracks, and
+  `search_music` lists them in `in_library` so agents reuse a track before importing another.
 - **Licences: CC0 and CC BY only.** NC (non-commercial), ND (no derivatives) and SA (share-alike) tracks are never
   shown or imported, whatever Openverse returns: videos are often commercial, they're edited and re-cut, and a
   share-alike track would put its licence on the whole video. CC0 needs no credit; CC BY needs one, which the app adds.
@@ -213,8 +227,8 @@ Openverse API.
   and with `--deploy` redeploys so the functions pick them up. Then click the verification link Openverse emails
   you: until then the app has anonymous limits. `npm run setup` offers the same step, and the setup page shows
   whether searches run as a registered app. The server swaps the credentials for a token and keeps it until it
-  expires. Searches are cached for 5 minutes, and when Openverse says it's busy the app waits before asking again
-  and says "Openverse is busy, try again in a minute."
+  expires. Searches are stored (above), and when Openverse says it's busy the app waits before asking again and says
+  "Openverse is busy, try again in a minute."
 
 ## The API
 

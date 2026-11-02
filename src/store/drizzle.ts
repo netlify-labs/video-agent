@@ -43,6 +43,7 @@ import type {
   MediaUploadRow,
   MediaUploadPartRow,
   OpenverseJobRow,
+  OpenverseSearchRow,
   VersionMediaRow,
   VersionProvenanceRow,
   GatewayCallRow,
@@ -574,6 +575,63 @@ function repoFor(db: Db): Repo {
           .delete(t.openverseJobs)
           .where(lte(t.openverseJobs.expiresAt, now))
           .returning({ id: t.openverseJobs.id })
+      ).length,
+    getOpenverseSearch: async (key) =>
+      one<OpenverseSearchRow>(
+        await db.select().from(t.openverseSearches).where(eq(t.openverseSearches.key, key)),
+      ),
+    putOpenverseSearch: async (row) => {
+      await db
+        .insert(t.openverseSearches)
+        .values(row)
+        .onConflictDoUpdate({
+          target: t.openverseSearches.key,
+          set: { result: row.result, fetchedAt: row.fetchedAt },
+        })
+    },
+    deleteOldOpenverseSearches: async (q) => {
+      const s = t.openverseSearches
+      const old = await db.delete(s).where(lt(s.fetchedAt, q.fetchedBefore)).returning({ key: s.key })
+      // Over the cap: keep the most recently fetched.
+      const over = await db
+        .select({ key: s.key })
+        .from(s)
+        .orderBy(desc(s.fetchedAt), asc(s.key))
+        .offset(q.keep)
+        .limit(1000)
+      if (over.length)
+        await db.delete(s).where(
+          inArray(
+            s.key,
+            over.map((r) => r.key),
+          ),
+        )
+      return old.length + over.length
+    },
+    addOpenverseSearchUse: async (key, day) => {
+      const u = t.openverseSearchUses
+      await db
+        .insert(u)
+        .values({ key, day, count: 1 })
+        .onConflictDoUpdate({ target: [u.key, u.day], set: { count: sql`${u.count} + 1` } })
+    },
+    topOpenverseSearches: async (sinceDay, limit) => {
+      const u = t.openverseSearchUses
+      const total = sql<number>`sum(${u.count})::int`
+      return await db
+        .select({ key: u.key, count: total })
+        .from(u)
+        .where(gte(u.day, sinceDay))
+        .groupBy(u.key)
+        .orderBy(desc(total), asc(u.key))
+        .limit(limit)
+    },
+    deleteOpenverseSearchUses: async (beforeDay) =>
+      (
+        await db
+          .delete(t.openverseSearchUses)
+          .where(lt(t.openverseSearchUses.day, beforeDay))
+          .returning({ key: t.openverseSearchUses.key })
       ).length,
     insertVersionMedia: async (rows) => {
       if (rows.length) await db.insert(t.versionMedia).values(rows)

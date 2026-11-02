@@ -399,6 +399,29 @@ export const openverseJobs = pgTable(
   ],
 )
 
+// Finished Openverse searches, shared by every instance and person: served fresh for a day, then (stale, refreshed in
+// the background) for up to two weeks. Keyed by the normalized search; never holds library membership.
+export const openverseSearches = pgTable(
+  'openverse_searches',
+  {
+    key: text('key').primaryKey(),
+    result: jsonb('result').notNull(),
+    fetchedAt: ts('fetched_at').notNull(),
+  },
+  (t) => [index('openverse_searches_fetched_idx').on(t.fetchedAt)],
+)
+
+// How often each first-page search was asked for, per UTC day: the daily warm-up refreshes the most used.
+export const openverseSearchUses = pgTable(
+  'openverse_search_uses',
+  {
+    key: text('key').notNull(),
+    day: text('day').notNull(),
+    count: integer('count').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.key, t.day] }), index('openverse_search_uses_day_idx').on(t.day)],
+)
+
 // Media a version was made with, snapshotted when it was queued (plan v2 §9): the run downloads exactly these
 // bytes, even if the item is later soft-deleted. Revisions and edits inherit their parent's.
 export const versionMedia = pgTable(

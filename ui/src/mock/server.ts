@@ -408,6 +408,7 @@ export function installMock() {
     }
     // Media library (plan v2 §9): in memory. localStorage.mockFailPart=1 fails one part once, to test resume.
     if (p === '/api/v1/media' && method === 'GET') {
+      seedLibraryMusic()
       const kind = url.searchParams.get('kind')
       return json({ items: mockMedia.filter((m) => !kind || m.kind === kind), nextCursor: null })
     }
@@ -487,8 +488,21 @@ export function installMock() {
       if (busy) return fail(429, 'rate_limited', 'Openverse is busy, try again in a minute.')
       const q = (url.searchParams.get('q') ?? '').toLowerCase()
       const cc0Only = url.searchParams.get('license') === 'cc0'
-      if (mockOpenverseSlow()) return mockJobStart('search', { q, cc0Only })
-      return json(mockSearch(q, cc0Only))
+      // The common searches are kept warm on the server, so they answer at once even when Openverse is slow.
+      if (mockOpenverseSlow() && !MOCK_COMMON.includes(q)) return mockJobStart('search', { q, cc0Only })
+      return json(mockSearch(q, cc0Only, true))
+    }
+    if (p === '/api/v1/media/openverse/common' && method === 'GET') return json({ queries: MOCK_COMMON })
+    if (p === '/api/v1/media/openverse/library' && method === 'GET') {
+      seedLibraryMusic()
+      const words = (url.searchParams.get('q') ?? '')
+        .toLowerCase()
+        .split(/\W+/)
+        .filter((w) => w.length > 1 && w !== 'music')
+      const text = (m: MockMedia) =>
+        [m.filename, m.caption ?? '', m.source?.title ?? '', m.source?.creator ?? ''].join(' ').toLowerCase()
+      const items = mockMedia.filter((m) => m.kind === 'audio' && words.some((w) => text(m).includes(w)))
+      return json({ items })
     }
     if (p === '/api/v1/media/openverse/import' && method === 'POST') {
       const b = (await readBody(init, input)) as { id: string }
@@ -881,7 +895,41 @@ const mockOpenverseSlow = () => {
     return null
   }
 }
-function mockSearch(q: string, cc0Only: boolean) {
+/** localStorage.mockOpenverseStale=1: stored searches are three hours past their fresh day (refreshing). */
+const mockStale = () => {
+  try {
+    return localStorage.getItem('mockOpenverseStale') === '1'
+  } catch {
+    return false
+  }
+}
+const MOCK_COMMON = ['upbeat', 'ambient', 'corporate', 'cinematic', 'acoustic', 'piano', 'lofi', 'calm']
+/** localStorage.mockLibraryMusic=1: the library already has a piano track imported from Openverse. */
+function seedLibraryMusic() {
+  try {
+    if (!localStorage.getItem('mockLibraryMusic') || mockMedia.some((m) => m.id === 'med_libpiano')) return
+  } catch {
+    return
+  }
+  const m = { ...mockItem('Quiet Piano Morning - Ada Keys.mp3', 'audio', 2_100_000), id: 'med_libpiano' }
+  m.caption = 'Calm piano bed'
+  m.source = {
+    name: 'openverse',
+    id: '00000009-0000-4000-8000-000000000009',
+    url: 'https://www.jamendo.com/track/2009',
+    title: 'Quiet Piano Morning',
+    creator: 'Ada Keys',
+    creatorUrl: 'https://www.jamendo.com/artist/1009',
+    license: 'cc0',
+    licenseVersion: '1.0',
+    licenseLabel: 'CC0 1.0',
+    licenseUrl: 'https://creativecommons.org/publicdomain/zero/1.0/',
+    attribution: null,
+    creditRequired: false,
+  }
+  mockMedia.push(m)
+}
+function mockSearch(q: string, cc0Only: boolean, stored = false) {
   const items = mockTracks
     .filter(
       (t) =>
@@ -893,7 +941,9 @@ function mockSearch(q: string, cc0Only: boolean) {
             .some((w) => q.includes(w))),
     )
     .map((t) => ({ ...t, mediaId: mockMedia.find((m) => m.source?.id === t.id)?.id ?? null }))
-  return { items, page: 1, pageCount: 1, total: items.length }
+  const stale = stored && mockStale()
+  const fetchedAt = new Date(Date.now() - (stale ? 27 : 0) * 3600_000).toISOString()
+  return { items, page: 1, pageCount: 1, total: items.length, fetchedAt, stale }
 }
 interface MockJob {
   id: string
