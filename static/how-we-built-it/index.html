@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How we built Video Agent</title>
+<meta name="description" content="An AI agent that turns a prompt into a branded MP4, built on Netlify: HyperFrames rendering inside Netlify Agent Runners, usable from a web app, an API or any MCP client.">
+<meta property="og:title" content="How we built Video Agent">
+<meta property="og:description" content="Prompt in, branded MP4 out: HyperFrames inside Netlify Agent Runners, with a web app, an API and MCP on top.">
+<meta property="og:type" content="article">
+<style>
+  :root {
+    --ground: #f7f8f9; --surface: #ffffff; --raised: #eef0f2; --rule: #e3e6ea;
+    --text: #111418; --muted: #4c5561; --faint: #77808b; --accent: #058a80; --accent-soft: #e0f4f2;
+    --code: #0b0d10; --code-text: #dfe5ea;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0b0d10; --surface: #13161a; --raised: #1b1f24; --rule: #262b31;
+      --text: #f2f4f6; --muted: #b3bcc6; --faint: #87919c; --accent: #32e6e2; --accent-soft: #0f2b2c;
+      --code: #07090b; --code-text: #dfe5ea;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0b0d10; --surface: #13161a; --raised: #1b1f24; --rule: #262b31;
+    --text: #f2f4f6; --muted: #b3bcc6; --faint: #87919c; --accent: #32e6e2; --accent-soft: #0f2b2c;
+    --code: #07090b; --code-text: #dfe5ea;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--ground); color: var(--text); font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 0 16px 96px; }
+  header.hero { padding: 72px 0 40px; }
+  .kicker { color: var(--accent); font-weight: 600; font-size: 14px; letter-spacing: .02em; margin: 0 0 12px; }
+  h1 { font-size: clamp(34px, 6vw, 52px); line-height: 1.08; letter-spacing: -.02em; margin: 0 0 18px; }
+  .lede { font-size: 19px; color: var(--muted); margin: 0 0 28px; max-width: 680px; }
+  h2 { font-size: 26px; letter-spacing: -.01em; margin: 64px 0 14px; }
+  h3 { font-size: 17px; margin: 0 0 6px; }
+  p { margin: 0 0 14px; }
+  .muted { color: var(--muted); }
+  a { color: var(--accent); text-underline-offset: 3px; }
+  code { font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--raised); padding: 1px 6px; border-radius: 6px; }
+  pre { background: var(--code); color: var(--code-text); border-radius: 14px; padding: 18px 20px; overflow-x: auto; font: 13.5px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 0 0 16px; }
+  pre code { background: none; padding: 0; color: inherit; font: inherit; }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 999px; font-weight: 600; text-decoration: none; font-size: 15px; }
+  .btn.primary { background: var(--text); color: var(--ground); }
+  .btn.secondary { background: var(--raised); color: var(--text); }
+  .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 40px 0 0; }
+  .stat { background: var(--surface); border: 1px solid var(--rule); border-radius: 14px; padding: 16px; }
+  .stat b { display: block; font-size: 26px; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
+  .stat span { color: var(--faint); font-size: 13px; }
+  .flow { list-style: none; padding: 0; margin: 20px 0; counter-reset: step; }
+  .flow li { position: relative; padding: 0 0 22px 52px; counter-increment: step; }
+  .flow li::before { content: counter(step); position: absolute; left: 0; top: 0; width: 34px; height: 34px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-weight: 700; display: grid; place-items: center; font-size: 15px; }
+  .flow li::after { content: ""; position: absolute; left: 16px; top: 38px; bottom: 4px; width: 2px; background: var(--rule); }
+  .flow li:last-child::after { display: none; }
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 18px 0; }
+  .card { background: var(--surface); border: 1px solid var(--rule); border-radius: 14px; padding: 18px; }
+  .card p { color: var(--muted); font-size: 15px; margin: 0; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 0; padding: 0; list-style: none; }
+  .chips li { background: var(--raised); border-radius: 999px; padding: 4px 12px; font-size: 14px; color: var(--muted); }
+  .lessons { margin: 18px 0; padding: 0; list-style: none; }
+  .lessons li { border-top: 1px solid var(--rule); padding: 18px 0; }
+  .lessons li:last-child { border-bottom: 1px solid var(--rule); }
+  .lessons p { color: var(--muted); margin: 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 15px; margin: 8px 0 16px; }
+  th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { color: var(--faint); font-weight: 500; font-size: 13px; }
+  td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .table-wrap { overflow-x: auto; }
+  footer { color: var(--faint); font-size: 14px; border-top: 1px solid var(--rule); padding-top: 24px; margin-top: 72px; }
+  @media (max-width: 640px) {
+    header.hero { padding-top: 48px; }
+    .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<main>
+<header class="hero">
+  <p class="kicker">Netlify GTM Engineering</p>
+  <h1>How we built Video Agent</h1>
+  <p class="lede">Type what a video should say and get a branded MP4 a few minutes later. An AI agent writes the video as
+  HTML, renders it with HyperFrames inside a Netlify Agent Runner, and hands it back. Anyone who signs in can use it,
+  and so can scripts and AI tools.</p>
+  <div class="actions">
+    <a class="btn primary" href="/">Open Video Agent</a>
+    <a class="btn secondary" href="#use-it">Connect it to your AI tools</a>
+  </div>
+  <div class="stats">
+    <div class="stat"><b>3–8 min</b><span>prompt to MP4</span></div>
+    <div class="stat"><b>~90–250</b><span>AI credits per new video</span></div>
+    <div class="stat"><b>~34</b><span>credits for a browser edit</span></div>
+    <div class="stat"><b>4 days</b><span>first plan to everything here</span></div>
+  </div>
+</header>
+
+<h2>The idea that made it work</h2>
+<p><a href="https://hyperframes.heygen.com">HyperFrames</a> is an open-source renderer that turns an HTML page with
+timed animations into a video. That matters because AI agents are very good at writing HTML and CSS. They're much less
+good at driving video editors.</p>
+<p>A <a href="https://docs.netlify.com/build/build-with-ai/agent-runners/overview/">Netlify Agent Runner</a> gives an
+agent a real Linux machine checked out from your repo. Our first test run showed it already had what HyperFrames needs:
+Node, FFmpeg and FFprobe, and <code>npx hyperframes</code> worked straight away. That run took 45 seconds and cost
+about 14 credits. A second test showed a run can write files to Netlify Blobs at about 40 MB/s and call back to our
+API.</p>
+<p class="muted">Put together: the agent writes <code>video/index.html</code>, checks it, renders it in the runner,
+uploads the files and tells the app where they are. No video service, no GPU, no extra accounts.</p>
+
+<h2>How a video gets made</h2>
+<ol class="flow">
+  <li><h3>You describe it</h3><p class="muted">In the web app, through the API or from an AI tool over MCP. Optionally
+  "Plan it first" asks a few questions and writes a brief you can edit.</p></li>
+  <li><h3>It waits its turn</h3><p class="muted">Requests go into a queue in Netlify Database. A few run at once
+  (three by default), so a busy day can't spend all your credits at the same time.</p></li>
+  <li><h3>An agent run writes and checks it</h3><p class="muted">The app starts an Agent Runner run on the same Netlify
+  project. The agent reads your brand guide, logos and fonts from <code>context/</code>, writes the composition as HTML,
+  and runs <code>hyperframes check</code> until it passes. Music and voice-over are added here when asked for.</p></li>
+  <li><h3>One script renders and uploads it</h3><p class="muted"><code>scripts/render-job.ts</code> renders the MP4,
+  makes the poster, GIF preview and captions, uploads them to Netlify Blobs, and posts a signed list of the files and
+  their SHA-256 hashes back to the app.</p></li>
+  <li><h3>The app checks before it trusts</h3><p class="muted">Finalize compares every uploaded file with those hashes
+  and inspects the MP4 itself before the video becomes "ready". A sweep every minute catches anything that went quiet:
+  lost callbacks, crashed starts, runs that ask a question or run too long.</p></li>
+  <li><h3>You watch, edit, revise and share</h3><p class="muted">Play and download it, change text, timing, colours,
+  media and music in the browser, ask for a revision in plain words, or publish a public share page with an embed
+  snippet.</p></li>
+</ol>
+
+<h2>Built entirely on Netlify</h2>
+<p>One repo and one Netlify project. Each platform piece does one job:</p>
+<div class="grid">
+  <div class="card"><h3>Agent Runners</h3><p>Every video is a run: the agent's whole working session, with its logs
+  and a link from the app to the run.</p></div>
+  <div class="card"><h3>Functions</h3><p>A Hono API with an OpenAPI spec, background functions for long jobs, and a
+  scheduled sweep every minute that owns every outcome.</p></div>
+  <div class="card"><h3>Netlify Database</h3><p>Postgres with Drizzle migrations: videos, versions, run attempts,
+  people, API keys, plans, comments and the queue.</p></div>
+  <div class="card"><h3>Netlify Blobs</h3><p>Rendered files, uploads, the media library and the preview bundles.
+  Edge functions serve them with signed, expiring links.</p></div>
+  <div class="card"><h3>Edge Functions</h3><p>Fast file delivery with byte ranges, public share pages, and a
+  sandboxed live preview of the composition.</p></div>
+  <div class="card"><h3>AI Gateway</h3><p>The quick planning questions and the brief, with no model keys to
+  manage.</p></div>
+</div>
+<ul class="chips" aria-label="Also used">
+  <li>HyperFrames</li><li>Hono + zod-openapi</li><li>React + Mantine</li><li>Drizzle</li><li>Kokoro voices</li>
+  <li>Openverse music</li><li>Playwright</li><li>Vitest</li>
+</ul>
+
+<h2 id="use-it">Anyone can use it, from anywhere</h2>
+<p>The same video tasks are available four ways, with the same permissions behind each one:</p>
+<div class="grid">
+  <div class="card"><h3>Web app</h3><p>Sign in with Netlify. Create, watch progress, edit in the browser, comment,
+  approve and publish.</p></div>
+  <div class="card"><h3>API</h3><p>API keys and signed webhooks for scripts and CI, with a reference built into the
+  app.</p></div>
+  <div class="card"><h3>MCP</h3><p>Ask Claude, Cursor or any MCP client for a video. Sign in with Netlify through
+  OAuth, or use an API key.</p></div>
+  <div class="card"><h3>Agent skill</h3><p>A downloadable skill that teaches coding agents the good path, with recipes
+  like a pull request into a demo video.</p></div>
+</div>
+<p>Connect your AI tool to the MCP server. Clients that support OAuth only need the URL: you sign in with Netlify and
+approve the app.</p>
+<pre><code>https://netlify-video-agent.netlify.app/mcp</code></pre>
+<p>Or, in Claude Code:</p>
+<pre><code>claude mcp add --transport http video-agent https://netlify-video-agent.netlify.app/mcp</code></pre>
+<p>Install the skill for Claude Code:</p>
+<pre><code>curl -fsSL https://netlify-video-agent.netlify.app/skills/netlify-video.zip -o /tmp/netlify-video.zip \
+  &amp;&amp; unzip -o /tmp/netlify-video.zip -d ~/.claude/skills/</code></pre>
+<p class="muted">The app's <a href="/docs/mcp">MCP page</a> and <a href="/docs/skills">Agent skills page</a> have the
+setup for other tools.</p>
+
+<h2>What it can do</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Feature</th><th>How it works</th></tr></thead>
+  <tbody>
+    <tr><td>Plan it first</td><td>A fast model decides whether questions would help, asks up to six (each with room for
+    your own answer), then writes a brief: goal, audience, scenes with timings, tone and call to action.</td></tr>
+    <tr><td>Your brand</td><td>Brand guide, logos and fonts in <code>context/</code>. Every run reads them.</td></tr>
+    <tr><td>Revisions</td><td>"Make the end card orange" starts a new version from the previous composition. Every
+    version keeps its prompt and author.</td></tr>
+    <tr><td>Browser editor</td><td>Videos follow an editing contract, so text, scene length and order, colours, media,
+    music level and narration can be changed without the agent. The edit renders as the next version for about 34
+    credits.</td></tr>
+    <tr><td>Music</td><td>CC0 and CC BY tracks from Openverse, picked before the run or searched in the app, with
+    credits added to the share page automatically.</td></tr>
+    <tr><td>Voice-over</td><td>Kokoro text-to-speech runs inside the agent run. Each scene is made long enough for its
+    line, the music ducks under the voice, and the captions follow the words.</td></tr>
+    <tr><td>Media library</td><td>Logos, screenshots, clips and fonts, uploaded in parts and resumable, checked before
+    use; SVGs are sanitized.</td></tr>
+    <tr><td>Publishing</td><td>A public share page with link previews, a raw MP4 URL, a GIF and an embed snippet.
+    Unpublishing takes it down at once.</td></tr>
+    <tr><td>Review</td><td>Comments pinned to a moment and a spot in the frame, approvals, and revisions that address
+    the comments.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>What we learned the hard way</h2>
+<ul class="lessons">
+  <li><h3>Don't count on the agent's last words</h3><p>We first asked the agent to end its answer with a JSON list of
+  the files. Agents often didn't. The render script now posts a signed callback itself, and the final answer is only a
+  fallback.</p></li>
+  <li><h3>An agent may run the render twice</h3><p>One run rendered, lost sight of its output, and rendered again,
+  overwriting the uploads. The app rejected the second file list and the video failed. Now the newest list wins until
+  the video is ready, and the agent is told not to render twice.</p></li>
+  <li><h3>Finish when the files arrive, not when the run ends</h3><p>After rendering, a run still writes its results
+  and deploys a preview, which can take minutes. The app now finishes the video as soon as the render reports its
+  files.</p></li>
+  <li><h3>Keep the video; add a note</h3><p>A narrated video came out 55 seconds instead of the 42 asked for, and we
+  threw it away. Runs cost real credits, so a video that's the wrong length is now kept with a notice instead.</p></li>
+  <li><h3>Check everything a run hands back</h3><p>A run can write to any Blobs store on the site, so hashes against
+  the authenticated callback and a real MP4 check are what make a video trustworthy.</p></li>
+  <li><h3>Make it editable by design</h3><p>Scenes register through a small seek adapter that stretches their
+  animations, so changing a scene's length needs no code change. That's what makes a browser editor possible on
+  agent-written video.</p></li>
+</ul>
+
+<h2>Try it</h2>
+<p>Sign in with your Netlify account, describe a video, and choose "Plan it first" the first time. Or connect the MCP
+server above and ask your AI tool for one.</p>
+<div class="actions">
+  <a class="btn primary" href="/new">Make a video</a>
+  <a class="btn secondary" href="/docs/api">API docs</a>
+</div>
+
+<footer>Built by Netlify GTM Engineering with Claude Code, on Netlify Agent Runners and HyperFrames.</footer>
+</main>
+</body>
+</html>

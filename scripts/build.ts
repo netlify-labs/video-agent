@@ -3,7 +3,7 @@
 // With BRAND_ZIP_URL set, the web app's name, accent and logo come from that zip's brand.json, the same
 // zip netlify-agent-kit unpacks into context/brand/ for agent runs.
 import { execFileSync } from 'node:child_process'
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { videoRunOf, writeVideoRunPreview } from './lib/agent-preview.js'
@@ -156,6 +156,8 @@ if (videoRun && process.env.FORCE_UI_BUILD !== 'true') {
   copyFileSync(join(repoRoot, 'src/preview/bridge.js'), join(repoRoot, 'ui/dist/_preview/bridge.js'))
   // For compositions made before GSAP was vendored (the preview rewrites their CDN tag to this).
   copyFileSync(join(repoRoot, 'video/vendor/gsap.min.js'), join(repoRoot, 'ui/dist/_preview/gsap.js'))
+  // Static pages outside the app (static/<path>/index.html), public and without the app's JavaScript.
+  cpSync(join(repoRoot, 'static'), join(repoRoot, 'ui/dist'), { recursive: true })
   log('preview', { runtime: 'hyperframes/dist/hyperframe.runtime.iife.js' })
   // Installable agent skills at /skills/<name>.zip and /skills/index.json, pointing at this deployment's URL (the
   // same URL the API uses for links), so a fork serves skills for itself.
