@@ -12,6 +12,7 @@ import { parseArgs } from './lib/run-tools.js'
 import {
   ask,
   buildAndWait,
+  cliEmail,
   cliToken,
   getSite,
   netlifyApi as api,
@@ -80,7 +81,12 @@ async function main() {
           .trim()
           .toLowerCase()
     if (want === '' || want.startsWith('y')) {
-      const email = await ask(rl, 'Email for Openverse', 'OPENVERSE_EMAIL', admins.split(',')[0]?.trim())
+      const email = await ask(
+        rl,
+        'Email for Openverse',
+        'OPENVERSE_EMAIL',
+        cliEmail() ?? admins.split(',')[0]?.trim(),
+      )
       try {
         const app = await registerOpenverse({
           netlifyToken: token,

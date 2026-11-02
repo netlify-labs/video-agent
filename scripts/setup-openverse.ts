@@ -1,11 +1,12 @@
 // npm run setup:openverse -- --site <site id or name> [--email you@example.com] [--name "App name"] [--force] [--deploy]
+// The email defaults to your Netlify CLI login's (override with --email or OPENVERSE_EMAIL).
 // Registers an Openverse API application for this deployment's music search and sets OPENVERSE_CLIENT_ID and
 // OPENVERSE_CLIENT_SECRET on the site (the secret is never printed). Openverse then emails a verification link:
 // click it, or the app keeps anonymous rate limits. Variables reach the functions on the next deploy (--deploy
 // starts one). Uses your Netlify CLI login (`npx netlify login`).
 import { createInterface } from 'node:readline/promises'
 import { parseArgs } from './lib/run-tools.js'
-import { ask, buildAndWait, cliToken, getSite, siteVarNames } from './lib/netlify-setup.js'
+import { ask, buildAndWait, cliEmail, cliToken, getSite, siteVarNames } from './lib/netlify-setup.js'
 import { defaultAppName, defaultDescription, registerOpenverse } from './lib/openverse-setup.js'
 
 async function main() {
@@ -23,12 +24,15 @@ async function main() {
     return
   }
 
-  const rl = createInterface({ input: process.stdin, output: process.stdout })
-  const email =
-    args.email ??
-    (await ask(rl, 'Email for Openverse to verify and contact (OPENVERSE_EMAIL)', 'OPENVERSE_EMAIL'))
+  // Your Netlify login's email unless you say otherwise; asked for only when the CLI doesn't know it.
+  let email = args.email ?? process.env.OPENVERSE_EMAIL ?? cliEmail()
+  if (!email) {
+    const rl = createInterface({ input: process.stdin, output: process.stdout })
+    email = await ask(rl, 'Email for Openverse to verify and contact (OPENVERSE_EMAIL)', 'OPENVERSE_EMAIL')
+    rl.close()
+  }
   const name = args.name ?? defaultAppName(site)
-  rl.close()
+  console.log(`Registering "${name}" with Openverse for ${email}…`)
 
   const app = await registerOpenverse({
     netlifyToken: token,

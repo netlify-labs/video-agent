@@ -25,9 +25,8 @@ export interface SiteVar {
   scopes?: string[]
 }
 
-/** The token of your `netlify login` (or NETLIFY_AUTH_TOKEN). */
-export function cliToken(): string {
-  if (process.env.NETLIFY_AUTH_TOKEN) return process.env.NETLIFY_AUTH_TOKEN
+/** The user of your `netlify login`, from the CLI's config file. */
+function cliUser(): { token?: string; email?: string } | null {
   const paths = [
     join(homedir(), 'Library/Preferences/netlify/config.json'),
     join(homedir(), '.config/netlify/config.json'),
@@ -36,16 +35,27 @@ export function cliToken(): string {
     try {
       const cfg = JSON.parse(readFileSync(p, 'utf8')) as {
         userId?: string
-        users?: Record<string, { auth?: { token?: string } }>
+        users?: Record<string, { auth?: { token?: string }; email?: string }>
       }
-      const token = cfg.userId ? cfg.users?.[cfg.userId]?.auth?.token : undefined
-      if (token) return token
+      const user = cfg.userId ? cfg.users?.[cfg.userId] : undefined
+      if (user?.auth?.token) return { token: user.auth.token, ...(user.email ? { email: user.email } : {}) }
     } catch {
       // try the next location
     }
   }
+  return null
+}
+
+/** The token of your `netlify login` (or NETLIFY_AUTH_TOKEN). */
+export function cliToken(): string {
+  if (process.env.NETLIFY_AUTH_TOKEN) return process.env.NETLIFY_AUTH_TOKEN
+  const token = cliUser()?.token
+  if (token) return token
   throw new Error('Not logged in to Netlify. Run `npx netlify login` first.')
 }
+
+/** The email of your `netlify login`, when the CLI knows it. */
+export const cliEmail = (): string | undefined => cliUser()?.email
 
 // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- the caller names the response type
 export async function netlifyApi<T>(

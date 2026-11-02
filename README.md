@@ -164,7 +164,7 @@ Openverse API.
   npm run setup:openverse -- --site <your project> --deploy
   ```
 
-  It asks for an email (or reads `OPENVERSE_EMAIL`), registers an app named after your site (names are unique
+  It uses your Netlify login's email for Openverse (or `--email` / `OPENVERSE_EMAIL`), registers an app named after your site (names are unique
   across Openverse; pass `--name` to choose another), sets `OPENVERSE_CLIENT_ID` and `OPENVERSE_CLIENT_SECRET`,
   and with `--deploy` redeploys so the functions pick them up. Then click the verification link Openverse emails
   you: until then the app has anonymous limits. `npm run setup` offers the same step, and the setup page shows
