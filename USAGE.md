@@ -22,4 +22,9 @@ Netlify team: create the OAuth app as above (the same redirect URI) and set `AUT
 slug or id). Skip steps 1 and 3: the first sign-in from an `ADMIN_EMAILS` address becomes an admin. See the README,
 "Sign in with Netlify for the web app".
 
+Optional: **Find music** on the Media page searches Openverse for CC0 and CC BY tracks (CC BY ones are credited on the
+video, its share page and the embed automatically). It works anonymously; for steady use, register an Openverse app
+(`POST https://api.openverse.org/v1/auth_tokens/register/`, see https://api.openverse.org/v1/#tag/auth), confirm the
+email, and set `OPENVERSE_CLIENT_ID` and `OPENVERSE_CLIENT_SECRET`.
+
 Put your brand guide, logos and fonts in `context/` in the new repo so every video follows them.
