@@ -58,6 +58,17 @@ interface MockComment {
   unread?: boolean
 }
 // Connected OAuth apps (MCP OAuth is on in mock mode unless localStorage.mockOAuth is '0').
+const mockMissingSettings = () => {
+  try {
+    return (localStorage.getItem('mockMissingSettings') ?? '')
+      .split(',')
+      .filter((s): s is 'RUNNER_API_TOKEN' | 'ALLOWED_EMAIL_DOMAINS' | 'ADMIN_EMAILS' =>
+        ['RUNNER_API_TOKEN', 'ALLOWED_EMAIL_DOMAINS', 'ADMIN_EMAILS'].includes(s),
+      )
+  } catch {
+    return []
+  }
+}
 const mockOAuth = () => {
   try {
     return localStorage.getItem('mockOAuth') !== '0'
@@ -283,6 +294,8 @@ export function installMock() {
         mcpOAuth: mockOAuth(),
         authProvider: mockAuthProvider(),
         requiredTeams: mockAuthProvider() === 'netlify' ? ['acme'] : [],
+        // localStorage.mockMissingSettings = 'RUNNER_API_TOKEN,ADMIN_EMAILS' shows the not-set-up notices.
+        missingSettings: mockMissingSettings(),
       })
     if (p === '/api/v1/oauth/grants')
       return mockOAuth() ? json(grants) : fail(404, 'not_found', 'OAuth is not enabled on this video agent.')

@@ -1670,3 +1670,33 @@ test('a video far from the length asked for is kept, with a notice under the pla
   await page.locator('button.va-version', { hasText: /^v1/ }).click()
   await expect(page.getByTestId('output-notices')).toContainText('Asked for about 6 s; this video is 8.0 s.')
 })
+
+test('a deployment that skipped its required settings says what to add, signed out and in', async ({
+  page,
+}) => {
+  await mock(page, 'mockMissingSettings', 'RUNNER_API_TOKEN,ALLOWED_EMAIL_DOMAINS,ADMIN_EMAILS')
+  await mock(page, 'mockSignedOut')
+  await page.goto('/')
+  const notice = page.getByTestId('missing-settings')
+  await expect(notice).toContainText("This site isn't set up yet")
+  for (const name of ['RUNNER_API_TOKEN', 'ALLOWED_EMAIL_DOMAINS', 'ADMIN_EMAILS'])
+    await expect(notice).toContainText(name)
+  await expect(notice.getByRole('link', { name: 'Open the setup checklist' })).toHaveAttribute(
+    'href',
+    '/setup',
+  )
+})
+
+test('signed in, a missing run token shows a banner with where to fix it', async ({ page }) => {
+  await mock(page, 'mockMissingSettings', 'RUNNER_API_TOKEN')
+  await page.goto('/')
+  const banner = page.getByTestId('missing-settings-banner')
+  await expect(banner).toContainText("Videos can't be made yet: RUNNER_API_TOKEN isn't set. Add it in Netlify")
+  await expect(banner.getByRole('link', { name: 'Setup checklist' })).toBeVisible()
+})
+
+test('a set-up deployment shows no missing-settings notices', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.getByRole('heading', { level: 1, name: 'Library' })).toBeVisible()
+  await expect(page.getByTestId('missing-settings-banner')).toHaveCount(0)
+})

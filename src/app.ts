@@ -256,6 +256,12 @@ export function createApp(deps: Deps, opts: AppOptions) {
           mcpOAuth: oauthEnabled(deps),
           authProvider: deps.config.authProvider,
           requiredTeams: deps.config.netlifyRequiredTeams,
+          // The deploy form lets these be skipped; say which are still needed (names only, never values).
+          missingSettings: [
+            ...(deps.config.runnerTokenPresent ? [] : (['RUNNER_API_TOKEN'] as const)),
+            ...(deps.config.allowedEmailDomains ? [] : (['ALLOWED_EMAIL_DOMAINS'] as const)),
+            ...(deps.config.adminEmails.length ? [] : (['ADMIN_EMAILS'] as const)),
+          ],
         },
         200,
       ),

@@ -5974,6 +5974,8 @@ export interface components {
             authProvider: "identity" | "netlify";
             /** @description Netlify teams (slugs or ids) a Netlify sign-in must belong to; empty when there is no team rule. */
             requiredTeams: string[];
+            /** @description Required settings this deployment doesn't have yet (names only), so the sign-in screen and the app can say what to add. Empty once it's set up. */
+            missingSettings: ("RUNNER_API_TOKEN" | "ALLOWED_EMAIL_DOMAINS" | "ADMIN_EMAILS")[];
         };
         Video: {
             /** @example vid_01jc8k0000000000000000000 */

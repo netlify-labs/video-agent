@@ -30,6 +30,7 @@ import { $api } from '../api/client'
 import { useAuth } from '../auth'
 import { brand } from '../theme'
 import { Mark, PoweredBy } from './bits'
+import { MissingSettingsBanner } from './MissingSettings'
 import { NotificationBell } from './NotificationBell'
 
 export function Layout() {
@@ -160,6 +161,7 @@ export function Layout() {
         ) : null}
       </AppShell.Navbar>
       <AppShell.Main>
+        <MissingSettingsBanner admin={isAdmin} />
         <Outlet />
         <PoweredBy />
       </AppShell.Main>

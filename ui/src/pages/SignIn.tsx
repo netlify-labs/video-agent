@@ -19,6 +19,7 @@ import { $api } from '../api/client'
 import { useAuth } from '../auth'
 import { brand } from '../theme'
 import { Mark, PoweredBy } from '../components/bits'
+import { MissingSettingsNotice } from '../components/MissingSettings'
 
 export function AuthPages({ setupReady }: { setupReady: boolean }) {
   const logo = useComputedColorScheme('dark') === 'light' ? (brand.logoLight ?? brand.logo) : brand.logo
@@ -77,6 +78,7 @@ export function AuthPages({ setupReady }: { setupReady: boolean }) {
               {auth.notice}
             </Alert>
           ) : null}
+          <MissingSettingsNotice />
           {error ? <Alert color="red">{error}</Alert> : null}
           {info ? <Alert color="blue">{info}</Alert> : null}
           {children}
