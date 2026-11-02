@@ -88,7 +88,8 @@ const QuestionsOut = z.object({
           .min(2)
           .max(4),
         multiSelect: z.boolean().default(false),
-        allowOther: z.boolean().default(true),
+        // Every question takes free text (another answer, or more context), whatever the model said.
+        allowOther: z.unknown().transform((): true => true),
       }),
     )
     .max(6),
@@ -408,7 +409,7 @@ export async function generateQuestions(deps: Deps, p: Principal, planId: string
       : '',
     DATA_RULE,
     plan.mediaIds.length ? MEDIA_RULE : '',
-    'Reply with JSON only: {"questions":[{"id":"q1","question":"…","why":"…","options":[{"id":"a","label":"…","description":"…"}],"multiSelect":false,"allowOther":true}]}',
+    'Reply with JSON only: {"questions":[{"id":"q1","question":"…","why":"…","options":[{"id":"a","label":"…","description":"…"}],"multiSelect":false}]}',
     'Use 0–6 questions and 2–4 short options each. Return {"questions":[]} if nothing is open.',
   ]
     .filter(Boolean)

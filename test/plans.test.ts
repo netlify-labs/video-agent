@@ -25,7 +25,8 @@ const QUESTIONS = JSON.stringify({
         { id: 'b', label: 'Try it free', description: '' },
       ],
       multiSelect: false,
-      allowOther: true,
+      // Ignored: every question takes free text.
+      allowOther: false,
     },
   ],
 })
@@ -66,6 +67,7 @@ describe('planning', () => {
     h.deps.gateway.replies.push(QUESTIONS)
     const withQ = await h.json(await h.call('POST', `/api/v1/plans/${plan.id}/questions`, { as: h.member }))
     expect(withQ.questions.map((q: { id: string }) => q.id)).toEqual(['q1', 'q2'])
+    expect(withQ.questions.every((q: { allowOther: boolean }) => q.allowOther)).toBe(true)
     const qCall = h.deps.gateway.calls.find((c) => c.kind === 'messages')
     expect(qCall?.model).toBe('claude-haiku-4-5')
     expect(qCall?.user).toContain(`<data name="request">${JSON.stringify(PROMPT)}</data>`)
