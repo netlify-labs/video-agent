@@ -163,7 +163,14 @@ Openverse API.
 - **Attribution** comes from the library, not from the agent: a version made with a CC BY item lists it in the
   version's `credits`, the video page shows "Music: _title_ by _creator_, CC BY 4.0" with links, and the public share
   page and the embed snippet carry the same line. A silent version isn't credited for a track it never used.
-- **In runs.** When Sound is Music and no track was picked and the brand has none, the agent finds one itself with
+- **Before runs.** When Sound is Music (or Music + effects) and the version has no track, picked or inherited, and
+  the brand has none, the server picks one before the run starts: the attempt shows **Finding music…** (stage
+  `finding_music`) while background Openverse jobs search with a short query (from the AI Gateway's fast model when
+  it's available, else mood words in the request) and import the best CC0 or CC BY track, long enough for the video
+  if possible. It joins the version's media like a picked track, owned by the version's author, so it's credited the
+  same way. If that fails or takes over 5 minutes, the run starts anyway and finds music itself (below). Revisions
+  inherit the track; a version can be cancelled while it's finding music.
+- **In runs.** When the server's pick found nothing (or the version predates it), the agent finds a track itself with
   `scripts/openverse.ts` (same licence rules, files over HTTPS up to 10 MB so they fit the preview bundle, CC0 first).
   The script records each file's licence in the composition's `assets/music/credits.json`; finalize reads it from the
   saved composition, keeps only valid CC0/CC BY entries for files an `<audio>` plays, and stores them on the version,
