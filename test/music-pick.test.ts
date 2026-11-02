@@ -43,18 +43,32 @@ const item = (n: number, o: { license?: string; seconds?: number; title?: string
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
 
-/** A fake Openverse: searches answer with `items` (or `searchStatus`), item lookups by id; files always download. */
+/**
+ * A fake Openverse: searches answer with `items` (or `searchStatus`, or per query `byQuery`), item lookups by id; files
+ * always download.
+ */
 function openverse(h: Harness, items = [item(1), item(2, { license: 'cc0' })]) {
-  const state = { items, searchStatus: 200 }
+  const state = {
+    items,
+    searchStatus: 200,
+    byQuery: {} as Record<string, number | ReturnType<typeof item>[]>,
+    all: [] as ReturnType<typeof item>[],
+  }
   h.deps.outbound.handler = (u) => {
     if (u.origin === FILE_HOST)
       return new Response(MP3, { headers: { 'content-length': String(MP3.byteLength) } })
     if (u.pathname === '/v1/audio/') {
-      if (state.searchStatus !== 200) return json({ detail: 'no' }, state.searchStatus)
-      return json({ result_count: state.items.length, page_count: 1, results: state.items })
+      const answer = state.byQuery[u.searchParams.get('q') ?? ''] ?? state.searchStatus
+      if (typeof answer === 'number' && answer !== 200) return json({ detail: 'no' }, answer)
+      const results = Array.isArray(answer) ? answer : state.items
+      return json({ result_count: results.length, page_count: 1, results })
     }
     const one = /^\/v1\/audio\/([0-9a-f-]+)\/$/.exec(u.pathname)
-    const it = state.items.find((x) => x.id === one?.[1])
+    const it = [
+      ...state.items,
+      ...state.all,
+      ...Object.values(state.byQuery).flatMap((x) => (Array.isArray(x) ? x : [])),
+    ].find((x) => x.id === one?.[1])
     return it ? json(it) : json({ detail: 'Not found.' }, 404)
   }
   return state
@@ -140,6 +154,8 @@ describe('a version that needs music', () => {
       title: 'Track 2',
       mediaId,
       reason: null,
+      source: 'openverse',
+      tried: [{ query: 'calm ambient piano', outcome: 'chosen' }],
     })
   })
 
@@ -281,7 +297,7 @@ describe('the search words', () => {
 })
 
 describe('when the pick fails', () => {
-  it('a failed search tries the fallback words, then starts the run without music', async () => {
+  it('three failed searches in a row with no audio in the library start the run without music', async () => {
     const h = harness()
     current = h.deps
     const ov = openverse(h)
@@ -289,9 +305,18 @@ describe('when the pick fails', () => {
     h.deps.gateway.isAvailable = false
     const vid = await create(h)
     await tick(h)
-    expect(searches(h).map((p) => p.get('q'))).toEqual(['upbeat electronic', 'background instrumental'])
+    // Openverse counts as down after three failures in a row; the library has nothing either.
+    expect(searches(h).map((p) => p.get('q'))).toEqual([
+      'upbeat electronic',
+      'background instrumental',
+      'corporate',
+    ])
     const a = await attempt(h, vid)
-    expect(a.musicPick).toMatchObject({ status: 'skipped', usedFallback: true })
+    expect(a.musicPick).toMatchObject({
+      status: 'skipped',
+      usedFallback: true,
+      reason: "Openverse isn't answering. The library has no audio to use instead.",
+    })
     expect(a.stage).toBe('running')
     expect(await h.deps.store.listVersionMedia(vid, 1)).toEqual([])
     // The run's own Openverse helper is the backup.
@@ -328,7 +353,10 @@ describe('when the pick fails', () => {
     ])
     await h.drive(Math.ceil(MUSIC_PICK_BUDGET_MS / 61_000))
     a = await attempt(h, vid)
-    expect(a.musicPick).toMatchObject({ status: 'skipped', reason: 'Openverse took too long to answer.' })
+    expect(a.musicPick).toMatchObject({
+      status: 'skipped',
+      reason: 'Openverse found no track in time. The library has no audio to use instead.',
+    })
     expect(h.deps.runner.starts.map((s) => s.requestId)).toEqual([a.id])
   })
 
@@ -354,6 +382,191 @@ describe('when the pick fails', () => {
     expect(h.deps.runner.starts).toHaveLength(0)
     expect(await h.deps.store.listVersionMedia(vid, 1)).toEqual([])
     expect(await h.deps.store.countSlotHolders()).toBe(0)
+  })
+})
+
+describe('when Openverse is slow or down', () => {
+  /** Imports an Openverse track into the library through the API, as the member. */
+  const importTrack = async (h: Harness, ov: ReturnType<typeof openverse>, t: ReturnType<typeof item>) => {
+    ov.all.push(t)
+    const r = await h.call('POST', '/api/v1/media/openverse/import', { as: h.member, body: { id: t.id } })
+    expect(r.status).toBe(201)
+    return (await h.json<{ id: string }>(r)).id
+  }
+
+  it('tries the next words in order (fallback, then broad ones that fit) until one yields a track', async () => {
+    const h = harness()
+    current = h.deps
+    const ov = openverse(h)
+    h.deps.gateway.isAvailable = false
+    ov.byQuery = {
+      'upbeat electronic': 504,
+      'background instrumental': [],
+      corporate: 504,
+      ambient: [item(3, { title: 'Soft Focus' })],
+    }
+    const vid = await create(h)
+    await tick(h)
+    // Each search is tried once: the next words are the retry, not the same failing query again.
+    expect(searches(h).map((p) => p.get('q'))).toEqual([
+      'upbeat electronic',
+      'background instrumental',
+      'corporate',
+      'ambient',
+    ])
+    const a = await attempt(h, vid)
+    expect(a.musicPick).toMatchObject({
+      status: 'picked',
+      source: 'openverse',
+      query: 'ambient',
+      title: 'Soft Focus',
+      openverseId: id(3),
+      tried: [
+        { query: 'upbeat electronic', outcome: 'failed' },
+        { query: 'background instrumental', outcome: 'empty' },
+        { query: 'corporate', outcome: 'failed' },
+        { query: 'ambient', outcome: 'chosen' },
+      ],
+    })
+    expect((await h.deps.store.listVersionMedia(vid, 1)).map((m) => m.mediaId)).toEqual([
+      a.musicPick?.mediaId,
+    ])
+  })
+
+  it('a track that fails to import moves on to the next words', async () => {
+    const h = harness()
+    current = h.deps
+    const ov = openverse(h, [])
+    h.deps.gateway.isAvailable = false
+    ov.byQuery = { 'upbeat electronic': [item(4)], 'background instrumental': [item(5)] }
+    // The first track's lookup 404s, so its import fails.
+    const handler = h.deps.outbound.handler
+    h.deps.outbound.handler = (u, init) =>
+      u.pathname === `/v1/audio/${id(4)}/` ? json({}, 404) : handler(u, init)
+    const vid = await create(h)
+    await tick(h)
+    expect((await attempt(h, vid)).musicPick).toMatchObject({
+      status: 'picked',
+      openverseId: id(5),
+      tried: [
+        { query: 'upbeat electronic', outcome: 'import_failed' },
+        { query: 'background instrumental', outcome: 'chosen' },
+      ],
+    })
+  })
+
+  it("uses the library's best match when every search fails, and credits a CC BY track", async () => {
+    const h = harness()
+    current = h.deps
+    const ov = openverse(h, [])
+    h.deps.gateway.isAvailable = false
+    const match = await importTrack(h, ov, item(21, { title: 'Electronic Launch Party' }))
+    h.deps.clock.advance(1000)
+    await importTrack(h, ov, item(20, { title: 'Quiet Morning' }))
+    h.deps.clock.advance(1000)
+    // Newest, and its name matches the mood, but an upload has no licence or credit to go with it.
+    await upload(h, h.member, MP3, 'filename=upbeat-electronic.mp3')
+    ov.searchStatus = 504
+    const vid = await create(h)
+    await h.drive(4)
+    const a = await attempt(h, vid)
+    expect(a.musicPick).toMatchObject({
+      status: 'picked',
+      source: 'library',
+      mediaId: match,
+      title: 'Electronic Launch Party',
+      reason: null,
+    })
+    expect(searches(h)).toHaveLength(3)
+    expect((await h.deps.store.listVersionMedia(vid, 1)).map((m) => m.mediaId)).toEqual([match])
+    const v = await h.json<{
+      versions: { status: string; music: { source: string }; credits: { mediaId: string; text: string }[] }[]
+    }>(await h.call('GET', `/api/v1/videos/${vid}`, { as: h.member }))
+    expect(v.versions[0]?.status).toBe('ready')
+    expect(v.versions[0]?.music.source).toBe('library')
+    expect(v.versions[0]?.credits).toEqual([
+      expect.objectContaining({
+        mediaId: match,
+        text: '"Electronic Launch Party" by Artist 21, CC BY 4.0, https://www.jamendo.com/track/21',
+      }),
+    ])
+  })
+
+  it('among equally good imports, picks the most recently used', async () => {
+    const h = harness()
+    current = h.deps
+    const ov = openverse(h, [])
+    h.deps.gateway.isAvailable = false
+    const used = await importTrack(h, ov, item(30, { title: 'Corporate One' }))
+    h.deps.clock.advance(1000)
+    await importTrack(h, ov, item(31, { title: 'Corporate Two' }))
+    // The older one was used in a video since, so it's the more recent.
+    const other = await create(h, { mediaIds: [used] })
+    await h.drive(4)
+    expect((await h.deps.store.listVersionMedia(other, 1)).map((m) => m.mediaId)).toEqual([used])
+    ov.searchStatus = 504
+    const vid = await create(h)
+    await h.drive(1)
+    expect((await attempt(h, vid)).musicPick).toMatchObject({ source: 'library', mediaId: used })
+  })
+
+  it("never picks audio the author can't see: deleted, unfinished or rejected items", async () => {
+    const h = harness()
+    current = h.deps
+    const ov = openverse(h, [])
+    h.deps.gateway.isAvailable = false
+    const plain = await h.json<{ id: string }>(await upload(h, h.member, MP3, 'filename=theme.mp3'))
+    h.deps.clock.advance(1000)
+    const deleted = await importTrack(h, ov, item(40, { title: 'Upbeat Electronic Corporate' }))
+    expect((await h.call('DELETE', `/api/v1/media/${deleted}`, { as: h.member })).status).toBe(204)
+    const row = await h.deps.store.getMedia(plain.id)
+    if (!row) throw new Error('no upload')
+    for (const [n, status] of [
+      [1, 'verifying'],
+      [2, 'rejected'],
+      [3, 'uploading'],
+    ] as const)
+      await h.deps.store.insertMedia({
+        ...row,
+        ...(await h.deps.store.getMedia(deleted)),
+        deletedAt: null,
+        id: `med_hidden${n}`,
+        uploaderId: n === 1 ? 'u_member' : 'u_admin',
+        status,
+        sourceId: id(90 + n),
+        createdAt: h.deps.clock.now().toISOString(),
+      })
+    ov.searchStatus = 504
+    const vid = await create(h)
+    await h.drive(1)
+    expect((await attempt(h, vid)).musicPick).toMatchObject({ source: 'library', mediaId: plain.id })
+  })
+
+  it('goes to the library once the budget is spent, without searching on (Openverse slow, not failing)', async () => {
+    const h = harness()
+    current = h.deps
+    const ov = openverse(h, [])
+    h.deps.gateway.isAvailable = false
+    const plain = await h.json<{ id: string }>(await upload(h, h.member, MP3, 'filename=theme.mp3'))
+    // Every search answers empty after 100 s.
+    ov.searchStatus = 200
+    const run = h.deps.platform.onOpenverseJob
+    h.deps.platform.onOpenverseJob = async (jobId) => {
+      await run?.(jobId)
+      h.deps.clock.advance(100_000)
+    }
+    const vid = await create(h)
+    const started = h.deps.clock.now().getTime()
+    await tick(h)
+    const a = await attempt(h, vid)
+    // Four searches started within the 5 minutes (at 0, 100, 200 and 300 s); the fifth would start after it.
+    expect(searches(h)).toHaveLength(4)
+    expect(a.musicPick).toMatchObject({ status: 'picked', source: 'library', mediaId: plain.id })
+    expect(a.musicPick?.tried?.map((t) => t.outcome)).toEqual(['empty', 'empty', 'empty', 'empty'])
+    expect(Date.parse(a.musicPick?.endedAt ?? '') - started).toBeLessThanOrEqual(
+      MUSIC_PICK_BUDGET_MS + 100_000,
+    )
+    expect(h.deps.runner.starts.map((s) => s.requestId)).toEqual([a.id])
   })
 })
 

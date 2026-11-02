@@ -2,19 +2,22 @@
 // reliably, so when a version needs music and has no track (picked, inherited or the brand's), the attempt waits in
 // finding_music while Openverse jobs search and import a track in the background. The track is snapshotted into the
 // version's media like a picked one, so the run hydrates it, the prompt names it and its credit flows. Each step is
-// persisted on the attempt; the reconciler advances it every tick and gives up after MUSIC_PICK_BUDGET_MS.
+// persisted on the attempt; the reconciler advances it every tick. A search that fails or finds nothing importable
+// moves on to the next words (the request's, then broad ones that fit its mood); when no Openverse track is chosen
+// within MUSIC_PICK_BUDGET_MS, or Openverse keeps failing, the best audio already in the team's library is used.
 import type { Deps } from '../deps.js'
 import { contextMeta } from '../generated/context.js'
 import { ApiError } from '../lib/errors.js'
 import { LIMITS } from '../lib/media/classify.js'
 import type { OpenverseTrack } from '../lib/openverse-rules.js'
 import type { Repo } from '../store/types.js'
+import { can, type Principal } from './policy.js'
 import { FAST_MODEL } from './gateway-models.js'
 import { snapshotMedia } from './media.js'
 import { importedTrack, searchRequest, type SearchPage } from './openverse.js'
 import { queueOpenverseJob } from './openverse-jobs.js'
 import { DATA_RULE, dataBlock, parseJson, record } from './plans.js'
-import type { AttemptRow, MusicPick, VersionRow } from './types.js'
+import type { AttemptRow, MediaRow, MusicPick, MusicPickTry, VersionRow } from './types.js'
 
 /** How long a run waits for its music before it starts without (the run's own Openverse helper is the backup). */
 export const MUSIC_PICK_BUDGET_MS = 5 * 60_000
@@ -25,6 +28,14 @@ const QUERY_TIMEOUT_MS = 8_000
 const DEFAULT_SECONDS = 30
 const DEFAULT_QUERY = 'upbeat electronic'
 const DEFAULT_FALLBACK = 'background instrumental'
+/** Broad searches that almost always find something, tried after the request's own words. */
+export const GENERIC_QUERIES = ['upbeat electronic', 'ambient', 'corporate', 'acoustic', 'cinematic']
+/** The most searches one pick tries (the request's two plus the broad ones). */
+const MAX_QUERIES = 7
+/** Searches failing in a row (errors, not empty answers) that mean Openverse is down: use the library now. */
+const DOWN_AFTER_FAILURES = 3
+/** Pick searches don't retry: the next words are the retry (a query Openverse times out on usually keeps timing out). */
+const PICK_SEARCH_RETRIES = 0
 
 /** The brand's music from context/ (built into the deploy). */
 export const brandMusic = () => contextMeta.music
@@ -52,6 +63,8 @@ export function newMusicPick(now: Date): MusicPick {
     fallbackQuery: null,
     querySource: null,
     usedFallback: false,
+    tried: [],
+    source: null,
     searchJobId: null,
     importJobId: null,
     openverseId: null,
@@ -74,18 +87,38 @@ const words = (s: unknown, max = 5) =>
         .slice(0, 60)
     : ''
 
-// Mood words in a request and the search they suggest, strongest first.
-const MOODS: [RegExp, string][] = [
-  [/\b(lo-?fi|chillhop)\b/, 'lofi hip hop'],
-  [/\b(cinematic|epic|dramatic|trailer|heroic)\b/, 'cinematic epic'],
-  [/\b(calm|relax\w*|peaceful|gentle|soft|chill|soothing|serene|meditat\w*)\b/, 'calm ambient'],
-  [/\b(playful|fun|quirky|whimsical|cute|silly|kids?)\b/, 'playful quirky'],
-  [/\b(inspir\w*|uplifting|motivat\w*|hopeful|emotional)\b/, 'uplifting inspiring'],
-  [/\b(corporate|business|professional|enterprise|sales|b2b)\b/, 'corporate background'],
-  [/\b(acoustic|warm|folk|friendly|cozy)\b/, 'acoustic warm'],
-  [/\b(futuristic|sci-?fi|cyber\w*|synth\w*)\b/, 'futuristic synth'],
-  [/\b(upbeat|energetic|exciting|hype|fast|dynamic|bold|punchy|launch)\b/, 'upbeat electronic'],
-  [/\b(tech\w*|digital|developers?|code|software|ai)\b/, 'electronic technology'],
+// Mood words in a request, the search they suggest (strongest first) and the broad searches that suit them.
+const MOODS: [RegExp, string, string[]][] = [
+  [/\b(lo-?fi|chillhop)\b/, 'lofi hip hop', ['ambient', 'acoustic']],
+  [/\b(cinematic|epic|dramatic|trailer|heroic)\b/, 'cinematic epic', ['cinematic']],
+  [
+    /\b(calm|relax\w*|peaceful|gentle|soft|chill|soothing|serene|meditat\w*|ambient)\b/,
+    'calm ambient',
+    ['ambient', 'acoustic'],
+  ],
+  [
+    /\b(playful|fun|quirky|whimsical|cute|silly|kids?)\b/,
+    'playful quirky',
+    ['acoustic', 'upbeat electronic'],
+  ],
+  [
+    /\b(inspir\w*|uplifting|motivat\w*|hopeful|emotional)\b/,
+    'uplifting inspiring',
+    ['cinematic', 'corporate'],
+  ],
+  [/\b(corporate|business|professional|enterprise|sales|b2b)\b/, 'corporate background', ['corporate']],
+  [/\b(acoustic|warm|folk|friendly|cozy|guitar)\b/, 'acoustic warm', ['acoustic']],
+  [/\b(futuristic|sci-?fi|cyber\w*|synth\w*)\b/, 'futuristic synth', ['upbeat electronic', 'ambient']],
+  [
+    /\b(upbeat|energetic|exciting|hype|fast|dynamic|bold|punchy|launch|pop|dance)\b/,
+    'upbeat electronic',
+    ['upbeat electronic'],
+  ],
+  [
+    /\b(tech\w*|digital|developers?|code|software|ai|electronic)\b/,
+    'electronic technology',
+    ['upbeat electronic', 'corporate'],
+  ],
 ]
 
 /** Search words from the request's own mood words; a broad default when it has none. */
@@ -177,51 +210,210 @@ export function targetSeconds(version: VersionRow): number {
   return version.targetDurationSec ?? (planned > 0 ? Math.round(planned) : DEFAULT_SECONDS)
 }
 
+/** The request's words for mood matching: its prompt and the plan's tone. */
+const requestText = (version: VersionRow) => [version.prompt, version.plan?.brief.tone ?? ''].join('\n')
+
+/**
+ * The searches a pick tries, in order: the first words, the fallback, then the broad searches, those that suit the
+ * request's mood (or the first words') first. At most MAX_QUERIES, no repeats.
+ */
+export function queryPlan(first: string, fallback: string | null, text: string): string[] {
+  const t = [text, first, fallback ?? ''].join('\n').toLowerCase()
+  const suited = MOODS.filter(([re]) => re.test(t)).flatMap(([, , generic]) => generic)
+  return [...new Set([first, fallback ?? '', ...suited, ...GENERIC_QUERIES].filter(Boolean))].slice(
+    0,
+    MAX_QUERIES,
+  )
+}
+
+// Words too common in music searches and titles to say anything about mood.
+const STOP_WORDS = new Set(
+  'and the with for music track song background instrumental modern loop version mix by of a'.split(' '),
+)
+
+/** Mood words to match library items against: the searches' words and the mood searches the request suggests. */
+export function moodWords(queries: string[], text: string): string[] {
+  const t = text.toLowerCase()
+  const fromRequest = MOODS.filter(([re]) => re.test(t)).map(([, q]) => q)
+  return [
+    ...new Set(
+      [...queries, ...fromRequest]
+        .flatMap((q) => q.toLowerCase().split(/[^a-z0-9]+/))
+        .filter((w) => w.length > 2 && !STOP_WORDS.has(w)),
+    ),
+  ]
+}
+
+const moodScore = (m: MediaRow, mood: string[]) => {
+  const text = [m.filename, m.caption ?? '', m.sourceTitle ?? ''].join(' ').toLowerCase()
+  return mood.filter((w) => new RegExp(`\\b${w}`).test(text)).length
+}
+
+/** How many library items a fallback looks through. */
+const LIBRARY_SCAN = 500
+
+/**
+ * The best audio already in the team library, for when Openverse found nothing in time: ready, undeleted audio the
+ * author can see (the library list's own rules). Openverse imports (licensed and creditable) first, then the best
+ * mood match, then at least `seconds` long, then the most recently used or added. Null when there's none.
+ */
+export async function libraryTrack(
+  deps: Deps,
+  version: VersionRow,
+  mood: string[],
+  seconds: number,
+): Promise<MediaRow | null> {
+  const author = await deps.store.getUser(version.authorId)
+  if (!author || author.disabledAt) return null
+  const p: Principal = {
+    kind: 'user',
+    userId: author.id,
+    email: author.email,
+    name: author.name,
+    role: author.role,
+    apiKeyId: null,
+  }
+  if (!can(p, 'video:read')) return null
+  const items: MediaRow[] = []
+  let before: { createdAt: string; id: string } | undefined
+  while (items.length < LIBRARY_SCAN) {
+    // No includePendingOf: only ready items, the ones anyone in the team sees and a version can use.
+    const page = await deps.store.listMedia({ kind: 'audio', before, limit: 100 })
+    items.push(
+      ...page.filter(
+        (m) =>
+          m.kind === 'audio' &&
+          m.status === 'ready' &&
+          !m.deletedAt &&
+          (m.durationSec === null || m.durationSec <= LIMITS.audioSeconds),
+      ),
+    )
+    const last = page.at(-1)
+    if (page.length < 100 || !last) break
+    before = { createdAt: last.createdAt, id: last.id }
+  }
+  if (!items.length) return null
+  // One number per item: licensed import, then mood words matched, then long enough.
+  const rank = (m: MediaRow) =>
+    Number(m.source === 'openverse' && (m.license === 'cc0' || m.license === 'by')) * 10_000 +
+    Math.min(moodScore(m, mood), 99) * 10 +
+    Number((m.durationSec ?? 0) >= seconds)
+  const ranked = items.map((m) => ({ m, r: rank(m) })).sort((a, b) => b.r - a.r)
+  // Among the best equals, the most recently used (in any video) or added.
+  const top = ranked.filter((x) => x.r === ranked[0]?.r).slice(0, 20)
+  const usage = await deps.store.mediaUsage(top.map((x) => x.m.id))
+  let best: { m: MediaRow; at: string } | null = null
+  for (const { m } of top) {
+    let at = m.createdAt
+    for (const jobId of usage[m.id] ?? []) {
+      const job = await deps.store.getJob(jobId)
+      if (job && !job.deletedAt && job.updatedAt > at) at = job.updatedAt
+    }
+    if (!best || at > best.at) best = { m, at }
+  }
+  return best?.m ?? null
+}
+
+/** The pick with the fields added since it was first stored. */
+const normalized = (p: MusicPick): MusicPick => ({ ...p, tried: p.tried ?? [], source: p.source ?? null })
+
+/** The pick with its latest search marked `outcome` (added when a pick from before `tried` existed has none). */
+function settle(pick: MusicPick, outcome: MusicPickTry['outcome']): MusicPick {
+  const tried = [...(pick.tried ?? [])]
+  const last = tried.at(-1)
+  if (last && (last.outcome === 'searching' || (outcome === 'import_failed' && last.outcome === 'chosen')))
+    tried[tried.length - 1] = { ...last, outcome }
+  else tried.push({ query: pick.query ?? DEFAULT_QUERY, outcome })
+  return { ...pick, tried: tried.slice(-MAX_QUERIES) }
+}
+
+/** Searches that failed in a row at the end of the list. */
+const failedInARow = (tried: MusicPickTry[]) => {
+  let n = 0
+  for (let i = tried.length - 1; i >= 0 && tried[i]?.outcome === 'failed'; i--) n++
+  return n
+}
+
 /**
  * One step of a pick: looks at its jobs and moves it on as far as it can now. Returns the pick to persist; picked and
  * skipped are final (start the run). Openverse is only reached through background jobs, so a step is quick.
  */
 export async function advanceMusicPick(deps: Deps, a: AttemptRow): Promise<MusicPick> {
   const now = deps.clock.now()
-  let pick = a.musicPick ?? newMusicPick(now)
-  const skip = (reason: string): MusicPick => {
-    deps.log.info('music.skipped', { attemptId: a.id, reason })
-    return { ...pick, status: 'skipped', reason, endedAt: now.toISOString() }
-  }
+  let pick = normalized(a.musicPick ?? newMusicPick(now))
   if (pick.status === 'picked' || pick.status === 'skipped') return pick
-  if (now.getTime() - new Date(pick.startedAt).getTime() > MUSIC_PICK_BUDGET_MS)
-    return skip('Openverse took too long to answer.')
+  const skip = (reason: string): MusicPick => {
+    deps.log.info('music.skipped', { attemptId: a.id, reason, tried: pick.tried?.length ?? 0 })
+    return { ...pick, status: 'skipped', reason, endedAt: deps.clock.now().toISOString() }
+  }
+  const overBudget = () =>
+    deps.clock.now().getTime() - new Date(pick.startedAt).getTime() > MUSIC_PICK_BUDGET_MS
   const version = await deps.store.getVersion(a.jobId, a.versionN)
   if (!version) return skip('The version is gone.')
   const seconds = targetSeconds(version)
-  // Each pass either waits on a job, finishes, or moves to the next job; a few passes cover a whole pick.
-  for (let pass = 0; pass < 6; pass++) {
+  const text = requestText(version)
+  // No Openverse track in time: the best audio already in the library, else none.
+  const fromLibrary = async (why: string): Promise<MusicPick> => {
+    const queries = (pick.tried ?? []).map((t) => t.query)
+    const m = await libraryTrack(deps, version, moodWords(queries, text), seconds)
+    if (!m) return skip(`${why} The library has no audio to use instead.`)
+    deps.log.info('music.from_library', { attemptId: a.id, mediaId: m.id, why })
+    const title = m.sourceTitle ?? m.caption ?? m.filename
+    return {
+      ...picked(pick, m.id, deps.clock.now()),
+      source: 'library',
+      title,
+      openverseId: m.sourceId,
+    }
+  }
+  if (overBudget()) return fromLibrary('Openverse found no track in time.')
+  // Each pass either waits on a job, finishes, or moves to the next job or search.
+  for (let pass = 0; pass < 3 * MAX_QUERIES; pass++) {
     if (pick.status === 'searching') {
       if (!pick.query) pick = { ...pick, ...(await musicQuery(deps, version, seconds)) }
-      const q = pick.query ?? DEFAULT_QUERY
       if (!pick.searchJobId) {
+        const tried = pick.tried ?? []
+        const plan = queryPlan(tried[0]?.query ?? pick.query ?? DEFAULT_QUERY, pick.fallbackQuery, text)
+        const q = plan[tried.length]
+        if (!q) return fromLibrary('Openverse had no track that fits.')
+        if (overBudget()) return fromLibrary('Openverse found no track in time.')
         const req = searchRequest({ q, license: 'cc0,by', category: 'music' })
-        const params = { q, license: 'cc0,by', category: 'music', page: 1, attemptId: a.id }
+        const params = {
+          q,
+          license: 'cc0,by',
+          category: 'music',
+          page: 1,
+          attemptId: a.id,
+          retries: PICK_SEARCH_RETRIES,
+        }
         const job = await queueOpenverseJob(deps, version.authorId, 'search', req.key, params)
-        pick = { ...pick, searchJobId: job.id }
+        deps.log.info('music.search', { attemptId: a.id, query: q, n: tried.length + 1 })
+        pick = {
+          ...pick,
+          query: q,
+          usedFallback: tried.length > 0,
+          searchJobId: job.id,
+          tried: [...tried, { query: q, outcome: 'searching' as const }],
+        }
       }
       const job = await deps.store.getOpenverseJob(pick.searchJobId ?? '')
       if (job && (job.status === 'queued' || job.status === 'running')) return pick
       const track =
         job?.status === 'done' ? chooseTrack((job.result as SearchPage | null)?.items ?? [], seconds) : null
       if (!track) {
-        if (pick.usedFallback || !pick.fallbackQuery)
-          return skip(
-            job?.status === 'done'
-              ? 'Openverse had no track that fits.'
-              : (job?.error?.message ?? 'The music search was lost.'),
-          )
-        pick = { ...pick, query: pick.fallbackQuery, usedFallback: true, searchJobId: null }
+        pick = { ...settle(pick, job?.status === 'done' ? 'empty' : 'failed'), searchJobId: null }
+        deps.log.info('music.search_missed', {
+          attemptId: a.id,
+          query: pick.query,
+          error: job?.status === 'done' ? null : (job?.error?.message ?? 'lost'),
+        })
+        if (failedInARow(pick.tried ?? []) >= DOWN_AFTER_FAILURES)
+          return fromLibrary("Openverse isn't answering.")
         continue
       }
-      pick = { ...pick, openverseId: track.id, title: track.title }
+      pick = { ...settle(pick, 'chosen'), openverseId: track.id, title: track.title }
       const existing = await importedTrack(deps, track.id)
-      if (existing) return picked(pick, existing.id, now)
+      if (existing) return picked(pick, existing.id, deps.clock.now())
       const importJob = await queueOpenverseJob(deps, version.authorId, 'import', track.id, {
         id: track.id,
         attemptId: a.id,
@@ -232,11 +424,20 @@ export async function advanceMusicPick(deps: Deps, a: AttemptRow): Promise<Music
     if (pick.status === 'importing') {
       const job = await deps.store.getOpenverseJob(pick.importJobId ?? '')
       if (job && (job.status === 'queued' || job.status === 'running')) return pick
-      if (job?.status !== 'done') return skip(job?.error?.message ?? 'The music import was lost.')
-      const mediaId = (job.result as { mediaId?: string } | null)?.mediaId
+      const mediaId = job?.status === 'done' ? (job.result as { mediaId?: string } | null)?.mediaId : null
       const m = mediaId ? await deps.store.getMedia(mediaId) : null
-      if (!m || m.deletedAt || m.status !== 'ready') return skip('The imported track is gone.')
-      return picked(pick, m.id, now)
+      if (m && !m.deletedAt && m.status === 'ready') return picked(pick, m.id, deps.clock.now())
+      // The track couldn't be imported: search on with the next words.
+      deps.log.info('music.import_failed', { attemptId: a.id, error: job?.error?.message ?? 'gone' })
+      pick = {
+        ...settle(pick, 'import_failed'),
+        status: 'searching',
+        searchJobId: null,
+        importJobId: null,
+        openverseId: null,
+        title: null,
+      }
+      continue
     }
     return pick
   }
@@ -244,7 +445,14 @@ export async function advanceMusicPick(deps: Deps, a: AttemptRow): Promise<Music
 }
 
 function picked(pick: MusicPick, mediaId: string, now: Date): MusicPick {
-  return { ...pick, status: 'picked', mediaId, reason: null, endedAt: now.toISOString() }
+  return {
+    ...pick,
+    status: 'picked',
+    source: pick.source ?? 'openverse',
+    mediaId,
+    reason: null,
+    endedAt: now.toISOString(),
+  }
 }
 
 /**
@@ -267,5 +475,13 @@ export async function attachTrack(repo: Repo, a: AttemptRow, mediaId: string): P
 /** What the API shows of a pick. */
 export function musicPickDto(p: MusicPick | null | undefined) {
   if (!p) return null
-  return { status: p.status, query: p.query, title: p.title, mediaId: p.mediaId, reason: p.reason }
+  return {
+    status: p.status,
+    query: p.query,
+    title: p.title,
+    mediaId: p.mediaId,
+    reason: p.reason,
+    source: p.status === 'picked' ? (p.source ?? 'openverse') : null,
+    tried: (p.tried ?? []).map((t) => ({ query: t.query, outcome: t.outcome })),
+  }
 }

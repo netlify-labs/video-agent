@@ -460,7 +460,13 @@ async function findingMusic(deps: Deps, a: AttemptRow): Promise<void> {
     )
   })
   if (!ok) return
-  deps.log.info('attempt.music_done', { attemptId: a.id, status: pick.status, mediaId: pick.mediaId })
+  deps.log.info('attempt.music_done', {
+    attemptId: a.id,
+    status: pick.status,
+    source: pick.source ?? null,
+    mediaId: pick.mediaId,
+    tried: pick.tried?.map((t) => `${t.query}: ${t.outcome}`),
+  })
   await start(deps, { ...a, stage: 'starting', musicPick: pick })
 }
 
