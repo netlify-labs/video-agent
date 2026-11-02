@@ -14,7 +14,8 @@ it starts from.
 **Brand music (optional).** Videos made with Sound set to Music use a track picked from the media library, or else
 this one. Add it to `brand.json` (MP3, M4A, WAV or Ogg, a file you have the rights to):
 `"music": { "file": "assets/music.mp3", "genre": "warm minimal electronic", "tempo": "110 bpm" }`. Without it (and
-without a picked track) those videos have no music: the agent never fetches music from elsewhere.
+without a picked track) the agent finds a CC0 or CC BY track on Openverse and credits it; it never fetches music from
+anywhere else.
 
 Keep it short and concrete. The agent follows rules better than adjectives: "headlines are 96 px, white on
 #0b0d10, never more than 6 words" beats "bold and modern".

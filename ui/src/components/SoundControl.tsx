@@ -33,7 +33,7 @@ export function SoundControl(props: {
         ? `Music: ${track.filename}.`
         : brand.music
           ? "Music: the brand's track. Add an audio file to use another."
-          : 'Add an audio file from the media library; without one the video has no music.'
+          : 'Add an audio file from the media library, or the agent finds a CC0 or CC BY track on Openverse.'
   return (
     <div>
       <Text size="sm" fw={500} mb={8} id="sound-label">
