@@ -60,11 +60,19 @@ import {
 
 const STAGE_WORDS: Record<string, string> = {
   queued: 'Waiting for a free slot',
+  finding_music: 'Finding music…',
   starting: 'Starting an agent run',
   running: 'The agent is writing and checking the composition',
   cancelling: 'Stopping the run',
   unresolved: 'Checking whether the run started (an admin can resolve this)',
   finishing: 'Verifying and saving the files',
+}
+
+/** The music the server picked before the run, for the version details. */
+function musicWords(m: NonNullable<Version['music']>): string {
+  if (m.status === 'picked') return `${m.title ?? 'A track'} (picked from Openverse)`
+  if (m.status === 'skipped') return 'None found in time; the agent looked itself'
+  return m.title ? `Adding ${m.title}…` : 'Finding music…'
 }
 
 function useTicker() {
@@ -149,6 +157,10 @@ function Progress({ video, v, canCancel }: { video: Video; v: Version; canCancel
   const progress = useProgress(video, v)
   const snapshot =
     progress.data?.versionN === v.n && progress.data.checkpoint?.hasBundle ? progress.data.checkpoint : null
+  // The live stage and music pick when /progress has them, else the version's.
+  const live = progress.data?.versionN === v.n ? progress.data : null
+  const stage = live?.stage ?? v.stage ?? 'queued'
+  const music = live?.music ?? v.music
   const cancel = $api.useMutation('post', '/api/v1/videos/{id}/versions/{n}/cancel', {
     onSuccess: () => void qc.invalidateQueries(),
     onError: showError,
@@ -188,10 +200,16 @@ function Progress({ video, v, canCancel }: { video: Video; v: Version; canCancel
               {clock(v.timings?.queuedAt)}
             </Text>
           </Group>
-          <StageTrack version={v} />
-          <Text size="sm" c="var(--va-muted)">
-            {STAGE_WORDS[v.stage ?? 'queued'] ?? 'Working'}
+          <StageTrack version={{ status: v.status, stage }} />
+          <Text size="sm" c="var(--va-muted)" data-testid="stage-words">
+            {STAGE_WORDS[stage] ?? 'Working'}
           </Text>
+          {music?.title && (music.status === 'picked' || music.status === 'importing') ? (
+            <Text size="sm" c="var(--va-muted)" lineClamp={1} data-testid="picked-music">
+              Music: {music.title}
+              {music.status === 'importing' ? ' (adding it to the library)' : ''}
+            </Text>
+          ) : null}
           <Narration video={video} v={v} />
           <Group justify="space-between" mt="xs">
             {'Notification' in window ? (
@@ -940,6 +958,7 @@ export function VideoPage() {
               <Meta label="Agent">
                 {v.agent ? [v.agent.agent, v.agent.model].filter(Boolean).join(' · ') || '—' : '—'}
               </Meta>
+              {v.music ? <Meta label="Music">{musicWords(v.music)}</Meta> : null}
               <Meta label="Attempts">{v.attempts}</Meta>
               {v.incorporates ? (
                 <Meta label="Feedback">

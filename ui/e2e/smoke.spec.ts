@@ -111,6 +111,23 @@ test('an in-progress video shows its stage and can be cancelled', async ({ page 
   await expect(page.getByRole('button', { name: 'Make v2' })).toBeDisabled()
 })
 
+test('a run that needs music shows Finding music… before it starts', async ({ page }) => {
+  await mock(page, 'mockMusic', 'searching')
+  await page.goto('/videos/vid_making')
+  await expect(page.getByTestId('stage-words')).toHaveText('Finding music…')
+  await expect(page.getByRole('img', { name: 'Stage: Finding music' }).first()).toBeVisible()
+  await expect(page.getByTestId('picked-music')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Cancel' })).toBeEnabled()
+  await expect(page.getByText('Finding music…')).toHaveCount(2)
+})
+
+test('the track the server picked shows in the progress card and the details', async ({ page }) => {
+  await mock(page, 'mockMusic', 'picked')
+  await page.goto('/videos/vid_making')
+  await expect(page.getByTestId('picked-music')).toHaveText('Music: Bright Horizons')
+  await expect(page.getByText('Bright Horizons (picked from Openverse)')).toBeVisible()
+})
+
 test('a failed video explains why and offers Try again', async ({ page }) => {
   await page.goto('/videos/vid_failed')
   await expect(page.getByText(/stopped to ask a question/).first()).toBeVisible()

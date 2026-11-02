@@ -8,6 +8,7 @@ import { $api } from '../api/client'
 import { relativeTime, showError } from '../components/bits'
 
 const STAGE: Record<string, string> = {
+  finding_music: 'Finding music',
   starting: 'Starting',
   running: 'Making',
   cancelling: 'Stopping',
@@ -181,7 +182,7 @@ export function AdminPage() {
                       <td>{STAGE[a.stage ?? ''] ?? a.stage}</td>
                       <td className="num">{a.startedAt ? relativeTime(a.startedAt) : '—'}</td>
                       <td style={{ textAlign: 'right' }}>
-                        {a.stage === 'running' || a.stage === 'starting' ? (
+                        {a.stage === 'running' || a.stage === 'starting' || a.stage === 'finding_music' ? (
                           <Button
                             size="xs"
                             variant="subtle"
