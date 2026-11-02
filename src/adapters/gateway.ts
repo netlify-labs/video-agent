@@ -87,13 +87,27 @@ export function createGateway(env: NodeJS.ProcessEnv = process.env): GatewayPort
           messages: [{ role: 'user', content }],
         }),
       })
-      const body = (await res.json()) as {
+      // Read as text first: an error can come back with an empty or non-JSON body, and res.json() would hide the
+      // status behind "Unexpected end of JSON input".
+      const raw = await res.text()
+      let body: {
         content?: { type?: string; text?: string }[]
         model?: string
         usage?: Record<string, number>
         error?: { message?: string }
+      } = {}
+      try {
+        body = raw ? (JSON.parse(raw) as typeof body) : {}
+      } catch {
+        if (res.ok)
+          throw new Error(
+            `AI Gateway returned ${res.status} with a body that isn't JSON: ${raw.slice(0, 200)}`,
+          )
       }
-      if (!res.ok) throw new Error(`AI Gateway returned ${res.status}: ${body.error?.message ?? 'error'}`)
+      if (!res.ok)
+        throw new Error(
+          `AI Gateway returned ${res.status}: ${body.error?.message ?? (raw.slice(0, 200) || 'an empty body')}`,
+        )
       const u = body.usage ?? {}
       const usage: GatewayUsage = {
         inputTokens: u.input_tokens ?? 0,
