@@ -4323,7 +4323,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Tracks (fresh, or from a recent identical search) */
+                /** @description Tracks: fresh, or from an identical search in the last two weeks (stale after a day, then refreshed in the background) */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -4397,6 +4397,170 @@ export interface paths {
                 };
                 /** @description Openverse didn't answer */
                 502: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/media/openverse/library": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Audio already in the team library that matches music search words (title, caption, filename, creator or source), answered at once without asking Openverse */
+        get: {
+            parameters: {
+                query: {
+                    q: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Matching library audio */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MusicLibraryMatches"];
+                    };
+                };
+                /** @description Invalid request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not signed in */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not allowed */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Conflict or not ready */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/media/openverse/common": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Common music searches, kept warm every day: quick picks that answer at once */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The searches */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["OpenverseCommon"];
+                    };
+                };
+                /** @description Invalid request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not signed in */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not allowed */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Conflict or not ready */
+                409: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -6337,6 +6501,10 @@ export interface components {
             page: number;
             pageCount: number;
             total: number;
+            /** @description When these tracks were fetched from Openverse (searches are shared and stored) */
+            fetchedAt: string | null;
+            /** @description True when the stored search is over a day old: it is answered at once and refreshed in the background */
+            stale: boolean;
         };
         OpenverseTrack: {
             /** @description Openverse audio id (pass it to import) */
@@ -6386,6 +6554,20 @@ export interface components {
             updatedAt: string;
             /** @description The job can be read until then (30 minutes) */
             expiresAt: string;
+        };
+        MusicLibraryMatches: {
+            /** @description Ready audio in the library matching the words, Openverse imports first */
+            items: components["schemas"]["Media"][];
+        };
+        OpenverseCommon: {
+            /**
+             * @example [
+             *       "upbeat",
+             *       "ambient",
+             *       "cinematic"
+             *     ]
+             */
+            queries: string[];
         };
         CommentList: {
             items: components["schemas"]["Comment"][];

@@ -50,8 +50,8 @@ const REFRESH_AGAIN_MS = 10 * 60_000
 /** The most searches the sweep keeps, and the most used searches the warm-up refreshes besides the common ones. */
 export const MAX_STORED_SEARCHES = 5_000
 const WARM_TOP = 15
-/** The warm-up refreshes searches older than this, so a daily run finds yesterday's still a little short of stale. */
-const WARM_OLDER_THAN_MS = SEARCH_FRESH_MS - 4 * 60 * 60_000
+/** The warm-up refreshes searches fetched before this, so a daily run also takes yesterday's, a little short of stale. */
+const warmCutoff = (deps: Deps) => deps.clock.now().getTime() - (SEARCH_FRESH_MS - 4 * 60 * 60_000)
 
 /** Searches people often start with: offered as quick picks in Find music and kept warm every day. */
 export const COMMON_SEARCHES = [
@@ -439,7 +439,7 @@ export async function planWarmup(deps: Deps): Promise<string[]> {
   const out: string[] = []
   for (const key of keys) {
     const row = await deps.store.getOpenverseSearch(key)
-    if (!row || Date.parse(row.fetchedAt) < now - WARM_OLDER_THAN_MS) out.push(key)
+    if (!row || Date.parse(row.fetchedAt) < warmCutoff(deps)) out.push(key)
   }
   return out
 }
@@ -471,6 +471,8 @@ async function runWarmup(deps: Deps, raw: unknown, opts: CallOpts): Promise<Warm
   const call: CallOpts = { ...opts, retries: Math.min(opts.retries, 1) }
   let next = 0
   let stop = false
+  // Read through a function: other workers set it while this one awaits.
+  const stopped = () => stop || opts.deadline?.aborted === true
   let lastStart = -Infinity
   let gate = Promise.resolve()
   // Starts are serialized through the gate, so they stay spaced however many run at once.
@@ -484,15 +486,15 @@ async function runWarmup(deps: Deps, raw: unknown, opts: CallOpts): Promise<Warm
     return turn
   }
   const worker = async () => {
-    while (!stop && next < keys.length) {
+    while (!stopped() && next < keys.length) {
       const req = requestFromKey(keys[next++] ?? '')
       const row = req && (await deps.store.getOpenverseSearch(req.key))
-      if (!req || (row && Date.parse(row.fetchedAt) >= deps.clock.now().getTime() - WARM_OLDER_THAN_MS)) {
+      if (!req || (row && Date.parse(row.fetchedAt) >= warmCutoff(deps))) {
         r.skipped++
         continue
       }
       await spaced()
-      if (stop || opts.deadline?.aborted) break
+      if (stopped()) break
       try {
         await fetchSearchAt(deps, req, call)
         r.refreshed++
