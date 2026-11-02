@@ -127,7 +127,10 @@ export async function finalizeAttempt(deps: Deps, attemptId: string): Promise<Fi
     if (!(info.durationSec > 0)) throw new Invalid('invalid_output', 'The video has no duration.')
     if (version.targetDurationSec !== null) {
       const t = version.targetDurationSec
-      if (info.durationSec < t * 0.75 || info.durationSec > t * 1.25) {
+      // With a voice-over the narration sets the length: each beat is made long enough for its line, so only a video
+      // that came out too short is wrong.
+      const longest = version.voiceover ? Infinity : t * 1.25
+      if (info.durationSec < t * 0.75 || info.durationSec > longest) {
         throw new Invalid('invalid_output', `Asked for about ${t}s, got ${info.durationSec.toFixed(1)}s.`)
       }
     }

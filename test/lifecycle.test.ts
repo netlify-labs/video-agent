@@ -359,6 +359,39 @@ describe('video lifecycle', () => {
     expect(res.status).toBe(409)
   })
 
+  it('a voice-over may run longer than the target length; without one the video must be close to it', async () => {
+    // Live on 11-02: a voiced video asked for about 42 s came out 55.3 s because its lines needed that long to speak.
+    for (const voiceover of [true, false]) {
+      const h = harness()
+      h.deps.runner.nextScripts.push({ timeline: [running()] })
+      const video = await h.json(
+        await h.call('POST', '/api/v1/videos', {
+          as: h.member,
+          body: { prompt: PROMPT, ...(voiceover ? { voiceover: { enabled: true } } : {}) },
+        }),
+      )
+      await h.drive(2)
+      // The fixture video is 2 s: over 1.25 × a 1.5 s target.
+      await h.deps.store.updateVersion(video.id, 1, { targetDurationSec: 1.5 })
+      const [a] = await h.attempts(video.id)
+      const { fixtureFiles, uploadAndManifest } = await import('./fakes.js')
+      const m = await uploadAndManifest(h.deps.blobs, video.id, a?.id ?? '', fixtureFiles())
+      const token = /--token (\S+)/.exec(h.deps.runner.starts[0]?.prompt ?? '')?.[1]
+      await h.call('POST', `/api/internal/runs/${a?.id}/done`, {
+        origin: null,
+        headers: { authorization: `Bearer ${token}` },
+        body: m,
+      })
+      await h.drive(2)
+      const [done] = await h.attempts(video.id)
+      if (voiceover) expect(done?.stage).toBe('ready')
+      else {
+        expect(done?.errorCategory).toBe('invalid_output')
+        expect(done?.errorMessage).toMatch(/Asked for about 1.5s/)
+      }
+    }
+  })
+
   it('rejects a video with the wrong dimensions', async () => {
     const h = harness()
     h.deps.runner.defaultScript = ((orig) => (req) => {
