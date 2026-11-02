@@ -242,6 +242,11 @@ export const VersionSchema = z
         bytes: z.number().int(),
         title: z.string(),
         summary: z.string(),
+        notices: z
+          .array(z.string())
+          .describe(
+            'Things to know about the video, kept despite them, e.g. a length far from the one asked for',
+          ),
       })
       .nullable(),
     links: z.object({
@@ -592,12 +597,9 @@ export const OpenverseSearchSchema = z
     page: z.number().int(),
     pageCount: z.number().int(),
     total: z.number().int(),
-    fetchedAt: z
-      .string()
-      .nullable()
-      .openapi({
-        description: 'When these tracks were fetched from Openverse (searches are shared and stored)',
-      }),
+    fetchedAt: z.string().nullable().openapi({
+      description: 'When these tracks were fetched from Openverse (searches are shared and stored)',
+    }),
     stale: z.boolean().openapi({
       description:
         'True when the stored search is over a day old: it is answered at once and refreshed in the background',

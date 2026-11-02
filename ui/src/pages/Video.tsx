@@ -754,6 +754,15 @@ export function VideoPage() {
                   }}
                 />
               </div>
+              {v.output?.notices.length ? (
+                <Alert color="yellow" variant="light" data-testid="output-notices">
+                  {v.output.notices.map((n) => (
+                    <Text key={n} size="sm">
+                      {n} Kept as made; ask for a revision to change it.
+                    </Text>
+                  ))}
+                </Alert>
+              ) : null}
               <VerdictBar video={data} v={v} canReview={canReview && me.data.id !== v.authorId} />
             </Stack>
           ) : (

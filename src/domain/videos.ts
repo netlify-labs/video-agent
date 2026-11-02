@@ -759,6 +759,7 @@ function versionDto(
           bytes: o.bytes,
           title: o.title,
           summary: o.agentSummary,
+          notices: o.notices ?? [],
         }
       : null,
     links: {

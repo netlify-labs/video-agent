@@ -125,14 +125,14 @@ export async function finalizeAttempt(deps: Deps, attemptId: string): Promise<Fi
       )
     }
     if (!(info.durationSec > 0)) throw new Invalid('invalid_output', 'The video has no duration.')
+    // A video far from the length asked for is still kept (the run cost credits and it's better than nothing), with a
+    // notice. With a voice-over the narration sets the length, so only a short one is noted.
+    const notices: string[] = []
     if (version.targetDurationSec !== null) {
       const t = version.targetDurationSec
-      // With a voice-over the narration sets the length: each beat is made long enough for its line, so only a video
-      // that came out too short is wrong.
       const longest = version.voiceover ? Infinity : t * 1.25
-      if (info.durationSec < t * 0.75 || info.durationSec > longest) {
-        throw new Invalid('invalid_output', `Asked for about ${t}s, got ${info.durationSec.toFixed(1)}s.`)
-      }
+      if (info.durationSec < t * 0.75 || info.durationSec > longest)
+        notices.push(`Asked for about ${t} s; this video is ${info.durationSec.toFixed(1)} s.`)
     }
     if (sniff(files['poster.jpg']) !== 'jpeg')
       throw new Invalid('invalid_output', 'The poster is not a JPEG.')
@@ -189,6 +189,7 @@ export async function finalizeAttempt(deps: Deps, attemptId: string): Promise<Fi
       agentSummary: manifest.summary.slice(0, 4000),
       previews,
       runCredits,
+      notices: notices.length ? notices : null,
     })
     // The preview bundle (plan v2 §7). Best effort: a version without one is still ready and is extracted later.
     if (result === 'ready') {

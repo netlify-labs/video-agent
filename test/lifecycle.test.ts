@@ -359,7 +359,7 @@ describe('video lifecycle', () => {
     expect(res.status).toBe(409)
   })
 
-  it('a voice-over may run longer than the target length; without one the video must be close to it', async () => {
+  it('a video far from the length asked for is kept with a notice; a voice-over may run longer without one', async () => {
     // Live on 11-02: a voiced video asked for about 42 s came out 55.3 s because its lines needed that long to speak.
     for (const voiceover of [true, false]) {
       const h = harness()
@@ -384,11 +384,12 @@ describe('video lifecycle', () => {
       })
       await h.drive(2)
       const [done] = await h.attempts(video.id)
-      if (voiceover) expect(done?.stage).toBe('ready')
-      else {
-        expect(done?.errorCategory).toBe('invalid_output')
-        expect(done?.errorMessage).toMatch(/Asked for about 1.5s/)
-      }
+      // Kept either way: the run cost credits, and a video is better than an error.
+      expect(done?.stage).toBe('ready')
+      const got = await h.json(await h.call('GET', `/api/v1/videos/${video.id}`, { as: h.member }))
+      expect(got.versions[0].output.notices).toEqual(
+        voiceover ? [] : ['Asked for about 1.5 s; this video is 2.0 s.'],
+      )
     }
   })
 

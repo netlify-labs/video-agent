@@ -1644,3 +1644,10 @@ test('a playing preview has a timeline to click, drag or step through', async ({
   await row.getByRole('button', { name: /^Stop / }).click()
   await expect(dialog.getByTestId('preview-timeline')).toHaveCount(0)
 })
+
+test('a video far from the length asked for is kept, with a notice under the player', async ({ page }) => {
+  await page.goto('/videos/vid_teaser')
+  await expect(page.getByTestId('output-notices')).toHaveCount(0)
+  await page.locator('button.va-version', { hasText: /^v1/ }).click()
+  await expect(page.getByTestId('output-notices')).toContainText('Asked for about 6 s; this video is 8.0 s.')
+})

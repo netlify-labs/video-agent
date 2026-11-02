@@ -371,6 +371,8 @@ export interface OutputRow {
   previews?: Previews | null
   /** Openverse files the run fetched itself, from its video/assets/music/credits.json as finalize checked it. */
   runCredits?: RunCredit[] | null
+  /** Things to know about the video, kept despite them (a length far from the one asked for). */
+  notices?: string[] | null
 }
 
 export interface PublicationRow {

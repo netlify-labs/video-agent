@@ -53,6 +53,8 @@ function ready(
     author: string
     parent?: number
     target?: number | null
+    /** Kept despite these (a length far from the one asked for). */
+    notices?: string[]
     pub?: string
     editable?: boolean
     /** Preview variants made from ui/mock-assets/teaser-v2.mp4 (the real render-job output for that file). */
@@ -101,6 +103,7 @@ function ready(
       bytes: o.bytes,
       title: o.title,
       summary: o.summary,
+      notices: o.notices ?? [],
     },
     links: files(id, n),
     files: o.previews ? previewFiles('teaser-v2') : null,
@@ -298,6 +301,7 @@ export const videos: Video[] = [
         title: 'Ship faster with preview deploys',
         author: people.sam.id,
         target: 8,
+        notices: ['Asked for about 6 s; this video is 8.0 s.'],
         summary:
           'An 8-second, calm product teaser on a dark background with three beats and an end card that reads "Try it today".',
       },

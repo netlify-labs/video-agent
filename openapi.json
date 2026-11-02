@@ -573,6 +573,13 @@
               },
               "summary": {
                 "type": "string"
+              },
+              "notices": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Things to know about the video, kept despite them, e.g. a length far from the one asked for"
               }
             },
             "required": [
@@ -581,7 +588,8 @@
               "height",
               "bytes",
               "title",
-              "summary"
+              "summary",
+              "notices"
             ]
           },
           "links": {

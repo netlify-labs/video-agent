@@ -5865,6 +5865,8 @@ export interface components {
                 bytes: number;
                 title: string;
                 summary: string;
+                /** @description Things to know about the video, kept despite them, e.g. a length far from the one asked for */
+                notices: string[];
             } | null;
             links: {
                 video: string;

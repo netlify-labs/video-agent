@@ -175,6 +175,8 @@ export const outputs = pgTable(
     agentSummary: text('agent_summary').notNull(),
     previews: jsonb('previews'),
     runCredits: jsonb('run_credits'),
+    // Things to know about a video kept despite them, e.g. a length far from the one asked for.
+    notices: jsonb('notices'),
   },
   (t) => [primaryKey({ columns: [t.jobId, t.versionN] })],
 )
