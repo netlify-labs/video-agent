@@ -10,225 +10,608 @@
 <meta property="og:type" content="article">
 <style>
   :root {
-    --ground: #f7f8f9; --surface: #ffffff; --raised: #eef0f2; --rule: #e3e6ea;
-    --text: #111418; --muted: #4c5561; --faint: #77808b; --accent: #058a80; --accent-soft: #e0f4f2;
-    --code: #0b0d10; --code-text: #dfe5ea;
+    --ground: #f6f7f9; --surface: #ffffff; --raised: #eceff2; --rule: #e1e5e9;
+    --text: #0f1216; --muted: #4a535e; --faint: #76808b;
+    --accent: #047f77; --accent-soft: #dcf3f1; --ok: #0f8a4f; --ok-soft: #dff4e8; --warn: #a15c00; --warn-soft: #fbefdc;
+    --code: #0b0d10; --code-text: #d9e1e8; --code-dim: #6c7783; --stage: #0d1117;
+    --spring: cubic-bezier(.34, 1.4, .64, 1); --ease: cubic-bezier(.22, 1, .36, 1);
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --ground: #0b0d10; --surface: #13161a; --raised: #1b1f24; --rule: #262b31;
-      --text: #f2f4f6; --muted: #b3bcc6; --faint: #87919c; --accent: #32e6e2; --accent-soft: #0f2b2c;
-      --code: #07090b; --code-text: #dfe5ea;
+      --ground: #0a0c0f; --surface: #12151a; --raised: #1a1e24; --rule: #252a31;
+      --text: #f2f4f6; --muted: #b2bbc5; --faint: #85909b;
+      --accent: #32e6e2; --accent-soft: #0e2a2b; --ok: #3ddc84; --ok-soft: #0f2a1c; --warn: #f5b25b; --warn-soft: #2d2212;
+      --code: #07090b; --stage: #07090b;
     }
   }
   :root[data-theme="dark"] {
-    --ground: #0b0d10; --surface: #13161a; --raised: #1b1f24; --rule: #262b31;
-    --text: #f2f4f6; --muted: #b3bcc6; --faint: #87919c; --accent: #32e6e2; --accent-soft: #0f2b2c;
-    --code: #07090b; --code-text: #dfe5ea;
+    --ground: #0a0c0f; --surface: #12151a; --raised: #1a1e24; --rule: #252a31;
+    --text: #f2f4f6; --muted: #b2bbc5; --faint: #85909b;
+    --accent: #32e6e2; --accent-soft: #0e2a2b; --ok: #3ddc84; --ok-soft: #0f2a1c; --warn: #f5b25b; --warn-soft: #2d2212;
+    --code: #07090b; --stage: #07090b;
   }
   * { box-sizing: border-box; }
-  html { -webkit-text-size-adjust: 100%; }
+  html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
   body { margin: 0; background: var(--ground); color: var(--text); font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
-  main { max-width: 860px; margin: 0 auto; padding: 0 16px 96px; }
-  header.hero { padding: 72px 0 40px; }
-  .kicker { color: var(--accent); font-weight: 600; font-size: 14px; letter-spacing: .02em; margin: 0 0 12px; }
-  h1 { font-size: clamp(34px, 6vw, 52px); line-height: 1.08; letter-spacing: -.02em; margin: 0 0 18px; }
-  .lede { font-size: 19px; color: var(--muted); margin: 0 0 28px; max-width: 680px; }
-  h2 { font-size: 26px; letter-spacing: -.01em; margin: 64px 0 14px; }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 0 24px; }
+  .prose { max-width: 760px; }
+  section { padding: 72px 0 0; }
+  h1 { font-size: clamp(38px, 5.4vw, 64px); line-height: 1.04; letter-spacing: -.025em; margin: 0 0 20px; }
+  h2 { font-size: clamp(26px, 3vw, 34px); line-height: 1.15; letter-spacing: -.015em; margin: 0 0 12px; }
   h3 { font-size: 17px; margin: 0 0 6px; }
   p { margin: 0 0 14px; }
   .muted { color: var(--muted); }
+  .kicker { color: var(--accent); font-weight: 600; font-size: 14px; letter-spacing: .02em; margin: 0 0 14px; }
+  .section-lede { color: var(--muted); font-size: 18px; margin: 0 0 28px; max-width: 760px; }
   a { color: var(--accent); text-underline-offset: 3px; }
   code { font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--raised); padding: 1px 6px; border-radius: 6px; }
-  pre { background: var(--code); color: var(--code-text); border-radius: 14px; padding: 18px 20px; overflow-x: auto; font: 13.5px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 0 0 16px; }
+  pre { background: var(--code); color: var(--code-text); border-radius: 14px; padding: 16px 18px; overflow-x: auto; font: 13.5px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 0 0 14px; }
   pre code { background: none; padding: 0; color: inherit; font: inherit; }
+  button { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+  /* Hero */
+  .hero { padding: 64px 0 8px; display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 48px; align-items: center; }
+  .lede { font-size: 19px; color: var(--muted); margin: 0 0 28px; }
   .actions { display: flex; flex-wrap: wrap; gap: 10px; }
-  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 999px; font-weight: 600; text-decoration: none; font-size: 15px; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 10px 20px; border-radius: 999px; font-weight: 600; text-decoration: none; font-size: 15px; border: 0; cursor: pointer; }
   .btn.primary { background: var(--text); color: var(--ground); }
   .btn.secondary { background: var(--raised); color: var(--text); }
-  .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 40px 0 0; }
-  .stat { background: var(--surface); border: 1px solid var(--rule); border-radius: 14px; padding: 16px; }
-  .stat b { display: block; font-size: 26px; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
+  .hero-video { position: relative; aspect-ratio: 16 / 9; border-radius: 18px; overflow: hidden; background: var(--stage); box-shadow: 0 30px 80px -30px rgba(0, 0, 0, .55), 0 0 0 1px var(--rule); }
+  .hero-video video { display: block; width: 100%; height: 100%; object-fit: cover; }
+  .hero-video .pending { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 24px; color: #c5ced8;
+    background: radial-gradient(120% 90% at 20% 10%, rgba(50, 230, 226, .18), transparent 60%), radial-gradient(90% 80% at 90% 100%, rgba(80, 120, 255, .16), transparent 60%), var(--stage); }
+  .hero-video .pending b { display: block; color: #fff; font-size: 20px; margin-bottom: 6px; }
+  .caption { color: var(--faint); font-size: 13px; margin: 10px 2px 0; }
+  .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 48px 0 0; }
+  .stat { background: var(--surface); border: 1px solid var(--rule); border-radius: 14px; padding: 16px 18px; }
+  .stat b { display: block; font-size: 28px; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
   .stat span { color: var(--faint); font-size: 13px; }
-  .flow { list-style: none; padding: 0; margin: 20px 0; counter-reset: step; }
-  .flow li { position: relative; padding: 0 0 22px 52px; counter-increment: step; }
-  .flow li::before { content: counter(step); position: absolute; left: 0; top: 0; width: 34px; height: 34px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-weight: 700; display: grid; place-items: center; font-size: 15px; }
-  .flow li::after { content: ""; position: absolute; left: 16px; top: 38px; bottom: 4px; width: 2px; background: var(--rule); }
-  .flow li:last-child::after { display: none; }
-  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 18px 0; }
+
+  /* Panels */
+  .panel { background: var(--surface); border: 1px solid var(--rule); border-radius: 18px; padding: 24px; }
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  .icon-btn { width: 44px; height: 44px; border-radius: 50%; border: 0; background: var(--raised); display: grid; place-items: center; cursor: pointer; }
+  .icon-btn svg { width: 18px; height: 18px; }
+  .icon-btn:disabled { opacity: .4; cursor: default; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* HTML is the video */
+  .scrub { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 24px; align-items: start; }
+  .code { background: var(--code); border-radius: 14px; padding: 14px 0; font: 13.5px/1.75 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--code-dim); overflow-x: auto; }
+  .code div { padding: 0 18px; white-space: pre; border-left: 3px solid transparent; transition: background .25s var(--ease), color .25s var(--ease), border-color .25s var(--ease); }
+  .code div.on { background: rgba(50, 230, 226, .1); color: var(--code-text); border-left-color: #32e6e2; }
+  .code .a { color: #7ee7ff; } .code .s { color: #b7f19a; } .code .t { color: #ff9ecf; }
+  .stage { position: relative; aspect-ratio: 16 / 9; border-radius: 14px; overflow: hidden; background: var(--stage); color: #fff; }
+  .stage .scene { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 8%; }
+  .stage .s1 b { font-size: clamp(22px, 4.4vw, 46px); letter-spacing: -.02em; line-height: 1.05; }
+  .stage .s1 i { display: block; height: 4px; width: 0; margin: 14px auto 0; background: #32e6e2; border-radius: 2px; }
+  .stage .s2 .term { width: min(86%, 520px); text-align: left; font: clamp(12px, 1.6vw, 16px)/1.5 ui-monospace, Menlo, monospace; }
+  .stage .s2 .bar { height: 12px; border-radius: 6px; background: rgba(255, 255, 255, .12); margin-top: 16px; overflow: hidden; }
+  .stage .s2 .bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #3b5bff, #32e6e2); }
+  .stage .s2 .pct { font-size: clamp(26px, 5vw, 54px); font-weight: 700; font-family: ui-sans-serif, system-ui, sans-serif; margin-top: 10px; }
+  .stage .s3 b { font-size: clamp(20px, 3.6vw, 38px); }
+  .stage .s3 span { display: block; color: #32e6e2; margin-top: 8px; font-size: clamp(13px, 1.8vw, 18px); }
+  .stage .hud { position: absolute; left: 12px; top: 10px; font: 12px ui-monospace, Menlo, monospace; color: rgba(255, 255, 255, .55); }
+  .timeline { margin-top: 14px; }
+  .lanes { position: relative; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-bottom: 8px; }
+  .lanes span { font-size: 12px; text-align: center; padding: 5px 0; border-radius: 6px; background: var(--raised); color: var(--muted); transition: background .25s var(--ease), color .25s var(--ease); }
+  .lanes span.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  input[type=range] { width: 100%; accent-color: var(--accent); height: 28px; }
+  .readout { display: flex; justify-content: space-between; color: var(--faint); font-size: 13px; }
+
+  /* Pipeline stepper */
+  .flow { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0; margin: 8px 0 22px; }
+  .node { position: relative; text-align: center; padding: 0 6px; }
+  .node .dot { position: relative; z-index: 1; width: 64px; height: 64px; margin: 0 auto 10px; border-radius: 18px; display: grid; place-items: center; background: var(--raised); color: var(--faint);
+    transition: transform .45s var(--spring), background .3s var(--ease), color .3s var(--ease), box-shadow .3s var(--ease); }
+  .node .dot svg { width: 28px; height: 28px; }
+  .node b { display: block; font-size: 14px; }
+  .node small { color: var(--faint); font-size: 12px; }
+  .node.on .dot { background: var(--accent-soft); color: var(--accent); transform: scale(1.08); box-shadow: 0 0 0 2px var(--accent); }
+  .node.done .dot { color: var(--accent); }
+  .node.ok.on .dot { background: var(--ok-soft); color: var(--ok); box-shadow: 0 0 0 2px var(--ok); }
+  .node:not(:last-child)::after { content: ""; position: absolute; top: 31px; left: calc(50% + 38px); right: calc(-50% + 38px); height: 2px; background: var(--rule); }
+  .node.link::after { background: repeating-linear-gradient(90deg, var(--accent) 0 8px, transparent 8px 14px); background-size: 28px 2px; animation: flow 0.9s linear infinite; }
+  @keyframes flow { to { background-position: 28px 0; } }
+  .step-text { min-height: 112px; }
+  .step-text h3 { font-size: 20px; }
+  .step-text .tag { display: inline-block; font-size: 12px; font-weight: 600; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 2px 10px; margin-bottom: 8px; }
+  .dots { display: flex; gap: 6px; }
+  .dots button { width: 28px; height: 28px; border: 0; background: none; padding: 0; display: grid; place-items: center; cursor: pointer; }
+  .dots button i { width: 10px; height: 10px; border-radius: 50%; background: var(--rule); transition: transform .3s var(--spring), background .3s; }
+  .dots button[aria-current="step"] i { background: var(--accent); transform: scale(1.3); }
+
+  /* Ready timing */
+  .toggle { display: inline-flex; background: var(--raised); border-radius: 999px; padding: 4px; }
+  .toggle button { border: 0; background: none; border-radius: 999px; padding: 8px 16px; min-height: 40px; cursor: pointer; color: var(--muted); font-weight: 600; font-size: 14px; }
+  .toggle button[aria-pressed="true"] { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0, 0, 0, .15); }
+  .track { position: relative; margin: 34px 0 10px; }
+  .phases { display: flex; height: 40px; border-radius: 10px; overflow: hidden; }
+  .phases div { display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: var(--muted); background: var(--raised); border-right: 2px solid var(--surface); white-space: nowrap; overflow: hidden; }
+  .phases .render { background: var(--accent-soft); color: var(--accent); }
+  .phases .wrap-up { background: repeating-linear-gradient(135deg, var(--raised) 0 8px, transparent 8px 16px); }
+  .ready-pin { position: absolute; top: -28px; bottom: -6px; width: 2px; background: var(--ok); transition: left .7s var(--spring); }
+  .ready-pin span { position: absolute; top: 0; left: 50%; transform: translateX(-50%); white-space: nowrap; background: var(--ok-soft); color: var(--ok); font-size: 12px; font-weight: 700; padding: 2px 10px; border-radius: 999px; }
+  .ready-pin.end span { left: auto; right: 0; transform: none; }
+  .axis { display: flex; justify-content: space-between; color: var(--faint); font-size: 12px; }
+  .verdict { margin: 16px 0 0; font-size: 15px; }
+
+  /* Cards, tables, lessons */
+  .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .grid4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
   .card { background: var(--surface); border: 1px solid var(--rule); border-radius: 14px; padding: 18px; }
   .card p { color: var(--muted); font-size: 15px; margin: 0; }
-  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 0; padding: 0; list-style: none; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 0; padding: 0; list-style: none; }
   .chips li { background: var(--raised); border-radius: 999px; padding: 4px 12px; font-size: 14px; color: var(--muted); }
-  .lessons { margin: 18px 0; padding: 0; list-style: none; }
-  .lessons li { border-top: 1px solid var(--rule); padding: 18px 0; }
-  .lessons li:last-child { border-bottom: 1px solid var(--rule); }
-  .lessons p { color: var(--muted); margin: 0; }
-  table { width: 100%; border-collapse: collapse; font-size: 15px; margin: 8px 0 16px; }
-  th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px; align-items: start; }
+  table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  th, td { text-align: left; padding: 11px 8px; border-bottom: 1px solid var(--rule); vertical-align: top; }
   th { color: var(--faint); font-weight: 500; font-size: 13px; }
-  td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td:first-child { font-weight: 600; white-space: nowrap; }
   .table-wrap { overflow-x: auto; }
-  footer { color: var(--faint); font-size: 14px; border-top: 1px solid var(--rule); padding-top: 24px; margin-top: 72px; }
+  .lessons { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .lessons li { background: var(--surface); border: 1px solid var(--rule); border-radius: 14px; padding: 18px; }
+  .lessons p { color: var(--muted); margin: 0; font-size: 15px; }
+  .cta { margin-top: 72px; background: var(--surface); border: 1px solid var(--rule); border-radius: 18px; padding: 32px; display: flex; flex-wrap: wrap; gap: 20px; align-items: center; justify-content: space-between; }
+  .cta h2 { margin: 0 0 6px; }
+  .cta p { margin: 0; color: var(--muted); }
+  footer { color: var(--faint); font-size: 14px; border-top: 1px solid var(--rule); padding: 24px 0 64px; margin-top: 56px; }
+
+  /* Entrances */
+  .reveal { opacity: 0; transform: translateY(18px); transition: opacity .7s var(--ease), transform .8s var(--spring); }
+  .reveal.in { opacity: 1; transform: none; }
+
+  @media (max-width: 960px) {
+    .hero, .scrub, .two { grid-template-columns: minmax(0, 1fr); }
+    .hero { gap: 28px; }
+    .grid3, .grid4, .lessons { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
   @media (max-width: 640px) {
-    header.hero { padding-top: 48px; }
+    .wrap { padding: 0 16px; }
+    .hero { padding-top: 40px; }
     .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .grid { grid-template-columns: 1fr; }
+    .grid3, .grid4, .lessons { grid-template-columns: minmax(0, 1fr); }
+    .grid4[style] { grid-template-columns: minmax(0, 1fr) !important; }
+    .panel { padding: 16px; }
+    /* The pipeline runs down the page on phones. */
+    .flow { grid-template-columns: 1fr; gap: 10px; }
+    .node { display: grid; grid-template-columns: 52px 1fr; align-items: center; gap: 12px; text-align: left; padding: 0; }
+    .node .dot { width: 52px; height: 52px; margin: 0; border-radius: 14px; }
+    .node .dot svg { width: 24px; height: 24px; }
+    .node:not(:last-child)::after { top: 54px; bottom: -10px; left: 25px; right: auto; width: 2px; height: auto; }
+    .node.link::after { background: repeating-linear-gradient(180deg, var(--accent) 0 8px, transparent 8px 14px); background-size: 2px 28px; animation-name: flow-down; }
+    @keyframes flow-down { to { background-position: 0 28px; } }
+    .phases div { font-size: 11px; }
+    .cta { padding: 22px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .reveal { opacity: 1; transform: none; transition: none; }
+    .node .dot, .ready-pin, .dots button i { transition: none; }
+    .node.link::after { animation: none; }
   }
 </style>
 </head>
 <body>
-<main>
+<div class="wrap">
+
 <header class="hero">
-  <p class="kicker">Netlify GTM Engineering</p>
-  <h1>How we built Video Agent</h1>
-  <p class="lede">Type what a video should say and get a branded MP4 a few minutes later. An AI agent writes the video as
-  HTML, renders it with HyperFrames inside a Netlify Agent Runner, and hands it back. Anyone who signs in can use it,
-  and so can scripts and AI tools.</p>
-  <div class="actions">
-    <a class="btn primary" href="/">Open Video Agent</a>
-    <a class="btn secondary" href="#use-it">Connect it to your AI tools</a>
+  <div>
+    <p class="kicker">Netlify GTM Engineering</p>
+    <h1>How we built Video Agent</h1>
+    <p class="lede">Type what a video should say and get a branded MP4 a few minutes later. An AI agent writes the
+    video as HTML, renders it with HyperFrames inside a Netlify Agent Runner, and hands it back. Anyone who signs in can
+    use it, and so can scripts and AI tools.</p>
+    <div class="actions">
+      <a class="btn primary" href="/">Open Video Agent</a>
+      <a class="btn secondary" href="#use-it">Connect your AI tools</a>
+    </div>
   </div>
-  <div class="stats">
-    <div class="stat"><b>3–8 min</b><span>prompt to MP4</span></div>
-    <div class="stat"><b>~90–250</b><span>AI credits per new video</span></div>
-    <div class="stat"><b>~34</b><span>credits for a browser edit</span></div>
-    <div class="stat"><b>4 days</b><span>first plan to everything here</span></div>
-  </div>
+  <figure style="margin:0">
+    <!-- The hero video, made with Video Agent itself. data-src is its public MP4; until then the panel says so. -->
+    <div class="hero-video" id="hero-video" data-src="/v/uc5sgjj42p.mp4" data-poster="/v/uc5sgjj42p.jpg" data-captions="/v/uc5sgjj42p.vtt">
+      <div class="pending"><div><b>This video is being made by Video Agent</b>A narrated tour of how it works, made
+      from one prompt.</div></div>
+    </div>
+    <figcaption class="caption">Made with Video Agent from one prompt in about 7 minutes: an Agent Runner run, a voice-over and music. <a href="/v/uc5sgjj42p">Share page</a></figcaption>
+  </figure>
 </header>
 
-<h2>The idea that made it work</h2>
-<p><a href="https://hyperframes.heygen.com">HyperFrames</a> is an open-source renderer that turns an HTML page with
-timed animations into a video. That matters because AI agents are very good at writing HTML and CSS. They're much less
-good at driving video editors.</p>
-<p>A <a href="https://docs.netlify.com/build/build-with-ai/agent-runners/overview/">Netlify Agent Runner</a> gives an
-agent a real Linux machine checked out from your repo. Our first test run showed it already had what HyperFrames needs:
-Node, FFmpeg and FFprobe, and <code>npx hyperframes</code> worked straight away. That run took 45 seconds and cost
-about 14 credits. A second test showed a run can write files to Netlify Blobs at about 40 MB/s and call back to our
-API.</p>
-<p class="muted">Put together: the agent writes <code>video/index.html</code>, checks it, renders it in the runner,
-uploads the files and tells the app where they are. No video service, no GPU, no extra accounts.</p>
-
-<h2>How a video gets made</h2>
-<ol class="flow">
-  <li><h3>You describe it</h3><p class="muted">In the web app, through the API or from an AI tool over MCP. Optionally
-  "Plan it first" asks a few questions and writes a brief you can edit.</p></li>
-  <li><h3>It waits its turn</h3><p class="muted">Requests go into a queue in Netlify Database. A few run at once
-  (three by default), so a busy day can't spend all your credits at the same time.</p></li>
-  <li><h3>An agent run writes and checks it</h3><p class="muted">The app starts an Agent Runner run on the same Netlify
-  project. The agent reads your brand guide, logos and fonts from <code>context/</code>, writes the composition as HTML,
-  and runs <code>hyperframes check</code> until it passes. Music and voice-over are added here when asked for.</p></li>
-  <li><h3>One script renders and uploads it</h3><p class="muted"><code>scripts/render-job.ts</code> renders the MP4,
-  makes the poster, GIF preview and captions, uploads them to Netlify Blobs, and posts a signed list of the files and
-  their SHA-256 hashes back to the app.</p></li>
-  <li><h3>The app checks before it trusts</h3><p class="muted">Finalize compares every uploaded file with those hashes
-  and inspects the MP4 itself before the video becomes "ready". A sweep every minute catches anything that went quiet:
-  lost callbacks, crashed starts, runs that ask a question or run too long.</p></li>
-  <li><h3>You watch, edit, revise and share</h3><p class="muted">Play and download it, change text, timing, colours,
-  media and music in the browser, ask for a revision in plain words, or publish a public share page with an embed
-  snippet.</p></li>
-</ol>
-
-<h2>Built entirely on Netlify</h2>
-<p>One repo and one Netlify project. Each platform piece does one job:</p>
-<div class="grid">
-  <div class="card"><h3>Agent Runners</h3><p>Every video is a run: the agent's whole working session, with its logs
-  and a link from the app to the run.</p></div>
-  <div class="card"><h3>Functions</h3><p>A Hono API with an OpenAPI spec, background functions for long jobs, and a
-  scheduled sweep every minute that owns every outcome.</p></div>
-  <div class="card"><h3>Netlify Database</h3><p>Postgres with Drizzle migrations: videos, versions, run attempts,
-  people, API keys, plans, comments and the queue.</p></div>
-  <div class="card"><h3>Netlify Blobs</h3><p>Rendered files, uploads, the media library and the preview bundles.
-  Edge functions serve them with signed, expiring links.</p></div>
-  <div class="card"><h3>Edge Functions</h3><p>Fast file delivery with byte ranges, public share pages, and a
-  sandboxed live preview of the composition.</p></div>
-  <div class="card"><h3>AI Gateway</h3><p>The quick planning questions and the brief, with no model keys to
-  manage.</p></div>
+<div class="stats">
+  <div class="stat reveal"><b>3–8 min</b><span>prompt to MP4</span></div>
+  <div class="stat reveal"><b>~90–250</b><span>AI credits per new video</span></div>
+  <div class="stat reveal"><b>~34</b><span>credits for a browser edit</span></div>
+  <div class="stat reveal"><b>4 days</b><span>first plan to everything here</span></div>
 </div>
-<ul class="chips" aria-label="Also used">
-  <li>HyperFrames</li><li>Hono + zod-openapi</li><li>React + Mantine</li><li>Drizzle</li><li>Kokoro voices</li>
-  <li>Openverse music</li><li>Playwright</li><li>Vitest</li>
-</ul>
 
-<h2 id="use-it">Anyone can use it, from anywhere</h2>
-<p>The same video tasks are available four ways, with the same permissions behind each one:</p>
-<div class="grid">
-  <div class="card"><h3>Web app</h3><p>Sign in with Netlify. Create, watch progress, edit in the browser, comment,
-  approve and publish.</p></div>
-  <div class="card"><h3>API</h3><p>API keys and signed webhooks for scripts and CI, with a reference built into the
-  app.</p></div>
-  <div class="card"><h3>MCP</h3><p>Ask Claude, Cursor or any MCP client for a video. Sign in with Netlify through
-  OAuth, or use an API key.</p></div>
-  <div class="card"><h3>Agent skill</h3><p>A downloadable skill that teaches coding agents the good path, with recipes
-  like a pull request into a demo video.</p></div>
-</div>
-<p>Connect your AI tool to the MCP server. Clients that support OAuth only need the URL: you sign in with Netlify and
-approve the app.</p>
-<pre><code>https://netlify-video-agent.netlify.app/mcp</code></pre>
-<p>Or, in Claude Code:</p>
-<pre><code>claude mcp add --transport http video-agent https://netlify-video-agent.netlify.app/mcp</code></pre>
-<p>Install the skill for Claude Code:</p>
-<pre><code>curl -fsSL https://netlify-video-agent.netlify.app/skills/netlify-video.zip -o /tmp/netlify-video.zip \
+<section id="html-is-video">
+  <div class="prose reveal">
+    <p class="kicker">The idea that made it work</p>
+    <h2>A video is just a web page plus time</h2>
+    <p class="section-lede"><a href="https://hyperframes.heygen.com">HyperFrames</a> renders an HTML page with timed
+    scenes into a video, and AI agents are very good at writing HTML. Drag the timeline: each scene is a
+    <code>&lt;section&gt;</code> with a start and a length, and rendering means stepping through the page one frame at a
+    time.</p>
+  </div>
+  <div class="panel reveal">
+    <div class="scrub">
+      <div>
+        <div class="code" aria-label="The composition's HTML">
+          <div data-line="0"><span class="t">&lt;section</span> <span class="a">data-start</span>=<span class="s">"0"</span> <span class="a">data-duration</span>=<span class="s">"3"</span><span class="t">&gt;</span></div>
+          <div data-line="0">  &lt;h1&gt;Ship in seconds&lt;/h1&gt;</div>
+          <div data-line="0"><span class="t">&lt;/section&gt;</span></div>
+          <div data-line="1"><span class="t">&lt;section</span> <span class="a">data-start</span>=<span class="s">"3"</span> <span class="a">data-duration</span>=<span class="s">"3"</span><span class="t">&gt;</span></div>
+          <div data-line="1">  &lt;pre&gt;$ netlify deploy --prod&lt;/pre&gt;</div>
+          <div data-line="1">  &lt;div class="bar"&gt;&lt;/div&gt;</div>
+          <div data-line="1"><span class="t">&lt;/section&gt;</span></div>
+          <div data-line="2"><span class="t">&lt;section</span> <span class="a">data-start</span>=<span class="s">"6"</span> <span class="a">data-duration</span>=<span class="s">"3"</span><span class="t">&gt;</span></div>
+          <div data-line="2">  &lt;h2&gt;Live in seconds&lt;/h2&gt;</div>
+          <div data-line="2"><span class="t">&lt;/section&gt;</span></div>
+        </div>
+        <p class="caption">The agent writes this, then <code>hyperframes check</code> catches layout and contrast problems
+        before anything renders.</p>
+      </div>
+      <div>
+        <div class="stage" id="stage" role="img" aria-label="A three-scene video at the time on the timeline">
+          <div class="hud num" id="hud">frame 0 / 270</div>
+          <div class="scene s1"><div><b>Ship in seconds</b><i></i></div></div>
+          <div class="scene s2"><div class="term">$ netlify deploy --prod<div class="bar"><i></i></div><div class="pct num">0%</div></div></div>
+          <div class="scene s3"><div><b>Live in seconds</b><span>netlify.com</span></div></div>
+        </div>
+        <div class="timeline">
+          <div class="lanes" aria-hidden="true"><span>Scene 1 · 0–3 s</span><span>Scene 2 · 3–6 s</span><span>Scene 3 · 6–9 s</span></div>
+          <div class="controls">
+            <button class="icon-btn" id="scrub-play" aria-label="Play the composition">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg>
+            </button>
+            <input type="range" id="scrub" min="0" max="9" step="0.0333" value="0" aria-label="Time in the composition" style="flex:1">
+          </div>
+          <div class="readout num"><span id="time">0.00 s</span><span>30 frames a second</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="pipeline">
+  <div class="prose reveal">
+    <p class="kicker">How a video gets made</p>
+    <h2>From a sentence to a verified MP4</h2>
+    <p class="section-lede">Step through one video's trip. Press play, use the arrow keys, or pick a step.</p>
+  </div>
+  <div class="panel reveal" id="stepper" tabindex="0" aria-label="How a video gets made, step by step">
+    <div class="flow" id="flow">
+      <div class="node" data-node="you"><div class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg></div><div><b>You</b><small>app, API or MCP</small></div></div>
+      <div class="node" data-node="api"><div class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg></div><div><b>API + queue</b><small>Functions, Database</small></div></div>
+      <div class="node" data-node="runner"><div class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M7 10l3 2-3 2M12 15h5"/></svg></div><div><b>Agent Runner</b><small>writes, checks, renders</small></div></div>
+      <div class="node" data-node="blobs"><div class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8l6-4 6 4v8l-6 4-6-4z"/><path d="M6 8l6 4 6-4M12 12v8"/></svg></div><div><b>Netlify Blobs</b><small>the files</small></div></div>
+      <div class="node" data-node="finalize"><div class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 5-3.5 8.5-7 10-3.5-1.5-7-5-7-10V6z"/><path d="M9 12l2 2 4-4"/></svg></div><div><b>Finalize</b><small>verifies</small></div></div>
+      <div class="node ok" data-node="ready"><div class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M10 9.5v5l4.5-2.5z" fill="currentColor"/></svg></div><div><b>Ready</b><small>watch, edit, share</small></div></div>
+    </div>
+    <div class="step-text" aria-live="polite" id="step-text"></div>
+    <div class="controls" style="justify-content:space-between">
+      <div class="controls">
+        <button class="icon-btn" id="prev" aria-label="Previous step"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M15 6l-6 6 6 6"/></svg></button>
+        <button class="icon-btn" id="play" aria-label="Play the steps"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg></button>
+        <button class="icon-btn" id="next" aria-label="Next step"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg></button>
+      </div>
+      <div class="dots" id="dots" role="group" aria-label="Steps"></div>
+    </div>
+  </div>
+</section>
+
+<section id="ready-sooner">
+  <div class="two">
+    <div class="reveal">
+      <p class="kicker">One lesson, made visible</p>
+      <h2>When is a video ready?</h2>
+      <p class="muted">After rendering, an agent run still writes up its results and Netlify deploys a preview of the
+      run. At first the app waited for all of that. Now it finishes as soon as the render reports its files, which it
+      checks the same way. Switch between the two.</p>
+    </div>
+    <div class="panel reveal">
+      <div class="toggle" role="group" aria-label="When the app finishes the video">
+        <button type="button" data-mode="before" aria-pressed="false">Wait for the run to end</button>
+        <button type="button" data-mode="after" aria-pressed="true">Finish when files arrive</button>
+      </div>
+      <div class="track">
+        <div class="ready-pin" id="ready-pin"><span>Ready</span></div>
+        <div class="phases">
+          <div style="flex:7">Writing + checking</div>
+          <div class="render" style="flex:2">Render</div>
+          <div class="wrap-up" style="flex:3">Wrap-up + preview</div>
+        </div>
+      </div>
+      <div class="axis num"><span>0 min</span><span>Run time (illustrative)</span><span>12 min</span></div>
+      <p class="verdict" id="verdict"></p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="prose reveal">
+    <p class="kicker">Built entirely on Netlify</p>
+    <h2>One repo, one Netlify project</h2>
+    <p class="section-lede">No video service, no GPU and no extra accounts. Each platform piece does one job.</p>
+  </div>
+  <div class="grid3">
+    <div class="card reveal"><h3>Agent Runners</h3><p>Every video is a run: the agent's whole working session on a real
+    Linux machine with Node and FFmpeg, its logs, and a link from the app to the run.</p></div>
+    <div class="card reveal"><h3>Functions</h3><p>A Hono API with an OpenAPI spec, background functions for long jobs,
+    and a scheduled sweep every minute that owns every outcome.</p></div>
+    <div class="card reveal"><h3>Netlify Database</h3><p>Postgres with Drizzle migrations: videos, versions, run
+    attempts, people, API keys, plans, comments and the queue.</p></div>
+    <div class="card reveal"><h3>Netlify Blobs</h3><p>Rendered files, uploads, the media library and preview bundles.
+    A run can upload at about 40 MB/s.</p></div>
+    <div class="card reveal"><h3>Edge Functions</h3><p>Signed, expiring file links with byte ranges, public share
+    pages, and a sandboxed live preview of the composition.</p></div>
+    <div class="card reveal"><h3>AI Gateway</h3><p>The quick planning questions and the brief, with no model keys to
+    manage.</p></div>
+  </div>
+  <ul class="chips" aria-label="Also used">
+    <li>HyperFrames</li><li>Hono + zod-openapi</li><li>React + Mantine</li><li>Drizzle</li><li>Kokoro voices</li>
+    <li>Openverse music</li><li>Playwright</li><li>Vitest</li>
+  </ul>
+</section>
+
+<section id="use-it">
+  <div class="two">
+    <div class="reveal">
+      <p class="kicker">Anyone can use it</p>
+      <h2>Four ways in, one set of permissions</h2>
+      <div class="grid4" style="grid-template-columns:1fr 1fr">
+        <div class="card"><h3>Web app</h3><p>Sign in with Netlify. Create, watch, edit, comment, approve and
+        publish.</p></div>
+        <div class="card"><h3>API</h3><p>API keys and signed webhooks for scripts and CI.</p></div>
+        <div class="card"><h3>MCP</h3><p>Ask Claude, Cursor or any MCP client. OAuth or an API key.</p></div>
+        <div class="card"><h3>Agent skill</h3><p>Recipes for coding agents, like a pull request into a demo
+        video.</p></div>
+      </div>
+    </div>
+    <div class="reveal">
+      <p class="muted" style="margin-top:6px">Connect your AI tool. Clients with OAuth only need the URL: sign in with
+      Netlify and approve.</p>
+      <pre><code>https://netlify-video-agent.netlify.app/mcp</code></pre>
+      <p class="muted">In Claude Code:</p>
+      <pre><code>claude mcp add --transport http video-agent https://netlify-video-agent.netlify.app/mcp</code></pre>
+      <p class="muted">Install the skill:</p>
+      <pre><code>curl -fsSL https://netlify-video-agent.netlify.app/skills/netlify-video.zip -o /tmp/netlify-video.zip \
   &amp;&amp; unzip -o /tmp/netlify-video.zip -d ~/.claude/skills/</code></pre>
-<p class="muted">The app's <a href="/docs/mcp">MCP page</a> and <a href="/docs/skills">Agent skills page</a> have the
-setup for other tools.</p>
+      <p class="muted">The app's <a href="/docs/mcp">MCP page</a> and <a href="/docs/skills">Agent skills page</a> cover
+      other tools.</p>
+    </div>
+  </div>
+</section>
 
-<h2>What it can do</h2>
-<div class="table-wrap">
-<table>
-  <thead><tr><th>Feature</th><th>How it works</th></tr></thead>
-  <tbody>
-    <tr><td>Plan it first</td><td>A fast model decides whether questions would help, asks up to six (each with room for
-    your own answer), then writes a brief: goal, audience, scenes with timings, tone and call to action.</td></tr>
-    <tr><td>Your brand</td><td>Brand guide, logos and fonts in <code>context/</code>. Every run reads them.</td></tr>
-    <tr><td>Revisions</td><td>"Make the end card orange" starts a new version from the previous composition. Every
-    version keeps its prompt and author.</td></tr>
-    <tr><td>Browser editor</td><td>Videos follow an editing contract, so text, scene length and order, colours, media,
-    music level and narration can be changed without the agent. The edit renders as the next version for about 34
-    credits.</td></tr>
-    <tr><td>Music</td><td>CC0 and CC BY tracks from Openverse, picked before the run or searched in the app, with
-    credits added to the share page automatically.</td></tr>
-    <tr><td>Voice-over</td><td>Kokoro text-to-speech runs inside the agent run. Each scene is made long enough for its
-    line, the music ducks under the voice, and the captions follow the words.</td></tr>
-    <tr><td>Media library</td><td>Logos, screenshots, clips and fonts, uploaded in parts and resumable, checked before
-    use; SVGs are sanitized.</td></tr>
-    <tr><td>Publishing</td><td>A public share page with link previews, a raw MP4 URL, a GIF and an embed snippet.
-    Unpublishing takes it down at once.</td></tr>
-    <tr><td>Review</td><td>Comments pinned to a moment and a spot in the frame, approvals, and revisions that address
-    the comments.</td></tr>
-  </tbody>
-</table>
-</div>
+<section>
+  <div class="prose reveal">
+    <p class="kicker">What it can do</p>
+    <h2>More than one prompt, one video</h2>
+  </div>
+  <div class="panel reveal" style="padding:8px 20px">
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>Feature</th><th>How it works</th></tr></thead>
+      <tbody>
+        <tr><td>Plan it first</td><td>A fast model decides whether questions would help, asks up to six (each with room
+        for your own answer), then writes a brief: goal, audience, scenes with timings, tone and call to action.</td></tr>
+        <tr><td>Your brand</td><td>A brand guide, logos and fonts the agent reads in every run.</td></tr>
+        <tr><td>Revisions</td><td>"Make the end card orange" starts a new version from the previous composition. Every
+        version keeps its prompt and author.</td></tr>
+        <tr><td>Browser editor</td><td>Videos follow an editing contract, so text, scene length and order, colours,
+        media, music level and narration change without the agent. The edit renders as the next version for about 34
+        credits.</td></tr>
+        <tr><td>Music</td><td>CC0 and CC BY tracks from Openverse, picked before the run or searched in the app, credited
+        on the share page automatically.</td></tr>
+        <tr><td>Voice-over</td><td>Kokoro text-to-speech runs inside the agent run. Each scene is long enough for its line,
+        the music ducks under the voice, and the captions follow the words.</td></tr>
+        <tr><td>Media library</td><td>Logos, screenshots, clips and fonts, uploaded in resumable parts and checked before
+        use; SVGs are sanitized.</td></tr>
+        <tr><td>Publishing</td><td>A public share page with link previews, a raw MP4 URL, a GIF and an embed snippet.
+        Unpublishing takes it down at once.</td></tr>
+        <tr><td>Review</td><td>Comments pinned to a moment and a spot in the frame, approvals, and revisions that address
+        the comments.</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </div>
+</section>
 
-<h2>What we learned the hard way</h2>
-<ul class="lessons">
-  <li><h3>Don't count on the agent's last words</h3><p>We first asked the agent to end its answer with a JSON list of
-  the files. Agents often didn't. The render script now posts a signed callback itself, and the final answer is only a
-  fallback.</p></li>
-  <li><h3>An agent may run the render twice</h3><p>One run rendered, lost sight of its output, and rendered again,
-  overwriting the uploads. The app rejected the second file list and the video failed. Now the newest list wins until
-  the video is ready, and the agent is told not to render twice.</p></li>
-  <li><h3>Finish when the files arrive, not when the run ends</h3><p>After rendering, a run still writes its results
-  and deploys a preview, which can take minutes. The app now finishes the video as soon as the render reports its
-  files.</p></li>
-  <li><h3>Keep the video; add a note</h3><p>A narrated video came out 55 seconds instead of the 42 asked for, and we
-  threw it away. Runs cost real credits, so a video that's the wrong length is now kept with a notice instead.</p></li>
-  <li><h3>Check everything a run hands back</h3><p>A run can write to any Blobs store on the site, so hashes against
-  the authenticated callback and a real MP4 check are what make a video trustworthy.</p></li>
-  <li><h3>Make it editable by design</h3><p>Scenes register through a small seek adapter that stretches their
-  animations, so changing a scene's length needs no code change. That's what makes a browser editor possible on
-  agent-written video.</p></li>
-</ul>
+<section>
+  <div class="prose reveal">
+    <p class="kicker">What we learned the hard way</p>
+    <h2>Lessons from real runs</h2>
+  </div>
+  <ul class="lessons">
+    <li class="reveal"><h3>Don't count on the agent's last words</h3><p>Agents often didn't end with the JSON list of
+    files we asked for. The render script now posts a signed callback itself; the final answer is only a
+    fallback.</p></li>
+    <li class="reveal"><h3>An agent may render twice</h3><p>One run rendered, lost sight of its output and rendered
+    again, overwriting the uploads, and the app rejected the second file list. Now the newest list wins until the video
+    is ready, and the agent is told not to render twice.</p></li>
+    <li class="reveal"><h3>Finish when the files arrive</h3><p>A run keeps going for minutes after rendering. The app
+    now finishes the video as soon as the render reports its files (see above).</p></li>
+    <li class="reveal"><h3>Keep the video; add a note</h3><p>A narrated video came out 55 seconds instead of 42 and was
+    thrown away. Runs cost real credits, so a video of the wrong length is now kept with a notice.</p></li>
+    <li class="reveal"><h3>Check everything a run hands back</h3><p>A run can write to any Blobs store on the site, so
+    hashes against the authenticated callback and a real MP4 check are what make a video trustworthy.</p></li>
+    <li class="reveal"><h3>Make it editable by design</h3><p>Scenes register through a small seek adapter that stretches
+    their animations, so changing a scene's length needs no code change. That's what makes a browser editor possible on
+    agent-written video.</p></li>
+  </ul>
 
-<h2>Try it</h2>
-<p>Sign in with your Netlify account, describe a video, and choose "Plan it first" the first time. Or connect the MCP
-server above and ask your AI tool for one.</p>
-<div class="actions">
-  <a class="btn primary" href="/new">Make a video</a>
-  <a class="btn secondary" href="/docs/api">API docs</a>
-</div>
+  <div class="cta reveal">
+    <div>
+      <h2>Make your first video</h2>
+      <p>Sign in with Netlify, describe a video, and choose "Plan it first" the first time.</p>
+    </div>
+    <div class="actions">
+      <a class="btn primary" href="/new">Make a video</a>
+      <a class="btn secondary" href="/docs/api">API docs</a>
+    </div>
+  </div>
+</section>
 
 <footer>Built by Netlify GTM Engineering with Claude Code, on Netlify Agent Runners and HyperFrames.</footer>
-</main>
+</div>
+
+<script>
+(() => {
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches
+  const $ = (s, r = document) => r.querySelector(s)
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)]
+  const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x))
+  const ease = (x) => 1 - Math.pow(1 - clamp(x), 3)
+  const PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg>'
+  const PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>'
+
+  // Entrances: each block fades up the first time it scrolls into view.
+  const io = new IntersectionObserver((es) => {
+    for (const e of es) if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target) }
+  }, { rootMargin: '0px 0px -8% 0px' })
+  $$('.reveal').forEach((el) => io.observe(el))
+
+  // The hero video: shown once its public MP4 is set on the panel.
+  const hero = $('#hero-video')
+  if (hero.dataset.src) {
+    hero.innerHTML = ''
+    const v = document.createElement('video')
+    Object.assign(v, { src: hero.dataset.src, controls: true, playsInline: true, preload: 'metadata' })
+    if (hero.dataset.poster) v.poster = hero.dataset.poster
+    if (hero.dataset.captions) {
+      const tr = document.createElement('track')
+      Object.assign(tr, { kind: 'captions', srclang: 'en', label: 'English', src: hero.dataset.captions })
+      v.append(tr)
+    }
+    hero.append(v)
+  }
+
+  // A video is a page plus time: every scene is a pure function of t, like a HyperFrames seek.
+  const DUR = 9, FPS = 30
+  const scrub = $('#scrub'), stage = $('#stage')
+  const s1 = $('.s1', stage), s2 = $('.s2', stage), s3 = $('.s3', stage)
+  const lines = $$('.code div'), lanes = $$('.lanes span')
+  const draw = (t) => {
+    const scene = t < 3 ? 0 : t < 6 ? 1 : 2
+    const show = (el, on, local) => {
+      el.style.opacity = on ? String(ease(local / 0.5)) : '0'
+      el.style.transform = on ? `translateY(${(1 - ease(local / 0.6)) * 16}px)` : 'none'
+    }
+    show(s1, scene === 0, t); show(s2, scene === 1, t - 3); show(s3, scene === 2, t - 6)
+    $('i', s1).style.width = `${ease((t - 0.6) / 1.4) * 40}%`
+    const p = clamp((t - 3.6) / 2)
+    $('.bar i', s2).style.width = `${ease(p) * 100}%`
+    $('.pct', s2).textContent = `${Math.round(ease(p) * 100)}%`
+    $('b', s3).style.transform = `scale(${0.92 + 0.08 * ease((t - 6) / 0.8)})`
+    lines.forEach((l) => l.classList.toggle('on', Number(l.dataset.line) === scene))
+    lanes.forEach((l, i) => l.classList.toggle('on', i === scene))
+    const frame = Math.min(DUR * FPS - 1, Math.floor(t * FPS))
+    $('#hud').textContent = `frame ${frame} / ${DUR * FPS}`
+    $('#time').textContent = `${t.toFixed(2)} s`
+  }
+  let playing = false, last = 0, raf = 0
+  const scrubBtn = $('#scrub-play')
+  const setPlaying = (on) => {
+    playing = on
+    scrubBtn.innerHTML = on ? PAUSE : PLAY
+    scrubBtn.setAttribute('aria-label', on ? 'Pause the composition' : 'Play the composition')
+    if (on) { last = performance.now(); raf = requestAnimationFrame(tick) } else cancelAnimationFrame(raf)
+  }
+  const tick = (now) => {
+    let t = Number(scrub.value) + (now - last) / 1000
+    last = now
+    if (t >= DUR) t = 0
+    scrub.value = String(t); draw(t)
+    if (playing) raf = requestAnimationFrame(tick)
+  }
+  scrub.addEventListener('input', () => { setPlaying(false); draw(Number(scrub.value)) })
+  scrubBtn.addEventListener('click', () => setPlaying(!playing))
+  draw(0)
+  // Plays on its own the first time it's on screen (not with reduced motion), and stops when scrolled away.
+  let autoplayed = false
+  new IntersectionObserver(([e]) => {
+    if (!e.isIntersecting) { if (playing) setPlaying(false); return }
+    if (!autoplayed && !reduced) { autoplayed = true; setPlaying(true) }
+  }, { threshold: 0.5 }).observe(stage)
+
+  // The pipeline, one step at a time: which parts are involved, and what happens.
+  const STEPS = [
+    { on: ['you'], links: [], tag: 'You', title: 'You describe the video',
+      text: 'In the web app, through the API, or by asking your AI tool over MCP. "Plan it first" can ask a few questions and write a brief you edit.' },
+    { on: ['api'], links: ['you'], tag: 'Functions + Netlify Database', title: 'It joins the queue',
+      text: 'The API saves the request in Netlify Database. A few runs go at once (three by default), so a busy day can\'t spend every credit at the same moment.' },
+    { on: ['runner'], links: ['api'], tag: 'Agent Runners', title: 'An agent run starts',
+      text: 'A scheduled sweep starts a Netlify Agent Runner run on the same project. The agent reads the brand guide, logos and fonts, and any music or media you picked.' },
+    { on: ['runner'], links: [], tag: 'HyperFrames', title: 'It writes the video as HTML',
+      text: 'The agent writes video/index.html, scene by scene, and runs hyperframes check until it passes. A voice-over is spoken here with Kokoro, and the scenes are sized to fit the lines.' },
+    { on: ['runner', 'blobs'], links: ['runner'], tag: 'render-job.ts', title: 'It renders and uploads',
+      text: 'One script renders the MP4, makes the poster, GIF preview and captions, and uploads them to Netlify Blobs. Then it posts a signed list of every file and its SHA-256 hash to the app.' },
+    { on: ['finalize'], links: ['blobs'], tag: 'Trust, then publish', title: 'The app checks before it trusts',
+      text: 'Finalize compares every upload with those hashes and inspects the MP4 itself. A run can write anywhere on the site, so nothing is shown until it matches.' },
+    { on: ['ready'], links: ['finalize'], tag: 'Ready', title: 'You watch, edit, revise and share',
+      text: 'Play and download it, edit text, timing, colours, media and music in the browser, ask for a revision in plain words, or publish a share page with an embed snippet.' },
+  ]
+  const nodes = Object.fromEntries($$('.node').map((n) => [n.dataset.node, n]))
+  const order = Object.keys(nodes)
+  const dots = $('#dots')
+  STEPS.forEach((s, i) => {
+    const b = document.createElement('button')
+    b.type = 'button'
+    b.setAttribute('aria-label', `Step ${i + 1}: ${s.title}`)
+    b.innerHTML = '<i></i>'
+    b.addEventListener('click', () => { stopSteps(); go(i) })
+    dots.append(b)
+  })
+  let step = 0, stepTimer = 0
+  const go = (i) => {
+    step = (i + STEPS.length) % STEPS.length
+    const s = STEPS[step]
+    const reached = Math.max(...s.on.map((k) => order.indexOf(k)))
+    order.forEach((k, j) => {
+      nodes[k].classList.toggle('on', s.on.includes(k))
+      nodes[k].classList.toggle('done', j < reached && !s.on.includes(k))
+      nodes[k].classList.toggle('link', s.links.includes(k))
+    })
+    $('#step-text').innerHTML = `<span class="tag">Step ${step + 1} of ${STEPS.length} · ${s.tag}</span><h3>${s.title}</h3><p class="muted">${s.text}</p>`
+    $$('button', dots).forEach((b, j) => (j === step ? b.setAttribute('aria-current', 'step') : b.removeAttribute('aria-current')))
+    $('#prev').disabled = step === 0
+  }
+  const playBtn = $('#play')
+  const stopSteps = () => { clearInterval(stepTimer); stepTimer = 0; playBtn.innerHTML = PLAY; playBtn.setAttribute('aria-label', 'Play the steps') }
+  const playSteps = () => {
+    if (step === STEPS.length - 1) go(0)
+    playBtn.innerHTML = PAUSE; playBtn.setAttribute('aria-label', 'Pause the steps')
+    stepTimer = setInterval(() => { if (step === STEPS.length - 1) stopSteps(); else go(step + 1) }, 3200)
+  }
+  playBtn.addEventListener('click', () => (stepTimer ? stopSteps() : playSteps()))
+  $('#prev').addEventListener('click', () => { stopSteps(); go(step - 1) })
+  $('#next').addEventListener('click', () => { stopSteps(); go(step + 1) })
+  $('#stepper').addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight') { e.preventDefault(); stopSteps(); go(step + 1) }
+    if (e.key === 'ArrowLeft') { e.preventDefault(); stopSteps(); go(step - 1) }
+  })
+  go(0)
+  let stepsStarted = false
+  new IntersectionObserver(([e]) => {
+    if (!e.isIntersecting) { if (stepTimer) stopSteps(); return }
+    if (!stepsStarted && !reduced) { stepsStarted = true; playSteps() }
+  }, { threshold: 0.4 }).observe($('#stepper'))
+
+  // When is it ready: the pin sits at the end of the run, or right after the render reports its files.
+  const MODES = {
+    before: { at: 100, text: 'Ready after <b>12 min</b>: the video was finished, but the page said "Making version 1" through the wrap-up.' },
+    after: { at: 75, text: 'Ready after <b>9 min</b>: as soon as the render reports its files. The run carries on with its wrap-up on its own.' },
+  }
+  const setMode = (m) => {
+    $$('.toggle button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === m)))
+    $('#ready-pin').style.left = `calc(${MODES[m].at}% - 1px)`
+    $('#ready-pin').classList.toggle('end', MODES[m].at > 90)
+    $('#verdict').innerHTML = MODES[m].text
+  }
+  $$('.toggle button').forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode)))
+  setMode('after')
+})()
+</script>
 </body>
 </html>
