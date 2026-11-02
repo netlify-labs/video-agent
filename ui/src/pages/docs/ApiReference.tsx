@@ -65,6 +65,9 @@ export default function ApiReferencePage() {
             withDefaultFonts: false,
             customCss: SCALAR_CSS,
             layout: 'modern',
+            // Open on the introduction with every group closed.
+            defaultOpenFirstTag: false,
+            defaultOpenAllTags: false,
             hideModels: false,
             authentication: { preferredSecurityScheme: 'bearerAuth' },
             metaData: { title: 'Video Agent API' },

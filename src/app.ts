@@ -227,7 +227,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/health',
-      summary: 'Liveness and setup readiness (no secrets)',
+      summary: 'Check health',
+      description: 'Liveness and setup readiness. Never returns secrets.',
       tags: ['system'],
       request: { query: z.object({ fresh: z.enum(['1']).optional() }) },
       responses: { 200: json(s.HealthSchema, 'Health') },
@@ -241,7 +242,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/config',
-      summary: 'Public configuration for the sign-in screen',
+      summary: 'Get public config',
+      description: 'Public configuration for the sign-in screen.',
       tags: ['system'],
       responses: { 200: json(s.PublicConfigSchema, 'Config') },
     }),
@@ -264,7 +266,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/videos',
-      summary: 'Create a video from a prompt',
+      summary: 'Create a video',
+      description: 'Creates a video from a prompt and queues its first version.',
       tags: ['videos'],
       security,
       request: {
@@ -289,7 +292,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/videos',
-      summary: 'List videos, newest first',
+      summary: 'List videos',
+      description: 'Lists videos, newest first.',
       tags: ['videos'],
       security,
       request: {
@@ -317,7 +321,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/videos/{id}',
-      summary: 'One video with its versions',
+      summary: 'Get a video',
+      description: 'One video with its versions.',
       tags: ['videos'],
       security,
       request: { params: IdParam },
@@ -340,7 +345,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'patch',
       path: '/api/v1/videos/{id}',
-      summary: 'Rename a video or make it private',
+      summary: 'Update a video',
+      description: 'Renames a video or makes it private.',
       tags: ['videos'],
       security,
       request: {
@@ -356,7 +362,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'delete',
       path: '/api/v1/videos/{id}',
-      summary: 'Delete a video, its versions, files and public links',
+      summary: 'Delete a video',
+      description: 'Deletes a video, its versions, files and public links.',
       tags: ['videos'],
       security,
       request: { params: IdParam },
@@ -371,7 +378,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/videos/{id}/versions',
-      summary: 'Revise: start the next version from a ready one',
+      summary: 'Revise a video',
+      description: 'Starts the next version from a ready one.',
       tags: ['versions'],
       security,
       request: {
@@ -398,7 +406,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/videos/{id}/versions/{n}/retry',
-      summary: 'Try a failed, cancelled or timed-out version again',
+      summary: 'Retry a version',
+      description: 'Tries a failed, cancelled or timed-out version again.',
       tags: ['versions'],
       security,
       request: { params: VersionParam },
@@ -415,7 +424,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/videos/{id}/versions/{n}/cancel',
-      summary: 'Stop a version in progress',
+      summary: 'Cancel a version',
+      description: 'Stops a version in progress.',
       tags: ['versions'],
       security,
       request: { params: VersionParam },
@@ -432,7 +442,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/videos/{id}/versions/{n}/publish',
-      summary: 'Publish a version to a public link',
+      summary: 'Publish a version',
+      description: 'Publishes a version to a public share page and links.',
       tags: ['publishing'],
       security,
       request: { params: VersionParam },
@@ -447,7 +458,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'delete',
       path: '/api/v1/videos/{id}/versions/{n}/publish',
-      summary: 'Unpublish a version (its link stops working on the next request)',
+      summary: 'Unpublish a version',
+      description: "Takes a version's public links down; they stop working on the next request.",
       tags: ['publishing'],
       security,
       request: { params: VersionParam },
@@ -463,7 +475,9 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'put',
       path: '/api/v1/videos/{id}/versions/{n}/verdict',
-      summary: 'Approve a version or request changes (null clears your verdict); never on your own version',
+      summary: 'Set your verdict',
+      description:
+        'Approve a version or request changes; null clears your verdict. Not allowed on your own version.',
       tags: ['review'],
       security,
       request: {
@@ -482,8 +496,9 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/videos/{id}/versions/{n}/preview',
-      summary:
-        "A short-lived link to play a ready version's composition in the sandboxed preview (live=1: a running version's latest snapshot)",
+      summary: 'Get a preview link',
+      description:
+        "A short-lived link to play a ready version's composition in the sandboxed preview. With live=1, a running version's latest snapshot.",
       tags: ['videos'],
       security,
       request: { params: VersionParam, query: z.object({ live: z.enum(['1']).optional() }) },
@@ -501,7 +516,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/videos/{id}/versions/{n}/{file}',
-      summary: 'Download a file: redirects to a signed URL valid for 5 to 10 minutes',
+      summary: 'Download a file',
+      description: 'Redirects to a signed URL valid for 5 to 10 minutes.',
       tags: ['versions'],
       security,
       request: { params: FileParam, query: z.object({ download: z.enum(['1']).optional() }) },
@@ -528,8 +544,9 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'put',
       path: '/api/v1/videos/{id}/versions/{n}/previews/{name}',
-      summary:
-        "Admins: add a preview variant (or the placeholder, name lqip) to a ready version that doesn't have it yet",
+      summary: 'Add a preview variant',
+      description:
+        "Admins only. Adds a preview variant (or the placeholder, name lqip) to a ready version that doesn't have it yet.",
       tags: ['versions'],
       security,
       request: {
@@ -555,7 +572,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/keys',
-      summary: 'Your API keys',
+      summary: 'List API keys',
+      description: 'Your API keys.',
       tags: ['keys'],
       security,
       responses: { 200: json(z.array(s.KeySchema), 'Keys'), ...errors },
@@ -566,7 +584,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/keys',
-      summary: 'Create an API key (the secret is shown once)',
+      summary: 'Create an API key',
+      description: 'Creates an API key. Its secret is shown once.',
       tags: ['keys'],
       security,
       request: { body: { content: { 'application/json': { schema: s.CreateKeySchema } }, required: true } },
@@ -579,6 +598,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       method: 'delete',
       path: '/api/v1/keys/{id}',
       summary: 'Revoke an API key',
+      description: 'Revokes an API key; requests with it stop working.',
       tags: ['keys'],
       security,
       request: { params: IdParam },
@@ -593,7 +613,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/oauth/grants',
-      summary: 'Your connected OAuth apps (404 when MCP OAuth is off)',
+      summary: 'List connected apps',
+      description: 'Your connected OAuth apps. 404 when MCP OAuth is off.',
       tags: ['keys'],
       security,
       responses: { 200: json(z.array(s.OAuthGrantSchema), 'Connected apps'), ...errors },
@@ -604,7 +625,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'delete',
       path: '/api/v1/oauth/grants/{id}',
-      summary: 'Disconnect an OAuth app (its tokens stop working)',
+      summary: 'Disconnect an app',
+      description: 'Disconnects an OAuth app; its tokens stop working.',
       tags: ['keys'],
       security,
       request: { params: IdParam },
@@ -619,7 +641,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/me',
-      summary: 'Who you are',
+      summary: 'Get your account',
+      description: 'Who you are: your account and role.',
       tags: ['me'],
       security,
       responses: { 200: json(s.MeSchema, 'Me'), ...errors },
@@ -642,7 +665,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/users',
-      summary: 'List users (admin)',
+      summary: 'List users',
+      description: 'Everyone who has signed in, with their roles. Admins only.',
       tags: ['admin'],
       security,
       responses: { 200: json(z.array(s.UserSchema), 'Users'), ...errors },
@@ -653,7 +677,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'patch',
       path: '/api/v1/users/{id}',
-      summary: 'Change a role, disable or enable a user (admin)',
+      summary: 'Update a user',
+      description: 'Changes a role, or disables or enables a user. Admins only.',
       tags: ['admin'],
       security,
       request: {
@@ -669,7 +694,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/me/webhook',
-      summary: 'Get your webhook (events on videos you own)',
+      summary: 'Get your webhook',
+      description: 'Your webhook, for events on videos you own.',
       tags: ['keys'],
       security,
       responses: { 200: json(s.WebhookSettingSchema.nullable(), 'Webhook or null'), ...errors },
@@ -680,7 +706,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'put',
       path: '/api/v1/me/webhook',
-      summary: 'Set your webhook URL (a signing secret is returned once, on create or rotate)',
+      summary: 'Set your webhook',
+      description: 'Sets your webhook URL. A signing secret is returned once, on create or rotate.',
       tags: ['keys'],
       security,
       request: { body: { content: { 'application/json': { schema: s.PutWebhookSchema } }, required: true } },
@@ -692,7 +719,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'delete',
       path: '/api/v1/me/webhook',
-      summary: 'Remove your webhook (pending deliveries to it are dropped)',
+      summary: 'Remove your webhook',
+      description: 'Removes your webhook; pending deliveries to it are dropped.',
       tags: ['keys'],
       security,
       responses: { 204: { description: 'Removed' }, ...errors },
@@ -706,7 +734,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/me/webhook/test',
-      summary: 'Send a signed webhook.test event to your webhook now',
+      summary: 'Test your webhook',
+      description: 'Sends a signed webhook.test event to your webhook now.',
       tags: ['keys'],
       security,
       responses: { 200: json(s.WebhookTestSchema, 'Result'), ...errors },
@@ -717,7 +746,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/admin/team-webhook',
-      summary: 'Get the team webhook (events on every video)',
+      summary: 'Get the team webhook',
+      description: 'The team webhook, for events on every video. Admins only.',
       tags: ['admin'],
       security,
       responses: { 200: json(s.WebhookSettingSchema.nullable(), 'Webhook or null'), ...errors },
@@ -728,7 +758,9 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'put',
       path: '/api/v1/admin/team-webhook',
-      summary: 'Set the team webhook URL (a signing secret is returned once, on create or rotate)',
+      summary: 'Set the team webhook',
+      description:
+        'Sets the team webhook URL. A signing secret is returned once, on create or rotate. Admins only.',
       tags: ['admin'],
       security,
       request: { body: { content: { 'application/json': { schema: s.PutWebhookSchema } }, required: true } },
@@ -740,7 +772,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'delete',
       path: '/api/v1/admin/team-webhook',
-      summary: 'Remove the team webhook (pending deliveries to it are dropped)',
+      summary: 'Remove the team webhook',
+      description: 'Removes the team webhook; pending deliveries to it are dropped. Admins only.',
       tags: ['admin'],
       security,
       responses: { 204: { description: 'Removed' }, ...errors },
@@ -754,7 +787,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/admin/team-webhook/test',
-      summary: 'Send a signed webhook.test event to the team webhook now',
+      summary: 'Test the team webhook',
+      description: 'Sends a signed webhook.test event to the team webhook now. Admins only.',
       tags: ['admin'],
       security,
       responses: { 200: json(s.WebhookTestSchema, 'Result'), ...errors },
@@ -765,7 +799,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/plans',
-      summary: 'Start planning a video: a fast router decides whether a few questions would help',
+      summary: 'Start a plan',
+      description: 'Starts planning a video: a fast router decides whether a few questions would help.',
       tags: ['planning'],
       security,
       request: { body: { content: { 'application/json': { schema: s.CreatePlanSchema } }, required: true } },
@@ -777,7 +812,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/plans/{id}',
-      summary: 'A plan (yours)',
+      summary: 'Get a plan',
+      description: 'One of your plans.',
       tags: ['planning'],
       security,
       request: { params: IdParam },
@@ -789,7 +825,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/plans/{id}/questions',
-      summary: '0–6 multiple-choice questions about the video (empty when the prompt covers it)',
+      summary: 'Ask questions',
+      description: 'Zero to six multiple-choice questions about the video; empty when the prompt covers it.',
       tags: ['planning'],
       security,
       request: { params: IdParam },
@@ -802,7 +839,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/plans/{id}/brief',
-      summary: 'Turn the answers into an editable brief',
+      summary: 'Write the brief',
+      description: 'Turns the answers into an editable brief.',
       tags: ['planning'],
       security,
       request: {
@@ -826,7 +864,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'patch',
       path: '/api/v1/plans/{id}',
-      summary: 'Save your edits to the brief (send the briefRev you loaded)',
+      summary: 'Edit the brief',
+      description: 'Saves your edits to the brief. Send the briefRev you loaded.',
       tags: ['planning'],
       security,
       request: {
@@ -857,7 +896,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/me/usage',
-      summary: 'Your credits this month: agent runs and planning (estimates)',
+      summary: 'Get your usage',
+      description: 'Your credits this month: agent runs and planning (estimates).',
       tags: ['usage'],
       security,
       responses: { 200: json(s.MyUsageSchema, 'Usage'), ...errors },
@@ -868,7 +908,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/notifications',
-      summary: 'Comments and approvals on your videos, newest first, with an unread count',
+      summary: 'List notifications',
+      description: 'Comments and approvals on your videos, newest first, with an unread count.',
       tags: ['notifications'],
       security,
       request: {
@@ -885,7 +926,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/notifications/read',
-      summary: 'Mark notifications read (all, or up to a time)',
+      summary: 'Mark notifications read',
+      description: 'Marks notifications read: all, or up to a time.',
       tags: ['notifications'],
       security,
       request: {
@@ -906,7 +948,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/videos/{id}/progress',
-      summary: "Live progress of the latest version's run: the agent's step, steps and credits so far",
+      summary: 'Get progress',
+      description: "Live progress of the latest version's run: the agent's step, steps and credits so far.",
       tags: ['videos'],
       security,
       request: { params: z.object({ id: z.string() }) },
@@ -918,7 +961,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/videos/{id}/versions/{n}/edits',
-      summary: 'Open your edit draft of a finished, editable version (creates it if you have none)',
+      summary: 'Open an edit draft',
+      description: 'Opens your edit draft of a finished, editable version, creating it if you have none.',
       tags: ['editor'],
       security,
       request: { params: VersionParam },
@@ -939,7 +983,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/edits/{id}',
-      summary: 'One of your edit drafts',
+      summary: 'Get an edit draft',
+      description: 'One of your edit drafts.',
       tags: ['editor'],
       security,
       request: { params: EditParam },
@@ -951,7 +996,9 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'put',
       path: '/api/v1/edits/{id}',
-      summary: 'Save the full list of edits as the next rev (rev must match the draft, for multi-tab safety)',
+      summary: 'Save edits',
+      description:
+        'Saves the full list of edits as the next rev. rev must match the draft, for multi-tab safety.',
       tags: ['editor'],
       security,
       request: {
@@ -967,7 +1014,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'delete',
       path: '/api/v1/edits/{id}',
-      summary: 'Discard one of your edit drafts',
+      summary: 'Discard a draft',
+      description: 'Discards one of your edit drafts.',
       tags: ['editor'],
       security,
       request: { params: EditParam },
@@ -982,8 +1030,9 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/edits/{id}/render',
-      summary:
-        'Render your draft as the next version, unchanged (the run checks and renders; it never redesigns)',
+      summary: 'Render a draft',
+      description:
+        'Renders your draft as the next version, unchanged: the run checks and renders and never redesigns.',
       tags: ['editor'],
       security,
       request: {
@@ -1008,7 +1057,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/edits/{id}/preview',
-      summary: "A short-lived link to play the draft's current rev in the sandboxed preview",
+      summary: 'Get a draft preview link',
+      description: "A short-lived link to play the draft's current rev in the sandboxed preview.",
       tags: ['editor'],
       security,
       request: { params: EditParam },
@@ -1021,8 +1071,9 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/media',
-      summary:
-        'Upload one file up to 4 MB as the request body (images, SVG, fonts, short clips); bigger files use upload sessions',
+      summary: 'Upload a file',
+      description:
+        'Uploads one file up to 4 MB as the request body: images, SVG, fonts, short clips. Bigger files use upload sessions.',
       tags: ['media'],
       security,
       request: {
@@ -1050,7 +1101,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/media',
-      summary: "The team's media library, newest first (plus your own uploads still being checked)",
+      summary: 'List media',
+      description: "The team's media library, newest first, plus your own uploads still being checked.",
       tags: ['media'],
       security,
       request: {
@@ -1068,8 +1120,9 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/media/uploads',
-      summary:
-        'Start an upload session for a file over 4 MB (declare its size and sha256; quota is reserved)',
+      summary: 'Start an upload',
+      description:
+        'Starts an upload session for a file over 4 MB. Declare its size and sha256; quota is reserved.',
       tags: ['media'],
       security,
       request: {
@@ -1100,7 +1153,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/media/uploads/{id}',
-      summary: 'An upload session: which parts arrived (to resume) and its status',
+      summary: 'Get an upload',
+      description: 'An upload session: which parts arrived (to resume) and its status.',
       tags: ['media'],
       security,
       request: { params: UploadParam },
@@ -1112,7 +1166,9 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'put',
       path: '/api/v1/media/uploads/{id}/parts/{index}',
-      summary: 'Send one part (at most 4 MB) as the request body; x-part-sha256 guards against corruption',
+      summary: 'Upload a part',
+      description:
+        'Sends one part (at most 4 MB) as the request body; x-part-sha256 guards against corruption.',
       tags: ['media'],
       security,
       request: {
@@ -1146,8 +1202,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/media/uploads/{id}/complete',
-      summary:
-        'Finish the upload: the file is assembled and checked in the background (poll the session or the item)',
+      summary: 'Finish an upload',
+      description: 'The file is assembled and checked in the background; poll the session or the item.',
       tags: ['media'],
       security,
       request: {
@@ -1178,7 +1234,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'delete',
       path: '/api/v1/media/uploads/{id}',
-      summary: 'Cancel an unfinished upload session (frees its parts and quota)',
+      summary: 'Cancel an upload',
+      description: 'Cancels an unfinished upload session and frees its parts and quota.',
       tags: ['media'],
       security,
       request: { params: UploadParam },
@@ -1194,8 +1251,9 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/media/openverse/search',
-      summary:
-        'Search Openverse for CC0 or CC BY audio (music by default); NC, ND and SA licences are never returned (Creators and admins). When Openverse is slow, answers 202 with a job to poll',
+      summary: 'Search Openverse',
+      description:
+        'Searches Openverse for CC0 or CC BY audio (music by default); NC, ND and SA licences are never returned. Creators and admins. When Openverse is slow, answers 202 with a job to poll.',
       tags: ['media'],
       security,
       request: {
@@ -1235,8 +1293,9 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/media/openverse/library',
-      summary:
-        'Audio already in the team library that matches music search words (title, caption, filename, creator or source), answered at once without asking Openverse',
+      summary: 'Search library music',
+      description:
+        'Audio already in the team library that matches music search words (title, caption, filename, creator or source), answered at once without asking Openverse.',
       tags: ['media'],
       security,
       request: { query: z.object({ q: z.string().min(1).max(200) }) },
@@ -1249,7 +1308,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/media/openverse/common',
-      summary: 'Common music searches, kept warm every day: quick picks that answer at once',
+      summary: 'List quick music picks',
+      description: 'Common music searches, kept warm every day: quick picks that answer at once.',
       tags: ['media'],
       security,
       responses: { 200: json(s.OpenverseCommonSchema, 'The searches'), ...errors },
@@ -1260,8 +1320,9 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/media/openverse/import',
-      summary:
-        'Import an Openverse track into the library by its id: re-read from Openverse, licence checked, file downloaded and verified as audio. Importing it again returns the same item. When Openverse is slow, answers 202 with a job to poll',
+      summary: 'Import from Openverse',
+      description:
+        'Imports an Openverse track into the library by its id: re-read from Openverse, licence checked, file downloaded and verified as audio. Importing it again returns the same item. When Openverse is slow, answers 202 with a job to poll.',
       tags: ['media'],
       security,
       request: {
@@ -1296,8 +1357,9 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/media/openverse/jobs/{id}',
-      summary:
-        'An Openverse search or import that is running in the background: its status, then the tracks or the library item (only for the person who started it)',
+      summary: 'Get an Openverse job',
+      description:
+        'An Openverse search or import running in the background: its status, then the tracks or the library item. Only for the person who started it.',
       tags: ['media'],
       security,
       request: { params: z.object({ id: z.string() }) },
@@ -1310,7 +1372,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/media/{id}',
-      summary: 'One media item',
+      summary: 'Get a media item',
+      description: 'One media item.',
       tags: ['media'],
       security,
       request: { params: MediaParam },
@@ -1322,7 +1385,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'patch',
       path: '/api/v1/media/{id}',
-      summary: 'Change the caption (uploader or admin)',
+      summary: 'Update a caption',
+      description: 'Changes the caption (uploader or admin).',
       tags: ['media'],
       security,
       request: {
@@ -1341,7 +1405,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'delete',
       path: '/api/v1/media/{id}',
-      summary: 'Remove it from the library (uploader or admin); versions that used it keep it',
+      summary: 'Remove a media item',
+      description: 'Removes it from the library (uploader or admin); versions that used it keep it.',
       tags: ['media'],
       security,
       request: { params: MediaParam },
@@ -1357,7 +1422,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/videos/{id}/comments',
-      summary: 'Comments on a video (optionally one version), oldest first, with your unread count',
+      summary: 'List comments',
+      description: 'Comments on a video (optionally one version), oldest first, with your unread count.',
       tags: ['review'],
       security,
       request: {
@@ -1386,7 +1452,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/videos/{id}/comments',
-      summary: 'Comment on a version, optionally pinned to a moment (timeSec) and a spot (x, y)',
+      summary: 'Add a comment',
+      description: 'Comments on a version, optionally pinned to a moment (timeSec) and a spot (x, y).',
       tags: ['review'],
       security,
       request: {
@@ -1402,7 +1469,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/videos/{id}/comments/read',
-      summary: "Mark this video's comments read (all, or up to a time)",
+      summary: 'Mark comments read',
+      description: "Marks this video's comments read: all, or up to a time.",
       tags: ['review'],
       security,
       request: {
@@ -1424,7 +1492,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'patch',
       path: '/api/v1/comments/{id}',
-      summary: 'Edit your comment, or resolve/reopen one (video owner or admin)',
+      summary: 'Update a comment',
+      description: 'Edit your comment, or resolve or reopen one (video owner or admin).',
       tags: ['review'],
       security,
       request: {
@@ -1443,7 +1512,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'delete',
       path: '/api/v1/comments/{id}',
-      summary: 'Delete your comment, or any comment on your video (owner or admin)',
+      summary: 'Delete a comment',
+      description: 'Deletes your comment, or any comment on your video (owner or admin).',
       tags: ['review'],
       security,
       request: { params: CommentParam },
@@ -1458,7 +1528,9 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/transfers',
-      summary: "Transfer videos to another Creator or Admin: some videos, or all of a person's (admin)",
+      summary: 'Transfer videos',
+      description:
+        "Transfers videos to another Creator or Admin: some videos, or all of a person's. Admins only.",
       tags: ['admin'],
       security,
       request: { body: { content: { 'application/json': { schema: s.TransferSchema } }, required: true } },
@@ -1480,7 +1552,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/stats',
-      summary: 'Runs, queue, failures and credits (admin)',
+      summary: 'Get stats',
+      description: 'Runs, queue, failures and credits. Admins only.',
       tags: ['admin'],
       security,
       responses: { 200: json(s.StatsSchema, 'Stats'), ...errors },
@@ -1565,7 +1638,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/admin/attempts/{id}/resolve',
-      summary: 'Mark an unresolved start as failed and free its slot (admin)',
+      summary: 'Resolve a stuck start',
+      description: 'Marks an unresolved start as failed and frees its slot. Admins only.',
       tags: ['admin'],
       security,
       request: { params: IdParam },
@@ -1582,7 +1656,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/admin/queue/resume',
-      summary: 'Resume a queue paused because AI credits were unavailable (admin)',
+      summary: 'Resume the queue',
+      description: 'Resumes a queue paused because AI credits were unavailable. Admins only.',
       tags: ['admin'],
       security,
       responses: { 204: { description: 'Resumed' }, ...errors },
@@ -1729,6 +1804,11 @@ export function createApp(deps: Deps, opts: AppOptions) {
         : 'The web app session (Netlify Identity). State-changing requests must be same-origin.',
   })
 
+  const tag = (name: string, displayName: string, description: string) => ({
+    name,
+    description,
+    'x-displayName': displayName,
+  })
   const spec = () =>
     app.getOpenAPI31Document({
       openapi: '3.1.0',
@@ -1739,6 +1819,46 @@ export function createApp(deps: Deps, opts: AppOptions) {
           'Make videos from a prompt with Netlify Agent Runners and HyperFrames. Everything the web app does is in this API: authenticate with a key from the [API keys](/keys) page.',
       },
       servers: [{ url: deps.config.siteUrl }],
+      // The reference's sidebar groups, in this order, each with a name and one line on what's in it.
+      tags: [
+        tag(
+          'videos',
+          'Videos',
+          'Create a video from a prompt, list and update videos, and follow a run while it works.',
+        ),
+        tag(
+          'versions',
+          'Versions',
+          'Revise a video into its next version, retry or cancel one, and download its files.',
+        ),
+        tag(
+          'planning',
+          'Planning',
+          'Plan before creating: a few questions, then an editable brief to create the video with.',
+        ),
+        tag(
+          'editor',
+          'Editor',
+          'Edit a finished version in the browser: open a draft, save edits, preview and render them.',
+        ),
+        tag(
+          'publishing',
+          'Publishing',
+          'Give a version a public share page, MP4, GIF and embed links, or take them down.',
+        ),
+        tag('review', 'Review', 'Comments pinned to moments in a video, and approvals.'),
+        tag('media', 'Media', "The team's media library: uploads, music from Openverse and captions."),
+        tag('notifications', 'Notifications', 'Comments and approvals on your videos.'),
+        tag('keys', 'Keys and webhooks', 'API keys, connected OAuth apps and your webhook.'),
+        tag('me', 'Account', 'Who you are.'),
+        tag('usage', 'Usage', 'Your AI credits this month.'),
+        tag(
+          'admin',
+          'Admin',
+          'People and roles, the team webhook, transfers, stats and the queue. Admins only.',
+        ),
+        tag('system', 'System', 'Health and public configuration. No sign-in needed.'),
+      ],
     })
   app.get('/api/openapi.json', (c) => c.json(spec()))
   app.get('/api/docs', (c) =>

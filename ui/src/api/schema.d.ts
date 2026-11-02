@@ -11,7 +11,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Liveness and setup readiness (no secrets) */
+        /**
+         * Check health
+         * @description Liveness and setup readiness. Never returns secrets.
+         */
         get: {
             parameters: {
                 query?: {
@@ -49,7 +52,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Public configuration for the sign-in screen */
+        /**
+         * Get public config
+         * @description Public configuration for the sign-in screen.
+         */
         get: {
             parameters: {
                 query?: never;
@@ -85,7 +91,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List videos, newest first */
+        /**
+         * List videos
+         * @description Lists videos, newest first.
+         */
         get: {
             parameters: {
                 query?: {
@@ -159,7 +168,10 @@ export interface paths {
             };
         };
         put?: never;
-        /** Create a video from a prompt */
+        /**
+         * Create a video
+         * @description Creates a video from a prompt and queues its first version.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -253,7 +265,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** One video with its versions */
+        /**
+         * Get a video
+         * @description One video with its versions.
+         */
         get: {
             parameters: {
                 query?: never;
@@ -330,7 +345,10 @@ export interface paths {
         };
         put?: never;
         post?: never;
-        /** Delete a video, its versions, files and public links */
+        /**
+         * Delete a video
+         * @description Deletes a video, its versions, files and public links.
+         */
         delete: {
             parameters: {
                 query?: never;
@@ -398,7 +416,10 @@ export interface paths {
         };
         options?: never;
         head?: never;
-        /** Rename a video or make it private */
+        /**
+         * Update a video
+         * @description Renames a video or makes it private.
+         */
         patch: {
             parameters: {
                 query?: never;
@@ -481,7 +502,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Revise: start the next version from a ready one */
+        /**
+         * Revise a video
+         * @description Starts the next version from a ready one.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -579,7 +603,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Try a failed, cancelled or timed-out version again */
+        /**
+         * Retry a version
+         * @description Tries a failed, cancelled or timed-out version again.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -672,7 +699,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Stop a version in progress */
+        /**
+         * Cancel a version
+         * @description Stops a version in progress.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -756,7 +786,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Publish a version to a public link */
+        /**
+         * Publish a version
+         * @description Publishes a version to a public share page and links.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -825,7 +858,10 @@ export interface paths {
                 };
             };
         };
-        /** Unpublish a version (its link stops working on the next request) */
+        /**
+         * Unpublish a version
+         * @description Takes a version's public links down; they stop working on the next request.
+         */
         delete: {
             parameters: {
                 query?: never;
@@ -905,7 +941,10 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Approve a version or request changes (null clears your verdict); never on your own version */
+        /**
+         * Set your verdict
+         * @description Approve a version or request changes; null clears your verdict. Not allowed on your own version.
+         */
         put: {
             parameters: {
                 query?: never;
@@ -992,7 +1031,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** A short-lived link to play a ready version's composition in the sandboxed preview (live=1: a running version's latest snapshot) */
+        /**
+         * Get a preview link
+         * @description A short-lived link to play a ready version's composition in the sandboxed preview. With live=1, a running version's latest snapshot.
+         */
         get: {
             parameters: {
                 query?: {
@@ -1078,7 +1120,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Download a file: redirects to a signed URL valid for 5 to 10 minutes */
+        /**
+         * Download a file
+         * @description Redirects to a signed URL valid for 5 to 10 minutes.
+         */
         get: {
             parameters: {
                 query?: {
@@ -1164,7 +1209,10 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Admins: add a preview variant (or the placeholder, name lqip) to a ready version that doesn't have it yet */
+        /**
+         * Add a preview variant
+         * @description Admins only. Adds a preview variant (or the placeholder, name lqip) to a ready version that doesn't have it yet.
+         */
         put: {
             parameters: {
                 query?: never;
@@ -1255,7 +1303,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Your API keys */
+        /**
+         * List API keys
+         * @description Your API keys.
+         */
         get: {
             parameters: {
                 query?: never;
@@ -1322,7 +1373,10 @@ export interface paths {
             };
         };
         put?: never;
-        /** Create an API key (the secret is shown once) */
+        /**
+         * Create an API key
+         * @description Creates an API key. Its secret is shown once.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -1408,7 +1462,10 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Revoke an API key */
+        /**
+         * Revoke an API key
+         * @description Revokes an API key; requests with it stop working.
+         */
         delete: {
             parameters: {
                 query?: never;
@@ -1486,7 +1543,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Your connected OAuth apps (404 when MCP OAuth is off) */
+        /**
+         * List connected apps
+         * @description Your connected OAuth apps. 404 when MCP OAuth is off.
+         */
         get: {
             parameters: {
                 query?: never;
@@ -1570,7 +1630,10 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Disconnect an OAuth app (its tokens stop working) */
+        /**
+         * Disconnect an app
+         * @description Disconnects an OAuth app; its tokens stop working.
+         */
         delete: {
             parameters: {
                 query?: never;
@@ -1648,7 +1711,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Who you are */
+        /**
+         * Get your account
+         * @description Who you are: your account and role.
+         */
         get: {
             parameters: {
                 query?: never;
@@ -1729,7 +1795,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List users (admin) */
+        /**
+         * List users
+         * @description Everyone who has signed in, with their roles. Admins only.
+         */
         get: {
             parameters: {
                 query?: never;
@@ -1816,7 +1885,10 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Change a role, disable or enable a user (admin) */
+        /**
+         * Update a user
+         * @description Changes a role, or disables or enables a user. Admins only.
+         */
         patch: {
             parameters: {
                 query?: never;
@@ -1897,7 +1969,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get your webhook (events on videos you own) */
+        /**
+         * Get your webhook
+         * @description Your webhook, for events on videos you own.
+         */
         get: {
             parameters: {
                 query?: never;
@@ -1963,7 +2038,10 @@ export interface paths {
                 };
             };
         };
-        /** Set your webhook URL (a signing secret is returned once, on create or rotate) */
+        /**
+         * Set your webhook
+         * @description Sets your webhook URL. A signing secret is returned once, on create or rotate.
+         */
         put: {
             parameters: {
                 query?: never;
@@ -2034,7 +2112,10 @@ export interface paths {
             };
         };
         post?: never;
-        /** Remove your webhook (pending deliveries to it are dropped) */
+        /**
+         * Remove your webhook
+         * @description Removes your webhook; pending deliveries to it are dropped.
+         */
         delete: {
             parameters: {
                 query?: never;
@@ -2112,7 +2193,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Send a signed webhook.test event to your webhook now */
+        /**
+         * Test your webhook
+         * @description Sends a signed webhook.test event to your webhook now.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -2191,7 +2275,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get the team webhook (events on every video) */
+        /**
+         * Get the team webhook
+         * @description The team webhook, for events on every video. Admins only.
+         */
         get: {
             parameters: {
                 query?: never;
@@ -2257,7 +2344,10 @@ export interface paths {
                 };
             };
         };
-        /** Set the team webhook URL (a signing secret is returned once, on create or rotate) */
+        /**
+         * Set the team webhook
+         * @description Sets the team webhook URL. A signing secret is returned once, on create or rotate. Admins only.
+         */
         put: {
             parameters: {
                 query?: never;
@@ -2328,7 +2418,10 @@ export interface paths {
             };
         };
         post?: never;
-        /** Remove the team webhook (pending deliveries to it are dropped) */
+        /**
+         * Remove the team webhook
+         * @description Removes the team webhook; pending deliveries to it are dropped. Admins only.
+         */
         delete: {
             parameters: {
                 query?: never;
@@ -2406,7 +2499,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Send a signed webhook.test event to the team webhook now */
+        /**
+         * Test the team webhook
+         * @description Sends a signed webhook.test event to the team webhook now. Admins only.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -2487,7 +2583,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Start planning a video: a fast router decides whether a few questions would help */
+        /**
+         * Start a plan
+         * @description Starts planning a video: a fast router decides whether a few questions would help.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -2570,7 +2669,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** A plan (yours) */
+        /**
+         * Get a plan
+         * @description One of your plans.
+         */
         get: {
             parameters: {
                 query?: never;
@@ -2643,7 +2745,10 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Save your edits to the brief (send the briefRev you loaded) */
+        /**
+         * Edit the brief
+         * @description Saves your edits to the brief. Send the briefRev you loaded.
+         */
         patch: {
             parameters: {
                 query?: never;
@@ -2728,7 +2833,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 0–6 multiple-choice questions about the video (empty when the prompt covers it) */
+        /**
+         * Ask questions
+         * @description Zero to six multiple-choice questions about the video; empty when the prompt covers it.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -2811,7 +2919,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Turn the answers into an editable brief */
+        /**
+         * Write the brief
+         * @description Turns the answers into an editable brief.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -2896,7 +3007,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Your credits this month: agent runs and planning (estimates) */
+        /**
+         * Get your usage
+         * @description Your credits this month: agent runs and planning (estimates).
+         */
         get: {
             parameters: {
                 query?: never;
@@ -2977,7 +3091,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Comments and approvals on your videos, newest first, with an unread count */
+        /**
+         * List notifications
+         * @description Comments and approvals on your videos, newest first, with an unread count.
+         */
         get: {
             parameters: {
                 query?: {
@@ -3063,7 +3180,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Mark notifications read (all, or up to a time) */
+        /**
+         * Mark notifications read
+         * @description Marks notifications read: all, or up to a time.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -3146,7 +3266,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Live progress of the latest version's run: the agent's step, steps and credits so far */
+        /**
+         * Get progress
+         * @description Live progress of the latest version's run: the agent's step, steps and credits so far.
+         */
         get: {
             parameters: {
                 query?: never;
@@ -3231,7 +3354,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Open your edit draft of a finished, editable version (creates it if you have none) */
+        /**
+         * Open an edit draft
+         * @description Opens your edit draft of a finished, editable version, creating it if you have none.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -3322,7 +3448,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** One of your edit drafts */
+        /**
+         * Get an edit draft
+         * @description One of your edit drafts.
+         */
         get: {
             parameters: {
                 query?: never;
@@ -3390,7 +3519,10 @@ export interface paths {
                 };
             };
         };
-        /** Save the full list of edits as the next rev (rev must match the draft, for multi-tab safety) */
+        /**
+         * Save edits
+         * @description Saves the full list of edits as the next rev. rev must match the draft, for multi-tab safety.
+         */
         put: {
             parameters: {
                 query?: never;
@@ -3463,7 +3595,10 @@ export interface paths {
             };
         };
         post?: never;
-        /** Discard one of your edit drafts */
+        /**
+         * Discard a draft
+         * @description Discards one of your edit drafts.
+         */
         delete: {
             parameters: {
                 query?: never;
@@ -3543,7 +3678,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Render your draft as the next version, unchanged (the run checks and renders; it never redesigns) */
+        /**
+         * Render a draft
+         * @description Renders your draft as the next version, unchanged: the run checks and renders and never redesigns.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -3635,7 +3773,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** A short-lived link to play the draft's current rev in the sandboxed preview */
+        /**
+         * Get a draft preview link
+         * @description A short-lived link to play the draft's current rev in the sandboxed preview.
+         */
         get: {
             parameters: {
                 query?: never;
@@ -3718,7 +3859,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The team's media library, newest first (plus your own uploads still being checked) */
+        /**
+         * List media
+         * @description The team's media library, newest first, plus your own uploads still being checked.
+         */
         get: {
             parameters: {
                 query?: {
@@ -3789,7 +3933,10 @@ export interface paths {
             };
         };
         put?: never;
-        /** Upload one file up to 4 MB as the request body (images, SVG, fonts, short clips); bigger files use upload sessions */
+        /**
+         * Upload a file
+         * @description Uploads one file up to 4 MB as the request body: images, SVG, fonts, short clips. Bigger files use upload sessions.
+         */
         post: {
             parameters: {
                 query?: {
@@ -3877,7 +4024,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Start an upload session for a file over 4 MB (declare its size and sha256; quota is reserved) */
+        /**
+         * Start an upload
+         * @description Starts an upload session for a file over 4 MB. Declare its size and sha256; quota is reserved.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -3974,7 +4124,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** An upload session: which parts arrived (to resume) and its status */
+        /**
+         * Get an upload
+         * @description An upload session: which parts arrived (to resume) and its status.
+         */
         get: {
             parameters: {
                 query?: never;
@@ -4044,7 +4197,10 @@ export interface paths {
         };
         put?: never;
         post?: never;
-        /** Cancel an unfinished upload session (frees its parts and quota) */
+        /**
+         * Cancel an upload
+         * @description Cancels an unfinished upload session and frees its parts and quota.
+         */
         delete: {
             parameters: {
                 query?: never;
@@ -4123,7 +4279,10 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Send one part (at most 4 MB) as the request body; x-part-sha256 guards against corruption */
+        /**
+         * Upload a part
+         * @description Sends one part (at most 4 MB) as the request body; x-part-sha256 guards against corruption.
+         */
         put: {
             parameters: {
                 query?: never;
@@ -4218,7 +4377,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Finish the upload: the file is assembled and checked in the background (poll the session or the item) */
+        /**
+         * Finish an upload
+         * @description The file is assembled and checked in the background; poll the session or the item.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -4306,7 +4468,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Search Openverse for CC0 or CC BY audio (music by default); NC, ND and SA licences are never returned (Creators and admins). When Openverse is slow, answers 202 with a job to poll */
+        /**
+         * Search Openverse
+         * @description Searches Openverse for CC0 or CC BY audio (music by default); NC, ND and SA licences are never returned. Creators and admins. When Openverse is slow, answers 202 with a job to poll.
+         */
         get: {
             parameters: {
                 query: {
@@ -4421,7 +4586,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Audio already in the team library that matches music search words (title, caption, filename, creator or source), answered at once without asking Openverse */
+        /**
+         * Search library music
+         * @description Audio already in the team library that matches music search words (title, caption, filename, creator or source), answered at once without asking Openverse.
+         */
         get: {
             parameters: {
                 query: {
@@ -4504,7 +4672,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Common music searches, kept warm every day: quick picks that answer at once */
+        /**
+         * List quick music picks
+         * @description Common music searches, kept warm every day: quick picks that answer at once.
+         */
         get: {
             parameters: {
                 query?: never;
@@ -4587,7 +4758,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Import an Openverse track into the library by its id: re-read from Openverse, licence checked, file downloaded and verified as audio. Importing it again returns the same item. When Openverse is slow, answers 202 with a job to poll */
+        /**
+         * Import from Openverse
+         * @description Imports an Openverse track into the library by its id: re-read from Openverse, licence checked, file downloaded and verified as audio. Importing it again returns the same item. When Openverse is slow, answers 202 with a job to poll.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -4710,7 +4884,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** An Openverse search or import that is running in the background: its status, then the tracks or the library item (only for the person who started it) */
+        /**
+         * Get an Openverse job
+         * @description An Openverse search or import running in the background: its status, then the tracks or the library item. Only for the person who started it.
+         */
         get: {
             parameters: {
                 query?: never;
@@ -4793,7 +4970,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** One media item */
+        /**
+         * Get a media item
+         * @description One media item.
+         */
         get: {
             parameters: {
                 query?: never;
@@ -4863,7 +5043,10 @@ export interface paths {
         };
         put?: never;
         post?: never;
-        /** Remove it from the library (uploader or admin); versions that used it keep it */
+        /**
+         * Remove a media item
+         * @description Removes it from the library (uploader or admin); versions that used it keep it.
+         */
         delete: {
             parameters: {
                 query?: never;
@@ -4931,7 +5114,10 @@ export interface paths {
         };
         options?: never;
         head?: never;
-        /** Change the caption (uploader or admin) */
+        /**
+         * Update a caption
+         * @description Changes the caption (uploader or admin).
+         */
         patch: {
             parameters: {
                 query?: never;
@@ -5014,7 +5200,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Comments on a video (optionally one version), oldest first, with your unread count */
+        /**
+         * List comments
+         * @description Comments on a video (optionally one version), oldest first, with your unread count.
+         */
         get: {
             parameters: {
                 query?: {
@@ -5087,7 +5276,10 @@ export interface paths {
             };
         };
         put?: never;
-        /** Comment on a version, optionally pinned to a moment (timeSec) and a spot (x, y) */
+        /**
+         * Add a comment
+         * @description Comments on a version, optionally pinned to a moment (timeSec) and a spot (x, y).
+         */
         post: {
             parameters: {
                 query?: never;
@@ -5174,7 +5366,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Mark this video's comments read (all, or up to a time) */
+        /**
+         * Mark comments read
+         * @description Marks this video's comments read: all, or up to a time.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -5262,7 +5457,10 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Delete your comment, or any comment on your video (owner or admin) */
+        /**
+         * Delete a comment
+         * @description Deletes your comment, or any comment on your video (owner or admin).
+         */
         delete: {
             parameters: {
                 query?: never;
@@ -5330,7 +5528,10 @@ export interface paths {
         };
         options?: never;
         head?: never;
-        /** Edit your comment, or resolve/reopen one (video owner or admin) */
+        /**
+         * Update a comment
+         * @description Edit your comment, or resolve or reopen one (video owner or admin).
+         */
         patch: {
             parameters: {
                 query?: never;
@@ -5413,7 +5614,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Transfer videos to another Creator or Admin: some videos, or all of a person's (admin) */
+        /**
+         * Transfer videos
+         * @description Transfers videos to another Creator or Admin: some videos, or all of a person's. Admins only.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -5496,7 +5700,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Runs, queue, failures and credits (admin) */
+        /**
+         * Get stats
+         * @description Runs, queue, failures and credits. Admins only.
+         */
         get: {
             parameters: {
                 query?: never;
@@ -5579,7 +5786,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Mark an unresolved start as failed and free its slot (admin) */
+        /**
+         * Resolve a stuck start
+         * @description Marks an unresolved start as failed and frees its slot. Admins only.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -5660,7 +5870,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Resume a queue paused because AI credits were unavailable (admin) */
+        /**
+         * Resume the queue
+         * @description Resumes a queue paused because AI credits were unavailable. Admins only.
+         */
         post: {
             parameters: {
                 query?: never;

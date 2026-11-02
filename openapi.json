@@ -10,6 +10,73 @@
       "url": "https://your-video-agent.netlify.app"
     }
   ],
+  "tags": [
+    {
+      "name": "videos",
+      "description": "Create a video from a prompt, list and update videos, and follow a run while it works.",
+      "x-displayName": "Videos"
+    },
+    {
+      "name": "versions",
+      "description": "Revise a video into its next version, retry or cancel one, and download its files.",
+      "x-displayName": "Versions"
+    },
+    {
+      "name": "planning",
+      "description": "Plan before creating: a few questions, then an editable brief to create the video with.",
+      "x-displayName": "Planning"
+    },
+    {
+      "name": "editor",
+      "description": "Edit a finished version in the browser: open a draft, save edits, preview and render them.",
+      "x-displayName": "Editor"
+    },
+    {
+      "name": "publishing",
+      "description": "Give a version a public share page, MP4, GIF and embed links, or take them down.",
+      "x-displayName": "Publishing"
+    },
+    {
+      "name": "review",
+      "description": "Comments pinned to moments in a video, and approvals.",
+      "x-displayName": "Review"
+    },
+    {
+      "name": "media",
+      "description": "The team's media library: uploads, music from Openverse and captions.",
+      "x-displayName": "Media"
+    },
+    {
+      "name": "notifications",
+      "description": "Comments and approvals on your videos.",
+      "x-displayName": "Notifications"
+    },
+    {
+      "name": "keys",
+      "description": "API keys, connected OAuth apps and your webhook.",
+      "x-displayName": "Keys and webhooks"
+    },
+    {
+      "name": "me",
+      "description": "Who you are.",
+      "x-displayName": "Account"
+    },
+    {
+      "name": "usage",
+      "description": "Your AI credits this month.",
+      "x-displayName": "Usage"
+    },
+    {
+      "name": "admin",
+      "description": "People and roles, the team webhook, transfers, stats and the queue. Admins only.",
+      "x-displayName": "Admin"
+    },
+    {
+      "name": "system",
+      "description": "Health and public configuration. No sign-in needed.",
+      "x-displayName": "System"
+    }
+  ],
   "components": {
     "securitySchemes": {
       "bearerAuth": {
@@ -4117,7 +4184,8 @@
   "paths": {
     "/api/health": {
       "get": {
-        "summary": "Liveness and setup readiness (no secrets)",
+        "summary": "Check health",
+        "description": "Liveness and setup readiness. Never returns secrets.",
         "tags": [
           "system"
         ],
@@ -4150,7 +4218,8 @@
     },
     "/api/v1/config": {
       "get": {
-        "summary": "Public configuration for the sign-in screen",
+        "summary": "Get public config",
+        "description": "Public configuration for the sign-in screen.",
         "tags": [
           "system"
         ],
@@ -4170,7 +4239,8 @@
     },
     "/api/v1/videos": {
       "post": {
-        "summary": "Create a video from a prompt",
+        "summary": "Create a video",
+        "description": "Creates a video from a prompt and queues its first version.",
         "tags": [
           "videos"
         ],
@@ -4277,7 +4347,8 @@
         }
       },
       "get": {
-        "summary": "List videos, newest first",
+        "summary": "List videos",
+        "description": "Lists videos, newest first.",
         "tags": [
           "videos"
         ],
@@ -4417,7 +4488,8 @@
     },
     "/api/v1/videos/{id}": {
       "get": {
-        "summary": "One video with its versions",
+        "summary": "Get a video",
+        "description": "One video with its versions.",
         "tags": [
           "videos"
         ],
@@ -4506,7 +4578,8 @@
         }
       },
       "patch": {
-        "summary": "Rename a video or make it private",
+        "summary": "Update a video",
+        "description": "Renames a video or makes it private.",
         "tags": [
           "videos"
         ],
@@ -4602,7 +4675,8 @@
         }
       },
       "delete": {
-        "summary": "Delete a video, its versions, files and public links",
+        "summary": "Delete a video",
+        "description": "Deletes a video, its versions, files and public links.",
         "tags": [
           "videos"
         ],
@@ -4683,7 +4757,8 @@
     },
     "/api/v1/videos/{id}/versions": {
       "post": {
-        "summary": "Revise: start the next version from a ready one",
+        "summary": "Revise a video",
+        "description": "Starts the next version from a ready one.",
         "tags": [
           "versions"
         ],
@@ -4800,7 +4875,8 @@
     },
     "/api/v1/videos/{id}/versions/{n}/retry": {
       "post": {
-        "summary": "Try a failed, cancelled or timed-out version again",
+        "summary": "Retry a version",
+        "description": "Tries a failed, cancelled or timed-out version again.",
         "tags": [
           "versions"
         ],
@@ -4907,7 +4983,8 @@
     },
     "/api/v1/videos/{id}/versions/{n}/cancel": {
       "post": {
-        "summary": "Stop a version in progress",
+        "summary": "Cancel a version",
+        "description": "Stops a version in progress.",
         "tags": [
           "versions"
         ],
@@ -5004,7 +5081,8 @@
     },
     "/api/v1/videos/{id}/versions/{n}/publish": {
       "post": {
-        "summary": "Publish a version to a public link",
+        "summary": "Publish a version",
+        "description": "Publishes a version to a public share page and links.",
         "tags": [
           "publishing"
         ],
@@ -5099,7 +5177,8 @@
         }
       },
       "delete": {
-        "summary": "Unpublish a version (its link stops working on the next request)",
+        "summary": "Unpublish a version",
+        "description": "Takes a version's public links down; they stop working on the next request.",
         "tags": [
           "publishing"
         ],
@@ -5189,7 +5268,8 @@
     },
     "/api/v1/videos/{id}/versions/{n}/verdict": {
       "put": {
-        "summary": "Approve a version or request changes (null clears your verdict); never on your own version",
+        "summary": "Set your verdict",
+        "description": "Approve a version or request changes; null clears your verdict. Not allowed on your own version.",
         "tags": [
           "review"
         ],
@@ -5296,7 +5376,8 @@
     },
     "/api/v1/videos/{id}/versions/{n}/preview": {
       "get": {
-        "summary": "A short-lived link to play a ready version's composition in the sandboxed preview (live=1: a running version's latest snapshot)",
+        "summary": "Get a preview link",
+        "description": "A short-lived link to play a ready version's composition in the sandboxed preview. With live=1, a running version's latest snapshot.",
         "tags": [
           "videos"
         ],
@@ -5404,7 +5485,8 @@
     },
     "/api/v1/videos/{id}/versions/{n}/{file}": {
       "get": {
-        "summary": "Download a file: redirects to a signed URL valid for 5 to 10 minutes",
+        "summary": "Download a file",
+        "description": "Redirects to a signed URL valid for 5 to 10 minutes.",
         "tags": [
           "versions"
         ],
@@ -5519,7 +5601,8 @@
     },
     "/api/v1/videos/{id}/versions/{n}/previews/{name}": {
       "put": {
-        "summary": "Admins: add a preview variant (or the placeholder, name lqip) to a ready version that doesn't have it yet",
+        "summary": "Add a preview variant",
+        "description": "Admins only. Adds a preview variant (or the placeholder, name lqip) to a ready version that doesn't have it yet.",
         "tags": [
           "versions"
         ],
@@ -5656,7 +5739,8 @@
     },
     "/api/v1/keys": {
       "get": {
-        "summary": "Your API keys",
+        "summary": "List API keys",
+        "description": "Your API keys.",
         "tags": [
           "keys"
         ],
@@ -5735,7 +5819,8 @@
         }
       },
       "post": {
-        "summary": "Create an API key (the secret is shown once)",
+        "summary": "Create an API key",
+        "description": "Creates an API key. Its secret is shown once.",
         "tags": [
           "keys"
         ],
@@ -5824,6 +5909,7 @@
     "/api/v1/keys/{id}": {
       "delete": {
         "summary": "Revoke an API key",
+        "description": "Revokes an API key; requests with it stop working.",
         "tags": [
           "keys"
         ],
@@ -5904,7 +5990,8 @@
     },
     "/api/v1/oauth/grants": {
       "get": {
-        "summary": "Your connected OAuth apps (404 when MCP OAuth is off)",
+        "summary": "List connected apps",
+        "description": "Your connected OAuth apps. 404 when MCP OAuth is off.",
         "tags": [
           "keys"
         ],
@@ -5985,7 +6072,8 @@
     },
     "/api/v1/oauth/grants/{id}": {
       "delete": {
-        "summary": "Disconnect an OAuth app (its tokens stop working)",
+        "summary": "Disconnect an app",
+        "description": "Disconnects an OAuth app; its tokens stop working.",
         "tags": [
           "keys"
         ],
@@ -6066,7 +6154,8 @@
     },
     "/api/v1/me": {
       "get": {
-        "summary": "Who you are",
+        "summary": "Get your account",
+        "description": "Who you are: your account and role.",
         "tags": [
           "me"
         ],
@@ -6144,7 +6233,8 @@
     },
     "/api/v1/users": {
       "get": {
-        "summary": "List users (admin)",
+        "summary": "List users",
+        "description": "Everyone who has signed in, with their roles. Admins only.",
         "tags": [
           "admin"
         ],
@@ -6225,7 +6315,8 @@
     },
     "/api/v1/users/{id}": {
       "patch": {
-        "summary": "Change a role, disable or enable a user (admin)",
+        "summary": "Update a user",
+        "description": "Changes a role, or disables or enables a user. Admins only.",
         "tags": [
           "admin"
         ],
@@ -6323,7 +6414,8 @@
     },
     "/api/v1/me/webhook": {
       "get": {
-        "summary": "Get your webhook (events on videos you own)",
+        "summary": "Get your webhook",
+        "description": "Your webhook, for events on videos you own.",
         "tags": [
           "keys"
         ],
@@ -6399,7 +6491,8 @@
         }
       },
       "put": {
-        "summary": "Set your webhook URL (a signing secret is returned once, on create or rotate)",
+        "summary": "Set your webhook",
+        "description": "Sets your webhook URL. A signing secret is returned once, on create or rotate.",
         "tags": [
           "keys"
         ],
@@ -6485,7 +6578,8 @@
         }
       },
       "delete": {
-        "summary": "Remove your webhook (pending deliveries to it are dropped)",
+        "summary": "Remove your webhook",
+        "description": "Removes your webhook; pending deliveries to it are dropped.",
         "tags": [
           "keys"
         ],
@@ -6556,7 +6650,8 @@
     },
     "/api/v1/me/webhook/test": {
       "post": {
-        "summary": "Send a signed webhook.test event to your webhook now",
+        "summary": "Test your webhook",
+        "description": "Sends a signed webhook.test event to your webhook now.",
         "tags": [
           "keys"
         ],
@@ -6634,7 +6729,8 @@
     },
     "/api/v1/admin/team-webhook": {
       "get": {
-        "summary": "Get the team webhook (events on every video)",
+        "summary": "Get the team webhook",
+        "description": "The team webhook, for events on every video. Admins only.",
         "tags": [
           "admin"
         ],
@@ -6710,7 +6806,8 @@
         }
       },
       "put": {
-        "summary": "Set the team webhook URL (a signing secret is returned once, on create or rotate)",
+        "summary": "Set the team webhook",
+        "description": "Sets the team webhook URL. A signing secret is returned once, on create or rotate. Admins only.",
         "tags": [
           "admin"
         ],
@@ -6796,7 +6893,8 @@
         }
       },
       "delete": {
-        "summary": "Remove the team webhook (pending deliveries to it are dropped)",
+        "summary": "Remove the team webhook",
+        "description": "Removes the team webhook; pending deliveries to it are dropped. Admins only.",
         "tags": [
           "admin"
         ],
@@ -6867,7 +6965,8 @@
     },
     "/api/v1/admin/team-webhook/test": {
       "post": {
-        "summary": "Send a signed webhook.test event to the team webhook now",
+        "summary": "Test the team webhook",
+        "description": "Sends a signed webhook.test event to the team webhook now. Admins only.",
         "tags": [
           "admin"
         ],
@@ -6945,7 +7044,8 @@
     },
     "/api/v1/plans": {
       "post": {
-        "summary": "Start planning a video: a fast router decides whether a few questions would help",
+        "summary": "Start a plan",
+        "description": "Starts planning a video: a fast router decides whether a few questions would help.",
         "tags": [
           "planning"
         ],
@@ -7033,7 +7133,8 @@
     },
     "/api/v1/plans/{id}": {
       "get": {
-        "summary": "A plan (yours)",
+        "summary": "Get a plan",
+        "description": "One of your plans.",
         "tags": [
           "planning"
         ],
@@ -7119,7 +7220,8 @@
         }
       },
       "patch": {
-        "summary": "Save your edits to the brief (send the briefRev you loaded)",
+        "summary": "Edit the brief",
+        "description": "Saves your edits to the brief. Send the briefRev you loaded.",
         "tags": [
           "planning"
         ],
@@ -7225,7 +7327,8 @@
     },
     "/api/v1/plans/{id}/questions": {
       "post": {
-        "summary": "0–6 multiple-choice questions about the video (empty when the prompt covers it)",
+        "summary": "Ask questions",
+        "description": "Zero to six multiple-choice questions about the video; empty when the prompt covers it.",
         "tags": [
           "planning"
         ],
@@ -7313,7 +7416,8 @@
     },
     "/api/v1/plans/{id}/brief": {
       "post": {
-        "summary": "Turn the answers into an editable brief",
+        "summary": "Write the brief",
+        "description": "Turns the answers into an editable brief.",
         "tags": [
           "planning"
         ],
@@ -7411,7 +7515,8 @@
     },
     "/api/v1/me/usage": {
       "get": {
-        "summary": "Your credits this month: agent runs and planning (estimates)",
+        "summary": "Get your usage",
+        "description": "Your credits this month: agent runs and planning (estimates).",
         "tags": [
           "usage"
         ],
@@ -7489,7 +7594,8 @@
     },
     "/api/v1/notifications": {
       "get": {
-        "summary": "Comments and approvals on your videos, newest first, with an unread count",
+        "summary": "List notifications",
+        "description": "Comments and approvals on your videos, newest first, with an unread count.",
         "tags": [
           "notifications"
         ],
@@ -7587,7 +7693,8 @@
     },
     "/api/v1/notifications/read": {
       "post": {
-        "summary": "Mark notifications read (all, or up to a time)",
+        "summary": "Mark notifications read",
+        "description": "Marks notifications read: all, or up to a time.",
         "tags": [
           "notifications"
         ],
@@ -7673,7 +7780,8 @@
     },
     "/api/v1/videos/{id}/progress": {
       "get": {
-        "summary": "Live progress of the latest version's run: the agent's step, steps and credits so far",
+        "summary": "Get progress",
+        "description": "Live progress of the latest version's run: the agent's step, steps and credits so far.",
         "tags": [
           "videos"
         ],
@@ -7761,7 +7869,8 @@
     },
     "/api/v1/videos/{id}/versions/{n}/edits": {
       "post": {
-        "summary": "Open your edit draft of a finished, editable version (creates it if you have none)",
+        "summary": "Open an edit draft",
+        "description": "Opens your edit draft of a finished, editable version, creating it if you have none.",
         "tags": [
           "editor"
         ],
@@ -7868,7 +7977,8 @@
     },
     "/api/v1/edits/{id}": {
       "get": {
-        "summary": "One of your edit drafts",
+        "summary": "Get an edit draft",
+        "description": "One of your edit drafts.",
         "tags": [
           "editor"
         ],
@@ -7954,7 +8064,8 @@
         }
       },
       "put": {
-        "summary": "Save the full list of edits as the next rev (rev must match the draft, for multi-tab safety)",
+        "summary": "Save edits",
+        "description": "Saves the full list of edits as the next rev. rev must match the draft, for multi-tab safety.",
         "tags": [
           "editor"
         ],
@@ -8050,7 +8161,8 @@
         }
       },
       "delete": {
-        "summary": "Discard one of your edit drafts",
+        "summary": "Discard a draft",
+        "description": "Discards one of your edit drafts.",
         "tags": [
           "editor"
         ],
@@ -8131,7 +8243,8 @@
     },
     "/api/v1/edits/{id}/render": {
       "post": {
-        "summary": "Render your draft as the next version, unchanged (the run checks and renders; it never redesigns)",
+        "summary": "Render a draft",
+        "description": "Renders your draft as the next version, unchanged: the run checks and renders and never redesigns.",
         "tags": [
           "editor"
         ],
@@ -8238,7 +8351,8 @@
     },
     "/api/v1/edits/{id}/preview": {
       "get": {
-        "summary": "A short-lived link to play the draft's current rev in the sandboxed preview",
+        "summary": "Get a draft preview link",
+        "description": "A short-lived link to play the draft's current rev in the sandboxed preview.",
         "tags": [
           "editor"
         ],
@@ -8326,7 +8440,8 @@
     },
     "/api/v1/media": {
       "post": {
-        "summary": "Upload one file up to 4 MB as the request body (images, SVG, fonts, short clips); bigger files use upload sessions",
+        "summary": "Upload a file",
+        "description": "Uploads one file up to 4 MB as the request body: images, SVG, fonts, short clips. Bigger files use upload sessions.",
         "tags": [
           "media"
         ],
@@ -8433,7 +8548,8 @@
         }
       },
       "get": {
-        "summary": "The team's media library, newest first (plus your own uploads still being checked)",
+        "summary": "List media",
+        "description": "The team's media library, newest first, plus your own uploads still being checked.",
         "tags": [
           "media"
         ],
@@ -8546,7 +8662,8 @@
     },
     "/api/v1/media/uploads": {
       "post": {
-        "summary": "Start an upload session for a file over 4 MB (declare its size and sha256; quota is reserved)",
+        "summary": "Start an upload",
+        "description": "Starts an upload session for a file over 4 MB. Declare its size and sha256; quota is reserved.",
         "tags": [
           "media"
         ],
@@ -8668,7 +8785,8 @@
     },
     "/api/v1/media/uploads/{id}": {
       "get": {
-        "summary": "An upload session: which parts arrived (to resume) and its status",
+        "summary": "Get an upload",
+        "description": "An upload session: which parts arrived (to resume) and its status.",
         "tags": [
           "media"
         ],
@@ -8754,7 +8872,8 @@
         }
       },
       "delete": {
-        "summary": "Cancel an unfinished upload session (frees its parts and quota)",
+        "summary": "Cancel an upload",
+        "description": "Cancels an unfinished upload session and frees its parts and quota.",
         "tags": [
           "media"
         ],
@@ -8835,7 +8954,8 @@
     },
     "/api/v1/media/uploads/{id}/parts/{index}": {
       "put": {
-        "summary": "Send one part (at most 4 MB) as the request body; x-part-sha256 guards against corruption",
+        "summary": "Upload a part",
+        "description": "Sends one part (at most 4 MB) as the request body; x-part-sha256 guards against corruption.",
         "tags": [
           "media"
         ],
@@ -8971,7 +9091,8 @@
     },
     "/api/v1/media/uploads/{id}/complete": {
       "post": {
-        "summary": "Finish the upload: the file is assembled and checked in the background (poll the session or the item)",
+        "summary": "Finish an upload",
+        "description": "The file is assembled and checked in the background; poll the session or the item.",
         "tags": [
           "media"
         ],
@@ -9076,7 +9197,8 @@
     },
     "/api/v1/media/openverse/search": {
       "get": {
-        "summary": "Search Openverse for CC0 or CC BY audio (music by default); NC, ND and SA licences are never returned (Creators and admins). When Openverse is slow, answers 202 with a job to poll",
+        "summary": "Search Openverse",
+        "description": "Searches Openverse for CC0 or CC BY audio (music by default); NC, ND and SA licences are never returned. Creators and admins. When Openverse is slow, answers 202 with a job to poll.",
         "tags": [
           "media"
         ],
@@ -9235,7 +9357,8 @@
     },
     "/api/v1/media/openverse/library": {
       "get": {
-        "summary": "Audio already in the team library that matches music search words (title, caption, filename, creator or source), answered at once without asking Openverse",
+        "summary": "Search library music",
+        "description": "Audio already in the team library that matches music search words (title, caption, filename, creator or source), answered at once without asking Openverse.",
         "tags": [
           "media"
         ],
@@ -9325,7 +9448,8 @@
     },
     "/api/v1/media/openverse/common": {
       "get": {
-        "summary": "Common music searches, kept warm every day: quick picks that answer at once",
+        "summary": "List quick music picks",
+        "description": "Common music searches, kept warm every day: quick picks that answer at once.",
         "tags": [
           "media"
         ],
@@ -9403,7 +9527,8 @@
     },
     "/api/v1/media/openverse/import": {
       "post": {
-        "summary": "Import an Openverse track into the library by its id: re-read from Openverse, licence checked, file downloaded and verified as audio. Importing it again returns the same item. When Openverse is slow, answers 202 with a job to poll",
+        "summary": "Import from Openverse",
+        "description": "Imports an Openverse track into the library by its id: re-read from Openverse, licence checked, file downloaded and verified as audio. Importing it again returns the same item. When Openverse is slow, answers 202 with a job to poll.",
         "tags": [
           "media"
         ],
@@ -9546,7 +9671,8 @@
     },
     "/api/v1/media/openverse/jobs/{id}": {
       "get": {
-        "summary": "An Openverse search or import that is running in the background: its status, then the tracks or the library item (only for the person who started it)",
+        "summary": "Get an Openverse job",
+        "description": "An Openverse search or import running in the background: its status, then the tracks or the library item. Only for the person who started it.",
         "tags": [
           "media"
         ],
@@ -9634,7 +9760,8 @@
     },
     "/api/v1/media/{id}": {
       "get": {
-        "summary": "One media item",
+        "summary": "Get a media item",
+        "description": "One media item.",
         "tags": [
           "media"
         ],
@@ -9720,7 +9847,8 @@
         }
       },
       "patch": {
-        "summary": "Change the caption (uploader or admin)",
+        "summary": "Update a caption",
+        "description": "Changes the caption (uploader or admin).",
         "tags": [
           "media"
         ],
@@ -9828,7 +9956,8 @@
         }
       },
       "delete": {
-        "summary": "Remove it from the library (uploader or admin); versions that used it keep it",
+        "summary": "Remove a media item",
+        "description": "Removes it from the library (uploader or admin); versions that used it keep it.",
         "tags": [
           "media"
         ],
@@ -9909,7 +10038,8 @@
     },
     "/api/v1/videos/{id}/comments": {
       "get": {
-        "summary": "Comments on a video (optionally one version), oldest first, with your unread count",
+        "summary": "List comments",
+        "description": "Comments on a video (optionally one version), oldest first, with your unread count.",
         "tags": [
           "review"
         ],
@@ -10022,7 +10152,8 @@
         }
       },
       "post": {
-        "summary": "Comment on a version, optionally pinned to a moment (timeSec) and a spot (x, y)",
+        "summary": "Add a comment",
+        "description": "Comments on a version, optionally pinned to a moment (timeSec) and a spot (x, y).",
         "tags": [
           "review"
         ],
@@ -10120,7 +10251,8 @@
     },
     "/api/v1/videos/{id}/comments/read": {
       "post": {
-        "summary": "Mark this video's comments read (all, or up to a time)",
+        "summary": "Mark comments read",
+        "description": "Marks this video's comments read: all, or up to a time.",
         "tags": [
           "review"
         ],
@@ -10216,7 +10348,8 @@
     },
     "/api/v1/comments/{id}": {
       "patch": {
-        "summary": "Edit your comment, or resolve/reopen one (video owner or admin)",
+        "summary": "Update a comment",
+        "description": "Edit your comment, or resolve or reopen one (video owner or admin).",
         "tags": [
           "review"
         ],
@@ -10312,7 +10445,8 @@
         }
       },
       "delete": {
-        "summary": "Delete your comment, or any comment on your video (owner or admin)",
+        "summary": "Delete a comment",
+        "description": "Deletes your comment, or any comment on your video (owner or admin).",
         "tags": [
           "review"
         ],
@@ -10393,7 +10527,8 @@
     },
     "/api/v1/transfers": {
       "post": {
-        "summary": "Transfer videos to another Creator or Admin: some videos, or all of a person's (admin)",
+        "summary": "Transfer videos",
+        "description": "Transfers videos to another Creator or Admin: some videos, or all of a person's. Admins only.",
         "tags": [
           "admin"
         ],
@@ -10481,7 +10616,8 @@
     },
     "/api/v1/stats": {
       "get": {
-        "summary": "Runs, queue, failures and credits (admin)",
+        "summary": "Get stats",
+        "description": "Runs, queue, failures and credits. Admins only.",
         "tags": [
           "admin"
         ],
@@ -10559,7 +10695,8 @@
     },
     "/api/v1/admin/attempts/{id}/resolve": {
       "post": {
-        "summary": "Mark an unresolved start as failed and free its slot (admin)",
+        "summary": "Resolve a stuck start",
+        "description": "Marks an unresolved start as failed and frees its slot. Admins only.",
         "tags": [
           "admin"
         ],
@@ -10640,7 +10777,8 @@
     },
     "/api/v1/admin/queue/resume": {
       "post": {
-        "summary": "Resume a queue paused because AI credits were unavailable (admin)",
+        "summary": "Resume the queue",
+        "description": "Resumes a queue paused because AI credits were unavailable. Admins only.",
         "tags": [
           "admin"
         ],
