@@ -5,12 +5,12 @@
 [build.environment]
   NODE_VERSION = "24"
 
-# The Deploy to Netlify button asks for these. Netlify makes every variable listed here a required field, so only
-# the settings a new deployment can't work without are listed.
+# The Deploy to Netlify button asks for these: the agent needs them to make videos, but the build doesn't, so they can
+# be skipped and added later (Project configuration > Environment variables, then redeploy). /setup lists any missing.
 [template.environment]
-  RUNNER_API_TOKEN = "Required. A Netlify personal access token that starts agent runs (ideally from a dedicated account in this team)"
-  ALLOWED_EMAIL_DOMAINS = "Required. Who can sign up: your company's email domains, comma-separated (e.g. acme.com), or invite-only"
-  ADMIN_EMAILS = "Required. The first admins' email addresses, comma-separated"
+  RUNNER_API_TOKEN = "A Netlify personal access token that starts agent runs (ideally from a dedicated account in this team). Required to make videos. You can skip this now and add it later."
+  ALLOWED_EMAIL_DOMAINS = "Who can sign up: your company's email domains, comma-separated (e.g. acme.com), or invite-only. Required to make videos. You can skip this now and add it later."
+  ADMIN_EMAILS = "The first admins' email addresses, comma-separated. Required to make videos. You can skip this now and add it later."
 
 # Everything else is optional and has a default; set it later under Project configuration > Environment variables.
 # The README's Configuration table describes each one:

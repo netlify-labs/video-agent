@@ -36,7 +36,9 @@ Have these ready before you press the button:
 
 ## Deploy
 
-**With the button:** press Deploy to Netlify above. It copies this repo to your GitHub and asks for:
+**With the button:** press Deploy to Netlify above. It copies this repo to your GitHub and asks for the three settings
+the agent needs to make videos. Don't have them ready? Leave them empty: the site still deploys, and you can add them
+later under Project configuration > Environment variables (then redeploy). The `/setup` page lists anything missing.
 
 | Variable                | What to enter                                                                            |
 | ----------------------- | ---------------------------------------------------------------------------------------- |
