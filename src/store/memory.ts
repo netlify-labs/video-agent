@@ -1,5 +1,6 @@
 // In-memory store with the same semantics as Postgres: transactions are serialized and roll back
 // on error. Used by tests and by OpenAPI generation.
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { NARRATION_SETTING_DEFAULTS, SLOT_STAGES, isTerminal } from '../domain/types.js'
 import type {
   ApiKeyRow,
@@ -146,7 +147,9 @@ const live = (leaseUntil: string | null, now: string) => leaseUntil !== null && 
 export function createMemoryStore(): Store & { reset(): void; dump(): State } {
   let state = empty()
   let chain: Promise<unknown> = Promise.resolve()
-  let inTx = false
+  // Which transaction a call runs in: a nested call joins it, while a concurrent one (another request, sweep or GC)
+  // waits its turn, the way a row lock would make it wait on Postgres.
+  const txScope = new AsyncLocalStorage<{ open: boolean }>()
 
   const repo: Repo = {
     getSettings: async () => clone(state.settings),
@@ -398,6 +401,14 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
       state.media.set(row.id, clone(row))
     },
     getMedia: async (id) => clone(state.media.get(id) ?? null),
+    // Transactions here run one at a time (a global lock), so the row lock is the order they're queued in.
+    lockMedia: async (ids) =>
+      clone(
+        [...new Set(ids)].sort().flatMap((id) => {
+          const m = state.media.get(id)
+          return m ? [m] : []
+        }),
+      ),
     updateMedia: async (id, patch) => {
       const m = state.media.get(id)
       if (m) Object.assign(m, clone(patch))
@@ -971,17 +982,17 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
   const store = {
     ...repo,
     tx<T>(fn: (r: Repo) => Promise<T>): Promise<T> {
-      if (inTx) return fn(repo)
+      if (txScope.getStore()?.open) return fn(repo)
       const run = async () => {
         const snapshot = clone(state)
-        inTx = true
+        const scope = { open: true }
         try {
-          return await fn(repo)
+          return await txScope.run(scope, () => fn(repo))
         } catch (e) {
           state = snapshot
           throw e
         } finally {
-          inTx = false
+          scope.open = false
         }
       }
       const p = chain.then(run, run)

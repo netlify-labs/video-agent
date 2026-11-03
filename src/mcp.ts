@@ -197,6 +197,7 @@ function fromApiError(e: ApiError, videoId?: string): ToolError {
           }
         : {},
     ],
+    take_deleted: ['TAKE_DELETED', { fix_hint: 'That recording was deleted. Record or pick another take.' }],
     not_ready: [
       'NOT_READY',
       videoId ? { suggested_tool_calls: [{ name: 'get_video', arguments: { video_id: videoId } }] } : {},

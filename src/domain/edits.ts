@@ -21,7 +21,7 @@ import {
 } from './bundles.js'
 import { assertCan, type Principal } from './policy.js'
 import { snapshotMedia } from './media.js'
-import { isTake } from './takes.js'
+import { isTake, releaseOwnerRefs } from './takes.js'
 import { getSettings } from './settings.js'
 import type { Repo } from '../store/types.js'
 import type { EditRow } from './types.js'
@@ -305,12 +305,20 @@ export async function saveEdit(deps: Deps, p: Principal, id: string, input: { op
   })
 }
 
+/** Discarding releases the draft's narration takes (they're kept for 30 days), never deletes them. */
 export async function discardEdit(deps: Deps, p: Principal, id: string) {
   const e = await loadEdit(deps.store, deps, p, id)
   for (const k of await deps.blobs.list('bundles', editPrefix(e.jobId, e.baseN, e.id)))
     await deps.blobs.delete('bundles', k)
-  await deps.store.deleteEdit(id)
+  await dropEdit(deps, id)
 }
+
+/** The draft row and its take references go together. */
+const dropEdit = (deps: Deps, id: string) =>
+  deps.store.tx(async (repo) => {
+    await releaseOwnerRefs(repo, deps, 'draft', id)
+    await repo.deleteEdit(id)
+  })
 
 /** A preview capability for the draft's current rev. */
 export async function editPreviewLink(deps: Deps, p: Principal, id: string) {
@@ -327,12 +335,12 @@ export async function editPreviewLink(deps: Deps, p: Principal, id: string) {
   }
 }
 
-/** Sweep: expired drafts go, with their bundles. */
+/** Sweep: expired drafts go, with their bundles; their narration takes are released (and kept for 30 days). */
 export async function deleteExpiredEdits(deps: Deps, limit = 20) {
   for (const e of await deps.store.listExpiredEdits(deps.clock.now().toISOString(), limit)) {
     for (const k of await deps.blobs.list('bundles', editPrefix(e.jobId, e.baseN, e.id)))
       await deps.blobs.delete('bundles', k)
-    await deps.store.deleteEdit(e.id)
+    await dropEdit(deps, e.id)
   }
 }
 

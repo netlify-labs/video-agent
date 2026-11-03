@@ -5,6 +5,7 @@ export type ErrorCode =
   | 'not_found'
   | 'not_ready'
   | 'conflict'
+  | 'take_deleted'
   | 'gone'
   | 'rate_limited'
   | 'upstream_error'
@@ -19,6 +20,7 @@ const STATUS: Record<ErrorCode, number> = {
   not_found: 404,
   not_ready: 409,
   conflict: 409,
+  take_deleted: 409,
   gone: 410,
   rate_limited: 429,
   upstream_error: 502,

@@ -7,6 +7,7 @@ import { PUBLIC_URL_TTL_SEC, accessKey, fileTtl, signFile, stableExp, writeAcces
 import { getSettings } from './settings.js'
 import { emitEvent } from './webhooks.js'
 import { snapshotMedia } from './media.js'
+import { releaseOwnerRefs } from './takes.js'
 import { musicPickDto } from './music-pick.js'
 import { versionCredits, type Credit } from './credits.js'
 import { creditHtml } from '../lib/credit-html.js'
@@ -605,7 +606,11 @@ export async function deleteVideo(deps: Deps, principal: Principal, jobId: strin
     }
     for (const a of await repo.listAttempts(jobId)) {
       if (!isTerminal(a.stage) && a.stage !== 'unresolved') await requestCancel(repo, deps, a, 'user')
+      await releaseOwnerRefs(repo, deps, 'frozen_attempt', a.id)
     }
+    // Its versions' narration takes are released: kept for 30 days, then GC deletes them.
+    for (const v of await repo.listVersions(jobId))
+      await releaseOwnerRefs(repo, deps, 'version', `${jobId}#${v.n}`)
     for (const store of ['videos', 'sources', 'bundles'] as const) {
       await repo.insertCleanup({
         id: deps.ids.uuid(),

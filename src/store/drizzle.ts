@@ -445,6 +445,16 @@ function repoFor(db: Db): Repo {
       await db.insert(t.media).values(row)
     },
     getMedia: async (id) => one<MediaRow>(await db.select().from(t.media).where(eq(t.media.id, id))),
+    lockMedia: async (ids) => {
+      if (ids.length === 0) return []
+      // Rows are locked in the order they're returned, so every locker takes them in the same order.
+      return (await db
+        .select()
+        .from(t.media)
+        .where(inArray(t.media.id, ids))
+        .orderBy(asc(t.media.id))
+        .for('update')) as MediaRow[]
+    },
     updateMedia: async (id, patch) => {
       await db.update(t.media).set(patch).where(eq(t.media.id, id))
     },

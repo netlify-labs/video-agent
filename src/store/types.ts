@@ -147,6 +147,8 @@ export interface Repo {
   getCommentReadAt(userId: string, jobId: string): Promise<string | null>
   insertMedia(row: MediaRow): Promise<void>
   getMedia(id: string): Promise<MediaRow | null>
+  /** Locks these rows for the rest of the transaction (SELECT … FOR UPDATE) in id order; missing ids are skipped. */
+  lockMedia(ids: string[]): Promise<MediaRow[]>
   updateMedia(id: string, patch: Partial<MediaRow>): Promise<void>
   /**
    * Newest first: ready, undeleted items, plus `includePendingOf`'s own items in any state. Narration takes are left
