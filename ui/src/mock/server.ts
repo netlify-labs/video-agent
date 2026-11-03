@@ -471,6 +471,12 @@ export function installMock() {
     if (p === '/api/v1/media' && method === 'POST') {
       if (me.role === 'viewer' || me.role === 'reviewer')
         return fail(403, 'forbidden', `Your role (${me.role}) can't upload media.`)
+      if (url.searchParams.has('role'))
+        return fail(
+          400,
+          'invalid_request',
+          'Recordings upload in a session: POST /api/v1/media/uploads with role and scopeJobId.',
+        )
       const body = new Uint8Array(
         await (input instanceof Request
           ? input.clone().arrayBuffer()
@@ -500,7 +506,14 @@ export function installMock() {
       })
     }
     if (p === '/api/v1/media/uploads' && method === 'POST') {
-      const b = (await readBody(init, input)) as { filename: string; size: number }
+      const b = (await readBody(init, input)) as {
+        filename: string
+        size: number
+        role?: 'narration-take' | 'narration-upload'
+        scopeJobId?: string
+      }
+      if (b.role && !b.scopeJobId)
+        return fail(400, 'invalid_request', 'A recording needs scopeJobId: the video it is recorded for.')
       const s = {
         id: `upl_${mockUploads.size + 1}`,
         filename: b.filename,
@@ -512,6 +525,8 @@ export function installMock() {
         mediaId: null as string | null,
         error: null,
         expiresAt: new Date(Date.now() + 86400_000).toISOString(),
+        role: b.role ?? null,
+        scopeJobId: b.role ? (b.scopeJobId ?? null) : null,
       }
       mockUploads.set(s.id, s)
       return json(s, 201)
@@ -609,6 +624,33 @@ export function installMock() {
         return json(mockJob(j, 'done', { media: r?.item ?? null, created: r?.created ?? null }))
       }
       return json(mockJob(j, 'running'))
+    }
+    const extra = /^\/api\/v1\/media\/([^/]+)\/(peaks|speech)$/.exec(p)
+    if (extra?.[1]) {
+      if (!mockMedia.some((m) => m.id === extra[1])) return fail(404, 'not_found', 'Media not found.')
+      if (extra[2] === 'peaks') {
+        if (method === 'PUT') {
+          const body = new Uint8Array(
+            await (input instanceof Request
+              ? input.clone().arrayBuffer()
+              : new Response(init?.body as BodyInit).arrayBuffer()),
+          )
+          mockPeaks.set(extra[1], body)
+          return json({ mediaId: extra[1], bytes: body.byteLength, levels: body[5] ?? 0, samples: 0 })
+        }
+        const bytes = mockPeaks.get(extra[1])
+        if (!bytes) return fail(404, 'not_found', 'No peaks for this recording yet.')
+        return new Response(new Uint8Array(bytes), {
+          headers: { 'content-type': 'application/octet-stream' },
+        })
+      }
+      if (method === 'PUT') {
+        const b = await readBody(init, input)
+        mockSpeech.set(extra[1], b)
+        return json(b)
+      }
+      const speech = mockSpeech.get(extra[1])
+      return speech ? json(speech) : fail(404, 'not_found', 'No speech spans for this recording yet.')
     }
     const mm = /^\/api\/v1\/media\/([^/]+)$/.exec(p)
     if (mm?.[1]) {
@@ -888,8 +930,13 @@ const mockUploads = new Map<
     mediaId: string | null
     error: null
     expiresAt: string
+    role: 'narration-take' | 'narration-upload' | null
+    scopeJobId: string | null
   }
 >()
+// A recording's peaks.bin and speech spans, by media id (PUT/GET /api/v1/media/{id}/peaks and /speech).
+const mockPeaks = new Map<string, Uint8Array<ArrayBuffer>>()
+const mockSpeech = new Map<string, unknown>()
 type MockKind = MockMedia['kind']
 function mockKind(b: Uint8Array): MockKind | null {
   const head = String.fromCharCode(...b.subarray(0, 12))

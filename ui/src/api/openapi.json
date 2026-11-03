@@ -3867,6 +3867,25 @@
           },
           "expiresAt": {
             "type": "string"
+          },
+          "role": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "narration-take",
+              "narration-upload",
+              null
+            ],
+            "description": "A voice-over recording (take) or uploaded narration; null for library uploads"
+          },
+          "scopeJobId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The video a recording is for"
           }
         },
         "required": [
@@ -3879,7 +3898,9 @@
           "status",
           "mediaId",
           "error",
-          "expiresAt"
+          "expiresAt",
+          "role",
+          "scopeJobId"
         ]
       },
       "OpenverseSearch": {
@@ -4181,6 +4202,67 @@
         },
         "required": [
           "queries"
+        ]
+      },
+      "TakePeaksStored": {
+        "type": "object",
+        "properties": {
+          "mediaId": {
+            "type": "string"
+          },
+          "bytes": {
+            "type": "integer"
+          },
+          "levels": {
+            "type": "integer"
+          },
+          "samples": {
+            "type": "integer",
+            "description": "Source length in samples at 24 kHz"
+          }
+        },
+        "required": [
+          "mediaId",
+          "bytes",
+          "levels",
+          "samples"
+        ]
+      },
+      "SpeechSummary": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "The VAD version the spans were measured with"
+          },
+          "spans": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              ]
+            },
+            "maxItems": 10000,
+            "description": "Speech as [start, end) in source samples at 24 kHz, in order, not overlapping"
+          },
+          "samples": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "The recording's length in samples at 24 kHz (filled in when it's checked)"
+          }
+        },
+        "required": [
+          "version",
+          "spans"
         ]
       },
       "CommentList": {
@@ -9486,7 +9568,7 @@
     "/api/v1/media/uploads": {
       "post": {
         "summary": "Start an upload",
-        "description": "Starts an upload session for a file over 4 MB. Declare its size and sha256; quota is reserved.",
+        "description": "Starts an upload session for a file over 4 MB, or for any voice-over recording. Declare its size and sha256 (a recorder may send the hash it computed while recording; the server checks every part and the whole file); quota is reserved. A recording names its role and the video it's for (scopeJobId), which you must be able to see.",
         "tags": [
           "media"
         ],
@@ -9521,6 +9603,19 @@
                   "caption": {
                     "type": "string",
                     "maxLength": 500
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "narration-take",
+                      "narration-upload"
+                    ],
+                    "description": "A voice-over recording (take) or uploaded narration"
+                  },
+                  "scopeJobId": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "description": "The video a recording is for (required with role)"
                   }
                 },
                 "required": [
@@ -9584,7 +9679,7 @@
             }
           },
           "409": {
-            "description": "Conflict or not ready",
+            "description": "Recorded voice-over is turned off (narration_disabled)",
             "content": {
               "application/json": {
                 "schema": {
@@ -9925,7 +10020,7 @@
     "/api/v1/media/uploads/{id}/complete": {
       "post": {
         "summary": "Finish an upload",
-        "description": "The file is assembled and checked in the background; poll the session or the item.",
+        "description": "The file is assembled and checked in the background; poll the session or the item. A recording's whole-file sha256 is checked first: a mismatch is a 400 and the session fails.",
         "tags": [
           "media"
         ],
@@ -10829,6 +10924,380 @@
         "responses": {
           "204": {
             "description": "Deleted"
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/media/{id}/peaks": {
+      "put": {
+        "summary": "Store a recording's peaks",
+        "description": "Stores a recording's waveform peaks (peaks.bin, the VAPK format, at most 256 KB) as the request body. Only the uploader, before or after the recording is ready; sending again replaces them.",
+        "tags": [
+          "media"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Stored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TakePeaksStored"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "Get a recording's peaks",
+        "description": "A recording's waveform peaks (peaks.bin), for anyone who can read the recording.",
+        "tags": [
+          "media"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "peaks.bin",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/media/{id}/speech": {
+      "put": {
+        "summary": "Store a recording's speech spans",
+        "description": "Stores where the voice is in a recording, as [start, end) spans in source samples. Only the uploader, before or after the recording is ready; sending again replaces them.",
+        "tags": [
+          "media"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpeechSummary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Stored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpeechSummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "Get a recording's speech spans",
+        "description": "Where the voice is in a recording, for anyone who can read the recording.",
+        "tags": [
+          "media"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Speech spans",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpeechSummary"
+                }
+              }
+            }
           },
           "400": {
             "description": "Invalid request",

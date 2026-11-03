@@ -3,16 +3,21 @@
 // only the session id: it joins the parts, checks the whole hash, verifies the file (MP4 checks included) and makes
 // the library item ready, or rejected with the reason. Sessions are bound to their uploader, expire, and reserve
 // quota when they're created. Narration takes have budgets of their own (voice-over plan §8): stored bytes per person
-// (the takeQuotaBytes setting) and a rate limit, checked at create and again at complete.
+// (the takeQuotaBytes setting) and a rate limit, checked at create and again at complete. A take session (voice-over
+// plan §5.1, §7) also names its role and the video it's recorded for, and its whole-file hash usually comes from the
+// recorder's worker, so completion checks it at once and answers a mismatch with a 400.
+import { createHash } from 'node:crypto'
 import type { Deps } from '../deps.js'
 import { sha256Hex } from '../lib/crypto.js'
 import { ApiError } from '../lib/errors.js'
 import { classify, LIMITS, MediaError } from '../lib/media/classify.js'
-import { mediaDto, storeMedia } from './media.js'
-import { narrationSettings } from './narration-settings.js'
+import { mediaDto, mergeMediaMeta, readMediaMeta, storeMedia } from './media.js'
+import { assertNarrationEnabled, narrationSettings } from './narration-settings.js'
 import { assertCan, type Principal } from './policy.js'
 import { NO_PROVENANCE, type MediaRole, type MediaRow, type MediaUploadRow } from './types.js'
 import type { Repo } from '../store/types.js'
+import { takeSamples } from './take-extras.js'
+import { loadJob } from './videos.js'
 
 export const PART_SIZE = 4 * 1024 * 1024
 export const UPLOAD_QUOTA_BYTES = 1024 * 1024 * 1024
@@ -37,24 +42,21 @@ function sessionDto(u: MediaUploadRow, uploaded: number[]) {
     mediaId: u.mediaId,
     error: u.error,
     expiresAt: u.expiresAt,
+    role: u.role,
+    scopeJobId: u.scopeJobId,
   }
 }
 
 export const isTakeRole = (role: string | null | undefined): role is MediaRole =>
   role === 'narration-take' || role === 'narration-upload'
 
-/**
- * The take role a session was started with. Sessions don't store one yet (va-2qq.2.6 adds media_uploads.role and
- * the create body's `role`); until then this is null and no session is held to the take budgets.
- */
-const sessionRole = (u: MediaUploadRow): MediaRole | null => (u as { role?: MediaRole | null }).role ?? null
-
 const sizeLabel = (n: number) =>
   n >= 1024 ** 3 ? `${(n / 1024 ** 3).toFixed(1)} GB` : `${Math.max(0, Math.round(n / 1024 ** 2))} MB`
 
 /**
- * The person's storage for narration takes once `incomingBytes` more are added: ready and in-flight takes count, and
- * takes GC is deleting count as freed. Refuses with 413 quota_exceeded, and the bytes left, when they don't fit.
+ * The person's storage for narration takes once `incomingBytes` more are added: ready and in-flight takes (open take
+ * sessions included) count, and takes GC is deleting count as freed. Refuses with 413 quota_exceeded, and the bytes
+ * left, when they don't fit.
  */
 export async function quotaForTakes(
   deps: Pick<Deps, 'store' | 'log'>,
@@ -101,8 +103,9 @@ export async function createUpload(
     size: number
     sha256: string
     caption?: string | undefined
-    /** A narration take (not yet accepted by the API: va-2qq.2.6); takes are held to the take budgets. */
+    /** A narration take, held to the take budgets; it needs the video it's recorded for. */
     role?: MediaRole | null | undefined
+    scopeJobId?: string | undefined
   },
 ) {
   assertCan(p, 'media:upload')
@@ -112,7 +115,17 @@ export async function createUpload(
     throw new ApiError('invalid_request', 'Files must be 100 MB or smaller.')
   if (!/^[0-9a-f]{64}$/.test(input.sha256))
     throw new ApiError('invalid_request', 'sha256 must be 64 hex characters.')
+  const role = input.role ?? null
+  if (role && !isTakeRole(role))
+    throw new ApiError('invalid_request', 'role must be narration-take or narration-upload.')
+  if (role && !input.scopeJobId)
+    throw new ApiError('invalid_request', 'A recording needs scopeJobId: the video it is recorded for.')
+  if (!role && input.scopeJobId)
+    throw new ApiError('invalid_request', 'scopeJobId is only for recordings (with a role).')
+  if (role) await assertNarrationEnabled(deps)
   return deps.store.tx(async (repo) => {
+    // The video must be one the caller can see; any other id is not_found, like the video itself.
+    if (role && input.scopeJobId) await loadJob(repo, p, input.scopeJobId)
     // Quota is reserved now, so parallel sessions can't overrun it.
     const reserved = await repo.reservedUploadBytes(p.userId)
     if (reserved + input.size > UPLOAD_QUOTA_BYTES)
@@ -120,7 +133,7 @@ export async function createUpload(
         'rate_limited',
         'You have too many uploads in progress. Finish or wait for them first.',
       )
-    if (isTakeRole(input.role)) {
+    if (role) {
       await assertTakeRate(deps, p.userId, repo)
       await quotaForTakes(deps, p.userId, input.size, repo)
     }
@@ -140,8 +153,17 @@ export async function createUpload(
       leaseUntil: null,
       createdAt: now.toISOString(),
       expiresAt: new Date(now.getTime() + SESSION_TTL_MS).toISOString(),
+      role,
+      scopeJobId: role ? (input.scopeJobId ?? null) : null,
     }
     await repo.insertUpload(row)
+    deps.log.info('media.upload_started', {
+      uploadId: row.id,
+      userId: p.userId,
+      bytes: row.size,
+      role,
+      scopeJobId: row.scopeJobId,
+    })
     return sessionDto(row, [])
   })
 }
@@ -218,6 +240,9 @@ export async function completeUpload(
       'conflict',
       `Parts still missing: ${missing.slice(0, 10).join(', ')}${missing.length > 10 ? '…' : ''}.`,
     )
+  // A take's whole-file hash comes from the recorder (hashed as it recorded), so check it now: a mismatch is the
+  // client's bug or a damaged part, and answering at once beats a rejected item later. Assembly checks it again.
+  if (isTakeRole(u0.role)) await checkWholeHash(deps, u0)
   if (input.poster) {
     const poster = Buffer.from(input.poster, 'base64')
     if (poster.byteLength > POSTER_MAX)
@@ -227,9 +252,10 @@ export async function completeUpload(
   const started = await deps.store.tx(async (repo) => {
     const u = await repo.getUpload(id, { lock: true })
     if (!u || u.status !== 'open') return false
-    // Other takes may have finished since this one started; check the quota again with its bytes.
-    const role = sessionRole(u)
-    if (isTakeRole(role)) await quotaForTakes(deps, u.uploaderId, u.size, repo)
+    // Other takes may have finished since this one started; check the quota again. The open session's own bytes
+    // are already counted (narrationTakeBytes holds them until its media row does).
+    const role = u.role
+    if (isTakeRole(role)) await quotaForTakes(deps, u.uploaderId, 0, repo)
     const now = deps.clock.now()
     const mediaId = `med_${deps.ids.uuid().replaceAll('-', '').slice(0, 24)}`
     // Visible to the uploader as "being checked" until assembly finishes.
@@ -257,7 +283,7 @@ export async function completeUpload(
       updatedAt: now.toISOString(),
       deletedAt: null,
       role,
-      scopeJobId: null,
+      scopeJobId: u.scopeJobId,
       retainUntil: null,
       deletingAt: null,
       ...NO_PROVENANCE,
@@ -272,6 +298,26 @@ export async function completeUpload(
   })
   if (started) await deps.platform.dispatchMediaAssembly(id)
   return getUpload(deps, p, id)
+}
+
+/** Reads the parts and compares the whole file with the declared size and sha256; a mismatch fails the session. */
+async function checkWholeHash(deps: Deps, u: MediaUploadRow) {
+  const started = Date.now()
+  const hash = createHash('sha256')
+  let size = 0
+  for (const part of await deps.store.listUploadParts(u.id)) {
+    const b = await deps.blobs.get('media', partKey(u.id, part.idx))
+    if (b) hash.update(b)
+    size += b?.byteLength ?? 0
+  }
+  const ok = size === u.size && hash.digest('hex') === u.sha256
+  deps.log.info('media.upload_hash_checked', { uploadId: u.id, bytes: size, ok, ms: Date.now() - started })
+  if (ok) return
+  const reason =
+    "The file's sha256 doesn't match the one declared when the upload started. Start the upload again."
+  await deps.store.updateUpload(u.id, { status: 'failed', error: reason })
+  await dropParts(deps, u)
+  throw new ApiError('invalid_request', reason)
 }
 
 /** The background step: join, verify and store. Idempotent: a finished session is left alone. */
@@ -308,30 +354,46 @@ export async function assembleUpload(deps: Deps, id: string) {
     if (!(e instanceof MediaError)) deps.log.error('media.classify_failed', { uploadId: id, error: e })
     return fail(e instanceof MediaError ? e.message : "The file couldn't be read.")
   }
+  if (isTakeRole(u.role) && c.kind !== 'audio') return fail('A recording must be an audio file.')
   const poster = await deps.blobs.get('media', posterKey(id))
   const row = await storeMedia(deps, { userId: u.uploaderId }, bytes, c, {
     id: u.mediaId,
     filename: u.filename,
     caption: u.caption ?? undefined,
     poster,
+    deferMeta: true,
   })
-  // Everything verified about the file; the item keeps its id, uploader and creation time.
-  await deps.store.updateMedia(u.mediaId, {
-    kind: row.kind,
-    status: row.status,
-    filename: row.filename,
-    mime: row.mime,
-    ext: row.ext,
-    bytes: row.bytes,
-    originalKey: row.originalKey,
-    originalSha256: row.originalSha256,
-    cleanKey: row.cleanKey,
-    cleanSha256: row.cleanSha256,
-    width: row.width,
-    height: row.height,
-    durationSec: row.durationSec,
-    posterKey: row.posterKey,
-    updatedAt: row.updatedAt,
+  const mediaId = u.mediaId
+  const samples = isTakeRole(u.role) ? takeSamples(bytes, c) : null
+  await deps.store.tx(async (repo) => {
+    // Under the row lock: a take's speech spans (and the client's samples) may already be in meta.json, and must
+    // survive this write. A take's length is filled in when the client didn't send it.
+    await repo.lockMedia([mediaId])
+    const prior = await readMediaMeta(deps, mediaId)
+    await mergeMediaMeta(deps, mediaId, {
+      file: row.cleanKey,
+      original: row.originalKey,
+      poster: row.posterKey,
+      ...(samples !== null && prior?.samples === undefined ? { samples } : {}),
+    })
+    // Everything verified about the file; the item keeps its id, uploader and creation time.
+    await repo.updateMedia(mediaId, {
+      kind: row.kind,
+      status: row.status,
+      filename: row.filename,
+      mime: row.mime,
+      ext: row.ext,
+      bytes: row.bytes,
+      originalKey: row.originalKey,
+      originalSha256: row.originalSha256,
+      cleanKey: row.cleanKey,
+      cleanSha256: row.cleanSha256,
+      width: row.width,
+      height: row.height,
+      durationSec: row.durationSec,
+      posterKey: row.posterKey,
+      updatedAt: row.updatedAt,
+    })
   })
   await deps.store.updateUpload(id, { status: 'done', leaseUntil: null })
   await dropParts(deps, u)

@@ -661,6 +661,9 @@ export interface MediaUploadRow {
   leaseUntil: string | null
   createdAt: string
   expiresAt: string
+  /** A narration take's role and the video it's recorded for; the media row gets both at completion. */
+  role: MediaRole | null
+  scopeJobId: string | null
 }
 
 export interface MediaUploadPartRow {

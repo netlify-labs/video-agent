@@ -1317,7 +1317,13 @@ function repoFor(db: Db): Repo {
             isNull(m.deletingAt),
           ),
         )
-      return Number(rows[0]?.total ?? 0)
+      // Open take sessions have no media row yet; their declared size is held until completion.
+      const u = t.mediaUploads
+      const open = await db
+        .select({ total: sql<string | number>`coalesce(sum(${u.size}), 0)::bigint` })
+        .from(u)
+        .where(and(eq(u.uploaderId, uploaderId), eq(u.status, 'open'), isNotNull(u.role)))
+      return Number(rows[0]?.total ?? 0) + Number(open[0]?.total ?? 0)
     },
     countNarrationTakes: async (uploaderId, since) => {
       const m = t.media
@@ -1331,7 +1337,14 @@ function repoFor(db: Db): Repo {
             gte(m.createdAt, since),
           ),
         )
-      return rows[0]?.n ?? 0
+      const u = t.mediaUploads
+      const open = await db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(u)
+        .where(
+          and(eq(u.uploaderId, uploaderId), eq(u.status, 'open'), isNotNull(u.role), gte(u.createdAt, since)),
+        )
+      return (rows[0]?.n ?? 0) + (open[0]?.n ?? 0)
     },
   }
 }

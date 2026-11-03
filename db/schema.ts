@@ -402,6 +402,10 @@ export const mediaUploads = pgTable(
     leaseUntil: ts('lease_until'),
     createdAt: ts('created_at').notNull(),
     expiresAt: ts('expires_at').notNull(),
+    // A narration take's role and the video it's recorded for (voice-over plan §5.1, §7); the media row gets both at
+    // completion. Null for library uploads.
+    role: text('role'),
+    scopeJobId: text('scope_job_id'),
   },
   (t) => [
     index('media_uploads_uploader_idx').on(t.uploaderId, t.status),

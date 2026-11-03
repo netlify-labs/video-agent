@@ -26,6 +26,27 @@ export const mediaKeys = (id: string, ext: string) => ({
   poster: `${id}/poster.jpg`,
 })
 
+const metaKey = (id: string) => `${id}/meta.json`
+
+/**
+ * Merges fields into an item's meta.json: what the /media edge route serves for each variant (it has no database),
+ * and a take's speech spans. Two writers that can race (a take's assembly and its speech upload) call this inside a
+ * transaction holding the media row lock, so neither loses the other's fields.
+ */
+export async function mergeMediaMeta(deps: Pick<Deps, 'blobs'>, id: string, fields: Record<string, unknown>) {
+  const prior = await deps.blobs.get('media', metaKey(id))
+  const base = prior ? (JSON.parse(new TextDecoder().decode(prior)) as Record<string, unknown>) : {}
+  await deps.blobs.set('media', metaKey(id), JSON.stringify({ ...base, ...fields }), {
+    contentType: 'application/json',
+  })
+}
+
+/** An item's meta.json, or null before anything wrote one. */
+export async function readMediaMeta(deps: Pick<Deps, 'blobs'>, id: string) {
+  const b = await deps.blobs.get('media', metaKey(id))
+  return b ? (JSON.parse(new TextDecoder().decode(b)) as Record<string, unknown>) : null
+}
+
 function cleanName(name: string | undefined, ext: string) {
   const base = (name ?? '')
     .replace(/\.[A-Za-z0-9]{1,5}$/, '')
@@ -50,6 +71,8 @@ export async function storeMedia(
     id?: string
     poster?: Uint8Array | null
     provenance?: MediaProvenance
+    /** The caller writes meta.json itself, under the row lock (upload assembly: mergeMediaMeta). */
+    deferMeta?: boolean
   },
 ) {
   const id = meta.id ?? `med_${deps.ids.uuid().replaceAll('-', '').slice(0, 24)}`
@@ -95,12 +118,13 @@ export async function storeMedia(
     }
   }
   // What the /media edge route serves for each variant (it has no database).
-  await deps.blobs.set(
-    'media',
-    `${id}/meta.json`,
-    JSON.stringify({ file: cleanKey, original: keys.original, poster: posterKey }),
-    { contentType: 'application/json' },
-  )
+  if (!meta.deferMeta)
+    await deps.blobs.set(
+      'media',
+      metaKey(id),
+      JSON.stringify({ file: cleanKey, original: keys.original, poster: posterKey }),
+      { contentType: 'application/json' },
+    )
   const now = deps.clock.now().toISOString()
   const row: MediaRow = {
     id,
@@ -292,7 +316,7 @@ export async function checkMedia(deps: Deps, p: Principal, files: { filename: st
   }
 }
 
-async function loadMedia(deps: Deps, p: Principal, id: string) {
+export async function loadMedia(deps: Deps, p: Principal, id: string) {
   const m = await deps.store.getMedia(id)
   if (!m || m.deletedAt || (m.status !== 'ready' && m.uploaderId !== p.userId))
     throw new ApiError('not_found', 'Media not found.')

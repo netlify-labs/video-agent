@@ -42,6 +42,13 @@ import { getProgress } from './domain/progress.js'
 import { previewLink } from './domain/preview.js'
 import { cancelUpload, completeUpload, createUpload, getUpload, putPart } from './domain/media-uploads.js'
 import {
+  getTakePeaks,
+  getTakeSpeech,
+  PEAKS_MAX_BYTES,
+  putTakePeaks,
+  putTakeSpeech,
+} from './domain/take-extras.js'
+import {
   deleteMedia,
   checkMedia,
   getMedia,
@@ -1154,6 +1161,12 @@ export function createApp(deps: Deps, opts: AppOptions) {
       const declared = Number(c.req.header('content-length') ?? 0)
       if (declared > SINGLE_UPLOAD_MAX + 1024)
         throw new ApiError('invalid_request', 'Files over 4 MB upload in parts: start an upload session.')
+      // Recordings are held to their own budgets and scope, which only upload sessions check.
+      if (c.req.query('role') !== undefined || c.req.query('scopeJobId') !== undefined)
+        throw new ApiError(
+          'invalid_request',
+          'Recordings upload in a session: POST /api/v1/media/uploads with role and scopeJobId.',
+        )
       const bytes = new Uint8Array(await c.req.arrayBuffer())
       const q = c.req.valid('query')
       return c.json(await uploadMedia(deps, c.get('principal'), bytes, q), 201)
@@ -1215,7 +1228,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       path: '/api/v1/media/uploads',
       summary: 'Start an upload',
       description:
-        'Starts an upload session for a file over 4 MB. Declare its size and sha256; quota is reserved.',
+        "Starts an upload session for a file over 4 MB, or for any voice-over recording. Declare its size and sha256 (a recorder may send the hash it computed while recording; the server checks every part and the whole file); quota is reserved. A recording names its role and the video it's for (scopeJobId), which you must be able to see.",
       tags: ['media'],
       security,
       request: {
@@ -1227,6 +1240,15 @@ export function createApp(deps: Deps, opts: AppOptions) {
                 size: z.number().int().positive(),
                 sha256: z.string().regex(/^[0-9a-f]{64}$/),
                 caption: z.string().max(500).optional(),
+                role: z
+                  .enum(['narration-take', 'narration-upload'])
+                  .optional()
+                  .openapi({ description: 'A voice-over recording (take) or uploaded narration' }),
+                scopeJobId: z
+                  .string()
+                  .max(64)
+                  .optional()
+                  .openapi({ description: 'The video a recording is for (required with role)' }),
               }),
             },
           },
@@ -1236,6 +1258,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       responses: {
         201: json(s.UploadSessionSchema, 'Session'),
         ...errors,
+        409: err('Recorded voice-over is turned off (narration_disabled)'),
         413: err('Recordings storage full (details: quotaBytes, usedBytes, remainingBytes)'),
         429: err('Too many uploads in progress, or too many recordings this hour'),
       },
@@ -1297,7 +1320,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
       method: 'post',
       path: '/api/v1/media/uploads/{id}/complete',
       summary: 'Finish an upload',
-      description: 'The file is assembled and checked in the background; poll the session or the item.',
+      description:
+        "The file is assembled and checked in the background; poll the session or the item. A recording's whole-file sha256 is checked first: a mismatch is a 400 and the session fails.",
       tags: ['media'],
       security,
       request: {
@@ -1522,6 +1546,92 @@ export function createApp(deps: Deps, opts: AppOptions) {
       await deleteMedia(deps, c.get('principal'), c.req.valid('param').id)
       return c.body(null, 204)
     },
+  )
+  // A recording's waveform peaks and speech spans (voice-over plan §5.1, §6.1): the uploader sends them; readers of
+  // the take get them.
+  app.openapi(
+    createRoute({
+      method: 'put',
+      path: '/api/v1/media/{id}/peaks',
+      summary: "Store a recording's peaks",
+      description: `Stores a recording's waveform peaks (peaks.bin, the VAPK format, at most ${PEAKS_MAX_BYTES / 1024} KB) as the request body. Only the uploader, before or after the recording is ready; sending again replaces them.`,
+      tags: ['media'],
+      security,
+      request: {
+        params: MediaParam,
+        body: {
+          content: { 'application/octet-stream': { schema: z.string().openapi({ format: 'binary' }) } },
+          required: true,
+        },
+      },
+      responses: { 200: json(s.TakePeaksStoredSchema, 'Stored'), ...errors },
+    }),
+    async (c) => {
+      if (Number(c.req.header('content-length') ?? 0) > PEAKS_MAX_BYTES + 1024)
+        throw new ApiError('invalid_request', `Peaks must be ${PEAKS_MAX_BYTES / 1024} KB or smaller.`)
+      const bytes = new Uint8Array(await c.req.arrayBuffer())
+      return c.json(await putTakePeaks(deps, c.get('principal'), c.req.valid('param').id, bytes), 200)
+    },
+  )
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/v1/media/{id}/peaks',
+      summary: "Get a recording's peaks",
+      description: "A recording's waveform peaks (peaks.bin), for anyone who can read the recording.",
+      tags: ['media'],
+      security,
+      request: { params: MediaParam },
+      responses: {
+        200: {
+          description: 'peaks.bin',
+          content: { 'application/octet-stream': { schema: z.string().openapi({ format: 'binary' }) } },
+        },
+        ...errors,
+      },
+    }),
+    async (c) => {
+      const bytes = await getTakePeaks(deps, c.get('principal'), c.req.valid('param').id)
+      return c.body(new Uint8Array(bytes), 200, {
+        'content-type': 'application/octet-stream',
+        'cache-control': 'private, no-cache',
+        'x-content-type-options': 'nosniff',
+      })
+    },
+  )
+  app.openapi(
+    createRoute({
+      method: 'put',
+      path: '/api/v1/media/{id}/speech',
+      summary: "Store a recording's speech spans",
+      description:
+        'Stores where the voice is in a recording, as [start, end) spans in source samples. Only the uploader, before or after the recording is ready; sending again replaces them.',
+      tags: ['media'],
+      security,
+      request: {
+        params: MediaParam,
+        body: { content: { 'application/json': { schema: s.SpeechSummarySchema } }, required: true },
+      },
+      responses: { 200: json(s.SpeechSummarySchema, 'Stored'), ...errors },
+    }),
+    async (c) =>
+      c.json(
+        await putTakeSpeech(deps, c.get('principal'), c.req.valid('param').id, c.req.valid('json')),
+        200,
+      ),
+  )
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/v1/media/{id}/speech',
+      summary: "Get a recording's speech spans",
+      description: 'Where the voice is in a recording, for anyone who can read the recording.',
+      tags: ['media'],
+      security,
+      request: { params: MediaParam },
+      responses: { 200: json(s.SpeechSummarySchema, 'Speech spans'), ...errors },
+    }),
+    async (c) => c.json(await getTakeSpeech(deps, c.get('principal'), c.req.valid('param').id), 200),
   )
   const CommentParam = z.object({ id: z.string() })
   app.openapi(

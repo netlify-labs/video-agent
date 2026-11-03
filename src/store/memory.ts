@@ -150,6 +150,11 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
   // Which transaction a call runs in: a nested call joins it, while a concurrent one (another request, sweep or GC)
   // waits its turn, the way a row lock would make it wait on Postgres.
   const txScope = new AsyncLocalStorage<{ open: boolean }>()
+  // Take upload sessions not yet completed: they hold quota and count toward the rate limit until their media row does.
+  const openTakeSessions = (uploaderId: string) =>
+    [...state.uploads.values()].filter(
+      (u) => u.uploaderId === uploaderId && u.status === 'open' && u.role !== null,
+    )
 
   const repo: Repo = {
     getSettings: async () => clone(state.settings),
@@ -1007,11 +1012,11 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
     narrationTakeBytes: async (uploaderId) =>
       [...state.media.values()]
         .filter((m) => m.uploaderId === uploaderId && isTake(m) && m.status !== 'rejected' && !m.deletingAt)
-        .reduce((n, m) => n + m.bytes, 0),
+        .reduce((n, m) => n + m.bytes, 0) + openTakeSessions(uploaderId).reduce((n, u) => n + u.size, 0),
     countNarrationTakes: async (uploaderId, since) =>
       [...state.media.values()].filter(
         (m) => m.uploaderId === uploaderId && isTake(m) && m.createdAt >= since,
-      ).length,
+      ).length + openTakeSessions(uploaderId).filter((u) => u.createdAt >= since).length,
   }
 
   const store = {

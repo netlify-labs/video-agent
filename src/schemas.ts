@@ -586,8 +586,39 @@ export const UploadSessionSchema = z
     mediaId: z.string().nullable(),
     error: z.string().nullable(),
     expiresAt: z.string(),
+    role: z.enum(['narration-take', 'narration-upload']).nullable().openapi({
+      description: 'A voice-over recording (take) or uploaded narration; null for library uploads',
+    }),
+    scopeJobId: z.string().nullable().openapi({ description: 'The video a recording is for' }),
   })
   .openapi('UploadSession')
+
+// A take's waveform peaks and speech spans (voice-over plan §5.1, §6.1).
+export const TakePeaksStoredSchema = z
+  .object({
+    mediaId: z.string(),
+    bytes: z.number().int(),
+    levels: z.number().int(),
+    samples: z.number().int().openapi({ description: 'Source length in samples at 24 kHz' }),
+  })
+  .openapi('TakePeaksStored')
+export const SpeechSummarySchema = z
+  .object({
+    version: z.number().int().min(1).openapi({ description: 'The VAD version the spans were measured with' }),
+    spans: z
+      .array(z.tuple([z.number().int().min(0), z.number().int().min(0)]))
+      .max(10_000)
+      .openapi({
+        description: 'Speech as [start, end) in source samples at 24 kHz, in order, not overlapping',
+      }),
+    samples: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .openapi({ description: "The recording's length in samples at 24 kHz (filled in when it's checked)" }),
+  })
+  .openapi('SpeechSummary')
 
 export const OpenverseTrackSchema = z
   .object({
@@ -820,7 +851,10 @@ const CompositionSchema = z
           .number()
           .openapi({ description: 'The level set (a gain: 1 is as authored, up to 4), kept while muted' }),
         muted: z.boolean(),
-        beat: z.string().nullable().openapi({ description: 'The beat it plays in; null for music and narration' }),
+        beat: z
+          .string()
+          .nullable()
+          .openapi({ description: 'The beat it plays in; null for music and narration' }),
       }),
     ),
     narration: z

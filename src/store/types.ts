@@ -365,10 +365,14 @@ export interface Repo {
   // narration take budgets (voice-over plan §8)
   /**
    * Bytes of the person's narration takes (media role narration-*) that are stored or being checked: uploading,
-   * verifying or ready. Rows GC has marked deleting count as freed.
+   * verifying or ready, plus the declared size of their open take upload sessions (which have no media row yet).
+   * Rows GC has marked deleting count as freed.
    */
   narrationTakeBytes(uploaderId: string): Promise<number>
-  /** The person's narration takes created at or after `since` (for the take upload rate limit). */
+  /**
+   * The person's narration takes created at or after `since` (for the take upload rate limit): media rows, plus open
+   * take upload sessions (a completed session is counted by its media row).
+   */
   countNarrationTakes(uploaderId: string, since: string): Promise<number>
 }
 
