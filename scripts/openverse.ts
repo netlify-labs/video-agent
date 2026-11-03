@@ -12,6 +12,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { classify, LIMITS, MediaError } from '../src/lib/media/classify.js'
+import { readCapped } from '../src/lib/media/range.js'
 import {
   isImportLicense,
   licenseLabel,
@@ -176,26 +177,7 @@ export class Openverse {
         await res.body.cancel()
         throw tooBig()
       }
-      const chunks: Uint8Array[] = []
-      let size = 0
-      const reader = (res.body as ReadableStream<Uint8Array>).getReader()
-      for (;;) {
-        const { done, value } = await reader.read()
-        if (done) break
-        size += value.byteLength
-        if (size > maxBytes) {
-          await reader.cancel()
-          throw tooBig()
-        }
-        chunks.push(value)
-      }
-      const out = new Uint8Array(size)
-      let o = 0
-      for (const c of chunks) {
-        out.set(c, o)
-        o += c.byteLength
-      }
-      return out
+      return readCapped(res.body as ReadableStream<Uint8Array>, maxBytes, tooBig)
     }
   }
 }

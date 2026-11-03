@@ -61,6 +61,34 @@ export function sliceStream(
   })
 }
 
+/** Reads a stream to the end; past `maxBytes` it cancels the stream and throws `tooBig()`. */
+export async function readCapped(
+  body: ReadableStream<Uint8Array>,
+  maxBytes: number,
+  tooBig: () => Error,
+): Promise<Uint8Array> {
+  const chunks: Uint8Array[] = []
+  let size = 0
+  const reader = body.getReader()
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    size += value.byteLength
+    if (size > maxBytes) {
+      await reader.cancel()
+      throw tooBig()
+    }
+    chunks.push(value)
+  }
+  const out = new Uint8Array(size)
+  let o = 0
+  for (const c of chunks) {
+    out.set(c, o)
+    o += c.byteLength
+  }
+  return out
+}
+
 export const CONTENT_TYPES: Record<string, string> = {
   mp4: 'video/mp4',
   jpg: 'image/jpeg',

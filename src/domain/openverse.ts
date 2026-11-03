@@ -5,6 +5,7 @@
 import type { Deps } from '../deps.js'
 import { ApiError } from '../lib/errors.js'
 import { classify, LIMITS, MediaError } from '../lib/media/classify.js'
+import { readCapped } from '../lib/media/range.js'
 import {
   isImportLicense,
   licenseLabel,
@@ -463,31 +464,12 @@ async function download(deps: Deps, start: string, opts: CallOpts): Promise<Uint
       await res.body.cancel()
       throw tooBig()
     }
-    const chunks: Uint8Array[] = []
-    let size = 0
-    const reader = (res.body as ReadableStream<Uint8Array>).getReader()
     try {
-      for (;;) {
-        const { done, value } = await reader.read()
-        if (done) break
-        size += value.byteLength
-        if (size > LIMITS.audioBytes) {
-          await reader.cancel()
-          throw tooBig()
-        }
-        chunks.push(value)
-      }
+      return await readCapped(res.body as ReadableStream<Uint8Array>, LIMITS.audioBytes, tooBig)
     } catch (e) {
       if (e instanceof ApiError) throw e
       throw new OpenverseUnavailable("The track's file couldn't be downloaded. Try again shortly.")
     }
-    const out = new Uint8Array(size)
-    let o = 0
-    for (const c of chunks) {
-      out.set(c, o)
-      o += c.byteLength
-    }
-    return out
   }
 }
 
