@@ -2,6 +2,7 @@
 // lines on a finished contract-1 version, see it in the sandboxed preview, and render it unchanged as the next version. The page holds the composition the
 // person wants; the op list sent on each save is its difference from the version, so saves are idempotent. With recorded
 // voice-over on, a Narration section (plan 2026-11-02 §2.3-§2.5) adds the narration op to that list, and Render asks how.
+// Opening it takes the narration lock (§2.7), and while timing changes are pending it offers Render picture first.
 import {
   ActionIcon,
   Alert,
@@ -37,7 +38,7 @@ import {
   IconVolumeOff,
 } from '@tabler/icons-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router'
+import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { $api, errorMessage, fetchClient, newIdempotencyKey, useNarrationEnabled } from '../api/client'
 import type { paths } from '../api/schema'
 import { confirmDanger, showError } from '../components/bits'
@@ -45,8 +46,16 @@ import { CompositionPreview, type PreviewCommand } from '../components/Compositi
 import { MediaLibraryModal, type Media } from '../components/MediaPicker'
 import { NarrationRenderDialog } from '../components/NarrationRenderDialog'
 import { NarrationSection, type NarrationControl } from '../components/NarrationSection'
+import {
+  keepMineWarning,
+  NarrationLockBanner,
+  NarrationStaleBanner,
+  useNarrationLock,
+} from '../components/narration'
+import { RenderPictureFirst } from '../components/RenderPictureFirst'
 import { humanize, labelFor } from '../lib/labels'
 import { narrationOf, narrationToSave, sameOps, videoSamples, withNarration } from '../lib/narration-panel'
+import { timingChanged } from '../../../src/lib/stale-picture'
 import type { NarrationOp } from '../../../src/lib/timeline'
 
 type Edit = paths['/api/v1/edits/{id}']['get']['responses'][200]['content']['application/json']
@@ -55,8 +64,6 @@ type Op = Edit['ops'][number]
 type Slot = Composition['beats'][number]['media'][number]
 type Track = Composition['audio'][number]
 type Line = Composition['narration'][number]
-/** Ops that move time: recording waits for them to be rendered (plan 2026-11-02 §5.3, Render picture first). */
-const TIMING_OPS = new Set(['retime', 'reorder', 'delete', 'voice'])
 
 const fps = (s: number) => Math.round(s * 30) / 30
 const sameNumber = (a: number, b: number) => Math.abs(a - b) < 1e-6
@@ -297,10 +304,16 @@ function VoiceRow({
   )
 }
 
+/** One editor per version: Render picture first reopens on the next one with nothing carried over. */
 export function EditPage() {
   const { id = '', n = '' } = useParams()
-  const versionN = Number(n)
+  return <EditVersion key={`${id}/${n}`} id={id} versionN={Number(n)} />
+}
+
+function EditVersion({ id, versionN }: { id: string; versionN: number }) {
   const navigate = useNavigate()
+  // Reopened by Render picture first: the narration was moved here on purpose, so there's nothing to ask about.
+  const reopened = (useLocation().state as { narrationReady?: boolean } | null)?.narrationReady === true
   const qc = useQueryClient()
   const video = $api.useQuery('get', '/api/v1/videos/{id}', { params: { path: { id } } })
   const [draft, setDraft] = useState<Edit | null>(null)
@@ -339,13 +352,22 @@ export function EditPage() {
       if (data) {
         setDraft(data)
         setCur(data.composition)
-        setResumed(data.ops.length)
+        setResumed(reopened ? 0 : data.ops.length)
         const op = narrationOf(data.ops)
         setNarration(op)
         setNarrationStart((s) => ({ op, key: s.key + 1 }))
       } else setProblem(errorMessage(error))
     })()
-  }, [id, versionN])
+  }, [id, versionN, reopened])
+
+  // The narration lock (plan 2026-11-02 §2.7): held while the Narration section is open; without it the track is
+  // read-only and Record is off. A newer version with other narration offers Rebase or Keep mine.
+  const lock = useNarrationLock(narrationOn && draft ? id : null, draft?.id ?? null)
+  const [takingOver, setTakingOver] = useState(false)
+  const [keptMine, setKeptMine] = useState(false)
+  const [rebasing, setRebasing] = useState(false)
+  // Render picture first queued v`n`: the draft is rendered, so it stops saving until the editor reopens there.
+  const [pictureN, setPictureN] = useState<number | null>(null)
 
   // The narration op goes last, as one snapshot of the whole track (none while it's empty, or when narration is off).
   const ops = useMemo(
@@ -402,12 +424,12 @@ export function EditPage() {
 
   // Save shortly after the last change.
   useEffect(() => {
-    if (!dirty || saving) return
+    if (!dirty || saving || pictureN !== null) return
     const t = setTimeout(() => void save(), 700)
     return () => {
       clearTimeout(t)
     }
-  }, [dirty, saving, save])
+  }, [dirty, saving, save, pictureN])
 
   const update = (fn: (c: Composition) => Composition) => {
     setCur((c) => (c ? fn(structuredClone(c)) : c))
@@ -484,6 +506,17 @@ export function EditPage() {
   const discard = $api.useMutation('delete', '/api/v1/edits/{id}', {
     onSuccess: () => void navigate(`/videos/${id}`),
   })
+  const rebase = async (toN: number) => {
+    if (!draft) return
+    setRebasing(true)
+    const { data, error } = await fetchClient.POST('/api/v1/edits/{id}/rebase-narration', {
+      params: { path: { id: draft.id } },
+      body: { toN },
+    })
+    setRebasing(false)
+    if (data) void navigate(`/videos/${id}/edit/${toN}`, { state: { narrationReady: true } })
+    else showError(error)
+  }
 
   if (problem && !draft)
     return (
@@ -516,6 +549,9 @@ export function EditPage() {
     params: { path: { id: draft.id }, header: { 'idempotency-key': renderKey } },
     body: { mode: 'keep_visuals' as const, ...(holdFinalFrame ? { holdFinalFrame: true } : {}) },
   })
+  // Recording waits while a pending op would move time in the render (plan 2026-11-02 §5.3).
+  const timingPending = timingChanged(ops, base)
+  const lockedOut = lock.state.status === 'locked' || lock.state.status === 'taken_over'
   const hint = (
     <Text size="xs" c="var(--va-faint)">
       Click any text in the preview to edit it. Text changes show at once; timing, order, colours, media and
@@ -574,7 +610,7 @@ export function EditPage() {
               Discard
             </Button>
             <Button
-              disabled={!draft.rev || dirty || saving}
+              disabled={!draft.rev || dirty || saving || pictureN !== null}
               loading={render.isPending}
               onClick={() => {
                 if (savedNarration) setRenderDialog(true)
@@ -654,9 +690,51 @@ export function EditPage() {
             onMusicChange={setTrack}
             onPreviewReady={onReady}
             onPreviewClick={onPreviewClick}
-            timingPending={ops.some((o) => TIMING_OPS.has(o.op))}
+            timingPending={timingPending}
             control={narrationControl}
             hint={hint}
+            readOnly={lockedOut}
+            canRecord={lock.canEdit}
+            banner={
+              <>
+                <NarrationLockBanner
+                  state={lock.state}
+                  busy={takingOver}
+                  onWatch={() => void navigate(`/videos/${id}`)}
+                  onTakeOver={() => {
+                    setTakingOver(true)
+                    void lock.takeOver().finally(() => setTakingOver(false))
+                  }}
+                />
+                {keptMine ? null : (
+                  <NarrationStaleBanner
+                    changed={draft.narrationChanged}
+                    busy={rebasing}
+                    onRebase={(toN) => void rebase(toN)}
+                    onKeepMine={() => setKeptMine(true)}
+                  />
+                )}
+              </>
+            }
+            pictureFirst={
+              <RenderPictureFirst
+                videoId={id}
+                editId={draft.id}
+                disabled={dirty || saving || !lock.canEdit}
+                reason={
+                  !lock.canEdit
+                    ? 'Recording needs the narration lock.'
+                    : dirty || saving
+                      ? 'Saving your changes first…'
+                      : undefined
+                }
+                onStarted={setPictureN}
+                onReopen={(to) => {
+                  void qc.invalidateQueries()
+                  void navigate(`/videos/${id}/edit/${to}`, { state: { narrationReady: true } })
+                }}
+              />
+            }
           />
         ) : (
           <>
@@ -1054,6 +1132,7 @@ export function EditPage() {
             setRenderDialog(false)
             narrationControl.current?.jumpTo(clipId, sample)
           }}
+          warning={keptMine ? keepMineWarning(draft.narrationChanged) : null}
         />
       ) : null}
       {replacingAudio ? (

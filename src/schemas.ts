@@ -880,6 +880,13 @@ const CompositionSchema = z
             fit: z.string().nullable(),
           }),
         ),
+        voice: z
+          .object({ id: z.string(), src: z.string(), start: z.number(), duration: z.number() })
+          .nullable()
+          .openapi({
+            description:
+              "The beat's AI voice-over clip, in seconds into the beat; null when it has none. A changed line may lengthen its beat when re-voiced",
+          }),
       }),
     ),
     layers: z.array(z.string()),
@@ -967,6 +974,10 @@ export const RenderEditSchema = z
       .enum(['sidecar', 'burned'])
       .optional()
       .openapi({ description: 'How narration captions are delivered: a VTT sidecar (default) or burned in' }),
+    excludeNarration: z.boolean().optional().openapi({
+      description:
+        "Render picture first: render the draft's other edits without its recorded narration, so you can record against the new picture. The narration stays in the draft; move it onto the new version with rebase-narration",
+    }),
   })
   .openapi('RenderEdit')
 

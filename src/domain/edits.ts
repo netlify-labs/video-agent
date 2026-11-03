@@ -549,6 +549,12 @@ export interface RenderSettings {
   /** Narration past the end holds the last frame (plus a 0.5 s post-roll) instead of being cut off. */
   holdFinalFrame: boolean
   captions: CaptionPolicy
+  /**
+   * Render picture first (plan 2026-11-02 §2.1, §5.3): the draft's other ops only, frozen without its narration op,
+   * so the person records against the new picture. The op stays in the draft, and rebaseNarration moves it onto the
+   * version this makes.
+   */
+  excludeNarration: boolean
 }
 
 /**
@@ -625,7 +631,13 @@ export async function renderEdit(
     mode: input.mode ?? 'keep_visuals',
     holdFinalFrame: input.holdFinalFrame ?? false,
     captions: input.captions ?? 'sidecar',
+    excludeNarration: input.excludeNarration ?? false,
   }
+  if (settings.excludeNarration && settings.holdFinalFrame)
+    throw new ApiError(
+      'invalid_request',
+      'A render without the narration has no narration to hold the last frame for.',
+    )
   if (settings.mode === 'fit_to_narration')
     throw new ApiError(
       'invalid_request',
@@ -645,9 +657,8 @@ export async function renderEdit(
       if (await hasUnfinished(repo, e.jobId))
         throw new ApiError('conflict', 'Another version of this video is still in progress.')
       // A held last frame is part of the frozen composition: one beat after the visuals (contract applyHoldFrame).
-      const r = await computeRev(deps, e, e.ops as DraftOp[], repo, {
-        holdFinalFrame: settings.holdFinalFrame,
-      })
+      const ops = (e.ops as DraftOp[]).filter((o) => !settings.excludeNarration || o.op !== 'narration')
+      const r = await computeRev(deps, e, ops, repo, { holdFinalFrame: settings.holdFinalFrame })
       // Recorded narration is mixed by the run from frozen inputs; its takes are checked like a save's.
       if (r.track && !enabled) throw narrationOff()
       if (r.track) await checkTakeAccess(repo, p, e, r.track)
@@ -742,6 +753,7 @@ export async function renderEdit(
         ops: e.ops.length,
         base: e0.baseN,
         mode: settings.mode,
+        ...(settings.excludeNarration ? { excludeNarration: true } : {}),
         ...(narration
           ? {
               takes: narration.takes.length,

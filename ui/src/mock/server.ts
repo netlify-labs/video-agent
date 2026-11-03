@@ -422,7 +422,7 @@ export function installMock() {
       let live = false
       try {
         stale = localStorage.getItem('mockStale') === '1'
-        render = localStorage.getItem('mockRender') === '1'
+        render = localStorage.getItem('mockRender') === '1' || pictureRender?.n === latest?.n
         live = localStorage.getItem('mockLive') === '1'
       } catch {
         // private mode
@@ -774,7 +774,16 @@ export function installMock() {
       if (edit[2] === '/rebase-narration') {
         const b = (await readBody(init, input)) as { toN: number }
         const track = mockEdit.ops.filter((o) => (o as { op: string }).op === 'narration')
-        mockEdit = { ...mockEdit, baseN: b.toN, rev: 1, ops: track, narrationChanged: null }
+        // The new base's picture is the draft's: nothing else is pending there.
+        mockEdit = {
+          ...mockEdit,
+          baseN: b.toN,
+          rev: 1,
+          ops: track,
+          composition: mockEdit.base,
+          renderedN: null,
+          narrationChanged: null,
+        }
         return json(mockEdit, 201)
       }
       if (edit[2] === '/render') {
@@ -787,6 +796,12 @@ export function installMock() {
         const w = window as unknown as { __rendered?: number }
         w.__rendered = (w.__rendered ?? 0) + 1
         if (!vid) return fail(404, 'not_found', 'Video not found.')
+        // Render picture first (plan 2026-11-02 §2.1): a real new version, which polls of the video move along.
+        if ((body as { excludeNarration?: boolean }).excludeNarration) {
+          const n = startPictureRender(vid, mockEdit.baseN)
+          mockEdit = { ...mockEdit, renderedN: n }
+          return json(withComments(vid), 202)
+        }
         return json({ ...withComments(vid), latestVersion: vid.versions.length + 1 }, 202)
       }
       if (method === 'DELETE') {
@@ -929,6 +944,7 @@ export function installMock() {
     if (m?.[1] && m[3])
       return Response.redirect(new URL(mockFile(m[1], m[3] as 'video'), window.location.origin).href, 302)
     if (m?.[1]) {
+      stepPictureRender(m[1])
       const v = videos.find((x) => x.id === m[1])
       if (v && method === 'PATCH') {
         const b = (await readBody(init, input)) as { title?: string; private?: boolean; language?: string }
@@ -1014,6 +1030,46 @@ function mockPlan(stage: 'route' | 'questions' | 'brief' = 'route') {
   }
 }
 
+/**
+ * A Render picture first render (plan 2026-11-02 §2.1): v`n`, a copy of the base version that each poll of its
+ * video moves on: queued, two polls running (Rendering N%), then ready.
+ */
+let pictureRender: { videoId: string; n: number; polls: number; ready: Video['versions'][number] } | null =
+  null
+function startPictureRender(vid: Video, baseN: number) {
+  const base = vid.versions.find((x) => x.n === baseN) ?? vid.versions[0]
+  const n = vid.versions.length + 1
+  if (!base) return n
+  const ready = {
+    ...structuredClone(base),
+    n,
+    prompt: `Edited from v${baseN} in the browser.`,
+    parentN: baseN,
+    editedFromN: baseN,
+    mode: 'render_unchanged' as const,
+    createdAt: new Date().toISOString(),
+    publications: [],
+  }
+  vid.versions.unshift({ ...ready, status: 'queued', stage: 'queued', output: null })
+  vid.status = 'queued'
+  vid.latestVersion = n
+  pictureRender = { videoId: vid.id, n, polls: 0, ready }
+  return n
+}
+function stepPictureRender(videoId: string) {
+  const r = pictureRender
+  const vid = videos.find((x) => x.id === videoId)
+  if (r?.videoId !== videoId || !vid) return
+  r.polls += 1
+  const status = r.polls < 2 ? 'queued' : r.polls < 4 ? 'running' : 'ready'
+  vid.versions[0] =
+    status === 'ready'
+      ? r.ready
+      : { ...r.ready, status, stage: status, output: null, latestStep: 'Rendering' }
+  vid.status = status
+  if (status === 'ready') pictureRender = null
+}
+
 type MockPerson = { userId: string; name: string }
 let narrationLock: { holder: { who: MockPerson; since: string; draftId: string } | null } | null = null
 /** The mock's one narration lock (it's per video on the server; the mock edits one video at a time). */
@@ -1076,7 +1132,7 @@ function newMockEdit(videoId: string, baseN: number) {
     base,
     palette: mockPalette,
     expiresAt: new Date(Date.now() + 7 * 86400_000).toISOString(),
-    renderedN: null,
+    renderedN: null as number | null,
     newerVersion: null,
     // localStorage.mockNarrationChanged=1: Ada changed the narration in a newer version 10 minutes ago.
     narrationChanged: localStorage.getItem('mockNarrationChanged')

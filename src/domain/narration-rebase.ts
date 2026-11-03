@@ -1,7 +1,8 @@
 // Rebase onto vN (plan 2026-11-02 §2.7 Stale base): the caller's narration op moves from their draft to their draft
 // of a newer version (opened, or created, the way the editor opens one), and is saved there through saveEdit, so it's
 // revalidated like any save: the narration lock, who may place each take, the takes' bounds and the output limit
-// against the new base. The old draft is left as it was; a refused rebase leaves no new draft behind.
+// against the new base. The old draft is left as it was; a refused rebase leaves no new draft behind. A draft rendered
+// picture first (renderEdit's excludeNarration, §2.1) still has its narration to move: onto the version it made.
 import type { Deps } from '../deps.js'
 import { ApiError } from '../lib/errors.js'
 import type { NarrationOp } from '../lib/timeline.js'
@@ -11,7 +12,10 @@ import { assertCan, type Principal } from './policy.js'
 export async function rebaseNarration(deps: Deps, p: Principal, id: string, input: { toN: number }) {
   assertCan(p, 'edit:create')
   const from = await getEdit(deps, p, id)
-  if (from.renderedN !== null)
+  if (
+    from.renderedN !== null &&
+    !(await pictureFirst(deps, from.videoId, from.id, from.renderedN, input.toN))
+  )
     throw new ApiError('conflict', `This draft was already rendered as v${from.renderedN}.`)
   const track = from.ops.find((o): o is NarrationOp => o.op === 'narration')
   if (!track) throw new ApiError('invalid_request', 'This draft has no narration to rebase.')
@@ -45,4 +49,11 @@ export async function rebaseNarration(deps: Deps, p: Principal, id: string, inpu
       throw new ApiError(err.code, `Your narration can't move to v${input.toN}: ${err.message}`, err.details)
     throw err
   }
+}
+
+/** Whether draft `editId` was rendered as v`renderedN` without its narration (Render picture first), onto v`toN`. */
+async function pictureFirst(deps: Deps, jobId: string, editId: string, renderedN: number, toN: number) {
+  if (toN !== renderedN) return false
+  const v = await deps.store.getVersion(jobId, renderedN)
+  return !!v?.frozen && v.frozen.editId === editId && !v.frozen.narration
 }

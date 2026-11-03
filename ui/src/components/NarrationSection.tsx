@@ -3,6 +3,8 @@
 // Music), the clip tools, the track's settings and Add audio (upload, drop, the library, this video's recordings).
 // The op it edits goes up through onChange and is saved with the draft's other ops (one whole-track snapshot); clip
 // edits are undoable here, track settings apply as they're set. Slots take the recorder and the narration banners.
+// While timing changes are pending, Render picture first takes the recorder's place (§2.1, §5.3); while someone else
+// holds the narration lock (§2.7) the track is read-only: it plays and selects, but nothing changes.
 import {
   Badge,
   Button,
@@ -77,6 +79,8 @@ export interface NarrationTrackApi {
   ) => { ok: boolean; message: string }
   /** The draft has unsaved or unrendered timing changes: recording waits for Render picture first (§5.3). */
   timingPending: boolean
+  /** You hold the narration lock (§2.7): Record is off without it. */
+  canRecord: boolean
 }
 
 /** What the page can do to the section from outside (the render dialog's Trim). */
@@ -106,6 +110,12 @@ export interface NarrationSectionProps {
   banner?: ReactNode
   /** The recorder (lane C, ui/src/recorder), given the track to place its takes on. */
   recorder?: (api: NarrationTrackApi) => ReactNode
+  /** Shown in the recorder's place while timingPending: Render picture first (RenderPictureFirst). */
+  pictureFirst?: ReactNode
+  /** Someone else holds the narration lock: the track plays and selects, but nothing on it changes. */
+  readOnly?: boolean
+  /** Record needs the narration lock (false while someone else holds it). */
+  canRecord?: boolean
   /** A hint under the preview. */
   hint?: ReactNode
 }
@@ -121,6 +131,8 @@ const MODE_NOTES: Record<AiVoiceMode, string> = {
   under: 'The AI voice-over plays under yours, at the AI voice level.',
   keep: 'The AI voice-over plays as it is, alongside yours.',
 }
+
+const LOCKED_MESSAGE = 'Someone else is editing the narration. Take over to change it.'
 
 interface Importing {
   name: string
@@ -159,13 +171,31 @@ export function NarrationSection(props: NarrationSectionProps) {
   const [cleanup, setCleanup] = useState(initial.cleanup)
   const [mediaIds, setMediaIds] = useState(() => initial.clips.map((c) => c.mediaId))
   const takes = useNarrationTakes(mediaIds)
-  const editor = useNarrationEditor(initial, {
+  const live = useNarrationEditor(initial, {
     takeSamples: takes.takeSamples,
     baseSamples,
     fps: FPS,
     playhead,
     beats: lanes.beats,
+    readOnly: props.readOnly === true,
   })
+  // Read-only: every command is refused (selection and the playhead still move, so the track can be watched).
+  const readOnly = props.readOnly === true
+  const editor = useMemo<NarrationEditor>(
+    () =>
+      readOnly
+        ? {
+            ...live,
+            dispatch: () => ({ ok: false, message: LOCKED_MESSAGE }),
+            onClipCommand: () => undefined,
+            undo: () => undefined,
+            redo: () => undefined,
+            canUndo: false,
+            canRedo: false,
+          }
+        : live,
+    [live, readOnly],
+  )
   // Track settings aren't clip commands: they sit beside the editor's undo stack, as on a mixing desk.
   const op = useMemo<NarrationOp>(() => ({ ...editor.op, tracks, cleanup }), [editor.op, tracks, cleanup])
   const ids = op.clips.map((c) => c.mediaId).join()
@@ -242,6 +272,10 @@ export function NarrationSection(props: NarrationSectionProps) {
 
   const [importing, setImporting] = useState<Importing | null>(null)
   const addFiles = async (files: File[], start: number) => {
+    if (readOnly) {
+      notifications.show({ color: 'yellow', message: LOCKED_MESSAGE })
+      return
+    }
     const audio = files.filter(isNarrationFile)
     for (const f of files.filter((x) => !isNarrationFile(x)))
       notifications.show({ color: 'red', message: `${f.name} isn't an MP3, M4A, WAV or Ogg file.` })
@@ -287,6 +321,7 @@ export function NarrationSection(props: NarrationSectionProps) {
   )
 
   const onTrackChange = (patch: TrackPatch) => {
+    if (readOnly) return
     if (patch.lane === 'musicLevel') props.onMusicChange(patch.audioId, patch.set)
     else setTracks((t) => applyTrackPatch(t, patch))
   }
@@ -328,7 +363,7 @@ export function NarrationSection(props: NarrationSectionProps) {
                   size="xs"
                   variant="default"
                   leftSection={<IconPlus size={14} />}
-                  disabled={!!importing}
+                  disabled={!!importing || readOnly}
                   data-testid="narration-upload"
                 >
                   Add audio
@@ -342,7 +377,7 @@ export function NarrationSection(props: NarrationSectionProps) {
                   variant="default"
                   aria-label="Add audio from"
                   rightSection={<IconChevronDown size={14} />}
-                  disabled={!!importing}
+                  disabled={!!importing || readOnly}
                 >
                   From…
                 </Button>
@@ -402,7 +437,7 @@ export function NarrationSection(props: NarrationSectionProps) {
               <SegmentedControl
                 size="xs"
                 aria-label="AI voice"
-                disabled={!hasVoice}
+                disabled={!hasVoice || readOnly}
                 value={tracks.aiVoice.mode}
                 onChange={(v) => {
                   setTracks((t) => ({ ...t, aiVoice: { ...t.aiVoice, mode: v } }))
@@ -417,6 +452,7 @@ export function NarrationSection(props: NarrationSectionProps) {
               <SegmentedControl
                 size="xs"
                 aria-label="Cleanup"
+                disabled={readOnly}
                 value={cleanup}
                 onChange={(v) => {
                   setCleanup(v === 'off' ? 'off' : 'light')
@@ -430,6 +466,7 @@ export function NarrationSection(props: NarrationSectionProps) {
             <Switch
               size="xs"
               label="Mute all original audio"
+              disabled={readOnly}
               checked={tracks.original.muteAll}
               onChange={(e) => {
                 const muteAll = e.currentTarget.checked
@@ -456,7 +493,17 @@ export function NarrationSection(props: NarrationSectionProps) {
                 : ''}
             </Text>
           ) : null}
-          {props.recorder?.({ op, editor, playhead, range, insertTake, timingPending: props.timingPending })}
+          {props.timingPending && props.pictureFirst
+            ? props.pictureFirst
+            : props.recorder?.({
+                op,
+                editor,
+                playhead,
+                range,
+                insertTake,
+                timingPending: props.timingPending,
+                canRecord: props.canRecord !== false && !readOnly,
+              })}
         </Stack>
       </Card>
       {picking === 'library' ? (

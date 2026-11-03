@@ -7862,6 +7862,13 @@ export interface components {
                     beat: string | null;
                     fit: string | null;
                 }[];
+                /** @description The beat's AI voice-over clip, in seconds into the beat; null when it has none. A changed line may lengthen its beat when re-voiced */
+                voice: {
+                    id: string;
+                    src: string;
+                    start: number;
+                    duration: number;
+                } | null;
             }[];
             layers: string[];
             audio: {
@@ -7946,6 +7953,8 @@ export interface components {
              * @enum {string}
              */
             captions?: "sidecar" | "burned";
+            /** @description Render picture first: render the draft's other edits without its recorded narration, so you can record against the new picture. The narration stays in the draft; move it onto the new version with rebase-narration */
+            excludeNarration?: boolean;
         };
         RebaseNarration: {
             /** @description The version to move your narration onto */
