@@ -3,6 +3,7 @@
 import { z } from '@hono/zod-openapi'
 import { SOUNDS } from './domain/types.js'
 import { MAX_NARRATION } from './lib/contract.js'
+import { LANGUAGES } from './lib/language.js'
 import {
   GAIN_DB_RANGE,
   MAX_FADE_SAMPLES,
@@ -303,6 +304,12 @@ export const VersionSchema = z
   })
   .openapi('Version')
 
+export const LanguageSchema = z.enum(LANGUAGES).openapi('Language', {
+  description:
+    'The language spoken in the video (BCP-47 primary subtag): recorded narration is transcribed for captions in it. The local transcriber covers the European languages; the others need ElevenLabs.',
+  example: 'en',
+})
+
 export const VideoSchema = z
   .object({
     id: z.string().openapi({ example: 'vid_01jc8k0000000000000000000' }),
@@ -318,6 +325,7 @@ export const VideoSchema = z
     versions: z.array(VersionSchema),
     published: z.boolean(),
     private: z.boolean(),
+    language: LanguageSchema,
     comments: z.object({
       count: z.number().int(),
       unread: z.number().int().openapi({ description: "Others' comments since you last read them" }),
@@ -391,8 +399,14 @@ export const ReviseSchema = z
   .openapi('Revise')
 
 export const UpdateVideoSchema = z
-  .object({ title: z.string().min(1).max(120).optional(), private: z.boolean().optional() })
-  .refine((v) => v.title !== undefined || v.private !== undefined, { message: 'Send title or private.' })
+  .object({
+    title: z.string().min(1).max(120).optional(),
+    private: z.boolean().optional(),
+    language: LanguageSchema.optional(),
+  })
+  .refine((v) => v.title !== undefined || v.private !== undefined || v.language !== undefined, {
+    message: 'Send title, private or language.',
+  })
   .openapi('UpdateVideo')
 
 export const KeySchema = z

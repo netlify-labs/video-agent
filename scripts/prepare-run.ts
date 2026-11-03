@@ -329,6 +329,7 @@ export async function hydrateNarration(
     targetSamples: n.targetSamples,
     captions: n.captions,
     ...(n.transcriptionProvider ? { transcriptionProvider: n.transcriptionProvider } : {}),
+    ...(n.language ? { language: n.language } : {}),
     takes,
   }
   writeFileSync(p.manifest, JSON.stringify(inputs, null, 2))

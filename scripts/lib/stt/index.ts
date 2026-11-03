@@ -1,6 +1,8 @@
 // The STT stage of a narration run (plan 2026-11-02 §6.6, bead va-2qq.3.12), after scripts/narration.ts wrote the bus:
 //   1. pick    the provider the render froze (NarrationInputs.transcriptionProvider, default 'local'); 'off' or muted
-//              narration skips; 'elevenlabs' without ELEVENLABS_API_KEY falls back to the local provider, with a warning
+//              narration skips; 'elevenlabs' without ELEVENLABS_API_KEY falls back to the local provider, with a warning.
+//              It transcribes in the language the render froze (NarrationInputs.language, default 'en'); one the local
+//              provider doesn't cover fails with a message (captions fall back) instead of coming out as another
 //   2. cache   ~/.cache/video-agent/stt/<bus sha256>-<provider>-<model>-<language>.json. Runner caches don't outlive a
 //              run, so across runs this is a no-op on a fresh runner; it saves a retry within one
 //   3. decode  video/assets/narration/bus.wav to 16 kHz mono PCM16 (.va-run/narration/stt/bus16k.wav)
@@ -13,6 +15,13 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { NARRATION_SRC } from '../../../src/lib/contract.js'
+import {
+  DEFAULT_LANGUAGE,
+  PARAKEET_LANGUAGES,
+  isLanguage,
+  parakeetCovers,
+  type Language,
+} from '../../../src/lib/language.js'
 import type { FrozenTranscription } from '../../../src/lib/run-manifest.js'
 import { narrationPaths, readNarrationInputs } from '../narration-inputs.js'
 import { runTree } from '../proc-tree.js'
@@ -42,7 +51,7 @@ export interface SttRecord {
   /** Who transcribed (null when skipped or failed before a provider was chosen). */
   provider: SttProviderName | null
   model: string | null
-  language: 'en'
+  language: Language
   /** The bus transcribed (sha256 of video/assets/narration/bus.wav). */
   busSha256: string | null
   /** Composition seconds, offset-corrected (local: PARAKEET_OFFSET_S added to starts). Empty unless ok. */
@@ -97,13 +106,15 @@ export async function runStt(o: RunSttOptions): Promise<SttRecord> {
   const p = narrationPaths(o.root)
   const inputs = readNarrationInputs(o.root)
   const setting: FrozenTranscription = inputs?.transcriptionProvider ?? 'local'
+  // Checked again (it names the cache file): the manifest verifier already refused an unknown one.
+  const language: Language = isLanguage(inputs?.language) ? inputs.language : DEFAULT_LANGUAGE
   const record: SttRecord = {
     v: STT_RECORD_VERSION,
     status: 'failed',
     setting,
     provider: null,
     model: null,
-    language: 'en',
+    language,
     busSha256: null,
     words: [],
     offsetMs: 0,
@@ -144,6 +155,10 @@ export async function runStt(o: RunSttOptions): Promise<SttRecord> {
   if (!provider) return finish('off')
   record.provider = provider.name
   record.model = provider.model
+  if (provider.name === 'local' && !parakeetCovers(language))
+    return finish('failed', {
+      error: `The local transcriber (Parakeet) doesn't cover the video's language "${language}" (it covers ${PARAKEET_LANGUAGES.join(', ')}). Set transcription to ElevenLabs for narration captions in it.`,
+    })
   record.offsetMs = provider.name === 'local' ? Math.round(PARAKEET_OFFSET_S * 1000) : 0
   record.busSha256 = sha256File(bus)
 
@@ -197,9 +212,10 @@ export async function runStt(o: RunSttOptions): Promise<SttRecord> {
       deadlineAt,
       workDir: work,
       cwd: join(o.root, 'video'),
-      language: 'en',
+      language,
     })
     log('stt.transcribe', {
+      language,
       provider: out.provider,
       model: out.model,
       words: out.words.length,

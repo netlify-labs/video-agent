@@ -13,6 +13,7 @@ import { versionCredits, type Credit } from './credits.js'
 import { creditHtml } from '../lib/credit-html.js'
 import { notifyOwner } from './notifications.js'
 import { ApiError } from '../lib/errors.js'
+import { DEFAULT_LANGUAGE, type Language } from '../lib/language.js'
 import type { CommentCounts, Repo, VideoPageRows } from '../store/types.js'
 import { assertCan, type Principal } from './policy.js'
 import type {
@@ -294,6 +295,7 @@ export async function createVideo(
         version: 1,
         private: false,
         accessEpoch: 0,
+        language: DEFAULT_LANGUAGE,
       }
       await repo.insertJob(job)
       // Media attached while planning comes first, then any picked when creating.
@@ -577,16 +579,19 @@ export async function updateVideo(
   deps: Deps,
   principal: Principal,
   jobId: string,
-  patch: { title?: string | undefined; private?: boolean | undefined },
+  patch: { title?: string | undefined; private?: boolean | undefined; language?: Language | undefined },
 ) {
   return deps.store.tx(async (repo) => {
     const job = await loadJob(repo, principal, jobId, true)
-    if (patch.title !== undefined) assertCan(principal, 'video:rename', { ownerId: job.ownerId })
+    // The language is a setting of the video like its title: whoever may rename it may set it.
+    if (patch.title !== undefined || patch.language !== undefined)
+      assertCan(principal, 'video:rename', { ownerId: job.ownerId })
     const privacyChanges = patch.private !== undefined && patch.private !== job.private
     if (patch.private !== undefined) assertCan(principal, 'video:private', { ownerId: job.ownerId })
     await repo.updateJob(jobId, {
       ...(patch.title !== undefined ? { title: patch.title.trim() } : {}),
       ...(privacyChanges ? { private: patch.private as boolean, accessEpoch: job.accessEpoch + 1 } : {}),
+      ...(patch.language !== undefined ? { language: patch.language } : {}),
       updatedAt: deps.clock.now().toISOString(),
       version: job.version + 1,
     })
@@ -957,6 +962,7 @@ async function buildVideoDto(
     versions: out,
     published: pubs.some((p) => !p.unpublishedAt),
     private: job.private,
+    language: job.language,
     comments: comments ?? { count: 0, unread: 0 },
     links: { self: `${deps.config.siteUrl}/api/v1/videos/${job.id}` },
   }

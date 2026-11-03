@@ -1,5 +1,6 @@
 // Domain records. These mirror the database tables (db/schema.ts) and the in-memory store.
 import type { BundleReference } from '../lib/bundle-references.js'
+import type { Language } from '../lib/language.js'
 import type { FrozenNarration } from '../lib/run-manifest.js'
 import type { MediaKind } from '../lib/media/classify.js'
 import type { PreviewFile, Previews } from '../lib/media/previews.js'
@@ -248,6 +249,8 @@ export interface JobRow {
   private: boolean
   /** Bumped on every privacy or owner change; part of file URL signatures (§14 rule 4). */
   accessEpoch: number
+  /** The language spoken in it (src/lib/language.ts); narration captions are transcribed in it. */
+  language: Language
 }
 
 export interface VersionRow {

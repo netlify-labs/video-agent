@@ -74,6 +74,8 @@ export const jobs = pgTable(
     version: integer('version').notNull(),
     private: boolean('private').notNull().default(false),
     accessEpoch: integer('access_epoch').notNull().default(0),
+    // The language spoken in the video (BCP-47 primary subtag, src/lib/language.ts): narration is transcribed in it.
+    language: text('language').notNull().default('en'),
   },
   (t) => [
     index('jobs_created_idx').on(t.createdAt, t.id),

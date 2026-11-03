@@ -2,6 +2,7 @@
 import spec from '../api/openapi.json'
 import type { paths } from '../api/schema'
 import { applyEdits, applyNarration, type EditOp } from '../../../src/lib/contract'
+import { isLanguage } from '../../../src/lib/language'
 import type { NarrationOp, Span } from '../../../src/lib/timeline'
 import plainHtml from '../../../test/fixtures/contract1/index.html?raw'
 import musicHtml from '../../../test/fixtures/contract1-music/index.html?raw'
@@ -929,6 +930,14 @@ export function installMock() {
       return Response.redirect(new URL(mockFile(m[1], m[3] as 'video'), window.location.origin).href, 302)
     if (m?.[1]) {
       const v = videos.find((x) => x.id === m[1])
+      if (v && method === 'PATCH') {
+        const b = (await readBody(init, input)) as { title?: string; private?: boolean; language?: string }
+        if (b.language !== undefined && !isLanguage(b.language))
+          return fail(400, 'invalid_request', 'Unknown language.')
+        if (b.title !== undefined) v.title = b.title.trim()
+        if (b.private !== undefined) v.private = b.private
+        if (b.language !== undefined) v.language = b.language
+      }
       return v ? json(withComments(v)) : fail(404, 'not_found', 'Video not found.')
     }
     return fail(404, 'not_found', `Mock has no ${method} ${p}`)

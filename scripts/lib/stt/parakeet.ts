@@ -2,6 +2,8 @@
 // HyperFrames. `hyperframes models install parakeet` is idempotent and caches the model in ~/.cache/hyperframes
 // (704 MB, 3.4 s on the runner); `hyperframes transcribe --engine parakeet --json --dir <d>` writes
 // <d>/transcript.json, one { id, text, start, end } per word in seconds. About 0.06x real time on 10 minutes.
+// v3 is multilingual (25 European languages, src/lib/language.ts PARAKEET_LANGUAGES) and detects the language itself:
+// HyperFrames uses --language only to refuse one it doesn't cover (runStt checks that first).
 // Both commands run under the caller's outer deadline with the whole process tree killed on timeout (proc-tree.ts):
 // HyperFrames' own --timeout only covers its Whisper engine.
 import { mkdirSync, readFileSync, rmSync } from 'node:fs'

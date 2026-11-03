@@ -32,12 +32,14 @@ import {
 } from '../components/VoiceoverControl'
 import { CommentsCard, ReviewPlayer, VerdictBar, type Pin } from '../components/Review'
 import { CompositionPreview } from '../components/CompositionPreview'
+import { LanguageSelect, languageName } from '../components/LanguageSelect'
 import {
   IconBell,
   IconBellRinging,
   IconDots,
   IconDownload,
   IconExternalLink,
+  IconLanguage,
   IconLock,
   IconLockOpen,
 } from '@tabler/icons-react'
@@ -764,6 +766,30 @@ export function VideoPage() {
                   }}
                 >
                   {data.private ? 'Make visible to the team' : 'Make private'}
+                </Menu.Item>
+                <Menu.Item
+                  leftSection={<IconLanguage size={14} />}
+                  onClick={() => {
+                    let language = data.language
+                    modals.openConfirmModal({
+                      title: 'Language',
+                      children: (
+                        <LanguageSelect
+                          defaultValue={data.language}
+                          onChange={(l) => {
+                            language = l
+                          }}
+                        />
+                      ),
+                      labels: { confirm: 'Save', cancel: 'Cancel' },
+                      onConfirm: () => {
+                        rename.mutate({ params: { path: { id } }, body: { language } })
+                      },
+                    })
+                  }}
+                  data-testid="video-language"
+                >
+                  Language: {languageName(data.language)}
                 </Menu.Item>
                 <Menu.Item
                   color="red"

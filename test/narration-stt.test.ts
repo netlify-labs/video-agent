@@ -2,7 +2,7 @@
 // provider and every process it started, the Parakeet offset correction and transcript parsing (S11's fixture), the
 // ElevenLabs Scribe request and response with a mocked fetch, the local cache, and stt.json plus the receipt.
 // Cases that decode the bus skip without ffmpeg.
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -217,6 +217,36 @@ describe('ElevenLabs Scribe', () => {
     expect(form.get('file')).toBeInstanceOf(Blob)
   })
 
+  it("sends the video's language as language_code and keeps unspaced words (Japanese)", async () => {
+    const dir = tmp()
+    const file = join(dir, 'bus16k.wav')
+    writeFileSync(file, wav(new Uint8Array(320)))
+    let form: FormData | null = null
+    const fetchImpl = ((_url: string, init: RequestInit) => {
+      form = init.body as FormData
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            language_code: 'jpn',
+            words: [
+              { text: 'こんにちは', start: 0.1, end: 0.6, type: 'word' },
+              { text: '世界。', start: 0.6, end: 1.0, type: 'word' },
+            ],
+          }),
+          { status: 200 },
+        ),
+      )
+    }) as unknown as typeof fetch
+    const out = await scribe('k', fetchImpl).transcribe(file, {
+      deadlineAt: Date.now() + 10_000,
+      workDir: dir,
+      cwd: dir,
+      language: 'ja',
+    })
+    expect((form as unknown as FormData).get('language_code')).toBe('ja')
+    expect(out.words.map((w) => w.text)).toEqual(['こんにちは', '世界。'])
+  })
+
   it('an error response throws with the detail', async () => {
     const fetchImpl = (() =>
       Promise.resolve(
@@ -262,7 +292,9 @@ const op = (muted = false): NarrationOp => ({
 })
 
 /** A prepared workspace after narration.ts: inputs, a 1 s bus and a receipt. */
-function workspace(o: { setting?: NarrationInputs['transcriptionProvider']; muted?: boolean } = {}) {
+function workspace(
+  o: { setting?: NarrationInputs['transcriptionProvider']; muted?: boolean; language?: string } = {},
+) {
   const root = tmp()
   const p = narrationPaths(root)
   mkdirSync(p.dir, { recursive: true })
@@ -277,6 +309,7 @@ function workspace(o: { setting?: NarrationInputs['transcriptionProvider']; mute
     targetSamples: S,
     captions: 'sidecar',
     ...(o.setting ? { transcriptionProvider: o.setting } : {}),
+    ...(o.language ? { language: o.language as NarrationInputs['language'] } : {}),
     takes: [],
   }
   writeFileSync(p.manifest, JSON.stringify(inputs))
@@ -305,6 +338,32 @@ describe('runStt', () => {
     const r = await runStt({ root: tmp(), cacheDir: tmp() })
     expect(r.status).toBe('failed')
     expect(r.error).toMatch(/no recorded narration/)
+  })
+
+  it("a language the local provider doesn't cover fails with a message, without running it", async () => {
+    const { root, p } = workspace({ language: 'ja' })
+    let ran = false
+    const r = await runStt({
+      root,
+      cacheDir: tmp(),
+      provider: {
+        name: 'local',
+        model: 'fake-1',
+        transcribe: () => {
+          ran = true
+          return Promise.reject(new Error('should not run'))
+        },
+      },
+    })
+    expect(ran).toBe(false)
+    expect(r).toMatchObject({ status: 'failed', language: 'ja', provider: 'local' })
+    expect(r.error).toMatch(/doesn't cover the video's language "ja".*ElevenLabs/)
+    expect(receiptStt(p)).toMatchObject({ status: 'failed', language: 'ja' })
+  })
+
+  it('an unknown language in the inputs falls back to English (it names the cache file)', async () => {
+    const { root } = workspace({ setting: 'off', language: '../x' })
+    expect((await runStt({ root, cacheDir: tmp() })).language).toBe('en')
   })
 
   describe.skipIf(!which('ffmpeg'))('with ffmpeg', () => {
@@ -346,6 +405,36 @@ describe('runStt', () => {
         provider: fake(() => Promise.reject(new Error('should not run'))),
       })
       expect(again).toMatchObject({ status: 'ok', cached: true, words })
+    })
+
+    it('passes the frozen language to the provider and keys the cache on it; ElevenLabs takes any listed one', async () => {
+      const cacheDir = tmp()
+      for (const [language, name] of [
+        ['de', 'local'],
+        ['ja', 'elevenlabs'],
+      ] as const) {
+        const { root } = workspace({ language })
+        const seen: string[] = []
+        const r = await runStt({
+          root,
+          cacheDir,
+          provider: {
+            name,
+            model: 'fake-1',
+            transcribe: (_wav, o) => {
+              seen.push(o.language)
+              return Promise.resolve({ words, provider: name, model: 'fake-1', durationMs: 1 })
+            },
+          },
+        })
+        expect(seen).toEqual([language])
+        expect(r).toMatchObject({ status: 'ok', language })
+      }
+      expect(
+        readdirSync(cacheDir)
+          .map((f) => f.replace(/^[0-9a-f]{64}-/, ''))
+          .sort(),
+      ).toEqual(['elevenlabs-fake-1-ja.json', 'local-fake-1-de.json'])
     })
 
     it('a provider that fails is status failed, and the run goes on', async () => {

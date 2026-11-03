@@ -3,6 +3,7 @@
 // chose: nothing the model writes (or a request smuggles in) can point it somewhere else.
 import { createHash } from 'node:crypto'
 import { isBundleReference, type BundleReference } from './bundle-references.js'
+import { isLanguage, type Language } from './language.js'
 import { MEDIA_KINDS, type MediaKind } from './media/classify.js'
 import {
   GAIN_DB_RANGE,
@@ -83,6 +84,8 @@ export interface FrozenNarration {
   captions: CaptionPolicy
   /** The transcription provider (plan §6.6). Missing (frozen before it was recorded): 'local'. */
   transcriptionProvider?: FrozenTranscription | undefined
+  /** The video's language, transcribed in (src/lib/language.ts). Missing (frozen before it was recorded): 'en'. */
+  language?: Language | undefined
 }
 
 export interface RunMedia {
@@ -158,6 +161,7 @@ const narrationOf = (n: FrozenNarration) => ({
   captions: n.captions,
   // Only when set, so a manifest frozen before it keeps its bytes.
   ...(n.transcriptionProvider ? { transcriptionProvider: n.transcriptionProvider } : {}),
+  ...(n.language ? { language: n.language } : {}),
 })
 
 /** Stable bytes: the same inputs always serialize the same, so a re-sent start pins the same hash. */
@@ -257,6 +261,7 @@ function isFrozenNarration(v: unknown): v is FrozenNarration {
     (n.captions === 'sidecar' || n.captions === 'burned') &&
     (n.transcriptionProvider === undefined ||
       ['local', 'elevenlabs', 'off'].includes(n.transcriptionProvider as string)) &&
+    (n.language === undefined || isLanguage(n.language)) &&
     int(recipe.pipeline, 1, 1000) &&
     (NARRATION_CLEANUP_PRESETS as readonly unknown[]).includes(recipe.cleanup) &&
     op.op === 'narration' &&

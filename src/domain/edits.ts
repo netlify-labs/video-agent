@@ -14,6 +14,7 @@ import {
   type EditOp,
   type Summary,
 } from '../lib/contract.js'
+import type { Language } from '../lib/language.js'
 import { NARRATION_PIPELINE } from '../lib/narration-cleanup.js'
 import { wholeClipSpans } from '../lib/peaks.js'
 import { MAX_FROZEN_TAKE_BYTES, type CaptionPolicy, type FrozenNarration } from '../lib/run-manifest.js'
@@ -577,6 +578,7 @@ async function freezeNarration(
   r: Rev,
   s: RenderSettings,
   transcriptionProvider: TranscriptionProvider,
+  language: Language,
 ): Promise<FrozenNarration> {
   const { targetSamples } = r
   const clips = resolve(op.clips).filter((c) => c.gainDb !== null && c.start < targetSamples)
@@ -602,6 +604,7 @@ async function freezeNarration(
     targetSamples,
     captions: s.captions,
     transcriptionProvider,
+    language,
   }
 }
 
@@ -649,7 +652,7 @@ export async function renderEdit(
       if (r.track && !enabled) throw narrationOff()
       if (r.track) await checkTakeAccess(repo, p, e, r.track)
       const narration = r.track
-        ? await freezeNarration(repo, r.track, r, settings, transcriptionProvider)
+        ? await freezeNarration(repo, r.track, r, settings, transcriptionProvider, job.language)
         : null
       const n = job.nextVersionN
       // A draft has no narration bus (the run writes it), and a base's bus is never part of the frozen bundle.

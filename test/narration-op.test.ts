@@ -2,10 +2,12 @@
 // its takes (bounds, counts, who may use them) and the output-duration limit, held by the draft's media_refs, and
 // written into the draft bundle as the narration layer. A keep-visuals render freezes it (§6.1 Snapshots, §6.3): the
 // audible op, its takes by key, the recipe and the bus length, held by the attempt and carried in the run manifest.
-import { readFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { editRevPrefix } from '../src/domain/edits.js'
-import { holdBeatOf, load, read as readComposition, validate } from '../src/lib/contract.js'
+import { NARRATION_SRC, holdBeatOf, load, read as readComposition, validate } from '../src/lib/contract.js'
 import { resetSettingsCache } from '../src/domain/settings.js'
 import { NarrationOpSchema } from '../src/schemas.js'
 import {
@@ -23,6 +25,11 @@ import { failedSnap, running } from './fakes.js'
 import type { Store } from '../src/store/types.js'
 import { harness, person, pgStore, PROMPT, upload, type Harness } from './helpers.js'
 import { tarGz } from './tarball.js'
+import { wav } from '../src/lib/voice.js'
+import { hydrateNarration } from '../scripts/prepare-run.js'
+import { readNarrationInputs } from '../scripts/lib/narration-inputs.js'
+import { which } from '../scripts/lib/run-tools.js'
+import { runStt } from '../scripts/lib/stt/index.js'
 
 const fx = (f: string) => readFileSync(new URL(`./fixtures/contract1/${f}`, import.meta.url), 'utf8')
 const tone = () => new Uint8Array(readFileSync(new URL('./fixtures/audio/tone.mp3', import.meta.url)))
@@ -460,6 +467,62 @@ describe('rendering narration with the visuals kept', () => {
     expect(Object.keys(after)).not.toContain(req.requestId)
     expect(Object.values(after)).toEqual([ids])
   })
+  it.skipIf(!which('ffmpeg') || !which('ffprobe'))(
+    "the video's language goes API -> freeze -> run manifest -> run inputs -> the STT provider",
+    async () => {
+      const h = harness()
+      const { id, editId } = await narrated(h, ([a]) => [clip(a!)], 1)
+      const patch = (body: object) => h.call('PATCH', `/api/v1/videos/${id}`, { as: h.member, body })
+      expect((await h.json<{ language: string }>(await patch({ language: 'de' }))).language).toBe('de')
+      expect((await patch({ language: 'xx' })).status).toBe(400)
+      expect(
+        (await h.json<{ language: string }>(await h.call('GET', `/api/v1/videos/${id}`, { as: h.member })))
+          .language,
+      ).toBe('de')
+      h.deps.runner.nextScripts.push({ timeline: [running(), failedSnap()] })
+      expect((await render(h, editId)).status).toBe(202)
+      await h.drive(5)
+      expect((await h.deps.store.getVersion(id, 2))!.frozen!.narration!.language).toBe('de')
+      const req = h.deps.runner.starts[1]!
+      const sha = /--manifest ([0-9a-f]{64})/.exec(req.prompt)?.[1] ?? ''
+      const raw = new TextDecoder().decode(
+        await h.deps.blobs.get('sources', runManifestKey(id, req.requestId)),
+      )
+      const m = verifyRunManifest(raw, { attemptId: req.requestId, sha256: sha })
+      expect(m.bundle?.narration?.language).toBe('de')
+      // The run: prepare-run hydrates the inputs, then the STT stage transcribes in that language.
+      const root = mkdtempSync(join(tmpdir(), 'va-lang-'))
+      try {
+        const inputs = await hydrateNarration(root, m, m.bundle?.narration, async (key, to) => {
+          writeFileSync(to, (await h.deps.blobs.get('media', key))!)
+        })
+        expect(inputs?.language).toBe('de')
+        expect(readNarrationInputs(root)?.language).toBe('de')
+        mkdirSync(join(root, 'video', 'assets', 'narration'), { recursive: true })
+        writeFileSync(join(root, 'video', NARRATION_SRC), wav(new Uint8Array(S * 2)))
+        const seen: string[] = []
+        const cacheDir = join(root, 'cache')
+        const r = await runStt({
+          root,
+          cacheDir,
+          provider: {
+            name: 'local',
+            model: 'fake-1',
+            transcribe: (_wav, o) => {
+              seen.push(o.language)
+              return Promise.resolve({ words: [], provider: 'local', model: 'fake-1', durationMs: 1 })
+            },
+          },
+        })
+        expect(seen).toEqual(['de'])
+        expect(r).toMatchObject({ status: 'ok', language: 'de' })
+        expect(readdirSync(cacheDir)).toEqual([`${r.busSha256}-local-fake-1-de.json`])
+      } finally {
+        rmSync(root, { recursive: true, force: true })
+      }
+    },
+    60_000,
+  )
 })
 
 describe('run manifest narration', () => {

@@ -418,7 +418,7 @@ export interface paths {
         head?: never;
         /**
          * Update a video
-         * @description Renames a video or makes it private.
+         * @description Renames a video, makes it private, or sets the language spoken in it (for narration captions).
          */
         patch: {
             parameters: {
@@ -7191,6 +7191,7 @@ export interface components {
             versions: components["schemas"]["Version"][];
             published: boolean;
             private: boolean;
+            language: components["schemas"]["Language"];
             comments: {
                 count: number;
                 /** @description Others' comments since you last read them */
@@ -7403,6 +7404,12 @@ export interface components {
             /** @description HTML to embed the video; with CC BY media it includes the credit line as a caption */
             embed: string | null;
         };
+        /**
+         * @description The language spoken in the video (BCP-47 primary subtag): recorded narration is transcribed for captions in it. The local transcriber covers the European languages; the others need ElevenLabs.
+         * @example en
+         * @enum {string}
+         */
+        Language: "en" | "es" | "fr" | "de" | "bg" | "hr" | "cs" | "da" | "nl" | "et" | "fi" | "el" | "hu" | "it" | "lv" | "lt" | "mt" | "pl" | "pt" | "ro" | "sk" | "sl" | "sv" | "ru" | "uk" | "ar" | "hi" | "id" | "ja" | "ko" | "tr" | "vi" | "zh";
         Error: {
             error: {
                 /** @example not_found */
@@ -7447,6 +7454,7 @@ export interface components {
         UpdateVideo: {
             title?: string;
             private?: boolean;
+            language?: components["schemas"]["Language"];
         };
         Revise: {
             prompt: string;

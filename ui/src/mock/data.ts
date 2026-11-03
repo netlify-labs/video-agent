@@ -184,6 +184,7 @@ function video(
     versions,
     published: versions.some((v) => v.publications.some((p) => !p.unpublishedAt)),
     private: false,
+    language: 'en',
     comments: { count: 0, unread: 0 },
     links: { self: `/api/v1/videos/${id}` },
   }

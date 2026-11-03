@@ -8,6 +8,7 @@
 //   .va-run/narration/receipt.json       scripts/narration.ts: inputs, recipe, bus digest, spans, attempt id
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import type { Language } from '../../src/lib/language.js'
 import type { NarrationReceipt } from '../../src/lib/narration-run.js'
 import type {
   CaptionPolicy,
@@ -54,6 +55,8 @@ export interface NarrationInputs {
   captions: CaptionPolicy
   /** How scripts/narration-stt.ts transcribes the bus; missing: 'local'. */
   transcriptionProvider?: FrozenTranscription | undefined
+  /** The language scripts/narration-stt.ts transcribes in; missing: 'en'. */
+  language?: Language | undefined
   takes: HydratedTake[]
 }
 

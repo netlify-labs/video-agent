@@ -301,6 +301,9 @@
           "private": {
             "type": "boolean"
           },
+          "language": {
+            "$ref": "#/components/schemas/Language"
+          },
           "comments": {
             "type": "object",
             "properties": {
@@ -343,6 +346,7 @@
           "versions",
           "published",
           "private",
+          "language",
           "comments",
           "links"
         ]
@@ -1218,6 +1222,46 @@
           "embed"
         ]
       },
+      "Language": {
+        "type": "string",
+        "enum": [
+          "en",
+          "es",
+          "fr",
+          "de",
+          "bg",
+          "hr",
+          "cs",
+          "da",
+          "nl",
+          "et",
+          "fi",
+          "el",
+          "hu",
+          "it",
+          "lv",
+          "lt",
+          "mt",
+          "pl",
+          "pt",
+          "ro",
+          "sk",
+          "sl",
+          "sv",
+          "ru",
+          "uk",
+          "ar",
+          "hi",
+          "id",
+          "ja",
+          "ko",
+          "tr",
+          "vi",
+          "zh"
+        ],
+        "description": "The language spoken in the video (BCP-47 primary subtag): recorded narration is transcribed for captions in it. The local transcriber covers the European languages; the others need ElevenLabs.",
+        "example": "en"
+      },
       "Error": {
         "type": "object",
         "properties": {
@@ -1364,6 +1408,9 @@
           },
           "private": {
             "type": "boolean"
+          },
+          "language": {
+            "$ref": "#/components/schemas/Language"
           }
         }
       },
@@ -5381,7 +5428,7 @@
       },
       "patch": {
         "summary": "Update a video",
-        "description": "Renames a video or makes it private.",
+        "description": "Renames a video, makes it private, or sets the language spoken in it (for narration captions).",
         "tags": [
           "videos"
         ],

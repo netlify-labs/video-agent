@@ -1,7 +1,8 @@
 // Captions from recorded narration (plan 2026-11-02 §6.6 "Cues" and "What is audible", bead va-2qq.3.13). The run's
 // transcript words become cues of their own kind ({ narration: true, id, start, end, text, words }), grouped for
 // reading: at most 42 characters on each of 2 lines, a new cue at a pause over 300 ms and after punctuation, and 1-6 s
-// on screen. summary.json keeps every cue (withNarrationCues); captions.vtt captions only what's audible: the AI voice's cues go when the narration replaces it (or all
+// on screen. Lengths are in graphemes (Intl.Segmenter), East Asian wide ones counting 2, and words in scripts written
+// without spaces (Japanese, Chinese, Thai...) are joined without one. summary.json keeps every cue (withNarrationCues); captions.vtt captions only what's audible: the AI voice's cues go when the narration replaces it (or all
 // original audio is muted), and a muted narration track has no cues. Pure, so the editor can use it too.
 import type { Caption } from './contract.js'
 import type { NarrationTracks } from './timeline.js'
@@ -27,12 +28,41 @@ export interface NarrationCue extends Caption {
 
 const ms3 = (n: number) => Math.round(n * 1000) / 1000
 
-/** Greedy word wrap at `width` characters (a longer word gets a line of its own). */
+const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+/** Graphemes about twice as wide as a Latin letter: CJK ideographs, kana, Hangul, full-width forms. */
+const WIDE =
+  /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\u3000-\u303f\uff01-\uff60]/u
+/** Half-width katakana and Hangul (U+FF61-FFDC) are narrow although their script is wide. */
+const HALF_WIDTH = /[\uff61-\uffdc]/u
+/** Scripts written without spaces between words. */
+const UNSPACED =
+  /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}\p{Script=Lao}\p{Script=Khmer}\p{Script=Myanmar}\u3000-\u303f\uff01-\uff60]/u
+
+const segments = (s: string) => Array.from(graphemes.segment(s), (g) => g.segment)
+
+/** A line's width in Latin-letter columns: graphemes (so "e" + a combining accent is 1), wide ones 2. */
+export function textWidth(s: string): number {
+  let n = 0
+  for (const g of segments(s)) n += WIDE.test(g) && !HALF_WIDTH.test(g) ? 2 : 1
+  return n
+}
+
+/** "" between two words of an unspaced script (日本 + 語), else " ". */
+const gap = (a: string, b: string) =>
+  UNSPACED.test(segments(a).at(-1) ?? '') && UNSPACED.test(segments(b)[0] ?? '') ? '' : ' '
+
+/** Words joined as they're written: spaces between them except inside unspaced scripts. */
+export function joinWords(words: readonly string[]): string {
+  return words.reduce((line, w, i) => (i === 0 ? w : `${line}${gap(line, w)}${w}`), '')
+}
+
+/** Greedy word wrap at `width` columns (textWidth; a longer word gets a line of its own). */
 export function wrapWords(words: string[], width = CUE_LINE_CHARS): string[] {
   const lines: string[] = []
   for (const w of words) {
     const last = lines.at(-1)
-    if (last !== undefined && last.length + 1 + w.length <= width) lines[lines.length - 1] = `${last} ${w}`
+    const joined = last === undefined ? w : `${last}${gap(last, w)}${w}`
+    if (last !== undefined && textWidth(joined) <= width) lines[lines.length - 1] = joined
     else lines.push(w)
   }
   return lines
@@ -51,8 +81,8 @@ function hashId(s: string): string {
 /** A cue's stable id: the same start and text always give the same id (caption revisions key on it). */
 export const cueId = (start: number, text: string) => `nc_${hashId(`${ms3(start).toFixed(3)}|${text}`)}`
 
-const SENTENCE_END = /[.!?…]["')\]]*$/
-const CLAUSE_END = /[,;:—–]["')\]]*$/
+const SENTENCE_END = /[.!?…。！？]["')\]」』）]*$/
+const CLAUSE_END = /[,;:—–、，；：]["')\]」』）]*$/
 
 /**
  * Groups transcript words into cues. A new cue starts at a pause over CUE_PAUSE_S, when the next word would break
@@ -71,7 +101,7 @@ export function groupWords(input: readonly CueWord[]): NarrationCue[] {
     const prev = cur.at(-1)
     if (first && prev) {
       const up = prev.end - first.start
-      const chars = cur.map((x) => x.text).join(' ').length
+      const chars = textWidth(joinWords(cur.map((x) => x.text)))
       const split =
         // In whole milliseconds, so a 300 ms gap isn't "over" by a rounding error.
         Math.round((w.start - prev.end) * 1000) > CUE_PAUSE_S * 1000 ||

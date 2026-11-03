@@ -390,7 +390,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
       method: 'patch',
       path: '/api/v1/videos/{id}',
       summary: 'Update a video',
-      description: 'Renames a video or makes it private.',
+      description:
+        'Renames a video, makes it private, or sets the language spoken in it (for narration captions).',
       tags: ['videos'],
       security,
       request: {

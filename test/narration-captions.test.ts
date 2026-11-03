@@ -13,6 +13,9 @@ import {
   CUE_LINE_CHARS,
   cueId,
   groupWords,
+  joinWords,
+  textWidth,
+  wrapWords,
   type CueWord,
   type NarrationCue,
 } from '../src/lib/narration-captions.js'
@@ -33,6 +36,94 @@ const tmp = () => {
 }
 afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true })
+})
+
+/** Words (given as a list) spoken back to back from `at`. */
+const speakList = (list: string[], at = 0, dur = 0.25, gap = 0.05): CueWord[] =>
+  list.map((t, i) => ({ text: t, start: at + i * (dur + gap), end: at + i * (dur + gap) + dur }))
+
+describe('non-Latin and combining text (Intl.Segmenter)', () => {
+  it('measures graphemes, with CJK and kana counting 2', () => {
+    // "Grüße" written with a combining diaeresis: 6 UTF-16 units, 5 graphemes.
+    const decomposed = 'Gru\u0308ße'
+    expect(decomposed.length).toBe(6)
+    expect(textWidth(decomposed)).toBe(5)
+    expect(textWidth('日本語')).toBe(6)
+    expect(textWidth('ｶﾀｶﾅ')).toBe(4) // half-width katakana stays narrow
+    expect(textWidth('👩‍💻')).toBe(1)
+  })
+
+  it('joins Japanese and Chinese words without spaces, and mixed ones with one', () => {
+    expect(joinWords(['今日は', '良い', '天気', 'です。'])).toBe('今日は良い天気です。')
+    expect(joinWords(['我们', '开始', '吧'])).toBe('我们开始吧')
+    expect(joinWords(['Netlify', 'の', 'デモ'])).toBe('Netlify のデモ')
+    expect(joinWords(['Guten', 'Tag'])).toBe('Guten Tag')
+  })
+
+  it('wraps a Japanese cue at 21 wide characters a line', () => {
+    const words = Array.from({ length: 12 }, () => 'です')
+    expect(wrapWords(words)).toEqual(['です'.repeat(10), 'です'.repeat(2)])
+    expect(wrapWords(words).every((l) => textWidth(l) <= CUE_LINE_CHARS)).toBe(true)
+  })
+
+  it('groups a Japanese transcript into cues: 2 lines of 21, after 。, no spaces', () => {
+    const ja = speakList(
+      [
+        '今日は',
+        'Netlify',
+        'の',
+        '新しい',
+        '機能を',
+        '紹介します。',
+        'まず',
+        'ダッシュボードを',
+        '開いて',
+        'ください。',
+      ],
+      0,
+      0.4,
+      0.02,
+    )
+    const cues = groupWords(ja)
+    expect(cues.map((c) => c.text)).toEqual([
+      '今日は Netlify の新しい機能を紹介します。',
+      'まずダッシュボードを開いてください。',
+    ])
+    for (const c of cues)
+      for (const line of c.text.split('\n')) expect(textWidth(line)).toBeLessThanOrEqual(CUE_LINE_CHARS)
+  })
+
+  it('a run of Japanese past 2 x 21 starts a new cue', () => {
+    const cues = groupWords(
+      speakList(
+        Array.from({ length: 30 }, () => '日本'),
+        0,
+        0.15,
+        0.01,
+      ),
+    )
+    expect(cues.length).toBeGreaterThan(1)
+    for (const c of cues) {
+      expect(c.text.split('\n').length).toBeLessThanOrEqual(2)
+      expect(c.text).not.toContain(' ')
+    }
+  })
+
+  it('German: long compounds and decomposed umlauts are measured in graphemes', () => {
+    const de = speak(
+      'Die Donaudampfschifffahrtsgesellschaft begru\u0308ßt Sie herzlich. Bitte o\u0308ffnen Sie das Dashboard.',
+      0,
+      0.3,
+      0.02,
+    )
+    const cues = groupWords(de)
+    expect(cues.map((c) => c.text.normalize('NFC'))).toEqual([
+      'Die Donaudampfschifffahrtsgesellschaft\nbegrüßt Sie herzlich.',
+      'Bitte öffnen Sie das Dashboard.',
+    ])
+    for (const c of cues)
+      for (const line of c.text.split('\n')) expect(textWidth(line)).toBeLessThanOrEqual(CUE_LINE_CHARS)
+  })
 })
 
 /** Words spoken back to back from `at`, each `dur` long with `gap` between them. */
