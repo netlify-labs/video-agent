@@ -1,16 +1,25 @@
 // The record flow (flow.ts) with fake parts: the phases from Record to saved, Space / Esc, every picture stop reason,
-// failures, the placement (calibration, manual offset, pre-roll trimmed), and the recovery checkpoint.
+// failures, the placement (calibration, manual offset, pre-roll trimmed), the recovery checkpoint, and punch-ins (the
+// pre-roll's picture start, the armed range, and the capture cut to the range).
 import { describe, expect, it } from 'vitest'
 import { placeTake, SAMPLE_RATE } from '../../../src/lib/timeline'
 import { STOP_MESSAGES, type FitSegment, type StopKind, type StopReason } from './clock'
 import {
+  armedRange,
+  BEFORE_PUNCH,
+  clampPreRoll,
   clampToTake,
   createRecordFlow,
   DISCARDED,
   flowKey,
+  isPunchKey,
   placementsFromRecord,
+  punchAt,
+  sliceToRange,
+  takeStart,
   TOO_EARLY,
   trimPreRoll,
+  type TakeStart,
   type FlowPhase,
   type FlowRecorder,
   type RecordFlowParts,
@@ -39,6 +48,7 @@ function harness(o: { failMic?: string; failUpload?: string; segments?: FitSegme
   const phases: FlowPhase[] = []
   const calls: string[] = []
   const remembered: RememberedTake[] = []
+  const starts: TakeStart[] = []
   let stopListener: ((r: StopReason) => void) | null = null
   let gate: (() => void) | null = null
   const rec: FlowRecorder & { started: boolean; cancelled: boolean } = {
@@ -67,9 +77,11 @@ function harness(o: { failMic?: string; failUpload?: string; segments?: FitSegme
       calls.push('recorder')
       return rec
     },
-    prepare: async () => {
+    prepare: async (_ctx, start) => {
+      starts.push(start)
       calls.push('prepare')
     },
+    arm: (range) => calls.push(`arm:${range ? `${range[0]}-${range[1]}` : 'off'}`),
     // The countdown waits are released by the test (tick), one second each.
     wait: () =>
       new Promise<void>((r) => {
@@ -134,7 +146,14 @@ function harness(o: { failMic?: string; failUpload?: string; segments?: FitSegme
     picture = { kind, atPerf: 2, atSample: 2 * S }
     flow.stopped(picture)
   }
-  return { flow, phases, calls, rec, ctx, remembered, tick, rolling, pictureStops, flush }
+  /** A punch-in, through the countdown: the pre-roll is rolling. */
+  const punching = async (punch: { from: number; to: number | null }, preRoll = 1) => {
+    flow.open()
+    const p = flow.record(punch, preRoll)
+    for (let i = 0; i < 3; i++) await tick()
+    await p
+  }
+  return { flow, phases, calls, rec, ctx, remembered, starts, tick, rolling, punching, pictureStops, flush }
 }
 
 describe('the record flow', () => {
@@ -287,6 +306,123 @@ describe('the record flow', () => {
     h.flow.dispose()
     await h.flush()
     expect(h.rec.cancelled).toBe(true)
+  })
+})
+
+describe('punch-in', () => {
+  // SEGMENT places source sample s at composition s − 3 s, less the 720-sample offset (calibration + manual).
+  const OFFSET = -960 + 240
+
+  it('starts the picture the pre-roll before the punch point, and arms the range just before it rolls', async () => {
+    const h = harness()
+    await h.punching({ from: 2 * S, to: 2.5 * S }, 1)
+    expect(h.starts).toEqual([{ pictureFrom: S, punch: { from: 2 * S, to: 2.5 * S } }])
+    const arm = h.calls.indexOf(`arm:${2 * S}-${2.5 * S}`)
+    expect(arm).toBeGreaterThan(h.calls.indexOf('prepare'))
+    expect(arm).toBe(h.calls.indexOf('roll') - 1)
+    expect(h.flow.get()).toMatchObject({ phase: 'recording', punch: { from: 2 * S, to: 2.5 * S } })
+  })
+
+  it('keeps only the samples inside the range as the clip; the whole capture stays the source', async () => {
+    const h = harness()
+    await h.punching({ from: S, to: 2 * S })
+    h.flow.stop()
+    await h.flush()
+    // Composition 1 s is source sample 4 s less the offset; the clip ends exactly at 2 s.
+    expect(h.flow.placementsFor('rec_1')).toEqual([
+      expect.objectContaining({ start: S, srcStart: 4 * S - OFFSET, srcEnd: 5 * S - OFFSET }),
+    ])
+    expect(h.calls).toContain('upload.finish')
+    // The monitor's narration comes back once the take stops.
+    expect(h.calls.filter((c) => c.startsWith('arm'))).toEqual([`arm:${S}-${2 * S}`, 'arm:off'])
+    expect(h.flow.get()).toMatchObject({ phase: 'saved' })
+  })
+
+  it('with no end, the clip runs from the punch point until stop and the armed range is open-ended', async () => {
+    const h = harness()
+    await h.punching({ from: S, to: null }, 0)
+    expect(h.starts[0]?.pictureFrom).toBe(S)
+    expect(h.calls).toContain(`arm:${S}-Infinity`)
+    h.flow.stop()
+    await h.flush()
+    expect(h.flow.placementsFor('rec_1')).toEqual([
+      expect.objectContaining({ start: S, srcStart: 4 * S - OFFSET, srcEnd: 6 * S }),
+    ])
+  })
+
+  it('a stop in the pre-roll keeps nothing: the take is dropped and says why', async () => {
+    const h = harness()
+    await h.punching({ from: 5 * S, to: null })
+    h.flow.stop()
+    await h.flush()
+    expect(h.flow.get()).toMatchObject({ phase: 'setup', notice: BEFORE_PUNCH })
+    expect(h.calls).not.toContain('upload.finish')
+    expect(h.rec.cancelled).toBe(true)
+    expect(h.calls.at(-1)).toBe('release')
+    expect(h.flow.placementsFor('rec_1')).toBeNull()
+  })
+
+  it('Esc during a punch unarms the monitor', async () => {
+    const h = harness()
+    await h.punching({ from: S, to: 2 * S })
+    await h.flow.discard()
+    expect(h.calls.filter((c) => c.startsWith('arm'))).toEqual([`arm:${S}-${2 * S}`, 'arm:off'])
+  })
+
+  it('takeStart: pre-roll before the punch point, never before 0; a whole take starts at 0', () => {
+    expect(takeStart(null, 2)).toEqual({ pictureFrom: 0, punch: null })
+    expect(takeStart({ from: 5 * S, to: 7 * S }, 2).pictureFrom).toBe(3 * S)
+    expect(takeStart({ from: 5 * S, to: null }, 0).pictureFrom).toBe(5 * S)
+    expect(takeStart({ from: S, to: null }, 2).pictureFrom).toBe(0)
+    expect(takeStart({ from: 8 * S, to: null }, 9).pictureFrom).toBe(3 * S)
+    expect(takeStart({ from: 8 * S, to: null }, 0.25).pictureFrom).toBe(7.75 * S)
+  })
+
+  it('R (no modifiers) punches: over the selected range, or from the playhead until stop', () => {
+    const k = (key: string, mod: Partial<Record<'altKey' | 'ctrlKey' | 'metaKey', boolean>> = {}) =>
+      isPunchKey({ key, altKey: false, ctrlKey: false, metaKey: false, ...mod })
+    expect([k('r'), k('R'), k('s'), k('r', { metaKey: true }), k('r', { ctrlKey: true })]).toEqual([
+      true,
+      true,
+      false,
+      false,
+      false,
+    ])
+    expect(punchAt(3 * S, [S, 2 * S])).toEqual({ from: S, to: 2 * S })
+    expect(punchAt(3 * S, null)).toEqual({ from: 3 * S, to: null })
+    expect(punchAt(3 * S, [S, S])).toEqual({ from: 3 * S, to: null })
+  })
+
+  it('clampPreRoll holds the setting to 0-5 s (2 s when unreadable) and armedRange opens a range with no end', () => {
+    expect([clampPreRoll(3), clampPreRoll('1.5'), clampPreRoll(-1), clampPreRoll(7)]).toEqual([3, 1.5, 0, 5])
+    expect([clampPreRoll(null), clampPreRoll('x'), clampPreRoll(Number.NaN)]).toEqual([2, 2, 2])
+    expect(armedRange({ from: 10, to: 20 })).toEqual([10, 20])
+    expect(armedRange({ from: 10, to: null })).toEqual([10, Infinity])
+  })
+
+  it('sliceToRange cuts each piece by its own fit and offset, ends exactly at the range end, drops the rest', () => {
+    const fit = (a: number) => ({ a, b: 1 / S, residualMs: 1 })
+    const at = (a: number, offsetSamples: number, srcStart: number, srcEnd: number) => ({
+      start: placeTake(fit(a), offsetSamples, srcStart),
+      srcStart,
+      srcEnd,
+      fit: fit(a),
+      offsetSamples,
+    })
+    // Picture step at source 4 s: the second piece sits a frame later.
+    const pieces = [at(-1, 120, 0, 4 * S), at(-1 + 1 / 30, 120, 4 * S, 9 * S)]
+    const out = sliceToRange(pieces, 2 * S, 5 * S)
+    expect(out).toEqual([
+      { ...pieces[0], srcStart: 3 * S - 120, start: 2 * S },
+      { ...pieces[1], srcStart: 4 * S, srcEnd: 4 * S + (5 * S - (pieces[1]?.start ?? 0)) },
+    ])
+    // Composition times are kept: each piece's end is where the range ends or the piece did.
+    expect(out.map((p) => p.start + (p.srcEnd - p.srcStart))).toEqual([3 * S + 120, 5 * S])
+    // A range before or after the take keeps nothing.
+    expect(sliceToRange(pieces, 20 * S, 21 * S)).toEqual([])
+    expect(sliceToRange(pieces, -3 * S, -2 * S)).toEqual([])
+    // A range that holds the whole take keeps it as it is.
+    expect(sliceToRange(pieces, -2 * S)).toEqual(pieces)
   })
 })
 

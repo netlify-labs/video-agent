@@ -12,7 +12,11 @@
 //
 // Framework-free: the editor (NarrationRecorder.tsx) supplies the parts (recorder, picture clock, monitor, uploader);
 // the tests supply fakes.
-import { placeTake, SAMPLE_RATE } from '../../../src/lib/timeline'
+//
+// A punch-in (§2.2) is the same flow with a range: the picture starts the pre-roll before the punch point, the monitor
+// mutes the existing narration inside the range from the punch point on, and only the samples placed inside the
+// range (or from the punch point until stop) become the clip; the whole capture is still the take's source.
+import { placeTake, SAMPLE_RATE, type Span } from '../../../src/lib/timeline'
 import { placeRecordedTake, STOP_MESSAGES, type FitSegment, type RecordedPlacement } from './clock'
 import type { StopKind, StopReason } from './clock/fit'
 import type { TakeRecord } from './store'
@@ -33,9 +37,45 @@ export interface FlowSnapshot {
   notice: string | null
   error: string | null
   recordingId: string | null
+  /** The punch-in being recorded (or last recorded); null for a whole take. */
+  punch: Punch | null
 }
 
 export const COUNTDOWN = 3
+
+/** A punch-in (§2.2): re-record composition samples [from, to), or from `from` until stop when `to` is null. */
+export interface Punch {
+  from: number
+  to: number | null
+}
+
+/** Where a take's picture starts and what it records into. */
+export interface TakeStart {
+  /** Composition sample the picture starts at: 0 for a whole take, the punch point less the pre-roll for a punch. */
+  pictureFrom: number
+  punch: Punch | null
+}
+
+/** Pre-roll before a punch point, in seconds: 2 by default, 0 to 5 (§2.2 step 2). */
+export const PRE_ROLL_SEC = 2
+export const MAX_PRE_ROLL_SEC = 5
+
+/** A pre-roll setting held to 0..MAX_PRE_ROLL_SEC (the default when it isn't a number). */
+export function clampPreRoll(sec: unknown): number {
+  const v = typeof sec === 'string' && sec.trim() !== '' ? Number(sec) : sec
+  if (typeof v !== 'number' || !Number.isFinite(v)) return PRE_ROLL_SEC
+  return Math.min(MAX_PRE_ROLL_SEC, Math.max(0, v))
+}
+
+/** Where the picture starts for a take: a punch plays its pre-roll first (never before composition 0). */
+export function takeStart(punch: Punch | null, preRollSec = PRE_ROLL_SEC): TakeStart {
+  if (!punch) return { pictureFrom: 0, punch: null }
+  const pictureFrom = Math.max(0, punch.from - Math.round(clampPreRoll(preRollSec) * SAMPLE_RATE))
+  return { pictureFrom, punch }
+}
+
+/** The composition range the monitor mutes the existing narration in for a punch (`to` Infinity until stop). */
+export const armedRange = (punch: Punch): Span => [punch.from, punch.to ?? Infinity]
 
 /** The recorder parts the flow drives (recorder.ts's Recorder satisfies it). */
 export interface FlowRecorder {
@@ -54,9 +94,11 @@ export interface RecordFlowParts<C, R extends FlowRecorder> {
   openContext(): Promise<C>
   /** Opens the mic and the capture chain in that context. */
   createRecorder(ctx: C): Promise<R>
-  /** Rewinds the picture and loads the monitor's stems; resolves when both can play. */
-  prepare(ctx: C): Promise<void>
+  /** Cues the picture at the take's start and loads the monitor's stems; resolves when both can play. */
+  prepare(ctx: C, start: TakeStart): Promise<void>
   wait(ms: number): Promise<void>
+  /** Mutes the existing narration in the monitor inside `range` (a punch's), or unmutes it (null). */
+  arm(range: Span | null): void
   /** Arms the picture clock (and the monitor on it), gives it the take's first frame, and plays the picture. */
   roll(ctx: C, rec: R): Promise<void>
   /** Stops the picture clock (its stop listener may call stopped()), pauses the picture, stops the monitor. */
@@ -77,8 +119,8 @@ export interface RecordFlow {
   get(): FlowSnapshot
   open(): void
   close(): void
-  /** The Record click. */
-  record(): Promise<void>
+  /** The Record click; with `punch`, a punch-in over that range after `preRollSec` of pre-roll. */
+  record(punch?: Punch | null, preRollSec?: number): Promise<void>
   /** Space: stops and keeps (during the countdown nothing was recorded against the picture, so nothing is kept). */
   stop(kind?: StopKind, detail?: string, notice?: string): void
   /** The picture clock stopped the take (its onStop listener). */
@@ -96,38 +138,58 @@ export interface RecordFlow {
 
 export const DISCARDED = 'Take discarded.'
 export const TOO_EARLY = 'Stopped before the picture started, so nothing was kept.'
+export const BEFORE_PUNCH = 'Stopped before the punch point, so nothing was kept.'
 
-/** The take's clips: the fit placed with the offsets, then the countdown's pre-roll (before composition 0) cut off. */
+/**
+ * The take's clips: the fit placed with the offsets, then cut to what goes on the timeline. A whole take loses the
+ * countdown (before composition 0); a punch keeps only its range (or from the punch point on, with no end).
+ */
 export function takePlacements(
   segments: readonly FitSegment[],
   offsets: { calibrationOffsetSamples: number; manualOffsetSamples: number },
+  punch: Punch | null = null,
 ): RecordedPlacement[] {
-  return trimPreRoll(
-    placeRecordedTake(segments, offsets.calibrationOffsetSamples, offsets.manualOffsetSamples),
-  )
+  const pieces = placeRecordedTake(segments, offsets.calibrationOffsetSamples, offsets.manualOffsetSamples)
+  return punch ? sliceToRange(pieces, punch.from, punch.to ?? Infinity) : trimPreRoll(pieces)
+}
+
+/**
+ * Pieces cut to composition [from, to). A piece starts at its first source sample placed at or after `from` (by its
+ * own fit and offset), and ends where it reaches `to` (the clip plays its source sample by sample from there, so its
+ * end is exact). Pieces wholly outside the range are dropped; one already inside it is untouched.
+ */
+export function sliceToRange(
+  pieces: readonly RecordedPlacement[],
+  from: number,
+  to = Infinity,
+): RecordedPlacement[] {
+  const out: RecordedPlacement[] = []
+  for (const p of pieces) {
+    let s = p.srcStart
+    let start = p.start
+    if (start < from) {
+      const { a, b } = p.fit
+      if (!(b > 0)) continue
+      // `from` is source sample ((from − offset)/SR − a)/b; rounding can leave the estimate a sample either side.
+      s = Math.max(p.srcStart, Math.ceil(((from - p.offsetSamples) / SAMPLE_RATE - a) / b))
+      while (s > p.srcStart && placeTake(p.fit, p.offsetSamples, s - 1) >= from) s--
+      while (s < p.srcEnd && placeTake(p.fit, p.offsetSamples, s) < from) s++
+      if (s >= p.srcEnd) continue
+      start = placeTake(p.fit, p.offsetSamples, s)
+    }
+    const srcEnd = Number.isFinite(to) ? Math.min(p.srcEnd, s + (to - start)) : p.srcEnd
+    if (srcEnd <= s) continue
+    out.push(s === p.srcStart && srcEnd === p.srcEnd ? p : { ...p, srcStart: s, srcEnd, start })
+  }
+  return out
 }
 
 /**
  * Pieces start at the first source sample that lands at or after composition 0: the mic was capturing through the
  * countdown, and that part (before the picture starts) isn't on the timeline. A piece wholly before 0 is dropped.
  */
-export function trimPreRoll(pieces: readonly RecordedPlacement[]): RecordedPlacement[] {
-  const out: RecordedPlacement[] = []
-  for (const p of pieces) {
-    if (p.start >= 0) {
-      out.push(p)
-      continue
-    }
-    const { a, b } = p.fit
-    if (!(b > 0)) continue
-    // Composition 0 is source sample (−offset/SR − a)/b; rounding can leave it a sample short.
-    let s = Math.max(p.srcStart, Math.ceil((-p.offsetSamples / SAMPLE_RATE - a) / b))
-    while (s < p.srcEnd && placeTake(p.fit, p.offsetSamples, s) < 0) s++
-    if (s >= p.srcEnd) continue
-    out.push({ ...p, srcStart: s, start: placeTake(p.fit, p.offsetSamples, s) })
-  }
-  return out
-}
+export const trimPreRoll = (pieces: readonly RecordedPlacement[]): RecordedPlacement[] =>
+  sliceToRange(pieces, 0)
 
 /** Pieces cut to the take's length (the uploaded file's samples); empty ones dropped. */
 export function clampToTake(pieces: readonly RecordedPlacement[], samples: number): RecordedPlacement[] {
@@ -150,6 +212,14 @@ export function flowKey(phase: FlowPhase, key: string): 'stop' | 'discard' | nul
   return null
 }
 
+/** R with no modifier punches in (at the playhead, or over the selected range); the caller skips text fields. */
+export const isPunchKey = (e: { key: string; altKey: boolean; ctrlKey: boolean; metaKey: boolean }) =>
+  (e.key === 'r' || e.key === 'R') && !e.altKey && !e.ctrlKey && !e.metaKey
+
+/** The punch the editor's playhead and ruler selection mean: the range if there is one, else from the playhead on. */
+export const punchAt = (playhead: number, range: Span | null): Punch =>
+  range && range[1] > range[0] ? { from: range[0], to: range[1] } : { from: Math.max(0, playhead), to: null }
+
 /** Phases in which Record can be pressed. */
 export const canRecord = (phase: FlowPhase) => phase === 'setup' || phase === 'saved' || phase === 'failed'
 /** Phases in which a take is in the mic's hands: the setup is fixed and the panel stays open. */
@@ -166,6 +236,7 @@ const IDLE: FlowSnapshot = {
   notice: null,
   error: null,
   recordingId: null,
+  punch: null,
 }
 
 export function createRecordFlow<C, R extends FlowRecorder>(
@@ -173,8 +244,8 @@ export function createRecordFlow<C, R extends FlowRecorder>(
   onChange: (s: FlowSnapshot) => void = () => undefined,
 ): RecordFlow {
   let snap = IDLE
-  // The take being recorded: its context and recorder, and whether the picture has started.
-  let cur: { ctx: C; rec: R; rolling: boolean; keeping: boolean } | null = null
+  // The take being recorded: its context and recorder, whether the picture has started, and its punch range.
+  let cur: { ctx: C; rec: R; rolling: boolean; keeping: boolean; punch: Punch | null } | null = null
   // Each Record click gets a generation; a discard makes the old one's later steps no-ops.
   let gen = 0
   const placed = new Map<string, RecordedPlacement[]>()
@@ -210,15 +281,26 @@ export function createRecordFlow<C, R extends FlowRecorder>(
       notice: notice ?? (early ? STOP_MESSAGES[reason.kind] : null),
     })
     parts.halt(reason.kind, reason.detail)
-    const pieces = takePlacements(parts.fit(), parts.offsets())
-    placed.set(take.rec.recordingId, pieces)
+    if (take.punch) parts.arm(null)
+    const pieces = takePlacements(parts.fit(), parts.offsets(), take.punch)
     log('record.stop', {
       recordingId: take.rec.recordingId,
       kind: reason.kind,
       atSample: reason.atSample,
       pieces: pieces.length,
       start: pieces[0]?.start ?? null,
+      ...(take.punch ? { punch: [take.punch.from, take.punch.to] } : {}),
     })
+    if (take.punch && !pieces.length) {
+      // Stopped in the pre-roll: nothing landed in the range, so there's no clip to keep.
+      if (cur === take) cur = null
+      gen++
+      parts.upload.reset()
+      rest({ stop: reason, notice: BEFORE_PUNCH, error: null })
+      await drop(take)
+      return
+    }
+    placed.set(take.rec.recordingId, pieces)
     await parts.remember(take.rec.recordingId, { pieces, stop: reason.kind }).catch(() => undefined)
     try {
       await parts.upload.finish(take.rec)
@@ -239,28 +321,42 @@ export function createRecordFlow<C, R extends FlowRecorder>(
       const settled = snap.phase === 'setup' || snap.phase === 'saved' || snap.phase === 'failed'
       set({ open: false, ...(settled ? { phase: 'idle' as const, notice: null, error: null } : {}) })
     },
-    async record() {
+    async record(punch = null, preRollSec = PRE_ROLL_SEC) {
       if (!canRecord(snap.phase) || cur) return
       const my = ++gen
       const live = () => my === gen
-      set({ phase: 'countdown', count: COUNTDOWN, stop: null, notice: null, error: null, recordingId: null })
+      const start = takeStart(punch, preRollSec)
+      set({
+        phase: 'countdown',
+        count: COUNTDOWN,
+        stop: null,
+        notice: null,
+        error: null,
+        recordingId: null,
+        punch,
+      })
       const t0 = Date.now()
       let ctx: C | null = null
       try {
         ctx = await parts.openContext()
         const rec = await parts.createRecorder(ctx)
         if (!live()) {
-          await drop({ ctx, rec, rolling: false, keeping: false })
+          await drop({ ctx, rec, rolling: false, keeping: false, punch })
           return
         }
-        const take = { ctx, rec, rolling: false, keeping: false }
+        const take = { ctx, rec, rolling: false, keeping: false, punch }
         cur = take
         // The mic captures from here, through the countdown.
         rec.start()
         parts.upload.recording(rec.recordingId)
         set({ recordingId: rec.recordingId })
-        log('record.armed', { recordingId: rec.recordingId, ms: Date.now() - t0 })
-        const ready = parts.prepare(ctx)
+        log('record.armed', {
+          recordingId: rec.recordingId,
+          ms: Date.now() - t0,
+          pictureFrom: start.pictureFrom,
+          ...(punch ? { punch: [punch.from, punch.to] } : {}),
+        })
+        const ready = parts.prepare(ctx, start)
         for (let n = COUNTDOWN; n > 0; n--) {
           set({ count: n })
           await parts.wait(1000)
@@ -270,6 +366,8 @@ export function createRecordFlow<C, R extends FlowRecorder>(
         if (!live()) return
         take.rolling = true
         set({ count: null })
+        // The monitor plays the existing narration through the pre-roll and mutes it from the punch point.
+        if (punch) parts.arm(armedRange(punch))
         await parts.roll(ctx, rec)
         if (!live() || take.keeping) return
         set({ phase: 'recording' })
@@ -280,6 +378,7 @@ export function createRecordFlow<C, R extends FlowRecorder>(
           return
         }
         log('record.failed', { error: message(e) })
+        if (punch) parts.arm(null)
         const take = cur
         cur = null
         if (take) await drop(take)
@@ -323,6 +422,7 @@ export function createRecordFlow<C, R extends FlowRecorder>(
       cur = null
       rest({ stop: null, notice, error: null })
       if (take.rolling) parts.halt('user')
+      if (take.punch) parts.arm(null)
       parts.upload.reset()
       log('record.discard', { recordingId: take.rec.recordingId, rolling: take.rolling })
       await drop(take)
@@ -330,7 +430,7 @@ export function createRecordFlow<C, R extends FlowRecorder>(
     async checkpoint() {
       const take = cur
       if (!take?.rolling || take.keeping) return
-      const pieces = takePlacements(parts.fit(), parts.offsets())
+      const pieces = takePlacements(parts.fit(), parts.offsets(), take.punch)
       if (pieces.length)
         await parts.remember(take.rec.recordingId, { pieces, stop: null }).catch(() => undefined)
     },

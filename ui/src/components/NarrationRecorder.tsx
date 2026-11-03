@@ -6,11 +6,21 @@
 // to a ready clip, which lands on the Narration track where it was recorded (one undo step) and is saved with the
 // draft. Takes a reload or a failure left behind are offered again (RecoveryPrompt). Leaving the editor discards a
 // running take and releases the mic.
-import { Alert, Button, Card, Group, Progress, Stack, Text } from '@mantine/core'
-import { IconMicrophone, IconPlayerRecordFilled, IconPlayerStopFilled, IconX } from '@tabler/icons-react'
+// Punch in (§2.2): Punch in, or R outside a text field, re-records the ruler's selected range (or from the playhead
+// until stop). The picture starts the pre-roll before the punch point (2 s, 0-5 s, remembered in this browser) with
+// the existing narration in the monitor; from the punch point the monitor mutes it inside the range, and only the
+// range's samples land on the track, laid over the older clips (one undo step).
+import { Alert, Button, Card, Group, NumberInput, Progress, Stack, Text } from '@mantine/core'
+import {
+  IconArrowBarToRight,
+  IconMicrophone,
+  IconPlayerRecordFilled,
+  IconPlayerStopFilled,
+  IconX,
+} from '@tabler/icons-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { decodePeaks, type Peaks } from '../../../src/lib/peaks'
-import { placeTake, type NarrationTracks } from '../../../src/lib/timeline'
+import { placeTake, SAMPLE_RATE, type NarrationTracks } from '../../../src/lib/timeline'
 import { $api } from '../api/client'
 import {
   AudioClock,
@@ -24,12 +34,17 @@ import {
 } from '../recorder/clock'
 import {
   canRecord,
+  clampPreRoll,
   clampToTake,
   createRecordFlow,
   flowKey,
+  isPunchKey,
   isRunning,
+  MAX_PRE_ROLL_SEC,
   placementsFromRecord,
+  punchAt,
   type FlowSnapshot,
+  type Punch,
   type RecordFlowParts,
 } from '../recorder/flow'
 import { draftStemLoader, signedTakeLoader, useStemMonitor } from '../recorder/monitor'
@@ -49,6 +64,7 @@ import {
 import { recoveryStore } from '../recorder/store'
 import { pictureTime, PrompterLayout, Teleprompter, isTextField } from '../recorder/teleprompter'
 import { useTakeUpload } from '../recorder/use-take-upload'
+import { formatTime } from '../lib/timeline-view'
 import { fileUrl } from './bits'
 import type { NarrationTrackApi } from './NarrationSection'
 
@@ -58,6 +74,28 @@ const NO_OFFSETS = { calibrationOffsetSamples: 0, manualOffsetSamples: 0 }
 const READY_MS = 15_000
 /** How often a running take's placement is written to its recovery record. */
 const CHECKPOINT_MS = 2_000
+/** Where this browser remembers the punch-in pre-roll. */
+const PRE_ROLL_KEY = 'va.narration.preRollSec'
+
+function storedPreRoll(): number {
+  try {
+    return clampPreRoll(localStorage.getItem(PRE_ROLL_KEY))
+  } catch {
+    return clampPreRoll(null)
+  }
+}
+
+function storePreRoll(sec: number) {
+  try {
+    localStorage.setItem(PRE_ROLL_KEY, String(sec))
+  } catch {
+    // A private window: it's remembered for this visit only.
+  }
+}
+
+const at = (samples: number) => formatTime(samples / SAMPLE_RATE, 0.1)
+/** "0:02.0 to 0:04.0", or "from 0:02.0" with no end. */
+export const punchText = (p: Punch) => (p.to === null ? `from ${at(p.from)}` : `${at(p.from)} to ${at(p.to)}`)
 
 const INTERRUPTED: Record<string, string> = {
   quota: "Your browser's storage is full, so the take stopped there.",
@@ -80,12 +118,15 @@ async function until(ok: () => boolean, ms: number): Promise<boolean> {
   return true
 }
 
-/** The picture at its first frame, paused, with enough buffered to play (a seek while armed would stop the take). */
-async function rewind(video: HTMLVideoElement) {
+/**
+ * The picture at composition second `time` (0 for a whole take, the pre-roll's start for a punch), paused, with enough
+ * buffered to play (a seek while armed would stop the take).
+ */
+async function cue(video: HTMLVideoElement, time: number) {
   video.pause()
-  if (video.currentTime !== 0) {
+  if (Math.abs(video.currentTime - time) > 1e-3) {
     const seeked = new Promise((r) => video.addEventListener('seeked', r, { once: true }))
-    video.currentTime = 0
+    video.currentTime = time
     await seeked
   }
   if (video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) {
@@ -170,6 +211,9 @@ export function NarrationRecorder({ api, videoId, versionN, draft }: NarrationRe
   const [rate, setRate] = useState<number | null>(null)
   const offsets = useRef<CalibrationOffsets | null>(null)
   const [level, setLevel] = useState(0)
+  const [preRoll, setPreRoll] = useState(storedPreRoll)
+  // Composition second the take's picture starts at, for what the monitor loads first.
+  const [monitorFrom, setMonitorFrom] = useState(0)
 
   // The take's AudioContext and clock (made in the Record click), the picture, and the monitor on them.
   const [audio, setAudio] = useState<{ ctx: AudioContext; clock: AudioClock } | null>(null)
@@ -198,6 +242,7 @@ export function NarrationRecorder({ api, videoId, versionN, draft }: NarrationRe
     stemLoader,
     outputMode: setup.outputMode,
     speakersLevelDb: monitorDbWhileRecording(setup),
+    from: monitorFrom,
   })
   const monitorRef = useRef(monitor)
   monitorRef.current = monitor
@@ -271,15 +316,18 @@ export function NarrationRecorder({ api, videoId, versionN, draft }: NarrationRe
           )
         }
       },
-      async prepare() {
+      async prepare(_ctx, start) {
+        // R with the panel closed opens it in the same click: the picture mounts a render later.
+        await until(() => !!videoRef.current, READY_MS)
         const v = videoRef.current
         if (!v) throw new Error("The video isn't on the page.")
-        await rewind(v)
+        await cue(v, start.pictureFrom / SAMPLE_RATE)
         // No composition yet (its preview is still loading): the take records without the monitor.
         const ok = await until(() => !latest.current.api.html || monitorRef.current.ready, READY_MS)
         if (!ok) log('record.monitor_not_ready', { ms: READY_MS })
       },
       wait: sleep,
+      arm: (range) => monitorRef.current.setArmedRange(range),
       async roll(ctx, rec) {
         const v = videoRef.current
         const ck = monitorRef.current
@@ -390,7 +438,7 @@ export function NarrationRecorder({ api, videoId, versionN, draft }: NarrationRe
     }
   }, [flow, phase])
 
-  const onRecord = () => {
+  const onRecord = (punch: Punch | null = null) => {
     // The setup's Original audio goes on the track the take is recorded for.
     const t = setupToTrackPatch(setupRef.current)
     latest.current.api.setTracks({
@@ -398,12 +446,36 @@ export function NarrationRecorder({ api, videoId, versionN, draft }: NarrationRe
       original: t.original,
     } satisfies Partial<NarrationTracks>)
     ;(document.activeElement as HTMLElement | null)?.blur()
-    void flow.record()
+    setMonitorFrom(punch ? Math.max(0, punch.from / SAMPLE_RATE - preRoll) : 0)
+    void flow.record(punch, preRoll)
   }
   const openPanel = () => {
     if (rate === null) setRate(deviceRate())
     flow.open()
   }
+
+  const busyUpload =
+    upload.state === 'uploading' || upload.state === 'processing' || upload.state === 'saving'
+  const canStart = canRecord(phase) && api.canRecord && !!userId && !busyUpload
+  const punch = punchAt(api.playhead, api.range)
+
+  // R punches in at the playhead (or over the ruler's range), opening the panel if it's closed; not in text fields.
+  const onPunchKey = useRef<() => void>(() => undefined)
+  onPunchKey.current = () => {
+    if (!api.canRecord || !userId || busyUpload || running) return
+    if (!s.open) openPanel()
+    if (!canRecord(flow.get().phase)) return
+    onRecord(punch)
+  }
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.repeat || isTextField(e.target) || !isPunchKey(e)) return
+      e.preventDefault()
+      onPunchKey.current()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   const listener = useMemo(() => setupClapListener(() => setupRef.current), [])
   const route: AudioRoute | null = useMemo(
@@ -421,8 +493,6 @@ export function NarrationRecorder({ api, videoId, versionN, draft }: NarrationRe
     [],
   )
 
-  const busyUpload =
-    upload.state === 'uploading' || upload.state === 'processing' || upload.state === 'saving'
   const status = statusText(s, upload.state, upload.progress)
   const recoverable = recovery.takes.filter((t) => t.id !== s.recordingId)
 
@@ -524,16 +594,49 @@ export function NarrationRecorder({ api, videoId, versionN, draft }: NarrationRe
                   </Button>
                 </>
               ) : (
-                <Button
-                  size="xs"
-                  color="red"
-                  leftSection={<IconPlayerRecordFilled size={14} />}
-                  disabled={!canRecord(phase) || !api.canRecord || !userId || busyUpload}
-                  onClick={onRecord}
-                  data-testid="record-start"
-                >
-                  Record
-                </Button>
+                <>
+                  <Button
+                    size="xs"
+                    color="red"
+                    leftSection={<IconPlayerRecordFilled size={14} />}
+                    disabled={!canStart}
+                    onClick={() => onRecord()}
+                    data-testid="record-start"
+                  >
+                    Record
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant="default"
+                    leftSection={<IconArrowBarToRight size={14} />}
+                    disabled={!canStart}
+                    onClick={() => onRecord(punch)}
+                    data-testid="record-punch"
+                    data-from={punch.from}
+                    data-to={punch.to ?? ''}
+                  >
+                    Punch in {punchText(punch)} (R)
+                  </Button>
+                  <NumberInput
+                    size="xs"
+                    w={110}
+                    label="Pre-roll (s)"
+                    min={0}
+                    max={MAX_PRE_ROLL_SEC}
+                    step={0.5}
+                    decimalScale={1}
+                    clampBehavior="strict"
+                    value={preRoll}
+                    onChange={(v) => {
+                      // A half-typed value ('' or '1.') waits for the next keystroke.
+                      if (typeof v !== 'number') return
+                      const next = clampPreRoll(v)
+                      setPreRoll(next)
+                      storePreRoll(next)
+                    }}
+                    data-testid="punch-preroll"
+                  />
+                </>
               )}
               {phase === 'recording' ? (
                 <Progress
@@ -611,11 +714,15 @@ function statusText(
   switch (s.phase) {
     case 'idle':
     case 'setup':
-      return 'Record starts a 3-2-1 countdown, then the video plays from the start. Space stops and keeps the take; Esc discards it.'
+      return 'Record starts a 3-2-1 countdown, then the video plays from the start. Space stops and keeps the take; Esc discards it. To redo part of it, select a range on the ruler (or put the playhead there) and punch in.'
     case 'countdown':
-      return s.count === null ? 'Starting the video…' : `Recording in ${s.count}…`
+      return s.count === null
+        ? 'Starting the video…'
+        : `${s.punch ? `Punching in ${punchText(s.punch)}` : 'Recording'} in ${s.count}…`
     case 'recording':
-      return 'Recording. Space stops and keeps the take; Esc discards it.'
+      return s.punch
+        ? `Punching in ${punchText(s.punch)}: your narration there is muted from the punch point. Space stops and keeps the take; Esc discards it.`
+        : 'Recording. Space stops and keeps the take; Esc discards it.'
     case 'stopping':
       return 'Finishing the take…'
     case 'uploading':

@@ -12,6 +12,8 @@ import {
   outputEnd,
   outputLimit,
   SAMPLE_RATE,
+  segments,
+  XFADE_SAMPLES,
   type NarrationClip,
   type NarrationOp,
 } from '../../../src/lib/timeline'
@@ -518,5 +520,29 @@ describe('insert (a new take on the track)', () => {
     h = editorReducer(h, { type: 'undo' })
     expect(h.present.clips).toHaveLength(0)
     expect(applyCommand(opOf([]), { type: 'insert', clip: first, with: [first] }, ctx).ok).toBe(false)
+  })
+
+  it('a punch-in over the middle of a clip replaces exactly its range: the older clip is split around it, its samples keep their times, joins crossfade on handle audio, and it is one undo entry', () => {
+    const S = SAMPLE_RATE
+    // A 6 s take at 0; the punch take (m2) recorded from a 2 s pre-roll and re-records 2-4 s.
+    const op = opOf([clip({ id: 'a', srcEnd: 6 * S })])
+    const punch = clip({ id: 'p', mediaId: 'm2', start: 2 * S, srcStart: 2 * S + 77, srcEnd: 4 * S + 77 })
+    let h = initHistory(op)
+    h = editorReducer(h, { type: 'command', command: { type: 'insert', clip: punch }, ctx })
+    expect(h.present.clips.map((c) => [c.id, c.mediaId, c.start, clipEnd(c), c.srcStart])).toEqual([
+      ['a', 'm1', 0, 2 * S, 0],
+      ['p', 'm2', 2 * S, 4 * S, 2 * S + 77],
+      ['a~2', 'm1', 4 * S, 6 * S, 4 * S],
+    ])
+    // Both edit points have handle audio on both sides: 20 ms equal-power crossfades.
+    const segs = segments(h.present.clips, ctx.takeSamples)
+    expect(segs.map((g) => [g.head.kind, g.tail.kind])).toEqual([
+      ['none', 'xfade'],
+      ['xfade', 'xfade'],
+      ['xfade', 'none'],
+    ])
+    expect(segs[1]).toMatchObject({ from: 2 * S - XFADE_SAMPLES / 2, to: 4 * S + XFADE_SAMPLES / 2 })
+    h = editorReducer(h, { type: 'undo' })
+    expect(sameClips(h.present, initHistory(op).present)).toBe(true)
   })
 })
