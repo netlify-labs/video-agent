@@ -51,8 +51,9 @@ import { assertCan, type Principal } from './policy.js'
 import { snapshotMedia } from './media.js'
 import { addAttemptRefs, canReadTake, isTake, releaseOwnerRefs, replaceDraftRefs } from './takes.js'
 import { getSettings } from './settings.js'
+import { narrationEnabled } from './narration-settings.js'
 import type { Repo } from '../store/types.js'
-import { NARRATION_SETTING_DEFAULTS, type EditRow, type MediaRow } from './types.js'
+import { type EditRow, type MediaRow } from './types.js'
 import { hasUnfinished, loadJob, newAttempt, videoDto, withIdempotency } from './videos.js'
 
 export const EDIT_TTL_MS = 7 * 24 * 3600_000
@@ -121,11 +122,7 @@ function takeIds(op: NarrationOp) {
   return ids
 }
 
-// TODO(voiceover settings lane): use the shared narrationEnabled helper once it lands; same rule (missing = on).
-// Read before a transaction: a settings cache miss inside one would query outside it.
-async function narrationEnabled(deps: Deps) {
-  return (await getSettings(deps)).narrationEnabled ?? NARRATION_SETTING_DEFAULTS.narrationEnabled
-}
+// Read before a transaction (it queries the settings row directly, uncached, so an admin's switch applies at once).
 const narrationOff = () =>
   new ApiError('narration_disabled', 'Recorded voice-over is turned off on this site.')
 

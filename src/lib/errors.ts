@@ -13,7 +13,6 @@ export type ErrorCode =
   | 'upstream_error'
   | 'setup_required'
   | 'planning_unavailable'
-  | 'narration_disabled'
   | 'internal'
 
 const STATUS: Record<ErrorCode, number> = {
@@ -31,7 +30,6 @@ const STATUS: Record<ErrorCode, number> = {
   upstream_error: 502,
   setup_required: 503,
   planning_unavailable: 503,
-  narration_disabled: 409,
   internal: 500,
 }
 
