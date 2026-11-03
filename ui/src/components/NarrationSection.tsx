@@ -282,7 +282,7 @@ export function NarrationSection(props: NarrationSectionProps) {
     }
     const audio = files.filter(isNarrationFile)
     for (const f of files.filter((x) => !isNarrationFile(x)))
-      notifications.show({ color: 'red', message: `${f.name} isn't an MP3, M4A, WAV or Ogg file.` })
+      notifications.show({ color: 'red', message: `${f.name} isn't an MP3, M4A, WAV, Ogg or WebM file.` })
     let at = start
     for (const f of audio) {
       setImporting({ name: f.name, percent: 0, phase: 'Reading' })
@@ -405,7 +405,7 @@ export function NarrationSection(props: NarrationSectionProps) {
         </Group>
         {props.banner}
         <Text size="xs" c="var(--va-faint)" mb="xs">
-          Drop an MP3, M4A, WAV or Ogg file on the Narration lane, or add one at the playhead. Drag clips to
+          Drop an MP3, M4A, WAV, Ogg or WebM file on the Narration lane, or add one at the playhead. Drag clips to
           line them up; your narration plays over the scenes as they are.
         </Text>
         {importing ? (

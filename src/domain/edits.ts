@@ -60,7 +60,7 @@ import { hasUnfinished, loadJob, newAttempt, videoDto, withIdempotency } from '.
 
 export const EDIT_TTL_MS = 7 * 24 * 3600_000
 const MAX_OPS = 500
-const AUDIO_FILE = /\.(mp3|m4a|aac|wav|ogg|opus)$/i
+const AUDIO_FILE = /\.(mp3|m4a|aac|wav|ogg|opus|webm)$/i
 
 /** A draft's ops: the contract's edits, plus at most one whole-track narration op (plan 2026-11-02 §6.1). */
 export type DraftOp = EditOp | NarrationOp
