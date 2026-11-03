@@ -888,8 +888,8 @@ test('media picked on New video goes to the plan and the video; chips lock while
   await expect(dialog.getByText('Nothing to pick yet.')).toBeVisible()
   await dialog.locator('input[type=file]').setInputFiles(pngFile())
   await dialog.getByTestId('pick-med_mock0001').click()
-  await expect(dialog.getByText('1 of up to 12 picked')).toBeVisible()
-  await dialog.getByRole('button', { name: 'Done' }).click()
+  await expect(dialog.getByText('Selected (1 of up to 12)')).toBeVisible()
+  await dialog.getByRole('button', { name: 'Add 1 to the video' }).click()
   await expect(page.getByTestId('chip-med_mock0001')).toContainText('logo.png')
 
   await planFirst(page)
@@ -900,7 +900,7 @@ test('media picked on New video goes to the plan and the video; chips lock while
   await expect(page.getByTestId('chip-med_mock0001')).toHaveCount(0)
   await page.getByRole('button', { name: 'Add media' }).click()
   await page.getByRole('dialog').getByTestId('pick-med_mock0001').click()
-  await page.getByRole('dialog').getByRole('button', { name: 'Done' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Add 1 to the video' }).click()
   await createNow(page)
   await expect(page).toHaveURL(/\/videos\//)
   expect(await page.evaluate("window.__sent['/api/v1/videos'].mediaIds")).toEqual(['med_mock0001'])
@@ -926,6 +926,50 @@ test('files dropped on Add media upload, and the picker shows their section', as
   await expect(dialog.getByTestId('pick-med_mock0001')).toContainText('launch-notes.pdf')
 })
 
+test('a file whose name is already in the library asks to replace it, keep both or skip it', async ({
+  page,
+}) => {
+  await page.goto('/media')
+  const file = page.locator('input[type=file]')
+  await file.setInputFiles(pngFile())
+  await expect(page.getByTestId('media-med_mock0001')).toBeVisible()
+  // Same name again: asked, and Replace (the default) swaps the old item for the new one.
+  await file.setInputFiles(pngFile())
+  const ask = page.getByRole('dialog', { name: 'Replace the file in the library?' })
+  await expect(ask.getByText('logo.png')).toBeVisible()
+  await ask.getByRole('button', { name: 'Continue' }).click()
+  await expect(page.getByTestId('media-med_mock0002')).toBeVisible()
+  await expect(page.getByTestId('media-med_mock0001')).toHaveCount(0)
+  // Keep both keeps the old one; Skip uploads nothing.
+  await file.setInputFiles(pngFile())
+  await ask.getByText('Keep both').click()
+  await ask.getByRole('button', { name: 'Continue' }).click()
+  await expect(page.getByTestId('media-med_mock0003')).toBeVisible()
+  await expect(page.getByTestId('media-med_mock0002')).toBeVisible()
+  await file.setInputFiles(pngFile())
+  await ask.getByText('Skip').click()
+  await ask.getByRole('button', { name: 'Continue' }).click()
+  await expect(ask).toHaveCount(0)
+  await expect(page.getByTestId('media-med_mock0004')).toHaveCount(0)
+})
+
+test('selected media is marked and listed, and the button says what it adds', async ({ page }) => {
+  await page.goto('/new')
+  await page.getByRole('button', { name: 'Add media' }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByText('Nothing selected yet.')).toBeVisible()
+  await dialog.locator('input[type=file]').setInputFiles(pngFile())
+  const card = dialog.getByTestId('pick-med_mock0001')
+  await card.click()
+  await expect(card).toHaveAttribute('aria-pressed', 'true')
+  await expect(dialog.getByTestId('selected-med_mock0001')).toContainText('logo.png')
+  await dialog.getByRole('button', { name: 'Unselect logo.png' }).click()
+  await expect(card).toHaveAttribute('aria-pressed', 'false')
+  await card.click()
+  await dialog.getByRole('button', { name: 'Add 1 to the video' }).click()
+  await expect(page.getByTestId('chip-med_mock0001')).toContainText('logo.png')
+})
+
 test('a revision can add media', async ({ page }) => {
   await page.goto('/videos/vid_teaser')
   await page.getByLabel('What should change?').fill('Put our logo on the end card')
@@ -933,7 +977,7 @@ test('a revision can add media', async ({ page }) => {
   const dialog = page.getByRole('dialog')
   await dialog.locator('input[type=file]').setInputFiles(pngFile())
   await dialog.getByTestId('pick-med_mock0001').click()
-  await dialog.getByRole('button', { name: 'Done' }).click()
+  await dialog.getByRole('button', { name: 'Add 1 to the video' }).click()
   await page.getByRole('button', { name: /Make v\d+ now/ }).click()
   await expect
     .poll(() => page.evaluate("window.__sent?.['/api/v1/videos/vid_teaser/versions']?.mediaIds"))
@@ -978,7 +1022,7 @@ test('New video sends the Sound choice; picking a track turns music on', async (
   await dialog.locator('input[type=file]').setInputFiles(mp3File())
   await dialog.getByText('Audio', { exact: true }).click()
   await dialog.getByTestId('pick-med_mock0001').click()
-  await dialog.getByRole('button', { name: 'Done' }).click()
+  await dialog.getByRole('button', { name: 'Add 1 to the video' }).click()
   await expect(page.getByTestId('chip-med_mock0001')).toContainText('theme.mp3')
   await expect(page.getByRole('radio', { name: 'Music', exact: true })).toBeChecked()
   await expect(page.getByText('Music: theme.mp3.')).toBeVisible()
@@ -1444,7 +1488,7 @@ test('a track imported from the picker is picked straight away', async ({ page }
   await find.getByTestId(`track-${HARBOR}`).getByRole('button', { name: 'Import' }).click()
   await expect(find).toHaveCount(0)
   await expect(picker.getByTestId('pick-med_mock0001')).toHaveAttribute('aria-pressed', 'true')
-  await picker.getByRole('button', { name: 'Done' }).click()
+  await picker.getByRole('button', { name: 'Add 1 to the video' }).click()
   await expect(page.getByTestId('chip-med_mock0001')).toContainText('Quiet Harbor')
 })
 

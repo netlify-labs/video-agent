@@ -652,6 +652,28 @@ export const MusicLibraryMatchesSchema = z
   })
   .openapi('MusicLibraryMatches')
 
+export const MediaCheckSchema = z
+  .object({
+    files: z
+      .array(z.object({ filename: z.string().min(1).max(200), sha256: z.string().regex(/^[0-9a-f]{64}$/) }))
+      .min(1)
+      .max(50),
+  })
+  .openapi('MediaCheck')
+export const MediaCheckResultSchema = z
+  .object({
+    files: z.array(
+      z.object({
+        filename: z.string(),
+        sha256: z.string(),
+        // An item with exactly these bytes (no need to upload it again), and a different file with the same name.
+        sameFile: z.union([MediaSchema, z.null()]),
+        sameName: z.union([MediaSchema, z.null()]),
+      }),
+    ),
+  })
+  .openapi('MediaCheckResult')
+
 export const MediaListSchema = z
   .object({ items: z.array(MediaSchema), nextCursor: z.string().nullable() })
   .openapi('MediaList')

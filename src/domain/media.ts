@@ -234,6 +234,31 @@ export async function listMedia(
   }
 }
 
+/**
+ * What's already in the library for files about to be uploaded: the same file (identical bytes, so the upload can
+ * be skipped) or a different file with the same name (so the person can replace it, keep both or skip).
+ */
+export async function checkMedia(deps: Deps, p: Principal, files: { filename: string; sha256: string }[]) {
+  assertCan(p, 'media:upload')
+  const rows = await deps.store.findMediaMatches({
+    sha256s: [...new Set(files.map((f) => f.sha256))],
+    filenames: [...new Set(files.map((f) => f.filename))],
+    includePendingOf: p.userId,
+  })
+  const usage = await deps.store.mediaUsage(rows.map((m) => m.id))
+  const dto = (m: MediaRow | undefined) => (m ? mediaDto(deps, p, m, usage) : Promise.resolve(null))
+  return {
+    files: await Promise.all(
+      files.map(async (f) => ({
+        filename: f.filename,
+        sha256: f.sha256,
+        sameFile: await dto(rows.find((m) => m.originalSha256 === f.sha256)),
+        sameName: await dto(rows.find((m) => m.filename === f.filename && m.originalSha256 !== f.sha256)),
+      })),
+    ),
+  }
+}
+
 async function loadMedia(deps: Deps, p: Principal, id: string) {
   const m = await deps.store.getMedia(id)
   if (!m || m.deletedAt || (m.status !== 'ready' && m.uploaderId !== p.userId))

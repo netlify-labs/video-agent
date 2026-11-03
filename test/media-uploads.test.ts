@@ -228,3 +228,43 @@ describe('upload sessions', () => {
     ).toEqual([s.id])
   })
 })
+
+describe('duplicate check', () => {
+  it.each(['memory', 'postgres'])(
+    'finds the same file by its bytes and a different file by its name (%s)',
+    async (store) => {
+      const { png, upload, person } = await import('./helpers.js')
+      const h = store === 'postgres' ? harness({}, { store: await pgStore() }) : harness()
+      const logo = png(64, 64)
+      const res = await upload(h, h.member, logo, 'filename=logo.png')
+      expect(res.status).toBe(201)
+      const item = (await res.json()) as { id: string }
+      const check = await h.json<{
+        files: { filename: string; sameFile: { id: string } | null; sameName: { id: string } | null }[]
+      }>(
+        await h.call('POST', '/api/v1/media/check', {
+          as: h.member,
+          body: {
+            files: [
+              { filename: 'copy-of-logo.png', sha256: sha(logo) },
+              { filename: 'logo.png', sha256: sha(png(32, 32)) },
+              { filename: 'new.png', sha256: sha(png(8, 8)) },
+            ],
+          },
+        }),
+      )
+      expect(check.files.map((f) => [f.filename, f.sameFile?.id ?? null, f.sameName?.id ?? null])).toEqual([
+        ['copy-of-logo.png', item.id, null],
+        ['logo.png', null, item.id],
+        ['new.png', null, null],
+      ])
+      // Viewers can't upload, so they can't check either.
+      const viewer = await person(h, 'u_v', 'viewer')
+      const refused = await h.call('POST', '/api/v1/media/check', {
+        as: viewer,
+        body: { files: [{ filename: 'x.png', sha256: sha(logo) }] },
+      })
+      expect(refused.status).toBe(403)
+    },
+  )
+})

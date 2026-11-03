@@ -4015,6 +4015,94 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/media/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check for duplicates
+         * @description Before uploading, finds what the library already has for each file: the same file (by sha256) or a different file with the same name.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["MediaCheck"];
+                };
+            };
+            responses: {
+                /** @description Matches */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MediaCheckResult"];
+                    };
+                };
+                /** @description Invalid request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not signed in */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not allowed */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Conflict or not ready */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/media/uploads": {
         parameters: {
             query?: never;
@@ -6708,6 +6796,20 @@ export interface components {
         MediaList: {
             items: components["schemas"]["Media"][];
             nextCursor: string | null;
+        };
+        MediaCheckResult: {
+            files: {
+                filename: string;
+                sha256: string;
+                sameFile: components["schemas"]["Media"] | null;
+                sameName: components["schemas"]["Media"] | null;
+            }[];
+        };
+        MediaCheck: {
+            files: {
+                filename: string;
+                sha256: string;
+            }[];
         };
         UploadSession: {
             id: string;

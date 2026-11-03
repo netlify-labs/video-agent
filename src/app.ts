@@ -42,6 +42,7 @@ import { previewLink } from './domain/preview.js'
 import { cancelUpload, completeUpload, createUpload, getUpload, putPart } from './domain/media-uploads.js'
 import {
   deleteMedia,
+  checkMedia,
   getMedia,
   listMedia,
   SINGLE_UPLOAD_MAX,
@@ -1121,6 +1122,20 @@ export function createApp(deps: Deps, opts: AppOptions) {
       responses: { 200: json(s.MediaListSchema, 'Media'), ...errors },
     }),
     async (c) => c.json(await listMedia(deps, c.get('principal'), c.req.valid('query')), 200),
+  )
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/v1/media/check',
+      summary: 'Check for duplicates',
+      description:
+        'Before uploading, finds what the library already has for each file: the same file (by sha256) or a different file with the same name.',
+      tags: ['media'],
+      security,
+      request: { body: { content: { 'application/json': { schema: s.MediaCheckSchema } }, required: true } },
+      responses: { 200: json(s.MediaCheckResultSchema, 'Matches'), ...errors },
+    }),
+    async (c) => c.json(await checkMedia(deps, c.get('principal'), c.req.valid('json').files), 200),
   )
   app.openapi(
     createRoute({

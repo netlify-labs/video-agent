@@ -23,6 +23,7 @@ import { $api, useCanCreate } from '../api/client'
 import { confirmDanger, relativeTime, showError } from '../components/bits'
 import { FindMusicModal } from '../components/FindMusic'
 import { MEDIA_ACCEPT, Thumb, type Media } from '../components/MediaPicker'
+import { planUploads, retireReplaced, type PlannedUpload } from '../components/Duplicates'
 import { uploadFile, type UploadProgress } from '../lib/upload'
 
 type Kind = 'all' | 'image' | 'svg' | 'video' | 'audio' | 'font' | 'pdf'
@@ -33,6 +34,8 @@ interface Job {
   progress: UploadProgress | null
   error: string | null
   file: File
+  /** The library item this upload replaces, removed once the new one is in. */
+  replaces: PlannedUpload['replaces']
 }
 
 const mb = (n: number) => `${(n / 1048576).toFixed(n < 10 * 1048576 ? 1 : 0)} MB`
@@ -219,19 +222,21 @@ export function MediaPage() {
           setJob(job.key, { progress: p })
         },
       })
+      if (job.replaces) await retireReplaced(job.replaces)
       setJobs((js) => js.filter((j) => j.key !== job.key))
     } catch (e) {
       setJob(job.key, { error: e instanceof Error ? e.message : String(e) })
     }
     void qc.invalidateQueries({ queryKey: ['get', '/api/v1/media'] })
   }
-  const add = (files: File[]) => {
-    const next = files.map((file) => ({
+  const add = async (picked: File[]) => {
+    const next = (await planUploads(picked)).uploads.map(({ file, replaces }) => ({
       key: `${file.name}:${file.size}:${file.lastModified}:${Math.random()}`,
       name: file.name,
       progress: null,
       error: null,
       file,
+      replaces,
     }))
     setJobs((js) => [...js, ...next])
     void (async () => {
@@ -260,7 +265,7 @@ export function MediaPage() {
             >
               Find music
             </Button>
-            <FileButton multiple accept={MEDIA_ACCEPT} onChange={add}>
+            <FileButton multiple accept={MEDIA_ACCEPT} onChange={(fs) => void add(fs)}>
               {(props) => (
                 <Button {...props} leftSection={<IconUpload size={16} />}>
                   Upload
@@ -294,7 +299,7 @@ export function MediaPage() {
           onDrop={(e) => {
             e.preventDefault()
             setDragging(false)
-            add([...e.dataTransfer.files])
+            void add([...e.dataTransfer.files])
           }}
         >
           <Text size="sm" c="var(--va-muted)">

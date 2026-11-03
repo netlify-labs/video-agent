@@ -450,6 +450,17 @@ export function installMock() {
       mockMedia.unshift(m)
       return json(m, 201)
     }
+    // Duplicates: the mock keeps no hashes, so it matches by name (a different file with the same name).
+    if (p === '/api/v1/media/check' && method === 'POST') {
+      const b = (await readBody(init, input)) as { files: { filename: string; sha256: string }[] }
+      return json({
+        files: b.files.map((f) => ({
+          ...f,
+          sameFile: null,
+          sameName: mockMedia.find((m) => m.filename === f.filename) ?? null,
+        })),
+      })
+    }
     if (p === '/api/v1/media/uploads' && method === 'POST') {
       const b = (await readBody(init, input)) as { filename: string; size: number }
       const s = {
@@ -854,8 +865,11 @@ function mockKind(b: Uint8Array): MockKind | null {
   if (new TextDecoder().decode(b.subarray(0, 200)).includes('<svg')) return 'svg'
   return null
 }
+// Ids only go up: after a delete, the next upload still gets a new one.
+let mockMediaSeq = 0
 function mockItem(filename: string, kind: MockKind, bytes: number): MockMedia {
-  const id = `med_mock${String(mockMedia.length + 1).padStart(4, '0')}`
+  mockMediaSeq = Math.max(mockMediaSeq, mockMedia.length) + 1
+  const id = `med_mock${String(mockMediaSeq).padStart(4, '0')}`
   return {
     id,
     kind,

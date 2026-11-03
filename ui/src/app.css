@@ -1000,12 +1000,53 @@ body {
   max-height: 60vh;
   overflow-y: auto;
 }
+/* A pickable item: a quiet edge; selected, an accent edge, an accent tint and a check in the corner. The edge is a
+   border (not an outline), so it follows the rounded corners. */
 .va-media-pick {
+  position: relative;
   border-radius: var(--mantine-radius-lg);
-  outline: 1px solid var(--va-rule);
+  border: 1px solid var(--va-dialog-edge);
+  background: var(--va-dialog-raised);
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+}
+.va-media-pick:hover:not(:disabled) {
+  border-color: var(--va-muted);
 }
 .va-media-pick[data-on] {
-  outline: 2px solid var(--va-text);
+  border-color: var(--va-accent);
+  box-shadow: 0 0 0 1px var(--va-accent);
+  background: color-mix(in srgb, var(--va-accent) 10%, var(--va-dialog-raised));
+}
+.va-pick-check {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--va-accent);
+  color: #fff;
+}
+/* The picker's footer: what's selected (as chips) beside the buttons. */
+.va-pick-footer {
+  margin-top: auto;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--va-dialog-edge);
+}
+.va-pick-selected {
+  min-width: min(100%, 240px);
+  flex: 1;
+  max-height: 96px;
+  overflow-y: auto;
 }
 .va-media-pick:disabled {
   opacity: 0.5;

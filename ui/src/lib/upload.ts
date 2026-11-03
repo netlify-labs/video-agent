@@ -18,6 +18,8 @@ async function sha256(data: ArrayBuffer): Promise<string> {
   const d = await crypto.subtle.digest('SHA-256', data)
   return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, '0')).join('')
 }
+/** A file's sha256, as the library stores it (for the duplicate check). */
+export const fileSha256 = async (f: File) => sha256(await f.arrayBuffer())
 
 const resumeKey = (f: File) => `va-upload:${f.name}:${f.size}:${f.lastModified}`
 function remembered(f: File): string | null {

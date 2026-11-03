@@ -157,6 +157,36 @@ describe('MCP', () => {
     expect(notId.data.error.data.suggested_tool_calls[0].name).toBe('list_videos')
   })
 
+  it('logs why a request was refused, without its arguments or credentials', async () => {
+    const { h, key } = await setup()
+    // Accept without text/event-stream: the transport refuses it (406) before any tool runs.
+    const res = await h.call('POST', '/api/mcp', {
+      origin: null,
+      headers: { accept: 'application/json', authorization: `Bearer ${key}` },
+      body: {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/call',
+        params: { name: 'create_video', arguments: { prompt: 'secret words' } },
+      },
+    })
+    const r = { status: res.status }
+    expect(r.status).toBe(406)
+    const line = h.deps.logs
+      .map((l) => JSON.parse(l) as Record<string, unknown>)
+      .find((l) => l.event === 'mcp.refused')
+    expect(line).toMatchObject({
+      status: 406,
+      httpMethod: 'POST',
+      methods: ['tools/call'],
+      accept: 'application/json',
+      principal: 'apiKey',
+    })
+    expect(line?.message).toEqual(expect.stringContaining('text/event-stream'))
+    expect(JSON.stringify(line)).not.toContain('secret words')
+    expect(JSON.stringify(line)).not.toContain(key)
+  })
+
   it('requires an API key', async () => {
     const { h } = await setup()
     expect((await rpc(h, null, 'tools/list')).status).toBe(401)

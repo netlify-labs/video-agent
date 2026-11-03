@@ -1184,9 +1184,70 @@ export async function handleMcp(
   const server = buildMcpServer(deps, principal, kick)
   const transport = new WebStandardStreamableHTTPServerTransport({ enableJsonResponse: true }) // no sessionIdGenerator: stateless
   await server.connect(transport)
+  // Kept to explain a refused request; the transport reads the original.
+  const copy = req.method === 'POST' ? req.clone() : null
   try {
-    return await transport.handleRequest(req)
+    const res = await transport.handleRequest(req)
+    if (res.status >= 400 && res.status < 500) await logRefused(deps, principal, req, copy, res)
+    return res
   } finally {
     void server.close()
   }
+}
+
+/**
+ * Why the transport refused a request (4xx), for the logs: the JSON-RPC methods asked for, the headers that decide
+ * how it's handled and the transport's own message. Never the arguments, tokens or other headers.
+ */
+async function logRefused(
+  deps: Deps,
+  principal: Principal,
+  req: Request,
+  copy: Request | null,
+  res: Response,
+) {
+  let methods: string[] | null = null
+  let parse: string | null = null
+  if (copy) {
+    try {
+      const body: unknown = JSON.parse(await copy.text())
+      const msgs = Array.isArray(body) ? body : [body]
+      methods = msgs.map((m) =>
+        m && typeof m === 'object' && 'method' in m
+          ? String((m as { method: unknown }).method).slice(0, 80)
+          : 'id' in (m as object)
+            ? '(response)'
+            : '(none)',
+      )
+    } catch {
+      parse = 'not JSON'
+    }
+  }
+  let message: string | null
+  try {
+    const out = (await res.clone().json()) as { error?: { message?: unknown } }
+    message = typeof out.error?.message === 'string' ? out.error.message.slice(0, 300) : null
+  } catch {
+    message =
+      (
+        await res
+          .clone()
+          .text()
+          .catch(() => '')
+      ).slice(0, 300) || null
+  }
+  const h = (name: string) => req.headers.get(name)?.slice(0, 200) ?? null
+  deps.log.warn('mcp.refused', {
+    status: res.status,
+    httpMethod: req.method,
+    methods,
+    ...(parse ? { body: parse } : {}),
+    message,
+    protocolVersion: h('mcp-protocol-version'),
+    sessionId: req.headers.has('mcp-session-id'),
+    accept: h('accept'),
+    contentType: h('content-type'),
+    userAgent: h('user-agent'),
+    principal: principal.kind,
+  })
 }

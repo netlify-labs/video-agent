@@ -152,6 +152,12 @@ export interface Repo {
     before?: { createdAt: string; id: string } | undefined
     limit: number
   }): Promise<MediaRow[]>
+  /** Undeleted items (ready, or `includePendingOf`'s own) with one of these hashes or file names, for duplicates. */
+  findMediaMatches(q: {
+    sha256s: string[]
+    filenames: string[]
+    includePendingOf: string
+  }): Promise<MediaRow[]>
   insertUpload(row: MediaUploadRow): Promise<void>
   getUpload(id: string, opts?: { lock?: boolean }): Promise<MediaUploadRow | null>
   updateUpload(id: string, patch: Partial<MediaUploadRow>): Promise<void>

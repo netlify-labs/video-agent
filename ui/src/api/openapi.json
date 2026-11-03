@@ -3416,6 +3416,85 @@
           "nextCursor"
         ]
       },
+      "MediaCheckResult": {
+        "type": "object",
+        "properties": {
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "filename": {
+                  "type": "string"
+                },
+                "sha256": {
+                  "type": "string"
+                },
+                "sameFile": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Media"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "sameName": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Media"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "filename",
+                "sha256",
+                "sameFile",
+                "sameName"
+              ]
+            }
+          }
+        },
+        "required": [
+          "files"
+        ]
+      },
+      "MediaCheck": {
+        "type": "object",
+        "properties": {
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "filename": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                }
+              },
+              "required": [
+                "filename",
+                "sha256"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 50
+          }
+        },
+        "required": [
+          "files"
+        ]
+      },
       "UploadSession": {
         "type": "object",
         "properties": {
@@ -8653,6 +8732,95 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/MediaList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/media/check": {
+      "post": {
+        "summary": "Check for duplicates",
+        "description": "Before uploading, finds what the library already has for each file: the same file (by sha256) or a different file with the same name.",
+        "tags": [
+          "media"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MediaCheck"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Matches",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaCheckResult"
                 }
               }
             }

@@ -464,6 +464,25 @@ function repoFor(db: Db): Repo {
         .orderBy(desc(m.createdAt), desc(m.id))
         .limit(q.limit)) as MediaRow[]
     },
+    findMediaMatches: async (q) => {
+      const m = t.media
+      if (!q.sha256s.length && !q.filenames.length) return []
+      return (await db
+        .select()
+        .from(m)
+        .where(
+          and(
+            isNull(m.deletedAt),
+            or(eq(m.status, 'ready'), eq(m.uploaderId, q.includePendingOf)),
+            or(
+              q.sha256s.length ? inArray(m.originalSha256, q.sha256s) : undefined,
+              q.filenames.length ? inArray(m.filename, q.filenames) : undefined,
+            ),
+          ),
+        )
+        .orderBy(desc(m.createdAt))
+        .limit(100)) as MediaRow[]
+    },
     insertUpload: async (row) => {
       await db.insert(t.mediaUploads).values(row)
     },

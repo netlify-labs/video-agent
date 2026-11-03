@@ -387,6 +387,18 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
       const m = state.media.get(id)
       if (m) Object.assign(m, clone(patch))
     },
+    findMediaMatches: async (q) =>
+      clone(
+        [...state.media.values()]
+          .filter(
+            (m) =>
+              !m.deletedAt &&
+              (m.status === 'ready' || m.uploaderId === q.includePendingOf) &&
+              (q.sha256s.includes(m.originalSha256) || q.filenames.includes(m.filename)),
+          )
+          .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+          .slice(0, 100),
+      ),
     listMedia: async (q) =>
       clone(
         [...state.media.values()]

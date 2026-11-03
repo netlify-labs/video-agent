@@ -12,12 +12,21 @@ import {
   UnstyledButton,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
-import { IconFileTypePdf, IconMovie, IconMusic, IconPhoto, IconTypography, IconX } from '@tabler/icons-react'
+import {
+  IconCheck,
+  IconFileTypePdf,
+  IconMovie,
+  IconMusic,
+  IconPhoto,
+  IconTypography,
+  IconX,
+} from '@tabler/icons-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { $api, useCanCreate } from '../api/client'
 import type { paths } from '../api/schema'
 import { uploadFile } from '../lib/upload'
+import { planUploads, retireReplaced } from './Duplicates'
 import { clockTime } from './bits'
 import { FindMusicModal } from './FindMusic'
 
@@ -135,6 +144,8 @@ export function MediaLibraryModal(props: {
   }
   // Files just uploaded here (dropped or chosen): once the library lists them, the picker shows their section.
   const [fresh, setFresh] = useState<string[]>([])
+  // A replacing upload's new id → the id it replaced, so a selected old file becomes the new one.
+  const [replacedBy, setReplacedBy] = useState<Record<string, string>>({})
   const [dragging, setDragging] = useState(false)
   useEffect(() => {
     if (!fresh.length || !list.data) return
@@ -148,15 +159,22 @@ export function MediaLibraryModal(props: {
       notifications.show({
         message: `${other.filename} is in the library, but this picker only takes ${kinds.map((k) => KIND_LABEL[k].toLowerCase()).join(' and ')}.`,
       })
+    const swaps = mine.filter((m) => replacedBy[m.id])
+    if (swaps.length) setPicked((ps) => ps.map((x) => swaps.find((m) => replacedBy[m.id] === x.id) ?? x))
     setFresh((f) => f.filter((id) => !mine.some((m) => m.id === id)))
   }, [fresh, list.data])
   const upload = async (files: File[]) => {
     if (!files.length) return
     setUploading(true)
-    for (const f of files) {
+    const { uploads, existing } = await planUploads(files)
+    // Files already in the library aren't uploaded again; the picker shows them like fresh uploads.
+    if (existing.length) setFresh((ids) => [...ids, ...existing.map((m) => m.id)])
+    for (const { file: f, replaces } of uploads) {
       try {
         const id = await uploadFile(f)
         if (id) setFresh((ids) => [...ids, id])
+        if (id && replaces) setReplacedBy((r) => ({ ...r, [id]: replaces.id }))
+        if (replaces) await retireReplaced(replaces)
       } catch (e) {
         notifications.show({
           color: 'red',
@@ -242,6 +260,11 @@ export function MediaLibraryModal(props: {
             </Group>
           ) : null}
         </Group>
+        <Text size="sm" c="var(--va-muted)" mt={-4}>
+          {props.multiple
+            ? 'Click files to select them for the video (click again to unselect), then add them below.'
+            : 'Click a file to use it.'}
+        </Text>
         {canUpload ? (
           <div className="va-dropzone va-dropzone-compact" data-active={dragging || undefined}>
             <Text size="sm" c="var(--va-muted)">
@@ -276,6 +299,11 @@ export function MediaLibraryModal(props: {
                   data-testid={`pick-${m.id}`}
                 >
                   <Thumb m={m} />
+                  {on ? (
+                    <span className="va-pick-check" aria-hidden>
+                      <IconCheck size={14} stroke={3} />
+                    </span>
+                  ) : null}
                   <Text size="xs" p={6} truncate title={m.filename}>
                     {m.filename}
                   </Text>
@@ -302,19 +330,57 @@ export function MediaLibraryModal(props: {
           />
         ) : null}
         {props.multiple ? (
-          <Group justify="space-between" mt="auto">
-            <Text size="xs" c="var(--va-faint)">
-              {picked.length} of up to {MAX_PICKS} picked
-            </Text>
-            <Button
-              onClick={() => {
-                props.onPick(picked)
-                props.onClose()
-              }}
-            >
-              Done
-            </Button>
-          </Group>
+          // What will be added, removable here, and a button that says what it does.
+          <div className="va-pick-footer">
+            <div className="va-pick-selected" aria-live="polite">
+              {picked.length ? (
+                <>
+                  <Text size="xs" c="var(--va-muted)" fw={500}>
+                    Selected ({picked.length} of up to {MAX_PICKS})
+                  </Text>
+                  <Group gap={6} mt={6}>
+                    {picked.map((m) => (
+                      <span key={m.id} className="va-media-chip" data-testid={`selected-${m.id}`}>
+                        <span className="va-media-chip-name">{m.filename}</span>
+                        <ActionIcon
+                          size="xs"
+                          variant="subtle"
+                          color="gray"
+                          aria-label={`Unselect ${m.filename}`}
+                          onClick={() => {
+                            setPicked((ps) => ps.filter((x) => x.id !== m.id))
+                          }}
+                        >
+                          <IconX size={12} />
+                        </ActionIcon>
+                      </span>
+                    ))}
+                  </Group>
+                </>
+              ) : (
+                <Text size="sm" c="var(--va-faint)">
+                  Nothing selected yet. Click files above to select them.
+                </Text>
+              )}
+            </div>
+            <Group gap="sm" wrap="nowrap">
+              <Button variant="default" onClick={props.onClose}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  props.onPick(picked)
+                  props.onClose()
+                }}
+              >
+                {picked.length
+                  ? `Add ${picked.length} to the video`
+                  : (props.selected?.length ?? 0) > 0
+                    ? 'Remove all'
+                    : 'Done'}
+              </Button>
+            </Group>
+          </div>
         ) : null}
       </Stack>
     </Modal>
