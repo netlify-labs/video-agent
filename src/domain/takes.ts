@@ -51,6 +51,49 @@ export async function canReadTake(repo: Repo, p: Principal, m: MediaRow): Promis
   return false
 }
 
+/** Where a take is used, as one reader may know it: a version of a video they can see, or a draft of their own. */
+export type TakeUse =
+  { kind: 'version'; videoId: string; n: number } | { kind: 'draft'; videoId: string; draftId: string }
+
+/**
+ * A take's recording facts for the library (plan 2026-11-02 §2.3, §6.1): its role, the video it was made for (when
+ * the reader can see it), where the reader can see it used, and until when its bytes are kept (null while anything
+ * references it, the reader's or not, since then nothing will delete it). Frozen attempts aren't listed: their
+ * version will be. Call only for a take the reader may read.
+ */
+export async function recordingDto(repo: Repo, p: Principal, m: MediaRow) {
+  const refs = await repo.listMediaRefsByMedia([m.id])
+  const visible = new Map<string, boolean>()
+  const sees = async (jobId: string) => {
+    if (!visible.has(jobId)) {
+      const job = await repo.getJob(jobId)
+      visible.set(jobId, !!job && !job.deletedAt && canSee(p, job))
+    }
+    return visible.get(jobId) ?? false
+  }
+  const usedIn: TakeUse[] = []
+  for (const r of refs) {
+    if (r.ownerKind === 'frozen_attempt' || !(await sees(r.jobId))) continue
+    if (r.ownerKind === 'version') {
+      const n = Number(r.ownerId.slice(r.ownerId.lastIndexOf('#') + 1))
+      if (Number.isInteger(n) && n > 0) usedIn.push({ kind: 'version', videoId: r.jobId, n })
+    } else {
+      const e = await repo.getEdit(r.ownerId)
+      if (e && e.authorId === p.userId && e.jobId === r.jobId)
+        usedIn.push({ kind: 'draft', videoId: r.jobId, draftId: e.id })
+    }
+  }
+  const retainUntil = refs.length
+    ? null
+    : (m.retainUntil ?? new Date(new Date(m.createdAt).getTime() + TAKE_RETAIN_MS).toISOString())
+  return {
+    role: m.role ?? 'narration-take',
+    videoId: m.scopeJobId && (await sees(m.scopeJobId)) ? m.scopeJobId : null,
+    usedIn,
+    retainUntil,
+  }
+}
+
 /** The rows the principal may read, in order (takes they can't read are dropped). */
 export async function readableMedia(repo: Repo, p: Principal, rows: MediaRow[]) {
   const ok = await Promise.all(rows.map((m) => canReadTake(repo, p, m)))

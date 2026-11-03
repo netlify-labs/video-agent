@@ -4031,6 +4031,8 @@ export interface paths {
                     q?: string;
                     /** @description Default newest */
                     sort?: "newest" | "oldest" | "name";
+                    /** @description Your voice-over recordings: listed with the rest (include, the default), only, or left out */
+                    recordings?: "include" | "only" | "exclude";
                     cursor?: string;
                     limit?: number;
                 };
@@ -4261,6 +4263,92 @@ export interface paths {
                 };
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/videos/{id}/recordings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a video's recordings
+         * @description The voice-over recordings made for this video or used on it that you can read: your own, and the ones its versions (or their uploader's drafts) use. Newest first, with where each is used and how long it's kept, so a recording whose draft expired can be placed again.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Recordings */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["RecordingList"];
+                    };
+                };
+                /** @description Invalid request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not signed in */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not allowed */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Conflict or not ready */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -7453,6 +7541,7 @@ export interface components {
             } | null;
             canDelete: boolean;
             source: components["schemas"]["MediaSource"];
+            recording: components["schemas"]["Recording"];
         };
         /** @description Where an imported item came from (Openverse), with its licence; null for uploads */
         MediaSource: {
@@ -7476,6 +7565,30 @@ export interface components {
             /** @description True for CC BY: videos that use it credit it (CC0 needs no credit) */
             creditRequired: boolean;
         } | null;
+        /** @description For a voice-over recording: its video, where it is used and how long it is kept; null otherwise */
+        Recording: {
+            /**
+             * @description A voice-over recording (take) or uploaded narration
+             * @enum {string}
+             */
+            role: "narration-take" | "narration-upload";
+            /** @description The video it was made for; null if you can no longer see it */
+            videoId: string | null;
+            /** @description Versions of videos you can see, and your own drafts, that use it */
+            usedIn: ({
+                /** @enum {string} */
+                kind: "version";
+                videoId: string;
+                n: number;
+            } | {
+                /** @enum {string} */
+                kind: "draft";
+                videoId: string;
+                draftId: string;
+            })[];
+            /** @description When it's deleted if nothing uses it by then; null while a draft or version uses it */
+            retainUntil: string | null;
+        } | null;
         MediaList: {
             items: components["schemas"]["Media"][];
             nextCursor: string | null;
@@ -7493,6 +7606,9 @@ export interface components {
                 filename: string;
                 sha256: string;
             }[];
+        };
+        RecordingList: {
+            items: components["schemas"]["Media"][];
         };
         DeletedRecordings: {
             /** @description How many recordings were deleted */

@@ -539,6 +539,28 @@ export const MediaSourceSchema = z
   })
   .openapi('MediaSource')
 
+export const RecordingSchema = z
+  .object({
+    role: z.enum(['narration-take', 'narration-upload']).openapi({
+      description: 'A voice-over recording (take) or uploaded narration',
+    }),
+    videoId: z
+      .string()
+      .nullable()
+      .openapi({ description: 'The video it was made for; null if you can no longer see it' }),
+    usedIn: z
+      .array(
+        z.union([
+          z.object({ kind: z.literal('version'), videoId: z.string(), n: z.number().int() }),
+          z.object({ kind: z.literal('draft'), videoId: z.string(), draftId: z.string() }),
+        ]),
+      )
+      .openapi({ description: 'Versions of videos you can see, and your own drafts, that use it' }),
+    retainUntil: z.string().nullable().openapi({
+      description: "When it's deleted if nothing uses it by then; null while a draft or version uses it",
+    }),
+  })
+  .openapi('Recording')
 export const MediaSchema = z
   .object({
     id: z.string(),
@@ -569,6 +591,10 @@ export const MediaSchema = z
     canDelete: z.boolean(),
     source: MediaSourceSchema.nullable().openapi({
       description: 'Where an imported item came from (Openverse), with its licence; null for uploads',
+    }),
+    recording: RecordingSchema.nullable().openapi({
+      description:
+        'For a voice-over recording: its video, where it is used and how long it is kept; null otherwise',
     }),
   })
   .openapi('Media')
@@ -727,6 +753,7 @@ export const DeletedRecordingsSchema = z
 export const MediaListSchema = z
   .object({ items: z.array(MediaSchema), nextCursor: z.string().nullable() })
   .openapi('MediaList')
+export const RecordingListSchema = z.object({ items: z.array(MediaSchema) }).openapi('RecordingList')
 
 const samples = (min: number, max: number) => z.number().int().min(min).max(max)
 const Db = z.number().min(GAIN_DB_RANGE[0]).max(GAIN_DB_RANGE[1])

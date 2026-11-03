@@ -1,5 +1,7 @@
 // The media library (plan v2 §9): the team's logos, screenshots, clips, music and fonts. Creators and admins drop files in
-// (bigger ones upload in resumable parts); everyone can browse and see where an item is used.
+// (bigger ones upload in resumable parts); everyone can browse and see where an item is used. Your voice-over
+// recordings are left out of the list and shown under the Recordings filter (plan 2026-11-02 §2.3), with where each is
+// used, a way back to its video, and Delete unused recordings.
 import {
   ActionIcon,
   Badge,
@@ -14,9 +16,11 @@ import {
   Text,
   Title,
 } from '@mantine/core'
+import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
 import { IconDots, IconMusic, IconUpload } from '@tabler/icons-react'
 import { useState } from 'react'
+import { useNavigate } from 'react-router'
 import { $api, useCanCreate } from '../api/client'
 import { confirmDanger, relativeTime, showError } from '../components/bits'
 import { FindMusicModal } from '../components/FindMusic'
@@ -27,12 +31,13 @@ import {
   LibraryToolbar,
   MediaTable,
   mediaName,
+  recordingUse,
   SourceLine,
   useLibraryControls,
 } from '../components/MediaLibrary'
 import { uploadFile, type UploadProgress } from '../lib/upload'
 
-type Kind = 'all' | 'image' | 'svg' | 'video' | 'audio' | 'font' | 'pdf'
+type Kind = 'all' | 'image' | 'svg' | 'video' | 'audio' | 'font' | 'pdf' | 'recordings'
 
 interface Job {
   key: string
@@ -46,11 +51,13 @@ interface Job {
 
 const mb = (n: number) => `${(n / 1048576).toFixed(n < 10 * 1048576 ? 1 : 0)} MB`
 
-/** An item's menu: rename it and edit its notes, or delete it (uploader or admin). */
+/** An item's menu: rename it and edit its notes, or delete it (uploader or admin); a recording also opens its video. */
 function MediaActions({ m }: { m: Media }) {
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const refresh = () => void qc.invalidateQueries({ queryKey: ['get', '/api/v1/media'] })
   const remove = $api.useMutation('delete', '/api/v1/media/{id}', { onSuccess: refresh, onError: showError })
+  const videoId = m.recording?.videoId
   if (!m.canDelete) return null
   return (
     <Menu position="bottom-end">
@@ -67,12 +74,23 @@ function MediaActions({ m }: { m: Media }) {
         >
           Edit name and notes
         </Menu.Item>
+        {videoId ? (
+          <Menu.Item
+            onClick={() => {
+              void navigate(`/videos/${videoId}`)
+            }}
+          >
+            Open video
+          </Menu.Item>
+        ) : null}
         <Menu.Item
           color="red"
           onClick={() => {
             confirmDanger({
               title: `Delete ${mediaName(m)}?`,
-              body: 'It leaves the library. Videos that already use it keep it.',
+              body: m.recording
+                ? 'It leaves your recordings. Drafts and versions that already use it keep it.'
+                : 'It leaves the library. Videos that already use it keep it.',
               confirm: 'Delete',
               onConfirm: () => {
                 remove.mutate({ params: { path: { id: m.id } } })
@@ -131,7 +149,11 @@ function MediaCard({ m }: { m: Media }) {
           ) : null}
           <Text size="xs" c="var(--va-faint)" className="num">
             {mb(m.bytes)} · {m.uploader.name ?? m.uploader.email?.split('@')[0]} · {relativeTime(m.createdAt)}
-            {m.usedIn ? ` · used in ${m.usedIn} video${m.usedIn === 1 ? '' : 's'}` : ''}
+            {m.recording
+              ? ` · ${recordingUse(m.recording)}`
+              : m.usedIn
+                ? ` · used in ${m.usedIn} video${m.usedIn === 1 ? '' : 's'}`
+                : ''}
           </Text>
         </Group>
       </Stack>
@@ -147,15 +169,34 @@ export function MediaPage() {
   const [jobs, setJobs] = useState<Job[]>([])
   const [dragging, setDragging] = useState(false)
   const [finding, setFinding] = useState(false)
+  const recordings = kind === 'recordings'
   const list = $api.useQuery(
     'get',
     '/api/v1/media',
-    { params: { query: { ...(kind === 'all' ? {} : { kind }), ...lib.query } } },
+    {
+      params: {
+        query: recordings
+          ? { recordings: 'only', ...lib.query }
+          : { recordings: 'exclude', ...(kind === 'all' ? {} : { kind }), ...lib.query },
+      },
+    },
     {
       // Poll while something of yours is still being checked.
       refetchInterval: (q) => (q.state.data?.items.some((m) => m.status === 'verifying') ? 3000 : false),
     },
   )
+
+  const clear = $api.useMutation('post', '/api/v1/media/recordings/delete-unused', {
+    onSuccess: (r) => {
+      notifications.show({
+        message: r.deleted
+          ? `Deleted ${String(r.deleted)} unused recording${r.deleted === 1 ? '' : 's'}.`
+          : 'No unused recordings to delete.',
+      })
+      void qc.invalidateQueries({ queryKey: ['get', '/api/v1/media'] })
+    },
+    onError: showError,
+  })
 
   const setJob = (key: string, patch: Partial<Job>) => {
     setJobs((js) => js.map((j) => (j.key === key ? { ...j, ...patch } : j)))
@@ -320,13 +361,46 @@ export function MediaPage() {
           { value: 'audio', label: 'Audio' },
           { value: 'font', label: 'Fonts' },
           { value: 'pdf', label: 'PDFs' },
+          { value: 'recordings', label: 'Recordings' },
         ]}
       />
+      {recordings ? (
+        <Group justify="space-between" mb="md" gap="xs">
+          <Text size="sm" c="var(--va-muted)">
+            Your voice-over recordings. One no draft or version uses is deleted 30 days after its last use.
+          </Text>
+          <Button
+            size="xs"
+            variant="default"
+            color="red"
+            loading={clear.isPending}
+            onClick={() => {
+              confirmDanger({
+                title: 'Delete unused recordings?',
+                body: "Your recordings that no draft or version uses are deleted now, and can't be brought back. Recordings in use are kept.",
+                confirm: 'Delete unused',
+                onConfirm: () => {
+                  clear.mutate({})
+                },
+              })
+            }}
+          >
+            Delete unused recordings
+          </Button>
+        </Group>
+      ) : null}
       {!list.isLoading && items.length === 0 && lib.searching ? (
         <Card>
           <Text fw={600}>Nothing matches that search</Text>
           <Text size="sm" c="var(--va-muted)" mt={4}>
             Search looks at names, file names and notes. Give items names and notes to find them later.
+          </Text>
+        </Card>
+      ) : !list.isLoading && items.length === 0 && recordings ? (
+        <Card>
+          <Text fw={600}>No recordings</Text>
+          <Text size="sm" c="var(--va-muted)" mt={4}>
+            Record a voice-over in a video&apos;s editor; your takes are listed here.
           </Text>
         </Card>
       ) : !list.isLoading && items.length === 0 ? (

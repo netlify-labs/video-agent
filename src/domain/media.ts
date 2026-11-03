@@ -12,8 +12,8 @@ import { getSettings } from './settings.js'
 import type { Repo } from '../store/types.js'
 import { NO_PROVENANCE, type MediaProvenance, type MediaRow, type VersionMediaRow } from './types.js'
 import { licenseLabel, safeUrl } from './credits.js'
-import { canReadTake, isTake, readableMedia } from './takes.js'
-import { canSee, decodeCursor, nextCursor } from './videos.js'
+import { canReadTake, isTake, readableMedia, recordingDto } from './takes.js'
+import { canSee, decodeCursor, loadJob, nextCursor } from './videos.js'
 
 /** One request carries at most this much (Netlify's request limit is about 4.5 MB); bigger files use sessions. */
 export const SINGLE_UPLOAD_MAX = 4 * 1024 * 1024
@@ -226,6 +226,7 @@ export async function mediaDto(deps: Deps, p: Principal, m: MediaRow, usage?: Re
       : null,
     canDelete: m.uploaderId === p.userId || p.role === 'admin',
     source: sourceDto(m),
+    recording: isTake(m) ? await recordingDto(deps.store, p, m) : null,
   }
 }
 
@@ -256,6 +257,7 @@ export async function listMedia(
     kind?: MediaRow['kind'] | undefined
     q?: string | undefined
     sort?: 'newest' | 'oldest' | 'name' | undefined
+    recordings?: 'include' | 'only' | 'exclude' | undefined
     cursor?: string | undefined
     limit?: number | undefined
   },
@@ -271,6 +273,7 @@ export async function listMedia(
     includePendingOf: p.userId,
     // Only the caller's own takes are listed here; a video's shared ones are listed with that video.
     takesOf: p.userId,
+    recordings: q.recordings === 'include' ? undefined : q.recordings,
     before,
     limit: limit + 1,
   })
@@ -283,6 +286,25 @@ export async function listMedia(
     // Only newest-first pages continue; the other orders return the first `limit` matches.
     nextCursor: sort === 'newest' ? nextCursor(rows.length, limit, page) : null,
   }
+}
+
+/** The most recordings one video lists. */
+const VIDEO_RECORDINGS_MAX = 200
+
+/**
+ * A video's recordings (plan 2026-11-02 §2.3, §6.1 draft expiry): the takes made for it or used on it that the caller
+ * may read (canReadTake: their own, and the ones its versions or the uploader's drafts use), newest first, so a take
+ * whose draft expired can be found and placed again. Someone else's unused take is never listed.
+ */
+export async function listVideoRecordings(deps: Deps, p: Principal, jobId: string) {
+  assertCan(p, 'video:read')
+  await loadJob(deps.store, p, jobId)
+  const rows = await deps.store.listVideoTakes(jobId, VIDEO_RECORDINGS_MAX)
+  const readable = (await readableMedia(deps.store, p, rows)).filter(
+    (m) => m.status === 'ready' || m.uploaderId === p.userId,
+  )
+  const usage = await deps.store.mediaUsage(readable.map((m) => m.id))
+  return { items: await Promise.all(readable.map((m) => mediaDto(deps, p, m, usage))) }
 }
 
 /**

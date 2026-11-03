@@ -3595,6 +3595,9 @@
           },
           "source": {
             "$ref": "#/components/schemas/MediaSource"
+          },
+          "recording": {
+            "$ref": "#/components/schemas/Recording"
           }
         },
         "required": [
@@ -3615,7 +3618,8 @@
           "usedIn",
           "urls",
           "canDelete",
-          "source"
+          "source",
+          "recording"
         ]
       },
       "MediaSource": {
@@ -3706,6 +3710,95 @@
           "creditRequired"
         ],
         "description": "Where an imported item came from (Openverse), with its licence; null for uploads"
+      },
+      "Recording": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "narration-take",
+              "narration-upload"
+            ],
+            "description": "A voice-over recording (take) or uploaded narration"
+          },
+          "videoId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The video it was made for; null if you can no longer see it"
+          },
+          "usedIn": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "version"
+                      ]
+                    },
+                    "videoId": {
+                      "type": "string"
+                    },
+                    "n": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "videoId",
+                    "n"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "draft"
+                      ]
+                    },
+                    "videoId": {
+                      "type": "string"
+                    },
+                    "draftId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "videoId",
+                    "draftId"
+                  ]
+                }
+              ]
+            },
+            "description": "Versions of videos you can see, and your own drafts, that use it"
+          },
+          "retainUntil": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When it's deleted if nothing uses it by then; null while a draft or version uses it"
+          }
+        },
+        "required": [
+          "role",
+          "videoId",
+          "usedIn",
+          "retainUntil"
+        ],
+        "description": "For a voice-over recording: its video, where it is used and how long it is kept; null otherwise"
       },
       "MediaList": {
         "type": "object",
@@ -3805,6 +3898,20 @@
         },
         "required": [
           "files"
+        ]
+      },
+      "RecordingList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Media"
+            }
+          }
+        },
+        "required": [
+          "items"
         ]
       },
       "DeletedRecordings": {
@@ -9316,6 +9423,21 @@
           },
           {
             "schema": {
+              "type": "string",
+              "enum": [
+                "include",
+                "only",
+                "exclude"
+              ],
+              "description": "Your voice-over recordings: listed with the rest (include, the default), only, or left out"
+            },
+            "required": false,
+            "description": "Your voice-over recordings: listed with the rest (include, the default), only, or left out",
+            "name": "recordings",
+            "in": "query"
+          },
+          {
+            "schema": {
               "type": "string"
             },
             "required": false,
@@ -9429,6 +9551,95 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/MediaCheckResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/videos/{id}/recordings": {
+      "get": {
+        "summary": "List a video's recordings",
+        "description": "The voice-over recordings made for this video or used on it that you can read: your own, and the ones its versions (or their uploader's drafts) use. Newest first, with where each is used and how long it's kept, so a recording whose draft expired can be placed again.",
+        "tags": [
+          "media"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Recordings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordingList"
                 }
               }
             }

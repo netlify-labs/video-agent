@@ -439,6 +439,7 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
               !m.deletedAt &&
               (m.status === 'ready' || m.uploaderId === q.includePendingOf) &&
               takeVisible(m, q.takesOf) &&
+              (q.recordings === 'only' ? m.role !== null : q.recordings !== 'exclude' || m.role === null) &&
               (!q.kind || m.kind === q.kind) &&
               searchWords(q.search).every((w) =>
                 [m.title, m.filename, m.caption, m.sourceTitle, m.creator].some((f) =>
@@ -624,6 +625,23 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
           .filter((r) => r.ownerKind === ownerKind && r.ownerId === ownerId)
           .sort(byCreated),
       ),
+    listVideoTakes: async (jobId, limit) => {
+      const used = new Set(
+        [...state.mediaRefs.values()].filter((r) => r.jobId === jobId).map((r) => r.mediaId),
+      )
+      return clone(
+        [...state.media.values()]
+          .filter(
+            (m) =>
+              m.role !== null &&
+              !m.deletedAt &&
+              m.deletingAt === null &&
+              (m.scopeJobId === jobId || used.has(m.id)),
+          )
+          .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))
+          .slice(0, limit),
+      )
+    },
     listUnreferencedTakes: async (q) => {
       const held = new Set([...state.mediaRefs.values()].map((r) => r.mediaId))
       return clone(

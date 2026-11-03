@@ -472,6 +472,11 @@ function repoFor(db: Db): Repo {
             isNull(m.deletedAt),
             visible,
             takeVisible(q.takesOf),
+            q.recordings === 'only'
+              ? isNotNull(m.role)
+              : q.recordings === 'exclude'
+                ? isNull(m.role)
+                : undefined,
             q.kind ? eq(m.kind, q.kind) : undefined,
             ...searchWords(q.search).map((w) => {
               const like = `%${w.replace(/[%_\\]/g, (c) => `\\${c}`)}%`
@@ -756,6 +761,31 @@ function repoFor(db: Db): Repo {
         .from(r)
         .where(and(eq(r.ownerKind, ownerKind), eq(r.ownerId, ownerId)))
         .orderBy(asc(r.createdAt), asc(r.mediaId))) as MediaRefRow[]
+    },
+    listVideoTakes: async (jobId, limit) => {
+      const m = t.media
+      const r = t.mediaRefs
+      return (await db
+        .select()
+        .from(m)
+        .where(
+          and(
+            isNotNull(m.role),
+            isNull(m.deletedAt),
+            isNull(m.deletingAt),
+            or(
+              eq(m.scopeJobId, jobId),
+              exists(
+                db
+                  .select({ one: sql`1` })
+                  .from(r)
+                  .where(and(eq(r.mediaId, m.id), eq(r.jobId, jobId))),
+              ),
+            ),
+          ),
+        )
+        .orderBy(desc(m.createdAt), desc(m.id))
+        .limit(limit)) as MediaRow[]
     },
     listUnreferencedTakes: async (q) => {
       const m = t.media

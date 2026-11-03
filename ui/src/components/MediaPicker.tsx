@@ -121,7 +121,17 @@ export function MediaLibraryModal(props: {
   const list = $api.useQuery(
     'get',
     '/api/v1/media',
-    { params: { query: { limit: 100, ...(kinds.length === 1 ? { kind: kinds[0] } : {}), ...lib.query } } },
+    {
+      params: {
+        // Recordings are placed on the Narration track, never picked as library media.
+        query: {
+          limit: 100,
+          recordings: 'exclude',
+          ...(kinds.length === 1 ? { kind: kinds[0] } : {}),
+          ...lib.query,
+        },
+      },
+    },
     {
       enabled: props.opened,
       refetchInterval: (q) => (q.state.data?.items.some((m) => m.status === 'verifying') ? 3000 : false),

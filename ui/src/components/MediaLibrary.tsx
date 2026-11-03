@@ -42,6 +42,19 @@ export type MediaView = 'table' | 'grid'
 /** What people see an item called: the title they gave it, else its file name. */
 export const mediaName = (m: Pick<Media, 'title' | 'filename'>) => m.title ?? m.filename
 
+/**
+ * Where a voice-over recording is used, in words: its versions and your drafts, or, unused, until when it's kept
+ * (plan 2026-11-02 §2.3, §6.1).
+ */
+export function recordingUse(r: NonNullable<Media['recording']>) {
+  const versions = r.usedIn.flatMap((u) => (u.kind === 'version' ? [`v${String(u.n)}`] : []))
+  const drafts = r.usedIn.filter((u) => u.kind === 'draft').length
+  const uses = [...versions, ...(drafts ? [drafts === 1 ? 'your draft' : `${String(drafts)} drafts`] : [])]
+  if (uses.length) return uses.join(', ')
+  if (!r.retainUntil) return 'In use'
+  return `Unused · kept until ${new Date(r.retainUntil).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
+}
+
 const VIEW_KEY = 'va-media-view'
 function readView(): MediaView {
   try {
@@ -320,8 +333,12 @@ export function MediaTable(props: {
                   </Text>
                 </Table.Td>
                 <Table.Td visibleFrom="md">
-                  <Text size="sm" c="var(--va-muted)" className="num">
-                    {m.usedIn ? `${m.usedIn} video${m.usedIn === 1 ? '' : 's'}` : '—'}
+                  <Text size="sm" c="var(--va-muted)" className="num" data-testid={`used-${m.id}`}>
+                    {m.recording
+                      ? recordingUse(m.recording)
+                      : m.usedIn
+                        ? `${m.usedIn} video${m.usedIn === 1 ? '' : 's'}`
+                        : '—'}
                   </Text>
                 </Table.Td>
                 {props.actions ? (

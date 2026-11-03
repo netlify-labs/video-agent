@@ -454,13 +454,20 @@ export function installMock() {
     // Media library (plan v2 §9): in memory. localStorage.mockFailPart=1 fails one part once, to test resume.
     if (p === '/api/v1/media' && method === 'GET') {
       seedLibraryMusic()
+      seedRecordings()
       const kind = url.searchParams.get('kind')
+      // Recordings: the caller's own only (the mock's seeded ones are all Sam's), or none of them.
+      const recordings = url.searchParams.get('recordings') ?? 'include'
       // Search and sort as the server does: every word somewhere in the name, file name or notes.
       const words = (url.searchParams.get('q') ?? '').toLowerCase().split(/\s+/).filter(Boolean)
       const sort = url.searchParams.get('sort') ?? 'newest'
       const name = (m: MockMedia) => (m.title ?? m.filename).toLowerCase()
       const items = mockMedia
         .filter((m) => !kind || m.kind === kind)
+        .filter((m) =>
+          recordings === 'only' ? m.recording !== null : recordings !== 'exclude' || m.recording === null,
+        )
+        .filter((m) => !m.recording || m.uploader.id === me.id)
         .filter((m) =>
           words.every((w) => [m.title, m.filename, m.caption].some((f) => f?.toLowerCase().includes(w))),
         )
@@ -565,6 +572,13 @@ export function installMock() {
                     ? 'font'
                     : 'video'
         const m = mockItem(s.filename, kind, s.size)
+        if (s.role)
+          m.recording = {
+            role: s.role,
+            videoId: s.scopeJobId,
+            usedIn: [],
+            retainUntil: new Date(Date.now() + 30 * 86400_000).toISOString(),
+          }
         mockMedia.unshift(m)
         s.status = 'done'
         s.mediaId = m.id
@@ -624,6 +638,26 @@ export function installMock() {
         return json(mockJob(j, 'done', { media: r?.item ?? null, created: r?.created ?? null }))
       }
       return json(mockJob(j, 'running'))
+    }
+    // Recordings (plan 2026-11-02 §2.3): a video's are the caller's own plus the ones its versions use.
+    const vr = /^\/api\/v1\/videos\/([^/]+)\/recordings$/.exec(p)
+    if (vr?.[1] && method === 'GET') {
+      seedRecordings()
+      if (!videos.some((v) => v.id === vr[1])) return fail(404, 'not_found', 'Video not found.')
+      if (me.role === 'reviewer' || me.role === 'viewer') return json({ items: [] })
+      return json({
+        items: mockMedia.filter(
+          (m) =>
+            m.recording &&
+            (m.recording.videoId === vr[1] || m.recording.usedIn.some((u) => u.videoId === vr[1])) &&
+            (m.uploader.id === me.id || m.recording.usedIn.some((u) => u.kind === 'version')),
+        ),
+      })
+    }
+    if (p === '/api/v1/media/recordings/delete-unused' && method === 'POST') {
+      const unused = mockMedia.filter((m) => m.recording?.retainUntil && m.uploader.id === me.id)
+      for (const m of unused) mockMedia.splice(mockMedia.indexOf(m), 1)
+      return json({ deleted: unused.length })
     }
     const extra = /^\/api\/v1\/media\/([^/]+)\/(peaks|speech)$/.exec(p)
     if (extra?.[1]) {
@@ -988,6 +1022,7 @@ function mockItem(filename: string, kind: MockKind, bytes: number): MockMedia {
     },
     canDelete: true,
     source: null,
+    recording: null,
   }
 }
 
@@ -1072,6 +1107,43 @@ function seedLibraryMusic() {
     creditRequired: false,
   }
   mockMedia.push(m)
+}
+// localStorage.mockRecordings=1 seeds three of Sam's recordings for "Ship faster with preview deploys": one on v2,
+// one in his draft, and one unused (kept until its retention ends).
+function seedRecordings() {
+  try {
+    if (!localStorage.getItem('mockRecordings') || mockMedia.some((m) => m.id === 'med_take0001')) return
+  } catch {
+    return
+  }
+  const take = (id: string, title: string, recording: NonNullable<MockMedia['recording']>) => ({
+    ...mockItem(`${id}.wav`, 'audio', 1_200_000),
+    id,
+    title,
+    durationSec: 24,
+    recording,
+  })
+  const videoId = 'vid_teaser'
+  mockMedia.push(
+    take('med_take0001', 'Intro take', {
+      role: 'narration-take',
+      videoId,
+      usedIn: [{ kind: 'version', videoId, n: 2 }],
+      retainUntil: null,
+    }),
+    take('med_take0002', 'Second try', {
+      role: 'narration-take',
+      videoId,
+      usedIn: [{ kind: 'draft', videoId, draftId: '00000000-0000-4000-8000-00000000ed17' }],
+      retainUntil: null,
+    }),
+    take('med_take0003', 'Warm-up', {
+      role: 'narration-upload',
+      videoId,
+      usedIn: [],
+      retainUntil: new Date(Date.now() + 12 * 86400_000).toISOString(),
+    }),
+  )
 }
 function mockSearch(q: string, cc0Only: boolean, stored = false) {
   const items = mockTracks

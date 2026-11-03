@@ -53,6 +53,7 @@ import {
   checkMedia,
   getMedia,
   listMedia,
+  listVideoRecordings,
   SINGLE_UPLOAD_MAX,
   updateMedia,
   uploadMedia,
@@ -1187,6 +1188,10 @@ export function createApp(deps: Deps, opts: AppOptions) {
             description: 'Words to find in the title, file name, notes, source title or creator',
           }),
           sort: z.enum(['newest', 'oldest', 'name']).optional().openapi({ description: 'Default newest' }),
+          recordings: z.enum(['include', 'only', 'exclude']).optional().openapi({
+            description:
+              'Your voice-over recordings: listed with the rest (include, the default), only, or left out',
+          }),
           cursor: z.string().optional(),
           limit: z.coerce.number().int().min(1).max(100).optional(),
         }),
@@ -1208,6 +1213,20 @@ export function createApp(deps: Deps, opts: AppOptions) {
       responses: { 200: json(s.MediaCheckResultSchema, 'Matches'), ...errors },
     }),
     async (c) => c.json(await checkMedia(deps, c.get('principal'), c.req.valid('json').files), 200),
+  )
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/v1/videos/{id}/recordings',
+      summary: "List a video's recordings",
+      description:
+        "The voice-over recordings made for this video or used on it that you can read: your own, and the ones its versions (or their uploader's drafts) use. Newest first, with where each is used and how long it's kept, so a recording whose draft expired can be placed again.",
+      tags: ['media'],
+      security,
+      request: { params: IdParam },
+      responses: { 200: json(s.RecordingListSchema, 'Recordings'), ...errors },
+    }),
+    async (c) => c.json(await listVideoRecordings(deps, c.get('principal'), c.req.valid('param').id), 200),
   )
   app.openapi(
     createRoute({

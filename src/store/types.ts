@@ -162,6 +162,8 @@ export interface Repo {
     sort?: 'newest' | 'oldest' | 'name' | undefined
     includePendingOf?: string | undefined
     takesOf?: string | undefined
+    /** Narration takes only (`takesOf`'s own), or none of them; by default they're listed with the rest. */
+    recordings?: 'only' | 'exclude' | undefined
     before?: { createdAt: string; id: string } | undefined
     limit: number
   }): Promise<MediaRow[]>
@@ -242,6 +244,11 @@ export interface Repo {
     due?: { now: string; createdBefore: string }
     limit: number
   }): Promise<MediaRow[]>
+  /**
+   * A video's narration takes, newest first: undeleted ones GC isn't deleting that were made for it (scope_job_id)
+   * or that a draft, attempt or version of it references. Who may read each is canReadTake's call, not this one's.
+   */
+  listVideoTakes(jobId: string, limit: number): Promise<MediaRow[]>
   getNarrationLock(jobId: string): Promise<NarrationLockRow | null>
   /** Inserts or replaces the video's lock. */
   upsertNarrationLock(row: NarrationLockRow): Promise<void>
