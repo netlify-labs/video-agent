@@ -4,7 +4,7 @@
 // outlier). For development and the Playwright specs. Never in production builds: App.tsx mounts it only when
 // VITE_MOCK is set.
 import { Badge, Button, Code, Divider, Group, SegmentedControl, Stack, Text, Title } from '@mantine/core'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { SAMPLE_RATE } from '../../../src/lib/timeline'
 import {
   AudioClock,
@@ -22,6 +22,9 @@ import {
 } from '../recorder/clock'
 
 const FPS = 30
+// The stem monitor section (va-2qq.4.7), on its own video and AudioContext. Mounted on
+// request, so its second copy of the MP4 doesn't load (and stall the clock's picture) unless it's wanted.
+const MonitorDemo = lazy(() => import('./MonitorDemo'))
 
 export default function ClockDemo() {
   const [video, setVideo] = useState<HTMLVideoElement | null>(null)
@@ -39,6 +42,7 @@ export default function ClockDemo() {
     [rate],
   )
   const [offsets, setOffsets] = useState<CalibrationOffsets | null>(null)
+  const [monitorDemo, setMonitorDemo] = useState(false)
 
   useEffect(
     () => () => {
@@ -191,6 +195,16 @@ export default function ClockDemo() {
           ? `calibration ${offsets.calibrationOffsetSamples} + manual ${offsets.manualOffsetSamples} = ${offsets.offsetSamples} samples; a take at 1.0 s starts at ${demoClip?.start ?? '-'}`
           : '-'}
       </Text>
+      <Divider />
+      {monitorDemo ? (
+        <Suspense fallback={null}>
+          <MonitorDemo />
+        </Suspense>
+      ) : (
+        <Button variant="default" onClick={() => setMonitorDemo(true)}>
+          Open the monitor demo
+        </Button>
+      )}
     </Stack>
   )
 }
