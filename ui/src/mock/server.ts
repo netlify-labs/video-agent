@@ -1,5 +1,5 @@
 // Mock mode: answers /api/* from mock/data.ts by replacing window.fetch. Loaded only when VITE_MOCK=1.
-import spec from '../../../openapi.json'
+import spec from '../api/openapi.json'
 import type { paths } from '../api/schema'
 import { applyEdits, type EditOp } from '../../../src/lib/contract'
 import plainHtml from '../../../test/fixtures/contract1/index.html?raw'

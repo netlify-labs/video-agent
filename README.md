@@ -236,7 +236,7 @@ Openverse API.
 ## The API
 
 Reference: the app's **API docs → REST API** page (`/docs/api`), built from the OpenAPI spec at `/api/openapi.json` (committed as
-[`openapi.json`](openapi.json)). A standalone copy is at `/api/docs`.
+[`ui/src/api/openapi.json`](ui/src/api/openapi.json)). A standalone copy is at `/api/docs`.
 
 ```sh
 KEY=nva_...   # create one on the API keys page
@@ -365,7 +365,7 @@ in as before, while accounts created by Sign in with Netlify can only use MCP OA
 npm ci
 npm test             # unit and integration tests (in-memory store and a real Postgres via PGlite)
 npm run typecheck && npm run lint
-npm run openapi:gen  # after changing routes; CI fails if openapi.json or the UI's types are stale
+npm run openapi:gen  # after changing routes; CI fails if ui/src/api/openapi.json or the UI's types are stale
 npm run db:generate  # after changing db/schema.ts
 npx netlify dev      # local app (set ALLOW_NON_PRODUCTION=true to serve the API outside production)
 ```

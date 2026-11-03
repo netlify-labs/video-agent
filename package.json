@@ -12,7 +12,7 @@
     "lint": "NODE_OPTIONS=--max-old-space-size=6144 eslint .",
     "format": "prettier --write .",
     "test": "vitest run",
-    "openapi:gen": "tsx scripts/gen-openapi.ts && npx -y openapi-typescript@7.13.0 openapi.json -o ui/src/api/schema.d.ts",
+    "openapi:gen": "tsx scripts/gen-openapi.ts && npx -y openapi-typescript@7.13.0 ui/src/api/openapi.json -o ui/src/api/schema.d.ts",
     "db:generate": "drizzle-kit generate",
     "db:check": "drizzle-kit check",
     "build": "tsx scripts/build.ts",
@@ -21,7 +21,7 @@
     "setup:openverse": "tsx scripts/setup-openverse.ts",
     "seed:music": "tsx scripts/seed-music.ts",
     "postinstall": "netlify-agent-kit install --strict",
-    "openapi:check": "tsx scripts/gen-openapi.ts --check && npx -y openapi-typescript@7.13.0 openapi.json --check -o ui/src/api/schema.d.ts",
+    "openapi:check": "tsx scripts/gen-openapi.ts --check && npx -y openapi-typescript@7.13.0 ui/src/api/openapi.json --check -o ui/src/api/schema.d.ts",
     "test:ui": "playwright test"
   },
   "dependencies": {
@@ -78,6 +78,12 @@
     "typescript-eslint": "8.72.1",
     "vite": "8.3.5",
     "vitest": "5.0.5"
+  },
+  "prettier": {
+    "semi": false,
+    "singleQuote": true,
+    "printWidth": 110,
+    "trailingComma": "all"
   },
   "netlifyAgent": {
     "hyperframes": {

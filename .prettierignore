@@ -2,7 +2,7 @@ node_modules
 .beads
 .nax
 netlify/database/migrations
-openapi.json
+ui/src/api/openapi.json
 package-lock.json
 ui/dist
 video
