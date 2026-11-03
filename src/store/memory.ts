@@ -677,7 +677,8 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
     },
     mediaUsage: async (ids) => {
       const out: Record<string, string[]> = {}
-      for (const r of state.versionMedia)
+      const versionRefs = [...state.mediaRefs.values()].filter((r) => r.ownerKind === 'version')
+      for (const r of [...state.versionMedia, ...versionRefs])
         if (ids.includes(r.mediaId) && !(out[r.mediaId] ??= []).includes(r.jobId))
           out[r.mediaId]?.push(r.jobId)
       return out
@@ -691,15 +692,11 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
           .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
       ),
     versionProvenance: async (jobId) =>
-      state.versionMedia
-        .filter((r) => r.jobId === jobId)
-        .sort((a, b) => a.versionN - b.versionN || a.position - b.position)
-        .flatMap((r) => {
-          const m = state.media.get(r.mediaId)
-          if (!m?.source) return []
-          const { versionN, mediaId, position, kind } = r
-          return [{ versionN, mediaId, position, kind, ...pickProvenance(m) }]
-        }),
+      provenanceOf(state, (id) => id === jobId).map((r) => {
+        const row: Partial<typeof r> = { ...r }
+        delete row.jobId
+        return row as VersionProvenanceRow
+      }),
     insertEdit: async (row) => {
       state.edits.set(row.id, clone(row))
     },
@@ -764,15 +761,7 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
             .filter((r) => has(r.jobId))
             .sort((a, b) => a.versionN - b.versionN || a.position - b.position),
         ),
-        provenance: state.versionMedia
-          .filter((r) => has(r.jobId))
-          .sort((a, b) => a.versionN - b.versionN || a.position - b.position)
-          .flatMap((r) => {
-            const m = state.media.get(r.mediaId)
-            if (!m?.source) return []
-            const { jobId, versionN, mediaId, position, kind } = r
-            return [{ jobId, versionN, mediaId, position, kind, ...pickProvenance(m) }]
-          }),
+        provenance: provenanceOf(state, has),
         owners,
       }
     },
@@ -1091,6 +1080,47 @@ export function isoWeek(iso: string): string {
   const day = (d.getUTCDay() + 6) % 7
   d.setUTCDate(d.getUTCDate() - day)
   return d.toISOString().slice(0, 10)
+}
+
+/**
+ * Credited library items per version: version_media rows, then the library audio a version's recorded narration
+ * plays (media_refs `version` references, owner `<job>#<n>`; recordings, which have a take role, are left out).
+ */
+function provenanceOf(state: State, has: (jobId: string) => boolean) {
+  const media = state.versionMedia
+    .filter((r) => has(r.jobId))
+    .sort((a, b) => a.versionN - b.versionN || a.position - b.position)
+    .flatMap((r) => {
+      const m = state.media.get(r.mediaId)
+      if (!m?.source) return []
+      const { jobId, versionN, mediaId, position, kind } = r
+      return [{ jobId, versionN, mediaId, position, kind, ...pickProvenance(m) }]
+    })
+  const narration = [...state.mediaRefs.values()]
+    .filter((r) => r.ownerKind === 'version' && has(r.jobId))
+    .sort((a, b) => a.ownerId.localeCompare(b.ownerId) || a.mediaId.localeCompare(b.mediaId))
+    .flatMap((r) => {
+      const m = state.media.get(r.mediaId)
+      if (!m?.source || m.role !== null) return []
+      const versionN = Number(r.ownerId.slice(r.ownerId.lastIndexOf('#') + 1))
+      return [
+        {
+          jobId: r.jobId,
+          versionN,
+          mediaId: m.id,
+          position: 0,
+          kind: m.kind,
+          narration: true,
+          ...pickProvenance(m),
+        },
+      ]
+    })
+  return [...media, ...narration].sort(
+    (a, b) =>
+      a.versionN - b.versionN ||
+      Number('narration' in a) - Number('narration' in b) ||
+      a.position - b.position,
+  ) as (VersionProvenanceRow & { jobId: string })[]
 }
 
 function pickProvenance(

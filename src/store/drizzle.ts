@@ -70,11 +70,7 @@ type Db = PgAsyncDatabase<any, any, any>
 const one = <T>(rows: unknown[]): T | null => (rows[0] as T | undefined) ?? null
 const nonDue = [...TERMINAL_STAGES, 'queued', 'unresolved']
 /** A version's credited media: the version_media row and the media item's source and licence. */
-const PROVENANCE_COLUMNS = {
-  versionN: t.versionMedia.versionN,
-  mediaId: t.versionMedia.mediaId,
-  position: t.versionMedia.position,
-  kind: t.versionMedia.kind,
+const MEDIA_PROVENANCE = {
   source: t.media.source,
   sourceId: t.media.sourceId,
   sourceUrl: t.media.sourceUrl,
@@ -86,6 +82,47 @@ const PROVENANCE_COLUMNS = {
   creatorUrl: t.media.creatorUrl,
   attribution: t.media.attribution,
 }
+const PROVENANCE_COLUMNS = {
+  versionN: t.versionMedia.versionN,
+  mediaId: t.versionMedia.mediaId,
+  position: t.versionMedia.position,
+  kind: t.versionMedia.kind,
+  ...MEDIA_PROVENANCE,
+}
+/**
+ * Library items versions' recorded narration plays (media_refs `version` references, owner `<job>#<n>`), with their
+ * provenance: credits and usage union these with version_media (plan 2026-11-02 §6.1). Recordings are the user's
+ * own (a take role, no source) and are left out.
+ */
+async function narrationProvenance(db: Db, jobIds: string[]) {
+  if (!jobIds.length) return []
+  const r = t.mediaRefs
+  const m = t.media
+  const rows = await db
+    .select({ jobId: r.jobId, ownerId: r.ownerId, mediaId: m.id, kind: m.kind, ...MEDIA_PROVENANCE })
+    .from(r)
+    .innerJoin(m, eq(m.id, r.mediaId))
+    .where(and(inArray(r.jobId, jobIds), eq(r.ownerKind, 'version'), isNull(m.role), isNotNull(m.source)))
+    .orderBy(asc(r.ownerId), asc(r.mediaId))
+  return rows.map(({ ownerId, ...row }) => ({
+    ...row,
+    versionN: Number(ownerId.slice(ownerId.lastIndexOf('#') + 1)),
+    position: 0,
+    narration: true,
+  })) as (VersionProvenanceRow & { jobId: string })[]
+}
+const withoutJob = <T extends { jobId: string }>(r: T): Omit<T, 'jobId'> => {
+  const row: Partial<T> = { ...r }
+  delete row.jobId
+  return row as Omit<T, 'jobId'>
+}
+/** version_media rows first, then narration ones, each version in turn. */
+const byVersion = <T extends VersionProvenanceRow>(rows: T[]) =>
+  rows.sort(
+    (a, b) =>
+      a.versionN - b.versionN || Number(!!a.narration) - Number(!!b.narration) || a.position - b.position,
+  )
+
 /** Library queries leave narration takes out, except `takesOf`'s own that GC isn't deleting. */
 const takeVisible = (takesOf: string | undefined) =>
   takesOf
@@ -844,10 +881,17 @@ function repoFor(db: Db): Repo {
       ).length,
     mediaUsage: async (ids) => {
       if (ids.length === 0) return {}
+      const r = t.mediaRefs
       const rows = await db
         .selectDistinct({ mediaId: t.versionMedia.mediaId, jobId: t.versionMedia.jobId })
         .from(t.versionMedia)
         .where(inArray(t.versionMedia.mediaId, ids))
+        .union(
+          db
+            .selectDistinct({ mediaId: r.mediaId, jobId: r.jobId })
+            .from(r)
+            .where(and(inArray(r.mediaId, ids), eq(r.ownerKind, 'version'))),
+        )
       const out: Record<string, string[]> = {}
       for (const r of rows) (out[r.mediaId] ??= []).push(r.jobId)
       return out
@@ -864,12 +908,16 @@ function repoFor(db: Db): Repo {
     versionProvenance: async (jobId) => {
       const v = t.versionMedia
       const m = t.media
-      return (await db
-        .select(PROVENANCE_COLUMNS)
-        .from(v)
-        .innerJoin(m, eq(m.id, v.mediaId))
-        .where(and(eq(v.jobId, jobId), isNotNull(m.source)))
-        .orderBy(asc(v.versionN), asc(v.position))) as VersionProvenanceRow[]
+      const [media, narration] = await Promise.all([
+        db
+          .select(PROVENANCE_COLUMNS)
+          .from(v)
+          .innerJoin(m, eq(m.id, v.mediaId))
+          .where(and(eq(v.jobId, jobId), isNotNull(m.source)))
+          .orderBy(asc(v.versionN), asc(v.position)) as Promise<VersionProvenanceRow[]>,
+        narrationProvenance(db, [jobId]),
+      ])
+      return byVersion([...media, ...narration.map(withoutJob)])
     },
     videoPage: async (jobIds) => {
       if (jobIds.length === 0)
@@ -885,7 +933,7 @@ function repoFor(db: Db): Repo {
         }
       const v = t.versionMedia
       const m = t.media
-      const [jobs, versions, attempts, publications, outputs, versionComments, provenance] =
+      const [jobs, versions, attempts, publications, outputs, versionComments, provenance, narration] =
         await Promise.all([
           db.select().from(t.jobs).where(inArray(t.jobs.id, jobIds)),
           db.select().from(t.versions).where(inArray(t.versions.jobId, jobIds)).orderBy(desc(t.versions.n)),
@@ -911,6 +959,7 @@ function repoFor(db: Db): Repo {
             .innerJoin(m, eq(m.id, v.mediaId))
             .where(and(inArray(v.jobId, jobIds), isNotNull(m.source)))
             .orderBy(asc(v.versionN), asc(v.position)),
+          narrationProvenance(db, jobIds),
         ])
       const ownerIds = [...new Set(jobs.map((j) => j.ownerId))]
       const owners = ownerIds.length
@@ -923,7 +972,10 @@ function repoFor(db: Db): Repo {
         publications,
         outputs: outputs as OutputRow[],
         versionComments,
-        provenance: provenance as (VersionProvenanceRow & { jobId: string })[],
+        provenance: byVersion([
+          ...(provenance as (VersionProvenanceRow & { jobId: string })[]),
+          ...narration,
+        ]),
         owners: owners as UserRow[],
       }
     },

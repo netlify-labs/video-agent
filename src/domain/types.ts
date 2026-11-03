@@ -714,6 +714,8 @@ export interface VersionProvenanceRow extends MediaProvenance {
   mediaId: string
   position: number
   kind: MediaRow['kind']
+  /** Library audio the version's recorded narration plays (a media_refs version reference), not a version_media row. */
+  narration?: boolean
 }
 
 export interface EditRow {

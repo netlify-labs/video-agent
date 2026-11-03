@@ -12,7 +12,7 @@ export interface Credit {
   /** The library item, or null for a file the run fetched from Openverse itself. */
   mediaId: string | null
   kind: MediaRow['kind']
-  /** "Music" for audio, "Media" otherwise. */
+  /** "Music" for audio, "Media" otherwise; "Narration" for library audio a recorded narration plays. */
   role: string
   title: string
   creator: string | null
@@ -69,23 +69,43 @@ export function runCreditFor(c: RunCredit): Credit | null {
 }
 
 /**
+ * The library items a version's recorded narration makes heard (plan 2026-11-02 §6.1): from the resolved op it mixed
+ * (versions.narration, or the render's frozen.narration until finalize records it), none when the narration track is
+ * muted, and only items with a clip that has a level. The op is stored jsonb, so it's read defensively.
+ */
+export function audibleNarration(v: Pick<VersionRow, 'narration' | 'frozen'>): Set<string> {
+  const op = (v.narration?.op ?? v.frozen?.narration?.op) as
+    { clips?: unknown; tracks?: { narration?: { muted?: unknown } } } | undefined
+  if (!op || op.tracks?.narration?.muted === true || !Array.isArray(op.clips)) return new Set()
+  const clips = op.clips as { mediaId?: unknown; gainDb?: unknown }[]
+  return new Set(
+    clips.flatMap((c) => (typeof c.mediaId === 'string' && c.gainDb !== null ? [c.mediaId] : [])),
+  )
+}
+
+/**
  * The credits one version needs. Audio is only given to runs with sound (or a voice-over, where the editor can swap a
- * track in), so a silent version's picked track isn't credited; anything else it was made with is. Then the files
- * the run fetched itself (`run`, from its output), skipping any Openverse work the library already credits.
+ * track in), so a silent version's picked track isn't credited; anything else it was made with is. Library audio its
+ * recorded narration plays is credited when the mix makes it heard (audibleNarration); recordings are the user's
+ * own and never reach here (the store reads library items only). Then the files the run fetched itself (`run`, from
+ * its output), skipping any Openverse work the library already credits.
  */
 export function versionCredits(
   rows: VersionProvenanceRow[],
-  v: Pick<VersionRow, 'n' | 'sound' | 'voiceover'>,
+  v: Pick<VersionRow, 'n' | 'sound' | 'voiceover' | 'narration' | 'frozen'>,
   run: RunCredit[] | null | undefined = null,
 ): Credit[] {
   const audible = (v.sound ?? 'silent') !== 'silent' || Boolean(v.voiceover)
+  const narrated = rows.some((r) => r.narration && r.versionN === v.n) ? audibleNarration(v) : new Set()
   const out: Credit[] = []
   const seen = new Set<string>()
   for (const r of rows) {
-    if (r.versionN !== v.n || (r.kind === 'audio' && !audible)) continue
+    if (r.versionN !== v.n) continue
+    if (r.narration ? !narrated.has(r.mediaId) : r.kind === 'audio' && !audible) continue
     if (r.source === 'openverse' && r.sourceId) seen.add(r.sourceId)
     const c = creditFor(r.mediaId, r.kind, r)
-    if (c && !out.some((x) => x.mediaId === c.mediaId)) out.push(c)
+    if (c && !out.some((x) => x.mediaId === c.mediaId))
+      out.push(r.narration ? { ...c, role: 'Narration' } : c)
   }
   // Run credits were checked when the version was recorded: each plays in the composition.
   for (const r of run ?? []) {
