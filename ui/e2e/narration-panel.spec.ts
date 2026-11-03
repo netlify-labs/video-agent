@@ -1,7 +1,8 @@
 // The editor's Narration section and the keep-visuals render dialog (plan 2026-11-02 §2.3-§2.5), on the mock build:
-// the section shows only while recorded voice-over is on; a WAV added with Add audio uploads as a narration take and
-// lands as a clip at the playhead; the clip moves and saves as the draft's narration op; Render then asks how, with the
-// overflow past the end, and Hold the last frame sends holdFinalFrame. A recording from this video lands there too.
+// the section shows only while recorded voice-over is on; a WAV dropped on the Narration lane uploads as a narration
+// take and lands as a clip where it was dropped; the clip moves and saves as the draft's narration op; Render then asks
+// how, with the overflow past the end, and Hold the last frame sends holdFinalFrame. A chosen file, a recording of
+// this video and library audio land at the playhead.
 import { expect, test, type Page } from '@playwright/test'
 
 const RATE = 24_000
@@ -38,12 +39,38 @@ function speechWav(seconds: number, rate = RATE): number[] {
   return [...new Uint8Array(v.buffer)]
 }
 
-/** Adds a WAV at the playhead with Add audio. */
-async function addFile(page: Page, name: string, bytes: number[]) {
-  await page
-    .getByTestId('narration-section')
-    .locator('input[type="file"]')
-    .setInputFiles({ name, mimeType: 'audio/wav', buffer: Buffer.from(bytes) })
+/** Drops a WAV on the Narration lane `seconds` in (with Alt held, it doesn't snap). */
+async function dropOnLane(page: Page, name: string, bytes: number[], seconds: number, alt = false) {
+  const lane = page.locator('.va-tl-lane[data-lane="narration"]')
+  await lane.scrollIntoViewIfNeeded()
+  const box = await lane.boundingBox()
+  const content = await page.locator('.va-tl-content').boundingBox()
+  if (!box || !content) throw new Error('no Narration lane')
+  const pps = Number(await page.getByTestId('timeline').getAttribute('data-px-per-sec'))
+  await lane.evaluate(
+    (el, a) => {
+      // The browser's DOM, typed only as far as this uses it (the e2e project has no DOM lib).
+      const w = globalThis as unknown as {
+        DataTransfer: new () => { items: { add: (f: unknown) => void } }
+        File: new (parts: unknown[], name: string, o: { type: string }) => unknown
+        DragEvent: new (type: string, o: Record<string, unknown>) => unknown
+      }
+      const dt = new w.DataTransfer()
+      dt.items.add(new w.File([new Uint8Array(a.bytes)], a.name, { type: 'audio/wav' }))
+      for (const type of ['dragenter', 'dragover', 'drop'])
+        (el as unknown as { dispatchEvent: (e: unknown) => void }).dispatchEvent(
+          new w.DragEvent(type, {
+            dataTransfer: dt,
+            clientX: a.x,
+            clientY: a.y,
+            altKey: a.alt,
+            bubbles: true,
+            cancelable: true,
+          }),
+        )
+    },
+    { bytes, name, alt, x: content.x + seconds * pps, y: box.y + box.height / 2 },
+  )
 }
 
 /** The selected clip's [id, start, end] in seconds, from the inspector. */
@@ -61,6 +88,7 @@ test('the Narration section shows while recorded voice-over is on, and not when 
   const section = page.getByTestId('narration-section')
   await expect(section).toBeVisible()
   await expect(section.getByRole('region', { name: 'Timeline' })).toBeVisible()
+  await expect(section.getByText('Drop an audio file here')).toBeVisible()
   await expect(section.getByRole('radio', { name: 'Light' })).toBeChecked()
   // Nothing on the track: no narration op, and Render goes straight to the render.
   await expect(page.getByTestId('edit-status')).toContainText('No changes yet')
@@ -72,23 +100,23 @@ test('the Narration section shows while recorded voice-over is on, and not when 
   await expect(page.getByTestId('narration-section')).toHaveCount(0)
 })
 
-test('an added WAV becomes a clip at the playhead; moved and saved, Render asks how and holds the last frame', async ({
+test('a dropped WAV becomes a clip where it lands; moved and saved, Render asks how and holds the last frame', async ({
   page,
 }) => {
   await page.goto('/videos/vid_teaser/edit/2')
   await expect(page.getByTestId('narration-section')).toBeVisible()
-  // 10 s of narration at the playhead (0): it runs past the 9 s video.
-  await addFile(page, 'my-voice.wav', speechWav(10))
+  // 4 s of narration dropped just after the 6 s scene boundary snaps to it, and runs to 10 s, past the 9 s video.
+  await dropOnLane(page, 'my-voice.wav', speechWav(4), 6.04)
   const clip = page.locator('.va-tl-clip[data-clip-id="nar_1"]')
   await expect(clip).toBeVisible({ timeout: 15_000 })
   await expect(clip).toContainText('my-voice.wav')
-  await expect.poll(() => span(page)).toEqual(['nar_1', 0, 10])
+  await expect.poll(() => span(page)).toEqual(['nar_1', 6, 10])
   await expect(page.getByTestId('narration-note')).toContainText('runs 1 s past the end')
 
   // Move it ten frames later from the keyboard (Shift+→).
   await clip.focus()
   await page.keyboard.press('Shift+ArrowRight')
-  await expect.poll(() => span(page)).toEqual(['nar_1', 0.33, 10.33])
+  await expect.poll(() => span(page)).toEqual(['nar_1', 6.33, 10.33])
 
   // It saves as the draft's one narration op: the uploaded take, placed in samples.
   await expect(page.getByTestId('edit-status')).toContainText('Draft saved')
@@ -100,7 +128,7 @@ test('an added WAV becomes a clip at the playhead; moved and saved, Render asks 
       sampleRate: RATE,
       cleanup: 'light',
       tracks: { aiVoice: { mode: 'replace' }, music: { duck: true } },
-      clips: [{ id: 'nar_1', srcStart: 0, srcEnd: 10 * RATE, start: 8000, gainDb: 0 }],
+      clips: [{ id: 'nar_1', srcStart: 0, srcEnd: 4 * RATE, start: 6 * RATE + 8000, gainDb: 0 }],
     })
   const ops = await lastOps(page)
   const mediaId = (ops.find((o) => o.op === 'narration') as unknown as { clips: { mediaId: string }[] })
@@ -119,7 +147,7 @@ test('an added WAV becomes a clip at the playhead; moved and saved, Render asks 
   // Render: the dialog shows where the narration sits and the overrun, Keep my visuals chosen.
   await page.getByRole('button', { name: 'Render as v3' }).click()
   const dialog = page.getByRole('dialog', { name: 'Render as v3' })
-  await expect(dialog.getByTestId('render-duration-bar')).toContainText('Narration 0:00.3–0:10.3')
+  await expect(dialog.getByTestId('render-duration-bar')).toContainText('Narration 0:06.3–0:10.3')
   await expect(dialog.getByTestId('render-duration-bar')).toContainText('Video 0:09.0')
   await expect(dialog.getByRole('radio', { name: 'Keep my visuals' })).toBeChecked()
   await expect(dialog.getByText('About 34 credits', { exact: false })).toBeVisible()
@@ -137,7 +165,7 @@ test('an added WAV becomes a clip at the playhead; moved and saved, Render asks 
 
 test('Trim in the render dialog jumps to the clip that runs over', async ({ page }) => {
   await page.goto('/videos/vid_teaser/edit/2')
-  await addFile(page, 'long.wav', speechWav(10))
+  await dropOnLane(page, 'long.wav', speechWav(3), 7.5, true)
   await expect(page.locator('.va-tl-clip[data-clip-id="nar_1"]')).toBeVisible({ timeout: 15_000 })
   await expect(page.getByTestId('edit-status')).toContainText('Draft saved')
   await page.getByRole('button', { name: 'Render as v3' }).click()
@@ -176,4 +204,25 @@ test('a chosen file (decoded by the browser) and a recording of this video land 
   await expect
     .poll(async () => (await lastOps(page)).find((o) => o.op === 'narration'), { timeout: 5000 })
     .toMatchObject({ clips: [{ id: 'nar_2', mediaId: 'med_take0003', start: 0, srcEnd: 24 * RATE }] })
+})
+
+test('library audio picked from the Narration section lands at the playhead, its full length', async ({
+  page,
+}) => {
+  await mock(page, 'mockLibraryMusic')
+  await page.goto('/videos/vid_teaser/edit/2')
+  const section = page.getByTestId('narration-section')
+  await section.getByRole('button', { name: 'Add audio from' }).click()
+  await page.getByRole('menuitem', { name: 'The library' }).click()
+  await page
+    .getByRole('dialog', { name: 'Add audio to the narration' })
+    .getByTestId('pick-med_libpiano')
+    .click()
+  const clip = page.locator('.va-tl-clip[data-clip-id="nar_1"]')
+  await expect(clip).toContainText('Quiet Piano Morning')
+  // No stored waveform or spans: its length is the file's (95 s in the mock), as the server checks it.
+  await expect.poll(() => span(page)).toEqual(['nar_1', 0, 95])
+  await expect
+    .poll(async () => (await lastOps(page)).find((o) => o.op === 'narration'), { timeout: 5000 })
+    .toMatchObject({ clips: [{ mediaId: 'med_libpiano', srcEnd: 95 * RATE }] })
 })

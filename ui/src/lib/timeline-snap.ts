@@ -100,3 +100,18 @@ export function snapMove(
   if (dHead === Infinity && dTail === Infinity) return { sample: start, target: null }
   return dHead <= dTail ? head : { sample: tail.sample - length, target: tail.target }
 }
+
+/**
+ * Where a file dropped on the Narration lane starts (§2.4): the composition sample under the pointer, `x` CSS px
+ * into the lanes' content, snapped like a dragged edge (Alt / Option turns it off) and never before 0. The take's
+ * length isn't known until it's decoded, so only its start snaps.
+ */
+export function dropSample(
+  x: number,
+  pxPerSec: number,
+  targets: readonly SnapTarget[],
+  opts: { disabled?: boolean } = {},
+): number {
+  const at = Math.max(0, Math.round((x / pxPerSec) * SAMPLE_RATE))
+  return Math.max(0, snap(at, targets, pxPerSec, opts).sample)
+}

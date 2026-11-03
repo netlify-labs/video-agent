@@ -1,9 +1,11 @@
 // Upload to the Narration track (docs/plans/2026-11-02-record-your-own-voiceover.md §2.4, §5.2): an audio file is
-// decoded to mono at 24 kHz, its peaks and speech spans are computed, and it goes up as a narration upload (role
-// narration-upload, for this video) with them, then is waited on until the server has checked it.
+// decoded to mono at 24 kHz, its peaks and speech spans are computed off the page, and it goes up as a narration
+// upload (role narration-upload, for this video) with them, then is waited on until the server has checked it.
 //
-// A 24 kHz PCM16 WAV (what the recorder writes) is read directly, without decodeAudioData; anything else goes through
-// the browser's decoder once (narration-decode.ts browserDecoder, which resamples).
+// Decoding stays on the page: decodeAudioData and OfflineAudioContext don't exist in workers, and WebCodecs would need
+// a demuxer per format. A 24 kHz PCM16 WAV (what the recorder writes) is read directly, without decodeAudioData;
+// anything else goes through the browser's decoder once (narration-decode.ts browserDecoder, which resamples). The
+// peaks and speech pass (the long part for a long take) runs in a worker, or here when a worker can't start.
 import { decodePeaks, VAD_VERSION, type Peaks } from '../../../src/lib/peaks'
 import type { Span } from '../../../src/lib/timeline'
 import { analyzeSamples, type AnalyzedAudio } from './narration-analyze'
@@ -38,10 +40,30 @@ export async function decodeFile(f: File, decode: Decoder = browserDecoder): Pro
   return decode(bytes)
 }
 
-/** Peaks and speech spans (narration-analyze.ts). */
+/** Peaks and speech in the analysis worker; on the page when the worker can't start or fails. */
 export async function analyze(mono: Float32Array): Promise<AnalyzedAudio> {
-  await Promise.resolve()
-  return analyzeSamples(mono)
+  let worker: Worker
+  try {
+    worker = new Worker(new URL('./narration-analyze.worker.ts', import.meta.url), { type: 'module' })
+  } catch {
+    return analyzeSamples(mono)
+  }
+  try {
+    return await new Promise<AnalyzedAudio>((ok, bad) => {
+      worker.onmessage = (e: MessageEvent<AnalyzedAudio>) => {
+        ok(e.data)
+      }
+      worker.onerror = () => {
+        bad(new Error('worker'))
+      }
+      // Copied, not transferred: if the worker fails, the samples are still here for the fallback.
+      worker.postMessage({ samples: mono })
+    })
+  } catch {
+    return analyzeSamples(mono)
+  } finally {
+    worker.terminate()
+  }
 }
 
 export interface ImportOptions {

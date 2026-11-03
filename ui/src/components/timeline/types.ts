@@ -78,6 +78,11 @@ export interface TimelineProps {
   onSelectClip: (clipId: string | null) => void
   onRangeSelect: (range: Span | null) => void
   onClipCommand?: (command: ClipCommand) => void
+  /**
+   * Audio files dropped on the Narration lane, with the composition sample they land at (snapped like a dragged
+   * edge; Alt / Option turns it off). Without it the lane takes no drops.
+   */
+  onDropFiles?: (files: File[], sample: number) => void
   /** Initial zoom in px per second; the timeline fits the composition when it's left out. */
   initialPxPerSec?: number
   /** Called with the zoom whenever it changes. */

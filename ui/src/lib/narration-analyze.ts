@@ -1,6 +1,7 @@
 // A take's waveform peaks and speech spans from its decoded audio (docs/plans/2026-11-02-record-your-own-voiceover.md
 // §2.4, §5.2): the same PeaksBuilder and SpeechDetector the recorder's worker runs, over mono samples at 24 kHz, in
-// one-second blocks. Pure: no DOM, so it can move into a worker.
+// one-second blocks. Pure, so it runs in the analysis worker (narration-analyze.worker.ts) and, where a worker can't
+// start, on the page.
 import { encodePeaks, PeaksBuilder, SpeechDetector } from '../../../src/lib/peaks'
 import { SAMPLE_RATE, type Span } from '../../../src/lib/timeline'
 

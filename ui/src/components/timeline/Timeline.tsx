@@ -12,6 +12,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type DragEvent,
   type KeyboardEvent,
   type MouseEvent,
   type PointerEvent,
@@ -30,7 +31,7 @@ import {
   type Span,
 } from '../../../../src/lib/timeline'
 import { labelFor } from '../../lib/labels'
-import { snapTargets } from '../../lib/timeline-snap'
+import { dropSample, snapTargets } from '../../lib/timeline-snap'
 import {
   clampZoom,
   DEFAULT_PX_PER_SEC,
@@ -72,6 +73,7 @@ export function Timeline(props: TimelineProps) {
   const [viewport, setViewport] = useState(0)
   const [win, setWin] = useState<Span>([0, 0])
   const [draft, setDraft] = useState<Span | null>(null)
+  const [dropping, setDropping] = useState(false)
 
   const clips = useMemo(() => resolve(op.clips).map((clip, index) => ({ clip, index })), [op.clips])
   const videoEnd = secondsToSamples(composition.duration)
@@ -225,6 +227,35 @@ export function Timeline(props: TimelineProps) {
     if (p.selectedClipId !== id) p.onSelectClip(id)
     p.onClipCommand?.({ type: 'menu', clipId: id, clientX: e.clientX, clientY: e.clientY })
   }, [])
+
+  // ---- files dropped on the Narration lane
+
+  const hasFiles = (e: DragEvent) => [...e.dataTransfer.types].includes('Files')
+  const drop = props.onDropFiles
+    ? {
+        active: dropping,
+        onDragOver: (e: DragEvent<HTMLDivElement>) => {
+          if (!hasFiles(e)) return
+          e.preventDefault()
+          e.dataTransfer.dropEffect = 'copy'
+          setDropping(true)
+        },
+        onDragLeave: (e: DragEvent<HTMLDivElement>) => {
+          // Leaving for a clip inside the lane isn't leaving the lane.
+          if (!(e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget)))
+            setDropping(false)
+        },
+        onDrop: (e: DragEvent<HTMLDivElement>) => {
+          setDropping(false)
+          const files = [...e.dataTransfer.files]
+          if (!files.length) return
+          e.preventDefault()
+          const left = contentRef.current?.getBoundingClientRect().left ?? 0
+          const at = dropSample(e.clientX - left, ppsRef.current, targets, { disabled: e.altKey })
+          live.current.onDropFiles?.(files, at)
+        },
+      }
+    : undefined
 
   // ---- what's in the window
 
@@ -446,7 +477,13 @@ export function Timeline(props: TimelineProps) {
             onPointerDown={(e) => {
               if (e.target === e.currentTarget && props.selectedClipId) props.onSelectClip(null)
             }}
+            {...(drop ? { drop } : {})}
           >
+            {drop && !clips.length ? (
+              <Text size="xs" c="var(--va-faint)" className="va-tl-drop-hint">
+                Drop an audio file here
+              </Text>
+            ) : null}
             {shownClips.map(({ clip: c, index }) => {
               const l = clipLabel(c, index)
               return (

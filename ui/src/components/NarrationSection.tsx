@@ -1,6 +1,6 @@
 // The editor's Narration section (docs/plans/2026-11-02-record-your-own-voiceover.md §2.3-§2.5, §5.4, §5.5): the
 // composition preview with the narration auditioned over it, and under it the timeline (Scenes, Narration, AI voice,
-// Music), the clip tools, the track's settings and Add audio (upload, the library, this video's recordings).
+// Music), the clip tools, the track's settings and Add audio (upload, drop, the library, this video's recordings).
 // The op it edits goes up through onChange and is saved with the draft's other ops (one whole-track snapshot); clip
 // edits are undoable here, track settings apply as they're set. Slots take the recorder and the narration banners.
 import {
@@ -238,7 +238,7 @@ export function NarrationSection(props: NarrationSectionProps) {
     }
   }, [control, seek, editor])
 
-  // ---- adding audio: files, the library, this video's recordings
+  // ---- adding audio: files (dropped or chosen), the library, this video's recordings
 
   const [importing, setImporting] = useState<Importing | null>(null)
   const addFiles = async (files: File[], start: number) => {
@@ -363,8 +363,8 @@ export function NarrationSection(props: NarrationSectionProps) {
         </Group>
         {props.banner}
         <Text size="xs" c="var(--va-faint)" mb="xs">
-          Add an MP3, M4A, WAV or Ogg file at the playhead, or pick one you've uploaded. Drag clips to line
-          them up; your narration plays over the scenes as they are.
+          Drop an MP3, M4A, WAV or Ogg file on the Narration lane, or add one at the playhead. Drag clips to
+          line them up; your narration plays over the scenes as they are.
         </Text>
         {importing ? (
           <Stack gap={4} mb="xs" data-testid="narration-importing">
@@ -388,6 +388,7 @@ export function NarrationSection(props: NarrationSectionProps) {
           onSelectClip={editor.setSelected}
           onRangeSelect={setRange}
           onClipCommand={editor.onClipCommand}
+          onDropFiles={(files, at) => void addFiles(files, at)}
         />
         <ClipMenu editor={editor} />
         <EditorAnnouncer editor={editor} />

@@ -2,7 +2,7 @@
 // Headers sit in a fixed column beside the scrolling lanes; both use the same row heights (timeline.css).
 import { ActionIcon, Slider, Switch, Text, Tooltip } from '@mantine/core'
 import { IconVolume, IconVolumeOff } from '@tabler/icons-react'
-import type { PointerEvent, ReactNode } from 'react'
+import type { DragEvent, PointerEvent, ReactNode } from 'react'
 import type { LaneId } from './types'
 
 export interface VolumeControl {
@@ -110,15 +110,26 @@ export function Lane(p: {
   muted?: boolean
   children: ReactNode
   onPointerDown?: (e: PointerEvent<HTMLDivElement>) => void
+  /** Files being dragged over the lane (it highlights) and dropped on it. */
+  drop?: {
+    active: boolean
+    onDragOver: (e: DragEvent<HTMLDivElement>) => void
+    onDragLeave: (e: DragEvent<HTMLDivElement>) => void
+    onDrop: (e: DragEvent<HTMLDivElement>) => void
+  }
 }) {
   return (
     <div
       className="va-tl-lane"
       data-lane={p.lane}
       data-muted={p.muted ? '' : undefined}
+      data-drop={p.drop?.active ? '' : undefined}
       role="group"
       aria-label={`${p.name} lane`}
       onPointerDown={p.onPointerDown}
+      onDragOver={p.drop?.onDragOver}
+      onDragLeave={p.drop?.onDragLeave}
+      onDrop={p.drop?.onDrop}
     >
       {p.children}
     </div>

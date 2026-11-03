@@ -122,6 +122,19 @@
   position: relative;
   border-bottom: 1px solid var(--va-rule);
 }
+.va-tl-lane[data-drop] {
+  background: color-mix(in srgb, var(--mantine-color-teal-6) 14%, transparent);
+  outline: 1px dashed var(--mantine-color-teal-6);
+  outline-offset: -1px;
+}
+.va-tl-drop-hint {
+  position: sticky;
+  left: 8px;
+  display: inline-block;
+  padding: 0 8px;
+  line-height: var(--tl-narration);
+  pointer-events: none;
+}
 .va-tl-lane[data-muted] > .va-tl-clip {
   opacity: 0.45;
 }

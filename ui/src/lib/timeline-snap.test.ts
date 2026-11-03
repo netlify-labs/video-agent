@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { IDENTITY_FIT, SAMPLE_RATE, type NarrationClip } from '../../../src/lib/timeline'
-import { snap, SNAP_PX, snapMove, snapTargets } from './timeline-snap'
+import { dropSample, snap, SNAP_PX, snapMove, snapTargets } from './timeline-snap'
 
 const S = SAMPLE_RATE
 const clip = (id: string, start: number, len: number): NarrationClip => ({
@@ -82,5 +82,21 @@ describe('snap', () => {
     expect(m.target?.sample).toBe(20 * S)
     expect(snapMove(9.99 * S, 2 * S, targets, pps).sample).toBe(10 * S)
     expect(snapMove(3 * S, 2 * S, targets, pps)).toEqual({ sample: 3 * S, target: null })
+  })
+})
+
+describe('dropSample (a file dropped on the Narration lane)', () => {
+  const targets = snapTargets({ beats: [{ start: 0, duration: 3 }], clips: [clip('a', 5 * S, S)] })
+  it('is the sample under the pointer, snapped to a nearby edge unless Alt is held', () => {
+    // 100 px/s: x = 304 px is 3.04 s, 4 px from the beat edge at 3 s.
+    expect(dropSample(304, 100, targets)).toBe(3 * S)
+    expect(dropSample(304, 100, targets, { disabled: true })).toBe(3.04 * S)
+    // Far from any edge it stays put; x = 420 px is 4.2 s.
+    expect(dropSample(420, 100, targets)).toBe(4.2 * S)
+    // The end of clip a (6 s) is a target too.
+    expect(dropSample(598, 100, targets)).toBe(6 * S)
+  })
+  it('never starts before 0', () => {
+    expect(dropSample(-50, 100, targets, { disabled: true })).toBe(0)
   })
 })
