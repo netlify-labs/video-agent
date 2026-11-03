@@ -406,6 +406,8 @@ export interface TestDeps extends Deps {
   nextSource: Uint8Array | null
   /** A narration bus the next fake run uploads on its own and lists as a reference file (once). */
   nextBus: Uint8Array | null
+  /** More files the next fake run uploads (and lists), and fields its manifest carries (once). */
+  nextExtra: { files?: Record<string, Uint8Array>; manifest?: Partial<Manifest> } | null
   /** Preview variants (and placeholder) the next fake run uploads and lists in its manifest (once). */
   nextPreviews: {
     files: Partial<Record<PreviewFile, Uint8Array>>
@@ -436,6 +438,7 @@ export function makeDeps(env: Record<string, string> = {}, store?: Deps['store']
     store: store ?? createMemoryStore(),
     nextSource: null,
     nextBus: null,
+    nextExtra: null,
     nextPreviews: null,
     blobs: new FakeBlobs(),
     identity: new FakeIdentity(),
@@ -496,7 +499,7 @@ export async function uploadAndManifest(
   jobId: string,
   attemptId: string,
   files: Record<string, Uint8Array> = fixtureFiles(),
-  extra: { lqip?: string } = {},
+  extra: Partial<Manifest> = {},
 ): Promise<Manifest> {
   const entries = Object.entries(files) as [keyof Manifest['files'], Uint8Array][]
   for (const [name, bytes] of entries) await blobs.set('uploads', `${attemptId}/${name}`, bytes)

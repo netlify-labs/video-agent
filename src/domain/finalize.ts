@@ -21,9 +21,11 @@ import {
   type Previews,
 } from '../lib/media/previews.js'
 import { readRunCredits, RUN_CREDITS_FILE, type RunCredit } from '../lib/openverse-rules.js'
+import { NARRATION_SRC } from '../lib/contract.js'
 import { readTarGz, type TarLimits } from '../lib/tar.js'
 import { ensureBundle } from './bundles.js'
 import { getSettings } from './settings.js'
+import { promoteAttemptRefs } from './takes.js'
 import { deriveTitle, setStage } from './videos.js'
 import { emitTerminalEvent } from './webhooks.js'
 import {
@@ -32,7 +34,11 @@ import {
   type AttemptRow,
   type FailureCategory,
   type Manifest,
+  type NarrationReport,
   type OutputFile,
+  type VersionCaptions,
+  type VersionNarration,
+  type VersionRow,
 } from './types.js'
 
 const MIN = 60_000
@@ -223,25 +229,33 @@ export async function finalizeAttempt(deps: Deps, attemptId: string): Promise<Fi
     }
     const previews = await storePreviews(deps, a.id, prefix, manifest, sha256)
     const runCredits = runCreditsOf(deps, a.id, files['source.tar.gz'])
-    const result = await finish(deps, a, 'ready', null, {
-      jobId: a.jobId,
-      versionN: a.versionN,
-      videoKey: keys.video,
-      posterKey: keys.poster,
-      gifKey: keys.gif,
-      captionsKey: keys.captions,
-      sourceKey: keys.source,
-      sha256,
-      bytes: video.byteLength,
-      durationSec: info.durationSec,
-      width: info.width,
-      height: info.height,
-      title: manifest.title.slice(0, 120),
-      agentSummary: manifest.summary.slice(0, 4000),
-      previews,
-      runCredits,
-      notices: notices.length ? notices : null,
-    })
+    const recorded = narrationMetadata(deps, a, version, manifest, references)
+    const result = await finish(
+      deps,
+      a,
+      'ready',
+      null,
+      {
+        jobId: a.jobId,
+        versionN: a.versionN,
+        videoKey: keys.video,
+        posterKey: keys.poster,
+        gifKey: keys.gif,
+        captionsKey: keys.captions,
+        sourceKey: keys.source,
+        sha256,
+        bytes: video.byteLength,
+        durationSec: info.durationSec,
+        width: info.width,
+        height: info.height,
+        title: manifest.title.slice(0, 120),
+        agentSummary: manifest.summary.slice(0, 4000),
+        previews,
+        runCredits,
+        notices: notices.length ? notices : null,
+      },
+      recorded,
+    )
     // The preview bundle (plan v2 §7). Best effort: a version without one is still ready and is extracted later.
     if (result === 'ready') {
       try {
@@ -380,6 +394,7 @@ async function finish(
   outcome: 'ready' | 'failed' | 'cancelled',
   error: { category: FailureCategory; message: string } | null,
   output: Parameters<Deps['store']['upsertOutput']>[0] | null,
+  recorded: Pick<VersionRow, 'narration' | 'captions'> | null = null,
 ): Promise<FinalizeResult> {
   const now = deps.clock.now().toISOString()
   return deps.store.tx(async (repo) => {
@@ -390,6 +405,10 @@ async function finish(
     const final = fresh.cancelRequestedAt || job?.deletedAt ? 'cancelled' : outcome
     if (final === 'ready' && output) {
       await repo.upsertOutput(output)
+      // What was rendered, and the takes it played: the attempt's references become the version's, under the take
+      // locks (a failed or cancelled attempt releases its own instead, in setStage).
+      if (recorded) await repo.updateVersion(a.jobId, a.versionN, recorded)
+      await promoteAttemptRefs(repo, deps, a.id, `${a.jobId}#${a.versionN}`)
       // A title still taken from the first prompt gives way to the agent's; a title someone chose (typed, renamed
       // or from the brief) is kept.
       const first = job && output.title ? await repo.getVersion(a.jobId, 1) : null
@@ -426,6 +445,111 @@ async function finish(
     deps.log.info('finalize.done', { attemptId: a.id, outcome: final })
     return final
   })
+}
+
+/**
+ * versions.narration and versions.captions for a render of recorded narration (plan 2026-11-02 §6.1 Version fields,
+ * §6.6): the frozen op, the recipe with ffmpeg's version from the run's receipt, the bus as finalize verified and
+ * stored it, and the captions' transcription status and policy at rev 0. Null for every other version. The run's
+ * report is untrusted: what fails its checks is left out (and logged), and the verified bus always wins.
+ */
+export function narrationMetadata(
+  deps: Pick<Deps, 'log'>,
+  a: Pick<AttemptRow, 'id' | 'jobId' | 'versionN'>,
+  version: VersionRow,
+  manifest: Manifest,
+  references: { entry: BundleReference; bytes: Uint8Array }[],
+): Pick<VersionRow, 'narration' | 'captions'> | null {
+  const frozen = version.frozen?.narration
+  if (!frozen) return null
+  const bus = references.find((r) => r.entry.path === NARRATION_SRC)
+  if (!bus) throw new Invalid('invalid_output', "The narration bus wasn't uploaded with the video.")
+  const report = narrationReportOf(manifest.narration)
+  if (manifest.narration !== undefined && !report)
+    deps.log.warn('finalize.narration_report_invalid', { attemptId: a.id })
+  if (report && report.bus.sha256 !== bus.entry.sha256)
+    deps.log.warn('finalize.narration_report_mismatch', { attemptId: a.id, reported: report.bus.sha256 })
+  const samples = wavSamples(bus.bytes) ?? report?.bus.samples ?? 0
+  const narration: VersionNarration = {
+    op: frozen.op,
+    recipe: {
+      pipeline: report?.pipeline ?? frozen.recipe.pipeline,
+      ffmpegVersion: report?.ffmpeg ?? '',
+      settings: { cleanup: report?.cleanup ?? frozen.recipe.cleanup },
+    },
+    bus: { key: bus.entry.key, sha256: bus.entry.sha256, samples },
+  }
+  // No report from the transcription stage: off when the render froze it off, a failure otherwise.
+  const status: VersionCaptions['status'] =
+    report?.stt?.status ?? (frozen.transcriptionProvider === 'off' ? 'off' : 'failed')
+  const captions: VersionCaptions = {
+    status,
+    policy: frozen.captions,
+    rev: 0,
+    files: { vtt: 'captions.vtt', transcript: null },
+    sha256: { vtt: manifest.files['captions.vtt'].sha256, transcript: null },
+    generation: 0,
+  }
+  deps.log.info('finalize.narration', {
+    attemptId: a.id,
+    jobId: a.jobId,
+    versionN: a.versionN,
+    bus: bus.entry.sha256,
+    samples,
+    captions: status,
+    policy: frozen.captions,
+  })
+  return { narration, captions }
+}
+
+const STT_STATUSES = new Set(['ok', 'failed', 'off', 'timeout'])
+const shortText = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max) : null)
+
+/** The run's narration report, checked field by field; null when it isn't one. */
+export function narrationReportOf(v: unknown): NarrationReport | null {
+  if (!v || typeof v !== 'object') return null
+  const r = v as Record<string, unknown>
+  const bus = r.bus as Record<string, unknown> | undefined
+  const stt = r.stt as Record<string, unknown> | null | undefined
+  if (!Number.isInteger(r.pipeline) || (r.cleanup !== 'off' && r.cleanup !== 'light')) return null
+  if (typeof r.ffmpeg !== 'string') return null
+  if (!bus || typeof bus.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(bus.sha256)) return null
+  if (!Number.isInteger(bus.samples) || (bus.samples as number) < 0) return null
+  if (stt !== null && (!stt || !STT_STATUSES.has(stt.status as string))) return null
+  return {
+    pipeline: r.pipeline as number,
+    cleanup: r.cleanup,
+    ffmpeg: r.ffmpeg.slice(0, 200),
+    bus: { sha256: bus.sha256, samples: bus.samples as number },
+    stt: stt
+      ? {
+          status: stt.status as VersionCaptions['status'],
+          provider: shortText(stt.provider, 40),
+          model: shortText(stt.model, 80),
+          words: Number.isInteger(stt.words) ? (stt.words as number) : 0,
+        }
+      : null,
+  }
+}
+
+/** Samples per channel of a PCM16 WAV, from its chunk headers; null when it isn't one. */
+export function wavSamples(b: Uint8Array): number | null {
+  const id = (o: number) => String.fromCharCode(...b.subarray(o, o + 4))
+  if (b.length < 12 || id(0) !== 'RIFF' || id(8) !== 'WAVE') return null
+  const v = new DataView(b.buffer, b.byteOffset, b.byteLength)
+  let channels = 0
+  for (let o = 12; o + 8 <= b.length;) {
+    const size = v.getUint32(o + 4, true)
+    if (id(o) === 'fmt ' && o + 24 <= b.length) {
+      if (v.getUint16(o + 8, true) !== 1 || v.getUint16(o + 22, true) !== 16) return null
+      channels = v.getUint16(o + 10, true)
+    } else if (id(o) === 'data') {
+      if (!channels) return null
+      return Math.floor(Math.min(size, b.length - o - 8) / (2 * channels))
+    }
+    o += 8 + size + (size & 1)
+  }
+  return null
 }
 
 /** The agent's explanation, trimmed to its first sentences, for a failure message. */

@@ -6,7 +6,7 @@
 // Prints the manifest as a fenced json block on stdout. Logs JSON lines on stderr.
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { MasteringReport } from '../src/domain/types.js'
+import type { MasteringReport, NarrationReport } from '../src/domain/types.js'
 import { bundleManifest, compositionFiles } from '../src/lib/bundle-manifest.js'
 import { validate, type Summary } from '../src/lib/contract.js'
 import { checkNarration } from '../src/lib/narration-guard.js'
@@ -321,6 +321,8 @@ async function main() {
   }
   const references = await uploadReferences(attempt, videoDir)
   log('upload.done', { ms: Date.now() - started })
+  // What finalize records on the version (versions.narration and versions.captions): the receipt, summed up.
+  const narrationReport = narrationOp ? narrationReportOf(readNarrationReceipt(repoRoot)) : undefined
 
   const manifest = {
     jobId: job,
@@ -340,6 +342,7 @@ async function main() {
         }
       : {}),
     ...(mastering ? { mastering } : {}),
+    ...(narrationReport ? { narration: narrationReport } : {}),
     durationSec,
     width: stream.width,
     height: stream.height,
@@ -371,6 +374,20 @@ async function main() {
   log('callback.done', { status, ms: Date.now() - started })
   if (status === 410) console.log('The service says this job was cancelled. Stop here.')
   console.log(`\`\`\`json\n${JSON.stringify(manifest, null, 2)}\n\`\`\``)
+}
+
+/** The receipt as the callback carries it: the recipe, the bus and how transcription went (no words, no spans). */
+function narrationReportOf(r: ReturnType<typeof readNarrationReceipt>): NarrationReport | undefined {
+  if (!r) return undefined
+  return {
+    pipeline: r.pipeline,
+    cleanup: r.recipe.cleanup,
+    ffmpeg: r.recipe.ffmpeg.slice(0, 200),
+    bus: { sha256: r.bus.sha256, samples: r.bus.samples },
+    stt: r.stt
+      ? { status: r.stt.status, provider: r.stt.provider, model: r.stt.model, words: r.stt.words }
+      : null,
+  }
 }
 
 main().catch((e: unknown) => {

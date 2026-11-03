@@ -445,7 +445,7 @@ describe('rendering narration with the visuals kept', () => {
     expect(await error(await render(h, editId))).toMatchObject({ status: 409, code: 'narration_disabled' })
   })
 
-  it('carries frozen.narration in the run manifest, and a retry moves the takes to the new attempt', async () => {
+  it('carries frozen.narration in the run manifest, and a retry takes the takes again', async () => {
     const h = harness()
     const { id, editId, ids } = await narrated(h, ([a]) => [clip(a!)], 1)
     h.deps.runner.nextScripts.push({ timeline: [running(), failedSnap()] })
@@ -459,8 +459,8 @@ describe('rendering narration with the visuals kept', () => {
     expect(m.bundle?.narration).toEqual((await h.deps.store.getVersion(id, 2))!.frozen!.narration)
     // The admin's transcription setting is frozen with it (default local).
     expect(m.bundle?.narration?.transcriptionProvider).toBe('local')
-    const before = await attemptRefs(h, id)
-    expect(Object.keys(before)).toEqual([req.requestId])
+    // The failed attempt let go of its takes; the retry takes them again.
+    expect(await attemptRefs(h, id)).toEqual({})
     h.deps.runner.nextScripts.push({ timeline: [running(), failedSnap()] })
     expect((await h.call('POST', `/api/v1/videos/${id}/versions/2/retry`, { as: h.member })).status).toBe(202)
     const after = await attemptRefs(h, id)

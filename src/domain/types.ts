@@ -287,21 +287,23 @@ export interface VersionRow {
 export interface VersionNarration {
   /** The resolved narration op (schema-versioned; validated where it's saved). */
   op: unknown
+  /** The pipeline version, ffmpeg's version line from the run's receipt, and the settings it ran with (cleanup). */
   recipe: { pipeline: number; ffmpegVersion: string; settings: Record<string, unknown> }
-  /** The processed bus in the sources store, its digest and length in samples. */
+  /** The processed bus in the videos store, its digest and length in samples. */
   bus: { key: string; sha256: string; samples: number }
 }
 
 /** A version's captions (plan 2026-11-02 §6.6), kept apart from the render's output hashes. */
 export interface VersionCaptions {
-  status: 'ok' | 'failed' | 'off'
+  /** How the run's transcription went (scripts/lib/stt): 'ok', or why the captions have no narration cues. */
+  status: 'ok' | 'failed' | 'off' | 'timeout'
   /** Stored, never inferred from the HTML: burned-in captions can't be revised. */
   policy: 'sidecar' | 'burned'
   /** Bumped by every revision (compare-and-swap). */
   rev: number
-  /** File names of the current revision, e.g. captions.r2.vtt. */
-  files: { vtt: string; transcript: string }
-  sha256: { vtt: string; transcript: string }
+  /** File names of the current revision, e.g. captions.r2.vtt; no transcript when the run wrote none. */
+  files: { vtt: string; transcript: string | null }
+  sha256: { vtt: string; transcript: string | null }
   /** The publication mirror's generation: a mirror update never applies an older one. */
   generation: number
 }
@@ -871,6 +873,24 @@ export interface Manifest {
   tools?: Record<string, string>
   /** Narrated renders only: the final mix's loudness before and after the master gain (scripts/lib/mastering.ts). */
   mastering?: MasteringReport
+  /** Narrated renders only: what scripts/narration.ts's receipt says it made, and how transcription went. */
+  narration?: NarrationReport
+}
+
+/** The run's narration receipt, summed up for the callback (src/lib/narration-run.ts NarrationReceipt). Untrusted. */
+export interface NarrationReport {
+  pipeline: number
+  cleanup: 'off' | 'light'
+  /** First line of `ffmpeg -version`. */
+  ffmpeg: string
+  bus: { sha256: string; samples: number }
+  /** Null when the transcription stage didn't run. */
+  stt: {
+    status: VersionCaptions['status']
+    provider: string | null
+    model: string | null
+    words: number
+  } | null
 }
 
 /** Integrated loudness (null when ffmpeg measures -inf) and true peak of an MP4's audio, from ffmpeg ebur128. */

@@ -72,14 +72,17 @@ export function harness(
       }
       const previews = deps.nextPreviews
       deps.nextPreviews = null
+      const extra = deps.nextExtra
+      deps.nextExtra = null
       const manifest = await uploadAndManifest(
         deps.blobs,
         a.jobId,
         a.id,
-        { ...files, ...previews?.files },
+        { ...files, ...previews?.files, ...extra?.files },
         {
           ...(previews?.lqip ? { lqip: previews.lqip } : {}),
           ...(previews?.skipped ? { previewsSkipped: previews.skipped } : {}),
+          ...extra?.manifest,
         },
       )
       const bus = deps.nextBus

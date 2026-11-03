@@ -215,6 +215,10 @@ export async function setStage(
       nextActionAt: new Date(new Date(now).getTime() + 24 * 3600_000).toISOString(),
       doneAt: null,
     })
+    // An attempt that won't make its version lets go of the narration takes it froze (their 30 days start now); a
+    // retry takes them again. A ready one's become its version's in finalize.
+    if (stage !== 'ready')
+      await releaseOwnerRefs(repo, { clock: { now: () => new Date(now) } }, 'frozen_attempt', attempt.id)
   }
   const status = statusForStage(stage)
   await repo.updateVersion(attempt.jobId, attempt.versionN, { status })
