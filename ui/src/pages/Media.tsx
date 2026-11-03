@@ -299,8 +299,9 @@ export function MediaPage() {
         >
           <Text size="sm" c="var(--va-muted)">
             Drop files here: PNG, JPEG, WebP or SVG images up to 5 MB, MP4 clips up to 100 MB and 2 minutes,
-            MP3, M4A, WAV or Ogg audio up to 50 MB and 10 minutes, WOFF2, TTF or OTF fonts. Only upload music
-            you have the rights to, or use Find music for CC0 and CC BY tracks from Openverse.
+            MP3, M4A, WAV or Ogg audio up to 50 MB and 10 minutes, WOFF2, TTF or OTF fonts, and PDFs up to 20
+            MB for the agent to read. Only upload music you have the rights to, or use Find music for CC0 and
+            CC BY tracks from Openverse.
           </Text>
         </div>
       ) : null}

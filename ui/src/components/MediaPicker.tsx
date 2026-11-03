@@ -14,7 +14,7 @@ import {
 import { notifications } from '@mantine/notifications'
 import { IconFileTypePdf, IconMovie, IconMusic, IconPhoto, IconTypography, IconX } from '@tabler/icons-react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { $api, useCanCreate } from '../api/client'
 import type { paths } from '../api/schema'
 import { uploadFile } from '../lib/upload'
@@ -133,11 +133,30 @@ export function MediaLibraryModal(props: {
           : [...ps, m],
     )
   }
+  // Files just uploaded here (dropped or chosen): once the library lists them, the picker shows their section.
+  const [fresh, setFresh] = useState<string[]>([])
+  const [dragging, setDragging] = useState(false)
+  useEffect(() => {
+    if (!fresh.length || !list.data) return
+    const mine = list.data.items.filter((m) => fresh.includes(m.id))
+    if (!mine.length) return
+    const sections = [...new Set(mine.filter((m) => kinds.includes(m.kind)).map((m) => m.kind))]
+    if (sections.length === 1 && sections[0]) setFilter(sections[0])
+    else if (sections.length > 1) setFilter('all')
+    const other = mine.find((m) => !kinds.includes(m.kind))
+    if (other)
+      notifications.show({
+        message: `${other.filename} is in the library, but this picker only takes ${kinds.map((k) => KIND_LABEL[k].toLowerCase()).join(' and ')}.`,
+      })
+    setFresh((f) => f.filter((id) => !mine.some((m) => m.id === id)))
+  }, [fresh, list.data])
   const upload = async (files: File[]) => {
+    if (!files.length) return
     setUploading(true)
     for (const f of files) {
       try {
-        await uploadFile(f)
+        const id = await uploadFile(f)
+        if (id) setFresh((ids) => [...ids, id])
       } catch (e) {
         notifications.show({
           color: 'red',
@@ -158,8 +177,32 @@ export function MediaLibraryModal(props: {
       size="80%"
       padding="xl"
     >
-      {/* Tall enough to browse a library, with Done at the bottom even when it's nearly empty. */}
-      <Stack gap="md" mih="min(64vh, 620px)">
+      {/* Tall enough to browse a library, with Done at the bottom even when it's nearly empty. Files dropped anywhere
+          on it upload, like Upload. */}
+      <Stack
+        gap="md"
+        mih="min(64vh, 620px)"
+        className="va-media-drop"
+        data-active={dragging || undefined}
+        data-testid="media-modal-dropzone"
+        {...(canUpload
+          ? {
+              onDragOver: (e: React.DragEvent) => {
+                if (![...e.dataTransfer.types].includes('Files')) return
+                e.preventDefault()
+                setDragging(true)
+              },
+              onDragLeave: (e: React.DragEvent) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false)
+              },
+              onDrop: (e: React.DragEvent) => {
+                e.preventDefault()
+                setDragging(false)
+                void upload([...e.dataTransfer.files])
+              },
+            }
+          : {})}
+      >
         <Group justify="space-between">
           {kinds.length > 1 ? (
             <SegmentedControl
@@ -199,10 +242,19 @@ export function MediaLibraryModal(props: {
             </Group>
           ) : null}
         </Group>
+        {canUpload ? (
+          <div className="va-dropzone va-dropzone-compact" data-active={dragging || undefined}>
+            <Text size="sm" c="var(--va-muted)">
+              {uploading
+                ? 'Uploading…'
+                : 'Drop files anywhere here to add them: images, SVGs, clips, audio, fonts or PDFs.'}
+            </Text>
+          </div>
+        ) : null}
         {!list.isLoading && items.length === 0 ? (
           <Text size="sm" c="var(--va-muted)">
             {canUpload
-              ? 'Nothing to pick yet. Upload a file here or on the Media page.'
+              ? 'Nothing to pick yet. Drop or upload a file, or add some on the Media page.'
               : 'Nothing to pick yet. Creators can upload on the Media page.'}
           </Text>
         ) : (

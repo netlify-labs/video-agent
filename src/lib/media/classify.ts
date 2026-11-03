@@ -173,6 +173,6 @@ export function classify(b: Uint8Array, opts: { head?: boolean } = {}): Classifi
     return { kind: 'svg', ext: 'svg', mime: 'image/svg+xml', width: null, height: null, durationSec: null }
   }
   throw new MediaError(
-    'Upload PNG, JPEG, WebP or SVG images, MP4 clips, MP3, M4A, WAV or Ogg audio, or WOFF2, TTF or OTF fonts.',
+    'Upload PNG, JPEG, WebP or SVG images, MP4 clips, MP3, M4A, WAV or Ogg audio, WOFF2, TTF or OTF fonts, or PDFs.',
   )
 }

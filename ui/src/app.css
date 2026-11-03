@@ -1236,3 +1236,22 @@ body {
   border-radius: 0 0 var(--mantine-radius-lg) var(--mantine-radius-lg);
   background: var(--va-surface);
 }
+
+/* The Add media dialog takes files dropped anywhere on it; the strip says so and lights up while dragging. */
+.va-media-drop {
+  position: relative;
+  border-radius: var(--mantine-radius-lg);
+}
+.va-media-drop[data-active]::after {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border: 2px dashed var(--va-accent);
+  border-radius: var(--mantine-radius-lg);
+  background: color-mix(in srgb, var(--va-accent) 8%, transparent);
+  pointer-events: none;
+}
+.va-dropzone-compact {
+  padding: 14px;
+  margin-bottom: 0;
+}

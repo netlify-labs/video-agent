@@ -906,6 +906,26 @@ test('media picked on New video goes to the plan and the video; chips lock while
   expect(await page.evaluate("window.__sent['/api/v1/videos'].mediaIds")).toEqual(['med_mock0001'])
 })
 
+test('files dropped on Add media upload, and the picker shows their section', async ({ page }) => {
+  await page.goto('/new')
+  await page.getByRole('button', { name: 'Add media' }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByText('Drop files anywhere here')).toBeVisible()
+  const drop = dialog.getByTestId('media-modal-dropzone')
+  // Runs in the page (this file is checked without DOM types): a drag carrying one PDF.
+  const files = await page.evaluateHandle(`(() => {
+    const dt = new DataTransfer()
+    dt.items.add(new File(['%PDF-1.7\\n%%EOF\\n'], 'launch-notes.pdf', { type: 'application/pdf' }))
+    return dt
+  })()`)
+  await drop.dispatchEvent('dragover', { dataTransfer: files })
+  await expect(drop).toHaveAttribute('data-active', 'true')
+  await drop.dispatchEvent('drop', { dataTransfer: files })
+  await expect(drop).not.toHaveAttribute('data-active')
+  await expect(dialog.getByRole('radio', { name: 'PDFs' })).toBeChecked()
+  await expect(dialog.getByTestId('pick-med_mock0001')).toContainText('launch-notes.pdf')
+})
+
 test('a revision can add media', async ({ page }) => {
   await page.goto('/videos/vid_teaser')
   await page.getByLabel('What should change?').fill('Put our logo on the end card')

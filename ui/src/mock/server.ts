@@ -444,7 +444,7 @@ export function installMock() {
         return fail(
           400,
           'invalid_request',
-          'Upload PNG, JPEG, WebP or SVG images, MP4 clips, MP3, M4A, WAV or Ogg audio, or WOFF2, TTF or OTF fonts.',
+          'Upload PNG, JPEG, WebP or SVG images, MP4 clips, MP3, M4A, WAV or Ogg audio, WOFF2, TTF or OTF fonts, or PDFs.',
         )
       const m = mockItem(name, kind, body.byteLength)
       mockMedia.unshift(m)
@@ -486,7 +486,21 @@ export function installMock() {
         return json({ idx: Number(up[2]), sha256: 'x', duplicate: false })
       }
       if (up[3]) {
-        const m = mockItem(s.filename, 'video', s.size)
+        // The real server reads the bytes; the mock goes by the file name.
+        const ext = s.filename.split('.').pop()?.toLowerCase() ?? ''
+        const kind: MockKind =
+          ext === 'pdf'
+            ? 'pdf'
+            : ext === 'svg'
+              ? 'svg'
+              : ['png', 'jpg', 'jpeg', 'webp'].includes(ext)
+                ? 'image'
+                : ['mp3', 'm4a', 'wav', 'ogg'].includes(ext)
+                  ? 'audio'
+                  : ['woff2', 'woff', 'ttf', 'otf'].includes(ext)
+                    ? 'font'
+                    : 'video'
+        const m = mockItem(s.filename, kind, s.size)
         mockMedia.unshift(m)
         s.status = 'done'
         s.mediaId = m.id
@@ -829,6 +843,7 @@ const mockUploads = new Map<
 type MockKind = MockMedia['kind']
 function mockKind(b: Uint8Array): MockKind | null {
   const head = String.fromCharCode(...b.subarray(0, 12))
+  if (head.startsWith('%PDF-')) return 'pdf'
   if (b[0] === 0x89 && head.slice(1, 4) === 'PNG') return 'image'
   if (b[0] === 0xff && b[1] === 0xd8) return 'image'
   if (head.startsWith('ID3') || head.startsWith('OggS') || (b[0] === 0xff && ((b[1] ?? 0) & 0xe0) === 0xe0))
@@ -851,14 +866,16 @@ function mockItem(filename: string, kind: MockKind, bytes: number): MockMedia {
     mime:
       kind === 'video'
         ? 'video/mp4'
-        : kind === 'svg'
-          ? 'image/svg+xml'
-          : kind === 'audio'
-            ? 'audio/mpeg'
-            : 'image/png',
+        : kind === 'pdf'
+          ? 'application/pdf'
+          : kind === 'svg'
+            ? 'image/svg+xml'
+            : kind === 'audio'
+              ? 'audio/mpeg'
+              : 'image/png',
     bytes,
-    width: kind === 'font' || kind === 'audio' ? null : 1920,
-    height: kind === 'font' || kind === 'audio' ? null : 1080,
+    width: kind === 'font' || kind === 'audio' || kind === 'pdf' ? null : 1920,
+    height: kind === 'font' || kind === 'audio' || kind === 'pdf' ? null : 1080,
     durationSec: kind === 'video' ? 12 : kind === 'audio' ? 95 : null,
     uploader: people.sam,
     createdAt: new Date().toISOString(),
