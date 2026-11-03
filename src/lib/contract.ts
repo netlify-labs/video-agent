@@ -13,8 +13,8 @@
 //               beat-local data-start/data-duration
 //   voice       at most one <audio data-va-voice=<beat id>> per beat, a direct child of it: an id, src under
 //               assets/voice/, beat-local data-start/data-duration that end inside the beat (docs/spikes.md S9)
-//   ducking     a layer with data-va-duck=<level> (the music) carries a volume lane that dips under every voice;
-//               the patcher rewrites it after retimes and reorders
+//   ducking     a layer with data-va-duck=<level> (the music) carries a volume lane that dips under every unmuted
+//               voice and under recorded narration's speech; the patcher rewrites it after retimes and reorders
 //   audio       <audio id> elements with src under assets/ and data-volume 0-4 (HyperFrames gain, up to +12 dB, which
 //               loudness normalization can set): music is the root layer
 //               data-va-layer="music"; voice (data-va-audio="voice") and effects live inside beats. A muted track
@@ -427,9 +427,15 @@ export function validate(html: string, summary?: Summary, opts: ValidateOptions 
 
   const narrated = busesOf(root)
   for (const l of kids(root).filter((e) => attr(e, 'data-va-duck') !== null)) {
-    const want = duckPoints(d, num(attr(l, 'data-va-duck')))
+    const level = num(attr(l, 'data-va-duck'))
+    const want = duckPoints(d, level)
+    const lane = volumeLane(attr(l, 'data-automation'))
     if (!want) v.push(`data-va-duck on "${attr(l, 'data-va-layer') ?? ''}" must be a level between 0 and 1.`)
-    else if (!sameLane(volumeLane(attr(l, 'data-automation')), want))
+    // Lanes written before muted voices stopped counting still pass, until there's recorded narration.
+    else if (
+      !sameLane(lane, want) &&
+      (narrated.length > 0 || !sameLane(lane, lanePoints(d, level, true) ?? []))
+    )
       v.push(
         `The music's ducking doesn't match the voice-over; run npx tsx scripts/voice.ts sync (it rewrites the volume lane).`,
       )
@@ -490,26 +496,34 @@ interface LanePoint {
 const DUCK_DOWN = 0.25
 const DUCK_UP = 0.4
 
+/** The most volume points a duck lane carries (HyperFrames caps automation at about 512; S12). */
+export const MAX_DUCK_POINTS = 400
+
 /**
- * The music's volume points for the voice-over: full level, down to `level` just before each voice, back up after
- * it. Voices closer than a second apart share one dip. Null when the level isn't a number in 0-1.
+ * The music's volume points for the voice-over: full level, down to `level` just before each unmuted voice and each
+ * span of recorded narration speech, back up after it. Voices closer than a second apart share one dip; with
+ * narration, anything closer than DUCK_RELEASE_MS does, so continuous narration doesn't pump the music. The closest
+ * dips are joined until the lane fits MAX_DUCK_POINTS. Null when the level isn't a number in 0-1.
  */
-export function duckPoints(d: Doc, level: number): LanePoint[] | null {
+export const duckPoints = (d: Doc, level: number) => lanePoints(d, level, false)
+
+function lanePoints(d: Doc, level: number, withMuted: boolean): LanePoint[] | null {
   if (!(level >= 0 && level <= 1)) return null
   const comp = read(d)
   const r = (n: number) => Math.round(n * 1000) / 1000
-  const spans: [number, number][] = []
+  const muted = new Set(comp.audio.filter((a) => a.muted && !withMuted).map((a) => a.id))
+  const voices: Range[] = []
   let t = 0
   for (const b of comp.beats) {
-    if (b.voice && b.voice.duration > 0) {
-      const s = t + b.voice.start
-      const e = s + b.voice.duration
-      const last = spans[spans.length - 1]
-      if (last && s - last[1] < 1) last[1] = e
-      else spans.push([s, e])
-    }
+    if (b.voice && b.voice.duration > 0 && !muted.has(b.voice.id))
+      voices.push([t + b.voice.start, t + b.voice.start + b.voice.duration])
     t += b.duration
   }
+  const speech = busesOf(d.root).flatMap((e) =>
+    attr(e, 'data-va-muted') === null ? (speechOf(e) ?? []) : [],
+  )
+  const gap = speech.length ? DUCK_RELEASE_MS / 1000 : 1
+  const spans = capSpans(mergeSpans([...voices, ...speech], gap), Math.floor((MAX_DUCK_POINTS - 1) / 4))
   const points: LanePoint[] = [{ t: 0, v: spans[0] && spans[0][0] <= DUCK_DOWN ? level : 1 }]
   for (const [s, e] of spans) {
     if (s > DUCK_DOWN) points.push({ t: r(s - DUCK_DOWN), v: 1 }, { t: r(s), v: level })
