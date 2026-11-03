@@ -8,18 +8,24 @@ import {
   applyEdits,
   applyNarration,
   ContractError,
+  FPS,
   load,
   read as readComposition,
   type EditOp,
   type Summary,
 } from '../lib/contract.js'
+import { NARRATION_PIPELINE } from '../lib/narration-cleanup.js'
 import { wholeClipSpans } from '../lib/peaks.js'
+import { MAX_FROZEN_TAKE_BYTES, type CaptionPolicy, type FrozenNarration } from '../lib/run-manifest.js'
 import {
   clipEnd,
+  frameStart,
+  framesFor,
   MAX_NARRATION_TAKES,
   outputEnd,
   outputLimit,
   resolve,
+  SAMPLE_RATE,
   samplesToSeconds,
   secondsToSamples,
   withinOutputLimit,
@@ -43,7 +49,7 @@ import {
 } from './bundles.js'
 import { assertCan, type Principal } from './policy.js'
 import { snapshotMedia } from './media.js'
-import { canReadTake, isTake, releaseOwnerRefs, replaceDraftRefs } from './takes.js'
+import { addAttemptRefs, canReadTake, isTake, releaseOwnerRefs, replaceDraftRefs } from './takes.js'
 import { getSettings } from './settings.js'
 import type { Repo } from '../store/types.js'
 import { NARRATION_SETTING_DEFAULTS, type EditRow, type MediaRow } from './types.js'
@@ -52,6 +58,8 @@ import { hasUnfinished, loadJob, newAttempt, videoDto, withIdempotency } from '.
 export const EDIT_TTL_MS = 7 * 24 * 3600_000
 const MAX_OPS = 500
 const AUDIO_FILE = /\.(mp3|m4a|aac|wav|ogg|opus)$/i
+/** Hold-final-frame keeps the last frame this long after the narration ends (plan 2026-11-02 §2.5). */
+const POST_ROLL_SAMPLES = SAMPLE_RATE / 2
 
 /** A draft's ops: the contract's edits, plus at most one whole-track narration op (plan 2026-11-02 §6.1). */
 export type DraftOp = EditOp | NarrationOp
@@ -114,10 +122,12 @@ function takeIds(op: NarrationOp) {
 }
 
 // TODO(voiceover settings lane): use the shared narrationEnabled helper once it lands; same rule (missing = on).
-async function assertNarrationOn(deps: Deps) {
-  if (!((await getSettings(deps)).narrationEnabled ?? NARRATION_SETTING_DEFAULTS.narrationEnabled))
-    throw new ApiError('narration_disabled', 'Recorded voice-over is turned off on this site.')
+// Read before a transaction: a settings cache miss inside one would query outside it.
+async function narrationEnabled(deps: Deps) {
+  return (await getSettings(deps)).narrationEnabled ?? NARRATION_SETTING_DEFAULTS.narrationEnabled
 }
+const narrationOff = () =>
+  new ApiError('narration_disabled', 'Recorded voice-over is turned off on this site.')
 
 /**
  * The narration soft lock (plan 2026-11-02 §2.7): bead va-2qq.5.5 makes a narration save 409 narration_locked unless
@@ -461,7 +471,7 @@ export async function saveEdit(deps: Deps, p: Principal, id: string, input: { op
   assertCan(p, 'edit:create')
   if (input.ops.length > MAX_OPS) throw new ApiError('invalid_request', `At most ${MAX_OPS} edits per draft.`)
   const track = narrationOp(input.ops)
-  if (track) await assertNarrationOn(deps)
+  if (track && !(await narrationEnabled(deps))) throw narrationOff()
   return deps.store.tx(async (repo) => {
     const e = await loadEdit(repo, deps, p, id, true)
     if (e.renderedN !== null)
@@ -531,16 +541,90 @@ export async function deleteExpiredEdits(deps: Deps, limit = 20) {
   }
 }
 
+export type RenderMode = 'keep_visuals' | 'fit_to_narration'
+export interface RenderSettings {
+  mode: RenderMode
+  /** Narration past the end holds the last frame (plus a 0.5 s post-roll) instead of being cut off. */
+  holdFinalFrame: boolean
+  captions: CaptionPolicy
+}
+
+/**
+ * frozen.narration for a keep-visuals render (plan 2026-11-02 §6.1, §6.3). The op keeps only what's audible (resolved
+ * clips with a level that start inside the target), and the takes are only the ones those play: by key and digest
+ * from the media store, never snapshotted with snapshotMedia, at most 32 and 400 MiB. The bus is the visuals' length,
+ * or with holdFinalFrame and an overrun, the narration's end plus the post-roll in whole frames, within the limit.
+ */
+async function freezeNarration(
+  repo: Repo,
+  op: NarrationOp,
+  r: Rev,
+  s: RenderSettings,
+): Promise<FrozenNarration> {
+  const base = secondsToSamples(r.composition.duration)
+  const audible = resolve(op.clips).filter((c) => c.gainDb !== null)
+  const end = outputEnd(audible)
+  const targetSamples =
+    s.holdFinalFrame && end > base ? frameStart(framesFor(end + POST_ROLL_SAMPLES, FPS), FPS) : base
+  if (!withinOutputLimit(targetSamples, base))
+    throw new ApiError(
+      'invalid_request',
+      `Holding the last frame would make the video ${secs(targetSamples)}; it can run to ${secs(outputLimit(base))} at most. Trim the narration instead.`,
+    )
+  const clips = audible.filter((c) => c.start < targetSamples)
+  const takes: FrozenNarration['takes'] = []
+  for (const id of new Set(clips.map((c) => c.mediaId))) {
+    const m = await repo.getMedia(id)
+    if (!m)
+      throw new ApiError('take_deleted', 'A recording this uses was deleted. Record or pick another take.')
+    takes.push({
+      mediaId: m.id,
+      key: m.cleanKey,
+      sha256: m.cleanSha256,
+      bytes: m.bytes,
+      ...(m.license ? { license: m.license } : {}),
+    })
+  }
+  if (takes.length > MAX_NARRATION_TAKES || takes.reduce((n, t) => n + t.bytes, 0) > MAX_FROZEN_TAKE_BYTES)
+    throw new ApiError('invalid_request', 'The recordings this narration plays add up to more than 400 MB.')
+  return {
+    op: { ...op, clips },
+    takes,
+    recipe: { pipeline: NARRATION_PIPELINE, cleanup: op.cleanup },
+    targetSamples,
+    captions: s.captions,
+  }
+}
+
 /**
  * Renders the draft's current edits as the next version (plan v2 §8, §14 rules 19, 21): the composition is frozen
  * into version-owned storage (kept until the version is deleted, so retries work after the draft expires) and one
  * render-unchanged attempt is queued. The run restores and verifies it, checks it and renders it without changes.
  */
-export async function renderEdit(deps: Deps, p: Principal, id: string, idemKey?: string) {
+export async function renderEdit(
+  deps: Deps,
+  p: Principal,
+  id: string,
+  idemKey?: string,
+  input: { [K in keyof RenderSettings]?: RenderSettings[K] | undefined } = {},
+) {
   assertCan(p, 'edit:create')
+  const settings: RenderSettings = {
+    mode: input.mode ?? 'keep_visuals',
+    holdFinalFrame: input.holdFinalFrame ?? false,
+    captions: input.captions ?? 'sidecar',
+  }
+  if (settings.mode === 'fit_to_narration')
+    throw new ApiError(
+      'invalid_request',
+      "Fitting the video to your narration isn't available yet. Render it with your visuals kept.",
+    )
+  const enabled = await narrationEnabled(deps)
   return deps.store.tx(async (repo) => {
     const e0 = await loadEdit(repo, deps, p, id)
-    return withIdempotency(repo, deps, p, `edits.render:${id}`, idemKey, { id }, async () => {
+    // A replay is the same request for the same rev: a later save, another mode or other settings is a new one.
+    const request = { id, rev: e0.rev, ...settings }
+    return withIdempotency(repo, deps, p, `edits.render:${id}`, idemKey, request, async () => {
       const e = await loadEdit(repo, deps, p, id, true)
       if (e.renderedN !== null)
         throw new ApiError('conflict', `This draft was already rendered as v${e.renderedN}.`)
@@ -548,6 +632,10 @@ export async function renderEdit(deps: Deps, p: Principal, id: string, idemKey?:
       if (await hasUnfinished(repo, e.jobId))
         throw new ApiError('conflict', 'Another version of this video is still in progress.')
       const r = await computeRev(deps, e, e.ops as DraftOp[], repo)
+      // Recorded narration is mixed by the run from frozen inputs; its takes are checked like a save's.
+      if (r.track && !enabled) throw narrationOff()
+      if (r.track) await checkTakeAccess(repo, p, e, r.track)
+      const narration = r.track ? await freezeNarration(repo, r.track, r, settings) : null
       const n = job.nextVersionN
       // A draft has no narration bus (the run writes it), and a base's bus is never part of the frozen bundle.
       const frozenFile = (path: string) => !excluded(path) && !isReference(path)
@@ -583,7 +671,11 @@ export async function renderEdit(deps: Deps, p: Principal, id: string, idemKey?:
         authorId: p.userId,
         apiKeyId: p.apiKeyId,
         // A re-voiced line may lengthen its beat, so the length is only known once the run has spoken it.
-        targetDurationSec: revoice ? null : r.composition.duration,
+        targetDurationSec: revoice
+          ? null
+          : narration
+            ? narration.targetSamples / SAMPLE_RATE
+            : r.composition.duration,
         parentN: e.baseN,
         webhookUrl: null,
         status: 'queued',
@@ -597,6 +689,7 @@ export async function renderEdit(deps: Deps, p: Principal, id: string, idemKey?:
           manifestHash: manifest,
           editId: e.id,
           ...(revoice ? { revoice } : {}),
+          ...(narration ? { narration } : {}),
         },
         // The composition (and any audio in it) is the base's, so its sound and voice-over are too.
         sound: base?.sound ?? 'silent',
@@ -605,7 +698,17 @@ export async function renderEdit(deps: Deps, p: Principal, id: string, idemKey?:
       await repo.insertVersionMedia(
         await snapshotMedia(repo, e.jobId, n, r.picks, await repo.listVersionMedia(e.jobId, e.baseN)),
       )
-      await repo.insertAttempt(newAttempt(deps, e.jobId, n, now))
+      const attempt = newAttempt(deps, e.jobId, n, now)
+      await repo.insertAttempt(attempt)
+      // The attempt holds the takes it mixes until its version does (finalize promotes the refs).
+      if (narration)
+        await addAttemptRefs(
+          repo,
+          deps,
+          attempt.id,
+          e.jobId,
+          narration.takes.map((t) => t.mediaId),
+        )
       await repo.updateJob(e.jobId, {
         latestVersion: n,
         nextVersionN: n + 1,
@@ -614,7 +717,21 @@ export async function renderEdit(deps: Deps, p: Principal, id: string, idemKey?:
         version: job.version + 1,
       })
       await repo.updateEdit(e.id, { renderedN: n, updatedAt: now })
-      deps.log.info('edit.render', { editId: e.id, jobId: e.jobId, n, ops: e.ops.length, base: e0.baseN })
+      deps.log.info('edit.render', {
+        editId: e.id,
+        jobId: e.jobId,
+        n,
+        ops: e.ops.length,
+        base: e0.baseN,
+        mode: settings.mode,
+        ...(narration
+          ? {
+              takes: narration.takes.length,
+              targetSamples: narration.targetSamples,
+              hold: settings.holdFinalFrame,
+            }
+          : {}),
+      })
       return { status: 202, body: await videoDto(repo, deps, e.jobId, p) }
     })
   })

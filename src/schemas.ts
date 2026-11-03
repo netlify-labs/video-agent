@@ -857,6 +857,22 @@ export const EditSchema = z
 export const SaveEditSchema = z
   .object({ ops: z.array(EditOpSchema).max(500), rev: z.number().int().min(0) })
   .openapi('SaveEdit')
+export const RenderEditSchema = z
+  .object({
+    mode: z.enum(['keep_visuals', 'fit_to_narration']).optional().openapi({
+      description:
+        'keep_visuals (default): render the draft as is, recorded narration mixed over it. fit_to_narration: not available yet',
+    }),
+    holdFinalFrame: z.boolean().optional().openapi({
+      description:
+        'Narration that runs past the end holds the last frame, plus 0.5 s, instead of being cut off',
+    }),
+    captions: z
+      .enum(['sidecar', 'burned'])
+      .optional()
+      .openapi({ description: 'How narration captions are delivered: a VTT sidecar (default) or burned in' }),
+  })
+  .openapi('RenderEdit')
 
 export const PreviewLinkSchema = z
   .object({

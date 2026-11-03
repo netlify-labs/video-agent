@@ -185,6 +185,8 @@ async function startRequest(
         manifestHash: version.frozen.manifestHash,
         ...(version.frozen.revoice ? { revoice: version.frozen.revoice } : {}),
         ...(version.frozen.references?.length ? { references: version.frozen.references } : {}),
+        // Recorded narration: prepare-run hydrates its takes into .va-run/, never video/ (plan 2026-11-02 §6.3).
+        ...(version.frozen.narration ? { narration: version.frozen.narration } : {}),
       },
       media,
       feedback: null,

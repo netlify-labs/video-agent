@@ -3836,7 +3836,7 @@ export interface paths {
         put?: never;
         /**
          * Render a draft
-         * @description Renders your draft as the next version, unchanged: the run checks and renders and never redesigns.
+         * @description Renders your draft as the next version, unchanged: the run checks and renders and never redesigns. Recorded narration is mixed over the kept visuals.
          */
         post: {
             parameters: {
@@ -3849,7 +3849,11 @@ export interface paths {
                 };
                 cookie?: never;
             };
-            requestBody?: never;
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["RenderEdit"];
+                };
+            };
             responses: {
                 /** @description Queued */
                 202: {
@@ -7074,6 +7078,20 @@ export interface components {
                 text: string;
             } | components["schemas"]["NarrationOp"])[];
             rev: number;
+        };
+        RenderEdit: {
+            /**
+             * @description keep_visuals (default): render the draft as is, recorded narration mixed over it. fit_to_narration: not available yet
+             * @enum {string}
+             */
+            mode?: "keep_visuals" | "fit_to_narration";
+            /** @description Narration that runs past the end holds the last frame, plus 0.5 s, instead of being cut off */
+            holdFinalFrame?: boolean;
+            /**
+             * @description How narration captions are delivered: a VTT sidecar (default) or burned in
+             * @enum {string}
+             */
+            captions?: "sidecar" | "burned";
         };
         Media: {
             id: string;

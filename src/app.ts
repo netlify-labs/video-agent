@@ -1089,21 +1089,26 @@ export function createApp(deps: Deps, opts: AppOptions) {
       path: '/api/v1/edits/{id}/render',
       summary: 'Render a draft',
       description:
-        'Renders your draft as the next version, unchanged: the run checks and renders and never redesigns.',
+        'Renders your draft as the next version, unchanged: the run checks and renders and never redesigns. Recorded narration is mixed over the kept visuals.',
       tags: ['editor'],
       security,
       request: {
         params: EditParam,
         headers: z.object({ 'idempotency-key': z.string().max(200).optional() }),
+        body: { content: { 'application/json': { schema: s.RenderEditSchema } }, required: false },
       },
       responses: { 202: json(s.VideoSchema, 'Queued'), ...errors, 503: err('Setup required') },
     }),
     async (c) => {
+      // The body is optional (older clients send none): checked here, since the validator skips a missing one.
+      const body = s.RenderEditSchema.safeParse(await c.req.json().catch(() => ({})))
+      if (!body.success) throw new ApiError('invalid_request', 'That render request is not valid.')
       const res = await renderEdit(
         deps,
         c.get('principal'),
         c.req.valid('param').id,
         c.req.valid('header')['idempotency-key'],
+        body.data,
       )
       c.header('location', res.body.links.self)
       if (!res.replayed) kick(c)

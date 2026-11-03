@@ -3434,6 +3434,31 @@
           "rev"
         ]
       },
+      "RenderEdit": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "keep_visuals",
+              "fit_to_narration"
+            ],
+            "description": "keep_visuals (default): render the draft as is, recorded narration mixed over it. fit_to_narration: not available yet"
+          },
+          "holdFinalFrame": {
+            "type": "boolean",
+            "description": "Narration that runs past the end holds the last frame, plus 0.5 s, instead of being cut off"
+          },
+          "captions": {
+            "type": "string",
+            "enum": [
+              "sidecar",
+              "burned"
+            ],
+            "description": "How narration captions are delivered: a VTT sidecar (default) or burned in"
+          }
+        }
+      },
       "Media": {
         "type": "object",
         "properties": {
@@ -8837,7 +8862,7 @@
     "/api/v1/edits/{id}/render": {
       "post": {
         "summary": "Render a draft",
-        "description": "Renders your draft as the next version, unchanged: the run checks and renders and never redesigns.",
+        "description": "Renders your draft as the next version, unchanged: the run checks and renders and never redesigns. Recorded narration is mixed over the kept visuals.",
         "tags": [
           "editor"
         ],
@@ -8868,6 +8893,16 @@
             "in": "header"
           }
         ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenderEdit"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "description": "Queued",

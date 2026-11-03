@@ -7,7 +7,7 @@ import { PUBLIC_URL_TTL_SEC, accessKey, fileTtl, signFile, stableExp, writeAcces
 import { getSettings } from './settings.js'
 import { emitEvent } from './webhooks.js'
 import { snapshotMedia } from './media.js'
-import { releaseOwnerRefs } from './takes.js'
+import { addAttemptRefs, releaseOwnerRefs } from './takes.js'
 import { musicPickDto } from './music-pick.js'
 import { versionCredits, type Credit } from './credits.js'
 import { creditHtml } from '../lib/credit-html.js'
@@ -509,7 +509,16 @@ export async function retryVersion(deps: Deps, principal: Principal, jobId: stri
     if (await hasUnfinished(repo, jobId))
       throw new ApiError('conflict', 'Another version of this video is still in progress.')
     const now = deps.clock.now().toISOString()
-    await repo.insertAttempt(newAttempt(deps, jobId, n, now))
+    const attempt = newAttempt(deps, jobId, n, now)
+    await repo.insertAttempt(attempt)
+    // A frozen narration's takes move to the new attempt (re-locked and re-checked), so a failed one holds nothing.
+    const takes = version.frozen?.narration?.takes.map((t) => t.mediaId) ?? []
+    if (takes.length) {
+      await addAttemptRefs(repo, deps, attempt.id, jobId, takes)
+      for (const a of await repo.listAttempts(jobId))
+        if (a.versionN === n && a.id !== attempt.id)
+          await releaseOwnerRefs(repo, deps, 'frozen_attempt', a.id)
+    }
     await repo.updateVersion(jobId, n, { status: 'queued' })
     await repo.updateJob(jobId, { status: 'queued', updatedAt: now, version: job.version + 1 })
     return videoDto(repo, deps, jobId, principal)

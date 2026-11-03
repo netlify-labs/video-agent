@@ -9,6 +9,8 @@
 // Every option used exists in ffmpeg 6.0 (run with the 6.0 static build and 9.0.2: identical PCM), so 6.1 should too.
 
 export const CLEANUP_SAMPLE_RATE = 24_000
+/** The narration processing recipe's version (plan §6.3): frozen with every render, bumped when the chain changes. */
+export const NARRATION_PIPELINE = 1
 export type CleanupPreset = 'off' | 'light'
 /** afftdn's latency in samples at CLEANUP_SAMPLE_RATE (measured with a click; test/narration-cleanup.test.ts). */
 export const AFFTDN_DELAY = 600

@@ -4,6 +4,15 @@
 import { createHash } from 'node:crypto'
 import { isBundleReference, type BundleReference } from './bundle-references.js'
 import { MEDIA_KINDS, type MediaKind } from './media/classify.js'
+import {
+  GAIN_DB_RANGE,
+  MAX_NARRATION_CLIPS,
+  MAX_NARRATION_TAKES,
+  MAX_OUTPUT_SAMPLES,
+  SAMPLE_RATE,
+  type NarrationCleanup,
+  type NarrationOp,
+} from './timeline.js'
 
 export const RUN_MANIFEST_VERSION = 1
 
@@ -31,6 +40,8 @@ export interface RunManifest {
     manifestHash: string
     revoice?: { beats: string[]; keptHash: string } | undefined
     references?: BundleReference[] | undefined
+    /** Recorded narration to mix (keep-visuals renders): prepare-run hydrates its takes outside video/. */
+    narration?: FrozenNarration | undefined
   } | null
   /** Library media to download into video/assets/media/ (plan v2 §9, §14 rule 27). */
   media: RunMedia[] | null
@@ -39,6 +50,33 @@ export interface RunManifest {
     video: { key: string; sha256: string }
     pins: FeedbackPin[]
   } | null
+}
+
+/** The most bytes the takes one render freezes may add up to (plan 2026-11-02 §6.1); at most MAX_NARRATION_TAKES. */
+export const MAX_FROZEN_TAKE_BYTES = 400 * 1024 * 1024
+
+export type CaptionPolicy = 'sidecar' | 'burned'
+
+/** One take a render mixes: its bytes in the media store by key and digest, never snapshotted into the bundle. */
+export interface FrozenTake {
+  mediaId: string
+  key: string
+  sha256: string
+  bytes: number
+  /** Library audio used as narration keeps its licence slug (cc0, by); recordings have none. */
+  license?: string | undefined
+}
+
+/**
+ * Recorded narration as a render freezes it (plan 2026-11-02 §6.1, §6.3): the resolved op (only audible clips), the
+ * takes those clips play, the processing recipe, the bus length to mix in samples and the caption policy.
+ */
+export interface FrozenNarration {
+  op: NarrationOp
+  takes: FrozenTake[]
+  recipe: { pipeline: number; cleanup: NarrationCleanup }
+  targetSamples: number
+  captions: CaptionPolicy
 }
 
 export interface RunMedia {
@@ -72,6 +110,48 @@ const refs = (r: BundleReference[] | undefined) =>
     ? { references: r.map((x) => ({ path: x.path, key: x.key, sha256: x.sha256, bytes: x.bytes })) }
     : {}
 
+/** Field by field, in one order: a stored op comes back from jsonb with its keys in any order. */
+const narrationOf = (n: FrozenNarration) => ({
+  op: {
+    op: n.op.op,
+    schema: n.op.schema,
+    sampleRate: n.op.sampleRate,
+    clips: n.op.clips.map((c) => ({
+      id: c.id,
+      mediaId: c.mediaId,
+      srcStart: c.srcStart,
+      srcEnd: c.srcEnd,
+      fit: { a: c.fit.a, b: c.fit.b, residualMs: c.fit.residualMs },
+      offsetSamples: c.offsetSamples,
+      start: c.start,
+      gainDb: c.gainDb,
+      fadeInSamples: c.fadeInSamples,
+      fadeOutSamples: c.fadeOutSamples,
+    })),
+    tracks: {
+      narration: {
+        volumeDb: n.op.tracks.narration.volumeDb,
+        muted: n.op.tracks.narration.muted,
+        solo: n.op.tracks.narration.solo,
+      },
+      aiVoice: { mode: n.op.tracks.aiVoice.mode, volumeDb: n.op.tracks.aiVoice.volumeDb },
+      music: { duck: n.op.tracks.music.duck, duckDb: n.op.tracks.music.duckDb },
+      original: { muteAll: n.op.tracks.original.muteAll },
+    },
+    cleanup: n.op.cleanup,
+  },
+  takes: n.takes.map((t) => ({
+    mediaId: t.mediaId,
+    key: t.key,
+    sha256: t.sha256,
+    bytes: t.bytes,
+    ...(t.license ? { license: t.license } : {}),
+  })),
+  recipe: { pipeline: n.recipe.pipeline, cleanup: n.recipe.cleanup },
+  targetSamples: n.targetSamples,
+  captions: n.captions,
+})
+
 /** Stable bytes: the same inputs always serialize the same, so a re-sent start pins the same hash. */
 export function serializeRunManifest(m: RunManifest): string {
   return JSON.stringify({
@@ -95,6 +175,7 @@ export function serializeRunManifest(m: RunManifest): string {
         ? { revoice: { beats: [...m.bundle.revoice.beats], keptHash: m.bundle.revoice.keptHash } }
         : {}),
       ...refs(m.bundle.references),
+      ...(m.bundle.narration ? { narration: narrationOf(m.bundle.narration) } : {}),
     },
     media:
       m.media && m.media.map((x) => ({ key: x.key, sha256: x.sha256, filename: x.filename, kind: x.kind })),
@@ -109,6 +190,82 @@ export const sha256Hex = (s: string | Uint8Array) => createHash('sha256').update
 
 const HEX = /^[0-9a-f]{64}$/
 const ID = /^[A-Za-z0-9_-]{1,80}$/
+const MEDIA_ID = /^med_[a-z0-9]{8,40}$/
+
+/** Parsed JSON: a frozen narration's shape, its takes' keys inside their own media prefix, and its caps. */
+function isFrozenNarration(v: unknown): v is FrozenNarration {
+  const rec = (x: unknown): Record<string, unknown> =>
+    x && typeof x === 'object' ? (x as Record<string, unknown>) : {}
+  const int = (x: unknown, lo: number, hi = Number.MAX_SAFE_INTEGER): x is number =>
+    Number.isInteger(x) && (x as number) >= lo && (x as number) <= hi
+  const db = (x: unknown) => typeof x === 'number' && x >= GAIN_DB_RANGE[0] && x <= GAIN_DB_RANGE[1]
+  const bool = (x: unknown) => typeof x === 'boolean'
+  const n = rec(v)
+  if (!Array.isArray(n.takes) || n.takes.length > MAX_NARRATION_TAKES) return false
+  const ids = new Set<string>()
+  let bytes = 0
+  for (const x of n.takes as unknown[]) {
+    const t = rec(x)
+    const id = typeof t.mediaId === 'string' && MEDIA_ID.test(t.mediaId) ? t.mediaId : null
+    if (
+      !id ||
+      ids.has(id) ||
+      typeof t.key !== 'string' ||
+      !new RegExp(`^${id}/(original|clean)\\.[a-z0-9]{2,5}$`).test(t.key) ||
+      typeof t.sha256 !== 'string' ||
+      !HEX.test(t.sha256) ||
+      !int(t.bytes, 1) ||
+      (t.license !== undefined && (typeof t.license !== 'string' || !/^[a-z0-9.-]{1,20}$/.test(t.license)))
+    )
+      return false
+    ids.add(id)
+    bytes += t.bytes
+  }
+  const recipe = rec(n.recipe)
+  const op = rec(n.op)
+  const tr = rec(op.tracks)
+  const [voice, ai, music, original] = [rec(tr.narration), rec(tr.aiVoice), rec(tr.music), rec(tr.original)]
+  const clipOk = (x: unknown) => {
+    const c = rec(x)
+    const fit = rec(c.fit)
+    return (
+      typeof c.id === 'string' &&
+      c.id.length <= 80 &&
+      typeof c.mediaId === 'string' &&
+      ids.has(c.mediaId) &&
+      int(c.srcStart, 0) &&
+      int(c.srcEnd, c.srcStart + 1) &&
+      int(c.start, 0, MAX_OUTPUT_SAMPLES) &&
+      Number.isInteger(c.offsetSamples) &&
+      [fit.a, fit.b, fit.residualMs].every(Number.isFinite) &&
+      (c.gainDb === null || db(c.gainDb)) &&
+      int(c.fadeInSamples, 0) &&
+      int(c.fadeOutSamples, 0)
+    )
+  }
+  return (
+    bytes <= MAX_FROZEN_TAKE_BYTES &&
+    int(n.targetSamples, 1, MAX_OUTPUT_SAMPLES) &&
+    (n.captions === 'sidecar' || n.captions === 'burned') &&
+    int(recipe.pipeline, 1, 1000) &&
+    (recipe.cleanup === 'off' || recipe.cleanup === 'light') &&
+    op.op === 'narration' &&
+    op.schema === 1 &&
+    op.sampleRate === SAMPLE_RATE &&
+    op.cleanup === recipe.cleanup &&
+    Array.isArray(op.clips) &&
+    op.clips.length <= MAX_NARRATION_CLIPS &&
+    (op.clips as unknown[]).every(clipOk) &&
+    db(voice.volumeDb) &&
+    bool(voice.muted) &&
+    bool(voice.solo) &&
+    ['replace', 'under', 'keep'].includes(ai.mode as string) &&
+    db(ai.volumeDb) &&
+    bool(music.duck) &&
+    db(music.duckDb) &&
+    bool(original.muteAll)
+  )
+}
 
 /** Parses and checks a downloaded manifest against the attempt and the hash from the prompt. Throws a message. */
 export function verifyRunManifest(raw: string, expected: { attemptId: string; sha256: string }): RunManifest {
@@ -153,6 +310,8 @@ export function verifyRunManifest(raw: string, expected: { attemptId: string; sh
       !rv.beats.every((b) => typeof b === 'string' && /^[a-z0-9][a-z0-9-]{0,40}$/.test(b)))
   )
     throw new Error('The run manifest has a bad re-voice entry.')
+  if (m.bundle?.narration !== undefined && !isFrozenNarration(m.bundle.narration))
+    throw new Error('The run manifest has a bad narration entry.')
   if (m.media) {
     if (!Array.isArray(m.media) || m.media.length > 50) throw new Error('The run manifest has bad media.')
     for (const x of m.media)
