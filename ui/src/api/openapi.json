@@ -3459,6 +3459,112 @@
           }
         }
       },
+      "NarrationLock": {
+        "type": "object",
+        "properties": {
+          "videoId": {
+            "type": "string"
+          },
+          "holder": {
+            "$ref": "#/components/schemas/NarrationLockHolder"
+          },
+          "mine": {
+            "type": "boolean",
+            "description": "You hold the lock"
+          },
+          "draftId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The holder's draft (shown to the holder only)"
+          },
+          "heartbeatAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expiresAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The lock is free from then on unless the holder heartbeats (every 30 s)"
+          }
+        },
+        "required": [
+          "videoId",
+          "holder",
+          "mine",
+          "draftId",
+          "heartbeatAt",
+          "expiresAt"
+        ]
+      },
+      "NarrationLockHolder": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "userId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "since": {
+            "type": "string",
+            "description": "When they took the lock"
+          }
+        },
+        "required": [
+          "userId",
+          "name",
+          "since"
+        ],
+        "description": "Who is editing the narration; null when no one is"
+      },
+      "AcquireNarrationLock": {
+        "type": "object",
+        "properties": {
+          "draftId": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "Your draft of this video"
+          },
+          "heartbeat": {
+            "type": "boolean",
+            "description": "You believe you hold the lock (a heartbeat): if someone took it over, the 409 says who (details.takenOverBy, details.at)"
+          }
+        },
+        "required": [
+          "draftId"
+        ]
+      },
+      "NarrationTakeOver": {
+        "type": "object",
+        "properties": {
+          "lock": {
+            "$ref": "#/components/schemas/NarrationLock"
+          },
+          "previous": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/NarrationLockHolder"
+              },
+              {
+                "description": "Who held it before you; null when no one did"
+              }
+            ]
+          }
+        },
+        "required": [
+          "lock",
+          "previous"
+        ]
+      },
       "Media": {
         "type": "object",
         "properties": {
@@ -9198,6 +9304,381 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PreviewLink"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/videos/{id}/narration-lock": {
+      "get": {
+        "summary": "Get the narration lock",
+        "description": "Who is editing this video's narration, if anyone.",
+        "tags": [
+          "editor"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The lock",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NarrationLock"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Acquire the narration lock",
+        "description": "Takes the video's narration lock for your draft, or heartbeats it (every 30 s; it lapses after 2 min without one). Only the holder saves narration ops.",
+        "tags": [
+          "editor"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcquireNarrationLock"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Held",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NarrationLock"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Someone else is editing the narration (narration_locked; details: holder, takenOverBy, at)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Release the narration lock",
+        "description": "Releases your narration lock; someone else's is left alone.",
+        "tags": [
+          "editor"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Released"
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/videos/{id}/narration-lock/take-over": {
+      "post": {
+        "summary": "Take over the narration lock",
+        "description": "Moves the narration lock to you, whoever holds it. Their draft is kept; their next heartbeat or narration save is refused and says you took over.",
+        "tags": [
+          "editor"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "draftId": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "description": "Your draft of this video"
+                  }
+                },
+                "required": [
+                  "draftId"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Yours now",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NarrationTakeOver"
                 }
               }
             }

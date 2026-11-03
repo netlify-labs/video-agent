@@ -124,6 +124,7 @@ describe('narration credits end to end', () => {
     const e = await h.json<{ id: string }>(
       await h.call('POST', `/api/v1/videos/${id}/versions/1/edits`, { as: h.member }),
     )
+    await h.call('POST', `/api/v1/videos/${id}/narration-lock`, { as: h.member, body: { draftId: e.id } })
     const saved = await h.call('PUT', `/api/v1/edits/${e.id}`, { as: h.member, body: { rev: 0, ops: [op] } })
     expect(saved.status).toBe(200)
     expect((await h.call('POST', `/api/v1/edits/${e.id}/render`, { as: h.member })).status).toBe(202)

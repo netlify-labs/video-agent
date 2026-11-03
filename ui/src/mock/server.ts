@@ -702,6 +702,55 @@ export function installMock() {
       }
       return json(m)
     }
+    // Narration soft lock (plan 2026-11-02 §2.7). localStorage.mockNarrationHolder=ada starts with Ada holding it;
+    // window.__mockNarrationTakeOver('ada') has her take it over, so the next heartbeat is refused.
+    const nl = /^\/api\/v1\/videos\/([^/]+)\/narration-lock(\/take-over)?$/.exec(p)
+    if (nl?.[1]) {
+      const lock = mockLock()
+      const dto = () => ({
+        videoId: nl[1],
+        holder: lock.holder ? { ...lock.holder.who, since: lock.holder.since } : null,
+        mine: lock.holder?.who.userId === me.id,
+        draftId: lock.holder?.who.userId === me.id ? lock.holder.draftId : null,
+        heartbeatAt: lock.holder ? new Date().toISOString() : null,
+        expiresAt: lock.holder ? new Date(Date.now() + 120_000).toISOString() : null,
+      })
+      if (method === 'GET') return json(dto())
+      if (method === 'DELETE') {
+        if (lock.holder?.who.userId === me.id) lock.holder = null
+        return new Response(null, { status: 204 })
+      }
+      const b = (await readBody(init, input)) as { draftId: string; heartbeat?: boolean }
+      const mine = { userId: me.id, name: me.name }
+      if (nl[2]) {
+        const previous =
+          lock.holder && lock.holder.who.userId !== me.id
+            ? { ...lock.holder.who, since: lock.holder.since }
+            : null
+        lock.holder = { who: mine, since: new Date().toISOString(), draftId: b.draftId }
+        return json({ lock: dto(), previous })
+      }
+      if (lock.holder && lock.holder.who.userId !== me.id) {
+        const holder = { ...lock.holder.who, since: lock.holder.since }
+        return json(
+          {
+            error: {
+              code: 'narration_locked',
+              message: b.heartbeat
+                ? `${holder.name} took over the narration. Your draft is saved; you can render it or discard it.`
+                : `${holder.name} is editing the narration.`,
+              details: {
+                holder,
+                ...(b.heartbeat ? { takenOverBy: lock.holder.who, at: holder.since } : {}),
+              },
+            },
+          },
+          409,
+        )
+      }
+      lock.holder ??= { who: mine, since: new Date().toISOString(), draftId: b.draftId }
+      return json(dto())
+    }
     // Editor (plan v2 §8): drafts run on the real patcher over the spike S8 fixture. window.__lastEditOps records saves.
     const ed = /^\/api\/v1\/videos\/([^/]+)\/versions\/(\d+)\/edits$/.exec(p)
     const edit = /^\/api\/v1\/edits\/([^/]+)(\/render|\/preview)?$/.exec(p)
@@ -910,6 +959,34 @@ function mockPlan(stage: 'route' | 'questions' | 'brief' = 'route') {
     voiceover: mockVoice,
     expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
   }
+}
+
+type MockPerson = { userId: string; name: string }
+let narrationLock: { holder: { who: MockPerson; since: string; draftId: string } | null } | null = null
+/** The mock's one narration lock (it's per video on the server; the mock edits one video at a time). */
+function mockLock() {
+  if (narrationLock) return narrationLock
+  const key = localStorage.getItem('mockNarrationHolder') as keyof typeof people | null
+  const who = key ? people[key] : undefined
+  narrationLock = {
+    holder: who
+      ? {
+          who: { userId: who.id, name: who.name },
+          since: new Date(Date.now() - 10 * 60_000).toISOString(),
+          draftId: 'their-draft',
+        }
+      : null,
+  }
+  const w = window as unknown as { __mockNarrationTakeOver?: (k: keyof typeof people) => void }
+  w.__mockNarrationTakeOver = (k) => {
+    const p = people[k]
+    mockLock().holder = {
+      who: { userId: p.id, name: p.name },
+      since: new Date().toISOString(),
+      draftId: 'their-draft',
+    }
+  }
+  return narrationLock
 }
 
 const mockPalette = ['#0b0d10', '#f4f5f7', '#9aa3ad', '#14b8a6', '#ff5a1f']

@@ -935,6 +935,47 @@ export const RenderEditSchema = z
   })
   .openapi('RenderEdit')
 
+// The narration soft lock (plan 2026-11-02 §2.7).
+const LockHolderSchema = z
+  .object({
+    userId: z.string(),
+    name: z.string(),
+    since: z.string().openapi({ description: 'When they took the lock' }),
+  })
+  .openapi('NarrationLockHolder')
+export const NarrationLockSchema = z
+  .object({
+    videoId: z.string(),
+    holder: LockHolderSchema.nullable().openapi({
+      description: 'Who is editing the narration; null when no one is',
+    }),
+    mine: z.boolean().openapi({ description: 'You hold the lock' }),
+    draftId: z.string().nullable().openapi({ description: "The holder's draft (shown to the holder only)" }),
+    heartbeatAt: z.string().nullable(),
+    expiresAt: z
+      .string()
+      .nullable()
+      .openapi({ description: 'The lock is free from then on unless the holder heartbeats (every 30 s)' }),
+  })
+  .openapi('NarrationLock')
+export const AcquireNarrationLockSchema = z
+  .object({
+    draftId: z.string().max(64).openapi({ description: 'Your draft of this video' }),
+    heartbeat: z.boolean().optional().openapi({
+      description:
+        'You believe you hold the lock (a heartbeat): if someone took it over, the 409 says who (details.takenOverBy, details.at)',
+    }),
+  })
+  .openapi('AcquireNarrationLock')
+export const NarrationTakeOverSchema = z
+  .object({
+    lock: NarrationLockSchema,
+    previous: LockHolderSchema.nullable().openapi({
+      description: 'Who held it before you; null when no one did',
+    }),
+  })
+  .openapi('NarrationTakeOver')
+
 export const PreviewLinkSchema = z
   .object({
     url: z

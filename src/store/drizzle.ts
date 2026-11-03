@@ -851,10 +851,40 @@ function repoFor(db: Db): Repo {
         .orderBy(asc(m.createdAt), asc(m.id))
         .limit(q.limit)) as MediaRow[]
     },
-    getNarrationLock: async (jobId) =>
-      one<NarrationLockRow>(
-        await db.select().from(t.narrationLocks).where(eq(t.narrationLocks.jobId, jobId)),
-      ),
+    getNarrationLock: async (jobId, opts) => {
+      const q = db.select().from(t.narrationLocks).where(eq(t.narrationLocks.jobId, jobId))
+      return one<NarrationLockRow>(opts?.lock ? await q.for('update') : await q)
+    },
+    acquireNarrationLock: async (row, staleBefore) => {
+      const l = t.narrationLocks
+      const rows = await db
+        .insert(l)
+        .values(row)
+        .onConflictDoUpdate({
+          target: l.jobId,
+          set: {
+            holderId: row.holderId,
+            draftId: row.draftId,
+            // A heartbeat keeps when the holder took it; a new holder's starts now.
+            acquiredAt: sql`case when ${l.holderId} = ${row.holderId} then ${l.acquiredAt} else excluded.acquired_at end`,
+            heartbeatAt: row.heartbeatAt,
+          },
+          setWhere: sql`${l.heartbeatAt} < ${staleBefore} or ${l.holderId} = ${row.holderId}`,
+        })
+        .returning({ jobId: l.jobId })
+      return rows.length > 0
+    },
+    releaseNarrationLock: async (jobId, holderId) => {
+      const l = t.narrationLocks
+      return (
+        (
+          await db
+            .delete(l)
+            .where(and(eq(l.jobId, jobId), eq(l.holderId, holderId)))
+            .returning({ jobId: l.jobId })
+        ).length > 0
+      )
+    },
     upsertNarrationLock: async (row) => {
       await db
         .insert(t.narrationLocks)

@@ -202,6 +202,10 @@ function fromApiError(e: ApiError, videoId?: string): ToolError {
       'NARRATION_DISABLED',
       { fix_hint: 'Recorded voice-over is turned off; an admin can turn it on in Settings.' },
     ],
+    narration_locked: [
+      'NARRATION_LOCKED',
+      { fix_hint: 'Someone else is editing this narration; wait for them, or take it over in the editor.' },
+    ],
     not_ready: [
       'NOT_READY',
       videoId ? { suggested_tool_calls: [{ name: 'get_video', arguments: { video_id: videoId } }] } : {},

@@ -52,6 +52,7 @@ import { snapshotMedia } from './media.js'
 import { addAttemptRefs, canReadTake, isTake, releaseOwnerRefs, replaceDraftRefs } from './takes.js'
 import { getSettings } from './settings.js'
 import { narrationEnabled, narrationSettings } from './narration-settings.js'
+import { assertNarrationLock } from './narration-lock.js'
 import type { Repo } from '../store/types.js'
 import { type EditRow, type MediaRow, type TranscriptionProvider } from './types.js'
 import { hasUnfinished, loadJob, newAttempt, videoDto, withIdempotency } from './videos.js'
@@ -125,12 +126,6 @@ function takeIds(op: NarrationOp) {
 // Read before a transaction (it queries the settings row directly, uncached, so an admin's switch applies at once).
 const narrationOff = () =>
   new ApiError('narration_disabled', 'Recorded voice-over is turned off on this site.')
-
-/**
- * The narration soft lock (plan 2026-11-02 §2.7): bead va-2qq.5.5 makes a narration save 409 narration_locked unless
- * the saver holds the video's lock. Until then anyone may save.
- */
-const assertNarrationLock: (repo: Repo, p: Principal, e: EditRow) => Promise<void> = async () => {}
 
 /**
  * Who may place a take (plan 2026-11-02 §6.1, §8). A new pick is a ready, undeleted audio item the saver can read
@@ -486,7 +481,8 @@ export async function saveEdit(deps: Deps, p: Principal, id: string, input: { op
         rev: e.rev,
       })
     if (track) {
-      await assertNarrationLock(repo, p, e)
+      // The narration soft lock (plan 2026-11-02 §2.7): only its holder saves narration.
+      await assertNarrationLock(deps, repo, p, e)
       await checkTakeAccess(repo, p, e, track)
     }
     // The draft holds exactly the takes its narration places (none without one), locked before the rev is built.

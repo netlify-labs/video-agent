@@ -60,6 +60,12 @@ import {
 } from './domain/media.js'
 import { deleteUnusedRecordings } from './domain/takes.js'
 import { discardEdit, editPreviewLink, getEdit, openEdit, renderEdit, saveEdit } from './domain/edits.js'
+import {
+  acquireNarrationLock,
+  getNarrationLock,
+  releaseNarrationLock,
+  takeOverNarrationLock,
+} from './domain/narration-lock.js'
 import { receiveCheckpoint } from './domain/checkpoints.js'
 import {
   addComment,
@@ -1135,6 +1141,86 @@ export function createApp(deps: Deps, opts: AppOptions) {
       responses: { 200: json(s.PreviewLinkSchema, 'Preview link'), ...errors },
     }),
     async (c) => c.json(await editPreviewLink(deps, c.get('principal'), c.req.valid('param').id), 200),
+  )
+  // ───── narration soft lock (plan 2026-11-02 §2.7) ─────
+  const lockPath = '/api/v1/videos/{id}/narration-lock'
+  const lockErrors = {
+    ...errors,
+    409: err('Someone else is editing the narration (narration_locked; details: holder, takenOverBy, at)'),
+  }
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: lockPath,
+      summary: 'Get the narration lock',
+      description: "Who is editing this video's narration, if anyone.",
+      tags: ['editor'],
+      security,
+      request: { params: EditParam },
+      responses: { 200: json(s.NarrationLockSchema, 'The lock'), ...errors },
+    }),
+    async (c) => c.json(await getNarrationLock(deps, c.get('principal'), c.req.valid('param').id), 200),
+  )
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: lockPath,
+      summary: 'Acquire the narration lock',
+      description:
+        "Takes the video's narration lock for your draft, or heartbeats it (every 30 s; it lapses after 2 min without one). Only the holder saves narration ops.",
+      tags: ['editor'],
+      security,
+      request: {
+        params: EditParam,
+        body: { content: { 'application/json': { schema: s.AcquireNarrationLockSchema } }, required: true },
+      },
+      responses: { 200: json(s.NarrationLockSchema, 'Held'), ...lockErrors },
+    }),
+    async (c) =>
+      c.json(
+        await acquireNarrationLock(deps, c.get('principal'), c.req.valid('param').id, c.req.valid('json')),
+        200,
+      ),
+  )
+  app.openapi(
+    createRoute({
+      method: 'delete',
+      path: lockPath,
+      summary: 'Release the narration lock',
+      description: "Releases your narration lock; someone else's is left alone.",
+      tags: ['editor'],
+      security,
+      request: { params: EditParam },
+      responses: { 204: { description: 'Released' }, ...errors },
+    }),
+    async (c) => {
+      await releaseNarrationLock(deps, c.get('principal'), c.req.valid('param').id)
+      return c.body(null, 204)
+    },
+  )
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: `${lockPath}/take-over`,
+      summary: 'Take over the narration lock',
+      description:
+        'Moves the narration lock to you, whoever holds it. Their draft is kept; their next heartbeat or narration save is refused and says you took over.',
+      tags: ['editor'],
+      security,
+      request: {
+        params: EditParam,
+        body: {
+          content: { 'application/json': { schema: s.AcquireNarrationLockSchema.pick({ draftId: true }) } },
+          required: true,
+        },
+      },
+      responses: { 200: json(s.NarrationTakeOverSchema, 'Yours now'), ...errors },
+    }),
+    async (c) =>
+      c.json(
+        await takeOverNarrationLock(deps, c.get('principal'), c.req.valid('param').id, c.req.valid('json')),
+        200,
+      ),
   )
   // ───── media library (plan v2 §9) ─────
   app.openapi(

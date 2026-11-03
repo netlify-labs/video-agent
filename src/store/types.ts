@@ -249,10 +249,18 @@ export interface Repo {
    * or that a draft, attempt or version of it references. Who may read each is canReadTake's call, not this one's.
    */
   listVideoTakes(jobId: string, limit: number): Promise<MediaRow[]>
-  getNarrationLock(jobId: string): Promise<NarrationLockRow | null>
+  /** With `lock`, SELECT … FOR UPDATE (inside a transaction). */
+  getNarrationLock(jobId: string, opts?: { lock?: boolean }): Promise<NarrationLockRow | null>
   /** Inserts or replaces the video's lock. */
   upsertNarrationLock(row: NarrationLockRow): Promise<void>
+  /**
+   * Acquire or heartbeat, as one conditional upsert: takes the lock when there is none, its heartbeat is older than
+   * `staleBefore`, or `row.holderId` already holds it (which keeps its acquiredAt). False when someone else holds it.
+   */
+  acquireNarrationLock(row: NarrationLockRow, staleBefore: string): Promise<boolean>
   deleteNarrationLock(jobId: string): Promise<void>
+  /** Deletes the video's lock only if `holderId` holds it; true when it did. */
+  releaseNarrationLock(jobId: string, holderId: string): Promise<boolean>
   /** Deletes locks whose last heartbeat is older than `before`; returns how many went. */
   deleteStaleNarrationLocks(before: string): Promise<number>
   /** Per media id, the distinct videos (job ids) whose versions use it. */

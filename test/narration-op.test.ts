@@ -76,8 +76,13 @@ const narration = (clips: object[], over: Record<string, unknown> = {}) => ({
 
 const openDraft = async (h: Harness, id: string, as = h.member) =>
   h.json<{ id: string; rev: number }>(await h.call('POST', `/api/v1/videos/${id}/versions/1/edits`, { as }))
-const save = (h: Harness, editId: string, body: object, as = h.member) =>
-  h.call('PUT', `/api/v1/edits/${editId}`, { as, body })
+/** Saves the draft; a narration op needs the video's narration lock (plan 2026-11-02 §2.7), so it's taken first. */
+async function save(h: Harness, editId: string, body: { rev: number; ops: object[] }, as = h.member) {
+  const e = await h.deps.store.getEdit(editId)
+  if (e && body.ops.some((o) => (o as { op?: string }).op === 'narration'))
+    await h.call('POST', `/api/v1/videos/${e.jobId}/narration-lock`, { as, body: { draftId: editId } })
+  return h.call('PUT', `/api/v1/edits/${editId}`, { as, body })
+}
 const draftRefs = async (h: Harness, editId: string) =>
   (await h.deps.store.listMediaRefsByOwner('draft', editId)).map((r) => r.mediaId).sort()
 const error = async (res: Response) => {

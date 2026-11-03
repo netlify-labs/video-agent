@@ -663,8 +663,20 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
     upsertNarrationLock: async (row) => {
       state.narrationLocks.set(row.jobId, clone(row))
     },
+    acquireNarrationLock: async (row, staleBefore) => {
+      const was = state.narrationLocks.get(row.jobId)
+      const mine = was?.holderId === row.holderId
+      if (was && !mine && was.heartbeatAt >= staleBefore) return false
+      state.narrationLocks.set(row.jobId, clone(mine ? { ...row, acquiredAt: was.acquiredAt } : row))
+      return true
+    },
     deleteNarrationLock: async (jobId) => {
       state.narrationLocks.delete(jobId)
+    },
+    releaseNarrationLock: async (jobId, holderId) => {
+      if (state.narrationLocks.get(jobId)?.holderId !== holderId) return false
+      state.narrationLocks.delete(jobId)
+      return true
     },
     deleteStaleNarrationLocks: async (before) => {
       let n = 0
