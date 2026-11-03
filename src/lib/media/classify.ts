@@ -1,6 +1,6 @@
 // What an uploaded file really is (plan v2 §9, §14 rule 25): decided from its bytes, never from its name or the
 // declared type. Images are checked for size (40 megapixels at most); fonts, SVGs, clips and audio have their own caps.
-import { AudioError, sniffAudio } from './audio.js'
+import { ascii, AudioError, sniffAudio, u16le, u32 } from './audio.js'
 import { inspectMp4, Mp4Error } from './mp4.js'
 
 export const MEDIA_KINDS = ['image', 'svg', 'video', 'font', 'audio'] as const
@@ -40,11 +40,7 @@ function audio(ext: keyof typeof AUDIO_MIME, durationSec: number | null, bytes: 
   return { kind: 'audio', ext, mime: AUDIO_MIME[ext], width: null, height: null, durationSec: d }
 }
 
-const ascii = (b: Uint8Array, from: number, to: number) => String.fromCharCode(...b.subarray(from, to))
-const u32 = (b: Uint8Array, o: number) =>
-  (((b[o] ?? 0) << 24) | ((b[o + 1] ?? 0) << 16) | ((b[o + 2] ?? 0) << 8) | (b[o + 3] ?? 0)) >>> 0
 const u16 = (b: Uint8Array, o: number) => ((b[o] ?? 0) << 8) | (b[o + 1] ?? 0)
-const u16le = (b: Uint8Array, o: number) => (b[o] ?? 0) | ((b[o + 1] ?? 0) << 8)
 const u24le = (b: Uint8Array, o: number) => (b[o] ?? 0) | ((b[o + 1] ?? 0) << 8) | ((b[o + 2] ?? 0) << 16)
 
 function jpegSize(b: Uint8Array): [number, number] | null {
