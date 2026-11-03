@@ -12,7 +12,7 @@ const fx = (f: string) => readFileSync(new URL(`./fixtures/contract1/${f}`, impo
 const tone = () => new Uint8Array(readFileSync(new URL('./fixtures/audio/tone.mp3', import.meta.url)))
 const S = SAMPLE_RATE
 
-const narration = (mediaId: string) => ({
+const narration = (mediaId: string, start = S) => ({
   op: 'narration',
   schema: 1,
   sampleRate: S,
@@ -24,7 +24,7 @@ const narration = (mediaId: string) => ({
       srcEnd: 2 * S,
       fit: { a: 0, b: 1 / S, residualMs: 0 },
       offsetSamples: 0,
-      start: S,
+      start,
       gainDb: 0,
       fadeInSamples: 0,
       fadeOutSamples: 0,
@@ -186,7 +186,11 @@ describe('narration lock', () => {
         holder: { userId: 'u_member' },
       })
       await h.call('POST', `${lock(h, id)}/take-over`, { as: dana, body: { draftId: danas } })
-      const taken = await errorOf(await save(2, [narration(m.id)]))
+      // The lock covers narration only: my other edits still save with the track carried unchanged...
+      const carried = [{ op: 'retime', beat: 'intro', duration: 5 }, narration(m.id)]
+      expect((await save(2, carried)).status).toBe(200)
+      // ...but changing the track is refused, and says who took over.
+      const taken = await errorOf(await save(3, [narration(m.id, 2 * S)]))
       expect(taken).toMatchObject({ status: 409, code: 'narration_locked' })
       expect(taken.details).toMatchObject({ takenOverBy: { userId: 'u_dana', name: 'u_dana' } })
       // Dana releases hers; it's free.

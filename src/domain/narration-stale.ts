@@ -16,7 +16,7 @@ export interface NarrationChanged {
 }
 
 /** JSON with keys sorted at every level, so a jsonb round trip (any key order) hashes the same. */
-function canonical(x: unknown): string {
+export function canonical(x: unknown): string {
   if (Array.isArray(x)) return `[${x.map(canonical).join(',')}]`
   if (x && typeof x === 'object')
     return `{${Object.keys(x)

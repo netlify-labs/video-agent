@@ -53,7 +53,7 @@ import { addAttemptRefs, canReadTake, isTake, releaseOwnerRefs, replaceDraftRefs
 import { getSettings } from './settings.js'
 import { narrationEnabled, narrationSettings } from './narration-settings.js'
 import { assertNarrationLock } from './narration-lock.js'
-import { narrationChangedSince } from './narration-stale.js'
+import { canonical, narrationChangedSince } from './narration-stale.js'
 import type { Repo } from '../store/types.js'
 import { type EditRow, type MediaRow, type TranscriptionProvider } from './types.js'
 import { hasUnfinished, loadJob, newAttempt, videoDto, withIdempotency } from './videos.js'
@@ -482,8 +482,10 @@ export async function saveEdit(deps: Deps, p: Principal, id: string, input: { op
         rev: e.rev,
       })
     if (track) {
-      // The narration soft lock (plan 2026-11-02 §2.7): only its holder saves narration.
-      await assertNarrationLock(deps, repo, p, e)
+      // The narration soft lock (plan 2026-11-02 §2.7) covers narration only: a save that changes the track needs it;
+      // one that carries it unchanged (other edits, an autosave) doesn't.
+      if (canonical(track) !== canonical(narrationOp(e.ops as DraftOp[])))
+        await assertNarrationLock(deps, repo, p, e)
       await checkTakeAccess(repo, p, e, track)
     }
     // The draft holds exactly the takes its narration places (none without one), locked before the rev is built.
