@@ -3,6 +3,7 @@ import type { BundleReference } from '../lib/bundle-references.js'
 import type { Language } from '../lib/language.js'
 import type { FrozenNarration } from '../lib/run-manifest.js'
 import type { MediaKind } from '../lib/media/classify.js'
+import type { NarrationCleanup } from '../lib/timeline.js'
 import type { PreviewFile, Previews } from '../lib/media/previews.js'
 import type { RunCredit } from '../lib/openverse-rules.js'
 
@@ -887,7 +888,7 @@ export interface Manifest {
 /** The run's narration receipt, summed up for the callback (src/lib/narration-run.ts NarrationReceipt). Untrusted. */
 export interface NarrationReport {
   pipeline: number
-  cleanup: 'off' | 'light'
+  cleanup: NarrationCleanup
   /** First line of `ffmpeg -version`. */
   ffmpeg: string
   bus: { sha256: string; samples: number }
