@@ -50,11 +50,13 @@ import {
   voicesFromHtml,
   type EditorComposition,
 } from '../lib/narration-panel'
+import { voicePlacements } from '../lib/narration-voice-align'
 import { formatTime } from '../lib/timeline-view'
 import { useNarrationAudition } from '../lib/use-narration-audition'
 import { focusClip, useNarrationEditor, type NarrationEditor } from '../lib/use-narration-editor'
 import { useNarrationTakes, type TakeInfo } from '../lib/use-narration-takes'
 import { CompositionPreview, type PreviewCommand } from './CompositionPreview'
+import { AlignToVoice } from './AlignToVoice'
 import { MediaLibraryModal } from './MediaPicker'
 import {
   applyTrackPatch,
@@ -76,7 +78,7 @@ export interface NarrationTrackApi {
   insertTake: (
     take: { mediaId: string } & TakeInfo,
     at?: { start?: number; srcStart?: number; srcEnd?: number },
-  ) => { ok: boolean; message: string }
+  ) => { ok: boolean; message: string; clipId?: string }
   /** The draft has unsaved or unrendered timing changes: recording waits for Render picture first (§5.3). */
   timingPending: boolean
   /** You hold the narration lock (§2.7): Record is off without it. */
@@ -251,7 +253,7 @@ export function NarrationSection(props: NarrationSectionProps) {
       const srcEnd = at.srcEnd ?? clip.srcEnd
       const r = editor.dispatch({ type: 'insert', clip: { ...clip, srcStart, srcEnd } })
       if (!r.ok) notifications.show({ color: 'red', message: r.message })
-      return r
+      return { ...r, clipId: clip.id }
     },
     [editor, playhead, takes],
   )
@@ -271,6 +273,8 @@ export function NarrationSection(props: NarrationSectionProps) {
   // ---- adding audio: files (dropped or chosen), the library, this video's recordings
 
   const [importing, setImporting] = useState<Importing | null>(null)
+  // The one file just added, offered Align to AI voice (§2.4) until it's used or dismissed.
+  const [aligning, setAligning] = useState<{ clipId: string; mono: Float32Array } | null>(null)
   const addFiles = async (files: File[], start: number) => {
     if (readOnly) {
       notifications.show({ color: 'yellow', message: LOCKED_MESSAGE })
@@ -297,6 +301,9 @@ export function NarrationSection(props: NarrationSectionProps) {
         const r = insertTake(take, { start: at })
         // Several files land one after another.
         if (r.ok) at += take.samples
+        setAligning(
+          audio.length === 1 && r.ok && r.clipId && take.mono ? { clipId: r.clipId, mono: take.mono } : null,
+        )
       } catch (e) {
         notifications.show({ color: 'red', message: errorMessage(e) })
       }
@@ -408,6 +415,17 @@ export function NarrationSection(props: NarrationSectionProps) {
             </Text>
             <Progress size="sm" value={importing.percent} animated />
           </Stack>
+        ) : null}
+        {aligning && hasVoice ? (
+          <AlignToVoice
+            editId={draft.editId}
+            voices={voicePlacements(lanes)}
+            clipId={aligning.clipId}
+            mono={aligning.mono}
+            op={op}
+            dispatch={editor.dispatch}
+            onDone={() => setAligning(null)}
+          />
         ) : null}
         <Timeline
           op={op}

@@ -26,6 +26,8 @@ export interface ImportedTake {
   spans: Span[]
   peaks: Peaks
   name: string
+  /** The decoded samples (24 kHz mono), for Align to AI voice; not kept once the suggestion is done. */
+  mono?: Float32Array
 }
 
 const log = (event: string, fields: Record<string, unknown>) => {
@@ -108,5 +110,5 @@ export async function importNarrationFile(f: File, opts: ImportOptions): Promise
   })
   await waitReady(mediaId, opts.signal ? { signal: opts.signal } : {})
   log('narration.import.ready', { file: f.name, mediaId, ms: Math.round(performance.now() - t1) })
-  return { mediaId, samples: a.samples, spans: a.spans, peaks: decodePeaks(a.peaks), name: f.name }
+  return { mediaId, samples: a.samples, spans: a.spans, peaks: decodePeaks(a.peaks), name: f.name, mono }
 }

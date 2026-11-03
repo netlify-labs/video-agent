@@ -33,8 +33,11 @@ export interface EditContext {
 }
 
 export type NarrationCommand =
-  /** Put the clip's start at composition sample `start` (clamped at 0). The moved clip wins where it overlaps. */
-  | { type: 'move'; clipId: string; start: number }
+  /**
+   * Put the clip's start at composition sample `start` (clamped at 0). The moved clip wins where it overlaps. With
+   * `srcStart`, the clip also starts at that source sample (its end stays): Align to AI voice trims a take's lead-in.
+   */
+  | { type: 'move'; clipId: string; start: number; srcStart?: number }
   /** Move the clip's left edge to composition sample `at`, moving srcStart with it. */
   | { type: 'trimStart'; clipId: string; at: number }
   /** Move the clip's right edge to composition sample `at`, moving srcEnd with it. */
@@ -121,7 +124,15 @@ export function applyCommand(op: NarrationOp, cmd: NarrationCommand, ctx: EditCo
       const to = cmd.type === 'move' ? cmd.start : nudge(c.start, cmd.frames, ctx.fps)
       if (!Number.isFinite(to)) return { ok: false, reason: 'Not a time' }
       const start = Math.max(0, Math.round(to))
-      return finish(op, lastWins(clips, c.id, { ...c, start }), ctx, `Clip moved to ${clock(start)}`)
+      const from = cmd.type === 'move' ? cmd.srcStart : undefined
+      if (from !== undefined && !Number.isFinite(from)) return { ok: false, reason: 'Not a time' }
+      const srcStart = from === undefined ? c.srcStart : clampInt(from, 0, c.srcEnd - minLen)
+      return finish(
+        op,
+        lastWins(clips, c.id, { ...c, srcStart, start }),
+        ctx,
+        `Clip moved to ${clock(start)}`,
+      )
     }
     case 'trimStart': {
       if (!Number.isFinite(cmd.at)) return { ok: false, reason: 'Not a time' }

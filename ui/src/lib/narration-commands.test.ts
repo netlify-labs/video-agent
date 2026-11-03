@@ -101,6 +101,19 @@ describe('applyCommand', () => {
     expect(a).toMatchObject({ start: 0, srcStart: 0, srcEnd: SAMPLE_RATE / 2 })
   })
 
+  it('moves with a new source start in one step (Align to AI voice trimming a lead-in)', () => {
+    const r = ok(two, { type: 'move', clipId: 'b', start: 5 * SAMPLE_RATE, srcStart: SAMPLE_RATE / 4 })
+    expect(r.op.clips.find((c) => c.id === 'b')).toMatchObject({
+      start: 5 * SAMPLE_RATE,
+      srcStart: SAMPLE_RATE / 4,
+      srcEnd: SAMPLE_RATE,
+    })
+    // Never past the clip's last frame.
+    const far = ok(two, { type: 'move', clipId: 'b', start: 0, srcStart: 10 * SAMPLE_RATE })
+    expect(far.op.clips.find((c) => c.id === 'b')?.srcStart).toBe(SAMPLE_RATE - minClipSamples(FPS))
+    expect(applyCommand(two, { type: 'move', clipId: 'b', start: 0, srcStart: NaN }, ctx).ok).toBe(false)
+  })
+
   it('nudges by whole frames', () => {
     expect(ok(two, { type: 'nudge', clipId: 'b', frames: 1 }).op.clips[1]?.start).toBe(
       2 * SAMPLE_RATE + FRAME,
