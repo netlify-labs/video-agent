@@ -94,18 +94,19 @@ describe('Parakeet', () => {
     expect(() => parseHyperframesTranscript({})).toThrow(/not an array/)
   })
 
-  it('takes the fixed 240 ms off starts and ends, clamped at 0', () => {
+  it('adds the fixed 240 ms to starts only, keeping each word at least 50 ms long', () => {
     expect(PARAKEET_OFFSET_S).toBe(0.24)
+    // A word Parakeet reports at 1.00 s is captioned at 1.24 s.
     expect(
       correctOffset([
-        { text: 'a', start: 0.1, end: 0.2 },
-        { text: 'b', start: 0.2, end: 0.5 },
-        { text: 'c', start: 1.0, end: 1.3 },
+        { text: 'a', start: 1.0, end: 1.3 },
+        { text: 'b', start: 1.0, end: 1.2 },
+        { text: 'c', start: 0, end: 0.1 },
       ]),
     ).toEqual([
-      { text: 'a', start: 0, end: 0 },
-      { text: 'b', start: 0, end: 0.26 },
-      { text: 'c', start: 0.76, end: 1.06 },
+      { text: 'a', start: 1.24, end: 1.3 },
+      { text: 'b', start: 1.24, end: 1.29 },
+      { text: 'c', start: 0.24, end: 0.29 },
     ])
   })
 
@@ -144,7 +145,7 @@ describe('Parakeet', () => {
     )
     expect(calls.every((c) => c.opts.deadlineMs > 0 && c.opts.deadlineMs <= 60_000)).toBe(true)
     expect(out).toMatchObject({ provider: 'local', model: PARAKEET_MODEL })
-    expect(out.words[0]).toEqual({ text: 'The', start: 0.28, end: 0.44 })
+    expect(out.words[0]).toEqual({ text: 'The', start: 0.76, end: 0.81 })
   })
 
   it('a timed-out install is a timeout', async () => {
@@ -333,7 +334,7 @@ describe('runStt', () => {
         model: 'fake-1',
         words,
         cached: false,
-        offsetMs: -240,
+        offsetMs: 240,
       })
       expect(r.busSha256).toMatch(/^[0-9a-f]{64}$/)
       expect(readSttRecord(root)?.words).toEqual(words)

@@ -19,7 +19,6 @@ import {
 import type { NarrationTracks } from '../src/lib/timeline.js'
 import { toVtt } from '../scripts/lib/captions.js'
 import { applyNarrationCaptions, captionsForRender } from '../scripts/lib/narration-captions.js'
-import { narrationPaths } from '../scripts/lib/narration-inputs.js'
 import { harness, PROMPT } from './helpers.js'
 
 const fx = (f: string) => readFileSync(new URL(`./fixtures/contract1-voice/${f}`, import.meta.url), 'utf8')
@@ -153,51 +152,50 @@ describe('validate() and narration cues', () => {
 
 describe('applyNarrationCaptions and captionsForRender', () => {
   const words = [...speak('Hello from my own voice.', 0.5), ...speak('Second line here', 3)]
+  const op = (mode: NarrationTracks['aiVoice']['mode'], o: { muted?: boolean } = {}) => ({
+    tracks: { ...tracks(mode, o), music: { duck: true, duckDb: -12 } },
+  })
 
-  function workspace(mode: NarrationTracks['aiVoice']['mode']) {
+  function workspace() {
     const root = tmp()
     mkdirSync(join(root, 'video'), { recursive: true })
     const summaryPath = join(root, 'video', 'summary.json')
     writeFileSync(summaryPath, JSON.stringify(baseSummary))
-    const p = narrationPaths(root)
-    mkdirSync(p.dir, { recursive: true })
-    writeFileSync(p.manifest, JSON.stringify({ v: 1, op: { tracks: tracks(mode) } }))
     return { root, summaryPath }
   }
   const read = (p: string) => JSON.parse(readFileSync(p, 'utf8')) as Summary
 
-  it('writes the cues and the audible rule into summary.json, idempotently', () => {
-    const { summaryPath } = workspace('replace')
-    const first = applyNarrationCaptions(summaryPath, { status: 'ok', words }, { tracks: tracks('replace') })
-    expect(first.cues).toHaveLength(2)
-    const s = read(summaryPath)
+  it('adds the narration cues to summary.json and keeps every frozen cue, idempotently', () => {
+    const { summaryPath } = workspace()
+    const s = applyNarrationCaptions(summaryPath, { status: 'ok', words })
     expect(s.title).toBe('Org webhooks')
-    expect(s.captions?.every((c) => c.narration)).toBe(true)
-    applyNarrationCaptions(summaryPath, { status: 'ok', words }, { tracks: tracks('replace') })
-    expect(read(summaryPath).captions).toEqual(s.captions)
+    expect(s.captions?.filter((c) => c.narration)).toHaveLength(2)
+    expect(s.captions?.filter((c) => !c.narration)).toEqual(baseSummary.captions)
+    applyNarrationCaptions(summaryPath, { status: 'ok', words })
+    expect(read(summaryPath)).toEqual(s)
     expect(validate(html, read(summaryPath))).toEqual([])
   })
 
-  it('a failed transcription adds no cues: with replace nothing is left, and the VTT is a valid empty one', () => {
-    const { root, summaryPath } = workspace('replace')
-    applyNarrationCaptions(summaryPath, { status: 'failed', words: [] }, { tracks: tracks('replace') })
-    const s = read(summaryPath)
-    expect(s.captions).toEqual([])
-    const vtt = toVtt(captionsForRender(root, s.captions), 9)
+  it('captions.vtt captions only what is audible: replace -> narration cues, under -> both, muted -> AI only', () => {
+    const { summaryPath } = workspace()
+    const s = applyNarrationCaptions(summaryPath, { status: 'ok', words })
+    const kinds = (cs: unknown) => (cs as Caption[]).map((c) => (c.narration ? 'n' : 'ai'))
+    expect(kinds(captionsForRender(s.captions, op('replace')))).toEqual(['n', 'n'])
+    expect(kinds(captionsForRender(s.captions, op('under')))).toContain('ai')
+    expect(kinds(captionsForRender(s.captions, op('under')))).toContain('n')
+    expect(kinds(captionsForRender(s.captions, op('keep', { muted: true })))).not.toContain('n')
+    // Without recorded narration nothing changes.
+    expect(captionsForRender(s.captions, undefined)).toBe(s.captions)
+  })
+
+  it('a failed transcription adds no cues: with replace the VTT is a valid empty one', () => {
+    const { summaryPath } = workspace()
+    const s = applyNarrationCaptions(summaryPath, { status: 'failed', words: [] })
+    expect(s.captions).toEqual(baseSummary.captions)
+    const vtt = toVtt(captionsForRender(s.captions, op('replace')), 9)
     expect(vtt).toBe('WEBVTT\n\n')
     expect(sniff(new TextEncoder().encode(vtt))).toBe('vtt')
-  })
-
-  it('under keeps the AI cues when transcription failed', () => {
-    const { summaryPath } = workspace('under')
-    applyNarrationCaptions(summaryPath, null, { tracks: tracks('under') })
-    expect(read(summaryPath).captions).toEqual(baseSummary.captions)
-  })
-
-  it('render-job applies the rule even if the caption step never ran; without narration it changes nothing', () => {
-    const { root } = workspace('replace')
-    expect(captionsForRender(root, baseSummary.captions)).toEqual([])
-    expect(captionsForRender(tmp(), baseSummary.captions)).toBe(baseSummary.captions)
+    expect(applyNarrationCaptions(summaryPath, null).captions).toEqual(baseSummary.captions)
   })
 })
 

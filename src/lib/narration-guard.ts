@@ -25,9 +25,11 @@ import {
 import { readPcm16 } from './narration-cleanup.js'
 import {
   mayChange,
+  narrationSummary,
   narrationTransform,
   optionalFrozenFilesFor,
   type NarrationReceipt,
+  type NarrationTranscript,
 } from './narration-run.js'
 import { expectRevoiced, FROZEN_DIR } from './revoice.js'
 import type { RunManifest } from './run-manifest.js'
@@ -88,7 +90,8 @@ function leakedTakes(videoDir: string, receipt: NarrationReceipt, m: RunManifest
  *     re-voice), with the files the steps write (narration-run.ts mayChange) recomputed instead:
  *   - index.html is the frozen one (re-voiced, when there are lines) with exactly the narration transform
  *     (narrationTransform over the receipt's spans), and its data-va-speech is speechSeconds(receipt.spans);
- *   - summary.json is the frozen one with only the narration's cues (none until captions land, va-2qq.3.13);
+ *   - summary.json is the frozen one plus exactly the narration cues regrouped from the transcript the transcribe
+ *     step left (.va-run/narration/stt.json, `transcript`; none when it isn't ok or the step didn't run);
  *   - with a held last frame (the frozen data-va-hold beat), video/assets/hold/last.png is the PNG the receipt says
  *     the run rendered of the base's last frame; without one there is no still;
  *   - the narrated composition passes the contract with the bus's length, and nothing from .va-run/ is in video/.
@@ -99,6 +102,7 @@ export function checkNarration(
   videoDir: string,
   receipt: NarrationReceipt | null,
   m: RunManifest,
+  transcript: NarrationTranscript | null = null,
 ): string[] {
   const n = m.bundle?.narration
   if (!m.bundle || !n) return ['This render has no recorded narration to check.']
@@ -190,7 +194,8 @@ export function checkNarration(
   }
   let want: { html: string; summary: Summary }
   try {
-    want = narrationTransform(base.html, base.summary, n.op, receipt.spans)
+    const mixed = narrationTransform(base.html, base.summary, n.op, receipt.spans)
+    want = { html: mixed.html, summary: narrationSummary(mixed.summary, transcript) }
   } catch (e) {
     return [
       ...problems,

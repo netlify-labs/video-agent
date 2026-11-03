@@ -4,8 +4,8 @@
 // Decodes video/assets/narration/bus.wav to 16 kHz, transcribes it with the provider the render froze (local Parakeet
 // by default, ElevenLabs Scribe when an admin opted in and the key is set, or nothing when off) under one outer
 // deadline that kills the whole process tree, and writes .va-run/narration/stt.json plus `stt` in the receipt
-// (scripts/lib/stt/index.ts). Then it writes the narration caption cues into video/summary.json with only what's
-// audible captioned (scripts/lib/narration-captions.ts applyNarrationCaptions). A failed or timed-out transcription
+// (scripts/lib/stt/index.ts). Then it adds the narration caption cues to video/summary.json, keeping every frozen cue
+// (scripts/lib/narration-captions.ts applyNarrationCaptions; render-job captions only what's audible). A failed or timed-out transcription
 // is not an error: it exits 0 and the render goes on without narration captions. Logs JSON lines on stderr.
 import { join } from 'node:path'
 import { applyNarrationCaptions } from './lib/narration-captions.js'
@@ -21,10 +21,9 @@ if (process.argv[1]?.endsWith('scripts/narration-stt.ts')) {
   const deadlineMs = Number(args['deadline-ms'] ?? STT_DEADLINE_MS)
   runStt({ root: repoRoot, deadlineMs: deadlineMs > 0 ? deadlineMs : STT_DEADLINE_MS })
     .then((r) => {
-      const inputs = readNarrationInputs(repoRoot)
-      if (inputs) {
-        const { cues } = applyNarrationCaptions(join(repoRoot, 'video', 'summary.json'), r, inputs.op)
-        console.log(`Narration captions: ${cues.length} cues.`)
+      if (readNarrationInputs(repoRoot)) {
+        const s = applyNarrationCaptions(join(repoRoot, 'video', 'summary.json'), r)
+        console.log(`Narration captions: ${(s.captions ?? []).filter((c) => c.narration).length} cues.`)
       }
       console.log(
         r.status === 'ok'

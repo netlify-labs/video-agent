@@ -18,6 +18,8 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { revoiceVideo } from '../scripts/voice.js'
 import { runNarration } from '../scripts/narration.js'
 import type { Snapshot } from '../scripts/lib/hold-still.js'
+import { applyNarrationCaptions } from '../scripts/lib/narration-captions.js'
+import { readSttRecord, type SttRecord } from '../scripts/lib/stt/index.js'
 import {
   narrationPaths,
   readNarrationReceipt,
@@ -35,7 +37,13 @@ import {
 } from '../src/lib/contract.js'
 import { readPcm16 } from '../src/lib/narration-cleanup.js'
 import { checkNarration } from '../src/lib/narration-guard.js'
-import { frozenFilesFor, mayChange, optionalFrozenFilesFor, runSteps } from '../src/lib/narration-run.js'
+import {
+  frozenFilesFor,
+  mayChange,
+  optionalFrozenFilesFor,
+  runSteps,
+  STEP_COMMANDS,
+} from '../src/lib/narration-run.js'
 import { FROZEN_DIR, keptHash } from '../src/lib/revoice.js'
 import type { FrozenNarration, RunManifest } from '../src/lib/run-manifest.js'
 import { IDENTITY_FIT, SAMPLE_RATE as S, type NarrationOp } from '../src/lib/timeline.js'
@@ -53,15 +61,25 @@ afterEach(() => {
 describe('narration-run: one order of steps', () => {
   const narration = {} as FrozenNarration
   const revoice = { beats: ['intro'], keptHash: 'x' }
-  it('restore, re-voice, narration, check, render; each only when the bundle has it', () => {
+  it('restore, re-voice, narration, transcribe, check, render; each only when the bundle has it', () => {
     expect(runSteps(null)).toEqual(['prepare', 'check', 'render'])
     expect(runSteps({ revoice })).toEqual(['prepare', 'revoice', 'check', 'render'])
-    expect(runSteps({ narration })).toEqual(['prepare', 'narration', 'check', 'render'])
-    expect(runSteps({ revoice, narration })).toEqual(['prepare', 'revoice', 'narration', 'check', 'render'])
+    expect(runSteps({ narration })).toEqual(['prepare', 'narration', 'transcribe', 'check', 'render'])
+    expect(runSteps({ revoice, narration })).toEqual([
+      'prepare',
+      'revoice',
+      'narration',
+      'transcribe',
+      'check',
+      'render',
+    ])
+    expect(STEP_COMMANDS.transcribe).toBe('npx tsx scripts/narration-stt.ts')
   })
   it('allows exactly the files those steps write, and keeps frozen copies to recompute them from', () => {
     expect(mayChange(NARRATION_SRC, { narration })).toBe(true)
     expect(mayChange('index.html', { narration })).toBe(true)
+    expect(mayChange('summary.json', { narration })).toBe(true)
+    expect(mayChange('summary.json', null)).toBe(false)
     expect(mayChange(NARRATION_SRC, null)).toBe(false)
     expect(mayChange('assets/voice/intro.wav', { narration })).toBe(false)
     expect(mayChange('assets/voice/intro.wav', { revoice, narration })).toBe(true)
@@ -212,7 +230,8 @@ describe('checkNarration', () => {
       ],
     }
     writeFileSync(p.manifest, JSON.stringify(inputs))
-    const check = () => checkNarration(join(root, FROZEN_DIR), video, readNarrationReceipt(root), m)
+    const check = () =>
+      checkNarration(join(root, FROZEN_DIR), video, readNarrationReceipt(root), m, readSttRecord(root))
     return { root, video, m, p, check }
   }
 
@@ -235,6 +254,76 @@ describe('checkNarration', () => {
     const wrongOrder = prepared({ revoice: { outro: 'Read the docs today.' } })
     runNarration({ root: wrongOrder.root })
     expect(wrongOrder.check()).toContainEqual(expect.stringMatching(/new voice doesn't say its line/))
+  })
+
+  /** What scripts/narration-stt.ts leaves: stt.json with these words, and their cues in summary.json. */
+  function transcribed(w: ReturnType<typeof prepared>, status: SttRecord['status'] = 'ok') {
+    const words = [
+      { text: 'Hello', start: 0.74, end: 1.1 },
+      { text: 'from', start: 1.15, end: 1.4 },
+      { text: 'me.', start: 1.45, end: 1.9 },
+      { text: 'Second', start: 3, end: 3.4 },
+      { text: 'line.', start: 3.45, end: 3.9 },
+    ]
+    const record: SttRecord = {
+      v: 1,
+      status,
+      setting: 'local',
+      provider: 'local',
+      model: 'parakeet-tdt-0.6b-v3-int8',
+      language: 'en',
+      busSha256: null,
+      words: status === 'ok' ? words : [],
+      offsetMs: 240,
+      durationMs: 1,
+      cached: false,
+      warnings: [],
+    }
+    writeFileSync(w.p.stt, JSON.stringify(record))
+    applyNarrationCaptions(join(w.video, 'summary.json'), record)
+  }
+
+  it('passes the narration cues the transcribe step added, next to every frozen cue', () => {
+    const w = prepared()
+    runNarration({ root: w.root })
+    const frozen = JSON.parse(readFileSync(join(w.video, 'summary.json'), 'utf8')) as Summary
+    transcribed(w)
+    const s = JSON.parse(readFileSync(join(w.video, 'summary.json'), 'utf8')) as Summary
+    expect(s.captions?.filter((c) => c.narration)).toHaveLength(2)
+    // Replace mode: the AI and text cues stay in summary.json (captions.vtt drops them).
+    expect(s.captions?.filter((c) => !c.narration)).toEqual(frozen.captions)
+    expect(w.check()).toEqual([])
+    // A failed transcription adds nothing, and that passes too.
+    const f = prepared()
+    runNarration({ root: f.root })
+    transcribed(f, 'failed')
+    expect(f.check()).toEqual([])
+  })
+
+  it('fails an edited narration cue, an extra one, and cues without the transcript they came from', () => {
+    const summary = (w: ReturnType<typeof prepared>) => join(w.video, 'summary.json')
+    const a = prepared()
+    runNarration({ root: a.root })
+    transcribed(a)
+    edit(summary(a), (s) => s.replace('Hello from me.', 'Hello from you.'))
+    expect(a.check()).toContainEqual(expect.stringMatching(/summary.json differs/))
+
+    const b = prepared()
+    runNarration({ root: b.root })
+    transcribed(b)
+    const s = JSON.parse(readFileSync(summary(b), 'utf8')) as Summary
+    s.captions = [
+      ...(s.captions ?? []),
+      { narration: true, id: 'nc_000000000000', start: 7, end: 8, text: 'Extra' },
+    ]
+    writeFileSync(summary(b), JSON.stringify(s, null, 2))
+    expect(b.check()).toContainEqual(expect.stringMatching(/summary.json differs/))
+
+    const c = prepared()
+    runNarration({ root: c.root })
+    transcribed(c)
+    rmSync(c.p.stt)
+    expect(c.check()).toContainEqual(expect.stringMatching(/summary.json differs/))
   })
 
   it('fails an edited attribute on the narration element', () => {

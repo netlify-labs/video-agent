@@ -359,7 +359,7 @@ export function buildRenderUnchangedPrompt(p: {
   const doing = [
     'restore',
     revoice.length ? 're-voice' : '',
-    p.narration ? 'mix the narration' : '',
+    p.narration ? 'mix and transcribe the narration' : '',
     'check and render',
   ]
     .filter(Boolean)
@@ -367,7 +367,10 @@ export function buildRenderUnchangedPrompt(p: {
   const writers = [
     revoice.length ? 'scripts/voice.ts revoice' : '',
     p.narration ? 'scripts/narration.ts' : '',
+    p.narration ? 'scripts/narration-stt.ts' : '',
   ].filter(Boolean)
+  const andList = (xs: string[]) =>
+    xs.length < 3 ? xs.join(' and ') : `${xs.slice(0, -1).join(', ')} and ${xs.at(-1) ?? ''}`
   const changed = [revoice.length ? 'the re-voiced lines' : '', p.narration ? 'the narration' : ''].filter(
     Boolean,
   )
@@ -384,6 +387,10 @@ export function buildRenderUnchangedPrompt(p: {
       `Run from the repo root: ${STEP_COMMANDS.narration}`,
       "   It cleans the recordings prepare-run put in .va-run/narration/ (outside video/), mixes them into video/assets/narration/bus.wav at the video's length, writes the speech and the music's ducking into index.html, and, if the video holds its last frame, captures that frame as video/assets/hold/last.png. If it fails, stop and report the error. Don't run it twice, don't copy, move or edit anything in .va-run/, and don't process the recordings any other way.",
     ],
+    transcribe: [
+      `Run from the repo root: ${STEP_COMMANDS.transcribe}`,
+      "   It transcribes the mixed narration for captions (into .va-run/narration/stt.json) and adds its caption cues to video/summary.json. It never fails the run: if it reports that the narration wasn't transcribed, carry on without captions. Don't run it twice and don't edit its output.",
+    ],
     check: [
       'Run `npx hyperframes check` in video/. If it reports any error, stop: fix nothing, and end your answer with the errors.',
     ],
@@ -398,7 +405,7 @@ export function buildRenderUnchangedPrompt(p: {
   })
   return [
     `You are rendering version ${p.versionN} of video ${p.jobId} (attempt ${p.attemptId}) exactly as someone edited it in the browser from version ${p.editedFromN}, with ${what.join(' and ')}.`,
-    `Don't write, change or delete any file in video/ yourself. There is nothing to design: only ${doing}. Only ${writers.join(' and ')} may change files, and only the ones ${writers.length === 1 ? 'it writes' : 'they write'}.`,
+    `Don't write, change or delete any file in video/ yourself. There is nothing to design: only ${doing}. Only ${andList(writers)} may change files, and only the ones ${writers.length === 1 ? 'it writes' : 'they write'}.`,
     '',
     ...numbered,
     `${steps.length + 1}. End your answer with the fenced \`\`\`json block render-job.ts prints.`,

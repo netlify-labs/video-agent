@@ -1,7 +1,7 @@
 // Captions from recorded narration (plan 2026-11-02 §6.6 "Cues" and "What is audible", bead va-2qq.3.13). The run's
 // transcript words become cues of their own kind ({ narration: true, id, start, end, text, words }), grouped for
 // reading: at most 42 characters on each of 2 lines, a new cue at a pause over 300 ms and after punctuation, and 1-6 s
-// on screen. Then only what's audible is captioned: the AI voice's cues go when the narration replaces it (or all
+// on screen. summary.json keeps every cue (withNarrationCues); captions.vtt captions only what's audible: the AI voice's cues go when the narration replaces it (or all
 // original audio is muted), and a muted narration track has no cues. Pure, so the editor can use it too.
 import type { Caption } from './contract.js'
 import type { NarrationTracks } from './timeline.js'
@@ -100,7 +100,15 @@ export function groupWords(input: readonly CueWord[]): NarrationCue[] {
 }
 
 /**
- * The captions of what's audible (plan §6.6): recorded narration's cues unless its track is muted, and every other
+ * summary.json's captions with the narration's cues: every other cue kept as it is (so a later switch to keep or
+ * under still has them), earlier narration cues replaced, interleaved by time (a stable sort).
+ */
+export function withNarrationCues(captions: readonly Caption[], cues: readonly NarrationCue[]): Caption[] {
+  return [...captions.filter((c) => !c.narration), ...cues].sort((a, b) => a.start - b.start)
+}
+
+/**
+ * The captions of what's audible (plan §6.6), applied when captions.vtt is written (summary.json keeps every cue): recorded narration's cues unless its track is muted, and every other
  * cue (the AI voice's, and on-screen text) only while the AI voice still plays: not with replace, not with
  * original.muteAll. Interleaved by time. Narration cues already in `captions` are replaced by `narration`.
  */

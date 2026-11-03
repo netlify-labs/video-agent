@@ -227,16 +227,20 @@ describe('buildRenderUnchangedPrompt', () => {
       '1. Run: npx tsx scripts/prepare-run.ts',
       '2. Run from the repo root: npx tsx scripts/voice.ts revoice',
       '3. Run from the repo root: npx tsx scripts/narration.ts',
-      '4. Run `npx hyperframes check`',
-      '5. Run: npx tsx scripts/render-job.ts',
-      '6. End your answer',
+      '4. Run from the repo root: npx tsx scripts/narration-stt.ts',
+      '5. Run `npx hyperframes check`',
+      '6. Run: npx tsx scripts/render-job.ts',
+      '7. End your answer',
     ]
     const at = steps.map((s) => both.indexOf(s))
     expect(at.every((i) => i >= 0)).toBe(true)
     expect([...at].sort((a, b) => a - b)).toEqual(at)
     expect(narrated).toContain('2. Run from the repo root: npx tsx scripts/narration.ts')
+    expect(narrated).toContain('3. Run from the repo root: npx tsx scripts/narration-stt.ts')
     expect(narrated).not.toContain('voice.ts')
-    expect(both).toContain('Only scripts/voice.ts revoice and scripts/narration.ts may change files')
+    expect(both).toContain(
+      'Only scripts/voice.ts revoice, scripts/narration.ts and scripts/narration-stt.ts may change files',
+    )
   })
 
   it('without narration, the prompts are unchanged', () => {

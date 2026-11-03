@@ -45,7 +45,7 @@ export interface SttRecord {
   language: 'en'
   /** The bus transcribed (sha256 of video/assets/narration/bus.wav). */
   busSha256: string | null
-  /** Composition seconds, offset-corrected (local: PARAKEET_OFFSET_S off start and end). Empty unless ok. */
+  /** Composition seconds, offset-corrected (local: PARAKEET_OFFSET_S added to starts). Empty unless ok. */
   words: SttWord[]
   offsetMs: number
   /** The stage's wall time, decode included (a cache hit is just the lookup). */
@@ -144,7 +144,7 @@ export async function runStt(o: RunSttOptions): Promise<SttRecord> {
   if (!provider) return finish('off')
   record.provider = provider.name
   record.model = provider.model
-  record.offsetMs = provider.name === 'local' ? -Math.round(PARAKEET_OFFSET_S * 1000) : 0
+  record.offsetMs = provider.name === 'local' ? Math.round(PARAKEET_OFFSET_S * 1000) : 0
   record.busSha256 = sha256File(bus)
 
   // Cache.

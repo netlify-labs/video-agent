@@ -12,11 +12,13 @@ import { remaining, SttTimeout, type SttProvider, type SttWord } from './types.j
 export const PARAKEET_MODEL = 'parakeet-tdt-0.6b-v3-int8'
 
 /**
- * S11 measured Parakeet's phrase starts consistently ~240 ms off the true onset (and its ends 430-485 ms late), so
- * captions take a fixed 240 ms off every word's start and end, clamped at 0. Median start error after it: 34-48 ms.
- * Re-measure (spikes/s11) when the model changes.
+ * S11 measured Parakeet's phrase starts consistently ~236-240 ms early (reported before the true onset), and its
+ * phrase ends 430-485 ms late. So captions add a fixed 240 ms to every word's start and leave its end alone, keeping
+ * each word at least WORD_MIN_S long. Median start error after it: 34-48 ms. Re-measure (spikes/s11) when the model
+ * changes.
  */
 export const PARAKEET_OFFSET_S = 0.24
+export const WORD_MIN_S = 0.05
 
 type Run = (cmd: string, args: string[], opts: TreeOptions) => Promise<TreeResult>
 
@@ -40,11 +42,14 @@ export function parseHyperframesTranscript(json: unknown): SttWord[] {
 
 const ms3 = (n: number) => Math.round(n * 1000) / 1000
 
-/** The fixed offset correction: `offset` seconds off start and end, clamped at 0, rounded to the millisecond. */
+/**
+ * The fixed offset correction: `offset` seconds later starts, ends as reported but at least WORD_MIN_S after the
+ * start; rounded to the millisecond. A word reported at 1.00-1.30 s is captioned at 1.24-1.30 s.
+ */
 export function correctOffset(words: SttWord[], offset = PARAKEET_OFFSET_S): SttWord[] {
   return words.map((w) => {
-    const start = ms3(Math.max(0, w.start - offset))
-    return { text: w.text, start, end: Math.max(start, ms3(Math.max(0, w.end - offset))) }
+    const start = ms3(Math.max(0, w.start + offset))
+    return { text: w.text, start, end: ms3(Math.max(w.end, start + WORD_MIN_S)) }
   })
 }
 

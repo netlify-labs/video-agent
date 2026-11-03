@@ -13,6 +13,7 @@ import { checkNarration } from '../src/lib/narration-guard.js'
 import { checkRevoiced, FROZEN_DIR } from '../src/lib/revoice.js'
 import type { PreviewFile } from '../src/lib/media/previews.js'
 import type { RunManifest } from '../src/lib/run-manifest.js'
+import type { NarrationOp } from '../src/lib/timeline.js'
 import { postCheckpoint } from './checkpoint.js'
 import { readNarrationReceipt } from './lib/narration-inputs.js'
 import { toVtt } from './lib/captions.js'
@@ -24,6 +25,7 @@ import {
   narrationOf,
 } from './lib/mastering.js'
 import { captionsForRender } from './lib/narration-captions.js'
+import { readSttRecord } from './lib/stt/index.js'
 import { makePreviews, posterTime } from './lib/previews.js'
 import { uploadReferences } from './lib/references.js'
 import { RenderProgressReporter } from './lib/render-progress.js'
@@ -96,13 +98,22 @@ async function main() {
 
   // Render-unchanged runs render exactly the frozen bundle prepare-run restored (plan v2 §14 rule 21).
   const runManifestPath = join(repoRoot, '.render', 'run-manifest.json')
+  // The frozen narration op: captions.vtt captions only what its tracks leave audible.
+  let narrationOp: NarrationOp | undefined
   if (existsSync(runManifestPath)) {
     const m = JSON.parse(readFileSync(runManifestPath, 'utf8')) as RunManifest
+    if (m.attemptId === attempt) narrationOp = m.bundle?.narration?.op
     if (m.attemptId === attempt && m.kind === 'render_unchanged' && m.bundle?.narration) {
       // Recorded narration (after any re-voice): only the files narration-run.ts's steps write may differ, each
       // exactly as those steps write it from the frozen files and the receipt (src/lib/narration-guard.ts).
       const receipt = readNarrationReceipt(repoRoot)
-      const problems = checkNarration(join(repoRoot, FROZEN_DIR), videoDir, receipt, m)
+      const problems = checkNarration(
+        join(repoRoot, FROZEN_DIR),
+        videoDir,
+        receipt,
+        m,
+        readSttRecord(repoRoot),
+      )
       if (problems.length)
         throw new StepError(
           `narration_guard_failed: ${problems[0]}\nvideo/ changed in ways re-voicing and mixing the narration don't explain. Render-unchanged runs must not edit files. Stop and report this.\n- ${problems.join('\n- ')}`,
@@ -258,7 +269,10 @@ async function main() {
     '0',
     join(out, 'preview.gif'),
   ])
-  writeFileSync(join(out, 'captions.vtt'), toVtt(captionsForRender(repoRoot, summary.captions), durationSec))
+  writeFileSync(
+    join(out, 'captions.vtt'),
+    toVtt(captionsForRender(summary.captions, narrationOp), durationSec),
+  )
   run('tar', videoTarArgs(join(out, 'source.tar.gz')))
   // Best effort: a variant that can't be made is left out, and the service falls back to the poster and GIF.
   const previews = makePreviews({ video, out, posterAt, durationSec })

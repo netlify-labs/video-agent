@@ -1,5 +1,6 @@
 // The one order of a render-unchanged run's steps (plan 2026-11-02 §6.3 "Ordering"): restore, re-voice (when the
-// frozen bundle has lines to re-voice), mix the recorded narration (when it has narration), check, render. The prompt
+// frozen bundle has lines to re-voice), mix the recorded narration and transcribe it for captions (when it has
+// narration), check, render. The prompt
 // builder (src/domain/prompt.ts) numbers its steps from runSteps, prepare-run keeps the frozen copies the guards need
 // (frozenFilesFor), and render-job's guards (src/lib/revoice.ts checkRevoiced, src/lib/narration-guard.ts
 // checkNarration) allow exactly the files those steps write (mayChange). Re-voicing runs first because it can
@@ -7,11 +8,12 @@
 import { applyBusNarration, HOLD_STILL_SRC, NARRATION_SRC, type Summary } from './contract.js'
 import type { BUS_LIMITER } from './narration-bus.js'
 import type { CleanupMeasured } from './narration-cleanup.js'
+import { groupWords, withNarrationCues, type CueWord } from './narration-captions.js'
 import { FROZEN_FILES, revoicable } from './revoice.js'
 import type { RunManifest } from './run-manifest.js'
 import type { NarrationOp, Span } from './timeline.js'
 
-export type RunStep = 'prepare' | 'revoice' | 'narration' | 'check' | 'render'
+export type RunStep = 'prepare' | 'revoice' | 'narration' | 'transcribe' | 'check' | 'render'
 
 type FrozenBundle = Pick<NonNullable<RunManifest['bundle']>, 'revoice' | 'narration'>
 
@@ -20,7 +22,7 @@ export function runSteps(bundle: { revoice?: unknown; narration?: unknown } | nu
   return [
     'prepare',
     ...(bundle?.revoice ? (['revoice'] as const) : []),
-    ...(bundle?.narration ? (['narration'] as const) : []),
+    ...(bundle?.narration ? (['narration', 'transcribe'] as const) : []),
     'check',
     'render',
   ]
@@ -30,18 +32,20 @@ export function runSteps(bundle: { revoice?: unknown; narration?: unknown } | nu
 export const STEP_COMMANDS = {
   revoice: 'npx tsx scripts/voice.ts revoice',
   narration: 'npx tsx scripts/narration.ts',
+  transcribe: 'npx tsx scripts/narration-stt.ts',
 } as const
 
 /**
- * What scripts/narration.ts writes in video/: the bus, the composition, (once captions land) summary.json, and the
- * held frame's still (written when the composition holds its last frame, removed otherwise).
+ * What scripts/narration.ts writes in video/: the bus, the composition and the held frame's still (written when the
+ * composition holds its last frame, removed otherwise).
  */
-export const NARRATION_WRITES: readonly string[] = [
-  'index.html',
-  'summary.json',
-  NARRATION_SRC,
-  HOLD_STILL_SRC,
-]
+export const NARRATION_WRITES: readonly string[] = ['index.html', NARRATION_SRC, HOLD_STILL_SRC]
+
+/**
+ * What scripts/narration-stt.ts writes in video/: summary.json, the frozen cues plus the narration's (outside video/
+ * it writes .va-run/narration/stt.json and the receipt's `stt`).
+ */
+export const TRANSCRIBE_WRITES: readonly string[] = ['summary.json']
 
 /**
  * Whether a run of this bundle may change `path` (relative to video/). The guards still recompute every changed file
@@ -51,7 +55,8 @@ export function mayChange(path: string, bundle: FrozenBundle | null | undefined)
   return runSteps(bundle).some((s) =>
     s === 'revoice'
       ? revoicable(path, bundle?.revoice?.beats ?? [])
-      : s === 'narration' && NARRATION_WRITES.includes(path),
+      : (s === 'narration' && NARRATION_WRITES.includes(path)) ||
+        (s === 'transcribe' && TRANSCRIBE_WRITES.includes(path)),
   )
 }
 
@@ -72,8 +77,7 @@ export const optionalFrozenFilesFor = (bundle: FrozenBundle | null | undefined):
  * scripts/narration.ts's change to the composition (step 4), shared with checkNarration so the two can't disagree:
  * the narration element with its speech spans, the duck lane and the AI-voice levels (applyBusNarration). A held last
  * frame (contract applyHoldFrame) is already in the frozen composition, so it isn't part of this; its still is
- * (scripts/lib/hold-still.ts, receipt.hold). Captions from the narration (bead va-2qq.3.13) will add their cues to
- * `summary` here; until then it is returned unchanged.
+ * (scripts/lib/hold-still.ts, receipt.hold). summary.json is the transcribe step's (narrationSummary).
  */
 export function narrationTransform(
   html: string,
@@ -82,6 +86,22 @@ export function narrationTransform(
   speech: readonly Span[],
 ): { html: string; summary: Summary } {
   return { html: applyBusNarration(html, summary, op, speech).html, summary }
+}
+
+/** The transcript the transcribe step left in .va-run/narration/stt.json (the fields the cues come from). */
+export interface NarrationTranscript {
+  status: 'ok' | 'failed' | 'off' | 'timeout'
+  words: CueWord[]
+}
+
+/**
+ * scripts/narration-stt.ts's change to summary.json, shared with checkNarration: the frozen cues, all kept (the
+ * audible rule applies when render-job writes captions.vtt), plus the narration cues grouped from the transcript's
+ * words (none unless it is ok; earlier narration cues are replaced).
+ */
+export function narrationSummary(summary: Summary, transcript: NarrationTranscript | null): Summary {
+  const cues = transcript?.status === 'ok' ? groupWords(transcript.words) : []
+  return { ...summary, captions: withNarrationCues(summary.captions ?? [], cues) }
 }
 
 /** .va-run/narration/receipt.json, written by scripts/narration.ts step 5 and read by checkNarration. */
@@ -128,4 +148,11 @@ export interface NarrationReceipt {
   /** The held frame's still the run rendered (video/assets/hold/last.png), or null without a held frame. */
   hold: { path: typeof HOLD_STILL_SRC; sha256: string; atSeconds: number; holdSeconds: number } | null
   warnings: string[]
+  /** Written afterwards by scripts/narration-stt.ts: its status, provider and model, and the word count. */
+  stt?: {
+    status: NarrationTranscript['status']
+    provider: string | null
+    model: string | null
+    words: number
+  }
 }
