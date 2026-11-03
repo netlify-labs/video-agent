@@ -48,7 +48,6 @@ import {
   CopyField,
   Meta,
   STATUS_WORD,
-  StageTrack,
   Status,
   VersionImage,
   confirmDanger,
@@ -335,7 +334,14 @@ function Filmstrip({
                 {x.status === 'ready' ? (
                   <VersionImage videoId={video.id} v={x} file="poster" sizes="112px" />
                 ) : (
-                  <StageTrack version={x} />
+                  // A black frame with a spinner while it's being made; just the frame if it stopped.
+                  <div
+                    className="va-poster-wait"
+                    role="img"
+                    aria-label={`Stage: ${x.stage === 'finding_music' && x.status === 'running' ? 'Finding music' : STATUS_WORD[x.status]}`}
+                  >
+                    {inProgress(x.status) ? <Loader size={18} color="var(--va-accent)" /> : null}
+                  </div>
                 )}
               </div>
               <div style={{ minWidth: 0 }}>

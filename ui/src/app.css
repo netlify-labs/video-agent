@@ -613,6 +613,13 @@ body {
 .va-version {
   position: relative;
 }
+.va-poster-wait {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  display: grid;
+  place-items: center;
+}
 .va-version[aria-pressed='true'] {
   background: var(--va-raised);
 }
