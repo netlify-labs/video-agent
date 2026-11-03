@@ -103,12 +103,15 @@ test('setup: a quiet mic is too quiet', async ({ page }) => {
   await expect(page.getByTestId('level-verdict')).toContainText('Move closer')
 })
 
-test('setup: a denied mic shows help, Upload instead, and Retry recovers', async ({ page }) => {
+test('setup: a denied mic shows help, Upload instead, and Retry recovers', async ({ page, browserName }) => {
   await setup(page, { deny: true })
   await page.getByRole('button', { name: 'Check mic' }).click()
   const problem = page.getByTestId('mic-problem')
   await expect(problem).toContainText('The microphone is blocked')
-  await expect(problem).toContainText('set Microphone to Allow')
+  // The help names this browser's own setting (setup/mic.ts).
+  await expect(problem).toContainText(
+    browserName === 'firefox' ? 'remove the block' : 'set Microphone to Allow',
+  )
   await expect(page.getByTestId('mic-meter')).toHaveCount(0)
   await problem.getByRole('button', { name: 'Upload a file instead' }).click()
   await expect(page.getByTestId('upload-instead')).toBeVisible()

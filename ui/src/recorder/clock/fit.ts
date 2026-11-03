@@ -182,7 +182,10 @@ export interface FitOptions {
   /** A run is a frame step when every residual is within this of the same whole number of frames. */
   stepToleranceMs: number
   slopeTolerancePpm: number
-  /** Anchors in the first segment before residuals are checked (the fit is still settling). */
+  /**
+   * Anchors in the first segment before residuals are checked (the fit is still settling). When the warm-up fills,
+   * anchors off the warm-up's median offset by more than the residual limit are dropped as outliers (see `trimWarmup`).
+   */
   residualWarmup: number
   /** Anchors in a segment before its slope is checked. */
   slopeWarmup: number
@@ -257,6 +260,7 @@ export class SyncFitter {
   /** Anchors in the breaching run, not yet in a segment. */
   private pending: SyncPoint[] = []
   private stopped: Extract<FitEvent, { type: 'stop' }> | null = null
+  private trimmed = false
   readonly outliers: { sample: number; residualMs: number }[] = []
   readonly steps: { atSample: number; frames: number }[] = []
 
@@ -296,6 +300,7 @@ export class SyncFitter {
   push(p: SyncPoint): FitEvent {
     if (this.stopped) return this.stopped
     const o = this.options
+    if (!this.trimmed && this.pieces.length === 1 && this.piece.xs.length >= o.residualWarmup) this.trimWarmup()
     const line = this.currentLine()
     const checking = line && (this.pieces.length > 1 || this.piece.xs.length >= o.residualWarmup)
     if (!line || !checking) {
@@ -338,6 +343,38 @@ export class SyncFitter {
     this.split(from)
     this.steps.push({ atSample: from, frames: k })
     return { type: 'step', atSample: from, frames: k }
+  }
+
+  /**
+   * Warm-up anchors go into the fit unchecked, so one bad anchor there skews the line every later anchor is checked
+   * against. Firefox's rVFC reports a frame 8-12 frames ahead in up to one callback in five (docs/spikes.md S10,
+   * Firefox): 12 of the first 60 anchors sat 233-317 ms ahead, the least-squares line sat ~77 ms off, and the good anchors
+   * after the warm-up all breached. So once the warm-up fills, the anchors are checked against a robust reference
+   * instead: the median of their offsets t − x/sampleRate (the nominal slope; over a warm-up of 2 s the slope tolerance
+   * is ~2 ms, which the limit allows for). Anchors beyond the residual limit of it are outliers and leave the fit.
+   * Needs a majority of good anchors; a real step inside the warm-up keeps the majority side and the step shows after.
+   */
+  private trimWarmup() {
+    this.trimmed = true
+    const o = this.options
+    const { xs, ys } = this.piece
+    if (xs.length < 3) return
+    const x0 = xs[0] ?? 0
+    const nominal = 1 / o.sampleRate
+    const offsets = xs.map((x, i) => (ys[i] ?? 0) - (x - x0) * nominal)
+    const ref = median(offsets)
+    const spanS = ((xs.at(-1) ?? x0) - x0) / o.sampleRate
+    const limit = (o.residualLimitMs + spanS * o.slopeTolerancePpm * 1e-3) / 1000
+    const keep = offsets.map((d) => Math.abs(d - ref) <= limit)
+    const kept = keep.filter(Boolean).length
+    if (kept === xs.length || kept < 2) return
+    keep.forEach((k, i) => {
+      if (!k) this.outliers.push({ sample: xs[i] ?? 0, residualMs: ((offsets[i] ?? 0) - ref) * 1000 })
+    })
+    this.pieces[0] = piece(
+      xs.filter((_, i) => keep[i]),
+      ys.filter((_, i) => keep[i]),
+    )
   }
 
   private add(p: SyncPoint) {

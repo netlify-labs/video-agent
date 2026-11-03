@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { AudioClock, type ClockContext } from './audio-clock'
 import type { StopKind } from './fit'
-import { PictureClock, PictureMonitor, type Anchor } from './picture'
+import { lookaheadAnchors, PictureClock, PictureMonitor, type Anchor } from './picture'
 
 const FPS = 30
 const FRAME_MS = 1000 / FPS
@@ -60,18 +60,30 @@ function rig() {
   }).start()
   // Take starts at perf 1000: context frame (1000 − 500) / 1000 · 48000.
   clock.beginTake({ startFrame: 24_000 })
-  /** Plays `n` frames from frame `from` via the rVFC callback; `shift` frames of picture offset from `stepAt` on. */
-  const play = (from: number, n: number, o: { stepAt?: number; shift?: number; wobbleFrom?: number } = {}) => {
+  /**
+   * Plays `n` frames from frame `from` via the rVFC callback; `shift` frames of picture offset from `stepAt` on.
+   * `firefox` makes it look like Firefox's rVFC under a busy main thread (docs/spikes.md S10, Firefox): every fifth
+   * callback is a lookahead, and every 25th two in a row, reporting a frame 8-11 frames ahead with presentedFrames
+   * jumping by as many.
+   */
+  let jumped = 0
+  const play = (
+    from: number,
+    n: number,
+    o: { stepAt?: number; shift?: number; wobbleFrom?: number; firefox?: boolean } = {},
+  ) => {
     for (let k = from; k < from + n; k++) {
       const e = 1000 + k * FRAME_MS
       time.now = e
       audio.sample()
       const shift = o.stepAt !== undefined && k >= o.stepAt ? (o.shift ?? -1) / FPS : 0
       const wobble = o.wobbleFrom !== undefined && k >= o.wobbleFrom ? 0.015 : 0
+      const ahead = o.firefox && (k % 5 === 3 || k % 25 === 4) ? 8 + (k % 4) : 0
+      jumped += ahead
       video.cb?.(e, {
-        mediaTime: k / FPS + shift + wobble,
+        mediaTime: (k + ahead) / FPS + shift + wobble,
         expectedDisplayTime: e,
-        presentedFrames: k + 1,
+        presentedFrames: k + 1 + jumped,
         presentationTime: e,
         width: 0,
         height: 0,
@@ -228,5 +240,62 @@ describe('PictureClock', () => {
     c.stop('user')
     // Anchor 0 maps a few samples before the take's first sample (the render map's bias) and is left out.
     expect(c.fitFor().segments[0]?.n).toBeGreaterThanOrEqual(119)
+  })
+
+  describe('Firefox lookahead anchors (docs/spikes.md S10, Firefox)', () => {
+    it('are dropped: the take runs on, one clean segment, nothing in the fit is a lookahead', () => {
+      const r = rig()
+      // Before the fix: anchors 60-62 breached a line the warm-up lookaheads had skewed, and the take stopped
+      // ('residual', worst 157 ms) about 2 s in.
+      r.play(0, 600, { firefox: true })
+      expect(r.clock.stopReason).toBeNull()
+      expect(r.clock.lookaheads).toBe(144)
+      // The picture monitor saw only the steady anchors: no breaks or steps.
+      expect(r.clock.monitor.steps).toEqual([])
+      r.clock.stop('user')
+      expect(r.clock.anchors).toHaveLength(600)
+      const fit = r.clock.fitFor()
+      expect(fit.lookaheads).toBe(144)
+      // 600 − 144 lookaheads, less anchor 0 when it maps just before the take's first sample (the render map's bias).
+      expect(fit.segments[0]!.n).toBeGreaterThanOrEqual(455)
+      expect(fit.segments[0]!.n).toBeLessThanOrEqual(456)
+      expect(fit.outliers).toBe(0)
+      expect(fit.segments).toHaveLength(1)
+      expect(fit.segments[0]!.residualMax).toBeLessThan(1)
+      expect(Math.abs(fit.segments[0]!.a * 1000)).toBeLessThan(2)
+      expect(Math.abs(fit.slopePpm!)).toBeLessThan(100)
+      expect(r.log).toHaveBeenCalledWith('clock.lookahead', expect.objectContaining({ count: 1 }))
+    })
+
+    it('a real drift still stops the take at its first anchor', () => {
+      const r = rig()
+      r.play(0, 400, { firefox: true, wobbleFrom: 302 })
+      expect(r.clock.stopReason?.kind).toBe('residual')
+      expect(Math.abs(r.clock.stopReason!.atSample! - 302 * FRAME_MS * 24)).toBeLessThan(48)
+    })
+
+    it('a one-frame picture step still splits the fit instead of stopping', () => {
+      const r = rig()
+      r.play(0, 600, { firefox: true, stepAt: 402 })
+      expect(r.clock.stopReason).toBeNull()
+      r.clock.stop('user')
+      const fit = r.clock.fitFor()
+      expect(fit.segments).toHaveLength(2)
+      expect(fit.steps[0]?.frames).toBe(-1)
+      for (const s of fit.segments) expect(s.residualMax).toBeLessThan(1)
+    })
+
+    it('lookaheadAnchors finds one and two in a row, and nothing on a steady picture', () => {
+      const at = (ms: number[]) => ms.map((m, k) => ({ mediaTime: m / 1000, expectedDisplayTime: k, now: k, presentedFrames: k }))
+      expect([...lookaheadAnchors(at([0, 33, 333, 67, 100, 433, 467, 133, 167]))]).toEqual([2, 5, 6])
+      expect(lookaheadAnchors(at([0, 33, 67, 67, 100])).size).toBe(0)
+    })
+
+    it('a seek backwards is not a lookahead: it stops the take', () => {
+      const r = rig()
+      r.play(0, 120, { firefox: true })
+      r.video.dispatchEvent(new Event('seeking'))
+      expect(r.clock.stopReason?.kind).toBe('seek')
+    })
   })
 })

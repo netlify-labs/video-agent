@@ -382,6 +382,32 @@ What this changes or tells the plan:
 - **Memory is small.** Memory during a 10-minute take stays at 2–6 MB. The growth (about 0.37 MB a minute) is
   the harness's anchor log. The audition budget holds at 200 MB against 1.76 GB for decoding every take.
 
+**Firefox** (2026-11-03, Playwright Firefox 157, headless, mock build, the record-flow take). Takes stopped about 2 s
+in with `residual` ("3 anchors beyond 10 ms, worst 157 ms"), intermittently, whenever the main thread was busy; a
+page script blocking it 30-60 ms every 100 ms reproduces it every time. What the anchors look like:
+
+- The steady anchors are very clean: `mediaTime − expectedDisplayTime` holds to ±0.7 ms (0.01 ms resolution,
+  although `performance.now()` itself is 1 ms here).
+- But in up to one callback in five (12 of the first 63; 4-24 per 9 s under load) rVFC reports a **lookahead**: a
+  `mediaTime` 8-12 frames (233-400 ms) ahead of the steady offset, with `presentedFrames` jumping by as many (13 → 23),
+  one or two in a row, and the next callback back on the steady offset with an earlier `mediaTime` (0.733 then
+  0.600). Firefox reports a queued frame, not the one on screen. Chromium never does this.
+- The fit's warm-up (60 anchors, unchecked) took them in: the least-squares line sat ~77 ms off, so the first checked
+  good anchors all breached and the take stopped.
+- `getOutputTimestamp` works, but its `performanceTime` is `now − outputLatency` (21.9 ms) and `contextTime` trails
+  `currentTime` by the same amount, so the output map comes out equal to the render map (the monitor's concern, not
+  the take's fit).
+
+What changed: `PictureClock` holds each anchor back three callbacks (`LOOKAHEAD_HOLD`) and drops any anchor whose
+`mediaTime` is later than a newer one's (`lookaheadAnchors`). The picture monitor, the online fit and the final fit
+only see the rest, and `TakeFit.lookaheads` counts the dropped ones. A forward-playing picture never shows a frame and
+then an earlier one, so the rule doesn't depend on the browser. `anchors` and the anchor listeners still get every
+anchor at once, because the stem monitor and the teleprompter take medians over them and need no delay. As a second
+guard, the fit's warm-up is trimmed when it fills: anchors more than the residual limit from the warm-up's median
+offset leave the fit as outliers. The residual limit (10 ms), the step rule and the slope rule are unchanged, and a
+15 ms drift or a 2500 ppm slope still stops a take with lookaheads in it (unit tests). Firefox's `presentedFrames`
+jumps still count as skipped frames, so `skippedFrames` overstates Firefox's real frame loss.
+
 #### Pending: owner hardware matrix (`spikes/s10/CHECKLIST.md`)
 
 The checklist runs Chrome, Safari and Firefox on macOS, about 28 minutes per browser, with built-in, USB and

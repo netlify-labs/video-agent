@@ -37,6 +37,32 @@ export interface Anchor {
   presentedFrames: number
 }
 
+/**
+ * Anchors held back before the picture monitor and the online fit see them (PictureClock.observe): Firefox's
+ * lookaheads came one or two in a row.
+ */
+export const LOOKAHEAD_HOLD = 3
+
+/**
+ * Lookahead anchors: ones whose mediaTime is later than one of the next `hold` anchors'. Playing forward, the picture
+ * never shows a frame and then an earlier one, so such an anchor didn't show that frame at that time. Firefox's rVFC
+ * does this when the main thread is busy (docs/spikes.md S10, Firefox): up to one callback in five reports a frame
+ * 8-12 frames (283-400 ms) ahead of the steady offset, presentedFrames jumping by as many, one or two in a row, and
+ * the next callback is back on the steady offset. Returns their indices.
+ */
+export function lookaheadAnchors(anchors: readonly Anchor[], hold = LOOKAHEAD_HOLD): Set<number> {
+  const out = new Set<number>()
+  anchors.forEach((a, i) => {
+    for (let j = i + 1; j <= i + hold && j < anchors.length; j++) {
+      if ((anchors[j]?.mediaTime ?? Infinity) < a.mediaTime) {
+        out.add(i)
+        return
+      }
+    }
+  })
+  return out
+}
+
 /** Seconds: what the picture shows at perf time p is p/1000 + pictureOffset (for a steady picture). */
 export const pictureOffset = (a: Anchor): number => a.mediaTime - a.expectedDisplayTime / 1000
 
@@ -127,10 +153,14 @@ export class PictureMonitor {
     if (this.recent.length > this.options.reference) this.recent.shift()
   }
 
-  /** The watchdog: a stall when the last anchor is older than stallMs while the video plays. */
-  checkStall(now: number, paused: boolean): Extract<PictureEvent, { kind: 'stall' }> | null {
-    if (paused || !this.last) return null
-    const gapMs = now - this.last.now
+  /** The watchdog: a stall when the last anchor (`last`, default the last observed) is older than stallMs while playing. */
+  checkStall(
+    now: number,
+    paused: boolean,
+    last: Anchor | null = this.last,
+  ): Extract<PictureEvent, { kind: 'stall' }> | null {
+    if (paused || !last) return null
+    const gapMs = now - last.now
     return gapMs > this.options.stallMs ? { kind: 'stall', gapMs } : null
   }
 }
@@ -177,6 +207,8 @@ export interface TakeFit {
   cleanSamples: number
   steps: { atSample: number; frames: number }[]
   outliers: number
+  /** Lookahead anchors dropped (Firefox; see PictureClock.observe). */
+  lookaheads: number
   skippedFrames: number
   anchors: number
   outputSource: OutputSource | null
@@ -187,7 +219,12 @@ export interface TakeFit {
 type StopListener = (reason: StopReason) => void
 
 export class PictureClock {
+  /** Every anchor the video gave, lookaheads included (medians over them, as the stem monitor takes, shrug those off). */
   readonly anchors: Anchor[] = []
+  /** The newest anchors, held back from the picture monitor and the online fit until later ones rule out lookaheads. */
+  private held: Anchor[] = []
+  /** Lookahead anchors dropped from the online stream. */
+  lookaheads = 0
   readonly monitor: PictureMonitor
   private fitter: SyncFitter | null = null
   private take: Required<TakeClockInput> | null = null
@@ -269,20 +306,58 @@ export class PictureClock {
       outRate: input.outRate ?? SAMPLE_RATE,
     }
     this.fitter = new SyncFitter({ ...this.fitOptions, sampleRate: this.take.outRate })
-    for (const a of this.anchors) this.fitAnchor(a)
+    // The held anchors aren't released yet; observe() fits them when they are.
+    const released = this.anchors.length - this.held.length
+    const lookahead = lookaheadAnchors(this.anchors)
+    this.anchors.slice(0, released).forEach((a, i) => {
+      if (!lookahead.has(i)) this.fitAnchor(a)
+    })
   }
 
   /** The watchdog tick (100 ms). Public for tests. */
   tick(): void {
-    const s = this.monitor.checkStall(this.now(), this.video.paused)
+    const s = this.monitor.checkStall(this.now(), this.video.paused, this.anchors.at(-1) ?? null)
     if (s) this.stop('stall', `no frame for ${Math.round(s.gapMs)} ms`)
   }
 
-  /** Feeds one anchor (the rVFC callback does this; tests call it directly). */
+  /**
+   * Feeds one anchor (the rVFC callback does this; tests call it directly). It joins `anchors` and the anchor
+   * listeners hear it at once; the picture monitor and the online fit get it LOOKAHEAD_HOLD callbacks later, unless a
+   * newer anchor showed it was a lookahead (`lookaheadAnchors`). A stop found then still ends the clean part at the
+   * first breaching anchor, so the hold-back only delays it by a few frames.
+   */
   observe(a: Anchor): void {
     if (this.stopped) return
     this.o.audioClock?.sample()
     this.anchors.push(a)
+    this.dropLookaheads(a.mediaTime)
+    this.held.push(a)
+    const events: PictureEvent[] = []
+    // release() may stop the take (stopReason is a getter, so this isn't narrowed away).
+    while (this.held.length > LOOKAHEAD_HOLD && !this.stopReason) events.push(...this.release(this.held.shift() as Anchor))
+    for (const l of this.anchorListeners) l(a, events)
+  }
+
+  /** Drops held anchors later than `mediaTime` (lookaheads). */
+  private dropLookaheads(mediaTime: number) {
+    const kept = this.held.filter((h) => h.mediaTime <= mediaTime)
+    for (const h of this.held) {
+      if (h.mediaTime <= mediaTime) continue
+      this.lookaheads++
+      // The first, then every 100th: under load Firefox gives several a second.
+      if (this.lookaheads === 1 || this.lookaheads % 100 === 0)
+        this.o.log?.('clock.lookahead', {
+        mediaTime: h.mediaTime,
+        next: mediaTime,
+        presentedFrames: h.presentedFrames,
+        count: this.lookaheads,
+      })
+    }
+    this.held = kept
+  }
+
+  /** Feeds a held anchor to the picture monitor and the online fit; returns the monitor's events. */
+  private release(a: Anchor): PictureEvent[] {
     const events = this.monitor.observe(a)
     for (const e of events) {
       if (e.kind === 'step') {
@@ -291,8 +366,8 @@ export class PictureClock {
         this.o.log?.('clock.picture-step', { frames: e.frames, anchor: e.index, atSample: at })
       }
     }
-    for (const l of this.anchorListeners) l(a, events)
     this.fitAnchor(a)
+    return events
   }
 
   private readonly onFrame = (now: number, md: VideoFrameCallbackMetadata) => {
@@ -333,9 +408,10 @@ export class PictureClock {
       atSample: sample === null ? null : Math.max(0, Math.floor(sample)),
       ...(detail === undefined ? {} : { detail }),
     }
+    this.held = []
     this.detach?.()
     this.detach = null
-    this.o.log?.('clock.stop', { ...this.stopped, anchors: this.anchors.length })
+    this.o.log?.('clock.stop', { ...this.stopped, anchors: this.anchors.length, lookaheads: this.lookaheads })
     for (const l of this.listeners) l(this.stopped)
   }
 
@@ -362,6 +438,7 @@ export class PictureClock {
       cleanSamples: 0,
       steps: [],
       outliers: 0,
+      lookaheads: this.lookaheads,
       skippedFrames: this.monitor.skipped,
       anchors: this.anchors.length,
       outputSource: ck?.outputSource ?? null,
@@ -370,7 +447,10 @@ export class PictureClock {
     if (!input || !ck) return empty
     const outRate = input.outRate ?? SAMPLE_RATE
     const points: SyncPoint[] = []
-    for (const a of this.anchors) {
+    // The final fit leaves lookaheads out, as the online fit did.
+    const lookahead = lookaheadAnchors(this.anchors)
+    for (const [i, a] of this.anchors.entries()) {
+      if (lookahead.has(i)) continue
       const x = ck.perfToTakeSample(a.expectedDisplayTime, input.startFrame, outRate)
       if (x >= 0) points.push({ sample: x, time: a.mediaTime })
     }
@@ -392,6 +472,7 @@ export class PictureClock {
       cleanSamples: fit.cleanSamples,
       steps: [...pictureSteps, ...fit.steps].sort((p, q) => p.atSample - q.atSample),
       outliers: fit.outliers,
+      lookaheads: lookahead.size,
       slopePpm: longest ? slopePpm(longest.b, outRate) : null,
     }
   }

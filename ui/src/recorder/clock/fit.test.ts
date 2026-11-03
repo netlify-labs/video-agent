@@ -172,4 +172,47 @@ describe('piecewise fit', () => {
     expect(segs[1]!.fromSample).toBe(pts[150]!.sample)
     expect(segs[0]!.n + segs[1]!.n).toBe(pts.length)
   })
+
+  // Warm-up anchors go into the fit unchecked. Firefox's rVFC (docs/spikes.md S10, Firefox) reports a frame 8-12
+  // frames ahead in up to one callback in five; the picture clock drops those (lookaheadAnchors), but before it did, 12
+  // of the first 60 skewed the warm-up line by ~77 ms and the first checked anchors stopped the take ('residual', worst
+  // 157 ms). The warm-up is now trimmed against its median offset, so stray anchors there can't do that.
+  const strays = (pts: SyncPoint[], until = 60) =>
+    pts.map((p, i) => (i < until && i % 5 === 3 ? { ...p, time: p.time + (7 + (i % 4)) / FPS } : p))
+
+  it('stray anchors in the warm-up are trimmed: no stop, one clean segment', () => {
+    const { pts, a } = take({ seconds: 30, ppm: 64, jitterMs: 1 })
+    const ff = strays(pts)
+    const f = fitPiecewise(ff, Math.ceil(ff.at(-1)!.sample))
+    expect(f.stop).toBeNull()
+    expect(f.steps).toEqual([])
+    expect(f.segments).toHaveLength(1)
+    expect(f.outliers).toBe(12)
+    expect(f.segments[0]!.n).toBe(pts.length - 12)
+    expect(f.segments[0]!.residualMax).toBeLessThan(1.5)
+    expect(f.segments[0]!.a).toBeCloseTo(a, 3)
+    expect(Math.abs(slopePpm(f.segments[0]!.b) - 64)).toBeLessThan(30)
+  })
+
+  it('after a trimmed warm-up, a real drift still stops and a one-frame step still splits', () => {
+    const { pts } = take({ seconds: 30, jitterMs: 1 })
+    const bad = strays(pts).map((p, i) => (i >= 450 ? { ...p, time: p.time + 0.015 } : p))
+    const f = fitPiecewise(bad, Math.ceil(bad.at(-1)!.sample))
+    expect(f.stop?.kind).toBe('residual')
+    expect(f.stop?.atSample).toBeCloseTo(bad[450]!.sample, 6)
+    const stepped = take({ seconds: 30, jitterMs: 1, steps: [{ at: 450, frames: -1 }] }).pts
+    const g = fitPiecewise(strays(stepped), Math.ceil(stepped.at(-1)!.sample))
+    expect(g.stop).toBeNull()
+    expect(g.steps.map((s) => s.frames)).toEqual([-1])
+    const fast = take({ seconds: 30, ppm: 2500 }).pts
+    expect(fitPiecewise(strays(fast), Math.ceil(fast.at(-1)!.sample)).stop?.kind).toBe('slope')
+  })
+
+  it('the warm-up trim keeps a clean take whole', () => {
+    const { pts } = take({ seconds: 10, ppm: 900, jitterMs: 2 })
+    const f = fitPiecewise(pts, Math.ceil(pts.at(-1)!.sample))
+    expect(f.stop).toBeNull()
+    expect(f.outliers).toBe(0)
+    expect(f.segments[0]!.n).toBe(pts.length)
+  })
 })
