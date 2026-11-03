@@ -25,6 +25,8 @@ const DocsSkillsPage = routes.lazyPage(routes.docsSkillsRoute, (m) => m.default)
 const TimelineDemo = import.meta.env.VITE_MOCK ? lazy(() => import('./mock/TimelineDemo')) : null
 // And the narration lock and stale-base banners on a mock draft (/dev/narration).
 const NarrationDemo = import.meta.env.VITE_MOCK ? lazy(() => import('./mock/NarrationDemo')) : null
+// Mock builds only: the voice-over recorder on its own (/dev/recorder).
+const RecorderDemo = import.meta.env.VITE_MOCK ? lazy(() => import('./mock/RecorderDemo')) : null
 
 /** /docs opens the REST reference; old /docs?tab=mcp|skills links open their page, keeping the hash. */
 function DocsRedirect() {
@@ -180,6 +182,16 @@ export function App() {
             element={
               <Page>
                 <NarrationDemo />
+              </Page>
+            }
+          />
+        ) : null}
+        {RecorderDemo ? (
+          <Route
+            path="/dev/recorder"
+            element={
+              <Page>
+                <RecorderDemo />
               </Page>
             }
           />
