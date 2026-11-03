@@ -904,9 +904,11 @@ try {
   const sv = await fetchTo(v2.links.captions, 'silence.vtt')
   const sCues = parseVtt(sv.text)
   log('silence', { captions: v2.captions, cues: sCues.length, vtt: sv.text.slice(0, 120) })
+  // Transcribing silence succeeds and hears nothing: status ok with no cues (off when the track is muted or
+  // transcription is turned off). Only a failed transcription would be wrong here.
   check(
-    ['off', 'failed'].includes(v2.captions?.status ?? ''),
-    'a silence-only take should render with captions off or failed',
+    ['ok', 'off'].includes(v2.captions?.status ?? ''),
+    'a silence-only take should render with captions ok (nothing heard) or off',
     { captions: v2.captions },
   )
   check(
