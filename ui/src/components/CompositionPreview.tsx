@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 // zod/mini: the same validation as classic zod at a fraction of the bundle size.
 import * as z from 'zod/mini'
 import { fetchClient } from '../api/client'
+import { clockTime } from './bits'
 
 const Msg = z.discriminatedUnion('type', [
   z.object({ type: z.literal('ready'), channel: z.string(), duration: z.number().check(z.nonnegative()) }),
@@ -39,8 +40,6 @@ interface Link {
 
 /** Renew this long before the link expires. */
 const RENEW_EARLY_MS = 60_000
-
-const clock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
 
 export function CompositionPreview({
   videoId,
@@ -277,14 +276,14 @@ export function CompositionPreview({
           step={0.05}
           value={Math.min(time, duration)}
           disabled={!ready}
-          label={(v) => clock(v)}
+          label={(v) => clockTime(v)}
           onChange={(v) => {
             setTime(v)
             send({ type: 'seek', time: v })
           }}
         />
         <Text size="xs" c="var(--va-faint)" className="num" w={78} ta="right">
-          {clock(time)} / {clock(duration)}
+          {clockTime(time)} / {clockTime(duration)}
         </Text>
       </Group>
       <Text size="xs" c="var(--va-faint)">

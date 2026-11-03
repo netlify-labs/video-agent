@@ -30,7 +30,7 @@ import {
   voiceStateFrom,
   type VoiceState,
 } from '../components/VoiceoverControl'
-import { CommentsCard, ReviewPlayer, VerdictBar, clockTime, type Pin } from '../components/Review'
+import { CommentsCard, ReviewPlayer, VerdictBar, type Pin } from '../components/Review'
 import { CompositionPreview } from '../components/CompositionPreview'
 import {
   IconBell,
@@ -50,6 +50,7 @@ import {
   STATUS_WORD,
   Status,
   VersionImage,
+  clockTime,
   confirmDanger,
   credits,
   duration,

@@ -18,6 +18,7 @@ import { useState } from 'react'
 import { $api, useCanCreate } from '../api/client'
 import type { paths } from '../api/schema'
 import { uploadFile } from '../lib/upload'
+import { clockTime } from './bits'
 import { FindMusicModal } from './FindMusic'
 
 export type Media = paths['/api/v1/media/{id}']['get']['responses'][200]['content']['application/json']
@@ -69,10 +70,7 @@ export function Thumb({ m }: { m: Media }) {
 }
 
 /** 95 → "1:35". */
-export const duration = (sec: number) => {
-  const s = Math.round(sec)
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
-}
+export const duration = (sec: number) => clockTime(Math.round(sec))
 
 export const KIND_LABEL: Record<MediaKind, string> = {
   image: 'Images',

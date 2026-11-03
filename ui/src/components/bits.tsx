@@ -126,6 +126,11 @@ export function duration(sec: number | null | undefined): string {
   return m ? `${m}:${String(s).padStart(2, '0')}` : `${s.toFixed(0)} s`
 }
 
+/** 95.7 → "1:35" (whole seconds, rounded down). */
+export function clockTime(sec: number) {
+  return `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, '0')}`
+}
+
 export function credits(v: number | undefined | null): string {
   return v === undefined || v === null ? '—' : v.toFixed(0)
 }

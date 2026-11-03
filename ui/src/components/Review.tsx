@@ -22,7 +22,7 @@ import { IconCheck, IconDots, IconMapPin, IconX } from '@tabler/icons-react'
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import { $api, commentsInit, newIdempotencyKey, type Version, type Video } from '../api/client'
 import type { paths } from '../api/schema'
-import { fileUrl, imageUrl, relativeTime, showError } from './bits'
+import { clockTime, fileUrl, imageUrl, relativeTime, showError } from './bits'
 
 type Comment =
   paths['/api/v1/videos/{id}/comments']['get']['responses'][200]['content']['application/json']['items'][number]
@@ -42,10 +42,6 @@ export function contentBox(el: { width: number; height: number }, video: { width
   const width = video.width * scale
   const height = video.height * scale
   return { left: (el.width - width) / 2, top: (el.height - height) / 2, width, height }
-}
-
-export function clockTime(sec: number) {
-  return `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, '0')}`
 }
 
 function useComments(videoId: string) {
