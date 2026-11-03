@@ -264,6 +264,143 @@ hyperframes tts`, free, installed on demand only when a video has a voice-over) 
 
 ## Voice-over spikes
 
+### S10: browser sync and capture harness (2026-11-03, `spikes/s10`, `spikes/s10/make-media.sh && npx playwright test -c spikes/s10`)
+
+One instrumented page (no app integration), served by `spikes/s10/server.ts`. The server type-strips the TypeScript
+with Node's `stripTypeScriptTypes`, so the spike adds no bundler and no dependency. It reuses `src/lib/peaks.ts` and
+`timeline.ts` unchanged.
+
+- **Media** (`make-media.sh`, generated, git-ignored): H.264 30 fps MP4s of 30 s and 10 min. Each is black with a
+  white flash for 3 frames at 1 s and then every 4 s, plus a 15-bit binary frame counter. Each has a 48 kHz WAV
+  stem: a quiet 220/330 Hz bed plus 50 ms 2 kHz beeps that start on the flash frames to the sample. There is also
+  `fake-mic.wav`, with a beep every 2.000 s.
+- **Picture:** a `<video muted>` with `requestVideoFrameCallback` anchors `(mediaTime, expectedDisplayTime)`.
+- **Clocks:** the page keeps three maps onto `performance.now()`. The picture map comes from the rVFC anchors. The
+  render map pairs `(currentTime, perf)` at the first sight of each new `currentTime`, and input samples go through
+  it. The output map comes from `getOutputTimestamp()` and schedules the monitor. `outputLatency` is never added to
+  `getOutputTimestamp()`; it is used only in the labelled fallback when that call is missing.
+- **Monitor:** the stem plays in the same single `AudioContext`, positioned from the anchors through the output map.
+- **Capture:** `getUserMedia` (EC/NS/AGC configurable, default all off) → `AudioWorkletNode` (2,048-frame
+  transferable blocks with their `currentFrame`, posted straight to the worker over a `MessagePort`) → worker. The
+  worker does gap fill, a streaming **windowed-sinc polyphase resample** to 24 kHz (Blackman, 16 zero crossings,
+  cutoff 0.45 × the lower rate, a 256-phase table with linear interpolation between phases, exact integer timing),
+  `PeaksBuilder`, an onset detector, PCM16 encoding, a **streaming SHA-256** (our own; `lib/sha256.ts`), and an
+  IndexedDB write per 0.5 s chunk **from the first chunk**. Each write updates a take record with the running PCM
+  hash. A MediaRecorder runs on the same stream for comparison.
+- **Fit:** `t = a + b·sample` by least squares over every anchor, reported as RMS and max residual and slope in
+  ppm. The take stops on: residual above the threshold (default 10 ms) for 3 consecutive anchors, slope beyond the
+  tolerance, `seeking`, `waiting` or a frame gap over 300 ms (stall), a hidden tab, `devicechange`, or track
+  `ended`. The report keeps the clean sample count.
+- **Measurement and calibration:** beeps or claps in the take are matched to the nearest flash, and the report
+  gives the start, middle and end offset error raw and with each calibration. The calibrations are (a) 8 scheduled
+  clicks through speakers: input latency = render-map time of the captured onset − output-map time of the click;
+  (b) 8 claps on the flashes, robust mean with outliers dropped; (c) a manual slider.
+- **Stress:** memory (`measureUserAgentSpecificMemory`, else `performance.memory`); stop → file hash → assemble from
+  IndexedDB → POST `/upload`, which re-hashes; recovery after a reload; a 32-take audition under a 200 MB decode
+  budget (10 s windows, 30 s ahead and 5 s behind the playhead, LRU).
+- **Reports and checklist:** every report is downloadable and POSTed to `spikes/s10/out/<ts>-<kind>.json`.
+  `analyze.ts` prints the tables (`--markdown` for this file). `spikes/s10/CHECKLIST.md` is the owner run.
+
+**Automated results** (Playwright 1.64, Chromium 156 Chrome for Testing, headless, macOS, context 48 kHz). The mic
+is **synthetic**. Chromium's `--use-fake-device-for-media-stream` (with `--use-file-for-fake-audio-capture`) never
+resolves `getUserMedia` on this agent host, headless or headed, even with `--use-fake-ui-for-media-stream` and the
+microphone permission granted. The browser log shows the fake device opened and the stream started, and the
+renderer promise still hangs. So the page loops `fake-mic.wav` through a `MediaStreamAudioDestinationNode`, and
+everything from `MediaStreamAudioSourceNode` on is the real path. The flags remain in the config (`S10_MIC=device`)
+for a host where they work. Headless rVFC timestamps have no real vsync, so residuals here show only the pipeline's
+own error.
+
+| Check | 30 s take | 10 min take (`S10_LONG=1`, full 600 s) |
+|---|---|---|
+| Captured samples = `ceil(frames × 24000 / 48000)` | 720,128 = 720,128 | 14,400,256 = 14,400,256 |
+| Fill-in / no-input quanta | 0 / 0 | 0 / 0 |
+| Worker file SHA-256 = one-shot SubtleCrypto of the assembled WAV = server's | yes | yes |
+| Streamed PCM hash = one-shot; running hash in the IndexedDB record | yes; yes | yes; yes |
+| Peaks (level 0 bins = ceil(samples / 1024); max diff vs recompute) | 11 levels, 704 bins; 0 | 15 levels, 14,063 bins; 0 |
+| Pipeline consistency: captured beep spacing vs the file's 48,000 samples | 14 intervals, 0 samples error | 299 intervals, 0 samples error |
+| Stop → worker done (flush + writes + file-hash pass) | 92 ms (file hash 61 ms) | 171 ms (file hash 164 ms, 28.8 MB) |
+| Stop → uploaded (adds assemble from IndexedDB + POST to localhost) | 207 ms | 285 ms (604 ms in a 22 MB run) |
+| IndexedDB write per chunk p50 / p99 / max, max pending | 5.8 / 26 / 26 ms, 2 | 0.35 / 18 / 38 ms, 2 |
+| Fit residual RMS / max; slope | 0.002 / 0.005 ms; +31.7 ppm | 8.9 / 18.5 ms; −43 ppm (one-frame step, below) |
+| Render map residual RMS / max | 1.5 / 3.0 ms | 1.5 / 3.1 ms |
+| Output latency implied by `getOutputTimestamp` vs reported `outputLatency + baseLatency` | 30.2 vs 32.3 ms | 30.2 vs 32.3 ms |
+| Monitor vs picture, mean / max | −0.5 / 1.0 ms | +1.9 / 20.6 ms (drift, below) |
+| MediaRecorder (webm/opus, 129 kbps): `start` event / decoded sample 0 on the take's timeline | +53 ms / +4.8 ms | +58 ms / +13.5 ms |
+| Memory during the take (`measureUserAgentSpecificMemory`) | 1.7 MB | 2.2 MB at 48 s → 5.5 MB at 587 s |
+
+| Other automated check | Result |
+|---|---|
+| Stop conditions (simulated at about 3 s: seek, hidden tab, `devicechange`, track `ended`, residual with a 0.01 ms threshold) | each stopped with its own reason; clean part about 72,500 samples |
+| Recovery after a reload at about 5.5 s | 132,000 samples (11 chunks) recovered, running hash matches, clock record has 120 anchors and a fit, 3 ms |
+| Audition: 32 × 10-min takes, 8 active, 200 MB | peak 199.6 MB (decode-all would be 1,758 MB); 1,400 window decodes at 2.2 ms; 1,182 evictions; JS heap peak 204 MB (Chromium counts AudioBuffers in the heap) |
+| Resampler (2 s of 1 kHz + 15 kHz, 48 and 44.1 kHz in) | −91 dB error against the ideal 1 kHz, so the 15 kHz tone is gone; the count is exact; block-wise = one-shot |
+| Onset detector on synthetic 2 kHz beeps | +1 sample (0.04 ms) late, every time |
+| Calibration code paths (a), (b) | run; the numbers are meaningless with a synthetic mic: (a) hears no clicks, and (b)'s "claps" are file beeps |
+
+**API matrix** (Playwright browsers; real Safari and Firefox are in the owner checklist):
+
+| API | Chromium 156 | WebKit 27.2 (Playwright) | Firefox |
+|---|---|---|---|
+| `requestVideoFrameCallback` | yes | yes | not run |
+| `getOutputTimestamp` | yes (live values) | yes (live values) | not run |
+| `outputLatency` / `baseLatency` (headless, fake output) | 27.0 / 5.3 ms | 15.6 / 2.7 ms | not run |
+| AudioWorklet, module Worker, IndexedDB | yes | yes | not run |
+| MediaRecorder types | webm opus/pcm, mp4 aac/opus | webm opus, mp4 aac/opus | not run |
+| `measureUserAgentSpecificMemory` / `performance.memory` | yes / yes | no / no | not run |
+| `AudioContext.setSinkId` | yes | no | not run |
+| Storage quota | 10,240 MB | 1,000 MB | not run |
+
+Playwright's Firefox build (firefox-1555) isn't installed on this machine and wasn't installed for this spike, so
+the config adds the Firefox and WebKit projects only when their executables exist.
+
+What this changes or tells the plan:
+
+- **Schedule the monitor from about 10 anchors, not the first.** Frames just after `play()` are presented late.
+  Scheduling from the third anchor put the monitor 28.8 ms off for the whole take. The median of
+  `mediaTime − expectedDisplayTime` over 10 anchors (about 0.5 s) brings it to −0.5 ms.
+- **The picture and audio clocks drift about 33 ppm apart** (headless; every run). The fit's slope absorbs this for
+  the take. The monitor doesn't: it drifted to 18–21 ms within 8–10 minutes and never reached the one-frame
+  resync. Phase 3 needs a resync at about half a frame, or a `playbackRate` trim on the video. The owner run
+  measures the real-hardware ppm.
+- **One-frame steps in the anchors.** In all three 10-minute runs, the anchors stepped by exactly one frame
+  (−33.3 ms) and stayed there, at 388 s, 459 s and 496 s: the picture lost a frame against the audio clock. With
+  the stop rule, two runs stopped at 459 s and 496 s. Fitted as one line across the step, the third run had a
+  residual RMS of 8.9 ms and a slope of −43 ppm. A single global line can't represent this. The options are to stop
+  there (the plan, losing the rest of the take) or to fit piecewise, splitting where 3 or more consecutive anchors
+  sit at a steady whole-frame offset. Whether real Chrome, Safari and Firefox step like this is in the owner run.
+- **Chromium's worklet `currentFrame` glitches**: 2 to 29 times per run it reported one quantum low and then skipped
+  a value (F−128, F−128, F+128) while the data stayed continuous. The worker trusts the block count and fills only
+  real gaps of more than 2 quanta. Sample counts matched in every run.
+- **The streaming hash covers the PCM, not the file.** SHA-256 of a WAV can't be streamed during a take, because
+  the 44-byte header holds the length and comes first. The worker streams SHA-256 over the PCM and, at stop, hashes
+  header + chunks read back from IndexedDB in 64-chunk batches: 164 ms for 10 minutes. Per-chunk gets cost 2–4 ms
+  each, so batch them. The `uploadFile` option can take that file hash.
+- **Worklet, not MediaRecorder.** MediaRecorder's `start` event comes 53–58 ms after `start()`, and its decoded
+  sample 0 lands 4.8–13.5 ms after the worklet take's start, varying by run. It has no sample index, it is lossy,
+  and it keeps the whole blob in memory (9.7 MB of Opus for 10 minutes). The worklet path is exact (sample
+  counts, beep spacing) and bounded.
+- **Memory is small.** Memory during a 10-minute take stays at 2–6 MB. The growth (about 0.37 MB a minute) is
+  the harness's anchor log. The audition budget holds at 200 MB against 1.76 GB for decoding every take.
+
+#### Pending: owner hardware matrix (`spikes/s10/CHECKLIST.md`)
+
+The checklist runs Chrome, Safari and Firefox on macOS, about 28 minutes per browser, with built-in, USB and
+Bluetooth inputs on speakers, wired headphones and Bluetooth headphones. It covers calibrations (a) ×3, (b) ×2 and
+(c), a 10-minute loopback take, earcup-on-mic loopback for headphone routes, hidden-tab, reload-recovery and
+unplug stops, and the audition run. Then `npx tsx spikes/s10/analyze.ts --markdown` replaces this list. The run
+settles:
+
+- **The calibration default:** (a) speaker loopback reused for headphones on the same input, (b) clap-on-flash, or
+  (c) manual. Chosen from repeatability (sd and range per route) and from how far (b) − (a) moves on headphone
+  routes.
+- **The residual-stop threshold** (proposal 10 ms; the largest residual over clean real-hardware takes), plus
+  whether one-frame anchor steps happen on real browsers and so whether the fit must be piecewise.
+- **Qualified setups for the ≤ 1 frame promise:** every browser and route whose start, middle and end errors stay
+  within 33.3 ms, and the 10-minute drift per browser.
+- Real `getOutputTimestamp` and `outputLatency` behaviour on Bluetooth routes, Safari's and Firefox's memory and
+  MediaRecorder numbers, and whether any supported browser fails muted-MP4 mode (the only trigger for the iframe
+  fallback).
+
 ### S13: speech cleanup chain, light and off (2026-11-03, `spikes/s13`, `npx tsx spikes/s13/run.ts [--sweep]`)
 
 Eight synthetic takes in `test/fixtures/narration/` (macOS `say` voices degraded with ffmpeg: quiet laptop, noisy
