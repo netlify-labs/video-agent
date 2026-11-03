@@ -141,7 +141,9 @@ export class MemoryRecoveryStore implements RecoveryStore {
   }
 
   async listTakes(userId: string) {
-    return [...this.takes.values()].filter((t) => t.userId === userId).sort((a, b) => b.createdAt - a.createdAt)
+    return [...this.takes.values()]
+      .filter((t) => t.userId === userId)
+      .sort((a, b) => b.createdAt - a.createdAt)
   }
 
   async chunkRange(take: string, from: number, to: number) {
@@ -248,7 +250,9 @@ export class IdbRecoveryStore implements RecoveryStore {
   }
 
   async getTake(id: string) {
-    return req(this.db.transaction('takes').objectStore('takes').get(id) as IDBRequest<TakeRecord | undefined>)
+    return req(
+      this.db.transaction('takes').objectStore('takes').get(id) as IDBRequest<TakeRecord | undefined>,
+    )
   }
 
   async listTakes(userId: string) {
@@ -273,7 +277,9 @@ export class IdbRecoveryStore implements RecoveryStore {
   }
 
   async sweep(now = Date.now()) {
-    const all = await req(this.db.transaction('takes').objectStore('takes').getAll() as IDBRequest<TakeRecord[]>)
+    const all = await req(
+      this.db.transaction('takes').objectStore('takes').getAll() as IDBRequest<TakeRecord[]>,
+    )
     const old = all.filter((t) => expired(t, now))
     for (const t of old) await this.deleteTake(t.id)
     return old.length

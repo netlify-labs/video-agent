@@ -38,7 +38,9 @@ test.beforeEach(async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Recorder' })).toBeVisible()
 })
 
-test('recorder: record and stop gives a 24 kHz PCM16 WAV whose hash, peaks and speech match', async ({ page }) => {
+test('recorder: record and stop gives a 24 kHz PCM16 WAV whose hash, peaks and speech match', async ({
+  page,
+}) => {
   await page.getByRole('button', { name: 'Record' }).click()
   await expect(page.getByTestId('recorder-phase')).toHaveText('recording')
   await expect(page.getByText(/captured [2-9]\.\d s/)).toBeVisible({ timeout: 10_000 })
@@ -64,6 +66,21 @@ test('recorder: record and stop gives a 24 kHz PCM16 WAV whose hash, peaks and s
     }
   })
   expect(check).toEqual({ sha256: t.sha256, rate: 24_000, channels: 1, bits: 16 })
+
+  // Then it uploads as a narration take with its peaks, waits until ready, and the clip is saved.
+  await expect(page.getByTestId('take-state')).toHaveText('saved')
+  const clip = await page.getByTestId('saved-clip').textContent()
+  const mediaId = /clip (med_\w+) (\d+) samples/.exec(clip ?? '')
+  expect(Number(mediaId?.[2])).toBe(t.samples)
+  const peaks = await page.evaluate(
+    async (id) => (await fetch(`/api/v1/media/${id}/peaks`)).status,
+    mediaId?.[1] ?? '',
+  )
+  expect(peaks).toBe(200)
+  // Saved: the recovery copy is gone.
+  await page.reload()
+  await expect(page.getByRole('heading', { name: 'Recorder' })).toBeVisible()
+  await expect(page.getByTestId('recovery-prompt')).toHaveCount(0)
 })
 
 test('recovery: a reload mid-take offers the take to its owner only, and Recover brings it back', async ({
@@ -84,19 +101,48 @@ test('recovery: a reload mid-take offers the take to its owner only, and Recover
   await expect(page.getByTestId('recovery-prompt')).toHaveCount(0)
 
   await page.goto('/dev/recorder?user=usr_a')
-  await page.getByTestId('recovery-prompt').getByRole('button', { name: /^Recover/ }).click()
+  await page
+    .getByTestId('recovery-prompt')
+    .getByRole('button', { name: /^Recover/ })
+    .click()
   await expect(page.getByTestId('recorder-take')).toBeVisible()
   const t = await takeInfo(page)
   expect(t.samples % 12_000).toBe(0) // whole chunks: up to the last one saved
   expect(t.samples).toBeGreaterThanOrEqual(24_000)
   expect(t.bytes).toBe(44 + 2 * t.samples)
   await expect(page.getByTestId('recovery-prompt')).toHaveCount(0)
-
-  // Discard clears it for good.
-  await page.reload()
-  await page.getByTestId('recovery-prompt').getByRole('button', { name: /^Discard/ }).click()
-  await expect(page.getByTestId('recovery-prompt')).toHaveCount(0)
+  // The recovered take uploads and saves like a new one, and then its copy is cleared.
+  await expect(page.getByTestId('take-state')).toHaveText('saved')
   await page.reload()
   await expect(page.getByText('as usr_a')).toBeVisible()
+  await expect(page.getByTestId('recovery-prompt')).toHaveCount(0)
+})
+
+test('take upload: a failed draft save keeps the recovery copy; Retry saves; Discard drops it', async ({
+  page,
+}) => {
+  await page.evaluate(() => localStorage.setItem('mockFailSave', '1'))
+  await page.getByRole('button', { name: 'Record' }).click()
+  await expect(page.getByText(/captured [1-9]\.\d s/)).toBeVisible({ timeout: 10_000 })
+  await page.getByRole('button', { name: 'Stop' }).click()
+  await expect(page.getByTestId('take-state')).toHaveText('failed')
+  await expect(page.getByText("The draft couldn't be saved. Try again.")).toBeVisible()
+  await page.getByRole('button', { name: 'Retry' }).click()
+  await expect(page.getByTestId('take-state')).toHaveText('saved')
+  await expect(page.getByTestId('saved-clip')).toHaveCount(1)
+
+  // Fails again and the page goes away: the take is offered, uploaded but unsaved.
+  await page.evaluate(() => localStorage.setItem('mockFailSave', '1'))
+  await page.getByRole('button', { name: 'Record' }).click()
+  await expect(page.getByText(/captured [1-9]\.\d s/)).toBeVisible({ timeout: 10_000 })
+  await page.getByRole('button', { name: 'Stop' }).click()
+  await expect(page.getByTestId('take-state')).toHaveText('failed')
+  await page.reload()
+  const prompt = page.getByTestId('recovery-prompt')
+  await expect(prompt).toContainText("uploaded, but the draft wasn't saved")
+  await prompt.getByRole('button', { name: /^Discard/ }).click()
+  await expect(prompt).toHaveCount(0)
+  await page.reload()
+  await expect(page.getByRole('heading', { name: 'Recorder' })).toBeVisible()
   await expect(page.getByTestId('recovery-prompt')).toHaveCount(0)
 })

@@ -50,7 +50,8 @@ describe('Resampler', () => {
     it(`${inRate} -> 24 kHz keeps 1 kHz, removes 15 kHz, and gives ceil(n × 24000 / rate) samples`, () => {
       const x = new Float32Array(inRate * 2).map(
         (_, i) =>
-          0.5 * Math.sin((2 * Math.PI * 1000 * i) / inRate) + 0.3 * Math.sin((2 * Math.PI * 15_000 * i) / inRate),
+          0.5 * Math.sin((2 * Math.PI * 1000 * i) / inRate) +
+          0.3 * Math.sin((2 * Math.PI * 15_000 * i) / inRate),
       )
       const r = new Resampler(inRate, 24_000)
       const parts: Float32Array[] = []

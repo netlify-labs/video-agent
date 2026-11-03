@@ -36,7 +36,10 @@ describe('MemoryRecoveryStore', () => {
   it("keeps the page's clock and placement fields when the worker writes progress", async () => {
     const s = new MemoryRecoveryStore()
     await s.patchTake('a', takeRecord({ id: 'a' }))
-    await s.patchTake('a', { clock: { anchors: [[0, 1]], fit: null }, placement: { start: 480, offsetSamples: 0 } })
+    await s.patchTake('a', {
+      clock: { anchors: [[0, 1]], fit: null },
+      placement: { start: 480, offsetSamples: 0 },
+    })
     await s.putChunk(chunk('a', 0), { id: 'a', chunks: 1 })
     expect(await s.getTake('a')).toMatchObject({
       chunks: 1,

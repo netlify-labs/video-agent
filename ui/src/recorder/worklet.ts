@@ -74,7 +74,8 @@ class Recorder extends AudioWorkletProcessor {
   private flush(): void {
     if (this.filled === 0) return
     const samples = this.filled === BLOCK ? this.block : this.block.slice(0, this.filled)
-    if (this.blockEvents) this.port.postMessage({ type: 'block', frame: this.blockFrame, length: this.filled })
+    if (this.blockEvents)
+      this.port.postMessage({ type: 'block', frame: this.blockFrame, length: this.filled })
     this.out?.postMessage({ type: 'block', frame: this.blockFrame, samples }, [samples.buffer])
     this.blocks++
     this.block = new Float32Array(BLOCK)

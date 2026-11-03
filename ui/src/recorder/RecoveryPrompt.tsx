@@ -13,10 +13,10 @@ const duration = (samples: number) => {
 const why = (t: TakeRecord) =>
   t.status === 'recording'
     ? 'recording was interrupted'
-    : t.upload.state === 'failed'
-      ? (t.upload.error ?? "it didn't upload")
-      : t.upload.mediaId
-        ? "uploaded, but the draft wasn't saved"
+    : t.upload.mediaId
+      ? "uploaded, but the draft wasn't saved"
+      : t.upload.state === 'failed'
+        ? (t.upload.error ?? "it didn't upload")
         : 'not uploaded yet'
 
 export function RecoveryPrompt({
