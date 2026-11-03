@@ -6,6 +6,7 @@ export type ErrorCode =
   | 'not_ready'
   | 'conflict'
   | 'take_deleted'
+  | 'narration_disabled'
   | 'gone'
   | 'quota_exceeded'
   | 'rate_limited'
@@ -23,6 +24,7 @@ const STATUS: Record<ErrorCode, number> = {
   not_ready: 409,
   conflict: 409,
   take_deleted: 409,
+  narration_disabled: 409,
   gone: 410,
   quota_exceeded: 413,
   rate_limited: 429,

@@ -198,6 +198,10 @@ function fromApiError(e: ApiError, videoId?: string): ToolError {
         : {},
     ],
     take_deleted: ['TAKE_DELETED', { fix_hint: 'That recording was deleted. Record or pick another take.' }],
+    narration_disabled: [
+      'NARRATION_DISABLED',
+      { fix_hint: 'Recorded voice-over is turned off; an admin can turn it on in Settings.' },
+    ],
     not_ready: [
       'NOT_READY',
       videoId ? { suggested_tool_calls: [{ name: 'get_video', arguments: { video_id: videoId } }] } : {},

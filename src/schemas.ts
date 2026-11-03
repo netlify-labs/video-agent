@@ -3,6 +3,14 @@
 import { z } from '@hono/zod-openapi'
 import { SOUNDS } from './domain/types.js'
 import { MAX_NARRATION } from './lib/contract.js'
+import {
+  GAIN_DB_RANGE,
+  MAX_FADE_SAMPLES,
+  MAX_NARRATION_CLIPS,
+  MAX_OUTPUT_SAMPLES,
+  SAMPLE_RATE,
+  maxFade,
+} from './lib/timeline.js'
 import { SPEED_RANGE, VOICE_ID } from './lib/voice.js'
 import { MEDIA_KINDS } from './lib/media/classify.js'
 
@@ -689,6 +697,56 @@ export const MediaListSchema = z
   .object({ items: z.array(MediaSchema), nextCursor: z.string().nullable() })
   .openapi('MediaList')
 
+const samples = (min: number, max: number) => z.number().int().min(min).max(max)
+const Db = z.number().min(GAIN_DB_RANGE[0]).max(GAIN_DB_RANGE[1])
+// Mirrors NarrationOp in src/lib/timeline.ts (plan 2026-11-02 §6.1): integer samples at 24 kHz; zod 4 numbers are
+// finite. The 32-take limit, source bounds and output limit need the takes, so the server checks them (edits.ts).
+const NarrationClipSchema = z
+  .object({
+    id: z.string().min(1).max(80).openapi({ description: 'Stable slot id; a split piece gets <id>~n' }),
+    mediaId: z.string().regex(/^med_[a-z0-9]{8,40}$/),
+    srcStart: samples(0, 2 ** 31).openapi({ description: 'First source sample (integer, 24 kHz)' }),
+    srcEnd: samples(1, 2 ** 31).openapi({ description: 'Source sample after the last; > srcStart' }),
+    fit: z
+      .object({
+        a: z.number().min(-3600).max(3600),
+        b: z.number().gt(0).max(1),
+        residualMs: z.number().min(0),
+      })
+      .openapi({ description: 'Recording alignment, t = a + b·sample (identity for uploads); provenance' }),
+    offsetSamples: samples(-MAX_OUTPUT_SAMPLES, MAX_OUTPUT_SAMPLES),
+    start: samples(0, MAX_OUTPUT_SAMPLES).openapi({
+      description: 'Composition sample where srcStart sounds',
+    }),
+    gainDb: Db.nullable().openapi({ description: 'Clip gain in dB; null is silent' }),
+    fadeInSamples: samples(0, MAX_FADE_SAMPLES),
+    fadeOutSamples: samples(0, MAX_FADE_SAMPLES),
+  })
+  .refine((c) => c.srcEnd > c.srcStart, { message: 'A clip needs srcEnd after srcStart.' })
+  .refine(
+    (c) =>
+      c.fadeInSamples <= maxFade(c.srcEnd - c.srcStart) && c.fadeOutSamples <= maxFade(c.srcEnd - c.srcStart),
+    { message: "A clip's fades are at most half the clip and 2 s." },
+  )
+export const NarrationOpSchema = z
+  .object({
+    op: z.literal('narration'),
+    schema: z.literal(1),
+    sampleRate: z.literal(SAMPLE_RATE),
+    clips: z.array(NarrationClipSchema).max(MAX_NARRATION_CLIPS),
+    tracks: z.object({
+      narration: z.object({ volumeDb: Db, muted: z.boolean(), solo: z.boolean() }),
+      aiVoice: z.object({ mode: z.enum(['replace', 'under', 'keep']), volumeDb: Db }),
+      music: z.object({ duck: z.boolean(), duckDb: z.number().min(GAIN_DB_RANGE[0]).max(0) }),
+      original: z.object({ muteAll: z.boolean() }),
+    }),
+    cleanup: z.enum(['off', 'light']),
+  })
+  .openapi('NarrationOp', {
+    description:
+      'The whole recorded narration track (at most one per draft): clips of takes placed in integer samples at 24 kHz; later clips win where they overlap',
+  })
+
 const EditOpSchema = z.discriminatedUnion('op', [
   z.object({ op: z.literal('text'), id: z.string().max(80), text: z.string().max(500) }),
   z.object({ op: z.literal('retime'), beat: z.string().max(80), duration: z.number().min(0.5).max(120) }),
@@ -725,6 +783,7 @@ const EditOpSchema = z.discriminatedUnion('op', [
       description:
         "Change a voiced beat's narration line (plain text). The draft preview keeps the old audio; the render re-voices the line, lengthening the beat only if the new line no longer fits",
     }),
+  NarrationOpSchema,
 ])
 const CompositionSchema = z
   .object({

@@ -6918,7 +6918,7 @@ export interface components {
                 op: "voice";
                 beat: string;
                 text: string;
-            })[];
+            } | components["schemas"]["NarrationOp"])[];
             composition: components["schemas"]["Composition"];
             base: components["schemas"]["Composition"];
             palette: string[];
@@ -6926,6 +6926,58 @@ export interface components {
             renderedN: number | null;
             /** @description A newer version exists: start from it, or render this draft as the next version */
             newerVersion: number | null;
+        };
+        /** @description The whole recorded narration track (at most one per draft): clips of takes placed in integer samples at 24 kHz; later clips win where they overlap */
+        NarrationOp: {
+            /** @enum {string} */
+            op: "narration";
+            /** @enum {number} */
+            schema: 1;
+            /** @enum {number} */
+            sampleRate: 24000;
+            clips: {
+                /** @description Stable slot id; a split piece gets <id>~n */
+                id: string;
+                mediaId: string;
+                /** @description First source sample (integer, 24 kHz) */
+                srcStart: number;
+                /** @description Source sample after the last; > srcStart */
+                srcEnd: number;
+                /** @description Recording alignment, t = a + b·sample (identity for uploads); provenance */
+                fit: {
+                    a: number;
+                    b: number;
+                    residualMs: number;
+                };
+                offsetSamples: number;
+                /** @description Composition sample where srcStart sounds */
+                start: number;
+                /** @description Clip gain in dB; null is silent */
+                gainDb: number | null;
+                fadeInSamples: number;
+                fadeOutSamples: number;
+            }[];
+            tracks: {
+                narration: {
+                    volumeDb: number;
+                    muted: boolean;
+                    solo: boolean;
+                };
+                aiVoice: {
+                    /** @enum {string} */
+                    mode: "replace" | "under" | "keep";
+                    volumeDb: number;
+                };
+                music: {
+                    duck: boolean;
+                    duckDb: number;
+                };
+                original: {
+                    muteAll: boolean;
+                };
+            };
+            /** @enum {string} */
+            cleanup: "off" | "light";
         };
         Composition: {
             duration: number;
@@ -7020,7 +7072,7 @@ export interface components {
                 op: "voice";
                 beat: string;
                 text: string;
-            })[];
+            } | components["schemas"]["NarrationOp"])[];
             rev: number;
         };
         Media: {

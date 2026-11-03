@@ -3,7 +3,29 @@
 // uses and stores an immutable bundle for that rev, which the preview plays and a render freezes.
 import type { Deps } from '../deps.js'
 import { excluded, manifestHash } from '../lib/bundle-manifest.js'
-import { applyEdits, ContractError, type EditOp, type Summary } from '../lib/contract.js'
+import { isReference } from '../lib/bundle-references.js'
+import {
+  applyEdits,
+  applyNarration,
+  ContractError,
+  load,
+  read as readComposition,
+  type EditOp,
+  type Summary,
+} from '../lib/contract.js'
+import { wholeClipSpans } from '../lib/peaks.js'
+import {
+  clipEnd,
+  MAX_NARRATION_TAKES,
+  outputEnd,
+  outputLimit,
+  resolve,
+  samplesToSeconds,
+  secondsToSamples,
+  withinOutputLimit,
+  type NarrationOp,
+  type Span,
+} from '../lib/timeline.js'
 import { keptHash } from '../lib/revoice.js'
 import { parseScript, VOICE_JSON, VOICE_SCRIPT, type VoiceFile, type VoiceScript } from '../lib/voice.js'
 import { signPath, sha256Hex } from '../lib/crypto.js'
@@ -21,15 +43,18 @@ import {
 } from './bundles.js'
 import { assertCan, type Principal } from './policy.js'
 import { snapshotMedia } from './media.js'
-import { isTake, releaseOwnerRefs } from './takes.js'
+import { canReadTake, isTake, releaseOwnerRefs, replaceDraftRefs } from './takes.js'
 import { getSettings } from './settings.js'
 import type { Repo } from '../store/types.js'
-import type { EditRow } from './types.js'
+import { NARRATION_SETTING_DEFAULTS, type EditRow, type MediaRow } from './types.js'
 import { hasUnfinished, loadJob, newAttempt, videoDto, withIdempotency } from './videos.js'
 
 export const EDIT_TTL_MS = 7 * 24 * 3600_000
 const MAX_OPS = 500
 const AUDIO_FILE = /\.(mp3|m4a|aac|wav|ogg|opus)$/i
+
+/** A draft's ops: the contract's edits, plus at most one whole-track narration op (plan 2026-11-02 §6.1). */
+export type DraftOp = EditOp | NarrationOp
 
 export const editPrefix = (jobId: string, n: number, editId: string) =>
   `${bundlePrefix(jobId, n)}e/${editId}/`
@@ -69,6 +94,130 @@ function parseVoiceScript(raw: string): VoiceScript | null {
   }
 }
 
+// ───── recorded narration (plan 2026-11-02 §6.1) ─────
+const secs = (samples: number) => `${String(Math.round(samplesToSeconds(samples) * 10) / 10)}s`
+
+/** The draft's narration op, or null; the track is one snapshot, so a second one is refused. */
+function narrationOp(ops: DraftOp[]): NarrationOp | null {
+  const found = ops.filter((o): o is NarrationOp => o.op === 'narration')
+  if (found.length > 1)
+    throw new ApiError('invalid_request', 'A draft has one narration track: send one narration op.')
+  return found[0] ?? null
+}
+
+/** The takes an op places, at most 32 (in first-use order). */
+function takeIds(op: NarrationOp) {
+  const ids = [...new Set(op.clips.map((c) => c.mediaId))]
+  if (ids.length > MAX_NARRATION_TAKES)
+    throw new ApiError('invalid_request', `A narration uses at most ${MAX_NARRATION_TAKES} recordings.`)
+  return ids
+}
+
+// TODO(voiceover settings lane): use the shared narrationEnabled helper once it lands; same rule (missing = on).
+async function assertNarrationOn(deps: Deps) {
+  if (!((await getSettings(deps)).narrationEnabled ?? NARRATION_SETTING_DEFAULTS.narrationEnabled))
+    throw new ApiError('narration_disabled', 'Recorded voice-over is turned off on this site.')
+}
+
+/**
+ * The narration soft lock (plan 2026-11-02 §2.7): bead va-2qq.5.5 makes a narration save 409 narration_locked unless
+ * the saver holds the video's lock. Until then anyone may save.
+ */
+const assertNarrationLock: (repo: Repo, p: Principal, e: EditRow) => Promise<void> = async () => {}
+
+/**
+ * Who may place a take (plan 2026-11-02 §6.1, §8). A new pick is a ready, undeleted audio item the saver can read
+ * (canReadTake). A take the base version's narration already plays is inherited: the version holds it (media_refs),
+ * so it stays usable through its uploader's soft delete or a change of hands. Anything else reads as unavailable,
+ * never forbidden, so a take's existence doesn't leak.
+ */
+async function checkTakeAccess(
+  repo: Repo,
+  p: Principal,
+  e: Pick<EditRow, 'jobId' | 'baseN'>,
+  op: NarrationOp,
+) {
+  const ids = takeIds(op)
+  const inherited = new Set(
+    (await repo.listMediaRefsByOwner('version', `${e.jobId}#${e.baseN}`)).map((r) => r.mediaId),
+  )
+  for (const id of ids) {
+    const m = await repo.getMedia(id)
+    const ok =
+      m?.kind === 'audio' &&
+      !m.deletingAt &&
+      (inherited.has(id) || (m.status === 'ready' && !m.deletedAt && (await canReadTake(repo, p, m))))
+    if (!ok)
+      throw new ApiError('invalid_request', `That edit can't be made: recording ${id} isn't available.`, {
+        mediaId: id,
+      })
+  }
+}
+
+const isSpan = (x: unknown): x is Span =>
+  Array.isArray(x) && x.length === 2 && x.every(Number.isInteger) && (x[1] as number) > (x[0] as number)
+
+/**
+ * A take's length and speech spans in source samples. meta.json carries them once upload sessions store the summary
+ * (va-2qq.2.6: `samples`, `speech`); until then the row's duration, and speech throughout (wholeClipSpans).
+ */
+async function takeSummary(deps: Deps, m: MediaRow): Promise<{ samples: number | null; speech: Span[] }> {
+  let meta: { samples?: unknown; speech?: unknown } = {}
+  try {
+    meta = JSON.parse(
+      text((await deps.blobs.get('media', `${m.id}/meta.json`)) ?? undefined) || '{}',
+    ) as typeof meta
+  } catch {
+    // An unreadable summary is the same as none.
+  }
+  const samples =
+    Number.isInteger(meta.samples) && (meta.samples as number) > 0
+      ? (meta.samples as number)
+      : m.durationSec
+        ? secondsToSamples(m.durationSec)
+        : null
+  const speech =
+    Array.isArray(meta.speech) && meta.speech.every(isSpan) ? meta.speech : wholeClipSpans(samples ?? 0)
+  return { samples, speech }
+}
+
+/**
+ * Checks a narration op against its takes and the visuals it plays over (`baseSamples`): at most 32 takes, every clip
+ * inside its take, resolved clips apart, and the end within the output limit (the video + 120 s, 15 min in all).
+ * Takes and the base never change, so every recompute checks this; who may use a take is checkTakeAccess's job, on
+ * save and render. Returns each take's speech spans for the draft's data-va-speech.
+ */
+async function narrationTakes(deps: Deps, repo: Repo, op: NarrationOp, baseSamples: number) {
+  const speech = new Map<string, Span[]>()
+  for (const id of takeIds(op)) {
+    const m = await repo.getMedia(id)
+    if (!m || m.deletingAt)
+      throw new ApiError('take_deleted', 'A recording this uses was deleted. Record or pick another take.', {
+        mediaIds: [id],
+      })
+    const t = await takeSummary(deps, m)
+    if (t.samples === null)
+      throw new ApiError('invalid_request', `Recording ${id} can't be placed yet: its length isn't known.`)
+    const over = op.clips.find((c) => c.mediaId === id && c.srcEnd > (t.samples ?? 0))
+    if (over)
+      throw new ApiError(
+        'invalid_request',
+        `That edit can't be made: clip ${over.id} runs past the end of its recording.`,
+      )
+    speech.set(id, t.speech)
+  }
+  const r = resolve(op.clips)
+  if (r.some((c, i) => i > 0 && c.start < clipEnd(r[i - 1] as typeof c)))
+    throw new ApiError('invalid_request', "That edit can't be made: the narration's clips overlap.")
+  const end = outputEnd(r)
+  if (!withinOutputLimit(end, baseSamples))
+    throw new ApiError(
+      'invalid_request',
+      `The narration runs to ${secs(end)}; this video's can run to ${secs(outputLimit(baseSamples))} at most.`,
+    )
+  return speech
+}
+
 /** Colours a role may take: the ones the composition already uses, plus the brand's primary colour. */
 export function paletteOf(colors: Record<string, string>) {
   return [...new Set([...Object.values(colors), contextMeta.primaryColor].map((c) => c.trim().toLowerCase()))]
@@ -76,9 +225,17 @@ export function paletteOf(colors: Record<string, string>) {
 
 /**
  * Applies the ops to the base (in memory). Throws ApiError (400, with the contract violations) when an edit would
- * break the composition.
+ * break the composition. Inside a transaction, `repo` is its handle.
  */
-async function computeRev(deps: Deps, e: Pick<EditRow, 'jobId' | 'baseN'>, ops: EditOp[]) {
+async function computeRev(
+  deps: Deps,
+  e: Pick<EditRow, 'jobId' | 'baseN'>,
+  draftOps: DraftOp[],
+  repo: Repo = deps.store,
+) {
+  // The narration goes on last, over the edited visuals, so its spans and the music's dip follow every retime.
+  const track = narrationOp(draftOps)
+  const ops = draftOps.filter((o): o is EditOp => o.op !== 'narration')
   const index = await baseIndex(deps, e.jobId, e.baseN)
   // Unchanged files are served from where they already are; only index.html and summary.json are rewritten.
   const entries = new Map<string, BundleEntry>(
@@ -123,12 +280,27 @@ async function computeRev(deps: Deps, e: Pick<EditRow, 'jobId' | 'baseN'>, ops: 
       })
     throw err
   }
+  let outHtml = out.html
+  let composition = out.composition
+  if (track) {
+    const speech = await narrationTakes(deps, repo, track, secondsToSamples(out.composition.duration))
+    try {
+      outHtml = applyNarration(out.html, out.summary, track, speech).html
+    } catch (err) {
+      if (err instanceof ContractError)
+        throw new ApiError('invalid_request', `That edit can't be made: ${err.violations.join(' ')}`, {
+          violations: err.violations,
+        })
+      throw err
+    }
+    composition = readComposition(load(outHtml), out.narration)
+  }
   const changed = new Map<string, Uint8Array>([
-    ['index.html', new TextEncoder().encode(out.html)],
+    ['index.html', new TextEncoder().encode(outHtml)],
     ['summary.json', new TextEncoder().encode(JSON.stringify(out.summary, null, 2))],
   ])
   // Changed lines go into the voice script, where the render run's scripts/voice.ts revoice reads them.
-  const revoiced = out.composition.narration.filter((n) => n.revoice)
+  const revoiced = composition.narration.filter((n) => n.revoice)
   if (voice && revoiced.length) {
     const was = parseVoiceScript(await read(VOICE_SCRIPT))
     const lines = was
@@ -158,7 +330,7 @@ async function computeRev(deps: Deps, e: Pick<EditRow, 'jobId' | 'baseN'>, ops: 
       continue
     }
     const file = src.slice('assets/media/'.length)
-    const m = await deps.store.getMedia(file.split('.')[0] ?? '')
+    const m = await repo.getMedia(file.split('.')[0] ?? '')
     const fits = kind === 'image' ? m?.kind === 'image' || m?.kind === 'svg' : m?.kind === kind
     // A narration take isn't a library item: it's placed with the narration op, never as a media or audio pick.
     if (!m || m.deletedAt || m.status !== 'ready' || isTake(m) || `${m.id}.${m.ext}` !== file || !fits)
@@ -179,7 +351,8 @@ async function computeRev(deps: Deps, e: Pick<EditRow, 'jobId' | 'baseN'>, ops: 
     changed,
     list,
     picks,
-    composition: out.composition,
+    track,
+    composition,
     base: baseComposition,
     palette,
     bundleSha256: manifestHash(
@@ -191,8 +364,14 @@ async function computeRev(deps: Deps, e: Pick<EditRow, 'jobId' | 'baseN'>, ops: 
 type Rev = Awaited<ReturnType<typeof computeRev>>
 
 /** Computes the rev and writes its immutable bundle (the newest rev only is kept). */
-async function buildRev(deps: Deps, e: Pick<EditRow, 'id' | 'jobId' | 'baseN'>, rev: number, ops: EditOp[]) {
-  const r = await computeRev(deps, e, ops)
+async function buildRev(
+  deps: Deps,
+  e: Pick<EditRow, 'id' | 'jobId' | 'baseN'>,
+  rev: number,
+  ops: DraftOp[],
+  repo: Repo = deps.store,
+) {
+  const r = await computeRev(deps, e, ops, repo)
   const { changed, list } = r
   const prefix = editRevPrefix(e.jobId, e.baseN, e.id, rev)
   for (const [path, bytes] of changed) await deps.blobs.set('bundles', `${prefix}f/${path}`, bytes)
@@ -213,16 +392,16 @@ async function buildRev(deps: Deps, e: Pick<EditRow, 'id' | 'jobId' | 'baseN'>, 
   return r
 }
 
-async function editDto(deps: Deps, e: EditRow, built?: Rev) {
-  const job = await deps.store.getJob(e.jobId)
+async function editDto(deps: Deps, e: EditRow, built?: Rev, repo: Repo = deps.store) {
+  const job = await repo.getJob(e.jobId)
   // Reads recompute in memory; only saves write bundles.
-  const b = built ?? (await computeRev(deps, e, e.ops as EditOp[]))
+  const b = built ?? (await computeRev(deps, e, e.ops as DraftOp[]))
   return {
     id: e.id,
     videoId: e.jobId,
     baseN: e.baseN,
     rev: e.rev,
-    ops: e.ops as EditOp[],
+    ops: e.ops as DraftOp[],
     composition: b.composition,
     // The version as it was: the editor diffs against it to build the op list.
     base: b.base,
@@ -278,9 +457,11 @@ export async function getEdit(deps: Deps, p: Principal, id: string) {
 }
 
 /** Saves the full op list as the next rev. `rev` must be the one the editor started from (multi-tab safety). */
-export async function saveEdit(deps: Deps, p: Principal, id: string, input: { ops: EditOp[]; rev: number }) {
+export async function saveEdit(deps: Deps, p: Principal, id: string, input: { ops: DraftOp[]; rev: number }) {
   assertCan(p, 'edit:create')
   if (input.ops.length > MAX_OPS) throw new ApiError('invalid_request', `At most ${MAX_OPS} edits per draft.`)
+  const track = narrationOp(input.ops)
+  if (track) await assertNarrationOn(deps)
   return deps.store.tx(async (repo) => {
     const e = await loadEdit(repo, deps, p, id, true)
     if (e.renderedN !== null)
@@ -289,8 +470,14 @@ export async function saveEdit(deps: Deps, p: Principal, id: string, input: { op
       throw new ApiError('conflict', 'This draft changed in another tab. Reload it to continue.', {
         rev: e.rev,
       })
+    if (track) {
+      await assertNarrationLock(repo, p, e)
+      await checkTakeAccess(repo, p, e, track)
+    }
+    // The draft holds exactly the takes its narration places (none without one), locked before the rev is built.
+    await replaceDraftRefs(repo, deps, e.id, e.jobId, track ? takeIds(track) : [])
     const rev = e.rev + 1
-    const built = await buildRev(deps, e, rev, input.ops)
+    const built = await buildRev(deps, e, rev, input.ops, repo)
     const now = deps.clock.now()
     const next: EditRow = {
       ...e,
@@ -301,7 +488,7 @@ export async function saveEdit(deps: Deps, p: Principal, id: string, input: { op
       expiresAt: new Date(now.getTime() + EDIT_TTL_MS).toISOString(),
     }
     await repo.updateEdit(id, next)
-    return editDto(deps, next, built)
+    return editDto(deps, next, built, repo)
   })
 }
 
@@ -360,11 +547,13 @@ export async function renderEdit(deps: Deps, p: Principal, id: string, idemKey?:
       const job = await loadJob(repo, p, e.jobId, true)
       if (await hasUnfinished(repo, e.jobId))
         throw new ApiError('conflict', 'Another version of this video is still in progress.')
-      const r = await computeRev(deps, e, e.ops as EditOp[])
+      const r = await computeRev(deps, e, e.ops as DraftOp[], repo)
       const n = job.nextVersionN
+      // A draft has no narration bus (the run writes it), and a base's bus is never part of the frozen bundle.
+      const frozenFile = (path: string) => !excluded(path) && !isReference(path)
       // The same canonical manifest prepare-run and render-job verify: media bytes, caches and stills excluded.
       const manifest = manifestHash(
-        r.list.filter((f) => !excluded(f.path)).map(({ path, sha256 }) => ({ path, sha256 })),
+        r.list.filter((f) => frozenFile(f.path)).map(({ path, sha256 }) => ({ path, sha256 })),
         [],
       )
       // Lines to re-voice in the run; every file but the ones re-voicing writes must come out as frozen.
@@ -381,7 +570,7 @@ export async function renderEdit(deps: Deps, p: Principal, id: string, idemKey?:
       // Media stays by reference: the run downloads it from the version's snapshot.
       const files = new Map(r.changed)
       for (const f of r.list)
-        if (!files.has(f.path) && !excluded(f.path)) files.set(f.path, await readEntry(deps, f))
+        if (!files.has(f.path) && frozenFile(f.path)) files.set(f.path, await readEntry(deps, f))
       const archive = writeTarGz(files)
       const key = `${e.jobId}/v${n}/frozen.tar.gz`
       await deps.blobs.set('sources', key, archive, { contentType: 'application/gzip' })

@@ -24,6 +24,9 @@ export const MAX_OUTPUT_SAMPLES = 15 * 60 * SAMPLE_RATE
 export const MAX_FADE_SAMPLES = 2 * SAMPLE_RATE
 /** Clip gain bounds in dB; null means silent. */
 export const GAIN_DB_RANGE = [-60, 12] as const
+/** One narration op places at most this many clips, from at most this many distinct takes. */
+export const MAX_NARRATION_CLIPS = 200
+export const MAX_NARRATION_TAKES = 32
 
 /** Recording alignment: composition seconds t = a + b·sample over the take (§5.3). Identity for uploads. */
 export interface Fit {
