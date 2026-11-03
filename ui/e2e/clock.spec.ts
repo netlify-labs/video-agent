@@ -4,7 +4,7 @@ import { expect, test, type Page } from '@playwright/test'
 
 async function startTake(page: Page) {
   await page.goto('/dev/clock')
-  await page.getByRole('button', { name: 'Start' }).click()
+  await page.getByRole('button', { name: 'Start', exact: true }).click()
   await expect(page.getByTestId('clock-state')).toHaveText('running')
   // About a second of frames.
   await expect.poll(async () => Number(await page.getByTestId('clock-anchors').textContent()), { timeout: 10_000 }).toBeGreaterThan(25)
@@ -30,10 +30,10 @@ test('clock: anchors from the muted picture fit as one clean segment, with a pla
 
 test('clock: hiding the tab stops the take with its reason', async ({ page }) => {
   await startTake(page)
-  await page.evaluate(() => {
-    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
-    document.dispatchEvent(new Event('visibilitychange'))
-  })
+  // A string, because the specs aren't typechecked against the DOM library.
+  await page.evaluate(
+    "Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true }); document.dispatchEvent(new Event('visibilitychange'))",
+  )
   await expect(page.getByTestId('clock-stop')).toHaveAttribute('data-kind', 'hidden')
   await expect(page.getByTestId('clock-stop')).toContainText('Keep this tab in front')
   await expect(page.getByTestId('clock-state')).toHaveText('stopped')

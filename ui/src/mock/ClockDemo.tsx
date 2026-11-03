@@ -1,10 +1,18 @@
 // Mock mode only (/dev/clock): the recorder's picture clock (ui/src/recorder/clock) on a real muted MP4, with no mic:
-// rVFC anchors, the AudioContext maps, the online piecewise fit, the stop rules and the clip placement it would give,
-// for development and the Playwright spec. Never in production builds: App.tsx mounts it only when VITE_MOCK is set.
-import { Badge, Button, Code, Group, Stack, Text, Title } from '@mantine/core'
-import { useEffect, useRef, useState } from 'react'
+// rVFC anchors, the AudioContext maps, the online piecewise fit, the stop rules and the clip placement it would give;
+// and the calibration panel on a switchable route with a synthetic clap listener (claps 45 ms after each flash, one
+// outlier). For development and the Playwright specs. Never in production builds: App.tsx mounts it only when
+// VITE_MOCK is set.
+import { Badge, Button, Code, Divider, Group, SegmentedControl, Stack, Text, Title } from '@mantine/core'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { SAMPLE_RATE } from '../../../src/lib/timeline'
 import {
   AudioClock,
+  CalibrationPanel,
+  CalibrationStore,
+  syntheticClapListener,
+  type AudioRoute,
+  type CalibrationOffsets,
   pictureOffsetFrom,
   placeRecordedTake,
   STOP_MESSAGES,
@@ -22,6 +30,15 @@ export default function ClockDemo() {
   const [fit, setFit] = useState<TakeFit | null>(null)
   const [running, setRunning] = useState(false)
   const picture = usePictureClock(video, { fps: FPS })
+  const store = useMemo(() => new CalibrationStore(), [])
+  const listener = useMemo(() => syntheticClapListener({ latencyMs: 45 }), [])
+  const [rate, setRate] = useState('48000')
+  const [epoch, setEpoch] = useState(0)
+  const route: AudioRoute = useMemo(
+    () => ({ inputDeviceId: 'demo-mic', outputDeviceId: 'default', sampleRate: Number(rate) }),
+    [rate],
+  )
+  const [offsets, setOffsets] = useState<CalibrationOffsets | null>(null)
 
   useEffect(
     () => () => {
@@ -69,7 +86,15 @@ export default function ClockDemo() {
   }
 
   const offset = pictureOffsetFrom(picture.anchors)
-  const placement = fit ? placeRecordedTake(fit.segments, 0, 0) : []
+  const placement = fit
+    ? placeRecordedTake(fit.segments, offsets?.calibrationOffsetSamples ?? 0, offsets?.manualOffsetSamples ?? 0)
+    : []
+  // A one-second take recorded against composition 1.0 s, placed with the panel's offsets.
+  const demoClip = placeRecordedTake(
+    [{ fromSample: 0, toSample: SAMPLE_RATE, a: 1, b: 1 / SAMPLE_RATE, residualRms: 0, residualMax: 0, n: 30 }],
+    offsets?.calibrationOffsetSamples ?? 0,
+    offsets?.manualOffsetSamples ?? 0,
+  )[0]
   const stop = picture.stopReason
   return (
     <Stack gap="md" maw={900}>
@@ -130,6 +155,42 @@ export default function ClockDemo() {
             )
           : 'No fit yet.'}
       </Code>
+      <Divider />
+      <Group>
+        <Text size="sm">Route sample rate</Text>
+        <SegmentedControl
+          aria-label="Route sample rate"
+          value={rate}
+          onChange={setRate}
+          data={[
+            { value: '48000', label: '48 kHz' },
+            { value: '44100', label: '44.1 kHz' },
+          ]}
+        />
+        <Button
+          size="xs"
+          variant="subtle"
+          onClick={() => {
+            store.invalidate(route)
+            setEpoch((e) => e + 1)
+          }}
+        >
+          Forget this route
+        </Button>
+      </Group>
+      <CalibrationPanel
+        key={epoch}
+        route={route}
+        store={store}
+        listener={listener}
+        procedure={{ intervalMs: 500, leadInMs: 300, flashMs: 80 }}
+        onChange={setOffsets}
+      />
+      <Text size="sm" data-testid="calibration-offsets" data-offset-samples={offsets?.offsetSamples ?? 0}>
+        {offsets
+          ? `calibration ${offsets.calibrationOffsetSamples} + manual ${offsets.manualOffsetSamples} = ${offsets.offsetSamples} samples; a take at 1.0 s starts at ${demoClip?.start ?? '-'}`
+          : '-'}
+      </Text>
     </Stack>
   )
 }
