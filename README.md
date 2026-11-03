@@ -116,6 +116,7 @@ Agent runs in this project can read the project's environment variables, like an
 `RUNNER_API_TOKEN`. Only signed-in people from your allowed domains (or invited people) can start runs, and every
 output is verified (hashes against the run's authenticated report, a real MP4 check) before it becomes a video.
 Prompts are visible to your Netlify team in the project's Agent Runs page.
+Runs can also read the project's Blobs, so they can read uploaded media, including voice-over recordings.
 
 ## Configuration
 
@@ -139,6 +140,31 @@ Prompts are visible to your Netlify team in the project's Agent Runs page.
 | `MCP_OAUTH_CIMD_HOSTS`                                   | Optional                                       | `claude.ai,claude.com`                         | Hosts whose https client ids (Client ID Metadata Documents) are fetched.                                                                                 |
 | `OPENVERSE_CLIENT_ID`, `OPENVERSE_CLIENT_SECRET`         | Optional                                       | —                                              | A registered Openverse app for Find music and runs' music (higher rate limits). Without them, searches are anonymous ([below](#music-from-openverse)).   |
 | `ELEVENLABS_API_KEY`                                     | Optional                                       | —                                              | ElevenLabs voices (with word timings) for voice-overs. Without it, voice-overs use Kokoro, which is built in. Agent runs read it, so scope it to builds. |
+
+## Your own voice-over
+
+Creators can narrate a video themselves: open **Edit → Narration**, record while the video plays (or drop in an
+audio file), re-record any stretch, and render. **Keep my visuals** re-renders the same picture with your voice (a
+render-unchanged run); **Fit the video to my narration** lets the agent retime the scenes to your words (a full
+run, and it always replaces the AI voice-over). Captions come from your recording.
+
+- **Recording needs HTTPS** (browsers only give the microphone to secure pages; the setup page checks it) and the app
+  sends `Permissions-Policy: microphone=(self)`. Share, embed and preview pages never get the microphone.
+- **Where recordings live:** in this project's Netlify Blobs (`media` store), like other uploads. A raw recording is
+  readable by the person who recorded it and by admins. Once a recording is used on a video (on the Narration track
+  of a version, or of its recorder's saved draft), Creators who can see that video can hear and re-cut it. Reviewers
+  and viewers only ever get the rendered video and its `narration.mp3`, never the raw takes. Unused recordings stay
+  private.
+- **Retention:** a recording that nothing uses any more is deleted 30 days after its last use (or right away with
+  **Delete unused recordings** on the Media page). Each person can store up to 2 GiB of recordings by default.
+- **Transcription** runs inside the render, locally, with NVIDIA's
+  [Parakeet TDT 0.6B v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) model (CC-BY-4.0) through HyperFrames;
+  nothing leaves the run. An admin can switch transcription to ElevenLabs (it then sends the narration to ElevenLabs;
+  this is separate from using ElevenLabs voices) or turn it off.
+- **Admin settings** (Admin page, no redeploy): turn recorded voice-over off for everyone, choose the transcription
+  provider, and set the per-person recording quota.
+- As with every upload here, agent runs can read the project's storage (see the trust model above), so app-level
+  privacy is between people using the app, not a wall against runs.
 
 ## Music from Openverse
 
