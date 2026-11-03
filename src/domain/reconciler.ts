@@ -15,6 +15,8 @@ import { contextMeta } from '../generated/context.js'
 import { clip } from '../lib/log.js'
 import { PROMPT_TEMPLATE_VERSION, buildPrompt, buildRenderUnchangedPrompt } from './prompt.js'
 import { setStage } from './videos.js'
+import { readReferences } from './bundles.js'
+import type { BundleReference } from '../lib/bundle-references.js'
 import { MUSIC_POLL_MS, advanceMusicPick, attachTrack, needsMusicPick, newMusicPick } from './music-pick.js'
 import { emitTerminalEvent } from './webhooks.js'
 import type { AttemptRow, FailureCategory } from './types.js'
@@ -145,7 +147,12 @@ async function startRequest(
   const version = await deps.store.getVersion(a.jobId, a.versionN)
   if (!job || !version) throw new Error('attempt without job/version')
   const author = await deps.store.getUser(version.authorId)
-  let revision: { parentN: number; sourceKey: string; sourceSha256: string } | null = null
+  let revision: {
+    parentN: number
+    sourceKey: string
+    sourceSha256: string
+    references: BundleReference[]
+  } | null = null
   // Library media for this version, downloaded by prepare-run into video/assets/media/ (plan v2 §9).
   const versionMedia = await deps.store.listVersionMedia(a.jobId, a.versionN)
   const media = versionMedia.length
@@ -177,6 +184,7 @@ async function startRequest(
         sha256: version.frozen.sha256,
         manifestHash: version.frozen.manifestHash,
         ...(version.frozen.revoice ? { revoice: version.frozen.revoice } : {}),
+        ...(version.frozen.references?.length ? { references: version.frozen.references } : {}),
       },
       media,
       feedback: null,
@@ -202,7 +210,14 @@ async function startRequest(
     const parent = await deps.store.getOutput(a.jobId, version.parentN)
     const sha = parent?.sha256['source.tar.gz']
     if (!parent || !sha) throw new SourceUnavailable(`Version ${version.parentN} has no saved composition.`)
-    revision = { parentN: version.parentN, sourceKey: parent.sourceKey, sourceSha256: sha }
+    // Its files kept outside the archive (the narration bus), restored by key with it.
+    let references: BundleReference[]
+    try {
+      references = await readReferences(deps, parent)
+    } catch (e) {
+      throw new SourceUnavailable(`Version ${version.parentN}: ${e instanceof Error ? e.message : String(e)}`)
+    }
+    revision = { parentN: version.parentN, sourceKey: parent.sourceKey, sourceSha256: sha, references }
   }
   // Comments to incorporate, snapshotted on the version; pinned ones get stills from the parent MP4 (plan v2 §5).
   const snapshots = revision ? await deps.store.listVersionComments(a.jobId, a.versionN) : []
@@ -237,6 +252,7 @@ async function startRequest(
         key: revision.sourceKey,
         sha256: revision.sourceSha256,
         parentN: revision.parentN,
+        ...(revision.references.length ? { references: revision.references } : {}),
       },
       bundle: null,
       media,

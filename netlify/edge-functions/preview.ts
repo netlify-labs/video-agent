@@ -1,9 +1,11 @@
 // Sandboxed composition preview: /preview/{jobId}/v{n}/{exp}.{epoch|x}.{sig}/{path} (plan v2 §7; minted by the API).
 // Serves only files listed in the version's bundle manifest, under the §7 headers with every CSP source scoped to
 // this capability path. index.html gets the vendored runtime first and the bridge last. Authorization is the
-// capability alone: the app's session cookie does arrive here (same-site) and is never read.
+// capability alone: the app's session cookie does arrive here (same-site) and is never read. A version's reference
+// files (the narration bus) come from the videos store under the same capability, checked against their digest.
 import type { Config, Context } from '@netlify/edge-functions'
 import { getStore } from '@netlify/blobs'
+import { isReference } from '../../src/lib/bundle-references.ts'
 import { mediaResponse, verifySignedPath, type AccessMirror } from '../../src/lib/media/range.ts'
 import { denyMicrophone } from '../../src/lib/permissions-policy.ts'
 import {
@@ -78,6 +80,8 @@ export default async (req: Request, context: Context) => {
       ? `${t.jobId}/v${t.versionN}/live/s${live[1]}/`
       : `${t.jobId}/v${t.versionN}/`
   const index = (await bundles.get(`${prefix}manifest.json`, { type: 'json' })) as BundleIndex | null
+  // Drafts and live snapshots have no narration bus yet (it's mixed in the run), whatever their manifest says.
+  if ((draft || live) && isReference(path)) return plain(404, 'Not in this bundle.')
   const entry = index?.files.find((f) => f.path === path)
   if (!entry) return plain(404, 'Not in this bundle.')
   const type = previewContentType(path)
@@ -87,6 +91,33 @@ export default async (req: Request, context: Context) => {
     return new Response(req.method === 'HEAD' ? null : injectPreviewScripts(html), {
       headers: headers(type),
     })
+  }
+  if (entry.src?.store === 'videos') {
+    const key = entry.src.key
+    if (!isReference(path) || !key.startsWith(`${t.jobId}/v${t.versionN}/`))
+      return plain(404, 'Not in this bundle.')
+    let bytes: Uint8Array | null = null
+    if (req.method === 'GET') {
+      const buf = (await getStore({ name: 'videos', consistency: 'strong' }).get(key, {
+        type: 'arrayBuffer',
+      })) as ArrayBuffer | null
+      if (!buf) return plain(404, 'Not in this bundle.')
+      bytes = new Uint8Array(buf)
+      const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))
+      const hex = Array.from(digest, (b) => b.toString(16).padStart(2, '0')).join('')
+      if (hex !== entry.sha256 || bytes.byteLength !== entry.size)
+        return plain(502, "This version's narration doesn't match its saved digest.")
+    }
+    return mediaResponse(
+      req,
+      {
+        size: entry.size,
+        etag: `"${entry.sha256.slice(0, 32)}"`,
+        open: async () => (bytes ? new Blob([bytes]).stream() : null),
+      },
+      type,
+      headers(type),
+    )
   }
   return mediaResponse(
     req,

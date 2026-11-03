@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { compositionFiles } from '../../src/lib/bundle-manifest.js'
+import { archiveFiles } from '../../src/lib/bundle-manifest.js'
 
 export const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
 
@@ -16,14 +16,15 @@ export class StepError extends Error {}
 
 /**
  * tar arguments for an archive of video/: exactly the files the bundle manifest counts (no dependencies, caches,
- * renders, feedback stills or library media, which runs download by reference). The file list is written next to
- * `out`, so tar and the manifest can't disagree about what a composition is.
+ * renders, feedback stills or library media, which runs download by reference), less the reference files render-job
+ * uploads on their own (the narration bus). The file list is written next to `out`, so tar and the manifest can't
+ * disagree about what a composition is.
  */
 export function videoTarArgs(out: string): string[] {
   const list = `${out}.files`
   writeFileSync(
     list,
-    compositionFiles(join(repoRoot, 'video'))
+    archiveFiles(join(repoRoot, 'video'))
       .map((f) => `video/${f}\n`)
       .join(''),
   )

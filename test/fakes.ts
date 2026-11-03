@@ -403,6 +403,8 @@ export interface TestDeps extends Deps {
   logs: string[]
   /** The source.tar.gz the next fake run uploads (once), instead of the default fixture. */
   nextSource: Uint8Array | null
+  /** A narration bus the next fake run uploads on its own and lists as a reference file (once). */
+  nextBus: Uint8Array | null
   /** Preview variants (and placeholder) the next fake run uploads and lists in its manifest (once). */
   nextPreviews: {
     files: Partial<Record<PreviewFile, Uint8Array>>
@@ -432,6 +434,7 @@ export function makeDeps(env: Record<string, string> = {}, store?: Deps['store']
     config,
     store: store ?? createMemoryStore(),
     nextSource: null,
+    nextBus: null,
     nextPreviews: null,
     blobs: new FakeBlobs(),
     identity: new FakeIdentity(),

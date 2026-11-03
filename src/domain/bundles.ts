@@ -3,16 +3,27 @@
 // and the manifest written last, so a half-written bundle is never served; a deletion that lands meanwhile wins.
 import type { Deps } from '../deps.js'
 import { excluded, isLibraryMedia } from '../lib/bundle-manifest.js'
+import {
+  isBundleReference,
+  isReference,
+  REFERENCES_FILE,
+  referencesKey,
+  type BundleReference,
+} from '../lib/bundle-references.js'
 import { sha256Hex } from '../lib/crypto.js'
 import { validate, type Summary } from '../lib/contract.js'
 import { readTarGz, TarError } from '../lib/tar.js'
+import type { OutputRow } from './types.js'
 
 export interface BundleEntry {
   path: string
   size: number
   sha256: string
-  /** Where an edit draft's unchanged or library file already is; otherwise it's under the bundle's own f/. */
-  src?: { store: 'bundles' | 'media'; key: string }
+  /**
+   * Where an edit draft's unchanged or library file already is, or a version's reference file (the narration bus, in
+   * videos); otherwise it's under the bundle's own f/.
+   */
+  src?: { store: 'bundles' | 'media' | 'videos'; key: string }
 }
 export interface BundleIndex {
   v: 1
@@ -35,8 +46,11 @@ export const liveIndexKey = (jobId: string, n: number, seq: number) =>
 export const liveFileKey = (jobId: string, n: number, seq: number, path: string) =>
   `${livePrefix(jobId, n)}s${seq}/f/${path}`
 
-/** The composition's own files: the same set the bundle manifest counts (run inputs and caches stay out). */
-const keep = (path: string) => !excluded(path)
+/**
+ * The composition's own files: the same set the bundle manifest counts (run inputs and caches stay out), less the
+ * reference files, which never come from an archive.
+ */
+const keep = (path: string) => !excluded(path) && !isReference(path)
 
 /**
  * Local media files index.html and its stylesheets point at that aren't in the bundle (library media aside).
@@ -81,6 +95,34 @@ export function contractOf(files: Map<string, Uint8Array>): { version: 1 | null;
   return { version: violations.length ? null : 1, violations }
 }
 
+/**
+ * A version's reference entries (src/lib/bundle-references.ts), as finalize wrote them next to its source archive.
+ * None for a version without (every one saved before them). Throws TarError when the list isn't the one pinned.
+ */
+export async function readReferences(
+  deps: Pick<Deps, 'blobs'>,
+  output: Pick<OutputRow, 'jobId' | 'versionN' | 'sha256'>,
+): Promise<BundleReference[]> {
+  const want = output.sha256[REFERENCES_FILE]
+  if (!want) return []
+  const raw = await deps.blobs.get('sources', referencesKey(output.jobId, output.versionN))
+  if (!raw || sha256Hex(raw) !== want)
+    throw new TarError("The saved composition's references don't match their hash.")
+  const list = JSON.parse(new TextDecoder().decode(raw)) as unknown
+  if (!Array.isArray(list) || !list.every((r) => isBundleReference(r, output.jobId)))
+    throw new TarError("The saved composition's references are not valid.")
+  return list
+}
+
+/** One reference file's bytes from the videos store, checked against its entry. Throws TarError on a mismatch. */
+export async function fetchReference(deps: Pick<Deps, 'blobs'>, ref: BundleReference): Promise<Uint8Array> {
+  const bytes = await deps.blobs.get('videos', ref.key)
+  if (!bytes) throw new TarError(`The saved composition's ${ref.path} is missing.`)
+  if (sha256Hex(bytes) !== ref.sha256 || bytes.byteLength !== ref.bytes)
+    throw new TarError(`The saved composition's ${ref.path} doesn't match its hash.`)
+  return bytes
+}
+
 export async function readBundleIndex(deps: Pick<Deps, 'blobs'>, jobId: string, n: number) {
   const raw = await deps.blobs.get('bundles', bundleIndexKey(jobId, n))
   return raw ? (JSON.parse(new TextDecoder().decode(raw)) as BundleIndex) : null
@@ -105,6 +147,9 @@ export async function ensureBundle(
   if (!gz) return null
   if (sha256Hex(gz) !== want) throw new TarError("The saved composition doesn't match its hash.")
   const files = [...readTarGz(gz)].filter(([path]) => keep(path))
+  // Reference files are served from the videos store, checked here first (plan 2026-11-02 §6.2).
+  const refs = await readReferences(deps, output)
+  const refFiles = await Promise.all(refs.map(async (r) => [r.path, await fetchReference(deps, r)] as const))
   // Library media is by reference: the preview needs it next to the composition (plan v2 §14 rule 23).
   for (const m of await deps.store.listVersionMedia(jobId, n)) {
     if (m.kind === 'pdf') continue
@@ -119,10 +164,18 @@ export async function ensureBundle(
     v: 1,
     jobId,
     versionN: n,
-    files: files.map(([path, bytes]) => ({ path, size: bytes.byteLength, sha256: sha256Hex(bytes) })),
+    files: [
+      ...files.map(([path, bytes]) => ({ path, size: bytes.byteLength, sha256: sha256Hex(bytes) })),
+      ...refs.map((r) => ({
+        path: r.path,
+        size: r.bytes,
+        sha256: r.sha256,
+        src: { store: 'videos' as const, key: r.key },
+      })),
+    ],
     createdAt: deps.clock.now().toISOString(),
     contract: (() => {
-      const all = new Map(files)
+      const all = new Map([...files, ...refFiles])
       const c = contractOf(all)
       const missing = c.version === 1 ? missingLocalFiles(all) : []
       // Editing renders the saved composition as is, so it must have every file it uses.

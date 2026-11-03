@@ -9,6 +9,8 @@ import { finalizeAttempt } from '../src/domain/finalize.js'
 import { assembleUpload } from '../src/domain/media-uploads.js'
 import { receiveCallback } from '../src/domain/callback.js'
 import { runOpenverseJob } from '../src/domain/openverse-jobs.js'
+import { NARRATION_SRC } from '../src/lib/contract.js'
+import { sha256Hex } from '../src/lib/crypto.js'
 import type { AttemptRow, Role } from '../src/domain/types.js'
 import { fixtureFiles, makeDeps, uploadAndManifest, type TestDeps } from './fakes.js'
 
@@ -80,6 +82,12 @@ export function harness(
           ...(previews?.skipped ? { previewsSkipped: previews.skipped } : {}),
         },
       )
+      const bus = deps.nextBus
+      deps.nextBus = null
+      if (bus) {
+        await deps.blobs.set('uploads', `${a.id}/narration-bus.wav`, bus)
+        manifest.references = [{ path: NARRATION_SRC, sha256: sha256Hex(bus), bytes: bus.byteLength }]
+      }
       const token = /--token (\S+)/.exec(req.prompt)?.[1] ?? null
       if (opts.autoCallback ?? true) await receiveCallback(deps, a.id, token, manifest)
     },

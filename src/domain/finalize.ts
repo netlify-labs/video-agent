@@ -1,6 +1,15 @@
 // finalize-background: verify the agent's uploads against the authenticated manifest, validate the
 // media, copy it to immutable keys and commit the version as ready. Idempotent; leased.
 import type { Deps } from '../deps.js'
+import {
+  isReference,
+  MAX_REFERENCE_BYTES,
+  REFERENCE_FILES,
+  REFERENCES_FILE,
+  referenceKey,
+  referencesKey,
+  type BundleReference,
+} from '../lib/bundle-references.js'
 import { decrypt, sha256Hex } from '../lib/crypto.js'
 import { inspectMp4, Mp4Error, sniff } from '../lib/media/mp4.js'
 import {
@@ -61,9 +70,27 @@ export function isManifest(v: unknown, attemptId: string): v is Manifest {
   const files = m.files
   if (m.attemptId !== attemptId || typeof m.title !== 'string' || typeof m.summary !== 'string') return false
   if (!files || typeof files !== 'object') return false
+  if (m.references !== undefined && !areReferenceUploads(m.references)) return false
   return OUTPUT_FILES.every((f) => {
     const e = (files as Record<string, unknown>)[f] as { sha256?: unknown; bytes?: unknown } | undefined
     return typeof e?.sha256 === 'string' && /^[0-9a-f]{64}$/.test(e.sha256)
+  })
+}
+
+/** The manifest's reference files: each a known path at most once, with a digest and a bounded size. */
+function areReferenceUploads(v: unknown): boolean {
+  if (!Array.isArray(v) || v.length > Object.keys(REFERENCE_FILES).length) return false
+  const paths = new Set<unknown>()
+  return v.every((r: { path?: unknown; sha256?: unknown; bytes?: unknown } | null) => {
+    if (!r || typeof r.path !== 'string' || !isReference(r.path) || paths.has(r.path)) return false
+    paths.add(r.path)
+    return (
+      typeof r.sha256 === 'string' &&
+      /^[0-9a-f]{64}$/.test(r.sha256) &&
+      Number.isInteger(r.bytes) &&
+      (r.bytes as number) > 0 &&
+      (r.bytes as number) <= MAX_REFERENCE_BYTES
+    )
   })
 }
 
@@ -101,6 +128,17 @@ export async function finalizeAttempt(deps: Deps, attemptId: string): Promise<Fi
       if (hash !== manifest.files[name].sha256)
         throw new NotYet(`Upload ${name} doesn't match the manifest hash.`)
       files[name] = bytes
+    }
+    // Files of the composition kept outside source.tar.gz (the narration bus, plan 2026-11-02 §6.2), checked the same.
+    const references: { entry: BundleReference; bytes: Uint8Array }[] = []
+    for (const r of manifest.references ?? []) {
+      const name = REFERENCE_FILES[r.path] ?? ''
+      const bytes = await deps.blobs.get('uploads', `${a.id}/${name}`)
+      if (!bytes) throw new NotYet(`Upload ${name} not found.`)
+      if (sha256Hex(bytes) !== r.sha256 || bytes.byteLength !== r.bytes)
+        throw new NotYet(`Upload ${name} doesn't match the manifest hash.`)
+      const key = referenceKey(a.jobId, a.versionN, r.path)
+      references.push({ entry: { path: r.path, key, sha256: r.sha256, bytes: r.bytes }, bytes })
     }
 
     const video = files['video.mp4']
@@ -170,6 +208,19 @@ export async function finalizeAttempt(deps: Deps, attemptId: string): Promise<Fi
     const sha256: Record<string, string> = Object.fromEntries(
       OUTPUT_FILES.map((f) => [f, manifest.files[f].sha256]),
     )
+    // The entries go next to the archive, pinned by their hash among the outputs, so restorers find them by key.
+    if (references.length) {
+      for (const r of references)
+        await deps.blobs.set('videos', r.entry.key, r.bytes, {
+          contentType: 'audio/wav',
+          size: String(r.bytes.byteLength),
+        })
+      const list = JSON.stringify(references.map((r) => r.entry))
+      await deps.blobs.set('sources', referencesKey(a.jobId, a.versionN), list, {
+        contentType: 'application/json',
+      })
+      sha256[REFERENCES_FILE] = sha256Hex(list)
+    }
     const previews = await storePreviews(deps, a.id, prefix, manifest, sha256)
     const runCredits = runCreditsOf(deps, a.id, files['source.tar.gz'])
     const result = await finish(deps, a, 'ready', null, {

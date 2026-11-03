@@ -2,6 +2,7 @@
 // the sources store and pins its sha256 in the prompt, so scripts/prepare-run.ts only ever follows keys the server
 // chose: nothing the model writes (or a request smuggles in) can point it somewhere else.
 import { createHash } from 'node:crypto'
+import { isBundleReference, type BundleReference } from './bundle-references.js'
 import { MEDIA_KINDS, type MediaKind } from './media/classify.js'
 
 export const RUN_MANIFEST_VERSION = 1
@@ -14,17 +15,22 @@ export interface RunManifest {
   attemptId: string
   versionN: number
   kind: RunKind
-  /** The parent version's source archive (revisions). */
-  source: { key: string; sha256: string; parentN: number } | null
+  /**
+   * The parent version's source archive (revisions), with its reference files (the narration bus) to fetch into
+   * video/ by key from the videos store (src/lib/bundle-references.ts).
+   */
+  source: { key: string; sha256: string; parentN: number; references?: BundleReference[] | undefined } | null
   /**
    * A version-owned frozen bundle (render-unchanged runs): archive hash plus the canonical file manifest hash. With
    * `revoice`, the run re-speaks those beats' lines and every other file must still match `keptHash` (src/lib/revoice.ts).
+   * `references` are restored like the source's, before the manifest hash is checked.
    */
   bundle: {
     key: string
     sha256: string
     manifestHash: string
     revoice?: { beats: string[]; keptHash: string } | undefined
+    references?: BundleReference[] | undefined
   } | null
   /** Library media to download into video/assets/media/ (plan v2 §9, §14 rule 27). */
   media: RunMedia[] | null
@@ -60,6 +66,12 @@ const MAX_PINS = 50
 
 export const runManifestKey = (jobId: string, attemptId: string) => `${jobId}/runs/${attemptId}.json`
 
+const refs = (r: BundleReference[] | undefined) =>
+  // Only when there are some, so every other manifest keeps its bytes.
+  r?.length
+    ? { references: r.map((x) => ({ path: x.path, key: x.key, sha256: x.sha256, bytes: x.bytes })) }
+    : {}
+
 /** Stable bytes: the same inputs always serialize the same, so a re-sent start pins the same hash. */
 export function serializeRunManifest(m: RunManifest): string {
   return JSON.stringify({
@@ -68,7 +80,12 @@ export function serializeRunManifest(m: RunManifest): string {
     attemptId: m.attemptId,
     versionN: m.versionN,
     kind: m.kind,
-    source: m.source && { key: m.source.key, sha256: m.source.sha256, parentN: m.source.parentN },
+    source: m.source && {
+      key: m.source.key,
+      sha256: m.source.sha256,
+      parentN: m.source.parentN,
+      ...refs(m.source.references),
+    },
     bundle: m.bundle && {
       key: m.bundle.key,
       sha256: m.bundle.sha256,
@@ -77,6 +94,7 @@ export function serializeRunManifest(m: RunManifest): string {
       ...(m.bundle.revoice
         ? { revoice: { beats: [...m.bundle.revoice.beats], keptHash: m.bundle.revoice.keptHash } }
         : {}),
+      ...refs(m.bundle.references),
     },
     media:
       m.media && m.media.map((x) => ({ key: x.key, sha256: x.sha256, filename: x.filename, kind: x.kind })),
@@ -112,6 +130,16 @@ export function verifyRunManifest(raw: string, expected: { attemptId: string; sh
     throw new Error('The run manifest has a bad source entry.')
   if (m.bundle && (!own(m.bundle.key) || !HEX.test(m.bundle.sha256) || !HEX.test(m.bundle.manifestHash)))
     throw new Error('The run manifest has a bad bundle entry.')
+  // Reference files: known paths, each once, at the key finalize gives them in this video.
+  for (const r of [m.source?.references, m.bundle?.references] as unknown[])
+    if (
+      r !== undefined &&
+      (!Array.isArray(r) ||
+        r.length === 0 ||
+        !r.every((x) => isBundleReference(x, m.jobId)) ||
+        new Set(r.map((x: BundleReference) => x.path)).size !== r.length)
+    )
+      throw new Error('The run manifest has a bad reference entry.')
   // Parsed JSON: check the shape rather than trust the type.
   const rv = m.bundle?.revoice as { beats?: unknown; keptHash?: unknown } | null | undefined
   if (

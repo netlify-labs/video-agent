@@ -19,6 +19,7 @@ export const fakeBlobsModule = (blobs: () => FakeBlobs | undefined) => ({
       if (o?.type === 'json') return JSON.parse(text) as unknown
       if (o?.type === 'text') return text
       if (o?.type === 'stream') return new Blob([b]).stream()
+      if (o?.type === 'arrayBuffer') return b.slice().buffer
       return b
     },
     getMetadata: async (key: string) => {

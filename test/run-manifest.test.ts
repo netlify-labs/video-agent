@@ -1,12 +1,15 @@
 // Run manifests and frozen bundles (plan v2 §14 rule 21): the server writes what a run restores and pins its hash
 // in the prompt; prepare-run follows only those keys and stops on any mismatch.
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, copyFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync, copyFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { feedbackStills, prepare } from '../scripts/prepare-run.js'
-import { bundleManifest, compositionFiles, excluded } from '../src/lib/bundle-manifest.js'
+import { uploadReferences } from '../scripts/lib/references.js'
+import { archiveFiles, bundleManifest, compositionFiles, excluded } from '../src/lib/bundle-manifest.js'
+import { isReference, REFERENCE_FILES, type BundleReference } from '../src/lib/bundle-references.js'
+import { NARRATION_SRC } from '../src/lib/contract.js'
 import {
   RUN_MANIFEST_VERSION,
   runManifestKey,
@@ -96,6 +99,36 @@ describe('run manifest', () => {
     ).toThrow(/bad feedback video/)
   })
 
+  it('carries reference files only when there are some, and checks them', () => {
+    expect(serializeRunManifest(base)).not.toContain('references')
+    const ref: BundleReference = {
+      path: NARRATION_SRC,
+      key: 'vid_1/v1/narration-bus.wav',
+      sha256: H('a'),
+      bytes: 10,
+    }
+    expect(verify({ ...base, source: { ...base.source!, references: [ref] } }).source?.references).toEqual([
+      ref,
+    ])
+    const ru: RunManifest = {
+      ...base,
+      kind: 'render_unchanged',
+      source: null,
+      bundle: { key: 'vid_1/v2/frozen.tar.gz', sha256: H('b'), manifestHash: H('c'), references: [ref] },
+    }
+    expect(verify(ru).bundle?.references).toEqual([ref])
+    for (const references of [
+      [ref, ref],
+      [{ ...ref, key: 'vid_2/v1/narration-bus.wav' }],
+      [{ ...ref, key: 'vid_1/v1/../x/narration-bus.wav' }],
+      [{ ...ref, key: 'vid_1/v1/video.mp4' }],
+      [{ ...ref, path: 'index.html' }],
+      [{ ...ref, sha256: 'x' }],
+      [{ ...ref, bytes: -1 }],
+    ])
+      expect(() => verify({ ...base, source: { ...base.source!, references } })).toThrow(/bad reference/)
+  })
+
   it('serializes the same inputs to the same bytes', () => {
     const { bundle, kind, ...rest } = base
     const reordered: RunManifest = { bundle, ...rest, kind }
@@ -133,6 +166,45 @@ describe('bundle manifest', () => {
     expect(excluded('node_modules/x/y.js')).toBe(true)
     expect(excluded('scenes/one.html')).toBe(false)
   })
+
+  it('a composition without reference files hashes exactly as before them', () => {
+    const { root } = workspace({ 'index.html': '<div>hi</div>', 'summary.json': '{}' })
+    const m = bundleManifest(join(root, 'video'))
+    expect(m.references).toEqual([])
+    expect(archiveFiles(join(root, 'video'))).toEqual(compositionFiles(join(root, 'video')))
+    // The v1 canonical form, spelled out: what versions frozen before reference entries pinned.
+    const files = [
+      ['index.html', sha256Hex('<div>hi</div>')],
+      ['summary.json', sha256Hex('{}')],
+    ]
+    expect(m.hash).toBe(sha256Hex(JSON.stringify({ v: 1, files, media: [] })))
+  })
+
+  it('counts the narration bus in the hash but keeps it out of the archive', () => {
+    expect(REFERENCE_FILES[NARRATION_SRC]).toBe('narration-bus.wav')
+    expect(isReference(NARRATION_SRC)).toBe(true)
+    expect(isReference('assets/narration/other.wav')).toBe(false)
+    expect(excluded(NARRATION_SRC)).toBe(false)
+    const plain = workspace({ 'index.html': '<div>hi</div>' })
+    const { root } = workspace({ 'index.html': '<div>hi</div>', [NARRATION_SRC]: 'RIFF bus' })
+    const m = bundleManifest(join(root, 'video'))
+    expect(m.files.map((f) => f.path)).toEqual([NARRATION_SRC, 'index.html'])
+    expect(m.references).toEqual([{ path: NARRATION_SRC, sha256: sha256Hex('RIFF bus'), bytes: 8 }])
+    expect(archiveFiles(join(root, 'video'))).toEqual(['index.html'])
+    expect(m.hash).not.toBe(bundleManifest(join(plain.root, 'video')).hash)
+  })
+
+  it('uploads each reference file under the attempt id and lists it for the manifest', async () => {
+    const { root } = workspace({ 'index.html': '<div>hi</div>', [NARRATION_SRC]: 'RIFF bus' })
+    const sent: [string, string][] = []
+    const refs = await uploadReferences('att_1', join(root, 'video'), async (key, file) => {
+      sent.push([key, readFileSync(file, 'utf8')])
+    })
+    expect(sent).toEqual([['att_1/narration-bus.wav', 'RIFF bus']])
+    expect(refs).toEqual([{ path: NARRATION_SRC, sha256: sha256Hex('RIFF bus'), bytes: 8 }])
+    const none = workspace({ 'index.html': '<div>hi</div>' })
+    expect(await uploadReferences('att_1', join(none.root, 'video'), async () => {})).toEqual([])
+  })
 })
 
 describe('prepare-run restore', () => {
@@ -158,6 +230,54 @@ describe('prepare-run restore', () => {
       { tmp: target, root: target, fetch: fetchFrom(src.archive) },
     )
     expect(readFileSync(join(target, 'video', 'summary.json'), 'utf8')).toBe('{}')
+  })
+
+  it('restores reference files by key next to the archive, before the bundle hash is checked', async () => {
+    const full = workspace({ 'index.html': '<div>v1</div>', [NARRATION_SRC]: 'RIFF bus' })
+    // What render-job archives: everything but the bus.
+    const archive = join(full.root, 'archived.tar.gz')
+    execFileSync('tar', ['-czf', archive, '-C', full.root, 'video/index.html'])
+    const sha256 = sha256Hex(readFileSync(archive))
+    const busFile = join(full.root, 'video', NARRATION_SRC)
+    const fetchBoth = async (key: string, to: string, store?: string) => {
+      copyFileSync(store === 'videos' && key === 'vid_1/v1/narration-bus.wav' ? busFile : archive, to)
+    }
+    const ref = {
+      path: NARRATION_SRC,
+      key: 'vid_1/v1/narration-bus.wav',
+      sha256: sha256Hex('RIFF bus'),
+      bytes: 8,
+    }
+    const target = mkdtempSync(join(tmpdir(), 'va-target-'))
+    await prepare(
+      { ...base, source: { key: 'vid_1/v1/source.tar.gz', sha256, parentN: 1, references: [ref] } },
+      { tmp: target, root: target, fetch: fetchBoth },
+    )
+    expect(readFileSync(join(target, 'video', NARRATION_SRC), 'utf8')).toBe('RIFF bus')
+
+    const manifestHash = bundleManifest(join(full.root, 'video')).hash
+    const bundle = { key: 'vid_1/v2/bundle.tar.gz', sha256, manifestHash, references: [ref] }
+    await prepare(
+      { ...base, kind: 'render_unchanged', source: null, bundle },
+      { tmp: target, root: target, fetch: fetchBoth },
+    )
+    expect(bundleManifest(join(target, 'video')).hash).toBe(manifestHash)
+  })
+
+  it('stops when a reference file does not match its entry', async () => {
+    const src = workspace({ 'index.html': '<div>v1</div>' })
+    const target = mkdtempSync(join(tmpdir(), 'va-target-'))
+    const ref = { path: NARRATION_SRC, key: 'vid_1/v1/narration-bus.wav', sha256: H('9'), bytes: 8 }
+    await expect(
+      prepare(
+        {
+          ...base,
+          source: { key: 'vid_1/v1/source.tar.gz', sha256: src.sha256, parentN: 1, references: [ref] },
+        },
+        { tmp: target, root: target, fetch: fetchFrom(src.archive) },
+      ),
+    ).rejects.toThrow(/bus\.wav doesn't match its hash/)
+    expect(existsSync(join(target, 'video', NARRATION_SRC))).toBe(false)
   })
 
   it('stops, leaving video/ alone, when the archive hash is wrong', async () => {

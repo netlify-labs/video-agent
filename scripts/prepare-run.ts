@@ -2,12 +2,14 @@
 //   npx tsx scripts/prepare-run.ts --job <jobId> --attempt <id> --manifest <sha256>
 // The manifest lives in the sources store at <jobId>/runs/<attempt>.json and must match the hash in the prompt.
 // Only keys inside it are followed. Revisions restore the parent's source archive; render-unchanged runs restore
-// a frozen bundle and verify its canonical file manifest (keeping copies of the files a re-voice may rewrite); incorporate-feedback runs also get one still per pinned
+// a frozen bundle and verify its canonical file manifest (keeping copies of the files a re-voice may rewrite), each
+// with its reference files (the narration bus) fetched by key and checked; incorporate-feedback runs also get one still per pinned
 // comment in video/feedback/, and library media is downloaded into video/assets/media/. Never falls back to the template: on any failure it
 // exits non-zero and the agent must stop. Writes the verified manifest to .render/run-manifest.json for render-job.
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { bundleManifest } from '../src/lib/bundle-manifest.js'
+import type { BundleReference } from '../src/lib/bundle-references.js'
 import { FROZEN_DIR, FROZEN_FILES, keptHash } from '../src/lib/revoice.js'
 import {
   feedbackStillPath,
@@ -93,7 +95,28 @@ function restoreArchive(root: string, archive: string, sha256: string, what: str
   run('tar', ['-xzf', archive, '-C', root])
 }
 
-/** Restores what the manifest lists. `root` and `fetch` are injectable for tests. */
+/** Fetches an archive's reference files into <root>/video by key, each checked against its entry. */
+async function restoreReferences(
+  root: string,
+  refs: BundleReference[] | undefined,
+  fetch: Fetch,
+  what: string,
+) {
+  for (const r of refs ?? []) {
+    const to = join(root, 'video', r.path)
+    mkdirSync(dirname(to), { recursive: true })
+    await fetch(r.key, to, 'videos')
+    const actual = sha256File(to)
+    if (actual !== r.sha256 || statSync(to).size !== r.bytes) {
+      rmSync(to, { force: true })
+      throw new StepError(
+        `The saved ${what}'s ${r.path} doesn't match its hash (got ${actual}). Stop and report this.`,
+      )
+    }
+  }
+  if (refs?.length) log('references', { what, files: refs.map((r) => r.path) })
+}
+
 /** A second check of a clip with ffprobe (the upload was checked without it): H.264, AAC or no audio, ≤ 2 min. */
 export function probeClip(path: string, name: string) {
   let info: { streams?: { codec_type?: string; codec_name?: string }[]; format?: { duration?: string } }
@@ -144,18 +167,21 @@ export function probeAudio(path: string, name: string) {
     throw new StepError(`Audio ${name} is longer than 10 minutes. Stop and report this.`)
 }
 
+/** Restores what the manifest lists. `root` and `fetch` are injectable for tests. */
 export async function prepare(m: RunManifest, opts: { tmp: string; root?: string; fetch?: Fetch }) {
   const { tmp, root = repoRoot, fetch = download } = opts
   if (m.source) {
     const archive = join(tmp, 'source.tar.gz')
     await fetch(m.source.key, archive)
     restoreArchive(root, archive, m.source.sha256, 'composition')
+    await restoreReferences(root, m.source.references, fetch, 'composition')
     log('restored', { kind: 'source', key: m.source.key, parentN: m.source.parentN })
   }
   if (m.bundle) {
     const archive = join(tmp, 'bundle.tar.gz')
     await fetch(m.bundle.key, archive)
     restoreArchive(root, archive, m.bundle.sha256, 'bundle')
+    await restoreReferences(root, m.bundle.references, fetch, 'bundle')
     const restored = bundleManifest(join(root, 'video'))
     const actual = restored.hash
     if (actual !== m.bundle.manifestHash)

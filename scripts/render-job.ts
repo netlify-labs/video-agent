@@ -2,6 +2,7 @@
 //   npx tsx scripts/render-job.ts --job <id> --attempt <id> --callback <url> --token <t> --upload blobs
 // Renders video/, checks the file, makes the poster, GIF preview, captions and source archive (plus optional preview
 // variants: small WebP/AVIF posters, a placeholder and a hover clip), uploads everything to the uploads store under the attempt id, and notifies the service.
+// Reference files (the narration bus) stay out of source.tar.gz and are uploaded on their own (scripts/lib/references.ts).
 // Prints the manifest as a fenced json block on stdout. Logs JSON lines on stderr.
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -13,6 +14,7 @@ import type { RunManifest } from '../src/lib/run-manifest.js'
 import { postCheckpoint } from './checkpoint.js'
 import { toVtt } from './lib/captions.js'
 import { makePreviews, posterTime } from './lib/previews.js'
+import { uploadReferences } from './lib/references.js'
 import { RenderProgressReporter } from './lib/render-progress.js'
 import {
   StepError,
@@ -252,6 +254,7 @@ async function main() {
       previews.skipped.push({ name, reason: `upload failed: ${error}` })
     }
   }
+  const references = await uploadReferences(attempt, videoDir)
   log('upload.done', { ms: Date.now() - started })
 
   const manifest = {
@@ -260,6 +263,8 @@ async function main() {
     title: typeof summary.title === 'string' ? summary.title.slice(0, 120) : '',
     summary: typeof summary.summary === 'string' ? summary.summary.slice(0, 4000) : '',
     files,
+    // Only when there are some, so every other manifest keeps its shape.
+    ...(references.length ? { references } : {}),
     ...(previews.lqip ? { lqip: previews.lqip } : {}),
     // Why a variant is missing, so the service can log it (the run's own output isn't kept).
     ...(previews.skipped.length

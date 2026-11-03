@@ -1,4 +1,5 @@
 // Domain records. These mirror the database tables (db/schema.ts) and the in-memory store.
+import type { BundleReference } from '../lib/bundle-references.js'
 import type { MediaKind } from '../lib/media/classify.js'
 import type { PreviewFile, Previews } from '../lib/media/previews.js'
 import type { RunCredit } from '../lib/openverse-rules.js'
@@ -312,6 +313,8 @@ export interface FrozenBundle {
   editId: string
   /** Narration lines the run re-voices (scripts/voice.ts revoice), and the hash of every file that must not change. */
   revoice?: RevoicePlan
+  /** Files of the bundle kept by key outside the archive (src/lib/bundle-references.ts). */
+  references?: BundleReference[]
 }
 
 export interface RevoicePlan {
@@ -844,6 +847,8 @@ export interface Manifest {
     { sha256: string; bytes: number }
   > &
     Partial<Record<PreviewFile, { sha256: string; bytes: number }>>
+  /** Files of the composition uploaded on their own, outside source.tar.gz (src/lib/bundle-references.ts). */
+  references?: Omit<BundleReference, 'key'>[]
   /** The tiny poster placeholder as a data URI, when render-job could make one. */
   lqip?: string
   /** Variants render-job couldn't make or upload, with why. */
