@@ -716,8 +716,9 @@ export async function renderEdit(
         r.list.filter((f) => frozenFile(f.path)).map(({ path, sha256 }) => ({ path, sha256 })),
         [],
       )
-      // Lines to re-voice in the run; every file but the ones re-voicing writes must come out as frozen.
-      const beats = r.composition.narration.filter((l) => l.revoice).map((l) => l.beat)
+      // Lines to re-voice in the run; every file but the ones re-voicing writes must come out as frozen. A fit mutes
+      // the AI voice (plan 2026-11-02 §6.4), so it re-voices nothing: speaking lines nobody hears only costs time.
+      const beats = fit ? [] : r.composition.narration.filter((l) => l.revoice).map((l) => l.beat)
       const revoice = beats.length
         ? {
             beats,

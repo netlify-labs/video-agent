@@ -15,8 +15,8 @@ import { formatTime } from '../lib/timeline-view'
 export const KEEP_VISUALS_CREDITS = 34
 
 /**
- * A fit's cost: an authoring run (§2.5, about 250 credits; an authoring run's measured range is roughly 200-300,
- * docs/spikes.md S4).
+ * A fit's cost: an authoring run (§2.5). docs/spikes.md S4 measured one at 240-250 credits on the same video a
+ * render-unchanged run cost about 34 on; longer videos cost more.
  */
 export const FIT_CREDITS = 250
 

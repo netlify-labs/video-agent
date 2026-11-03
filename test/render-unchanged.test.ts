@@ -16,7 +16,8 @@ import { SAMPLE_RATE, wav, type VoiceProvider } from '../src/lib/voice.js'
 import { readTarGz } from '../src/lib/tar.js'
 import type { Role } from '../src/domain/types.js'
 import { failedSnap, running, succeeded } from './fakes.js'
-import { harness, PROMPT, type Harness } from './helpers.js'
+import { harness, PROMPT, upload, type Harness } from './helpers.js'
+import { narrationOp, tone } from './narration-render.js'
 import { tarGz } from './tarball.js'
 
 const fx = (f: string) => readFileSync(new URL(`./fixtures/contract1/${f}`, import.meta.url), 'utf8')
@@ -260,6 +261,26 @@ describe('render unchanged with re-voiced lines', () => {
       })
       expect(bad.status).toBe(400)
     }
+  })
+
+  it('a fit re-voices nothing: its AI voice is muted, so a changed line is never spoken', async () => {
+    const h = harness({ MAX_ACTIVE_RUNS: '0' })
+    const { id, edit } = await voicedDraft(h)
+    const m = await h.json<{ id: string }>(await upload(h, h.member, tone(), 'filename=take.mp3'))
+    await h.deps.store.updateMedia(m.id, { role: 'narration-take', scopeJobId: id, durationSec: 20 })
+    await h.call('POST', `/api/v1/videos/${id}/narration-lock`, { as: h.member, body: { draftId: edit.id } })
+    const ops = [{ op: 'voice', beat: 'intro', text: longer }, narrationOp([m.id])]
+    expect(
+      (await h.call('PUT', `/api/v1/edits/${edit.id}`, { as: h.member, body: { rev: 0, ops } })).status,
+    ).toBe(200)
+    const res = await h.call('POST', `/api/v1/edits/${edit.id}/render`, {
+      as: h.member,
+      body: { mode: 'fit_to_narration' },
+    })
+    expect(res.status).toBe(202)
+    const v = (await h.deps.store.getVersion(id, 2))!
+    expect(v.mode).toBe('author')
+    expect(v.frozen?.revoice).toBeUndefined()
   })
 
   it('freezes the marked lines, and the run re-voices exactly those and passes the check', async () => {
