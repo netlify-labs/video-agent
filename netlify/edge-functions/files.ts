@@ -15,7 +15,7 @@ export default async (req: Request, context: Context) => {
     return notFound()
   const url = new URL(req.url)
   const m =
-    /^\/files\/(vid_[a-z0-9]+)\/v(\d+)\/(video\.mp4|poster\.jpg|preview\.gif|captions\.vtt|poster-(?:480|960)\.(?:webp|avif)|clip\.(?:webm|mp4))$/.exec(
+    /^\/files\/(vid_[a-z0-9]+)\/v(\d+)\/(video\.mp4|poster\.jpg|preview\.gif|captions\.vtt|narration\.mp3|transcript\.txt|poster-(?:480|960)\.(?:webp|avif)|clip\.(?:webm|mp4))$/.exec(
       url.pathname,
     )
   if (!m) return notFound()

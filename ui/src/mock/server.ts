@@ -11,7 +11,7 @@ import voiceHtml from '../../../test/fixtures/contract1-voice/index.html?raw'
 import voiceSummary from '../../../test/fixtures/contract1-voice/summary.json'
 import voiceFile from '../../../test/fixtures/contract1-voice/assets/voice/voice.json'
 import type { Video } from '../api/client'
-import { people, stats, videos } from './data'
+import { MOCK_TRANSCRIPT, embed, people, stats, videos } from './data'
 import { mockFile } from './files'
 
 const json = (body: unknown, status = 200) =>
@@ -939,6 +939,52 @@ export function installMock() {
       ;(window as unknown as { __lastRevise?: unknown }).__lastRevise = b
       const vid = videos.find((x) => x.id === rv[1])
       return vid ? json(withComments(vid), 202) : fail(404, 'not_found', 'Video not found.')
+    }
+    // Publish and unpublish; the last publish body is kept for tests.
+    const pb = /^\/api\/v1\/videos\/([^/]+)\/versions\/(\d+)\/publish$/.exec(p)
+    if (pb?.[1] && (method === 'POST' || method === 'DELETE')) {
+      const vid = videos.find((x) => x.id === pb[1])
+      const ver = vid?.versions.find((x) => x.n === Number(pb[2]))
+      if (!vid || !ver) return fail(404, 'not_found', 'Video not found.')
+      if (method === 'DELETE') {
+        for (const x of ver.publications) x.unpublishedAt ??= new Date().toISOString()
+        return new Response(null, { status: 204 })
+      }
+      const b = await readBody(init, input)
+      ;(window as unknown as { __lastPublish?: unknown }).__lastPublish = b
+      const showTranscript = b.showTranscript === true
+      const live = ver.publications.find((x) => !x.unpublishedAt)
+      const slug = live?.slug ?? `mock${vid.id.slice(-4)}${ver.n}pub`
+      const base = `${window.location.origin}/v/${slug}`
+      const w = ver.output?.width ?? 1920
+      const h = ver.output?.height ?? 1080
+      const pub = {
+        slug,
+        versionN: ver.n,
+        publishedAt: live?.publishedAt ?? new Date().toISOString(),
+        unpublishedAt: null,
+        showTranscript,
+        urls: {
+          page: base,
+          mp4: `${base}.mp4`,
+          poster: `${base}.jpg`,
+          gif: `${base}.gif`,
+          captions: `${base}.vtt`,
+          ...(ver.links.narrationAudio ? { narration: `${base}.mp3` } : {}),
+          ...(showTranscript && ver.links.transcript ? { transcript: `${base}.txt` } : {}),
+        },
+        embed: embed(slug, w, h, ver.credits),
+      }
+      ver.publications = [pub, ...ver.publications.filter((x) => x.slug !== slug)]
+      return json(pub)
+    }
+    const nf = /^\/api\/v1\/videos\/([^/]+)\/versions\/(\d+)\/(narration-audio|transcript)$/.exec(p)
+    if (nf?.[1] && method === 'GET') {
+      const ver = videos.find((x) => x.id === nf[1])?.versions.find((x) => x.n === Number(nf[2]))
+      if (!ver?.links.transcript) return fail(404, 'not_found', 'This version has no such file.')
+      return nf[3] === 'transcript'
+        ? new Response(MOCK_TRANSCRIPT, { headers: { 'content-type': 'text/plain; charset=utf-8' } })
+        : new Response(new Uint8Array(0), { headers: { 'content-type': 'audio/mpeg' } })
     }
     const m = /^\/api\/v1\/videos\/([^/]+)(?:\/versions\/(\d+)\/(video|poster|gif|captions))?$/.exec(p)
     if (m?.[1] && m[3])

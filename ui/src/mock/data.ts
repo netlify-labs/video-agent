@@ -61,6 +61,8 @@ function ready(
     previews?: boolean
     /** CC BY music it was made with (Openverse), credited on the page and in the embed. */
     music?: V['credits']
+    /** Recorded narration: the MP3 and transcript downloads (the mock API answers both). */
+    narrated?: boolean
   },
 ): V {
   const startedAt = ago(o.at)
@@ -105,7 +107,13 @@ function ready(
       summary: o.summary,
       notices: o.notices ?? [],
     },
-    links: files(id, n),
+    links: o.narrated
+      ? {
+          ...files(id, n),
+          narrationAudio: `/api/v1/videos/${id}/versions/${n}/narration-audio`,
+          transcript: `/api/v1/videos/${id}/versions/${n}/transcript`,
+        }
+      : files(id, n),
     files: o.previews ? previewFiles('teaser-v2') : null,
     publications: o.pub
       ? [
@@ -121,6 +129,7 @@ function ready(
               gif: `${SITE}/v/${o.pub}.gif`,
               captions: `${SITE}/v/${o.pub}.vtt`,
             },
+            showTranscript: false,
             embed: embed(o.pub, o.w, o.h, o.music ?? []),
           },
         ]
@@ -128,7 +137,11 @@ function ready(
   }
 }
 
-function embed(slug: string, w: number, h: number, credits: V['credits']) {
+/** What the mock API serves as a narrated version's transcript.txt: a paragraph per caption cue. */
+export const MOCK_TRANSCRIPT =
+  'Every pull request gets its own URL.\n\nReview the real site, not a screenshot.\n\nMerge with confidence. Book a demo.\n'
+
+export function embed(slug: string, w: number, h: number, credits: V['credits']) {
   const v = `<video controls playsinline preload="metadata" width="${w}" height="${h}" style="max-width:100%;height:auto" poster="${SITE}/v/${slug}.jpg"><source src="${SITE}/v/${slug}.mp4" type="video/mp4"><track kind="captions" src="${SITE}/v/${slug}.vtt" srclang="en" label="Captions"></video>`
   if (!credits.length) return v
   const line = credits
@@ -346,6 +359,7 @@ export const videos: Video[] = [
         title: 'Deploy previews for every pull request',
         author: people.priya.id,
         target: 15,
+        narrated: true,
         summary:
           'A 15-second vertical clip in three beats: every pull request gets its own URL, review the real site, merge with confidence. Ends on "Book a demo".',
       },

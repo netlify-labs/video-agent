@@ -153,3 +153,12 @@ export function audibleCaptions(
     ...(tracks.narration.muted ? [] : narration),
   ].sort((a, b) => a.start - b.start)
 }
+
+/**
+ * transcript.txt (plan §6.7): the narration's words as plain text, a paragraph per caption cue (a cue's two lines
+ * joined). The render writes it from the transcript's cues and a caption revision from the corrected ones.
+ */
+export function transcriptText(cues: readonly Pick<Caption, 'text'>[]): string {
+  const paragraphs = cues.map((c) => c.text.replace(/\s+/g, ' ').trim()).filter(Boolean)
+  return paragraphs.length ? `${paragraphs.join('\n\n')}\n` : ''
+}

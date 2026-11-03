@@ -152,10 +152,11 @@ export function Meta({ label, children }: { label: string; children: React.React
 export const fileUrl = (
   videoId: string,
   n: number,
-  file: 'video' | 'poster' | 'gif' | 'captions',
+  file: 'video' | 'poster' | 'gif' | 'captions' | 'narration-audio' | 'transcript',
   download = false,
 ) =>
-  import.meta.env.VITE_MOCK
+  // Narration's downloads have no mock asset: the mock API answers their routes.
+  import.meta.env.VITE_MOCK && file !== 'narration-audio' && file !== 'transcript'
     ? mockFile(videoId, file)
     : `/api/v1/videos/${videoId}/versions/${n}/${file}${download ? '?download=1' : ''}`
 

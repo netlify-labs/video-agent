@@ -6,9 +6,10 @@
 // Prints the manifest as a fenced json block on stdout. Logs JSON lines on stderr.
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { MasteringReport, NarrationReport } from '../src/domain/types.js'
+import type { MasteringReport, NarrationOutput, NarrationReport } from '../src/domain/types.js'
 import { bundleManifest, compositionFiles } from '../src/lib/bundle-manifest.js'
-import { validate, type Summary } from '../src/lib/contract.js'
+import { NARRATION_SRC, validate, type Summary } from '../src/lib/contract.js'
+import { groupWords, transcriptText } from '../src/lib/narration-captions.js'
 import { checkNarration } from '../src/lib/narration-guard.js'
 import { checkRevoiced, FROZEN_DIR } from '../src/lib/revoice.js'
 import type { PreviewFile } from '../src/lib/media/previews.js'
@@ -273,6 +274,38 @@ async function main() {
     join(out, 'captions.vtt'),
     toVtt(captionsForRender(summary.captions, narrationOp), durationSec),
   )
+  // Recorded narration's own outputs (plan 2026-11-02 §6.7): the processed bus as a 192 kbps CBR MP3 (48 kHz: MP3
+  // has no 192 kbps at the bus's 24 kHz), and the transcript, a paragraph per cue. Narrated renders only.
+  const narrationOutputs: NarrationOutput[] = []
+  if (narrationOp) {
+    const bus = join(videoDir, NARRATION_SRC)
+    if (existsSync(bus)) {
+      run('ffmpeg', [
+        '-y',
+        '-loglevel',
+        'error',
+        '-i',
+        bus,
+        '-ac',
+        '1',
+        '-ar',
+        '48000',
+        '-c:a',
+        'libmp3lame',
+        '-b:a',
+        '192k',
+        join(out, 'narration.mp3'),
+      ])
+      narrationOutputs.push('narration.mp3')
+    }
+    const stt = readSttRecord(repoRoot)
+    const text = stt?.status === 'ok' ? transcriptText(groupWords(stt.words)) : ''
+    if (text) {
+      writeFileSync(join(out, 'transcript.txt'), text)
+      narrationOutputs.push('transcript.txt')
+    }
+    log('narration.outputs', { files: narrationOutputs, stt: stt?.status ?? 'missing' })
+  }
   run('tar', videoTarArgs(join(out, 'source.tar.gz')))
   // Best effort: a variant that can't be made is left out, and the service falls back to the poster and GIF.
   const previews = makePreviews({ video, out, posterAt, durationSec })
@@ -287,7 +320,7 @@ async function main() {
     (typeof OUTPUTS)[number],
     { sha256: string; bytes: number }
   > &
-    Partial<Record<PreviewFile, { sha256: string; bytes: number }>>
+    Partial<Record<PreviewFile | NarrationOutput, { sha256: string; bytes: number }>>
 
   const cli = netlifyCli()
   for (const name of OUTPUTS) {
@@ -299,6 +332,17 @@ async function main() {
         { timeoutMs: 5 * 60_000 },
       ),
     )
+  }
+  for (const name of narrationOutputs) {
+    const [bin, ...pre] = cli as [string, ...string[]]
+    await withRetries(`upload ${name}`, 4, () =>
+      run(
+        bin,
+        [...pre, 'blobs:set', 'uploads', `${attempt}/${name}`, '--input', join(out, name), '--force'],
+        { timeoutMs: 5 * 60_000 },
+      ),
+    )
+    files[name] = entry(name)
   }
   for (const name of previews.files) {
     const [bin, ...pre] = cli as [string, ...string[]]

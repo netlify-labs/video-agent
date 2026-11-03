@@ -148,13 +148,33 @@ export const PublicationSchema = z
           .string()
           .optional()
           .describe('A 960px-wide WebP poster, for versions rendered with preview variants.'),
+        narration: z
+          .string()
+          .optional()
+          .describe('The recorded narration as an MP3, for versions that have one.'),
+        transcript: z
+          .string()
+          .optional()
+          .describe("The narration's transcript as plain text, when the publication shows it."),
       })
       .nullable(),
+    showTranscript: z.boolean().describe("Whether the share page offers the narration's transcript."),
     embed: z.string().nullable().openapi({
       description: 'HTML to embed the video; with CC BY media it includes the credit line as a caption',
     }),
   })
   .openapi('Publication')
+
+export const PublishSchema = z
+  .object({
+    showTranscript: z
+      .boolean()
+      .optional()
+      .describe(
+        "Offer the narration's transcript on the share page. Default off; publishing again changes only this.",
+      ),
+  })
+  .openapi('Publish')
 
 export const VerdictSchema = z.enum(['approved', 'changes_requested']).openapi('Verdict')
 export const SetVerdictSchema = z
@@ -269,6 +289,16 @@ export const VersionSchema = z
       poster: z.string(),
       gif: z.string(),
       captions: z.string(),
+      narrationAudio: z
+        .string()
+        .optional()
+        .describe('The recorded narration as a 192 kbps MP3; only versions with recorded narration.'),
+      transcript: z
+        .string()
+        .optional()
+        .describe(
+          "The narration's transcript as plain text (the latest caption revision); only when there is one.",
+        ),
       netlifyRun: z.string().nullable(),
     }),
     files: z

@@ -201,6 +201,8 @@ export const publications = pgTable(
     publishedBy: text('published_by').notNull(),
     publishedAt: ts('published_at').notNull(),
     unpublishedAt: ts('unpublished_at'),
+    // The share page shows the transcript only when the publisher chose to (voice-over plan §6.7): its own consent.
+    showTranscript: boolean('show_transcript').notNull().default(false),
   },
   (t) => [index('publications_job_idx').on(t.jobId)],
 )

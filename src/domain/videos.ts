@@ -3,7 +3,15 @@ import type { Deps } from '../deps.js'
 import { sha256Hex } from '../lib/crypto.js'
 import { clip } from '../lib/log.js'
 import type { PreviewFile, Previews } from '../lib/media/previews.js'
-import { PUBLIC_URL_TTL_SEC, accessKey, fileTtl, signFile, stableExp, writeAccessMirror } from './files.js'
+import {
+  PUBLIC_URL_TTL_SEC,
+  accessKey,
+  fileTtl,
+  signFile,
+  stableExp,
+  versionFileName,
+  writeAccessMirror,
+} from './files.js'
 import { getSettings } from './settings.js'
 import { emitEvent } from './webhooks.js'
 import { snapshotMedia } from './media.js'
@@ -655,12 +663,28 @@ export interface PublicationMirror {
   width: number
   height: number
   durationSec: number
-  keys: { video: string; poster: string; gif: string; captions: string }
+  keys: {
+    video: string
+    poster: string
+    gif: string
+    captions: string
+    /** Recorded narration's downloads (plan 2026-11-02 §6.7), for versions that have them. */
+    narration?: string
+    transcript?: string
+  }
   /** CC BY media the version was made with; mirrors written before credits existed have none. */
   credits?: Credit[]
+  /** The share page offers the transcript (the publisher's choice); missing: no. */
+  showTranscript?: boolean
 }
 
-export async function publishVersion(deps: Deps, principal: Principal, jobId: string, n: number) {
+export async function publishVersion(
+  deps: Deps,
+  principal: Principal,
+  jobId: string,
+  n: number,
+  opts: { showTranscript?: boolean | undefined } = {},
+) {
   const { pub, mirror, output } = await deps.store.tx(async (repo) => {
     const job = await loadJob(repo, principal, jobId, true)
     assertCan(principal, 'video:publish', { ownerId: job.ownerId })
@@ -670,7 +694,14 @@ export async function publishVersion(deps: Deps, principal: Principal, jobId: st
       throw new ApiError('not_ready', 'Only ready versions can be published.')
     const credits = versionCredits(await repo.versionProvenance(jobId), version, output.runCredits)
     const active = (await repo.listPublications(jobId)).find((p) => p.versionN === n && !p.unpublishedAt)
-    if (active) return { pub: active, mirror: mirrorFor(active, job, output, credits), output }
+    if (active) {
+      // Publishing again may change only whether the share page shows the transcript.
+      const show = opts.showTranscript ?? active.showTranscript ?? false
+      if (show !== (active.showTranscript ?? false))
+        await repo.updatePublication(active.slug, { showTranscript: show })
+      const row = { ...active, showTranscript: show }
+      return { pub: row, mirror: mirrorFor(row, job, version, output, credits), output }
+    }
     const row: PublicationRow = {
       slug: deps.ids.slug(),
       jobId,
@@ -678,15 +709,31 @@ export async function publishVersion(deps: Deps, principal: Principal, jobId: st
       publishedBy: principal.userId,
       publishedAt: deps.clock.now().toISOString(),
       unpublishedAt: null,
+      showTranscript: opts.showTranscript ?? false,
     }
     await repo.insertPublication(row)
-    return { pub: row, mirror: mirrorFor(row, job, output, credits), output }
+    return { pub: row, mirror: mirrorFor(row, job, version, output, credits), output }
   })
   await deps.blobs.set('internal', pubKey(pub.slug), JSON.stringify(mirror))
+  deps.log.info('publish.done', {
+    jobId,
+    versionN: n,
+    slug: pub.slug,
+    showTranscript: mirror.showTranscript ?? false,
+    narration: Boolean(mirror.keys.narration),
+  })
   return publicationDto(deps, pub, output, mirror.credits)
 }
 
-function mirrorFor(p: PublicationRow, job: JobRow, o: OutputRow, credits: Credit[]): PublicationMirror {
+function mirrorFor(
+  p: PublicationRow,
+  job: JobRow,
+  v: Pick<VersionRow, 'captions'>,
+  o: OutputRow,
+  credits: Credit[],
+): PublicationMirror {
+  const prefix = `${job.id}/v${p.versionN}`
+  const transcript = versionFileName(v, o, 'transcript')
   return {
     slug: p.slug,
     jobId: job.id,
@@ -695,8 +742,16 @@ function mirrorFor(p: PublicationRow, job: JobRow, o: OutputRow, credits: Credit
     width: o.width,
     height: o.height,
     durationSec: o.durationSec,
-    keys: { video: o.videoKey, poster: o.posterKey, gif: o.gifKey, captions: o.captionsKey },
+    keys: {
+      video: o.videoKey,
+      poster: o.posterKey,
+      gif: o.gifKey,
+      captions: o.captionsKey,
+      ...(versionFileName(v, o, 'narration-audio') ? { narration: `${prefix}/narration.mp3` } : {}),
+      ...(transcript ? { transcript: `${prefix}/${transcript}` } : {}),
+    },
     credits,
+    showTranscript: p.showTranscript ?? false,
   }
 }
 
@@ -718,17 +773,19 @@ export async function unpublishVersion(deps: Deps, principal: Principal, jobId: 
 export function publicationDto(
   deps: Pick<Deps, 'config'>,
   p: PublicationRow,
-  o: Pick<OutputRow, 'width' | 'height' | 'previews'> | null = null,
+  o: Pick<OutputRow, 'width' | 'height' | 'previews' | 'sha256'> | null = null,
   credits: Credit[] = [],
 ) {
   const base = `${deps.config.siteUrl}/v/${p.slug}`
   // The 960w WebP poster is public only as /v/{slug}.webp, for a published version that has one.
   const webp = o?.previews?.files['poster-960.webp'] ? `${base}.webp` : null
+  const showTranscript = p.showTranscript ?? false
   return {
     slug: p.slug,
     versionN: p.versionN,
     publishedAt: p.publishedAt,
     unpublishedAt: p.unpublishedAt,
+    showTranscript,
     urls: p.unpublishedAt
       ? null
       : {
@@ -738,6 +795,9 @@ export function publicationDto(
           gif: `${base}.gif`,
           captions: `${base}.vtt`,
           ...(webp ? { posterWebp: webp } : {}),
+          // Recorded narration: its audio follows the publication; the transcript only when the publisher chose it.
+          ...(o?.sha256['narration.mp3'] ? { narration: `${base}.mp3` } : {}),
+          ...(showTranscript && o?.sha256['transcript.txt'] ? { transcript: `${base}.txt` } : {}),
         },
     embed: p.unpublishedAt ? null : embedHtml(base, webp, o, credits),
   }
@@ -829,6 +889,11 @@ function versionDto(
       poster: `${fileBase}/poster`,
       gif: `${fileBase}/gif`,
       captions: `${fileBase}/captions`,
+      // Recorded narration's downloads, when the version has them (plan 2026-11-02 §6.7).
+      ...(o && versionFileName(v, o, 'narration-audio')
+        ? { narrationAudio: `${fileBase}/narration-audio` }
+        : {}),
+      ...(o && versionFileName(v, o, 'transcript') ? { transcript: `${fileBase}/transcript` } : {}),
       netlifyRun: a?.runnerId ? deps.runner.runUrl(a.runnerId, a.sessionId) : null,
     },
     // Signed image URLs, so the UI skips the redirect. One expiry per DTO keeps them stable for the browser cache.

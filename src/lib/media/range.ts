@@ -97,6 +97,8 @@ export const CONTENT_TYPES: Record<string, string> = {
   webp: 'image/webp',
   avif: 'image/avif',
   webm: 'video/webm',
+  mp3: 'audio/mpeg',
+  txt: 'text/plain; charset=utf-8',
 }
 
 export interface MediaSource {

@@ -11,6 +11,7 @@ import {
   type BundleReference,
 } from '../lib/bundle-references.js'
 import { decrypt, sha256Hex } from '../lib/crypto.js'
+import { sniffAudio } from '../lib/media/audio.js'
 import { inspectMp4, Mp4Error, sniff } from '../lib/media/mp4.js'
 import {
   MAX_PREVIEW_BYTES,
@@ -30,10 +31,12 @@ import { deriveTitle, setStage } from './videos.js'
 import { emitTerminalEvent } from './webhooks.js'
 import {
   ASPECTS,
+  NARRATION_OUTPUTS,
   OUTPUT_FILES,
   type AttemptRow,
   type FailureCategory,
   type Manifest,
+  type NarrationOutput,
   type NarrationReport,
   type OutputFile,
   type VersionCaptions,
@@ -229,7 +232,10 @@ export async function finalizeAttempt(deps: Deps, attemptId: string): Promise<Fi
     }
     const previews = await storePreviews(deps, a.id, prefix, manifest, sha256)
     const runCredits = runCreditsOf(deps, a.id, files['source.tar.gz'])
-    const recorded = narrationMetadata(deps, a, version, manifest, references)
+    const narrated = version.frozen?.narration
+      ? await storeNarrationOutputs(deps, a.id, prefix, manifest, sha256)
+      : new Set<NarrationOutput>()
+    const recorded = narrationMetadata(deps, a, version, manifest, references, narrated)
     const result = await finish(
       deps,
       a,
@@ -359,6 +365,59 @@ async function storePreviews(
   return Object.keys(out.files).length || out.lqip ? out : null
 }
 
+/** The longest transcript kept (about 15 minutes of speech is under 20 KB). */
+const MAX_TRANSCRIPT_BYTES = 1024 * 1024
+/** The longest narration MP3 kept: 15 minutes at 192 kbps is about 21 MB. */
+const MAX_NARRATION_MP3_BYTES = 64 * 1024 * 1024
+
+/**
+ * Recorded narration's outputs (plan 2026-11-02 §6.7), next to the version's other files: narration.mp3 and
+ * transcript.txt, each checked like a preview variant (hash, size, format). One that fails is left out and logged:
+ * the version is still ready, without that download. Returns what was stored; their hashes join `sha256`.
+ */
+async function storeNarrationOutputs(
+  deps: Deps,
+  attemptId: string,
+  prefix: string,
+  manifest: Manifest,
+  sha256: Record<string, string>,
+): Promise<Set<NarrationOutput>> {
+  const stored = new Set<NarrationOutput>()
+  for (const name of Object.keys(NARRATION_OUTPUTS) as NarrationOutput[]) {
+    const want = manifest.files[name]
+    if (!want) continue
+    try {
+      const bytes = await deps.blobs.get('uploads', `${attemptId}/${name}`)
+      if (!bytes) throw new Error('not uploaded')
+      if (sha256Hex(bytes) !== want.sha256) throw new Error("doesn't match the manifest hash")
+      if (name === 'narration.mp3') {
+        if (bytes.byteLength > MAX_NARRATION_MP3_BYTES || sniffAudio(bytes)?.format !== 'mp3')
+          throw new Error('too large or not an MP3')
+      } else if (bytes.byteLength > MAX_TRANSCRIPT_BYTES || !isUtf8Text(bytes))
+        throw new Error('too large or not UTF-8 text')
+      await deps.blobs.set('videos', `${prefix}/${name}`, bytes, {
+        contentType: NARRATION_OUTPUTS[name],
+        size: String(bytes.byteLength),
+      })
+      sha256[name] = want.sha256
+      stored.add(name)
+    } catch (e) {
+      deps.log.warn('finalize.narration_output_skipped', { attemptId, file: name, error: e })
+    }
+  }
+  deps.log.info('finalize.narration_outputs', { attemptId, stored: [...stored] })
+  return stored
+}
+
+const isUtf8Text = (b: Uint8Array) => {
+  try {
+    // eslint-disable-next-line no-control-regex
+    return !/[\u0000-\u0008\u000e-\u001f]/.test(new TextDecoder('utf-8', { fatal: true }).decode(b))
+  } catch {
+    return false
+  }
+}
+
 // Reading a saved composition for its credits only: wider than the preview bundle's limits, so a large file the run
 // made can't cost a CC BY work its credit, and still bounded.
 const SOURCE_READ_LIMITS: TarLimits = {
@@ -459,6 +518,7 @@ export function narrationMetadata(
   version: VersionRow,
   manifest: Manifest,
   references: { entry: BundleReference; bytes: Uint8Array }[],
+  outputs: ReadonlySet<NarrationOutput> = new Set(),
 ): Pick<VersionRow, 'narration' | 'captions'> | null {
   const frozen = version.frozen?.narration
   if (!frozen) return null
@@ -486,8 +546,11 @@ export function narrationMetadata(
     status,
     policy: frozen.captions,
     rev: 0,
-    files: { vtt: 'captions.vtt', transcript: null },
-    sha256: { vtt: manifest.files['captions.vtt'].sha256, transcript: null },
+    files: { vtt: 'captions.vtt', transcript: outputs.has('transcript.txt') ? 'transcript.txt' : null },
+    sha256: {
+      vtt: manifest.files['captions.vtt'].sha256,
+      transcript: outputs.has('transcript.txt') ? (manifest.files['transcript.txt']?.sha256 ?? null) : null,
+    },
     generation: 0,
   }
   deps.log.info('finalize.narration', {

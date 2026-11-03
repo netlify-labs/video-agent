@@ -2,7 +2,7 @@
 import type { Deps } from '../deps.js'
 import { signPath } from '../lib/crypto.js'
 import { isPreviewFile, type PreviewFile } from '../lib/media/previews.js'
-import type { JobRow } from './types.js'
+import type { JobRow, OutputRow, VersionRow } from './types.js'
 import { getSettings } from './settings.js'
 
 export const FILE_NAMES = {
@@ -10,8 +10,25 @@ export const FILE_NAMES = {
   poster: 'poster.jpg',
   gif: 'preview.gif',
   captions: 'captions.vtt',
+  // Recorded narration's downloads (plan 2026-11-02 §6.7): only narrated versions have them. Not `narration`: that
+  // path is the version's narration op (plan §7).
+  'narration-audio': 'narration.mp3',
+  transcript: 'transcript.txt',
 } as const
 export type FileKind = keyof typeof FILE_NAMES
+
+/** The stored name of one of a version's files, or null when the version has none (no narration, no transcript). */
+export function versionFileName(
+  v: Pick<VersionRow, 'captions'>,
+  o: Pick<OutputRow, 'sha256'>,
+  file: FileKind,
+): string | null {
+  if (file === 'transcript')
+    return v.captions?.files.transcript ?? (o.sha256[FILE_NAMES.transcript] ? FILE_NAMES.transcript : null)
+  if (file === 'narration-audio')
+    return o.sha256[FILE_NAMES['narration-audio']] ? FILE_NAMES['narration-audio'] : null
+  return FILE_NAMES[file]
+}
 
 /** Private-video file URLs last at most this long (plan v2 §14 rule 4). */
 export const PRIVATE_URL_TTL_SEC = 600
@@ -33,15 +50,16 @@ export const fileTtl = (job: Pick<JobRow, 'private'>, ttlSec: number) =>
   job.private ? Math.min(ttlSec, PRIVATE_URL_TTL_SEC) : ttlSec
 
 /** Signs one file path for a known expiry (the job's access epoch is bound in for private videos). Preview variants
- * are named by their file name. */
+ * are named by their file name; `name` overrides a kind's fixed one (versionFileName). */
 export function signFile(
   secret: string,
   job: Pick<JobRow, 'id' | 'private' | 'accessEpoch'>,
   n: number,
   file: FileKind | PreviewFile,
   exp: number,
+  name?: string,
 ): string {
-  const path = `/files/${job.id}/v${n}/${isPreviewFile(file) ? file : FILE_NAMES[file]}`
+  const path = `/files/${job.id}/v${n}/${name ?? (isPreviewFile(file) ? file : FILE_NAMES[file])}`
   const epoch = job.private ? job.accessEpoch : undefined
   const sig = signPath(secret, path, exp, epoch)
   return `${path}?exp=${exp}${epoch === undefined ? '' : `&e=${epoch}`}&sig=${sig}`
@@ -52,13 +70,13 @@ export async function signedFilePath(
   job: Pick<JobRow, 'id' | 'private' | 'accessEpoch'>,
   n: number,
   file: FileKind,
-  o: { ttlSec?: number; download?: boolean; stable?: boolean } = {},
+  o: { ttlSec?: number; download?: boolean; stable?: boolean; name?: string } = {},
 ): Promise<string> {
   const { fileSigningSecret } = await getSettings(deps)
   const ttl = fileTtl(job, o.ttlSec ?? 600)
   const nowSec = Math.floor(deps.clock.now().getTime() / 1000)
   const exp = o.stable ? stableExp(nowSec, ttl) : nowSec + ttl
-  return `${signFile(fileSigningSecret, job, n, file, exp)}${o.download ? '&download=1' : ''}`
+  return `${signFile(fileSigningSecret, job, n, file, exp, o.name)}${o.download ? '&download=1' : ''}`
 }
 
 export const accessKey = (jobId: string) => `access/${jobId}.json`

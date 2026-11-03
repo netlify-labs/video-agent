@@ -24,7 +24,7 @@ import {
   unpublishVersion,
   videoDto,
 } from './domain/videos.js'
-import { signedFilePath } from './domain/files.js'
+import { signedFilePath, versionFileName } from './domain/files.js'
 import { handleMcp } from './mcp.js'
 import {
   listGrants,
@@ -137,7 +137,9 @@ const VersionParam = IdParam.extend({
     .openapi({ param: { name: 'n', in: 'path' } }),
 })
 const FileParam = VersionParam.extend({
-  file: z.enum(['video', 'poster', 'gif', 'captions']).openapi({ param: { name: 'file', in: 'path' } }),
+  file: z
+    .enum(['video', 'poster', 'gif', 'captions', 'narration-audio', 'transcript'])
+    .openapi({ param: { name: 'file', in: 'path' } }),
 })
 
 export function createApp(deps: Deps, opts: AppOptions) {
@@ -488,15 +490,23 @@ export function createApp(deps: Deps, opts: AppOptions) {
       method: 'post',
       path: '/api/v1/videos/{id}/versions/{n}/publish',
       summary: 'Publish a version',
-      description: 'Publishes a version to a public share page and links.',
+      description:
+        "Publishes a version to a public share page and links. With showTranscript, the share page offers the narration's transcript.",
       tags: ['publishing'],
       security,
-      request: { params: VersionParam },
+      request: {
+        params: VersionParam,
+        body: { content: { 'application/json': { schema: s.PublishSchema } }, required: false },
+      },
       responses: { 200: json(s.PublicationSchema, 'Published'), ...errors },
     }),
     async (c) => {
       const p = c.req.valid('param')
-      return c.json(await publishVersion(deps, c.get('principal'), p.id, p.n), 200)
+      const body = c.req.valid('json') as { showTranscript?: boolean } | undefined
+      return c.json(
+        await publishVersion(deps, c.get('principal'), p.id, p.n, { showTranscript: body?.showTranscript }),
+        200,
+      )
     },
   )
   app.openapi(
@@ -573,12 +583,17 @@ export function createApp(deps: Deps, opts: AppOptions) {
       const job = await loadJob(deps.store, c.get('principal'), id)
       assertCan(c.get('principal'), 'video:read')
       const out = await deps.store.getOutput(id, n)
-      if (!out) throw new ApiError('not_ready', 'This version has no files yet.')
+      const version = await deps.store.getVersion(id, n)
+      if (!out || !version) throw new ApiError('not_ready', 'This version has no files yet.')
+      // narration-audio and transcript: narrated versions only; captions and transcript follow the caption revision.
+      const name = versionFileName(version, out, file)
+      if (!name) throw new ApiError('not_found', 'This version has no such file.')
       c.header('cache-control', 'private, no-store')
       return c.redirect(
         await signedFilePath(deps, job, n, file, {
           download: c.req.valid('query').download === '1',
           stable: true,
+          name,
         }),
         302,
       )

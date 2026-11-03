@@ -1,0 +1,1 @@
+ALTER TABLE "publications" ADD COLUMN "show_transcript" boolean DEFAULT false NOT NULL;

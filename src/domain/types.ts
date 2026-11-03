@@ -437,6 +437,8 @@ export interface PublicationRow {
   publishedBy: string
   publishedAt: string
   unpublishedAt: string | null
+  /** The share page offers the version's transcript; missing on rows written before it existed: off. */
+  showTranscript?: boolean
 }
 
 export interface ReceiptRow {
@@ -860,7 +862,7 @@ export interface Manifest {
     'video.mp4' | 'poster.jpg' | 'preview.gif' | 'captions.vtt' | 'source.tar.gz',
     { sha256: string; bytes: number }
   > &
-    Partial<Record<PreviewFile, { sha256: string; bytes: number }>>
+    Partial<Record<PreviewFile | NarrationOutput, { sha256: string; bytes: number }>>
   /** Files of the composition uploaded on their own, outside source.tar.gz (src/lib/bundle-references.ts). */
   references?: Omit<BundleReference, 'key'>[]
   /** The tiny poster placeholder as a data URI, when render-job could make one. */
@@ -921,3 +923,10 @@ export const OUTPUT_FILES = [
   'source.tar.gz',
 ] as const
 export type OutputFile = (typeof OUTPUT_FILES)[number]
+
+/** Recorded narration's outputs (plan 2026-11-02 §6.7): only narrated renders make them, so they're never required. */
+export const NARRATION_OUTPUTS = {
+  'narration.mp3': 'audio/mpeg',
+  'transcript.txt': 'text/plain; charset=utf-8',
+} as const
+export type NarrationOutput = keyof typeof NARRATION_OUTPUTS

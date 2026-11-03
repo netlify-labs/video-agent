@@ -22,6 +22,7 @@ import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
 import { MediaChips, type Media } from '../components/MediaPicker'
 import { PlanPanel } from '../components/PlanPanel'
+import { PublishButton } from '../components/PublishDialog'
 import { SoundControl, soundAfterPick, type Sound } from '../components/SoundControl'
 import {
   VoiceoverControl,
@@ -427,6 +428,8 @@ function PublicLink({ video, v, canPublish }: { video: Video; v: Version; canPub
         <CopyField label="Share page" value={live.urls.page} />
         <CopyField label="MP4" value={live.urls.mp4} />
         <CopyField label="GIF" value={live.urls.gif} />
+        {live.urls.narration ? <CopyField label="Narration (MP3)" value={live.urls.narration} /> : null}
+        {live.urls.transcript ? <CopyField label="Transcript" value={live.urls.transcript} /> : null}
         <CopyField label="Embed" value={live.embed ?? ''} />
         {canPublish ? (
           <Group justify="space-between" mt={4}>
@@ -700,14 +703,14 @@ export function VideoPage() {
             </Button>
           ) : null}
           {v.status === 'ready' && canPublish && !live ? (
-            <Button
+            <PublishButton
+              v={v}
+              userId={me.data?.id ?? ''}
               loading={publish.isPending}
-              onClick={() => {
-                publish.mutate({ params: { path: { id: data.id, n: v.n } } })
+              onPublish={(body) => {
+                publish.mutate({ params: { path: { id: data.id, n: v.n } }, body })
               }}
-            >
-              Publish v{v.n}
-            </Button>
+            />
           ) : live?.urls ? (
             <CopyButton value={live.urls.page}>
               {({ copied, copy }) => (
@@ -724,14 +727,23 @@ export function VideoPage() {
               </Menu.Target>
               <Menu.Dropdown>
                 {v.status === 'ready'
-                  ? (['poster', 'gif', 'captions'] as const).map((f) => (
+                  ? (
+                      [
+                        'poster',
+                        'gif',
+                        'captions',
+                        ...(v.links.narrationAudio ? (['narration-audio'] as const) : []),
+                        ...(v.links.transcript ? (['transcript'] as const) : []),
+                      ] as const
+                    ).map((f) => (
                       <Menu.Item
                         key={f}
                         component="a"
                         href={fileUrl(data.id, v.n, f, true)}
                         leftSection={<IconDownload size={14} />}
                       >
-                        Download {f === 'gif' ? 'GIF preview' : f}
+                        Download{' '}
+                        {f === 'gif' ? 'GIF preview' : f === 'narration-audio' ? 'narration (MP3)' : f}
                       </Menu.Item>
                     ))
                   : null}

@@ -788,7 +788,7 @@ export interface paths {
         put?: never;
         /**
          * Publish a version
-         * @description Publishes a version to a public share page and links.
+         * @description Publishes a version to a public share page and links. With showTranscript, the share page offers the narration's transcript.
          */
         post: {
             parameters: {
@@ -800,7 +800,11 @@ export interface paths {
                 };
                 cookie?: never;
             };
-            requestBody?: never;
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["Publish"];
+                };
+            };
             responses: {
                 /** @description Published */
                 200: {
@@ -1133,7 +1137,7 @@ export interface paths {
                 path: {
                     id: string;
                     n: number;
-                    file: "video" | "poster" | "gif" | "captions";
+                    file: "video" | "poster" | "gif" | "captions" | "narration-audio" | "transcript";
                 };
                 cookie?: never;
             };
@@ -7281,6 +7285,10 @@ export interface components {
                 poster: string;
                 gif: string;
                 captions: string;
+                /** @description The recorded narration as a 192 kbps MP3; only versions with recorded narration. */
+                narrationAudio?: string;
+                /** @description The narration's transcript as plain text (the latest caption revision); only when there is one. */
+                transcript?: string;
                 netlifyRun: string | null;
             };
             /** @description Signed URLs for the poster and preview GIF, once the version has files (30 to 60 minutes; 5 to 10 for private videos). Use links for a fresh one. */
@@ -7400,7 +7408,13 @@ export interface components {
                 captions: string;
                 /** @description A 960px-wide WebP poster, for versions rendered with preview variants. */
                 posterWebp?: string;
+                /** @description The recorded narration as an MP3, for versions that have one. */
+                narration?: string;
+                /** @description The narration's transcript as plain text, when the publication shows it. */
+                transcript?: string;
             } | null;
+            /** @description Whether the share page offers the narration's transcript. */
+            showTranscript: boolean;
             /** @description HTML to embed the video; with CC BY media it includes the credit line as a caption */
             embed: string | null;
         };
@@ -7469,6 +7483,10 @@ export interface components {
             voiceover?: components["schemas"]["VoiceoverInput"] & unknown;
             /** @description Incorporate feedback: open comments on the version being revised (owner or admin). prompt is your note. */
             commentIds?: string[];
+        };
+        Publish: {
+            /** @description Offer the narration's transcript on the share page. Default off; publishing again changes only this. */
+            showTranscript?: boolean;
         };
         SetVerdict: {
             verdict: components["schemas"]["Verdict"];

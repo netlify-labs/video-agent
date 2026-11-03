@@ -696,6 +696,14 @@
               "captions": {
                 "type": "string"
               },
+              "narrationAudio": {
+                "type": "string",
+                "description": "The recorded narration as a 192 kbps MP3; only versions with recorded narration."
+              },
+              "transcript": {
+                "type": "string",
+                "description": "The narration's transcript as plain text (the latest caption revision); only when there is one."
+              },
               "netlifyRun": {
                 "type": [
                   "string",
@@ -1195,6 +1203,14 @@
               "posterWebp": {
                 "type": "string",
                 "description": "A 960px-wide WebP poster, for versions rendered with preview variants."
+              },
+              "narration": {
+                "type": "string",
+                "description": "The recorded narration as an MP3, for versions that have one."
+              },
+              "transcript": {
+                "type": "string",
+                "description": "The narration's transcript as plain text, when the publication shows it."
               }
             },
             "required": [
@@ -1204,6 +1220,10 @@
               "gif",
               "captions"
             ]
+          },
+          "showTranscript": {
+            "type": "boolean",
+            "description": "Whether the share page offers the narration's transcript."
           },
           "embed": {
             "type": [
@@ -1219,6 +1239,7 @@
           "publishedAt",
           "unpublishedAt",
           "urls",
+          "showTranscript",
           "embed"
         ]
       },
@@ -1477,6 +1498,15 @@
         "required": [
           "prompt"
         ]
+      },
+      "Publish": {
+        "type": "object",
+        "properties": {
+          "showTranscript": {
+            "type": "boolean",
+            "description": "Offer the narration's transcript on the share page. Default off; publishing again changes only this."
+          }
+        }
       },
       "SetVerdict": {
         "type": "object",
@@ -5963,7 +5993,7 @@
     "/api/v1/videos/{id}/versions/{n}/publish": {
       "post": {
         "summary": "Publish a version",
-        "description": "Publishes a version to a public share page and links.",
+        "description": "Publishes a version to a public share page and links. With showTranscript, the share page offers the narration's transcript.",
         "tags": [
           "publishing"
         ],
@@ -5994,6 +6024,16 @@
             "in": "path"
           }
         ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Publish"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Published",
@@ -6404,7 +6444,9 @@
                 "video",
                 "poster",
                 "gif",
-                "captions"
+                "captions",
+                "narration-audio",
+                "transcript"
               ]
             },
             "required": true,
