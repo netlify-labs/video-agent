@@ -151,7 +151,7 @@ test('a dropped WAV becomes a clip where it lands; moved and saved, Render asks 
   await expect(dialog.getByTestId('render-duration-bar')).toContainText('Video 0:09.0')
   await expect(dialog.getByRole('radio', { name: 'Keep my visuals' })).toBeChecked()
   await expect(dialog.getByText('About 34 credits', { exact: false })).toBeVisible()
-  await expect(dialog.getByRole('radio', { name: /fit the video to my narration/ })).toBeDisabled()
+  await expect(dialog.getByRole('radio', { name: /fit the video to my narration/ })).toBeEnabled()
   await expect(dialog.getByTestId('render-overflow')).toContainText('runs 1.3 s past the end')
   // An overrun needs a choice before it renders.
   const go = dialog.getByRole('button', { name: 'Render as v3' })

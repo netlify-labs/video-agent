@@ -5,6 +5,7 @@ import { load, read, type VoiceClip } from '../../../src/lib/contract'
 import {
   audibleEnd,
   clipEnd,
+  fitTarget,
   holdFrameEnd,
   IDENTITY_FIT,
   outputLimit,
@@ -156,6 +157,12 @@ export interface RenderPreview {
   limit: number
   /** The last clip still heard past the end, for Trim to jump to. */
   overflowClipId: string | null
+  /**
+   * A fit's length (§2.5, §6.4): the last word plus 0.5 s in whole frames, shorter or longer than the video, and
+   * whether it's within the limit and anything is heard at all.
+   */
+  fitEnd: number
+  fitAllowed: boolean
 }
 
 /** Where the narration sits against a video of `video` samples, and what holding its last frame would make (§2.5). */
@@ -173,6 +180,8 @@ export function renderPreview(op: NarrationOp, video: number, fps: number): Rend
     holdAllowed: withinOutputLimit(holdEnd, video),
     limit: outputLimit(video),
     overflowClipId: over[over.length - 1]?.id ?? null,
+    fitEnd: fitTarget(audible, fps),
+    fitAllowed: end > 0 && withinOutputLimit(fitTarget(audible, fps), video),
   }
 }
 

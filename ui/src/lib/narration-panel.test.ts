@@ -174,5 +174,18 @@ describe('render dialog: duration and overflow', () => {
 
   it('no narration: everything at 0', () => {
     expect(renderPreview(emptyNarration(), video, FPS)).toMatchObject({ start: 0, end: 0, overflow: 0 })
+    expect(renderPreview(emptyNarration(), video, FPS)).toMatchObject({ fitEnd: 0, fitAllowed: false })
+  })
+
+  it("a fit's length is the last word plus 0.5 s in whole frames, shorter or longer than the video", () => {
+    const short = renderPreview(withClips([clip('a', S, 2 * S)]), video, FPS)
+    expect(short).toMatchObject({ fitEnd: 3.5 * S, fitAllowed: true })
+    const end = 10 * S + 240
+    const long = renderPreview(withClips([clip('b', 8 * S, end - 8 * S)]), video, FPS)
+    expect(long.fitEnd).toBe(frameStart(316, FPS))
+    expect(long.fitAllowed).toBe(true)
+    expect(renderPreview(withClips([clip('a', video, MAX_EXTENSION_SAMPLES)]), video, FPS).fitAllowed).toBe(
+      false,
+    )
   })
 })

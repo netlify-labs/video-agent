@@ -74,7 +74,7 @@ Optional planning (when plan_video is listed): call plan_video with the prompt f
 
 Videos have captions and are silent unless you pass sound ("music" or "music_sfx"); for music, pass an audio item from list_media in media_ids (else the brand's music, or a CC0 or CC BY track the agent finds on Openverse, credited automatically); when search_music is listed, it finds CC0 and CC BY music on Openverse to import with import_music (when Openverse is slow they answer status "pending" with a job_id: call get_music_job until it's done). Pass voiceover (true, or a script with a line per beat) for a spoken narration; its captions follow the words. The company's brand context is applied automatically. Don't create a new video to fix a small thing: revise it.
 
-Your own recorded voice-over (when add_narration is listed): upload the recording, place it with add_narration (media ids only), check it with get_narration, then render_with_narration with mode "keep_visuals"; the visuals stay as they are.
+Your own recorded voice-over (when add_narration is listed): upload the recording, place it with add_narration (media ids only), check it with get_narration, then render_with_narration with mode "keep_visuals" (the visuals stay as they are) or "fit_to_narration" (the agent retimes the scenes to it: an authoring run, about 250 credits).
 
 Prompts: prompts/list has step-by-step recipes for what your role can do: pr_video (pull request to demo video), changelog_video (release notes to changelog video), social_cut (short vertical cut of a video), localize_video (captions and on-screen text in other languages) and review_video (read and add feedback, approve, revise).`
 
@@ -1408,9 +1408,9 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "media_id": "med_01jc8x2
     {
       title: 'Render a video with your narration',
       description: `Render your draft (with the narration from add_narration or the editor) as the next version. "keep_visuals" keeps the video exactly as it is and mixes your narration over it; music dips under the voice and captions follow your words. hold_final_frame holds the last frame when the narration runs past the end (instead of cutting it off).
-"fit_to_narration" (retiming the visuals to the narration) isn't available yet. A draft without narration is refused.
+"fit_to_narration" is an authoring run (about 250 credits, against about 34 for keep_visuals): the agent retimes, extends or tightens the scenes so the video ends half a second after the last word. It never changes the narration and always replaces the AI voice-over (whatever the draft's AI voice setting); hold_final_frame doesn't apply. A draft without narration is refused.
 
-Each render starts a run that costs credits: confirm with your user first. Returns at once; follow it with get_video.
+Each render starts a run that costs credits: confirm with your user first, with the cost. Returns at once; follow it with get_video.
 
 Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "mode": "keep_visuals", "hold_final_frame": true}`,
       inputSchema: {
@@ -1424,7 +1424,9 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "mode": "keep_visuals", 
           ),
         mode: z
           .enum(['keep_visuals', 'fit_to_narration'])
-          .describe('"keep_visuals" (the visuals as they are) or "fit_to_narration" (not available yet).'),
+          .describe(
+            '"keep_visuals" (the visuals as they are) or "fit_to_narration" (the agent fits the scenes to the narration).',
+          ),
         hold_final_frame: z
           .boolean()
           .optional()
@@ -1464,14 +1466,6 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "mode": "keep_visuals", 
             fix_hint: 'Add a recording with add_narration first.',
             suggested_tool_calls: [{ name: 'get_narration', arguments: { video_id: id } }],
           })
-        if (args.mode === 'fit_to_narration')
-          throw new ToolError(
-            'INVALID_ARGUMENT',
-            "Fitting the video to your narration isn't available yet here.",
-            {
-              fix_hint: 'Render with mode "keep_visuals", or fit it from the editor.',
-            },
-          )
         const res = await renderEdit(deps, principal, edit.id, args.idempotency_key, {
           mode: args.mode,
           holdFinalFrame: args.hold_final_frame,

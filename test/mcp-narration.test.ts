@@ -122,7 +122,7 @@ describe('MCP narration tools', () => {
     expect((await tool(h, key, 'get_narration', { video_id: id })).data.draft.narration).toBeNull()
   })
 
-  it('refuses fit_to_narration for now, and a draft without narration', async () => {
+  it('fits to the narration as an authoring version, and refuses a draft without narration', async () => {
     const { h, id, key, take } = await setup()
     const none = await tool(h, key, 'render_with_narration', { video_id: id, mode: 'keep_visuals' })
     expect(none.data.error.type).toBe('NOT_FOUND')
@@ -143,9 +143,11 @@ describe('MCP narration tools', () => {
       edit_id: draft.id,
       mode: 'fit_to_narration',
     })
-    expect(fit.data.error.type).toBe('INVALID_ARGUMENT')
-    expect(fit.data.error.message).toContain("isn't available yet")
-    expect(await h.deps.store.getVersion(id, 2)).toBeNull()
+    expect(fit.data.error).toBeUndefined()
+    // An authoring run from the draft, the AI voice replaced (plan 2026-11-02 §6.4).
+    const v2 = await h.deps.store.getVersion(id, 2)
+    expect(v2).toMatchObject({ mode: 'author', editedFromN: 1 })
+    expect(v2?.frozen?.narration?.op.tracks.aiVoice.mode).toBe('replace')
   })
 
   it("exposes the video's language and sets it when adding narration", async () => {

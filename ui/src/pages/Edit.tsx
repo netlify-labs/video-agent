@@ -44,7 +44,7 @@ import type { paths } from '../api/schema'
 import { confirmDanger, showError } from '../components/bits'
 import { CompositionPreview, type PreviewCommand } from '../components/CompositionPreview'
 import { MediaLibraryModal, type Media } from '../components/MediaPicker'
-import { NarrationRenderDialog } from '../components/NarrationRenderDialog'
+import { NarrationRenderDialog, type RenderChoice } from '../components/NarrationRenderDialog'
 import { NarrationSection, type NarrationControl } from '../components/NarrationSection'
 import {
   keepMineWarning,
@@ -545,9 +545,9 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
   const reordered = kept.join() !== cur.beats.map((b) => b.id).join()
   // Render asks how when the saved draft has recorded narration (keep the visuals, and what to do past the end).
   const savedNarration = narrationOn ? narrationOf(draft.ops) : null
-  const renderBody = (holdFinalFrame: boolean) => ({
+  const renderBody = (c: RenderChoice) => ({
     params: { path: { id: draft.id }, header: { 'idempotency-key': renderKey } },
-    body: { mode: 'keep_visuals' as const, ...(holdFinalFrame ? { holdFinalFrame: true } : {}) },
+    body: { mode: c.mode, ...(c.holdFinalFrame ? { holdFinalFrame: true } : {}) },
   })
   // Recording waits while a pending op would move time in the render (plan 2026-11-02 §5.3).
   const timingPending = timingChanged(ops, base)
@@ -1126,7 +1126,7 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
           next={next}
           pending={render.isPending}
           onRender={(c) => {
-            render.mutate(renderBody(c.holdFinalFrame))
+            render.mutate(renderBody(c))
           }}
           onTrim={(clipId, sample) => {
             setRenderDialog(false)

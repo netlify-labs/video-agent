@@ -47,7 +47,12 @@ was rendered with and its captions' status.
 ## 3. Render
 
 **Ask before spending a run**: a render costs credits, like a revision. Then call `render_with_narration` with
-`video_id` and `mode` "keep_visuals" (pass `edit_id` for a draft other than your latest one). With
-`hold_final_frame`, narration that runs past the end holds the last frame until it finishes; without it, it's cut
-off. "fit_to_narration" (retiming the visuals to the narration) isn't available yet, and a draft without narration
-is refused. Follow the new version with `get_video` as usual.
+`video_id` and a `mode` (pass `edit_id` for a draft other than your latest one):
+
+- "keep_visuals" (about 34 credits) keeps the scenes as they are. With `hold_final_frame`, narration that runs past
+  the end holds the last frame until it finishes; without it, it's cut off.
+- "fit_to_narration" (an authoring run, about 250 credits: say so when you ask) lets the agent retime, extend or
+  tighten the scenes so the video ends half a second after the last word. It never changes the narration, and it
+  always replaces the AI voice-over, whatever the draft's AI voice setting says. No `hold_final_frame` with it.
+
+A draft without narration is refused. Follow the new version with `get_video` as usual.

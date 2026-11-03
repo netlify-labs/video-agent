@@ -789,11 +789,25 @@ export function installMock() {
       }
       if (edit[2] === '/render') {
         const vid = videos.find((x) => x.id === mockEdit?.videoId)
-        // The render's settings are kept for tests (window.__lastRender); fitting to the narration isn't there yet.
+        // The render's settings are kept for tests (window.__lastRender). A fit (plan 2026-11-02 §6.4) is refused
+        // as the server refuses it: without recorded narration in the draft, or with a held frame or no narration.
         const body = await readBody(init, input)
         ;(window as unknown as { __lastRender?: unknown }).__lastRender = body
-        if ((body as { mode?: string }).mode === 'fit_to_narration')
-          return fail(400, 'invalid_request', "Fitting the video to your narration isn't available yet.")
+        const r = body as { mode?: string; holdFinalFrame?: boolean; excludeNarration?: boolean }
+        if (r.mode === 'fit_to_narration') {
+          if (r.holdFinalFrame || r.excludeNarration)
+            return fail(
+              400,
+              'invalid_request',
+              'Fitting the video to your narration retimes the visuals to it, so it neither holds the last frame nor leaves the narration out.',
+            )
+          if (!mockEdit.ops.some((o) => (o as { op: string }).op === 'narration'))
+            return fail(
+              400,
+              'invalid_request',
+              'Fitting the video to your narration needs recorded narration in the draft. Record or upload some first, or render with your visuals kept.',
+            )
+        }
         const w = window as unknown as { __rendered?: number }
         w.__rendered = (w.__rendered ?? 0) + 1
         if (!vid) return fail(404, 'not_found', 'Video not found.')
