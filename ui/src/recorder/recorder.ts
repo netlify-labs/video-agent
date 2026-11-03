@@ -4,8 +4,9 @@
 // recovery store (store.ts) from the first one. stop() resolves with the finalized WAV, its file hash, peaks and
 // speech, so the uploader never reads the file whole. The mic tracks are stopped on stop() and cancel().
 //
-// Mock builds only: window.__vaTestMic(context) can supply the input stream (Playwright: Chromium's fake capture
-// device never resolves getUserMedia on the macOS agent host, S10), so everything from the source node on is real.
+// Mock builds only: window.__vaTestMic(context, constraints) can supply the input stream (Playwright: Chromium's fake
+// capture device never resolves getUserMedia on the macOS agent host, S10), so everything from the source node on is
+// real. It gets the audio constraints getUserMedia would have, and can throw to stand in for a denied mic.
 import type { Span } from '../../../src/lib/timeline'
 import type { DeviceRoute, TakeRecord } from './store'
 import { recoveryStore } from './store'
@@ -71,7 +72,7 @@ export interface Recorder {
 declare global {
   interface Window {
     /** Mock builds only: a stand-in mic for Playwright. */
-    __vaTestMic?: (context: AudioContext) => MediaStream | Promise<MediaStream>
+    __vaTestMic?: (context: AudioContext, audio: MediaTrackConstraints) => MediaStream | Promise<MediaStream>
   }
 }
 
@@ -82,17 +83,26 @@ async function loadWorklet(ctx: AudioContext) {
   loaded.add(ctx)
 }
 
-async function micStream(ctx: AudioContext, o: RecorderOptions): Promise<MediaStream> {
-  if (import.meta.env.VITE_MOCK && window.__vaTestMic) return window.__vaTestMic(ctx)
-  return navigator.mediaDevices.getUserMedia({
-    audio: {
-      ...(o.deviceId ? { deviceId: { exact: o.deviceId } } : {}),
-      channelCount: 1,
-      echoCancellation: o.echoCancellation,
-      noiseSuppression: false,
-      autoGainControl: false,
-    },
-  })
+/** The mic constraints for a take (§5.1); the setup panel's meter opens the same ones. */
+export function micConstraints(
+  o: Pick<RecorderOptions, 'deviceId' | 'echoCancellation'>,
+): MediaTrackConstraints {
+  return {
+    ...(o.deviceId ? { deviceId: { exact: o.deviceId } } : {}),
+    channelCount: 1,
+    echoCancellation: o.echoCancellation,
+    noiseSuppression: false,
+    autoGainControl: false,
+  }
+}
+
+export async function micStream(
+  ctx: AudioContext,
+  o: Pick<RecorderOptions, 'deviceId' | 'echoCancellation'>,
+): Promise<MediaStream> {
+  const audio = micConstraints(o)
+  if (import.meta.env.VITE_MOCK && window.__vaTestMic) return window.__vaTestMic(ctx, audio)
+  return navigator.mediaDevices.getUserMedia({ audio })
 }
 
 type FromWorker =

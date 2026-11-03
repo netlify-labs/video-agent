@@ -2,7 +2,8 @@
 // the Playwright spec, which supplies the mic through window.__vaTestMic. ?user= sets the owner (so the spec can switch
 // accounts); unsaved takes for that user are offered on load. A stopped or recovered take is uploaded to the mock
 // server with useTakeUpload, and "saving the draft" is a log line (localStorage.mockFailSave = '1' fails the next
-// save). Never in production builds: App.tsx mounts it only when VITE_MOCK is set.
+// save). The setup panel (ui/src/recorder/setup) sits above it: its value feeds createRecorder, and the recorder options
+// and track patch it maps to are shown for the spec. Never in production builds: App.tsx mounts it only when VITE_MOCK is set.
 import { Button, Code, Group, Stack, Text, Title } from '@mantine/core'
 import { useRef, useState } from 'react'
 import { SAMPLE_RATE } from '../../../src/lib/timeline'
@@ -10,6 +11,14 @@ import { createRecorder, type RecordedTake, type Recorder } from '../recorder/re
 import { RecoveryPrompt } from '../recorder/RecoveryPrompt'
 import { useRecordingRecovery } from '../recorder/recovery'
 import { useTakeUpload } from '../recorder/use-take-upload'
+import { RecordingSetup } from '../recorder/setup/RecordingSetup'
+import {
+  defaultSetup,
+  setupToRecorderOptions,
+  setupToTrackPatch,
+  type RecordingSetupValue,
+  type TrackPatch,
+} from '../recorder/setup/setup'
 
 const DRAFT = 'draft_demo'
 
@@ -23,6 +32,9 @@ export default function RecorderDemo() {
   const [take, setTake] = useState<RecordedTake | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState<string[]>([])
+  const [setup, setSetup] = useState<RecordingSetupValue>(() => defaultSetup())
+  const [tracks, setTracks] = useState<TrackPatch>(() => setupToTrackPatch(setup))
+  const [uploadAsked, setUploadAsked] = useState(false)
   const upload = useTakeUpload({
     userId,
     scopeJobId: 'vid_teaser',
@@ -46,7 +58,7 @@ export default function RecorderDemo() {
     setPhase('opening')
     try {
       const r = await createRecorder({
-        echoCancellation: false,
+        ...setupToRecorderOptions(setup),
         owner: { userId, draftId: DRAFT, expectedRev: 1, scopeJobId: 'vid_teaser' },
         onLevel: (l) => setLevel(l.peak),
         onProgress: (p) => setCaptured(p.samples),
@@ -91,6 +103,25 @@ export default function RecorderDemo() {
           The voice-over recorder on its own (mock data), as {userId}.
         </Text>
       </div>
+      <RecordingSetup
+        value={setup}
+        onChange={(v, t) => {
+          setSetup(v)
+          setTracks(t)
+        }}
+        onUploadInstead={() => {
+          setUploadAsked(true)
+        }}
+        locked={phase !== 'idle'}
+      />
+      <Code block data-testid="setup-options">
+        {JSON.stringify({ recorder: setupToRecorderOptions(setup), tracks })}
+      </Code>
+      {uploadAsked ? (
+        <Text size="sm" data-testid="upload-instead">
+          Upload instead was chosen.
+        </Text>
+      ) : null}
       <RecoveryPrompt
         takes={recovery.takes}
         onRecover={async (t) => {
