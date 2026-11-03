@@ -10,6 +10,9 @@ import { join, relative, sep } from 'node:path'
 import { bundleManifest, manifestHash } from './bundle-manifest.js'
 import { isReference } from './bundle-references.js'
 import {
+  FPS,
+  HOLD_STILL_SRC,
+  holdBeatOf,
   load,
   NARRATION_ID,
   NARRATION_SRC,
@@ -20,7 +23,12 @@ import {
   type Summary,
 } from './contract.js'
 import { readPcm16 } from './narration-cleanup.js'
-import { mayChange, narrationTransform, type NarrationReceipt } from './narration-run.js'
+import {
+  mayChange,
+  narrationTransform,
+  optionalFrozenFilesFor,
+  type NarrationReceipt,
+} from './narration-run.js'
 import { expectRevoiced, FROZEN_DIR } from './revoice.js'
 import type { RunManifest } from './run-manifest.js'
 import { SAMPLE_RATE } from './timeline.js'
@@ -29,6 +37,7 @@ const sha256 = (b: Uint8Array | string) => createHash('sha256').update(b).digest
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 /** parse5's serialization, so quoting and entity spelling don't count as an edit. */
 const normalize = (html: string) => save(load(html))
+const PNG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
 const audioCount = (html: string) => (html.match(/<audio\b/gi) ?? []).length
 
 /** data-va-speech of the root's narration element, as written (null without one). */
@@ -80,6 +89,8 @@ function leakedTakes(videoDir: string, receipt: NarrationReceipt, m: RunManifest
  *   - index.html is the frozen one (re-voiced, when there are lines) with exactly the narration transform
  *     (narrationTransform over the receipt's spans), and its data-va-speech is speechSeconds(receipt.spans);
  *   - summary.json is the frozen one with only the narration's cues (none until captions land, va-2qq.3.13);
+ *   - with a held last frame (the frozen data-va-hold beat), video/assets/hold/last.png is the PNG the receipt says
+ *     the run rendered of the base's last frame; without one there is no still;
  *   - the narrated composition passes the contract with the bus's length, and nothing from .va-run/ is in video/.
  * Returns the problems (empty when the run may render).
  */
@@ -142,10 +153,15 @@ export function checkNarration(
     const kept = bundleManifest(videoDir).files.filter(
       (f) => !isReference(f.path) && !mayChange(f.path, m.bundle),
     )
+    // A base's held-frame still, when the bundle had one, counts as frozen too (the narration step replaces it).
     const files = [
       ...kept,
       { path: 'index.html', sha256: sha256(html) },
       { path: 'summary.json', sha256: sha256(summary) },
+      ...optionalFrozenFilesFor(m.bundle).flatMap((p) => {
+        const b = frozen(p)
+        return b ? [{ path: p, sha256: sha256(b) }] : []
+      }),
     ]
     if (manifestHash(files, []) !== m.bundle.manifestHash)
       problems.push('Files other than the narration changed since prepare-run restored video/.')
@@ -181,6 +197,23 @@ export function checkNarration(
       `The narration can't be written into the frozen composition: ${e instanceof Error ? e.message : String(e)}`,
     ]
   }
+  // The held frame: exactly the still the run rendered when the composition holds its last frame, none otherwise.
+  const hold = holdBeatOf(load(want.html))
+  const stillPath = join(videoDir, HOLD_STILL_SRC)
+  if (hold) {
+    const at = Math.round(((Math.round(hold.start * FPS) - 1) / FPS) * 1e6) / 1e6
+    const still = existsSync(stillPath) ? readFileSync(stillPath) : null
+    if (!receipt.hold || receipt.hold.atSeconds !== at || receipt.hold.holdSeconds !== hold.duration)
+      problems.push("The narration receipt has no still of the held frame's base frame.")
+    else if (!still || sha256(still) !== receipt.hold.sha256 || !PNG.every((b, i) => still[i] === b))
+      problems.push(`video/${HOLD_STILL_SRC} isn't the held frame scripts/narration.ts rendered.`)
+  } else {
+    if (receipt.hold)
+      problems.push('The narration receipt has a held-frame still, but the composition holds no frame.')
+    if (existsSync(stillPath))
+      problems.push(`video/${HOLD_STILL_SRC} is there, but the composition holds no frame.`)
+  }
+
   let duration = NaN
   try {
     duration = read(load(actual)).duration

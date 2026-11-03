@@ -4,7 +4,7 @@
 // (frozenFilesFor), and render-job's guards (src/lib/revoice.ts checkRevoiced, src/lib/narration-guard.ts
 // checkNarration) allow exactly the files those steps write (mayChange). Re-voicing runs first because it can
 // lengthen beats, and the bus is mixed at the composition's final length.
-import { applyBusNarration, NARRATION_SRC, type Summary } from './contract.js'
+import { applyBusNarration, HOLD_STILL_SRC, NARRATION_SRC, type Summary } from './contract.js'
 import type { BUS_LIMITER } from './narration-bus.js'
 import type { CleanupMeasured } from './narration-cleanup.js'
 import { FROZEN_FILES, revoicable } from './revoice.js'
@@ -32,8 +32,16 @@ export const STEP_COMMANDS = {
   narration: 'npx tsx scripts/narration.ts',
 } as const
 
-/** What scripts/narration.ts writes in video/: the bus, the composition and (once captions land) summary.json. */
-export const NARRATION_WRITES: readonly string[] = ['index.html', 'summary.json', NARRATION_SRC]
+/**
+ * What scripts/narration.ts writes in video/: the bus, the composition, (once captions land) summary.json, and the
+ * held frame's still (written when the composition holds its last frame, removed otherwise).
+ */
+export const NARRATION_WRITES: readonly string[] = [
+  'index.html',
+  'summary.json',
+  NARRATION_SRC,
+  HOLD_STILL_SRC,
+]
 
 /**
  * Whether a run of this bundle may change `path` (relative to video/). The guards still recompute every changed file
@@ -54,12 +62,18 @@ export function frozenFilesFor(bundle: FrozenBundle | null | undefined): string[
 }
 
 /**
+ * Files prepare-run copies too when the bundle has them: a base's held-frame still, which the narration step
+ * replaces or removes, so checkNarration can put the frozen one back into the bundle's manifest hash.
+ */
+export const optionalFrozenFilesFor = (bundle: FrozenBundle | null | undefined): string[] =>
+  bundle?.narration ? [HOLD_STILL_SRC] : []
+
+/**
  * scripts/narration.ts's change to the composition (step 4), shared with checkNarration so the two can't disagree:
- * the narration element with its speech spans, the duck lane and the AI-voice levels (applyBusNarration). Captions
- * from the narration (bead va-2qq.3.13) will add their cues to `summary` here; until then it is returned unchanged.
- * TODO(hold beat): when the frozen target is longer than the visuals (holdFinalFrame), the appended data-va-hold beat
- * (contract holdBeatOf, from the hold-frame bead) is part of this transform too; add it here, before the bus layer,
- * so the script and the guard pick it up together.
+ * the narration element with its speech spans, the duck lane and the AI-voice levels (applyBusNarration). A held last
+ * frame (contract applyHoldFrame) is already in the frozen composition, so it isn't part of this; its still is
+ * (scripts/lib/hold-still.ts, receipt.hold). Captions from the narration (bead va-2qq.3.13) will add their cues to
+ * `summary` here; until then it is returned unchanged.
  */
 export function narrationTransform(
   html: string,
@@ -111,5 +125,7 @@ export interface NarrationReceipt {
   }
   /** Speech in the processed bus, composition samples (before speechSeconds widens them to frames). */
   spans: Span[]
+  /** The held frame's still the run rendered (video/assets/hold/last.png), or null without a held frame. */
+  hold: { path: typeof HOLD_STILL_SRC; sha256: string; atSeconds: number; holdSeconds: number } | null
   warnings: string[]
 }

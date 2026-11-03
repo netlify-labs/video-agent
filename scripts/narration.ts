@@ -12,8 +12,11 @@
 //               lengths are logged), then pre-limited to -2 dBTP (src/lib/narration-bus.ts)
 //   4. write    video/assets/narration/bus.wav (24 kHz mono PCM16), data-va-speech from the processed bus's VAD and the
 //               duck lane (contract applyBusNarration), validated with the bus's sample count
+//   4b. hold    with a held last frame (data-va-hold beat), video/assets/hold/last.png: the base composition's last
+//               frame, captured with hyperframes snapshot (scripts/lib/hold-still.ts); removed without one
 //   5. receipt  .va-run/narration/receipt.json: input and clean digests, recipe (with ffmpeg's version line), bus
-//               digest and samples, speech spans and the attempt id. The guard reads it instead of redoing cleanup.
+//               digest and samples, speech spans, the hold still's digest and the attempt id. The guard reads it
+//               instead of redoing cleanup.
 // Silence-only takes get no gain and a no_speech warning. Same inputs give the same bus within a run; across ffmpeg
 // builds that is best-effort (the receipt records the version). Exits non-zero on any failure: stop and report it.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -27,6 +30,7 @@ import type { RunManifest } from '../src/lib/run-manifest.js'
 import { MAX_OUTPUT_SAMPLES, SAMPLE_RATE, mixToBuffer } from '../src/lib/timeline.js'
 import { wav } from '../src/lib/voice.js'
 import { cleanTake, pcmSha256, readTake } from './lib/narration-cleanup.js'
+import { writeHoldStill, type Snapshot } from './lib/hold-still.js'
 import { narrationPaths, readNarrationInputs } from './lib/narration-inputs.js'
 import { StepError, assertNoTakesInVideo, log, repoRoot, run, sha256File } from './lib/run-tools.js'
 
@@ -44,7 +48,9 @@ function le16(s: Int16Array): Uint8Array {
 }
 
 /** Runs the pipeline over the prepared workspace at `root`. Throws a StepError the run should stop on. */
-export function runNarration(o: { root?: string; ffmpeg?: string } = {}): NarrationReceipt {
+export function runNarration(
+  o: { root?: string; ffmpeg?: string; snapshot?: Snapshot } = {},
+): NarrationReceipt {
   const root = o.root ?? repoRoot
   const ffmpeg = o.ffmpeg ?? process.env.FFMPEG ?? 'ffmpeg'
   const p = narrationPaths(root)
@@ -202,6 +208,16 @@ export function runNarration(o: { root?: string; ffmpeg?: string } = {}): Narrat
     (s) => ({ bus: NARRATION_SRC, samples: target, spans: s.length }),
   )
 
+  // 4b. The held frame's still, when the composition holds its last frame (from the composition before this step).
+  const hold = timed(
+    'narration.hold',
+    () => writeHoldStill(root, html, o.snapshot),
+    (h) =>
+      h
+        ? { still: h.path, sha256: h.sha256, atSeconds: h.atSeconds, holdSeconds: h.holdSeconds }
+        : { still: null },
+  )
+
   // 5. Receipt.
   const receipt: NarrationReceipt = {
     v: 1,
@@ -236,6 +252,7 @@ export function runNarration(o: { root?: string; ffmpeg?: string } = {}): Narrat
       limitedSamples: limited.limitedSamples,
     },
     spans,
+    hold,
     warnings,
   }
   writeFileSync(p.receipt, JSON.stringify(receipt, null, 2))

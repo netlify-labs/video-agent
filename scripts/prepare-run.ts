@@ -21,7 +21,7 @@ import {
 import { dirname, join, relative } from 'node:path'
 import { bundleManifest } from '../src/lib/bundle-manifest.js'
 import type { BundleReference } from '../src/lib/bundle-references.js'
-import { frozenFilesFor } from '../src/lib/narration-run.js'
+import { frozenFilesFor, optionalFrozenFilesFor } from '../src/lib/narration-run.js'
 import { FROZEN_DIR, keptHash } from '../src/lib/revoice.js'
 import { readPcm16 } from '../src/lib/narration-cleanup.js'
 import {
@@ -366,10 +366,13 @@ export async function prepare(m: RunManifest, opts: { tmp: string; root?: string
     rmSync(frozen, { recursive: true, force: true })
     if (m.bundle.revoice && keptHash(restored.files, m.bundle.revoice.beats) !== m.bundle.revoice.keptHash)
       throw new StepError("The restored bundle doesn't match its re-voice manifest. Stop and report this.")
-    for (const p of frozenFilesFor(m.bundle)) {
+    const optional = optionalFrozenFilesFor(m.bundle)
+    for (const p of [...frozenFilesFor(m.bundle), ...optional]) {
       const from = join(root, 'video', p)
-      if (!existsSync(from))
+      if (!existsSync(from)) {
+        if (optional.includes(p)) continue
         throw new StepError(`The restored bundle has no video/${p} to work from. Stop and report this.`)
+      }
       mkdirSync(dirname(join(frozen, p)), { recursive: true })
       copyFileSync(from, join(frozen, p))
     }

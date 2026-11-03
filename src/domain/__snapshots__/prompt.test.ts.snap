@@ -7,7 +7,7 @@ Don't write, change or delete any file in video/ yourself. There is nothing to d
 1. Run: npx tsx scripts/prepare-run.ts --job vid_1 --attempt att_1 --manifest bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
    It restores video/ and verifies every file. If it fails, stop and report the error.
 2. Run from the repo root: npx tsx scripts/narration.ts
-   It cleans the recordings prepare-run put in .va-run/narration/ (outside video/), mixes them into video/assets/narration/bus.wav at the video's length, and writes the speech and the music's ducking into index.html. If it fails, stop and report the error. Don't run it twice, don't copy, move or edit anything in .va-run/, and don't process the recordings any other way.
+   It cleans the recordings prepare-run put in .va-run/narration/ (outside video/), mixes them into video/assets/narration/bus.wav at the video's length, writes the speech and the music's ducking into index.html, and, if the video holds its last frame, captures that frame as video/assets/hold/last.png. If it fails, stop and report the error. Don't run it twice, don't copy, move or edit anything in .va-run/, and don't process the recordings any other way.
 3. Run \`npx hyperframes check\` in video/. If it reports any error, stop: fix nothing, and end your answer with the errors.
 4. Run: npx tsx scripts/render-job.ts --job vid_1 --attempt att_1 --callback https://x/done --token tok --upload blobs
    It checks that only the narration changed before rendering. If it fails, stop and report the error; never edit files to make it pass.
@@ -27,7 +27,7 @@ Don't write, change or delete any file in video/ yourself. There is nothing to d
 2. Run from the repo root: npx tsx scripts/voice.ts revoice
    It re-speaks exactly the marked lines with the video's own voice and speed, lengthens a beat only if its new line no longer fits (later beats move with it), and updates the narration captions and the music's ducking. If it fails, stop and report the error. Don't run it twice, don't use another text-to-speech tool, and don't run voice.ts any other way.
 3. Run from the repo root: npx tsx scripts/narration.ts
-   It cleans the recordings prepare-run put in .va-run/narration/ (outside video/), mixes them into video/assets/narration/bus.wav at the video's length, and writes the speech and the music's ducking into index.html. If it fails, stop and report the error. Don't run it twice, don't copy, move or edit anything in .va-run/, and don't process the recordings any other way.
+   It cleans the recordings prepare-run put in .va-run/narration/ (outside video/), mixes them into video/assets/narration/bus.wav at the video's length, writes the speech and the music's ducking into index.html, and, if the video holds its last frame, captures that frame as video/assets/hold/last.png. If it fails, stop and report the error. Don't run it twice, don't copy, move or edit anything in .va-run/, and don't process the recordings any other way.
 4. Run \`npx hyperframes check\` in video/. If it reports any error, stop: fix nothing, and end your answer with the errors.
 5. Run: npx tsx scripts/render-job.ts --job vid_1 --attempt att_1 --callback https://x/done --token tok --upload blobs
    It checks that only the re-voiced lines and the narration changed before rendering. If it fails, stop and report the error; never edit files to make it pass.

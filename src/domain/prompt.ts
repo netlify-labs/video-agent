@@ -382,7 +382,7 @@ export function buildRenderUnchangedPrompt(p: {
     ],
     narration: [
       `Run from the repo root: ${STEP_COMMANDS.narration}`,
-      "   It cleans the recordings prepare-run put in .va-run/narration/ (outside video/), mixes them into video/assets/narration/bus.wav at the video's length, and writes the speech and the music's ducking into index.html. If it fails, stop and report the error. Don't run it twice, don't copy, move or edit anything in .va-run/, and don't process the recordings any other way.",
+      "   It cleans the recordings prepare-run put in .va-run/narration/ (outside video/), mixes them into video/assets/narration/bus.wav at the video's length, writes the speech and the music's ducking into index.html, and, if the video holds its last frame, captures that frame as video/assets/hold/last.png. If it fails, stop and report the error. Don't run it twice, don't copy, move or edit anything in .va-run/, and don't process the recordings any other way.",
     ],
     check: [
       'Run `npx hyperframes check` in video/. If it reports any error, stop: fix nothing, and end your answer with the errors.',

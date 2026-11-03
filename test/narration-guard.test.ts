@@ -2,22 +2,40 @@
 // checkNarration over a prepared workspace after scripts/narration.ts (cleanup off, so no ffmpeg is needed): a clean
 // run passes, alone and after a re-voice, and every tamper fails with its reason.
 import { createHash } from 'node:crypto'
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { revoiceVideo } from '../scripts/voice.js'
 import { runNarration } from '../scripts/narration.js'
+import type { Snapshot } from '../scripts/lib/hold-still.js'
 import {
   narrationPaths,
   readNarrationReceipt,
   type NarrationInputs,
 } from '../scripts/lib/narration-inputs.js'
 import { bundleManifest } from '../src/lib/bundle-manifest.js'
-import { applyEdits, applyNarration, NARRATION_SRC, type Summary } from '../src/lib/contract.js'
+import {
+  applyEdits,
+  applyNarration,
+  HOLD_STILL_SRC,
+  holdBeatOf,
+  load,
+  NARRATION_SRC,
+  type Summary,
+} from '../src/lib/contract.js'
 import { readPcm16 } from '../src/lib/narration-cleanup.js'
 import { checkNarration } from '../src/lib/narration-guard.js'
-import { frozenFilesFor, mayChange, runSteps } from '../src/lib/narration-run.js'
+import { frozenFilesFor, mayChange, optionalFrozenFilesFor, runSteps } from '../src/lib/narration-run.js'
 import { FROZEN_DIR, keptHash } from '../src/lib/revoice.js'
 import type { FrozenNarration, RunManifest } from '../src/lib/run-manifest.js'
 import { IDENTITY_FIT, SAMPLE_RATE as S, type NarrationOp } from '../src/lib/timeline.js'
@@ -100,7 +118,9 @@ describe('checkNarration', () => {
    * What prepare-run leaves for a keep-visuals render: video/ restored from the frozen draft (the voiced fixture with
    * a draft narration, an unrelated asset, optionally lines to re-voice), the frozen copies and the hydrated take.
    */
-  function prepared(o: { revoice?: Record<string, string> } = {}) {
+  function prepared(
+    o: { revoice?: Record<string, string>; holdSeconds?: number; staleStill?: boolean } = {},
+  ) {
     const root = mkdtempSync(join(tmpdir(), 'va-guard-'))
     dirs.push(root)
     const video = join(root, 'video')
@@ -110,6 +130,11 @@ describe('checkNarration', () => {
     writeFileSync(join(video, 'assets/voice/intro.wav'), silence(2.2))
     writeFileSync(join(video, 'assets/voice/outro.wav'), silence(1.5))
     writeFileSync(join(video, 'assets/logo.svg'), '<svg xmlns="http://www.w3.org/2000/svg"/>')
+    // A base that held its last frame keeps its still in the bundle (the narration step replaces or removes it).
+    if (o.staleStill) {
+      mkdirSync(join(video, 'assets/hold'), { recursive: true })
+      writeFileSync(join(video, HOLD_STILL_SRC), Buffer.from(PNG))
+    }
     const spoken = Object.fromEntries(
       (JSON.parse(voice) as { beats: { beat: string; text: string }[] }).beats.map((b) => [b.beat, b.text]),
     )
@@ -123,7 +148,11 @@ describe('checkNarration', () => {
     const script = JSON.parse(vfx('assets/voice/script.json')) as { lines: { beat: string; text: string }[] }
     for (const l of script.lines) l.text = lines[l.beat] ?? l.text
     writeFileSync(join(video, 'assets/voice/script.json'), JSON.stringify(script))
-    writeFileSync(join(video, 'index.html'), applyNarration(edited.html, edited.summary, op).html)
+    const holdSeconds = o.holdSeconds ?? 0
+    writeFileSync(
+      join(video, 'index.html'),
+      applyNarration(edited.html, edited.summary, op, new Map(), { holdSeconds }).html,
+    )
     writeFileSync(join(video, 'summary.json'), JSON.stringify(edited.summary, null, 2))
 
     const bytes = new Uint8Array(readFileSync(fixture('noisy-room')))
@@ -131,7 +160,7 @@ describe('checkNarration', () => {
       op,
       takes: [{ mediaId: TAKE, key: `${TAKE}/original.wav`, sha256: sha(bytes), bytes: bytes.length }],
       recipe: { pipeline: 1, cleanup: 'off' },
-      targetSamples: 9 * S,
+      targetSamples: (9 + holdSeconds) * S,
       captions: 'sidecar',
     }
     const beats = Object.keys(lines)
@@ -155,7 +184,8 @@ describe('checkNarration', () => {
     }
     mkdirSync(join(root, '.render'), { recursive: true })
     writeFileSync(join(root, '.render', 'run-manifest.json'), JSON.stringify(m))
-    for (const f of frozenFilesFor(m.bundle)) {
+    for (const f of [...frozenFilesFor(m.bundle), ...optionalFrozenFilesFor(m.bundle)]) {
+      if (!existsSync(join(video, f))) continue
       mkdirSync(dirname(join(root, FROZEN_DIR, f)), { recursive: true })
       copyFileSync(join(video, f), join(root, FROZEN_DIR, f))
     }
@@ -285,5 +315,56 @@ describe('checkNarration', () => {
         ),
     )
     expect(w.check()).toContainEqual(expect.stringMatching(/takes aren't the ones this render froze/))
+  })
+
+  /** A stand-in for hyperframes snapshot: a PNG naming the frame time, and the project it was given. */
+  const PNG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
+  const snaps: { dir: string; at: number; html: string; files: string[] }[] = []
+  const snapshot: Snapshot = (dir, at, out) => {
+    snaps.push({
+      dir,
+      at,
+      html: readFileSync(join(dir, 'index.html'), 'utf8'),
+      files: readdirSync(dir).sort(),
+    })
+    mkdirSync(out, { recursive: true })
+    const png = join(out, `frame-00-at-${at}s.png`)
+    writeFileSync(png, Buffer.concat([Buffer.from(PNG), Buffer.from(`frame at ${at}`)]))
+    return png
+  }
+
+  it("a held last frame: the run renders the base composition's last frame as the still, and the guard checks it", () => {
+    const w = prepared({ holdSeconds: 2 })
+    const frozen = readFileSync(join(w.video, 'index.html'), 'utf8')
+    expect(holdBeatOf(load(frozen))).toMatchObject({ start: 9, duration: 2 })
+    snaps.length = 0
+    const r = runNarration({ root: w.root, snapshot })
+    // The base's last frame (frame 269 at 30 fps), from the composition without the hold, next to video/'s files.
+    expect(snaps).toHaveLength(1)
+    expect(snaps[0]?.at).toBe(8.966667)
+    expect(holdBeatOf(load(snaps[0]?.html ?? ''))).toBeNull()
+    expect(snaps[0]?.files).toEqual(['assets', 'index.html', 'summary.json'])
+    expect(existsSync(join(w.root, '.render', 'hold-base'))).toBe(false)
+    expect(existsSync(join(w.video, 'assets/voice/voice.json'))).toBe(true)
+    expect(r.hold).toMatchObject({ path: HOLD_STILL_SRC, atSeconds: 8.966667, holdSeconds: 2 })
+    expect(r.target.samples).toBe(11 * S)
+    expect(w.check()).toEqual([])
+
+    // Another still, no still, or a still without a hold all fail.
+    writeFileSync(join(w.video, HOLD_STILL_SRC), Buffer.concat([Buffer.from(PNG), Buffer.from('other')]))
+    expect(w.check()).toContainEqual(expect.stringMatching(/assets\/hold\/last.png isn't the held frame/))
+    rmSync(join(w.video, HOLD_STILL_SRC))
+    expect(w.check()).toContainEqual(expect.stringMatching(/assets\/hold\/last.png isn't the held frame/))
+  })
+
+  it('without a held frame, the run removes a stale still and the guard refuses one', () => {
+    const w = prepared({ staleStill: true })
+    snaps.length = 0
+    expect(runNarration({ root: w.root, snapshot }).hold).toBeNull()
+    expect(snaps).toHaveLength(0)
+    expect(existsSync(join(w.video, HOLD_STILL_SRC))).toBe(false)
+    expect(w.check()).toEqual([])
+    writeFileSync(join(w.video, HOLD_STILL_SRC), Buffer.from(PNG))
+    expect(w.check()).toContainEqual(expect.stringMatching(/is there, but the composition holds no frame/))
   })
 })

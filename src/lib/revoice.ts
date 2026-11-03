@@ -6,7 +6,15 @@ import { existsSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { bundleManifest, excluded, manifestHash } from './bundle-manifest.js'
 import { isReference } from './bundle-references.js'
-import { applyRevoice, load, normalizeLine, read, type RevoicedLine, type Summary } from './contract.js'
+import {
+  applyRevoice,
+  HOLD_STILL_SRC,
+  load,
+  normalizeLine,
+  read,
+  type RevoicedLine,
+  type Summary,
+} from './contract.js'
 import {
   FPS_TOLERANCE,
   SAMPLE_RATE,
@@ -28,12 +36,16 @@ export function revoicable(path: string, beats: readonly string[]): boolean {
 }
 
 /**
- * The canonical manifest hash over the files a re-voicing run must leave alone. Reference files (the narration bus)
- * never count: a frozen bundle doesn't hold one, and a narration step writes its own (checkNarration checks it).
+ * The canonical manifest hash over the files a re-voicing run must leave alone. The narration bus (a reference file)
+ * and the held frame's still never count: a frozen bundle doesn't hold a bus, and a narration step writes both
+ * (checkNarration checks them against its receipt).
  */
 export function keptHash(files: { path: string; sha256: string }[], beats: readonly string[]): string {
   return manifestHash(
-    files.filter((f) => !excluded(f.path) && !isReference(f.path) && !revoicable(f.path, beats)),
+    files.filter(
+      (f) =>
+        !excluded(f.path) && !isReference(f.path) && f.path !== HOLD_STILL_SRC && !revoicable(f.path, beats),
+    ),
     [],
   )
 }
