@@ -2,7 +2,8 @@
 // composition preview with the narration auditioned over it, and under it the timeline (Scenes, Narration, AI voice,
 // Music), the clip tools, the track's settings and Add audio (upload, drop, the library, this video's recordings).
 // The op it edits goes up through onChange and is saved with the draft's other ops (one whole-track snapshot); clip
-// edits are undoable here, track settings apply as they're set. Slots take the recorder and the narration banners.
+// edits are undoable here, track settings apply as they're set. Slots take the recorder (NarrationRecorder) and the
+// narration banners.
 // While timing changes are pending, Render picture first takes the recorder's place (§2.1, §5.3); while someone else
 // holds the narration lock (§2.7) the track is read-only: it plays and selects, but nothing changes.
 import {
@@ -30,7 +31,9 @@ import {
   secondsToSamples,
   snapToFrame,
   type AiVoiceMode,
+  type Fit,
   type NarrationOp,
+  type NarrationTracks,
   type Span,
 } from '../../../src/lib/timeline'
 import { $api, errorMessage, fetchClient } from '../api/client'
@@ -67,18 +70,40 @@ import {
   type TrackPatch,
 } from './timeline'
 
-/** What a recorder (va-2qq.3.x, ui/src/recorder) gets to place its takes and follow the picture. */
+/** Where a take goes: composition `start` (or the playhead), a source range, and a recorded take's sync fit. */
+export interface TakePlacement {
+  start?: number
+  srcStart?: number
+  srcEnd?: number
+  fit?: Fit
+  offsetSamples?: number
+}
+
+/** What a recorder (NarrationRecorder, ui/src/recorder) gets to place its takes and follow the picture. */
 export interface NarrationTrackApi {
   op: NarrationOp
   editor: NarrationEditor
   /** Composition sample under the playhead, and the ruler's selection (a punch-in range). */
   playhead: number
   range: Span | null
-  /** Adds a take to the track at `start` (or the playhead): the whole take, unless a source range is given. */
+  /**
+   * Adds a take to the track at `start` (or the playhead): the whole take, unless a source range is given. A list
+   * adds one clip per piece (a recorded take's fit segments) as one undo step. `op` is the op with them in it.
+   */
   insertTake: (
     take: { mediaId: string } & TakeInfo,
-    at?: { start?: number; srcStart?: number; srcEnd?: number },
-  ) => { ok: boolean; message: string; clipId?: string }
+    at?: TakePlacement | readonly TakePlacement[],
+  ) => { ok: boolean; message: string; clipId?: string; op?: NarrationOp }
+  /** Sets the track settings a take records with (the setup panel's Original audio). */
+  setTracks: (patch: Partial<NarrationTracks>) => void
+  /** Saves the draft with `op` as its narration; throws when the save fails. */
+  saveDraft: (op: NarrationOp) => Promise<void>
+  /** Opens the Add audio file picker (Upload instead). */
+  openUpload: () => void
+  /** The draft's composition as the preview plays it (the monitor's stems and the teleprompter's lines). */
+  html: string | null
+  takeSamples: ReadonlyMap<string, number>
+  takeSpans: ReadonlyMap<string, readonly Span[]>
   /** The draft has unsaved or unrendered timing changes: recording waits for Render picture first (§5.3). */
   timingPending: boolean
   /** You hold the narration lock (§2.7): Record is off without it. */
@@ -110,7 +135,9 @@ export interface NarrationSectionProps {
   control?: RefObject<NarrationControl | null>
   /** Shown above the timeline: the narration lock and stale-base banners (lane E, ui/src/components/narration). */
   banner?: ReactNode
-  /** The recorder (lane C, ui/src/recorder), given the track to place its takes on. */
+  /** Saves the draft with this narration op now (a recorded take's clip); throws when the save fails. */
+  onSaveDraft?: (op: NarrationOp) => Promise<void>
+  /** The recorder (NarrationRecorder), given the track to place its takes on. */
   recorder?: (api: NarrationTrackApi) => ReactNode
   /** Shown in the recorder's place while timingPending: Render picture first (RenderPictureFirst). */
   pictureFirst?: ReactNode
@@ -247,16 +274,38 @@ export function NarrationSection(props: NarrationSectionProps) {
   const insertTake = useCallback<NarrationTrackApi['insertTake']>(
     (take, at = {}) => {
       takes.add(take.mediaId, take)
-      const start = at.start ?? playhead
-      const clip = takeClip(freshClipId(editor.op), take.mediaId, take.samples, start)
-      const srcStart = at.srcStart ?? 0
-      const srcEnd = at.srcEnd ?? clip.srcEnd
-      const r = editor.dispatch({ type: 'insert', clip: { ...clip, srcStart, srcEnd } })
+      const pieces = Array.isArray(at) ? (at as readonly TakePlacement[]) : [at as TakePlacement]
+      const taken = new Set<string>()
+      const clips = pieces.map((p) => {
+        const id = freshClipId(editor.op, taken)
+        taken.add(id)
+        const clip = takeClip(id, take.mediaId, take.samples, p.start ?? playhead)
+        return {
+          ...clip,
+          srcStart: p.srcStart ?? 0,
+          srcEnd: p.srcEnd ?? clip.srcEnd,
+          ...(p.fit ? { fit: p.fit } : {}),
+          ...(p.offsetSamples !== undefined ? { offsetSamples: p.offsetSamples } : {}),
+        }
+      })
+      const [first, ...rest] = clips
+      if (!first) return { ok: false, message: 'Nothing to add' }
+      const r = editor.dispatch({ type: 'insert', clip: first, ...(rest.length ? { with: rest } : {}) })
       if (!r.ok) notifications.show({ color: 'red', message: r.message })
-      return { ...r, clipId: clip.id }
+      return { ...r, clipId: first.id, ...(r.op ? { op: { ...r.op, tracks, cleanup } } : {}) }
     },
-    [editor, playhead, takes],
+    [editor, playhead, takes, tracks, cleanup],
   )
+  const setTrackSettings = useCallback(
+    (patch: Partial<NarrationTracks>) => {
+      if (!readOnly) setTracks((t) => ({ ...t, ...patch }))
+    },
+    [readOnly],
+  )
+  const onSaveDraft = props.onSaveDraft
+  const saveDraft = useCallback(async (o: NarrationOp) => onSaveDraft?.(o), [onSaveDraft])
+  const uploadButton = useRef<HTMLButtonElement | null>(null)
+  const openUpload = useCallback(() => uploadButton.current?.click(), [])
 
   const control = props.control
   useEffect(() => {
@@ -367,6 +416,7 @@ export function NarrationSection(props: NarrationSectionProps) {
               {(p) => (
                 <Button
                   {...p}
+                  ref={uploadButton}
                   size="xs"
                   variant="default"
                   leftSection={<IconPlus size={14} />}
@@ -519,6 +569,12 @@ export function NarrationSection(props: NarrationSectionProps) {
                 playhead,
                 range,
                 insertTake,
+                setTracks: setTrackSettings,
+                saveDraft,
+                openUpload,
+                html,
+                takeSamples: takes.takeSamples,
+                takeSpans: takes.takeSpans,
                 timingPending: props.timingPending,
                 canRecord: props.canRecord !== false && !readOnly,
               })}

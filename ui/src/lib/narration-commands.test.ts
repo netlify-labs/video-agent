@@ -503,4 +503,20 @@ describe('insert (a new take on the track)', () => {
     h = editorReducer(h, { type: 'undo' })
     expect(h.present.clips).toHaveLength(0)
   })
+
+  it("adds a recorded take's pieces together, as one undo entry, and refuses a repeated id among them", () => {
+    let h = initHistory(opOf([]))
+    const first = clip({ id: 'n1', srcStart: 0, srcEnd: SAMPLE_RATE, start: 0 })
+    const second = clip({
+      id: 'n2',
+      srcStart: SAMPLE_RATE,
+      srcEnd: 2 * SAMPLE_RATE,
+      start: SAMPLE_RATE + 800,
+    })
+    h = editorReducer(h, { type: 'command', command: { type: 'insert', clip: first, with: [second] }, ctx })
+    expect(h.present.clips.map((c) => c.id)).toEqual(['n1', 'n2'])
+    h = editorReducer(h, { type: 'undo' })
+    expect(h.present.clips).toHaveLength(0)
+    expect(applyCommand(opOf([]), { type: 'insert', clip: first, with: [first] }, ctx).ok).toBe(false)
+  })
 })

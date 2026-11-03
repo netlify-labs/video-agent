@@ -51,8 +51,11 @@ export type NarrationCommand =
   | { type: 'setFades'; clipId: string; fadeInSamples?: number; fadeOutSamples?: number }
   /** Move the clip by whole frames (keeping its sub-frame offset). */
   | { type: 'nudge'; clipId: string; frames: number }
-  /** Lay a new clip (an uploaded or picked take) on top at its `start`; it wins where it overlaps. */
-  | { type: 'insert'; clip: NarrationClip }
+  /**
+   * Lay a new clip (an uploaded or picked take) on top at its `start`; it wins where it overlaps. `with` are the same
+   * take's other pieces (a recorded take split where its picture stepped a frame), added in the same undo step.
+   */
+  | { type: 'insert'; clip: NarrationClip; with?: readonly NarrationClip[] }
 
 export type CommandResult =
   | { ok: true; op: NarrationOp; /** What happened, for the aria-live region. */ message: string }
@@ -106,11 +109,15 @@ export function applyCommand(op: NarrationOp, cmd: NarrationCommand, ctx: EditCo
   const clips = op.clips
   if (cmd.type === 'insert') {
     const n = cmd.clip
-    if (clips.some((x) => x.id === n.id)) return { ok: false, reason: 'That clip is already there' }
-    if (!Number.isInteger(n.start) || !(clipLength(n) > 0)) return { ok: false, reason: 'Not a clip' }
+    const all = [n, ...(cmd.with ?? [])]
+    const ids = new Set(all.map((x) => x.id))
+    if (ids.size < all.length || clips.some((x) => ids.has(x.id)))
+      return { ok: false, reason: 'That clip is already there' }
+    if (all.some((x) => !Number.isInteger(x.start) || !(clipLength(x) > 0)))
+      return { ok: false, reason: 'Not a clip' }
     return finish(
       op,
-      [...clips, { ...n, start: Math.max(0, n.start) }],
+      [...clips, ...all.map((x) => ({ ...x, start: Math.max(0, x.start) }))],
       ctx,
       `Clip added at ${clock(n.start)}`,
     )

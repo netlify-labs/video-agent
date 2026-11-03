@@ -57,8 +57,15 @@ export interface TakeRecord {
   route: DeviceRoute | null
   /** Reserved for the sync clock (§5.3): picture anchors and the fit t = a + b·sample. */
   clock: { anchors: unknown[]; fit: Fit | null } | null
-  /** Reserved for the record flow: where the take goes on the timeline (composition sample of source sample 0). */
-  placement: { start: number; offsetSamples: number } | null
+  /**
+   * Where the take goes on the timeline (composition sample of source sample 0), and the clips the record flow
+   * (flow.ts) places it as: kept up to date while recording, so a recovered take lands where it was recorded.
+   */
+  placement: {
+    start: number
+    offsetSamples: number
+    pieces?: { start: number; srcStart: number; srcEnd: number; fit: Fit; offsetSamples: number }[]
+  } | null
   upload: { state: UploadState; mediaId: string | null; error: string | null }
   /** Why the take stopped early (quota, device change...), when it did. */
   stopReason: string | null

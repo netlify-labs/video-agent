@@ -45,6 +45,7 @@ import { confirmDanger, showError } from '../components/bits'
 import { CompositionPreview, type PreviewCommand } from '../components/CompositionPreview'
 import { MediaLibraryModal, type Media } from '../components/MediaPicker'
 import { NarrationRenderDialog, type RenderChoice } from '../components/NarrationRenderDialog'
+import { NarrationRecorder } from '../components/NarrationRecorder'
 import { NarrationSection, type NarrationControl } from '../components/NarrationSection'
 import {
   keepMineWarning,
@@ -390,25 +391,63 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
   curRef.current = cur
   const dirty = !!draft && !sameOps(ops, draft.ops)
 
+  // Saves run one at a time, each on the rev the last one left: the autosave and a recorded take's save (which waits
+  // for its answer) can't race each other into a conflict.
+  const draftRef = useRef(draft)
+  draftRef.current = draft
+  const saves = useRef<Promise<unknown>>(Promise.resolve())
+  const put = useCallback((next: Op[]) => {
+    const run = async () => {
+      const d = draftRef.current
+      if (!d) throw new Error('The draft is still opening.')
+      const r = await fetchClient.PUT('/api/v1/edits/{id}', {
+        params: { path: { id: d.id } },
+        body: { rev: d.rev, ops: next },
+      })
+      if (r.data) {
+        draftRef.current = r.data
+        setDraft(r.data)
+        setProblem(null)
+      }
+      return r
+    }
+    const p = saves.current.then(run, run)
+    saves.current = p.catch(() => undefined)
+    return p
+  }, [])
+
   const save = useCallback(async () => {
     if (!draft) return
     setSaving(true)
-    const { data, error, response } = await fetchClient.PUT('/api/v1/edits/{id}', {
-      params: { path: { id: draft.id } },
-      body: { rev: draft.rev, ops },
-    })
+    const { data, error, response } = await put(ops)
     setSaving(false)
-    if (data) {
-      setDraft(data)
-      setProblem(null)
-    } else if (response.status === 409) setProblem(errorMessage(error))
+    if (data) return
+    if (response.status === 409) setProblem(errorMessage(error))
     else {
       // The edit can't be made: show why and go back to the last saved state.
       showError(error)
       setCur(draft.composition)
       resetNarration(narrationOf(draft.ops))
     }
-  }, [draft, ops])
+  }, [draft, ops, put])
+
+  // A recorded take's clip (plan 2026-11-02 §5.1): saved now, with the narration it was added to, and a failure is
+  // thrown so the recorder keeps the take's local copy (the clip stays, and the autosave tries again).
+  const saveNarration = useCallback(
+    async (op: NarrationOp) => {
+      const d = draftRef.current
+      const c = curRef.current
+      if (!d || !c) throw new Error('The draft is still opening.')
+      setSaving(true)
+      try {
+        const { data, error } = await put(withNarration(diffOps(d.base, c), narrationToSave(op)))
+        if (!data) throw new Error(errorMessage(error))
+      } finally {
+        setSaving(false)
+      }
+    },
+    [put],
+  )
 
   // Edits are kept as a draft on the server, so leaving only loses the last moment's changes before they save.
   useEffect(() => {
@@ -695,6 +734,15 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
             hint={hint}
             readOnly={lockedOut}
             canRecord={lock.canEdit}
+            onSaveDraft={saveNarration}
+            recorder={(api) => (
+              <NarrationRecorder
+                api={api}
+                videoId={id}
+                versionN={draft.baseN}
+                draft={{ id: draft.id, rev: draft.rev }}
+              />
+            )}
             banner={
               <>
                 <NarrationLockBanner

@@ -46,7 +46,11 @@ export interface DispatchOptions {
 
 export interface NarrationEditor {
   op: NarrationOp
-  dispatch: (command: NarrationCommand, opts?: DispatchOptions) => { ok: boolean; message: string }
+  /** Runs a command; `op` is the op after it (the clips, as the next render shows them). */
+  dispatch: (
+    command: NarrationCommand,
+    opts?: DispatchOptions,
+  ) => { ok: boolean; message: string; op?: NarrationOp }
   /** Ends a coalesced gesture (an inspector field losing focus). */
   commit: () => void
   undo: () => void
@@ -137,7 +141,7 @@ export function useNarrationEditor(initialOp: NarrationOp, opts: NarrationEditor
       // A new clip comes in selected, so its gain and fades are one step away.
       if (last.ok && command.type === 'insert') setSelected(command.clip.id)
       if (!o.quiet) announce(last.message)
-      return { ok: last.ok, message: last.message }
+      return { ok: last.ok, message: last.message, op: next.present }
     },
     [run, announce, setSelected],
   )
