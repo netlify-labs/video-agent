@@ -746,10 +746,22 @@ export function applyNarration(
   op: NarrationOp | null,
   takeSpans: ReadonlyMap<string, readonly Span[]> = new Map(),
 ) {
+  return narrate(html, summary, op, op ? placeSpans(op.clips, takeSpans) : [])
+}
+
+/**
+ * The run's write (scripts/narration.ts, plan §6.3 step 4): like applyNarration, but with speech measured on the
+ * processed bus (`speech` in composition samples) instead of placed from the takes' summaries.
+ */
+export function applyBusNarration(html: string, summary: Summary, op: NarrationOp, speech: readonly Span[]) {
+  return narrate(html, summary, op, speech)
+}
+
+function narrate(html: string, summary: Summary, op: NarrationOp | null, speech: readonly Span[]) {
   const before = validate(html, summary)
   if (before.length) throw new ContractError(before)
   const d = load(html)
-  writeNarration(d, op, op ? placeSpans(op.clips, takeSpans) : [])
+  writeNarration(d, op, speech)
   relayout(d)
   const out = save(d)
   const after = validate(out, summary)
