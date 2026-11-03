@@ -22,7 +22,7 @@ import {
 } from '../recorder/clock'
 
 const FPS = 30
-// The stem monitor section (va-2qq.4.7), on its own video and AudioContext. Mounted on
+// The stem monitor and teleprompter section (va-2qq.4.7, va-2qq.4.8), on its own video and AudioContext. Mounted on
 // request, so its second copy of the MP4 doesn't load (and stall the clock's picture) unless it's wanted.
 const MonitorDemo = lazy(() => import('./MonitorDemo'))
 
@@ -202,7 +202,7 @@ export default function ClockDemo() {
         </Suspense>
       ) : (
         <Button variant="default" onClick={() => setMonitorDemo(true)}>
-          Open the monitor demo
+          Open the monitor and teleprompter demo
         </Button>
       )}
     </Stack>

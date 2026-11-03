@@ -1,0 +1,45 @@
+/* The teleprompter beside the picture (Teleprompter.tsx): stacked below it on narrow windows. */
+.va-prompter-layout {
+  display: grid;
+  gap: 16px;
+  align-items: start;
+}
+.va-prompter-layout[data-layout='beside'] {
+  grid-template-columns: minmax(0, 3fr) minmax(16rem, 2fr);
+}
+.va-prompter-layout[data-layout='stacked'] {
+  grid-template-columns: minmax(0, 1fr);
+}
+.va-prompter {
+  border: 1px solid var(--va-rule);
+  border-radius: 8px;
+  background: var(--va-raised);
+  padding: 10px 14px 14px;
+  min-height: 8rem;
+}
+.va-prompter-lines {
+  line-height: 1.3;
+}
+.va-prompter-line {
+  margin: 0.4em 0 0;
+  transition: opacity 120ms linear;
+}
+.va-prompter-line[data-state='current'] {
+  font-weight: 600;
+  color: var(--va-text);
+}
+.va-prompter-line[data-state='next'] {
+  opacity: 0.5;
+}
+.va-prompter-line[data-state='empty'] {
+  font-size: 0.6em;
+  opacity: 0.7;
+}
+.va-prompter-show {
+  width: 100%;
+}
+@media (prefers-reduced-motion: reduce) {
+  .va-prompter-line {
+    transition: none;
+  }
+}

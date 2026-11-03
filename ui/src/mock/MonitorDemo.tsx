@@ -1,4 +1,4 @@
-// Mock mode only (a section of /dev/clock): the stem monitor on the muted MP4, with no backend.
+// Mock mode only (a section of /dev/clock): the stem monitor and the teleprompter on the muted MP4, with no backend.
 // A synthetic 8 s composition (music 0-8 s, AI voice in intro and outro, an existing narration clip at 6.5-7.5 s) whose
 // stems and take are made in the page as 24 kHz WAVs: music a 220 Hz tone, each AI voice a 1 kHz tone, the narration
 // a 330 Hz tone, so the Playwright spec can tell them apart in a recorded take. Arm creates the AudioContext (the
@@ -12,6 +12,7 @@ import { AudioClock, usePictureClock } from '../recorder/clock'
 import { useStemMonitor, type OutputMode, type StemMonitorStats } from '../recorder/monitor'
 import { createRecorder, type RecordedTake, type Recorder } from '../recorder/recorder'
 import { floatToPcm16, wavHeader } from '../recorder/wav'
+import { PrompterLayout, Teleprompter, pictureTime } from '../recorder/teleprompter'
 
 declare global {
   interface Window {
@@ -41,6 +42,12 @@ const HTML = `<!doctype html><html><body>
     <h2 data-va-text="outro-cta">Read the docs</h2>
   </section>
 </div></body></html>`
+
+const SCRIPT = [
+  'Webhooks for your whole organization.',
+  'One subscription covers every project.',
+  'Read the docs to start.',
+]
 
 const tone = (seconds: number, hz: number, amp: number) =>
   Float32Array.from({ length: Math.round(seconds * S) }, (_, i) => amp * Math.sin((2 * Math.PI * hz * i) / S))
@@ -87,6 +94,7 @@ export default function MonitorDemo() {
   const picture = usePictureClock(video, { fps: 30 })
   const [mode, setMode] = useState<AiVoiceMode>('replace')
   const [output, setOutput] = useState<OutputMode>('headphones')
+  const [useScript, setUseScript] = useState(false)
   const [armPunch, setArmPunch] = useState(false)
   const [audio, setAudio] = useState<{ ctx: AudioContext; clock: AudioClock } | null>(null)
   const rec = useRef<Recorder | null>(null)
@@ -191,9 +199,14 @@ export default function MonitorDemo() {
     setPhase('stopped')
   }, [picture, video, monitor])
 
+  const getTime = useCallback(
+    () => pictureTime(picture.anchors, performance.now()) ?? video?.currentTime ?? 0,
+    [picture, video],
+  )
+
   return (
     <Stack gap="md">
-      <Title order={2}>Monitor mix</Title>
+      <Title order={2}>Monitor mix and teleprompter</Title>
       <Text size="sm" c="dimmed">
         The draft&apos;s stems in the recording&apos;s AudioContext, scheduled from the picture: music
         pre-ducked from the existing narration, the AI voice by mode, the existing clip muted in an armed
@@ -222,19 +235,29 @@ export default function MonitorDemo() {
           ]}
         />
         <Switch
+          label="AI script"
+          checked={useScript}
+          onChange={(e) => setUseScript(e.currentTarget.checked)}
+        />
+        <Switch
           label="Arm punch 6-8 s"
           checked={armPunch}
           onChange={(e) => setArmPunch(e.currentTarget.checked)}
         />
       </Group>
-      <video
-        ref={setVideo}
-        src="/teaser-v2.mp4"
-        muted
-        playsInline
-        preload="auto"
-        data-testid="monitor-video"
-        style={{ width: 480, maxWidth: '100%', background: '#000' }}
+      <PrompterLayout
+        picture={
+          <video
+            ref={setVideo}
+            src="/teaser-v2.mp4"
+            muted
+            playsInline
+            preload="auto"
+            data-testid="monitor-video"
+            style={{ width: '100%', background: '#000' }}
+          />
+        }
+        prompter={<Teleprompter composition={HTML} script={useScript ? SCRIPT : null} getTime={getTime} />}
       />
       <Group>
         <Button onClick={() => void arm()} disabled={phase === 'armed' || phase === 'recording'}>
