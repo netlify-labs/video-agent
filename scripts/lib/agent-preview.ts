@@ -5,6 +5,16 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
+/**
+ * Whether this build is a preview that can't run the app: an agent run's preview, a deploy preview or a branch deploy.
+ * Only the published production deploy serves the API and data, and sign-in can't return to a preview's address, so
+ * the app opens the How we built it page there instead of a sign-in form that leads nowhere.
+ */
+export function isPreviewBuild(env: NodeJS.ProcessEnv): boolean {
+  const agentRun = Object.keys(env).some((k) => k.startsWith('NETLIFY_AGENT_RUNNER_'))
+  return agentRun || env.CONTEXT === 'deploy-preview' || env.CONTEXT === 'branch-deploy'
+}
+
 export interface VideoRun {
   jobId: string
   attemptId: string

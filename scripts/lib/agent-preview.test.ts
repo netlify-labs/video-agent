@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { videoRunOf, writeVideoRunPreview } from './agent-preview.js'
+import { isPreviewBuild, videoRunOf, writeVideoRunPreview } from './agent-preview.js'
 
 const dirs: string[] = []
 const tmp = () => {
@@ -74,5 +74,14 @@ describe('agent run preview', () => {
     expect(html).not.toContain('<video')
     expect(html).toContain('Watch it in Video Agent instead.')
     expect(html).toContain('href="https://video.example.com/videos/vid_1"')
+  })
+
+  it('treats agent runs, deploy previews and branch deploys as preview builds, and production as the app', () => {
+    expect(isPreviewBuild({ NETLIFY_AGENT_RUNNER_ID: 'x', CONTEXT: 'production' })).toBe(true)
+    expect(isPreviewBuild({ CONTEXT: 'deploy-preview' })).toBe(true)
+    expect(isPreviewBuild({ CONTEXT: 'branch-deploy' })).toBe(true)
+    expect(isPreviewBuild({ CONTEXT: 'production' })).toBe(false)
+    expect(isPreviewBuild({ CONTEXT: 'dev' })).toBe(false)
+    expect(isPreviewBuild({})).toBe(false)
   })
 })

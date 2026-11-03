@@ -30,7 +30,13 @@ const queryClient = new QueryClient({
   },
 })
 
-preloadRoute(window.location.pathname, window.location.search)
+// A preview build can't run the app (no API or data, and sign-in can't come back to this address): show the project
+// page instead, with a note and a link to the real app.
+const previewOnly = import.meta.env.VITE_PREVIEW_DEPLOY === '1'
+if (previewOnly) {
+  const app = import.meta.env.VITE_APP_URL
+  window.location.replace(`/how-we-built-it/?preview=1${app ? `&app=${encodeURIComponent(app)}` : ''}`)
+} else preloadRoute(window.location.pathname, window.location.search)
 
 // The mock API (and the contract code it uses) is loaded only in mock builds, before the app's first request.
 const ready = import.meta.env.VITE_MOCK
@@ -60,7 +66,7 @@ const prefetchLibrary = () => {
 }
 
 const root = document.getElementById('root')
-if (root) {
+if (root && !previewOnly) {
   void ready.then(() => {
     prefetchLibrary()
     createRoot(root).render(

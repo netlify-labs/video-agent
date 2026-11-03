@@ -71,6 +71,10 @@
   /* The hero's second action: in the accent, so it stands out from the grey ground in light mode. */
   .btn.accent { background: var(--accent-soft); color: var(--accent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent); }
   .btn.accent:hover { background: color-mix(in srgb, var(--accent) 22%, var(--surface)); }
+  .preview-note { position: sticky; top: 0; z-index: 12; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; justify-content: center;
+    padding: 10px 16px; background: var(--accent-soft); color: var(--text); font-size: 14px; text-align: center; border-bottom: 1px solid var(--rule); }
+  .preview-note a { font-weight: 600; }
+  .has-preview-note .theme-toggle, .has-preview-note .repo-link { top: 58px; }
   .theme-toggle { position: fixed; top: 14px; right: 16px; z-index: 11; width: 40px; height: 40px; display: grid; place-items: center; border: 0; background: none; color: var(--muted); cursor: pointer; }
   .theme-toggle:hover { color: var(--text); }
   .theme-toggle svg { width: 20px; height: 20px; transition: transform .45s var(--spring); }
@@ -589,6 +593,36 @@
 
 <script>
 (() => {
+  // Opened from a preview build (?preview=1&app=<the live app>): the app can't run here, so say so, and send every
+  // link and video to the live app, like the employees' copy does at publish time.
+  const params = new URLSearchParams(location.search)
+  const liveApp = (() => {
+    try {
+      const u = new URL(params.get('app') || '')
+      return u.protocol === 'https:' ? u.origin : null
+    } catch {
+      return null
+    }
+  })()
+  if (params.get('preview') === '1') {
+    const note = document.createElement('div')
+    note.className = 'preview-note'
+    note.setAttribute('role', 'note')
+    note.textContent = "This is a preview build of Video Agent, so sign-in and your videos aren't here; they're on the live app."
+    if (liveApp) {
+      const a = Object.assign(document.createElement('a'), { href: liveApp, textContent: 'Open Video Agent' })
+      note.append(a)
+      document.documentElement.dataset.site = liveApp
+      for (const el of document.querySelectorAll('[href^="/"], [src^="/"], [data-src^="/"], [data-poster^="/"], [data-captions^="/"], [poster^="/"]'))
+        for (const attr of ['href', 'src', 'data-src', 'data-poster', 'data-captions', 'poster']) {
+          const v = el.getAttribute(attr)
+          if (v && v.startsWith('/') && !v.startsWith('//')) el.setAttribute(attr, liveApp + v)
+        }
+    }
+    document.body.prepend(note)
+    document.body.classList.add('has-preview-note')
+  }
+
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches
   const $ = (s, r = document) => r.querySelector(s)
   const $$ = (s, r = document) => [...r.querySelectorAll(s)]

@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process'
 import { copyFileSync, cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { videoRunOf, writeVideoRunPreview } from './lib/agent-preview.js'
+import { isPreviewBuild, videoRunOf, writeVideoRunPreview } from './lib/agent-preview.js'
 import { repoRoot } from './lib/run-tools.js'
 import { buildMcpApp } from './lib/mcp-app.js'
 import { buildSkills } from './lib/skills.js'
@@ -146,8 +146,14 @@ if (videoRun && process.env.FORCE_UI_BUILD !== 'true') {
   })
   log('ui', { skipped: true, videoPreview: { jobId: videoRun.jobId, embedded } })
 } else {
-  execFileSync('npx', ['vite', 'build', 'ui'], { stdio: 'inherit', cwd: repoRoot })
-  log('ui', { skipped: false })
+  // A preview can't run the app (no API or data, and sign-in can't return here): it opens the project page instead.
+  const preview = isPreviewBuild(process.env)
+  execFileSync('npx', ['vite', 'build', 'ui'], {
+    stdio: 'inherit',
+    cwd: repoRoot,
+    env: { ...process.env, VITE_PREVIEW_DEPLOY: preview ? '1' : '', VITE_APP_URL: process.env.URL ?? '' },
+  })
+  log('ui', { skipped: false, preview })
   // The preview's runtime comes from the pinned hyperframes package, never a CDN (plan v2 §7). The /preview edge
   // function serves these under each bundle's capability path.
   mkdirSync(join(repoRoot, 'ui/dist/_preview'), { recursive: true })
