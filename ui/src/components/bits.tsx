@@ -160,6 +160,12 @@ export const fileUrl = (
     ? mockFile(videoId, file)
     : `/api/v1/videos/${videoId}/versions/${n}/${file}${download ? '?download=1' : ''}`
 
+/** The captions track: a corrected version's names its revision, so the player loads the new file. */
+export const captionsUrl = (videoId: string, v: { n: number; captions: { rev: number } | null }) =>
+  v.captions?.rev
+    ? `/api/v1/videos/${videoId}/versions/${v.n}/captions?rev=${v.captions.rev}`
+    : fileUrl(videoId, v.n, 'captions')
+
 /** A signed URL from the DTO as a same-origin path, like the redirect gives. */
 export const localUrl = (signed: string) => {
   const u = new URL(signed, window.location.origin)

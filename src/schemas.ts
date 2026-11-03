@@ -176,6 +176,41 @@ export const PublishSchema = z
   })
   .openapi('Publish')
 
+export const CaptionCueSchema = z
+  .object({
+    id: z.string().min(1).max(64),
+    start: z.number().min(0),
+    end: z.number().min(0),
+    text: z.string().max(2000),
+  })
+  .openapi('CaptionCue')
+
+export const ReviseCaptionsSchema = z
+  .object({
+    expectedRev: z
+      .number()
+      .int()
+      .min(0)
+      .describe('The revision the corrections are based on (versions[].captions.rev).'),
+    cues: z
+      .array(CaptionCueSchema)
+      .max(2000)
+      .describe(
+        'Every cue of the current captions, in order, with the same ids and timings; only text may change.',
+      ),
+  })
+  .openapi('ReviseCaptions')
+
+export const VersionCaptionsSchema = z
+  .object({
+    status: z
+      .enum(['ok', 'failed', 'off', 'timeout'])
+      .describe("How the narration's transcription went; anything but ok means no narration cues."),
+    policy: z.enum(['sidecar', 'burned']).describe('Burned-in captions are corrected by rendering again.'),
+    rev: z.number().int().describe('Bumped by every correction; send it back as expectedRev.'),
+  })
+  .openapi('VersionCaptions')
+
 export const VerdictSchema = z.enum(['approved', 'changes_requested']).openapi('Verdict')
 export const SetVerdictSchema = z
   .object({ verdict: VerdictSchema.nullable(), note: z.string().max(500).optional() })
@@ -284,6 +319,9 @@ export const VersionSchema = z
           ),
       })
       .nullable(),
+    captions: VersionCaptionsSchema.nullable().describe(
+      'Recorded narration captions and their current correction; null: the render’s own captions.',
+    ),
     links: z.object({
       video: z.string(),
       poster: z.string(),

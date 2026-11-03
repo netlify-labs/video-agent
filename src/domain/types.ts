@@ -291,6 +291,8 @@ export interface VersionNarration {
   recipe: { pipeline: number; ffmpegVersion: string; settings: Record<string, unknown> }
   /** The processed bus in the videos store, its digest and length in samples. */
   bus: { key: string; sha256: string; samples: number }
+  /** sha256 of the op (narrationOpHash): a later version with the same op carries this one's caption corrections. */
+  opHash?: string
 }
 
 /** A version's captions (plan 2026-11-02 §6.6), kept apart from the render's output hashes. */
@@ -306,6 +308,8 @@ export interface VersionCaptions {
   sha256: { vtt: string; transcript: string | null }
   /** The publication mirror's generation: a mirror update never applies an older one. */
   generation: number
+  /** Corrections carried from an earlier version with the same narration op (its n and revision). */
+  carriedFrom?: { n: number; rev: number }
 }
 
 export type VersionMode = 'author' | 'render_unchanged'
@@ -845,7 +849,8 @@ export interface UserWebhookRow {
 export interface CleanupRow {
   id: string
   /** delete_take: GC's second phase for a narration take (prefix `<media id>/`), which also marks the row deleted. */
-  kind: 'delete_prefix' | 'delete_take'
+  /** sync_captions: a caption revision's publication mirror update (prefix `pub/<slug>.json#g<generation>`). */
+  kind: 'delete_prefix' | 'delete_take' | 'sync_captions'
   store: 'videos' | 'sources' | 'uploads' | 'internal' | 'checkpoints' | 'bundles' | 'media'
   prefix: string
   nextActionAt: string

@@ -3,6 +3,7 @@
 // stored) and its captions (transcription status, policy, rev 0); the attempt's take references become the version's.
 // A failed or cancelled attempt lets go of its references instead (their 30 days start), and a retry takes them again.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { narrationOpHash } from '../src/domain/captions.js'
 import { narrationReportOf, wavSamples } from '../src/domain/finalize.js'
 import { TAKE_RETAIN_MS } from '../src/domain/takes.js'
 import type { NarrationReport } from '../src/domain/types.js'
@@ -55,6 +56,7 @@ describe('finalizing recorded narration', () => {
           settings: { cleanup: 'light' },
         },
         bus: { key: `${id}/v2/narration-bus.wav`, sha256: sha256Hex(BUS), samples: 9 * S },
+        opHash: narrationOpHash(v.frozen!.narration!.op),
       })
       expect(v.captions).toEqual({
         status: 'ok',

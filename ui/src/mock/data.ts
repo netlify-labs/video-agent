@@ -75,6 +75,7 @@ function ready(
     targetDurationSec: o.target ?? null,
     sound: o.music?.length ? 'music' : 'silent',
     voiceover: null,
+    captions: o.narrated ? { status: 'ok', policy: 'sidecar', rev: 0 } : null,
     createdAt: ago(o.at + 0.3),
     plan: null,
     credits: o.music ?? [],
@@ -222,6 +223,7 @@ export const videos: Video[] = [
       targetDurationSec: 20,
       sound: 'silent',
       voiceover: null,
+      captions: null,
       createdAt: ago(2.6),
       plan: null,
 
@@ -257,6 +259,7 @@ export const videos: Video[] = [
       targetDurationSec: 30,
       sound: 'silent',
       voiceover: null,
+      captions: null,
       createdAt: ago(0.8),
       plan: null,
 
@@ -396,6 +399,7 @@ export const videos: Video[] = [
       targetDurationSec: null,
       sound: 'silent',
       voiceover: null,
+      captions: null,
       createdAt: ago(2900),
       plan: null,
 

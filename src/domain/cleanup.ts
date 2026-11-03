@@ -1,7 +1,8 @@
 // Bounded cleanup in the sweep: delete every copy of tombstoned videos, reap abandoned uploads and old Openverse jobs,
-// and delete unused narration takes (two-phase GC, takes.ts).
+// delete unused narration takes (two-phase GC, takes.ts) and retry caption revisions' mirror updates (captions.ts).
 import { CLIENT_IDLE_MS } from '../auth/oauth.js'
 import type { Deps } from '../deps.js'
+import { runCaptionsSync } from './captions.js'
 import { deleteExpiredEdits } from './edits.js'
 import { sweepUploads } from './media-uploads.js'
 import { sweepOpenverseJobs } from './openverse-jobs.js'
@@ -18,6 +19,11 @@ export async function runCleanup(
     // A take's bytes also mark its row deleted, and retry with their own backoff.
     if (c.kind === 'delete_take') {
       if (await deleteTakeBytes(deps, c)) done++
+      continue
+    }
+    // A caption revision's publication mirror update (captions.ts), retried until it's applied or moot.
+    if (c.kind === 'sync_captions') {
+      if (await runCaptionsSync(deps, c)) done++
       continue
     }
     try {

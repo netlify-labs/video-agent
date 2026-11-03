@@ -1,16 +1,11 @@
+import { CUE_ID, writeVtt } from '../../src/lib/vtt.js'
+
 export interface Cue {
   start: number
   end: number
   text: string
-}
-
-const ts = (sec: number) => {
-  const ms = Math.max(0, Math.round(sec * 1000))
-  const h = Math.floor(ms / 3600000)
-  const m = Math.floor((ms % 3600000) / 60000)
-  const s = Math.floor((ms % 60000) / 1000)
-  const pad = (n: number, w = 2) => String(n).padStart(w, '0')
-  return `${pad(h)}:${pad(m)}:${pad(s)}.${pad(ms % 1000, 3)}`
+  /** A narration cue's stable id (caption revisions key on it); other cues are numbered by position. */
+  id?: string
 }
 
 /**
@@ -29,16 +24,12 @@ export function toVtt(cues: unknown, durationSec: number): string {
         Number.isFinite((c as Cue).end),
     )
     .map((c) => ({
+      id: typeof c.id === 'string' && CUE_ID.test(c.id) && !/^\d+$/.test(c.id) ? c.id : null,
       start: Math.max(0, c.start),
       end: Math.min(durationSec, c.end),
       text: c.text.replace(/-->/g, '→').trim(),
     }))
     .filter((c) => c.text && c.end > c.start)
     .sort((a, b) => a.start - b.start)
-  if (!valid.length) return 'WEBVTT\n\n'
-  return [
-    'WEBVTT',
-    '',
-    ...valid.flatMap((c, i) => [String(i + 1), `${ts(c.start)} --> ${ts(c.end)}`, c.text, '']),
-  ].join('\n')
+  return writeVtt(valid.map((c, i) => ({ ...c, id: c.id ?? String(i + 1) })))
 }

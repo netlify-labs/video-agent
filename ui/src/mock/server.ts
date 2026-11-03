@@ -13,6 +13,7 @@ import voiceFile from '../../../test/fixtures/contract1-voice/assets/voice/voice
 import type { Video } from '../api/client'
 import { MOCK_TRANSCRIPT, embed, people, stats, videos } from './data'
 import { mockFile } from './files'
+import { parseVtt, writeVtt, type VttCue } from '../../../src/lib/vtt'
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
@@ -940,6 +941,34 @@ export function installMock() {
       const vid = videos.find((x) => x.id === rv[1])
       return vid ? json(withComments(vid), 202) : fail(404, 'not_found', 'Video not found.')
     }
+    // Narration captions and their corrections (POST: compare-and-swap on the revision, text-only).
+    const cp = /^\/api\/v1\/videos\/([^/]+)\/versions\/(\d+)\/captions$/.exec(p)
+    const capVer = cp?.[1]
+      ? videos.find((x) => x.id === cp[1])?.versions.find((x) => x.n === Number(cp[2]))
+      : null
+    if (cp?.[1] && capVer?.captions) {
+      const key = `${cp[1]}/${cp[2]}`
+      const cues = (mockCues[key] ??= parseVtt(MOCK_CAPTIONS))
+      if (method === 'GET')
+        return new Response(writeVtt(cues), { headers: { 'content-type': 'text/vtt; charset=utf-8' } })
+      if (method === 'POST') {
+        const b = (await readBody(init, input)) as { expectedRev?: number; cues?: VttCue[] }
+        if (b.expectedRev !== capVer.captions.rev)
+          return fail(409, 'conflict', 'The captions changed since you opened them. Reload and try again.')
+        const next = b.cues ?? []
+        if (
+          next.length !== cues.length ||
+          next.some((c, i) => {
+            const was = cues[i]
+            return !was || c.id !== was.id || c.start !== was.start
+          })
+        )
+          return fail(400, 'invalid_request', "A cue's id or timing changed: corrections change text only.")
+        mockCues[key] = cues.map((c, i) => ({ ...c, text: next[i]?.text.trim() ?? c.text }))
+        capVer.captions = { ...capVer.captions, rev: capVer.captions.rev + 1 }
+        return json(capVer.captions)
+      }
+    }
     // Publish and unpublish; the last publish body is kept for tests.
     const pb = /^\/api\/v1\/videos\/([^/]+)\/versions\/(\d+)\/publish$/.exec(p)
     if (pb?.[1] && (method === 'POST' || method === 'DELETE')) {
@@ -1005,6 +1034,14 @@ export function installMock() {
     return fail(404, 'not_found', `Mock has no ${method} ${p}`)
   }
 }
+
+// A narrated version's captions as the render wrote them, and their corrections (per video and version).
+const MOCK_CAPTIONS = writeVtt([
+  { id: 'nc_mock00000001', start: 0.4, end: 3.2, text: 'Every pull request gets its own URL.' },
+  { id: 'nc_mock00000002', start: 3.6, end: 7.8, text: 'Review the real site, not a screen shot.' },
+  { id: 'nc_mock00000003', start: 8.2, end: 13.5, text: 'Merge with confidence. Book a demo.' },
+])
+const mockCues: Record<string, VttCue[]> = {}
 
 let mockVoice: { voice: string | null; speed: number | null; script: string[] | null } | null = null
 // What the mock planner takes from the request for settings left untouched (like the real one: the request wins).

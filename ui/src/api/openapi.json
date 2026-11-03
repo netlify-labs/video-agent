@@ -681,6 +681,9 @@
               "notices"
             ]
           },
+          "captions": {
+            "$ref": "#/components/schemas/VersionCaptions"
+          },
           "links": {
             "type": "object",
             "properties": {
@@ -827,6 +830,7 @@
           "usage",
           "timings",
           "output",
+          "captions",
           "links",
           "files",
           "credits",
@@ -1075,6 +1079,42 @@
             "type": "number"
           }
         }
+      },
+      "VersionCaptions": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "failed",
+              "off",
+              "timeout"
+            ],
+            "description": "How the narration's transcription went; anything but ok means no narration cues."
+          },
+          "policy": {
+            "type": "string",
+            "enum": [
+              "sidecar",
+              "burned"
+            ],
+            "description": "Burned-in captions are corrected by rendering again."
+          },
+          "rev": {
+            "type": "integer",
+            "description": "Bumped by every correction; send it back as expectedRev."
+          }
+        },
+        "required": [
+          "status",
+          "policy",
+          "rev"
+        ],
+        "description": "Recorded narration captions and their current correction; null: the render’s own captions."
       },
       "Credit": {
         "type": "object",
@@ -1521,6 +1561,56 @@
         },
         "required": [
           "verdict"
+        ]
+      },
+      "ReviseCaptions": {
+        "type": "object",
+        "properties": {
+          "expectedRev": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "The revision the corrections are based on (versions[].captions.rev)."
+          },
+          "cues": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CaptionCue"
+            },
+            "maxItems": 2000,
+            "description": "Every cue of the current captions, in order, with the same ids and timings; only text may change."
+          }
+        },
+        "required": [
+          "expectedRev",
+          "cues"
+        ]
+      },
+      "CaptionCue": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "start": {
+            "type": "number",
+            "minimum": 0
+          },
+          "end": {
+            "type": "number",
+            "minimum": 0
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "id",
+          "start",
+          "end",
+          "text"
         ]
       },
       "PreviewLink": {
@@ -6238,6 +6328,114 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Video"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/videos/{id}/versions/{n}/captions": {
+      "post": {
+        "summary": "Correct the captions",
+        "description": "Corrects recorded narration's caption text without a render: every cue, in order, with its id and timing unchanged. The captions and transcript get new revision files; the share page follows. Owner or admin. 409 when expectedRev isn't the current revision or the captions are burned in.",
+        "tags": [
+          "versions"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "required": true,
+            "name": "n",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviseCaptions"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Corrected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionCaptions"
                 }
               }
             }

@@ -676,6 +676,8 @@ export interface PublicationMirror {
   credits?: Credit[]
   /** The share page offers the transcript (the publisher's choice); missing: no. */
   showTranscript?: boolean
+  /** versions.captions.generation the keys are of: a caption revision's sync applies only a newer one. */
+  captionsGeneration?: number
 }
 
 export async function publishVersion(
@@ -685,7 +687,7 @@ export async function publishVersion(
   n: number,
   opts: { showTranscript?: boolean | undefined } = {},
 ) {
-  const { pub, mirror, output } = await deps.store.tx(async (repo) => {
+  const { pub, mirror, output, written } = await deps.store.tx(async (repo) => {
     const job = await loadJob(repo, principal, jobId, true)
     assertCan(principal, 'video:publish', { ownerId: job.ownerId })
     const output = await repo.getOutput(jobId, n)
@@ -700,7 +702,10 @@ export async function publishVersion(
       if (show !== (active.showTranscript ?? false))
         await repo.updatePublication(active.slug, { showTranscript: show })
       const row = { ...active, showTranscript: show }
-      return { pub: row, mirror: mirrorFor(row, job, version, output, credits), output }
+      const mirror = mirrorFor(row, job, version, output, credits)
+      // Under the job's lock, like a caption revision's mirror sync, so neither overwrites the other's newer state.
+      await deps.blobs.set('internal', pubKey(row.slug), JSON.stringify(mirror))
+      return { pub: row, mirror, output, written: true }
     }
     const row: PublicationRow = {
       slug: deps.ids.slug(),
@@ -712,9 +717,9 @@ export async function publishVersion(
       showTranscript: opts.showTranscript ?? false,
     }
     await repo.insertPublication(row)
-    return { pub: row, mirror: mirrorFor(row, job, version, output, credits), output }
+    return { pub: row, mirror: mirrorFor(row, job, version, output, credits), output, written: false }
   })
-  await deps.blobs.set('internal', pubKey(pub.slug), JSON.stringify(mirror))
+  if (!written) await deps.blobs.set('internal', pubKey(pub.slug), JSON.stringify(mirror))
   deps.log.info('publish.done', {
     jobId,
     versionN: n,
@@ -734,6 +739,7 @@ function mirrorFor(
 ): PublicationMirror {
   const prefix = `${job.id}/v${p.versionN}`
   const transcript = versionFileName(v, o, 'transcript')
+  const captions = versionFileName(v, o, 'captions')
   return {
     slug: p.slug,
     jobId: job.id,
@@ -746,12 +752,13 @@ function mirrorFor(
       video: o.videoKey,
       poster: o.posterKey,
       gif: o.gifKey,
-      captions: o.captionsKey,
+      captions: v.captions ? `${prefix}/${captions}` : o.captionsKey,
       ...(versionFileName(v, o, 'narration-audio') ? { narration: `${prefix}/narration.mp3` } : {}),
       ...(transcript ? { transcript: `${prefix}/${transcript}` } : {}),
     },
     credits,
     showTranscript: p.showTranscript ?? false,
+    ...(v.captions ? { captionsGeneration: v.captions.generation } : {}),
   }
 }
 
@@ -883,6 +890,9 @@ function versionDto(
           summary: o.agentSummary,
           notices: o.notices ?? [],
         }
+      : null,
+    captions: v.captions
+      ? { status: v.captions.status, policy: v.captions.policy, rev: v.captions.rev }
       : null,
     links: {
       video: `${fileBase}/video`,

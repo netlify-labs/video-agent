@@ -25,6 +25,7 @@ import { readRunCredits, RUN_CREDITS_FILE, type RunCredit } from '../lib/openver
 import { NARRATION_SRC } from '../lib/contract.js'
 import { readTarGz, type TarLimits } from '../lib/tar.js'
 import { ensureBundle } from './bundles.js'
+import { carriedCaptions, narrationOpHash } from './captions.js'
 import { getSettings } from './settings.js'
 import { promoteAttemptRefs } from './takes.js'
 import { deriveTitle, setStage } from './videos.js'
@@ -236,6 +237,16 @@ export async function finalizeAttempt(deps: Deps, attemptId: string): Promise<Fi
       ? await storeNarrationOutputs(deps, a.id, prefix, manifest, sha256)
       : new Set<NarrationOutput>()
     const recorded = narrationMetadata(deps, a, version, manifest, references, narrated)
+    // The same narration as the version it was made from keeps that version's caption corrections.
+    if (recorded?.narration?.opHash && recorded.captions) {
+      const baseN = version.editedFromN ?? version.parentN
+      const base = baseN ? await deps.store.getVersion(a.jobId, baseN) : null
+      const carried = await carriedCaptions(deps, a.jobId, a.versionN, base, {
+        opHash: recorded.narration.opHash,
+        captions: recorded.captions,
+      })
+      if (carried) recorded.captions = carried
+    }
     const result = await finish(
       deps,
       a,
@@ -538,6 +549,7 @@ export function narrationMetadata(
       settings: { cleanup: report?.cleanup ?? frozen.recipe.cleanup },
     },
     bus: { key: bus.entry.key, sha256: bus.entry.sha256, samples },
+    opHash: narrationOpHash(frozen.op),
   }
   // No report from the transcription stage: off when the render froze it off, a failure otherwise.
   const status: VersionCaptions['status'] =

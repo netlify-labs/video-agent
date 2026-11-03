@@ -1028,6 +1028,97 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/videos/{id}/versions/{n}/captions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Correct the captions
+         * @description Corrects recorded narration's caption text without a render: every cue, in order, with its id and timing unchanged. The captions and transcript get new revision files; the share page follows. Owner or admin. 409 when expectedRev isn't the current revision or the captions are burned in.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                    n: number;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ReviseCaptions"];
+                };
+            };
+            responses: {
+                /** @description Corrected */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["VersionCaptions"];
+                    };
+                };
+                /** @description Invalid request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not signed in */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not allowed */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Conflict or not ready */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/videos/{id}/versions/{n}/preview": {
         parameters: {
             query?: never;
@@ -7280,6 +7371,7 @@ export interface components {
                 /** @description Things to know about the video, kept despite them, e.g. a length far from the one asked for */
                 notices: string[];
             } | null;
+            captions: components["schemas"]["VersionCaptions"];
             links: {
                 video: string;
                 poster: string;
@@ -7372,6 +7464,21 @@ export interface components {
             totalCreditsCost?: number;
             totalTokens?: number;
             stepsCount?: number;
+        } | null;
+        /** @description Recorded narration captions and their current correction; null: the render’s own captions. */
+        VersionCaptions: {
+            /**
+             * @description How the narration's transcription went; anything but ok means no narration cues.
+             * @enum {string}
+             */
+            status: "ok" | "failed" | "off" | "timeout";
+            /**
+             * @description Burned-in captions are corrected by rendering again.
+             * @enum {string}
+             */
+            policy: "sidecar" | "burned";
+            /** @description Bumped by every correction; send it back as expectedRev. */
+            rev: number;
         } | null;
         Credit: {
             /** @description The library item, or null for music or a sound effect the run fetched from Openverse itself */
@@ -7491,6 +7598,18 @@ export interface components {
         SetVerdict: {
             verdict: components["schemas"]["Verdict"];
             note?: string;
+        };
+        ReviseCaptions: {
+            /** @description The revision the corrections are based on (versions[].captions.rev). */
+            expectedRev: number;
+            /** @description Every cue of the current captions, in order, with the same ids and timings; only text may change. */
+            cues: components["schemas"]["CaptionCue"][];
+        };
+        CaptionCue: {
+            id: string;
+            start: number;
+            end: number;
+            text: string;
         };
         PreviewLink: {
             /** @description Load in <iframe sandbox="allow-scripts">; append #ch=<channel id> */

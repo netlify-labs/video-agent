@@ -22,7 +22,7 @@ import { IconCheck, IconDots, IconMapPin, IconX } from '@tabler/icons-react'
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import { $api, commentsInit, newIdempotencyKey, type Version, type Video } from '../api/client'
 import type { paths } from '../api/schema'
-import { clockTime, fileUrl, imageUrl, relativeTime, showError } from './bits'
+import { captionsUrl, clockTime, fileUrl, imageUrl, relativeTime, showError } from './bits'
 
 type Comment =
   paths['/api/v1/videos/{id}/comments']['get']['responses'][200]['content']['application/json']['items'][number]
@@ -118,7 +118,13 @@ export function ReviewPlayer({
           poster={imageUrl(video.id, v, 'poster')}
           src={fileUrl(video.id, v.n, 'video')}
         >
-          <track kind="captions" src={fileUrl(video.id, v.n, 'captions')} srcLang="en" label="Captions" />
+          <track
+            key={v.captions?.rev ?? 0}
+            kind="captions"
+            src={captionsUrl(video.id, v)}
+            srcLang="en"
+            label="Captions"
+          />
         </video>
         {dots.map((c) => (
           <Tooltip

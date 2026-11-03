@@ -23,3 +23,11 @@ describe('toVtt', () => {
     expect(toVtt([], 10)).toBe('WEBVTT\n\n')
   })
 })
+
+describe('toVtt cue ids', () => {
+  it("keeps a narration cue's id and escapes markup", () => {
+    expect(toVtt([{ id: 'nc_abc123', start: 0, end: 1, text: 'Tom & <b>Jerry</b>' }], 5)).toBe(
+      'WEBVTT\n\nnc_abc123\n00:00:00.000 --> 00:00:01.000\nTom &amp; &lt;b&gt;Jerry&lt;/b&gt;\n',
+    )
+  })
+})

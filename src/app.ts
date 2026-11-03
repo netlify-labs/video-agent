@@ -24,6 +24,7 @@ import {
   unpublishVersion,
   videoDto,
 } from './domain/videos.js'
+import { reviseCaptions } from './domain/captions.js'
 import { signedFilePath, versionFileName } from './domain/files.js'
 import { handleMcp } from './mcp.js'
 import {
@@ -544,6 +545,27 @@ export function createApp(deps: Deps, opts: AppOptions) {
     async (c) => {
       const p = c.req.valid('param')
       return c.json(await setVerdict(deps, c.get('principal'), p.id, p.n, c.req.valid('json')), 200)
+    },
+  )
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/v1/videos/{id}/versions/{n}/captions',
+      summary: 'Correct the captions',
+      description:
+        "Corrects recorded narration's caption text without a render: every cue, in order, with its id and timing unchanged. The captions and transcript get new revision files; the share page follows. Owner or admin. 409 when expectedRev isn't the current revision or the captions are burned in.",
+      tags: ['versions'],
+      security,
+      request: {
+        params: VersionParam,
+        body: { content: { 'application/json': { schema: s.ReviseCaptionsSchema } }, required: true },
+      },
+      responses: { 200: json(s.VersionCaptionsSchema, 'Corrected'), ...errors },
+    }),
+    async (c) => {
+      const p = c.req.valid('param')
+      const r = await reviseCaptions(deps, c.get('principal'), p.id, p.n, c.req.valid('json'))
+      return c.json({ status: r.status, policy: r.policy, rev: r.rev }, 200)
     },
   )
   // Before the {file} route, which would otherwise take 'preview' as a file name.

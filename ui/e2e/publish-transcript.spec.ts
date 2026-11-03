@@ -24,7 +24,7 @@ test('the transcript is off by default, previewed, sent with the publish and rem
   await expect(dialog).toBeHidden()
   await expect.poll(() => lastPublish(page)).toEqual({ showTranscript: true })
   await expect(page.getByText('Public link for v1')).toBeVisible()
-  await expect(page.getByText('Transcript', { exact: true })).toBeVisible()
+  await expect(page.getByLabel('Transcript', { exact: true })).toHaveValue(/\/v\/\w+\.txt$/)
 
   // A fresh page (the mock forgets the publication) opens with the choice remembered.
   await page.reload()

@@ -23,6 +23,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { MediaChips, type Media } from '../components/MediaPicker'
 import { PlanPanel } from '../components/PlanPanel'
 import { PublishButton } from '../components/PublishDialog'
+import { TranscriptEditor } from '../components/TranscriptEditor'
 import { SoundControl, soundAfterPick, type Sound } from '../components/SoundControl'
 import {
   VoiceoverControl,
@@ -1063,6 +1064,7 @@ export function VideoPage() {
         <div className="va-rail">
           <Filmstrip video={data} selected={v.n} onSelect={select} />
           <PublicLink video={data} v={v} canPublish={canPublish} />
+          {v.status === 'ready' ? <TranscriptEditor videoId={data.id} v={v} canEdit={canPublish} /> : null}
           <Card>
             <Text fw={600} mb="sm">
               Details for v{v.n}

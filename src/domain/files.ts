@@ -23,6 +23,8 @@ export function versionFileName(
   o: Pick<OutputRow, 'sha256'>,
   file: FileKind,
 ): string | null {
+  // A caption revision (src/domain/captions.ts) has its own immutable names, so each one is a new URL.
+  if (file === 'captions') return v.captions?.files.vtt ?? FILE_NAMES.captions
   if (file === 'transcript')
     return v.captions?.files.transcript ?? (o.sha256[FILE_NAMES.transcript] ? FILE_NAMES.transcript : null)
   if (file === 'narration-audio')
