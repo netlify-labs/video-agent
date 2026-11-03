@@ -65,6 +65,23 @@ type Db = PgAsyncDatabase<any, any, any>
 // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- the caller names the row type
 const one = <T>(rows: unknown[]): T | null => (rows[0] as T | undefined) ?? null
 const nonDue = [...TERMINAL_STAGES, 'queued', 'unresolved']
+/** A version's credited media: the version_media row and the media item's source and licence. */
+const PROVENANCE_COLUMNS = {
+  versionN: t.versionMedia.versionN,
+  mediaId: t.versionMedia.mediaId,
+  position: t.versionMedia.position,
+  kind: t.versionMedia.kind,
+  source: t.media.source,
+  sourceId: t.media.sourceId,
+  sourceUrl: t.media.sourceUrl,
+  sourceTitle: t.media.sourceTitle,
+  license: t.media.license,
+  licenseVersion: t.media.licenseVersion,
+  licenseUrl: t.media.licenseUrl,
+  creator: t.media.creator,
+  creatorUrl: t.media.creatorUrl,
+  attribution: t.media.attribution,
+}
 
 function repoFor(db: Db): Repo {
   return {
@@ -671,22 +688,7 @@ function repoFor(db: Db): Repo {
       const v = t.versionMedia
       const m = t.media
       return (await db
-        .select({
-          versionN: v.versionN,
-          mediaId: v.mediaId,
-          position: v.position,
-          kind: v.kind,
-          source: m.source,
-          sourceId: m.sourceId,
-          sourceUrl: m.sourceUrl,
-          sourceTitle: m.sourceTitle,
-          license: m.license,
-          licenseVersion: m.licenseVersion,
-          licenseUrl: m.licenseUrl,
-          creator: m.creator,
-          creatorUrl: m.creatorUrl,
-          attribution: m.attribution,
-        })
+        .select(PROVENANCE_COLUMNS)
         .from(v)
         .innerJoin(m, eq(m.id, v.mediaId))
         .where(and(eq(v.jobId, jobId), isNotNull(m.source)))
@@ -727,23 +729,7 @@ function repoFor(db: Db): Repo {
             .where(inArray(t.versionComments.jobId, jobIds))
             .orderBy(asc(t.versionComments.versionN), asc(t.versionComments.position)),
           db
-            .select({
-              jobId: v.jobId,
-              versionN: v.versionN,
-              mediaId: v.mediaId,
-              position: v.position,
-              kind: v.kind,
-              source: m.source,
-              sourceId: m.sourceId,
-              sourceUrl: m.sourceUrl,
-              sourceTitle: m.sourceTitle,
-              license: m.license,
-              licenseVersion: m.licenseVersion,
-              licenseUrl: m.licenseUrl,
-              creator: m.creator,
-              creatorUrl: m.creatorUrl,
-              attribution: m.attribution,
-            })
+            .select({ jobId: v.jobId, ...PROVENANCE_COLUMNS })
             .from(v)
             .innerJoin(m, eq(m.id, v.mediaId))
             .where(and(inArray(v.jobId, jobIds), isNotNull(m.source)))
