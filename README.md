@@ -284,6 +284,12 @@ The same video tasks are MCP tools, so people can ask Claude, Cursor or any MCP 
 and CC BY music from Openverse),
 and, when AI Gateway is available, `plan_video` and `plan_brief` (ask a few questions first, then create with the plan). Each key's tool list matches its owner's role: Reviewers see the read and review tools, Viewers read only.
 
+Recorded voice-over has three tools: `get_narration` reads a version's narration (or your draft's),
+`add_narration` places an uploaded recording on your draft by media id (no URLs; it takes the narration lock), and
+`render_with_narration` renders it over the kept visuals as the next version (`fit_to_narration` is refused until it
+ships). `get_video` reports the video's spoken `language`, and `add_narration` can set it. The skill's
+`references/narration.md` walks agents through uploading and rendering.
+
 In clients that show [MCP Apps](https://github.com/modelcontextprotocol/ext-apps) (Claude, for one), `create_video`,
 `revise_video` and `show_video` also show a **video card** in the chat. It follows the run with `get_video` and plays
 the video when it's ready, with Download, Open in Video Agent, and full screen or picture-in-picture where the

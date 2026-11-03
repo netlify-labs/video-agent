@@ -90,6 +90,22 @@ export const MCP_TOOLS: readonly McpCatalogEntry[] = [
     access: 'creators',
   },
   {
+    name: 'get_narration',
+    summary: 'A version’s recorded voice-over (clips in seconds, captions status), and your draft’s.',
+    access: 'everyone',
+  },
+  {
+    name: 'add_narration',
+    summary:
+      'Place an uploaded recording (a media id) on your draft, at a start time. Takes the narration lock.',
+    access: 'creators',
+  },
+  {
+    name: 'render_with_narration',
+    summary: 'Render your draft with its narration over the kept visuals as the next version.',
+    access: 'creators',
+  },
+  {
     name: 'plan_video',
     summary: 'Optional: a few multiple-choice questions to plan the video first.',
     access: 'planning',

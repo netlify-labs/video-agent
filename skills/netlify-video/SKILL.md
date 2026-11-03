@@ -47,6 +47,11 @@ the version in progress), `list_media` (the team's logos, screenshots, clips, fo
 `import_music` (find CC0 or CC BY music on Openverse and add it to the library; `get_music_job` finishes a slow one),
 `list_comments`, `add_comment` and `set_verdict` (review; see the recipes).
 
+**Your own voice-over.** To narrate a video with a recording of the person's voice, upload the audio file, place it
+with `add_narration` (media ids only, never URLs; it takes the video's narration lock), check it with
+`get_narration`, then render with `render_with_narration` (a run that costs credits). The steps, limits and the upload
+commands are in [references/narration.md](references/narration.md).
+
 ## Etiquette
 
 - **Ask before spending a run.** Each create or revise starts an agent run that costs credits. Confirm the prompt, the

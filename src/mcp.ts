@@ -1,6 +1,6 @@
 // MCP server: lets people make videos from their AI tools (Claude, Cursor, any MCP client).
 // Stateless Streamable HTTP at /api/mcp (alias /mcp), authenticated with the same API keys as the REST API.
-// Seventeen tools and five recipe prompts (mcp-prompts.ts); inputs are forgiving (aspect names, "30s", pasted
+// Twenty tools and five recipe prompts (mcp-prompts.ts); inputs are forgiving (aspect names, "30s", pasted
 // URLs) and every result says what to do next. create_video, revise_video and show_video carry the video card, an
 // MCP App (ui/src/mcp-app) that clients like Claude show in the chat: it follows progress, then plays the video.
 import { RESOURCE_MIME_TYPE, registerAppResource } from '@modelcontextprotocol/ext-apps/server'
@@ -10,6 +10,9 @@ import { z } from 'zod'
 import type { Deps } from './deps.js'
 import { PRIVATE_URL_TTL_SEC, signedFilePath } from './domain/files.js'
 import { addComment, listComments } from './domain/comments.js'
+import { getEdit, openEdit, renderEdit, saveEdit, takeSummary, type DraftOp } from './domain/edits.js'
+import { acquireNarrationLock } from './domain/narration-lock.js'
+import { canReadTake } from './domain/takes.js'
 import { getProgress } from './domain/progress.js'
 import { listMedia } from './domain/media.js'
 import { videoCardHtml } from './generated/video-card.js'
@@ -35,10 +38,24 @@ import {
   publishVersion,
   reviseVideo,
   unpublishVersion,
+  updateVideo,
   videoDto,
   type VideoDto,
 } from './domain/videos.js'
 import { ApiError } from './lib/errors.js'
+import { LANGUAGES } from './lib/language.js'
+import {
+  clipEnd,
+  GAIN_DB_RANGE,
+  IDENTITY_FIT,
+  MAX_NARRATION_CLIPS,
+  MAX_OUTPUT_SAMPLES,
+  resolve,
+  SAMPLE_RATE,
+  samplesToSeconds,
+  secondsToSamples,
+  type NarrationOp,
+} from './lib/timeline.js'
 import { clip } from './lib/log.js'
 import { ONE_WAY_WORDS, SPEED_RANGE, VOICE_ID } from './lib/voice.js'
 import { MEDIA_KINDS } from './lib/media/classify.js'
@@ -56,6 +73,8 @@ Typical flow:
 Optional planning (when plan_video is listed): call plan_video with the prompt first. If it returns questions, ask your user (they can skip any), then call plan_brief with their answers, show the brief, and pass plan_id to create_video (or revise_video). Skip planning when the request is already specific.
 
 Videos have captions and are silent unless you pass sound ("music" or "music_sfx"); for music, pass an audio item from list_media in media_ids (else the brand's music, or a CC0 or CC BY track the agent finds on Openverse, credited automatically); when search_music is listed, it finds CC0 and CC BY music on Openverse to import with import_music (when Openverse is slow they answer status "pending" with a job_id: call get_music_job until it's done). Pass voiceover (true, or a script with a line per beat) for a spoken narration; its captions follow the words. The company's brand context is applied automatically. Don't create a new video to fix a small thing: revise it.
+
+Your own recorded voice-over (when add_narration is listed): upload the recording, place it with add_narration (media ids only), check it with get_narration, then render_with_narration with mode "keep_visuals"; the visuals stay as they are.
 
 Prompts: prompts/list has step-by-step recipes for what your role can do: pr_video (pull request to demo video), changelog_video (release notes to changelog video), social_cut (short vertical cut of a video), localize_video (captions and on-screen text in other languages) and review_video (read and add feedback, approve, revise).`
 
@@ -343,12 +362,54 @@ async function summarize(deps: Deps, v: VideoDto) {
     title: v.title,
     status: v.status,
     aspect: v.aspect,
+    // The language spoken in it: recorded narration's captions are transcribed in it.
+    language: v.language,
     web_url: `${deps.config.siteUrl}/videos/${v.id}`,
     latest_version: v.latestVersion,
     ready_version: ready?.n ?? null,
     created_at: v.createdAt,
     versions,
     next_actions: next,
+  }
+}
+
+// ───────────── recorded narration (plan 2026-11-02 §7) ─────────────
+
+/** A new track's settings, as the editor starts one: your voice at 0 dB, the AI voice replaced, music ducked 12 dB. */
+const newNarration = (): NarrationOp => ({
+  op: 'narration',
+  schema: 1,
+  sampleRate: SAMPLE_RATE,
+  clips: [],
+  tracks: {
+    narration: { volumeDb: 0, muted: false, solo: false },
+    aiVoice: { mode: 'replace', volumeDb: -12 },
+    music: { duck: true, duckDb: -12 },
+    original: { muteAll: false },
+  },
+  cleanup: 'light',
+})
+
+const sec = (samples: number) => Math.round(samplesToSeconds(samples) * 100) / 100
+const narrationOf = (ops: readonly unknown[]) =>
+  (ops.find((o) => (o as { op?: unknown }).op === 'narration') as NarrationOp | undefined) ?? null
+
+/** A narration op in seconds, as agents read it: the clips as they play (later clips win where they overlap). */
+function narrationSummary(op: NarrationOp | null) {
+  if (!op) return null
+  const clips = resolve(op.clips)
+  return {
+    clips: clips.map((c) => ({
+      clip_id: c.id,
+      media_id: c.mediaId,
+      start_seconds: sec(c.start),
+      length_seconds: sec(c.srcEnd - c.srcStart),
+      gain_db: c.gainDb,
+    })),
+    end_seconds: clips.length ? sec(Math.max(...clips.map(clipEnd))) : 0,
+    cleanup: op.cleanup,
+    ai_voice: op.tracks.aiVoice.mode,
+    music_ducked: op.tracks.music.duck,
   }
 }
 
@@ -1174,6 +1235,247 @@ Example: {"plan_id": "plan_…", "answers": [{"question_id": "q1", "choice_ids":
       }),
   )
 
+  // Recorded narration (plan 2026-11-02 §7): place an uploaded recording on a draft, then render it over the visuals.
+  /** The latest ready version, the one a new narration draft starts from. */
+  const readyVersion = async (id: string) => {
+    const n = (await load(id)).versions.find((x) => x.status === 'ready')?.n
+    if (!n)
+      throw new ToolError('NOT_READY', 'This video has no ready version yet.', {
+        suggested_tool_calls: [{ name: 'get_video', arguments: { video_id: id, wait_seconds: 8 } }],
+      })
+    return n
+  }
+  /** The caller's open draft of a version, or null (drafts are per person; nobody else's is visible). */
+  const ownDraft = (id: string, n: number) =>
+    deps.store.findEdit(principal.userId, id, n, deps.clock.now().toISOString())
+
+  server.registerTool(
+    'get_narration',
+    {
+      title: 'Get a recorded narration',
+      description: `Read a video's recorded voice-over: the clips of each recording (media_id, where it starts and how long it plays, in seconds) and its captions' status. With version, that version's narration as it was rendered; without, the latest ready version's, plus your draft's if you have one (from add_narration or the editor).
+A version narrated with the AI voice (voiceover) has no recorded narration: narration is null.
+
+Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w"}`,
+      inputSchema: {
+        video_id: z.string().describe('The video id (vid_…) or its web URL.'),
+        version: optionalVersion('Which version (default: the latest ready one, and your draft of it).'),
+      },
+      annotations: { title: 'Get narration', readOnlyHint: true, openWorldHint: false },
+    },
+    (args) =>
+      run(async () => {
+        const id = normalizeVideoId(args.video_id)
+        const v = await load(id)
+        const n = args.version ?? (await readyVersion(id))
+        const row = await deps.store.getVersion(id, n)
+        if (!row || !v.versions.some((x) => x.n === n))
+          throw new ToolError('NOT_FOUND', `Version ${n} not found.`, {
+            suggested_tool_calls: [{ name: 'get_video', arguments: { video_id: id } }],
+          })
+        const draft = args.version === undefined ? await ownDraft(id, n) : null
+        const draftOp = draft ? narrationOf(draft.ops) : null
+        return {
+          video_id: id,
+          version: n,
+          language: v.language,
+          // What finalize recorded, else what the render froze (the same op, while it's being made).
+          narration: narrationSummary(
+            ((row.narration?.op ?? row.frozen?.narration?.op) as NarrationOp | undefined) ?? null,
+          ),
+          captions: row.captions
+            ? { status: row.captions.status, policy: row.captions.policy, revision: row.captions.rev }
+            : null,
+          ...(draft
+            ? { draft: { edit_id: draft.id, rev: draft.rev, narration: narrationSummary(draftOp) } }
+            : {}),
+          next_actions: [
+            draftOp?.clips.length
+              ? `Your draft has a narration: call render_with_narration with video_id "${id}" to render it (a run that costs credits).`
+              : `To add a recording, call add_narration with video_id "${id}" and an uploaded audio media_id.`,
+          ],
+        }
+      }, args.video_id),
+  )
+
+  const addNarrationTool = server.registerTool(
+    'add_narration',
+    {
+      title: 'Add a recording to the narration',
+      description: `Place an uploaded audio recording on your draft of the video's latest ready version, starting at start_seconds into the video. It plays whole; a later clip wins where two overlap. Saves the draft; nothing is rendered until render_with_narration.
+
+Media ids only: upload the recording first (see the skill's narration page), or pick an audio item from list_media. URLs aren't fetched.
+It takes the video's narration lock (one person at a time edits a narration; the hold lapses 2 minutes after this call). When someone else holds it, the answer is NARRATION_LOCKED with who: wait for them or ask them to close the editor.
+language sets the language spoken in the video, which its narration captions are transcribed in (owner or admin).
+
+Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "media_id": "med_01jc8x2k4m5n6p7q", "start_seconds": 1.5}`,
+      inputSchema: {
+        video_id: z.string().describe('The video id (vid_…) or its web URL.'),
+        media_id: z
+          .string()
+          .max(64)
+          .describe('An uploaded audio recording (med_…), from list_media or an upload.'),
+        start_seconds: z
+          .number()
+          .min(0)
+          .max(MAX_OUTPUT_SAMPLES / SAMPLE_RATE)
+          .describe('Where in the video the recording starts, in seconds.'),
+        gain_db: z
+          .number()
+          .min(GAIN_DB_RANGE[0])
+          .max(GAIN_DB_RANGE[1])
+          .optional()
+          .describe(
+            `Optional. The clip's level in dB, ${GAIN_DB_RANGE[0]} to ${GAIN_DB_RANGE[1]} (default 0).`,
+          ),
+        language: z
+          .enum(LANGUAGES)
+          .optional()
+          .describe("Optional. The language spoken (en, es, fr, de, ja, …), if not the video's current one."),
+      },
+      annotations: {
+        title: 'Add narration',
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    (args) =>
+      run(async () => {
+        const id = normalizeVideoId(args.video_id)
+        const v = await load(id)
+        // Unavailable reads the same as missing, so a recording's existence doesn't leak.
+        const m = await deps.store.getMedia(args.media_id)
+        const readable =
+          m?.kind === 'audio' &&
+          m.status === 'ready' &&
+          !m.deletedAt &&
+          !m.deletingAt &&
+          (await canReadTake(deps.store, principal, m))
+        if (!m || !readable)
+          throw new ToolError('NOT_FOUND', `No audio recording ${args.media_id} that you can use.`, {
+            fix_hint: 'Upload the recording first, or pick an audio item from list_media.',
+            suggested_tool_calls: [{ name: 'list_media', arguments: { kind: 'audio' } }],
+          })
+        const { samples } = await takeSummary(deps, m)
+        if (!samples)
+          throw new ToolError('NOT_READY', `Recording ${m.id} can't be placed yet: its length isn't known.`)
+        if (args.language && args.language !== v.language)
+          await updateVideo(deps, principal, id, { language: args.language })
+        const n = await readyVersion(id)
+        const { edit } = await openEdit(deps, principal, id, n)
+        await acquireNarrationLock(deps, principal, id, { draftId: edit.id })
+        const op = narrationOf(edit.ops) ?? newNarration()
+        if (op.clips.length >= MAX_NARRATION_CLIPS)
+          throw new ToolError('INVALID_ARGUMENT', `A narration has at most ${MAX_NARRATION_CLIPS} clips.`)
+        const ids = new Set(op.clips.map((c) => c.id))
+        let k = op.clips.length + 1
+        while (ids.has(`c${k}`)) k++
+        const clip = {
+          id: `c${k}`,
+          mediaId: m.id,
+          srcStart: 0,
+          srcEnd: samples,
+          fit: IDENTITY_FIT,
+          offsetSamples: 0,
+          start: secondsToSamples(args.start_seconds),
+          gainDb: args.gain_db ?? 0,
+          fadeInSamples: 0,
+          fadeOutSamples: 0,
+        }
+        const next: NarrationOp = { ...op, clips: [...op.clips, clip] }
+        const ops: DraftOp[] = [...edit.ops.filter((o) => o.op !== 'narration'), next]
+        // The same checks as a save from the editor: the lock, the recordings, the clips and the output limit.
+        const saved = await saveEdit(deps, principal, edit.id, { ops, rev: edit.rev })
+        return {
+          video_id: id,
+          version: n,
+          edit_id: saved.id,
+          clip_id: clip.id,
+          language: args.language ?? v.language,
+          narration: narrationSummary(next),
+          video_seconds: Math.round(saved.composition.duration * 100) / 100,
+          next_actions: [
+            `Add more recordings with add_narration, or render: call render_with_narration with video_id "${id}" (a run that costs credits; confirm with your user first).`,
+          ],
+        }
+      }, args.video_id),
+  )
+
+  const renderNarrationTool = server.registerTool(
+    'render_with_narration',
+    {
+      title: 'Render a video with your narration',
+      description: `Render your draft (with the narration from add_narration or the editor) as the next version. "keep_visuals" keeps the video exactly as it is and mixes your narration over it; music dips under the voice and captions follow your words. hold_final_frame holds the last frame when the narration runs past the end (instead of cutting it off).
+"fit_to_narration" (retiming the visuals to the narration) isn't available yet. A draft without narration is refused.
+
+Each render starts a run that costs credits: confirm with your user first. Returns at once; follow it with get_video.
+
+Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "mode": "keep_visuals", "hold_final_frame": true}`,
+      inputSchema: {
+        video_id: z.string().describe('The video id (vid_…) or its web URL.'),
+        edit_id: z
+          .string()
+          .max(64)
+          .optional()
+          .describe(
+            'Optional. The draft (from add_narration); default: your draft of the latest ready version.',
+          ),
+        mode: z
+          .enum(['keep_visuals', 'fit_to_narration'])
+          .describe('"keep_visuals" (the visuals as they are) or "fit_to_narration" (not available yet).'),
+        hold_final_frame: z
+          .boolean()
+          .optional()
+          .describe(
+            'Optional. Hold the last frame while the narration finishes (default false: it is cut off).',
+          ),
+        idempotency_key: z
+          .string()
+          .max(200)
+          .optional()
+          .describe('Optional. Reusing the same key returns the same render instead of a second one.'),
+      },
+      annotations: {
+        title: 'Render with narration',
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
+    },
+    (args) =>
+      run(async () => {
+        const id = normalizeVideoId(args.video_id)
+        const edit = args.edit_id
+          ? await getEdit(deps, principal, args.edit_id).then((e) => ({
+              id: e.id,
+              jobId: e.videoId,
+              ops: e.ops,
+            }))
+          : await ownDraft(id, await readyVersion(id))
+        if (!edit || edit.jobId !== id)
+          throw new ToolError('NOT_FOUND', 'You have no draft of this video.', {
+            fix_hint: 'Add a recording with add_narration first.',
+          })
+        if (!narrationOf(edit.ops)?.clips.length)
+          throw new ToolError('INVALID_ARGUMENT', 'This draft has no narration to render.', {
+            fix_hint: 'Add a recording with add_narration first.',
+            suggested_tool_calls: [{ name: 'get_narration', arguments: { video_id: id } }],
+          })
+        const res = await renderEdit(deps, principal, edit.id, args.idempotency_key, {
+          mode: args.mode,
+          holdFinalFrame: args.hold_final_frame,
+        })
+        if (!res.replayed) kick()
+        return {
+          ...(await summarize(deps, res.body)),
+          next_actions: [`Version ${res.body.latestVersion} is rendering. ${KEEP_CHECKING(id)}`],
+        }
+      }, args.video_id),
+  )
+
   // Keys inherit their owner's role, so the tool list shows only what that role can do (plan v2 §3).
   if (!can(principal, 'video:create')) {
     for (const t of [createTool, reviseTool, publishTool, unpublishTool]) t.remove()
@@ -1182,6 +1484,10 @@ Example: {"plan_id": "plan_…", "answers": [{"question_id": "q1", "choice_ids":
     searchMusicTool.remove()
     importMusicTool.remove()
     musicJobTool.remove()
+  }
+  if (!can(principal, 'edit:create')) {
+    addNarrationTool.remove()
+    renderNarrationTool.remove()
   }
   if (!can(principal, 'verdict:set')) verdictTool.remove()
   if (!can(principal, 'comment:create')) addCommentTool.remove()

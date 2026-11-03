@@ -162,7 +162,10 @@ const isSpan = (x: unknown): x is Span =>
  * A take's length and speech spans in source samples. meta.json carries them once upload sessions store the summary
  * (va-2qq.2.6: `samples`, `speech`); until then the row's duration, and speech throughout (wholeClipSpans).
  */
-async function takeSummary(deps: Deps, m: MediaRow): Promise<{ samples: number | null; speech: Span[] }> {
+export async function takeSummary(
+  deps: Deps,
+  m: MediaRow,
+): Promise<{ samples: number | null; speech: Span[] }> {
   let meta: { samples?: unknown; speech?: unknown } = {}
   try {
     meta = JSON.parse(

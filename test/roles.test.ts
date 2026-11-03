@@ -186,9 +186,11 @@ describe('MCP tools by role', () => {
     expect(await names(h.member)).toEqual(
       [
         'add_comment',
+        'add_narration',
         'cancel_video',
         'create_video',
         'get_music_job',
+        'get_narration',
         'get_video',
         'import_music',
         'list_comments',
@@ -197,6 +199,7 @@ describe('MCP tools by role', () => {
         'plan_brief',
         'plan_video',
         'publish_video',
+        'render_with_narration',
         'revise_video',
         'search_music',
         'set_verdict',
@@ -208,6 +211,7 @@ describe('MCP tools by role', () => {
     expect(await names(rita)).toEqual([
       'add_comment',
       'cancel_video',
+      'get_narration',
       'get_video',
       'list_comments',
       'list_media',
@@ -218,6 +222,7 @@ describe('MCP tools by role', () => {
     const vic = await person(h, 'u_viewer', 'viewer')
     expect(await names(vic)).toEqual([
       'cancel_video',
+      'get_narration',
       'get_video',
       'list_comments',
       'list_media',

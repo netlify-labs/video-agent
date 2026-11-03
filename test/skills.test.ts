@@ -53,6 +53,7 @@ describe('netlify-video skill package', () => {
     expect(list).toEqual([
       'netlify-video/SKILL.md',
       'netlify-video/references/connect.md',
+      'netlify-video/references/narration.md',
       'netlify-video/references/recipes.md',
     ])
     const skill = read('netlify-video/SKILL.md')
