@@ -16,6 +16,7 @@ import { PlanAnswerSchema, planBriefShape } from '../schemas.js'
 import { clampModel, estimateCredits, FAST_MODEL } from './gateway-models.js'
 import { assertCan, type Principal } from './policy.js'
 import { MEDIA_PER_VERSION } from './media.js'
+import { isTake } from './takes.js'
 import type {
   GatewayCallRow,
   MediaRow,
@@ -198,7 +199,8 @@ async function loadPlanMedia(deps: Deps, ids: string[]): Promise<MediaRow[]> {
   const rows: MediaRow[] = []
   for (const id of unique) {
     const m = await deps.store.getMedia(id)
-    if (!m || m.deletedAt || m.status !== 'ready')
+    // Narration takes aren't library items (takes.ts).
+    if (!m || m.deletedAt || m.status !== 'ready' || isTake(m))
       throw new ApiError('invalid_request', `Media ${id} isn't a ready item in the library.`)
     rows.push(m)
   }
@@ -210,7 +212,7 @@ async function mediaContext(deps: Deps, plan: PlanRow) {
   if (!plan.mediaIds.length) return { block: '', images: [] }
   // Items deleted since the plan was made are skipped here; creating the video refuses them.
   const rows = (await Promise.all(plan.mediaIds.map((id) => deps.store.getMedia(id)))).filter(
-    (m): m is MediaRow => !!m && !m.deletedAt && m.status === 'ready',
+    (m): m is MediaRow => !!m && !m.deletedAt && m.status === 'ready' && !isTake(m),
   )
   const images: { mime: string; base64: string }[] = []
   for (const m of rows) {

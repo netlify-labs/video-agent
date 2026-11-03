@@ -148,7 +148,10 @@ export interface Repo {
   insertMedia(row: MediaRow): Promise<void>
   getMedia(id: string): Promise<MediaRow | null>
   updateMedia(id: string, patch: Partial<MediaRow>): Promise<void>
-  /** Newest first: ready, undeleted items, plus `includePendingOf`'s own items in any state. */
+  /**
+   * Newest first: ready, undeleted items, plus `includePendingOf`'s own items in any state. Narration takes are left
+   * out, except `takesOf`'s own that GC isn't deleting.
+   */
   listMedia(q: {
     kind?: MediaRow['kind'] | undefined
     /** Words that must all appear in the title, file name, notes, source title or creator (any case). */
@@ -156,14 +159,19 @@ export interface Repo {
     /** Newest first by default; `before` pages only that order. */
     sort?: 'newest' | 'oldest' | 'name' | undefined
     includePendingOf?: string | undefined
+    takesOf?: string | undefined
     before?: { createdAt: string; id: string } | undefined
     limit: number
   }): Promise<MediaRow[]>
-  /** Undeleted items (ready, or `includePendingOf`'s own) with one of these hashes or file names, for duplicates. */
+  /**
+   * Undeleted items (ready, or `includePendingOf`'s own) with one of these hashes or file names, for duplicates.
+   * Narration takes are left out, except `takesOf`'s own that GC isn't deleting.
+   */
   findMediaMatches(q: {
     sha256s: string[]
     filenames: string[]
     includePendingOf: string
+    takesOf?: string | undefined
   }): Promise<MediaRow[]>
   insertUpload(row: MediaUploadRow): Promise<void>
   getUpload(id: string, opts?: { lock?: boolean }): Promise<MediaUploadRow | null>

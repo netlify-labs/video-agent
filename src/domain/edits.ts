@@ -21,6 +21,7 @@ import {
 } from './bundles.js'
 import { assertCan, type Principal } from './policy.js'
 import { snapshotMedia } from './media.js'
+import { isTake } from './takes.js'
 import { getSettings } from './settings.js'
 import type { Repo } from '../store/types.js'
 import type { EditRow } from './types.js'
@@ -159,7 +160,8 @@ async function computeRev(deps: Deps, e: Pick<EditRow, 'jobId' | 'baseN'>, ops: 
     const file = src.slice('assets/media/'.length)
     const m = await deps.store.getMedia(file.split('.')[0] ?? '')
     const fits = kind === 'image' ? m?.kind === 'image' || m?.kind === 'svg' : m?.kind === kind
-    if (!m || m.deletedAt || m.status !== 'ready' || `${m.id}.${m.ext}` !== file || !fits)
+    // A narration take isn't a library item: it's placed with the narration op, never as a media or audio pick.
+    if (!m || m.deletedAt || m.status !== 'ready' || isTake(m) || `${m.id}.${m.ext}` !== file || !fits)
       throw new ApiError(
         'invalid_request',
         `That edit can't be made: ${file} isn't a ready ${kind} in the library.`,

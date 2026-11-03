@@ -1,6 +1,7 @@
 // The team media library (plan v2 §9, §14 rules 24-27). Creators and admins upload; everyone sees ready items;
 // uploaders also see their own pending ones. Types come from the bytes. SVGs are sanitized, and only the clean copy is
 // ever used; the original is served strictly as a download. Deleting is soft: versions that used an item keep it.
+// Recorded voice-over takes are media rows too, but not library items: canReadTake (takes.ts) gates every read.
 import type { Deps } from '../deps.js'
 import { signPath, sha256Hex } from '../lib/crypto.js'
 import { ApiError } from '../lib/errors.js'
@@ -11,6 +12,7 @@ import { getSettings } from './settings.js'
 import type { Repo } from '../store/types.js'
 import { NO_PROVENANCE, type MediaProvenance, type MediaRow, type VersionMediaRow } from './types.js'
 import { licenseLabel, safeUrl } from './credits.js'
+import { canReadTake, isTake, readableMedia } from './takes.js'
 import { canSee, decodeCursor, nextCursor } from './videos.js'
 
 /** One request carries at most this much (Netlify's request limit is about 4.5 MB); bigger files use sessions. */
@@ -164,6 +166,8 @@ async function signed(deps: Deps, id: string, file: MediaFile) {
 }
 
 export async function mediaDto(deps: Deps, p: Principal, m: MediaRow, usage?: Record<string, string[]>) {
+  // Every signed link is issued here, so a take no one let this person read never gets one.
+  if (!(await canReadTake(deps.store, p, m))) throw new ApiError('not_found', 'Media not found.')
   const uploader = await deps.store.getUser(m.uploaderId)
   // "Used in N videos" counts only videos this person can see.
   const jobs = (usage ?? (await deps.store.mediaUsage([m.id])))[m.id] ?? []
@@ -241,13 +245,17 @@ export async function listMedia(
     search: q.q,
     sort,
     includePendingOf: p.userId,
+    // Only the caller's own takes are listed here; a video's shared ones are listed with that video.
+    takesOf: p.userId,
     before,
     limit: limit + 1,
   })
   const page = rows.slice(0, limit)
   const usage = await deps.store.mediaUsage(page.map((m) => m.id))
   return {
-    items: await Promise.all(page.map((m) => mediaDto(deps, p, m, usage))),
+    items: await Promise.all(
+      (await readableMedia(deps.store, p, page)).map((m) => mediaDto(deps, p, m, usage)),
+    ),
     // Only newest-first pages continue; the other orders return the first `limit` matches.
     nextCursor: sort === 'newest' ? nextCursor(rows.length, limit, page) : null,
   }
@@ -259,11 +267,17 @@ export async function listMedia(
  */
 export async function checkMedia(deps: Deps, p: Principal, files: { filename: string; sha256: string }[]) {
   assertCan(p, 'media:upload')
-  const rows = await deps.store.findMediaMatches({
-    sha256s: [...new Set(files.map((f) => f.sha256))],
-    filenames: [...new Set(files.map((f) => f.filename))],
-    includePendingOf: p.userId,
-  })
+  // Never someone else's take: matching one would reveal it exists.
+  const rows = await readableMedia(
+    deps.store,
+    p,
+    await deps.store.findMediaMatches({
+      sha256s: [...new Set(files.map((f) => f.sha256))],
+      filenames: [...new Set(files.map((f) => f.filename))],
+      includePendingOf: p.userId,
+      takesOf: p.userId,
+    }),
+  )
   const usage = await deps.store.mediaUsage(rows.map((m) => m.id))
   const dto = (m: MediaRow | undefined) => (m ? mediaDto(deps, p, m, usage) : Promise.resolve(null))
   return {
@@ -281,6 +295,9 @@ export async function checkMedia(deps: Deps, p: Principal, files: { filename: st
 async function loadMedia(deps: Deps, p: Principal, id: string) {
   const m = await deps.store.getMedia(id)
   if (!m || m.deletedAt || (m.status !== 'ready' && m.uploaderId !== p.userId))
+    throw new ApiError('not_found', 'Media not found.')
+  // A take being deleted, or one this person may not read, doesn't exist for them.
+  if (m.deletingAt || !(await canReadTake(deps.store, p, m)))
     throw new ApiError('not_found', 'Media not found.')
   return m
 }
@@ -333,7 +350,8 @@ export async function snapshotMedia(
   for (const id of [...new Set(picks)]) {
     if (rows.some((r) => r.mediaId === id)) continue
     const m = await repo.getMedia(id)
-    if (!m || m.deletedAt || m.status !== 'ready')
+    // Takes reach a version only through its narration (which checks canReadTake), never as library picks.
+    if (!m || m.deletedAt || m.status !== 'ready' || isTake(m))
       throw new ApiError('invalid_request', `Media ${id} isn't a ready item in the library.`)
     rows.push({
       jobId,

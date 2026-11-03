@@ -85,6 +85,11 @@ const PROVENANCE_COLUMNS = {
   creatorUrl: t.media.creatorUrl,
   attribution: t.media.attribution,
 }
+/** Library queries leave narration takes out, except `takesOf`'s own that GC isn't deleting. */
+const takeVisible = (takesOf: string | undefined) =>
+  takesOf
+    ? or(isNull(t.media.role), and(eq(t.media.uploaderId, takesOf), isNull(t.media.deletingAt)))
+    : isNull(t.media.role)
 
 function repoFor(db: Db): Repo {
   return {
@@ -455,6 +460,7 @@ function repoFor(db: Db): Repo {
           and(
             isNull(m.deletedAt),
             visible,
+            takeVisible(q.takesOf),
             q.kind ? eq(m.kind, q.kind) : undefined,
             ...searchWords(q.search).map((w) => {
               const like = `%${w.replace(/[%_\\]/g, (c) => `\\${c}`)}%`
@@ -493,6 +499,7 @@ function repoFor(db: Db): Repo {
           and(
             isNull(m.deletedAt),
             or(eq(m.status, 'ready'), eq(m.uploaderId, q.includePendingOf)),
+            takeVisible(q.takesOf),
             or(
               q.sha256s.length ? inArray(m.originalSha256, q.sha256s) : undefined,
               q.filenames.length ? inArray(m.filename, q.filenames) : undefined,

@@ -137,6 +137,9 @@ const rkey = (r: Pick<MediaRefRow, 'mediaId' | 'ownerKind' | 'ownerId'>) =>
   `${r.mediaId}\n${r.ownerKind}\n${r.ownerId}`
 const byCreated = (a: MediaRefRow, b: MediaRefRow) =>
   a.createdAt.localeCompare(b.createdAt) || rkey(a).localeCompare(rkey(b))
+/** Library queries leave narration takes out, except `takesOf`'s own that GC isn't deleting. */
+const takeVisible = (m: MediaRow, takesOf: string | undefined) =>
+  m.role === null || (m.uploaderId === takesOf && m.deletingAt === null)
 const ikey = (provider: string, subject: string) => `${provider}\n${subject}`
 const live = (leaseUntil: string | null, now: string) => leaseUntil !== null && leaseUntil > now
 
@@ -406,6 +409,7 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
             (m) =>
               !m.deletedAt &&
               (m.status === 'ready' || m.uploaderId === q.includePendingOf) &&
+              takeVisible(m, q.takesOf) &&
               (q.sha256s.includes(m.originalSha256) || q.filenames.includes(m.filename)),
           )
           .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
@@ -418,6 +422,7 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
             (m) =>
               !m.deletedAt &&
               (m.status === 'ready' || m.uploaderId === q.includePendingOf) &&
+              takeVisible(m, q.takesOf) &&
               (!q.kind || m.kind === q.kind) &&
               searchWords(q.search).every((w) =>
                 [m.title, m.filename, m.caption, m.sourceTitle, m.creator].some((f) =>

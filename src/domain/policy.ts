@@ -69,7 +69,7 @@ const ADMIN_ONLY: Action[] = [
   'video:transfer',
 ]
 
-const creatorOrUp = (r: Role) => r === 'admin' || r === 'creator'
+export const creatorOrUp = (r: Role) => r === 'admin' || r === 'creator'
 
 export function can(p: Principal, action: Action, r: Resource = {}): boolean {
   if (p.role === 'admin') return true
