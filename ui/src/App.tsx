@@ -23,7 +23,7 @@ const DocsMcpPage = routes.lazyPage(routes.docsMcpRoute, (m) => m.default)
 const DocsSkillsPage = routes.lazyPage(routes.docsSkillsRoute, (m) => m.default)
 // Mock builds only: the narration timeline on fixture data (/dev/timeline). The import is dropped from real builds.
 const TimelineDemo = import.meta.env.VITE_MOCK ? lazy(() => import('./mock/TimelineDemo')) : null
-// And the narration lock banner on a mock draft (/dev/narration).
+// And the narration lock and stale-base banners on a mock draft (/dev/narration).
 const NarrationDemo = import.meta.env.VITE_MOCK ? lazy(() => import('./mock/NarrationDemo')) : null
 
 /** /docs opens the REST reference; old /docs?tab=mcp|skills links open their page, keeping the hash. */

@@ -66,6 +66,7 @@ import {
   releaseNarrationLock,
   takeOverNarrationLock,
 } from './domain/narration-lock.js'
+import { rebaseNarration } from './domain/narration-rebase.js'
 import { receiveCheckpoint } from './domain/checkpoints.js'
 import {
   addComment,
@@ -1127,6 +1128,30 @@ export function createApp(deps: Deps, opts: AppOptions) {
       c.header('location', res.body.links.self)
       if (!res.replayed) kick(c)
       return c.json(res.body, statusOf(res.status))
+    },
+  )
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/v1/edits/{id}/rebase-narration',
+      summary: "Rebase a draft's narration",
+      description:
+        "Moves your draft's narration onto your draft of version toN (opened, or created), saved and checked like any save: the narration lock, the recordings you may use and the limits against that version. Your other draft is kept.",
+      tags: ['editor'],
+      security,
+      request: {
+        params: EditParam,
+        body: { content: { 'application/json': { schema: s.RebaseNarrationSchema } }, required: true },
+      },
+      responses: {
+        200: json(s.EditSchema, 'Your draft of toN, updated'),
+        201: json(s.EditSchema, 'A new draft of toN'),
+        ...errors,
+      },
+    }),
+    async (c) => {
+      const r = await rebaseNarration(deps, c.get('principal'), c.req.valid('param').id, c.req.valid('json'))
+      return c.json(r.edit, r.created ? 201 : 200)
     },
   )
   app.openapi(

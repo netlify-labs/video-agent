@@ -913,8 +913,28 @@ export const EditSchema = z
     newerVersion: z.number().int().nullable().openapi({
       description: 'A newer version exists: start from it, or render this draft as the next version',
     }),
+    narrationChanged: z
+      .object({
+        inVersion: z.number().int(),
+        by: z.object({ userId: z.string(), name: z.string() }),
+        at: z.string(),
+        yoursReplaces: z.boolean().openapi({
+          description:
+            "The draft has its own narration: rendering it replaces that version's (warn before rendering)",
+        }),
+      })
+      .nullable()
+      .openapi({
+        description:
+          "The newest ready version's narration differs from this draft's base: rebase onto it (rebase-narration), or keep yours",
+      }),
   })
   .openapi('Edit')
+export const RebaseNarrationSchema = z
+  .object({
+    toN: z.number().int().min(1).openapi({ description: 'The version to move your narration onto' }),
+  })
+  .openapi('RebaseNarration')
 export const SaveEditSchema = z
   .object({ ops: z.array(EditOpSchema).max(500), rev: z.number().int().min(0) })
   .openapi('SaveEdit')

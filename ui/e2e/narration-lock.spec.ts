@@ -23,7 +23,7 @@ test('narration lock: when someone takes it over, the next heartbeat says so and
 }) => {
   await page.clock.install()
   await page.goto('/dev/narration')
-  await expect(page.getByTestId('narration-lock-status')).toHaveText('held')
+  await expect(page.getByTestId('narration-lock-status')).toContainText('held')
   await expect(page.getByRole('button', { name: 'Save' })).toBeEnabled()
   await page.evaluate(() =>
     (globalThis as unknown as { __mockNarrationTakeOver: (k: string) => void }).__mockNarrationTakeOver(

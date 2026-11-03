@@ -753,7 +753,7 @@ export function installMock() {
     }
     // Editor (plan v2 §8): drafts run on the real patcher over the spike S8 fixture. window.__lastEditOps records saves.
     const ed = /^\/api\/v1\/videos\/([^/]+)\/versions\/(\d+)\/edits$/.exec(p)
-    const edit = /^\/api\/v1\/edits\/([^/]+)(\/render|\/preview)?$/.exec(p)
+    const edit = /^\/api\/v1\/edits\/([^/]+)(\/render|\/preview|\/rebase-narration)?$/.exec(p)
     if (ed?.[1] && method === 'POST') {
       mockEdit = mockEdit ?? newMockEdit(ed[1], Number(ed[2]))
       return json(mockEdit, mockEdit.rev === 0 ? 201 : 200)
@@ -765,6 +765,13 @@ export function installMock() {
           expiresAt: new Date(Date.now() + 600_000).toISOString(),
           seq: mockEdit.rev,
         })
+      // Rebase (plan 2026-11-02 §2.7): the narration moves onto the newer base, which is then the newest.
+      if (edit[2] === '/rebase-narration') {
+        const b = (await readBody(init, input)) as { toN: number }
+        const track = mockEdit.ops.filter((o) => (o as { op: string }).op === 'narration')
+        mockEdit = { ...mockEdit, baseN: b.toN, rev: 1, ops: track, narrationChanged: null }
+        return json(mockEdit, 201)
+      }
       if (edit[2] === '/render') {
         const vid = videos.find((x) => x.id === mockEdit?.videoId)
         const w = window as unknown as { __rendered?: number }
@@ -1023,6 +1030,15 @@ function newMockEdit(videoId: string, baseN: number) {
     expiresAt: new Date(Date.now() + 7 * 86400_000).toISOString(),
     renderedN: null,
     newerVersion: null,
+    // localStorage.mockNarrationChanged=1: Ada changed the narration in a newer version 10 minutes ago.
+    narrationChanged: localStorage.getItem('mockNarrationChanged')
+      ? {
+          inVersion: baseN + 1,
+          by: { userId: people.ada.id, name: people.ada.name },
+          at: new Date(Date.now() - 10 * 60_000).toISOString(),
+          yoursReplaces: true,
+        }
+      : null,
   }
 }
 

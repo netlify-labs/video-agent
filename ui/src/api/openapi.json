@@ -2750,6 +2750,46 @@
               "null"
             ],
             "description": "A newer version exists: start from it, or render this draft as the next version"
+          },
+          "narrationChanged": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "inVersion": {
+                "type": "integer"
+              },
+              "by": {
+                "type": "object",
+                "properties": {
+                  "userId": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "userId",
+                  "name"
+                ]
+              },
+              "at": {
+                "type": "string"
+              },
+              "yoursReplaces": {
+                "type": "boolean",
+                "description": "The draft has its own narration: rendering it replaces that version's (warn before rendering)"
+              }
+            },
+            "required": [
+              "inVersion",
+              "by",
+              "at",
+              "yoursReplaces"
+            ],
+            "description": "The newest ready version's narration differs from this draft's base: rebase onto it (rebase-narration), or keep yours"
           }
         },
         "required": [
@@ -2763,7 +2803,8 @@
           "palette",
           "expiresAt",
           "renderedN",
-          "newerVersion"
+          "newerVersion",
+          "narrationChanged"
         ]
       },
       "NarrationOp": {
@@ -3458,6 +3499,19 @@
             "description": "How narration captions are delivered: a VTT sidecar (default) or burned in"
           }
         }
+      },
+      "RebaseNarration": {
+        "type": "object",
+        "properties": {
+          "toN": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "The version to move your narration onto"
+          }
+        },
+        "required": [
+          "toN"
+        ]
       },
       "NarrationLock": {
         "type": "object",
@@ -9261,6 +9315,115 @@
           },
           "503": {
             "description": "Setup required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/edits/{id}/rebase-narration": {
+      "post": {
+        "summary": "Rebase a draft's narration",
+        "description": "Moves your draft's narration onto your draft of version toN (opened, or created), saved and checked like any save: the narration lock, the recordings you may use and the limits against that version. Your other draft is kept.",
+        "tags": [
+          "editor"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RebaseNarration"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Your draft of toN, updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Edit"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "A new draft of toN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Edit"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or not ready",
             "content": {
               "application/json": {
                 "schema": {

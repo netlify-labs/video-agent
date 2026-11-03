@@ -53,6 +53,7 @@ import { addAttemptRefs, canReadTake, isTake, releaseOwnerRefs, replaceDraftRefs
 import { getSettings } from './settings.js'
 import { narrationEnabled, narrationSettings } from './narration-settings.js'
 import { assertNarrationLock } from './narration-lock.js'
+import { narrationChangedSince } from './narration-stale.js'
 import type { Repo } from '../store/types.js'
 import { type EditRow, type MediaRow, type TranscriptionProvider } from './types.js'
 import { hasUnfinished, loadJob, newAttempt, videoDto, withIdempotency } from './videos.js'
@@ -420,6 +421,8 @@ async function editDto(deps: Deps, e: EditRow, built?: Rev, repo: Repo = deps.st
     renderedN: e.renderedN,
     // Someone else rendered (or revised) since this draft started: "start from vN, or render yours as vN+1".
     newerVersion: job && job.latestVersion > e.baseN ? job.latestVersion : null,
+    // A newer version changed the narration since this draft's base: Rebase onto it, or Keep mine.
+    narrationChanged: await narrationChangedSince(repo, e),
   }
 }
 

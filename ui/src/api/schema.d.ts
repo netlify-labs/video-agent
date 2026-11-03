@@ -3926,6 +3926,105 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/edits/{id}/rebase-narration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rebase a draft's narration
+         * @description Moves your draft's narration onto your draft of version toN (opened, or created), saved and checked like any save: the narration lock, the recordings you may use and the limits against that version. Your other draft is kept.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["RebaseNarration"];
+                };
+            };
+            responses: {
+                /** @description Your draft of toN, updated */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Edit"];
+                    };
+                };
+                /** @description A new draft of toN */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Edit"];
+                    };
+                };
+                /** @description Invalid request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not signed in */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not allowed */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Conflict or not ready */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/edits/{id}/preview": {
         parameters: {
             query?: never;
@@ -7666,6 +7765,17 @@ export interface components {
             renderedN: number | null;
             /** @description A newer version exists: start from it, or render this draft as the next version */
             newerVersion: number | null;
+            /** @description The newest ready version's narration differs from this draft's base: rebase onto it (rebase-narration), or keep yours */
+            narrationChanged: {
+                inVersion: number;
+                by: {
+                    userId: string;
+                    name: string;
+                };
+                at: string;
+                /** @description The draft has its own narration: rendering it replaces that version's (warn before rendering) */
+                yoursReplaces: boolean;
+            } | null;
         };
         /** @description The whole recorded narration track (at most one per draft): clips of takes placed in integer samples at 24 kHz; later clips win where they overlap */
         NarrationOp: {
@@ -7828,6 +7938,10 @@ export interface components {
              * @enum {string}
              */
             captions?: "sidecar" | "burned";
+        };
+        RebaseNarration: {
+            /** @description The version to move your narration onto */
+            toN: number;
         };
         NarrationLock: {
             videoId: string;

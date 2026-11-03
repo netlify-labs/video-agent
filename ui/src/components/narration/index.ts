@@ -1,4 +1,6 @@
 export { NarrationLockBanner } from './NarrationLockBanner'
+export { ago, keepMineWarning, NarrationStaleBanner } from './NarrationStaleBanner'
+export type { NarrationChanged } from './NarrationStaleBanner'
 export { HEARTBEAT_MS, lockTime, NarrationLockSession } from './narration-lock'
 export type { LockApi, LockHolder, LockResult, NarrationLockState } from './narration-lock'
 export { lockApi, useNarrationLock } from './use-narration-lock'
