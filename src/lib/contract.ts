@@ -702,6 +702,25 @@ export function speechSeconds(speech: readonly Span[], total: number): Range[] {
 }
 
 /**
+ * The narration element's attributes, in order: the bus layer over `total` seconds, playing NARRATION_SRC at full
+ * level, with `speech` (composition samples) as data-va-speech. writeNarration writes exactly these, and the fit
+ * guard (src/lib/narration-modified.ts) expects exactly these: no effect, automation, group or other level.
+ */
+export function narrationAttrs(total: number, speech: readonly Span[]): { name: string; value: string }[] {
+  return [
+    { name: 'id', value: NARRATION_ID },
+    { name: 'data-va-layer', value: 'narration' },
+    { name: 'data-va-audio', value: 'narration' },
+    { name: 'data-track-index', value: '4' },
+    { name: 'data-start', value: '0' },
+    { name: 'data-duration', value: fmt(total) },
+    { name: 'data-volume', value: '1' },
+    { name: 'data-va-speech', value: JSON.stringify(speechSeconds(speech, total)) },
+    { name: 'src', value: NARRATION_SRC },
+  ]
+}
+
+/**
  * Writes recorded narration into the composition, or takes it out (op null): the one bus layer with its speech
  * (`speech` in composition samples: in a draft, placeSpans of the op's clips over each take's summary; in the run,
  * the processed bus's VAD), and the levels the op's tracks ask for. AI voice: replace mutes every data-va-voice, under
@@ -748,20 +767,11 @@ export function writeNarration(d: Doc, op: NarrationOp | null, speech: readonly 
       setAttr(e, 'data-va-muted', '')
     }
   }
-  const el = defaultTreeAdapter.createElement('audio', h5.NS.HTML, [
-    { name: 'id', value: NARRATION_ID },
-    { name: 'data-va-layer', value: 'narration' },
-    { name: 'data-va-audio', value: 'narration' },
-    { name: 'data-track-index', value: '4' },
-    { name: 'data-start', value: '0' },
-    { name: 'data-duration', value: fmt(total) },
-    { name: 'data-volume', value: '1' },
-    {
-      name: 'data-va-speech',
-      value: JSON.stringify(speechSeconds(tracks.narration.muted ? [] : speech, total)),
-    },
-    { name: 'src', value: NARRATION_SRC },
-  ])
+  const el = defaultTreeAdapter.createElement(
+    'audio',
+    h5.NS.HTML,
+    narrationAttrs(total, tracks.narration.muted ? [] : speech),
+  )
   el.parentNode = root
   root.childNodes.splice(at < 0 ? root.childNodes.length : at, 0, el)
 }

@@ -11,6 +11,7 @@ import { bundleManifest, compositionFiles } from '../src/lib/bundle-manifest.js'
 import { NARRATION_SRC, validate, type Summary } from '../src/lib/contract.js'
 import { groupWords, transcriptText } from '../src/lib/narration-captions.js'
 import { checkNarration } from '../src/lib/narration-guard.js'
+import { checkNarrationModified } from '../src/lib/narration-modified.js'
 import { checkRevoiced, FROZEN_DIR } from '../src/lib/revoice.js'
 import type { PreviewFile } from '../src/lib/media/previews.js'
 import type { RunManifest } from '../src/lib/run-manifest.js'
@@ -122,6 +123,26 @@ async function main() {
       log('bundle.verified', {
         narration: { bus: receipt?.bus.sha256, samples: receipt?.bus.samples },
         ...(m.bundle.revoice ? { revoiced: m.bundle.revoice.beats } : {}),
+      })
+    } else if (m.attemptId === attempt && m.kind === 'author_from_frozen') {
+      // A fit to recorded narration: the agent retimed the visuals, but the narration must sound exactly as
+      // scripts/narration.ts mixed it (src/lib/narration-modified.ts), from the frozen draft and the receipt.
+      const receipt = readNarrationReceipt(repoRoot)
+      const problems = checkNarrationModified(
+        join(repoRoot, FROZEN_DIR),
+        videoDir,
+        receipt,
+        m,
+        readSttRecord(repoRoot),
+      )
+      if (problems.length)
+        throw new StepError(
+          `narration_modified: ${problems[0]}\nThe recorded narration is locked in a fit: change the visuals around it, never the narration element, its bus, its path to the mix, or audio over its speech. Fix the composition and run render-job again.\n- ${problems.join('\n- ')}`,
+        )
+      log('narration.locked', {
+        bus: receipt?.bus.sha256,
+        samples: receipt?.bus.samples,
+        ...(m.bundle?.revoice ? { revoiced: m.bundle.revoice.beats } : {}),
       })
     } else if (m.attemptId === attempt && m.kind === 'render_unchanged' && m.bundle?.revoice) {
       // Re-voiced lines: only the files voice.ts revoice writes may differ, and exactly as it writes them.

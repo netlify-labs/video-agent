@@ -53,7 +53,7 @@ function speechAttr(html: string): string | null {
 }
 
 /** video/ paths that hold a take's bytes or sit under a .va-run/ (symlinks included), whatever the hash excludes. */
-function leakedTakes(videoDir: string, receipt: NarrationReceipt, m: RunManifest): string[] {
+export function leakedTakes(videoDir: string, receipt: NarrationReceipt, m: RunManifest): string[] {
   const takes = new Set([
     ...(m.bundle?.narration?.takes ?? []).map((t) => t.sha256),
     ...receipt.inputs.flatMap((t) => [t.sha256, t.wavSha256]),
@@ -82,6 +82,46 @@ function leakedTakes(videoDir: string, receipt: NarrationReceipt, m: RunManifest
   return bad
 }
 
+/** The receipt is this attempt's, for the frozen recipe, from exactly the frozen takes (shared with the fit guard). */
+export function receiptProblems(receipt: NarrationReceipt, m: RunManifest): string[] {
+  const n = m.bundle?.narration
+  if (!n) return ['This render has no recorded narration to check.']
+  const problems: string[] = []
+  if (receipt.attemptId !== m.attemptId || receipt.jobId !== m.jobId)
+    problems.push(
+      `The narration receipt is from attempt ${receipt.attemptId}, not this run's (${m.attemptId}).`,
+    )
+  if (receipt.pipeline !== n.recipe.pipeline || receipt.recipe.cleanup !== n.recipe.cleanup)
+    problems.push("The narration receipt's recipe isn't the one this render froze.")
+  const takes = (xs: { mediaId: string; sha256: string }[]) =>
+    xs
+      .map((t) => `${t.mediaId}:${t.sha256}`)
+      .sort()
+      .join()
+  if (takes(receipt.inputs) !== takes(n.takes))
+    problems.push("The narration receipt's takes aren't the ones this render froze.")
+  return problems
+}
+
+/** video/assets/narration/bus.wav has the receipt's digest and sample count, at the length it was mixed for. */
+export function busProblems(videoDir: string, receipt: NarrationReceipt): string[] {
+  const busPath = join(videoDir, NARRATION_SRC)
+  if (!existsSync(busPath)) return [`video/${NARRATION_SRC} is missing.`]
+  const problems: string[] = []
+  const bytes = readFileSync(busPath)
+  if (sha256(bytes) !== receipt.bus.sha256)
+    problems.push(`video/${NARRATION_SRC} isn't the bus scripts/narration.ts wrote.`)
+  let samples = NaN
+  try {
+    samples = readPcm16(bytes).samples.length
+  } catch {
+    // reported below
+  }
+  if (samples !== receipt.bus.samples || receipt.bus.samples !== receipt.target.samples)
+    problems.push(`video/${NARRATION_SRC} has ${samples} samples; the receipt says ${receipt.bus.samples}.`)
+  return problems
+}
+
 /**
  * Checks a narrated video/ (after any re-voice and scripts/narration.ts) against the frozen bundle and the receipt:
  *   - the receipt is this attempt's, for the frozen recipe, from exactly the frozen takes;
@@ -107,39 +147,7 @@ export function checkNarration(
   const n = m.bundle?.narration
   if (!m.bundle || !n) return ['This render has no recorded narration to check.']
   if (!receipt) return ['scripts/narration.ts left no receipt: it has to run before render-job.']
-  const problems: string[] = []
-
-  // The receipt: this attempt, the frozen recipe and takes.
-  if (receipt.attemptId !== m.attemptId || receipt.jobId !== m.jobId)
-    problems.push(
-      `The narration receipt is from attempt ${receipt.attemptId}, not this run's (${m.attemptId}).`,
-    )
-  if (receipt.pipeline !== n.recipe.pipeline || receipt.recipe.cleanup !== n.recipe.cleanup)
-    problems.push("The narration receipt's recipe isn't the one this render froze.")
-  const takes = (xs: { mediaId: string; sha256: string }[]) =>
-    xs
-      .map((t) => `${t.mediaId}:${t.sha256}`)
-      .sort()
-      .join()
-  if (takes(receipt.inputs) !== takes(n.takes))
-    problems.push("The narration receipt's takes aren't the ones this render froze.")
-
-  // The bus.
-  const busPath = join(videoDir, NARRATION_SRC)
-  if (!existsSync(busPath)) problems.push(`video/${NARRATION_SRC} is missing.`)
-  else {
-    const bytes = readFileSync(busPath)
-    if (sha256(bytes) !== receipt.bus.sha256)
-      problems.push(`video/${NARRATION_SRC} isn't the bus scripts/narration.ts wrote.`)
-    let samples = NaN
-    try {
-      samples = readPcm16(bytes).samples.length
-    } catch {
-      // reported below
-    }
-    if (samples !== receipt.bus.samples || receipt.bus.samples !== receipt.target.samples)
-      problems.push(`video/${NARRATION_SRC} has ${samples} samples; the receipt says ${receipt.bus.samples}.`)
-  }
+  const problems = [...receiptProblems(receipt, m), ...busProblems(videoDir, receipt)]
 
   // Every file the steps don't write, and the frozen index.html and summary.json they start from.
   let base: { html: string; summary: Summary } | undefined
