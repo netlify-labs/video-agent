@@ -681,6 +681,10 @@ export const MediaCheckResultSchema = z
   })
   .openapi('MediaCheckResult')
 
+export const DeletedRecordingsSchema = z
+  .object({ deleted: z.number().int().openapi({ description: 'How many recordings were deleted' }) })
+  .openapi('DeletedRecordings')
+
 export const MediaListSchema = z
   .object({ items: z.array(MediaSchema), nextCursor: z.string().nullable() })
   .openapi('MediaList')

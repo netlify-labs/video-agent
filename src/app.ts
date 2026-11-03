@@ -49,6 +49,7 @@ import {
   updateMedia,
   uploadMedia,
 } from './domain/media.js'
+import { deleteUnusedRecordings } from './domain/takes.js'
 import { discardEdit, editPreviewLink, getEdit, openEdit, renderEdit, saveEdit } from './domain/edits.js'
 import { receiveCheckpoint } from './domain/checkpoints.js'
 import {
@@ -1158,6 +1159,19 @@ export function createApp(deps: Deps, opts: AppOptions) {
       responses: { 200: json(s.MediaCheckResultSchema, 'Matches'), ...errors },
     }),
     async (c) => c.json(await checkMedia(deps, c.get('principal'), c.req.valid('json').files), 200),
+  )
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/v1/media/recordings/delete-unused',
+      summary: 'Delete unused recordings',
+      description:
+        "Deletes your voice-over recordings that no draft or version uses, at once (they're otherwise kept 30 days after their last use). Recordings in use are kept.",
+      tags: ['media'],
+      security,
+      responses: { 200: json(s.DeletedRecordingsSchema, 'Deleted'), ...errors },
+    }),
+    async (c) => c.json(await deleteUnusedRecordings(deps, c.get('principal')), 200),
   )
   app.openapi(
     createRoute({

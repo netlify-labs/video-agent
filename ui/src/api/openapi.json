@@ -3505,6 +3505,18 @@
           "files"
         ]
       },
+      "DeletedRecordings": {
+        "type": "object",
+        "properties": {
+          "deleted": {
+            "type": "integer",
+            "description": "How many recordings were deleted"
+          }
+        },
+        "required": [
+          "deleted"
+        ]
+      },
       "UploadSession": {
         "type": "object",
         "properties": {
@@ -8857,6 +8869,85 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/MediaCheckResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/media/recordings/delete-unused": {
+      "post": {
+        "summary": "Delete unused recordings",
+        "description": "Deletes your voice-over recordings that no draft or version uses, at once (they're otherwise kept 30 days after their last use). Recordings in use are kept.",
+        "tags": [
+          "media"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletedRecordings"
                 }
               }
             }

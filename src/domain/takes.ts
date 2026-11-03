@@ -2,16 +2,27 @@
 // narration role; it's private to its uploader (and admins) until it's used on a video, and then any Creator who can
 // read that video can read it too, so teammates can re-cut the narration. Reviewers and Viewers never get raw takes.
 // And who holds one: media_refs rows, written only through the functions below, inside the writer's transaction and
-// after lockTakes, so GC (which takes the same locks) never deletes bytes something still references.
+// after lockTakes, so GC (which takes the same locks) never deletes bytes something still references. And GC itself,
+// in two phases: a tombstone and a deletion work item in one transaction, then the bytes outside it, with retries.
 import type { Deps } from '../deps.js'
 import { ApiError } from '../lib/errors.js'
 import type { Repo } from '../store/types.js'
-import { creatorOrUp, type Principal } from './policy.js'
-import type { MediaRefOwnerKind, MediaRow } from './types.js'
+import { assertCan, creatorOrUp, type Principal } from './policy.js'
+import type { CleanupRow, MediaRefOwnerKind, MediaRow } from './types.js'
 import { canSee } from './videos.js'
 
-/** How long a take's bytes are kept once nothing references it. */
+/** How long a take's bytes are kept once nothing references it (or, if nothing ever did, after it was made). */
 export const TAKE_RETAIN_MS = 30 * 24 * 3600_000
+/** A narration lock is free once its heartbeat is this old (plan 2026-11-02 §2.7). */
+export const NARRATION_LOCK_STALE_MS = 2 * 60_000
+
+/**
+ * Everything a take stores is under `<media id>/` in the media store, so one deletion work item covers it all: the
+ * original and meta.json (storeMedia), peaks.bin, and cached transcripts under `<media id>/transcripts/`.
+ */
+export const takePrefix = (mediaId: string) => `${mediaId}/`
+export const takePeaksKey = (mediaId: string) => `${mediaId}/peaks.bin`
+export const takeTranscriptPrefix = (mediaId: string) => `${mediaId}/transcripts/`
 
 export const isTake = (m: Pick<MediaRow, 'role'>) => m.role !== null
 
@@ -160,4 +171,115 @@ export async function releaseOwnerRefs(
   await repo.deleteMediaRefs(ownerKind, ownerId)
   await retainReleased(repo, deps, locked)
   return ids
+}
+
+const GC_BATCH = 20
+// A failed byte deletion is retried after as long as it has been failing (so the waits double), within these bounds.
+const RETRY_MIN_MS = 60_000
+const RETRY_MAX_MS = 6 * 3600_000
+/** How long "Delete unused recordings" deletes bytes before leaving the rest to the sweep. */
+const DELETE_NOW_MS = 10_000
+
+type GcReason = 'retention' | 'user'
+
+/** Unreferenced takes whose retention passed, as of `now`. */
+const due = (now: Date) => ({
+  now: now.toISOString(),
+  createdBefore: new Date(now.getTime() - TAKE_RETAIN_MS).toISOString(),
+})
+
+/**
+ * GC's first phase, in one transaction: under the take's row lock, re-check that nothing references it (and, for
+ * retention, that its time passed: a release may have just bumped it), then the tombstone and its deletion work
+ * item. Returns the work item, or null when the take is kept.
+ */
+async function tombstoneTake(deps: Deps, mediaId: string, reason: GcReason): Promise<CleanupRow | null> {
+  return deps.store.tx(async (repo) => {
+    const [m] = await repo.lockMedia([mediaId])
+    if (!m || !isTake(m) || m.deletingAt) return null
+    if ((await repo.listMediaRefsByMedia([m.id])).length) return null
+    const now = deps.clock.now()
+    const d = due(now)
+    if (reason === 'retention' && !(m.retainUntil ? m.retainUntil <= d.now : m.createdAt <= d.createdBefore))
+      return null
+    const at = now.toISOString()
+    const item: CleanupRow = {
+      id: deps.ids.uuid(),
+      kind: 'delete_take',
+      store: 'media',
+      prefix: takePrefix(m.id),
+      nextActionAt: at,
+      doneAt: null,
+    }
+    await repo.updateMedia(m.id, { deletingAt: at, updatedAt: at })
+    await repo.insertCleanup(item)
+    deps.log.info('take.gc_started', { mediaId: m.id, reason })
+    return item
+  })
+}
+
+/**
+ * GC's second phase, outside any transaction: the take's bytes go, then the row is marked deleted and the work item
+ * done. A failure leaves the item due again later (the sweep retries it); returns whether it finished.
+ */
+export async function deleteTakeBytes(deps: Deps, c: CleanupRow): Promise<boolean> {
+  const mediaId = c.prefix.slice(0, -1)
+  const started = Date.now()
+  try {
+    for (const k of await deps.blobs.list(c.store, c.prefix)) await deps.blobs.delete(c.store, k)
+  } catch (e) {
+    const now = deps.clock.now().getTime()
+    const since = Date.parse((await deps.store.getMedia(mediaId))?.deletingAt ?? '') || now
+    const wait = Math.min(Math.max(now - since, RETRY_MIN_MS), RETRY_MAX_MS)
+    deps.log.warn('take.delete_failed', { mediaId, retryInMs: wait, error: e })
+    await deps.store.updateCleanup(c.id, { nextActionAt: new Date(now + wait).toISOString() })
+    return false
+  }
+  await deps.store.tx(async (repo) => {
+    const at = deps.clock.now().toISOString()
+    const m = await repo.getMedia(mediaId)
+    if (m) await repo.updateMedia(mediaId, { deletedAt: m.deletedAt ?? at, updatedAt: at })
+    await repo.updateCleanup(c.id, { doneAt: at })
+  })
+  deps.log.info('take.deleted', { mediaId, ms: Date.now() - started })
+  return true
+}
+
+/**
+ * Sweep step, bounded per tick: unreferenced takes past their retention are deleted (both phases), and narration
+ * locks without a heartbeat for two minutes are reaped. Retries of failed deletions run with the cleanup items.
+ */
+export async function sweepTakes(deps: Deps, budget: { deadline: number }, limit = GC_BATCH) {
+  const now = deps.clock.now()
+  let deleted = 0
+  for (const m of await deps.store.listUnreferencedTakes({ due: due(now), limit })) {
+    if (Date.now() > budget.deadline) break
+    const item = await tombstoneTake(deps, m.id, 'retention')
+    if (item && (await deleteTakeBytes(deps, item))) deleted++
+  }
+  const locks = await deps.store.deleteStaleNarrationLocks(
+    new Date(now.getTime() - NARRATION_LOCK_STALE_MS).toISOString(),
+  )
+  if (locks) deps.log.info('narration.locks_reaped', { count: locks })
+  return deleted
+}
+
+/**
+ * "Delete unused recordings": the caller's own takes that nothing references go now, through the same two phases
+ * as GC (not by shortening their retention), so they're gone from the list at once. Bytes that can't be deleted
+ * within the request are left to the sweep. Anyone may clear their own recordings, whatever their role now.
+ */
+export async function deleteUnusedRecordings(deps: Deps, p: Principal) {
+  assertCan(p, 'video:read')
+  const started = Date.now()
+  const items: CleanupRow[] = []
+  for (const m of await deps.store.listUnreferencedTakes({ uploaderId: p.userId, limit: 500 })) {
+    const item = await tombstoneTake(deps, m.id, 'user')
+    if (item) items.push(item)
+  }
+  for (const item of items) {
+    if (Date.now() - started > DELETE_NOW_MS) break
+    await deleteTakeBytes(deps, item)
+  }
+  return { deleted: items.length }
 }

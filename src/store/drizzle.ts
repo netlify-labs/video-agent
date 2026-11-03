@@ -11,6 +11,7 @@ import {
   isNull,
   lt,
   lte,
+  notExists,
   notInArray,
   or,
   sql,
@@ -756,6 +757,33 @@ function repoFor(db: Db): Repo {
         .where(and(eq(r.ownerKind, ownerKind), eq(r.ownerId, ownerId)))
         .orderBy(asc(r.createdAt), asc(r.mediaId))) as MediaRefRow[]
     },
+    listUnreferencedTakes: async (q) => {
+      const m = t.media
+      return (await db
+        .select()
+        .from(m)
+        .where(
+          and(
+            isNotNull(m.role),
+            isNull(m.deletingAt),
+            notExists(
+              db
+                .select({ one: sql`1` })
+                .from(t.mediaRefs)
+                .where(eq(t.mediaRefs.mediaId, m.id)),
+            ),
+            q.uploaderId ? eq(m.uploaderId, q.uploaderId) : undefined,
+            q.due
+              ? or(
+                  lte(m.retainUntil, q.due.now),
+                  and(isNull(m.retainUntil), lte(m.createdAt, q.due.createdBefore)),
+                )
+              : undefined,
+          ),
+        )
+        .orderBy(asc(m.createdAt), asc(m.id))
+        .limit(q.limit)) as MediaRow[]
+    },
     getNarrationLock: async (jobId) =>
       one<NarrationLockRow>(
         await db.select().from(t.narrationLocks).where(eq(t.narrationLocks.jobId, jobId)),
@@ -777,6 +805,13 @@ function repoFor(db: Db): Repo {
     deleteNarrationLock: async (jobId) => {
       await db.delete(t.narrationLocks).where(eq(t.narrationLocks.jobId, jobId))
     },
+    deleteStaleNarrationLocks: async (before) =>
+      (
+        await db
+          .delete(t.narrationLocks)
+          .where(lt(t.narrationLocks.heartbeatAt, before))
+          .returning({ jobId: t.narrationLocks.jobId })
+      ).length,
     mediaUsage: async (ids) => {
       if (ids.length === 0) return {}
       const rows = await db

@@ -829,7 +829,8 @@ export interface UserWebhookRow {
 
 export interface CleanupRow {
   id: string
-  kind: 'delete_prefix'
+  /** delete_take: GC's second phase for a narration take (prefix `<media id>/`), which also marks the row deleted. */
+  kind: 'delete_prefix' | 'delete_take'
   store: 'videos' | 'sources' | 'uploads' | 'internal' | 'checkpoints' | 'bundles' | 'media'
   prefix: string
   nextActionAt: string

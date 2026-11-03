@@ -232,10 +232,22 @@ export interface Repo {
   listMediaRefsByMedia(mediaIds: string[]): Promise<MediaRefRow[]>
   /** The media ids an owner references, oldest first. */
   listMediaRefsByOwner(ownerKind: MediaRefOwnerKind, ownerId: string): Promise<MediaRefRow[]>
+  /**
+   * Narration takes no media_refs row holds and GC hasn't begun deleting, oldest first: one person's (`uploaderId`),
+   * and/or only those whose retention passed (`due`: retain_until at or before `now`, or, with none set, created at or
+   * before `createdBefore`).
+   */
+  listUnreferencedTakes(q: {
+    uploaderId?: string
+    due?: { now: string; createdBefore: string }
+    limit: number
+  }): Promise<MediaRow[]>
   getNarrationLock(jobId: string): Promise<NarrationLockRow | null>
   /** Inserts or replaces the video's lock. */
   upsertNarrationLock(row: NarrationLockRow): Promise<void>
   deleteNarrationLock(jobId: string): Promise<void>
+  /** Deletes locks whose last heartbeat is older than `before`; returns how many went. */
+  deleteStaleNarrationLocks(before: string): Promise<number>
   /** Per media id, the distinct videos (job ids) whose versions use it. */
   mediaUsage(mediaIds: string[]): Promise<Record<string, string[]>>
   /** Undeleted items imported from `source` with one of these ids there, newest first. */

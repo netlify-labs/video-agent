@@ -619,12 +619,38 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
           .filter((r) => r.ownerKind === ownerKind && r.ownerId === ownerId)
           .sort(byCreated),
       ),
+    listUnreferencedTakes: async (q) => {
+      const held = new Set([...state.mediaRefs.values()].map((r) => r.mediaId))
+      return clone(
+        [...state.media.values()]
+          .filter(
+            (m) =>
+              m.role !== null &&
+              m.deletingAt === null &&
+              !held.has(m.id) &&
+              (!q.uploaderId || m.uploaderId === q.uploaderId) &&
+              (!q.due ||
+                (m.retainUntil !== null ? m.retainUntil <= q.due.now : m.createdAt <= q.due.createdBefore)),
+          )
+          .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
+          .slice(0, q.limit),
+      )
+    },
     getNarrationLock: async (jobId) => clone(state.narrationLocks.get(jobId) ?? null),
     upsertNarrationLock: async (row) => {
       state.narrationLocks.set(row.jobId, clone(row))
     },
     deleteNarrationLock: async (jobId) => {
       state.narrationLocks.delete(jobId)
+    },
+    deleteStaleNarrationLocks: async (before) => {
+      let n = 0
+      for (const [k, l] of state.narrationLocks)
+        if (l.heartbeatAt < before) {
+          state.narrationLocks.delete(k)
+          n++
+        }
+      return n
     },
     mediaUsage: async (ids) => {
       const out: Record<string, string[]> = {}

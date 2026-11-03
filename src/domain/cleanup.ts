@@ -1,9 +1,11 @@
-// Bounded cleanup in the sweep: delete every copy of tombstoned videos, reap abandoned uploads and old Openverse jobs.
+// Bounded cleanup in the sweep: delete every copy of tombstoned videos, reap abandoned uploads and old Openverse jobs,
+// and delete unused narration takes (two-phase GC, takes.ts).
 import { CLIENT_IDLE_MS } from '../auth/oauth.js'
 import type { Deps } from '../deps.js'
 import { deleteExpiredEdits } from './edits.js'
 import { sweepUploads } from './media-uploads.js'
 import { sweepOpenverseJobs } from './openverse-jobs.js'
+import { deleteTakeBytes, sweepTakes } from './takes.js'
 
 export async function runCleanup(
   deps: Deps,
@@ -13,6 +15,11 @@ export async function runCleanup(
   let done = 0
   for (const c of await deps.store.listDueCleanup(now.toISOString(), budget.maxItems)) {
     if (Date.now() > budget.deadline) break
+    // A take's bytes also mark its row deleted, and retry with their own backoff.
+    if (c.kind === 'delete_take') {
+      if (await deleteTakeBytes(deps, c)) done++
+      continue
+    }
     try {
       const keys = await deps.blobs.list(c.store, c.prefix)
       for (const k of keys) await deps.blobs.delete(c.store, k)
@@ -35,5 +42,6 @@ export async function runCleanup(
   await deleteExpiredEdits(deps)
   await sweepUploads(deps)
   await sweepOpenverseJobs(deps)
+  await sweepTakes(deps, budget)
   return done
 }
