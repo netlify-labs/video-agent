@@ -1,7 +1,8 @@
 // Mock mode: answers /api/* from mock/data.ts by replacing window.fetch. Loaded only when VITE_MOCK=1.
 import spec from '../api/openapi.json'
 import type { paths } from '../api/schema'
-import { applyEdits, type EditOp } from '../../../src/lib/contract'
+import { applyEdits, applyNarration, type EditOp } from '../../../src/lib/contract'
+import type { NarrationOp, Span } from '../../../src/lib/timeline'
 import plainHtml from '../../../test/fixtures/contract1/index.html?raw'
 import musicHtml from '../../../test/fixtures/contract1-music/index.html?raw'
 import contractSummary from '../../../test/fixtures/contract1/summary.json'
@@ -219,6 +220,9 @@ export function installMock() {
     )
     const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase()
     const p = url.pathname
+    // The editor reads the draft's composition from its preview link (the frame itself loads the stand-in page).
+    if (p === '/mock-preview/contract.html' && mockEdit)
+      return new Response(mockEditHtml ?? contractHtml(), { headers: { 'content-type': 'text/html' } })
     if (!p.startsWith('/api/')) return real(input, init)
     await new Promise((r) => setTimeout(r, 120))
     // JSON bodies the app sent, by path (window.__sent), so tests can check what a form submitted.
@@ -774,6 +778,11 @@ export function installMock() {
       }
       if (edit[2] === '/render') {
         const vid = videos.find((x) => x.id === mockEdit?.videoId)
+        // The render's settings are kept for tests (window.__lastRender); fitting to the narration isn't there yet.
+        const body = await readBody(init, input)
+        ;(window as unknown as { __lastRender?: unknown }).__lastRender = body
+        if ((body as { mode?: string }).mode === 'fit_to_narration')
+          return fail(400, 'invalid_request', "Fitting the video to your narration isn't available yet.")
         const w = window as unknown as { __rendered?: number }
         w.__rendered = (w.__rendered ?? 0) + 1
         if (!vid) return fail(404, 'not_found', 'Video not found.')
@@ -781,6 +790,7 @@ export function installMock() {
       }
       if (method === 'DELETE') {
         mockEdit = null
+        mockEditHtml = null
         return new Response(null, { status: 204 })
       }
       if (method === 'PUT') {
@@ -788,11 +798,38 @@ export function installMock() {
         ;(window as unknown as { __lastEditOps?: unknown }).__lastEditOps = b.ops
         if (b.rev !== mockEdit.rev)
           return fail(409, 'conflict', 'This draft changed in another tab. Reload it to continue.')
+        // Recorded narration (plan 2026-11-02 §6.1): at most one whole-track op, laid over the edited visuals with
+        // each take's stored speech spans, as the server's buildRev does.
+        const tracks = b.ops.filter(
+          (o) => (o as { op: string }).op === 'narration',
+        ) as unknown as NarrationOp[]
+        if (tracks.length && !adminSettings.narrationEnabled)
+          return fail(403, 'narration_disabled', 'Recorded voice-over is turned off on this site.')
+        if (tracks.length > 1)
+          return fail(400, 'invalid_request', 'A draft has one narration track: send one narration op.')
+        const track = tracks[0] ?? null
+        const missing = track?.clips.find(
+          (c) => !mockMedia.some((m) => m.id === c.mediaId && m.kind === 'audio'),
+        )
+        if (missing)
+          return fail(
+            400,
+            'invalid_request',
+            `That edit can't be made: recording ${missing.mediaId} isn't available.`,
+          )
         try {
-          const out = applyEdits(contractHtml(), mockSummary(), b.ops, {
-            palette: mockPalette,
-            ...mockNarration(),
-          })
+          const out = applyEdits(
+            contractHtml(),
+            mockSummary(),
+            b.ops.filter((o) => (o as { op: string }).op !== 'narration'),
+            { palette: mockPalette, ...mockNarration() },
+          )
+          const spans = new Map<string, Span[]>()
+          for (const c of track?.clips ?? []) {
+            const speech = mockSpeech.get(c.mediaId) as { spans?: Span[] } | undefined
+            if (speech?.spans) spans.set(c.mediaId, speech.spans)
+          }
+          mockEditHtml = track ? applyNarration(out.html, out.summary, track, spans).html : out.html
           mockEdit = { ...mockEdit, rev: mockEdit.rev + 1, ops: b.ops, composition: out.composition }
           return json(mockEdit)
         } catch (e) {
@@ -999,6 +1036,8 @@ function mockLock() {
 const mockPalette = ['#0b0d10', '#f4f5f7', '#9aa3ad', '#14b8a6', '#ff5a1f']
 type MockEdit = ReturnType<typeof newMockEdit>
 let mockEdit: MockEdit | null = null
+/** The draft's index.html as last saved (null: the version's own). */
+let mockEditHtml: string | null = null
 /**
  * localStorage.mockMusic=1 edits the copy of the fixture with a music layer, whose track is in the library;
  * localStorage.mockVoice=1 the copy that also has a voice-over in two beats.

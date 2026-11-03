@@ -132,6 +132,8 @@ export function useNarrationEditor(initialOp: NarrationOp, opts: NarrationEditor
         setSelected(neighbour?.id ?? null)
         if (neighbour) focusClip(neighbour.id)
       }
+      // A new clip comes in selected, so its gain and fades are one step away.
+      if (last.ok && command.type === 'insert') setSelected(command.clip.id)
       if (!o.quiet) announce(last.message)
       return { ok: last.ok, message: last.message }
     },

@@ -1,6 +1,7 @@
 // The browser editor (plan v2 §8): change text, beat timing, colours, beat order, media slots, music and narration
 // lines on a finished contract-1 version, see it in the sandboxed preview, and render it unchanged as the next version. The page holds the composition the
-// person wants; the op list sent on each save is its difference from the version, so saves are idempotent.
+// person wants; the op list sent on each save is its difference from the version, so saves are idempotent. With recorded
+// voice-over on, a Narration section (plan 2026-11-02 §2.3-§2.5) adds the narration op to that list, and Render asks how.
 import {
   ActionIcon,
   Alert,
@@ -37,12 +38,16 @@ import {
 } from '@tabler/icons-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
-import { $api, errorMessage, fetchClient, newIdempotencyKey } from '../api/client'
+import { $api, errorMessage, fetchClient, newIdempotencyKey, useNarrationEnabled } from '../api/client'
 import type { paths } from '../api/schema'
 import { confirmDanger, showError } from '../components/bits'
 import { CompositionPreview, type PreviewCommand } from '../components/CompositionPreview'
 import { MediaLibraryModal, type Media } from '../components/MediaPicker'
+import { NarrationRenderDialog } from '../components/NarrationRenderDialog'
+import { NarrationSection, type NarrationControl } from '../components/NarrationSection'
 import { humanize, labelFor } from '../lib/labels'
+import { narrationOf, narrationToSave, sameOps, videoSamples, withNarration } from '../lib/narration-panel'
+import type { NarrationOp } from '../../../src/lib/timeline'
 
 type Edit = paths['/api/v1/edits/{id}']['get']['responses'][200]['content']['application/json']
 type Composition = Edit['composition']
@@ -50,6 +55,8 @@ type Op = Edit['ops'][number]
 type Slot = Composition['beats'][number]['media'][number]
 type Track = Composition['audio'][number]
 type Line = Composition['narration'][number]
+/** Ops that move time: recording waits for them to be rendered (plan 2026-11-02 §5.3, Render picture first). */
+const TIMING_OPS = new Set(['retime', 'reorder', 'delete', 'voice'])
 
 const fps = (s: number) => Math.round(s * 30) / 30
 const sameNumber = (a: number, b: number) => Math.abs(a - b) < 1e-6
@@ -309,6 +316,20 @@ export function EditPage() {
   const [picked, setPicked] = useState<Record<string, Media>>({})
   // Edits left from an earlier visit (or a refresh): asked once whether to keep them or start over.
   const [resumed, setResumed] = useState(0)
+  // Recorded narration: the op the Narration section shows, and what it starts from (a new key remounts it).
+  const narrationOn = useNarrationEnabled()
+  const config = $api.useQuery('get', '/api/v1/config', {}, { staleTime: 60_000 })
+  const [narration, setNarration] = useState<NarrationOp | null>(null)
+  const [narrationStart, setNarrationStart] = useState<{ op: NarrationOp | null; key: number }>({
+    op: null,
+    key: 0,
+  })
+  const resetNarration = (op: NarrationOp | null) => {
+    setNarration(op)
+    setNarrationStart((s) => ({ op, key: s.key + 1 }))
+  }
+  const narrationControl = useRef<NarrationControl | null>(null)
+  const [renderDialog, setRenderDialog] = useState(false)
 
   useEffect(() => {
     void (async () => {
@@ -319,19 +340,33 @@ export function EditPage() {
         setDraft(data)
         setCur(data.composition)
         setResumed(data.ops.length)
+        const op = narrationOf(data.ops)
+        setNarration(op)
+        setNarrationStart((s) => ({ op, key: s.key + 1 }))
       } else setProblem(errorMessage(error))
     })()
   }, [id, versionN])
 
-  const ops = useMemo(() => (draft && cur ? diffOps(draft.base, cur) : []), [draft, cur])
-  // The preview shows text as it's typed and plays the old voice until render, so only other saved changes reload it.
+  // The narration op goes last, as one snapshot of the whole track (none while it's empty, or when narration is off).
+  const ops = useMemo(
+    () =>
+      draft && cur
+        ? (withNarration(diffOps(draft.base, cur), narrationOn ? narrationToSave(narration) : null) as Op[])
+        : [],
+    [draft, cur, narration, narrationOn],
+  )
+  // The preview shows text as it's typed and plays the old voice until render, and the narration is auditioned over
+  // it, so only other saved changes reload it.
   const previewKey = useMemo(
-    () => JSON.stringify((draft?.ops ?? []).filter((o) => o.op !== 'text' && o.op !== 'voice')),
+    () =>
+      JSON.stringify(
+        (draft?.ops ?? []).filter((o) => o.op !== 'text' && o.op !== 'voice' && o.op !== 'narration'),
+      ),
     [draft?.ops],
   )
   const curRef = useRef(cur)
   curRef.current = cur
-  const dirty = !!draft && JSON.stringify(ops) !== JSON.stringify(draft.ops)
+  const dirty = !!draft && !sameOps(ops, draft.ops)
 
   const save = useCallback(async () => {
     if (!draft) return
@@ -349,6 +384,7 @@ export function EditPage() {
       // The edit can't be made: show why and go back to the last saved state.
       showError(error)
       setCur(draft.composition)
+      resetNarration(narrationOf(draft.ops))
     }
   }, [draft, ops])
 
@@ -406,6 +442,7 @@ export function EditPage() {
   const revertAll = () => {
     if (!draft) return
     setCur(structuredClone(draft.base))
+    resetNarration(null)
     sendRef.current?.({
       type: 'apply-edits',
       edits: draft.base.beats.flatMap((b) => b.texts.map((t) => ({ id: t.id, text: t.text }))),
@@ -457,7 +494,9 @@ export function EditPage() {
         </Anchor>
       </Alert>
     )
-  if (!draft || !cur || !video.data) return <Text c="var(--va-muted)">Opening the editor…</Text>
+  // Waits for the config too: until it says whether narration is on, a save would drop the draft's narration op.
+  if (!draft || !cur || !video.data || config.isPending)
+    return <Text c="var(--va-muted)">Opening the editor…</Text>
   const total = cur.beats.reduce((s, b) => s + b.duration, 0)
   // Music, then each voiced beat's line (effects and recorded narration get their own rows later).
   const music = cur.audio.filter((a) => a.role === 'music')
@@ -471,6 +510,18 @@ export function EditPage() {
   const deleted = base.beats.filter((b) => !cur.beats.some((x) => x.id === b.id))
   const kept = base.beats.map((b) => b.id).filter((bid) => cur.beats.some((x) => x.id === bid))
   const reordered = kept.join() !== cur.beats.map((b) => b.id).join()
+  // Render asks how when the saved draft has recorded narration (keep the visuals, and what to do past the end).
+  const savedNarration = narrationOn ? narrationOf(draft.ops) : null
+  const renderBody = (holdFinalFrame: boolean) => ({
+    params: { path: { id: draft.id }, header: { 'idempotency-key': renderKey } },
+    body: { mode: 'keep_visuals' as const, ...(holdFinalFrame ? { holdFinalFrame: true } : {}) },
+  })
+  const hint = (
+    <Text size="xs" c="var(--va-faint)">
+      Click any text in the preview to edit it. Text changes show at once; timing, order, colours, media and
+      audio after the draft saves.
+    </Text>
+  )
 
   // The preview stays put on the left with the actions above it; the controls scroll on their own on the right.
   const aspect = video.data.dimensions.width / video.data.dimensions.height
@@ -526,9 +577,11 @@ export function EditPage() {
               disabled={!draft.rev || dirty || saving}
               loading={render.isPending}
               onClick={() => {
-                render.mutate({
-                  params: { path: { id: draft.id }, header: { 'idempotency-key': renderKey } },
-                })
+                if (savedNarration) setRenderDialog(true)
+                else
+                  render.mutate({
+                    params: { path: { id: draft.id }, header: { 'idempotency-key': renderKey } },
+                  })
               }}
             >
               Render as v{next}
@@ -588,18 +641,36 @@ export function EditPage() {
           </Alert>
         ) : null}
 
-        <CompositionPreview
-          videoId={id}
-          versionN={draft.baseN}
-          dimensions={video.data.dimensions}
-          draft={{ editId: draft.id, key: previewKey }}
-          onClick={onPreviewClick}
-          onReady={onReady}
-        />
-        <Text size="xs" c="var(--va-faint)">
-          Click any text in the preview to edit it. Text changes show at once; timing, order, colours, media
-          and audio after the draft saves.
-        </Text>
+        {narrationOn ? (
+          <NarrationSection
+            key={narrationStart.key}
+            videoId={id}
+            versionN={draft.baseN}
+            dimensions={video.data.dimensions}
+            draft={{ editId: draft.id, key: previewKey }}
+            composition={cur}
+            initialOp={narrationStart.op}
+            onChange={setNarration}
+            onMusicChange={setTrack}
+            onPreviewReady={onReady}
+            onPreviewClick={onPreviewClick}
+            timingPending={ops.some((o) => TIMING_OPS.has(o.op))}
+            control={narrationControl}
+            hint={hint}
+          />
+        ) : (
+          <>
+            <CompositionPreview
+              videoId={id}
+              versionN={draft.baseN}
+              dimensions={video.data.dimensions}
+              draft={{ editId: draft.id, key: previewKey }}
+              onClick={onPreviewClick}
+              onReady={onReady}
+            />
+            {hint}
+          </>
+        )}
       </div>
       <div className="va-editor-panel" data-testid="edit-panel">
         <Card>
@@ -965,6 +1036,23 @@ export function EditPage() {
             const file = `${m.id}.${m.filename.split('.').pop() ?? ''}`
             setPicked((p) => ({ ...p, [file]: m }))
             setSlot(replacing.slot, { src: `assets/media/${file}` })
+          }}
+        />
+      ) : null}
+      {savedNarration ? (
+        <NarrationRenderDialog
+          opened={renderDialog}
+          onClose={() => setRenderDialog(false)}
+          op={savedNarration}
+          videoSamples={videoSamples(total)}
+          next={next}
+          pending={render.isPending}
+          onRender={(c) => {
+            render.mutate(renderBody(c.holdFinalFrame))
+          }}
+          onTrim={(clipId, sample) => {
+            setRenderDialog(false)
+            narrationControl.current?.jumpTo(clipId, sample)
           }}
         />
       ) : null}

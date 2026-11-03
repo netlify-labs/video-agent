@@ -450,3 +450,44 @@ describe('properties', () => {
     }
   })
 })
+
+describe('insert (a new take on the track)', () => {
+  it('lays the clip on top: it wins where it overlaps, the clip under it is trimmed', () => {
+    const op = opOf([clip({ id: 'a', srcEnd: 4 * SAMPLE_RATE })])
+    const res = applyCommand(
+      op,
+      {
+        type: 'insert',
+        clip: clip({ id: 'b', mediaId: 'm2', start: 3 * SAMPLE_RATE, srcEnd: 2 * SAMPLE_RATE }),
+      },
+      ctx,
+    )
+    if (!res.ok) throw new Error(res.reason)
+    expect(res.op.clips.map((c) => [c.id, c.start, clipEnd(c)])).toEqual([
+      ['a', 0, 3 * SAMPLE_RATE],
+      ['b', 3 * SAMPLE_RATE, 5 * SAMPLE_RATE],
+    ])
+    expect(res.message).toBe('Clip added at 0:03.00')
+  })
+
+  it('refuses a reused id, an empty clip, and one past the output limit', () => {
+    const op = opOf([clip({ id: 'a' })])
+    expect(
+      applyCommand(op, { type: 'insert', clip: clip({ id: 'a', start: 5 * SAMPLE_RATE }) }, ctx).ok,
+    ).toBe(false)
+    expect(applyCommand(op, { type: 'insert', clip: clip({ id: 'b', srcEnd: 0 }) }, ctx).ok).toBe(false)
+    const far = clip({ id: 'c', start: outputLimit(ctx.baseSamples) - SAMPLE_RATE / 2 })
+    expect(applyCommand(op, { type: 'insert', clip: far }, ctx)).toEqual({
+      ok: false,
+      reason: "The narration can't run past 2:30",
+    })
+  })
+
+  it('is one undo entry', () => {
+    let h = initHistory(opOf([]))
+    h = editorReducer(h, { type: 'command', command: { type: 'insert', clip: clip({ id: 'n' }) }, ctx })
+    expect(h.present.clips).toHaveLength(1)
+    h = editorReducer(h, { type: 'undo' })
+    expect(h.present.clips).toHaveLength(0)
+  })
+})

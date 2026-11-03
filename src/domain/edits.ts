@@ -19,8 +19,7 @@ import { wholeClipSpans } from '../lib/peaks.js'
 import { MAX_FROZEN_TAKE_BYTES, type CaptionPolicy, type FrozenNarration } from '../lib/run-manifest.js'
 import {
   clipEnd,
-  frameStart,
-  framesFor,
+  holdFrameEnd,
   MAX_NARRATION_TAKES,
   outputEnd,
   outputLimit,
@@ -61,8 +60,6 @@ import { hasUnfinished, loadJob, newAttempt, videoDto, withIdempotency } from '.
 export const EDIT_TTL_MS = 7 * 24 * 3600_000
 const MAX_OPS = 500
 const AUDIO_FILE = /\.(mp3|m4a|aac|wav|ogg|opus)$/i
-/** Hold-final-frame keeps the last frame this long after the narration ends (plan 2026-11-02 §2.5). */
-const POST_ROLL_SAMPLES = SAMPLE_RATE / 2
 
 /** A draft's ops: the contract's edits, plus at most one whole-track narration op (plan 2026-11-02 §6.1). */
 export type DraftOp = EditOp | NarrationOp
@@ -559,8 +556,7 @@ export interface RenderSettings {
  * otherwise the visuals' length. Refused past the output limit (base + 120 s, never over 15 min).
  */
 function holdTarget(op: NarrationOp, baseSamples: number) {
-  const end = outputEnd(resolve(op.clips).filter((c) => c.gainDb !== null))
-  const target = end > baseSamples ? frameStart(framesFor(end + POST_ROLL_SAMPLES, FPS), FPS) : baseSamples
+  const target = holdFrameEnd(op.clips, baseSamples, FPS)
   if (!withinOutputLimit(target, baseSamples))
     throw new ApiError(
       'invalid_request',

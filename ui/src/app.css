@@ -905,6 +905,10 @@ body {
   overflow-y: auto;
   padding: var(--mantine-spacing-lg);
 }
+/* The Narration section sits under the picture: the stage scrolls instead of squeezing it. */
+.va-editor-stage > * {
+  flex-shrink: 0;
+}
 /* The picture fits the height left under the title and above the controls, whatever its shape. */
 .va-editor-stage .va-preview-frame {
   width: min(100%, calc((100dvh - 300px) * var(--va-aspect, 1.7778)));
@@ -941,6 +945,39 @@ body {
     border-left: 0;
     background: none;
   }
+}
+/* The render dialog's narration-against-video bar: the picture, a held last frame, and where the narration plays. */
+.va-render-bar {
+  position: relative;
+  height: 18px;
+  border-radius: var(--mantine-radius-sm);
+  background: var(--va-raised);
+  overflow: hidden;
+}
+.va-render-bar > div {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+.va-render-bar-video {
+  left: 0;
+  background: color-mix(in srgb, var(--va-muted) 28%, transparent);
+}
+.va-render-bar-hold {
+  background: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--va-muted) 28%, transparent) 0 4px,
+    transparent 4px 8px
+  );
+}
+.va-render-bar-narration {
+  top: 5px !important;
+  bottom: 5px !important;
+  border-radius: 4px;
+  background: var(--mantine-color-teal-6);
+}
+.va-render-bar-narration[data-over] {
+  background: var(--mantine-color-yellow-6);
 }
 .va-beat {
   padding: 10px 12px;

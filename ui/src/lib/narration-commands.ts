@@ -48,6 +48,8 @@ export type NarrationCommand =
   | { type: 'setFades'; clipId: string; fadeInSamples?: number; fadeOutSamples?: number }
   /** Move the clip by whole frames (keeping its sub-frame offset). */
   | { type: 'nudge'; clipId: string; frames: number }
+  /** Lay a new clip (an uploaded or picked take) on top at its `start`; it wins where it overlaps. */
+  | { type: 'insert'; clip: NarrationClip }
 
 export type CommandResult =
   | { ok: true; op: NarrationOp; /** What happened, for the aria-live region. */ message: string }
@@ -99,6 +101,17 @@ const clampInt = (v: number, lo: number, hi: number) => Math.round(Math.min(hi, 
 /** Applies one command to `op`. Never throws on bad input; a rejected command reports why. */
 export function applyCommand(op: NarrationOp, cmd: NarrationCommand, ctx: EditContext): CommandResult {
   const clips = op.clips
+  if (cmd.type === 'insert') {
+    const n = cmd.clip
+    if (clips.some((x) => x.id === n.id)) return { ok: false, reason: 'That clip is already there' }
+    if (!Number.isInteger(n.start) || !(clipLength(n) > 0)) return { ok: false, reason: 'Not a clip' }
+    return finish(
+      op,
+      [...clips, { ...n, start: Math.max(0, n.start) }],
+      ctx,
+      `Clip added at ${clock(n.start)}`,
+    )
+  }
   const c = clips.find((x) => x.id === cmd.clipId)
   if (!c) return { ok: false, reason: 'That clip is gone' }
   const minLen = minClipSamples(ctx.fps)

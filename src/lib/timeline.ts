@@ -375,6 +375,24 @@ export function withinOutputLimit(endSamples: number, baseSamples: number): bool
   return endSamples <= outputLimit(baseSamples)
 }
 
+/** Hold-final-frame keeps the last frame this long after the narration ends (§2.5). */
+export const POST_ROLL_SAMPLES = SAMPLE_RATE / 2
+
+/** End of the last audible clip (gainDb not null), resolved, or 0: where the narration stops being heard. */
+export function audibleEnd(clips: readonly NarrationClip[]): number {
+  return outputEnd(resolve(clips).filter((c) => c.gainDb !== null))
+}
+
+/**
+ * The output's length when a keep-visuals render holds the last frame (§2.5, §6.1): with narration heard past
+ * `baseSamples`, its end plus the 0.5 s post-roll in whole frames (the held-frame beat is the difference); otherwise
+ * the base. Check it with withinOutputLimit.
+ */
+export function holdFrameEnd(clips: readonly NarrationClip[], baseSamples: number, fps: number): number {
+  const end = audibleEnd(clips)
+  return end > baseSamples ? frameStart(framesFor(end + POST_ROLL_SAMPLES, fps), fps) : baseSamples
+}
+
 // ---- time and frames (visuals only)
 
 export const samplesToSeconds = (samples: number): number => samples / SAMPLE_RATE
