@@ -16,7 +16,13 @@ import type { RunManifest } from '../src/lib/run-manifest.js'
 import { postCheckpoint } from './checkpoint.js'
 import { readNarrationReceipt } from './lib/narration-inputs.js'
 import { toVtt } from './lib/captions.js'
-import { MAX_AUTOMATION_POINTS, automationOverCap, master, narrationOf } from './lib/mastering.js'
+import {
+  HYPERFRAMES_AUTOMATION_POINTS,
+  MAX_AUTOMATION_POINTS,
+  automationOverCap,
+  master,
+  narrationOf,
+} from './lib/mastering.js'
 import { makePreviews, posterTime } from './lib/previews.js'
 import { uploadReferences } from './lib/references.js'
 import { RenderProgressReporter } from './lib/render-progress.js'
@@ -124,15 +130,19 @@ async function main() {
 
   // Recorded takes stay in .va-run/ (plan 2026-11-02 §6.3): nothing rendered, previewed or archived may hold one.
   assertNoTakesInVideo()
-  // HyperFrames keeps only the first 512 points of a lane and says nothing (docs/spikes.md S12): refuse long lanes.
+  // HyperFrames keeps only the first 512 points of a lane and says nothing (docs/spikes.md S12): refuse lanes it would
+  // cut. Narrated renders keep their own, stricter cap (the duck lane under narration stays at MAX_AUTOMATION_POINTS).
+  const cap = narrationOf(readFileSync(join(videoDir, 'index.html'), 'utf8')).narrated
+    ? MAX_AUTOMATION_POINTS
+    : HYPERFRAMES_AUTOMATION_POINTS
   const longLanes = compositionFiles(videoDir)
     .filter((f) => f.endsWith('.html'))
     .flatMap((f) =>
-      automationOverCap(readFileSync(join(videoDir, f), 'utf8')).map((l) => ({ file: f, ...l })),
+      automationOverCap(readFileSync(join(videoDir, f), 'utf8'), cap).map((l) => ({ file: f, ...l })),
     )
   if (longLanes.length)
     throw new StepError(
-      `automation_over_cap: ${longLanes.map((l) => `${l.file} #${l.element} ${l.target} has ${l.points} points`).join('; ')}. Keep every data-automation lane at ${MAX_AUTOMATION_POINTS} points or fewer (HyperFrames silently drops points past 512).`,
+      `automation_over_cap: ${longLanes.map((l) => `${l.file} #${l.element} ${l.target} has ${l.points} points`).join('; ')}. Keep every data-automation lane at ${cap} points or fewer (HyperFrames silently drops points past ${HYPERFRAMES_AUTOMATION_POINTS}).`,
     )
   log('render.start', { quality: QUALITY })
   const video = join(out, 'video.mp4')

@@ -26,6 +26,8 @@ export const MASTER = {
 
 /** The most points one automation lane may carry: the duck lane's own cap, well under HyperFrames' silent 512. */
 export const MAX_AUTOMATION_POINTS = MAX_DUCK_POINTS
+/** What HyperFrames itself keeps of a lane (docs/spikes.md S12): the cap for compositions without narration. */
+export const HYPERFRAMES_AUTOMATION_POINTS = 512
 
 const r2 = (n: number) => Math.round(n * 100) / 100
 
@@ -38,8 +40,11 @@ function* elements(n: Node): Generator<Element> {
 }
 const attr = (e: Element, name: string) => e.attrs.find((a) => a.name === name)?.value ?? null
 
-/** Every automation lane in `html` with more than MAX_AUTOMATION_POINTS points (unreadable lanes are check's job). */
-export function automationOverCap(html: string): { element: string; target: string; points: number }[] {
+/** Every automation lane in `html` with more than `cap` points (unreadable lanes are check's job). */
+export function automationOverCap(
+  html: string,
+  cap = MAX_AUTOMATION_POINTS,
+): { element: string; target: string; points: number }[] {
   const out: { element: string; target: string; points: number }[] = []
   for (const e of elements(parse(html))) {
     const raw = attr(e, 'data-automation')
@@ -51,7 +56,7 @@ export function automationOverCap(html: string): { element: string; target: stri
       continue
     }
     for (const l of Array.isArray(a.lanes) ? a.lanes : [])
-      if (Array.isArray(l.points) && l.points.length > MAX_AUTOMATION_POINTS)
+      if (Array.isArray(l.points) && l.points.length > cap)
         out.push({
           element: attr(e, 'id') ?? e.tagName,
           target: typeof l.target === 'string' ? l.target : '?',

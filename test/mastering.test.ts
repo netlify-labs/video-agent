@@ -107,6 +107,8 @@ describe('the automation cap and narration detection', () => {
     expect(automationOverCap(html(MAX_AUTOMATION_POINTS + 1))).toEqual([
       { element: 'music', target: 'volume', points: MAX_AUTOMATION_POINTS + 1 },
     ])
+    expect(automationOverCap(html(MAX_AUTOMATION_POINTS + 1), 512)).toEqual([])
+    expect(automationOverCap(html(513), 512)).toHaveLength(1)
     expect(automationOverCap('<div data-automation="not json"></div>')).toEqual([])
   })
   it('finds the narration bus and whether it has speech', () => {
