@@ -228,6 +228,7 @@ export async function assembleUpload(deps: Deps, id: string) {
   try {
     c = classify(bytes)
   } catch (e) {
+    if (!(e instanceof MediaError)) deps.log.error('media.classify_failed', { uploadId: id, error: e })
     return fail(e instanceof MediaError ? e.message : "The file couldn't be read.")
   }
   const poster = await deps.blobs.get('media', posterKey(id))

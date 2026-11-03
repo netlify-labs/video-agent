@@ -44,7 +44,9 @@ export async function sealToken(deps: Deps, token: string): Promise<string> {
 export async function openToken(deps: Deps, sealed: string): Promise<string | null> {
   try {
     return decrypt(await tokenKey(deps), sealed)
-  } catch {
+  } catch (e) {
+    // The person signs in again; a run of these means the encryption key changed.
+    deps.log.warn('oauth.token_unreadable', { error: e })
     return null
   }
 }

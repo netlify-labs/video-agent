@@ -12,6 +12,7 @@ import {
 } from '../lib/run-manifest.js'
 import { getSettings } from './settings.js'
 import { contextMeta } from '../generated/context.js'
+import { clip } from '../lib/log.js'
 import { PROMPT_TEMPLATE_VERSION, buildPrompt, buildRenderUnchangedPrompt } from './prompt.js'
 import { setStage } from './videos.js'
 import { MUSIC_POLL_MS, advanceMusicPick, attachTrack, needsMusicPick, newMusicPick } from './music-pick.js'
@@ -356,6 +357,12 @@ async function start(deps: Deps, a: AttemptRow): Promise<void> {
     ;({ req, parentSha } = await startRequest(deps, { ...a, deployId }, token))
   } catch (e) {
     if (!(e instanceof SourceUnavailable)) throw e
+    deps.log.warn('attempt.source_unavailable', {
+      attemptId: a.id,
+      jobId: a.jobId,
+      versionN: a.versionN,
+      reason: e.message,
+    })
     await deps.store.tx(async (repo) => {
       await setStage(repo, a, 'failed', terminal(now, 'source_unavailable', e.message), now.toISOString())
       await emitTerminalEvent(repo, deps, a.id)
@@ -372,6 +379,13 @@ async function start(deps: Deps, a: AttemptRow): Promise<void> {
     sendWindow: { sentAt: now.getTime(), failedAt: now.getTime() + MIN },
   })
 
+  // The whole prompt the agent run gets, minus its one-time callback token.
+  deps.log.debug('run.start_request', {
+    attemptId: a.id,
+    jobId: a.jobId,
+    versionN: a.versionN,
+    prompt: clip(req.prompt.replaceAll(token, '[redacted]'), 40_000),
+  })
   try {
     const res = await deps.runner.start(req)
     const after = deps.clock.now()

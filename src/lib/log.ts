@@ -1,4 +1,5 @@
-// Structured JSON-line logging with redaction of secrets.
+// Structured JSON-line logging with redaction of secrets. debug() lines (requests, prompts, model calls, MCP tool
+// calls) are written only when the logger is verbose: DEBUG_LEVEL=verbose (or debug) in the environment.
 
 const SECRET_KEYS = /token|secret|password|authorization|cookie|handle|signature|sig|nf_jwt|apikey|api_key/i
 const BEARER = /\b(Bearer\s+)[A-Za-z0-9._~+/=-]+/g
@@ -29,7 +30,20 @@ export function redact(value: unknown, depth = 0): unknown {
   return value
 }
 
+/** Long text (a prompt, a model's reply) cut to `max` characters for a debug line, with how long it really was. */
+export function clip(text: string | null | undefined, max = 4000): string | null {
+  if (text == null) return null
+  return text.length <= max ? text : `${text.slice(0, max)}… [${text.length - max} more characters]`
+}
+
+/** Whether DEBUG_LEVEL asks for debug lines. */
+export const verboseFromEnv = (env: NodeJS.ProcessEnv = process.env) =>
+  /^(verbose|debug|trace)$/i.test(env.DEBUG_LEVEL?.trim() ?? '')
+
 export interface Logger {
+  /** Written only when `verbose`: detail for debugging (requests, prompts, model calls). */
+  debug(event: string, fields?: LogFields): void
+  readonly verbose: boolean
   info(event: string, fields?: LogFields): void
   warn(event: string, fields?: LogFields): void
   error(event: string, fields?: LogFields): void
@@ -41,11 +55,17 @@ export function createLogger(
   sink: (line: string) => void = (l) => {
     console.log(l)
   },
+  opts: { verbose?: boolean } = {},
 ): Logger {
+  const verbose = opts.verbose ?? false
   const write = (level: string, event: string, fields: LogFields = {}) => {
     sink(JSON.stringify(redact({ ts: new Date().toISOString(), level, event, ...base, ...fields })))
   }
   return {
+    verbose,
+    debug: (e, f) => {
+      if (verbose) write('debug', e, f)
+    },
     info: (e, f) => {
       write('info', e, f)
     },
@@ -55,6 +75,6 @@ export function createLogger(
     error: (e, f) => {
       write('error', e, f)
     },
-    child: (fields) => createLogger({ ...base, ...fields }, sink),
+    child: (fields) => createLogger({ ...base, ...fields }, sink, { verbose }),
   }
 }

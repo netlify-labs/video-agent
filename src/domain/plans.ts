@@ -8,6 +8,7 @@
 import { z } from 'zod'
 import type { Deps, GatewayUsage } from '../deps.js'
 import { sha256Hex } from '../lib/crypto.js'
+import { clip } from '../lib/log.js'
 import { ApiError } from '../lib/errors.js'
 import { ONE_WAY_WORDS } from '../lib/voice.js'
 import { planningContext } from '../generated/planning-context.js'
@@ -297,6 +298,14 @@ export async function createPlan(
       { signal: AbortSignal.timeout(ROUTE_DEADLINE_MS) },
     )
     await record(deps, p, null, 'router', r.model, started, { usage: r.usage })
+    deps.log.debug('plan.routed', {
+      userId: p.userId,
+      prompt: clip(prompt),
+      revisionOf: jobId,
+      answers: r.answers,
+      model: r.model,
+      ms: Date.now() - started,
+    })
     route = {
       needsQuestions: r.answers.needs_questions === 'yes',
       template: r.answers.template,
@@ -382,6 +391,17 @@ async function callJson<T>(
         { signal: AbortSignal.timeout(left) },
       )
       await record(deps, p, plan.id, attempt === 0 ? kind : 'retry', r.model, started, { usage: r.usage })
+      deps.log.debug('plan.model_call', {
+        planId: plan.id,
+        kind,
+        attempt,
+        model: r.model,
+        ms: Date.now() - started,
+        system: clip(system, 8000),
+        user: clip(user, 12_000),
+        images: images.length,
+        reply: clip(r.text, 8000),
+      })
       const parsed = schema.safeParse(parseJson(r.text))
       if (parsed.success) return parsed.data
       lastError = new Error(`invalid ${kind}: ${parsed.error.issues[0]?.message ?? 'shape'}`)

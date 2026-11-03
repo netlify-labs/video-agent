@@ -81,7 +81,9 @@ async function readCache(deps: Deps, attemptId: string): Promise<CacheEntry | nu
   try {
     const raw = await deps.blobs.get('internal', progressKey(attemptId))
     return raw ? (JSON.parse(new TextDecoder().decode(raw)) as CacheEntry) : null
-  } catch {
+  } catch (e) {
+    // The live snapshot stands in; a failing store shows up here.
+    deps.log.warn('progress.cache_unreadable', { attemptId, error: e })
     return null
   }
 }

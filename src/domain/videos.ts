@@ -1,6 +1,7 @@
 // Creating, revising, retrying, cancelling, renaming, deleting and publishing videos.
 import type { Deps } from '../deps.js'
 import { sha256Hex } from '../lib/crypto.js'
+import { clip } from '../lib/log.js'
 import type { PreviewFile, Previews } from '../lib/media/previews.js'
 import { PUBLIC_URL_TTL_SEC, accessKey, fileTtl, signFile, stableExp, writeAccessMirror } from './files.js'
 import { getSettings } from './settings.js'
@@ -259,6 +260,18 @@ export async function createVideo(
 ) {
   assertCan(principal, 'video:create')
   checkWebhook(principal, input.webhookUrl)
+  deps.log.debug('video.create_requested', {
+    userId: principal.userId,
+    via: principal.kind,
+    prompt: clip(input.prompt),
+    title: input.title ?? null,
+    aspect: input.aspect ?? null,
+    durationSec: input.durationSec ?? null,
+    planId: input.planId ?? null,
+    mediaIds: input.mediaIds ?? [],
+    sound: input.sound ?? null,
+    voiceover: input.voiceover ?? null,
+  })
   return deps.store.tx((repo) =>
     withIdempotency(repo, deps, principal, 'videos.create', idemKey, input, async () => {
       const now = deps.clock.now().toISOString()
@@ -347,6 +360,18 @@ export async function reviseVideo(
 ) {
   assertCan(principal, 'version:create')
   checkWebhook(principal, input.webhookUrl)
+  deps.log.debug('video.revise_requested', {
+    userId: principal.userId,
+    via: principal.kind,
+    jobId,
+    change: clip(input.prompt),
+    fromVersion: input.fromVersion ?? null,
+    planId: input.planId ?? null,
+    commentIds: input.commentIds ?? [],
+    mediaIds: input.mediaIds ?? [],
+    sound: input.sound ?? null,
+    voiceover: input.voiceover ?? null,
+  })
   return deps.store.tx(async (repo) => {
     // Visibility first: a replay must not return a saved response for a video that has since gone private.
     await loadJob(repo, principal, jobId)

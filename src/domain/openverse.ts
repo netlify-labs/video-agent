@@ -271,8 +271,10 @@ async function apiGetOnce(deps: Deps, path: string, opts: CallOpts): Promise<unk
   } catch {
     body = null
   }
-  if (!body || typeof body !== 'object')
+  if (!body || typeof body !== 'object') {
+    deps.log.warn('openverse.bad_body', { path: path.split('?')[0], status: res.status })
     throw new OpenverseUnavailable('Openverse sent something unexpected. Try again shortly.')
+  }
   return body
 }
 
@@ -468,6 +470,7 @@ async function download(deps: Deps, start: string, opts: CallOpts): Promise<Uint
       return await readCapped(res.body as ReadableStream<Uint8Array>, LIMITS.audioBytes, tooBig)
     } catch (e) {
       if (e instanceof ApiError) throw e
+      deps.log.warn('openverse.download_interrupted', { error: e })
       throw new OpenverseUnavailable("The track's file couldn't be downloaded. Try again shortly.")
     }
   }
@@ -519,6 +522,7 @@ export async function importOpenverse(
   try {
     c = classify(bytes)
   } catch (e) {
+    if (!(e instanceof MediaError)) deps.log.error('openverse.classify_failed', { error: e })
     throw new ApiError(
       'invalid_request',
       e instanceof MediaError ? e.message : "The track's file couldn't be read as audio.",

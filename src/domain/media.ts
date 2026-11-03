@@ -57,6 +57,8 @@ export async function storeMedia(
     try {
       clean = sanitizeSvg(bytes)
     } catch (e) {
+      // A refused SVG is the file's fault; anything else is a bug, logged before it reads as one.
+      if (!(e instanceof SvgError)) deps.log.error('media.sanitize_failed', { error: e })
       throw new ApiError('invalid_request', e instanceof SvgError ? e.message : "The SVG couldn't be read.")
     }
   }
@@ -140,6 +142,7 @@ export async function uploadMedia(
   try {
     c = classify(bytes)
   } catch (e) {
+    if (!(e instanceof MediaError)) deps.log.error('media.classify_failed', { error: e })
     throw new ApiError('invalid_request', e instanceof MediaError ? e.message : "The file couldn't be read.")
   }
   const row = await storeMedia(deps, p, bytes, c, meta)

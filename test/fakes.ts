@@ -23,7 +23,7 @@ import type {
 } from '../src/deps.js'
 import { RunnerError, readConfig } from '../src/deps.js'
 import { ids as realIds } from '../src/lib/ids.js'
-import { createLogger, type Logger } from '../src/lib/log.js'
+import { createLogger, verboseFromEnv, type Logger } from '../src/lib/log.js'
 import { createMemoryStore } from '../src/store/memory.js'
 import { resetAuthCache } from '../src/domain/auth.js'
 import { resetSettingsCache } from '../src/domain/settings.js'
@@ -418,7 +418,7 @@ export function makeDeps(env: Record<string, string> = {}, store?: Deps['store']
   resetOpenverseCache()
   const outbound = new FakeFetch()
   const logs: string[] = []
-  const log: Logger = createLogger({}, (l) => logs.push(l))
+  const log: Logger = createLogger({}, (l) => logs.push(l), { verbose: verboseFromEnv(env) })
   const config: Config = readConfig({
     ALLOWED_EMAIL_DOMAINS: 'acme.com',
     ADMIN_EMAILS: 'admin@acme.com',

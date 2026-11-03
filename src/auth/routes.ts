@@ -14,6 +14,7 @@ import {
   type Outcome,
   type SignedIn,
 } from './oauth.js'
+import { ApiError } from '../lib/errors.js'
 import { liveSession, readCookie, SESSION_COOKIE } from './sessions.js'
 import { webCallback, webSignInEnabled } from './web.js'
 
@@ -176,7 +177,9 @@ export function oauthRoutes(deps: OAuthDeps) {
         upstreamTokenEnc: session.upstreamTokenEnc,
         membershipCheckedAt: session.membershipCheckedAt,
       }
-    } catch {
+    } catch (e) {
+      // A session that no longer holds is expected (ApiError); anything else is a failure worth seeing.
+      if (!(e instanceof ApiError)) deps.log.warn('oauth.session_check_failed', { error: e })
       return null
     }
   }

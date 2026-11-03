@@ -152,7 +152,9 @@ async function identityChecks(
   let identity
   try {
     identity = await deps.identity.settings()
-  } catch {
+  } catch (e) {
+    // Shown as "couldn't read" on the setup page; the cause goes to the logs.
+    deps.log.warn('setup.identity_unreadable', { error: e })
     identity = undefined
   }
   if (identity === null || identity === undefined) {

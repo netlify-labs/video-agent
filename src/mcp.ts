@@ -39,6 +39,7 @@ import {
   type VideoDto,
 } from './domain/videos.js'
 import { ApiError } from './lib/errors.js'
+import { clip } from './lib/log.js'
 import { ONE_WAY_WORDS, SPEED_RANGE, VOICE_ID } from './lib/voice.js'
 import { MEDIA_KINDS } from './lib/media/classify.js'
 import { registerPrompts } from './mcp-prompts.js'
@@ -236,10 +237,17 @@ function ok(body: Record<string, unknown>): ToolResult {
   return { content: [{ type: 'text', text: JSON.stringify(body, null, 2) }], structuredContent: body }
 }
 
-async function run(fn: () => Promise<Record<string, unknown>>, videoId?: string): Promise<ToolResult> {
+/** Runs a tool and shapes its outcome for agents. An unexpected error is logged: the agent only sees "went wrong". */
+async function runTool(
+  log: Deps['log'],
+  fn: () => Promise<Record<string, unknown>>,
+  videoId?: string,
+): Promise<ToolResult> {
   try {
     return ok(await fn())
   } catch (e) {
+    if (!(e instanceof ToolError) && !(e instanceof ApiError))
+      log.error('mcp.tool_failed', { videoId: videoId ?? null, error: e })
     const err =
       e instanceof ToolError
         ? e
@@ -343,6 +351,7 @@ export function buildMcpServer(deps: Deps, principal: Principal, kick: () => voi
     { instructions: SERVER_INSTRUCTIONS },
   )
   const load = (id: string) => videoDto(deps.store, deps, id, principal)
+  const run = (fn: () => Promise<Record<string, unknown>>, videoId?: string) => runTool(deps.log, fn, videoId)
 
   const createTool = server.registerTool(
     'create_video',
@@ -1184,15 +1193,53 @@ export async function handleMcp(
   const server = buildMcpServer(deps, principal, kick)
   const transport = new WebStandardStreamableHTTPServerTransport({ enableJsonResponse: true }) // no sessionIdGenerator: stateless
   await server.connect(transport)
-  // Kept to explain a refused request; the transport reads the original.
+  // Kept to explain a refused request (and, verbose, to log the call); the transport reads the original.
   const copy = req.method === 'POST' ? req.clone() : null
+  const seen = deps.log.verbose && req.method === 'POST' ? req.clone() : null
+  const started = Date.now()
   try {
     const res = await transport.handleRequest(req)
     if (res.status >= 400 && res.status < 500) await logRefused(deps, principal, req, copy, res)
+    if (seen) await logCall(deps, principal, seen, res, started)
     return res
   } finally {
     void server.close()
   }
+}
+
+/** DEBUG_LEVEL=verbose: each MCP call (tool names and arguments, which carry prompts) and how it ended. */
+async function logCall(deps: Deps, principal: Principal, req: Request, res: Response, started: number) {
+  let calls: unknown
+  try {
+    const body: unknown = JSON.parse(await req.text())
+    calls = (Array.isArray(body) ? body : [body]).map((m: { method?: unknown; params?: unknown }) => ({
+      method: m.method ?? null,
+      ...(m.method === 'tools/call' && m.params && typeof m.params === 'object'
+        ? {
+            tool: (m.params as { name?: unknown }).name ?? null,
+            arguments: clip(JSON.stringify((m.params as { arguments?: unknown }).arguments ?? {}), 8000),
+          }
+        : {}),
+    }))
+  } catch {
+    calls = 'not JSON'
+  }
+  let isError: boolean | null
+  try {
+    const out = (await res.clone().json()) as { result?: { isError?: boolean }; error?: unknown }
+    isError = Boolean(out.error) || out.result?.isError === true
+  } catch {
+    isError = null
+  }
+  deps.log.debug('mcp.call', {
+    userId: principal.userId,
+    via: principal.kind,
+    calls,
+    status: res.status,
+    isError,
+    ms: Date.now() - started,
+    client: req.headers.get('user-agent')?.slice(0, 160) ?? null,
+  })
 }
 
 /**

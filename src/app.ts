@@ -158,6 +158,24 @@ export function createApp(deps: Deps, opts: AppOptions) {
   })
   app.notFound((c) => c.json(errorBody('not_found', `No route for ${c.req.method} ${c.req.path}.`), 404))
 
+  // Every request in one debug line (DEBUG_LEVEL=verbose): who, what, the outcome and how long it took. The
+  // logger redacts signed-URL parameters; bodies aren't logged here (prompts are, where they're used).
+  if (deps.log.verbose)
+    app.use('*', async (c, next) => {
+      const started = Date.now()
+      await next()
+      const p = c.get('principal') as Principal | undefined
+      deps.log.debug('http.request', {
+        method: c.req.method,
+        path: c.req.path,
+        query: new URL(c.req.url).search || null,
+        status: c.res.status,
+        ms: Date.now() - started,
+        ...(p ? { caller: p.kind, userId: p.userId, role: p.role } : {}),
+        userAgent: c.req.header('user-agent')?.slice(0, 160) ?? null,
+      })
+    })
+
   // Deploy-context guard: previews and old deploys serve nothing.
   app.use('*', async (c, next) => {
     if (!opts.isLive(c.env.context)) {
