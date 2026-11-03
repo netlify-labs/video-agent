@@ -44,7 +44,8 @@ export const brandMusic = () => contextMeta.music
 export async function needsMusicPick(deps: Deps, a: AttemptRow): Promise<boolean> {
   if (a.musicPick) return false
   const version = await deps.store.getVersion(a.jobId, a.versionN)
-  if (!version || version.mode === 'render_unchanged') return false
+  // An edit (rendered as is, or fitted to its narration) keeps the composition's own sound.
+  if (!version || version.mode === 'render_unchanged' || version.frozen) return false
   if ((version.sound ?? 'silent') === 'silent' || brandMusic()) return false
   // A revision of a version with music keeps the music its composition already has.
   if (version.parentN !== null) {

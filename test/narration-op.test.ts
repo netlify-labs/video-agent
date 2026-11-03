@@ -424,9 +424,11 @@ describe('rendering narration with the visuals kept', () => {
   it('replays the same request once; another mode or settings under the key is a conflict', async () => {
     const h = harness({ MAX_ACTIVE_RUNS: '0' })
     const { id, editId } = await narrated(h, ([a]) => [clip(a!)], 1)
-    expect(await error(await render(h, editId, { mode: 'fit_to_narration' }))).toMatchObject({
+    expect(
+      await error(await render(h, editId, { mode: 'fit_to_narration', holdFinalFrame: true })),
+    ).toMatchObject({
       status: 400,
-      message: expect.stringContaining("isn't available yet"),
+      message: expect.stringContaining('neither holds the last frame'),
     })
     expect((await render(h, editId, { mode: 'sideways' })).status).toBe(400)
     expect((await render(h, editId, { holdFinalFrame: true }, 'k1')).status).toBe(202)

@@ -266,8 +266,16 @@ export const VersionSchema = z
       .describe('Ready and keeps editing contract v1, so it can be edited in the browser.'),
     mode: z
       .enum(['author', 'render_unchanged'])
-      .describe('render_unchanged: an edit made in the browser, rendered as is (no agent authoring).'),
-    editedFromN: z.number().int().nullable(),
+      .describe(
+        'render_unchanged: an edit made in the browser, rendered as is (no agent authoring). author: an agent run, including an edit fitted to its recorded narration (editedFromN set).',
+      ),
+    editedFromN: z
+      .number()
+      .int()
+      .nullable()
+      .describe(
+        'The version an edit made in the browser started from: rendered as is, or (mode author) fitted to its recorded narration.',
+      ),
     n: z.number().int(),
     status: StatusSchema,
     prompt: z.string(),
@@ -1032,7 +1040,7 @@ export const RenderEditSchema = z
   .object({
     mode: z.enum(['keep_visuals', 'fit_to_narration']).optional().openapi({
       description:
-        'keep_visuals (default): render the draft as is, recorded narration mixed over it. fit_to_narration: not available yet',
+        'keep_visuals (default): render the draft as is, recorded narration mixed over it. fit_to_narration: an authoring run (about 250 credits) retimes the visuals from the draft to the narration, which it cannot change; it always replaces the AI voice-over, and needs recorded narration in the draft (no holdFinalFrame or excludeNarration)',
     }),
     holdFinalFrame: z.boolean().optional().openapi({
       description:

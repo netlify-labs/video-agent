@@ -2,7 +2,8 @@
 //   npx tsx scripts/prepare-run.ts --job <jobId> --attempt <id> --manifest <sha256>
 // The manifest lives in the sources store at <jobId>/runs/<attempt>.json and must match the hash in the prompt.
 // Only keys inside it are followed. Revisions restore the parent's source archive; render-unchanged runs restore
-// a frozen bundle and verify its canonical file manifest (keeping copies of the files a re-voice may rewrite), each
+// a frozen bundle and verify its canonical file manifest (keeping copies of the files a re-voice may rewrite), and
+// fit-to-narration runs (author_from_frozen) restore the frozen edited draft the same way, keeping all of it, each
 // with its reference files (the narration bus) fetched by key and checked; incorporate-feedback runs also get one still per pinned
 // comment in video/feedback/, and library media is downloaded into video/assets/media/. Recorded narration's takes are
 // hydrated into .va-run/narration/ (outside video/: never archived, checkpointed or previewed; scripts/narration.ts
@@ -19,7 +20,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
-import { bundleManifest } from '../src/lib/bundle-manifest.js'
+import { archiveFiles, bundleManifest } from '../src/lib/bundle-manifest.js'
 import type { BundleReference } from '../src/lib/bundle-references.js'
 import { frozenFilesFor, optionalFrozenFilesFor } from '../src/lib/narration-run.js'
 import { FROZEN_DIR, keptHash } from '../src/lib/revoice.js'
@@ -267,7 +268,7 @@ export function probeTake(path: string, mediaId: string): { pcm16: boolean } {
  */
 export async function hydrateNarration(
   root: string,
-  m: Pick<RunManifest, 'jobId' | 'attemptId'>,
+  m: Pick<RunManifest, 'jobId' | 'attemptId'> & { kind?: RunManifest['kind'] },
   n: FrozenNarration | undefined,
   fetch: Fetch,
 ): Promise<NarrationInputs | null> {
@@ -358,12 +359,14 @@ export async function hydrateNarration(
     captions: n.captions,
     ...(n.transcriptionProvider ? { transcriptionProvider: n.transcriptionProvider } : {}),
     ...(n.language ? { language: n.language } : {}),
+    ...(m.kind === 'author_from_frozen' ? { fit: true as const } : {}),
     takes,
   }
   writeFileSync(p.manifest, JSON.stringify(inputs, null, 2))
   log('narration.hydrated', {
     ms: Date.now() - started,
     takes: takes.map((t) => ({ mediaId: t.mediaId, samples: t.samples, decoded: t.decoded })),
+    ...(inputs.fit ? { fit: true, targetSamples: n.targetSamples } : {}),
   })
   return inputs
 }
@@ -391,13 +394,18 @@ export async function prepare(m: RunManifest, opts: { tmp: string; root?: string
       )
     log('restored', { kind: 'bundle', key: m.bundle.key, manifestHash: actual })
     // Lines to re-voice or narration to mix: keep the frozen copies of the files those steps rewrite (narration-run.ts),
-    // for render-job's checks.
+    // for render-job's checks. A fit may change any file, so it keeps the whole frozen composition: the
+    // narration_modified guard proves the copies against the bundle's manifest hash before it reads them.
     const frozen = join(root, FROZEN_DIR)
     rmSync(frozen, { recursive: true, force: true })
     if (m.bundle.revoice && keptHash(restored.files, m.bundle.revoice.beats) !== m.bundle.revoice.keptHash)
       throw new StepError("The restored bundle doesn't match its re-voice manifest. Stop and report this.")
     const optional = optionalFrozenFilesFor(m.bundle)
-    for (const p of [...frozenFilesFor(m.bundle), ...optional]) {
+    const keep =
+      m.kind === 'author_from_frozen'
+        ? archiveFiles(join(root, 'video'))
+        : [...frozenFilesFor(m.bundle), ...optional]
+    for (const p of keep) {
       const from = join(root, 'video', p)
       if (!existsSync(from)) {
         if (optional.includes(p)) continue
@@ -407,6 +415,7 @@ export async function prepare(m: RunManifest, opts: { tmp: string; root?: string
       copyFileSync(from, join(frozen, p))
     }
     if (m.bundle.revoice) log('revoice.planned', { beats: m.bundle.revoice.beats })
+    if (m.kind === 'author_from_frozen') log('frozen.kept', { kind: m.kind, files: keep.length })
   }
   await hydrateNarration(root, m, m.bundle?.narration, fetch)
   // Library media by reference (plan v2 §9): exactly the snapshotted bytes, each one verified. PDFs are reference
@@ -466,7 +475,9 @@ async function main() {
   console.log(
     m.kind === 'revision'
       ? `Restored video/ from version ${m.source?.parentN}. Continue with the revision.`
-      : 'video/ is ready. Continue.',
+      : m.kind === 'author_from_frozen'
+        ? 'Restored video/ from the edited draft, with the recorded narration to fit. Continue.'
+        : 'video/ is ready. Continue.',
   )
 }
 

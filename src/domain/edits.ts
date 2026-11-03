@@ -20,6 +20,7 @@ import { wholeClipSpans } from '../lib/peaks.js'
 import { MAX_FROZEN_TAKE_BYTES, type CaptionPolicy, type FrozenNarration } from '../lib/run-manifest.js'
 import {
   clipEnd,
+  fitTarget,
   holdFrameEnd,
   MAX_NARRATION_TAKES,
   outputEnd,
@@ -578,20 +579,46 @@ function holdTarget(op: NarrationOp, baseSamples: number) {
 }
 
 /**
- * frozen.narration for a keep-visuals render (plan 2026-11-02 §6.1, §6.3). The op keeps only what's audible (resolved
- * clips with a level that start inside the target), and the takes are only the ones those play: by key and digest
- * from the media store, never snapshotted with snapshotMedia, at most 32 and 400 MiB. The bus is the composition's
- * length: the visuals', or with holdFinalFrame and an overrun, theirs plus the held frame (computeRev, holdTarget).
+ * The bus length a fit freezes (plan 2026-11-02 §6.4): the audible narration's end plus the 0.5 s post-roll in whole
+ * frames (timeline.fitTarget), which the agent's beats must total exactly. Refused when nothing is heard, or past the
+ * output limit of the visuals it starts from (base + 120 s, never over 15 min).
+ */
+function fitTargetOf(op: NarrationOp, baseSamples: number) {
+  const target = fitTarget(op.clips, FPS)
+  if (!(target > 0))
+    throw new ApiError(
+      'invalid_request',
+      "None of the narration is audible, so there's nothing to fit the video to. Unmute a clip first.",
+    )
+  if (!withinOutputLimit(target, baseSamples))
+    throw new ApiError(
+      'invalid_request',
+      `Fitting the video to the narration would make it ${secs(target)}; it can run to ${secs(outputLimit(baseSamples))} at most. Trim the narration instead.`,
+    )
+  return target
+}
+
+/** Fit always replaces the AI voice-over (plan 2026-11-02 §12 decision 11): Keep and Under are for keep-visuals only. */
+const replacingAiVoice = (o: DraftOp): DraftOp =>
+  o.op === 'narration' && o.tracks.aiVoice.mode !== 'replace'
+    ? { ...o, tracks: { ...o.tracks, aiVoice: { ...o.tracks.aiVoice, mode: 'replace' } } }
+    : o
+
+/**
+ * frozen.narration for a render (plan 2026-11-02 §6.1, §6.3, §6.4). The op keeps only what's audible (resolved clips
+ * with a level that start inside the target), and the takes are only the ones those play: by key and digest from the
+ * media store, never snapshotted with snapshotMedia, at most 32 and 400 MiB. The bus is `targetSamples` long: for a
+ * keep-visuals render the composition's length (the visuals', or with holdFinalFrame and an overrun, theirs plus the
+ * held frame: computeRev, holdTarget); for a fit, the length the agent fits the beats to (fitTargetOf).
  */
 async function freezeNarration(
   repo: Repo,
   op: NarrationOp,
-  r: Rev,
+  targetSamples: number,
   s: RenderSettings,
   transcriptionProvider: TranscriptionProvider,
   language: Language,
 ): Promise<FrozenNarration> {
-  const { targetSamples } = r
   const clips = resolve(op.clips).filter((c) => c.gainDb !== null && c.start < targetSamples)
   const takes: FrozenNarration['takes'] = []
   for (const id of new Set(clips.map((c) => c.mediaId))) {
@@ -622,7 +649,9 @@ async function freezeNarration(
 /**
  * Renders the draft's current edits as the next version (plan v2 §8, §14 rules 19, 21): the composition is frozen
  * into version-owned storage (kept until the version is deleted, so retries work after the draft expires) and one
- * render-unchanged attempt is queued. The run restores and verifies it, checks it and renders it without changes.
+ * attempt is queued. keep_visuals: a render-unchanged run restores and verifies it, checks it and renders it without
+ * changes. fit_to_narration (plan 2026-11-02 §6.4): an authoring run (mode 'author', editedFromN) starts from the same
+ * frozen draft and fits the beats to the narration's exact length; the frozen op always replaces the AI voice.
  */
 export async function renderEdit(
   deps: Deps,
@@ -643,10 +672,11 @@ export async function renderEdit(
       'invalid_request',
       'A render without the narration has no narration to hold the last frame for.',
     )
-  if (settings.mode === 'fit_to_narration')
+  const fit = settings.mode === 'fit_to_narration'
+  if (fit && (settings.holdFinalFrame || settings.excludeNarration))
     throw new ApiError(
       'invalid_request',
-      "Fitting the video to your narration isn't available yet. Render it with your visuals kept.",
+      'Fitting the video to your narration retimes the visuals to it, so it neither holds the last frame nor leaves the narration out.',
     )
   // Read once, outside the transaction: whether narration is on, and how the run transcribes it (frozen with it).
   const { narrationEnabled: enabled, transcriptionProvider } = await narrationSettings(deps)
@@ -662,13 +692,21 @@ export async function renderEdit(
       if (await hasUnfinished(repo, e.jobId))
         throw new ApiError('conflict', 'Another version of this video is still in progress.')
       // A held last frame is part of the frozen composition: one beat after the visuals (contract applyHoldFrame).
-      const ops = (e.ops as DraftOp[]).filter((o) => !settings.excludeNarration || o.op !== 'narration')
+      const ops = (e.ops as DraftOp[])
+        .filter((o) => !settings.excludeNarration || o.op !== 'narration')
+        .map((o) => (fit ? replacingAiVoice(o) : o))
+      if (fit && !narrationOp(ops)?.clips.length)
+        throw new ApiError(
+          'invalid_request',
+          'Fitting the video to your narration needs recorded narration in the draft. Record or upload some first, or render with your visuals kept.',
+        )
       const r = await computeRev(deps, e, ops, repo, { holdFinalFrame: settings.holdFinalFrame })
       // Recorded narration is mixed by the run from frozen inputs; its takes are checked like a save's.
       if (r.track && !enabled) throw narrationOff()
       if (r.track) await checkTakeAccess(repo, p, e, r.track)
+      const target = fit && r.track ? fitTargetOf(r.track, r.targetSamples) : r.targetSamples
       const narration = r.track
-        ? await freezeNarration(repo, r.track, r, settings, transcriptionProvider, job.language)
+        ? await freezeNarration(repo, r.track, target, settings, transcriptionProvider, job.language)
         : null
       const n = job.nextVersionN
       // A draft has no narration bus (the run writes it), and a base's bus is never part of the frozen bundle.
@@ -701,21 +739,28 @@ export async function renderEdit(
       await repo.insertVersion({
         jobId: e.jobId,
         n,
-        prompt: `Edited from v${e.baseN} in the browser.`,
+        prompt: fit
+          ? `Edited from v${e.baseN} in the browser, then fitted to the recorded narration.`
+          : `Edited from v${e.baseN} in the browser.`,
         authorId: p.userId,
         apiKeyId: p.apiKeyId,
-        // A re-voiced line may lengthen its beat, so the length is only known once the run has spoken it.
-        targetDurationSec: revoice
-          ? null
-          : narration
+        // A re-voiced line may lengthen its beat, so the length is only known once the run has spoken it; a fit
+        // makes the beats total its target exactly, whatever was re-voiced.
+        targetDurationSec:
+          fit && narration
             ? narration.targetSamples / SAMPLE_RATE
-            : r.composition.duration,
+            : revoice
+              ? null
+              : narration
+                ? narration.targetSamples / SAMPLE_RATE
+                : r.composition.duration,
         parentN: e.baseN,
         webhookUrl: null,
         status: 'queued',
         createdAt: now,
         plan: null,
-        mode: 'render_unchanged',
+        // A fit is an authoring run (src/domain/reconciler.ts: author_from_frozen), still edited from the base.
+        mode: fit ? 'author' : 'render_unchanged',
         editedFromN: e.baseN,
         frozen: {
           key,

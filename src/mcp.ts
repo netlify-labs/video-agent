@@ -1464,6 +1464,14 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "mode": "keep_visuals", 
             fix_hint: 'Add a recording with add_narration first.',
             suggested_tool_calls: [{ name: 'get_narration', arguments: { video_id: id } }],
           })
+        if (args.mode === 'fit_to_narration')
+          throw new ToolError(
+            'INVALID_ARGUMENT',
+            "Fitting the video to your narration isn't available yet here.",
+            {
+              fix_hint: 'Render with mode "keep_visuals", or fit it from the editor.',
+            },
+          )
         const res = await renderEdit(deps, principal, edit.id, args.idempotency_key, {
           mode: args.mode,
           holdFinalFrame: args.hold_final_frame,

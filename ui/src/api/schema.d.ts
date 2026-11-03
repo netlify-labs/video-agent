@@ -7320,10 +7320,11 @@ export interface components {
             /** @description Ready and keeps editing contract v1, so it can be edited in the browser. */
             editable: boolean;
             /**
-             * @description render_unchanged: an edit made in the browser, rendered as is (no agent authoring).
+             * @description render_unchanged: an edit made in the browser, rendered as is (no agent authoring). author: an agent run, including an edit fitted to its recorded narration (editedFromN set).
              * @enum {string}
              */
             mode: "author" | "render_unchanged";
+            /** @description The version an edit made in the browser started from: rendered as is, or (mode author) fitted to its recorded narration. */
             editedFromN: number | null;
             n: number;
             status: components["schemas"]["VideoStatus"];
@@ -8079,7 +8080,7 @@ export interface components {
         };
         RenderEdit: {
             /**
-             * @description keep_visuals (default): render the draft as is, recorded narration mixed over it. fit_to_narration: not available yet
+             * @description keep_visuals (default): render the draft as is, recorded narration mixed over it. fit_to_narration: an authoring run (about 250 credits) retimes the visuals from the draft to the narration, which it cannot change; it always replaces the AI voice-over, and needs recorded narration in the draft (no holdFinalFrame or excludeNarration)
              * @enum {string}
              */
             mode?: "keep_visuals" | "fit_to_narration";

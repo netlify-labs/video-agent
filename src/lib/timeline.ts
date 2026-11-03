@@ -395,6 +395,16 @@ export function holdFrameEnd(clips: readonly NarrationClip[], baseSamples: numbe
   return end > baseSamples ? frameStart(framesFor(end + POST_ROLL_SAMPLES, fps), fps) : baseSamples
 }
 
+/**
+ * The output's length when the agent fits the video to the narration (§6.4): the audible narration's end plus the
+ * 0.5 s post-roll in whole frames, shorter or longer than the visuals alike; 0 when none of it is heard. Check it with
+ * withinOutputLimit.
+ */
+export function fitTarget(clips: readonly NarrationClip[], fps: number): number {
+  const end = audibleEnd(clips)
+  return end > 0 ? frameStart(framesFor(end + POST_ROLL_SAMPLES, fps), fps) : 0
+}
+
 // ---- time and frames (visuals only)
 
 export const samplesToSeconds = (samples: number): number => samples / SAMPLE_RATE

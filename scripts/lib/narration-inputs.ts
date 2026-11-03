@@ -57,6 +57,11 @@ export interface NarrationInputs {
   transcriptionProvider?: FrozenTranscription | undefined
   /** The language scripts/narration-stt.ts transcribes in; missing: 'en'. */
   language?: Language | undefined
+  /**
+   * A fit-to-narration run (author_from_frozen, plan 2026-11-02 §6.4): scripts/narration.ts mixes the bus at
+   * targetSamples, the frozen target the agent fits the beats to, not at the root's length before it has.
+   */
+  fit?: true | undefined
   takes: HydratedTake[]
 }
 

@@ -19,7 +19,7 @@ import { readReferences } from './bundles.js'
 import type { BundleReference } from '../lib/bundle-references.js'
 import { MUSIC_POLL_MS, advanceMusicPick, attachTrack, needsMusicPick, newMusicPick } from './music-pick.js'
 import { emitTerminalEvent } from './webhooks.js'
-import type { AttemptRow, FailureCategory } from './types.js'
+import type { AttemptRow, FailureCategory, FrozenBundle } from './types.js'
 
 const MIN = 60_000
 const SEND_WINDOW_GRACE_MS = 5 * MIN
@@ -170,6 +170,16 @@ async function startRequest(
     },
     parentSha,
   })
+  // The frozen bundle as a run restores it: the edited draft, with any lines to re-voice and recorded narration.
+  const frozenBundle = (f: FrozenBundle) => ({
+    key: f.key,
+    sha256: f.sha256,
+    manifestHash: f.manifestHash,
+    ...(f.revoice ? { revoice: f.revoice } : {}),
+    ...(f.references?.length ? { references: f.references } : {}),
+    // Recorded narration: prepare-run hydrates its takes into .va-run/, never video/ (plan 2026-11-02 §6.3).
+    ...(f.narration ? { narration: f.narration } : {}),
+  })
   // An edit draft rendered as is (plan v2 §8): restore the frozen bundle, check it, render it, change nothing.
   if (version.mode === 'render_unchanged' && version.frozen) {
     const manifest = serializeRunManifest({
@@ -179,15 +189,7 @@ async function startRequest(
       versionN: a.versionN,
       kind: 'render_unchanged',
       source: null,
-      bundle: {
-        key: version.frozen.key,
-        sha256: version.frozen.sha256,
-        manifestHash: version.frozen.manifestHash,
-        ...(version.frozen.revoice ? { revoice: version.frozen.revoice } : {}),
-        ...(version.frozen.references?.length ? { references: version.frozen.references } : {}),
-        // Recorded narration: prepare-run hydrates its takes into .va-run/, never video/ (plan 2026-11-02 §6.3).
-        ...(version.frozen.narration ? { narration: version.frozen.narration } : {}),
-      },
+      bundle: frozenBundle(version.frozen),
       media,
       feedback: null,
     })
@@ -206,6 +208,41 @@ async function startRequest(
       checkpointUrl: `${deps.config.siteUrl}/api/internal/runs/${a.id}/checkpoint`,
       callbackToken,
       upload: { mode: 'blobs' },
+    })
+    return result(prompt, null)
+  }
+  // Fit the video to my narration (plan 2026-11-02 §6.4): an authoring run that starts from the frozen edited draft,
+  // never the parent's archive, with the narration it mixes and must not change. Every retry restores the same inputs.
+  if (version.frozen?.narration) {
+    const manifest = serializeRunManifest({
+      v: RUN_MANIFEST_VERSION,
+      jobId: a.jobId,
+      attemptId: a.id,
+      versionN: a.versionN,
+      kind: 'author_from_frozen',
+      source: null,
+      bundle: frozenBundle(version.frozen),
+      media,
+      feedback: null,
+    })
+    await deps.blobs.set('sources', runManifestKey(a.jobId, a.id), manifest, {
+      contentType: 'application/json',
+    })
+    const prompt = buildPrompt({
+      jobId: a.jobId,
+      attemptId: a.id,
+      versionN: a.versionN,
+      requesterName: author?.name ?? author?.email ?? 'a teammate',
+      userPrompt: version.prompt,
+      aspect: job.aspect,
+      targetDurationSec: version.targetDurationSec,
+      callbackUrl: `${deps.config.siteUrl}/api/internal/runs/${a.id}/done`,
+      checkpointUrl: `${deps.config.siteUrl}/api/internal/runs/${a.id}/checkpoint`,
+      callbackToken,
+      upload: { mode: 'blobs' },
+      revision: null,
+      runManifestSha256: sha256Hex(manifest),
+      sound: version.sound ?? 'silent',
     })
     return result(prompt, null)
   }

@@ -18,7 +18,14 @@ import {
 
 export const RUN_MANIFEST_VERSION = 1
 
-export type RunKind = 'author' | 'revision' | 'render_unchanged'
+/**
+ * author_from_frozen: an authoring run that starts from a frozen edited draft instead of a parent's archive (fit the
+ * video to my narration, plan 2026-11-02 §6.4). It carries the bundle and its narration like render_unchanged, but
+ * the agent may change the visuals; the narration stays locked.
+ */
+export type RunKind = 'author' | 'revision' | 'render_unchanged' | 'author_from_frozen'
+
+export const RUN_KINDS: readonly RunKind[] = ['author', 'revision', 'render_unchanged', 'author_from_frozen']
 
 export interface RunManifest {
   v: typeof RUN_MANIFEST_VERSION
@@ -32,7 +39,8 @@ export interface RunManifest {
    */
   source: { key: string; sha256: string; parentN: number; references?: BundleReference[] | undefined } | null
   /**
-   * A version-owned frozen bundle (render-unchanged runs): archive hash plus the canonical file manifest hash. With
+   * A version-owned frozen bundle (render-unchanged and author-from-frozen runs): archive hash plus the canonical file
+   * manifest hash. With
    * `revoice`, the run re-speaks those beats' lines and every other file must still match `keptHash` (src/lib/revoice.ts).
    * `references` are restored like the source's, before the manifest hash is checked.
    */
@@ -42,7 +50,7 @@ export interface RunManifest {
     manifestHash: string
     revoice?: { beats: string[]; keptHash: string } | undefined
     references?: BundleReference[] | undefined
-    /** Recorded narration to mix (keep-visuals renders): prepare-run hydrates its takes outside video/. */
+    /** Recorded narration to mix (keep-visuals and fit renders): prepare-run hydrates its takes outside video/. */
     narration?: FrozenNarration | undefined
   } | null
   /** Library media to download into video/assets/media/ (plan v2 §9, §14 rule 27). */
@@ -295,7 +303,7 @@ export function verifyRunManifest(raw: string, expected: { attemptId: string; sh
   if (m.v !== RUN_MANIFEST_VERSION) throw new Error(`Unsupported run manifest version ${String(m.v)}.`)
   if (m.attemptId !== expected.attemptId) throw new Error('The run manifest is for a different attempt.')
   if (!ID.test(m.jobId) || !ID.test(m.attemptId)) throw new Error('The run manifest has a bad id.')
-  if (!['author', 'revision', 'render_unchanged'].includes(m.kind)) throw new Error('Unknown run kind.')
+  if (!RUN_KINDS.includes(m.kind)) throw new Error('Unknown run kind.')
   // Every key stays inside this video's own prefix.
   const own = (key: string) => key.startsWith(`${m.jobId}/`) && !key.includes('..') && !key.includes('//')
   if (m.source && (!own(m.source.key) || !HEX.test(m.source.sha256)))
@@ -356,5 +364,8 @@ export function verifyRunManifest(raw: string, expected: { attemptId: string; sh
   }
   if (m.kind === 'revision' && !m.source) throw new Error('A revision run needs a source.')
   if (m.kind === 'render_unchanged' && !m.bundle) throw new Error('A render-unchanged run needs a bundle.')
+  // A fit starts from the frozen draft alone, and exists for its narration (the guard and the bus target need it).
+  if (m.kind === 'author_from_frozen' && (!m.bundle?.narration || m.source))
+    throw new Error('A fit-to-narration run needs a frozen bundle with narration, and no source.')
   return m as RunManifest
 }
