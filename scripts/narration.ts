@@ -9,11 +9,16 @@
 //               .va-run/narration/clean/<mediaId>.wav; the sample count must not change
 //   3. mix      the bus with timeline.mixToBuffer at exactly the composition's FINAL root duration in samples (after a
 //               re-voice that can differ from the frozen targetSamples: the bus is padded or cut to the root, and both
-//               lengths are logged), then pre-limited to -2 dBTP (src/lib/narration-bus.ts)
+//               lengths are logged), then pre-limited to -2 dBTP (src/lib/narration-bus.ts). In a fit-to-narration run
+//               (author_from_frozen, the run inputs' `fit`) the bus is the frozen targetSamples instead: the agent
+//               fits the beats to it afterwards (plan 2026-11-02 §6.4)
 //   4. write    video/assets/narration/bus.wav (24 kHz mono PCM16), data-va-speech from the processed bus's VAD and the
 //               duck lane (contract applyBusNarration), validated with the bus's sample count
+//               (in a fit: the narration element at the target and the AI-voice mutes, contract applyFitNarration, with
+//               no layout or validation, since the beats don't total the target until the agent has fitted them)
 //   4b. hold    with a held last frame (data-va-hold beat), video/assets/hold/last.png: the base composition's last
-//               frame, captured with hyperframes snapshot (scripts/lib/hold-still.ts); removed without one
+//               frame, captured with hyperframes snapshot (scripts/lib/hold-still.ts); removed without one (a fit
+//               doesn't hold a frame, so it skips this)
 //   5. receipt  .va-run/narration/receipt.json: input and clean digests, recipe (with ffmpeg's version line), bus
 //               digest and samples, speech spans, the hold still's digest and the attempt id. The guard reads it
 //               instead of redoing cleanup.
@@ -21,7 +26,7 @@
 // builds that is best-effort (the receipt records the version). Exits non-zero on any failure: stop and report it.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { load, NARRATION_SRC, read, validate, type Summary } from '../src/lib/contract.js'
+import { applyFitNarration, load, NARRATION_SRC, read, validate, type Summary } from '../src/lib/contract.js'
 import { BUS_LIMITER, floatToPcm16, limitBus, pcm16ToFloat } from '../src/lib/narration-bus.js'
 import { NARRATION_PIPELINE } from '../src/lib/narration-cleanup.js'
 import { narrationTransform, type NarrationReceipt } from '../src/lib/narration-run.js'
@@ -154,10 +159,20 @@ export function runNarration(
     throw new StepError('video/index.html or video/summary.json is missing. Run prepare-run first.')
   const html = readFileSync(indexPath, 'utf8')
   const summary = JSON.parse(readFileSync(summaryPath, 'utf8')) as Summary
-  const target = Math.round(read(load(html)).duration * SAMPLE_RATE)
+  const rootSamples = Math.round(read(load(html)).duration * SAMPLE_RATE)
+  // A fit mixes at the frozen target the agent fits the beats to; any other render at the root's length.
+  const fit = inputs.fit === true
+  const target = fit ? inputs.targetSamples : rootSamples
   if (!(target > 0) || target > MAX_OUTPUT_SAMPLES)
     throw new StepError(`The composition's duration (${target} samples) can't take a narration bus.`)
-  if (target !== inputs.targetSamples)
+  if (fit)
+    log('narration.target', {
+      fit: true,
+      samples: target,
+      rootSamples,
+      note: 'The bus is the frozen target; the agent fits the beats to it.',
+    })
+  else if (target !== inputs.targetSamples)
     log('narration.target', {
       manifestSamples: inputs.targetSamples,
       samples: target,
@@ -191,6 +206,11 @@ export function runNarration(
       mkdirSync(join(videoDir, 'assets', 'narration'), { recursive: true })
       writeFileSync(busPath, wav(le16(floatToPcm16(limited.bus))))
       const speech = detectSpeech(limited.bus)
+      // A fit: the narration element at the target, which render-job's narration_modified guard expects exactly.
+      if (fit) {
+        writeFileSync(indexPath, applyFitNarration(html, op, speech, target / SAMPLE_RATE))
+        return speech
+      }
       // The same transform render-job's checkNarration recomputes from the frozen files and this receipt.
       const out = narrationTransform(html, summary, op, speech)
       if (Math.round(read(load(out.html)).duration * SAMPLE_RATE) !== target)
@@ -211,7 +231,7 @@ export function runNarration(
   // 4b. The held frame's still, when the composition holds its last frame (from the composition before this step).
   const hold = timed(
     'narration.hold',
-    () => writeHoldStill(root, html, o.snapshot),
+    () => (fit ? null : writeHoldStill(root, html, o.snapshot)),
     (h) =>
       h
         ? { still: h.path, sha256: h.sha256, atSeconds: h.atSeconds, holdSeconds: h.holdSeconds }

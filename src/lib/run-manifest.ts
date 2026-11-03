@@ -21,7 +21,7 @@ export const RUN_MANIFEST_VERSION = 1
 /**
  * author_from_frozen: an authoring run that starts from a frozen edited draft instead of a parent's archive (fit the
  * video to my narration, plan 2026-11-02 §6.4). It carries the bundle and its narration like render_unchanged, but
- * the agent may change the visuals; the narration stays locked.
+ * the agent may change the visuals; the narration stays locked (src/lib/narration-modified.ts).
  */
 export type RunKind = 'author' | 'revision' | 'render_unchanged' | 'author_from_frozen'
 

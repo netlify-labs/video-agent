@@ -203,6 +203,22 @@ beats' captions and the ducking. A beat grows only when its new line is longer a
 0.4 s); later beats move with it. A shorter line never shortens a beat. `render-job` refuses a composition that
 still has a mark, and checks that nothing else changed.
 
+## Recorded narration (Video Agent)
+
+A person can record their own voice-over in the editor. `scripts/narration.ts` mixes it into
+`assets/narration/bus.wav`, played by one root layer `<audio id="va-narration" data-va-layer="narration"
+data-va-audio="narration">` whose `data-va-speech` lists when it speaks, in seconds. When the prompt says the
+narration is locked (fitting a video to it, or revising a narrated video):
+
+- Never change, move or remove that element or any of its attributes, never touch `assets/narration/`, and never add a
+  level, `data-fx-chain`, automation or audio group to it, or an effect, automation or level to the root.
+- Add no sound while it speaks: no `<audio>`, and no `<video>` without `muted`. Sound effects may go in its pauses.
+- The root lasts exactly as long as the bus (the prompt says how long, in seconds and frames), and every layer with it.
+- Keep `summary.json`'s narration cues (`"narration": true`) as they are; their times are the recording's.
+- After a timing change, `npx tsx scripts/check-contract.ts --duck` rewrites the music's ducking lane; without
+  `--duck` it checks the length against the bus.
+- `render-job` refuses a video whose narration changed (`narration_modified`), with the reason.
+
 ## Key Rules
 
 1. Every timed element needs `data-start` and a duration. `data-start` is what marks it as timed; `data-track-index` is an optional Studio display lane the render never reads

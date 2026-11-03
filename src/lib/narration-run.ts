@@ -13,16 +13,34 @@ import { FROZEN_FILES, revoicable } from './revoice.js'
 import type { RunManifest } from './run-manifest.js'
 import type { NarrationCleanup, NarrationOp, Span } from './timeline.js'
 
-export type RunStep = 'prepare' | 'revoice' | 'narration' | 'transcribe' | 'check' | 'render'
+export type RunStep = 'prepare' | 'revoice' | 'narration' | 'transcribe' | 'author' | 'check' | 'render'
 
 type FrozenBundle = Pick<NonNullable<RunManifest['bundle']>, 'revoice' | 'narration'>
 
 /** The steps a render-unchanged run takes for this frozen bundle (or just whether it has each), in order. */
-export function runSteps(bundle: { revoice?: unknown; narration?: unknown } | null | undefined): RunStep[] {
+export function runSteps(
+  bundle: { revoice?: unknown; narration?: unknown } | null | undefined,
+): Exclude<RunStep, 'author'>[] {
   return [
     'prepare',
     ...(bundle?.revoice ? (['revoice'] as const) : []),
     ...(bundle?.narration ? (['narration', 'transcribe'] as const) : []),
+    'check',
+    'render',
+  ]
+}
+
+/**
+ * A fit-to-narration run's steps (author_from_frozen, plan 2026-11-02 §6.4 "Order before the agent"): restore, any
+ * re-voice, mix the bus at the frozen target and transcribe it, and only then the agent authors, checks and renders.
+ */
+export function fitSteps(bundle: { revoice?: unknown } | null | undefined): RunStep[] {
+  return [
+    'prepare',
+    ...(bundle?.revoice ? (['revoice'] as const) : []),
+    'narration',
+    'transcribe',
+    'author',
     'check',
     'render',
   ]

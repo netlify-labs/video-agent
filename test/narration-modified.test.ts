@@ -16,7 +16,7 @@ import {
   NARRATION_SRC,
   type Summary,
 } from '../src/lib/contract.js'
-import { checkNarrationModified } from '../src/lib/narration-modified.js'
+import { checkNarrationKept, checkNarrationModified } from '../src/lib/narration-modified.js'
 import type { NarrationReceipt } from '../src/lib/narration-run.js'
 import { FROZEN_DIR } from '../src/lib/revoice.js'
 import type { FrozenNarration, RunManifest } from '../src/lib/run-manifest.js'
@@ -306,5 +306,74 @@ describe('checkNarrationModified', () => {
     const w = fitted()
     const r = { ...w.receipt, target: { manifestSamples: TARGET, samples: 9 * S } }
     expect(w.check(r)).toContainEqual(expect.stringMatching(/not the frozen target of 12s/))
+  })
+})
+
+describe('checkNarrationKept (a revision of a narrated version)', () => {
+  /** A narrated v1 restored for a revision: its composition kept in FROZEN_DIR, its bus by reference. */
+  function revised() {
+    const root = mkdtempSync(join(tmpdir(), 'va-kept-'))
+    dirs.push(root)
+    const video = join(root, 'video')
+    mkdirSync(join(video, 'assets/narration'), { recursive: true })
+    const nine: NarrationOp = { ...op, clips: [{ ...op.clips[0]!, srcEnd: 7 * S }] }
+    const summary = JSON.parse(vfx('summary.json')) as Summary
+    const cue = { start: 1, end: 2, text: 'Meet webhooks.', narration: true as const, id: 'n1', words: [] }
+    const narrated = { ...summary, captions: [...(summary.captions ?? []), cue] }
+    const spans: Span[] = [[S, 3 * S]]
+    writeFileSync(join(video, 'index.html'), applyBusNarration(vfx('index.html'), narrated, nine, spans).html)
+    writeFileSync(join(video, 'summary.json'), JSON.stringify(narrated, null, 2))
+    const bus = wav(new Uint8Array(9 * S * 2).map((_, i) => i % 3))
+    writeFileSync(join(video, NARRATION_SRC), bus)
+    cpSync(video, join(root, FROZEN_DIR), { recursive: true })
+    const m: RunManifest = {
+      v: 1,
+      jobId: 'vid_1',
+      attemptId: 'att_2',
+      versionN: 2,
+      kind: 'revision',
+      source: {
+        key: 'vid_1/v1/source.tar.gz',
+        sha256: 'a'.repeat(64),
+        parentN: 1,
+        references: [
+          { path: NARRATION_SRC, key: 'vid_1/v1/narration/bus.wav', sha256: sha(bus), bytes: bus.length },
+        ],
+      },
+      bundle: null,
+      media: null,
+      feedback: null,
+    }
+    const index = join(video, 'index.html')
+    const edit = (fn: (s: string) => string) => writeFileSync(index, fn(readFileSync(index, 'utf8')))
+    return { video, edit, check: () => checkNarrationKept(join(root, FROZEN_DIR), video, m) }
+  }
+
+  it('passes a revision that changes only the visuals', () => {
+    const w = revised()
+    w.edit((s) => s.replace('Org webhooks', 'Org-wide webhooks'))
+    expect(w.check()).toEqual([])
+  })
+
+  it('fails a changed narration, a new sound over its speech, another bus, a dropped cue or another length', () => {
+    const level = revised()
+    level.edit((s) => s.replace(narrationTag, (t) => t.replace('data-volume="1"', 'data-volume="2"')))
+    expect(level.check()).toEqual([expect.stringMatching(/narration element changed \(data-volume\)/)])
+    const sfx = revised()
+    sfx.edit(
+      inBeat('intro', '<audio id="boom" src="assets/sfx/boom.wav" data-start="1" data-duration="1"></audio>'),
+    )
+    expect(sfx.check()).toEqual([expect.stringMatching(/<audio id="boom"> is new and sounds over/)])
+    const bus = revised()
+    writeFileSync(join(bus.video, NARRATION_SRC), wav(new Uint8Array(9 * S * 2)))
+    expect(bus.check()).toContainEqual(expect.stringMatching(/isn't the parent's narration bus/))
+    const cues = revised()
+    const path = join(cues.video, 'summary.json')
+    const s = JSON.parse(readFileSync(path, 'utf8')) as Summary
+    writeFileSync(path, JSON.stringify({ ...s, captions: s.captions?.filter((c) => !c.narration) }))
+    expect(cues.check()).toEqual([expect.stringMatching(/narration captions aren't the ones transcribed/)])
+    const longer = revised()
+    longer.edit((h) => applyEdits(h, s, [{ op: 'retime', beat: 'outro', duration: 4 }]).html)
+    expect(longer.check()).toContainEqual(expect.stringMatching(/this video must last exactly 9s/))
   })
 })

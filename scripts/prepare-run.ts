@@ -22,6 +22,7 @@ import {
 import { dirname, join, relative } from 'node:path'
 import { archiveFiles, bundleManifest } from '../src/lib/bundle-manifest.js'
 import type { BundleReference } from '../src/lib/bundle-references.js'
+import { NARRATION_SRC } from '../src/lib/contract.js'
 import { frozenFilesFor, optionalFrozenFilesFor } from '../src/lib/narration-run.js'
 import { FROZEN_DIR, keptHash } from '../src/lib/revoice.js'
 import { readPcm16 } from '../src/lib/narration-cleanup.js'
@@ -380,6 +381,17 @@ export async function prepare(m: RunManifest, opts: { tmp: string; root?: string
     restoreArchive(root, archive, m.source.sha256, 'composition')
     await restoreReferences(root, m.source.references, fetch, 'composition')
     log('restored', { kind: 'source', key: m.source.key, parentN: m.source.parentN })
+    // A narrated parent's narration stays locked through the revision (plan 2026-11-02 §6.4): keep its composition
+    // as restored, for render-job's narration_modified check (src/lib/narration-modified.ts checkNarrationKept).
+    const frozen = join(root, FROZEN_DIR)
+    rmSync(frozen, { recursive: true, force: true })
+    if (m.source.references?.some((r) => r.path === NARRATION_SRC)) {
+      for (const p of archiveFiles(join(root, 'video'))) {
+        mkdirSync(dirname(join(frozen, p)), { recursive: true })
+        copyFileSync(join(root, 'video', p), join(frozen, p))
+      }
+      log('narration.locked', { parentN: m.source.parentN })
+    }
   }
   if (m.bundle) {
     const archive = join(tmp, 'bundle.tar.gz')

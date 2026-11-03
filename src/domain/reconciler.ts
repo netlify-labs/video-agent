@@ -13,7 +13,8 @@ import {
 import { getSettings } from './settings.js'
 import { contextMeta } from '../generated/context.js'
 import { clip } from '../lib/log.js'
-import { PROMPT_TEMPLATE_VERSION, buildPrompt, buildRenderUnchangedPrompt } from './prompt.js'
+import { PROMPT_TEMPLATE_VERSION, buildFitPrompt, buildPrompt, buildRenderUnchangedPrompt } from './prompt.js'
+import { NARRATION_SRC } from '../lib/contract.js'
 import { setStage } from './videos.js'
 import { readReferences } from './bundles.js'
 import type { BundleReference } from '../lib/bundle-references.js'
@@ -152,6 +153,8 @@ async function startRequest(
     sourceKey: string
     sourceSha256: string
     references: BundleReference[]
+    /** The parent's recorded narration bus, in samples: locked through the revision (plan 2026-11-02 §6.4). */
+    narrationSamples: number | null
   } | null = null
   // Library media for this version, downloaded by prepare-run into video/assets/media/ (plan v2 §9).
   const versionMedia = await deps.store.listVersionMedia(a.jobId, a.versionN)
@@ -228,21 +231,21 @@ async function startRequest(
     await deps.blobs.set('sources', runManifestKey(a.jobId, a.id), manifest, {
       contentType: 'application/json',
     })
-    const prompt = buildPrompt({
+    const prompt = buildFitPrompt({
       jobId: a.jobId,
       attemptId: a.id,
       versionN: a.versionN,
+      editedFromN: version.editedFromN ?? version.parentN ?? 0,
       requesterName: author?.name ?? author?.email ?? 'a teammate',
-      userPrompt: version.prompt,
       aspect: job.aspect,
-      targetDurationSec: version.targetDurationSec,
+      targetSamples: version.frozen.narration.targetSamples,
+      revoice: version.frozen.revoice?.beats ?? [],
+      sound: version.sound ?? 'silent',
+      runManifestSha256: sha256Hex(manifest),
       callbackUrl: `${deps.config.siteUrl}/api/internal/runs/${a.id}/done`,
       checkpointUrl: `${deps.config.siteUrl}/api/internal/runs/${a.id}/checkpoint`,
       callbackToken,
       upload: { mode: 'blobs' },
-      revision: null,
-      runManifestSha256: sha256Hex(manifest),
-      sound: version.sound ?? 'silent',
     })
     return result(prompt, null)
   }
@@ -257,7 +260,20 @@ async function startRequest(
     } catch (e) {
       throw new SourceUnavailable(`Version ${version.parentN}: ${e instanceof Error ? e.message : String(e)}`)
     }
-    revision = { parentN: version.parentN, sourceKey: parent.sourceKey, sourceSha256: sha, references }
+    // A narrated parent keeps its narration locked; a parent that was itself a revision has no versions.narration,
+    // so its bus's length comes from the reference (scripts/narration.ts writes a 44-byte header, PCM16 mono).
+    const bus = references.find((r) => r.path === NARRATION_SRC)
+    const narrated = bus
+      ? ((await deps.store.getVersion(a.jobId, version.parentN))?.narration?.bus.samples ??
+        Math.max(0, Math.floor((bus.bytes - 44) / 2)))
+      : null
+    revision = {
+      parentN: version.parentN,
+      sourceKey: parent.sourceKey,
+      sourceSha256: sha,
+      references,
+      narrationSamples: narrated,
+    }
   }
   // Comments to incorporate, snapshotted on the version; pinned ones get stills from the parent MP4 (plan v2 §5).
   const snapshots = revision ? await deps.store.listVersionComments(a.jobId, a.versionN) : []
@@ -335,6 +351,7 @@ async function startRequest(
     sound: version.sound ?? 'silent',
     voiceover: version.voiceover ?? null,
     brandMusic: contextMeta.music,
+    narration: revision?.narrationSamples ? { samples: revision.narrationSamples } : null,
   })
   return result(prompt, revision?.sourceSha256 ?? null)
 }

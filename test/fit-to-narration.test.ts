@@ -6,10 +6,11 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { runCleanup } from '../src/domain/cleanup.js'
 import { bundleManifest, manifestHash } from '../src/lib/bundle-manifest.js'
 import { isReference } from '../src/lib/bundle-references.js'
+import { NARRATION_SRC } from '../src/lib/contract.js'
 import { FROZEN_DIR } from '../src/lib/revoice.js'
 import {
   RUN_MANIFEST_VERSION,
@@ -27,7 +28,16 @@ import { readNarrationInputs } from '../scripts/lib/narration-inputs.js'
 import { which } from '../scripts/lib/run-tools.js'
 import { failedSnap, running } from './fakes.js'
 import { harness, type Harness } from './helpers.js'
-import { S, draftNarration, narratedDraft, narrationOp } from './narration-render.js'
+import {
+  BUS,
+  S,
+  contractSource,
+  draftNarration,
+  narratedDraft,
+  narrationOp,
+  render,
+  report,
+} from './narration-render.js'
 
 const ffmpeg = which('ffmpeg') && which('ffprobe')
 const dirs: string[] = []
@@ -240,4 +250,62 @@ describe('reconciler <-> prepare-run for a fit', () => {
     expect(again.bundle).toEqual(first.bundle)
     expect(await h.deps.blobs.get('sources', first.bundle!.key)).not.toBeNull()
   })
+})
+
+describe('the fit prompt and the lock through later revisions', () => {
+  it('the fit run gets the fit prompt: exact target, locked narration, no voice-over instructions', async () => {
+    const h = harness()
+    const { id, editId } = await fitted(h)
+    h.deps.runner.nextScripts.push({ timeline: [running()] })
+    expect((await fit(h, editId)).status).toBe(202)
+    await h.drive(2)
+    const prompt = h.deps.runner.starts[1]!.prompt
+    expect(prompt).toContain('Fit the video to that narration.')
+    expect(prompt).toContain('exactly 11 seconds (330 frames at 30 fps)')
+    expect(prompt).toContain('Never change, move or remove <audio id="va-narration">')
+    expect(prompt).not.toContain('Voice-over: follow')
+    expect((await manifestOf(h, id, 1)).kind).toBe('author_from_frozen')
+  })
+
+  it.skipIf(!ffmpeg)(
+    'a revision of a narrated version keeps the narration locked, and prepare-run keeps its composition',
+    async () => {
+      vi.stubGlobal('Netlify', { env: { get: () => undefined } })
+      try {
+        const h = harness()
+        const { id, editId } = await narratedDraft(h)
+        h.deps.nextBus = BUS
+        h.deps.nextExtra = { manifest: { narration: report() } }
+        // v2's composition as its run saves it (plain file entries, as render-job's tar writes them).
+        h.deps.nextSource = contractSource()
+        expect((await render(h, editId)).status).toBe(202)
+        await h.drive(4)
+        expect((await h.deps.store.getVersion(id, 2))?.narration?.bus.samples).toBe(9 * S)
+        h.deps.runner.nextScripts.push({ timeline: [running()] })
+        await h.call('POST', `/api/v1/videos/${id}/versions`, {
+          as: h.member,
+          body: { prompt: 'Shorter title', fromVersion: 2 },
+        })
+        await h.drive(2)
+        const req = h.deps.runner.starts.at(-1)!
+        expect(req.prompt).toContain('Keep it exactly 9 seconds (270 frames at 30 fps)')
+        expect(req.prompt).toContain('Never change, move or remove <audio id="va-narration">')
+        const m = await manifestOf(h, id, h.deps.runner.starts.length - 1)
+        expect(m.kind).toBe('revision')
+        expect(m.source?.references?.map((r) => r.path)).toEqual([NARRATION_SRC])
+        const root = mkdtempSync(join(tmpdir(), 'va-kept-'))
+        dirs.push(root)
+        const fetchFrom = async (key: string, to: string, store?: 'sources' | 'videos' | 'media') => {
+          writeFileSync(to, (await h.deps.blobs.get(store ?? 'sources', key))!)
+        }
+        await prepare(m, { tmp: root, root, fetch: fetchFrom })
+        expect(readFileSync(join(root, FROZEN_DIR, 'index.html'), 'utf8')).toBe(
+          readFileSync(join(root, 'video', 'index.html'), 'utf8'),
+        )
+      } finally {
+        vi.unstubAllGlobals()
+      }
+    },
+    60_000,
+  )
 })

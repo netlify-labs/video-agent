@@ -7,7 +7,11 @@
 // (scripts/lib/stt/index.ts). Then it adds the narration caption cues to video/summary.json, keeping every frozen cue
 // (scripts/lib/narration-captions.ts applyNarrationCaptions; render-job captions only what's audible). A failed or timed-out transcription
 // is not an error: it exits 0 and the render goes on without narration captions. Logs JSON lines on stderr.
+// In a fit-to-narration run (the run inputs' `fit`, plan 2026-11-02 §6.4) it then prints, for the agent, the words with
+// their times as fenced, sanitized data and the exact target, or duration-only guidance when nothing was transcribed
+// (src/domain/prompt.ts fitTranscriptLines).
 import { join } from 'node:path'
+import { fitTranscriptLines } from '../src/domain/prompt.js'
 import { applyNarrationCaptions } from './lib/narration-captions.js'
 import { readNarrationInputs } from './lib/narration-inputs.js'
 import { parseArgs, repoRoot, log } from './lib/run-tools.js'
@@ -21,7 +25,8 @@ if (process.argv[1]?.endsWith('scripts/narration-stt.ts')) {
   const deadlineMs = Number(args['deadline-ms'] ?? STT_DEADLINE_MS)
   runStt({ root: repoRoot, deadlineMs: deadlineMs > 0 ? deadlineMs : STT_DEADLINE_MS })
     .then((r) => {
-      if (readNarrationInputs(repoRoot)) {
+      const inputs = readNarrationInputs(repoRoot)
+      if (inputs) {
         const s = applyNarrationCaptions(join(repoRoot, 'video', 'summary.json'), r)
         console.log(`Narration captions: ${(s.captions ?? []).filter((c) => c.narration).length} cues.`)
       }
@@ -30,6 +35,7 @@ if (process.argv[1]?.endsWith('scripts/narration-stt.ts')) {
           ? `Narration transcribed: ${r.words.length} words (${r.provider}, ${r.model}${r.cached ? ', cached' : ''}). Continue.`
           : `Narration not transcribed (${r.status}${r.error ? `: ${r.error}` : ''}). Continue: the video renders without narration captions.`,
       )
+      if (inputs?.fit) console.log(fitTranscriptLines(r, inputs.targetSamples).join('\n'))
     })
     .catch((e: unknown) => {
       // Only a bug gets here (runStt records transcription problems as a status); still don't block the render.
@@ -37,5 +43,8 @@ if (process.argv[1]?.endsWith('scripts/narration-stt.ts')) {
       console.log(
         'Narration transcription or captions crashed. Continue: the video renders without narration captions.',
       )
+      // A fit still needs its target, without words.
+      const fit = readNarrationInputs(repoRoot)
+      if (fit?.fit) console.log(fitTranscriptLines(null, fit.targetSamples).join('\n'))
     })
 }

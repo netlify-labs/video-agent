@@ -11,7 +11,7 @@ import { bundleManifest, compositionFiles } from '../src/lib/bundle-manifest.js'
 import { NARRATION_SRC, validate, type Summary } from '../src/lib/contract.js'
 import { groupWords, transcriptText } from '../src/lib/narration-captions.js'
 import { checkNarration } from '../src/lib/narration-guard.js'
-import { checkNarrationModified } from '../src/lib/narration-modified.js'
+import { checkNarrationKept, checkNarrationModified } from '../src/lib/narration-modified.js'
 import { checkRevoiced, FROZEN_DIR } from '../src/lib/revoice.js'
 import type { PreviewFile } from '../src/lib/media/previews.js'
 import type { RunManifest } from '../src/lib/run-manifest.js'
@@ -144,6 +144,18 @@ async function main() {
         samples: receipt?.bus.samples,
         ...(m.bundle?.revoice ? { revoiced: m.bundle.revoice.beats } : {}),
       })
+    } else if (
+      m.attemptId === attempt &&
+      m.kind === 'revision' &&
+      m.source?.references?.some((r) => r.path === NARRATION_SRC)
+    ) {
+      // A revision of a narrated version: the narration stays as the parent had it until someone edits it.
+      const problems = checkNarrationKept(join(repoRoot, FROZEN_DIR), videoDir, m)
+      if (problems.length)
+        throw new StepError(
+          `narration_modified: ${problems[0]}\nThis video's recorded narration is locked: change the visuals around it, never the narration element, its bus, its path to the mix, or audio over its speech. Fix the composition and run render-job again.\n- ${problems.join('\n- ')}`,
+        )
+      log('narration.locked', { parentN: m.source.parentN })
     } else if (m.attemptId === attempt && m.kind === 'render_unchanged' && m.bundle?.revoice) {
       // Re-voiced lines: only the files voice.ts revoice writes may differ, and exactly as it writes them.
       const problems = checkRevoiced(videoDir, join(repoRoot, FROZEN_DIR), m.bundle.revoice)

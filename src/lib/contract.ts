@@ -728,7 +728,12 @@ export function narrationAttrs(total: number, speech: readonly Span[]): { name: 
  * audio op's (data-volume="0", data-va-muted, the level in data-va-volume). The last write's levels are undone first,
  * so writing is idempotent and keep or removal restores the composition's own. No per-clip attributes.
  */
-export function writeNarration(d: Doc, op: NarrationOp | null, speech: readonly Span[] = []) {
+export function writeNarration(
+  d: Doc,
+  op: NarrationOp | null,
+  speech: readonly Span[] = [],
+  total = num(attr(d.root, 'data-duration')),
+) {
   const { root } = d
   for (const e of [...walk(root)].filter((x) => attr(x, MIX) !== null)) {
     const level = attr(e, 'data-va-volume') ?? '1'
@@ -740,7 +745,6 @@ export function writeNarration(d: Doc, op: NarrationOp | null, speech: readonly 
   for (const e of old)
     if (e.parentNode) e.parentNode.childNodes = e.parentNode.childNodes.filter((n) => n !== e)
   if (!op) return
-  const total = num(attr(root, 'data-duration'))
   const { tracks } = op
   for (const e of [...walk(root)].filter((x) => x.tagName === 'audio' && attr(x, 'id'))) {
     if (attr(e, 'data-va-muted') !== null) continue // muted by the person: stays as it is
@@ -798,6 +802,23 @@ export function applyNarration(
  */
 export function applyBusNarration(html: string, summary: Summary, op: NarrationOp, speech: readonly Span[]) {
   return narrate(html, summary, op, speech)
+}
+
+/**
+ * A fit run's write (scripts/narration.ts in an author_from_frozen run, plan §6.4): the narration element over the
+ * frozen target, `totalSeconds`, with the bus's speech, and the AI-voice levels (a fit always replaces the voice). The
+ * beats don't total the target yet: the agent fits them to it next, so nothing is laid out again or validated here.
+ * The composition conforms once the beats total the target and the music's lane is synced (voice.ts sync).
+ */
+export function applyFitNarration(
+  html: string,
+  op: NarrationOp,
+  speech: readonly Span[],
+  totalSeconds: number,
+) {
+  const d = load(html)
+  writeNarration(d, op, speech, totalSeconds)
+  return save(d)
 }
 
 function narrate(
