@@ -328,6 +328,7 @@ export async function hydrateNarration(
     recipe: n.recipe,
     targetSamples: n.targetSamples,
     captions: n.captions,
+    ...(n.transcriptionProvider ? { transcriptionProvider: n.transcriptionProvider } : {}),
     takes,
   }
   writeFileSync(p.manifest, JSON.stringify(inputs, null, 2))

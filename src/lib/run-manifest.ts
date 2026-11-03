@@ -57,6 +57,9 @@ export const MAX_FROZEN_TAKE_BYTES = 400 * 1024 * 1024
 
 export type CaptionPolicy = 'sidecar' | 'burned'
 
+/** How the run transcribes the bus for captions (the admin setting at freeze time; src/domain/types.ts). */
+export type FrozenTranscription = 'local' | 'elevenlabs' | 'off'
+
 /** One take a render mixes: its bytes in the media store by key and digest, never snapshotted into the bundle. */
 export interface FrozenTake {
   mediaId: string
@@ -77,6 +80,8 @@ export interface FrozenNarration {
   recipe: { pipeline: number; cleanup: NarrationCleanup }
   targetSamples: number
   captions: CaptionPolicy
+  /** The transcription provider (plan §6.6). Missing (frozen before it was recorded): 'local'. */
+  transcriptionProvider?: FrozenTranscription | undefined
 }
 
 export interface RunMedia {
@@ -150,6 +155,8 @@ const narrationOf = (n: FrozenNarration) => ({
   recipe: { pipeline: n.recipe.pipeline, cleanup: n.recipe.cleanup },
   targetSamples: n.targetSamples,
   captions: n.captions,
+  // Only when set, so a manifest frozen before it keeps its bytes.
+  ...(n.transcriptionProvider ? { transcriptionProvider: n.transcriptionProvider } : {}),
 })
 
 /** Stable bytes: the same inputs always serialize the same, so a re-sent start pins the same hash. */
@@ -247,6 +254,8 @@ function isFrozenNarration(v: unknown): v is FrozenNarration {
     bytes <= MAX_FROZEN_TAKE_BYTES &&
     int(n.targetSamples, 1, MAX_OUTPUT_SAMPLES) &&
     (n.captions === 'sidecar' || n.captions === 'burned') &&
+    (n.transcriptionProvider === undefined ||
+      ['local', 'elevenlabs', 'off'].includes(n.transcriptionProvider as string)) &&
     int(recipe.pipeline, 1, 1000) &&
     (recipe.cleanup === 'off' || recipe.cleanup === 'light') &&
     op.op === 'narration' &&

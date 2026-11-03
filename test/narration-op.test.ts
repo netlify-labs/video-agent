@@ -444,6 +444,8 @@ describe('rendering narration with the visuals kept', () => {
     const raw = new TextDecoder().decode(await h.deps.blobs.get('sources', runManifestKey(id, req.requestId)))
     const m = verifyRunManifest(raw, { attemptId: req.requestId, sha256: sha })
     expect(m.bundle?.narration).toEqual((await h.deps.store.getVersion(id, 2))!.frozen!.narration)
+    // The admin's transcription setting is frozen with it (default local).
+    expect(m.bundle?.narration?.transcriptionProvider).toBe('local')
     const before = await attemptRefs(h, id)
     expect(Object.keys(before)).toEqual([req.requestId])
     h.deps.runner.nextScripts.push({ timeline: [running(), failedSnap()] })
@@ -497,6 +499,13 @@ describe('run manifest narration', () => {
     const without = manifest(narr)
     delete without.bundle!.narration
     expect(serializeRunManifest(without)).not.toContain('narration')
+  })
+
+  it('carries the transcription provider when frozen with one, and refuses an unknown one', () => {
+    const withStt = { ...narr, transcriptionProvider: 'elevenlabs' as const }
+    expect(verify(withStt).bundle?.narration).toEqual(withStt)
+    expect(serializeRunManifest(manifest(narr))).not.toContain('transcriptionProvider')
+    expect(() => verify({ ...narr, transcriptionProvider: 'whisper' })).toThrow(/bad narration entry/)
   })
 
   it('refuses takes outside their own prefix, over the caps, or clips of takes it does not carry', () => {

@@ -9,7 +9,12 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { NarrationReceipt } from '../../src/lib/narration-run.js'
-import type { CaptionPolicy, FrozenNarration, FrozenTake } from '../../src/lib/run-manifest.js'
+import type {
+  CaptionPolicy,
+  FrozenNarration,
+  FrozenTake,
+  FrozenTranscription,
+} from '../../src/lib/run-manifest.js'
 
 export const NARRATION_RUN_DIR = '.va-run/narration'
 
@@ -23,6 +28,8 @@ export const narrationPaths = (root: string) => {
     clean: join(dir, 'clean'),
     manifest: join(dir, 'manifest.json'),
     receipt: join(dir, 'receipt.json'),
+    /** scripts/narration-stt.ts: transcription status and word timings (SttRecord). */
+    stt: join(dir, 'stt.json'),
   }
 }
 
@@ -45,6 +52,8 @@ export interface NarrationInputs {
   recipe: FrozenNarration['recipe']
   targetSamples: number
   captions: CaptionPolicy
+  /** How scripts/narration-stt.ts transcribes the bus; missing: 'local'. */
+  transcriptionProvider?: FrozenTranscription | undefined
   takes: HydratedTake[]
 }
 

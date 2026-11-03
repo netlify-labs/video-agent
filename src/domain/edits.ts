@@ -51,9 +51,9 @@ import { assertCan, type Principal } from './policy.js'
 import { snapshotMedia } from './media.js'
 import { addAttemptRefs, canReadTake, isTake, releaseOwnerRefs, replaceDraftRefs } from './takes.js'
 import { getSettings } from './settings.js'
-import { narrationEnabled } from './narration-settings.js'
+import { narrationEnabled, narrationSettings } from './narration-settings.js'
 import type { Repo } from '../store/types.js'
-import { type EditRow, type MediaRow } from './types.js'
+import { type EditRow, type MediaRow, type TranscriptionProvider } from './types.js'
 import { hasUnfinished, loadJob, newAttempt, videoDto, withIdempotency } from './videos.js'
 
 export const EDIT_TTL_MS = 7 * 24 * 3600_000
@@ -581,6 +581,7 @@ async function freezeNarration(
   op: NarrationOp,
   r: Rev,
   s: RenderSettings,
+  transcriptionProvider: TranscriptionProvider,
 ): Promise<FrozenNarration> {
   const { targetSamples } = r
   const clips = resolve(op.clips).filter((c) => c.gainDb !== null && c.start < targetSamples)
@@ -605,6 +606,7 @@ async function freezeNarration(
     recipe: { pipeline: NARRATION_PIPELINE, cleanup: op.cleanup },
     targetSamples,
     captions: s.captions,
+    transcriptionProvider,
   }
 }
 
@@ -631,7 +633,8 @@ export async function renderEdit(
       'invalid_request',
       "Fitting the video to your narration isn't available yet. Render it with your visuals kept.",
     )
-  const enabled = await narrationEnabled(deps)
+  // Read once, outside the transaction: whether narration is on, and how the run transcribes it (frozen with it).
+  const { narrationEnabled: enabled, transcriptionProvider } = await narrationSettings(deps)
   return deps.store.tx(async (repo) => {
     const e0 = await loadEdit(repo, deps, p, id)
     // A replay is the same request for the same rev: a later save, another mode or other settings is a new one.
@@ -650,7 +653,9 @@ export async function renderEdit(
       // Recorded narration is mixed by the run from frozen inputs; its takes are checked like a save's.
       if (r.track && !enabled) throw narrationOff()
       if (r.track) await checkTakeAccess(repo, p, e, r.track)
-      const narration = r.track ? await freezeNarration(repo, r.track, r, settings) : null
+      const narration = r.track
+        ? await freezeNarration(repo, r.track, r, settings, transcriptionProvider)
+        : null
       const n = job.nextVersionN
       // A draft has no narration bus (the run writes it), and a base's bus is never part of the frozen bundle.
       const frozenFile = (path: string) => !excluded(path) && !isReference(path)
