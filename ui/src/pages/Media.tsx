@@ -2,7 +2,6 @@
 // (bigger ones upload in resumable parts); everyone can browse and see where an item is used.
 import {
   ActionIcon,
-  Anchor,
   Badge,
   Button,
   Card,
@@ -13,7 +12,6 @@ import {
   SegmentedControl,
   Stack,
   Text,
-  TextInput,
   Title,
 } from '@mantine/core'
 import { useQueryClient } from '@tanstack/react-query'
@@ -24,6 +22,14 @@ import { confirmDanger, relativeTime, showError } from '../components/bits'
 import { FindMusicModal } from '../components/FindMusic'
 import { MEDIA_ACCEPT, Thumb, type Media } from '../components/MediaPicker'
 import { planUploads, retireReplaced, type PlannedUpload } from '../components/Duplicates'
+import {
+  editMediaDetails,
+  LibraryToolbar,
+  MediaTable,
+  mediaName,
+  SourceLine,
+  useLibraryControls,
+} from '../components/MediaLibrary'
 import { uploadFile, type UploadProgress } from '../lib/upload'
 
 type Kind = 'all' | 'image' | 'svg' | 'video' | 'audio' | 'font' | 'pdf'
@@ -40,19 +46,48 @@ interface Job {
 
 const mb = (n: number) => `${(n / 1048576).toFixed(n < 10 * 1048576 ? 1 : 0)} MB`
 
-function MediaCard({ m }: { m: Media }) {
+/** An item's menu: rename it and edit its notes, or delete it (uploader or admin). */
+function MediaActions({ m }: { m: Media }) {
   const qc = useQueryClient()
   const refresh = () => void qc.invalidateQueries({ queryKey: ['get', '/api/v1/media'] })
-  const [editing, setEditing] = useState(false)
-  const [caption, setCaption] = useState(m.caption ?? '')
-  const save = $api.useMutation('patch', '/api/v1/media/{id}', {
-    onSuccess: () => {
-      setEditing(false)
-      refresh()
-    },
-    onError: showError,
-  })
   const remove = $api.useMutation('delete', '/api/v1/media/{id}', { onSuccess: refresh, onError: showError })
+  if (!m.canDelete) return null
+  return (
+    <Menu position="bottom-end">
+      <Menu.Target>
+        <ActionIcon variant="subtle" color="gray" size="sm" aria-label={`Actions for ${mediaName(m)}`}>
+          <IconDots size={14} />
+        </ActionIcon>
+      </Menu.Target>
+      <Menu.Dropdown>
+        <Menu.Item
+          onClick={() => {
+            editMediaDetails(m, refresh)
+          }}
+        >
+          Edit name and notes
+        </Menu.Item>
+        <Menu.Item
+          color="red"
+          onClick={() => {
+            confirmDanger({
+              title: `Delete ${mediaName(m)}?`,
+              body: 'It leaves the library. Videos that already use it keep it.',
+              confirm: 'Delete',
+              onConfirm: () => {
+                remove.mutate({ params: { path: { id: m.id } } })
+              },
+            })
+          }}
+        >
+          Delete
+        </Menu.Item>
+      </Menu.Dropdown>
+    </Menu>
+  )
+}
+
+function MediaCard({ m }: { m: Media }) {
   return (
     <Card padding={0} className="va-media-card" data-testid={`media-${m.id}`}>
       <Thumb m={m} />
@@ -63,80 +98,25 @@ function MediaCard({ m }: { m: Media }) {
           controls
           preload="none"
           src={m.urls.file}
-          aria-label={`Play ${m.filename}`}
+          aria-label={`Play ${mediaName(m)}`}
           data-testid={`player-${m.id}`}
         />
       ) : null}
       <Stack gap={4} p="sm">
         <Group justify="space-between" wrap="nowrap" gap={4}>
-          <Text size="sm" fw={600} truncate title={m.filename}>
+          <Text size="sm" fw={600} truncate title={mediaName(m)}>
+            {mediaName(m)}
+          </Text>
+          <MediaActions m={m} />
+        </Group>
+        {m.title ? (
+          <Text size="xs" c="var(--va-faint)" truncate title={m.filename}>
             {m.filename}
           </Text>
-          {m.canDelete ? (
-            <Menu position="bottom-end">
-              <Menu.Target>
-                <ActionIcon variant="subtle" color="gray" size="sm" aria-label={`Actions for ${m.filename}`}>
-                  <IconDots size={14} />
-                </ActionIcon>
-              </Menu.Target>
-              <Menu.Dropdown>
-                <Menu.Item
-                  onClick={() => {
-                    setEditing(true)
-                  }}
-                >
-                  Edit caption
-                </Menu.Item>
-                <Menu.Item
-                  color="red"
-                  onClick={() => {
-                    confirmDanger({
-                      title: `Delete ${m.filename}?`,
-                      body: 'It leaves the library. Videos that already use it keep it.',
-                      confirm: 'Delete',
-                      onConfirm: () => {
-                        remove.mutate({ params: { path: { id: m.id } } })
-                      },
-                    })
-                  }}
-                >
-                  Delete
-                </Menu.Item>
-              </Menu.Dropdown>
-            </Menu>
-          ) : null}
-        </Group>
-        {editing ? (
-          <TextInput
-            size="xs"
-            aria-label="Caption"
-            maxLength={500}
-            value={caption}
-            onChange={(e) => {
-              setCaption(e.currentTarget.value)
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') save.mutate({ params: { path: { id: m.id } }, body: { caption } })
-              if (e.key === 'Escape') setEditing(false)
-            }}
-            rightSection={
-              <Button
-                size="compact-xs"
-                variant="subtle"
-                onClick={() => {
-                  save.mutate({ params: { path: { id: m.id } }, body: { caption } })
-                }}
-              >
-                Save
-              </Button>
-            }
-            rightSectionWidth={56}
-          />
-        ) : (
-          <Text size="xs" c="var(--va-muted)" lineClamp={2}>
-            {m.caption ?? 'No caption'}
-          </Text>
-        )}
+        ) : null}
+        <Text size="xs" c="var(--va-muted)" lineClamp={2}>
+          {m.caption ?? 'No notes'}
+        </Text>
         {m.source ? <SourceLine source={m.source} /> : null}
         {m.status === 'rejected' ? (
           <Text size="xs" c="red">
@@ -159,52 +139,18 @@ function MediaCard({ m }: { m: Media }) {
   )
 }
 
-/** An imported item's licence, creator and a link to the work. */
-function SourceLine({ source }: { source: NonNullable<Media['source']> }) {
-  return (
-    <Group gap={6} wrap="nowrap" data-testid="media-source">
-      <Badge
-        size="xs"
-        variant="light"
-        color={source.creditRequired ? 'blue' : 'teal'}
-        title={source.creditRequired ? 'Videos that use it credit it automatically' : 'No credit needed'}
-      >
-        {source.licenseLabel}
-      </Badge>
-      <Text size="xs" c="var(--va-muted)" truncate>
-        {source.creator ? (
-          source.creatorUrl ? (
-            <Anchor href={source.creatorUrl} target="_blank" rel="noopener" c="inherit" size="xs">
-              {source.creator}
-            </Anchor>
-          ) : (
-            source.creator
-          )
-        ) : null}
-        {source.creator ? ' · ' : ''}
-        {source.url ? (
-          <Anchor href={source.url} target="_blank" rel="noopener" c="inherit" size="xs">
-            Openverse
-          </Anchor>
-        ) : (
-          'Openverse'
-        )}
-      </Text>
-    </Group>
-  )
-}
-
 export function MediaPage() {
   const qc = useQueryClient()
   const canUpload = useCanCreate()
   const [kind, setKind] = useState<Kind>('all')
+  const lib = useLibraryControls()
   const [jobs, setJobs] = useState<Job[]>([])
   const [dragging, setDragging] = useState(false)
   const [finding, setFinding] = useState(false)
   const list = $api.useQuery(
     'get',
     '/api/v1/media',
-    { params: { query: kind === 'all' ? {} : { kind } } },
+    { params: { query: { ...(kind === 'all' ? {} : { kind }), ...lib.query } } },
     {
       // Poll while something of yours is still being checked.
       refetchInterval: (q) => (q.state.data?.items.some((m) => m.status === 'verifying') ? 3000 : false),
@@ -251,7 +197,7 @@ export function MediaPage() {
         <div>
           <Title order={1}>Media</Title>
           <div className="va-sub">
-            Logos, screenshots, clips, music and fonts the agent can use in your videos.
+            Logos, screenshots, clips, music, fonts and PDFs the agent can use in your videos.
           </div>
         </div>
         {canUpload ? (
@@ -358,9 +304,10 @@ export function MediaPage() {
         </Stack>
       ) : null}
 
+      <LibraryToolbar {...lib} />
       <SegmentedControl
         size="xs"
-        mb="md"
+        my="md"
         value={kind}
         onChange={(v) => {
           setKind(v)
@@ -375,7 +322,14 @@ export function MediaPage() {
           { value: 'pdf', label: 'PDFs' },
         ]}
       />
-      {!list.isLoading && items.length === 0 ? (
+      {!list.isLoading && items.length === 0 && lib.searching ? (
+        <Card>
+          <Text fw={600}>Nothing matches that search</Text>
+          <Text size="sm" c="var(--va-muted)" mt={4}>
+            Search looks at names, file names and notes. Give items names and notes to find them later.
+          </Text>
+        </Card>
+      ) : !list.isLoading && items.length === 0 ? (
         <Card>
           <Text fw={600}>Nothing here yet</Text>
           <Text size="sm" c="var(--va-muted)" mt={4}>
@@ -383,6 +337,10 @@ export function MediaPage() {
               ? 'Upload your logo, product screenshots or a short clip, then pick them when you make a video.'
               : 'Creators can upload logos, screenshots and clips here.'}
           </Text>
+        </Card>
+      ) : lib.view === 'table' ? (
+        <Card padding={0}>
+          <MediaTable items={items} testIdPrefix="media-" actions={(m) => <MediaActions m={m} />} />
         </Card>
       ) : (
         <div className="va-media-grid">

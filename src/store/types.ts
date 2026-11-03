@@ -148,6 +148,10 @@ export interface Repo {
   /** Newest first: ready, undeleted items, plus `includePendingOf`'s own items in any state. */
   listMedia(q: {
     kind?: MediaRow['kind'] | undefined
+    /** Words that must all appear in the title, file name, notes, source title or creator (any case). */
+    search?: string | undefined
+    /** Newest first by default; `before` pages only that order. */
+    sort?: 'newest' | 'oldest' | 'name' | undefined
     includePendingOf?: string | undefined
     before?: { createdAt: string; id: string } | undefined
     limit: number

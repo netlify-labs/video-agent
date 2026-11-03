@@ -58,6 +58,7 @@ import type {
 } from '../domain/types.js'
 import { addUsage, type UsageRow } from './memory.js'
 import type { Repo, Store } from './types.js'
+import { searchWords } from '../lib/search.js'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- driver-agnostic (netlify-db, pglite)
 type Db = PgAsyncDatabase<any, any, any>
@@ -453,7 +454,17 @@ function repoFor(db: Db): Repo {
             isNull(m.deletedAt),
             visible,
             q.kind ? eq(m.kind, q.kind) : undefined,
-            q.before
+            ...searchWords(q.search).map((w) => {
+              const like = `%${w.replace(/[%_\\]/g, (c) => `\\${c}`)}%`
+              return or(
+                ilike(m.title, like),
+                ilike(m.filename, like),
+                ilike(m.caption, like),
+                ilike(m.sourceTitle, like),
+                ilike(m.creator, like),
+              )
+            }),
+            q.before && (q.sort ?? 'newest') === 'newest'
               ? or(
                   lt(m.createdAt, q.before.createdAt),
                   and(eq(m.createdAt, q.before.createdAt), lt(m.id, q.before.id)),
@@ -461,7 +472,13 @@ function repoFor(db: Db): Repo {
               : undefined,
           ),
         )
-        .orderBy(desc(m.createdAt), desc(m.id))
+        .orderBy(
+          ...(q.sort === 'oldest'
+            ? [asc(m.createdAt), asc(m.id)]
+            : q.sort === 'name'
+              ? [sql`lower(coalesce(${m.title}, ${m.filename}))`, asc(m.id)]
+              : [desc(m.createdAt), desc(m.id)]),
+        )
         .limit(q.limit)) as MediaRow[]
     },
     findMediaMatches: async (q) => {

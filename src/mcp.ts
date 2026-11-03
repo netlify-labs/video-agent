@@ -824,24 +824,30 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "version": 2}`,
     'list_media',
     {
       title: 'List the media library',
-      description: `The team's uploaded media: logos, screenshots, clips, fonts and audio (music), newest first. Pass media ids to create_video or revise_video (media_ids) so the agent uses them. A caption says what an item is.
+      description: `The team's uploaded media: logos, screenshots, clips, fonts, audio (music) and PDFs, newest first. Pass media ids to create_video or revise_video (media_ids) so the agent uses them. An item's title is its name in the library; its notes (caption) say what it is.
 
-Example: {"kind": "image"}`,
+Example: {"query": "launch logo", "kind": "image"}`,
       inputSchema: {
         kind: z.enum(MEDIA_KINDS).optional(),
+        query: z
+          .string()
+          .max(200)
+          .optional()
+          .describe('Words to find in the title, file name or notes, e.g. "Q3 launch".'),
         cursor: z.string().optional().describe('next_cursor from the previous page.'),
       },
       annotations: { title: 'List media', readOnlyHint: true, openWorldHint: false },
     },
     async (args) =>
       run(async () => {
-        const page = await listMedia(deps, principal, { kind: args.kind, cursor: args.cursor })
+        const page = await listMedia(deps, principal, { kind: args.kind, q: args.query, cursor: args.cursor })
         return {
           media: page.items
             .filter((m) => m.status === 'ready')
             .map((m) => ({
               id: m.id,
               kind: m.kind,
+              title: m.title ?? m.filename,
               filename: m.filename,
               caption: m.caption,
               width: m.width,

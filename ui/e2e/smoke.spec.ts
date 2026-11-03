@@ -823,18 +823,33 @@ const pngBytes = Buffer.from([
 ])
 const pngFile = (name = 'logo.png') => ({ name, mimeType: 'image/png', buffer: pngBytes })
 
-test('the media library starts empty, uploads a file, edits its caption and deletes it', async ({ page }) => {
+test('the media library starts empty, uploads a file, names it, adds notes, finds it and deletes it', async ({
+  page,
+}) => {
   await page.goto('/media')
   await expect(page.getByText('Nothing here yet')).toBeVisible()
   await page.locator('input[type=file]').setInputFiles(pngFile())
   const card = page.getByTestId('media-med_mock0001')
   await expect(card.getByText('logo.png')).toBeVisible()
   await card.getByRole('button', { name: 'Actions for logo.png' }).click()
-  await page.getByRole('menuitem', { name: 'Edit caption' }).click()
-  await card.getByRole('textbox', { name: 'Caption' }).fill('Main logo')
-  await card.getByRole('button', { name: 'Save' }).click()
+  await page.getByRole('menuitem', { name: 'Edit name and notes' }).click()
+  const edit = page.getByRole('dialog', { name: 'Edit logo.png' })
+  await edit.getByLabel('Name').fill('Main logo')
+  await edit.getByLabel('Notes').fill('Dark backgrounds only')
+  await edit.getByRole('button', { name: 'Save' }).click()
   await expect(card.getByText('Main logo')).toBeVisible()
-  await card.getByRole('button', { name: 'Actions for logo.png' }).click()
+  await expect(card.getByText('logo.png · Dark backgrounds only')).toBeVisible()
+  // Search finds it by its notes; a miss says so.
+  await page.getByLabel('Search media').fill('dark')
+  await expect(card).toBeVisible()
+  await page.getByLabel('Search media').fill('nothing like it')
+  await expect(page.getByText('Nothing matches that search')).toBeVisible()
+  await page.getByLabel('Search media').fill('')
+  // The grid shows the same item, by its name.
+  await page.getByText('Grid', { exact: true }).click()
+  await expect(card.getByText('Main logo')).toBeVisible()
+  await page.getByText('Table', { exact: true }).click()
+  await card.getByRole('button', { name: 'Actions for Main logo' }).click()
   await page.getByRole('menuitem', { name: 'Delete' }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click()
   await expect(page.getByText('Nothing here yet')).toBeVisible()
@@ -961,10 +976,10 @@ test('selected media is marked and listed, and the button says what it adds', as
   await dialog.locator('input[type=file]').setInputFiles(pngFile())
   const card = dialog.getByTestId('pick-med_mock0001')
   await card.click()
-  await expect(card).toHaveAttribute('aria-pressed', 'true')
+  await expect(card).toHaveAttribute('aria-selected', 'true')
   await expect(dialog.getByTestId('selected-med_mock0001')).toContainText('logo.png')
   await dialog.getByRole('button', { name: 'Unselect logo.png' }).click()
-  await expect(card).toHaveAttribute('aria-pressed', 'false')
+  await expect(card).toHaveAttribute('aria-selected', 'false')
   await card.click()
   await dialog.getByRole('button', { name: 'Add 1 to the video' }).click()
   await expect(page.getByTestId('chip-med_mock0001')).toContainText('logo.png')
@@ -991,7 +1006,7 @@ const mp3File = (name = 'theme.mp3') => ({
   buffer: Buffer.from([0x49, 0x44, 0x33, 4, 0, 0, 0, 0, 0, 0, 0xff, 0xf3, 0x70, 0xc0]),
 })
 
-test('the media library takes audio: an Audio filter and a player in the card', async ({ page }) => {
+test('the media library takes audio: an Audio filter and a player in its row', async ({ page }) => {
   await page.goto('/media')
   await expect(page.getByText(/MP3,\s+M4A, WAV or Ogg audio up to 50 MB/)).toBeVisible()
   await page.locator('input[type=file]').setInputFiles(pngFile())
@@ -1002,11 +1017,13 @@ test('the media library takes audio: an Audio filter and a player in the card', 
   await expect(player).toHaveAttribute('src', '/tone.mp3')
   await expect(player).toHaveAttribute('controls', '')
   expect(await prop<boolean>(player, 'muted')).toBe(false)
-  await expect(card.getByText('1:35')).toBeVisible()
-  await page.getByText('Audio', { exact: true }).click()
+  await expect(card.getByText(/1:35/).filter({ visible: true })).toBeVisible()
+  const filter = (k: string) =>
+    page.locator('.mantine-SegmentedControl-label', { hasText: new RegExp(`^${k}$`) })
+  await filter('Audio').click()
   await expect(card).toBeVisible()
   await expect(page.getByTestId('media-med_mock0001')).toHaveCount(0)
-  await page.getByText('Images', { exact: true }).click()
+  await filter('Images').click()
   await expect(card).toHaveCount(0)
   await expect(page.getByTestId('media-med_mock0001')).toBeVisible()
 })
@@ -1487,7 +1504,7 @@ test('a track imported from the picker is picked straight away', async ({ page }
   await find.getByRole('button', { name: 'Search' }).click()
   await find.getByTestId(`track-${HARBOR}`).getByRole('button', { name: 'Import' }).click()
   await expect(find).toHaveCount(0)
-  await expect(picker.getByTestId('pick-med_mock0001')).toHaveAttribute('aria-pressed', 'true')
+  await expect(picker.getByTestId('pick-med_mock0001')).toHaveAttribute('aria-selected', 'true')
   await picker.getByRole('button', { name: 'Add 1 to the video' }).click()
   await expect(page.getByTestId('chip-med_mock0001')).toContainText('Quiet Harbor')
 })
@@ -1585,7 +1602,7 @@ test('a library match is picked with Use in the media picker', async ({ page }) 
   await find.getByRole('button', { name: 'Search' }).click()
   await find.getByTestId('library-med_libpiano').getByRole('button', { name: 'Use' }).click()
   await expect(find).toHaveCount(0)
-  await expect(picker.getByTestId('pick-med_libpiano')).toHaveAttribute('aria-pressed', 'true')
+  await expect(picker.getByTestId('pick-med_libpiano')).toHaveAttribute('aria-selected', 'true')
 })
 
 test('quick searches answer at once from the stored searches, even when Openverse is slow', async ({

@@ -506,6 +506,9 @@ export interface MediaRow extends MediaProvenance {
   status: MediaStatus
   rejectReason: string | null
   filename: string
+  /** The name given in the library; null shows the file name. */
+  title: string | null
+  /** Notes: what the item is and how to use it. The planner and the agent read them. */
   caption: string | null
   mime: string
   ext: string

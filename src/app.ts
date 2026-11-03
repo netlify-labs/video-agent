@@ -1133,6 +1133,10 @@ export function createApp(deps: Deps, opts: AppOptions) {
       request: {
         query: z.object({
           kind: z.enum(MEDIA_KINDS).optional(),
+          q: z.string().max(200).optional().openapi({
+            description: 'Words to find in the title, file name, notes, source title or creator',
+          }),
+          sort: z.enum(['newest', 'oldest', 'name']).optional().openapi({ description: 'Default newest' }),
           cursor: z.string().optional(),
           limit: z.coerce.number().int().min(1).max(100).optional(),
         }),
@@ -1424,14 +1428,22 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'patch',
       path: '/api/v1/media/{id}',
-      summary: 'Update a caption',
-      description: 'Changes the caption (uploader or admin).',
+      summary: 'Rename or annotate an item',
+      description:
+        'Changes the title (the name shown in the library) or the caption (notes the planner and agent read). Uploader or admin. Leave a field out to keep it; null clears it.',
       tags: ['media'],
       security,
       request: {
         params: MediaParam,
         body: {
-          content: { 'application/json': { schema: z.object({ caption: z.string().max(500).nullable() }) } },
+          content: {
+            'application/json': {
+              schema: z.object({
+                title: z.string().max(120).nullable().optional(),
+                caption: z.string().max(500).nullable().optional(),
+              }),
+            },
+          },
           required: true,
         },
       },

@@ -3191,11 +3191,19 @@
           "filename": {
             "type": "string"
           },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The name given in the library; null shows the file name"
+          },
           "caption": {
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "Notes on the item. The planner and the agent read them."
           },
           "mime": {
             "type": "string"
@@ -3292,6 +3300,7 @@
           "status",
           "rejectReason",
           "filename",
+          "title",
           "caption",
           "mime",
           "bytes",
@@ -8708,6 +8717,32 @@
           },
           {
             "schema": {
+              "type": "string",
+              "maxLength": 200,
+              "description": "Words to find in the title, file name, notes, source title or creator"
+            },
+            "required": false,
+            "description": "Words to find in the title, file name, notes, source title or creator",
+            "name": "q",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "newest",
+                "oldest",
+                "name"
+              ],
+              "description": "Default newest"
+            },
+            "required": false,
+            "description": "Default newest",
+            "name": "sort",
+            "in": "query"
+          },
+          {
+            "schema": {
               "type": "string"
             },
             "required": false,
@@ -10065,8 +10100,8 @@
         }
       },
       "patch": {
-        "summary": "Update a caption",
-        "description": "Changes the caption (uploader or admin).",
+        "summary": "Rename or annotate an item",
+        "description": "Changes the title (the name shown in the library) or the caption (notes the planner and agent read). Uploader or admin. Leave a field out to keep it; null clears it.",
         "tags": [
           "media"
         ],
@@ -10095,6 +10130,13 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "title": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 120
+                  },
                   "caption": {
                     "type": [
                       "string",
@@ -10102,10 +10144,7 @@
                     ],
                     "maxLength": 500
                   }
-                },
-                "required": [
-                  "caption"
-                ]
+                }
               }
             }
           }

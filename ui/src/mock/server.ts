@@ -428,7 +428,18 @@ export function installMock() {
     if (p === '/api/v1/media' && method === 'GET') {
       seedLibraryMusic()
       const kind = url.searchParams.get('kind')
-      return json({ items: mockMedia.filter((m) => !kind || m.kind === kind), nextCursor: null })
+      // Search and sort as the server does: every word somewhere in the name, file name or notes.
+      const words = (url.searchParams.get('q') ?? '').toLowerCase().split(/\s+/).filter(Boolean)
+      const sort = url.searchParams.get('sort') ?? 'newest'
+      const name = (m: MockMedia) => (m.title ?? m.filename).toLowerCase()
+      const items = mockMedia
+        .filter((m) => !kind || m.kind === kind)
+        .filter((m) =>
+          words.every((w) => [m.title, m.filename, m.caption].some((f) => f?.toLowerCase().includes(w))),
+        )
+      if (sort === 'oldest') items.reverse()
+      if (sort === 'name') items.sort((a, b) => name(a).localeCompare(name(b)))
+      return json({ items, nextCursor: null })
     }
     if (p === '/api/v1/media' && method === 'POST') {
       if (me.role === 'viewer' || me.role === 'reviewer')
@@ -582,8 +593,9 @@ export function installMock() {
         return new Response(null, { status: 204 })
       }
       if (method === 'PATCH') {
-        const b = (await readBody(init, input)) as { caption: string | null }
-        m.caption = b.caption?.trim() || null
+        const b = (await readBody(init, input)) as { caption?: string | null; title?: string | null }
+        if (b.caption !== undefined) m.caption = b.caption?.trim() || null
+        if (b.title !== undefined) m.title = b.title?.trim() || null
       }
       return json(m)
     }
@@ -876,6 +888,7 @@ function mockItem(filename: string, kind: MockKind, bytes: number): MockMedia {
     status: 'ready',
     rejectReason: null,
     filename,
+    title: null,
     caption: null,
     mime:
       kind === 'video'

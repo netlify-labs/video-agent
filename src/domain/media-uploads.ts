@@ -168,6 +168,7 @@ export async function completeUpload(
       status: 'verifying',
       rejectReason: null,
       filename: u.filename,
+      title: null,
       caption: u.caption,
       mime: 'application/octet-stream',
       ext: 'bin',

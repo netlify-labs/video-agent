@@ -107,6 +107,7 @@ export async function storeMedia(
     status: 'ready',
     rejectReason: null,
     filename,
+    title: null,
     caption: meta.caption?.trim().slice(0, 500) || null,
     mime: c.mime,
     ext: c.ext,
@@ -174,6 +175,7 @@ export async function mediaDto(deps: Deps, p: Principal, m: MediaRow, usage?: Re
     status: m.status,
     rejectReason: m.rejectReason,
     filename: m.filename,
+    title: m.title,
     caption: m.caption,
     mime: m.mime,
     bytes: m.bytes,
@@ -218,13 +220,22 @@ function sourceDto(m: MediaProvenance) {
 export async function listMedia(
   deps: Deps,
   p: Principal,
-  q: { kind?: MediaRow['kind'] | undefined; cursor?: string | undefined; limit?: number | undefined },
+  q: {
+    kind?: MediaRow['kind'] | undefined
+    q?: string | undefined
+    sort?: 'newest' | 'oldest' | 'name' | undefined
+    cursor?: string | undefined
+    limit?: number | undefined
+  },
 ) {
   assertCan(p, 'video:read')
   const limit = Math.min(Math.max(q.limit ?? 48, 1), 100)
+  const sort = q.sort ?? 'newest'
   const before = decodeCursor(q.cursor)
   const rows = await deps.store.listMedia({
     kind: q.kind,
+    search: q.q,
+    sort,
     includePendingOf: p.userId,
     before,
     limit: limit + 1,
@@ -233,7 +244,8 @@ export async function listMedia(
   const usage = await deps.store.mediaUsage(page.map((m) => m.id))
   return {
     items: await Promise.all(page.map((m) => mediaDto(deps, p, m, usage))),
-    nextCursor: nextCursor(rows.length, limit, page),
+    // Only newest-first pages continue; the other orders return the first `limit` matches.
+    nextCursor: sort === 'newest' ? nextCursor(rows.length, limit, page) : null,
   }
 }
 
@@ -274,13 +286,21 @@ export async function getMedia(deps: Deps, p: Principal, id: string) {
   return mediaDto(deps, p, await loadMedia(deps, p, id))
 }
 
-export async function updateMedia(deps: Deps, p: Principal, id: string, patch: { caption?: string | null }) {
+/** Renames an item or changes its notes (uploader or admin). Fields left out stay; empty ones are cleared. */
+export async function updateMedia(
+  deps: Deps,
+  p: Principal,
+  id: string,
+  patch: { caption?: string | null | undefined; title?: string | null | undefined },
+) {
   const m = await loadMedia(deps, p, id)
   if (m.uploaderId !== p.userId && p.role !== 'admin')
     throw new ApiError('forbidden', 'Only the uploader or an admin can change this item.')
-  const caption = patch.caption?.trim().slice(0, 500) || null
-  await deps.store.updateMedia(id, { caption, updatedAt: deps.clock.now().toISOString() })
-  return mediaDto(deps, p, { ...m, caption })
+  const next: Partial<MediaRow> = {}
+  if (patch.caption !== undefined) next.caption = patch.caption?.trim().slice(0, 500) || null
+  if (patch.title !== undefined) next.title = patch.title?.replace(/\s+/g, ' ').trim().slice(0, 120) || null
+  await deps.store.updateMedia(id, { ...next, updatedAt: deps.clock.now().toISOString() })
+  return mediaDto(deps, p, { ...m, ...next })
 }
 
 /** Soft delete: it leaves the library, but versions that used it keep their bytes. */

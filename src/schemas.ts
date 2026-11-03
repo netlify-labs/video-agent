@@ -538,7 +538,14 @@ export const MediaSchema = z
     status: z.enum(['uploading', 'verifying', 'ready', 'rejected']),
     rejectReason: z.string().nullable(),
     filename: z.string(),
-    caption: z.string().nullable(),
+    title: z
+      .string()
+      .nullable()
+      .openapi({ description: 'The name given in the library; null shows the file name' }),
+    caption: z
+      .string()
+      .nullable()
+      .openapi({ description: 'Notes on the item. The planner and the agent read them.' }),
     mime: z.string(),
     bytes: z.number().int(),
     width: z.number().int().nullable(),

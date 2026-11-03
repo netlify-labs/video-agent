@@ -41,6 +41,7 @@ import type {
   UserIdentityRow,
 } from '../domain/types.js'
 import type { JobQuery, Repo, Store } from './types.js'
+import { searchWords } from '../lib/search.js'
 
 interface State {
   settings: SettingsRow | null
@@ -407,11 +408,25 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
               !m.deletedAt &&
               (m.status === 'ready' || m.uploaderId === q.includePendingOf) &&
               (!q.kind || m.kind === q.kind) &&
+              searchWords(q.search).every((w) =>
+                [m.title, m.filename, m.caption, m.sourceTitle, m.creator].some((f) =>
+                  f?.toLowerCase().includes(w.toLowerCase()),
+                ),
+              ) &&
               (!q.before ||
+                (q.sort ?? 'newest') !== 'newest' ||
                 m.createdAt < q.before.createdAt ||
                 (m.createdAt === q.before.createdAt && m.id < q.before.id)),
           )
-          .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))
+          .sort((a, b) =>
+            q.sort === 'oldest'
+              ? a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)
+              : q.sort === 'name'
+                ? (a.title ?? a.filename)
+                    .toLowerCase()
+                    .localeCompare((b.title ?? b.filename).toLowerCase()) || a.id.localeCompare(b.id)
+                : b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id),
+          )
           .slice(0, q.limit),
       ),
     insertUpload: async (row) => {

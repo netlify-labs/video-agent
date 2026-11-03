@@ -27,6 +27,7 @@ import { $api, useCanCreate } from '../api/client'
 import type { paths } from '../api/schema'
 import { uploadFile } from '../lib/upload'
 import { planUploads, retireReplaced } from './Duplicates'
+import { EditDetailsButton, LibraryToolbar, MediaTable, mediaName, useLibraryControls } from './MediaLibrary'
 import { clockTime } from './bits'
 import { FindMusicModal } from './FindMusic'
 
@@ -116,10 +117,11 @@ export function MediaLibraryModal(props: {
   const [finding, setFinding] = useState(false)
   const canUpload = useCanCreate()
   const qc = useQueryClient()
+  const lib = useLibraryControls()
   const list = $api.useQuery(
     'get',
     '/api/v1/media',
-    { params: { query: { limit: 100, ...(kinds.length === 1 ? { kind: kinds[0] } : {}) } } },
+    { params: { query: { limit: 100, ...(kinds.length === 1 ? { kind: kinds[0] } : {}), ...lib.query } } },
     {
       enabled: props.opened,
       refetchInterval: (q) => (q.state.data?.items.some((m) => m.status === 'verifying') ? 3000 : false),
@@ -274,12 +276,33 @@ export function MediaLibraryModal(props: {
             </Text>
           </div>
         ) : null}
+        <LibraryToolbar {...lib} />
         {!list.isLoading && items.length === 0 ? (
           <Text size="sm" c="var(--va-muted)">
-            {canUpload
-              ? 'Nothing to pick yet. Drop or upload a file, or add some on the Media page.'
-              : 'Nothing to pick yet. Creators can upload on the Media page.'}
+            {lib.searching
+              ? 'Nothing matches that search.'
+              : canUpload
+                ? 'Nothing to pick yet. Drop or upload a file, or add some on the Media page.'
+                : 'Nothing to pick yet. Creators can upload on the Media page.'}
           </Text>
+        ) : lib.view === 'table' ? (
+          <MediaTable
+            items={items}
+            testIdPrefix="pick-"
+            select={{
+              isOn: (m) => picked.some((x) => x.id === m.id),
+              toggle,
+              canPick: (m) => m.status === 'ready',
+            }}
+            actions={(m) =>
+              m.canDelete ? (
+                <EditDetailsButton
+                  m={m}
+                  onSaved={() => void qc.invalidateQueries({ queryKey: ['get', '/api/v1/media'] })}
+                />
+              ) : null
+            }
+          />
         ) : (
           <div className="va-media-grid va-media-grid-pick">
             {items.map((m) => {
@@ -291,7 +314,7 @@ export function MediaLibraryModal(props: {
                   className="va-media-card va-media-pick"
                   data-on={on || undefined}
                   aria-pressed={props.multiple ? on : undefined}
-                  aria-label={`${m.filename}${m.caption ? `, ${m.caption}` : ''}`}
+                  aria-label={`${mediaName(m)}${m.caption ? `, ${m.caption}` : ''}`}
                   disabled={!ready}
                   onClick={() => {
                     toggle(m)
@@ -304,8 +327,8 @@ export function MediaLibraryModal(props: {
                       <IconCheck size={14} stroke={3} />
                     </span>
                   ) : null}
-                  <Text size="xs" p={6} truncate title={m.filename}>
-                    {m.filename}
+                  <Text size="xs" p={6} truncate title={mediaName(m)}>
+                    {mediaName(m)}
                   </Text>
                 </UnstyledButton>
               )

@@ -3867,6 +3867,10 @@ export interface paths {
             parameters: {
                 query?: {
                     kind?: "image" | "svg" | "video" | "font" | "audio" | "pdf";
+                    /** @description Words to find in the title, file name, notes, source title or creator */
+                    q?: string;
+                    /** @description Default newest */
+                    sort?: "newest" | "oldest" | "name";
                     cursor?: string;
                     limit?: number;
                 };
@@ -5203,8 +5207,8 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Update a caption
-         * @description Changes the caption (uploader or admin).
+         * Rename or annotate an item
+         * @description Changes the title (the name shown in the library) or the caption (notes the planner and agent read). Uploader or admin. Leave a field out to keep it; null clears it.
          */
         patch: {
             parameters: {
@@ -5218,7 +5222,8 @@ export interface paths {
             requestBody: {
                 content: {
                     "application/json": {
-                        caption: string | null;
+                        title?: string | null;
+                        caption?: string | null;
                     };
                 };
             };
@@ -6748,6 +6753,9 @@ export interface components {
             status: "uploading" | "verifying" | "ready" | "rejected";
             rejectReason: string | null;
             filename: string;
+            /** @description The name given in the library; null shows the file name */
+            title: string | null;
+            /** @description Notes on the item. The planner and the agent read them. */
             caption: string | null;
             mime: string;
             bytes: number;

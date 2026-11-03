@@ -223,6 +223,7 @@ async function mediaContext(deps: Deps, plan: PlanRow) {
     rows.map((m) => ({
       kind: m.kind,
       filename: m.filename,
+      ...(m.title ? { title: m.title } : {}),
       caption: m.caption,
       ...(m.width ? { width: m.width, height: m.height } : {}),
       ...(m.durationSec ? { seconds: m.durationSec } : {}),

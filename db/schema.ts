@@ -302,6 +302,8 @@ export const media = pgTable(
     status: text('status').notNull(),
     rejectReason: text('reject_reason'),
     filename: text('filename').notNull(),
+    // The name people gave it in the library (null: the file name). caption is its notes, which the agent reads.
+    title: text('title'),
     caption: text('caption'),
     mime: text('mime').notNull(),
     ext: text('ext').notNull(),

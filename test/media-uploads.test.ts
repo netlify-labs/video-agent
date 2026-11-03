@@ -268,3 +268,49 @@ describe('duplicate check', () => {
     },
   )
 })
+
+describe('library search, sort and titles', () => {
+  it.each(['memory', 'postgres'])(
+    'renames and annotates items, finds them by title, file name or notes, and sorts (%s)',
+    async (store) => {
+      const { png, upload } = await import('./helpers.js')
+      const h = store === 'postgres' ? harness({}, { store: await pgStore() }) : harness()
+      const add = async (name: string, w: number) =>
+        ((await (await upload(h, h.member, png(w, w), `filename=${name}`)).json()) as { id: string }).id
+      const logo = await add('logo.png', 64)
+      h.deps.clock.advance(1000)
+      const shot = await add('screen-01.png', 32)
+      const renamed = await h.json<{ title: string | null; caption: string | null }>(
+        await h.call('PATCH', `/api/v1/media/${shot}`, {
+          as: h.member,
+          body: { title: '  Annual Q3   launch dashboard ', caption: 'Use on the second scene' },
+        }),
+      )
+      expect(renamed).toMatchObject({
+        title: 'Annual Q3 launch dashboard',
+        caption: 'Use on the second scene',
+      })
+      // Leaving a field out keeps it; null clears it.
+      expect(
+        await h.json(
+          await h.call('PATCH', `/api/v1/media/${shot}`, { as: h.member, body: { caption: null } }),
+        ),
+      ).toMatchObject({ title: 'Annual Q3 launch dashboard', caption: null })
+      const ids = async (query: string) =>
+        (
+          await h.json<{ items: { id: string }[] }>(
+            await h.call('GET', `/api/v1/media?${query}`, { as: h.member }),
+          )
+        ).items.map((m) => m.id)
+      expect(await ids('q=LAUNCH%20q3')).toEqual([shot])
+      expect(await ids('q=logo')).toEqual([logo])
+      expect(await ids('q=nothing-like-this')).toEqual([])
+      expect(await ids('q=100%25')).toEqual([])
+      expect(await ids('sort=oldest')).toEqual([logo, shot])
+      // By name: the title when there is one ("Annual Q3 launch dashboard" before "logo.png", though its file
+      // name, screen-01.png, would come after).
+      expect(await ids('sort=name')).toEqual([shot, logo])
+      expect(await ids('')).toEqual([shot, logo])
+    },
+  )
+})

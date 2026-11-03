@@ -1296,3 +1296,77 @@ body {
   padding: 14px;
   margin-bottom: 0;
 }
+
+/* The media library as a table (Media page and the Add media picker). */
+.va-library-toolbar {
+  margin-bottom: 4px;
+}
+.va-library-search {
+  flex: 1 1 240px;
+  max-width: 420px;
+}
+.va-table-wrap {
+  overflow: auto;
+  max-height: 60vh;
+  border-radius: var(--mantine-radius-lg);
+}
+.va-media-table {
+  --table-border-color: var(--va-rule);
+}
+.va-media-table thead th {
+  background: var(--va-surface);
+  color: var(--va-muted);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.mantine-Modal-content .va-media-table {
+  --table-border-color: var(--va-dialog-edge);
+}
+.mantine-Modal-content .va-media-table thead th {
+  background: var(--va-dialog);
+}
+/* The name takes the room (and truncates); the other columns fit their content. */
+.va-media-table .va-col-name {
+  width: 50%;
+  max-width: 0;
+}
+.va-media-table td:not(.va-col-name) {
+  white-space: nowrap;
+}
+.va-row-thumb {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 30px;
+  border-radius: var(--mantine-radius-sm);
+  overflow: hidden;
+  background: var(--va-raised);
+  color: var(--va-muted);
+}
+.va-row-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.va-row-pick {
+  cursor: pointer;
+}
+.va-row-pick[data-disabled] {
+  cursor: default;
+  opacity: 0.55;
+}
+.va-row-pick[data-on] {
+  background: color-mix(in srgb, var(--va-accent) 12%, transparent);
+  box-shadow: inset 3px 0 0 var(--va-accent);
+}
+.va-row-audio {
+  width: min(260px, 100%);
+  height: 30px;
+  margin-top: 4px;
+}
+.va-view-icon {
+  vertical-align: -2px;
+  margin-right: 6px;
+}
