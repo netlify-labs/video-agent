@@ -1,4 +1,4 @@
-// The Voice-over choice (SPIKES.md S9) for create, revise and plans: on or off, a voice, a pace and an optional script
+// The Voice-over choice (docs/spikes.md S9) for create, revise and plans: on or off, a voice, a pace and an optional script
 // with one line per beat. Without a script, the plan's narration or the agent's own words are spoken.
 import {
   ActionIcon,

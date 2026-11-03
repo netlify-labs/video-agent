@@ -1,4 +1,4 @@
-// Voice-over (idea 3, SPIKES.md S9): the choice stored on versions and plans and inherited by revisions, the plan's
+// Voice-over (idea 3, docs/spikes.md S9): the choice stored on versions and plans and inherited by revisions, the plan's
 // narration becoming the script, what the run prompt says, and the MCP arguments.
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'

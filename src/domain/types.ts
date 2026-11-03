@@ -9,7 +9,7 @@ export type Aspect = '16:9' | '9:16' | '1:1' | '4:5'
 export const SOUNDS = ['silent', 'music', 'music_sfx'] as const
 export type VideoSound = (typeof SOUNDS)[number]
 /**
- * A voice-over (SPIKES.md S9): the run speaks a narration line per beat with scripts/voice.ts. Null fields are left to
+ * A voice-over (docs/spikes.md S9): the run speaks a narration line per beat with scripts/voice.ts. Null fields are left to
  * the run: the default voice and speed, and a script the agent writes (or the plan's narration).
  */
 export interface Voiceover {

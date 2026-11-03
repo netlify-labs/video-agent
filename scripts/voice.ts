@@ -1,4 +1,4 @@
-// Voice-over for a run (SPIKES.md S9). Two steps, both run from the repo root:
+// Voice-over for a run (docs/spikes.md S9). Two steps, both run from the repo root:
 //   npx tsx scripts/voice.ts [--voice <id>] [--speed <0.7-1.3>]
 //     Reads video/assets/voice/script.json ({ "lines": [{ "beat", "text" }] }), speaks each line and writes
 //     video/assets/voice/<beat>.wav plus voice.json (cues and word times per beat). A beat whose line, voice and speed

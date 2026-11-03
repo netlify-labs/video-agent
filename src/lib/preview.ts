@@ -1,4 +1,4 @@
-// The sandboxed composition preview (plan v2 §7, §14 rule 23; design from spike S2, see SPIKES.md). Shared by the API
+// The sandboxed composition preview (plan v2 §7, §14 rule 23; design from spike S2, see docs/spikes.md). Shared by the API
 // (minting) and the /preview edge function (serving), so it stays free of Node-only imports.
 //   /preview/{jobId}/v{n}/{cap}/{path}    cap = {exp}.{epoch|x}.{sig}, one capability for the whole bundle
 // The composition itself is the sandboxed document: index.html is served with the vendored HyperFrames runtime

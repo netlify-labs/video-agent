@@ -1,4 +1,4 @@
-// Voice providers for scripts/voice.ts (SPIKES.md S9). Kokoro runs on the runner through `npx hyperframes tts` and is
+// Voice providers for scripts/voice.ts (docs/spikes.md S9). Kokoro runs on the runner through `npx hyperframes tts` and is
 // installed on first use; ElevenLabs is used when the deployer set ELEVENLABS_API_KEY and returns word times.
 // The Netlify AI Gateway has no speech endpoint yet, so it isn't a provider here.
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'

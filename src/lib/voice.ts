@@ -1,4 +1,4 @@
-// Voice-over (SPIKES.md S9): a narration line per beat becomes one audio file per beat with caption cues and word
+// Voice-over (docs/spikes.md S9): a narration line per beat becomes one audio file per beat with caption cues and word
 // times. Each caption phrase is spoken as its own clip and a beat's clips are joined with measured pauses, so every
 // cue starts and ends exactly where its audio does, without transcription. Word times come from the provider when it
 // has them and are otherwise spread by letters inside the phrase (marked estimated).

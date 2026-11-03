@@ -1,4 +1,4 @@
-// The voice-over choice (SPIKES.md S9) as requests send it and as versions and plans store it.
+// The voice-over choice (docs/spikes.md S9) as requests send it and as versions and plans store it.
 import type { PlanBrief, Voiceover } from './types.js'
 
 export interface VoiceoverInput {

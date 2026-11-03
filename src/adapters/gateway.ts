@@ -1,4 +1,4 @@
-// AI Gateway adapter (plan v2 §4, SPIKES.md S1). Netlify injects TYPESAFE_* and ANTHROPIC_* into Functions.
+// AI Gateway adapter (plan v2 §4, docs/spikes.md S1). Netlify injects TYPESAFE_* and ANTHROPIC_* into Functions.
 // The router sees only the request and short titles: the jev router rejects larger states with 4 questions.
 import { choice, TypeSafeClient } from '@typesafe-ai/sdk'
 import type { GatewayPort, GatewayUsage, RouteAnswers } from '../deps.js'

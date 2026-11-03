@@ -21,7 +21,7 @@ export const SoundSchema = z.enum(SOUNDS).openapi('Sound', {
   description:
     'silent: no audio (the default). music: a music bed (a picked audio item, else the brand music in context/, else none). music_sfx: music plus sound effects on visible actions.',
 })
-/** A voice-over request (SPIKES.md S9). `enabled: false` turns it off; omitted fields are left to the run. */
+/** A voice-over request (docs/spikes.md S9). `enabled: false` turns it off; omitted fields are left to the run. */
 export const VoiceoverInputSchema = z
   .object({
     enabled: z.boolean(),

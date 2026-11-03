@@ -356,7 +356,7 @@ export async function createPlan(
   return planDto(plan)
 }
 
-/** Runs a model call with one bounded retry on invalid output; the retry uses the fast model (SPIKES.md S1). */
+/** Runs a model call with one bounded retry on invalid output; the retry uses the fast model (docs/spikes.md S1). */
 async function callJson<T>(
   deps: Deps,
   p: Principal,

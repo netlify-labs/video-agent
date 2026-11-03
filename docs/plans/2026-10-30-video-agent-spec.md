@@ -30,29 +30,29 @@ Non-goals for v1:
 
 ## 2. Verified facts this plan relies on
 
-Observed on 2026-10-29 and 2026-10-30 unless marked otherwise. *(review)* rows were checked by the reviewers against `@netlify/open-api` 2.63.1, published npm packages and Netlify's docs, and spot-checked by us.
+Observed on 2026-10-29 and 2026-10-30 unless marked otherwise. _(review)_ rows were checked by the reviewers against `@netlify/open-api` 2.63.1, published npm packages and Netlify's docs, and spot-checked by us.
 
-| Fact | Evidence |
-| --- | --- |
-| Agent runs can edit and render a HyperFrames video end to end | Agent run `6ae3eba6`: full restyle in 99 s, 28 steps |
-| `netlify-agent-kit` installs FFmpeg, FFprobe, the HyperFrames skills and Chrome in agent runner setup, and keeps them out of git | Read-only run with 0.2.0. **Now 0.3.1; W4 re-checks it** |
-| Agent runs have outbound network, `curl` and `unzip` | Setup downloads |
-| A 14-second 1080p render takes about 16 s in a runner | Run timing |
-| `POST /sites/{site_id}/agent_runners` takes `prompt`, `branch`, `deploy_id` (precedence over `branch`), `agent`, `model`, `effort`, `mode` | Spec *(review)* |
-| Sessions have `state` (`new`, `running`, `await_input`, `interrupted`, `error`, `done`, `cancelled`), `result`, `deploy_id`, `deploy_url`, `duration`, `steps`, `usage`, `interactions`. **There is no `preview_state`** | Spec, checked by us |
-| There is **no completion webhook**. Agent runner hooks are inbound triggers | Spec *(review)* |
-| `createAgentRunnerUploadUrl` is `x-internal`. Not used | Spec, checked by us |
-| The session's `prompt` is visible to the project's team in the Netlify UI | Spec *(review)*. Accepted |
-| `nax-agent-runner-sdk` 0.3.0: `start`, `getSnapshot`, `stop`, durable handles, deadlines, retry classification, nullable usage. `requestId` must be a UUID. Inputs accept `deployId`, `model`, `effort`. `land: 'none'` only skips landing | SDK source, checked by us |
-| A runner can read its own site's Blobs with `netlify blobs:get`. **Whether it can `blobs:set` is unverified** | SDK README |
-| `@netlify/blobs` 11: conditional writes; eventually consistent reads by default; prefix listing; streamed reads, no byte ranges; works in every compute type | Package and docs *(review)* |
-| Function limits: buffered responses about 6 MB, streamed 20 MB, scheduled functions 30 s and only on published deploys, background functions 15 min. Edge: 50 ms CPU | Docs *(review)* |
-| Environment variable changes only take effect on the **next deploy** | Docs *(review)* |
-| Netlify Database: migrations are applied automatically only from `netlify/database/migrations/`, before a production deploy publishes (a failure blocks publishing). Deploy previews **and each agent run** get a database branch copied from production. The Drizzle adapter (`drizzle-orm/netlify-db`) exists only on the beta line | Docs *(review)*; `drizzle-orm`/`drizzle-kit` beta at `1.0.0-beta.22`, checked by us |
-| **Netlify Identity** is supported, free on credit-based plans, per site. Default registration is **Open**. `@netlify/identity` 2.0.0: login sets the `nf_jwt` cookie; server-side `getUser()` **reads that cookie** (no token argument) and can fall back to JWT claims if the live lookup fails; `verifyRequestOrigin` is its CSRF helper; `admin.getUser` does a live lookup; `handleAuthCallback`, `acceptInvite`, `getSettings` exist. New Identity event functions use typed handlers (`userValidate` with `event.deny()`) | Package README, checked by us; docs *(review)* |
-| Edge function responses are never CDN-cached without `cache: "manual"`; purges by cache tag take seconds | Docs *(review)* |
-| The Deploy to Netlify button only works from a **public** GitHub or GitLab repo; `[template.environment]` declares required inputs; `USAGE.md` is shown after deploy | Docs *(review)* |
-| `typescript-eslint` 8.72 supports TypeScript `<6.1.0`. `hono/netlify` is deprecated for `@hono/netlify` | npm, checked by us |
+| Fact                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Evidence                                                                            |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Agent runs can edit and render a HyperFrames video end to end                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Agent run `6ae3eba6`: full restyle in 99 s, 28 steps                                |
+| `netlify-agent-kit` installs FFmpeg, FFprobe, the HyperFrames skills and Chrome in agent runner setup, and keeps them out of git                                                                                                                                                                                                                                                                                                                                                                                                | Read-only run with 0.2.0. **Now 0.3.1; W4 re-checks it**                            |
+| Agent runs have outbound network, `curl` and `unzip`                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Setup downloads                                                                     |
+| A 14-second 1080p render takes about 16 s in a runner                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Run timing                                                                          |
+| `POST /sites/{site_id}/agent_runners` takes `prompt`, `branch`, `deploy_id` (precedence over `branch`), `agent`, `model`, `effort`, `mode`                                                                                                                                                                                                                                                                                                                                                                                      | Spec _(review)_                                                                     |
+| Sessions have `state` (`new`, `running`, `await_input`, `interrupted`, `error`, `done`, `cancelled`), `result`, `deploy_id`, `deploy_url`, `duration`, `steps`, `usage`, `interactions`. **There is no `preview_state`**                                                                                                                                                                                                                                                                                                        | Spec, checked by us                                                                 |
+| There is **no completion webhook**. Agent runner hooks are inbound triggers                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Spec _(review)_                                                                     |
+| `createAgentRunnerUploadUrl` is `x-internal`. Not used                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | Spec, checked by us                                                                 |
+| The session's `prompt` is visible to the project's team in the Netlify UI                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Spec _(review)_. Accepted                                                           |
+| `nax-agent-runner-sdk` 0.3.0: `start`, `getSnapshot`, `stop`, durable handles, deadlines, retry classification, nullable usage. `requestId` must be a UUID. Inputs accept `deployId`, `model`, `effort`. `land: 'none'` only skips landing                                                                                                                                                                                                                                                                                      | SDK source, checked by us                                                           |
+| A runner can read its own site's Blobs with `netlify blobs:get`. **Whether it can `blobs:set` is unverified**                                                                                                                                                                                                                                                                                                                                                                                                                   | SDK README                                                                          |
+| `@netlify/blobs` 11: conditional writes; eventually consistent reads by default; prefix listing; streamed reads, no byte ranges; works in every compute type                                                                                                                                                                                                                                                                                                                                                                    | Package and docs _(review)_                                                         |
+| Function limits: buffered responses about 6 MB, streamed 20 MB, scheduled functions 30 s and only on published deploys, background functions 15 min. Edge: 50 ms CPU                                                                                                                                                                                                                                                                                                                                                            | Docs _(review)_                                                                     |
+| Environment variable changes only take effect on the **next deploy**                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Docs _(review)_                                                                     |
+| Netlify Database: migrations are applied automatically only from `netlify/database/migrations/`, before a production deploy publishes (a failure blocks publishing). Deploy previews **and each agent run** get a database branch copied from production. The Drizzle adapter (`drizzle-orm/netlify-db`) exists only on the beta line                                                                                                                                                                                           | Docs _(review)_; `drizzle-orm`/`drizzle-kit` beta at `1.0.0-beta.22`, checked by us |
+| **Netlify Identity** is supported, free on credit-based plans, per site. Default registration is **Open**. `@netlify/identity` 2.0.0: login sets the `nf_jwt` cookie; server-side `getUser()` **reads that cookie** (no token argument) and can fall back to JWT claims if the live lookup fails; `verifyRequestOrigin` is its CSRF helper; `admin.getUser` does a live lookup; `handleAuthCallback`, `acceptInvite`, `getSettings` exist. New Identity event functions use typed handlers (`userValidate` with `event.deny()`) | Package README, checked by us; docs _(review)_                                      |
+| Edge function responses are never CDN-cached without `cache: "manual"`; purges by cache tag take seconds                                                                                                                                                                                                                                                                                                                                                                                                                        | Docs _(review)_                                                                     |
+| The Deploy to Netlify button only works from a **public** GitHub or GitLab repo; `[template.environment]` declares required inputs; `USAGE.md` is shown after deploy                                                                                                                                                                                                                                                                                                                                                            | Docs _(review)_                                                                     |
+| `typescript-eslint` 8.72 supports TypeScript `<6.1.0`. `hono/netlify` is deprecated for `@hono/netlify`                                                                                                                                                                                                                                                                                                                                                                                                                         | npm, checked by us                                                                  |
 
 ## 3. User workflows
 
@@ -125,12 +125,11 @@ video-agent/
 ├── scripts/
 │   ├── prepare-revision.ts # run first on revisions: download, verify and restore the parent's video/
 │   ├── render-job.ts       # render, probe, poster, GIF, captions, source archive, upload, callback
-│   ├── gen-openapi.ts      # writes openapi.json; --check fails if it's stale
+│   ├── gen-openapi.ts      # writes ui/src/api/openapi.json; --check fails if it's stale
 │   └── setup.ts            # npm run setup
 ├── db/schema.ts, db/index.ts
 ├── drizzle.config.ts       # out: netlify/database/migrations
 ├── netlify/database/migrations/   # generated by drizzle-kit, committed, applied by Netlify on deploy
-├── openapi.json            # generated, committed, checked in CI
 ├── netlify/functions/
 │   ├── api.ts              # the Hono app: every /api/* route
 │   ├── sweep.ts            # scheduled, every minute, bounded
@@ -142,32 +141,33 @@ video-agent/
 ├── src/                    # app.ts, routes/, schemas/, deps.ts, lib/ (store, reconciler, finalize,
 │                           # media (shared by both edge functions), mp4 checks, auth, policy, signing,
 │                           # webhooks, prompt builder, deploy-context guard)
-├── tsconfig.base.json
-└── ui/                     # web app: React + Mantine, built with Vite, client generated from openapi.json
+├── tsconfig.json           # ui/tsconfig.json extends it
+└── ui/                     # web app: React + Mantine, built with Vite, client generated from
+                            # ui/src/api/openapi.json (generated, committed, checked in CI)
 ```
 
 ## 4a. Tech stack
 
 **TypeScript for everything**, no `.js` or `.mjs` files in the repo apart from generated build output.
 
-| Part | Choice | Version at planning time |
-| --- | --- | --- |
-| Language | TypeScript, `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `verbatimModuleSyntax` | **6.0.3**; 7.0 when `typescript-eslint` and the codegen tools support it |
-| Runtime | Node 24 | 24 |
-| API | Hono + `@hono/zod-openapi` (`OpenAPIHono`) + zod, adapter `@hono/netlify` | Hono 4.13, zod-openapi 1.6, zod 4.6, `@hono/netlify` 1.0 |
-| Auth | Netlify Identity with `@netlify/identity` (browser and server) | 2.0 |
-| Agent runs | `nax-agent-runner-sdk` | 0.3.0 |
-| Records | Netlify Database (`@netlify/database`) + Drizzle (`drizzle-orm` and `drizzle-kit` from the beta line, the only one with the `netlify-db` adapter) | 2.0; Drizzle `1.0.0-beta.22` |
-| Files | `@netlify/blobs` | 11.1 |
-| Video tools (in runs) | `hyperframes`, `netlify-agent-kit`, pinned in the lockfile | 0.8.222, 0.3.1 |
-| Web app | React + Mantine (`core`, `hooks`, `notifications`, `modals`) + Vite (`@vitejs/plugin-react`) | React 19.3, Mantine 9.7, Vite 8.3 |
-| UI data | `openapi-typescript` + `openapi-fetch` + TanStack Query (`openapi-react-query`) | 7.13, 0.17, 0.5 |
-| UI routing | React Router | 8.5 |
-| Scripts | `tsx` | 4.23 |
-| Tests | vitest (API via `createApp(fakeDeps)`, reconciler, finalize, policy, prompt builder); Playwright for one UI smoke test | Vitest 5.0, Playwright 1.64 |
-| Lint and format | ESLint (typescript-eslint strict-type-checked), Prettier | ESLint 10, typescript-eslint 8.72, Prettier 3.9 |
+| Part                  | Choice                                                                                                                                            | Version at planning time                                                 |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Language              | TypeScript, `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `verbatimModuleSyntax`                                            | **6.0.3**; 7.0 when `typescript-eslint` and the codegen tools support it |
+| Runtime               | Node 24                                                                                                                                           | 24                                                                       |
+| API                   | Hono + `@hono/zod-openapi` (`OpenAPIHono`) + zod, adapter `@hono/netlify`                                                                         | Hono 4.13, zod-openapi 1.6, zod 4.6, `@hono/netlify` 1.0                 |
+| Auth                  | Netlify Identity with `@netlify/identity` (browser and server)                                                                                    | 2.0                                                                      |
+| Agent runs            | `nax-agent-runner-sdk`                                                                                                                            | 0.3.0                                                                    |
+| Records               | Netlify Database (`@netlify/database`) + Drizzle (`drizzle-orm` and `drizzle-kit` from the beta line, the only one with the `netlify-db` adapter) | 2.0; Drizzle `1.0.0-beta.22`                                             |
+| Files                 | `@netlify/blobs`                                                                                                                                  | 11.1                                                                     |
+| Video tools (in runs) | `hyperframes`, `netlify-agent-kit`, pinned in the lockfile                                                                                        | 0.8.222, 0.3.1                                                           |
+| Web app               | React + Mantine (`core`, `hooks`, `notifications`, `modals`) + Vite (`@vitejs/plugin-react`)                                                      | React 19.3, Mantine 9.7, Vite 8.3                                        |
+| UI data               | `openapi-typescript` + `openapi-fetch` + TanStack Query (`openapi-react-query`)                                                                   | 7.13, 0.17, 0.5                                                          |
+| UI routing            | React Router                                                                                                                                      | 8.5                                                                      |
+| Scripts               | `tsx`                                                                                                                                             | 4.23                                                                     |
+| Tests                 | vitest (API via `createApp(fakeDeps)`, reconciler, finalize, policy, prompt builder); Playwright for one UI smoke test                            | Vitest 5.0, Playwright 1.64                                              |
+| Lint and format       | ESLint (typescript-eslint strict-type-checked), Prettier                                                                                          | ESLint 10, typescript-eslint 8.72, Prettier 3.9                          |
 
-Exact pins, a committed lockfile, `npm ci` in CI and setup, Renovate for updates. One `tsconfig.base.json`; the server, edge and UI configs extend it. CI runs typecheck, lint, tests, `openapi:gen -- --check`, `drizzle-kit check` and the UI build.
+Exact pins, a committed lockfile, `npm ci` in CI and setup, Renovate for updates. One root `tsconfig.json`; `ui/tsconfig.json` extends it. CI runs typecheck, lint, tests, `openapi:gen -- --check`, `drizzle-kit check` and the UI build.
 
 ## 5. The run: what the agent is asked to do
 
@@ -175,7 +175,7 @@ The service builds the prompt from a fixed, versioned template (`PROMPT_TEMPLATE
 
 The agent's job is creative: read the context, write the composition, get `check` clean. Everything mechanical is a script.
 
-```
+````
 You are making version {n} of video {jobId} (attempt {attemptId}). Work only inside video/.
 
 {revisionSetup: "First run: npx tsx scripts/prepare-revision.ts --attempt {attemptId}
@@ -208,7 +208,7 @@ say so in your summary.
 6. End your answer with the fenced ```json block render-job.ts prints.
 
 Never print environment variables. Never commit, push or open a pull request.
-```
+````
 
 `scripts/prepare-revision.ts` (revisions only): downloads the parent version's `sources/{jobId}/v{n}.tar.gz` (with `netlify blobs:get`, which runners can do, or a signed URL minted when the attempt starts), checks its SHA-256 against the value in the prompt, and replaces `video/` with it. On failure the attempt ends as `source_unavailable`; it never silently falls back to the template.
 
@@ -238,10 +238,10 @@ Phase 0 (S2) picks one private hand-back path. Either way:
 - Finalize computes every file's SHA-256 itself and checks it against the manifest from the authenticated callback.
 - Missing uploads are retried within the finalize deadline, then the attempt fails with `artifacts_missing`. The public deploy preview is never a fallback.
 
-| Option | How | Status |
-| --- | --- | --- |
-| **A. Same-site Blobs** | `render-job.ts` runs `netlify blobs:set uploads {attemptId}/… --input …` | Spike: can runners write Blobs, and how big a file? |
-| **B. Signed upload** | The API mints a single-use upload URL when the attempt starts; the script `PUT`s to a streaming edge function that writes to Blobs | Spike, used if A fails |
+| Option                 | How                                                                                                                                | Status                                              |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| **A. Same-site Blobs** | `render-job.ts` runs `netlify blobs:set uploads {attemptId}/… --input …`                                                           | Spike: can runners write Blobs, and how big a file? |
+| **B. Signed upload**   | The API mints a single-use upload URL when the attempt starts; the script `PUT`s to a streaming edge function that writes to Blobs | Spike, used if A fails                              |
 
 ### Serving files
 
@@ -253,11 +253,11 @@ Phase 0 (S2) picks one private hand-back path. Either way:
 
 Each ready version can be **published** independently by the video's owner or an admin. Publishing creates a **publication** with its own random, unguessable slug (`/v/k7m2q9xw`) that only ever points at that version:
 
-| URL | What |
-| --- | --- |
-| `/v/{slug}` | Share page: player, title, poster, captions, and Open Graph and Twitter video tags so links unfurl. No prompt, no requester |
-| `/v/{slug}.mp4` | The MP4, with Range |
-| `/v/{slug}.jpg`, `.gif`, `.vtt` | Poster, GIF preview, captions |
+| URL                             | What                                                                                                                        |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `/v/{slug}`                     | Share page: player, title, poster, captions, and Open Graph and Twitter video tags so links unfurl. No prompt, no requester |
+| `/v/{slug}.mp4`                 | The MP4, with Range                                                                                                         |
+| `/v/{slug}.jpg`, `.gif`, `.vtt` | Poster, GIF preview, captions                                                                                               |
 
 - The UI shows copy buttons for each URL and an embed snippet (`<video controls poster="….jpg" src="….mp4"><track kind="captions" src="….vtt"></video>`, plus an iframe of the share page).
 - **Unpublishing** a version ends its publication. Every later request is checked against the database, so it stops serving as soon as the transaction commits. Bytes already downloaded, and link previews Slack or social sites already made, can't be recalled; the UI says so.
@@ -277,14 +277,14 @@ No completion webhook exists. The **reconciler** owns every outcome; everything 
 
 ### Stages
 
-| Stage | What happens |
-| --- | --- |
-| `queued` | Waiting for a slot (section 10). Cancelling here is local and immediate |
-| `starting` | **Before** calling the runner: persist the attempt with a fresh UUID `requestId`, the full input, and (for revisions) the parent's source hash and download capability. Then `sdk.start`, and save the serialized handle. On an ambiguous response, the next tick reconciles **the same attempt** by `requestId`. An attempt that can't be matched after the send window goes to `unresolved` and keeps its slot; an admin resolves it from the Admin page (mark failed and release the slot, after checking the Netlify UI) |
-| `running` | `sdk.getSnapshot(handle)`. `await_input` → stop, `needs_input` (never auto-answer). Past the authoring deadline (default 22 min) → stop, `timed_out` |
-| `finishing` | Entered **only after a terminal remote state is observed**. Dispatch `finalize-background` under a lease; re-dispatch if the lease expires. Finalize deadline: 10 min |
-| `cancelling` | Intent persisted first; the sweep stops the exact session and retries until the remote session reaches **any** terminal state. Cancellation intent means no files are published, whatever that state is |
-| Terminal | `ready`, `failed` (with a category), `cancelled`, `timed_out` |
+| Stage        | What happens                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `queued`     | Waiting for a slot (section 10). Cancelling here is local and immediate                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `starting`   | **Before** calling the runner: persist the attempt with a fresh UUID `requestId`, the full input, and (for revisions) the parent's source hash and download capability. Then `sdk.start`, and save the serialized handle. On an ambiguous response, the next tick reconciles **the same attempt** by `requestId`. An attempt that can't be matched after the send window goes to `unresolved` and keeps its slot; an admin resolves it from the Admin page (mark failed and release the slot, after checking the Netlify UI) |
+| `running`    | `sdk.getSnapshot(handle)`. `await_input` → stop, `needs_input` (never auto-answer). Past the authoring deadline (default 22 min) → stop, `timed_out`                                                                                                                                                                                                                                                                                                                                                                         |
+| `finishing`  | Entered **only after a terminal remote state is observed**. Dispatch `finalize-background` under a lease; re-dispatch if the lease expires. Finalize deadline: 10 min                                                                                                                                                                                                                                                                                                                                                        |
+| `cancelling` | Intent persisted first; the sweep stops the exact session and retries until the remote session reaches **any** terminal state. Cancellation intent means no files are published, whatever that state is                                                                                                                                                                                                                                                                                                                      |
+| Terminal     | `ready`, `failed` (with a category), `cancelled`, `timed_out`                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 
 A slot is held from `starting` until a terminal remote state is observed (including `unresolved`); `finishing` doesn't hold a slot, because the remote compute has stopped.
 
@@ -304,20 +304,20 @@ The serialized handle is saved after every mutating SDK call.
 
 Netlify Database (Postgres, through Drizzle) holds every record; Blobs holds only bytes. Migrations live in `netlify/database/migrations/` and are applied by Netlify before each production deploy publishes.
 
-| Table | Holds |
-| --- | --- |
-| `settings` | One row: the generated file-signing secret and data-encryption key (section 13), installation state |
-| `users` | Identity user ID (primary key), email, display name, `role` (`admin` or `member`), `admitted_via` (`domain` or `invite`), `created_at`, `last_seen_at`, `disabled_at` |
-| `api_keys` | `key_` + ULID, owner user ID, name, SHA-256 of the secret, `webhook_secret` (encrypted), `created_at`, `last_used_at`, `revoked_at` |
-| `jobs` (videos) | `vid_` + ULID, `title`, `aspect`, `owner_id`, `created_at`, `deleted_at`, `next_version_n`, `version` (fencing) |
-| `versions` | `job_id`, `n`, `prompt`, `author_id`, `api_key_id` (if created with a key), `target_duration_sec` (null = Auto), `parent_n`, `webhook_url`, `created_at` |
-| `attempts` | UUID (also the SDK `requestId`), `job_id`, `version_n`, `stage`, `next_action_at`, `lease_until`, `deploy_id`, `agent`, `model`, `effort`, `prompt_template_version`, `tool_versions`, `parent_source_sha256`, `handle` (encrypted), `runner_id`, `session_id`, `callback_token_hash`, `cancel_requested_at`, deadlines, `usage` (nullable), `error_category`, `error_message`, timings |
-| `outputs` | `job_id`, `version_n`, file keys and SHA-256s (video, poster, gif, captions, source), `bytes`, `duration_sec`, `width`, `height`, `agent_summary` |
-| `publications` | unique random `slug`, `job_id`, `version_n`, `published_by`, `published_at`, `unpublished_at` |
-| `callback_receipts` | `attempt_id` (unique), `manifest`, `received_at` |
-| `idempotency_keys` | unique `(principal_id, operation, key)`, request hash, the created resource IDs (job, version, attempt) and the original response, `expires_at` |
-| `queue_control` | One row: `max_active`; locked for every slot claim |
-| `webhook_events` | `event_id` (UUID), `job_id`, `version_n`, `attempt_id`, `type`, payload snapshot, `api_key_id` (signing secret reference), URL, `lease_until`, `next_retry_at`, `deliver_until`, `attempts`, `last_result` |
+| Table               | Holds                                                                                                                                                                                                                                                                                                                                                                                   |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `settings`          | One row: the generated file-signing secret and data-encryption key (section 13), installation state                                                                                                                                                                                                                                                                                     |
+| `users`             | Identity user ID (primary key), email, display name, `role` (`admin` or `member`), `admitted_via` (`domain` or `invite`), `created_at`, `last_seen_at`, `disabled_at`                                                                                                                                                                                                                   |
+| `api_keys`          | `key_` + ULID, owner user ID, name, SHA-256 of the secret, `webhook_secret` (encrypted), `created_at`, `last_used_at`, `revoked_at`                                                                                                                                                                                                                                                     |
+| `jobs` (videos)     | `vid_` + ULID, `title`, `aspect`, `owner_id`, `created_at`, `deleted_at`, `next_version_n`, `version` (fencing)                                                                                                                                                                                                                                                                         |
+| `versions`          | `job_id`, `n`, `prompt`, `author_id`, `api_key_id` (if created with a key), `target_duration_sec` (null = Auto), `parent_n`, `webhook_url`, `created_at`                                                                                                                                                                                                                                |
+| `attempts`          | UUID (also the SDK `requestId`), `job_id`, `version_n`, `stage`, `next_action_at`, `lease_until`, `deploy_id`, `agent`, `model`, `effort`, `prompt_template_version`, `tool_versions`, `parent_source_sha256`, `handle` (encrypted), `runner_id`, `session_id`, `callback_token_hash`, `cancel_requested_at`, deadlines, `usage` (nullable), `error_category`, `error_message`, timings |
+| `outputs`           | `job_id`, `version_n`, file keys and SHA-256s (video, poster, gif, captions, source), `bytes`, `duration_sec`, `width`, `height`, `agent_summary`                                                                                                                                                                                                                                       |
+| `publications`      | unique random `slug`, `job_id`, `version_n`, `published_by`, `published_at`, `unpublished_at`                                                                                                                                                                                                                                                                                           |
+| `callback_receipts` | `attempt_id` (unique), `manifest`, `received_at`                                                                                                                                                                                                                                                                                                                                        |
+| `idempotency_keys`  | unique `(principal_id, operation, key)`, request hash, the created resource IDs (job, version, attempt) and the original response, `expires_at`                                                                                                                                                                                                                                         |
+| `queue_control`     | One row: `max_active`; locked for every slot claim                                                                                                                                                                                                                                                                                                                                      |
+| `webhook_events`    | `event_id` (UUID), `job_id`, `version_n`, `attempt_id`, `type`, payload snapshot, `api_key_id` (signing secret reference), URL, `lease_until`, `next_retry_at`, `deliver_until`, `attempts`, `last_result`                                                                                                                                                                              |
 
 - Listing uses keyset pagination on `(created_at, id)`. Search, filters and stats are SQL.
 - The public API returns explicit DTOs; `handle`, token hashes, secrets and raw upstream errors never leave the server.
@@ -334,28 +334,28 @@ Netlify Database (Postgres, through Drizzle) holds every record; Blobs holds onl
 
 ### Resources
 
-| Method | Path | Does | Who |
-| --- | --- | --- | --- |
-| `POST` | `/api/v1/videos` | Create a video: `{ prompt, aspect?, durationSec?, title?, webhookUrl? }`. `Idempotency-Key` header | member |
-| `GET` | `/api/v1/videos` | List, newest first. `?status=`, `?owner=me\|all`, `?published=`, `?q=`, `?cursor=`, `?limit=` | member |
-| `GET` | `/api/v1/videos/{id}` | One video with its versions and publications. `ETag` / `304` | member |
-| `PATCH` | `/api/v1/videos/{id}` | Rename | owner, admin |
-| `DELETE` | `/api/v1/videos/{id}` | Tombstone, end every publication, delete every copy | owner, admin |
-| `POST` | `/api/v1/videos/{id}/versions` | Revise: `{ prompt, fromVersion?, durationSec?, webhookUrl? }`. `fromVersion` defaults to the latest **ready** version; an unready parent or an unfinished version on this video gives `409` | member |
-| `POST` | `/api/v1/videos/{id}/versions/{n}/retry` | Try a failed, cancelled or timed-out version again | author, owner, admin |
-| `POST` | `/api/v1/videos/{id}/versions/{n}/cancel` | Stop that version | author, owner, admin |
-| `POST` | `/api/v1/videos/{id}/versions/{n}/publish` | Publish this version; returns the publication and its URLs | owner, admin |
-| `DELETE` | `/api/v1/videos/{id}/versions/{n}/publish` | Unpublish this version | owner, admin |
-| `GET` | `/api/v1/videos/{id}/versions/{n}/{file}` | `video`, `poster`, `gif`, `captions`: `302` to a signed URL; `409 not_ready` until ready | member |
-| `GET`, `POST`, `DELETE` | `/api/v1/keys`, `/api/v1/keys/{keyId}` | Your API keys; the secret and webhook secret are shown once | member |
-| `GET` | `/api/v1/me` | Who you are and your role | member |
-| `GET` | `/api/v1/users` | List users | admin |
-| `PATCH` | `/api/v1/users/{id}` | Change a role, disable or enable | admin |
-| `POST` | `/api/v1/admin/attempts/{attemptId}/resolve` | Resolve an `unresolved` start: mark failed and release the slot | admin |
-| `GET` | `/api/v1/stats` | Runs in flight, queue, failures by category, credits per user per week | admin |
-| `GET` | `/api/health` | Liveness and setup checks (no secrets) | anyone |
-| `GET` | `/api/openapi.json`, `/api/docs` | Spec and reference | anyone |
-| `POST` | `/api/internal/runs/{attemptId}/done` | Agent callback (hidden from the spec) | callback token |
+| Method                  | Path                                         | Does                                                                                                                                                                                        | Who                  |
+| ----------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
+| `POST`                  | `/api/v1/videos`                             | Create a video: `{ prompt, aspect?, durationSec?, title?, webhookUrl? }`. `Idempotency-Key` header                                                                                          | member               |
+| `GET`                   | `/api/v1/videos`                             | List, newest first. `?status=`, `?owner=me\|all`, `?published=`, `?q=`, `?cursor=`, `?limit=`                                                                                               | member               |
+| `GET`                   | `/api/v1/videos/{id}`                        | One video with its versions and publications. `ETag` / `304`                                                                                                                                | member               |
+| `PATCH`                 | `/api/v1/videos/{id}`                        | Rename                                                                                                                                                                                      | owner, admin         |
+| `DELETE`                | `/api/v1/videos/{id}`                        | Tombstone, end every publication, delete every copy                                                                                                                                         | owner, admin         |
+| `POST`                  | `/api/v1/videos/{id}/versions`               | Revise: `{ prompt, fromVersion?, durationSec?, webhookUrl? }`. `fromVersion` defaults to the latest **ready** version; an unready parent or an unfinished version on this video gives `409` | member               |
+| `POST`                  | `/api/v1/videos/{id}/versions/{n}/retry`     | Try a failed, cancelled or timed-out version again                                                                                                                                          | author, owner, admin |
+| `POST`                  | `/api/v1/videos/{id}/versions/{n}/cancel`    | Stop that version                                                                                                                                                                           | author, owner, admin |
+| `POST`                  | `/api/v1/videos/{id}/versions/{n}/publish`   | Publish this version; returns the publication and its URLs                                                                                                                                  | owner, admin         |
+| `DELETE`                | `/api/v1/videos/{id}/versions/{n}/publish`   | Unpublish this version                                                                                                                                                                      | owner, admin         |
+| `GET`                   | `/api/v1/videos/{id}/versions/{n}/{file}`    | `video`, `poster`, `gif`, `captions`: `302` to a signed URL; `409 not_ready` until ready                                                                                                    | member               |
+| `GET`, `POST`, `DELETE` | `/api/v1/keys`, `/api/v1/keys/{keyId}`       | Your API keys; the secret and webhook secret are shown once                                                                                                                                 | member               |
+| `GET`                   | `/api/v1/me`                                 | Who you are and your role                                                                                                                                                                   | member               |
+| `GET`                   | `/api/v1/users`                              | List users                                                                                                                                                                                  | admin                |
+| `PATCH`                 | `/api/v1/users/{id}`                         | Change a role, disable or enable                                                                                                                                                            | admin                |
+| `POST`                  | `/api/v1/admin/attempts/{attemptId}/resolve` | Resolve an `unresolved` start: mark failed and release the slot                                                                                                                             | admin                |
+| `GET`                   | `/api/v1/stats`                              | Runs in flight, queue, failures by category, credits per user per week                                                                                                                      | admin                |
+| `GET`                   | `/api/health`                                | Liveness and setup checks (no secrets)                                                                                                                                                      | anyone               |
+| `GET`                   | `/api/openapi.json`, `/api/docs`             | Spec and reference                                                                                                                                                                          | anyone               |
+| `POST`                  | `/api/internal/runs/{attemptId}/done`        | Agent callback (hidden from the spec)                                                                                                                                                       | callback token       |
 
 ### Conventions
 
@@ -402,12 +402,12 @@ Roles live in the `users` table, keyed by Identity user ID. The row is created o
 
 Written once in `src/lib/auth/policy.ts` and tested for every route, including file and share routes:
 
-| Action | member | author of the version | owner of the video | admin |
-| --- | --- | --- | --- | --- |
-| View, list, download, revise any video | yes | yes | yes | yes |
-| Retry or cancel a version | | yes | yes | yes |
-| Rename, publish, unpublish, delete | | | yes | yes |
-| Users, stats, resolve unresolved attempts | | | | yes |
+| Action                                    | member | author of the version | owner of the video | admin |
+| ----------------------------------------- | ------ | --------------------- | ------------------ | ----- |
+| View, list, download, revise any video    | yes    | yes                   | yes                | yes   |
+| Retry or cancel a version                 |        | yes                   | yes                | yes   |
+| Rename, publish, unpublish, delete        |        |                       | yes                | yes   |
+| Users, stats, resolve unresolved attempts |        |                       |                    | yes   |
 
 ### Other credentials
 
@@ -470,16 +470,16 @@ React + Mantine + Vite, served at `/`, talking only to the public API through ge
 
 ### Phase 0: spikes (blocks everything)
 
-- **S1. From scratch.** 6 runs with the section 5 prompt: varied prompts, all four aspects, Auto and a few targets (15 s, 60 s, 3 min). Measure success rate, authoring and render time, file size at `looks`, `standard` and `delivery`, credits, how often `check` needs retries, and how long Auto videos come out. Score each with a rubric (legible text, correct requested text, no clipped frames, coherent story, acceptable motion). *Done when* we pick the default quality, effort and authoring deadline, and know the longest video that reliably fits a run.
-- **S2. Hand-back and revisions.** From a run: `netlify blobs:set` of 2 MB, 20 MB and 100 MB files and an interrupted retry; a signed `PUT` to a streaming edge function. Then round-trip a composition with an unmistakable change through `sources/` into a fresh pinned-deploy run and revise it. *Done when* we know the upload path and that revisions keep their changes and assets.
+- **S1. From scratch.** 6 runs with the section 5 prompt: varied prompts, all four aspects, Auto and a few targets (15 s, 60 s, 3 min). Measure success rate, authoring and render time, file size at `looks`, `standard` and `delivery`, credits, how often `check` needs retries, and how long Auto videos come out. Score each with a rubric (legible text, correct requested text, no clipped frames, coherent story, acceptable motion). _Done when_ we pick the default quality, effort and authoring deadline, and know the longest video that reliably fits a run.
+- **S2. Hand-back and revisions.** From a run: `netlify blobs:set` of 2 MB, 20 MB and 100 MB files and an interrupted retry; a signed `PUT` to a streaming edge function. Then round-trip a composition with an unmistakable change through `sources/` into a fresh pinned-deploy run and revise it. _Done when_ we know the upload path and that revisions keep their changes and assets.
 - **S3. Callback and signals.** Callback reachability to the production URL from a run, the session's fields at completion, and the time from callback to terminal state.
-- **S4. Serving.** Signed private delivery and public `/v/{slug}.mp4` of 20 MB and 100 MB files through edge functions in Safari and Chrome: `206`, `Content-Range`, `416`, HEAD, seek time, memory, upstream bytes per seek; expired and missing signatures fail. Also: can `@netlify/database` be used from an edge function? *Done when* we know whether stream-skipping is enough and where edge functions read their data.
+- **S4. Serving.** Signed private delivery and public `/v/{slug}.mp4` of 20 MB and 100 MB files through edge functions in Safari and Chrome: `206`, `Content-Range`, `416`, HEAD, seek time, memory, upstream bytes per seek; expired and missing signatures fail. Also: can `@netlify/database` be used from an edge function? _Done when_ we know whether stream-skipping is enough and where edge functions read their data.
 - **S5. SDK in Functions.** Bundle the SDK; time `start` and `getSnapshot`; force an ambiguous `start` and reconcile it by `requestId`.
 - **S6. Parallel runs, previews and deploy context.** 3 runs at once; the platform's concurrent-run ceiling; the variable that identifies an agent-run build and the build minutes left after skipping the UI build (including the preview database branch and migrations). Publish a version, make a preview, unpublish in production, and check that the preview and old deploy URLs serve nothing.
 - **S7. Identity.** In a Hono route inside one catch-all Function and in an edge function: `getUser()` from the cookie, `verifyRequestOrigin`, `admin.getUser` as a live check, a deleted user with a still-valid cookie, and a changed email. `userValidate` denying an outside domain; invite-only with a deny-all `userValidate` and invite acceptance; reading registration and autoconfirm settings for `/setup`; `handleAuthCallback` for confirmation, invite and recovery links.
 - **S8. Template button.** A scratch **public** GitHub repo with placeholder content and the real `netlify.toml`, deployed with the button into another team: the required inputs, `USAGE.md`, feature eligibility, the token's permissions in the destination team, bootstrap, and what's left for `/setup`.
 
-Output: `SPIKES.md` and updates to sections 5, 6, 7, 10, 11 and 13.
+Output: `docs/spikes.md` and updates to sections 5, 6, 7, 10, 11 and 13.
 
 ### Phase 1: template and agent setup (depends on S1, S2)
 
@@ -492,7 +492,7 @@ Output: `SPIKES.md` and updates to sections 5, 6, 7, 10, 11 and 13.
 ### Phase 2: service core (depends on W1–W3, S3–S5, S7)
 
 - **C1.** Repo setup (TypeScript, ESLint, Prettier, vitest, CI, Node 24, `npm ci`) and the Hono app (`createApp`, `@hono/netlify`, the deploy-context guard, `defaultHook`, error handlers, health, spec, docs, `gen-openapi --check`).
-- **C2.** Drizzle schema, `drizzle.config.ts`, the initial migration in `netlify/database/migrations/`, the store module, fencing updates, and the `settings` bootstrap. *Done when* a fresh site provisions the database and its tables on first deploy.
+- **C2.** Drizzle schema, `drizzle.config.ts`, the initial migration in `netlify/database/migrations/`, the store module, fencing updates, and the `settings` bootstrap. _Done when_ a fresh site provisions the database and its tables on first deploy.
 - **C3.** Auth: Identity cookie sessions, `verifyRequestOrigin`, the live check, `userValidate`, both admission modes, `users` and roles with `ADMIN_EMAILS`, API keys, the policy table with a test per route.
 - **C4.** Prompt builder (Auto and target length, revision setup and block) with tests, including injection-shaped prompts.
 - **C5.** `POST /videos`, revisions and retry: idempotency, version allocation under the job lock, one unfinished version per video, parent selection, queueing.
@@ -504,14 +504,14 @@ Output: `SPIKES.md` and updates to sections 5, 6, 7, 10, 11 and 13.
 - **C11.** Failure tests with a fake runner: lost callback, callback before terminal, repeated callback, crash after remote create, overlapping sweeps fighting for the last slot, expired leases, partial upload, cancel racing completion, stop timeout, credits unavailable, delete during finalize, publish during revise, two revises at once, crash between commit and webhook send. 20 queued jobs drain with at most 3 active at every instant.
 - **C12.** Real-run smoke test, opt-in nightly.
 
-*Done when* `curl` with an API key creates a video, gets a signed webhook, downloads a playable MP4, revises it to v2 with the v1 change intact, and publishes v2 to a share page that unfurls in Slack; killing the callback still finishes the job through the sweep; and a preview of the project serves nothing.
+_Done when_ `curl` with an API key creates a video, gets a signed webhook, downloads a playable MP4, revises it to v2 with the v1 change intact, and publishes v2 to a share page that unfurls in Slack; killing the callback still finishes the job through the sweep; and a preview of the project serves nothing.
 
 ### Phase 3: web app (depends on C3, C5–C9)
 
 - **U1.** Vite + React + Mantine app: theme from `context/`, `AppShell`, React Router, TanStack Query, Identity screens with `handleAuthCallback` first, SPA fallback outside `/api/*`, `/files/*` and `/v/*`.
 - **U2.** Library, New video, Video page (versions, revise, stages, notify, per-version publish, retry).
 - **U3.** API keys page; Admin page (runs, queue, unresolved starts, failures, credits, users).
-- **U4.** Setup page, `USAGE.md`, `npm run setup` and the Deploy button. *Done when* a deploy into another team from a public fixture repo, in both admission modes, with only the three variables and the setup page's links, makes and publishes a video, including the first admin confirming their email or accepting an invite.
+- **U4.** Setup page, `USAGE.md`, `npm run setup` and the Deploy button. _Done when_ a deploy into another team from a public fixture repo, in both admission modes, with only the three variables and the setup page's links, makes and publishes a video, including the first admin confirming their email or accepting an invite.
 
 ### Phase 4: operations
 
@@ -531,23 +531,23 @@ Output: `SPIKES.md` and updates to sections 5, 6, 7, 10, 11 and 13.
 
 ## 15. Risks
 
-| Risk | Impact | Mitigation |
-| --- | --- | --- |
-| From-scratch videos aren't good enough | Template isn't useful | S1 with a rubric; `context/` and the template give the agent a strong start |
-| An agent run reads the project's secrets (Netlify status quo) | A colleague with prompt access could exfiltrate the token or the database credential | Accepted and documented; only admitted, signed-in users can start runs; token named so the CLI isn't auto-authenticated; dedicated token account recommended |
-| A preview's copied database serves something production unpublished, or accepts jobs | Leaks or lost jobs | Every server surface runs only on the published production deploy (S6 tests it) |
-| Identity misconfigured (open registration, autoconfirm on) | Strangers can start runs | Three fail-closed checks; `/setup` blocks everything until settings match the mode |
-| A deleted user keeps a valid cookie or key | Access after removal | Live Identity lookup with a 5-minute cache, failing closed |
-| A revision starts from the template instead of its parent | Wrong video | `prepare-revision.ts` restores and verifies the parent; failure ends the attempt; S2 tests it |
-| Two sweeps start more runs than the cap | Platform errors | Slot claims lock `queue_control` first |
-| A run writes the wrong file | Wrong video | Attempt-specific keys; hashes checked against the authenticated callback; immutable version keys |
-| No private hand-back path works | Can't deliver | S2 tests two paths; the public preview is never a fallback |
-| Long Auto videos don't fit the 25-minute run | Timeouts | The prompt nudges short; S1 measures the ceiling; the failure suggests a target |
-| Crash between remote create and saving the handle | Orphaned or duplicate run | Start intent first; UUID `requestId`; `unresolved` with an admin action |
-| No spend limits | A surprise bill | README warning; credits visible per user and week; Netlify team credit controls |
-| A published video leaks something | Public exposure | Owners and admins only; unpublish takes effect on the next request; share pages show no prompt or requester |
-| Wrong plan, provider or permissions for a stranger | Opaque failures | Prerequisites up front; `/setup` names the exact missing piece |
-| Large files and slow seeks | Poor playback | S4; edge streaming; chunked storage if needed |
+| Risk                                                                                 | Impact                                                                               | Mitigation                                                                                                                                                   |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| From-scratch videos aren't good enough                                               | Template isn't useful                                                                | S1 with a rubric; `context/` and the template give the agent a strong start                                                                                  |
+| An agent run reads the project's secrets (Netlify status quo)                        | A colleague with prompt access could exfiltrate the token or the database credential | Accepted and documented; only admitted, signed-in users can start runs; token named so the CLI isn't auto-authenticated; dedicated token account recommended |
+| A preview's copied database serves something production unpublished, or accepts jobs | Leaks or lost jobs                                                                   | Every server surface runs only on the published production deploy (S6 tests it)                                                                              |
+| Identity misconfigured (open registration, autoconfirm on)                           | Strangers can start runs                                                             | Three fail-closed checks; `/setup` blocks everything until settings match the mode                                                                           |
+| A deleted user keeps a valid cookie or key                                           | Access after removal                                                                 | Live Identity lookup with a 5-minute cache, failing closed                                                                                                   |
+| A revision starts from the template instead of its parent                            | Wrong video                                                                          | `prepare-revision.ts` restores and verifies the parent; failure ends the attempt; S2 tests it                                                                |
+| Two sweeps start more runs than the cap                                              | Platform errors                                                                      | Slot claims lock `queue_control` first                                                                                                                       |
+| A run writes the wrong file                                                          | Wrong video                                                                          | Attempt-specific keys; hashes checked against the authenticated callback; immutable version keys                                                             |
+| No private hand-back path works                                                      | Can't deliver                                                                        | S2 tests two paths; the public preview is never a fallback                                                                                                   |
+| Long Auto videos don't fit the 25-minute run                                         | Timeouts                                                                             | The prompt nudges short; S1 measures the ceiling; the failure suggests a target                                                                              |
+| Crash between remote create and saving the handle                                    | Orphaned or duplicate run                                                            | Start intent first; UUID `requestId`; `unresolved` with an admin action                                                                                      |
+| No spend limits                                                                      | A surprise bill                                                                      | README warning; credits visible per user and week; Netlify team credit controls                                                                              |
+| A published video leaks something                                                    | Public exposure                                                                      | Owners and admins only; unpublish takes effect on the next request; share pages show no prompt or requester                                                  |
+| Wrong plan, provider or permissions for a stranger                                   | Opaque failures                                                                      | Prerequisites up front; `/setup` names the exact missing piece                                                                                               |
+| Large files and slow seeks                                                           | Poor playback                                                                        | S4; edge streaming; chunked storage if needed                                                                                                                |
 
 ## 16. Open questions
 
@@ -556,7 +556,7 @@ Output: `SPIKES.md` and updates to sections 5, 6, 7, 10, 11 and 13.
    `context/brand/` for runs, and the build reads its `brand.json` for the web app. Ours is the `netlify-brand` pack
    on the gtm-agent-skills site.
 2. ~~Should the README include a public demo deployment?~~ Owner (2026-10-30): no; revisit after launch.
-3. PLAN.md, SPIKES.md and `.beads` stay public, scrubbed of internal names (owner, 2026-10-30).
+3. This spec, `docs/spikes.md` and `.beads` stay public, scrubbed of internal names (owner, 2026-10-30).
 
 ## Decision log
 
@@ -614,4 +614,4 @@ Dropped by the interview: the isolation gate and renderer project; spend limits;
 
 ## Next
 
-Phase 0. The spikes (especially S2, S4, S6 and S7) settle what reviews can't. A third review round is only worth it after `SPIKES.md` exists.
+Phase 0. The spikes (especially S2, S4, S6 and S7) settle what reviews can't. A third review round is only worth it after `docs/spikes.md` exists.

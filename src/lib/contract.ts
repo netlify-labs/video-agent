@@ -12,7 +12,7 @@
 //   media       data-va-media=<slot>, data-va-kind image|video, src under assets/media/; video slots have an id and
 //               beat-local data-start/data-duration
 //   voice       at most one <audio data-va-voice=<beat id>> per beat, a direct child of it: an id, src under
-//               assets/voice/, beat-local data-start/data-duration that end inside the beat (SPIKES.md S9)
+//               assets/voice/, beat-local data-start/data-duration that end inside the beat (docs/spikes.md S9)
 //   ducking     a layer with data-va-duck=<level> (the music) carries a volume lane that dips under every voice;
 //               the patcher rewrites it after retimes and reorders
 //   audio       <audio id> elements with src under assets/ and data-volume 0-4 (HyperFrames gain, up to +12 dB, which

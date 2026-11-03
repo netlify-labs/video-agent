@@ -1,4 +1,4 @@
-// Voice-over (SPIKES.md S9): phrase timing, the run script with a fake provider, sync into captions and ducking,
+// Voice-over (docs/spikes.md S9): phrase timing, the run script with a fake provider, sync into captions and ducking,
 // and the editing contract's voice rules.
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'

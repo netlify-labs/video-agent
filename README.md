@@ -372,8 +372,9 @@ npx netlify dev      # local app (set ALLOW_NON_PRODUCTION=true to serve the API
 
 The code is TypeScript throughout: Hono + zod-openapi API (`src/app.ts`), domain logic in `src/domain`, ports in
 `src/deps.ts` with production adapters in `src/adapters` and fakes in `test/fakes.ts`, and a React + Mantine app
-in `ui/`. The design and its reasoning are in [`PLAN.md`](PLAN.md); measurements behind the defaults are in
-[`SPIKES.md`](SPIKES.md).
+in `ui/`. The design and its reasoning are in [`docs/plans/`](docs/plans/), starting with the
+[v1 spec](docs/plans/2026-10-30-video-agent-spec.md); measurements behind the defaults are in
+[`docs/spikes.md`](docs/spikes.md).
 
 ## License
 

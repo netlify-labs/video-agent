@@ -31,7 +31,7 @@ export interface PromptInput {
   }[]
   /** What to do with sound; silent when missing (the prompt is then exactly as before sound existed). */
   sound?: VideoSound
-  /** A voice-over (SPIKES.md S9): off when missing, and the prompt is then exactly as before voice existed. */
+  /** A voice-over (docs/spikes.md S9): off when missing, and the prompt is then exactly as before voice existed. */
   voiceover?: Voiceover | null
   /** The brand's music from context/ (built into the deploy), used when music is on and no track was picked. */
   brandMusic?: { file: string; genre: string | null; tempo: string | null } | null
@@ -265,7 +265,7 @@ function soundLines(
 }
 
 /**
- * The voice-over rules (SPIKES.md S9): a narration line per beat, spoken by scripts/voice.ts in this run, beats timed
+ * The voice-over rules (docs/spikes.md S9): a narration line per beat, spoken by scripts/voice.ts in this run, beats timed
  * to it, captions from its cues. The person's script is data in its own fence; voice and speed are checked values.
  */
 function voiceLines(voice: Voiceover | null): string[] {
