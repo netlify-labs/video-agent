@@ -26,6 +26,8 @@ export interface NarrationEditorOptions extends EditContext {
   playhead: number
   /** The composition's beats in seconds, as snap targets. */
   beats?: readonly { start: number; duration: number }[]
+  /** Someone else holds the narration lock: the keyboard shortcuts do nothing (the section refuses the rest). */
+  readOnly?: boolean
 }
 
 export interface ClipMenuState {
@@ -290,7 +292,7 @@ export function useNarrationEditor(initialOp: NarrationOp, opts: NarrationEditor
   // (a focused clip handles its own keys first and marks them handled).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || isEditableTarget(e.target)) return
+      if (e.defaultPrevented || isEditableTarget(e.target) || live.current.readOnly) return
       const action = keyAction(e, isMac())
       if (!action) return
       if (action.type === 'undo' || action.type === 'redo') {

@@ -1,7 +1,8 @@
 // Render with recorded narration (docs/plans/2026-11-02-record-your-own-voiceover.md §2.5): where the narration
 // starts and ends against the video in a small bar, Keep my visuals preselected with its cost, and when the narration
 // runs past the end, what to do about it: trim the clip (jumps to it), hold the last frame (plus 0.5 s), or let the
-// agent fit the video to the narration (coming in a later release).
+// agent fit the video to the narration (coming in a later release). After Keep mine on a stale base (§2.7), it warns
+// whose narration the render replaces.
 import { Alert, Badge, Button, Group, Modal, Radio, Stack, Text } from '@mantine/core'
 import { useEffect, useState } from 'react'
 import { FPS } from '../../../src/lib/contract'
@@ -77,6 +78,8 @@ export function NarrationRenderDialog(props: {
   onRender: (choice: RenderChoice) => void
   /** Trim: close and show the clip that runs past the end, with the playhead at the video's end. */
   onTrim: (clipId: string, sample: number) => void
+  /** Keep mine on a stale base: whose narration this replaces (keepMineWarning). */
+  warning?: string | null
 }) {
   const p = renderPreview(props.op, props.videoSamples, FPS)
   const over = p.overflow > 0
@@ -90,6 +93,11 @@ export function NarrationRenderDialog(props: {
   return (
     <Modal opened={props.opened} onClose={props.onClose} title={`Render as v${props.next}`} size="lg">
       <Stack gap="md">
+        {props.warning ? (
+          <Alert color="orange" variant="light" data-testid="render-warning">
+            <Text size="sm">{props.warning}</Text>
+          </Alert>
+        ) : null}
         <DurationBar p={p} hold={hold} />
         <Radio.Group value="keep_visuals" label="How to render" name="render-mode">
           <Stack gap="xs" mt={6}>
