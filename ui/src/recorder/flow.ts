@@ -133,6 +133,8 @@ export interface RecordFlow {
   uploadChanged(state: TakeUploadState, error: string | null): void
   /** A stopped take's clips, for onTakeReady. */
   placementsFor(recordingId: string): RecordedPlacement[] | null
+  /** The punch-in a stopped take was recorded for (null for a whole take). */
+  punchFor(recordingId: string): Punch | null
   dispose(): void
 }
 
@@ -249,6 +251,7 @@ export function createRecordFlow<C, R extends FlowRecorder>(
   // Each Record click gets a generation; a discard makes the old one's later steps no-ops.
   let gen = 0
   const placed = new Map<string, RecordedPlacement[]>()
+  const punches = new Map<string, Punch>()
   const log = parts.log ?? (() => undefined)
 
   const set = (patch: Partial<FlowSnapshot>) => {
@@ -301,6 +304,7 @@ export function createRecordFlow<C, R extends FlowRecorder>(
       return
     }
     placed.set(take.rec.recordingId, pieces)
+    if (take.punch) punches.set(take.rec.recordingId, take.punch)
     await parts.remember(take.rec.recordingId, { pieces, stop: reason.kind }).catch(() => undefined)
     try {
       await parts.upload.finish(take.rec)
@@ -445,6 +449,7 @@ export function createRecordFlow<C, R extends FlowRecorder>(
       else if (state === 'failed') set({ phase: 'failed', error })
     },
     placementsFor: (id) => placed.get(id) ?? null,
+    punchFor: (id) => punches.get(id) ?? null,
     dispose() {
       void flow.discard(null)
     },

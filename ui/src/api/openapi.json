@@ -3077,6 +3077,21 @@
                   "type": "integer",
                   "minimum": 0,
                   "maximum": 48000
+                },
+                "alternatives": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TakeAlternative"
+                  },
+                  "minItems": 1,
+                  "maxItems": 8,
+                  "description": "The slot's other takes, oldest first, the clip's own left out; a render plays only the clip's own take"
+                },
+                "take": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9,
+                  "description": "With alternatives: the clip's own take number in its slot (default: the newest)"
                 }
               },
               "required": [
@@ -3194,6 +3209,64 @@
           "cleanup"
         ],
         "description": "The whole recorded narration track (at most one per draft): clips of takes placed in integer samples at 24 kHz; later clips win where they overlap"
+      },
+      "TakeAlternative": {
+        "type": "object",
+        "properties": {
+          "mediaId": {
+            "type": "string",
+            "pattern": "^med_[a-z0-9]{8,40}$"
+          },
+          "srcStart": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483648
+          },
+          "srcEnd": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483648
+          },
+          "fit": {
+            "type": "object",
+            "properties": {
+              "a": {
+                "type": "number",
+                "minimum": -3600,
+                "maximum": 3600
+              },
+              "b": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "maximum": 1
+              },
+              "residualMs": {
+                "type": "number",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "a",
+              "b",
+              "residualMs"
+            ],
+            "description": "Recording alignment, t = a + b·sample (identity for uploads); provenance"
+          },
+          "offsetSamples": {
+            "type": "integer",
+            "minimum": -21600000,
+            "maximum": 21600000,
+            "description": "With the fit, where this take sounds: placeTake(fit, offsetSamples, srcStart)"
+          }
+        },
+        "required": [
+          "mediaId",
+          "srcStart",
+          "srcEnd",
+          "fit",
+          "offsetSamples"
+        ],
+        "description": "Another take of a clip's slot (an earlier punch-in over the same range); draft-only"
       },
       "Composition": {
         "type": "object",

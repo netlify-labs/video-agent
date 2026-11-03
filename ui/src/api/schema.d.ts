@@ -7952,6 +7952,10 @@ export interface components {
                 gainDb: number | null;
                 fadeInSamples: number;
                 fadeOutSamples: number;
+                /** @description The slot's other takes, oldest first, the clip's own left out; a render plays only the clip's own take */
+                alternatives?: components["schemas"]["TakeAlternative"][];
+                /** @description With alternatives: the clip's own take number in its slot (default: the newest) */
+                take?: number;
             }[];
             tracks: {
                 narration: {
@@ -7974,6 +7978,20 @@ export interface components {
             };
             /** @enum {string} */
             cleanup: "off" | "light" | "heavy";
+        };
+        /** @description Another take of a clip's slot (an earlier punch-in over the same range); draft-only */
+        TakeAlternative: {
+            mediaId: string;
+            srcStart: number;
+            srcEnd: number;
+            /** @description Recording alignment, t = a + b·sample (identity for uploads); provenance */
+            fit: {
+                a: number;
+                b: number;
+                residualMs: number;
+            };
+            /** @description With the fit, where this take sounds: placeTake(fit, offsetSamples, srcStart) */
+            offsetSamples: number;
         };
         Composition: {
             duration: number;

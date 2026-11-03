@@ -1,9 +1,18 @@
 // The narration editor's controls around the timeline (docs/plans/2026-11-02-record-your-own-voiceover.md §2.3,
 // §5.5): the clip menu (right-click, the ContextMenu key or Shift+F10 on a focused clip) mirroring every clip action,
-// an inspector with the selected clip's gain and fades, and the aria-live region announcing what each action did.
+// an inspector with the selected clip's gain and fades, and the aria-live region announcing what each action did. A
+// clip with take alternatives (punch-ins over its range) gets Takes ▸ Take N, newest first, to swap in place.
 // All of them act through useNarrationEditor, so everything they do is undoable.
 import { Button, Group, Kbd, Menu, NumberInput, Text } from '@mantine/core'
-import { clipEnd, GAIN_DB_RANGE, maxFade, clipLength, SAMPLE_RATE } from '../../../../src/lib/timeline'
+import { IconCheck } from '@tabler/icons-react'
+import {
+  clipEnd,
+  GAIN_DB_RANGE,
+  maxFade,
+  clipLength,
+  SAMPLE_RATE,
+  slotTakes,
+} from '../../../../src/lib/timeline'
 import { useRef } from 'react'
 import { canSplitAt, focusClip, type NarrationEditor } from '../../lib/use-narration-editor'
 
@@ -18,6 +27,7 @@ export function ClipMenu({ editor }: { editor: NarrationEditor }) {
   }
   const gain = clip?.gainDb ?? null
   const fade = clip ? Math.min(FADE_STEP_SAMPLES, maxFade(clipLength(clip))) : 0
+  const slot = clip?.alternatives?.length ? slotTakes(clip) : null
   // The dropdown holds focus until its exit transition ends; focus goes back to the clip (or the one selected after
   // a delete) only then, or it would be lost when the dropdown unmounts.
   const selected = useRef(editor.selected)
@@ -58,6 +68,28 @@ export function ClipMenu({ editor }: { editor: NarrationEditor }) {
         >
           Split at playhead
         </Menu.Item>
+        {slot ? (
+          <Menu.Sub position="right-start">
+            <Menu.Sub.Target>
+              <Menu.Sub.Item data-testid="clip-menu-takes">Takes ({slot.takes.length})</Menu.Sub.Item>
+            </Menu.Sub.Target>
+            <Menu.Sub.Dropdown aria-label="Takes" data-testid="clip-menu-takes-list">
+              {slot.takes
+                .map((_, i) => i)
+                .reverse()
+                .map((i) => (
+                  <Menu.Item
+                    key={i}
+                    aria-current={i === slot.own ? 'true' : undefined}
+                    leftSection={i === slot.own ? <IconCheck size={14} /> : <span style={{ width: 14 }} />}
+                    onClick={run((clipId) => editor.dispatch({ type: 'swapTake', clipId, take: i + 1 }))}
+                  >
+                    Take {i + 1}
+                  </Menu.Item>
+                ))}
+            </Menu.Sub.Dropdown>
+          </Menu.Sub>
+        ) : null}
         <Menu.Label>Nudge</Menu.Label>
         {[
           [-1, 'Nudge left 1 frame', '←'],

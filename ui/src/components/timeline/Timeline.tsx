@@ -306,9 +306,11 @@ export function Timeline(props: TimelineProps) {
     const take = props.takeNames?.get(c.mediaId) ?? 'Take'
     const span = `${formatTime(c.start / SAMPLE_RATE, 0.1)} to ${formatTime(clipEnd(c) / SAMPLE_RATE, 0.1)}`
     const gain = c.gainDb === null ? ', silent' : ''
+    const takes = c.alternatives?.length ? c.alternatives.length + 1 : 0
     return {
       label: take,
-      aria: `Narration clip ${index + 1} of ${total}: ${take}, ${span}${gain}`,
+      badge: takes ? `${takes} takes` : undefined,
+      aria: `Narration clip ${index + 1} of ${total}: ${take}, ${span}${gain}${takes ? `, ${takes} takes` : ''}`,
     }
   }
 
@@ -494,6 +496,7 @@ export function Timeline(props: TimelineProps) {
                   length={clipLength(c)}
                   srcStart={c.srcStart}
                   label={l.label}
+                  badge={l.badge}
                   ariaLabel={l.aria}
                   tone="narration"
                   pxPerSec={pps}

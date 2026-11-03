@@ -24,6 +24,8 @@ export interface ClipProps {
   srcStart: number
   label: string
   ariaLabel: string
+  /** A short tag after the label (a clip's take count). */
+  badge?: string | undefined
   tone: ClipTone
   pxPerSec: number
   /** The render window, composition samples. */
@@ -99,7 +101,16 @@ export const Clip = memo(function Clip(p: ClipProps) {
           pxPerSec={p.pxPerSec}
         />
       ) : null}
-      {width >= LABEL_MIN_PX ? <span className="va-tl-clip-label">{p.label}</span> : null}
+      {width >= LABEL_MIN_PX ? (
+        <span className="va-tl-clip-label">
+          {p.badge ? (
+            <span className="va-tl-clip-badge" data-testid="clip-takes-badge">
+              {p.badge}
+            </span>
+          ) : null}
+          {p.label}
+        </span>
+      ) : null}
       {p.interactive ? (
         <>
           <span className="va-tl-handle" data-part="start" aria-hidden />

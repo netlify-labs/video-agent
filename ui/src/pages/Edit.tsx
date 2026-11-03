@@ -440,7 +440,7 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
       if (!d || !c) throw new Error('The draft is still opening.')
       setSaving(true)
       try {
-        const { data, error } = await put(withNarration(diffOps(d.base, c), narrationToSave(op)))
+        const { data, error } = await put(withNarration(diffOps(d.base, c), narrationToSave(op)) as Op[])
         if (!data) throw new Error(errorMessage(error))
       } finally {
         setSaving(false)

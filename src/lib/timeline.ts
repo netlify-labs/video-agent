@@ -27,6 +27,8 @@ export const GAIN_DB_RANGE = [-60, 12] as const
 /** One narration op places at most this many clips, from at most this many distinct takes. */
 export const MAX_NARRATION_CLIPS = 200
 export const MAX_NARRATION_TAKES = 32
+/** A clip keeps at most this many other takes of its slot (punch-ins over the same range); the oldest go first. */
+export const MAX_CLIP_ALTERNATIVES = 8
 
 /** Recording alignment: composition seconds t = a + b·sample over the take (§5.3). Identity for uploads. */
 export interface Fit {
@@ -36,6 +38,19 @@ export interface Fit {
 }
 
 export const IDENTITY_FIT: Fit = { a: 0, b: 1 / SAMPLE_RATE, residualMs: 0 }
+
+/**
+ * Another take of a clip's slot (§9 phase 6, owner decision 7): a punch-in over the same range keeps what was there.
+ * It carries its own source bounds and alignment; it sounds at placeTake(fit, offsetSamples, srcStart) (altStart), so
+ * a swap puts each take back where it was. Draft-only: a render freezes only the selected take.
+ */
+export interface TakeAlternative {
+  mediaId: string
+  srcStart: number
+  srcEnd: number
+  fit: Fit
+  offsetSamples: number
+}
 
 /** One clip of the narration op (§6.1). `fit` and `offsetSamples` are provenance: `start` already includes them. */
 export interface NarrationClip {
@@ -55,6 +70,10 @@ export interface NarrationClip {
   /** 0..min(len/2, MAX_FADE_SAMPLES). */
   fadeInSamples: number
   fadeOutSamples: number
+  /** The slot's other takes, oldest first, the clip's own take left out (see `take`). */
+  alternatives?: TakeAlternative[] | undefined
+  /** With alternatives: this clip's take number in its slot, 1 (the oldest) to alternatives.length + 1 (default). */
+  take?: number | undefined
 }
 
 export type AiVoiceMode = 'replace' | 'under' | 'keep'
@@ -107,6 +126,91 @@ export function placeTake(fit: Fit, offsetSamples: number, srcStart = 0): number
   return Math.round((fit.a + fit.b * srcStart) * SAMPLE_RATE) + offsetSamples
 }
 
+// ---- take alternatives
+
+/** Composition sample at which an alternative's srcStart sounds: its recorded alignment. */
+export const altStart = (t: TakeAlternative): number => placeTake(t.fit, t.offsetSamples, t.srcStart)
+
+/** Every take a clip (or op) uses, alternatives included: what the take limit, access and draft refs count. */
+export const clipTakeIds = (c: NarrationClip): string[] => [
+  c.mediaId,
+  ...(c.alternatives ?? []).map((t) => t.mediaId),
+]
+export const opTakeIds = (clips: readonly NarrationClip[]): string[] => [
+  ...new Set(clips.flatMap(clipTakeIds)),
+]
+
+/** Source samples [srcStart, srcEnd) of a take sounding from composition sample `at` (offset re-aligned to it). */
+function aligned(
+  t: Pick<TakeAlternative, 'mediaId' | 'fit' | 'offsetSamples'>,
+  srcStart: number,
+  srcEnd: number,
+  at: number,
+): TakeAlternative {
+  return {
+    mediaId: t.mediaId,
+    srcStart,
+    srcEnd,
+    fit: t.fit,
+    offsetSamples: t.offsetSamples + at - placeTake(t.fit, t.offsetSamples, srcStart),
+  }
+}
+
+/** The clip's own take as an alternative, sounding where the clip does now. */
+export const asAlternative = (c: NarrationClip): TakeAlternative => aligned(c, c.srcStart, c.srcEnd, c.start)
+
+/** A clip's takes in slot order (oldest first), its own included at `take`; the index of its own. */
+export function slotTakes(c: NarrationClip): { takes: TakeAlternative[]; own: number } {
+  const alts = c.alternatives ?? []
+  const own = Math.min(Math.max(1, c.take ?? alts.length + 1), alts.length + 1) - 1
+  return { takes: [...alts.slice(0, own), asAlternative(c), ...alts.slice(own)], own }
+}
+
+/** The part of a take that sounds in composition [from, to), or null when none of it does. */
+export function cutAlternative(t: TakeAlternative, from: number, to: number): TakeAlternative | null {
+  const s = altStart(t)
+  const f = Math.max(from, s)
+  const e = Math.min(to, s + (t.srcEnd - t.srcStart))
+  return e > f ? aligned(t, t.srcStart + (f - s), t.srcStart + (e - s), f) : null
+}
+
+/**
+ * A clip with alternatives `takes` (slot order, oldest first, its own take excluded): the newest
+ * MAX_CLIP_ALTERNATIVES are kept, and the clip is the newest take. No takes: the fields are left off.
+ */
+export function withAlternatives(c: NarrationClip, takes: readonly TakeAlternative[]): NarrationClip {
+  const rest = withoutAlternatives(c)
+  const kept = takes.slice(Math.max(0, takes.length - MAX_CLIP_ALTERNATIVES))
+  return kept.length ? { ...rest, alternatives: kept } : rest
+}
+
+/** The clip's slot cut to composition [from, to): each alternative cut to it, empty ones dropped, `take` kept on its own. */
+export function cutSlot(
+  c: NarrationClip,
+  from: number,
+  to: number,
+): Pick<NarrationClip, 'alternatives' | 'take'> {
+  if (!c.alternatives?.length) return {}
+  const { own } = slotTakes(c)
+  const alts: TakeAlternative[] = []
+  let take = 1
+  c.alternatives.forEach((t, i) => {
+    const cut = cutAlternative(t, from, to)
+    if (!cut) return
+    alts.push(cut)
+    if (i < own) take++
+  })
+  return alts.length ? { alternatives: alts, ...(c.take !== undefined ? { take } : {}) } : {}
+}
+
+/** A clip as a render freezes it: the selected take only (alternatives are draft-only). */
+export function withoutAlternatives(c: NarrationClip): NarrationClip {
+  const out = { ...c }
+  delete out.alternatives
+  delete out.take
+  return out
+}
+
 // ---- overlap resolution
 
 /** The longest user fade a clip of `length` samples may have. */
@@ -121,10 +225,14 @@ const clampFades = (c: NarrationClip): NarrationClip => {
   }
 }
 
-/** The part of clip `c` that plays in composition [from, to); a cut side loses its user fade. */
+/**
+ * The part of clip `c` that plays in composition [from, to); a cut side loses its user fade, and its alternatives are
+ * cut to the same range (a swap never reaches under the clip that cut it).
+ */
 function piece(c: NarrationClip, from: number, to: number, id: string): NarrationClip {
   return clampFades({
-    ...c,
+    ...withoutAlternatives(c),
+    ...cutSlot(c, from, to),
     id,
     start: from,
     srcStart: sourceSampleAt(c, from),

@@ -3,22 +3,31 @@
 // (edits.ts:208), so undo lives here, in the browser. Pure: every command maps an op to a new op through
 // src/lib/timeline.ts, re-resolves the clips and checks the op's limits; a command that would break one is rejected
 // with a reason and changes nothing. The hook (use-narration-editor.ts) wires the timeline's pointer and key events
-// to these commands.
+// to these commands. A punch-in's insert keeps what it covers as the new clip's take alternatives, and swapTake puts
+// another take of a slot in place, each where it was recorded (§9 phase 6).
 import {
+  altStart,
   clipEnd,
   clipLength,
+  cutAlternative,
+  cutSlot,
   frameStart,
   GAIN_DB_RANGE,
   MAX_NARRATION_CLIPS,
   MAX_NARRATION_TAKES,
   maxFade,
   nudge,
+  opTakeIds,
   outputEnd,
   outputLimit,
   resolve,
   SAMPLE_RATE,
+  slotTakes,
+  withAlternatives,
+  withoutAlternatives,
   type NarrationClip,
   type NarrationOp,
+  type TakeAlternative,
 } from '../../../src/lib/timeline'
 import { formatTime } from './timeline-view'
 
@@ -53,9 +62,12 @@ export type NarrationCommand =
   | { type: 'nudge'; clipId: string; frames: number }
   /**
    * Lay a new clip (an uploaded or picked take) on top at its `start`; it wins where it overlaps. `with` are the same
-   * take's other pieces (a recorded take split where its picture stepped a frame), added in the same undo step.
+   * take's other pieces (a recorded take split where its picture stepped a frame), added in the same undo step. With
+   * `keepTakes` (a punch-in), each new clip keeps the takes it covers as its alternatives, so they can be swapped back.
    */
-  | { type: 'insert'; clip: NarrationClip; with?: readonly NarrationClip[] }
+  | { type: 'insert'; clip: NarrationClip; with?: readonly NarrationClip[]; keepTakes?: boolean }
+  /** Put take `take` (1 = the oldest) of the clip's slot in its place, where that take was recorded. */
+  | { type: 'swapTake'; clipId: string; take: number }
 
 export type CommandResult =
   | { ok: true; op: NarrationOp; /** What happened, for the aria-live region. */ message: string }
@@ -78,7 +90,7 @@ function finish(op: NarrationOp, clips: NarrationClip[], ctx: EditContext, messa
   const resolved = resolve(clips)
   if (resolved.length > MAX_NARRATION_CLIPS)
     return { ok: false, reason: `A narration can have at most ${MAX_NARRATION_CLIPS} clips` }
-  if (new Set(resolved.map((c) => c.mediaId)).size > MAX_NARRATION_TAKES)
+  if (opTakeIds(resolved).length > MAX_NARRATION_TAKES)
     return { ok: false, reason: `A narration can use at most ${MAX_NARRATION_TAKES} takes` }
   const limit = outputLimit(ctx.baseSamples)
   if (outputEnd(resolved) > limit)
@@ -104,6 +116,22 @@ const freshId = (clips: readonly NarrationClip[], id: string) => {
 
 const clampInt = (v: number, lo: number, hi: number) => Math.round(Math.min(hi, Math.max(lo, v)))
 
+/**
+ * The takes the track plays in composition [from, to), oldest first: every clip there with its slot's takes, cut to
+ * the range. What a punch-in over the range keeps as its alternatives.
+ */
+export function coveredTakes(clips: readonly NarrationClip[], from: number, to: number): TakeAlternative[] {
+  const out: TakeAlternative[] = []
+  for (const c of resolve(clips)) {
+    if (clipEnd(c) <= from || c.start >= to) continue
+    for (const t of slotTakes(c).takes) {
+      const cut = cutAlternative(t, from, to)
+      if (cut) out.push(cut)
+    }
+  }
+  return out
+}
+
 /** Applies one command to `op`. Never throws on bad input; a rejected command reports why. */
 export function applyCommand(op: NarrationOp, cmd: NarrationCommand, ctx: EditContext): CommandResult {
   const clips = op.clips
@@ -115,12 +143,11 @@ export function applyCommand(op: NarrationOp, cmd: NarrationCommand, ctx: EditCo
       return { ok: false, reason: 'That clip is already there' }
     if (all.some((x) => !Number.isInteger(x.start) || !(clipLength(x) > 0)))
       return { ok: false, reason: 'Not a clip' }
-    return finish(
-      op,
-      [...clips, ...all.map((x) => ({ ...x, start: Math.max(0, x.start) }))],
-      ctx,
-      `Clip added at ${clock(n.start)}`,
-    )
+    const placed = all.map((x) => {
+      const at = { ...x, start: Math.max(0, x.start) }
+      return cmd.keepTakes ? withAlternatives(at, coveredTakes(clips, at.start, clipEnd(at))) : at
+    })
+    return finish(op, [...clips, ...placed], ctx, `Clip added at ${clock(n.start)}`)
   }
   const c = clips.find((x) => x.id === cmd.clipId)
   if (!c) return { ok: false, reason: 'That clip is gone' }
@@ -170,9 +197,12 @@ export function applyCommand(op: NarrationOp, cmd: NarrationCommand, ctx: EditCo
       if (!(at > c.start && at < clipEnd(c)))
         return { ok: false, reason: "The playhead isn't inside the clip" }
       const cut = c.srcStart + (at - c.start)
-      const left: NarrationClip = { ...c, srcEnd: cut, fadeOutSamples: 0 }
+      // Each piece keeps its slot's other takes over its own part.
+      const bare = withoutAlternatives(c)
+      const left: NarrationClip = { ...bare, ...cutSlot(c, c.start, at), srcEnd: cut, fadeOutSamples: 0 }
       const right: NarrationClip = {
-        ...c,
+        ...bare,
+        ...cutSlot(c, at, clipEnd(c)),
         id: freshId(clips, c.id),
         srcStart: cut,
         start: at,
@@ -199,6 +229,26 @@ export function applyCommand(op: NarrationOp, cmd: NarrationCommand, ctx: EditCo
         ctx,
         `Gain ${dbText(gainDb)}`,
       )
+    }
+    case 'swapTake': {
+      const { takes, own } = slotTakes(c)
+      const i = Math.round(cmd.take) - 1
+      const t = takes[i]
+      if (!t || !Number.isFinite(cmd.take)) return { ok: false, reason: 'That take is gone' }
+      if (i === own) return finish(op, clips, ctx, `Take ${i + 1} is playing`)
+      const rest = takes.filter((_, k) => k !== i)
+      // The take sounds where it was recorded; the one it replaces keeps its own place among the alternatives.
+      const next: NarrationClip = {
+        ...withAlternatives(withoutAlternatives(c), rest),
+        ...(i < rest.length ? { take: i + 1 } : {}),
+        mediaId: t.mediaId,
+        srcStart: t.srcStart,
+        srcEnd: t.srcEnd,
+        fit: t.fit,
+        offsetSamples: t.offsetSamples,
+        start: altStart(t),
+      }
+      return finish(op, lastWins(clips, c.id, next), ctx, `Take ${i + 1} of ${takes.length}`)
     }
     case 'setFades': {
       const m = maxFade(clipLength(c))
@@ -261,7 +311,9 @@ const sameClip = (a: NarrationClip, b: NarrationClip) =>
   a.fadeInSamples === b.fadeInSamples &&
   a.fadeOutSamples === b.fadeOutSamples &&
   a.offsetSamples === b.offsetSamples &&
-  a.fit === b.fit
+  a.fit === b.fit &&
+  a.alternatives === b.alternatives &&
+  a.take === b.take
 
 /** Whether two ops place the same clips (the tracks aren't edited here). */
 export const sameClips = (a: NarrationOp, b: NarrationOp): boolean =>

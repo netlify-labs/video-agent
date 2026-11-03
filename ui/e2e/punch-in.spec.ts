@@ -171,3 +171,54 @@ test('R punches in at the playhead until stop; R typed in a field does nothing',
   expect(tail.start).toBe(end(fresh))
   expect(tail.mediaId).toBe(take.mediaId)
 })
+
+test('two punches over a range keep both earlier takes: the clip menu lists them and swaps one in place, undoably', async ({
+  page,
+}) => {
+  test.skip(test.info().project.name !== 'desktop', 'Ruler drags and right-clicks are covered on desktop.')
+  test.setTimeout(150_000)
+  await setUp(page)
+  const [take] = await savedClips(page)
+  if (!take) throw new Error('no take')
+
+  await selectRange(page, 2, 4)
+  const punch = page.getByTestId('record-punch')
+  const from = Number(await punch.getAttribute('data-from'))
+  const to = Number(await punch.getAttribute('data-to'))
+  await punch.click()
+  await keepAfter(page, to / RATE + 0.3)
+  const first = (await savedClips(page))[1]
+  await punch.click()
+  await keepAfter(page, to / RATE + 0.3)
+
+  const clips = await savedClips(page)
+  expect(clips).toHaveLength(3)
+  const slot = clips[1]
+  if (!first || !slot) throw new Error('missing clips')
+  expect(new Set([take.mediaId, first.mediaId, slot.mediaId]).size).toBe(3)
+  const el = page.locator(`.va-tl-clip[data-clip-id="${slot.id}"]`)
+  await expect(el.getByTestId('clip-takes-badge')).toHaveText('3 takes')
+
+  await el.click({ button: 'right' })
+  await expect(page.getByTestId('clip-menu')).toBeVisible()
+  await page.getByTestId('clip-menu-takes').hover()
+  const list = page.getByTestId('clip-menu-takes-list')
+  await expect(list.getByRole('menuitem')).toHaveText(['Take 3', 'Take 2', 'Take 1'])
+  await expect(list.getByRole('menuitem', { name: 'Take 3' })).toHaveAttribute('aria-current', 'true')
+  await list.getByRole('menuitem', { name: 'Take 1' }).click()
+  await expect(page.getByTestId('timeline-announcer')).toHaveText(/^Take 1 of 3/)
+
+  // The original take plays the range again, where it always was.
+  await expect
+    .poll(async () => (await savedClips(page)).find((c) => c.id === slot.id)?.mediaId, { timeout: 15_000 })
+    .toBe(take.mediaId)
+  const swapped = (await savedClips(page)).find((c) => c.id === slot.id)
+  expect(swapped).toMatchObject({ start: slot.start, srcStart: slot.start })
+  expect(swapped && end(swapped)).toBe(to)
+  expect(Math.abs((swapped?.start ?? 0) - from)).toBeLessThanOrEqual(1)
+
+  await page.keyboard.press('ControlOrMeta+z')
+  await expect
+    .poll(async () => (await savedClips(page)).find((c) => c.id === slot.id)?.mediaId, { timeout: 15_000 })
+    .toBe(slot.mediaId)
+})

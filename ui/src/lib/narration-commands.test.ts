@@ -2,6 +2,7 @@
 // fast-check dependency), as src/lib/timeline.test.ts does.
 import { describe, expect, it } from 'vitest'
 import {
+  altStart,
   clipEnd,
   clipLength,
   compositionTime,
@@ -13,12 +14,14 @@ import {
   outputLimit,
   SAMPLE_RATE,
   segments,
+  slotTakes,
   XFADE_SAMPLES,
   type NarrationClip,
   type NarrationOp,
 } from '../../../src/lib/timeline'
 import {
   applyCommand,
+  coveredTakes,
   editorReducer,
   initHistory,
   isEditableTarget,
@@ -544,5 +547,109 @@ describe('insert (a new take on the track)', () => {
     expect(segs[1]).toMatchObject({ from: 2 * S - XFADE_SAMPLES / 2, to: 4 * S + XFADE_SAMPLES / 2 })
     h = editorReducer(h, { type: 'undo' })
     expect(sameClips(h.present, initHistory(op).present)).toBe(true)
+  })
+})
+
+describe('take alternatives (punch-ins over the same range)', () => {
+  const S = SAMPLE_RATE
+  const fit = { a: -3, b: 1 / S, residualMs: 1 }
+  /** A punch take `mediaId` over [2 s, 4 s), recorded with a 3 s countdown and placed by its fit. */
+  const punch = (id: string, mediaId: string, offsetSamples = 0) => {
+    const srcStart = 5 * S - offsetSamples
+    return clip({ id, mediaId, fit, offsetSamples, srcStart, srcEnd: srcStart + 2 * S, start: 2 * S })
+  }
+  const insert = (h: EditorHistory, c: NarrationClip) =>
+    editorReducer(h, { type: 'command', command: { type: 'insert', clip: c, keepTakes: true }, ctx })
+  const swap = (h: EditorHistory, clipId: string, take: number) =>
+    editorReducer(h, { type: 'command', command: { type: 'swapTake', clipId, take }, ctx })
+  /** Where each clip's first source sample sounds, and which take, in time order. */
+  const layout = (op: NarrationOp) => op.clips.map((c) => [c.mediaId, c.start, clipEnd(c), c.srcStart])
+
+  it('a punch-in keeps what it covers as its alternatives; a second punch keeps both, oldest first', () => {
+    let h = initHistory(opOf([clip({ id: 'a', srcEnd: 6 * S })]))
+    h = insert(h, punch('p1', 'm2'))
+    const p1 = h.present.clips.find((c) => c.id === 'p1')
+    expect(p1?.alternatives).toEqual([
+      { mediaId: 'm1', srcStart: 2 * S, srcEnd: 4 * S, fit: IDENTITY_FIT, offsetSamples: 0 },
+    ])
+    h = insert(h, punch('p2', 'm3', 240))
+    const p2 = h.present.clips.find((c) => c.id === 'p2')
+    if (!p2) throw new Error('no p2')
+    expect(h.present.clips.map((c) => c.id)).toEqual(['a', 'p2', 'a~2'])
+    expect(slotTakes(p2).takes.map((t) => [t.mediaId, altStart(t), t.srcEnd - t.srcStart])).toEqual([
+      ['m1', 2 * S, 2 * S],
+      ['m2', 2 * S, 2 * S],
+      ['m3', 2 * S, 2 * S],
+    ])
+    expect(slotTakes(p2).own).toBe(2)
+    // One undo step per punch.
+    h = editorReducer(h, { type: 'undo' })
+    expect(h.present.clips.map((c) => c.id)).toEqual(['a', 'p1', 'a~2'])
+  })
+
+  it('a swap puts each take where it was recorded, keeps its neighbours, round-trips, and is one undo step', () => {
+    let h = initHistory(opOf([clip({ id: 'a', srcEnd: 6 * S })]))
+    h = insert(h, punch('p1', 'm2'))
+    h = insert(h, punch('p2', 'm3', 240))
+    const before = h.present
+    h = swap(h, 'p2', 1)
+    expect(h.last).toMatchObject({ ok: true, message: 'Take 1 of 3' })
+    // Take 1 is the original take's own audio over the range, at the same composition times as before the punches.
+    expect(layout(h.present)).toEqual([
+      ['m1', 0, 2 * S, 0],
+      ['m1', 2 * S, 4 * S, 2 * S],
+      ['m1', 4 * S, 6 * S, 4 * S],
+    ])
+    const slot = h.present.clips.find((c) => c.id === 'p2')
+    expect(slot?.take).toBe(1)
+    expect(slot && slotTakes(slot).takes.map((t) => [t.mediaId, altStart(t)])).toEqual([
+      ['m1', 2 * S],
+      ['m2', 2 * S],
+      ['m3', 2 * S],
+    ])
+    h = swap(h, 'p2', 2)
+    expect(layout(h.present)[1]).toEqual(['m2', 2 * S, 4 * S, 5 * S])
+    h = swap(h, 'p2', 3)
+    // Back to the newest take: the very clips the punches left.
+    expect(h.present.clips).toEqual(before.clips)
+    h = editorReducer(h, { type: 'undo' })
+    expect(layout(h.present)[1]?.[0]).toBe('m2')
+    // Swapping to the take already playing changes nothing; an unknown take is refused.
+    expect(swap(h, 'p2', 2).past).toHaveLength(h.past.length)
+    expect(applyCommand(h.present, { type: 'swapTake', clipId: 'p2', take: 9 }, ctx)).toEqual({
+      ok: false,
+      reason: 'That take is gone',
+    })
+  })
+
+  it('splitting a slot gives each piece its takes over its own part; the take limit counts alternatives', () => {
+    let h = initHistory(opOf([clip({ id: 'a', srcEnd: 6 * S })]))
+    h = insert(h, punch('p1', 'm2'))
+    const r = applyCommand(h.present, { type: 'split', clipId: 'p1', at: 3 * S }, ctx)
+    if (!r.ok) throw new Error(r.reason)
+    const pieces = r.op.clips.filter((c) => c.mediaId === 'm2')
+    expect(
+      pieces.map((c) => c.alternatives?.map((t) => [t.mediaId, altStart(t), t.srcEnd - t.srcStart])),
+    ).toEqual([[['m1', 2 * S, S]], [['m1', 3 * S, S]]])
+    expect(coveredTakes(h.present.clips, 3 * S, 5 * S).map((t) => [t.mediaId, altStart(t)])).toEqual([
+      ['m1', 3 * S],
+      ['m2', 3 * S],
+      ['m1', 4 * S],
+    ])
+    // 31 placed takes and an alternative of another is 33.
+    const many = Array.from({ length: 31 }, (_, i) =>
+      clip({ id: `c${i}`, mediaId: `t${i}`, start: i * S, srcEnd: S }),
+    )
+    const full = opOf([
+      ...many,
+      {
+        ...clip({ id: 'x', mediaId: 'm1', start: 40 * S }),
+        alternatives: [{ mediaId: 'm2', srcStart: 0, srcEnd: S, fit: IDENTITY_FIT, offsetSamples: 40 * S }],
+      },
+    ])
+    expect(applyCommand(full, { type: 'nudge', clipId: 'x', frames: 1 }, ctx)).toEqual({
+      ok: false,
+      reason: 'A narration can use at most 32 takes',
+    })
   })
 })

@@ -23,6 +23,7 @@ import {
   fitTarget,
   holdFrameEnd,
   MAX_NARRATION_TAKES,
+  opTakeIds,
   outputEnd,
   outputLimit,
   resolve,
@@ -30,6 +31,7 @@ import {
   samplesToSeconds,
   secondsToSamples,
   withinOutputLimit,
+  withoutAlternatives,
   type NarrationOp,
   type Span,
 } from '../lib/timeline.js'
@@ -115,9 +117,12 @@ function narrationOp(ops: DraftOp[]): NarrationOp | null {
   return found[0] ?? null
 }
 
-/** The takes an op places, at most 32 (in first-use order). */
+/**
+ * The takes an op uses, at most 32 (in first-use order): the clips' own and their alternatives (plan 2026-11-02 §9
+ * phase 6), which the draft holds like any other take until a render freezes only the selected ones.
+ */
 function takeIds(op: NarrationOp) {
-  const ids = [...new Set(op.clips.map((c) => c.mediaId))]
+  const ids = opTakeIds(op.clips)
   if (ids.length > MAX_NARRATION_TAKES)
     throw new ApiError('invalid_request', `A narration uses at most ${MAX_NARRATION_TAKES} recordings.`)
   return ids
@@ -203,11 +208,18 @@ async function narrationTakes(deps: Deps, repo: Repo, op: NarrationOp, baseSampl
     const t = await takeSummary(deps, m)
     if (t.samples === null)
       throw new ApiError('invalid_request', `Recording ${id} can't be placed yet: its length isn't known.`)
-    const over = op.clips.find((c) => c.mediaId === id && c.srcEnd > (t.samples ?? 0))
+    const past = (x: { mediaId: string; srcEnd: number }) => x.mediaId === id && x.srcEnd > (t.samples ?? 0)
+    const over = op.clips.find(past)
     if (over)
       throw new ApiError(
         'invalid_request',
         `That edit can't be made: clip ${over.id} runs past the end of its recording.`,
+      )
+    const alt = op.clips.find((c) => c.alternatives?.some(past))
+    if (alt)
+      throw new ApiError(
+        'invalid_request',
+        `That edit can't be made: a take of clip ${alt.id} runs past the end of its recording.`,
       )
     speech.set(id, t.speech)
   }
@@ -619,7 +631,10 @@ async function freezeNarration(
   transcriptionProvider: TranscriptionProvider,
   language: Language,
 ): Promise<FrozenNarration> {
-  const clips = resolve(op.clips).filter((c) => c.gainDb !== null && c.start < targetSamples)
+  // Only the selected take of each slot is frozen: alternatives are the draft's, never the render's.
+  const clips = resolve(op.clips)
+    .filter((c) => c.gainDb !== null && c.start < targetSamples)
+    .map(withoutAlternatives)
   const takes: FrozenNarration['takes'] = []
   for (const id of new Set(clips.map((c) => c.mediaId))) {
     const m = await repo.getMedia(id)

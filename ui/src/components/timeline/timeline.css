@@ -194,6 +194,17 @@
   text-overflow: ellipsis;
   pointer-events: none;
 }
+.va-tl-clip-badge {
+  display: inline-block;
+  margin-right: 4px;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 10px;
+  line-height: 13px;
+  background: var(--va-raised);
+  border: 1px solid var(--va-rule);
+  color: var(--va-text);
+}
 .va-tl-handle {
   position: absolute;
   top: 0;

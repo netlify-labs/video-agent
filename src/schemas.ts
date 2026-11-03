@@ -7,6 +7,7 @@ import { LANGUAGES } from './lib/language.js'
 import {
   GAIN_DB_RANGE,
   MAX_FADE_SAMPLES,
+  MAX_CLIP_ALTERNATIVES,
   MAX_NARRATION_CLIPS,
   MAX_OUTPUT_SAMPLES,
   NARRATION_CLEANUP_PRESETS,
@@ -849,20 +850,37 @@ export const RecordingListSchema = z.object({ items: z.array(MediaSchema) }).ope
 const samples = (min: number, max: number) => z.number().int().min(min).max(max)
 const Db = z.number().min(GAIN_DB_RANGE[0]).max(GAIN_DB_RANGE[1])
 // Mirrors NarrationOp in src/lib/timeline.ts (plan 2026-11-02 §6.1): integer samples at 24 kHz; zod 4 numbers are
-// finite. The 32-take limit, source bounds and output limit need the takes, so the server checks them (edits.ts).
+// finite. The 32-take limit (alternatives included), source bounds and output limit need the takes, so the server
+// checks them (edits.ts).
+const TakeMediaId = z.string().regex(/^med_[a-z0-9]{8,40}$/)
+const FitSchema = z
+  .object({
+    a: z.number().min(-3600).max(3600),
+    b: z.number().gt(0).max(1),
+    residualMs: z.number().min(0),
+  })
+  .openapi({ description: 'Recording alignment, t = a + b·sample (identity for uploads); provenance' })
+const TakeAlternativeSchema = z
+  .object({
+    mediaId: TakeMediaId,
+    srcStart: samples(0, 2 ** 31),
+    srcEnd: samples(1, 2 ** 31),
+    fit: FitSchema,
+    offsetSamples: samples(-MAX_OUTPUT_SAMPLES, MAX_OUTPUT_SAMPLES).openapi({
+      description: 'With the fit, where this take sounds: placeTake(fit, offsetSamples, srcStart)',
+    }),
+  })
+  .refine((t) => t.srcEnd > t.srcStart, { message: 'A take needs srcEnd after srcStart.' })
+  .openapi('TakeAlternative', {
+    description: "Another take of a clip's slot (an earlier punch-in over the same range); draft-only",
+  })
 const NarrationClipSchema = z
   .object({
     id: z.string().min(1).max(80).openapi({ description: 'Stable slot id; a split piece gets <id>~n' }),
-    mediaId: z.string().regex(/^med_[a-z0-9]{8,40}$/),
+    mediaId: TakeMediaId,
     srcStart: samples(0, 2 ** 31).openapi({ description: 'First source sample (integer, 24 kHz)' }),
     srcEnd: samples(1, 2 ** 31).openapi({ description: 'Source sample after the last; > srcStart' }),
-    fit: z
-      .object({
-        a: z.number().min(-3600).max(3600),
-        b: z.number().gt(0).max(1),
-        residualMs: z.number().min(0),
-      })
-      .openapi({ description: 'Recording alignment, t = a + b·sample (identity for uploads); provenance' }),
+    fit: FitSchema,
     offsetSamples: samples(-MAX_OUTPUT_SAMPLES, MAX_OUTPUT_SAMPLES),
     start: samples(0, MAX_OUTPUT_SAMPLES).openapi({
       description: 'Composition sample where srcStart sounds',
@@ -870,8 +888,20 @@ const NarrationClipSchema = z
     gainDb: Db.nullable().openapi({ description: 'Clip gain in dB; null is silent' }),
     fadeInSamples: samples(0, MAX_FADE_SAMPLES),
     fadeOutSamples: samples(0, MAX_FADE_SAMPLES),
+    alternatives: z.array(TakeAlternativeSchema).min(1).max(MAX_CLIP_ALTERNATIVES).optional().openapi({
+      description:
+        "The slot's other takes, oldest first, the clip's own left out; a render plays only the clip's own take",
+    }),
+    take: samples(1, MAX_CLIP_ALTERNATIVES + 1)
+      .optional()
+      .openapi({
+        description: "With alternatives: the clip's own take number in its slot (default: the newest)",
+      }),
   })
   .refine((c) => c.srcEnd > c.srcStart, { message: 'A clip needs srcEnd after srcStart.' })
+  .refine((c) => c.take === undefined || c.take <= (c.alternatives?.length ?? 0) + 1, {
+    message: "A clip's take number is one of its slot's takes.",
+  })
   .refine(
     (c) =>
       c.fadeInSamples <= maxFade(c.srcEnd - c.srcStart) && c.fadeOutSamples <= maxFade(c.srcEnd - c.srcStart),

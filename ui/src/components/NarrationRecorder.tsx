@@ -256,6 +256,7 @@ export function NarrationRecorder({ api, videoId, versionN, draft }: NarrationRe
     onTakeReady: async (mediaId, samples, speech, ready) => {
       const a = latest.current.api
       const pieces = flowRef.current?.placementsFor(ready.recordingId) ?? placementsFromRecord(ready.record)
+      const punched = !!flowRef.current?.punchFor(ready.recordingId)
       const placed = pieces ? clampToTake(pieces, samples) : []
       let op = a.op
       // A retry after a failed save: the clip is already on the track.
@@ -270,6 +271,8 @@ export function NarrationRecorder({ api, videoId, versionN, draft }: NarrationRe
             name: takeName(ready.record?.createdAt ?? Date.now()),
           },
           placed.length ? placed : {},
+          // A punch-in keeps what it covers as the new clip's other takes (Takes in the clip menu).
+          { keepTakes: punched },
         )
         if (!r.ok || !r.op) throw new Error(r.message || "The take couldn't be added to the Narration track.")
         op = r.op

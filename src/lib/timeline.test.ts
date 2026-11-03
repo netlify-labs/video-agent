@@ -2,8 +2,11 @@
 // Property tests use a small seeded generator (no fast-check dependency); each runs a few hundred cases.
 import { describe, expect, it } from 'vitest'
 import {
+  altStart,
+  asAlternative,
   clipEnd,
   compositionTime,
+  cutAlternative,
   dbToGain,
   DUCK_RELEASE_SAMPLES,
   EDGE_FADE_SAMPLES,
@@ -18,7 +21,9 @@ import {
   MAX_OUTPUT_SAMPLES,
   mergeSpans,
   mixToBuffer,
+  MAX_CLIP_ALTERNATIVES,
   nudge,
+  opTakeIds,
   outputEnd,
   outputLimit,
   placeSpans,
@@ -26,11 +31,15 @@ import {
   resolve,
   SAMPLE_RATE,
   segments,
+  slotTakes,
   snapToFrame,
   sourceSampleAt,
+  withAlternatives,
   withinOutputLimit,
+  withoutAlternatives,
   XFADE_SAMPLES,
   type NarrationClip,
+  type TakeAlternative,
 } from './timeline.js'
 
 const clip = (o: Partial<NarrationClip> & Pick<NarrationClip, 'id'>): NarrationClip => ({
@@ -155,6 +164,76 @@ describe('resolve', () => {
       }
       expect(ownerMap(out)).toEqual(ownerMap(moved))
     }
+  })
+})
+
+describe('take alternatives', () => {
+  const fit = { a: -2, b: 1 / SAMPLE_RATE, residualMs: 1 }
+  /** Take `mediaId` sounding source [srcStart, srcEnd) from composition `at`. */
+  const take = (mediaId: string, srcStart: number, srcEnd: number, at: number): TakeAlternative => ({
+    mediaId,
+    srcStart,
+    srcEnd,
+    fit,
+    offsetSamples: at - placeTake(fit, 0, srcStart),
+  })
+
+  it('an alternative sounds where its alignment puts it; a clip as one sounds where the clip is now', () => {
+    const t = take('m2', 5000, 9000, 3000)
+    expect(altStart(t)).toBe(3000)
+    // Moved since it was recorded: its offset follows the move, so it comes back where it is.
+    const c = clip({ id: 'a', fit, offsetSamples: 7, srcStart: 100, srcEnd: 600, start: 4321 })
+    expect(altStart(asAlternative(c))).toBe(4321)
+    expect(asAlternative(c)).toMatchObject({ mediaId: 'm1', srcStart: 100, srcEnd: 600, fit })
+  })
+
+  it('cuts an alternative to a composition range, keeping each sample at its time', () => {
+    const t = take('m2', 5000, 9000, 3000)
+    const cut = cutAlternative(t, 4000, 5000)
+    expect(cut).toMatchObject({ srcStart: 6000, srcEnd: 7000 })
+    expect(cut && altStart(cut)).toBe(4000)
+    expect(cutAlternative(t, 0, 3000)).toBeNull()
+    expect(cutAlternative(t, 0, 99_999)).toEqual(t)
+  })
+
+  it("lists a slot's takes oldest first with the clip's own at its take number; counts every take", () => {
+    const [t1, t2] = [take('m1', 0, 500, 1000), take('m2', 0, 500, 1000)]
+    const c = clip({ id: 'a', mediaId: 'm3', start: 1000, srcEnd: 500, alternatives: [t1, t2] })
+    expect(slotTakes(c)).toEqual({ takes: [t1, t2, asAlternative(c)], own: 2 })
+    expect(slotTakes({ ...c, take: 1 })).toEqual({ takes: [asAlternative(c), t1, t2], own: 0 })
+    expect(opTakeIds([c, clip({ id: 'b', mediaId: 'm2', start: 5000 })])).toEqual(['m3', 'm1', 'm2'])
+    expect(withoutAlternatives({ ...c, take: 1 })).toEqual(
+      clip({ id: 'a', mediaId: 'm3', start: 1000, srcEnd: 500 }),
+    )
+  })
+
+  it('keeps the newest MAX_CLIP_ALTERNATIVES; none leaves the fields off', () => {
+    const many = Array.from({ length: MAX_CLIP_ALTERNATIVES + 2 }, (_, i) => take(`t${i}`, 0, 100, 0))
+    const c = withAlternatives(clip({ id: 'a', take: 1 }), many)
+    expect(c.alternatives?.map((t) => t.mediaId)).toEqual(many.slice(2).map((t) => t.mediaId))
+    expect(c.take).toBeUndefined()
+    expect('alternatives' in withAlternatives(clip({ id: 'a' }), [])).toBe(false)
+  })
+
+  it("resolve cuts a trimmed or split clip's alternatives to each piece, and keeps its take number on its own", () => {
+    const S = 1000
+    // a (m3, take 2 of 3) at 0-6000, with m1 and m2 under the same range; b lands on 2000-4000.
+    const a = clip({
+      id: 'a',
+      mediaId: 'm3',
+      srcEnd: 6 * S,
+      alternatives: [take('m1', 0, 6 * S, 0), take('m2', 3 * S, 6 * S, 3 * S)],
+      take: 2,
+    })
+    const b = clip({ id: 'b', mediaId: 'm9', start: 2 * S, srcEnd: 2 * S })
+    const [head, , tail] = resolve([a, b])
+    // m2 only sounds from 3000, so the head (0-2000) has m1 alone, and a is still after it.
+    expect(head?.alternatives).toEqual([take('m1', 0, 2 * S, 0)])
+    expect(head?.take).toBe(2)
+    expect(tail?.alternatives).toEqual([take('m1', 4 * S, 6 * S, 4 * S), take('m2', 4 * S, 6 * S, 4 * S)])
+    expect(tail?.take).toBe(2)
+    // The playing audio is unchanged by any of it.
+    expect(segments([a, b], new Map()).map((g) => g.clip.mediaId)).toEqual(['m3', 'm9', 'm3'])
   })
 })
 

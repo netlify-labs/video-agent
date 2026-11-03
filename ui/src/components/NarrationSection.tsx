@@ -27,6 +27,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type
 import { FPS } from '../../../src/lib/contract'
 import {
   clipEnd,
+  opTakeIds,
   SAMPLE_RATE,
   secondsToSamples,
   snapToFrame,
@@ -88,11 +89,13 @@ export interface NarrationTrackApi {
   range: Span | null
   /**
    * Adds a take to the track at `start` (or the playhead): the whole take, unless a source range is given. A list
-   * adds one clip per piece (a recorded take's fit segments) as one undo step. `op` is the op with them in it.
+   * adds one clip per piece (a recorded take's fit segments) as one undo step. With `keepTakes` (a punch-in), what
+   * the new clips cover stays as their take alternatives. `op` is the op with them in it.
    */
   insertTake: (
     take: { mediaId: string } & TakeInfo,
     at?: TakePlacement | readonly TakePlacement[],
+    opts?: { keepTakes?: boolean },
   ) => { ok: boolean; message: string; clipId?: string; op?: NarrationOp }
   /** Sets the track settings a take records with (the setup panel's Original audio). */
   setTracks: (patch: Partial<NarrationTracks>) => void
@@ -198,7 +201,7 @@ export function NarrationSection(props: NarrationSectionProps) {
   const initial = useMemo(() => props.initialOp ?? emptyNarration(), [props.initialOp])
   const [tracks, setTracks] = useState(initial.tracks)
   const [cleanup, setCleanup] = useState(initial.cleanup)
-  const [mediaIds, setMediaIds] = useState(() => initial.clips.map((c) => c.mediaId))
+  const [mediaIds, setMediaIds] = useState(() => opTakeIds(initial.clips))
   const takes = useNarrationTakes(mediaIds)
   const live = useNarrationEditor(initial, {
     takeSamples: takes.takeSamples,
@@ -227,7 +230,8 @@ export function NarrationSection(props: NarrationSectionProps) {
   )
   // Track settings aren't clip commands: they sit beside the editor's undo stack, as on a mixing desk.
   const op = useMemo<NarrationOp>(() => ({ ...editor.op, tracks, cleanup }), [editor.op, tracks, cleanup])
-  const ids = op.clips.map((c) => c.mediaId).join()
+  // Alternatives' takes too: a swap needs their length and peaks.
+  const ids = opTakeIds(op.clips).join()
   useEffect(() => {
     setMediaIds(ids ? ids.split(',') : [])
   }, [ids])
@@ -272,7 +276,7 @@ export function NarrationSection(props: NarrationSectionProps) {
   )
 
   const insertTake = useCallback<NarrationTrackApi['insertTake']>(
-    (take, at = {}) => {
+    (take, at = {}, opts = {}) => {
       takes.add(take.mediaId, take)
       const pieces = Array.isArray(at) ? (at as readonly TakePlacement[]) : [at as TakePlacement]
       const taken = new Set<string>()
@@ -290,7 +294,12 @@ export function NarrationSection(props: NarrationSectionProps) {
       })
       const [first, ...rest] = clips
       if (!first) return { ok: false, message: 'Nothing to add' }
-      const r = editor.dispatch({ type: 'insert', clip: first, ...(rest.length ? { with: rest } : {}) })
+      const r = editor.dispatch({
+        type: 'insert',
+        clip: first,
+        ...(rest.length ? { with: rest } : {}),
+        ...(opts.keepTakes ? { keepTakes: true } : {}),
+      })
       if (!r.ok) notifications.show({ color: 'red', message: r.message })
       return { ...r, clipId: first.id, ...(r.op ? { op: { ...r.op, tracks, cleanup } } : {}) }
     },
