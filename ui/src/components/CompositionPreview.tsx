@@ -1,14 +1,16 @@
 // The sandboxed composition preview (plan v2 §7; design from spike S2). Plays a version's composition in
 // <iframe sandbox="allow-scripts"> with its own channel, accepts only schema-valid messages from that iframe's
-// window (ready, time, click, error, edits-applied) and sends only play, pause, seek and apply-edits. The link is
-// renewed before it expires, and a saved draft reloaded, without losing the playhead or flashing: the new frame loads
-// hidden behind the shown one and replaces it once it's at the same moment.
+// window (ready, time, click, error, edits-applied, mix-applied) and sends only play, pause, seek, apply-edits and mix
+// (the narration audition's levels, lib/preview-mix.ts). The link is renewed before it expires, and a saved draft
+// reloaded, without losing the playhead or flashing: the new frame loads hidden behind the shown one and replaces it
+// once it's at the same moment.
 import { ActionIcon, Group, Slider, Stack, Text } from '@mantine/core'
 import { IconPlayerPauseFilled, IconPlayerPlayFilled } from '@tabler/icons-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 // zod/mini: the same validation as classic zod at a fraction of the bundle size.
 import * as z from 'zod/mini'
 import { fetchClient } from '../api/client'
+import type { MixTracks } from '../lib/preview-mix'
 import { clockTime } from './bits'
 
 const Msg = z.discriminatedUnion('type', [
@@ -23,6 +25,7 @@ const Msg = z.discriminatedUnion('type', [
   }),
   z.object({ type: z.literal('error'), channel: z.string(), message: z.string().check(z.maxLength(300)) }),
   z.object({ type: z.literal('edits-applied'), channel: z.string(), count: z.int() }),
+  z.object({ type: z.literal('mix-applied'), channel: z.string(), count: z.int() }),
 ])
 export type PreviewMessage = z.infer<typeof Msg>
 
@@ -31,6 +34,13 @@ export type PreviewCommand =
   | { type: 'pause' }
   | { type: 'seek'; time: number }
   | { type: 'apply-edits'; edits: { id: string; text: string }[] }
+  | { type: 'mix'; tracks: MixTracks }
+
+/** What the person did to the preview's transport, with the composition time it happened at. */
+export interface PreviewTransport {
+  type: 'play' | 'pause' | 'seek'
+  time: number
+}
 
 interface Link {
   url: string
@@ -50,6 +60,7 @@ export function CompositionPreview({
   onClick,
   onMessage,
   onReady,
+  onTransport,
 }: {
   videoId: string
   versionN: number
@@ -63,6 +74,8 @@ export function CompositionPreview({
   dimensions: { width: number; height: number }
   onClick?: (c: { textId: string | null; x: number; y: number }) => void
   onMessage?: (m: PreviewMessage) => void
+  /** Play, pause and seek as the person presses them (in the click, so a parent AudioContext may start). */
+  onTransport?: (t: PreviewTransport) => void
 }) {
   const timeRef = useRef(0)
   const playingRef = useRef(false)
@@ -262,6 +275,7 @@ export function CompositionPreview({
           disabled={!ready}
           onClick={() => {
             send({ type: playing ? 'pause' : 'play' })
+            onTransport?.({ type: playing ? 'pause' : 'play', time: timeRef.current })
             playingRef.current = !playing
             setPlaying(!playing)
           }}
@@ -280,6 +294,7 @@ export function CompositionPreview({
           onChange={(v) => {
             setTime(v)
             send({ type: 'seek', time: v })
+            onTransport?.({ type: 'seek', time: v })
           }}
         />
         <Text size="xs" c="var(--va-faint)" className="num" w={78} ta="right">
