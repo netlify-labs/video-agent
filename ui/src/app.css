@@ -1292,9 +1292,35 @@ body {
   background: color-mix(in srgb, var(--va-accent) 8%, transparent);
   pointer-events: none;
 }
-.va-dropzone-compact {
-  padding: 14px;
+.va-dropzone-top {
+  padding: 22px;
   margin-bottom: 0;
+}
+/* The picker: a fixed height where only the list scrolls; the toolbar sits above it and the selection and buttons
+   stay at the bottom. */
+.va-pick-modal {
+  display: flex;
+  flex-direction: column;
+  height: min(88dvh, 920px);
+  overflow: hidden;
+}
+.va-pick-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.va-pick-body > .va-media-drop {
+  flex: 1;
+  min-height: 0;
+}
+.va-pick-body .va-table-wrap,
+.va-pick-body .va-media-grid-pick {
+  align-content: start;
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  overflow: auto;
 }
 
 /* The media library as a table (Media page and the Add media picker). */
@@ -1360,11 +1386,6 @@ body {
 .va-row-pick[data-on] {
   background: color-mix(in srgb, var(--va-accent) 12%, transparent);
   box-shadow: inset 3px 0 0 var(--va-accent);
-}
-.va-row-audio {
-  width: min(260px, 100%);
-  height: 30px;
-  margin-top: 4px;
 }
 .va-view-icon {
   vertical-align: -2px;

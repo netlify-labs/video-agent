@@ -1006,17 +1006,19 @@ const mp3File = (name = 'theme.mp3') => ({
   buffer: Buffer.from([0x49, 0x44, 0x33, 4, 0, 0, 0, 0, 0, 0, 0xff, 0xf3, 0x70, 0xc0]),
 })
 
-test('the media library takes audio: an Audio filter and a player in its row', async ({ page }) => {
+test('the media library takes audio: an Audio filter and a play button in its row', async ({ page }) => {
   await page.goto('/media')
   await expect(page.getByText(/MP3,\s+M4A, WAV or Ogg audio up to 50 MB/)).toBeVisible()
   await page.locator('input[type=file]').setInputFiles(pngFile())
   await page.locator('input[type=file]').setInputFiles(mp3File())
   const card = page.getByTestId('media-med_mock0002')
   await expect(card.getByText('theme.mp3')).toBeVisible()
+  // A play button, not a full player: the track loads only when it's pressed.
   const player = card.getByTestId('player-med_mock0002')
   await expect(player).toHaveAttribute('src', '/tone.mp3')
-  await expect(player).toHaveAttribute('controls', '')
+  await expect(player).toHaveAttribute('preload', 'none')
   expect(await prop<boolean>(player, 'muted')).toBe(false)
+  await expect(card.getByRole('button', { name: 'Play theme.mp3' })).toHaveAttribute('aria-pressed', 'false')
   await expect(card.getByText(/1:35/).filter({ visible: true })).toBeVisible()
   const filter = (k: string) =>
     page.locator('.mantine-SegmentedControl-label', { hasText: new RegExp(`^${k}$`) })

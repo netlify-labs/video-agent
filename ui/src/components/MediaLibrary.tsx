@@ -25,10 +25,12 @@ import {
   IconMovie,
   IconMusic,
   IconPencil,
+  IconPlayerPauseFilled,
+  IconPlayerPlayFilled,
   IconSearch,
   IconTypography,
 } from '@tabler/icons-react'
-import { useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { fetchClient } from '../api/client'
 import type { paths } from '../api/schema'
 import { duration, relativeTime, showError } from './bits'
@@ -144,6 +146,53 @@ const size = (n: number) =>
 const lengthOrSize = (m: Media) =>
   m.durationSec ? duration(m.durationSec) : m.width && m.height ? `${m.width}×${m.height}` : size(m.bytes)
 
+// One track plays at a time across the list.
+let playing: HTMLAudioElement | null = null
+
+/** A track's play/pause button, in place of its icon. Nothing loads until it's pressed. */
+function PlayButton({ m, src }: { m: Media; src: string }) {
+  const ref = useRef<HTMLAudioElement>(null)
+  const [on, setOn] = useState(false)
+  return (
+    <span className="va-row-thumb">
+      <ActionIcon
+        variant="subtle"
+        color="gray"
+        aria-label={`${on ? 'Pause' : 'Play'} ${mediaName(m)}`}
+        aria-pressed={on}
+        data-testid={`play-${m.id}`}
+        onClick={(e) => {
+          e.stopPropagation()
+          const a = ref.current
+          if (!a) return
+          if (a.paused) {
+            if (playing && playing !== a) playing.pause()
+            playing = a
+            void a.play()
+          } else a.pause()
+        }}
+      >
+        {on ? <IconPlayerPauseFilled size={16} /> : <IconPlayerPlayFilled size={16} />}
+      </ActionIcon>
+      <audio
+        ref={ref}
+        preload="none"
+        src={src}
+        data-testid={`player-${m.id}`}
+        onPlay={() => {
+          setOn(true)
+        }}
+        onPause={() => {
+          setOn(false)
+        }}
+        onEnded={() => {
+          setOn(false)
+        }}
+      />
+    </span>
+  )
+}
+
 /** A row's small preview: the image or poster when there is one, else an icon for the kind. */
 function RowThumb({ m }: { m: Media }) {
   const src = m.urls
@@ -225,7 +274,11 @@ export function MediaTable(props: {
                 ) : null}
                 <Table.Td className="va-col-name">
                   <Group gap="sm" wrap="nowrap" miw={0}>
-                    <RowThumb m={m} />
+                    {m.kind === 'audio' && m.urls ? (
+                      <PlayButton m={m} src={m.urls.file} />
+                    ) : (
+                      <RowThumb m={m} />
+                    )}
                     <Stack gap={0} miw={0}>
                       <Text size="sm" fw={500} truncate title={mediaName(m)}>
                         {mediaName(m)}
@@ -240,20 +293,6 @@ export function MediaTable(props: {
                         {KIND_WORD[m.kind]} · {lengthOrSize(m)}
                       </Text>
                       {m.source ? <SourceLine source={m.source} /> : null}
-                      {m.kind === 'audio' && m.urls ? (
-                        // Plays from the signed URL; nothing loads until someone presses play.
-                        <audio
-                          className="va-row-audio"
-                          controls
-                          preload="none"
-                          src={m.urls.file}
-                          aria-label={`Play ${mediaName(m)}`}
-                          data-testid={`player-${m.id}`}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                          }}
-                        />
-                      ) : null}
                       {m.status !== 'ready' ? (
                         <Text size="xs" c={m.status === 'rejected' ? 'red' : 'var(--va-faint)'}>
                           {m.status === 'rejected' ? (m.rejectReason ?? 'Rejected') : 'Checking…'}

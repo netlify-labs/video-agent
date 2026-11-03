@@ -194,14 +194,14 @@ export function MediaLibraryModal(props: {
       opened={props.opened}
       onClose={props.onClose}
       title={props.title ?? 'Add media'}
-      size="80%"
+      size="90%"
       padding="xl"
+      // A fixed height: the list scrolls inside it, and the selection and buttons stay in view at the bottom.
+      classNames={{ content: 'va-pick-modal', body: 'va-pick-body' }}
     >
-      {/* Tall enough to browse a library, with Done at the bottom even when it's nearly empty. Files dropped anywhere
-          on it upload, like Upload. */}
+      {/* Files dropped anywhere on it upload, like Upload. */}
       <Stack
         gap="md"
-        mih="min(64vh, 620px)"
         className="va-media-drop"
         data-active={dragging || undefined}
         data-testid="media-modal-dropzone"
@@ -223,6 +223,15 @@ export function MediaLibraryModal(props: {
             }
           : {})}
       >
+        {canUpload ? (
+          <div className="va-dropzone va-dropzone-top" data-active={dragging || undefined}>
+            <Text size="sm" c="var(--va-muted)">
+              {uploading
+                ? 'Uploading…'
+                : 'Drop files anywhere here to add them: images, SVGs, clips, audio, fonts or PDFs.'}
+            </Text>
+          </div>
+        ) : null}
         <Group justify="space-between">
           {kinds.length > 1 ? (
             <SegmentedControl
@@ -262,20 +271,6 @@ export function MediaLibraryModal(props: {
             </Group>
           ) : null}
         </Group>
-        <Text size="sm" c="var(--va-muted)" mt={-4}>
-          {props.multiple
-            ? 'Click files to select them for the video (click again to unselect), then add them below.'
-            : 'Click a file to use it.'}
-        </Text>
-        {canUpload ? (
-          <div className="va-dropzone va-dropzone-compact" data-active={dragging || undefined}>
-            <Text size="sm" c="var(--va-muted)">
-              {uploading
-                ? 'Uploading…'
-                : 'Drop files anywhere here to add them: images, SVGs, clips, audio, fonts or PDFs.'}
-            </Text>
-          </div>
-        ) : null}
         <LibraryToolbar {...lib} />
         {!list.isLoading && items.length === 0 ? (
           <Text size="sm" c="var(--va-muted)">
