@@ -184,6 +184,10 @@ export async function completeUpload(
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
       deletedAt: null,
+      role: null,
+      scopeJobId: null,
+      retainUntil: null,
+      deletingAt: null,
       ...NO_PROVENANCE,
     }
     await repo.insertMedia(pending)

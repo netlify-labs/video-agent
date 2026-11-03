@@ -25,6 +25,11 @@ export const settings = pgTable('settings', {
   teamWebhookUrl: text('team_webhook_url'),
   teamWebhookSecretEnc: text('team_webhook_secret_enc'),
   planDeepModel: text('plan_deep_model'),
+  // Recorded voice-over: admins can turn it off without a redeploy; how narration is transcribed for captions; and
+  // the stored bytes each person's takes may use (2 GiB).
+  narrationEnabled: boolean('narration_enabled').notNull().default(true),
+  transcriptionProvider: text('transcription_provider').notNull().default('local'),
+  takeQuotaBytes: bigint('take_quota_bytes', { mode: 'number' }).notNull().default(2147483648),
 })
 
 export const users = pgTable('users', {
@@ -103,6 +108,10 @@ export const versions = pgTable(
     sound: text('sound').notNull().default('silent'),
     // { voice, speed, script } when the run speaks a voice-over; null when it doesn't.
     voiceover: jsonb('voiceover'),
+    // Recorded narration: the resolved op, how the bus was made and the bus itself; null when there is none.
+    narration: jsonb('narration'),
+    // The version's caption revision (status, policy, rev, files and their hashes); null: the render's own captions.
+    captions: jsonb('captions'),
   },
   (t) => [primaryKey({ columns: [t.jobId, t.n] })],
 )
@@ -330,13 +339,49 @@ export const media = pgTable(
     creator: text('creator'),
     creatorUrl: text('creator_url'),
     attribution: text('attribution'),
+    // Recorded voice-over: 'narration-take' or 'narration-upload' (null for library items), the video it was recorded
+    // for, how long its bytes are kept while nothing references it, and when GC began deleting them (status is the
+    // API's upload state, so deleting is a column of its own).
+    role: text('role'),
+    scopeJobId: text('scope_job_id'),
+    retainUntil: ts('retain_until'),
+    deletingAt: ts('deleting_at'),
   },
   (t) => [
     index('media_created_idx').on(t.createdAt),
     index('media_uploader_idx').on(t.uploaderId),
     index('media_source_idx').on(t.source, t.sourceId),
+    index('media_uploader_role_idx').on(t.uploaderId, t.role),
   ],
 )
+
+// Who references a narration take (plan 2026-11-02 §6.1, §8): a draft, a frozen render attempt or a version. Written
+// in the same transaction as the reference; GC deletes take bytes only when no row is left.
+export const mediaRefs = pgTable(
+  'media_refs',
+  {
+    mediaId: text('media_id').notNull(),
+    ownerKind: text('owner_kind').notNull(),
+    ownerId: text('owner_id').notNull(),
+    jobId: text('job_id').notNull(),
+    createdAt: ts('created_at').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.mediaId, t.ownerKind, t.ownerId] }),
+    index('media_refs_media_idx').on(t.mediaId),
+    index('media_refs_job_idx').on(t.jobId, t.ownerKind),
+  ],
+)
+
+// One person at a time works on a video's narration (plan 2026-11-02 §6.1): a soft lock kept by heartbeats, free
+// once the heartbeat is two minutes old.
+export const narrationLocks = pgTable('narration_locks', {
+  jobId: text('job_id').primaryKey(),
+  holderId: text('holder_id').notNull(),
+  draftId: text('draft_id').notNull(),
+  acquiredAt: ts('acquired_at').notNull(),
+  heartbeatAt: ts('heartbeat_at').notNull(),
+})
 
 // Upload sessions for files over 4 MB (plan v2 §14 rule 24): bound to the uploader, expiring, with the whole file's
 // size and hash declared up front and quota reserved at creation. Parts are immutable once received.

@@ -105,7 +105,24 @@ export interface SettingsRow {
   teamWebhookSecretEnc?: string | null
   /** Admin-chosen deep model for planning (allowlisted; null = default). */
   planDeepModel?: string | null
+  /** Recorded voice-over on (the default) or off, without a redeploy. Missing: the default. */
+  narrationEnabled?: boolean
+  /** How recorded narration is transcribed for captions. Missing: the default. */
+  transcriptionProvider?: TranscriptionProvider
+  /** Stored bytes each person's narration takes may use. Missing: the default. */
+  takeQuotaBytes?: number
 }
+
+export type TranscriptionProvider = 'local' | 'elevenlabs' | 'off'
+
+/** The voice-over settings' defaults, as the database fills them (db/schema.ts). */
+export const NARRATION_SETTING_DEFAULTS = {
+  narrationEnabled: true,
+  transcriptionProvider: 'local',
+  takeQuotaBytes: 2 * 1024 ** 3,
+} as const satisfies Required<
+  Pick<SettingsRow, 'narrationEnabled' | 'transcriptionProvider' | 'takeQuotaBytes'>
+>
 
 export interface UserRow {
   id: string
@@ -255,6 +272,33 @@ export interface VersionRow {
   sound?: VideoSound
   /** Null (or missing) when the version has no voice-over. */
   voiceover?: Voiceover | null
+  /** Recorded narration; null (or missing) when the version has none. */
+  narration?: VersionNarration | null
+  /** The current caption revision; null (or missing): the render's own captions. */
+  captions?: VersionCaptions | null
+}
+
+/** A version's recorded narration (plan 2026-11-02 §6.1): what was mixed, how, and the resulting bus. */
+export interface VersionNarration {
+  /** The resolved narration op (schema-versioned; validated where it's saved). */
+  op: unknown
+  recipe: { pipeline: number; ffmpegVersion: string; settings: Record<string, unknown> }
+  /** The processed bus in the sources store, its digest and length in samples. */
+  bus: { key: string; sha256: string; samples: number }
+}
+
+/** A version's captions (plan 2026-11-02 §6.6), kept apart from the render's output hashes. */
+export interface VersionCaptions {
+  status: 'ok' | 'failed' | 'off'
+  /** Stored, never inferred from the HTML: burned-in captions can't be revised. */
+  policy: 'sidecar' | 'burned'
+  /** Bumped by every revision (compare-and-swap). */
+  rev: number
+  /** File names of the current revision, e.g. captions.r2.vtt. */
+  files: { vtt: string; transcript: string }
+  sha256: { vtt: string; transcript: string }
+  /** The publication mirror's generation: a mirror update never applies an older one. */
+  generation: number
 }
 
 export type VersionMode = 'author' | 'render_unchanged'
@@ -499,6 +543,9 @@ export interface CommentRow {
 
 export type MediaStatus = 'uploading' | 'verifying' | 'ready' | 'rejected'
 
+/** Recorded voice-over audio; library items have none. */
+export type MediaRole = 'narration-take' | 'narration-upload'
+
 export interface MediaRow extends MediaProvenance {
   id: string
   uploaderId: string
@@ -525,6 +572,13 @@ export interface MediaRow extends MediaProvenance {
   createdAt: string
   updatedAt: string
   deletedAt: string | null
+  role: MediaRole | null
+  /** The video a narration take was recorded or uploaded for. */
+  scopeJobId: string | null
+  /** An unreferenced take's bytes are kept until then. */
+  retainUntil: string | null
+  /** Set by GC's first phase (no references left): the bytes are being deleted and nothing may reference it. */
+  deletingAt: string | null
 }
 
 /** Where an imported item came from, with its licence and credit; all null for uploads. */
@@ -621,6 +675,28 @@ export interface VersionMediaRow {
   /** File name inside video/assets/media/. */
   filename: string
   caption: string | null
+}
+
+/** draft: an edit draft (owner id = edit id); frozen_attempt: a render's frozen input (attempt id); version: `<job>#<n>`. */
+export type MediaRefOwnerKind = 'draft' | 'frozen_attempt' | 'version'
+
+/** One reference to a narration take (plan 2026-11-02 §6.1): while any exists, GC keeps the take's bytes. */
+export interface MediaRefRow {
+  mediaId: string
+  ownerKind: MediaRefOwnerKind
+  ownerId: string
+  jobId: string
+  createdAt: string
+}
+
+/** Who is working on a video's narration (plan 2026-11-02 §6.1); free once `heartbeatAt` is two minutes old. */
+export interface NarrationLockRow {
+  jobId: string
+  holderId: string
+  /** The holder's edit draft. */
+  draftId: string
+  acquiredAt: string
+  heartbeatAt: string
 }
 
 /** One imported item a version was made with: its provenance, as the credits on that version need it. */

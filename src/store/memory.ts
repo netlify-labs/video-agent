@@ -1,6 +1,6 @@
 // In-memory store with the same semantics as Postgres: transactions are serialized and roll back
 // on error. Used by tests and by OpenAPI generation.
-import { SLOT_STAGES, isTerminal } from '../domain/types.js'
+import { NARRATION_SETTING_DEFAULTS, SLOT_STAGES, isTerminal } from '../domain/types.js'
 import type {
   ApiKeyRow,
   AttemptRow,
@@ -29,6 +29,8 @@ import type {
   OpenverseJobRow,
   OpenverseSearchRow,
   VersionMediaRow,
+  MediaRefRow,
+  NarrationLockRow,
   VersionProvenanceRow,
   GatewayCallRow,
   WebhookDeliveryRow,
@@ -74,6 +76,8 @@ interface State {
   openverseSearches: Map<string, OpenverseSearchRow>
   openverseSearchUses: Map<string, { key: string; day: string; count: number }>
   versionMedia: VersionMediaRow[]
+  mediaRefs: Map<string, MediaRefRow>
+  narrationLocks: Map<string, NarrationLockRow>
   userWebhooks: Map<string, UserWebhookRow>
   cleanup: Map<string, CleanupRow>
   oauthClients: Map<string, OAuthClientRow>
@@ -115,6 +119,8 @@ const empty = (): State => ({
   openverseSearches: new Map(),
   openverseSearchUses: new Map(),
   versionMedia: [],
+  mediaRefs: new Map(),
+  narrationLocks: new Map(),
   userWebhooks: new Map(),
   cleanup: new Map(),
   oauthClients: new Map(),
@@ -127,6 +133,10 @@ const empty = (): State => ({
 
 const clone = <T>(v: T): T => structuredClone(v)
 const vkey = (jobId: string, n: number) => `${jobId}#${n}`
+const rkey = (r: Pick<MediaRefRow, 'mediaId' | 'ownerKind' | 'ownerId'>) =>
+  `${r.mediaId}\n${r.ownerKind}\n${r.ownerId}`
+const byCreated = (a: MediaRefRow, b: MediaRefRow) =>
+  a.createdAt.localeCompare(b.createdAt) || rkey(a).localeCompare(rkey(b))
 const ikey = (provider: string, subject: string) => `${provider}\n${subject}`
 const live = (leaseUntil: string | null, now: string) => leaseUntil !== null && leaseUntil > now
 
@@ -138,7 +148,8 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
   const repo: Repo = {
     getSettings: async () => clone(state.settings),
     insertSettingsIfAbsent: async (row) => {
-      state.settings ??= clone(row)
+      // The database fills the voice-over settings' defaults.
+      state.settings ??= { ...NARRATION_SETTING_DEFAULTS, ...clone(row) }
       return clone(state.settings)
     },
     updateSettings: async (patch) => {
@@ -568,6 +579,37 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
           .filter((r) => r.jobId === jobId && r.versionN === n)
           .sort((a, b) => a.position - b.position),
       ),
+    insertMediaRefs: async (rows) => {
+      for (const r of rows) if (!state.mediaRefs.has(rkey(r))) state.mediaRefs.set(rkey(r), clone(r))
+    },
+    deleteMediaRefs: async (ownerKind, ownerId, mediaIds) => {
+      let n = 0
+      for (const [k, r] of state.mediaRefs)
+        if (
+          r.ownerKind === ownerKind &&
+          r.ownerId === ownerId &&
+          (!mediaIds || mediaIds.includes(r.mediaId))
+        ) {
+          state.mediaRefs.delete(k)
+          n++
+        }
+      return n
+    },
+    listMediaRefsByMedia: async (ids) =>
+      clone([...state.mediaRefs.values()].filter((r) => ids.includes(r.mediaId)).sort(byCreated)),
+    listMediaRefsByOwner: async (ownerKind, ownerId) =>
+      clone(
+        [...state.mediaRefs.values()]
+          .filter((r) => r.ownerKind === ownerKind && r.ownerId === ownerId)
+          .sort(byCreated),
+      ),
+    getNarrationLock: async (jobId) => clone(state.narrationLocks.get(jobId) ?? null),
+    upsertNarrationLock: async (row) => {
+      state.narrationLocks.set(row.jobId, clone(row))
+    },
+    deleteNarrationLock: async (jobId) => {
+      state.narrationLocks.delete(jobId)
+    },
     mediaUsage: async (ids) => {
       const out: Record<string, string[]> = {}
       for (const r of state.versionMedia)
@@ -908,6 +950,7 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
       for (const g of state.oauthGrants.values()) g.userId = swap(g.userId)
       for (const r of state.sessions.values()) r.userId = swap(r.userId)
       for (const r of state.identities.values()) r.userId = swap(r.userId)
+      for (const l of state.narrationLocks.values()) l.holderId = swap(l.holderId)
       state.users.delete(from)
     },
     failuresSince: async (since) => {

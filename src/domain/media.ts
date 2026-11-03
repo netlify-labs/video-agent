@@ -123,6 +123,10 @@ export async function storeMedia(
     createdAt: now,
     updatedAt: now,
     deletedAt: null,
+    role: null,
+    scopeJobId: null,
+    retainUntil: null,
+    deletingAt: null,
     ...(meta.provenance ?? NO_PROVENANCE),
   }
   return row

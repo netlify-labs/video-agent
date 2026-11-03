@@ -45,6 +45,8 @@ import type {
   OpenverseJobRow,
   OpenverseSearchRow,
   VersionMediaRow,
+  MediaRefRow,
+  NarrationLockRow,
   VersionProvenanceRow,
   GatewayCallRow,
   WebhookDeliveryRow,
@@ -701,6 +703,63 @@ function repoFor(db: Db): Repo {
         .from(t.versionMedia)
         .where(and(eq(t.versionMedia.jobId, jobId), eq(t.versionMedia.versionN, n)))
         .orderBy(asc(t.versionMedia.position))) as VersionMediaRow[],
+    insertMediaRefs: async (rows) => {
+      if (rows.length) await db.insert(t.mediaRefs).values(rows).onConflictDoNothing()
+    },
+    deleteMediaRefs: async (ownerKind, ownerId, mediaIds) => {
+      const r = t.mediaRefs
+      if (mediaIds?.length === 0) return 0
+      return (
+        await db
+          .delete(r)
+          .where(
+            and(
+              eq(r.ownerKind, ownerKind),
+              eq(r.ownerId, ownerId),
+              mediaIds ? inArray(r.mediaId, mediaIds) : undefined,
+            ),
+          )
+          .returning({ mediaId: r.mediaId })
+      ).length
+    },
+    listMediaRefsByMedia: async (ids) => {
+      if (ids.length === 0) return []
+      const r = t.mediaRefs
+      return (await db
+        .select()
+        .from(r)
+        .where(inArray(r.mediaId, ids))
+        .orderBy(asc(r.createdAt), asc(r.mediaId), asc(r.ownerKind), asc(r.ownerId))) as MediaRefRow[]
+    },
+    listMediaRefsByOwner: async (ownerKind, ownerId) => {
+      const r = t.mediaRefs
+      return (await db
+        .select()
+        .from(r)
+        .where(and(eq(r.ownerKind, ownerKind), eq(r.ownerId, ownerId)))
+        .orderBy(asc(r.createdAt), asc(r.mediaId))) as MediaRefRow[]
+    },
+    getNarrationLock: async (jobId) =>
+      one<NarrationLockRow>(
+        await db.select().from(t.narrationLocks).where(eq(t.narrationLocks.jobId, jobId)),
+      ),
+    upsertNarrationLock: async (row) => {
+      await db
+        .insert(t.narrationLocks)
+        .values(row)
+        .onConflictDoUpdate({
+          target: t.narrationLocks.jobId,
+          set: {
+            holderId: row.holderId,
+            draftId: row.draftId,
+            acquiredAt: row.acquiredAt,
+            heartbeatAt: row.heartbeatAt,
+          },
+        })
+    },
+    deleteNarrationLock: async (jobId) => {
+      await db.delete(t.narrationLocks).where(eq(t.narrationLocks.jobId, jobId))
+    },
     mediaUsage: async (ids) => {
       if (ids.length === 0) return {}
       const rows = await db
@@ -1150,6 +1209,7 @@ function repoFor(db: Db): Repo {
         ['oauth_grants', 'user_id'],
         ['sessions', 'user_id'],
         ['user_identities', 'user_id'],
+        ['narration_locks', 'holder_id'],
       ]
       for (const [table, col] of moves)
         await db.execute(

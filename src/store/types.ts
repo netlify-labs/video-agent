@@ -31,6 +31,9 @@ import type {
   OpenverseJobStatus,
   OpenverseSearchRow,
   VersionMediaRow,
+  MediaRefRow,
+  MediaRefOwnerKind,
+  NarrationLockRow,
   VersionProvenanceRow,
   GatewayCallRow,
   WebhookDeliveryRow,
@@ -211,6 +214,18 @@ export interface Repo {
   deleteOpenverseSearchUses(beforeDay: string): Promise<number>
   insertVersionMedia(rows: VersionMediaRow[]): Promise<void>
   listVersionMedia(jobId: string, versionN: number): Promise<VersionMediaRow[]>
+  /** Adds references to narration takes; one that already exists is left as it is. */
+  insertMediaRefs(rows: MediaRefRow[]): Promise<void>
+  /** Removes the owner's references (all of them, or only to these media ids); returns how many went. */
+  deleteMediaRefs(ownerKind: MediaRefOwnerKind, ownerId: string, mediaIds?: string[]): Promise<number>
+  /** Every reference to these media ids, oldest first. */
+  listMediaRefsByMedia(mediaIds: string[]): Promise<MediaRefRow[]>
+  /** The media ids an owner references, oldest first. */
+  listMediaRefsByOwner(ownerKind: MediaRefOwnerKind, ownerId: string): Promise<MediaRefRow[]>
+  getNarrationLock(jobId: string): Promise<NarrationLockRow | null>
+  /** Inserts or replaces the video's lock. */
+  upsertNarrationLock(row: NarrationLockRow): Promise<void>
+  deleteNarrationLock(jobId: string): Promise<void>
   /** Per media id, the distinct videos (job ids) whose versions use it. */
   mediaUsage(mediaIds: string[]): Promise<Record<string, string[]>>
   /** Undeleted items imported from `source` with one of these ids there, newest first. */
