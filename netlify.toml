@@ -31,6 +31,14 @@
   to = "/index.html"
   status = 200
 
+# The app may use the microphone (recording voice-over takes), from its own origin only. These headers reach the
+# static responses: the SPA and its assets. Share, embed and preview pages are edge-function responses, which deny
+# the microphone themselves (src/lib/permissions-policy.ts); scripts/e2e/headers.ts checks both live.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Permissions-Policy = "microphone=(self)"
+
 [[headers]]
   for = "/assets/*"
   [headers.values]

@@ -5,6 +5,7 @@ import type { Config, Context } from '@netlify/edge-functions'
 import { getStore } from '@netlify/blobs'
 import { CONTENT_TYPES, mediaResponse } from '../../src/lib/media/range.ts'
 import { creditHtml, type CreditLine } from '../../src/lib/credit-html.ts'
+import { denyMicrophone } from '../../src/lib/permissions-policy.ts'
 
 interface Mirror {
   slug: string
@@ -23,7 +24,7 @@ const NO_STORE = { 'cache-control': 'no-store' }
 const notFound = () =>
   new Response('<!doctype html><title>Not found</title><p>This video is not published.</p>', {
     status: 404,
-    headers: { ...NO_STORE, 'content-type': 'text/html; charset=utf-8' },
+    headers: denyMicrophone({ ...NO_STORE, 'content-type': 'text/html; charset=utf-8' }),
   })
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
 
@@ -87,7 +88,10 @@ video{width:100%;height:auto;border-radius:12px;background:#000;display:block}fi
 .credits{display:block;margin-top:4px;font-size:13px;opacity:.75}.credits a{color:inherit}</style></head>
 <body><main><figure><video controls playsinline preload="metadata" poster="${poster}" src="${base}.mp4" width="${pub.width}" height="${pub.height}">
 <track kind="captions" src="${base}.vtt" srclang="en" label="Captions"></video><figcaption>${title}${credits ? `<small class="credits" data-credits>${credits}</small>` : ''}</figcaption></figure></main></body></html>`
-  return new Response(html, { headers: { ...NO_STORE, 'content-type': 'text/html; charset=utf-8' } })
+  // The share page is also the embed player (twitter:player): it never gets the microphone.
+  return new Response(html, {
+    headers: denyMicrophone({ ...NO_STORE, 'content-type': 'text/html; charset=utf-8' }),
+  })
 }
 
 // GET and HEAD only (the manifest can't list HEAD, so the method check is in the handler).

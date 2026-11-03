@@ -98,6 +98,7 @@ describe('preview links and the edge function', () => {
     expect(res.headers.get('cache-control')).toBe('private, no-store')
     expect(res.headers.get('x-content-type-options')).toBe('nosniff')
     expect(res.headers.get('access-control-allow-origin')).toBe('*')
+    expect(res.headers.get('permissions-policy')).toBe('microphone=()')
     // Another manifest file, with Range.
     const part = await edge(base + 'summary.json', { headers: { range: 'bytes=0-0' } })
     expect(part.status).toBe(206)

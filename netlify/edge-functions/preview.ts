@@ -5,6 +5,7 @@
 import type { Config, Context } from '@netlify/edge-functions'
 import { getStore } from '@netlify/blobs'
 import { mediaResponse, verifySignedPath, type AccessMirror } from '../../src/lib/media/range.ts'
+import { denyMicrophone } from '../../src/lib/permissions-policy.ts'
 import {
   BRIDGE_PATH,
   GSAP_PATH,
@@ -52,6 +53,8 @@ export default async (req: Request, context: Context) => {
   if (!ok) return plain(403, 'This preview link has expired. Reopen the video to get a fresh one.')
 
   const base = previewBase(url.origin, t)
+  // Every bundle file can be a document (index.html, nested scenes, SVGs): none of them gets the microphone.
+  const headers = (type: string) => denyMicrophone(previewHeaders(base, type))
   // live/s{seq}/… is the running version's latest checkpoint snapshot (plan v2 §6 A2), under the same capability.
   const live = draft ? null : /^live\/s(\d{1,9})\/(.+)$/.exec(t.path)
   // The path inside the version, draft or snapshot: the vendored runtime is served at the same place in each.
@@ -65,7 +68,7 @@ export default async (req: Request, context: Context) => {
   if (asset) {
     const res = await fetch(new URL(asset, url))
     if (!res.ok) return plain(502, 'The preview runtime is missing from this deploy.')
-    return new Response(res.body, { headers: previewHeaders(base, 'text/javascript; charset=utf-8') })
+    return new Response(res.body, { headers: headers('text/javascript; charset=utf-8') })
   }
 
   const bundles = getStore({ name: 'bundles', consistency: 'strong' })
@@ -82,7 +85,7 @@ export default async (req: Request, context: Context) => {
     const html = (await bundles.get(`${prefix}f/index.html`, { type: 'text' })) as string | null
     if (html === null) return plain(404, 'Not in this bundle.')
     return new Response(req.method === 'HEAD' ? null : injectPreviewScripts(html), {
-      headers: previewHeaders(base, type),
+      headers: headers(type),
     })
   }
   return mediaResponse(
@@ -99,7 +102,7 @@ export default async (req: Request, context: Context) => {
       },
     },
     type,
-    previewHeaders(base, type),
+    headers(type),
   )
 }
 
