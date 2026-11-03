@@ -1,15 +1,15 @@
 # Record your own voice-over — plan
 
-- **Status:** draft 2 (2026-11-02). Folds in review round 1 (Fable 5 high, Codex gpt-6.1-sol high; 690 credits). §14 lists what was taken and what was rejected. Next: phase 0 spikes. The architecture choices marked **[S10]**–**[S15]** are provisional until their spike reports numbers.
+- **Status:** draft 3 (2026-11-02). Folds in review rounds 1 and 2 (Fable 5 high and Codex gpt-6.1-sol high each round; 690 + 1,260 credits). §14 lists what was taken and what was rejected, per round. Next: phase 0 spikes, run to the spike contract in §9. The architecture choices marked **[S10]**–**[S13]** are provisional until their spike reports numbers.
 - **Owner decisions so far (2026-11-02 interview):**
   - **Recording:** a whole take first, then punch-in re-records over any range. It should feel like a video editor: recordings are clips on a Narration track that sits above Music.
   - **Re-render:** the user picks either a plain re-render (render-unchanged, visuals untouched) or "let the agent adapt", which may retime scenes to fit the narration.
   - **Captions:** recorded narration is auto-transcribed into timed captions and VTT.
   - **In scope for v1:** a mic level meter, device picker and countdown; audio cleanup; uploading an existing file instead of recording; and an option to keep the original AI voice-over or sound under the narration.
 - **Builds on:**
-  - [`2026-10-31-storyboard-editor-feedback-media.md`](2026-10-31-storyboard-editor-feedback-media.md): editor, drafts, render-unchanged, media.
+  - [`2026-10-31-storyboard-editor-feedback-media.md`](2026-10-31-storyboard-editor-feedback-media.md): editor, drafts, render-unchanged, media, trust model.
   - [`2026-11-01-ideas-audio-skills-oauth.md`](2026-11-01-ideas-audio-skills-oauth.md): sound, music, AI voice-over.
-  - SPIKES S2, S4, S5, S7 and S9.
+  - `docs/spikes.md` S2, S4, S5, S7 and S9.
 
 ---
 
@@ -20,11 +20,11 @@ Today a video's narration can only come from the AI: Kokoro in the run, or Eleve
 The feature: **press Record, watch your video play, talk over it, and get a new version with your voice mixed in, ducked music, cleaned-up audio and real captions.** If a sentence comes out wrong, re-record just that sentence. If the narration runs long, either keep the visuals (and trim or hold the last frame) or let the agent stretch the scenes to fit.
 
 Success looks like this:
-1. A creator narrates a 60–90 s video in one sitting, fixes two flubs with punch-ins, and renders. The whole thing takes under 10 minutes. The keep-visuals render is a fraction of an authoring run's cost; the exact range is an S11 output, and today's render-unchanged run is about 34 credits.
-2. **Sync:** narration lands within one video frame (≤ 33 ms at 30 fps) of where the speaker heard it, on the setups S10 qualifies (wired headphones or built-in output, current Chrome, Safari and Firefox on macOS). Bluetooth and other setups are "best effort with calibration", stated in the UI.
-3. **Delivered audio**, measured on the decoded final AAC: −14 ± 1 LUFS integrated, true peak ≤ −1 dBTP, speech intelligible over the ducked music.
-4. **Captions** follow the words, within the timestamp error S11 measures for the chosen STT.
-5. **Recordings are private** to their uploader and the videos they're used in, and unused recordings are actually deleted (§8).
+1. A creator narrates a 60–90 s video in one sitting, fixes two flubs with punch-ins, and renders, all in under 10 minutes. The keep-visuals render costs a fraction of an authoring run; the measured range is an S11/S12 output, and today's render-unchanged run is about 34 credits for 16–60 s videos.
+2. **Sync:** narration lands within one video frame (≤ 33 ms at 30 fps) of where the speaker saw it, on the setups S10 qualifies. Other setups are "best effort with calibration", and the UI says so.
+3. **Delivered audio**, measured on the decoded final AAC: −14 ± 1 LUFS integrated for non-silent mixes, true peak ≤ −1 dBTP, speech intelligible over the ducked music.
+4. **Captions** follow the words, within the timestamp error S11 measures.
+5. **Recordings are private:** raw recordings are readable only by their uploader and admins. Viewers get the rendered mix, never the source takes, and unused recordings are actually deleted (§8).
 
 Non-goals for v1:
 - Multi-person or remote recording.
@@ -33,6 +33,7 @@ Non-goals for v1:
 - Real-time collaborative timeline editing.
 - Mobile recording (untested, unpromised).
 - Browser-side MP4 rendering. S7 rejected it, and rendering stays in the Agent Runner run.
+- Take alternatives and a takes switcher (deferred to phase 6).
 
 ## 2. User workflows
 
@@ -41,27 +42,26 @@ Non-goals for v1:
 2. **Setup panel:**
    - **Mic picker** (`enumerateDevices`, remembered per browser) with a live input meter. A 3 s "check level" pass reports too quiet (< −40 dBFS RMS), OK, or clipping (≥ −1 dBFS peak).
    - **Output setup:**
-     - *Headphones* (default): the video's audio plays normally while recording.
-     - *Speakers*: the video's audio is muted or ducked to −30 dB while recording, and browser echo cancellation turns on.
-     - The mode is fixed for the whole take, because toggling echo cancellation mid-stream can shift latency.
-   - **Calibration:** a one-time flash-and-beep loopback test per audio route (input device + output device + sample rate). It's prompted on the first take with a new route and stored locally; changing the route invalidates it. A manual **Sync offset ±** slider is always available in preview. Bluetooth isn't detected or blocked. The calibration prompt and a copy line ("Bluetooth adds delay and lowers mic quality; wired is best") cover it.
+     - *Headphones* (default): the monitor mix (§5.3) plays while recording.
+     - *Speakers*: the monitor mix is muted or ducked to −30 dB while recording, and browser echo cancellation turns on.
+     - The mode is fixed for the whole take.
+   - **Calibration:** a per-route procedure that S10 must show works with headphones on (§5.3), prompted on the first take with a new route (input + output device + sample rate). A manual **Sync offset ±** slider is always available in preview. Bluetooth isn't detected or blocked; the calibration prompt and a copy line ("Bluetooth adds delay and lowers mic quality; wired is best") cover it.
    - **Original audio:**
-     - *Replace AI voice-over* (default): the AI voice track is muted, but kept so it can be restored.
+     - *Replace AI voice-over* (default): the AI voice isn't played in the monitor and is muted in the render, but kept so it can be restored.
      - *Keep it under my voice*: the AI voice at a chosen level, −12 dB by default.
      - *Mute all original audio*.
 3. The user clicks **Record**. This click is the user gesture that starts the `AudioContext` and playback (`resume()` is explicit). A 3-2-1 countdown plays while the mic is already capturing, so nothing is clipped, then the video plays from the start.
 4. **Stopping:**
    - **Space** stops and keeps the take; **Esc** discards it.
-   - Seeking, a playback stall, the tab going hidden, a device change (`devicechange`, mic track `ended`) or a context interruption **stops the take and keeps what was captured** up to that point, with a message saying why.
+   - Seeking, a playback stall, the tab going hidden, a device change (`devicechange`, mic track `ended`), a context interruption, or sync residual beyond the limit (§5.3) **stops the take and keeps what was captured** up to that point, with a message saying why.
 5. The take appears as a clip on the **Narration** track, with its waveform, at the video time it was recorded against.
-6. **Play the mix** right away in the browser (§5.4). No render is needed.
+6. **Audition the mix** right away in the browser (§5.4). The narration is labelled *raw, before cleanup*. No render is needed.
 
 ### 2.2 Punch-in (re-record a range)
 1. Select a range on the ruler, or put the playhead somewhere and press **R**.
-2. **Pre-roll:** playback starts 2 s before the punch point (configurable 0–5 s), with existing narration audible so the user can match tone. At the punch-in point, armed narration in the punch range is muted, so the user doesn't hear their old take over themselves.
-3. **Recording:** capture runs continuously from the countdown. Only the samples from the punch range (or from the punch point until stop) become the new clip, and the rest of the capture is kept as the take's source.
-4. **Overlap:** the new clip is laid on top. Older clips are trimmed or split non-destructively, and their source audio is never modified. Each edit point gets a short crossfade using handle audio from both sides where it exists (§6.1), or edge fades where it doesn't.
-5. **Takes:** every clip slot remembers its alternatives, each with its own source bounds and alignment. Right-click opens **Takes ▸ Take 3 / Take 2 / Take 1**, which swaps the take in place.
+2. **Pre-roll:** playback starts 2 s before the punch point (configurable 0–5 s), with existing narration audible so the user can match tone. At the punch point the monitor mutes the user's existing narration in the punch range. This is possible because the monitor is built from separate stems (§5.3).
+3. **Recording:** capture runs continuously from the countdown. Only the samples from the punch range (or from the punch point until stop) become the new clip, and the full capture is kept as that take's source.
+4. **Overlap:** the new clip is laid on top. Older clips are trimmed or split non-destructively, and their source audio is never modified. Each edit point gets a fixed 20 ms crossfade using handle audio where both sides have it, or edge fades where they don't.
 
 ### 2.3 Arrange clips like an editor
 - **Clip actions:**
@@ -78,167 +78,158 @@ Non-goals for v1:
 - **Zoom:** ⌘/Ctrl-scroll.
 - **Undo/redo** is a local command stack in the editor. Draft saves keep only the newest revision (`edits.ts:208`), so undo can't come from server revisions.
 - **Keyboard shortcuts** ignore focus inside text fields and have Ctrl equivalents on non-Mac.
+- **Recordings** are managed with the library's existing conventions: `title` and notes (`db/schema.ts:305-307`), and the table view (`ui/src/pages/Media.tsx`) with a *Recordings* filter.
 
 ### 2.4 Upload instead of record
 - Drag an audio file onto the Narration track, or pick one from the library.
   - Accepted formats: MP3, WAV, M4A and Ogg today; WebM/Opus once §5.2 lands.
   - It lands at the drop position (default 0) and the user aligns it by dragging.
-  - From then on it behaves like a recorded take.
-- **Auto-align against the AI voice track** (cross-correlation) is deferred (§9, phase 6).
+- **Library audio used as narration keeps its license and attribution** (§6.1).
+- **Auto-align against the AI voice track** is deferred (phase 6).
 
 ### 2.5 Render
 The user clicks **Render**. A dialog shows a duration and overflow preview (where narration starts and ends against the video) and the cost range for each option:
 
 - **Keep my visuals (preselected).** This is render-unchanged.
-  - Narration plays over the existing scenes. Visual frames are identical to the base version (§10 checks this).
+  - Narration plays over the existing scenes. Visual frames are identical to the frozen edited draft (§10 checks this).
   - **If narration runs past the end**, the user chooses:
     - trim the clip;
-    - **hold the final frame** for the overrun plus a 0.5 s post-roll. This is an explicit, deterministic operation that appends a still of the last frame. It doesn't stretch the last beat's animation.
+    - **hold the final frame** for the overrun plus a 0.5 s post-roll. This is a deterministic append of a still of the last frame, bounded by the output-duration limit (§6.1). It doesn't stretch the last beat's animation.
     - switch to the fit option.
 - **Let the agent fit the video to my narration (≈ an authoring run, about 250 credits).**
-  - An authoring run that starts from the **edited draft** (§6.4).
-  - The agent gets the narration's word timings and a target duration (narration end + post-roll, frame-quantized). It may retime, extend or tighten scenes to match.
+  - An authoring run from the **frozen edited draft** (§6.4).
+  - The agent gets the narration's word timings (or, if transcription failed, duration-only guidance) and an exact target duration. It may retime, extend or tighten scenes to match.
   - **The agent cannot change the narration audio.** A guard enforces this (§6.4).
 
 **The result is a new version n+1** with:
-- mode `render_unchanged` or `author` (provenance: `editedFromN`, `narration` frozen);
+- mode `render_unchanged` or `author`, with provenance;
 - narration-derived captions;
 - the usual MP4, GIF, VTT and poster, plus `narration.mp3` and `transcript.txt`.
 
-**Publication** is per version and unchanged: a published older version keeps its slug until the new one is published.
+**Publication** is per version and unchanged.
 
 ### 2.6 Fix captions afterwards
 - The transcript is shown as cues, and words can be corrected. Fixes keep their timings and only change the text.
-- If the version doesn't burn captions in (the default today: VTT sidecar, captions off), a fix creates a **caption revision** of that version (§6.6). This is a new immutable VTT; the output pointer and any publication mirror are updated, and **no render** is needed.
-- If captions are burned in, a fix goes through the editor and a render-unchanged run.
-- **Ships with the first recording release**, not later: transcription errors are common, and captions are user-visible.
+- For VTT-sidecar captions (the default), a fix creates a **caption revision** of the version (§6.6): new immutable files, delivered through revision-aware signed paths, with **no render**.
+- For burned-in captions (a stored per-version policy), fixes go through the editor and a render-unchanged run.
+- Ships with the first recording release.
 
 ## 3. Constraints from the current system
 
-These are verified against the code, and confirmed or corrected by both round-1 reviews.
+Verified at `8649997`. Line numbers are as of that commit.
 
 | Fact | Where | Consequence |
 |---|---|---|
-| Every MP4 renders in an Agent Runner run (`render-job.ts:114`). There's no function-side or browser render path (S7). Render-unchanged has cost 33.6–34.4 credits. | `prompt.ts:303-354`, `docs/spikes.md:164-175,197-217` | Keep-visuals is a render-unchanged run. New narration processing adds time and cost, which S11 measures. |
-| Versions have two **modes**, `author` and `render_unchanged`; "revise" is a run kind, not a mode. An author run with a parent restores the **parent's** archive, not the edited draft. | `types.ts:260`, `run-manifest.ts:9`, `reconciler.ts:195-198` | Fit-to-narration needs the author run to start from the frozen edited draft (§6.4). |
-| `validate()`: every `data-va-layer` root child must be on track ≥ 1 and **span the whole video**. Any other timed root child that isn't a beat is a violation. | `contract.ts:336-347` | Per-clip narration elements are illegal. |
-| `relayout()` (on every `applyEdits` and `applyRevoice`) rewrites **every** `data-va-layer` to start 0 and full duration, then calls `applyDucking`. | `contract.ts:569-573` | Per-clip timing would be wiped on the first save. One full-duration narration bus is the only shape that survives (§6.2). |
-| AI voice is at most one `<audio data-va-voice="<beat>">` per beat, ending inside the beat. | `contract.ts:372-401` | AI voice stays as it is, and narration is separate. |
-| Ducking: `duckPoints` derives dips **only from beat voices**, and `validate()` fails a `data-va-duck` lane that doesn't match it. `data-va-duck` marks the *recipient* (music). | `contract.ts:403-410,468-526` | `duckPoints` itself must learn narration speech spans, in shared code (§6.3). |
-| Mute is `data-volume="0"` **plus** `data-va-muted`, with the level kept in `data-va-volume`. HyperFrames mixes every timed `<audio>` whatever its `muted` attribute says. | `contract.ts:696-718` | AI-voice "replace" reuses exactly this. |
-| HyperFrames 0.8.222 audio: `data-start`, `data-duration`, `data-volume`, `data-media-start` (source offset), `data-playback-start` (**overrides** `data-media-start`) and `data-automation`. Automation is clip-local, multiplies gain, and is capped at **512 points**; the mixer has a fallback that degrades automation. Looping uses native `loop`, not `data-loop`. Every `<audio>` needs an `id`. | `node_modules/hyperframes/dist` (Codex round 1), `video/AGENTS.md:142` | Fades and ducking go through bounded automation, and degraded-render warnings must fail the run (§6.3). |
-| Captions: `validate()` requires each cue to have `beat`+`textId`, or `voice: true` tied to a **voiced** beat. `syncVoice` rewrites voice captions and drops captions in voiced beats. | `contract.ts:433-452`, `scripts/voice.ts:145-173` | Narration cues need their own cue kind (§6.6). |
-| `captions.vtt` is a **required** output file. | `types.ts:775`, `finalize.ts:64,141` | A failed transcription produces an empty valid VTT plus a status; captions never go missing (§6.6). |
-| Audio is sniffed by content: MP3, PCM WAV, Ogg Vorbis/Opus, M4A/AAC. **WebM is rejected.** Limits are 50 MiB / 600 s. | `classify.ts:21-37,121-162`, `audio.ts:208` | Recordings upload as 24 kHz PCM16 WAV (28.8 MB for 10 min). WebM is upload-path only (§5.2). |
-| Upload sessions: 4 MiB parts, 100 MiB session ceiling, whole-file hash before upload. Completion can return **before** the media is ready. The 1 GiB quota counts **unfinished uploads only**. | `upload.ts:93-158`, `media-uploads.ts:14-57`, `store/drizzle.ts:463` | Takes need a stored-bytes budget of their own (§8), and recovery waits for "ready" (§5.1). |
-| Version media snapshots are capped at **12 items / 300 MiB**, inherit previous items, and hydrate to `video/assets/media/` by **Blobs key + sha256** (not signed URLs). | `media.ts:260-296`, `prepare-run.ts:30-34,182-197` | Takes get their own snapshot list, cap and directory (§6.1). |
-| `loadMedia` lets **any signed-in reader** load any *ready* media item and get a signed link. "Private" means signed-in only. | `media.ts:231-233,145` | Takes need scope enforcement (§8). |
-| No media GC exists. Delete is soft. The sweep reaps uploads, drafts, idempotency rows, plans, OAuth and sessions, but never media bytes. | `media.ts:253-258`, `cleanup.ts:1-35` | Deleting recordings is new work (§8). |
-| Drafts are **author-only** and expire after 7 days. Their bundles are deleted, and only the newest revision is kept. | `edits.ts:29,208,265,329-335` | Reviewers hear committed versions only. Draft expiry has to be handled for takes (§6.1). |
-| Preview iframe: `sandbox="allow-scripts"` (opaque origin, its own time origin). The bridge sends `ready`, `time` (only when moved > 20 ms), `click`, `error` and `edits-applied`. It doesn't send play, pause or ended. | `CompositionPreview.tsx:236`, `preview.ts:59`, `bridge.js:12-64` | Its clock can't be compared with the parent's directly (§5.3). |
-| The Video page plays the **MP4** in a native `<video>` (`Review.tsx:89-126`). | `Review.tsx` | A same-document clock with `requestVideoFrameCallback` is available (§5.3). |
-| Loudness is normalized only by the agent, on music, through the prompt. Voice WAVs aren't normalized. `hyperframes audio` analyses individual sources, not the summed mix. | `prompt.ts:215,262`, HyperFrames `audio-*.js` | Our script masters the mix and measures the decoded final AAC with ffmpeg `ebur128` (§6.3). |
-| No STT on the AI Gateway. `hyperframes transcribe` fails on the runner with `whisper_unavailable`, and the error **suggests `hyperframes models install parakeet`**. `transcript.json` is already a recognized project file. | `docs/spikes.md:229-249`, `video/AGENTS.md:84` | S11 tries Parakeet first, then whisper.cpp (§6.6). |
-| No `Permissions-Policy` anywhere. `netlify.toml` headers cover static responses only; share and embed pages are edge-function responses. | `netlify.toml:34`, `netlify/edge-functions/*` | Set the mic policy in both places (§8). |
+| **Rendering and cost.** Every MP4 renders in an Agent Runner run; there's no function-side or browser render (S7). Render-unchanged has cost 33.6–34.4 credits, measured only on 16 s and 60 s videos. render-job's own render timeout is 20 min, inside a 22-min authoring and 25-min runner limit. | `render-job.ts:114-116`, `prompt.ts:312-366`, `docs/spikes.md:164-175,197-217` | Keep-visuals is a render-unchanged run. The **whole** hydrate → clean → STT → render → upload sequence must fit the budget, and long videos need measuring (S11/S12). |
+| **Modes and restore.** Version modes are `author` and `render_unchanged`; `RunKind` is `author`, `revision` or `render_unchanged`. Only render-unchanged consumes `version.frozen`. An author run with a parent restores the **parent's** `source.tar.gz`. `FrozenBundle` carries `editId`. The run manifest serializes its fields explicitly. | `types.ts:260-270`, `run-manifest.ts:9,64`, `reconciler.ts:167-205` | Fit mode needs a new run kind plus manifest, reconciler and prepare-run changes together (§6.4). |
+| **Layers.** `validate()` requires every `data-va-layer` to be on track ≥ 1 and span the video. `relayout()` resets every layer to start 0 and full duration on each `applyEdits` and `applyRevoice`, then calls `applyDucking`. | `contract.ts:337-347,569-573` | Use one full-duration narration bus; per-clip layers are illegal. |
+| **Audio roles.** `AUDIO_ROLES = ['music','voice','sfx']`; any other `data-va-audio` value fails validation. The DTO enum also excludes narration. | `contract.ts:236,423-425`, `schemas.ts:753` | Add a `narration` role everywhere it's enumerated (§6.2). |
+| **Ducking.** `duckPoints` derives dips only from beat voices (muted voices included) and `validate()` checks the lane against it with `sameLane` tolerance. `data-va-duck` marks the *recipient*. | `contract.ts:403-410,468-526` | `duckPoints` changes in shared code: add narration spans, exclude muted voice (§6.3). |
+| **Mute.** Mute is `data-volume="0"` plus `data-va-muted`, with the level in `data-va-volume`. HyperFrames mixes every timed `<audio>` regardless of `muted`. | `contract.ts:696-718` | AI-voice *replace* reuses this exactly. |
+| **HyperFrames 0.8.222 audio.** Attributes `data-start`, `data-duration`, `data-volume`, `data-media-start` (overridden by `data-playback-start`) and `data-automation` (clip-local, multiplies gain). Native `loop`. Video elements' audio, groups and effects are part of the mix. It already measures decoded-AAC true peak and applies bounded attenuation. An automation point cap of about 512 was reported by one reviewer and couldn't be found by the other. | `node_modules/hyperframes/dist` | Mastering reuses HyperFrames' peak enforcement. The guard covers the effective audio graph. Automation is kept ≤ 400 points, and S12 confirms any cap. |
+| **Captions.** `validate()` needs `beat`+`textId` or `voice: true` on a voiced beat. `syncVoice` rewrites voice captions. `captions.vtt` is a required output. | `contract.ts:435-452`, `scripts/voice.ts:145-173`, `types.ts:781-787`, `finalize.ts:141` | Narration needs its own cue kind, and failure writes an empty valid VTT (§6.6). |
+| **Signed file paths.** Private file URLs are signed for fixed filenames, and the files edge function matches a fixed filename regex, builds the Blob key from the path, and caches `private, immutable`. | `src/domain/files.ts:44`, `netlify/edge-functions/files.ts:18,37-47` | Caption revisions need revision-aware paths (§6.6). |
+| **Bundles.** `excluded()` only skips library media (`assets/media/med_*`), so every other file goes into `source.tar.gz`, checkpoints and **preview bundles that version readers can open**. Bundle tar limits: 10 MiB per file, 50 MiB total. | `bundle-manifest.ts:24-28`, `run-tools.ts:22-30`, `bundles.ts:107-122`, `edge-functions/preview.ts:77-99`, `tar.ts:12-16` | Raw takes must never enter `video/`. A 24 kHz PCM16 bus passes 10 MiB at about 218 s, so the bus is stored by reference, not in the tar (§6.2). |
+| **Audio sniffing.** MP3, PCM WAV, Ogg Vorbis/Opus, M4A/AAC; WebM rejected; 50 MiB / 600 s limits. | `classify.ts:34-54,124-166`, `audio.ts:208-214` | Recordings upload as 24 kHz PCM16 WAV. WebM is upload-only (§5.2). |
+| **Uploads.** Sessions use 4 MiB parts with a 100 MiB ceiling. The uploader hashes the **whole file in memory** (`await f.arrayBuffer()`). Completion can return before the media is ready. The 1 GiB quota counts unfinished uploads only. | `upload.ts:93-158`, `media-uploads.ts:14-57`, `store/drizzle.ts:516-523` | The worker supplies the hash. Ready-wait before treating a take as saved. Add a stored-bytes quota for takes. |
+| **Media access.** Snapshots are capped at 12 items / 300 MiB and hydrate by Blobs key + sha256. `loadMedia` lets any signed-in reader load any ready media. `checkMedia` duplicate lookup returns matches across the library. Delete is soft. There is **no media GC**. Usage and credits read `version_media` only, and count audio as audible only via `sound` or `voiceover`. | `media.ts:155-159,252-258,277-286,306-353`, `prepare-run.ts:184-199`, `store/drizzle.ts:440,484-501,704-731`, `credits.ts:76-85`, `cleanup.ts` | Takes need a separate snapshot list, one authorization predicate on every path, a reference index, GC and provenance (§6.1, §8). |
+| **Drafts.** Author-only. Expire after 7 days. Only the newest revision is kept. Save locks the edit row, but media lookup happens outside that transaction. | `edits.ts:29,160,208,265,282-301` | Reviewers hear committed versions only. GC needs a lock protocol (§8). |
+| **Preview and players.** The preview iframe is `sandbox="allow-scripts"` (opaque origin, its own time origin). The bridge sends `ready`, `time` (when moved > 20 ms), `click`, `error` and `edits-applied`. The Video page plays the mixed MP4 (one AAC track) in a native `<video>`. | `CompositionPreview.tsx:235`, `bridge.js`, `Review.tsx:111-123` | Record against the MP4 **muted** as a picture reference, and build the monitor mix from separate stems (§5.3). |
+| **Edits that move time.** A voice-only edit can lengthen beats and shift later visuals. | `contract.ts:774` | Any pending op that changes timing blocks recording, not just "visual" ops (§5.3). |
+| **STT.** No STT on the AI Gateway. `hyperframes transcribe` fails with `whisper_unavailable` and suggests Parakeet. The transcribe timeout option applies to Whisper only. | `docs/spikes.md:229-249`, HyperFrames transcribe | S11 needs an outer process-tree deadline (§6.6). |
+| **Output duration.** There's no global output-duration limit; create takes any positive duration. | `schemas.ts:332-337` | Define one for narration placement and hold-frame (§6.1). |
+| **Mic policy.** No `Permissions-Policy` anywhere. `netlify.toml` covers static responses, and share and embed pages are edge responses. | `netlify.toml:34`, `netlify/edge-functions/*` | Set the mic policy in both places (§8). |
 
 ## 4. Architecture overview
 
 ```
-Browser (editor)                                   Functions / DB / Blobs                     Agent Runner run
-────────────────                                   ──────────────────────                     ────────────────
-Recorder: AudioWorklet → worker (resample 24k,      upload session → media{kind:audio,
-  PCM16 WAV, peaks) → IndexedDB from chunk 1 ─────▶   role:narration-take, scope}
-Sync: MP4 <video> + requestVideoFrameCallback        take scope enforced on read/link/reuse
-  + AudioContext in ONE document [S10]
-Timeline (src/lib/timeline.ts, integer samples)      saveEdit: narration op (whole-track
-  local undo stack ─────────────────────────────────▶   snapshot) → buildRev
-Live mix preview: composition iframe for visuals,
-  parent Web Audio for narration (±1 frame) ─────── Render ─▶ renderEdit: freeze draft +
-                                                     take snapshots + pipeline settings ──────▶ prepare-run: hydrate takes
-                                                                                                  by Blobs key + sha256
-                                                                                                scripts/narration.ts:
-                                                                                                  clean per take → mix bus
-                                                                                                  → master → measure
-                                                                                                transcribe (Parakeet/whisper,
-                                                                                                  bounded, optional)
-                                                                                                checkNarration() guard
-                                                                                                hyperframes check/render
-                                                                                                finalize (+narration.mp3)
+Browser (editor)                                   Functions / DB / Blobs                      Agent Runner run
+────────────────                                   ──────────────────────                      ────────────────
+Recorder: AudioWorklet → worker (24k PCM16 WAV,     upload session (worker hash) → media{audio,
+  hash, peaks) → IndexedDB from chunk 1 ──────────▶   role, scope} + peaks blob; ready-wait
+Picture: base MP4, muted, rVFC anchors              one authorization predicate (read, link,
+Monitor: draft stems (music, AI voice, narration)     duplicates, search, ops, snapshots)
+  in parent Web Audio on the same clock [S10]       media_refs index + lock protocol + GC
+Timeline (src/lib/timeline.ts, integer samples) ──▶ saveEdit: narration op → buildRev
+  local undo                                          (speech spans from peaks → duck lane)
+                                         Render ──▶ renderEdit: freeze editId + recipe
+                                                      (takes, settings, target duration) ───▶ prepare-run: takes → run-input
+                                                                                                 dir OUTSIDE video/ (never archived)
+                                                                                               revoice (if any) → narration.ts:
+                                                                                                 clean → mix bus (target length)
+                                                                                                 → receipt; bus by reference
+                                                                                               STT (outer deadline, cached)
+                                                                                               [fit: author run sees bus + words]
+                                                                                               checkNarration / narration_modified
+                                                                                               render → master/measure → finalize
 ```
 
 What goes where, and why:
 - **Recording happens in the browser.** Only the browser has the mic. PCM through an AudioWorklet gives per-sample positions, while MediaRecorder has codec delay, opaque timing and WebM output. S10 compares the two and keeps the winner.
-- **One clock for recording [S10].** We record against the **base version's MP4** in the parent document, so the video, the mic and the `AudioContext` share one `performance.now()` timeline. `requestVideoFrameCallback` gives exact presented-frame media times. The composition iframe stays for the post-record mix preview, where ±1 frame is acceptable.
-- **The timeline is a whole-track snapshot op** on the existing draft system. That gives optimistic saves (`expectedRev`), CSRF, roles and the frozen render inputs. Undo is a local command stack.
-- **One narration bus in the composition.** The run mixes clips into a single full-duration WAV, which is the shape `validate()` and `relayout()` already accept for layers. Clip-level data lives in the op and in `versions.narration`.
-- **All audio processing is deterministic code in the run** (`scripts/narration.ts`); the agent only invokes it. The same code runs in both render modes, so they sound the same. Source takes are never modified.
+- **One clock for recording.** The base MP4 plays muted in the parent document as the **picture**, and `requestVideoFrameCallback` gives presented-frame times on the parent clock. The **monitor mix** is the draft's separate stems scheduled with Web Audio on that same clock. That's what makes *replace* and punch-in muting work.
+- **The timeline is a whole-track snapshot op** on the existing draft system. Undo is local.
+- **One narration bus per render, stored by reference.** The composition carries one full-duration narration layer; its WAV lives in Blobs with a digest in the manifest, outside the 10 MiB tar limit. Raw takes never enter `video/`, archives or previews.
+- **Deterministic processing in the run** (`scripts/narration.ts`, invoked and never edited by the agent) produces a receipt bound to the attempt. Guards check the composition against frozen-derived expectations plus that receipt.
 
 ## 5. Browser: recording, sync and preview
 
 ### 5.1 Recorder
-- **Mic stream:** `getUserMedia({ audio: { deviceId, channelCount: 1, echoCancellation: <speakers mode>, noiseSuppression: false, autoGainControl: false } })`.
-  - Browser noise suppression and auto-gain are off because they pump the level and smear consonants; cleanup happens in the run.
-  - Stop the mic tracks when leaving the editor or cancelling.
+- **Mic stream:** `getUserMedia({ audio: { deviceId, channelCount: 1, echoCancellation: <speakers mode>, noiseSuppression: false, autoGainControl: false } })`. Stop the mic tracks when leaving the editor or cancelling.
 - **Capture chain:** `AudioContext` → `MediaStreamAudioSourceNode` → `AudioWorkletNode('va-recorder')`.
-  - The worklet's output is silent: it isn't connected to the destination, or it goes through a 0-gain node, so the user never hears themselves delayed.
-  - The worklet posts **transferable** Float32 blocks with their context sample index to a **Worker**.
+  - The worklet's output is silent (not connected, or through a 0-gain node).
+  - It posts **transferable** Float32 blocks with their context sample index to a **Worker**.
 - **Worker** (bounded memory):
-  - incrementally resamples to 24 kHz (polyphase, streaming) and encodes PCM16;
-  - computes multiresolution peaks;
+  - streams the resample to 24 kHz and encodes PCM16;
+  - computes multiresolution peaks and the speech-span summary (§6.2);
   - hashes incrementally;
-  - writes every chunk to **IndexedDB from the first chunk**, keyed by recording UUID with a sample sequence.
-  - Only the analyser and the last few seconds stay in memory. A 10-min take at 48 kHz Float32 would be 115 MB, so it's never held whole.
-- **Recovery record:** the recording UUID, sample sequence, clock anchors (§5.3), device route, the draft id and `expectedRev`, and upload state.
-  - On reload, the editor offers to recover takes that are unsaved or not yet uploaded.
+  - writes every chunk to **IndexedDB from the first chunk**.
+- **Upload:** the worker's final hash is passed into the upload session, so the uploader never calls `arrayBuffer()` on the whole file. That needs a small `uploadFile` option. Resume state is bound to user, role and scope.
+- **Recovery record:** recording UUID, sample sequence, clock anchors and fit, device route, draft id + `expectedRev`, and upload state.
+  - On reload, offer to recover takes that are unsaved or not yet uploaded.
   - The local copy is kept until the media is **ready** and the draft save that references it has succeeded.
-  - Quota errors stop the take cleanly, keep what was saved, and say so.
-  - Sign-out or account switch: recovery records belong to the user id and are never offered to another user.
-- **On stop:** finalize the WAV in the worker and upload through the existing sessions with `role: 'narration-take'`. The editor waits for media `ready` before treating the take as durable.
-- **Level meter:** an `AnalyserNode` showing RMS and peak, with a clip indicator latched for 1 s.
-- **Mic denied or missing:** a clear empty state with retry, and links to the browser's permission settings. Upload instead of record stays available.
+  - Quota errors stop the take cleanly.
+  - Records belong to the user id and are never offered to another account.
+  - Recovery copies are cleared on ready + save, on discard, or after 7 days.
+- **Level meter:** an `AnalyserNode` showing RMS and peak, with a latched clip indicator.
+- **Mic denied or missing:** an empty state with retry and help. Upload stays available.
 
 ### 5.2 Upload instead of record
-- Reuse `ui/src/lib/upload.ts` sessions with `role: 'narration-upload'`.
-- **WebM/Opus in the classifier:**
-  - Parse EBML **structurally**. Accept one audio track only (`A_OPUS`/`A_VORBIS`) and reject files with video tracks.
-  - Bound duration, channels and decode work. Substring checks for codec names aren't enough.
-  - ffprobe re-checks in prepare-run, as other audio is today.
-  - Add a fixture to `media.test.ts`.
+- Reuse upload sessions with `role: 'narration-upload'`.
+- **WebM/Opus:** parse EBML structurally. Accept one audio track (`A_OPUS`/`A_VORBIS`) and reject video tracks. Bound duration, channels and decode work. ffprobe re-checks it in prepare-run. Fixture in `media.test.ts`.
 
-### 5.3 Sync clock [S10]
-The goal: for source sample *k* of a take, find the composition time *t* the speaker was seeing and hearing.
+### 5.3 Picture, monitor and sync clock [S10]
+- **Picture:** while armed, the editor shows the base version's MP4 in a parent-document `<video muted>`.
+  - It's the visual reference only.
+  - `requestVideoFrameCallback` gives `(mediaTime, expectedDisplayTime)` for every presented frame on the parent's `performance.now()` clock.
+- **Monitor mix:** the parent schedules the draft's separate audio stems with Web Audio in **one `AudioContext`**, positioned from the picture anchors:
+  - music (with the draft's volume and duck);
+  - AI voice WAVs in *keep* and *under* modes (none in *replace*);
+  - the user's existing narration clips (muted inside an armed punch range).
 
-**Primary design: record against the base MP4 in the parent document.**
-- **The player:** while armed, the editor shows the base version's MP4 in a parent-document `<video>`. The composition iframe isn't used for recording.
-  - The visuals are identical to what keep-visuals renders.
-  - For fit-to-narration, the agent fits visuals to the narration afterwards anyway.
-  - Visual edits in the same draft (retime, reorder, delete) disable recording, with "render or discard visual edits first". Recording against a moving target is out of scope.
-- **Visual anchor:** `requestVideoFrameCallback` gives `(mediaTime, expectedDisplayTime)` for every presented frame, on the parent's `performance.now()` clock.
-- **Audio-output anchor:** where `AudioContext.getOutputTimestamp()` is available (feature-detected; MDN lists Safari 14.1+ and Firefox 70+), it maps context time to performance time at the output.
-  - **Don't add `outputLatency` on top**, because that double-counts.
-  - The MP4's own audio reaches the speakers through the media element's pipeline. Its output delay versus the visuals is measured by calibration, not assumed.
-- **Input anchor:** worklet blocks carry context sample indices. Mic input latency isn't reported reliably (`getSettings().latency` is a target, and `baseLatency` is output processing), so it comes from **calibration** (below), stored per route.
-- **Fit:** from anchors collected across the take, fit `t = a + b·sample`.
-  - If the slope deviates from 1/sampleRate beyond a threshold, or there's a discontinuity (stall, seek, dropped frames), the **take stops at the discontinuity** and keeps the clean part.
-  - We don't "correct" continuous drift silently.
-  - Raw samples are always kept, and alignment is stored separately as `{anchorFit, calibrationOffsetMs, manualOffsetMs}` so it can be redone.
-- **Calibration (per route):** a flash-and-beep loopback at the start, middle and end of a 10 s test clip, measuring the total offset between what's on screen and heard and what comes back through the mic. The UI explains that it's the speaker's real-world delay.
-- **Fallback for the composition iframe** (if MP4 mode fails S10 on some browser): the parent stamps bridge `time` messages on arrival with `MessageEvent.timeStamp`, which is on the parent clock. The iframe clock is never used directly. The bridge posts every frame while a `recording` flag is set, and adds `playing`, `paused`, `ended`, `seeked` and `stalled` events with a sequence number and epoch.
-- **Tab must stay visible** while recording, because rAF and `requestVideoFrameCallback` throttle in hidden tabs. Hiding the tab stops the take (§2.1).
+  The stems come from the edited draft bundle through the existing preview routes, which are author-only for drafts. Narration takes come through scoped signed links.
+- **Recording is blocked while any pending op changes timing:** retime, reorder, delete, **and voice ops that change beat length** (`contract.ts:774`). The message is "render or discard timing changes first". Audio-only ops that don't move time (music volume or mute) are allowed, and the monitor reflects them.
+- **Fit:** anchors give `(composition time, perf time)` pairs. Worklet blocks give `(context sample, context time)`. `getOutputTimestamp()` maps context time to perf time where available (feature-detected, never with `outputLatency` added on top).
+  - Fit `t = a + b·sample` over the take and store the **whole fit** (`a`, `b`, residual RMS, max residual) plus calibration and manual offsets. Never collapse it to a single offset.
+  - If the slope deviates from 1/sampleRate by more than S10's tolerance, or the cumulative residual exceeds a limit (default 10 ms), the take stops there and keeps the clean part.
+- **Input-to-picture latency** comes from calibration, because mic input latency isn't reliably reported. **S10 must demonstrate a headphone-compatible procedure.** Candidates:
+  - (a) a measured input-latency loopback done once on speakers, with output latency taken from `getOutputTimestamp()`;
+  - (b) a clap-on-flash test, where the user claps when a visual flash appears; it measures the whole perceive-and-react path, averaged over 8 claps with outliers dropped;
+  - (c) manual offset only.
 
-**S10** measures the anchor accuracy per browser, the API matrix, calibration repeatability, local drift over 10 minutes, and MP4 mode against iframe-message mode. It also compares MediaRecorder start and codec delay against worklet PCM.
+  S10 picks the default from measured repeatability. Calibration is keyed to the route and invalidated when the route changes.
+- **The tab must stay visible.** Hiding it stops the take.
+- **No iframe recording fallback in v1.** It gets added only if S10 shows MP4 mode failing on a supported browser.
 
-### 5.4 Live mix preview
-- **Visuals:** the composition preview iframe, which reflects the draft's audio ops.
-- **Narration:** the parent mixes clips with Web Audio `AudioBufferSourceNode`s, scheduled against the bridge clock, with the same crossfades as `src/lib/timeline.ts`.
-- **Mix control:** a new bridge command, `mix{tracks}`, sets track volumes and mutes on the iframe's `<audio>` elements. Music ducking in preview **imports** the shared `duckPoints` (§6.3); nothing reimplements it.
-- **Accuracy:** ±1 frame is fine for preview. The phase-2 gate compares an offline render of the preview mix with the MP4 audio (§10).
-- **Waveforms:** decoded and drawn from the stored multiresolution peaks, never from full decodes of long takes. Decode work is capped by zoom level.
+### 5.4 Audition (post-record mix preview)
+- **Visuals:** the composition preview iframe, which reflects the draft.
+- **Narration:** parent Web Audio plays the raw clips with the shared `src/lib/timeline.ts` crossfade and gain math.
+- **Mix control:** a new bridge command, `mix{tracks}`, sets track volumes and mutes on the iframe's `<audio>` elements. Ducking imports the shared `duckPoints`.
+- **It's labelled raw.** Cleanup exists only in the run, so the preview doesn't promise processed-audio parity.
+- **Decode budget:** a sliding window around the playhead, with a 200 MB budget across takes and an LRU cache. Takes are never all decoded at once; 32 ten-minute takes would be about 1.8 GB. Waveforms come from the stored peaks.
 
 ### 5.5 Timeline UI
-- `ui/src/components/timeline/`: `Timeline.tsx`, `Track.tsx`, `Clip.tsx`, `Ruler.tsx`, `Playhead.tsx`.
-- **Rendering:** start with accessible DOM lanes, since there are only four. Move to canvas only if profiling shows a need.
-- **Model:** `src/lib/timeline.ts` is pure TypeScript shared by the UI and the server. It resolves overlaps, converts integer samples to seconds, quantizes visuals only, and does gain and fade math. Undo is a reducer over commands.
+- **Location:** `ui/src/components/timeline/`. DOM lanes first (four of them); canvas only if profiling needs it.
+- **Model:** `src/lib/timeline.ts` is pure TypeScript shared by the UI and the server. It resolves overlaps, works in integer samples, quantizes visuals only, and does gain and fade math. Undo is a reducer.
 - **Keyboard shortcuts:**
   - Space: play/pause
   - R: record or punch
@@ -247,331 +238,430 @@ The goal: for source sample *k* of a take, find the composition time *t* the spe
   - ⌘Z / Ctrl+Z: undo; ⇧⌘Z / Ctrl+Y: redo
   - ←/→: nudge one frame; ⇧ nudges 10 frames
   - All shortcuts ignore input fields.
-- **Accessibility:**
-  - Every action is also in a clip menu.
-  - Clips are focusable and move with the arrow keys.
-  - The recorder announces its state through `aria-live`.
+- **Accessibility:** clip menus, focusable clips that move with the arrow keys, and an `aria-live` recorder state.
 
 ## 6. Server and run: data, contract, render
 
 ### 6.1 Data model
-- **Takes are media rows** with `kind: 'audio'`. They also get **queryable** columns:
+- **Takes are media rows** (`kind: 'audio'`) with **queryable** columns:
   - `role: 'narration-take' | 'narration-upload' | null`
-  - `scope_job_id`, the video it was recorded for
+  - `scope_job_id`
   - `retain_until`
+  - `state` (adds `deleting`)
   - an index on `(uploader_id, role)`
 
-  These are needed for filtering, scope checks and GC; `meta.json` isn't enough for any of them. `meta.json` keeps sampleRate, duration (in samples), the sync record and a hashed device label. Peaks are stored as a **separate Blob**, `<id>/peaks.bin`, holding multiresolution min/max pyramids as Int8 (about 60 KB for 10 min), and are served with the media.
-- **Edit op: one whole-track snapshot.** This matches the full-op-list save model (`edits.ts:279-304`). Version 1 of the schema:
+  `meta.json` keeps sampleRate, duration in samples, the sync fit and a hashed device label. Peaks live in `<id>/peaks.bin` (multiresolution Int8, about 60 KB for 10 min).
+- **Reference index (new table `media_refs`):** `(media_id, owner_kind, owner_id)`, where `owner_kind` is `draft`, `frozen_attempt` or `version`. It's written in the same transaction as the reference (§8). GC, usage, credits and scope checks all read it.
+- **Edit op: one whole-track snapshot**, matching the full-op-list save model (`edits.ts:279-304`):
   ```ts
   type NarrationOp = {
     op: 'narration'
     schema: 1
-    sampleRate: 24000                       // all source coordinates are integer samples at this rate
+    sampleRate: 24000                         // all source coordinates are integer samples at this rate
     clips: Array<{
-      id: string                            // stable slot id
-      take: {                               // the selected alternative
-        mediaId: string
-        srcStart: number                    // integer samples into the source
-        srcEnd: number                      // integer samples, > srcStart
-        alignOffsetSamples: number          // per-take alignment (sync fit + calibration + manual)
-      }
-      alternatives: Array<{ mediaId: string; srcStart: number; srcEnd: number; alignOffsetSamples: number }>
-      start: number                         // composition position, integer samples
-      gainDb: number                        // finite, -60..+12; -Infinity encoded as null = silent
-      fadeInSamples: number                 // 0..min(len/2, 2 s)
+      id: string                              // stable slot id
+      mediaId: string
+      srcStart: number                        // integer samples into the source
+      srcEnd: number                          // > srcStart
+      fit: { a: number; b: number; residualMs: number }   // recording alignment (identity for uploads)
+      offsetSamples: number                   // calibration + manual offset
+      start: number                           // composition position, integer samples
+      gainDb: number | null                   // finite -60..+12; null = silent
+      fadeInSamples: number                   // 0..min(len/2, 2 s)
       fadeOutSamples: number
-      xfadeHandleSamples?: number           // crossfade handle at edit points (default 480 = 20 ms)
     }>
     tracks: {
       narration: { volumeDb: number; muted: boolean; solo: boolean }
       aiVoice:   { mode: 'replace' | 'under' | 'keep'; volumeDb: number }
-      music:     { duck: boolean; duckDb: number; releaseAfterPauseMs: number }
+      music:     { duck: boolean; duckDb: number }
       original:  { muteAll: boolean }
     }
-    cleanup: { preset: 'off' | 'light' | 'heavy'; declick: boolean }
-    trimSilentEdges: false                  // reserved; off in v1 (§6.3)
+    cleanup: 'off' | 'light'                  // 'heavy' (RNNoise, declick) deferred
   }
   ```
+  Crossfade length (20 ms) and duck release-after-pause (1,500 ms) are **constants** in `timeline.ts`, not fields. They can become fields in schema 2.
 - **Validation** (zod in `src/schemas.ts`, plus server-side `timeline.resolve()`):
-  - Clips are resolved and must not overlap after resolution.
-  - Every number is finite, and source bounds fit inside the take's duration.
+  - Resolved clips don't overlap.
+  - Every number is finite, and source bounds fit the take.
   - At most 200 clips and 32 distinct takes per op.
-  - Every referenced `mediaId` must be in scope (§8). **New** picks are authorized against the current user. **Inherited** references (from the base version's frozen narration) are allowed even if the take was since soft-deleted or ownership changed, because the version already owns those bytes.
+  - **Output-duration limit:** the last clip end (or hold-frame end) is at most the base duration + 120 s, and never over 15 min total. This is a new explicit limit, since none exists today.
+  - Every `mediaId` passes the authorization predicate (§8). New picks are checked against the current user. Inherited references (the base version's frozen narration) stay valid through soft-delete or ownership change, because the version owns them through `media_refs`.
 - **Version fields:**
-  - `versions.voiceover` stays as the AI synthesis configuration and doesn't change.
-  - New `versions.narration jsonb`, nullable, holds the resolved op plus the pipeline version and settings.
-  - The "AI / recorded / mixed" badge is **derived** from the audible tracks, not stored.
-  - Migration: one nullable jsonb column plus the media columns above, generated with `npm run db:generate` (new migration only).
-- **Snapshots:** takes are **not** snapshotted through `snapshotMedia`, which has a 12-item / 300 MiB cap and puts files under `assets/media/`. `renderEdit` writes `frozen.narration.takes: [{mediaId, key, sha256, bytes}]`, capped at 32 takes / 400 MiB, and prepare-run hydrates them by Blobs key + sha256 into `video/assets/narration/src/`. References inherited by version n+1 that aren't audible are pruned at freeze.
-- **Draft expiry:** drafts expire after 7 days (`edits.ts:29`). The narration op dies with the draft; the takes don't. Reopening the editor on that version lists **"Recordings for this video"** (scope_job_id), with re-attach. GC respects `retain_until` (§8).
+  - `versions.voiceover` stays as the AI synthesis configuration.
+  - New `versions.narration jsonb`, nullable: the resolved op, the recipe (pipeline version, ffmpeg version string, settings) and the bus reference `{key, sha256, samples}`.
+  - The AI / recorded / mixed badge is derived from the audible tracks.
+  - New `versions.captions jsonb`: `{status, policy: 'sidecar' | 'burned', rev, files: {vtt, transcript}, sha256}`. It's separate from the render's output hashes (§6.6).
+  - Migration generated with `npm run db:generate` (new migration only).
+- **Snapshots and provenance:**
+  - `renderEdit` writes `frozen.narration = {op, takes: [{mediaId, key, sha256, bytes, license?}], recipe, targetSamples}`, capped at 32 takes / 400 MiB, and adds `media_refs` rows of kind `frozen_attempt`.
+  - On finalize, those become `version` refs.
+  - **Library audio used as narration** carries its license and attribution into the snapshot.
+  - Usage and credits union `media_refs` narration references with `version_media`, and audibility is derived from the resolved mix (`credits.ts:76-85` changes).
+- **Draft expiry:** the narration op dies with the draft; takes survive (`retain_until`) and are listed under **Recordings for this video** for re-attach.
 
-### 6.2 Contract (composition HTML)
-- The run **pre-mixes** all clips into one full-duration WAV, `assets/narration/bus.wav`. It's padded with silence and is exactly the root duration in samples. The composition carries exactly one narration layer:
+### 6.2 Contract and bus storage
+- **Audio role:** add `'narration'` to `AUDIO_ROLES` (`contract.ts:236`), the `AudioRole` type, `audioOf()`, the DTO enum (`schemas.ts:753`) and the editor's track mapping, all in one change.
+- **The composition carries exactly one narration layer:**
   ```html
   <audio id="va-narration" data-va-layer="narration" data-va-audio="narration"
-         data-track-index="4" data-start="0" data-duration="<root>"
-         data-volume="1" src="assets/narration/bus.wav"></audio>
+         data-track-index="4" data-start="0" data-duration="<root>" data-volume="1"
+         data-va-speech='[[12.48,15.69],…]' src="assets/narration/bus.wav"></audio>
   ```
-- This is already legal under `validate()`: a layer on track ≥ 1 that spans the video. `relayout()` keeps it correct when the root duration changes. The bus is re-mixed whenever the duration changes, because the run regenerates it from the op.
-- **Reader:** `read()` classifies `data-va-audio="narration"` explicitly, not as SFX. A narration validator checks:
-  - one element at most;
-  - `src` is `assets/narration/bus.wav`;
-  - the file's duration equals the root duration.
-- **AI voice modes** reuse the existing mute semantics (`data-volume="0"` + `data-va-muted`, level kept in `data-va-volume`):
-  - *replace* mutes every `data-va-voice`;
-  - *under* sets the chosen level;
-  - *keep* leaves them unchanged.
-  - Captions follow what's audible (§6.6).
-- **No per-clip attributes** go into HTML. Takes, bounds, gains, fades and crossfades exist only in the op and `versions.narration`. The editor renders the track from there.
-- **`data-va-speech`:** the server writes the narration's merged audible speech spans (from the bus mix plus a VAD threshold; seconds, frame-quantized, bounded count) onto the narration element. `duckPoints` reads them (§6.3).
+- **Draft vs materialized state:**
+  - **In a draft** (`buildRev`), the element is written with `data-va-speech` computed **from the op plus each take's stored speech-span summary** (worker VAD on peaks), and with **no `src` file present**. The editor auditions from the op (§5.4) and never needs the bus. Every save recomputes the spans, so `relayout()`/`applyDucking` always see current spans, and the duck lane validates in draft previews.
+  - **In the run,** `scripts/narration.ts` materializes `bus.wav` at exactly the **frozen target length** (§6.3, §6.4) and rewrites `data-va-speech` from the processed bus. The guard checks both.
+- **Bus storage by reference:**
+  - The bus is uploaded to Blobs (`videos/<job>/v<n>/narration-bus.wav`) with its digest in the bundle manifest.
+  - `assets/narration/bus.wav` is listed in the manifest as a **reference entry**: excluded from `source.tar.gz`, checkpoints and the 10 MiB tar limit, and restored by key + sha256.
+  - Preview delivers it through a version-scoped route with the same access as the version's MP4.
+  - `excluded()` (`bundle-manifest.ts:28`) learns these reference entries.
+- **Narration validator:**
+  - one element at most, with `src` = `assets/narration/bus.wav`;
+  - in materialized state, the referenced file's sample count equals the root duration;
+  - in draft state, no file is present.
+- **Fit mode and duration:** the bus is mixed once at the frozen target length, and the narration validator fails until the beats total exactly that frame-quantized length. The prompt states it, and the run's final check enforces it.
+- **AI voice modes** reuse the existing mute semantics: *replace* mutes, *under* sets the level, *keep* leaves it unchanged.
+- **No per-clip attributes** go into HTML.
 
-### 6.3 Processing, ducking and the keep-visuals render
-**`scripts/narration.ts`** is deterministic, versioned with `NARRATION_PIPELINE = 1`, and invoked by the run, never edited by it:
+### 6.3 Processing, ducking, mastering and the keep-visuals render
+**Run inputs:** prepare-run hydrates takes from `frozen.narration.takes` (Blobs key + sha256) into a **run-input directory outside `video/`** (`.va-run/narration/src/`). It's never archived, checkpointed or previewed. Revoice, if present, runs first (§6.3 ordering).
 
-1. **Hydrate and verify.** Hydrate the takes from `frozen.narration.takes` and verify sha256. ffprobe each: 24 kHz mono PCM16 expected for recordings; uploads are decoded to that.
-2. **Clean each take.** Cleanup runs per source take, so a quiet take punched into a loud one is levelled per take. The chain preserves sample count, so there's no time-stretch and no trim:
-   1. `highpass=f=80`.
-   2. If `declick`: `adeclick`. It runs **before** denoising, because clicks poison the noise estimate.
-   3. Denoise: `light` = `afftdn` with conservative noise reduction; `heavy` = `arnndn` with a pinned RNNoise model (license and sha recorded; any algorithmic delay compensated so the output is sample-aligned). The `off` preset is a **true bypass** of this whole step.
-   4. A gentle de-esser.
-   5. A compressor with explicit units: 2:1, threshold −24 dBFS, attack 10 ms, release 120 ms, soft knee.
-   6. **Per-take gain** toward a speech target, from gated integrated loudness of the take's speech regions. Silence-only takes are handled explicitly: no gain is applied, and a warning is shown.
+**`scripts/narration.ts`** is deterministic and versioned with `NARRATION_PIPELINE = 1`. ffmpeg is invoked with `-threads 1 -filter_threads 1`, and the ffmpeg version is recorded in the receipt.
 
-   S13 tunes these defaults on real recordings. `light` is the default.
-3. **Mix the bus.** Mix the clips into `bus.wav` at their sample positions with gains, fades and handle crossfades, using `src/lib/timeline.ts` math (the same module the browser uses).
-4. **Duck.** `duckPoints` (`contract.ts:468-491`) is extended in shared code. Its sources are:
-   - beat voices, as today, but **excluding muted AI voice**;
-   - `data-va-speech` spans from narration.
+1. **Verify inputs.** ffprobe each take: 24 kHz mono PCM16 for recordings; uploads are decoded to that.
+2. **Clean each take** (`light`, or `off` = a true bypass). The chain preserves sample count, so there's no time-stretch and no trim:
+   1. `highpass=f=80`;
+   2. `afftdn` with conservative noise reduction;
+   3. a gentle de-esser;
+   4. a compressor at 2:1 with threshold −24 dBFS, attack 10 ms, release 120 ms and a soft knee;
+   5. **per-take gain** toward a speech target, from gated integrated loudness of speech regions. Silence-only takes get no gain and a warning.
 
-   Spans are merged, with a `releaseAfterPauseMs` rule (default 1500 ms) so continuous narration doesn't hold the music down for the whole video. Automation points are **simplified to ≤ 400**, under the 512 cap with headroom. `validate()` keeps checking the lane, now against the extended `duckPoints`.
-5. **Master and measure.** After `hyperframes render`, decode the final MP4's AAC and measure with `ffmpeg ebur128`: integrated −14 ± 1 LUFS, true peak ≤ −1 dBTP.
-   - If the loudness is out of range, apply **one** linear gain correction to the narration and music track volumes (the HTML `data-volume` values), re-render the audio only if HyperFrames allows it, or else fail with the measured values.
-   - The bus is pre-limited at −2 dBTP to leave AAC encoding headroom.
-   - **Any HyperFrames warning that automation was degraded fails the run.**
-6. **Transcribe.** See §6.6. Bounded, optional, and never blocks the render.
+   S13 tunes these defaults.
+3. **Mix the bus** at the frozen target length with `src/lib/timeline.ts` math. The bus is pre-limited at −2 dBTP.
+4. **Speech spans and duck.** Write `data-va-speech` from the processed bus (VAD), merged with the 1,500 ms release rule.
+   - `duckPoints` (`contract.ts:468-491`) is extended in shared code: its sources are beat voices that **aren't muted** and the narration spans.
+   - Automation is simplified to ≤ 400 points.
+   - `validate()` keeps checking the lane.
+5. **Receipt.** Write `.va-run/narration/receipt.json` with:
+   - the input take hashes;
+   - the recipe;
+   - the bus sha256 and sample count;
+   - the spans;
+   - the attempt id.
 
-**Edge trimming is off in v1.** Silence at clip edges stays. If added later, it must preserve `t = start + (sourceSample − srcStart)/sampleRate` by moving `srcStart` and `start` together, and it's computed in the browser at save time, so the run stays timing-neutral.
+   The guard reads the receipt instead of redoing cleanup, which avoids doubling CPU time.
+   - **Trust boundary:** the same as revoice today. The runner is the trust model's boundary (2026-10-31 plan, "Roles and privacy (R)", rule 5). The guard protects against accidental agent edits, not a hostile runner.
+   - Hash equality within a run is the guarantee. Equality across runs is best-effort and is only used for caches.
+6. **Transcribe** (§6.6), with an outer deadline. It never blocks the render.
+7. **Render, then master and measure.** After `hyperframes render`, which already enforces AAC true peak with bounded attenuation, decode the final AAC and measure with `ebur128`.
+   - **Mastering is a trusted final-mix transform separate from the locked narration PCM.** It's one master gain applied to the **summed mix**: every audible source, including video-element audio, groups and effects. It's applied as a re-mux of the audio stream, not by editing HTML volumes, so the guard's exact-transform check isn't violated.
+   - Target −14 ± 1 LUFS integrated, bounded by −1 dBTP. If both can't be met, peak wins and the measured LUFS is recorded with a warning.
+   - Silent or near-silent mixes are exempt.
+   - **Any HyperFrames degraded-automation warning fails the run.**
+   - S12 confirms the re-mux path.
 
-**Keep-visuals guard (`checkNarration`, modelled on `checkRevoiced` in `src/lib/revoice.ts:71-135`):**
-- `renderEdit` freezes:
-  - the edited draft bundle (as today);
-  - `frozen.narration` (op, takes, pipeline version and settings);
-  - the caption policy;
-  - the target duration (the base duration, plus the hold-frame overrun if chosen).
-- render-job:
-  1. Recompute the expected HTML transformation: the narration element, `data-va-speech`, the duck lane and AI-voice mute attributes, from the frozen inputs only.
-  2. Check that `index.html` equals frozen + exactly that transformation.
-  3. Check that `bus.wav` equals the deterministic remix, by recomputing its PCM hash in the run from the same frozen inputs.
-  4. Check that `summary.json` equals frozen + the narration cues, and nothing else.
-  5. Check that every other file is byte-identical to the frozen bundle.
-- **Revoice and narration in one draft:** revoice runs first (`voice.ts revoice` + `checkRevoiced`), then narration, and `checkNarration` composes with it. One ordering function in `src/lib/narration-run.ts` is used by the prompt and by the guard.
-- **Hold-final-frame** is a deterministic contract operation: append a final beat that holds the last frame for the overrun + post-roll, flagged `data-va-hold`. The guard accepts exactly that.
+**Keep-visuals guard (`checkNarration`, modelled on `checkRevoiced`, `revoice.ts:71-135`):**
+- `renderEdit` freezes `editId` (the edited draft bundle), `frozen.narration` (op, takes, recipe, `targetSamples` = base duration, or base + hold-frame), and the caption policy.
+- render-job checks, from frozen inputs plus the receipt:
+  1. `index.html` = frozen + exactly the narration transformation (element, spans, duck lane, AI-voice mute attributes, optional hold-frame beat `data-va-hold`);
+  2. `bus.wav` digest and sample count = receipt;
+  3. `summary.json` = frozen + narration cues;
+  4. every other `video/` file is byte-identical;
+  5. nothing from `.va-run/` is under `video/`.
+- **Ordering:** revoice (`voice.ts revoice` + `checkRevoiced`) runs first, then narration. One function in `src/lib/narration-run.ts` defines the order and is used by both the prompt and the guards.
 
 ### 6.4 Fit-to-narration render
-- **Mode and starting point:**
-  - Mode `author`, with provenance `editedFromN` and `narration` frozen.
-  - It needs a reconciler change: when `frozen.edit` is present, an author run restores the **frozen edited draft** instead of the parent's archive (`reconciler.ts:195-198`).
-  - Requires the narration op; the API and MCP refuse fit mode otherwise.
-- **Order:** `scripts/narration.ts` steps 1–4 run **before** the agent, so the agent sees the final bus, the speech spans and the transcript.
-- **Prompt:** narration is locked.
-  - The `voiceLines` TTS instructions (`prompt.ts:271-297`) are **suppressed** when narration is present in replace mode. In keep or under mode, AI voice is kept as it is.
-  - The agent gets the transcript with word timings and the frozen **target duration** (narration end + post-roll, frame-quantized). It fits beats to that duration.
-- **Guard (`narration_modified`):** expected values derive from the frozen inputs, never from anything the agent wrote. render-job verifies:
-  - exactly one narration element, with its full serialized attribute set as expected;
-  - the `bus.wav` PCM hash;
-  - no added or removed `<audio>` with narration roles;
-  - no new `<audio>` whose time range overlaps narration speech, unless it was in the frozen bundle;
-  - no audio effect, automation or volume control on the narration element or any group or master bus that touches it. The **effective render audio graph** is checked, not just the element.
-- **Later revisions** of a version with locked narration keep the lock unless the user edits narration in the editor.
-- Cost: an authoring run, about 250 credits. The confirm dialog shows it before starting.
+- **New run kind `author_from_frozen`:**
+  - `RunKind` (`run-manifest.ts:9`) gains it.
+  - The manifest serializer and verifier (`run-manifest.ts:64`) carry `bundle` + `narration` for it.
+  - The reconciler (`reconciler.ts:167-205`) restores the **frozen edited draft** (`frozen.editId`) instead of the parent archive.
+  - prepare-run preserves guard baselines for narration as it does for revoice (`prepare-run.ts:166-179`).
+  - All four change together, with one test per pair.
+  - Version mode stays `author`, with provenance `editedFromN`.
+  - The API and MCP refuse fit mode when there's no narration op.
+- **Frozen:** the edited draft, the recipe, and the **target duration** (narration end + 0.5 s post-roll, frame-quantized, within the output limit).
+- **Order before the agent:**
+  1. restore and verify;
+  2. revoice, if any;
+  3. `narration.ts` steps 1–5 (a bus at target length, plus the receipt);
+  4. STT (§6.6, bounded).
+  5. Then the agent authors.
+- **Prompt:**
+  - Narration is locked.
+  - `voiceLines` TTS instructions (`prompt.ts:284-307`) are suppressed in *replace* mode.
+  - The transcript is passed as fenced, sanitized data, following the existing prompt conventions.
+  - The agent must make beats total exactly the target duration.
+  - If STT failed: duration-only guidance, plus a status shown to the user.
+- **Guard (`narration_modified`):** expected values come from the frozen inputs and the receipt, never from agent-written files. render-job verifies:
+  - exactly one narration element, with its full attribute set as expected;
+  - the bus digest = receipt;
+  - no added or removed narration-role audio;
+  - no new `<audio>` or `<video>` with audio that overlaps the speech spans, unless it was frozen;
+  - no effect, automation or volume change on the narration element or on any group or master path that reaches it. The **effective audio graph** is checked.
+- **Locks persist** through retries and later revisions, until the user edits narration.
+- Cost: an authoring run, about 250 credits, confirmed in the dialog.
 
 ### 6.5 Why processing is deterministic code, not prompt
-- Loudness today is a prompt instruction, and only music gets normalized.
-- Narration quality is the whole point of this feature, so cleanup, mixing, ducking and mastering are one versioned script with fixed parameters, unit tests on fixtures and measured output. The agent only runs it.
-- The same script runs in both render modes, so "fast" and "agent" outputs sound the same.
+- Narration quality is the point of the feature.
+- Cleanup, mixing, ducking and mastering are one versioned script with fixed parameters, fixture tests and measured output. The agent only runs it.
+- Both render modes use the same script, so they sound the same.
 
-### 6.6 Captions from transcription [S11]
-- **Provider order:**
-  - **Local first:** Parakeet through `hyperframes models install parakeet` + `hyperframes transcribe`, if S11 shows it installs and runs inside the time budget on the runner. **whisper.cpp** is the fallback, with a pinned binary, model digest and license, and a parsed JSON output schema with explicit word or token timings.
-  - ElevenLabs Scribe is **opt-in only**, a separate setting from the TTS key, because sending someone's voice to a third party needs its own consent.
+### 6.6 Captions [S11]
+- **Provider:**
+  - **Local first:** Parakeet (`hyperframes models install parakeet` + `hyperframes transcribe`) if S11 qualifies it, otherwise whisper.cpp (pinned binary, model digest and license, parsed JSON word timings).
+  - ElevenLabs Scribe is opt-in only, a separate setting from the TTS key.
   - `transcriptionProvider: 'local' | 'elevenlabs' | 'off'`, default `local`.
 - **Budget:**
-  - Decode a 16 kHz STT input from `bus.wav`.
-  - Transcription gets its own timeout (S11 sets it; it must leave render, upload and callback time inside the existing 22-min authoring / 25-min runner limits) and is killed on timeout.
-  - Results are cached by `(bus hash, provider, model, language)` in Blobs, so re-renders with unchanged narration don't re-transcribe.
-- **Cues:** a new cue kind `narration: true`, with absolute `start`/`end`, `text`, a stable `id`, `busHash` and `words[]`. It has no beat or textId, so `validate()` exempts it. Words are grouped into phrases by explicit rules: 42 characters max per line, 2 lines, split at pauses > 300 ms and at punctuation, 1–6 s per cue. That logic lives in `src/lib/narration-captions.ts`; `voiceCaptions` isn't reused, since it formats beat-bound cues.
-- **What's captioned is what's audible:**
-  - *replace*: narration cues only.
-  - *under* / *keep*: narration cues plus AI voice cues, interleaved by time, with AI cues marked.
-  - Muted narration: no narration cues.
-- **Failure:** the render still succeeds. `captions.vtt` is written as a **valid empty VTT**, since it's a required output, and the version records `captions.status: 'failed' | 'off' | 'ok'`. The UI shows "No captions: retry or add them".
-- **Caption revisions (fixes without a render):**
-  - `POST /api/v1/videos/:id/versions/:n/captions` takes `{expectedRev, cues}`.
-  - It writes an immutable `captions.r<k>.vtt`, updates the version's output pointer and sha256, and rewrites the publication mirror if published.
-  - It needs owner or admin, plus publish authority when the version is published.
-  - Text is escaped. It's rejected for burned-in captions, which need the render path.
-  - Later versions made from this one inherit the corrected cues as long as the narration bus hash is unchanged.
-- **Language:** English in v1. A per-video `language` setting and a multilingual model are deferred (phase 6).
+  - STT runs from a 16 kHz decode of `bus.wav`.
+  - It's wrapped in an **outer process-tree deadline**, covering install, model download and transcription, because the HyperFrames timeout option only applies to Whisper. On timeout the process tree is killed.
+  - The whole sequence must fit inside 22 minutes, measured in S11.
+  - Results are cached by `(bus sha256, provider, model, language)`. A cache miss after a runner-image change just re-transcribes.
+- **Cues:**
+  - A new cue kind `narration: true` with absolute `start`/`end`, `text`, a stable `id` and `words[]`. It's exempt from the beat checks in `validate()`.
+  - Grouping lives in `src/lib/narration-captions.ts`: 42 characters × 2 lines, split at pauses > 300 ms and at punctuation, 1–6 s per cue.
+- **What's audible gets captioned:**
+  - *replace*: narration cues only;
+  - *under* / *keep*: narration and AI cues interleaved;
+  - muted narration: no narration cues.
+- **Failure:** write a valid empty `captions.vtt` (a required output) and set `versions.captions.status = 'failed' | 'off'`. The UI shows "No captions: retry or add them".
+- **Caption revisions:**
+  - `POST /api/v1/videos/:id/versions/:n/captions` takes `{expectedRev, cues}`, with compare-and-swap on `versions.captions.rev`.
+  - It writes immutable `captions.r<k>.vtt` and `transcript.r<k>.txt`.
+  - **Signed paths become revision-aware:** `src/domain/files.ts` signs the filename from `versions.captions.files`, and `netlify/edge-functions/files.ts` accepts `captions(?:\.r\d+)?\.vtt` and `transcript(?:\.r\d+)?\.txt`. Each revision is a new immutable URL, so `private, immutable` caching stays correct.
+  - **Render hashes stay immutable.** Revision hashes live in `versions.captions`.
+  - The video ETag is bumped.
+  - It needs owner or admin, plus publish authority when published.
+  - Burned-in policy (stored, not inferred from HTML) is refused here.
+  - **Publication ordering:** the publication mirror carries a `captionsGeneration`. Updates are applied with compare-and-swap on it, after the DB commit, with durable retry. An older correction can never overwrite a newer one, and a correction after unpublish is a no-op.
+  - **Carry-forward:** when a new version is made from version n and its narration op is **unchanged** (op hash), the latest caption revision is copied. Otherwise the new version is re-transcribed. This uses the op hash, not PCM hashes, so ffmpeg changes don't matter.
+- **Language:** English in v1. Multilingual is phase 6.
 
 ### 6.7 Outputs
-- **Files:** the usual mp4, gif, poster and vtt, plus `narration.mp3` (192 kbps CBR, the processed bus) and `transcript.txt`.
-- **Publication:** both new files follow the version's publication.
-- **Share page transcript:** offered in the **publish dialog** with a preview. It's off by default for recorded narration, and the choice is remembered per user (§12.5).
+- **Files:** mp4, gif, poster, vtt, `narration.mp3` (192 kbps, the processed bus) and `transcript.txt`.
+- **Publication:** they follow the version's publication.
+- **Share-page transcript:** offered in the publish dialog with a preview. It's off by default for recorded narration, and the choice is remembered (§12.5).
 
 ## 7. API and MCP
 
 - **REST changes**, documented in OpenAPI and checked by `openapi:check`:
-  - Upload sessions accept `role` and `scopeJobId`.
+  - Upload sessions accept `role`, `scopeJobId` and a client-supplied `sha256`.
   - `GET /api/v1/videos/:id/recordings` lists in-scope takes for that video.
-  - `GET /api/v1/videos/:id/versions/:n/narration` returns the resolved op and the transcript.
+  - `GET …/versions/:n/narration` returns the resolved op and the transcript.
   - `POST …/versions/:n/captions` creates a caption revision (§6.6).
   - Draft endpoints accept the `narration` op.
-  - `renderEdit` gains `mode: 'keep_visuals' | 'fit_to_narration'` and `holdFinalFrame?: boolean`. The idempotency key includes the rev, the mode and the settings.
-- **MCP** (phase 6): `get_narration`, `add_narration {mediaId, start}` (media ids only, no URL ingestion in v1, to avoid SSRF and size handling) and `render_with_narration {mode}`. Fit mode is refused without narration. Recording itself is browser-only.
-- **Skills zip:** a `narration.md` page.
+  - `renderEdit` gains `mode: 'keep_visuals' | 'fit_to_narration'` and `holdFinalFrame?`. The idempotency key includes the rev, the mode and the settings.
+- **MCP** (phase 6): `get_narration`, `add_narration {mediaId, start}` (media ids only, no URL ingestion) and `render_with_narration {mode}`. Fit mode is refused without narration.
+- **Skills:** a `narration.md` page.
 
 ## 8. Security, privacy, roles
 
 - **Roles:**
-  - Record, upload and render need Creator (`edit:create`, `media:upload`).
-  - Drafts stay author-only (`edits.ts:265`). Reviewers hear **committed versions**, never draft takes.
-- **Take scope (new enforcement):** a narration take or upload is readable only by:
-  - its uploader;
-  - anyone who can read a version whose frozen narration references it, and only through that version's outputs (the bus and MP4), not the raw take;
-  - admins.
+  - Record, upload and render need Creator.
+  - Drafts stay author-only (`edits.ts:265`). Reviewers hear committed versions.
+- **One authorization predicate:** `canReadTake(principal, media)` is true for the uploader and admins only. It's enforced on every path that can expose a take, across REST and MCP:
+  - `loadMedia` and signed links;
+  - library and music search;
+  - `checkMedia` duplicate lookup (`media.ts:252-258`), which must not reveal other users' takes;
+  - op resolution;
+  - snapshots;
+  - upload finalization.
 
-  `loadMedia`, signed-link issuance, library listings, reuse in ops and upload finalization all enforce this, across REST and MCP. This closes today's rule that any signed-in reader can load any ready media.
-- **Runner trust model:** Creators' runs can read project storage (plan 2026-10-31, "Roles and privacy (R)", rule 5: the v1 trust model is an owner decision). Take privacy is enforced at the app layer; we don't promise isolation from runs in this deployment. The setup docs say so.
-- **Retention and GC (new):** a reference-aware sweep step hard-deletes take bytes (`original`, `peaks.bin`, cached transcripts) when a take is soft-deleted, or unreferenced and past `retain_until`.
-  - **Unreferenced** means not in any open draft, not an alternative in a draft, not in any frozen attempt, and not in any version's `frozen.narration`.
-  - Default `retain_until` = 30 days after last reference. **Delete unused recordings** in the UI deletes immediately.
-  - It's race-safe: the sweep re-checks references in the same transaction that tombstones the row.
-  - Browser recovery copies are cleared on ready + save, on explicit discard, and after 7 days.
-- **Budgets:** a stored-bytes quota for takes (default 2 GiB per user, configurable) and a rate limit on take uploads. The existing 1 GiB quota covers unfinished uploads only.
-- **Mic policy:** `Permissions-Policy: microphone=(self)` on app routes (static, via `netlify.toml`). `microphone=()` is set **in the edge functions** for share, embed and public pages. Both are tested live with a header check in `scripts/e2e`. The preview iframe never gets mic access.
-- **Disclosure:** settings and docs state that recordings are stored on this deployment's Netlify Blobs, that runs can read them (above), and that ElevenLabs transcription, if enabled, sends audio to ElevenLabs.
+  Viewers of a version get the rendered MP4 and the bus-derived `narration.mp3`. They never get raw takes, and raw takes are never in archives or previews (§6.2, §6.3). Reusing shared library audio as narration doesn't change that item's existing access policy.
+- **Runner trust model:** Creators' runs can read project storage (2026-10-31 plan, "Roles and privacy (R)", rule 5; the v1 trust model is an owner decision). Take privacy is enforced at the app layer; the setup docs say runs can read storage.
+- **GC and the lock protocol (new):**
+  - **Deletion predicate:** take bytes are deleted only when **no `media_refs` row exists** and retention allows it (`retain_until` passed, or the user chose **Delete unused recordings**). Soft delete stops new picks but never overrides retained references.
+  - **Locking:** draft saves that add narration references, `renderEdit` freeze, attempt retries and GC all take `SELECT … FOR UPDATE` on the media rows involved, in media-id order, inside their transaction. Reference writers reject `state = 'deleting'`.
+  - **Two phases:**
+    1. GC commits `state = 'deleting'` plus a deletion work item atomically, after re-checking `media_refs` under the lock.
+    2. Blob deletion (original, peaks and cached transcripts) runs outside the transaction, with retries.
+  - Browser recovery copies are covered in §5.1.
+- **Budgets:** a stored-bytes quota for takes (default 2 GiB per user) and an upload rate limit.
+- **Mic policy:** `Permissions-Policy: microphone=(self)` on app routes (`netlify.toml`), and `microphone=()` set **in the edge functions** for share, embed and public pages. Both are header-checked live.
+- **Disclosure:** docs state where recordings are stored, that runs can read storage, and that ElevenLabs transcription sends audio out.
 
-## 9. Phases and dependencies
+## 9. Phases, spike contract and dependencies
 
-The order was changed after review: storage, privacy and the upload-to-render path first, to prove the render pipeline without browser sync risk, then recording, then punch-in, then fit.
+The order is storage and privacy, then upload-to-render, then recording, then punch-in, then fit.
 
 | Phase | Contents | Depends on | Live gate |
 |---|---|---|---|
-| **0: spikes** | **S10 sync:** MP4 + `requestVideoFrameCallback` mode against iframe-message mode; per-browser API matrix (Chrome, Safari, Firefox); worklet PCM against MediaRecorder (start and codec delay, memory); physical flash/beep loopback at start, middle, end and at punch boundaries; built-in, USB and Bluetooth; 10-min drift; stalls, hidden tab and device change. **S11 STT:** Parakeet, then whisper.cpp, on the runner, with cold 60 s / 90 s / 10 min inputs; install and download cost, RSS, CPU time, word-timestamp error against a known transcript, timeout behaviour, credit delta. **S12 render:** one full-duration bus against 50 and 200 per-clip elements; automation-point limits and the degraded-mix fallback; final-AAC loudness after encoding. **S13 cleanup:** the chain on 5 real recordings, A/B against raw; RNNoise model license and delay. **S14 capture:** worker + IndexedDB over 10 min; memory, quota, recovery. **S15 hold-frame:** append-a-held-frame under render-unchanged, and frame-prefix invariance. | — | `docs/spikes.md` S10–S15 with numbers; architecture choices confirmed or revised in draft 3. |
-| **1: storage + privacy** | Media columns + migration, take scope enforcement on all read paths, peaks blob, stored-bytes quota, reference-aware GC, mic Permissions-Policy (static + edge), recordings list endpoint. | 0 | A non-uploader gets 404 on a take through REST and MCP; GC deletes an unreferenced take's bytes and keeps a referenced one. |
-| **2: upload → render (keep visuals)** | `narration` op (single and multi-clip, no recording UI), `src/lib/timeline.ts`, `scripts/narration.ts`, extended `duckPoints`, narration layer + reader/validator, `checkNarration`, transcription (local, bounded, cached), narration cues, empty-VTT fallback, caption revisions endpoint + editor, `narration.mp3` / transcript outputs, hold-final-frame. | 1 | Upload a fixture WAV with known beeps and transcript, place 3 clips, render: beeps land within 1 frame locally at each clip (per-clip correlation, not one global one); −14 ± 1 LUFS and ≤ −1 dBTP on decoded AAC; captions within S11's error; visual frames identical to base. |
-| **3: record a take** | Recorder (worklet → worker → IndexedDB), setup panel (meter, device, output mode, calibration, countdown), MP4-mode sync, take upload + ready wait + recovery, live mix preview (parent Web Audio + `mix` command), original-audio modes. | 2 | Chrome, Safari and Firefox on real hardware: a 60 s take with the calibration clip lands within 1 frame at start, middle and end; a reload mid-take recovers it. |
-| **4: punch-in + timeline** | Multi-track timeline, punch-in with pre-roll and armed muting, alternatives with per-take alignment, handle crossfades, split/trim/move/gain/fades, snapping, local undo, keyboard + a11y. | 3 | Three punch-ins on a 90 s video: no clicks at edit points (peak/RMS envelope check), sync holds at each boundary, switching takes keeps alignment. |
-| **5: fit to narration** | Author run from the frozen edited draft, TTS suppression, target duration, full `narration_modified` guard, cost confirm. | 2 | One fit run with narration 20% longer than the visuals: scenes extend, bus PCM hash unchanged, guard rejects a deliberately tampered variant (unit + one live run). |
-| **6: polish** | WebM/Opus classifier, auto-align for uploads, MCP tools, skills page, share-page transcript, multilingual STT. | 2–4 | MCP `add_narration` + render through the API; a Chrome WebM file uploads and renders. |
+| **0: spikes** | See the spike contract below. | — | `docs/spikes.md` S10–S13 with numbers; draft 4 confirms or revises the [S] choices. |
+| **1: storage + privacy** | Media columns + `media_refs` + migration; `canReadTake` on every path (incl. `checkMedia`, search, MCP); peaks blob; quota; lock protocol + two-phase GC; mic Permissions-Policy (static + edge); recordings endpoint. | 0 | A non-uploader gets 404 on a take everywhere, including duplicate lookup. A concurrent save and GC test keeps referenced bytes and deletes unreferenced ones. |
+| **2: upload → render (keep visuals)** | Narration op; `timeline.ts`; audio role; draft spans; `narration.ts` + receipt; run-input dir; bus by reference; extended `duckPoints`; `checkNarration`; mastering re-mux; STT with outer deadline + cache; narration cues; empty-VTT fallback; caption revisions with signed paths, CAS and mirror generations; `narration.mp3`/transcript; hold-frame; provenance + credits. | 1 | Fixture WAV with known beeps and transcript, 3 clips, render: per-clip beep correlation within 1 frame; −14 ± 1 LUFS and ≤ −1 dBTP on decoded AAC; captions within S11's error; visual frames identical to the frozen edited draft (pre-encode frame hashes); **one tamper case** (edited bus, edited attribute) rejected; raw take paths 404 for a reviewer through preview and archive; a 4-min and a 10-min bus reopen and re-render; caption correction updates private and public VTT, and a correction after unpublish doesn't resurrect the mirror; a silence-only take renders. |
+| **3: record a take** | Recorder (worklet → worker → IndexedDB), worker-hash upload, setup panel, muted-picture + stem monitor, calibration (S10's procedure), fit + residual stop, recovery, raw audition with decode budget, original-audio modes. | 2 | Chrome, Safari and Firefox on real hardware, with headphones: a 60 s take lands within 1 frame at start, middle and end; in *replace* mode the take has no AI-voice bleed; a reload mid-take recovers it. |
+| **4: punch-in + timeline** | Multi-track timeline, punch-in with pre-roll and range muting, crossfades, split/trim/move/gain/fades, snapping, local undo, keyboard + a11y. | 3 | Three punch-ins on a 90 s video: no clicks at edit points (envelope check), sync holds at each boundary. |
+| **5: fit to narration** | `author_from_frozen` run kind (manifest, reconciler, prepare-run), target duration, TTS suppression, fenced transcript, duration-only fallback, full `narration_modified` guard, cost confirm. | 2 | One fit run with narration 20% longer than the visuals: scenes total the target exactly, bus digest unchanged; a tampered variant is rejected. |
+| **6: polish** | Take alternatives + takes switcher; heavy cleanup (RNNoise, declick); WebM/Opus; auto-align; MCP tools; skills page; share transcript; multilingual; iframe recording fallback if S10 needs it. | 2–4 | MCP `add_narration` + render; a Chrome WebM file uploads and renders. |
+
+**Spike contract (phase 0).** The spikes are merged: four, not six.
+- **S10, browser end-to-end harness** (sync + capture). One instrumented page.
+  - Muted MP4 + `requestVideoFrameCallback` picture.
+  - Stem monitor in one `AudioContext`.
+  - Worklet → worker → IndexedDB capture compared with MediaRecorder: start delay, codec delay, memory.
+  - The per-browser API matrix.
+  - Calibration candidates (a), (b) and (c) for **headphones** and speakers, with repeatability.
+  - Physical flash/beep loopback at start, middle, end and punch boundaries.
+  - Built-in, USB and Bluetooth devices.
+  - 10-min drift and the residual stop.
+  - Stall, hidden tab and device change.
+  - Stop → hash → upload → recovery timing.
+  - Multi-take audition memory under the decode budget.
+- **S11, STT on the runner.**
+  - Parakeet, then whisper.cpp.
+  - Cold 60 s, 90 s and 10 min inputs.
+  - Install and download cost, RSS, CPU, and word-timestamp error against a known transcript.
+  - The outer-deadline kill.
+  - The whole-sequence time budget, hydrate through callback, at 90 s and 10 min.
+  - The credit delta.
+- **S12, render qualification** (bus + mastering + hold-frame).
+  - A full-duration bus layer at 90 s and 10 min, including the reference-entry restore.
+  - Automation limits and the degraded fallback.
+  - Mastering by re-mux.
+  - Final-AAC loudness and peak.
+  - Appending a held frame under render-unchanged, and frame-prefix invariance.
+- **S13, cleanup.** The light chain on 5 real recordings, compared A/B with raw and with bypass; parameter tuning.
+
+**Credit budget (written down before starting).**
+- Spikes: S11 and S12 each take about 3–5 runs, roughly 600 credits total.
+- Gates: phase 2 is about 2 keep-visuals runs + 1 tamper run + 2 long-bus runs, roughly 200 credits. Phase 5 is about 1 fit run + 1 tamper run, roughly 300 credits.
+- **Ceiling: 1,500 credits** for phase 0 plus all gates, including retries. Measured ranges are recorded in `docs/spikes.md` and the render dialog's copy.
+- Ten-minute cost and completion time aren't advertised until they're measured.
 
 ## 10. Testing
 
 - **Unit (vitest):**
-  - `timeline.ts`: overlap resolution, split, trim, alternatives, crossfade handles. Property tests: no overlaps after resolve; a source sample's composition time is preserved through every operation.
-  - Sync fit math: synthetic slope, discontinuities, calibration offsets.
+  - `timeline.ts`: resolve, split, trim, crossfades, fit math, output limit. Property tests: no overlaps after resolve, and each source sample's composition time is preserved.
   - WAV encoder and streaming resampler, checked against a reference.
-  - Peaks pyramid.
-  - Narration layer reader and validator.
-  - `duckPoints` with narration spans and muted AI voice, plus automation simplification ≤ 400 points.
-  - `checkNarration` and `narration_modified` (tampering cases: attribute, effect, extra audio, replaced bus).
-  - Narration captions grouping.
+  - Peaks and speech-span summary.
+  - Narration role, reader and validator in draft and materialized states.
+  - `duckPoints` with spans and muted voice, plus automation ≤ 400.
+  - `checkNarration` and `narration_modified` tamper cases.
+  - Narration caption grouping.
   - Op schema.
-  - Take scope on every read path.
-  - GC reference rules and races.
+  - `canReadTake` on every path, including `checkMedia`.
+  - `media_refs` + GC under concurrent save, freeze and retry (PGlite with two connections).
+  - Caption revision CAS and mirror generations.
+  - Run-manifest serialization for `author_from_frozen`.
   - Migration snapshot.
-- **Script tests:** `scripts/narration.ts` on fixtures in `test/fixtures/narration/`: quiet, clipping, noisy room, silence-only, punch-in of a quiet take into a loud one. Assert that sample counts are preserved, measure per-take loudness, check bypass is bit-exact, and check bus determinism (same inputs give the same PCM hash).
-- **UI:** Playwright on the mock build with a fake mic (`--use-fake-device-for-media-stream --use-file-for-fake-audio-capture`) in Chromium. Covers recorder state, recovery, punch-range selection and the shortcuts.
-  - This proves wiring, **not** hardware sync. Hardware sync is S10 and phase-3 manual gates on real Chrome, Safari and Firefox.
-- **Live gates:** `scripts/e2e/narration.ts`, with the budget written down up front: phase 2 gate ≈ 2 keep-visuals runs + retries; phase 5 ≈ 1 fit run + 1 tamper run. Measured cost ranges are recorded in `docs/spikes.md` and in the render dialog's copy.
-  - Per-clip beep correlation.
-  - The PCM hash of the locked bus, not lossy MP4 bytes.
-  - Loudness on decoded AAC.
-  - Visual frame-prefix invariance for keep-visuals.
-  - Header checks for the mic policy.
+- **Script tests:** `narration.ts` on fixtures (quiet, clipping, noisy, silence-only, quiet-into-loud punch). Assert that sample counts are preserved, check per-take loudness, check bypass is bit-exact, and check same-run determinism.
+- **UI:** Playwright with a fake mic in Chromium, covering recorder state, recovery, punch range and the shortcuts. This proves wiring only; hardware sync is S10 and the phase-3 manual gates.
+- **Live gates:** `scripts/e2e/narration.ts`, per §9's gate column, within the credit ceiling.
 
 ## 11. Risks
 
 | Risk | Likelihood | Mitigation |
 |---|---|---|
-| Latency APIs are absent or inaccurate on some browser or device, especially Bluetooth. | High | MP4 mode uses one document clock. Per-route calibration is required on a new route, plus the manual offset. The sync promise is stated per S10-qualified setup. |
-| Recording against the base MP4 is too limiting: visual edits block recording. | Medium | Clear copy. Phase-6 option to record against a fresh keep-visuals render. Fit mode adapts visuals afterwards anyway. |
-| STT too slow, too large or unavailable on the runner. | Medium | S11 tries Parakeet, then whisper.cpp. Bounded timeout, cache, empty-VTT fallback, caption editor. Captions never block a render. |
-| Loudness misses the target after AAC encoding. | Medium | Pre-limit with headroom, measure the decoded AAC, one bounded correction, otherwise fail loudly with the numbers. |
-| The agent changes narration in fit mode. | Medium | `narration_modified` checks the effective audio graph against frozen-derived expectations. A failed run beats a wrong mix. |
-| Take privacy gaps (other readers, runs). | Medium | Phase 1 scope enforcement on every path. Documented runner trust model. GC with race-safe reference checks. |
-| Browser memory or quota on long takes. | Low–Medium | Worker streaming, IndexedDB from chunk 1, quota handling. S14. |
-| Preview and render mix diverge. | Low | Shared `timeline.ts` and `duckPoints`. The phase-2 gate compares the preview mix rendered offline against the MP4. |
+| No headphone-compatible calibration is accurate enough. | Medium | S10 compares three procedures. The sync promise is stated only for qualified setups. The manual offset is always available. |
+| The stem monitor drifts against the muted picture. | Low–Medium | One `AudioContext`, positioned from picture anchors, re-anchored on residual. S10 measures it. |
+| The whole run sequence exceeds the 22-minute budget on long videos. | Medium | S11 measures the whole sequence at 10 min. STT has an outer deadline and a cache. The output limit is 15 min. |
+| STT too slow or unavailable. | Medium | Parakeet, then whisper.cpp; bounded; empty-VTT fallback; caption editor. |
+| Loudness misses after AAC encoding. | Medium | Re-mux mastering over the summed mix, peak-first, measured, warned. |
+| The agent changes narration in fit mode. | Medium | `narration_modified` checks the effective graph against frozen inputs plus the receipt. |
+| Take leaks through a forgotten path. | Medium | One predicate, a test per path, raw paths kept out of `video/`, and phase-1 and phase-2 denial gates. |
+| GC deletes something still referenced. | Low | `media_refs`, row locks in id order, two-phase delete, concurrent tests. |
+| Preview and render mix diverge. | Low | Shared `timeline.ts` and `duckPoints`. Audition is labelled raw. |
 
-## 12. Owner questions (answers proposed by round 1; owner to confirm)
+## 12. Owner questions (answers proposed by rounds 1–2; owner to confirm)
 
-1. **Default render choice:** *Keep my visuals* preselected, after a duration and overflow preview, with the measured cost range shown for both options. Both reviewers agree.
-2. **Bluetooth:** warn, and prompt calibration on first use of any new route. Don't block, and don't infer Bluetooth from device labels.
-3. **Unused takes:** a 30-day grace after last reference, plus an explicit **Delete unused recordings**. Discarding a draft releases references but doesn't destroy recordings immediately.
-4. **Captions provider:** local (Parakeet or whisper.cpp, per S11) by default. ElevenLabs transcription is a separate explicit opt-in, even when the TTS key exists.
-5. **Share-page transcript:** offered in the publish dialog with a preview, off by default for recorded narration, and the choice is remembered. Published audio doesn't imply consent to searchable text.
-6. **Take length:** keep 10 min / 50 MiB in v1. Longer takes raise memory, STT and run-time costs. The session ceiling isn't the binding limit.
+1. **Default render choice:** *Keep my visuals* preselected, after a duration and overflow preview and the measured cost range.
+2. **Bluetooth:** warn, and prompt calibration on any new route. Don't block, and don't infer Bluetooth from labels.
+3. **Unused takes:** a 30-day grace after the last reference, plus **Delete unused recordings**. Discarding a draft releases references only.
+4. **Captions provider:** local by default. ElevenLabs transcription is a separate opt-in.
+5. **Share-page transcript:** offered at publish with a preview, off by default for recorded narration, and the choice remembered.
+6. **Limits:** 10 min / 50 MiB per take. Narration may extend the output by at most 120 s, and never past 15 min total.
+7. **New: take alternatives** (a takes switcher) are deferred to phase 6. Punch-in still works, and the old take's audio is kept as source. OK?
 
 ## 13. Missing-piece checklist (each one is covered above)
 
 - Mic denied or disconnected: §5.1, §2.1.
 - Suspended or interrupted context: §2.1.
 - Hidden tab: §5.3.
-- Partial-upload retry: §5.1.
-- Sign-out or account switch during recovery: §5.1.
-- Preview link renewal during a take: none in MP4 mode; in iframe mode the take stops (§5.3).
-- Narration after beats are deleted or reordered: recording is blocked with pending visual edits; after a render, narration is absolute-time and doesn't move.
+- Partial-upload retry and worker hash: §5.1.
+- Account switch during recovery: §5.1.
+- Pending timing edits: §5.3.
 - Muted or empty-track captions: §6.6.
 - Cancellation: §2.1, §6.4.
-- Global video-duration limit: hold-frame overrun is bounded by the existing max video duration.
+- Output-duration limit: §6.1.
 - MCP URL ingestion: not in v1 (§7).
 - Shortcuts in text fields and on non-Mac: §5.5.
 - Draft expiry: §6.1.
 - Autoplay gesture: §2.1.
 - Revoice and narration ordering: §6.3.
 - Device change mid-take: §2.1.
+- Raw takes out of archives and previews: §6.2, §6.3.
+- Long-bus tar limit: §6.2.
+- Provenance and credits for library audio: §6.1.
+- Caption cache, ETag and unpublish ordering: §6.6.
 
 ## 14. Review log
 
-### Round 1, 2026-11-02 (Fable 5 high: 499 credits; Codex gpt-6.1-sol high: 191 credits)
+### Round 2, 2026-11-02 (Fable 5 high: 833 credits; Codex gpt-6.1-sol high: 427 credits), against `8649997`
 
-**Taken** (claims checked against the code before adopting):
-- **One narration bus instead of per-clip `data-va-layer` elements** (both). `validate()` requires layers to span the video, and `relayout()` resets them (`contract.ts:336-347,569-573`).
-- **Single-clock sync design.** The iframe is opaque-origin (`CompositionPreview.tsx:236`), so its `performance.now()` can't be compared with the parent's (both). We record against the parent-document MP4 with `requestVideoFrameCallback` (Codex's comparison, made primary), with parent-stamped message timestamps as the fallback (Fable). Also: no `outputLatency` double-counting, `baseLatency` isn't input latency, and calibration is per route (Codex).
-- **Recompute-and-verify guards** modelled on `checkRevoiced`, instead of filename exceptions (both). The fit guard checks the effective audio graph (Codex) and the full attribute set (Fable).
-- **Fit uses mode `author` from the frozen edited draft.** There's no `revise` mode (`types.ts:260`), the reconciler restores the parent's archive (`reconciler.ts:195-198`), and TTS gets suppressed (Codex).
-- **Narration cues as their own kind,** since `validate()` rejects them otherwise (`contract.ts:433-452`). VTT is required, so failure means an empty VTT (`types.ts:775`). Caption fixes are immutable revisions (Codex).
-- **Takes outside `snapshotMedia`** (12 / 300 MiB cap, `media.ts:260-262`), hydrated by Blobs key, not signed URLs (`prepare-run.ts:182-197`) (both).
-- **Take scope enforcement.** Any reader can load ready media today (`media.ts:231-233`) (Codex). Plus a **new reference-aware GC**, because none exists (`cleanup.ts`) (both). And a stored-bytes quota, because the 1 GiB quota covers unfinished uploads only (Codex).
-- **Parakeet before whisper.cpp,** as hinted by `docs/spikes.md:231` (Fable). Bounded, cached, timed-out transcription (Codex).
-- **Cleanup chain:**
-  - order (declick before denoise, Fable);
-  - per-take gain (Fable);
-  - a true bypass;
-  - explicit compressor units;
-  - measuring the decoded AAC, since `hyperframes audio` doesn't measure the mix (Codex);
-  - edge trim off in v1 (Codex; Fable's browser-side trim is kept as the future rule);
-  - releasing the duck during pauses (Fable);
-  - the 512-point automation cap (Codex).
-- **Recorder** streams to a worker and IndexedDB from the first chunk (both), with transferable blocks, a ready-wait before treating a take as durable, and silent worklet output (Codex).
-- **Data model:**
-  - integer samples;
-  - per-alternative alignment;
-  - handle crossfades;
-  - a separate peaks blob (the 10 KB estimate was wrong; it's about 225 KB Float32);
-  - queryable media columns;
-  - `voiceover` left as AI config, with the badge derived (Codex);
-  - draft-expiry handling (Fable).
-- **Local undo stack,** since only the newest revision survives (`edits.ts:208`) (Codex). Reviewers don't hear drafts, since drafts are author-only (`edits.ts:265`) (Codex).
-- **Phase order:** storage and privacy, then upload-to-render, before recording; caption fixes in the first recording release; per-clip correlation and PCM-hash gates; a written gate budget (Codex).
-- **Mic policy set in the edge functions too** (Fable). MCP uses media ids only, with no URL ingestion (Codex).
-- **Plan facts corrected:** `data-loop` (it's native `loop`), the bridge's message list, `data-va-captions` (no such convention), mute semantics (`data-va-muted`), and publish-time transcription (publishing starts no run).
+**Taken** (claims checked against the code first):
+- **Muted-MP4 picture plus a stem monitor in parent Web Audio** (both). The MP4 is one mixed AAC track (`Review.tsx:111-123`), so *replace* and punch-range muting were impossible as written. Recording is now blocked on **any** timing op, including voice ops that move beats (`contract.ts:774`) (Codex). The full sync fit plus a residual limit is stored (Codex). Calibration must work with headphones (Codex), with three candidates S10 compares (our addition).
+- **Raw takes out of `video/`.** `excluded()` only skips library media (`bundle-manifest.ts:24-28`), so takes would reach archives and readable previews (Codex). The **bus is stored by reference,** because tar limits each file to 10 MiB (`tar.ts:12-16`) (Codex).
+- **`narration` added to `AUDIO_ROLES`, the type, `audioOf`, the DTO enum and the editor** (both, `contract.ts:236,423-425`, `schemas.ts:753`). Fit mode uses an exact target duration (Fable). Draft and materialized states are separated, with spans from the op and take summaries so the duck lane stays valid in drafts (Codex's invalidation point, our mechanism).
+- **GC:**
+  - the deletion predicate is based on `media_refs`, and soft delete never overrides references (Codex);
+  - row locks in id order across every reference writer, because save does its media lookup outside the edit lock (`edits.ts:160,282-301`) (both);
+  - two-phase delete with a `deleting` state (both).
+- **New `author_from_frozen` run kind** with manifest serialization, reconciler and prepare-run changes together (`run-manifest.ts:9,64`, `reconciler.ts:167-205`) (both; Codex on serialization). `frozen.edit` is corrected to `editId` (Codex). Pre-author order is now bus, then STT, then agent (Codex). Duration-only fallback, fenced transcript, and locks through retries (Codex).
+- **Caption revisions:**
+  - revision-aware signed paths (`src/domain/files.ts:44`, `edge-functions/files.ts:18,37-47`) (both);
+  - caption hashes kept in `versions.captions`, separate from render receipts;
+  - an ETag bump;
+  - CAS;
+  - mirror generations so a late correction can't undo an unpublish (Codex).
+- **Mastering as a re-mux over the summed mix**, not HTML volume edits, which would violate the guard. It reuses HyperFrames' AAC peak enforcement, is peak-first, and exempts silence (Codex).
+- **ffmpeg pinned** (`-threads 1 -filter_threads 1`, version recorded). Same-run hashes are the guarantee and cross-run equality is best-effort (Fable). The guard uses a **receipt** to avoid repeating cleanup, with the trust boundary stated (Codex receipts, plus Fable's CPU point).
+- **One authorization predicate,** including `checkMedia` duplicate lookup (`media.ts:252-258`), search and MCP (Codex). Narration provenance and credits come through `media_refs`, because credits only count `sound`/`voiceover` today (`credits.ts:76-85`) (Codex).
+- **Worker-supplied upload hash,** because `upload.ts:109` hashes the whole file in memory (Codex). The audition decode budget (Codex). An explicit output-duration limit, because none exists (`schemas.ts:332-337`) (Codex).
+- **Simplifications:**
+  - take alternatives deferred to phase 6 (Fable);
+  - crossfade and release as constants (Fable);
+  - heavy cleanup deferred (Codex);
+  - no iframe fallback until needed (Codex);
+  - spikes merged S10+S14 and S12+S15, with the per-clip-layer comparison dropped (both);
+  - cross-version caption inheritance by PCM hash replaced with **op-hash carry-forward** (Fable's fragility point; Codex's carry-forward need).
+- **Gates:**
+  - a tamper case in phase 2 (Fable);
+  - a bleed check in phase 3 (Fable);
+  - raw-path denial, concurrent GC, long-bus reopen, caption unpublish ordering and silence-only (Codex);
+  - preview parity scoped (audition labelled raw) (Codex);
+  - an outer STT deadline and a whole-sequence budget, since render-job's timeout alone is 20 min (`render-job.ts:116`) (Codex);
+  - a written credit ceiling (Codex).
+- **Stale references refreshed** to `8649997` (both).
 
-**Changed from a reviewer's suggestion:**
-- **Bluetooth:** Fable suggested *requiring* calibration before Bluetooth takes, and Codex said not to infer Bluetooth from labels. We prompt calibration on **any new route**, which covers Bluetooth without detecting it.
-- **Edge trim:** Fable proposed doing it in the browser in v1. Codex proposed disabling it. We disabled it for v1 and kept Fable's rule for when it's added.
+**Changed:**
+- **Caption carry-forward:** Fable suggested dropping it; Codex required overlaying corrections. We kept carry-forward, keyed on the **op hash** rather than the PCM hash.
+- **The 512-point automation cap:** Codex reported it and Fable couldn't find it. The ≤ 400 design stands either way, and S12 confirms.
 
 **Not taken:**
-- **Fable's "`outputLatency` / `getOutputTimestamp` unsupported in Safari."** Codex cites MDN (Safari 14.1+ / 18.4+). We feature-detect and let S10 decide, rather than designing around either claim.
-- **Codex's "Compare MP4 recorder vs composition recorder" as an open choice.** We pick MP4 mode as primary (one clock, simpler) and keep the iframe as the S10 fallback, so phase 3 has a default to build.
+- **Codex's "not ready for phase 0" verdict, as a blocker on starting.** Its three fixes are design changes now in this draft. Spike S10 can start on the §9 contract immediately.
+
+### Round 1, 2026-11-02 (Fable 5 high: 499 credits; Codex gpt-6.1-sol high: 191 credits), against `7be32ab`
+
+**Taken:**
+- one narration bus instead of per-clip layers;
+- a single-clock sync design (the iframe is opaque-origin);
+- recompute-and-verify guards modelled on `checkRevoiced`;
+- fit as mode `author` from the frozen edited draft, plus TTS suppression;
+- narration cues as their own kind, an empty-VTT fallback, and caption revisions;
+- takes outside `snapshotMedia`, hydrated by Blobs key;
+- take scope enforcement, a new reference-aware GC, and a stored-bytes quota;
+- Parakeet before whisper.cpp, with bounded, cached STT;
+- the cleanup chain order, per-take gain, true bypass and explicit units; measuring decoded AAC; edge trim off in v1; duck release during pauses; bounded automation;
+- recorder streaming to a worker and IndexedDB from chunk 1;
+- integer samples and a separate peaks blob; queryable media columns; `voiceover` left as AI config; draft-expiry handling;
+- a local undo stack, and reviewers not hearing drafts;
+- phase reorder; caption fixes in the first release; per-clip correlation and PCM-hash gates; a gate budget;
+- mic policy in the edge functions; MCP by media ids;
+- factual corrections: native `loop`, the bridge's message list, no `data-va-captions` convention, `data-va-muted`, and no publish-time transcription.
+
+**Changed:**
+- Bluetooth: calibration on any new route, with no Bluetooth detection.
+- Edge trim: off in v1, with Fable's sync-preserving rule kept for later.
+
+**Not taken:**
+- Fable's claim that Safari lacks `getOutputTimestamp`. Codex cited MDN. We feature-detect, and S10 decides.
+- Leaving the MP4-vs-iframe recorder choice open. MP4 mode is primary.
