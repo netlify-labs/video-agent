@@ -5,7 +5,6 @@ import {
   Group,
   Menu,
   NavLink,
-  Text,
   Tooltip,
   UnstyledButton,
   useComputedColorScheme,
@@ -154,16 +153,11 @@ export function Layout() {
           {link('/docs/mcp', 'MCP for AI tools')}
           {link('/docs/skills', 'Agent skills')}
         </NavLink>
-        {canCreate ? (
-          <Text size="xs" c="var(--va-faint)" mt="auto" p="xs">
-            Press N for a new video
-          </Text>
-        ) : null}
+        <PoweredBy inSidebar />
       </AppShell.Navbar>
       <AppShell.Main>
         <MissingSettingsBanner admin={isAdmin} />
         <Outlet />
-        <PoweredBy />
       </AppShell.Main>
     </AppShell>
   )

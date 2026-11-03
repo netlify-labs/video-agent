@@ -2,6 +2,7 @@
 // skips), gets an editable brief, and creates the video with it. Create now is always there, and leaving keeps the
 // prompt. As a side panel (revisions) the questions are listed together; in the New video dialog they're steps.
 import {
+  ActionIcon,
   Alert,
   Button,
   Card,
@@ -19,7 +20,8 @@ import {
   TextInput,
   Textarea,
 } from '@mantine/core'
-import { useEffect, useState } from 'react'
+import { IconPlus, IconX } from '@tabler/icons-react'
+import { useEffect, useRef, useState } from 'react'
 import { $api, errorMessage } from '../api/client'
 import type { paths } from '../api/schema'
 import type { VoiceoverInput } from './VoiceoverControl'
@@ -50,6 +52,48 @@ export interface PlanPanelProps {
   steps?: boolean
 }
 
+// What the wait shows, a phrase at a time: each model call takes a few seconds, and the brief up to twenty.
+const READING = [
+  'Reading your prompt…',
+  'Working out what kind of video it is…',
+  'Checking what’s already clear…',
+]
+const ASKING = [
+  'Thinking of a few questions…',
+  'Looking for what’s still open…',
+  'Skipping what your prompt already answers…',
+  'Weighing what would change the video…',
+]
+const WRITING = [
+  'Writing the brief…',
+  'Finding the hook…',
+  'Sketching the scenes…',
+  'Timing each scene…',
+  'Choosing the tone…',
+  'Writing the call to action…',
+  'Checking it against your answers…',
+]
+const NARRATING = ['Writing the narration…', 'Fitting each line to its scene…']
+/** How long each loading phrase stays. */
+const PHRASE_MS = 2600
+
+/** Cycles through `phrases` while `active`, starting over when the list changes. */
+function useRotating(phrases: string[], active: boolean): string {
+  const [i, setI] = useState(0)
+  const key = phrases.join('|')
+  useEffect(() => {
+    setI(0)
+    if (!active) return
+    const t = setInterval(() => {
+      setI((n) => n + 1)
+    }, PHRASE_MS)
+    return () => {
+      clearInterval(t)
+    }
+  }, [key, active])
+  return phrases[i % phrases.length] ?? ''
+}
+
 const isUnavailable = (e: unknown) =>
   Boolean(
     e &&
@@ -57,6 +101,20 @@ const isUnavailable = (e: unknown) =>
     'error' in e &&
     (e as { error: { code?: string } }).error.code === 'planning_unavailable',
   )
+
+/** An option's label, with the planner's pick marked. */
+function OptionLabel({ o }: { o: Question['options'][number] }) {
+  return (
+    <>
+      {o.label}
+      {o.recommended ? (
+        <Text span fw={700} size="sm" ml={6} className="va-recommended">
+          (Recommended)
+        </Text>
+      ) : null}
+    </>
+  )
+}
 
 /** One question: its options (one or several), Skip, and free text for another answer or more context. */
 function QuestionCard({
@@ -98,7 +156,12 @@ function QuestionCard({
           >
             <Stack gap={6}>
               {q.options.map((o) => (
-                <Checkbox key={o.id} value={o.id} label={o.label} description={o.description || undefined} />
+                <Checkbox
+                  key={o.id}
+                  value={o.id}
+                  label={<OptionLabel o={o} />}
+                  description={o.description || undefined}
+                />
               ))}
             </Stack>
           </Checkbox.Group>
@@ -111,19 +174,25 @@ function QuestionCard({
           >
             <Stack gap={6}>
               {q.options.map((o) => (
-                <Radio key={o.id} value={o.id} label={o.label} description={o.description || undefined} />
+                <Radio
+                  key={o.id}
+                  value={o.id}
+                  label={<OptionLabel o={o} />}
+                  description={o.description || undefined}
+                />
               ))}
             </Stack>
           </Radio.Group>
         )}
         {/* Every question takes free text: another answer, or more context on the one picked. */}
         <Textarea
-          size="xs"
+          size="sm"
+          mt={4}
           aria-label={`Other, or more context: ${q.question}`}
           placeholder="Other, or more context…"
           autosize
-          minRows={1}
-          maxRows={4}
+          minRows={3}
+          maxRows={6}
           maxLength={500}
           value={a?.other ?? ''}
           onChange={(e) => {
@@ -155,6 +224,13 @@ function BriefEditor({
       </Text>
       <div className="va-brief">
         <Stack gap="sm">
+          <TextInput
+            label="Title"
+            description="The video's name in the library. You can rename it later."
+            maxLength={120}
+            value={brief.title ?? ''}
+            onChange={(e) => edit({ title: e.currentTarget.value })}
+          />
           <Textarea
             label="Goal"
             autosize
@@ -235,58 +311,87 @@ function BriefEditor({
               Each scene's narration is read word for word, and the scene is made long enough for it.
             </Text>
           ) : null}
-          {brief.beats.map((b, i) => (
-            <div key={i} className="va-brief-scene">
-              <span className="va-brief-n num">{i + 1}</span>
-              <Stack gap={6} style={{ flex: 1, minWidth: 0 }}>
-                <Group gap="xs" wrap="nowrap" align="flex-start">
-                  <Textarea
-                    style={{ flex: 1 }}
-                    aria-label={`Scene ${i + 1}`}
-                    autosize
-                    minRows={1}
-                    value={b.text}
-                    onChange={(e) => {
-                      const beats = brief.beats.map((x, j) =>
-                        j === i ? { ...x, text: e.currentTarget.value } : x,
-                      )
-                      edit({ beats })
-                    }}
-                  />
-                  <NumberInput
-                    w={84}
-                    min={0}
-                    max={600}
-                    suffix=" s"
-                    aria-label={`Length of scene ${i + 1}`}
-                    value={b.seconds}
-                    onChange={(v) => {
-                      const beats = brief.beats.map((x, j) =>
-                        j === i ? { ...x, seconds: Number(v) || 0 } : x,
-                      )
-                      edit({ beats })
-                    }}
-                  />
+          {brief.beats.map((b, i) => {
+            const setBeat = (patch: Partial<Brief['beats'][number]>) => {
+              edit({ beats: brief.beats.map((x, j) => (j === i ? { ...x, ...patch } : x)) })
+            }
+            return (
+              // One card per scene: its number, length and remove button, then what's shown and what's said.
+              <div key={i} className="va-brief-scene" data-testid={`brief-scene-${i + 1}`}>
+                <Group justify="space-between" wrap="nowrap" gap="xs">
+                  <Text size="sm" fw={600} className="num">
+                    Scene {i + 1}
+                  </Text>
+                  <Group gap={6} wrap="nowrap">
+                    <NumberInput
+                      size="xs"
+                      w={76}
+                      min={0}
+                      max={600}
+                      suffix=" s"
+                      aria-label={`Length of scene ${i + 1}`}
+                      value={b.seconds}
+                      onChange={(v) => {
+                        setBeat({ seconds: Number(v) || 0 })
+                      }}
+                    />
+                    {brief.beats.length > 1 ? (
+                      <ActionIcon
+                        variant="subtle"
+                        color="gray"
+                        aria-label={`Remove scene ${i + 1}`}
+                        onClick={() => {
+                          edit({ beats: brief.beats.filter((_, j) => j !== i) })
+                        }}
+                      >
+                        <IconX size={16} />
+                      </ActionIcon>
+                    ) : null}
+                  </Group>
                 </Group>
+                <Textarea
+                  label="On screen"
+                  aria-label={`Scene ${i + 1}`}
+                  autosize
+                  minRows={2}
+                  maxLength={300}
+                  value={b.text}
+                  onChange={(e) => {
+                    setBeat({ text: e.currentTarget.value })
+                  }}
+                />
                 {spoken ? (
                   <Textarea
+                    label="Narration"
                     aria-label={`Narration for scene ${i + 1}`}
                     placeholder="What the narrator says over this scene"
                     autosize
-                    minRows={1}
+                    minRows={2}
                     maxLength={600}
-                    size="xs"
                     value={b.narration ?? ''}
                     onChange={(e) => {
-                      const narration = e.currentTarget.value
-                      const beats = brief.beats.map((x, j) => (j === i ? { ...x, narration } : x))
-                      edit({ beats })
+                      setBeat({ narration: e.currentTarget.value })
                     }}
                   />
                 ) : null}
-              </Stack>
-            </div>
-          ))}
+              </div>
+            )
+          })}
+          {brief.beats.length < 12 ? (
+            <Button
+              variant="default"
+              size="xs"
+              leftSection={<IconPlus size={14} />}
+              style={{ alignSelf: 'flex-start' }}
+              onClick={() => {
+                edit({
+                  beats: [...brief.beats, { text: '', seconds: 5, ...(spoken ? { narration: '' } : {}) }],
+                })
+              }}
+            >
+              Add scene
+            </Button>
+          ) : null}
         </Stack>
       </div>
     </Stack>
@@ -392,15 +497,21 @@ export function PlanPanel(props: PlanPanelProps) {
     getBrief.mutate({ params: { path: { id: plan.id } }, body: { answers: list } })
   }
 
+  const phrase = useRotating(
+    start.isPending
+      ? READING
+      : getQuestions.isPending
+        ? ASKING
+        : plan?.voiceover
+          ? [...WRITING.slice(0, 4), ...NARRATING, ...WRITING.slice(4)]
+          : WRITING,
+    busy,
+  )
   const status = busy ? (
-    <Group gap="sm" py={props.steps ? 'xl' : 0} justify={props.steps ? 'center' : 'flex-start'}>
+    <Group gap="sm" py={props.steps ? 'xl' : 0} justify={props.steps ? 'center' : 'flex-start'} role="status">
       <Loader size="sm" />
-      <Text size="sm" c="var(--va-muted)">
-        {start.isPending
-          ? 'Reading your prompt…'
-          : getQuestions.isPending
-            ? 'Thinking of a few questions…'
-            : 'Writing the brief…'}
+      <Text key={phrase} size="sm" c="var(--va-muted)" className="va-phrase">
+        {phrase}
       </Text>
     </Group>
   ) : null
@@ -411,8 +522,45 @@ export function PlanPanel(props: PlanPanelProps) {
   ) : null
   const createLabel = props.revisionOf ? 'Make the new version' : 'Create with this brief'
 
+  // ← and → move between questions (→ on the last one writes the brief), except while typing in a field. ↑ and ↓
+  // still move between a question's options.
+  const nav = useRef<{ back: () => void; next: () => void } | null>(null)
+  useEffect(() => {
+    if (!props.steps) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+      if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return
+      const t = e.target as HTMLElement | null
+      if (
+        t?.closest('textarea, input:not([type=radio]):not([type=checkbox]), [contenteditable="true"], select')
+      )
+        return
+      if (!nav.current) return
+      e.preventDefault()
+      if (e.key === 'ArrowLeft') nav.current.back()
+      else nav.current.next()
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => {
+      window.removeEventListener('keydown', onKey, true)
+    }
+  }, [props.steps])
+
   if (props.steps) {
     const onBrief = step >= questions.length
+    const next = () => {
+      if (step < questions.length - 1) setStep(step + 1)
+      else writeBrief()
+    }
+    nav.current =
+      busy || onBrief || questions.length === 0
+        ? null
+        : {
+            back: () => {
+              if (step > 0) setStep(step - 1)
+            },
+            next,
+          }
     return (
       <Stack gap="md" className="va-plan-steps" data-testid="plan-steps">
         {problem}
@@ -435,22 +583,17 @@ export function PlanPanel(props: PlanPanelProps) {
         ) : null}
         {status ??
           (!onBrief && questions[step] ? (
-            <QuestionCard q={questions[step]} a={answers[questions[step].id]} setAnswer={setAnswer} />
+            <QuestionCard
+              key={questions[step].id}
+              q={questions[step]}
+              a={answers[questions[step].id]}
+              setAnswer={setAnswer}
+            />
           ) : brief ? (
             <BriefEditor brief={brief} voiceover={!!plan?.voiceover} edit={editBrief} />
           ) : null)}
         <Group justify="space-between" gap="sm" className="va-plan-footer">
-          <Button
-            variant="subtle"
-            color="gray"
-            loading={props.creating && !brief}
-            onClick={() => {
-              props.onCreate(null)
-            }}
-          >
-            {brief ? 'Create without the plan' : 'Create video now'}
-          </Button>
-          <Group gap="sm">
+          <Group gap="md">
             {step > 0 && questions.length > 0 ? (
               <Button
                 variant="default"
@@ -462,15 +605,25 @@ export function PlanPanel(props: PlanPanelProps) {
                 Back
               </Button>
             ) : null}
+            {!onBrief && questions.length > 1 ? (
+              <Text size="xs" c="var(--va-faint)" visibleFrom="sm" aria-hidden>
+                <kbd className="va-kbd">←</kbd> <kbd className="va-kbd">→</kbd> to move between questions
+              </Text>
+            ) : null}
+          </Group>
+          <Group gap="sm">
+            <Button
+              variant="default"
+              loading={props.creating && !brief}
+              onClick={() => {
+                props.onCreate(null)
+              }}
+            >
+              {brief ? 'Create without the plan' : 'Create video now'}
+            </Button>
             {!onBrief ? (
-              <Button
-                disabled={busy}
-                onClick={() => {
-                  if (step < questions.length - 1) setStep(step + 1)
-                  else writeBrief()
-                }}
-              >
-                {step < questions.length - 1 ? 'Next' : 'Write the brief'}
+              <Button disabled={busy} onClick={next}>
+                {step < questions.length - 1 ? 'Next question' : 'Write the brief'}
               </Button>
             ) : brief ? (
               <Button loading={props.creating || save.isPending} onClick={() => void create()}>

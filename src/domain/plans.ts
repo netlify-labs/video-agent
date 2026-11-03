@@ -84,6 +84,7 @@ const QuestionsOut = z.object({
               id: z.string().min(1).max(20),
               label: z.string().min(1).max(80),
               description: z.string().max(200).default(''),
+              recommended: z.boolean().optional(),
             }),
           )
           .min(2)
@@ -230,7 +231,7 @@ async function mediaContext(deps: Deps, plan: PlanRow) {
 }
 
 const MEDIA_RULE =
-  'attached_media lists files the person chose for the video (logos, screenshots, clips, fonts, music); the attached images are the first of them, in order. Plan around them and never ask for something they already provide.'
+  'attached_media lists files the person chose for the video (logos, screenshots, clips, fonts, music, and PDFs the agent reads for facts and wording); the attached images are the first of them, in order. Plan around them and never ask for something they already provide.'
 
 /** How the planner hears the Sound and voice-over choices (data, like the shape and length). */
 function soundLabel(
@@ -397,6 +398,17 @@ async function callJson<T>(
   )
 }
 
+/** At most one recommended option per question, and it comes first, whatever order the model gave. */
+export function recommendedFirst(
+  options: { id: string; label: string; description: string; recommended?: boolean | undefined }[],
+): PlanQuestion['options'] {
+  const plain = options.map((o) => ({ id: o.id, label: o.label, description: o.description }))
+  const i = options.findIndex((o) => o.recommended === true)
+  const pick = plain[i]
+  if (!pick) return plain
+  return [{ ...pick, recommended: true }, ...plain.filter((_, j) => j !== i)]
+}
+
 export async function generateQuestions(deps: Deps, p: Principal, planId: string) {
   assertCan(p, 'plan:create')
   requireGateway(deps)
@@ -414,7 +426,8 @@ export async function generateQuestions(deps: Deps, p: Principal, planId: string
       : '',
     DATA_RULE,
     plan.mediaIds.length ? MEDIA_RULE : '',
-    'Reply with JSON only: {"questions":[{"id":"q1","question":"…","why":"…","options":[{"id":"a","label":"…","description":"…"}],"multiSelect":false}]}',
+    'Put the option you recommend first and mark it "recommended": true (one per question at most; mark none when no option is clearly best).',
+    'Reply with JSON only: {"questions":[{"id":"q1","question":"…","why":"…","options":[{"id":"a","label":"…","description":"…","recommended":true},{"id":"b","label":"…","description":"…"}],"multiSelect":false}]}',
     'Use 0–6 questions and 2–4 short options each. Return {"questions":[]} if nothing is open.',
     'The request wins over the chosen settings: never ask about sound, music or a voice-over the request already asks for or rules out.',
     // Seen live: "the chosen_sound data says 'silent, no audio'".
@@ -449,7 +462,7 @@ export async function generateQuestions(deps: Deps, p: Principal, planId: string
     1500,
     media.images,
   )
-  const questions: PlanQuestion[] = out.questions.map((q) => ({ ...q }))
+  const questions: PlanQuestion[] = out.questions.map((q) => ({ ...q, options: recommendedFirst(q.options) }))
   await deps.store.updatePlan(plan.id, { questions })
   return planDto({ ...plan, questions })
 }
@@ -496,7 +509,7 @@ export async function generateBrief(deps: Deps, p: Principal, planId: string, an
       : '',
   ].filter(Boolean)
   const fields = [
-    '"goal":"","audience":"","keyMessage":""',
+    '"title":"","goal":"","audience":"","keyMessage":""',
     `"beats":[{"text":"","seconds":0${plan.voiceover || decideVoice ? ',"narration":""' : ''}}]`,
     '"tone":"","callToAction":"","mustInclude":[],"avoid":[]',
     decideSound ? '"sound":"silent"' : '',
@@ -505,6 +518,7 @@ export async function generateBrief(deps: Deps, p: Principal, planId: string, an
   const system = [
     "Turn a video request and the person's answers into a short, concrete brief for an agent that builds HTML/CSS animated videos.",
     'Keep their intent; make reasonable choices for anything skipped. Beats are on-screen moments with a length in seconds.',
+    '"title" names the video for a library list: 2 to 7 words, specific to this video, no quotes or trailing punctuation (for example "Event-driven functions in 30 seconds").',
     DATA_RULE,
     plan.mediaIds.length ? `${MEDIA_RULE} Say in the beats where each file appears.` : '',
     plan.voiceover ? NARRATION_RULE : '',

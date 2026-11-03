@@ -457,6 +457,49 @@ function PublicLink({ video, v, canPublish }: { video: Video; v: Version; canPub
   )
 }
 
+const TITLE_MAX = 120
+
+/** The video's title, edited in place: click it, type, and it saves when you press Enter or click away. Escape
+ * undoes the edit. Empty titles and unchanged ones aren't saved. */
+function EditableTitle({ title, onSave }: { title: string; onSave: (title: string) => void }) {
+  const ref = useRef<HTMLHeadingElement>(null)
+  const finish = () => {
+    const el = ref.current
+    if (!el) return
+    const next = el.textContent.replace(/\s+/g, ' ').trim().slice(0, TITLE_MAX)
+    if (!next) el.textContent = title
+    else if (next !== title) {
+      el.textContent = next
+      onSave(next)
+    }
+  }
+  return (
+    <Title
+      ref={ref}
+      order={1}
+      className="va-title-edit"
+      contentEditable="plaintext-only"
+      suppressContentEditableWarning
+      spellCheck
+      title="Click to edit title"
+      style={{ overflowWrap: 'anywhere' }}
+      onBlur={finish}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          e.currentTarget.blur()
+        } else if (e.key === 'Escape') {
+          e.preventDefault()
+          e.currentTarget.textContent = title
+          e.currentTarget.blur()
+        }
+      }}
+    >
+      {title}
+    </Title>
+  )
+}
+
 export function VideoPage() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
@@ -612,9 +655,18 @@ export function VideoPage() {
       </Anchor>
       <div className="va-title-row" style={{ marginTop: 4 }}>
         <div style={{ minWidth: 0, flex: 1 }}>
-          <Title order={1} style={{ overflowWrap: 'anywhere' }}>
-            {data.title}
-          </Title>
+          {canPublish ? (
+            <EditableTitle
+              title={data.title}
+              onSave={(title) => {
+                rename.mutate({ params: { path: { id } }, body: { title } })
+              }}
+            />
+          ) : (
+            <Title order={1} style={{ overflowWrap: 'anywhere' }}>
+              {data.title}
+            </Title>
+          )}
           <div className="va-sub num">{sub}</div>
         </div>
         <Group gap="sm">

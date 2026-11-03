@@ -68,7 +68,13 @@ export async function storeMedia(
     disposition,
   })
   // The original of an SVG is only ever a download; other originals are what runs use, so the clean key is the same.
-  await deps.blobs.set('media', keys.original, bytes, md(bytes, c.kind === 'svg' ? 'attachment' : 'inline'))
+  // An SVG's original and a PDF are only ever downloaded: opened in the browser, either could run scripts.
+  await deps.blobs.set(
+    'media',
+    keys.original,
+    bytes,
+    md(bytes, c.kind === 'svg' || c.kind === 'pdf' ? 'attachment' : 'inline'),
+  )
   const cleanKey = c.kind === 'svg' ? keys.clean : keys.original
   if (c.kind === 'svg') await deps.blobs.set('media', keys.clean, clean, md(clean, 'inline'))
   let posterKey: string | null = null

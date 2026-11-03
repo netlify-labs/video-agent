@@ -210,7 +210,8 @@ export function NewVideoPage() {
         </div>
       </div>
       <div className="va-split">
-        <Card>
+        {/* Not clipped, so the actions row can stick to the window's bottom edge. */}
+        <Card style={{ overflow: 'visible' }}>
           <form
             onSubmit={(e) => {
               e.preventDefault()
@@ -343,7 +344,8 @@ export function NewVideoPage() {
                   setTitle(e.currentTarget.value)
                 }}
               />
-              <Group>
+              {/* Sticks to the bottom of the window while the form scrolls, so Create video is always in reach. */}
+              <Group className="va-sticky-actions">
                 {/* Waits for the config: before it loads, a click would skip the choice and create at once. */}
                 <Button
                   type="submit"
@@ -401,7 +403,8 @@ export function NewVideoPage() {
         }}
         title={dialog === 'plan' ? 'Plan your video' : 'Create your video'}
         // Planning shows a question or a long brief at a time: most of the window, so neither is cramped.
-        size={dialog === 'plan' ? '85%' : 'lg'}
+        size={dialog === 'plan' ? '92%' : 'lg'}
+        padding={phone ? 'md' : 'xl'}
         fullScreen={phone}
         closeButtonProps={{ 'aria-label': 'Close' }}
         centered

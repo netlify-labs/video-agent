@@ -1039,7 +1039,7 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "version": 2, "body": "T
     'plan_video',
     {
       title: 'Plan a video with a few questions',
-      description: `Optional first step before create_video (or revise_video). Reads the request and returns 0–6 multiple-choice questions whose answers would change the video. Ask your user these questions (they may skip any or give their own answer), then call plan_brief.
+      description: `Optional first step before create_video (or revise_video). Reads the request and returns 0–6 multiple-choice questions whose answers would change the video. Ask your user these questions (they may skip any or give their own answer), then call plan_brief. A choice marked recommended is the planner's pick and comes first: show it first with "(Recommended)".
 
 Pass video_id to plan a revision of an existing video; the questions are about the change. If "questions" is empty, call plan_brief with no answers.
 
@@ -1088,7 +1088,12 @@ Example: {"prompt": "A 30-second launch video for org webhooks, ending on our lo
             why: q.why,
             multi_select: q.multiSelect,
             allow_other: q.allowOther,
-            choices: q.options.map((o) => ({ choice_id: o.id, label: o.label, description: o.description })),
+            choices: q.options.map((o) => ({
+              choice_id: o.id,
+              label: o.label,
+              description: o.description,
+              ...(o.recommended ? { recommended: true } : {}),
+            })),
           })),
           next_actions: [
             (plan.questions ?? []).length > 0

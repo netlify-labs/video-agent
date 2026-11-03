@@ -85,6 +85,8 @@ async function consumePlan(
   target: { jobId: string | null; n: number; newJobId: string },
 ): Promise<{
   frozen: FrozenPlan
+  /** The brief's name for the video, if it has one. */
+  title: string | null
   aspect: Aspect | null
   durationSec: number | null
   mediaIds: string[]
@@ -120,6 +122,7 @@ async function consumePlan(
   const seconds = plan.brief.beats.reduce((t, b) => t + b.seconds, 0)
   return {
     frozen: { planId: plan.id, brief: plan.brief, qa, contextHash: planningContext.hash },
+    title: plan.brief.title?.trim().slice(0, 120) || null,
     aspect: (plan.aspect as Aspect | null) ?? plan.route?.suggestedAspect ?? null,
     durationSec: plan.durationSec ?? (seconds > 0 ? Math.round(seconds) : null),
     mediaIds: plan.mediaIds,
@@ -265,7 +268,7 @@ export async function createVideo(
         : null
       const job: JobRow = {
         id: jobId,
-        title: input.title?.trim() || deriveTitle(input.prompt),
+        title: input.title?.trim() || planned?.title || deriveTitle(input.prompt),
         aspect: input.aspect ?? planned?.aspect ?? '16:9',
         ownerId: principal.userId,
         status: 'queued',

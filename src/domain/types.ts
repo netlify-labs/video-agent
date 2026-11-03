@@ -404,7 +404,8 @@ export interface PlanQuestion {
   id: string
   question: string
   why: string
-  options: { id: string; label: string; description: string }[]
+  /** The planner's recommended option, when it has one, is first and marked. */
+  options: { id: string; label: string; description: string; recommended?: boolean }[]
   multiSelect: boolean
   allowOther: boolean
 }
@@ -415,6 +416,8 @@ export interface PlanAnswer {
   skipped?: boolean | undefined
 }
 export interface PlanBrief {
+  /** The planner's name for the video (briefs from before titles have none). */
+  title?: string | undefined
   goal: string
   audience: string
   keyMessage: string

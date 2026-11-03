@@ -15,7 +15,7 @@ import { readRunCredits, RUN_CREDITS_FILE, type RunCredit } from '../lib/openver
 import { readTarGz, type TarLimits } from '../lib/tar.js'
 import { ensureBundle } from './bundles.js'
 import { getSettings } from './settings.js'
-import { setStage } from './videos.js'
+import { deriveTitle, setStage } from './videos.js'
 import { emitTerminalEvent } from './webhooks.js'
 import {
   ASPECTS,
@@ -339,6 +339,17 @@ async function finish(
     const final = fresh.cancelRequestedAt || job?.deletedAt ? 'cancelled' : outcome
     if (final === 'ready' && output) {
       await repo.upsertOutput(output)
+      // A title still taken from the first prompt gives way to the agent's; a title someone chose (typed, renamed
+      // or from the brief) is kept.
+      const first = job && output.title ? await repo.getVersion(a.jobId, 1) : null
+      if (
+        job &&
+        first &&
+        output.title &&
+        job.title === deriveTitle(first.prompt) &&
+        output.title !== job.title
+      )
+        await repo.updateJob(job.id, { title: output.title, updatedAt: now, version: job.version + 1 })
       // Comments this version was asked to incorporate count as addressed only once it succeeds (plan v2 §5).
       const fed = await repo.listVersionComments(a.jobId, a.versionN)
       await repo.markCommentsAddressed(

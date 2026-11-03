@@ -1,9 +1,10 @@
 // One Mantine theme: true-black flat in dark (the default), a quiet neutral in light.
 // Elevation is lightness alone; colour goes on data (the brand hue), never on buttons, tabs or nav.
-// The primary action is an inverted pill: white on black in dark, near-black in light.
+// The primary action is inverted: white on black in dark, near-black in light. Corners stay small (8px default).
 import {
   Button,
   Card,
+  Modal,
   Paper,
   SegmentedControl,
   Skeleton,
@@ -27,15 +28,16 @@ function palette(hex: string): MantineColorsTuple {
 }
 
 // Mantine reads dark[0] as text, dark[2] as dimmed, dark[4] as borders, dark[6] as fields and
-// dark[7] as the body. True black with #111 and #222 as the two raised steps.
+// dark[7] as the body. A black page with grey cards (#1c1c1c) and raised steps (#2a2a2a); fields are a darker well
+// with a visible border, so every control reads against its card.
 const dark: MantineColorsTuple = [
   '#ffffff',
   '#b4b4b4',
   '#949494',
   '#5e5e5e',
-  '#2e2e2e',
-  '#222222',
-  '#161616',
+  '#424242',
+  '#2a2a2a',
+  '#121212',
   '#000000',
   '#000000',
   '#000000',
@@ -58,7 +60,7 @@ export const theme = createTheme({
   },
   fontSizes: { xs: '12px', sm: '14px', md: '14px', lg: '16px', xl: '18px' },
   lineHeights: { xs: '1.4', sm: '1.43', md: '1.5', lg: '1.5', xl: '1.4' },
-  radius: { xs: '4px', sm: '8px', md: '12px', lg: '16px', xl: '999px' },
+  radius: { xs: '2px', sm: '4px', md: '6px', lg: '8px', xl: '12px' },
   defaultRadius: 'lg',
   spacing: { xs: '8px', sm: '12px', md: '16px', lg: '24px', xl: '32px' },
   cursorType: 'pointer',
@@ -66,9 +68,9 @@ export const theme = createTheme({
   other: { column: 1152 },
   components: {
     Button: Button.extend({
-      defaultProps: { radius: 'xl', size: 'sm' },
+      defaultProps: { radius: 'md', size: 'sm' },
       classNames: { root: 'va-button' },
-      // The one primary is an inverted pill; the brand hue never fills a button.
+      // The one primary is inverted; the brand hue never fills a button.
       vars: (_theme, props) =>
         (props.variant ?? 'filled') === 'filled' && !props.color
           ? {
@@ -84,11 +86,13 @@ export const theme = createTheme({
       defaultProps: { radius: 'lg', padding: 'lg', withBorder: false },
       classNames: { root: 'va-surface' },
     }),
+    // A darker, blurred backdrop, so a dialog reads as a layer above the page.
+    Modal: Modal.extend({ defaultProps: { overlayProps: { backgroundOpacity: 0.72, blur: 3 } } }),
     Paper: Paper.extend({
       defaultProps: { radius: 'lg', withBorder: false },
       classNames: { root: 'va-surface' },
     }),
-    SegmentedControl: SegmentedControl.extend({ defaultProps: { radius: 'xl', size: 'sm' } }),
+    SegmentedControl: SegmentedControl.extend({ defaultProps: { radius: 'md', size: 'sm' } }),
     Skeleton: Skeleton.extend({ defaultProps: { animate: false, radius: 'sm' } }),
     Tabs: Tabs.extend({ vars: () => ({ root: { '--tabs-color': 'var(--va-text)' } }) }),
     Switch: Switch.extend({ vars: () => ({ root: { '--switch-color': 'var(--va-muted)' } }) }),
@@ -107,6 +111,9 @@ export const resolver: CSSVariablesResolver = () => ({
     '--va-ground': '#f9fafb',
     '--va-surface': '#ffffff',
     '--va-raised': '#f2f3f5',
+    '--va-dialog': '#ffffff',
+    '--va-dialog-raised': '#f2f3f5',
+    '--va-dialog-edge': '#dfe2e6',
     '--va-rule': '#ebedf0',
     '--va-text': '#111111',
     '--va-muted': '#5f6368',
@@ -122,9 +129,13 @@ export const resolver: CSSVariablesResolver = () => ({
   },
   dark: {
     '--va-ground': '#000000',
-    '--va-surface': '#111111',
-    '--va-raised': '#222222',
-    '--va-rule': '#1a1a1a',
+    '--va-surface': '#1c1c1c',
+    '--va-raised': '#2a2a2a',
+    // Dialogs sit a clear step above the black page, with their own raised step and edge.
+    '--va-dialog': '#242424',
+    '--va-dialog-raised': '#303030',
+    '--va-dialog-edge': '#454545',
+    '--va-rule': '#2a2a2a',
     '--va-text': '#ffffff',
     '--va-muted': '#b4b4b4',
     '--va-faint': '#949494',

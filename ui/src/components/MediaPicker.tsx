@@ -12,7 +12,7 @@ import {
   UnstyledButton,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
-import { IconMovie, IconMusic, IconPhoto, IconTypography, IconX } from '@tabler/icons-react'
+import { IconFileTypePdf, IconMovie, IconMusic, IconPhoto, IconTypography, IconX } from '@tabler/icons-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { $api, useCanCreate } from '../api/client'
@@ -26,7 +26,7 @@ export type MediaKind = Media['kind']
 
 // A hint for the file dialog only: the server decides what a file is from its bytes.
 export const MEDIA_ACCEPT =
-  'image/png,image/jpeg,image/webp,image/svg+xml,video/mp4,audio/mpeg,audio/mp4,audio/x-m4a,audio/aac,audio/wav,audio/x-wav,audio/ogg,font/woff2,font/ttf,font/otf,.mp3,.m4a,.wav,.ogg,.opus,.woff2,.ttf,.otf'
+  'image/png,image/jpeg,image/webp,image/svg+xml,video/mp4,audio/mpeg,audio/mp4,audio/x-m4a,audio/aac,audio/wav,audio/x-wav,audio/ogg,font/woff2,font/ttf,font/otf,application/pdf,.mp3,.m4a,.wav,.ogg,.opus,.woff2,.ttf,.otf,.pdf'
 const MAX_PICKS = 12
 
 export function Thumb({ m }: { m: Media }) {
@@ -58,6 +58,12 @@ export function Thumb({ m }: { m: Media }) {
         {m.durationSec ? <span className="va-media-duration num">{duration(m.durationSec)}</span> : null}
       </div>
     )
+  if (m.kind === 'pdf')
+    return (
+      <div className="va-media-thumb">
+        <IconFileTypePdf size={32} />
+      </div>
+    )
   // A font shows a sample in itself.
   const family = `va-media-${m.id}`
   return (
@@ -78,6 +84,7 @@ export const KIND_LABEL: Record<MediaKind, string> = {
   video: 'Clips',
   audio: 'Audio',
   font: 'Fonts',
+  pdf: 'PDFs',
 }
 
 /**
@@ -93,7 +100,7 @@ export function MediaLibraryModal(props: {
   multiple?: boolean
   selected?: Media[]
 }) {
-  const kinds = props.kinds ?? (['image', 'svg', 'video', 'audio', 'font'] as MediaKind[])
+  const kinds = props.kinds ?? (['image', 'svg', 'video', 'audio', 'font', 'pdf'] as MediaKind[])
   const [filter, setFilter] = useState<'all' | MediaKind>('all')
   const [picked, setPicked] = useState<Media[]>(props.selected ?? [])
   const [uploading, setUploading] = useState(false)
@@ -144,8 +151,15 @@ export function MediaLibraryModal(props: {
   }
 
   return (
-    <Modal opened={props.opened} onClose={props.onClose} title={props.title ?? 'Add media'} size="xl">
-      <Stack gap="md">
+    <Modal
+      opened={props.opened}
+      onClose={props.onClose}
+      title={props.title ?? 'Add media'}
+      size="80%"
+      padding="xl"
+    >
+      {/* Tall enough to browse a library, with Done at the bottom even when it's nearly empty. */}
+      <Stack gap="md" mih="min(64vh, 620px)">
         <Group justify="space-between">
           {kinds.length > 1 ? (
             <SegmentedControl
@@ -236,7 +250,7 @@ export function MediaLibraryModal(props: {
           />
         ) : null}
         {props.multiple ? (
-          <Group justify="space-between">
+          <Group justify="space-between" mt="auto">
             <Text size="xs" c="var(--va-faint)">
               {picked.length} of up to {MAX_PICKS} picked
             </Text>
@@ -274,6 +288,8 @@ export function MediaChips(props: {
               <IconTypography size={14} />
             ) : m.kind === 'audio' ? (
               <IconMusic size={14} />
+            ) : m.kind === 'pdf' ? (
+              <IconFileTypePdf size={14} />
             ) : (
               <IconMovie size={14} />
             )}

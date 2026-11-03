@@ -107,6 +107,7 @@ export async function ensureBundle(
   const files = [...readTarGz(gz)].filter(([path]) => keep(path))
   // Library media is by reference: the preview needs it next to the composition (plan v2 §14 rule 23).
   for (const m of await deps.store.listVersionMedia(jobId, n)) {
+    if (m.kind === 'pdf') continue
     const path = `assets/media/${m.filename}`
     if (files.some(([p]) => p === path)) continue
     const bytes = await deps.blobs.get('media', m.key)

@@ -819,6 +819,10 @@
       "PlanBrief": {
         "type": "object",
         "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 120
+          },
           "goal": {
             "type": "string",
             "maxLength": 400
@@ -1072,7 +1076,8 @@
               "svg",
               "video",
               "font",
-              "audio"
+              "audio",
+              "pdf"
             ]
           },
           "role": {
@@ -1818,6 +1823,10 @@
                       },
                       "description": {
                         "type": "string"
+                      },
+                      "recommended": {
+                        "type": "boolean",
+                        "description": "The planner's recommended option; it is listed first."
                       }
                     },
                     "required": [
@@ -1881,6 +1890,10 @@
               "null"
             ],
             "properties": {
+              "title": {
+                "type": "string",
+                "maxLength": 120
+              },
               "goal": {
                 "type": "string",
                 "maxLength": 400
@@ -3156,7 +3169,8 @@
               "svg",
               "video",
               "font",
-              "audio"
+              "audio",
+              "pdf"
             ]
           },
           "status": {
@@ -8605,7 +8619,8 @@
                 "svg",
                 "video",
                 "font",
-                "audio"
+                "audio",
+                "pdf"
               ]
             },
             "required": false,

@@ -3866,7 +3866,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    kind?: "image" | "svg" | "video" | "font" | "audio";
+                    kind?: "image" | "svg" | "video" | "font" | "audio" | "pdf";
                     cursor?: string;
                     limit?: number;
                 };
@@ -6114,6 +6114,7 @@ export interface components {
             publications: components["schemas"]["Publication"][];
         };
         PlanBrief: {
+            title?: string;
             goal: string;
             audience: string;
             keyMessage: string;
@@ -6175,7 +6176,7 @@ export interface components {
             /** @description The library item, or null for music or a sound effect the run fetched from Openverse itself */
             mediaId: string | null;
             /** @enum {string} */
-            kind: "image" | "svg" | "video" | "font" | "audio";
+            kind: "image" | "svg" | "video" | "font" | "audio" | "pdf";
             /** @example Music */
             role: string;
             title: string;
@@ -6367,6 +6368,8 @@ export interface components {
                     id: string;
                     label: string;
                     description: string;
+                    /** @description The planner's recommended option; it is listed first. */
+                    recommended?: boolean;
                 }[];
                 multiSelect: boolean;
                 allowOther: boolean;
@@ -6378,6 +6381,7 @@ export interface components {
                 skipped?: boolean;
             }[] | null;
             brief: {
+                title?: string;
                 goal: string;
                 audience: string;
                 keyMessage: string;
@@ -6651,7 +6655,7 @@ export interface components {
         Media: {
             id: string;
             /** @enum {string} */
-            kind: "image" | "svg" | "video" | "font" | "audio";
+            kind: "image" | "svg" | "video" | "font" | "audio" | "pdf";
             /** @enum {string} */
             status: "uploading" | "verifying" | "ready" | "rejected";
             rejectReason: string | null;

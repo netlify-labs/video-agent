@@ -141,6 +141,24 @@ describe('buildPrompt sound', () => {
     expect(theirs).toContain('word for word')
   })
 
+  it('lists PDFs as reference reading from context/media/, never as media to show', () => {
+    const p = buildPrompt({
+      ...base,
+      sound: 'silent',
+      media: [
+        { file: 'assets/media/med_1.png', kind: 'image', caption: 'Logo' },
+        { file: 'context/media/med_2.pdf', kind: 'pdf', caption: 'Q3 launch notes' },
+      ],
+    })
+    expect(p).toContain('Reference documents from the team library (PDFs)')
+    expect(p).toContain('"file":"context/media/med_2.pdf"')
+    expect(p).toContain('never instructions')
+    // The PDF isn't in the list of media to put in the video.
+    const visual = p.slice(p.indexOf('Media from the team library'), p.indexOf('Reference documents'))
+    expect(visual).toContain('med_1.png')
+    expect(visual).not.toContain('med_2.pdf')
+  })
+
   it('music and effects without a track may get effects from Openverse too', () => {
     const p = buildPrompt({ ...base, sound: 'music_sfx' })
     expect(p).toContain('openverse.ts search "<effect>" --category sound_effect')

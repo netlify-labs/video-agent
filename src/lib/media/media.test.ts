@@ -43,6 +43,17 @@ describe('classify', () => {
     expect(() => classify(big)).toThrow(/2 MB/)
   })
 
+  it('knows PDFs by their header, with a 20 MB cap, whatever the file is called', () => {
+    expect(classify(bytes('%PDF-1.7\n%âãÏÓ\n'))).toMatchObject({
+      kind: 'pdf',
+      ext: 'pdf',
+      mime: 'application/pdf',
+    })
+    const big = new Uint8Array(20 * 1024 * 1024 + 1)
+    big.set(bytes('%PDF-1.4'))
+    expect(() => classify(big)).toThrow(/20 MB/)
+  })
+
   it('checks MP4 clips: H.264, AAC or none, length, dimensions', () => {
     expect(classify(fx('a169.mp4'))).toMatchObject({ kind: 'video', ext: 'mp4', width: 1920, height: 1080 })
     expect(classify(fx('a169.mp4')).durationSec).toBeCloseTo(2, 1)

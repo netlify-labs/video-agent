@@ -22,7 +22,8 @@ const QUESTIONS = JSON.stringify({
       why: '',
       options: [
         { id: 'a', label: 'Read the docs', description: '' },
-        { id: 'b', label: 'Try it free', description: '' },
+        { id: 'b', label: 'Try it free', description: '', recommended: true },
+        { id: 'c', label: 'Book a demo', description: '', recommended: true },
       ],
       multiSelect: false,
       // Ignored: every question takes free text.
@@ -40,6 +41,7 @@ const QUESTIONS = JSON.stringify({
   ],
 })
 const BRIEF = {
+  title: 'Org webhooks in 30 seconds',
   goal: 'Announce org webhooks',
   audience: 'Developers',
   keyMessage: 'One subscription for every project',
@@ -77,6 +79,13 @@ describe('planning', () => {
     const withQ = await h.json(await h.call('POST', `/api/v1/plans/${plan.id}/questions`, { as: h.member }))
     expect(withQ.questions.map((q: { id: string }) => q.id)).toEqual(['q1', 'q2', 'q3'])
     expect(withQ.questions.every((q: { allowOther: boolean }) => q.allowOther)).toBe(true)
+    // The planner's pick comes first, and only one option is marked.
+    expect(withQ.questions[1].options).toEqual([
+      { id: 'b', label: 'Try it free', description: '', recommended: true },
+      { id: 'a', label: 'Read the docs', description: '' },
+      { id: 'c', label: 'Book a demo', description: '' },
+    ])
+    expect(withQ.questions[0].options.some((o: { recommended?: boolean }) => o.recommended)).toBe(false)
     const qCall = h.deps.gateway.calls.find((c) => c.kind === 'messages')
     expect(qCall?.model).toBe('claude-haiku-4-5')
     expect(qCall?.user).toContain(`<data name="request">${JSON.stringify(PROMPT)}</data>`)
@@ -258,6 +267,8 @@ describe('planning', () => {
     })
     expect(res.status).toBe(202)
     const video = await h.json(res)
+    // The brief names the video when the request has no title.
+    expect(video.title).toBe('Org webhooks in 30 seconds')
     const v1 = await h.deps.store.getVersion(video.id, 1)
     expect(v1?.plan?.brief.callToAction).toBe('Read the docs')
     expect(v1?.plan?.qa[0]).toEqual({ question: 'Who is it for?', answer: ['Developers', 'Small teams'] })
@@ -357,3 +368,19 @@ async function ready(h: Harness, body: Record<string, unknown> = {}) {
   })
   return h.json(res)
 }
+
+describe('titles', () => {
+  it("the agent's title replaces one taken from the prompt, but never a title someone chose", async () => {
+    const h = harness()
+    const auto = await h.json<{ id: string; title: string }>(
+      await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }),
+    )
+    const named = await h.json<{ id: string }>(
+      await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT, title: 'My launch' } }),
+    )
+    expect(auto.title).toBe(PROMPT.slice(0, 57).trimEnd() + '…')
+    await h.drive(4)
+    expect((await h.deps.store.getJob(auto.id))?.title).toBe('Test video')
+    expect((await h.deps.store.getJob(named.id))?.title).toBe('My launch')
+  })
+})

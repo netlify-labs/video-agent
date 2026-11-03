@@ -152,6 +152,8 @@ export const SetVerdictSchema = z
   .openapi('SetVerdict')
 
 export const planBriefShape = z.object({
+  // A short name for the video; it becomes the video's title unless the person gave one.
+  title: z.string().max(120).optional(),
   goal: z.string().max(400),
   audience: z.string().max(300),
   keyMessage: z.string().max(300),
@@ -432,7 +434,14 @@ const PlanQuestionSchema = z.object({
   id: z.string(),
   question: z.string(),
   why: z.string(),
-  options: z.array(z.object({ id: z.string(), label: z.string(), description: z.string() })),
+  options: z.array(
+    z.object({
+      id: z.string(),
+      label: z.string(),
+      description: z.string(),
+      recommended: z.boolean().optional().describe("The planner's recommended option; it is listed first."),
+    }),
+  ),
   multiSelect: z.boolean(),
   allowOther: z.boolean(),
 })

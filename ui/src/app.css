@@ -23,7 +23,7 @@ body {
   border-radius: var(--mantine-radius-sm);
 }
 
-/* The one primary: an inverted pill. Secondary: a raised grey pill. The accent never goes on buttons. */
+/* The one primary: inverted. Secondary: raised grey. The accent never goes on buttons. */
 .va-button[data-variant='filled'] {
   --button-bg: var(--va-primary-bg);
   --button-hover: var(--va-primary-bg);
@@ -414,7 +414,7 @@ body {
   flex: none;
   padding: 4px 12px;
   border: 1px solid var(--va-rule);
-  border-radius: 999px;
+  border-radius: var(--mantine-radius-md);
   color: var(--va-muted);
   font-size: 13px;
   line-height: 20px;
@@ -638,7 +638,7 @@ body {
   align-items: center;
   gap: 8px;
   padding: 6px 12px 6px 8px;
-  border-radius: 999px;
+  border-radius: var(--mantine-radius-md);
   background: var(--va-raised);
   color: var(--va-muted);
   font-size: 12px;
@@ -651,6 +651,19 @@ body {
 }
 .va-powered svg {
   flex-shrink: 0;
+}
+/* In the sidebar: at its foot, as wide as the nav links, wrapping if it must. */
+.va-powered-sidebar {
+  position: static;
+  z-index: auto;
+  margin-top: auto;
+  padding: 8px 10px;
+  border-radius: var(--mantine-radius-sm);
+  background: transparent;
+  color: var(--va-faint);
+}
+.va-powered-sidebar:hover {
+  background: var(--va-surface);
 }
 
 @media (max-width: 720px) {
@@ -677,6 +690,27 @@ body {
     width: max-content;
     margin: 32px auto 24px;
   }
+}
+
+/* Dark: segmented controls (Length, Sound, filters) sit in a field-coloured track with an edge, and the chosen
+   option is a clearly lighter pill; Mantine's default puts them on pure black. */
+[data-mantine-color-scheme='dark'] .mantine-SegmentedControl-root {
+  background: var(--mantine-color-dark-6);
+  border: 1px solid var(--mantine-color-dark-4);
+}
+[data-mantine-color-scheme='dark'] .mantine-SegmentedControl-indicator {
+  background: #3d3d3d;
+}
+[data-mantine-color-scheme='dark'] .mantine-SegmentedControl-label {
+  color: var(--va-muted);
+}
+[data-mantine-color-scheme='dark'] .mantine-SegmentedControl-label[data-active] {
+  color: var(--va-text);
+}
+/* Dark: an off switch keeps a visible track. */
+[data-mantine-color-scheme='dark'] .mantine-Switch-track:not([data-checked]) {
+  background: var(--va-raised);
+  border-color: var(--mantine-color-dark-4);
 }
 
 /* Focused fields use a neutral edge: the brand hue stays on data. */
@@ -707,7 +741,7 @@ body {
   position: relative;
   aspect-ratio: 16 / 9;
   background: #000;
-  border-radius: 16px;
+  border-radius: var(--mantine-radius-lg);
   overflow: hidden;
 }
 .va-review-frame video {
@@ -746,7 +780,7 @@ body {
   color: #fff;
   font-size: 12px;
   padding: 4px 10px;
-  border-radius: 999px;
+  border-radius: var(--mantine-radius-md);
   pointer-events: none;
 }
 .va-markers {
@@ -773,7 +807,7 @@ body {
 }
 .va-comment {
   padding: 10px 12px;
-  border-radius: 12px;
+  border-radius: var(--mantine-radius-lg);
   background: var(--va-raised);
 }
 .va-comment[data-resolved] {
@@ -810,7 +844,7 @@ body {
   position: relative;
   width: 100%;
   background: #000;
-  border-radius: 16px;
+  border-radius: var(--mantine-radius-lg);
   overflow: hidden;
 }
 .va-live-badge {
@@ -822,7 +856,7 @@ body {
   align-items: center;
   gap: 7px;
   padding: 4px 11px 4px 9px;
-  border-radius: 999px;
+  border-radius: var(--mantine-radius-md);
   background: rgba(0, 0, 0, 0.62);
   color: #fff;
   font-size: 12px;
@@ -910,7 +944,7 @@ body {
 }
 .va-beat {
   padding: 10px 12px;
-  border-radius: 12px;
+  border-radius: var(--mantine-radius-lg);
   background: var(--va-raised);
 }
 
@@ -957,7 +991,7 @@ body {
 }
 .va-openverse-row {
   padding: 8px 10px;
-  border-radius: 12px;
+  border-radius: var(--mantine-radius-lg);
   background: var(--va-raised);
 }
 .va-media-grid-pick {
@@ -967,7 +1001,7 @@ body {
   overflow-y: auto;
 }
 .va-media-pick {
-  border-radius: 12px;
+  border-radius: var(--mantine-radius-lg);
   outline: 1px solid var(--va-rule);
 }
 .va-media-pick[data-on] {
@@ -979,7 +1013,7 @@ body {
 }
 .va-slot {
   padding: 6px 8px;
-  border-radius: 10px;
+  border-radius: var(--mantine-radius-md);
   background: var(--va-raised);
 }
 .va-slot-thumb {
@@ -994,7 +1028,7 @@ body {
   align-items: center;
   gap: 6px;
   padding: 2px 4px 2px 6px;
-  border-radius: 999px;
+  border-radius: var(--mantine-radius-md);
   background: var(--va-raised);
   font-size: 13px;
   max-width: 220px;
@@ -1012,7 +1046,7 @@ body {
 }
 .va-dropzone {
   border: 1px dashed var(--va-rule);
-  border-radius: 16px;
+  border-radius: var(--mantine-radius-lg);
   padding: 24px;
   margin-bottom: 16px;
   text-align: center;
@@ -1052,17 +1086,49 @@ body {
 }
 /* The plan's steps: a steady height so the dialog doesn't jump between questions; numbers only on phones. */
 .va-plan-steps {
-  min-height: 420px;
+  min-height: min(64vh, 640px);
 }
 .va-plan-steps .va-plan-footer {
   margin-top: auto;
   position: sticky;
   bottom: 0;
+  /* Above the scrolled fields (their steppers are positioned), with an edge between them. */
+  z-index: 3;
   padding-block: 12px;
-  background: var(--mantine-color-body);
+  border-top: 1px solid var(--va-dialog-edge);
+  background: var(--va-dialog);
 }
-.mantine-Modal-content:has(.va-plan-steps) {
-  background: var(--mantine-color-body);
+
+/* Dialogs: a lighter grey than the page with a visible edge, so they read as a layer above it. Inside, raised
+   things and secondary buttons take the dialog's own raised step. */
+.mantine-Modal-content,
+.mantine-Modal-header {
+  background: var(--va-dialog);
+}
+.mantine-Modal-content {
+  border: 1px solid var(--va-dialog-edge);
+}
+.mantine-Modal-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+.mantine-Modal-content .va-raised,
+.mantine-Modal-content .va-plan-q {
+  background: var(--va-dialog-raised);
+}
+.mantine-Modal-content .va-button[data-variant='default'] {
+  --button-bg: var(--va-dialog-raised);
+  --button-hover: color-mix(in srgb, var(--va-dialog-raised) 80%, var(--va-text));
+  border: 1px solid var(--va-dialog-edge);
+}
+/* A question's choices and its free-text box: visible edges on the raised card. */
+.va-plan-q .mantine-Radio-radio,
+.va-plan-q .mantine-Checkbox-input {
+  border-color: var(--va-faint);
+}
+.va-plan-q .mantine-Input-input {
+  background: var(--va-dialog);
+  border: 1px solid var(--va-dialog-edge);
 }
 @media (max-width: 48em) {
   .va-create-choice {
@@ -1082,20 +1148,25 @@ body {
 }
 .va-brief-scene {
   display: flex;
-  gap: 10px;
-  align-items: flex-start;
-}
-.va-brief-n {
-  flex-shrink: 0;
-  width: 24px;
-  height: 24px;
-  margin-top: 6px;
-  border-radius: 50%;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: var(--mantine-radius-lg);
   background: var(--va-raised);
-  color: var(--va-muted);
+  border: 1px solid var(--va-rule);
+}
+.mantine-Modal-content .va-brief-scene {
+  background: var(--va-dialog-raised);
+  border-color: var(--va-dialog-edge);
+}
+.va-brief-scene .mantine-Input-input {
+  background: var(--va-dialog);
+  border: 1px solid var(--va-dialog-edge);
+}
+.va-brief-scene .mantine-InputWrapper-label {
   font-size: 12px;
-  display: grid;
-  place-items: center;
+  color: var(--va-muted);
+  margin-bottom: 4px;
 }
 .va-brief-audio {
   border-top: 1px solid var(--va-rule);
@@ -1105,4 +1176,63 @@ body {
   .va-brief {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* A loading phrase fades in as it changes. */
+.va-phrase {
+  animation: va-phrase-in 0.35s ease-out;
+}
+@keyframes va-phrase-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .va-phrase {
+    animation: none;
+  }
+}
+
+/* A key in a hint ("← → to move between questions"). */
+.va-kbd {
+  display: inline-block;
+  min-width: 20px;
+  padding: 0 5px;
+  border: 1px solid var(--va-dialog-edge);
+  border-radius: var(--mantine-radius-sm);
+  font: inherit;
+  text-align: center;
+}
+/* The planner's pick among a question's options. */
+.va-recommended {
+  color: var(--va-text);
+}
+
+/* The video title, editable in place: a faint outline on hover and a clear one while editing. */
+.va-title-edit {
+  border-radius: var(--mantine-radius-sm);
+  outline: 1px solid transparent;
+  outline-offset: 4px;
+  cursor: text;
+  transition: outline-color 0.15s ease;
+}
+.va-title-edit:hover {
+  outline-color: var(--va-rule);
+}
+.va-title-edit:focus {
+  outline: 2px solid var(--va-accent);
+}
+
+/* A form's main action, pinned to the bottom of the window as the form scrolls: it spans the card (the card's lg
+   padding is undone and redone) with an edge above it. */
+.va-sticky-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  margin: 0 calc(var(--mantine-spacing-lg) * -1) calc(var(--mantine-spacing-lg) * -1);
+  padding: 14px var(--mantine-spacing-lg);
+  border-top: 1px solid var(--va-rule);
+  border-radius: 0 0 var(--mantine-radius-lg) var(--mantine-radius-lg);
+  background: var(--va-surface);
 }

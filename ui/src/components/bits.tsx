@@ -68,11 +68,12 @@ export function Mark({ size = 22 }: { size?: number }) {
   )
 }
 
-/** The corner badge: opens the story of how this app was built on Agent Runners (static/how-we-built-it). */
-export function PoweredBy() {
+/** The badge that opens the story of how this app was built on Agent Runners (static/how-we-built-it): at the foot
+ * of the sidebar in the app, in the corner on pages without one. */
+export function PoweredBy({ inSidebar = false }: { inSidebar?: boolean }) {
   return (
     <a
-      className="va-powered"
+      className={inSidebar ? 'va-powered va-powered-sidebar' : 'va-powered'}
       href="/how-we-built-it/"
       target="_blank"
       rel="noreferrer"

@@ -718,7 +718,7 @@ function mockPlan(stage: 'route' | 'questions' | 'brief' = 'route') {
       question: 'Who is this video for?',
       why: 'It sets how technical the beats get.',
       options: [
-        { id: 'a', label: 'Developers', description: 'Show the API' },
+        { id: 'a', label: 'Developers', description: 'Show the API', recommended: true },
         { id: 'b', label: 'Team leads', description: 'Show the outcome' },
       ],
       multiSelect: false,
@@ -746,6 +746,7 @@ function mockPlan(stage: 'route' | 'questions' | 'brief' = 'route') {
     brief:
       stage === 'brief'
         ? {
+            title: 'Org-wide webhooks in 30 seconds',
             goal: 'Announce org-wide webhooks',
             audience: 'Developers',
             keyMessage: 'One subscription covers every project',

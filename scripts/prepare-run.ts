@@ -179,11 +179,13 @@ export async function prepare(m: RunManifest, opts: { tmp: string; root?: string
       log('revoice.planned', { beats: m.bundle.revoice.beats })
     }
   }
-  // Library media by reference (plan v2 §9): exactly the snapshotted bytes, each one verified.
+  // Library media by reference (plan v2 §9): exactly the snapshotted bytes, each one verified. PDFs are reference
+  // reading for the agent, so they go to context/media/, outside the composition and its source archive.
   if (m.media?.length) {
-    const dir = join(root, 'video', 'assets', 'media')
-    mkdirSync(dir, { recursive: true })
     for (const item of m.media) {
+      const dir =
+        item.kind === 'pdf' ? join(root, 'context', 'media') : join(root, 'video', 'assets', 'media')
+      mkdirSync(dir, { recursive: true })
       const to = join(dir, item.filename)
       await fetch(item.key, to, 'media')
       const actual = sha256File(to)

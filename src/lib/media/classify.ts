@@ -1,15 +1,28 @@
 // What an uploaded file really is (plan v2 §9, §14 rule 25): decided from its bytes, never from its name or the
-// declared type. Images are checked for size (40 megapixels at most); fonts, SVGs, clips and audio have their own caps.
+// declared type. Images are checked for size (40 megapixels at most); fonts, SVGs, clips, audio and PDFs have their own caps.
 import { ascii, AudioError, sniffAudio, u16le, u32 } from './audio.js'
 import { inspectMp4, Mp4Error } from './mp4.js'
 
-export const MEDIA_KINDS = ['image', 'svg', 'video', 'font', 'audio'] as const
+export const MEDIA_KINDS = ['image', 'svg', 'video', 'font', 'audio', 'pdf'] as const
 export type MediaKind = (typeof MEDIA_KINDS)[number]
 
 export interface Classified {
   kind: MediaKind
   ext:
-    'png' | 'jpg' | 'webp' | 'svg' | 'mp4' | 'woff2' | 'woff' | 'ttf' | 'otf' | 'mp3' | 'm4a' | 'wav' | 'ogg'
+    | 'png'
+    | 'jpg'
+    | 'webp'
+    | 'svg'
+    | 'mp4'
+    | 'woff2'
+    | 'woff'
+    | 'ttf'
+    | 'otf'
+    | 'mp3'
+    | 'm4a'
+    | 'wav'
+    | 'ogg'
+    | 'pdf'
   mime: string
   width: number | null
   height: number | null
@@ -27,6 +40,7 @@ export const LIMITS = {
   videoSeconds: 120,
   audioBytes: 50 * 1024 * 1024,
   audioSeconds: 600,
+  pdfBytes: 20 * 1024 * 1024,
 }
 
 const AUDIO_MIME = { mp3: 'audio/mpeg', m4a: 'audio/mp4', wav: 'audio/wav', ogg: 'audio/ogg' } as const
@@ -98,6 +112,11 @@ export function classify(b: Uint8Array, opts: { head?: boolean } = {}): Classifi
     return { kind: 'font', ext, mime, width: null, height: null, durationSec: null }
   }
   const magic = ascii(b, 0, 4)
+  // A PDF is reference material for the agent (facts, wording), never shown in the video.
+  if (ascii(b, 0, 5) === '%PDF-') {
+    if (b.byteLength > LIMITS.pdfBytes) throw new MediaError('PDFs must be 20 MB or smaller.')
+    return { kind: 'pdf', ext: 'pdf', mime: 'application/pdf', width: null, height: null, durationSec: null }
+  }
   if (magic === 'wOF2') return font('woff2', 'font/woff2')
   if (magic === 'wOFF') return font('woff', 'font/woff')
   if (magic === 'OTTO') return font('otf', 'font/otf')

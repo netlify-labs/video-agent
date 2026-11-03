@@ -1,6 +1,6 @@
 // Media in videos (plan v2 §9, §14 rule 27): snapshots on create, inheritance on revisions and edits, the fenced
 // list in the prompt, the run manifest, prepare-run hydration, and media in preview bundles.
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -165,6 +165,34 @@ describe('media in videos', () => {
     )
     await h.deps.blobs.set('media', m.media![0]!.key, new TextEncoder().encode('tampered'))
     await expect(prepare(m, { tmp: root, root, fetch })).rejects.toThrow(/doesn't match its hash/)
+  })
+
+  it('a PDF is reference reading: in context/media/ for the run, in the prompt as a document, not in the bundle', async () => {
+    const h = harness()
+    const pdf = new TextEncoder().encode('%PDF-1.7\n1 0 obj << >> endobj\ntrailer << >>\n%%EOF\n')
+    const doc = await upload(h, pdf, 'filename=launch-notes.pdf&caption=Q3%20launch%20notes')
+    expect((doc as { kind?: string }).kind).toBe('pdf')
+    const v = await h.json(
+      await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT, mediaIds: [doc.id] } }),
+    )
+    await h.drive(1)
+    const prompt = h.deps.runner.starts[0]?.prompt ?? ''
+    expect(prompt).toContain(`"file":"context/media/${doc.id}.pdf"`)
+    expect(prompt).toContain('Reference documents from the team library (PDFs)')
+    const { m } = await manifestOf(h, 0)
+    const root = mkdtempSync(join(tmpdir(), 'va-media-'))
+    await prepare(m, {
+      tmp: root,
+      root,
+      fetch: async (key: string, to: string, store?: string) => {
+        writeFileSync(to, (await h.deps.blobs.get(store as 'media', key))!)
+      },
+    })
+    expect(new Uint8Array(readFileSync(join(root, 'context', 'media', `${doc.id}.pdf`)))).toEqual(pdf)
+    expect(existsSync(join(root, 'video', 'assets', 'media', `${doc.id}.pdf`))).toBe(false)
+    await h.drive(4)
+    const index = await readBundleIndex(h.deps, v.id, 1)
+    expect(index?.files.map((f) => f.path)).not.toContain(`assets/media/${doc.id}.pdf`)
   })
 
   it("puts the version's media in its preview bundle", async () => {

@@ -25,7 +25,7 @@ import { FindMusicModal } from '../components/FindMusic'
 import { MEDIA_ACCEPT, Thumb, type Media } from '../components/MediaPicker'
 import { uploadFile, type UploadProgress } from '../lib/upload'
 
-type Kind = 'all' | 'image' | 'svg' | 'video' | 'audio' | 'font'
+type Kind = 'all' | 'image' | 'svg' | 'video' | 'audio' | 'font' | 'pdf'
 
 interface Job {
   key: string
@@ -366,6 +366,7 @@ export function MediaPage() {
           { value: 'video', label: 'Clips' },
           { value: 'audio', label: 'Audio' },
           { value: 'font', label: 'Fonts' },
+          { value: 'pdf', label: 'PDFs' },
         ]}
       />
       {!list.isLoading && items.length === 0 ? (

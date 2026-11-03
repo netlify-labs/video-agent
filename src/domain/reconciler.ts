@@ -266,7 +266,8 @@ async function startRequest(
     feedback,
     media: await Promise.all(
       versionMedia.map(async (m) => ({
-        file: `assets/media/${m.filename}`,
+        // PDFs are read, not shown: prepare-run puts them in context/media/ (a repo path, not one in video/).
+        file: m.kind === 'pdf' ? `context/media/${m.filename}` : `assets/media/${m.filename}`,
         kind: m.kind,
         caption: m.caption,
         // A track's length helps place it, and a CC BY track says so; the library row outlives a soft delete.
