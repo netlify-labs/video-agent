@@ -362,3 +362,38 @@ So:
   equality is still only best-effort (plan §6.3); the receipt records the version.
 - **Still open:** the blind A/B with the owner on real (consented) recordings, which can move nr and the de-esser.
   The phase-2 script tests use these fixtures.
+
+### S11: speech-to-text on the runner (2026-11-03, `spikes/s11`, run `6ae99c77bed4b69e1b6179d1`, 48 credits)
+
+Kokoro-spoken inputs with a known transcript (20 phrases, two voices) were concatenated into 60 s, 90 s and 600 s
+clips; phrase starts are exact, word starts are estimated within a phrase. Runner: Ubuntu, 4 CPUs, 15.3 GB, Node 24,
+static **ffmpeg 7.0.2**.
+
+| Provider                                         | Result                                                                                   |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| Parakeet (`hyperframes models install parakeet`) | Installs in **3.4 s** (704 MB into `~/.cache/hyperframes`); `parakeet-tdt-0.6b-v3-int8`, sherpa-onnx, **CC-BY-4.0** |
+| Parakeet, 60 / 90 / 600 s                        | WER **0.6 / 0.8 / 1.2 %**; **0.10× / 0.08× / 0.06×** real time; peak ~1.9 GB             |
+| Parakeet phrase starts                           | Consistently **~240 ms early**; with that offset removed, median error **34-48 ms**; phrase ends 430-485 ms late |
+| Outer deadline kill                              | SIGTERM at the deadline, but `npm exec` and a worker thread survived: **children not reaped** |
+| whisper.cpp v1.9.5                               | **Clone failed** on the runner (exit 1, no stderr). Locally its DTW timestamps were the most accurate (51 ms median) |
+
+So Parakeet is the local provider: about 36 s for 10 minutes of narration, well inside the budget. Captions subtract
+a fixed 240 ms from Parakeet's word starts (re-measure when the model changes). The deadline must kill the whole
+tree (setsid plus a recursive kill), not just the group leader. whisper.cpp would need a vendored source tarball;
+it isn't needed for v1. Parakeet's CC-BY-4.0 licence is credited in the README.
+
+### S12: render qualification (2026-11-03, `spikes/s12`, runs `6ae99c7736f6fef837ecc5bb` and `6ae99e7176bcf173e806d8ea`, 65 + 22 + 44 credits)
+
+| Case          | Result                                                                                                       |
+| ------------- | ------------------------------------------------------------------------------------------------------------ |
+| bus90         | 90 s, 2,700 frames exact; all **13 beeps at 0 ms** error in the final AAC                                     |
+| bus600        | 600 s, 18,000 frames exact; render **7.1 min**; all **82 beeps at 0 ms**. A first attempt was cancelled (`render_cancelled_parent_exited`) because the launching shell exited: long renders must run fully detached |
+| automation    | 100 and 400 points honoured. **600 points: silently cut to the first 512**, no warning text                     |
+| remux         | One master gain by re-encoding only the audio: −21.5 → **−14.0 LUFS**, video packets byte-identical, beeps unmoved |
+| hold          | All 180 pre-encode frames identical to the base render in both methods; after H.264 only 152-157 match exactly (PSNR ≥ 80 dB). The appended-beat method gives held frames equal to the last base frame; extending the last beat does not (PSNR ~41 dB) |
+| leftovers     | Every render leaves headless Chrome processes outside its process group                                       |
+
+So: keep automation at ≤ 400 points and treat > 512 as an error ourselves (HyperFrames won't warn). Master by audio
+re-mux. Hold the final frame as an appended beat, and compare frames before encoding in the guard. A 10-minute
+narration fits the 22-minute run: render ~7 min, cleanup ~2 s, STT ~36 s. Runs must reap Chrome processes after
+rendering.
