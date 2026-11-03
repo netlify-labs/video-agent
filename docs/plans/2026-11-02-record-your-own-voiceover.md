@@ -1,6 +1,7 @@
 # Record your own voice-over — plan
 
 - **Status:** draft 4 (2026-11-02). It folds in review rounds 1 and 2 (Fable 5 high and Codex gpt-6.1-sol high each round; 690 + 1,260 credits) and the owner interview (§12, all answers settled). §14 lists what was taken and what was rejected, per round. Next: phase 0 spikes, run to the spike contract in §9. The architecture choices marked **[S10]**–**[S13]** are provisional until their spike reports numbers.
+- **Beads:** epic `va-2qq` (75 beads: 8 epics, 67 tasks; labels `voiceover`, `phase-0`…`phase-6`). Plan keys map to bead ids in `.beads/voiceover-keymap.json` (S10 = `va-2qq.1.1`, phase gates `*.G`). Start with `br ready -l voiceover`.
 - **Interview decisions (2026-11-02, second interview):**
   - **Shared takes:** Creators who can see a video can hear and re-cut the takes *used* on it.
   - **Quick picture render:** offered when timing edits block recording.
