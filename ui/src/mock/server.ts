@@ -501,7 +501,7 @@ export function installMock() {
         return fail(
           400,
           'invalid_request',
-          'Upload PNG, JPEG, WebP or SVG images, MP4 clips, MP3, M4A, WAV or Ogg audio, WOFF2, TTF or OTF fonts, or PDFs.',
+          'Upload PNG, JPEG, WebP or SVG images, MP4 clips, MP3, M4A, WAV, Ogg or WebM audio, WOFF2, TTF or OTF fonts, or PDFs.',
         )
       const m = mockItem(name, kind, body.byteLength)
       mockMedia.unshift(m)
@@ -572,7 +572,7 @@ export function installMock() {
               ? 'svg'
               : ['png', 'jpg', 'jpeg', 'webp'].includes(ext)
                 ? 'image'
-                : ['mp3', 'm4a', 'wav', 'ogg'].includes(ext)
+                : ['mp3', 'm4a', 'wav', 'ogg', 'opus', 'webm'].includes(ext)
                   ? 'audio'
                   : ['woff2', 'woff', 'ttf', 'otf'].includes(ext)
                     ? 'font'
@@ -1260,6 +1260,8 @@ function mockKind(b: Uint8Array): MockKind | null {
   if (head.startsWith('ID3') || head.startsWith('OggS') || (b[0] === 0xff && ((b[1] ?? 0) & 0xe0) === 0xe0))
     return 'audio'
   if (head.startsWith('RIFF') && head.slice(8, 12) === 'WAVE') return 'audio'
+  // EBML (WebM): audio only, as the real classifier takes it.
+  if (b[0] === 0x1a && b[1] === 0x45 && b[2] === 0xdf && b[3] === 0xa3) return 'audio'
   if (head.slice(4, 8) === 'ftyp') return 'video'
   if (head.startsWith('wOF2') || head.startsWith('OTTO')) return 'font'
   if (new TextDecoder().decode(b.subarray(0, 200)).includes('<svg')) return 'svg'

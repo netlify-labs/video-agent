@@ -159,17 +159,41 @@ export function probeClip(path: string, name: string) {
     throw new StepError(`Clip ${name} is longer than 2 minutes. Stop and report this.`)
 }
 
+interface ProbedStreams {
+  streams?: { codec_type?: string; codec_name?: string }[]
+  format?: { format_name?: string }
+}
+
+/**
+ * Why a WebM/Matroska file isn't audio this app uses (plan 2026-11-02 §5.2: one Opus or Vorbis track, no video),
+ * or null. The upload was checked structurally without ffprobe; this is the second look. Other formats pass.
+ */
+export function webmProblem(info: ProbedStreams): string | null {
+  if (!/matroska|webm/.test(info.format?.format_name ?? '')) return null
+  const streams = info.streams ?? []
+  if (streams.some((s) => s.codec_type === 'video')) return 'has a video track'
+  if (streams.length !== 1 || !['opus', 'vorbis'].includes(streams[0]?.codec_name ?? ''))
+    return "isn't one Opus or Vorbis track"
+  return null
+}
+
 /** A second check of a library audio file with ffprobe: it has an audio stream and lasts at most 10 minutes. */
 export function probeAudio(path: string, name: string) {
-  let info: { streams?: { codec_type?: string }[]; format?: { duration?: string } }
+  let info: ProbedStreams & { format?: { duration?: string } }
   try {
     info = JSON.parse(
       run(
         'ffprobe',
-        ['-v', 'error', '-show_entries', 'stream=codec_type:format=duration', '-of', 'json', path],
-        {
-          timeoutMs: 60_000,
-        },
+        [
+          '-v',
+          'error',
+          '-show_entries',
+          'stream=codec_type,codec_name:format=format_name,duration',
+          '-of',
+          'json',
+          path,
+        ],
+        { timeoutMs: 60_000 },
       ),
     ) as typeof info
   } catch (e) {
@@ -181,6 +205,8 @@ export function probeAudio(path: string, name: string) {
     throw new StepError(`Audio ${name} has no audio stream. Stop and report this.`)
   if (Number(info.format?.duration) > 600.5)
     throw new StepError(`Audio ${name} is longer than 10 minutes. Stop and report this.`)
+  const webm = webmProblem(info)
+  if (webm) throw new StepError(`Audio ${name} ${webm}. Stop and report this.`)
 }
 
 /**
@@ -218,6 +244,8 @@ export function probeTake(path: string, mediaId: string): { pcm16: boolean } {
     throw new StepError(`Narration take ${mediaId} has no audio stream. Stop and report this.`)
   if (Number(info.format?.duration) > MAX_OUTPUT_SAMPLES / SAMPLE_RATE + 0.5)
     throw new StepError(`Narration take ${mediaId} is longer than 15 minutes. Stop and report this.`)
+  const webm = webmProblem(info)
+  if (webm) throw new StepError(`Narration take ${mediaId} ${webm}. Stop and report this.`)
   const [a] = audio
   return {
     pcm16:

@@ -12,10 +12,10 @@ import { analyzeSamples, type AnalyzedAudio } from './narration-analyze'
 import { browserDecoder, parseWav, sliceable, slicePcm16, type Decoder } from './narration-decode'
 import { uploadFile, UploadError, waitReady, type UploadProgress } from './upload'
 
-/** What the Narration track takes today (WebM/Opus once the classifier reads it, §5.2). */
+/** What the Narration track takes (WebM: Opus or Vorbis audio only, §5.2). */
 export const NARRATION_ACCEPT =
-  'audio/mpeg,audio/mp4,audio/x-m4a,audio/wav,audio/x-wav,audio/ogg,.mp3,.m4a,.wav,.ogg'
-const NARRATION_FILE = /\.(mp3|m4a|wav|ogg)$/i
+  'audio/mpeg,audio/mp4,audio/x-m4a,audio/wav,audio/x-wav,audio/ogg,audio/webm,.mp3,.m4a,.wav,.ogg,.opus,.webm'
+const NARRATION_FILE = /\.(mp3|m4a|wav|ogg|opus|webm)$/i
 
 export const isNarrationFile = (f: File): boolean => NARRATION_FILE.test(f.name)
 
@@ -79,7 +79,7 @@ export interface ImportOptions {
  * UploadError with a message people can act on.
  */
 export async function importNarrationFile(f: File, opts: ImportOptions): Promise<ImportedTake> {
-  if (!isNarrationFile(f)) throw new UploadError(`${f.name} isn't an MP3, M4A, WAV or Ogg file.`)
+  if (!isNarrationFile(f)) throw new UploadError(`${f.name} isn't an MP3, M4A, WAV, Ogg or WebM file.`)
   const t0 = performance.now()
   opts.onProgress?.({ phase: 'decoding', sent: 0, total: f.size })
   let mono: Float32Array

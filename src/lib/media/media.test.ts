@@ -1,6 +1,11 @@
 // Upload classification (plan v2 §9, §14 rule 25) and the SVG allowlist sanitizer (§14 rule 26) with its corpus.
-import { readFileSync } from 'node:fs'
+// WebM/Opus (plan 2026-11-02 §5.2): ffmpeg-made files when ffmpeg is installed, handcrafted EBML otherwise.
+import { execFileSync } from 'node:child_process'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { which } from '../../../scripts/lib/run-tools.js'
 import { classify, MediaError } from './classify.js'
 import { sanitizeSvg, SvgError } from './svg.js'
 
@@ -104,6 +109,163 @@ describe('classify', () => {
   it('refuses anything else, whatever its name says', () => {
     expect(() => classify(bytes('<html><script>alert(1)</script>'))).toThrow(MediaError)
     expect(() => classify(bytes('GIF89a....'))).toThrow(/Upload PNG/)
+  })
+})
+
+// ───────── WebM ─────────
+
+/** An EBML element: id bytes, an 8-byte size (or unknown) and the body. */
+const el = (id: number[], ...body: (number[] | string)[]) => {
+  const b = [...bytes(...body)]
+  return [...id, 0x01, 0, 0, 0, ...be32(b.length), ...b]
+}
+const unknownSize = (id: number[], ...body: (number[] | string)[]) => [
+  ...id,
+  0x01,
+  ...new Array(7).fill(0xff),
+  ...bytes(...body),
+]
+const EBML = (docType = 'webm') => el([0x1a, 0x45, 0xdf, 0xa3], el([0x42, 0x82], docType))
+const TRACK = (type: number, codec: string, channels = 1) =>
+  el([0xae], el([0x83], [type]), el([0x86], codec), type === 2 ? el([0xe1], el([0x9f], [channels])) : [])
+const TRACKS = (...entries: number[][]) => el([0x16, 0x54, 0xae, 0x6b], ...entries)
+const INFO = (durationMs?: number) => {
+  const d = new Uint8Array(8)
+  if (durationMs !== undefined) new DataView(d.buffer).setFloat64(0, durationMs)
+  return el(
+    [0x15, 0x49, 0xa9, 0x66],
+    el([0x2a, 0xd7, 0xb1], [0x0f, 0x42, 0x40]),
+    durationMs !== undefined ? el([0x44, 0x89], [...d]) : [],
+  )
+}
+/** A Cluster at `ms` holding one SimpleBlock `rel` ms later, both of unknown size like MediaRecorder writes. */
+const CLUSTER = (ms: number, rel: number) =>
+  unknownSize(
+    [0x1f, 0x43, 0xb6, 0x75],
+    el([0xe7], be32(ms)),
+    el([0xa3], [0x81, (rel >> 8) & 255, rel & 255, 0x80], new Array(20).fill(9)),
+  )
+const webm = (...segment: number[][]) =>
+  new Uint8Array([...EBML(), ...unknownSize([0x18, 0x53, 0x80, 0x67], ...segment)])
+
+const ffmpeg = which('ffmpeg')
+
+describe('classify WebM', () => {
+  it('reads a MediaRecorder-style WebM/Opus (unknown sizes, no Duration) from its last Cluster', () => {
+    const c = classify(webm(INFO(), TRACKS(TRACK(2, 'A_OPUS')), CLUSTER(0, 0), CLUSTER(1000, 480)))
+    expect(c).toMatchObject({ kind: 'audio', ext: 'webm', mime: 'audio/webm', width: null, height: null })
+    expect(c.durationSec).toBeCloseTo(1.48, 3)
+    expect(classify(webm(INFO(2500), TRACKS(TRACK(2, 'A_VORBIS', 2)))).durationSec).toBe(2.5)
+    // Matroska audio (.mka) reads the same way.
+    const mka = new Uint8Array([
+      ...EBML('matroska'),
+      ...el([0x18, 0x53, 0x80, 0x67], INFO(1000), TRACKS(TRACK(2, 'A_OPUS'))),
+    ])
+    expect(classify(mka).durationSec).toBe(1)
+  })
+
+  it('refuses video, other codecs, extra tracks and too many channels', () => {
+    expect(() => classify(webm(INFO(1000), TRACKS(TRACK(1, 'V_VP9'), TRACK(2, 'A_OPUS'))))).toThrow(
+      /WebM video/,
+    )
+    expect(() => classify(webm(INFO(1000), TRACKS(TRACK(2, 'A_AAC'))))).toThrow(/Opus or Vorbis/)
+    expect(() => classify(webm(INFO(1000), TRACKS(TRACK(2, 'A_OPUS'), TRACK(2, 'A_OPUS'))))).toThrow(
+      /exactly one/,
+    )
+    expect(() => classify(webm(INFO(1000), TRACKS(TRACK(17, 'S_TEXT/UTF8'), TRACK(2, 'A_OPUS'))))).toThrow(
+      /exactly one/,
+    )
+    expect(() => classify(webm(INFO(1000), TRACKS(TRACK(2, 'A_OPUS', 12))))).toThrow(/8 channels/)
+    expect(() => classify(webm(INFO(1000)))).toThrow(/no track list/)
+    expect(() => classify(new Uint8Array([...EBML('mkvx'), ...webm().subarray(EBML().length)]))).toThrow(
+      /isn't WebM/,
+    )
+  })
+
+  it('keeps the 50 MB and 10 minute caps', () => {
+    expect(() => classify(webm(INFO(601_000), TRACKS(TRACK(2, 'A_OPUS'))))).toThrow(/10 minutes/)
+    const big = new Uint8Array(50 * 1024 * 1024 + 1)
+    big.set(webm(INFO(1000), TRACKS(TRACK(2, 'A_OPUS'))))
+    expect(() => classify(big)).toThrow(/50 MB/)
+  })
+
+  it('is bounded on malformed bytes: truncated, huge sizes, unknown sizes, floods and nesting', () => {
+    const ok = webm(INFO(1000), TRACKS(TRACK(2, 'A_OPUS')))
+    for (const n of [4, 12, 40, ok.length - 3])
+      expect(() => classify(ok.subarray(0, n)), `cut at ${n}`).toThrow(/couldn't be read/)
+    // A Tracks element claiming 2^56 - 2 bytes.
+    const huge = webm(
+      INFO(1000),
+      [0x16, 0x54, 0xae, 0x6b, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe],
+      TRACK(2, 'A_OPUS'),
+    )
+    expect(() => classify(huge)).toThrow(/ends early/)
+    // Unknown sizes only where Matroska allows them (Segment, Cluster).
+    expect(() =>
+      classify(webm(INFO(1000), unknownSize([0x16, 0x54, 0xae, 0x6b], TRACK(2, 'A_OPUS')))),
+    ).toThrow(/unknown size/)
+    // An id with no length marker.
+    expect(() => classify(webm([0x00, 0x81, 0x00]))).toThrow(/malformed element/)
+    const flood = webm(...new Array(5000).fill(el([0xec], [0])), TRACKS(TRACK(2, 'A_OPUS')))
+    // 10,000 nested Segments around the track list: skipped over, never recursed into.
+    const inner = TRACKS(TRACK(2, 'A_OPUS'))
+    const nested = new Uint8Array(12 * 10_000 + inner.length)
+    for (let i = 0; i < 10_000; i++)
+      nested.set([0x18, 0x53, 0x80, 0x67, 0x01, 0, 0, 0, ...be32(nested.length - 12 * (i + 1))], 12 * i)
+    nested.set(inner, 12 * 10_000)
+    // A long run of stray Cluster ids at the end (no Duration) costs one scan of the tail.
+    const stray = new Uint8Array([
+      ...webm(INFO(), TRACKS(TRACK(2, 'A_OPUS'))),
+      ...new Array(200_000).fill(0).flatMap(() => [0x1f, 0x43, 0xb6, 0x75]),
+    ])
+    const deep = webm(INFO(1000), [...nested])
+    const t = performance.now()
+    expect(() => classify(flood)).toThrow(/too many elements/)
+    expect(() => classify(deep)).toThrow(/no track list/)
+    expect(classify(stray).durationSec).toBeNull()
+    expect(performance.now() - t).toBeLessThan(2000)
+  })
+
+  describe.skipIf(!ffmpeg)('with ffmpeg', () => {
+    const make = (args: string[]) => {
+      const d = mkdtempSync(join(tmpdir(), 'va-webm-'))
+      try {
+        const out = join(d, 'out.webm')
+        execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...args, out])
+        return new Uint8Array(readFileSync(out))
+      } finally {
+        rmSync(d, { recursive: true, force: true })
+      }
+    }
+    const sine = ['-f', 'lavfi', '-i', 'sine=f=440:r=48000:d=1.5']
+
+    it.each([
+      ['Opus', [...sine, '-c:a', 'libopus', '-b:a', '32k']],
+      ['Opus, streamed (no Duration, unknown sizes)', [...sine, '-c:a', 'libopus', '-live', '1']],
+      ['Vorbis', [...sine, '-ac', '2', '-c:a', 'vorbis', '-strict', '-2']],
+    ])('knows %s WebM as audio, with its length', (_name, args) => {
+      const c = classify(make(args))
+      expect(c).toMatchObject({ kind: 'audio', ext: 'webm', mime: 'audio/webm' })
+      expect(c.durationSec).toBeCloseTo(1.5, 1)
+    })
+
+    it('refuses a WebM with a video track, and a truncated one', () => {
+      const av = make([
+        '-f',
+        'lavfi',
+        '-i',
+        'testsrc=s=64x36:d=1',
+        ...sine,
+        '-c:v',
+        'libvpx-vp9',
+        '-c:a',
+        'libopus',
+        '-shortest',
+      ])
+      expect(() => classify(av)).toThrow(/WebM video/)
+      const opus = make([...sine, '-c:a', 'libopus'])
+      expect(() => classify(opus.subarray(0, 60))).toThrow(/couldn't be read/)
+    })
   })
 })
 

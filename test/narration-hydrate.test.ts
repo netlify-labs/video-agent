@@ -20,7 +20,7 @@ import { NARRATION_SRC } from '../src/lib/contract.js'
 import { readPcm16 } from '../src/lib/narration-cleanup.js'
 import type { FrozenNarration, RunManifest } from '../src/lib/run-manifest.js'
 import { IDENTITY_FIT, SAMPLE_RATE } from '../src/lib/timeline.js'
-import { hydrateNarration, prepare } from '../scripts/prepare-run.js'
+import { hydrateNarration, prepare, probeAudio } from '../scripts/prepare-run.js'
 import { narrationPaths, readNarrationInputs } from '../scripts/lib/narration-inputs.js'
 import { assertNoTakesInVideo, which } from '../scripts/lib/run-tools.js'
 
@@ -156,6 +156,39 @@ describe.skipIf(!ffmpeg)('hydrateNarration', () => {
     })
     expect(t?.wavSha256).not.toBe(t?.sha256)
     expect(Math.abs(pcm.samples.length - 1.5 * SAMPLE_RATE)).toBeLessThan(0.1 * SAMPLE_RATE)
+  })
+
+  it('decodes a WebM/Opus upload to 24 kHz mono PCM16, and refuses a WebM with video (§5.2)', async () => {
+    const root = tmp()
+    const webm = join(root, 'in.webm')
+    execFileSync('ffmpeg', [
+      ...['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'sine=f=440:r=48000:d=1.5'],
+      ...['-ac', '2', '-c:a', 'libopus', '-b:a', '48k', webm],
+    ])
+    const bytes = new Uint8Array(readFileSync(webm))
+    const n = narration([{ mediaId: A, ext: 'webm', bytes }])
+    const inputs = await hydrateNarration(root, m, n, store({ [`${A}/original.webm`]: bytes }).fetch)
+    const pcm = readPcm16(readFileSync(join(root, inputs?.takes[0]?.path ?? '')))
+    expect(pcm).toMatchObject({ sampleRate: SAMPLE_RATE, channels: 1 })
+    expect(inputs?.takes[0]).toMatchObject({ decoded: true, samples: pcm.samples.length })
+    expect(Math.abs(pcm.samples.length - 1.5 * SAMPLE_RATE)).toBeLessThan(0.1 * SAMPLE_RATE)
+    // The upload check refuses this; the run checks again, as it does for library audio.
+    const av = join(root, 'av.webm')
+    execFileSync('ffmpeg', [
+      ...['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'testsrc=s=64x36:d=1'],
+      ...['-f', 'lavfi', '-i', 'sine=d=1', '-c:v', 'libvpx-vp9', '-c:a', 'libopus', '-shortest', av],
+    ])
+    const avBytes = new Uint8Array(readFileSync(av))
+    await expect(
+      hydrateNarration(
+        tmp(),
+        m,
+        narration([{ mediaId: A, ext: 'webm', bytes: avBytes }]),
+        store({ [`${A}/original.webm`]: avBytes }).fetch,
+      ),
+    ).rejects.toThrow(/has a video track/)
+    expect(() => probeAudio(av, 'av.webm')).toThrow(/has a video track/)
+    expect(() => probeAudio(webm, 'in.webm')).not.toThrow()
   })
 
   it('prepare() clears stale inputs on a run without narration; the next hydration writes its own', async () => {

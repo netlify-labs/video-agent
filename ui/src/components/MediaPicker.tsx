@@ -36,7 +36,7 @@ export type MediaKind = Media['kind']
 
 // A hint for the file dialog only: the server decides what a file is from its bytes.
 export const MEDIA_ACCEPT =
-  'image/png,image/jpeg,image/webp,image/svg+xml,video/mp4,audio/mpeg,audio/mp4,audio/x-m4a,audio/aac,audio/wav,audio/x-wav,audio/ogg,font/woff2,font/ttf,font/otf,application/pdf,.mp3,.m4a,.wav,.ogg,.opus,.woff2,.ttf,.otf,.pdf'
+  'image/png,image/jpeg,image/webp,image/svg+xml,video/mp4,audio/mpeg,audio/mp4,audio/x-m4a,audio/aac,audio/wav,audio/x-wav,audio/ogg,audio/webm,font/woff2,font/ttf,font/otf,application/pdf,.mp3,.m4a,.wav,.ogg,.opus,.webm,.woff2,.ttf,.otf,.pdf'
 const MAX_PICKS = 12
 
 export function Thumb({ m }: { m: Media }) {

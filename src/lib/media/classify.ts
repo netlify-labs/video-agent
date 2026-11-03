@@ -2,6 +2,7 @@
 // declared type. Images are checked for size (40 megapixels at most); fonts, SVGs, clips, audio and PDFs have their own caps.
 import { ascii, AudioError, sniffAudio, u16le, u32 } from './audio.js'
 import { inspectMp4, Mp4Error } from './mp4.js'
+import { inspectWebm, isEbml, WebmError } from './webm.js'
 
 export const MEDIA_KINDS = ['image', 'svg', 'video', 'font', 'audio', 'pdf'] as const
 export type MediaKind = (typeof MEDIA_KINDS)[number]
@@ -22,6 +23,7 @@ export interface Classified {
     | 'm4a'
     | 'wav'
     | 'ogg'
+    | 'webm'
     | 'pdf'
   mime: string
   width: number | null
@@ -43,7 +45,13 @@ export const LIMITS = {
   pdfBytes: 20 * 1024 * 1024,
 }
 
-const AUDIO_MIME = { mp3: 'audio/mpeg', m4a: 'audio/mp4', wav: 'audio/wav', ogg: 'audio/ogg' } as const
+const AUDIO_MIME = {
+  mp3: 'audio/mpeg',
+  m4a: 'audio/mp4',
+  wav: 'audio/wav',
+  ogg: 'audio/ogg',
+  webm: 'audio/webm',
+} as const
 
 function audio(ext: keyof typeof AUDIO_MIME, durationSec: number | null, bytes: number): Classified {
   if (bytes > LIMITS.audioBytes) throw new MediaError('Audio files must be 50 MB or smaller.')
@@ -157,6 +165,17 @@ export function classify(b: Uint8Array, opts: { head?: boolean } = {}): Classifi
       durationSec: info.durationSec,
     }
   }
+  // WebM/Matroska is only ever audio here (one Opus or Vorbis track); a video track refuses the file.
+  if (isEbml(b)) {
+    if (b.byteLength > LIMITS.audioBytes) throw new MediaError('Audio files must be 50 MB or smaller.')
+    let info
+    try {
+      info = inspectWebm(b)
+    } catch (e) {
+      throw new MediaError(e instanceof WebmError ? e.message : "The WebM file couldn't be read.")
+    }
+    return audio('webm', info.durationSec, b.byteLength)
+  }
   let sound
   try {
     sound = sniffAudio(b)
@@ -173,6 +192,6 @@ export function classify(b: Uint8Array, opts: { head?: boolean } = {}): Classifi
     return { kind: 'svg', ext: 'svg', mime: 'image/svg+xml', width: null, height: null, durationSec: null }
   }
   throw new MediaError(
-    'Upload PNG, JPEG, WebP or SVG images, MP4 clips, MP3, M4A, WAV or Ogg audio, WOFF2, TTF or OTF fonts, or PDFs.',
+    'Upload PNG, JPEG, WebP or SVG images, MP4 clips, MP3, M4A, WAV, Ogg or WebM audio, WOFF2, TTF or OTF fonts, or PDFs.',
   )
 }
