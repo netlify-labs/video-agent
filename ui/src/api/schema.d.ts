@@ -6679,13 +6679,13 @@ export interface components {
             audio: {
                 id: string;
                 /** @enum {string} */
-                role: "music" | "voice" | "sfx";
+                role: "music" | "voice" | "sfx" | "narration";
                 label: string | null;
                 src: string;
                 /** @description The level set (a gain: 1 is as authored, up to 4), kept while muted */
                 volume: number;
                 muted: boolean;
-                /** @description The beat it plays in; null for music */
+                /** @description The beat it plays in; null for music and narration */
                 beat: string | null;
             }[];
             /** @description Each voiced beat's narration line, in beat order */

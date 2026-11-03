@@ -2849,7 +2849,8 @@
                   "enum": [
                     "music",
                     "voice",
-                    "sfx"
+                    "sfx",
+                    "narration"
                   ]
                 },
                 "label": {
@@ -2873,7 +2874,7 @@
                     "string",
                     "null"
                   ],
-                  "description": "The beat it plays in; null for music"
+                  "description": "The beat it plays in; null for music and narration"
                 }
               },
               "required": [

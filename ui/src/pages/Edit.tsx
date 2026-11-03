@@ -459,7 +459,7 @@ export function EditPage() {
     )
   if (!draft || !cur || !video.data) return <Text c="var(--va-muted)">Opening the editor…</Text>
   const total = cur.beats.reduce((s, b) => s + b.duration, 0)
-  // Music, then each voiced beat's line (effects get their own rows later).
+  // Music, then each voiced beat's line (effects and recorded narration get their own rows later).
   const music = cur.audio.filter((a) => a.role === 'music')
   const lines = cur.narration.filter((l) => cur.beats.some((b) => b.id === l.beat))
   const next = video.data.versions.length + 1

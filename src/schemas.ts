@@ -750,14 +750,14 @@ const CompositionSchema = z
     audio: z.array(
       z.object({
         id: z.string(),
-        role: z.enum(['music', 'voice', 'sfx']),
+        role: z.enum(['music', 'voice', 'sfx', 'narration']),
         label: z.string().nullable(),
         src: z.string(),
         volume: z
           .number()
           .openapi({ description: 'The level set (a gain: 1 is as authored, up to 4), kept while muted' }),
         muted: z.boolean(),
-        beat: z.string().nullable().openapi({ description: 'The beat it plays in; null for music' }),
+        beat: z.string().nullable().openapi({ description: 'The beat it plays in; null for music and narration' }),
       }),
     ),
     narration: z

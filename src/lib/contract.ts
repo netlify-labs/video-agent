@@ -23,10 +23,25 @@
 //   narration   each voiced beat's line lives in assets/voice/script.json (the server passes it in); a voice op
 //               records a new line and marks the clip data-va-revoice, and the render run re-speaks exactly the
 //               marked clips (scripts/voice.ts revoice), lengthening a beat only when its new line no longer fits
+//   recorded    at most one root layer <audio id="va-narration" data-va-layer="narration" data-va-audio="narration">
+//               playing assets/narration/bus.wav, the person's voice-over mixed from the narration op, with where it
+//               speaks in data-va-speech (seconds, whole frames). A draft has no bus file; the run writes it at the
+//               root's length (docs/plans/2026-11-02-record-your-own-voiceover.md §6.2)
 //   captions    summary.json captions carry beat, textId, beatStart, beatEnd (beat-relative) plus the absolute
 //               start, end and text render-job reads; the patcher keeps both in step. Voice cues (voice: true) follow
 //               the spoken words instead of a text, and keep their times when a beat is stretched (audio isn't)
-import { parse, serialize, type DefaultTreeAdapterMap } from 'parse5'
+import { defaultTreeAdapter, html as h5, parse, serialize, type DefaultTreeAdapterMap } from 'parse5'
+import {
+  DUCK_RELEASE_MS,
+  SAMPLE_RATE,
+  dbToGain,
+  frameAt,
+  framesFor,
+  mergeSpans,
+  placeSpans,
+  type NarrationOp,
+  type Span,
+} from './timeline.js'
 
 type Node = DefaultTreeAdapterMap['node']
 type Element = DefaultTreeAdapterMap['element']
@@ -80,7 +95,7 @@ export interface MediaSlot {
   beat: string | null
   fit: string | null
 }
-export type AudioRole = 'music' | 'voice' | 'sfx'
+export type AudioRole = 'music' | 'voice' | 'sfx' | 'narration'
 export interface AudioTrack {
   id: string
   role: AudioRole
@@ -89,7 +104,7 @@ export interface AudioTrack {
   /** The level the person set, 0-1, kept while muted. */
   volume: number
   muted: boolean
-  /** The beat it plays in; null for the music layer. */
+  /** The beat it plays in; null for the music and narration layers. */
   beat: string | null
 }
 /** A voiced beat's narration line, for the editor. */
@@ -139,7 +154,8 @@ function setText(el: Element, text: string) {
   el.childNodes = [{ nodeName: '#text', value: text, parentNode: el } as unknown as ChildNode]
 }
 const num = (v: string | null) => (v === null || v.trim() === '' ? NaN : Number(v))
-const fmt = (n: number) => String(Math.round(n * 1e6) / 1e6)
+const sec = (n: number) => Math.round(n * 1e6) / 1e6
+const fmt = (n: number) => String(sec(n))
 
 export interface Doc {
   doc: DefaultTreeAdapterMap['document']
@@ -233,7 +249,7 @@ function voiceOf(beat: Element): VoiceClip | null {
   }
 }
 
-const AUDIO_ROLES: readonly string[] = ['music', 'voice', 'sfx']
+const AUDIO_ROLES: readonly string[] = ['music', 'voice', 'sfx', 'narration']
 /** HyperFrames' data-volume is a gain up to about +12 dB; loudness normalization sets values above 1. */
 export const MAX_VOLUME = 4
 /** A file the composition carries (library media, the brand's music, effects): under assets/, no way out. */
@@ -247,12 +263,13 @@ function audioOf(root: Element): AudioTrack[] {
       .filter((e) => e.tagName === 'audio' && attr(e, 'id'))
       .map((e): AudioTrack => {
         // Voice-over clips are marked data-va-voice (scripts/voice.ts); an explicit data-va-audio wins.
+        const layer = attr(e, 'data-va-layer')
         const role =
           attr(e, 'data-va-audio') ??
           (attr(e, 'data-va-voice') !== null
             ? 'voice'
-            : attr(e, 'data-va-layer') === 'music'
-              ? 'music'
+            : layer === 'music' || layer === 'narration'
+              ? layer
               : 'sfx')
         const muted = attr(e, 'data-va-muted') !== null
         const level = num(muted ? attr(e, 'data-va-volume') : attr(e, 'data-volume'))
@@ -286,8 +303,16 @@ function mediaOf(e: Element, beat: string | null): MediaSlot {
   }
 }
 
+export interface ValidateOptions {
+  /**
+   * The recorded narration's state. 'draft' (the default): the bus file isn't there yet and isn't looked for. A
+   * materialized bus gives its length in samples, which must match the root duration to a frame.
+   */
+  narration?: 'draft' | { busSamples: number }
+}
+
 /** Every way the composition breaks contract v1; empty when it conforms. */
-export function validate(html: string, summary?: Summary): string[] {
+export function validate(html: string, summary?: Summary, opts: ValidateOptions = {}): string[] {
   const v: string[] = []
   let d: Doc
   try {
@@ -400,6 +425,7 @@ export function validate(html: string, summary?: Summary): string[] {
   for (const b of beats)
     if (voicesOf(b).length > 1) v.push(`Beat "${attr(b, 'data-va-beat') ?? ''}" has more than one voice.`)
 
+  const narrated = busesOf(root)
   for (const l of kids(root).filter((e) => attr(e, 'data-va-duck') !== null)) {
     const want = duckPoints(d, num(attr(l, 'data-va-duck')))
     if (!want) v.push(`data-va-duck on "${attr(l, 'data-va-layer') ?? ''}" must be a level between 0 and 1.`)
@@ -422,12 +448,15 @@ export function validate(html: string, summary?: Summary): string[] {
     }
     const role = attr(e, 'data-va-audio')
     if (role !== null && !AUDIO_ROLES.includes(role))
-      v.push(`${name} has data-va-audio="${role}"; use music, voice or sfx.`)
+      v.push(
+        `${name} has data-va-audio="${role}"; use music, voice or sfx (narration comes from the editor).`,
+      )
     if (attr(e, 'data-va-muted') !== null && num(attr(e, 'data-volume')) !== 0)
       v.push(`${name} is muted, so it needs data-volume="0".`)
   }
   for (const e of kids(root).filter((x) => attr(x, 'data-va-layer') === 'music'))
     if (e.tagName !== 'audio' || !attr(e, 'id')) v.push('The music layer must be an <audio> with an id.')
+  v.push(...checkBus(root, narrated, total, opts.narration ?? 'draft'))
 
   const { colors } = readColors(d)
   if (Object.keys(colors).length === 0) v.push('Declare colours as --va-color-<role> on the root.')
@@ -500,6 +529,22 @@ function volumeLane(raw: string | null): LanePoint[] | null {
   }
 }
 
+/** At most `max` spans: the closest neighbours are joined first (the earlier on a tie). */
+function capSpans(spans: readonly Range[], max: number): Range[] {
+  const gaps = spans
+    .slice(1)
+    .map(([s], i) => [s - (spans[i]?.[1] ?? s), i + 1] as const)
+    .sort((x, y) => x[0] - y[0] || x[1] - y[1])
+  const join = new Set(gaps.slice(0, Math.max(0, spans.length - max)).map(([, i]) => i))
+  const out: Range[] = []
+  for (const [i, [s, e]] of spans.entries()) {
+    const last = out[out.length - 1]
+    if (last && join.has(i)) last[1] = Math.max(last[1], e)
+    else out.push([s, e])
+  }
+  return out
+}
+
 const sameLane = (a: LanePoint[] | null, b: LanePoint[]) =>
   !!a &&
   a.length === b.length &&
@@ -523,6 +568,179 @@ export function applyDucking(d: Doc) {
       JSON.stringify({ ...auto, version: 1, lanes: [...lanes, { target: 'volume', points }] }),
     )
   }
+}
+
+// ───── recorded narration ─────
+/** [start, end) in seconds. */
+type Range = [start: number, end: number]
+export const NARRATION_ID = 'va-narration'
+export const NARRATION_SRC = 'assets/narration/bus.wav'
+/** The most spans data-va-speech carries; the closest are joined first. */
+export const MAX_SPEECH_SPANS = 400
+/** Marks a level the narration set (mute or under), so the next write can put the composition's own back. */
+const MIX = 'data-va-narration-mix'
+
+const busesOf = (root: Element) =>
+  [...walk(root)].filter(
+    (e) => attr(e, 'data-va-layer') === 'narration' || attr(e, 'data-va-audio') === 'narration',
+  )
+
+/** data-va-speech; null when it isn't a list of [start, end] numbers. */
+function speechOf(e: Element): Range[] | null {
+  try {
+    const a = JSON.parse(attr(e, 'data-va-speech') ?? '') as unknown
+    return Array.isArray(a) &&
+      a.every(
+        (x) => Array.isArray(x) && x.length === 2 && x.every((n) => typeof n === 'number' && isFinite(n)),
+      )
+      ? (a as Range[])
+      : null
+  } catch {
+    return null
+  }
+}
+
+function checkBus(root: Element, buses: Element[], total: number, state: 'draft' | { busSamples: number }) {
+  const v: string[] = []
+  if (buses.length > 1)
+    v.push(`There's more than one narration layer; keep the one <audio id="${NARRATION_ID}">.`)
+  const onFrame = (x: number) => Math.abs(x * FPS - Math.round(x * FPS)) < 1e-3
+  for (const e of buses) {
+    if (
+      e.parentNode !== root ||
+      e.tagName !== 'audio' ||
+      attr(e, 'id') !== NARRATION_ID ||
+      attr(e, 'data-va-layer') !== 'narration' ||
+      attr(e, 'data-va-audio') !== 'narration'
+    )
+      v.push(
+        `The narration must be an <audio id="${NARRATION_ID}" data-va-layer="narration" data-va-audio="narration"> in the root.`,
+      )
+    if (attr(e, 'src') !== NARRATION_SRC) v.push(`The narration must play ${NARRATION_SRC}.`)
+    const speech = speechOf(e)
+    if (!speech) v.push('The narration needs data-va-speech, a list of [start, end] seconds.')
+    else if (speech.length > MAX_SPEECH_SPANS)
+      v.push(`The narration has ${speech.length} speech spans; ${MAX_SPEECH_SPANS} at most.`)
+    else if (
+      !speech.every(
+        ([s, x], i) =>
+          s >= 0 &&
+          x > s &&
+          x <= total + 0.5 / FPS &&
+          s > (speech[i - 1]?.[1] ?? -1) &&
+          onFrame(s) &&
+          onFrame(x),
+      )
+    )
+      v.push("The narration's speech spans must be in order, apart, on whole frames and inside the video.")
+    if (state !== 'draft' && Math.abs(state.busSamples - total * SAMPLE_RATE) > SAMPLE_RATE / FPS)
+      v.push(`The narration bus is ${fmt(state.busSamples / SAMPLE_RATE)}s but the video is ${fmt(total)}s.`)
+  }
+  if (state !== 'draft' && !buses.length) v.push("There's a narration bus but no narration layer.")
+  return v
+}
+
+/**
+ * data-va-speech for composition-sample spans: widened to whole frames, joined across pauses shorter than
+ * DUCK_RELEASE_MS, at most MAX_SPEECH_SPANS (closest joined first), inside [0, total], in seconds.
+ */
+export function speechSeconds(speech: readonly Span[], total: number): Range[] {
+  const end = Math.round(total * FPS)
+  const inFrames = speech.map(([s, e]): Range => [
+    Math.max(0, frameAt(s, FPS)),
+    Math.min(end, framesFor(e, FPS)),
+  ])
+  return capSpans(mergeSpans(inFrames, (DUCK_RELEASE_MS * FPS) / 1000), MAX_SPEECH_SPANS).map(([s, e]) => [
+    sec(s / FPS),
+    sec(e / FPS),
+  ])
+}
+
+/**
+ * Writes recorded narration into the composition, or takes it out (op null): the one bus layer with its speech
+ * (`speech` in composition samples: in a draft, placeSpans of the op's clips over each take's summary; in the run,
+ * the processed bus's VAD), and the levels the op's tracks ask for. AI voice: replace mutes every data-va-voice, under
+ * lowers it by tracks.aiVoice.volumeDb, keep leaves it; original.muteAll mutes all the other audio. Mutes work as the
+ * audio op's (data-volume="0", data-va-muted, the level in data-va-volume). The last write's levels are undone first,
+ * so writing is idempotent and keep or removal restores the composition's own. No per-clip attributes.
+ */
+export function writeNarration(d: Doc, op: NarrationOp | null, speech: readonly Span[] = []) {
+  const { root } = d
+  for (const e of [...walk(root)].filter((x) => attr(x, MIX) !== null)) {
+    const level = attr(e, 'data-va-volume') ?? '1'
+    e.attrs = e.attrs.filter((a) => ![MIX, 'data-va-volume', 'data-va-muted'].includes(a.name))
+    setAttr(e, 'data-volume', level)
+  }
+  const old = busesOf(root)
+  const at = root.childNodes.findIndex((n) => old.includes(n as Element))
+  for (const e of old)
+    if (e.parentNode) e.parentNode.childNodes = e.parentNode.childNodes.filter((n) => n !== e)
+  if (!op) return
+  const total = num(attr(root, 'data-duration'))
+  const { tracks } = op
+  for (const e of [...walk(root)].filter((x) => x.tagName === 'audio' && attr(x, 'id'))) {
+    if (attr(e, 'data-va-muted') !== null) continue // muted by the person: stays as it is
+    const voice = attr(e, 'data-va-voice') !== null
+    const mode =
+      tracks.original.muteAll || (voice && tracks.aiVoice.mode === 'replace')
+        ? 'mute'
+        : voice && tracks.aiVoice.mode === 'under'
+          ? 'under'
+          : null
+    if (!mode) continue
+    const level = num(attr(e, 'data-volume'))
+    const was = Number.isFinite(level) ? level : 1
+    setAttr(e, MIX, mode)
+    setAttr(e, 'data-va-volume', fmt(was))
+    if (mode === 'under')
+      setAttr(
+        e,
+        'data-volume',
+        fmt(Math.min(MAX_VOLUME, Math.round(was * dbToGain(tracks.aiVoice.volumeDb) * 100) / 100)),
+      )
+    else {
+      setAttr(e, 'data-volume', '0')
+      setAttr(e, 'data-va-muted', '')
+    }
+  }
+  const el = defaultTreeAdapter.createElement('audio', h5.NS.HTML, [
+    { name: 'id', value: NARRATION_ID },
+    { name: 'data-va-layer', value: 'narration' },
+    { name: 'data-va-audio', value: 'narration' },
+    { name: 'data-track-index', value: '4' },
+    { name: 'data-start', value: '0' },
+    { name: 'data-duration', value: fmt(total) },
+    { name: 'data-volume', value: '1' },
+    {
+      name: 'data-va-speech',
+      value: JSON.stringify(speechSeconds(tracks.narration.muted ? [] : speech, total)),
+    },
+    { name: 'src', value: NARRATION_SRC },
+  ])
+  el.parentNode = root
+  root.childNodes.splice(at < 0 ? root.childNodes.length : at, 0, el)
+}
+
+/**
+ * The composition with recorded narration written in (op) or taken out (null), as a draft: its speech comes from the
+ * op's clips over each take's stored speech-span summary (`takeSpans`, source samples by media id; a take without one
+ * counts as speech throughout), and the music's dip follows. Validates before and after, like applyEdits.
+ */
+export function applyNarration(
+  html: string,
+  summary: Summary,
+  op: NarrationOp | null,
+  takeSpans: ReadonlyMap<string, readonly Span[]> = new Map(),
+) {
+  const before = validate(html, summary)
+  if (before.length) throw new ContractError(before)
+  const d = load(html)
+  writeNarration(d, op, op ? placeSpans(op.clips, takeSpans) : [])
+  relayout(d)
+  const out = save(d)
+  const after = validate(out, summary)
+  if (after.length) throw new ContractError(after)
+  return { html: out, composition: read(load(out)) }
 }
 
 // ───── edits ─────
@@ -569,6 +787,16 @@ function relayout(d: Doc) {
   for (const l of kids(d.root).filter((e) => attr(e, 'data-va-layer') !== null)) {
     setAttr(l, 'data-start', '0')
     setAttr(l, 'data-duration', fmt(t))
+  }
+  // Speech past a shorter end is cut off; every narration save recomputes it anyway.
+  for (const e of busesOf(d.root)) {
+    const speech = speechOf(e)
+    if (speech)
+      setAttr(
+        e,
+        'data-va-speech',
+        JSON.stringify(speech.flatMap(([s, x]) => (s < t ? [[s, Math.min(x, t)]] : []))),
+      )
   }
   applyDucking(d)
 }
@@ -709,7 +937,10 @@ function applyOne(d: Doc, op: EditOp, opts: EditOptions, narration: Record<strin
         throw new ContractError([`Volume goes from 0 to ${MAX_VOLUME}.`])
       const level = fmt(Math.round(volume * 100) / 100)
       // HyperFrames mixes every timed <audio> whatever its muted attribute says, so muting is data-volume="0".
-      el.attrs = el.attrs.filter((a) => !['data-volume', 'data-va-volume', 'data-va-muted'].includes(a.name))
+      // The person's level wins over the narration's mixing.
+      el.attrs = el.attrs.filter(
+        (a) => !['data-volume', 'data-va-volume', 'data-va-muted', MIX].includes(a.name),
+      )
       if (op.muted ?? track?.muted) {
         setAttr(el, 'data-volume', '0')
         setAttr(el, 'data-va-volume', level)
