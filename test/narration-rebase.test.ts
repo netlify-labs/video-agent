@@ -8,6 +8,7 @@ import type { VersionNarration, VersionRow } from '../src/domain/types.js'
 import { SAMPLE_RATE } from '../src/lib/timeline.js'
 import { harness, person, PROMPT, upload } from './helpers.js'
 import { tarGz } from './tarball.js'
+import { BUS } from './narration-render.js'
 
 const fx = (f: string) => readFileSync(new URL(`./fixtures/contract1/${f}`, import.meta.url), 'utf8')
 const tone = () => new Uint8Array(readFileSync(new URL('./fixtures/audio/tone.mp3', import.meta.url)))
@@ -96,6 +97,8 @@ describe('stale base and rebase', () => {
       await lock(dana, e.id)
       expect((await save(dana, e.id, 0, ops)).status).toBe(200)
       h.deps.nextSource = source()
+      // A narrated render uploads its bus with the outputs; finalize fails a version without one.
+      h.deps.nextBus = BUS
       expect((await h.call('POST', `/api/v1/edits/${e.id}/render`, { as: dana })).status).toBe(202)
       await h.drive(6)
       expect((await h.deps.store.getVersion(id, 2))?.status).toBe('ready')
