@@ -193,6 +193,10 @@
             },
             "description": "Netlify teams (slugs or ids) a Netlify sign-in must belong to; empty when there is no team rule."
           },
+          "narrationEnabled": {
+            "type": "boolean",
+            "description": "Recorded voice-over is on, so the Narration track and Record are offered."
+          },
           "missingSettings": {
             "type": "array",
             "items": {
@@ -213,6 +217,7 @@
           "mcpOAuth",
           "authProvider",
           "requiredTeams",
+          "narrationEnabled",
           "missingSettings"
         ]
       },
@@ -1730,6 +1735,53 @@
           "ok",
           "result"
         ]
+      },
+      "AdminSettings": {
+        "type": "object",
+        "properties": {
+          "narrationEnabled": {
+            "type": "boolean",
+            "description": "Recorded voice-over is on (the default). Off hides recording and refuses narration changes; versions that already have narration keep playing."
+          },
+          "transcriptionProvider": {
+            "$ref": "#/components/schemas/TranscriptionProvider"
+          },
+          "takeQuotaBytes": {
+            "type": "integer",
+            "description": "Stored bytes each person's recordings may use (default 2 GiB)."
+          }
+        },
+        "required": [
+          "narrationEnabled",
+          "transcriptionProvider",
+          "takeQuotaBytes"
+        ]
+      },
+      "TranscriptionProvider": {
+        "type": "string",
+        "enum": [
+          "local",
+          "elevenlabs",
+          "off"
+        ],
+        "description": "How recorded narration is transcribed for captions: local (the default, audio stays in this deployment), elevenlabs (sends the audio to ElevenLabs) or off (no captions from recordings)."
+      },
+      "UpdateAdminSettings": {
+        "type": "object",
+        "properties": {
+          "narrationEnabled": {
+            "type": "boolean"
+          },
+          "transcriptionProvider": {
+            "$ref": "#/components/schemas/TranscriptionProvider"
+          },
+          "takeQuotaBytes": {
+            "type": "integer",
+            "minimum": 1048576,
+            "maximum": 1099511627776,
+            "description": "1 MiB to 1 TiB."
+          }
+        }
       },
       "Plan": {
         "type": "object",
@@ -7135,6 +7187,172 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/WebhookTest"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/settings": {
+      "get": {
+        "summary": "Get settings",
+        "description": "Settings an admin can change without a redeploy: recorded voice-over. Admins only.",
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminSettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update settings",
+        "description": "Changes the settings given; leave a field out to keep it. Takes effect at once. Admins only.",
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAdminSettings"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminSettings"
                 }
               }
             }

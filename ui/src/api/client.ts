@@ -66,3 +66,10 @@ export function useCanCreate(): boolean {
   const me = $api.useQuery('get', '/api/v1/me')
   return me.data?.role === 'admin' || me.data?.role === 'creator'
 }
+
+/** Recorded voice-over is on for this deployment (an admin setting). The Narration track and Record read this to
+ * hide themselves when it's off; while the config loads it reads as off, so nothing flashes in. */
+export function useNarrationEnabled(): boolean {
+  const config = $api.useQuery('get', '/api/v1/config', {}, { staleTime: 60_000 })
+  return config.data?.narrationEnabled === true
+}

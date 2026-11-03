@@ -36,6 +36,7 @@ import {
 import { oauthRoutes } from './auth/routes.js'
 import { webAuthRoutes, webSignInEnabled } from './auth/web.js'
 import * as hooks from './domain/webhook-settings.js'
+import { getAdminSettings, narrationEnabled, updateAdminSettings } from './domain/narration-settings.js'
 import { listNotifications, markNotificationsRead } from './domain/notifications.js'
 import { getProgress } from './domain/progress.js'
 import { previewLink } from './domain/preview.js'
@@ -267,7 +268,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       tags: ['system'],
       responses: { 200: json(s.PublicConfigSchema, 'Config') },
     }),
-    (c) =>
+    async (c) =>
       c.json(
         {
           admission: deps.config.allowedEmailDomains,
@@ -276,6 +277,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
           mcpOAuth: oauthEnabled(deps),
           authProvider: deps.config.authProvider,
           requiredTeams: deps.config.netlifyRequiredTeams,
+          // Before the database is set up this reads as the default (on).
+          narrationEnabled: await narrationEnabled(deps).catch(() => true),
           // The deploy form lets these be skipped; say which are still needed (names only, never values).
           missingSettings: [
             ...(deps.config.runnerTokenPresent ? [] : (['RUNNER_API_TOKEN'] as const)),
@@ -820,6 +823,34 @@ export function createApp(deps: Deps, opts: AppOptions) {
       responses: { 200: json(s.WebhookTestSchema, 'Result'), ...errors },
     }),
     async (c) => c.json(await hooks.testWebhook(deps, c.get('principal'), 'team'), 200),
+  )
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/v1/admin/settings',
+      summary: 'Get settings',
+      description: 'Settings an admin can change without a redeploy: recorded voice-over. Admins only.',
+      tags: ['admin'],
+      security,
+      responses: { 200: json(s.AdminSettingsSchema, 'Settings'), ...errors },
+    }),
+    async (c) => c.json(await getAdminSettings(deps, c.get('principal')), 200),
+  )
+  app.openapi(
+    createRoute({
+      method: 'patch',
+      path: '/api/v1/admin/settings',
+      summary: 'Update settings',
+      description:
+        'Changes the settings given; leave a field out to keep it. Takes effect at once. Admins only.',
+      tags: ['admin'],
+      security,
+      request: {
+        body: { content: { 'application/json': { schema: s.UpdateAdminSettingsSchema } }, required: true },
+      },
+      responses: { 200: json(s.AdminSettingsSchema, 'Updated'), ...errors },
+    }),
+    async (c) => c.json(await updateAdminSettings(deps, c.get('principal'), c.req.valid('json')), 200),
   )
   app.openapi(
     createRoute({

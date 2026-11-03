@@ -122,6 +122,18 @@ export async function setupChecks(
     fix: 'AI Gateway comes with credit-based plans; Enterprise teams can ask their account manager to enable it.',
   })
 
+  // Browsers only allow the microphone in a secure context, so recorded voice-over needs HTTPS (localhost counts).
+  const secure = secureContext(deps.config.siteUrl)
+  add({
+    id: 'secure-context',
+    label: 'HTTPS for recording',
+    status: secure ? 'ok' : 'warn',
+    detail: secure
+      ? 'Served over HTTPS, so people can record their own voice-over.'
+      : `${deps.config.siteUrl} isn't HTTPS, so browsers won't let people record a voice-over. Everything else works.`,
+    fix: `Serve the site over HTTPS: Netlify provisions a certificate for every domain at ${siteSettings}/domain-management.`,
+  })
+
   // Optional: music search works anonymously; a registered Openverse app gets its own rate limits.
   const music = await openverseStatus(deps)
   add({
@@ -141,6 +153,16 @@ export async function setupChecks(
     checks.every((c) => c.status !== 'fail') &&
     !checks.some((c) => ['runner-token', 'identity'].includes(c.id) && c.status === 'unknown')
   return { ready, checks }
+}
+
+/** What browsers treat as a secure context: an https origin, or a loopback one (local development). */
+export function secureContext(siteUrl: string): boolean {
+  try {
+    const u = new URL(siteUrl)
+    return u.protocol === 'https:' || ['localhost', '127.0.0.1', '[::1]'].includes(u.hostname)
+  } catch {
+    return false
+  }
 }
 
 async function identityChecks(

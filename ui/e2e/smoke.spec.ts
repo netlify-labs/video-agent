@@ -404,6 +404,23 @@ test('admin, keys and setup render', async ({ page }) => {
   await expect(page.getByText('Everything needed is in place. People can make videos.')).toBeVisible()
 })
 
+test('admins turn recorded voice-over off and size its storage', async ({ page }) => {
+  await page.goto('/admin')
+  const toggle = page.getByRole('switch', { name: 'People can record their own voice-over' })
+  await expect(toggle).toBeChecked()
+  await toggle.click({ force: true })
+  await expect(toggle).not.toBeChecked()
+  const sent = () => page.evaluate("window.__sent['/api/v1/admin/settings']")
+  expect(await sent()).toEqual({ narrationEnabled: false })
+  const quota = page.getByLabel("Storage for each person's recordings")
+  await expect(quota).toHaveValue('2 GiB')
+  await quota.fill('5')
+  await quota.press('Enter')
+  await expect.poll(sent).toEqual({ takeQuotaBytes: 5 * 1024 ** 3 })
+  await page.goto('/setup')
+  await expect(page.getByText('HTTPS for recording')).toBeVisible()
+})
+
 test('Sign in with Netlify: one button that returns here, and the rule in plain words', async ({ page }) => {
   await mock(page, 'mockAuthProvider', 'netlify')
   await mock(page, 'mockSignedOut')

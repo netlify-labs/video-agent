@@ -2574,6 +2574,162 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get settings
+         * @description Settings an admin can change without a redeploy: recorded voice-over. Admins only.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Settings */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdminSettings"];
+                    };
+                };
+                /** @description Invalid request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not signed in */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not allowed */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Conflict or not ready */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update settings
+         * @description Changes the settings given; leave a field out to keep it. Takes effect at once. Admins only.
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["UpdateAdminSettings"];
+                };
+            };
+            responses: {
+                /** @description Updated */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdminSettings"];
+                    };
+                };
+                /** @description Invalid request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not signed in */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not allowed */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Conflict or not ready */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
     "/api/v1/plans": {
         parameters: {
             query?: never;
@@ -6151,6 +6307,8 @@ export interface components {
             authProvider: "identity" | "netlify";
             /** @description Netlify teams (slugs or ids) a Netlify sign-in must belong to; empty when there is no team rule. */
             requiredTeams: string[];
+            /** @description Recorded voice-over is on, so the Narration track and Record are offered. */
+            narrationEnabled: boolean;
             /** @description Required settings this deployment doesn't have yet (names only), so the sign-in screen and the app can say what to add. Empty once it's set up. */
             missingSettings: ("RUNNER_API_TOKEN" | "ALLOWED_EMAIL_DOMAINS" | "ADMIN_EMAILS")[];
         };
@@ -6523,6 +6681,24 @@ export interface components {
         WebhookTest: {
             ok: boolean;
             result: string;
+        };
+        AdminSettings: {
+            /** @description Recorded voice-over is on (the default). Off hides recording and refuses narration changes; versions that already have narration keep playing. */
+            narrationEnabled: boolean;
+            transcriptionProvider: components["schemas"]["TranscriptionProvider"];
+            /** @description Stored bytes each person's recordings may use (default 2 GiB). */
+            takeQuotaBytes: number;
+        };
+        /**
+         * @description How recorded narration is transcribed for captions: local (the default, audio stays in this deployment), elevenlabs (sends the audio to ElevenLabs) or off (no captions from recordings).
+         * @enum {string}
+         */
+        TranscriptionProvider: "local" | "elevenlabs" | "off";
+        UpdateAdminSettings: {
+            narrationEnabled?: boolean;
+            transcriptionProvider?: components["schemas"]["TranscriptionProvider"];
+            /** @description 1 MiB to 1 TiB. */
+            takeQuotaBytes?: number;
         };
         Plan: {
             id: string;

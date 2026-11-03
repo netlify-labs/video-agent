@@ -945,6 +945,40 @@ export const UpdateUserSchema = z
   .object({ role: RoleSchema.optional(), disabled: z.boolean().optional() })
   .openapi('UpdateUser')
 
+export const TranscriptionProviderSchema = z
+  .enum(['local', 'elevenlabs', 'off'])
+  .openapi('TranscriptionProvider', {
+    description:
+      'How recorded narration is transcribed for captions: local (the default, audio stays in this deployment), elevenlabs (sends the audio to ElevenLabs) or off (no captions from recordings).',
+  })
+export const AdminSettingsSchema = z
+  .object({
+    narrationEnabled: z
+      .boolean()
+      .describe(
+        'Recorded voice-over is on (the default). Off hides recording and refuses narration changes; versions that already have narration keep playing.',
+      ),
+    transcriptionProvider: TranscriptionProviderSchema,
+    takeQuotaBytes: z
+      .number()
+      .int()
+      .describe("Stored bytes each person's recordings may use (default 2 GiB)."),
+  })
+  .openapi('AdminSettings')
+export const UpdateAdminSettingsSchema = z
+  .object({
+    narrationEnabled: z.boolean().optional(),
+    transcriptionProvider: TranscriptionProviderSchema.optional(),
+    takeQuotaBytes: z
+      .number()
+      .int()
+      .min(1024 * 1024)
+      .max(1024 ** 4)
+      .optional()
+      .describe('1 MiB to 1 TiB.'),
+  })
+  .openapi('UpdateAdminSettings')
+
 export const MeSchema = z
   .object({
     id: z.string(),
@@ -1019,6 +1053,9 @@ export const PublicConfigSchema = z
       .describe(
         'Netlify teams (slugs or ids) a Netlify sign-in must belong to; empty when there is no team rule.',
       ),
+    narrationEnabled: z
+      .boolean()
+      .describe('Recorded voice-over is on, so the Narration track and Record are offered.'),
     missingSettings: z
       .array(z.enum(['RUNNER_API_TOKEN', 'ALLOWED_EMAIL_DOMAINS', 'ADMIN_EMAILS']))
       .describe(

@@ -1,8 +1,21 @@
-import { Alert, Anchor, Button, Card, Group, Select, Stack, Switch, Text, Title } from '@mantine/core'
+import {
+  Alert,
+  Anchor,
+  Button,
+  Card,
+  Group,
+  NumberInput,
+  Select,
+  Stack,
+  Switch,
+  Text,
+  Title,
+} from '@mantine/core'
 import { modals } from '@mantine/modals'
 import { WebhookCard } from '../components/WebhookCard'
 import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
+import { useEffect, useState } from 'react'
 import { Link, Navigate } from 'react-router'
 import { $api } from '../api/client'
 import { relativeTime, showError } from '../components/bits'
@@ -343,6 +356,7 @@ export function AdminPage() {
             </Text>
           </Card>
           <WebhookCard scope="team" />
+          <NarrationSettingsCard />
           <Card>
             <Text fw={600} mb="xs">
               Credits by person
@@ -388,6 +402,77 @@ export function AdminPage() {
         </div>
       </Stack>
     </>
+  )
+}
+
+const GIB = 1024 ** 3
+
+/** Recorded voice-over: on or off, how takes are transcribed, and each person's storage for recordings. */
+function NarrationSettingsCard() {
+  const qc = useQueryClient()
+  const settings = $api.useQuery('get', '/api/v1/admin/settings')
+  const save = $api.useMutation('patch', '/api/v1/admin/settings', {
+    onSuccess: () => void qc.invalidateQueries(),
+    onError: showError,
+  })
+  const s = settings.data
+  const [quota, setQuota] = useState<number | string>('')
+  useEffect(() => {
+    if (s) setQuota(s.takeQuotaBytes / GIB)
+  }, [s])
+  const saveQuota = () => {
+    const gib = Number(quota)
+    if (s && Number.isFinite(gib) && gib > 0 && Math.round(gib * GIB) !== s.takeQuotaBytes)
+      save.mutate({ body: { takeQuotaBytes: Math.round(gib * GIB) } })
+  }
+  return (
+    <Card>
+      <Text fw={600} mb="xs">
+        Recorded voice-over
+      </Text>
+      <Stack gap="sm">
+        <Switch
+          label="People can record their own voice-over"
+          description="Off hides recording and refuses narration changes. Videos that already have narration keep playing."
+          checked={s?.narrationEnabled ?? false}
+          disabled={!s}
+          onChange={(e) => {
+            save.mutate({ body: { narrationEnabled: e.currentTarget.checked } })
+          }}
+        />
+        <Select
+          label="Captions from recordings"
+          size="sm"
+          value={s?.transcriptionProvider ?? null}
+          disabled={!s}
+          allowDeselect={false}
+          data={[
+            { value: 'local', label: 'Transcribe here (recommended)' },
+            { value: 'elevenlabs', label: 'ElevenLabs (sends the audio to ElevenLabs)' },
+            { value: 'off', label: 'Off' },
+          ]}
+          onChange={(v) => {
+            if (v === 'local' || v === 'elevenlabs' || v === 'off')
+              save.mutate({ body: { transcriptionProvider: v } })
+          }}
+        />
+        <NumberInput
+          label="Storage for each person's recordings"
+          size="sm"
+          suffix=" GiB"
+          min={0.01}
+          max={1024}
+          decimalScale={2}
+          value={quota}
+          disabled={!s}
+          onChange={setQuota}
+          onBlur={saveQuota}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') saveQuota()
+          }}
+        />
+      </Stack>
+    </Card>
   )
 }
 

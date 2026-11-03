@@ -76,6 +76,22 @@ const mockOAuth = () => {
     return true
   }
 }
+// Admin settings (GET/PATCH /api/v1/admin/settings); localStorage.mockNarrationOff starts with recording off.
+const adminSettings: {
+  narrationEnabled: boolean
+  transcriptionProvider: 'local' | 'elevenlabs' | 'off'
+  takeQuotaBytes: number
+} = {
+  narrationEnabled: (() => {
+    try {
+      return localStorage.getItem('mockNarrationOff') !== '1'
+    } catch {
+      return true
+    }
+  })(),
+  transcriptionProvider: 'local',
+  takeQuotaBytes: 2 * 1024 ** 3,
+}
 const grants = [
   {
     id: 'grt_claude',
@@ -260,6 +276,12 @@ export function installMock() {
             detail: 'context/ still has the neutral default.',
             fix: 'Edit context/BRAND.md and context/brand.json, add your logo to context/assets/, and push.',
           },
+          {
+            id: 'secure-context',
+            label: 'HTTPS for recording',
+            status: 'ok',
+            detail: 'Served over HTTPS, so people can record their own voice-over.',
+          },
         ],
       })
     }
@@ -299,6 +321,7 @@ export function installMock() {
         mcpOAuth: mockOAuth(),
         authProvider: mockAuthProvider(),
         requiredTeams: mockAuthProvider() === 'netlify' ? ['acme'] : [],
+        narrationEnabled: adminSettings.narrationEnabled,
         // localStorage.mockMissingSettings = 'RUNNER_API_TOKEN,ADMIN_EMAILS' shows the not-set-up notices.
         missingSettings: mockMissingSettings(),
       })
@@ -313,6 +336,10 @@ export function installMock() {
     }
     if (p === '/api/v1/me') return json(me)
     if (p === '/api/v1/stats') return json(stats)
+    if (p === '/api/v1/admin/settings') {
+      if (method === 'PATCH') Object.assign(adminSettings, await readBody(init, input))
+      return json(adminSettings)
+    }
     if (p === '/api/v1/users') {
       return json(
         Object.values(people).map((u, i) => ({
