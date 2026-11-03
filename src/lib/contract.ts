@@ -27,10 +27,20 @@
 //               playing assets/narration/bus.wav, the person's voice-over mixed from the narration op, with where it
 //               speaks in data-va-speech (seconds, whole frames). A draft has no bus file; the run writes it at the
 //               root's length (docs/plans/2026-11-02-record-your-own-voiceover.md §6.2)
+//   hold        at most one last beat data-va-hold="<seconds>" (id va-hold), exactly as applyHoldFrame writes it: no
+//               script, text or media, only an <img> of assets/hold/last.png, the base's last frame, which the run
+//               renders; it holds the final frame while recorded narration runs past the end (docs/spikes.md S12)
 //   captions    summary.json captions carry beat, textId, beatStart, beatEnd (beat-relative) plus the absolute
 //               start, end and text render-job reads; the patcher keeps both in step. Voice cues (voice: true) follow
 //               the spoken words instead of a text, and keep their times when a beat is stretched (audio isn't)
-import { defaultTreeAdapter, html as h5, parse, serialize, type DefaultTreeAdapterMap } from 'parse5'
+import {
+  defaultTreeAdapter,
+  html as h5,
+  parse,
+  serialize,
+  serializeOuter,
+  type DefaultTreeAdapterMap,
+} from 'parse5'
 import {
   DUCK_RELEASE_MS,
   SAMPLE_RATE,
@@ -38,7 +48,11 @@ import {
   frameAt,
   framesFor,
   mergeSpans,
+  outputLimit,
   placeSpans,
+  samplesToSeconds,
+  secondsToSamples,
+  withinOutputLimit,
   type NarrationOp,
   type Span,
 } from './timeline.js'
@@ -345,6 +359,10 @@ export function validate(html: string, summary?: Summary, opts: ValidateOptions 
       v.push(`Beat "${id}" should start at ${fmt(t)}s, right after the beat before it.`)
     const track = attr(b, 'data-track-index')
     if (track !== null && track !== '0') v.push(`Beat "${id}" must be on track 0.`)
+    t += dur
+    // The held frame has no script: holdProblems checks it is exactly the still applyHoldFrame writes.
+    if (attr(b, HOLD) !== null) return
+    if (id === HOLD_BEAT) v.push(`Beat id "${HOLD_BEAT}" is kept for the held last frame.`)
     const script = scriptOf(b)
     const code = script ? textOf(script) : ''
     if (!new RegExp(`vaBeat\\(\\s*['"]${id}['"]`).test(code))
@@ -354,8 +372,8 @@ export function validate(html: string, summary?: Summary, opts: ValidateOptions 
     for (const other of ids)
       if (other !== id && new RegExp(`['"#]${other}['"\\]]`).test(code))
         v.push(`Beat "${id}" refers to beat "${other}".`)
-    t += dur
   })
+  v.push(...holdProblems(root, beats))
   if (beats.length && Math.abs(t - total) > 0.5 / FPS)
     v.push(`The beats add up to ${fmt(t)}s but the root says ${fmt(total)}s.`)
 
@@ -738,15 +756,17 @@ export function writeNarration(d: Doc, op: NarrationOp | null, speech: readonly 
 /**
  * The composition with recorded narration written in (op) or taken out (null), as a draft: its speech comes from the
  * op's clips over each take's stored speech-span summary (`takeSpans`, source samples by media id; a take without one
- * counts as speech throughout), and the music's dip follows. Validates before and after, like applyEdits.
+ * counts as speech throughout), and the music's dip follows. With `holdSeconds` (a keep-visuals render whose
+ * narration runs past the end), the final frame is held that long first. Validates before and after, like applyEdits.
  */
 export function applyNarration(
   html: string,
   summary: Summary,
   op: NarrationOp | null,
   takeSpans: ReadonlyMap<string, readonly Span[]> = new Map(),
+  opts: { holdSeconds?: number } = {},
 ) {
-  return narrate(html, summary, op, op ? placeSpans(op.clips, takeSpans) : [])
+  return narrate(html, summary, op, op ? placeSpans(op.clips, takeSpans) : [], opts.holdSeconds)
 }
 
 /**
@@ -757,16 +777,119 @@ export function applyBusNarration(html: string, summary: Summary, op: NarrationO
   return narrate(html, summary, op, speech)
 }
 
-function narrate(html: string, summary: Summary, op: NarrationOp | null, speech: readonly Span[]) {
+function narrate(
+  html: string,
+  summary: Summary,
+  op: NarrationOp | null,
+  speech: readonly Span[],
+  holdSeconds?: number,
+) {
   const before = validate(html, summary)
   if (before.length) throw new ContractError(before)
   const d = load(html)
+  // A render's held frame goes on first, so the narration layer and its speech span it too. The run's write
+  // (applyBusNarration) gets a frozen composition that already holds it.
+  if (op && holdSeconds) applyHoldFrame(d, holdSeconds)
   writeNarration(d, op, speech)
   relayout(d)
   const out = save(d)
   const after = validate(out, summary)
   if (after.length) throw new ContractError(after)
   return { html: out, composition: read(load(out)) }
+}
+
+// ───── hold the final frame (plan 2026-11-02 §2.5, §6.3; docs/spikes.md S12) ─────
+/** The held frame's beat id, and the still it shows: the base's last pre-encode frame, which the run renders. */
+export const HOLD_BEAT = 'va-hold'
+export const HOLD_STILL_SRC = 'assets/hold/last.png'
+const HOLD = 'data-va-hold'
+
+/**
+ * The held-frame beat as applyHoldFrame writes it, starting at `start` for `duration` seconds: a full-frame still of
+ * the last frame, above every layer (a logo bug or overlay is already in the still, so it mustn't draw again), with
+ * no script, text or media slot. S12: an appended beat like this holds frames equal to the last base frame, where
+ * extending the last beat doesn't (its animation and the layers keep moving).
+ */
+function holdElement(start: string, duration: string): Element {
+  const el = defaultTreeAdapter.createElement('section', h5.NS.HTML, [
+    { name: 'id', value: HOLD_BEAT },
+    { name: 'class', value: 'clip' },
+    { name: 'data-va-beat', value: HOLD_BEAT },
+    { name: 'data-composition-id', value: HOLD_BEAT },
+    { name: 'data-va-label', value: 'Held last frame' },
+    { name: 'data-start', value: start },
+    { name: 'data-duration', value: duration },
+    { name: 'data-va-authored-duration', value: duration },
+    { name: 'data-track-index', value: '0' },
+    { name: HOLD, value: duration },
+    { name: 'style', value: 'position:absolute;inset:0;z-index:2147483647' },
+  ])
+  const img = defaultTreeAdapter.createElement('img', h5.NS.HTML, [
+    { name: 'src', value: HOLD_STILL_SRC },
+    { name: 'alt', value: '' },
+    { name: 'style', value: 'position:absolute;inset:0;width:100%;height:100%;object-fit:fill' },
+  ])
+  img.parentNode = el
+  el.childNodes.push(img)
+  return el
+}
+
+/** What's wrong with the composition's held frame, if it has one (validate's part). */
+function holdProblems(root: Element, beats: Element[]): string[] {
+  const v: string[] = []
+  const holds = beats.filter((b) => attr(b, HOLD) !== null)
+  if (holds.length > 1) v.push(`There's more than one held frame (${HOLD}); keep one, as the last beat.`)
+  for (const b of holds) {
+    if (b !== beats.at(-1)) v.push(`The held frame (${HOLD}) must be the last beat.`)
+    if (beats.length < 2) v.push('A held frame needs a beat before it.')
+    const want = holdElement(attr(b, 'data-start') ?? '', attr(b, HOLD) ?? '')
+    if (
+      attr(b, 'data-duration') !== attr(b, HOLD) ||
+      !(num(attr(b, HOLD)) > 0) ||
+      serializeOuter(b) !== serializeOuter(want)
+    )
+      v.push(
+        'The held frame must stay exactly as the editor writes it: a still of the last frame, with no text, media or animation.',
+      )
+  }
+  for (const e of walk(root))
+    if (attr(e, HOLD) !== null && !holds.includes(e)) v.push(`Only the held-frame beat carries ${HOLD}.`)
+  return v
+}
+
+/** The held-frame beat (start and length in seconds), or null when there's none. The narration guard accepts it. */
+export function holdBeatOf(d: Doc): { beat: string; start: number; duration: number } | null {
+  const b = beatsOf(d.root).find((e) => attr(e, HOLD) !== null)
+  return b
+    ? { beat: attr(b, 'data-va-beat') ?? '', start: num(attr(b, 'data-start')), duration: num(attr(b, HOLD)) }
+    : null
+}
+
+/**
+ * Holds the final frame for `holdSeconds` (whole frames) after the beats: removes any held frame, then, for a
+ * positive hold, appends the one beat holdElement writes and lays the video out again (root, layers and the music's
+ * dip span the hold; the beats before it don't move, so every earlier frame is the same). 0 removes it, which
+ * restores the composition as it was. Deterministic: the same composition and hold give the same HTML. Refused past
+ * the output limit: base + 120 s, never over 15 min (timeline.outputLimit).
+ */
+export function applyHoldFrame(d: Doc, holdSeconds: number) {
+  for (const b of beatsOf(d.root).filter((e) => attr(e, HOLD) !== null))
+    d.root.childNodes = d.root.childNodes.filter((n) => n !== b)
+  relayout(d)
+  if (!(holdSeconds > 0)) return
+  const base = num(attr(d.root, 'data-duration'))
+  const hold = frames(holdSeconds)
+  if (!(hold > 0)) throw new ContractError(['A held frame lasts at least one frame.'])
+  const baseSamples = secondsToSamples(base)
+  if (!withinOutputLimit(secondsToSamples(base + hold), baseSamples))
+    throw new ContractError([
+      `Holding the last frame for ${fmt(hold)}s would make the video ${fmt(base + hold)}s; it can run to ${fmt(samplesToSeconds(outputLimit(baseSamples)))}s at most.`,
+    ])
+  const last = beatsOf(d.root).at(-1)
+  const el = holdElement(fmt(base), fmt(hold))
+  el.parentNode = d.root
+  d.root.childNodes.splice(last ? d.root.childNodes.indexOf(last) + 1 : d.root.childNodes.length, 0, el)
+  relayout(d)
 }
 
 // ───── edits ─────

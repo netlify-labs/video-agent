@@ -239,6 +239,7 @@ async function computeRev(
   e: Pick<EditRow, 'jobId' | 'baseN'>,
   draftOps: DraftOp[],
   repo: Repo = deps.store,
+  opts: { holdFinalFrame?: boolean } = {},
 ) {
   // The narration goes on last, over the edited visuals, so its spans and the music's dip follow every retime.
   const track = narrationOp(draftOps)
@@ -289,10 +290,16 @@ async function computeRev(
   }
   let outHtml = out.html
   let composition = out.composition
+  // The visuals' length, and the narration bus's: longer only for a render that holds the last frame.
+  const visualSamples = secondsToSamples(out.composition.duration)
+  let targetSamples = visualSamples
   if (track) {
-    const speech = await narrationTakes(deps, repo, track, secondsToSamples(out.composition.duration))
+    const speech = await narrationTakes(deps, repo, track, visualSamples)
+    if (opts.holdFinalFrame) targetSamples = holdTarget(track, visualSamples)
     try {
-      outHtml = applyNarration(out.html, out.summary, track, speech).html
+      outHtml = applyNarration(out.html, out.summary, track, speech, {
+        holdSeconds: samplesToSeconds(targetSamples - visualSamples),
+      }).html
     } catch (err) {
       if (err instanceof ContractError)
         throw new ApiError('invalid_request', `That edit can't be made: ${err.violations.join(' ')}`, {
@@ -360,6 +367,7 @@ async function computeRev(
     picks,
     track,
     composition,
+    targetSamples,
     base: baseComposition,
     palette,
     bundleSha256: manifestHash(
@@ -547,10 +555,26 @@ export interface RenderSettings {
 }
 
 /**
+ * The narration bus's length when a render holds the last frame (plan 2026-11-02 §2.5, §6.1): with an overrun, the
+ * audible narration's end plus the 0.5 s post-roll in whole frames, so the held-frame beat is the difference;
+ * otherwise the visuals' length. Refused past the output limit (base + 120 s, never over 15 min).
+ */
+function holdTarget(op: NarrationOp, baseSamples: number) {
+  const end = outputEnd(resolve(op.clips).filter((c) => c.gainDb !== null))
+  const target = end > baseSamples ? frameStart(framesFor(end + POST_ROLL_SAMPLES, FPS), FPS) : baseSamples
+  if (!withinOutputLimit(target, baseSamples))
+    throw new ApiError(
+      'invalid_request',
+      `Holding the last frame would make the video ${secs(target)}; it can run to ${secs(outputLimit(baseSamples))} at most. Trim the narration instead.`,
+    )
+  return target
+}
+
+/**
  * frozen.narration for a keep-visuals render (plan 2026-11-02 §6.1, §6.3). The op keeps only what's audible (resolved
  * clips with a level that start inside the target), and the takes are only the ones those play: by key and digest
- * from the media store, never snapshotted with snapshotMedia, at most 32 and 400 MiB. The bus is the visuals' length,
- * or with holdFinalFrame and an overrun, the narration's end plus the post-roll in whole frames, within the limit.
+ * from the media store, never snapshotted with snapshotMedia, at most 32 and 400 MiB. The bus is the composition's
+ * length: the visuals', or with holdFinalFrame and an overrun, theirs plus the held frame (computeRev, holdTarget).
  */
 async function freezeNarration(
   repo: Repo,
@@ -558,17 +582,8 @@ async function freezeNarration(
   r: Rev,
   s: RenderSettings,
 ): Promise<FrozenNarration> {
-  const base = secondsToSamples(r.composition.duration)
-  const audible = resolve(op.clips).filter((c) => c.gainDb !== null)
-  const end = outputEnd(audible)
-  const targetSamples =
-    s.holdFinalFrame && end > base ? frameStart(framesFor(end + POST_ROLL_SAMPLES, FPS), FPS) : base
-  if (!withinOutputLimit(targetSamples, base))
-    throw new ApiError(
-      'invalid_request',
-      `Holding the last frame would make the video ${secs(targetSamples)}; it can run to ${secs(outputLimit(base))} at most. Trim the narration instead.`,
-    )
-  const clips = audible.filter((c) => c.start < targetSamples)
+  const { targetSamples } = r
+  const clips = resolve(op.clips).filter((c) => c.gainDb !== null && c.start < targetSamples)
   const takes: FrozenNarration['takes'] = []
   for (const id of new Set(clips.map((c) => c.mediaId))) {
     const m = await repo.getMedia(id)
@@ -628,7 +643,10 @@ export async function renderEdit(
       const job = await loadJob(repo, p, e.jobId, true)
       if (await hasUnfinished(repo, e.jobId))
         throw new ApiError('conflict', 'Another version of this video is still in progress.')
-      const r = await computeRev(deps, e, e.ops as DraftOp[], repo)
+      // A held last frame is part of the frozen composition: one beat after the visuals (contract applyHoldFrame).
+      const r = await computeRev(deps, e, e.ops as DraftOp[], repo, {
+        holdFinalFrame: settings.holdFinalFrame,
+      })
       // Recorded narration is mixed by the run from frozen inputs; its takes are checked like a save's.
       if (r.track && !enabled) throw narrationOff()
       if (r.track) await checkTakeAccess(repo, p, e, r.track)

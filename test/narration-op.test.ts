@@ -5,6 +5,7 @@
 import { readFileSync } from 'node:fs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { editRevPrefix } from '../src/domain/edits.js'
+import { holdBeatOf, load, read as readComposition, validate } from '../src/lib/contract.js'
 import { resetSettingsCache } from '../src/domain/settings.js'
 import { NarrationOpSchema } from '../src/schemas.js'
 import {
@@ -373,6 +374,27 @@ describe('rendering narration with the visuals kept', () => {
     expect(await target(S, S, true)).toBe(9 * S)
     // Ending exactly at the 129 s limit saves, but holding past it doesn't render.
     expect(await target(127 * S, 2 * S, true)).toContain('129s at most')
+  })
+
+  it('freezes the held frame as the last beat of the composition, matching the bus length', async () => {
+    const frozenHtml = async (hold: boolean) => {
+      const h = harness({ MAX_ACTIVE_RUNS: '0' })
+      const { id, editId } = await narrated(h, ([a]) => [clip(a!, { start: 8 * S, srcEnd: 2 * S + 10 })], 1)
+      expect((await render(h, editId, { holdFinalFrame: hold })).status).toBe(202)
+      const version = (await h.deps.store.getVersion(id, 2))!
+      const files = readTarGz((await h.deps.blobs.get('sources', version.frozen!.key))!)
+      const html = new TextDecoder().decode(files.get('index.html'))
+      return { html, version }
+    }
+    const { html, version } = await frozenHtml(true)
+    // 316 frames of bus: the 9 s of visuals and a 1.533333 s hold (46 frames) of the last frame.
+    expect(holdBeatOf(load(html))).toEqual({ beat: 'va-hold', start: 9, duration: 1.533333 })
+    expect(validate(html)).toEqual([])
+    const c = readComposition(load(html))
+    expect(c.duration * S).toBeCloseTo(version.frozen!.narration!.targetSamples, 0)
+    expect(version.targetDurationSec).toBeCloseTo(316 / 30, 6)
+    expect(html).toMatch(/<audio id="va-narration"[^>]*data-duration="10.533333"/)
+    expect(holdBeatOf(load((await frozenHtml(false)).html))).toBeNull()
   })
 
   it('refuses more than 400 MB of takes', async () => {
