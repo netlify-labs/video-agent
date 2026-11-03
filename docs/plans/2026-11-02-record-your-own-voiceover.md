@@ -1,6 +1,16 @@
 # Record your own voice-over — plan
 
-- **Status:** draft 3 (2026-11-02). Folds in review rounds 1 and 2 (Fable 5 high and Codex gpt-6.1-sol high each round; 690 + 1,260 credits). §14 lists what was taken and what was rejected, per round. Next: phase 0 spikes, run to the spike contract in §9. The architecture choices marked **[S10]**–**[S13]** are provisional until their spike reports numbers.
+- **Status:** draft 4 (2026-11-02). It folds in review rounds 1 and 2 (Fable 5 high and Codex gpt-6.1-sol high each round; 690 + 1,260 credits) and the owner interview (§12, all answers settled). §14 lists what was taken and what was rejected, per round. Next: phase 0 spikes, run to the spike contract in §9. The architecture choices marked **[S10]**–**[S13]** are provisional until their spike reports numbers.
+- **Interview decisions (2026-11-02, second interview):**
+  - **Shared takes:** Creators who can see a video can hear and re-cut the takes *used* on it.
+  - **Quick picture render:** offered when timing edits block recording.
+  - **Teleprompter:** beside the picture, locked to the scenes.
+  - **Fit mode:** always replaces the AI voice.
+  - **Soft lock with Take over** for narration editing.
+  - **Browser approximation** to preview cleanup.
+  - **Pre-ducked monitor music.**
+  - **On by default,** and an admin can disable it.
+  - See §12 for the full list.
 - **Owner decisions so far (2026-11-02 interview):**
   - **Recording:** a whole take first, then punch-in re-records over any range. It should feel like a video editor: recordings are clips on a Narration track that sits above Music.
   - **Re-render:** the user picks either a plain re-render (render-unchanged, visuals untouched) or "let the agent adapt", which may retime scenes to fit the narration.
@@ -24,7 +34,11 @@ Success looks like this:
 2. **Sync:** narration lands within one video frame (≤ 33 ms at 30 fps) of where the speaker saw it, on the setups S10 qualifies. Other setups are "best effort with calibration", and the UI says so.
 3. **Delivered audio**, measured on the decoded final AAC: −14 ± 1 LUFS integrated for non-silent mixes, true peak ≤ −1 dBTP, speech intelligible over the ducked music.
 4. **Captions** follow the words, within the timestamp error S11 measures.
-5. **Recordings are private:** raw recordings are readable only by their uploader and admins. Viewers get the rendered mix, never the source takes, and unused recordings are actually deleted (§8).
+5. **Recordings are private until used:**
+   - A raw take is readable by its uploader and admins.
+   - Once a take is **used** on a video (on the Narration track of a version, or of the uploader's saved draft), Creators who can see that video can also read it, so they can re-cut the narration.
+   - Viewers and Reviewers get the rendered mix, never the source takes.
+   - Unused recordings stay private and are actually deleted (§8).
 
 Non-goals for v1:
 - Multi-person or remote recording.
@@ -50,12 +64,21 @@ Non-goals for v1:
      - *Replace AI voice-over* (default): the AI voice isn't played in the monitor and is muted in the render, but kept so it can be restored.
      - *Keep it under my voice*: the AI voice at a chosen level, −12 dB by default.
      - *Mute all original audio*.
-3. The user clicks **Record**. This click is the user gesture that starts the `AudioContext` and playback (`resume()` is explicit). A 3-2-1 countdown plays while the mic is already capturing, so nothing is clipped, then the video plays from the start.
-4. **Stopping:**
+   - **Stale picture:** if the draft has unrendered timing changes (§5.3), Record is replaced by **Render picture first**. One click starts a keep-visuals render of the timing changes (about 34 credits, a few minutes). It produces a **normal new version n+1** in the history. When it finishes, the editor reopens Narration on top of it, ready to record.
+3. **Layout while recording:** the picture sits on the left, and the **teleprompter** is on the right (stacked below on narrow windows).
+   - **Text:** the AI voice-over script if there is one, otherwise each beat's on-screen text.
+   - **Timing:** locked to the picture. Each line appears when its beat starts, the current line is highlighted, and the next line is shown dimmed half a second before its beat.
+   - **Controls:** adjustable font size. Toggle the prompter with **T**.
+   - It's a guide only. What you actually say is what gets transcribed.
+4. The user clicks **Record**. This click is the user gesture that starts the `AudioContext` and playback (`resume()` is explicit). A 3-2-1 countdown plays while the mic is already capturing, so nothing is clipped, then the video plays from the start.
+5. **Stopping:**
    - **Space** stops and keeps the take; **Esc** discards it.
    - Seeking, a playback stall, the tab going hidden, a device change (`devicechange`, mic track `ended`), a context interruption, or sync residual beyond the limit (§5.3) **stops the take and keeps what was captured** up to that point, with a message saying why.
-5. The take appears as a clip on the **Narration** track, with its waveform, at the video time it was recorded against.
-6. **Audition the mix** right away in the browser (§5.4). The narration is labelled *raw, before cleanup*. No render is needed.
+6. The take appears as a clip on the **Narration** track, with its waveform, at the video time it was recorded against.
+7. **Audition the mix** right away in the browser (§5.4).
+   - The narration plays raw by default.
+   - An **A/B Cleanup** toggle applies a browser approximation of the *Light* chain (high-pass, compressor, gentle spectral gate), labelled *approximate: the render's cleanup is the real one*.
+   - No render is needed.
 
 ### 2.2 Punch-in (re-record a range)
 1. Select a range on the ruler, or put the playhead somewhere and press **R**.
@@ -98,6 +121,7 @@ The user clicks **Render**. A dialog shows a duration and overflow preview (wher
     - switch to the fit option.
 - **Let the agent fit the video to my narration (≈ an authoring run, about 250 credits).**
   - An authoring run from the **frozen edited draft** (§6.4).
+  - **Fit always replaces the AI voice-over.** *Keep* and *Under* apply to keep-visuals renders only. The dialog says so when they're set.
   - The agent gets the narration's word timings (or, if transcription failed, duration-only guidance) and an exact target duration. It may retime, extend or tighten scenes to match.
   - **The agent cannot change the narration audio.** A guard enforces this (§6.4).
 
@@ -113,6 +137,19 @@ The user clicks **Render**. A dialog shows a duration and overflow preview (wher
 - For VTT-sidecar captions (the default), a fix creates a **caption revision** of the version (§6.6): new immutable files, delivered through revision-aware signed paths, with **no render**.
 - For burned-in captions (a stored per-version policy), fixes go through the editor and a render-unchanged run.
 - Ships with the first recording release.
+
+### 2.7 Working on narration with teammates
+- **Shared takes:**
+  - Any Creator who can see a video (`edit:create` is role-wide, `policy.ts:55`) can open its Narration track, hear the takes it uses, and re-cut, move, mute or replace them.
+  - "Used" means referenced by a version's frozen narration, or by the uploader's saved draft of that video.
+  - Takes the uploader recorded but never placed (flubs, discarded retakes) stay private to the uploader.
+  - Private videos keep their existing visibility rules. A take is visible only through a video the reader can see.
+- **Soft lock on narration editing:**
+  - Opening the Narration track takes the video's **narration lock**. It's held with a 30 s heartbeat, and released when the editor closes or after 2 min without a heartbeat.
+  - Anyone else who opens Narration sees **"Dana is editing the narration (since 14:02)"** and can **watch**, which means auditioning the last rendered version read-only, or click **Take over**.
+  - **Take over** moves the lock. Dana's draft is kept untouched; drafts are per author. Dana immediately sees **"Sam took over the narration. Your draft is saved; you can render it or discard it."**, and her Record and save buttons are disabled until she takes the lock back.
+  - The lock covers narration ops only. Other edits work as they do today.
+- **Stale base:** when you open Narration and a version newer than your draft's base exists with different narration, a banner says **"Narration changed in v7 (Sam, 10 min ago)"** with *Rebase onto v7* or *Keep mine*. Rebase reapplies your narration op onto the new base. If both changed narration, *Keep mine* replaces theirs at render, and the render dialog warns about it.
 
 ## 3. Constraints from the current system
 
@@ -207,7 +244,9 @@ What goes where, and why:
   - the user's existing narration clips (muted inside an armed punch range).
 
   The stems come from the edited draft bundle through the existing preview routes, which are author-only for drafts. Narration takes come through scoped signed links.
-- **Recording is blocked while any pending op changes timing:** retime, reorder, delete, **and voice ops that change beat length** (`contract.ts:774`). The message is "render or discard timing changes first". Audio-only ops that don't move time (music volume or mute) are allowed, and the monitor reflects them.
+- **Recording is blocked while any pending op changes timing:** retime, reorder, delete, **and voice ops that change beat length** (`contract.ts:774`). The UI offers **Render picture first** (§2.1), which is a keep-visuals render into a normal version n+1, then reopens Narration on it. Audio-only ops that don't move time (music volume or mute) are allowed, and the monitor reflects them.
+- **Monitor music is pre-ducked.** Music plays at the draft's level, with the duck lane computed from narration that **already exists**. It never reacts live to the mic, so there's no pumping while you speak.
+- **Teleprompter:** a DOM panel beside the picture, driven by the same picture anchors. Its lines come from `versions.voiceover.script` or beat texts, read from the base composition (`read()`).
 - **Fit:** anchors give `(composition time, perf time)` pairs. Worklet blocks give `(context sample, context time)`. `getOutputTimestamp()` maps context time to perf time where available (feature-detected, never with `outputLatency` added on top).
   - Fit `t = a + b·sample` over the take and store the **whole fit** (`a`, `b`, residual RMS, max residual) plus calibration and manual offsets. Never collapse it to a single offset.
   - If the slope deviates from 1/sampleRate by more than S10's tolerance, or the cumulative residual exceeds a limit (default 10 ms), the take stops there and keeps the clean part.
@@ -225,6 +264,7 @@ What goes where, and why:
 - **Narration:** parent Web Audio plays the raw clips with the shared `src/lib/timeline.ts` crossfade and gain math.
 - **Mix control:** a new bridge command, `mix{tracks}`, sets track volumes and mutes on the iframe's `<audio>` elements. Ducking imports the shared `duckPoints`.
 - **It's labelled raw.** Cleanup exists only in the run, so the preview doesn't promise processed-audio parity.
+- **A/B Cleanup (approximate):** a Web Audio chain (a `BiquadFilterNode` high-pass at 80 Hz, a `DynamicsCompressorNode` at 2:1, and a simple spectral-gate AudioWorklet) toggled on the narration bus, labelled approximate. It's for judging whether *Light* helps; the run's ffmpeg chain is authoritative.
 - **Decode budget:** a sliding window around the playhead, with a 200 MB budget across takes and an LRU cache. Takes are never all decoded at once; 32 ten-minute takes would be about 1.8 GB. Waveforms come from the stored peaks.
 
 ### 5.5 Timeline UI
@@ -251,6 +291,11 @@ What goes where, and why:
   - an index on `(uploader_id, role)`
 
   `meta.json` keeps sampleRate, duration in samples, the sync fit and a hashed device label. Peaks live in `<id>/peaks.bin` (multiresolution Int8, about 60 KB for 10 min).
+- **Narration lock (new table `narration_locks`):** `(job_id PK, holder_id, draft_id, acquired_at, heartbeat_at)`.
+  - Acquire, heartbeat and take-over are one `UPDATE … WHERE heartbeat_at < now() - 2 min OR holder_id = $me` (or an unconditional update for take-over), and each returns the previous holder for the notice.
+  - The `narration` op save checks that the saver holds the lock (409 `narration_locked` otherwise).
+  - Expired rows are reaped by the sweep.
+- **Setting:** `narrationEnabled` in the DB settings row. It defaults to **on**, and admins can turn it off without a redeploy. When it's off, the Narration track and Record are hidden and narration ops are rejected; existing versions still play. The setup page checks that the deployment is a secure context (HTTPS).
 - **Reference index (new table `media_refs`):** `(media_id, owner_kind, owner_id)`, where `owner_kind` is `draft`, `frozen_attempt` or `version`. It's written in the same transaction as the reference (§8). GC, usage, credits and scope checks all read it.
 - **Edit op: one whole-track snapshot**, matching the full-op-list save model (`edits.ts:279-304`):
   ```ts
@@ -388,7 +433,7 @@ What goes where, and why:
   5. Then the agent authors.
 - **Prompt:**
   - Narration is locked.
-  - `voiceLines` TTS instructions (`prompt.ts:284-307`) are suppressed in *replace* mode.
+  - **Fit forces *replace*:** every `data-va-voice` is muted and the `voiceLines` TTS instructions (`prompt.ts:284-307`) are suppressed. `renderEdit` with `fit_to_narration` rewrites `tracks.aiVoice.mode` to `replace` in the frozen op.
   - The transcript is passed as fenced, sanitized data, following the existing prompt conventions.
   - The agent must make beats total exactly the target duration.
   - If STT failed: duration-only guidance, plus a status shown to the user.
@@ -445,7 +490,8 @@ What goes where, and why:
 
 - **REST changes**, documented in OpenAPI and checked by `openapi:check`:
   - Upload sessions accept `role`, `scopeJobId` and a client-supplied `sha256`.
-  - `GET /api/v1/videos/:id/recordings` lists in-scope takes for that video.
+  - `GET /api/v1/videos/:id/recordings` lists the takes the caller can read for that video: their own, plus used ones.
+  - `POST|DELETE /api/v1/videos/:id/narration-lock` acquires or heartbeats, and releases. `POST …/narration-lock/take-over` takes over. `GET` returns the holder, for the banner.
   - `GET …/versions/:n/narration` returns the resolved op and the transcript.
   - `POST …/versions/:n/captions` creates a caption revision (§6.6).
   - Draft endpoints accept the `narration` op.
@@ -458,7 +504,12 @@ What goes where, and why:
 - **Roles:**
   - Record, upload and render need Creator.
   - Drafts stay author-only (`edits.ts:265`). Reviewers hear committed versions.
-- **One authorization predicate:** `canReadTake(principal, media)` is true for the uploader and admins only. It's enforced on every path that can expose a take, across REST and MCP:
+- **One authorization predicate:** `canReadTake(principal, media)` is true for:
+  - the uploader;
+  - admins;
+  - a **Creator who can read a video** for which a `media_refs` row places this take in a `version` of that video, or in a `draft` of that video authored by the uploader.
+
+  Unused takes stay uploader-only. Reviewers and Viewers never read raw takes. Private-video rules apply through "can read the video". It's enforced on every path that can expose a take, across REST and MCP:
   - `loadMedia` and signed links;
   - library and music search;
   - `checkMedia` duplicate lookup (`media.ts:252-258`), which must not reveal other users' takes;
@@ -486,10 +537,10 @@ The order is storage and privacy, then upload-to-render, then recording, then pu
 | Phase | Contents | Depends on | Live gate |
 |---|---|---|---|
 | **0: spikes** | See the spike contract below. | — | `docs/spikes.md` S10–S13 with numbers; draft 4 confirms or revises the [S] choices. |
-| **1: storage + privacy** | Media columns + `media_refs` + migration; `canReadTake` on every path (incl. `checkMedia`, search, MCP); peaks blob; quota; lock protocol + two-phase GC; mic Permissions-Policy (static + edge); recordings endpoint. | 0 | A non-uploader gets 404 on a take everywhere, including duplicate lookup. A concurrent save and GC test keeps referenced bytes and deletes unreferenced ones. |
+| **1: storage + privacy** | Media columns + `media_refs` + migration; `narrationEnabled` setting; `canReadTake` (uploader, admins, Creators via *used* refs) on every path (incl. `checkMedia`, search, MCP); peaks blob; quota; lock protocol + two-phase GC; mic Permissions-Policy (static + edge); recordings endpoint. | 0 | A non-uploader gets 404 on an **unused** take everywhere, including duplicate lookup; a Creator who can see the video reads a **used** take; a Reviewer gets 404 on both. A concurrent save and GC test keeps referenced bytes and deletes unreferenced ones. |
 | **2: upload → render (keep visuals)** | Narration op; `timeline.ts`; audio role; draft spans; `narration.ts` + receipt; run-input dir; bus by reference; extended `duckPoints`; `checkNarration`; mastering re-mux; STT with outer deadline + cache; narration cues; empty-VTT fallback; caption revisions with signed paths, CAS and mirror generations; `narration.mp3`/transcript; hold-frame; provenance + credits. | 1 | Fixture WAV with known beeps and transcript, 3 clips, render: per-clip beep correlation within 1 frame; −14 ± 1 LUFS and ≤ −1 dBTP on decoded AAC; captions within S11's error; visual frames identical to the frozen edited draft (pre-encode frame hashes); **one tamper case** (edited bus, edited attribute) rejected; raw take paths 404 for a reviewer through preview and archive; a 4-min and a 10-min bus reopen and re-render; caption correction updates private and public VTT, and a correction after unpublish doesn't resurrect the mirror; a silence-only take renders. |
-| **3: record a take** | Recorder (worklet → worker → IndexedDB), worker-hash upload, setup panel, muted-picture + stem monitor, calibration (S10's procedure), fit + residual stop, recovery, raw audition with decode budget, original-audio modes. | 2 | Chrome, Safari and Firefox on real hardware, with headphones: a 60 s take lands within 1 frame at start, middle and end; in *replace* mode the take has no AI-voice bleed; a reload mid-take recovers it. |
-| **4: punch-in + timeline** | Multi-track timeline, punch-in with pre-roll and range muting, crossfades, split/trim/move/gain/fades, snapping, local undo, keyboard + a11y. | 3 | Three punch-ins on a 90 s video: no clicks at edit points (envelope check), sync holds at each boundary. |
+| **3: record a take** | Recorder (worklet → worker → IndexedDB), worker-hash upload, setup panel, muted-picture + stem monitor (pre-ducked music), teleprompter, *Render picture first*, calibration (S10's procedure), fit + residual stop, recovery, raw audition + approximate A/B cleanup with decode budget, original-audio modes. | 2 | Chrome, Safari and Firefox on real hardware, with headphones: a 60 s take lands within 1 frame at start, middle and end; in *replace* mode the take has no AI-voice bleed; a reload mid-take recovers it. |
+| **4: punch-in + timeline + collaboration** | Multi-track timeline, punch-in with pre-roll and range muting, crossfades, split/trim/move/gain/fades, snapping, local undo, keyboard + a11y; narration lock (heartbeat, Take over, notices), stale-base banner + rebase. | 3 | Three punch-ins on a 90 s video: no clicks at edit points (envelope check), sync holds at each boundary; a second Creator sees the lock, takes over, and the first sees the notice with their draft intact. |
 | **5: fit to narration** | `author_from_frozen` run kind (manifest, reconciler, prepare-run), target duration, TTS suppression, fenced transcript, duration-only fallback, full `narration_modified` guard, cost confirm. | 2 | One fit run with narration 20% longer than the visuals: scenes total the target exactly, bus digest unchanged; a tampered variant is rejected. |
 | **6: polish** | Take alternatives + takes switcher; heavy cleanup (RNNoise, declick); WebM/Opus; auto-align; MCP tools; skills page; share transcript; multilingual; iframe recording fallback if S10 needs it. | 2–4 | MCP `add_narration` + render; a Chrome WebM file uploads and renders. |
 
@@ -538,7 +589,8 @@ The order is storage and privacy, then upload-to-render, then recording, then pu
   - `checkNarration` and `narration_modified` tamper cases.
   - Narration caption grouping.
   - Op schema.
-  - `canReadTake` on every path, including `checkMedia`.
+  - `canReadTake` on every path, including `checkMedia`, for uploader, admin, Creator via used refs (version and uploader draft), Creator with an unused take, Reviewer, and private video.
+  - Narration lock: acquire, heartbeat, expiry, take-over and op-save rejection (409).
   - `media_refs` + GC under concurrent save, freeze and retry (PGlite with two connections).
   - Caption revision CAS and mirror generations.
   - Run-manifest serialization for `author_from_frozen`.
@@ -561,15 +613,30 @@ The order is storage and privacy, then upload-to-render, then recording, then pu
 | GC deletes something still referenced. | Low | `media_refs`, row locks in id order, two-phase delete, concurrent tests. |
 | Preview and render mix diverge. | Low | Shared `timeline.ts` and `duckPoints`. Audition is labelled raw. |
 
-## 12. Owner questions (answers proposed by rounds 1–2; owner to confirm)
+## 12. Owner decisions (settled 2026-11-02)
 
-1. **Default render choice:** *Keep my visuals* preselected, after a duration and overflow preview and the measured cost range.
-2. **Bluetooth:** warn, and prompt calibration on any new route. Don't block, and don't infer Bluetooth from labels.
+First interview:
+- Recording is a whole take plus punch-in, on an editor-style Narration track above Music.
+- The user picks the render mode per render.
+- Captions are auto-transcribed.
+- In v1: meter, device picker and countdown; cleanup; upload; keep the original audio.
+
+Second interview and accepted recommendations:
+1. **Default render:** *Keep my visuals* is preselected, after a duration and overflow preview and the measured cost range.
+2. **Bluetooth:** warn, and prompt calibration on any new route. Don't block it, and don't infer it from device labels.
 3. **Unused takes:** a 30-day grace after the last reference, plus **Delete unused recordings**. Discarding a draft releases references only.
 4. **Captions provider:** local by default. ElevenLabs transcription is a separate opt-in.
-5. **Share-page transcript:** offered at publish with a preview, off by default for recorded narration, and the choice remembered.
+5. **Share-page transcript:** offered at publish with a preview, off by default for recorded narration, and the choice is remembered.
 6. **Limits:** 10 min / 50 MiB per take. Narration may extend the output by at most 120 s, and never past 15 min total.
-7. **New: take alternatives** (a takes switcher) are deferred to phase 6. Punch-in still works, and the old take's audio is kept as source. OK?
+7. **Take alternatives:** a takes switcher is deferred to phase 6.
+8. **Collaboration:** Creators who can see a video can hear and re-cut the takes **used** on it. Unused takes stay private to the uploader (§2.7, §8).
+9. **Stale picture:** offer **Render picture first**, a keep-visuals render into a **normal new version** (§2.1).
+10. **Teleprompter:** beside the picture, locked to the scenes, with text from the AI script or the beat texts (§2.1).
+11. **Fit mode always replaces the AI voice** (§2.5, §6.4).
+12. **Concurrent editing:** a soft narration lock with heartbeat and **Take over**; the other person's draft is kept and they're told (§2.7).
+13. **Cleanup preview:** a browser approximation A/B, labelled approximate (§5.4).
+14. **Monitor music:** pre-ducked from existing narration, never live-ducked on the mic (§5.3).
+15. **Rollout:** `narrationEnabled` is on by default, and an admin can disable it from settings with no redeploy (§6.1).
 
 ## 13. Missing-piece checklist (each one is covered above)
 
@@ -594,6 +661,17 @@ The order is storage and privacy, then upload-to-render, then recording, then pu
 - Caption cache, ETag and unpublish ordering: §6.6.
 
 ## 14. Review log
+
+### Owner interview 2, 2026-11-02
+Decisions 8–15 in §12. Changes made for them:
+- `canReadTake` widened to used takes (§1, §8).
+- New §2.7 on teammates: lock, take over, stale base.
+- `narration_locks` table and endpoints (§6.1, §7).
+- Teleprompter, Render picture first and pre-ducked monitor (§2.1, §5.3).
+- Approximate A/B cleanup (§2.1, §5.4).
+- Fit forces replace (§2.5, §6.4).
+- `narrationEnabled` setting (§6.1).
+- Phases 1, 3 and 4 and their gates updated (§9, §10).
 
 ### Round 2, 2026-11-02 (Fable 5 high: 833 credits; Codex gpt-6.1-sol high: 427 credits), against `8649997`
 
