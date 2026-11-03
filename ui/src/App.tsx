@@ -1,5 +1,5 @@
 import { Center, Loader } from '@mantine/core'
-import { Suspense, useEffect, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, type ReactNode } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router'
 import { $api } from './api/client'
 import { useAuth } from './auth'
@@ -21,6 +21,8 @@ const SetupPage = routes.lazyPage(routes.setupRoute, (m) => m.SetupPage)
 const DocsApiPage = routes.lazyPage(routes.docsApiRoute, (m) => m.default)
 const DocsMcpPage = routes.lazyPage(routes.docsMcpRoute, (m) => m.default)
 const DocsSkillsPage = routes.lazyPage(routes.docsSkillsRoute, (m) => m.default)
+// Mock builds only: the narration timeline on fixture data (/dev/timeline). The import is dropped from real builds.
+const TimelineDemo = import.meta.env.VITE_MOCK ? lazy(() => import('./mock/TimelineDemo')) : null
 
 /** /docs opens the REST reference; old /docs?tab=mcp|skills links open their page, keeping the hash. */
 function DocsRedirect() {
@@ -160,6 +162,16 @@ export function App() {
           }
         />
         <Route path="/docs/*" element={<Navigate to="/docs/api" replace />} />
+        {TimelineDemo ? (
+          <Route
+            path="/dev/timeline"
+            element={
+              <Page>
+                <TimelineDemo />
+              </Page>
+            }
+          />
+        ) : null}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

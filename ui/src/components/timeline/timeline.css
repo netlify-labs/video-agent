@@ -1,0 +1,249 @@
+/* The narration timeline (components/timeline). Headers and lanes share these row heights so they line up. */
+.va-tl {
+  --tl-head: 196px;
+  --tl-ruler: 28px;
+  --tl-scenes: 42px;
+  --tl-narration: 64px;
+  --tl-aiVoice: 56px;
+  --tl-music: 76px;
+  --tl-narration-ink: var(--va-accent);
+  display: grid;
+  grid-template-columns: var(--tl-head) minmax(0, 1fr);
+  border-radius: 8px;
+  background: var(--va-surface);
+  overflow: hidden;
+  position: relative;
+  user-select: none;
+}
+@media (max-width: 640px) {
+  .va-tl {
+    --tl-head: 128px;
+  }
+}
+
+.va-tl-heads {
+  border-right: 1px solid var(--va-rule);
+  min-width: 0;
+}
+.va-tl-corner {
+  height: var(--tl-ruler);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 6px;
+  border-bottom: 1px solid var(--va-rule);
+}
+.va-tl-head {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--va-rule);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  overflow: hidden;
+}
+.va-tl-head-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.va-tl-head-name {
+  flex: 1;
+  min-width: 0;
+}
+.va-tl-solo {
+  font-size: 11px;
+  font-weight: 700;
+}
+.va-tl-level {
+  flex: 1;
+  padding: 4px 2px;
+}
+.va-tl-head[data-lane='scenes'],
+.va-tl-lane[data-lane='scenes'] {
+  height: var(--tl-scenes);
+}
+.va-tl-head[data-lane='narration'],
+.va-tl-lane[data-lane='narration'] {
+  height: var(--tl-narration);
+}
+.va-tl-head[data-lane='aiVoice'],
+.va-tl-lane[data-lane='aiVoice'] {
+  height: var(--tl-aiVoice);
+}
+.va-tl-head[data-lane='music'],
+.va-tl-lane[data-lane='music'] {
+  height: var(--tl-music);
+}
+
+.va-tl-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+}
+.va-tl-content {
+  position: relative;
+}
+
+.va-tl-ruler {
+  position: relative;
+  height: var(--tl-ruler);
+  border-bottom: 1px solid var(--va-rule);
+  cursor: text;
+  touch-action: none;
+}
+.va-tl-ruler:focus-visible {
+  outline: 2px solid var(--va-accent);
+  outline-offset: -2px;
+}
+.va-tl-tick {
+  position: absolute;
+  bottom: 0;
+  width: 1px;
+  height: 6px;
+  background: var(--va-rule);
+}
+.va-tl-tick[data-major] {
+  height: 12px;
+  background: var(--va-faint);
+}
+.va-tl-tick-label {
+  position: absolute;
+  bottom: 12px;
+  left: 4px;
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--va-muted);
+  white-space: nowrap;
+}
+
+.va-tl-lane {
+  position: relative;
+  border-bottom: 1px solid var(--va-rule);
+}
+.va-tl-lane[data-muted] > .va-tl-clip {
+  opacity: 0.45;
+}
+
+.va-tl-scene,
+.va-tl-clip {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  border-radius: 4px;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+.va-tl-scene {
+  background: var(--va-raised);
+  border-left: 1px solid var(--va-rule);
+  border-right: 1px solid var(--va-rule);
+}
+.va-tl-clip {
+  color: var(--va-muted);
+  background: color-mix(in srgb, currentColor 14%, transparent);
+  outline-offset: -1px;
+}
+.va-tl-clip[data-tone='narration'] {
+  color: var(--tl-narration-ink);
+  cursor: grab;
+  touch-action: none;
+}
+.va-tl-clip[data-tone='music'] {
+  color: color-mix(in srgb, var(--va-accent) 50%, var(--va-muted));
+}
+.va-tl-clip[data-muted] {
+  background: color-mix(in srgb, currentColor 6%, transparent);
+}
+.va-tl-clip[data-selected] {
+  box-shadow: inset 0 0 0 2px currentColor;
+}
+.va-tl-clip:focus-visible {
+  outline: 2px solid var(--va-text);
+}
+.va-tl-wave {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  pointer-events: none;
+}
+.va-tl-clip-label {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  top: 2px;
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--va-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+.va-tl-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: ew-resize;
+}
+.va-tl-handle[data-part='start'] {
+  left: 0;
+}
+.va-tl-handle[data-part='end'] {
+  right: 0;
+}
+.va-tl-clip[data-selected] .va-tl-handle,
+.va-tl-clip:hover .va-tl-handle {
+  background: color-mix(in srgb, currentColor 45%, transparent);
+}
+
+.va-tl-duck {
+  position: absolute;
+  bottom: 3px;
+  height: 10px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--va-muted) 35%, transparent);
+  pointer-events: none;
+}
+.va-tl-past {
+  position: absolute;
+  top: var(--tl-ruler);
+  bottom: 0;
+  right: 0;
+  background: repeating-linear-gradient(
+    135deg,
+    transparent 0 6px,
+    color-mix(in srgb, var(--va-muted) 10%, transparent) 6px 12px
+  );
+  pointer-events: none;
+}
+.va-tl-range {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: color-mix(in srgb, var(--va-accent) 16%, transparent);
+  border-left: 1px solid var(--va-accent);
+  border-right: 1px solid var(--va-accent);
+  pointer-events: none;
+}
+.va-tl-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--va-negative);
+  pointer-events: none;
+  will-change: transform;
+}
+.va-tl-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
