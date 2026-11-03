@@ -57,12 +57,13 @@ export function pcmSha256(path: string): string {
     .digest('hex')
 }
 
-/** True peak (dBTP, 4× oversampled) and whole-take integrated loudness from ffmpeg's ebur128. */
+/** True peak (dBTP, 4× oversampled) and whole-file integrated loudness of the first audio stream, from ffmpeg's ebur128. */
 export function ebur128(
   path: string,
   ffmpeg = 'ffmpeg',
 ): { truePeakDb: number; integratedLufs: number | null } {
-  const err = ff(ffmpeg, ['-i', path, '-af', 'ebur128=peak=true:framelog=quiet', '-f', 'null', '-'])
+  // -vn: an MP4's picture isn't decoded just to be thrown away (mastering measures the final render with this).
+  const err = ff(ffmpeg, ['-i', path, '-vn', '-af', 'ebur128=peak=true:framelog=quiet', '-f', 'null', '-'])
   const summary = err.slice(err.lastIndexOf('Summary:'))
   const num = (re: RegExp) => {
     const m = re.exec(summary)?.[1]

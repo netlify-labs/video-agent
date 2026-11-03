@@ -864,6 +864,28 @@ export interface Manifest {
   width: number
   height: number
   tools?: Record<string, string>
+  /** Narrated renders only: the final mix's loudness before and after the master gain (scripts/lib/mastering.ts). */
+  mastering?: MasteringReport
+}
+
+/** Integrated loudness (null when ffmpeg measures -inf) and true peak of an MP4's audio, from ffmpeg ebur128. */
+export interface Loudness {
+  integratedLufs: number | null
+  truePeakDb: number
+}
+
+/**
+ * The master gain step (plan 2026-11-02 §6.3 step 7): `mastered` when the audio was re-encoded with `gainDb`,
+ * `within_target` when it already met -14 +/- 1 LUFS at <= -1 dBTP, `exempt` for silent or speechless mixes.
+ */
+export interface MasteringReport {
+  status: 'mastered' | 'within_target' | 'exempt'
+  before: Loudness
+  /** Re-measured after the re-encode; null when nothing was applied. */
+  after: Loudness | null
+  gainDb: number
+  /** peak_limited (target loudness not reachable under the ceiling), true_peak_over, loudness_off_target, silent, no_speech. */
+  warnings: string[]
 }
 
 export const OUTPUT_FILES = [

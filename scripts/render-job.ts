@@ -1,12 +1,13 @@
 // Run by the agent inside an Agent Runner run, after `hyperframes check` passes:
 //   npx tsx scripts/render-job.ts --job <id> --attempt <id> --callback <url> --token <t> --upload blobs
-// Renders video/, checks the file, makes the poster, GIF preview, captions and source archive (plus optional preview
+// Renders video/, checks the file, masters a narrated mix's loudness (scripts/lib/mastering.ts), makes the poster, GIF preview, captions and source archive (plus optional preview
 // variants: small WebP/AVIF posters, a placeholder and a hover clip), uploads everything to the uploads store under the attempt id, and notifies the service.
 // Reference files (the narration bus) stay out of source.tar.gz and are uploaded on their own (scripts/lib/references.ts).
 // Prints the manifest as a fenced json block on stdout. Logs JSON lines on stderr.
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { bundleManifest } from '../src/lib/bundle-manifest.js'
+import type { MasteringReport } from '../src/domain/types.js'
+import { bundleManifest, compositionFiles } from '../src/lib/bundle-manifest.js'
 import { validate, type Summary } from '../src/lib/contract.js'
 import { checkNarration } from '../src/lib/narration-guard.js'
 import { checkRevoiced, FROZEN_DIR } from '../src/lib/revoice.js'
@@ -15,6 +16,7 @@ import type { RunManifest } from '../src/lib/run-manifest.js'
 import { postCheckpoint } from './checkpoint.js'
 import { readNarrationReceipt } from './lib/narration-inputs.js'
 import { toVtt } from './lib/captions.js'
+import { MAX_AUTOMATION_POINTS, automationOverCap, master, narrationOf } from './lib/mastering.js'
 import { makePreviews, posterTime } from './lib/previews.js'
 import { uploadReferences } from './lib/references.js'
 import { RenderProgressReporter } from './lib/render-progress.js'
@@ -122,6 +124,16 @@ async function main() {
 
   // Recorded takes stay in .va-run/ (plan 2026-11-02 §6.3): nothing rendered, previewed or archived may hold one.
   assertNoTakesInVideo()
+  // HyperFrames keeps only the first 512 points of a lane and says nothing (docs/spikes.md S12): refuse long lanes.
+  const longLanes = compositionFiles(videoDir)
+    .filter((f) => f.endsWith('.html'))
+    .flatMap((f) =>
+      automationOverCap(readFileSync(join(videoDir, f), 'utf8')).map((l) => ({ file: f, ...l })),
+    )
+  if (longLanes.length)
+    throw new StepError(
+      `automation_over_cap: ${longLanes.map((l) => `${l.file} #${l.element} ${l.target} has ${l.points} points`).join('; ')}. Keep every data-automation lane at ${MAX_AUTOMATION_POINTS} points or fewer (HyperFrames silently drops points past 512).`,
+    )
   log('render.start', { quality: QUALITY })
   const video = join(out, 'video.mp4')
   // "Rendering N%" for the person watching, through the checkpoint endpoint (best effort, plan v2 §6 A2).
@@ -193,6 +205,16 @@ async function main() {
     codecs: audioCodecs,
     composed: wantsAudio,
   })
+
+  // Narrated renders only (plan 2026-11-02 §6.3 step 7): one master gain on the final mix, audio re-encoded, video
+  // packets copied. Every other video keeps the sound HyperFrames rendered.
+  const narration = narrationOf(indexHtml)
+  let mastering: MasteringReport | undefined
+  if (narration.narrated && audioCodecs.length) {
+    const t = Date.now()
+    mastering = master(video, { speech: narration.speech })
+    log('mastering', { ms: Date.now() - t, ...mastering })
+  }
 
   const posterAt = posterTime(durationSec)
   run('ffmpeg', [
@@ -292,6 +314,7 @@ async function main() {
             .map((s) => ({ name: s.name, reason: s.reason.slice(0, 300) })),
         }
       : {}),
+    ...(mastering ? { mastering } : {}),
     durationSec,
     width: stream.width,
     height: stream.height,
