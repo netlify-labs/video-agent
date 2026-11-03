@@ -82,6 +82,9 @@ const maxCredits = Number(env.MAX_CREDITS ?? 250)
 const perRender = Number(env.CREDITS_PER_RENDER ?? 34)
 const perLongRender = Number(env.LONG_RENDER_CREDITS ?? 70)
 const long = env.LONG === '1'
+// FIT=1 runs only the phase-5 gate (bead va-2qq.6.5): one fit-to-narration render, an authoring run.
+const fit = env.FIT === '1'
+const perFitRender = Number(env.FIT_CREDITS ?? 300)
 const longMinutes = (env.LONG_MINUTES ?? '4,10').split(',').map(Number)
 const longVideoIds = (env.LONG_VIDEO_IDS ?? '').split(',').filter(Boolean)
 const publishOk = env.VIDEO_PUBLISH_OK === '1'
@@ -91,16 +94,18 @@ const minPsnr = Number(env.MIN_PSNR ?? 80)
 const frameCount = Number(env.FRAMES ?? 12)
 const S = SAMPLE_RATE
 
-const renders = [
-  { name: 'keep-visuals, 3 clips', credits: perRender },
-  { name: 'silence-only take', credits: perRender },
-  ...(long
-    ? longMinutes.flatMap((m) => [
-        { name: `long ${m} min`, credits: perLongRender },
-        { name: `long ${m} min reopened`, credits: perLongRender },
-      ])
-    : []),
-]
+const renders = fit
+  ? [{ name: 'fit to narration', credits: perFitRender }]
+  : [
+      { name: 'keep-visuals, 3 clips', credits: perRender },
+      { name: 'silence-only take', credits: perRender },
+      ...(long
+        ? longMinutes.flatMap((m) => [
+            { name: `long ${m} min`, credits: perLongRender },
+            { name: `long ${m} min reopened`, credits: perLongRender },
+          ])
+        : []),
+    ]
 const projected = renders.reduce((a, r) => a + r.credits, 0)
 
 const STEPS = [
@@ -160,6 +165,7 @@ if (!selftest && (!base || !key))
   throw new Error('Set VIDEO_AGENT_URL and VIDEO_AGENT_KEY (or pass --dry or --selftest).')
 /** Ends a --selftest run through the same summary. */
 class SelfTestDone extends Error {}
+class FitDone extends Error {}
 
 interface Version {
   n: number
@@ -395,7 +401,7 @@ function guardCredits(next: { name: string; credits: number }) {
 async function render(
   videoId: string,
   draft: Edit,
-  opts: { holdFinalFrame?: boolean },
+  opts: { holdFinalFrame?: boolean; mode?: 'keep_visuals' | 'fit_to_narration' },
   budget: { name: string; credits: number },
 ) {
   guardCredits(budget)
@@ -403,7 +409,11 @@ async function render(
     key,
     'POST',
     `/api/v1/edits/${draft.id}/render`,
-    { mode: 'keep_visuals', captions: 'sidecar', ...(opts.holdFinalFrame ? { holdFinalFrame: true } : {}) },
+    {
+      mode: opts.mode ?? 'keep_visuals',
+      captions: 'sidecar',
+      ...(opts.holdFinalFrame ? { holdFinalFrame: true } : {}),
+    },
     { 'idempotency-key': crypto.randomUUID() },
   )
   check(r.status === 202, `${budget.name}: render`, { status: r.status, body: r.json })
@@ -434,9 +444,8 @@ async function render(
     status: v?.status,
     error: v?.error,
   })
-  check(v.mode === 'render_unchanged', `${budget.name}: a keep-visuals render is render_unchanged`, {
-    mode: v.mode,
-  })
+  const wantMode = opts.mode === 'fit_to_narration' ? 'author' : 'render_unchanged'
+  check(v.mode === wantMode, `${budget.name}: the version's mode is ${wantMode}`, { mode: v.mode })
   return v
 }
 async function fetchTo(url: string, name: string) {
@@ -679,6 +688,64 @@ try {
     step: 'upload',
   })
   created.media.push(upload.id)
+
+  // ── FIT=1: the phase-5 gate ──
+  if (fit) {
+    // Narration about 20% longer than the visuals: whole fixture blocks back to back, each with its beep, so the
+    // fitted video's audio can be checked sample by sample against where the narration was placed.
+    const fd = await draftOf(vid.id, bv.n)
+    const D = fd.composition.duration
+    const SKIP = Math.round(0.1 * S)
+    const GAP = Math.round(0.25 * S)
+    const len = fx.blockLen - SKIP
+    const fclips: { id: string; mediaId: string; srcStart: number; srcEnd: number; start: number }[] = []
+    for (let i = 0, at = Math.round(0.3 * S); at < 1.2 * D * S; i++, at += len + GAP) {
+      const k = i % 3
+      fclips.push({
+        id: `f${i + 1}`,
+        mediaId: upload.id,
+        srcStart: (fx.blocks[k] ?? 0) + SKIP,
+        srcEnd: (fx.blocks[k] ?? 0) + SKIP + len,
+        start: at,
+      })
+    }
+    const end = Math.max(...fclips.map((c) => c.start + (c.srcEnd - c.srcStart))) / S
+    const fop = narrationOp(fclips)
+    const fs = await saveDraft(key, fd, fd.rev, [fop, ...muteOthers(fd)])
+    check(fs.status === 200, 'fit: save the narration draft', { status: fs.status, body: fs.json })
+    log('fit_placed', {
+      visualsSec: D,
+      narrationEndSec: end,
+      clips: fclips.length,
+      ratio: +(end / D).toFixed(2),
+    })
+    check(end > D * 1.15, 'fit: the narration should run well past the visuals', { end, D })
+    const fv = await render(
+      vid.id,
+      fs.json,
+      { mode: 'fit_to_narration' },
+      renders[0] ?? { name: 'fit', credits: perFitRender },
+    )
+    check(fv.editedFromN === bv.n, 'fit: edited from the base', { editedFromN: fv.editedFromN })
+    const fmp4 = await fetchTo(fv.links.video, 'fit.mp4')
+    const fp = probe(fmp4.path)
+    const ffps = fpsOf(fp)
+    const got = Number(fp.format.duration)
+    // The frozen target is the narration's end + 0.5 s post-roll in whole frames (plan §6.4).
+    const want = Math.ceil((end + 0.5) * ffps) / ffps
+    log('fit_length', { want, got, visualsSec: D, fps: ffps })
+    check(got >= end, 'fit: the video must not cut the narration off', { got, end })
+    check(Math.abs(got - want) <= 2 / ffps + 0.05, 'fit: the beats total the frozen target', { got, want })
+    ok('fit: length is the narration end + post-roll', { got, want, visualsSec: D })
+    // The narration is locked: each block's beep is where it was placed, to the frame.
+    const fbeeps = fclips.map((c) => (c.start + fx.beepInBlock - SKIP) / S)
+    checkBeeps('fit', fmp4.path, fbeeps, ffps)
+    const fvtt = await fetchTo(fv.links.captions, 'fit.vtt')
+    const fcues = parseVtt(fvtt.text).filter((c) => c.id.startsWith('nc_'))
+    check(fcues.length > 0, 'fit: narration captions', { cues: fcues.length, status: fv.captions })
+    ok('fit: captions from the narration', { cues: fcues.length })
+    throw new FitDone()
+  }
 
   // ── draft: 3 clips, shuffled ──
   const d = await draftOf(vid.id, bv.n)
@@ -993,7 +1060,8 @@ try {
     }
   }
 } catch (e) {
-  if (!(e instanceof SelfTestDone)) failure = e instanceof Error ? e : new Error(String(e))
+  if (!(e instanceof SelfTestDone) && !(e instanceof FitDone))
+    failure = e instanceof Error ? e : new Error(String(e))
 } finally {
   try {
     for (const p of published) {
