@@ -13,6 +13,7 @@ import {
   useRef,
   useState,
   type KeyboardEvent,
+  type MouseEvent,
   type PointerEvent,
 } from 'react'
 import {
@@ -201,10 +202,6 @@ export function Timeline(props: TimelineProps) {
       p.onSelectClip(id)
       return
     }
-    if (e.key === 'Escape') {
-      p.onSelectClip(null)
-      return
-    }
     const result = { handled: false }
     p.onClipCommand?.({
       type: 'key',
@@ -219,6 +216,14 @@ export function Timeline(props: TimelineProps) {
       },
     })
     if (result.handled) e.preventDefault()
+    // Escape deselects unless the editor used it (to close its clip menu).
+    else if (e.key === 'Escape') p.onSelectClip(null)
+  }, [])
+  const onClipMenu = useCallback((id: string, e: MouseEvent<HTMLDivElement>) => {
+    const p = live.current
+    e.preventDefault()
+    if (p.selectedClipId !== id) p.onSelectClip(id)
+    p.onClipCommand?.({ type: 'menu', clipId: id, clientX: e.clientX, clientY: e.clientY })
   }, [])
 
   // ---- what's in the window
@@ -462,6 +467,7 @@ export function Timeline(props: TimelineProps) {
                   interactive
                   onPointer={onClipPointer}
                   onKey={onClipKey}
+                  {...(props.onClipCommand ? { onMenu: onClipMenu } : {})}
                 />
               )
             })}

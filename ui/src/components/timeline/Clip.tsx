@@ -1,9 +1,8 @@
 // One clip on a lane: a block placed by its start and length in composition samples, with its waveform drawn on a
 // canvas from the take's peaks pyramid. The canvas covers only the part of the clip inside the render window, so a
 // ten-minute clip at frame zoom never needs a canvas wider than a few viewports. Narration clips are focusable and
-// carry trim handles; their pointer and key events go to the editor through the timeline (va-2qq.5.2 adds the
-// commands).
-import { memo, useLayoutEffect, useRef, type KeyboardEvent, type PointerEvent } from 'react'
+// carry trim handles; their pointer, key and context-menu events go to the editor's commands through the timeline.
+import { memo, useLayoutEffect, useRef, type KeyboardEvent, type MouseEvent, type PointerEvent } from 'react'
 import type { Peaks } from '../../../../src/lib/peaks'
 import type { Span } from '../../../../src/lib/timeline'
 import { sampleToX, waveformColumns } from '../../lib/timeline-view'
@@ -42,6 +41,7 @@ export interface ClipProps {
     part: ClipPart,
   ) => void
   onKey?: (id: string, e: KeyboardEvent<HTMLDivElement>) => void
+  onMenu?: (id: string, e: MouseEvent<HTMLDivElement>) => void
 }
 
 const partOf = (target: EventTarget): ClipPart => {
@@ -68,6 +68,13 @@ export const Clip = memo(function Clip(p: ClipProps) {
         onPointerCancel: (e: PointerEvent<HTMLDivElement>) =>
           p.onPointer?.(p.id, e, 'cancel', partOf(e.target)),
         onKeyDown: (e: KeyboardEvent<HTMLDivElement>) => p.onKey?.(p.id, e),
+        ...(p.onMenu
+          ? {
+              'aria-haspopup': 'menu' as const,
+              'aria-keyshortcuts': 'S Delete ArrowLeft ArrowRight Shift+F10',
+              onContextMenu: (e: MouseEvent<HTMLDivElement>) => p.onMenu?.(p.id, e),
+            }
+          : {}),
       }
     : { 'aria-hidden': true }
   return (

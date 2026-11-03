@@ -54,6 +54,8 @@ export type ClipCommand =
       /** Call when the editor acted on the key; the timeline then prevents the browser's default for it. */
       handled: () => void
     }
+  /** A right-click (or long press) on a clip: open its menu at this viewport position. */
+  | { type: 'menu'; clipId: string; clientX: number; clientY: number }
 
 export interface TimelineProps {
   op: NarrationOp
