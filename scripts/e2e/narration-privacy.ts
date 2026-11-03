@@ -6,7 +6,9 @@
 //     [VIDEO_ID=vid_…] [GC_WAIT_MIN=5] [ALLOW_DELETE_UNUSED=1] npx tsx scripts/e2e/narration-privacy.ts
 //
 // Keys: VIDEO_AGENT_KEY is Creator A (owns the test video), VIDEO_AGENT_KEY_B is Creator B (a Creator, not an admin:
-// admins read every take), VIDEO_AGENT_KEY_R is a Reviewer. VIDEO_ID is a ready, editable video A owns (default: A's
+// admins read every take), VIDEO_AGENT_KEY_R is a Reviewer. Without VIDEO_AGENT_KEY_R, B also plays the Reviewer: A (who
+// must then be an admin) switches B's role to Reviewer for each Reviewer check and back to Creator after, and the
+// cleanup always puts B back to Creator. VIDEO_ID is a ready, editable video A owns (default: A's
 // newest ready one with an editable version). A private video is made visible for the run (B must be able to see it)
 // and put back at the end.
 //
@@ -51,7 +53,9 @@ import {
 } from './narration-lib.js'
 
 const keyB = process.env.VIDEO_AGENT_KEY_B ?? ''
-const keyR = process.env.VIDEO_AGENT_KEY_R ?? ''
+// One second account is enough: without a Reviewer key, B is switched to Reviewer (by admin A) for R's checks.
+const flip = !process.env.VIDEO_AGENT_KEY_R
+const keyR = process.env.VIDEO_AGENT_KEY_R || keyB
 const videoIdEnv = process.env.VIDEO_ID ?? ''
 const gcWaitMin = Number(process.env.GC_WAIT_MIN ?? 5)
 const allowDeleteUnused = process.env.ALLOW_DELETE_UNUSED === '1'
@@ -80,9 +84,9 @@ if (dry)
       VIDEO_AGENT_URL: process.env.VIDEO_AGENT_URL,
       VIDEO_AGENT_KEY: process.env.VIDEO_AGENT_KEY,
       VIDEO_AGENT_KEY_B: process.env.VIDEO_AGENT_KEY_B,
-      VIDEO_AGENT_KEY_R: process.env.VIDEO_AGENT_KEY_R,
     },
     optional: {
+      VIDEO_AGENT_KEY_R: process.env.VIDEO_AGENT_KEY_R, // unset: B is switched to Reviewer by admin A
       VIDEO_ID: process.env.VIDEO_ID,
       GC_WAIT_MIN: process.env.GC_WAIT_MIN,
       ALLOW_DELETE_UNUSED: process.env.ALLOW_DELETE_UNUSED,
@@ -91,14 +95,34 @@ if (dry)
     credits: { projected: 0, renders: 0, note: 'phase 1 renders nothing' },
     problems: Number.isFinite(gcWaitMin) && gcWaitMin > 0 ? [] : ['GC_WAIT_MIN must be a positive number'],
   })
-if (!base || !key || !keyB || !keyR)
+if (!base || !key || !keyB)
   throw new Error(
-    'Set VIDEO_AGENT_URL, VIDEO_AGENT_KEY, VIDEO_AGENT_KEY_B and VIDEO_AGENT_KEY_R (or pass --dry).',
+    'Set VIDEO_AGENT_URL, VIDEO_AGENT_KEY and VIDEO_AGENT_KEY_B, and VIDEO_AGENT_KEY_R or an admin A (or pass --dry).',
   )
 
 interface Me {
   id: string
   role: string
+}
+
+/** B's user id, for switching it to Reviewer and back (flip mode). */
+let bUserId = ''
+let bIsReviewer = false
+async function setB(role: 'reviewer' | 'creator') {
+  if (!flip || (role === 'reviewer') === bIsReviewer) return
+  const r = await call(key, 'PATCH', `/api/v1/users/${bUserId}`, { role })
+  check(r.status === 200, `switch B to ${role}`, { status: r.status, body: r.json })
+  bIsReviewer = role === 'reviewer'
+  log('role_switch', { user: bUserId, role })
+}
+/** Runs `f` with R's key acting as a Reviewer: B switched to Reviewer for it in flip mode. */
+async function asR<T>(f: () => Promise<T>): Promise<T> {
+  await setB('reviewer')
+  try {
+    return await f()
+  } finally {
+    await setB('creator')
+  }
 }
 interface Video {
   id: string
@@ -233,10 +257,16 @@ async function othersUnused() {
 let failure: GateError | Error | null = null
 try {
   // ── preflight ──
-  const [meA, meB, meR] = await Promise.all(
-    [key, keyB, keyR].map(async (k) => (await call<Me>(k, 'GET', '/api/v1/me')).json),
+  const [meA, meB] = await Promise.all(
+    [key, keyB].map(async (k) => (await call<Me>(k, 'GET', '/api/v1/me')).json),
   )
-  log('principals', { a: meA?.role, b: meB?.role, r: meR?.role })
+  bUserId = meB?.id ?? ''
+  if (flip)
+    check(meA?.role === 'admin', 'Without VIDEO_AGENT_KEY_R, A must be an admin (to switch B to Reviewer)', {
+      role: meA?.role,
+    })
+  const meR = await asR(async () => (await call<Me>(keyR, 'GET', '/api/v1/me')).json)
+  log('principals', { a: meA?.role, b: meB?.role, r: meR.role })
   check(meA?.role === 'creator' || meA?.role === 'admin', 'VIDEO_AGENT_KEY must be a Creator (or admin)', {
     role: meA?.role,
   })
@@ -247,10 +277,10 @@ try {
       role: meB?.role,
     },
   )
-  check(meR?.role === 'reviewer', 'VIDEO_AGENT_KEY_R must be a Reviewer', { role: meR?.role })
+  check(meR.role === 'reviewer', 'VIDEO_AGENT_KEY_R must be a Reviewer', { role: meR.role })
   check(
-    meA.id !== meB.id && meA.id !== meR.id && meB.id !== meR.id,
-    'A, B and R must be three different people',
+    meA.id !== meB.id && meA.id !== meR.id && (flip || meB.id !== meR.id),
+    flip ? 'A and B must be two different people' : 'A, B and R must be three different people',
   )
 
   let video: Video | undefined
@@ -266,7 +296,9 @@ try {
   check(n !== undefined, 'The video has no editable version', { videoId })
   log('video', { videoId, n, private: video.private })
 
-  for (const k of [key, keyB, keyR]) mcpHas.set(k, (await mcpTools(k)).includes('list_media'))
+  for (const k of [key, keyB]) mcpHas.set(k, (await mcpTools(k)).includes('list_media'))
+  const rHasListMedia = await asR(async () => (await mcpTools(keyR)).includes('list_media'))
+  if (!flip) mcpHas.set(keyR, rHasListMedia)
   log('mcp', {
     listMedia: { a: mcpHas.get(key), b: mcpHas.get(keyB), r: mcpHas.get(keyR) },
     note: 'a key without list_media skips the MCP path for that key (logged as skipped)',
@@ -320,7 +352,7 @@ try {
     ])
   for (const t of [take1, take2]) {
     await expectHidden(keyB, 'B', t, 'unused')
-    await expectHidden(keyR, 'R', t, 'unused')
+    await asR(() => expectHidden(keyR, 'R', t, 'unused'))
   }
 
   // ── used by A's draft: Creators who can see the video read it; Reviewers never ──
@@ -338,7 +370,7 @@ try {
   ok('draft saved with both takes', { draftId: d1.id, rev: s1.json.rev })
   for (const t of [take1, take2]) {
     await expectReadable(keyB, 'B', t, 'used', ['media', 'peaks', 'speech', 'recordings'])
-    await expectHidden(keyR, 'R', t, 'used')
+    await asR(() => expectHidden(keyR, 'R', t, 'used'))
   }
 
   // ── discard: references released ──
@@ -429,6 +461,8 @@ try {
   // ── cleanup ──
   const left: Record<string, unknown> = {}
   try {
+    // setB is a no-op unless B was left a Reviewer by a failure mid-check.
+    if (flip && bUserId) await setB('creator')
     for (const d of created.drafts) {
       const r = await call(key, 'DELETE', `/api/v1/edits/${d}`)
       log('cleanup_draft', { draftId: d, status: r.status })
