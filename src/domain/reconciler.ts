@@ -85,24 +85,29 @@ export async function lease(deps: Deps, attempt: AttemptRow, ms: number): Promis
   return ok ? { ...attempt, leaseUntil: until } : null
 }
 
+/** Leases an attempt and runs its next step (false if a sweep holds it); a failed step is retried in a minute. */
+async function leaseAndStep(deps: Deps, a: AttemptRow): Promise<boolean> {
+  const leased = await lease(deps, a, 2 * MIN)
+  if (!leased) return false
+  try {
+    await step(deps, leased)
+  } catch (e) {
+    deps.log.error('reconciler.step_failed', { attemptId: a.id, stage: a.stage, error: e })
+    await deps.store.updateAttempt(a.id, {
+      leaseUntil: null,
+      nextActionAt: iso(deps.clock.now().getTime() + MIN),
+    })
+  }
+  return true
+}
+
 export async function tick(deps: Deps, budget: TickBudget): Promise<{ claimed: number; processed: number }> {
   const claimed = await claimSlots(deps)
   let processed = 0
   const due = await deps.store.listDueAttempts(deps.clock.now().toISOString(), budget.maxItems)
   for (const a of due) {
     if (Date.now() > budget.deadline) break
-    const leased = await lease(deps, a, 2 * MIN)
-    if (!leased) continue
-    try {
-      await step(deps, leased)
-    } catch (e) {
-      deps.log.error('reconciler.step_failed', { attemptId: a.id, stage: a.stage, error: e })
-      await deps.store.updateAttempt(a.id, {
-        leaseUntil: null,
-        nextActionAt: iso(deps.clock.now().getTime() + MIN),
-      })
-    }
-    processed++
+    if (await leaseAndStep(deps, a)) processed++
   }
   if (processed > 0 || claimed > 0) await claimSlots(deps)
   return { claimed, processed }
@@ -480,17 +485,7 @@ export async function wakeMusicPick(deps: Deps, openverseJobId: string): Promise
   if (typeof attemptId !== 'string') return
   const a = await deps.store.getAttempt(attemptId)
   if (a?.stage !== 'finding_music') return
-  const leased = await lease(deps, a, 2 * MIN)
-  if (!leased) return
-  try {
-    await step(deps, leased)
-  } catch (e) {
-    deps.log.error('reconciler.step_failed', { attemptId: a.id, stage: a.stage, error: e })
-    await deps.store.updateAttempt(a.id, {
-      leaseUntil: null,
-      nextActionAt: iso(deps.clock.now().getTime() + MIN),
-    })
-  }
+  await leaseAndStep(deps, a)
 }
 
 async function poll(deps: Deps, a: AttemptRow): Promise<void> {
