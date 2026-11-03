@@ -1,12 +1,19 @@
 // Mock mode only (/dev/recorder): drives the voice-over recorder (ui/src/recorder) on its own, for development and
-// the Playwright spec, which supplies the mic through window.__vaTestMic. Never in production builds: App.tsx mounts
-// it only when VITE_MOCK is set.
+// the Playwright spec, which supplies the mic through window.__vaTestMic. ?user= sets the owner (so the spec can switch
+// accounts); unsaved takes for that user are offered on load. Never in production builds: App.tsx mounts it only when
+// VITE_MOCK is set.
 import { Button, Code, Group, Stack, Text, Title } from '@mantine/core'
 import { useRef, useState } from 'react'
 import { SAMPLE_RATE } from '../../../src/lib/timeline'
 import { createRecorder, type RecordedTake, type Recorder } from '../recorder/recorder'
+import { RecoveryPrompt } from '../recorder/RecoveryPrompt'
+import { useRecordingRecovery } from '../recorder/recovery'
+
+const DRAFT = 'draft_demo'
 
 export default function RecorderDemo() {
+  const [userId] = useState(() => new URLSearchParams(window.location.search).get('user') ?? 'usr_demo')
+  const recovery = useRecordingRecovery(userId, DRAFT)
   const rec = useRef<Recorder | null>(null)
   const [phase, setPhase] = useState<'idle' | 'opening' | 'recording' | 'stopping'>('idle')
   const [level, setLevel] = useState(0)
@@ -21,7 +28,7 @@ export default function RecorderDemo() {
     try {
       const r = await createRecorder({
         echoCancellation: false,
-        owner: { userId: 'demo', draftId: null, expectedRev: null, scopeJobId: null },
+        owner: { userId, draftId: DRAFT, expectedRev: 1, scopeJobId: 'vid_teaser' },
         onLevel: (l) => setLevel(l.peak),
         onProgress: (p) => setCaptured(p.samples),
       })
@@ -34,15 +41,18 @@ export default function RecorderDemo() {
     }
   }
 
+  const show = (t: RecordedTake) => {
+    // For the spec: the WAV itself, so it can hash it independently.
+    ;(window as unknown as { __vaTake?: RecordedTake }).__vaTake = t
+    setTake(t)
+  }
+
   const stop = async () => {
     const r = rec.current
     if (!r) return
     setPhase('stopping')
     try {
-      const t = await r.stop()
-      // For the spec: the WAV itself, so it can hash it independently.
-      ;(window as unknown as { __vaTake?: RecordedTake }).__vaTake = t
-      setTake(t)
+      show(await r.stop())
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
@@ -55,9 +65,14 @@ export default function RecorderDemo() {
       <div>
         <Title order={1}>Recorder</Title>
         <Text size="sm" c="var(--va-muted)">
-          The voice-over recorder on its own (mock data).
+          The voice-over recorder on its own (mock data), as {userId}.
         </Text>
       </div>
+      <RecoveryPrompt
+        takes={recovery.takes}
+        onRecover={async (t) => show((await recovery.recover(t.id)).take)}
+        onDiscard={(t) => recovery.discard(t.id)}
+      />
       <Group>
         <Button onClick={() => void record()} disabled={phase !== 'idle'}>
           Record

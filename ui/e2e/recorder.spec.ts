@@ -65,3 +65,38 @@ test('recorder: record and stop gives a 24 kHz PCM16 WAV whose hash, peaks and s
   })
   expect(check).toEqual({ sha256: t.sha256, rate: 24_000, channels: 1, bits: 16 })
 })
+
+test('recovery: a reload mid-take offers the take to its owner only, and Recover brings it back', async ({
+  page,
+}) => {
+  await page.goto('/dev/recorder?user=usr_a')
+  await page.getByRole('button', { name: 'Record' }).click()
+  await expect(page.getByText(/captured [2-9]\.\d s/)).toBeVisible({ timeout: 10_000 })
+  // The tab goes away mid-take.
+  await page.reload()
+  const prompt = page.getByTestId('recovery-prompt')
+  await expect(prompt).toContainText('An unsaved recording')
+  await expect(prompt).toContainText('recording was interrupted')
+
+  // Another account on this browser is never offered it.
+  await page.goto('/dev/recorder?user=usr_b')
+  await expect(page.getByText('as usr_b')).toBeVisible()
+  await expect(page.getByTestId('recovery-prompt')).toHaveCount(0)
+
+  await page.goto('/dev/recorder?user=usr_a')
+  await page.getByTestId('recovery-prompt').getByRole('button', { name: /^Recover/ }).click()
+  await expect(page.getByTestId('recorder-take')).toBeVisible()
+  const t = await takeInfo(page)
+  expect(t.samples % 12_000).toBe(0) // whole chunks: up to the last one saved
+  expect(t.samples).toBeGreaterThanOrEqual(24_000)
+  expect(t.bytes).toBe(44 + 2 * t.samples)
+  await expect(page.getByTestId('recovery-prompt')).toHaveCount(0)
+
+  // Discard clears it for good.
+  await page.reload()
+  await page.getByTestId('recovery-prompt').getByRole('button', { name: /^Discard/ }).click()
+  await expect(page.getByTestId('recovery-prompt')).toHaveCount(0)
+  await page.reload()
+  await expect(page.getByText('as usr_a')).toBeVisible()
+  await expect(page.getByTestId('recovery-prompt')).toHaveCount(0)
+})
