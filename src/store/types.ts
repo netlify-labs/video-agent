@@ -361,6 +361,15 @@ export interface Repo {
     since: string,
   ): Promise<{ userId: string; week: string; credits: number | null; videos: number }[]>
   failuresSince(since: string): Promise<{ category: string; count: number }[]>
+
+  // narration take budgets (voice-over plan §8)
+  /**
+   * Bytes of the person's narration takes (media role narration-*) that are stored or being checked: uploading,
+   * verifying or ready. Rows GC has marked deleting count as freed.
+   */
+  narrationTakeBytes(uploaderId: string): Promise<number>
+  /** The person's narration takes created at or after `since` (for the take upload rate limit). */
+  countNarrationTakes(uploaderId: string, since: string): Promise<number>
 }
 
 export interface Store extends Repo {

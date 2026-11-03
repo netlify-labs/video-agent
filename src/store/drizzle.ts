@@ -1302,6 +1302,37 @@ function repoFor(db: Db): Repo {
           .where(and(gte(t.attempts.endedAt, since), sql`${t.attempts.errorCategory} is not null`))
           .groupBy(t.attempts.errorCategory)
       ).map((r) => ({ category: r.category ?? 'unknown', count: r.count })),
+
+    narrationTakeBytes: async (uploaderId) => {
+      const m = t.media
+      const rows = await db
+        // bigint sums come back as strings from Postgres.
+        .select({ total: sql<string | number>`coalesce(sum(${m.bytes}), 0)::bigint` })
+        .from(m)
+        .where(
+          and(
+            eq(m.uploaderId, uploaderId),
+            inArray(m.role, ['narration-take', 'narration-upload']),
+            sql`${m.status} <> 'rejected'`,
+            isNull(m.deletingAt),
+          ),
+        )
+      return Number(rows[0]?.total ?? 0)
+    },
+    countNarrationTakes: async (uploaderId, since) => {
+      const m = t.media
+      const rows = await db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(m)
+        .where(
+          and(
+            eq(m.uploaderId, uploaderId),
+            inArray(m.role, ['narration-take', 'narration-upload']),
+            gte(m.createdAt, since),
+          ),
+        )
+      return rows[0]?.n ?? 0
+    },
   }
 }
 

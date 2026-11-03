@@ -9333,8 +9333,18 @@
               }
             }
           },
+          "413": {
+            "description": "Recordings storage full (details: quotaBytes, usedBytes, remainingBytes)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "429": {
-            "description": "Too many uploads in progress",
+            "description": "Too many uploads in progress, or too many recordings this hour",
             "content": {
               "application/json": {
                 "schema": {
@@ -9747,6 +9757,16 @@
           },
           "409": {
             "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Recordings storage full (details: quotaBytes, usedBytes, remainingBytes)",
             "content": {
               "application/json": {
                 "schema": {

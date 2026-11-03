@@ -1231,7 +1231,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
       responses: {
         201: json(s.UploadSessionSchema, 'Session'),
         ...errors,
-        429: err('Too many uploads in progress'),
+        413: err('Recordings storage full (details: quotaBytes, usedBytes, remainingBytes)'),
+        429: err('Too many uploads in progress, or too many recordings this hour'),
       },
     }),
     async (c) => c.json(await createUpload(deps, c.get('principal'), c.req.valid('json')), 201),
@@ -1311,7 +1312,11 @@ export function createApp(deps: Deps, opts: AppOptions) {
           required: false,
         },
       },
-      responses: { 202: json(s.UploadSessionSchema, 'Assembling'), ...errors },
+      responses: {
+        202: json(s.UploadSessionSchema, 'Assembling'),
+        ...errors,
+        413: err('Recordings storage full (details: quotaBytes, usedBytes, remainingBytes)'),
+      },
     }),
     async (c) => {
       const body = (await c.req.json().catch(() => ({}))) as { poster?: string }

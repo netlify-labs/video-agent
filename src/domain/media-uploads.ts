@@ -2,17 +2,22 @@
 // sends parts of at most 4 MB (each with its own sha256), and completes. Assembly runs in a background function given
 // only the session id: it joins the parts, checks the whole hash, verifies the file (MP4 checks included) and makes
 // the library item ready, or rejected with the reason. Sessions are bound to their uploader, expire, and reserve
-// quota when they're created.
+// quota when they're created. Narration takes have budgets of their own (voice-over plan §8): stored bytes per person
+// (the takeQuotaBytes setting) and a rate limit, checked at create and again at complete.
 import type { Deps } from '../deps.js'
 import { sha256Hex } from '../lib/crypto.js'
 import { ApiError } from '../lib/errors.js'
 import { classify, LIMITS, MediaError } from '../lib/media/classify.js'
 import { mediaDto, storeMedia } from './media.js'
+import { narrationSettings } from './narration-settings.js'
 import { assertCan, type Principal } from './policy.js'
-import { NO_PROVENANCE, type MediaRow, type MediaUploadRow } from './types.js'
+import { NO_PROVENANCE, type MediaRole, type MediaRow, type MediaUploadRow } from './types.js'
+import type { Repo } from '../store/types.js'
 
 export const PART_SIZE = 4 * 1024 * 1024
 export const UPLOAD_QUOTA_BYTES = 1024 * 1024 * 1024
+/** Take uploads each person may start in an hour (voice-over plan §8). */
+export const TAKE_UPLOADS_PER_HOUR = 30
 const SESSION_TTL_MS = 24 * 3600_000
 const ASSEMBLY_LEASE_MS = 15 * 60_000
 const POSTER_MAX = 512 * 1024
@@ -35,10 +40,70 @@ function sessionDto(u: MediaUploadRow, uploaded: number[]) {
   }
 }
 
+export const isTakeRole = (role: string | null | undefined): role is MediaRole =>
+  role === 'narration-take' || role === 'narration-upload'
+
+/**
+ * The take role a session was started with. Sessions don't store one yet (va-2qq.2.6 adds media_uploads.role and
+ * the create body's `role`); until then this is null and no session is held to the take budgets.
+ */
+const sessionRole = (u: MediaUploadRow): MediaRole | null => (u as { role?: MediaRole | null }).role ?? null
+
+const sizeLabel = (n: number) =>
+  n >= 1024 ** 3 ? `${(n / 1024 ** 3).toFixed(1)} GB` : `${Math.max(0, Math.round(n / 1024 ** 2))} MB`
+
+/**
+ * The person's storage for narration takes once `incomingBytes` more are added: ready and in-flight takes count, and
+ * takes GC is deleting count as freed. Refuses with 413 quota_exceeded, and the bytes left, when they don't fit.
+ */
+export async function quotaForTakes(
+  deps: Pick<Deps, 'store' | 'log'>,
+  userId: string,
+  incomingBytes: number,
+  repo: Repo = deps.store,
+) {
+  const { takeQuotaBytes } = await narrationSettings(deps)
+  const bytes = await repo.narrationTakeBytes(userId)
+  const quota = {
+    quotaBytes: takeQuotaBytes,
+    usedBytes: bytes,
+    remainingBytes: Math.max(0, takeQuotaBytes - bytes),
+  }
+  if (bytes + incomingBytes > takeQuotaBytes) {
+    deps.log.warn('media.take_quota_exceeded', { userId, incomingBytes, ...quota })
+    throw new ApiError(
+      'quota_exceeded',
+      `Your recordings have ${sizeLabel(quota.remainingBytes)} of ${sizeLabel(takeQuotaBytes)} left, not enough for this one (${sizeLabel(incomingBytes)}). Delete unused recordings to make room.`,
+      { ...quota, incomingBytes },
+    )
+  }
+  return { ...quota, remainingBytes: takeQuotaBytes - bytes - incomingBytes }
+}
+
+/** At most TAKE_UPLOADS_PER_HOUR take uploads per person in any hour. */
+async function assertTakeRate(deps: Pick<Deps, 'store' | 'log' | 'clock'>, userId: string, repo: Repo) {
+  const since = new Date(deps.clock.now().getTime() - 3600_000).toISOString()
+  const started = await repo.countNarrationTakes(userId, since)
+  if (started >= TAKE_UPLOADS_PER_HOUR) {
+    deps.log.warn('media.take_rate_limited', { userId, started })
+    throw new ApiError(
+      'rate_limited',
+      `You've uploaded ${TAKE_UPLOADS_PER_HOUR} recordings in the last hour. Wait a little, then try again.`,
+    )
+  }
+}
+
 export async function createUpload(
   deps: Deps,
   p: Principal,
-  input: { filename: string; size: number; sha256: string; caption?: string | undefined },
+  input: {
+    filename: string
+    size: number
+    sha256: string
+    caption?: string | undefined
+    /** A narration take (not yet accepted by the API: va-2qq.2.6); takes are held to the take budgets. */
+    role?: MediaRole | null | undefined
+  },
 ) {
   assertCan(p, 'media:upload')
   if (!Number.isInteger(input.size) || input.size <= 0)
@@ -55,6 +120,10 @@ export async function createUpload(
         'rate_limited',
         'You have too many uploads in progress. Finish or wait for them first.',
       )
+    if (isTakeRole(input.role)) {
+      await assertTakeRate(deps, p.userId, repo)
+      await quotaForTakes(deps, p.userId, input.size, repo)
+    }
     const now = deps.clock.now()
     const row: MediaUploadRow = {
       id: `upl_${deps.ids.uuid().replaceAll('-', '').slice(0, 24)}`,
@@ -158,6 +227,9 @@ export async function completeUpload(
   const started = await deps.store.tx(async (repo) => {
     const u = await repo.getUpload(id, { lock: true })
     if (!u || u.status !== 'open') return false
+    // Other takes may have finished since this one started; check the quota again with its bytes.
+    const role = sessionRole(u)
+    if (isTakeRole(role)) await quotaForTakes(deps, u.uploaderId, u.size, repo)
     const now = deps.clock.now()
     const mediaId = `med_${deps.ids.uuid().replaceAll('-', '').slice(0, 24)}`
     // Visible to the uploader as "being checked" until assembly finishes.
@@ -184,7 +256,7 @@ export async function completeUpload(
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
       deletedAt: null,
-      role: null,
+      role,
       scopeJobId: null,
       retainUntil: null,
       deletingAt: null,

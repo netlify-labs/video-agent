@@ -4432,7 +4432,16 @@ export interface paths {
                         "application/json": components["schemas"]["Error"];
                     };
                 };
-                /** @description Too many uploads in progress */
+                /** @description Recordings storage full (details: quotaBytes, usedBytes, remainingBytes) */
+                413: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Too many uploads in progress, or too many recordings this hour */
                 429: {
                     headers: {
                         [name: string]: unknown;
@@ -4778,6 +4787,15 @@ export interface paths {
                 };
                 /** @description Conflict or not ready */
                 409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Recordings storage full (details: quotaBytes, usedBytes, remainingBytes) */
+                413: {
                     headers: {
                         [name: string]: unknown;
                     };

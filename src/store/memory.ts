@@ -1003,6 +1003,15 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
       }
       return [...counts].map(([category, count]) => ({ category, count }))
     },
+
+    narrationTakeBytes: async (uploaderId) =>
+      [...state.media.values()]
+        .filter((m) => m.uploaderId === uploaderId && isTake(m) && m.status !== 'rejected' && !m.deletingAt)
+        .reduce((n, m) => n + m.bytes, 0),
+    countNarrationTakes: async (uploaderId, since) =>
+      [...state.media.values()].filter(
+        (m) => m.uploaderId === uploaderId && isTake(m) && m.createdAt >= since,
+      ).length,
   }
 
   const store = {
@@ -1077,3 +1086,5 @@ function pickProvenance(
     attribution: m.attribution,
   }
 }
+
+const isTake = (m: MediaRow) => m.role === 'narration-take' || m.role === 'narration-upload'

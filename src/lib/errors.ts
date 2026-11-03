@@ -7,6 +7,7 @@ export type ErrorCode =
   | 'conflict'
   | 'take_deleted'
   | 'gone'
+  | 'quota_exceeded'
   | 'rate_limited'
   | 'upstream_error'
   | 'setup_required'
@@ -23,6 +24,7 @@ const STATUS: Record<ErrorCode, number> = {
   conflict: 409,
   take_deleted: 409,
   gone: 410,
+  quota_exceeded: 413,
   rate_limited: 429,
   upstream_error: 502,
   setup_required: 503,
