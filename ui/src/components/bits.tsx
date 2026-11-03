@@ -58,33 +58,6 @@ export function Status({ status, size = 'sm' }: { status: Video['status']; size?
   )
 }
 
-const TRACK = ['queued', 'running', 'finishing', 'ready'] as const
-
-/** Where a version is: four steps in the data hue (queued, making, saving, ready). Finding music is part of making. */
-export function StageTrack({ version }: { version: Pick<Version, 'status'> & { stage?: Version['stage'] } }) {
-  const i = TRACK.indexOf(version.status as (typeof TRACK)[number])
-  const music = version.stage === 'finding_music' && version.status === 'running'
-  return (
-    <div
-      className="va-track"
-      role="img"
-      aria-label={`Stage: ${music ? 'Finding music' : STATUS_WORD[version.status]}`}
-      {...(music ? { 'data-stage': 'finding_music' } : {})}
-    >
-      {TRACK.map((s, n) => (
-        <span
-          key={s}
-          {...(n < i || version.status === 'ready'
-            ? { 'data-done': true }
-            : n === i
-              ? { 'data-now': true }
-              : {})}
-        />
-      ))}
-    </div>
-  )
-}
-
 /** The product's mark: a frame with a play notch, in the brand hue. */
 export function Mark({ size = 22 }: { size?: number }) {
   return (

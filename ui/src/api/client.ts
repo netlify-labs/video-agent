@@ -45,7 +45,6 @@ export type Video = NonNullable<
   paths['/api/v1/videos/{id}']['get']['responses'][200]['content']['application/json']
 >
 export type Version = Video['versions'][number]
-export type Publication = Version['publications'][number]
 export type Stats = paths['/api/v1/stats']['get']['responses'][200]['content']['application/json']
 
 export interface ApiErrorBody {

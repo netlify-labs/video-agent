@@ -293,23 +293,6 @@ body {
   margin-top: 8px;
 }
 
-/* Stage track: the one element in the data hue. Progress through queued → making → saving → ready. */
-.va-track {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 4px;
-}
-.va-track span {
-  height: 4px;
-  border-radius: 2px;
-  background: var(--va-raised);
-}
-.va-track span[data-done] {
-  background: var(--va-accent);
-}
-.va-track span[data-now] {
-  background: color-mix(in srgb, var(--va-accent) 55%, var(--va-raised));
-}
 .va-dot {
   display: inline-block;
   width: 8px;

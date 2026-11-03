@@ -58,5 +58,3 @@ export function createLogger(
     child: (fields) => createLogger({ ...base, ...fields }, sink),
   }
 }
-
-export const silentLogger: Logger = createLogger({}, () => undefined)

@@ -6,13 +6,7 @@ import { licenseLabel, safeUrl, type RunCredit } from '../lib/openverse-rules.js
 import type { MediaProvenance, MediaRow, VersionProvenanceRow, VersionRow } from './types.js'
 
 // The licence helpers are shared with the Openverse search and the run's helper script; re-exported for callers here.
-export {
-  IMPORT_LICENSES,
-  isImportLicense,
-  licenseLabel,
-  safeUrl,
-  type ImportLicense,
-} from '../lib/openverse-rules.js'
+export { licenseLabel, safeUrl } from '../lib/openverse-rules.js'
 
 export interface Credit {
   /** The library item, or null for a file the run fetched from Openverse itself. */

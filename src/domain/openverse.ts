@@ -379,16 +379,10 @@ export async function storedSearch(deps: Deps, req: SearchRequest): Promise<Fetc
 export const isStale = (deps: Pick<Deps, 'clock'>, fetchedAt: string) =>
   Date.parse(fetchedAt) < now(deps) - SEARCH_FRESH_MS
 
-/** One search page from Openverse, through a short cache that keeps repeats (and paging back) inside its rate limits. */
-export async function fetchSearch(
-  deps: Deps,
-  req: SearchRequest,
-  opts: CallOpts = SYNC_CALL,
-): Promise<SearchPage> {
-  return (await fetchSearchAt(deps, req, opts)).page
-}
-
-/** fetchSearch with when the page was fetched. Every answer from Openverse is also stored for every instance. */
+/**
+ * One search page from Openverse and when it was fetched, through a short cache that keeps repeats (and paging back)
+ * inside its rate limits. Every answer from Openverse is also stored for every instance.
+ */
 export async function fetchSearchAt(
   deps: Deps,
   req: SearchRequest,
@@ -430,12 +424,6 @@ export async function withLibrary(
     fetchedAt: meta.fetchedAt,
     stale: meta.stale,
   }
-}
-
-export async function searchOpenverse(deps: Deps, p: Principal, q: SearchQuery, opts: CallOpts = SYNC_CALL) {
-  assertCan(p, 'media:upload')
-  const r = await fetchSearchAt(deps, searchRequest(q), opts)
-  return withLibrary(deps, r.page, { fetchedAt: r.fetchedAt, stale: false })
 }
 
 /** Downloads a file: https only, at most 3 redirects, a size cap and a deadline. */
