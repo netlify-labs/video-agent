@@ -18,6 +18,7 @@ import { uploadReferences } from './lib/references.js'
 import { RenderProgressReporter } from './lib/render-progress.js'
 import {
   StepError,
+  assertNoTakesInVideo,
   log,
   netlifyCli,
   parseArgs,
@@ -104,6 +105,8 @@ async function main() {
     }
   }
 
+  // Recorded takes stay in .va-run/ (plan 2026-11-02 §6.3): nothing rendered, previewed or archived may hold one.
+  assertNoTakesInVideo()
   log('render.start', { quality: QUALITY })
   const video = join(out, 'video.mp4')
   // "Rendering N%" for the person watching, through the checkpoint endpoint (best effort, plan v2 §6 A2).

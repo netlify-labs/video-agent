@@ -1,10 +1,12 @@
 // Helpers shared by render-job.ts and prepare-run.ts (run inside Agent Runner runs).
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { archiveFiles } from '../../src/lib/bundle-manifest.js'
+import { NARRATION_SRC } from '../../src/lib/contract.js'
+import { NARRATION_RUN_DIR, narrationPaths, readNarrationInputs } from './narration-inputs.js'
 
 export const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
 
@@ -21,6 +23,7 @@ export class StepError extends Error {}
  * disagree about what a composition is.
  */
 export function videoTarArgs(out: string): string[] {
+  assertNoTakesInVideo()
   const list = `${out}.files`
   writeFileSync(
     list,
@@ -33,6 +36,65 @@ export function videoTarArgs(out: string): string[] {
 
 export function sha256File(path: string): string {
   return createHash('sha256').update(readFileSync(path)).digest('hex')
+}
+
+/**
+ * Raw narration takes never enter video/ (plan 2026-11-02 §6.3): prepare-run hydrates them into .va-run/narration/,
+ * outside it, and this refuses a video/ that holds a byte-identical copy of one anyway (a stored original, its
+ * hydrated WAV or a clean copy) or a link into .va-run/. Files are compared by size first, so only same-size files
+ * are hashed. The bus is exempt when it is the one narration.ts wrote (its receipt digest): a bypassed single-clip
+ * bus can equal its take, and the bus is meant to be shared. render-job and every archive (videoTarArgs) call it.
+ */
+export function assertNoTakesInVideo(root = repoRoot): void {
+  const p = narrationPaths(root)
+  if (!existsSync(p.dir)) return
+  const bySize = new Map<number, Set<string>>()
+  const forbid = (bytes: number, sha: string) => bySize.set(bytes, (bySize.get(bytes) ?? new Set()).add(sha))
+  for (const t of readNarrationInputs(root)?.takes ?? []) forbid(t.bytes, t.sha256)
+  const walk = (d: string, each: (full: string) => void) => {
+    if (existsSync(d))
+      for (const name of readdirSync(d).sort()) {
+        const full = join(d, name)
+        const st = lstatSync(full)
+        if (st.isDirectory()) walk(full, each)
+        else each(full)
+      }
+  }
+  for (const d of [p.fetch, p.src, p.clean])
+    walk(d, (f) => {
+      if (lstatSync(f).isFile()) forbid(lstatSync(f).size, sha256File(f))
+    })
+  let busSha: string | undefined
+  try {
+    busSha = (JSON.parse(readFileSync(p.receipt, 'utf8')) as { bus?: { sha256?: string } }).bus?.sha256
+  } catch {
+    busSha = undefined
+  }
+  const runDir = realpathSync(p.dir)
+  const video = join(root, 'video')
+  const bad: string[] = []
+  const check = (d: string) => {
+    if (!existsSync(d)) return
+    for (const name of readdirSync(d).sort()) {
+      const full = join(d, name)
+      const rel = relative(video, full).split(sep).join('/')
+      const st = lstatSync(full)
+      if (st.isSymbolicLink()) {
+        const target = existsSync(full) ? realpathSync(full) : null // dangling: nothing to copy
+        if (target && (target === runDir || target.startsWith(runDir + sep))) bad.push(rel)
+      } else if (st.isDirectory()) {
+        if (name !== 'node_modules') check(full)
+      } else if (st.isFile() && bySize.has(st.size)) {
+        const sha = sha256File(full)
+        if (bySize.get(st.size)?.has(sha) && !(rel === NARRATION_SRC && sha === busSha)) bad.push(rel)
+      }
+    }
+  }
+  check(video)
+  if (bad.length)
+    throw new StepError(
+      `video/ holds a copy of a recorded narration take: ${bad.map((b) => `video/${b}`).join(', ')}. Raw takes stay in ${NARRATION_RUN_DIR}/ and must never be archived or previewed. Delete the copy, then try again.`,
+    )
 }
 
 export function which(cmd: string): string | null {

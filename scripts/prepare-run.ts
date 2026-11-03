@@ -4,20 +4,35 @@
 // Only keys inside it are followed. Revisions restore the parent's source archive; render-unchanged runs restore
 // a frozen bundle and verify its canonical file manifest (keeping copies of the files a re-voice may rewrite), each
 // with its reference files (the narration bus) fetched by key and checked; incorporate-feedback runs also get one still per pinned
-// comment in video/feedback/, and library media is downloaded into video/assets/media/. Never falls back to the template: on any failure it
+// comment in video/feedback/, and library media is downloaded into video/assets/media/. Recorded narration's takes are
+// hydrated into .va-run/narration/ (outside video/: never archived, checkpointed or previewed; scripts/narration.ts
+// mixes them). Never falls back to the template: on any failure it
 // exits non-zero and the agent must stop. Writes the verified manifest to .render/run-manifest.json for render-job.
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs'
+import { dirname, join, relative } from 'node:path'
 import { bundleManifest } from '../src/lib/bundle-manifest.js'
 import type { BundleReference } from '../src/lib/bundle-references.js'
 import { FROZEN_DIR, FROZEN_FILES, keptHash } from '../src/lib/revoice.js'
+import { readPcm16 } from '../src/lib/narration-cleanup.js'
 import {
   feedbackStillPath,
   runManifestKey,
   verifyRunManifest,
   type FeedbackPin,
+  type FrozenNarration,
   type RunManifest,
 } from '../src/lib/run-manifest.js'
+import { MAX_OUTPUT_SAMPLES, SAMPLE_RATE } from '../src/lib/timeline.js'
+import { narrationPaths, type HydratedTake, type NarrationInputs } from './lib/narration-inputs.js'
 import {
   StepError,
   log,
@@ -167,6 +182,161 @@ export function probeAudio(path: string, name: string) {
     throw new StepError(`Audio ${name} is longer than 10 minutes. Stop and report this.`)
 }
 
+/**
+ * ffprobe of a take: whether it already is what the run mixes (24 kHz mono PCM16 WAV, as the recorder uploads), or
+ * at least has audio within the 15-minute output limit to decode.
+ */
+export function probeTake(path: string, mediaId: string): { pcm16: boolean } {
+  let info: {
+    streams?: { codec_type?: string; codec_name?: string; sample_rate?: string; channels?: number }[]
+    format?: { format_name?: string; duration?: string }
+  }
+  try {
+    info = JSON.parse(
+      run(
+        'ffprobe',
+        [
+          '-v',
+          'error',
+          '-show_entries',
+          'stream=codec_type,codec_name,sample_rate,channels:format=format_name,duration',
+          '-of',
+          'json',
+          path,
+        ],
+        { timeoutMs: 60_000 },
+      ),
+    ) as typeof info
+  } catch (e) {
+    throw new StepError(
+      `Narration take ${mediaId} can't be read (${e instanceof Error ? e.message.slice(0, 200) : 'ffprobe failed'}). Stop and report this.`,
+    )
+  }
+  const audio = info.streams?.filter((s) => s.codec_type === 'audio') ?? []
+  if (!audio.length)
+    throw new StepError(`Narration take ${mediaId} has no audio stream. Stop and report this.`)
+  if (Number(info.format?.duration) > MAX_OUTPUT_SAMPLES / SAMPLE_RATE + 0.5)
+    throw new StepError(`Narration take ${mediaId} is longer than 15 minutes. Stop and report this.`)
+  const [a] = audio
+  return {
+    pcm16:
+      audio.length === 1 &&
+      info.streams?.length === 1 &&
+      info.format?.format_name === 'wav' &&
+      a?.codec_name === 'pcm_s16le' &&
+      Number(a.sample_rate) === SAMPLE_RATE &&
+      a.channels === 1,
+  }
+}
+
+/**
+ * Recorded narration's takes (plan 2026-11-02 §6.3 "Run inputs"): each fetched by key from the media store like
+ * library media, checked against its frozen sha256 and size, then put in .va-run/narration/src/<mediaId>.wav as
+ * 24 kHz mono PCM16 (a recording as it is; any other upload decoded with ffmpeg, single-threaded and bitexact). Never
+ * under video/. Writes .va-run/narration/manifest.json for scripts/narration.ts. A run without narration gets no
+ * .va-run/narration/ at all, so a stale one from an earlier attempt can't be mixed.
+ */
+export async function hydrateNarration(
+  root: string,
+  m: Pick<RunManifest, 'jobId' | 'attemptId'>,
+  n: FrozenNarration | undefined,
+  fetch: Fetch,
+): Promise<NarrationInputs | null> {
+  const p = narrationPaths(root)
+  rmSync(p.dir, { recursive: true, force: true })
+  if (!n) return null
+  const started = Date.now()
+  for (const d of [p.fetch, p.src]) mkdirSync(d, { recursive: true })
+  const takes: HydratedTake[] = []
+  for (const t of n.takes) {
+    const ext = /\.([a-z0-9]{2,5})$/.exec(t.key)?.[1] ?? 'bin'
+    const raw = join(p.fetch, `${t.mediaId}.${ext}`)
+    await fetch(t.key, raw, 'media')
+    const actual = sha256File(raw)
+    if (actual !== t.sha256 || statSync(raw).size !== t.bytes) {
+      rmSync(p.dir, { recursive: true, force: true })
+      throw new StepError(
+        `Narration take ${t.mediaId} doesn't match its hash (got ${actual}). Stop and report this.`,
+      )
+    }
+    const to = join(p.src, `${t.mediaId}.wav`)
+    const { pcm16 } = probeTake(raw, t.mediaId)
+    if (pcm16) renameSync(raw, to)
+    else {
+      run(
+        'ffmpeg',
+        [
+          '-hide_banner',
+          '-nostdin',
+          '-loglevel',
+          'error',
+          '-y',
+          '-threads',
+          '1',
+          '-i',
+          raw,
+          '-map',
+          '0:a:0',
+          '-vn',
+          '-ac',
+          '1',
+          '-ar',
+          String(SAMPLE_RATE),
+          '-c:a',
+          'pcm_s16le',
+          '-map_metadata',
+          '-1',
+          '-fflags',
+          '+bitexact',
+          '-flags:a',
+          '+bitexact',
+          to,
+        ],
+        { timeoutMs: 5 * 60_000 },
+      )
+      rmSync(raw, { force: true })
+    }
+    let samples: number
+    try {
+      const pcm = readPcm16(readFileSync(to))
+      if (pcm.sampleRate !== SAMPLE_RATE || pcm.channels !== 1) throw new Error('not 24 kHz mono')
+      samples = pcm.samples.length
+    } catch (e) {
+      throw new StepError(
+        `Narration take ${t.mediaId} didn't become 24 kHz mono PCM16 (${e instanceof Error ? e.message : String(e)}). Stop and report this.`,
+      )
+    }
+    takes.push({
+      mediaId: t.mediaId,
+      key: t.key,
+      sha256: t.sha256,
+      bytes: t.bytes,
+      ...(t.license ? { license: t.license } : {}),
+      path: relative(root, to),
+      wavSha256: sha256File(to),
+      samples,
+      decoded: !pcm16,
+    })
+  }
+  rmSync(p.fetch, { recursive: true, force: true })
+  const inputs: NarrationInputs = {
+    v: 1,
+    jobId: m.jobId,
+    attemptId: m.attemptId,
+    op: n.op,
+    recipe: n.recipe,
+    targetSamples: n.targetSamples,
+    captions: n.captions,
+    takes,
+  }
+  writeFileSync(p.manifest, JSON.stringify(inputs, null, 2))
+  log('narration.hydrated', {
+    ms: Date.now() - started,
+    takes: takes.map((t) => ({ mediaId: t.mediaId, samples: t.samples, decoded: t.decoded })),
+  })
+  return inputs
+}
+
 /** Restores what the manifest lists. `root` and `fetch` are injectable for tests. */
 export async function prepare(m: RunManifest, opts: { tmp: string; root?: string; fetch?: Fetch }) {
   const { tmp, root = repoRoot, fetch = download } = opts
@@ -205,6 +375,7 @@ export async function prepare(m: RunManifest, opts: { tmp: string; root?: string
       log('revoice.planned', { beats: m.bundle.revoice.beats })
     }
   }
+  await hydrateNarration(root, m, m.bundle?.narration, fetch)
   // Library media by reference (plan v2 §9): exactly the snapshotted bytes, each one verified. PDFs are reference
   // reading for the agent, so they go to context/media/, outside the composition and its source archive.
   if (m.media?.length) {

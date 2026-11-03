@@ -22,3 +22,6 @@ playwright-report/
 spikes/s8/out-*.mp4
 spikes/s8/variants/
 **/.hyperframes/
+
+# Run inputs outside video/ (recorded narration takes; scripts/lib/narration-inputs.ts)
+.va-run/
