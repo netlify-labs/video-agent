@@ -38,10 +38,16 @@ import {
 import type { Manifest } from '../src/domain/types.js'
 import { PREVIEW_FILES, PREVIEW_NAMES, type PreviewFile } from '../src/lib/media/previews.js'
 
+const WINDOW_MS = 300_000
+/** Just past the next 5-minute edge: up to 5 minutes ahead of real time, so links never look expired. */
+const clockStart = (now = Date.now()) => Math.ceil((now + 1) / WINDOW_MS) * WINDOW_MS + 1000
+
 export class FakeClock implements Clock {
   // Starts at the real time: the edge function checks link expiry against the real clock, so a fixed date here made
-  // every preview test fail once that date had passed. Whole seconds, as signatures count in seconds.
-  constructor(public t = Math.floor(Date.now() / 1000) * 1000) {}
+  // every preview test fail once that date had passed. Signed URLs snap to 5-minute windows (every window edge is on
+  // one), and a test that drives a run moves the clock about 4 minutes, so it starts just past an edge: tests that
+  // expect URLs to repeat within a window failed when a run began near one. Whole seconds, as signatures count them.
+  constructor(public t = clockStart()) {}
   now() {
     return new Date(this.t)
   }
