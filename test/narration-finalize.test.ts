@@ -194,7 +194,7 @@ describe('the run’s narration report', () => {
     for (const bad of [
       null,
       'report',
-      { ...report(), cleanup: 'heavy' },
+      { ...report(), cleanup: 'extreme' },
       { ...report(), bus: { sha256: 'nope', samples: 1 } },
       { ...report(), bus: { sha256: 'a'.repeat(64), samples: -1 } },
       { ...report(), stt: { status: 'great' } },

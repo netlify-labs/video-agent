@@ -79,6 +79,13 @@ export async function draftNarration(h: Harness, id: string, fromN: number, op: 
   const e = await h.json<{ id: string; rev?: number }>(
     await h.call('POST', `/api/v1/videos/${id}/versions/${fromN}/edits`, { as: h.member }),
   )
+  // Saving narration needs the video's narration lock (plan §2.7); take it just before, since driving runs moves the
+  // test clock past its 2-minute hold.
+  const lock = await h.call('POST', `/api/v1/videos/${id}/narration-lock`, {
+    as: h.member,
+    body: { draftId: e.id },
+  })
+  if (lock.status !== 200) throw new Error(`narration lock: ${lock.status} ${await lock.text()}`)
   const res = await h.call('PUT', `/api/v1/edits/${e.id}`, {
     as: h.member,
     body: { rev: e.rev ?? 0, ops: [op] },

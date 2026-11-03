@@ -1,6 +1,7 @@
 // finalize-background: verify the agent's uploads against the authenticated manifest, validate the
 // media, copy it to immutable keys and commit the version as ready. Idempotent; leased.
 import type { Deps } from '../deps.js'
+import { NARRATION_CLEANUP_PRESETS } from '../lib/timeline.js'
 import {
   isReference,
   MAX_REFERENCE_BYTES,
@@ -586,14 +587,15 @@ export function narrationReportOf(v: unknown): NarrationReport | null {
   const r = v as Record<string, unknown>
   const bus = r.bus as Record<string, unknown> | undefined
   const stt = r.stt as Record<string, unknown> | null | undefined
-  if (!Number.isInteger(r.pipeline) || (r.cleanup !== 'off' && r.cleanup !== 'light')) return null
+  if (!Number.isInteger(r.pipeline) || !(NARRATION_CLEANUP_PRESETS as readonly unknown[]).includes(r.cleanup))
+    return null
   if (typeof r.ffmpeg !== 'string') return null
   if (!bus || typeof bus.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(bus.sha256)) return null
   if (!Number.isInteger(bus.samples) || (bus.samples as number) < 0) return null
   if (stt !== null && (!stt || !STT_STATUSES.has(stt.status as string))) return null
   return {
     pipeline: r.pipeline as number,
-    cleanup: r.cleanup,
+    cleanup: r.cleanup as NarrationReport['cleanup'],
     ffmpeg: r.ffmpeg.slice(0, 200),
     bus: { sha256: bus.sha256, samples: bus.samples as number },
     stt: stt
