@@ -1,5 +1,6 @@
-// S13: raw vs light vs off on the synthetic narration fixtures (docs/spikes.md S13). Prints JSON.
+// S13: raw vs light vs heavy vs off on the synthetic narration fixtures (docs/spikes.md S13). Prints JSON.
 //   npx tsx spikes/s13/run.ts                       # the table, with the local ffmpeg (or FFMPEG=...)
+//   RNNOISE_ALT=/path/to/bd.rnnn npx tsx spikes/s13/run.ts   # also runs heavy with another RNNoise model
 //   FFMPEG_ALT=/path/to/ffmpeg-6 npx tsx spikes/s13/run.ts   # also runs light with a second ffmpeg and compares
 //   npx tsx spikes/s13/run.ts --sweep               # parameter variants, averaged over the speech fixtures
 import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs'
@@ -13,6 +14,7 @@ import {
   readPcm16,
   rmsDb,
   sibilanceDb,
+  type CleanupPreset,
   type LightParams,
   type Region,
 } from '../../src/lib/narration-cleanup.js'
@@ -20,6 +22,7 @@ import { cleanTake, ebur128, ffmpegVersion, pcmSha256 } from '../../scripts/lib/
 
 const ffmpeg = process.env.FFMPEG ?? 'ffmpeg'
 const alt = process.env.FFMPEG_ALT
+const altModel = process.env.RNNOISE_ALT
 const dir = new URL('../../test/fixtures/narration/', import.meta.url).pathname
 const tmp = mkdtempSync(join(tmpdir(), 's13-'))
 const fixtures = readdirSync(dir)
@@ -44,12 +47,61 @@ function metrics(path: string, speech: Region[], gaps: Region[], ff = ffmpeg) {
   }
 }
 
-function runOne(f: string, preset: 'off' | 'light', params: LightParams = LIGHT, ff = ffmpeg, tag = '') {
+function runOne(
+  f: string,
+  preset: CleanupPreset,
+  params: LightParams = LIGHT,
+  ff = ffmpeg,
+  tag = '',
+  rnnoiseModel?: string,
+) {
   const input = join(dir, f)
   const out = join(tmp, `${f}.${preset}${tag}.wav`)
   const t0 = performance.now()
-  const r = cleanTake({ input, output: out, preset, ffmpeg: ff, params })
+  const r = cleanTake({ input, output: out, preset, ffmpeg: ff, params, rnnoiseModel })
   return { r, out, ms: Math.round(performance.now() - t0) }
+}
+
+/** A processed take against the raw one: level, floor, SNR and 4-9 kHz changes, shift and determinism. */
+function processed(
+  f: string,
+  preset: 'light' | 'heavy',
+  raw: Int16Array,
+  rawM: ReturnType<typeof metrics>,
+  speech: Region[],
+  gaps: Region[],
+  rnnoiseModel?: string,
+) {
+  const tag = rnnoiseModel ? '.altmodel' : ''
+  const a = runOne(f, preset, LIGHT, ffmpeg, tag, rnnoiseModel)
+  const b = runOne(f, preset, LIGHT, ffmpeg, `${tag}.again`, rnnoiseModel)
+  const m = metrics(a.out, speech, gaps)
+  const firstSpeech = speech[0]
+  const lag = firstSpeech
+    ? bestLag(
+        raw,
+        readPcm16(readFileSync(a.out)).samples,
+        { start: firstSpeech.start, end: Math.min(firstSpeech.end, firstSpeech.start + 48_000) },
+        2000,
+      )
+    : null
+  const change = (x: number | null, y: number | null) => (x === null || y === null ? null : r1(y - x))
+  return {
+    a,
+    m: {
+      ...m,
+      samplesEqual: m.samples === rawM.samples,
+      lagSamples: lag,
+      gapFloorChangeDb: change(rawM.gapFloorDb, m.gapFloorDb),
+      snrChangeDb:
+        rawM.speechLufs === null || m.speechLufs === null || rawM.gapFloorDb === null || m.gapFloorDb === null
+          ? null
+          : r1(m.speechLufs - m.gapFloorDb - (rawM.speechLufs - rawM.gapFloorDb)),
+      sibilanceChangeDb: change(rawM.sibilanceDb, m.sibilanceDb),
+      deterministic: a.r.sha256 === b.r.sha256,
+      ms: a.ms,
+    },
+  }
 }
 
 function table() {
@@ -59,22 +111,10 @@ function table() {
     const off = runOne(f, 'off')
     const speech = off.r.speech
     const gaps = speech.length ? gapRegions(speech, raw.length) : [{ start: 0, end: raw.length }]
-    const a = runOne(f, 'light')
-    const b = runOne(f, 'light', LIGHT, ffmpeg, '.again')
     const rawM = metrics(input, speech, gaps)
-    const lightM = metrics(a.out, speech, gaps)
-    const firstSpeech = speech[0]
-    const lag = firstSpeech
-      ? bestLag(
-          raw,
-          readPcm16(readFileSync(a.out)).samples,
-          {
-            start: firstSpeech.start,
-            end: Math.min(firstSpeech.end, firstSpeech.start + 48_000),
-          },
-          2000,
-        )
-      : null
+    const { a, m: light } = processed(f, 'light', raw, rawM, speech, gaps)
+    const heavy = processed(f, 'heavy', raw, rawM, speech, gaps)
+    const heavyAlt = altModel ? processed(f, 'heavy', raw, rawM, speech, gaps, altModel).m : undefined
     let altResult: Record<string, unknown> | undefined
     if (alt) {
       const c = runOne(f, 'light', LIGHT, alt, '.alt')
@@ -97,28 +137,9 @@ function table() {
       measured: a.r.measured,
       raw: rawM,
       off: { ...metrics(off.out, speech, gaps), bitExact: off.r.sha256 === pcmSha256(input), ms: off.ms },
-      light: {
-        ...lightM,
-        samplesEqual: lightM.samples === rawM.samples,
-        lagSamples: lag,
-        gapFloorChangeDb:
-          rawM.gapFloorDb === null || lightM.gapFloorDb === null
-            ? null
-            : r1(lightM.gapFloorDb - rawM.gapFloorDb),
-        snrChangeDb:
-          rawM.speechLufs === null ||
-          lightM.speechLufs === null ||
-          rawM.gapFloorDb === null ||
-          lightM.gapFloorDb === null
-            ? null
-            : r1(lightM.speechLufs - lightM.gapFloorDb - (rawM.speechLufs - rawM.gapFloorDb)),
-        sibilanceChangeDb:
-          rawM.sibilanceDb === null || lightM.sibilanceDb === null
-            ? null
-            : r1(lightM.sibilanceDb - rawM.sibilanceDb),
-        deterministic: a.r.sha256 === b.r.sha256,
-        ms: a.ms,
-      },
+      light,
+      heavy: { ...heavy.m, measured: heavy.a.r.measured, warnings: heavy.a.r.warnings },
+      ...(heavyAlt ? { heavyAltModel: heavyAlt } : {}),
       ...(altResult ? { alt: altResult } : {}),
     }
   })
@@ -133,6 +154,7 @@ function table() {
     punch: {
       rawDiffLu: diff(q?.raw.speechLufs, l?.raw.speechLufs),
       lightDiffLu: diff(q?.light.speechLufs, l?.light.speechLufs),
+      heavyDiffLu: diff(q?.heavy.speechLufs, l?.heavy.speechLufs),
     },
   }
 }

@@ -8,6 +8,7 @@ import {
   MAX_FADE_SAMPLES,
   MAX_NARRATION_CLIPS,
   MAX_OUTPUT_SAMPLES,
+  NARRATION_CLEANUP_PRESETS,
   SAMPLE_RATE,
   maxFade,
 } from './lib/timeline.js'
@@ -798,7 +799,7 @@ export const NarrationOpSchema = z
       music: z.object({ duck: z.boolean(), duckDb: z.number().min(GAIN_DB_RANGE[0]).max(0) }),
       original: z.object({ muteAll: z.boolean() }),
     }),
-    cleanup: z.enum(['off', 'light']),
+    cleanup: z.enum(NARRATION_CLEANUP_PRESETS),
   })
   .openapi('NarrationOp', {
     description:

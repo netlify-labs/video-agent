@@ -66,7 +66,9 @@ export interface NarrationTracks {
   original: { muteAll: boolean }
 }
 
-export type NarrationCleanup = 'off' | 'light'
+/** Cleanup presets for a take (plan §6.3 step 2; the editor's control lists these). 'heavy' adds declick + RNNoise. */
+export const NARRATION_CLEANUP_PRESETS = ['off', 'light', 'heavy'] as const
+export type NarrationCleanup = (typeof NARRATION_CLEANUP_PRESETS)[number]
 
 /** The whole-track narration edit op (§6.1). The zod schema lives with the other edit ops. */
 export interface NarrationOp {

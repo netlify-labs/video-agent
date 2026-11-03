@@ -1,12 +1,15 @@
-// Cleans one narration take with ffmpeg (docs/spikes.md S13): measure the raw take, run the light chain once without
-// the trim to measure what it does, then once with the trim. `off` is a true bypass (the bytes are copied). ffmpeg
-// runs single-threaded so the same take gives the same PCM within a run; the output's sample count is checked.
+// Cleans one narration take with ffmpeg (docs/spikes.md S13): measure the raw take, run the light (or heavy) chain once
+// without the trim to measure what it does, then once with the trim. `off` is a true bypass (the bytes are copied).
+// ffmpeg runs single-threaded so the same take gives the same PCM within a run; the output's sample count is checked.
+// heavy loads the vendored RNNoise model (./rnnoise/), whose sha256 is checked first.
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { copyFileSync, readFileSync, rmSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import {
   CLEANUP_SAMPLE_RATE,
   LIGHT,
+  RNNOISE_MODEL,
   cleanupFilter,
   gapRegions,
   gatedLoudness,
@@ -23,6 +26,18 @@ import {
 } from '../../src/lib/narration-cleanup.js'
 
 const STEP_TIMEOUT_MS = 5 * 60_000
+
+let modelChecked: string | undefined
+/** The vendored RNNoise model's path, after checking its sha256 against the pinned one (once per process). */
+export function rnnoiseModelPath(): string {
+  const path = fileURLToPath(new URL(`./rnnoise/${RNNOISE_MODEL.file}`, import.meta.url))
+  if (modelChecked === path) return path
+  const got = createHash('sha256').update(readFileSync(path)).digest('hex')
+  if (got !== RNNOISE_MODEL.sha256)
+    throw new Error(`${path}: sha256 ${got} is not the pinned RNNoise model ${RNNOISE_MODEL.sha256}`)
+  modelChecked = path
+  return path
+}
 
 function ff(ffmpeg: string, args: string[]): string {
   const r = spawnSync(ffmpeg, ['-hide_banner', '-nostdin', '-nostats', ...args], {
@@ -125,6 +140,8 @@ export function cleanTake(o: {
   preset: CleanupPreset
   ffmpeg?: string
   params?: LightParams
+  /** Another RNNoise model for heavy (spikes compare models); the pinned, checked one otherwise. */
+  rnnoiseModel?: string | undefined
 }): CleanResult {
   const ffmpeg = o.ffmpeg ?? 'ffmpeg'
   const raw = readTake(o.input)
@@ -137,13 +154,17 @@ export function cleanTake(o: {
   if (o.preset === 'off') copyFileSync(o.input, o.output)
   else {
     const p = o.params ?? LIGHT
+    const rnnoise =
+      o.preset === 'heavy'
+        ? { model: o.rnnoiseModel ?? rnnoiseModelPath(), samples: raw.samples.length }
+        : undefined
     const gaps = speech.length
       ? gapRegions(speech, raw.samples.length)
       : [{ start: 0, end: raw.samples.length }]
     measured = { noiseFloorDb: rmsDb(raw.samples, gaps), preGainDb: preGain(rawSpeechLufs, p), trimDb: 0 }
     const probe = `${o.output}.probe.wav`
     try {
-      runChain(o.input, probe, cleanupFilter('light', measured, p) ?? 'anull', ffmpeg)
+      runChain(o.input, probe, cleanupFilter(o.preset, measured, p, rnnoise) ?? 'anull', ffmpeg)
       const cleaned = readTake(probe).samples
       const t = trimGain(
         speech.length ? gatedLoudness(cleaned, speech) : null,
@@ -156,7 +177,7 @@ export function cleanTake(o: {
     } finally {
       rmSync(probe, { force: true })
     }
-    filter = cleanupFilter('light', measured, p)
+    filter = cleanupFilter(o.preset, measured, p, rnnoise)
     runChain(o.input, o.output, filter ?? 'anull', ffmpeg)
   }
   const out = readTake(o.output)

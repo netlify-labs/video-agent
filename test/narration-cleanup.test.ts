@@ -6,8 +6,13 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   AFFTDN_DELAY,
+  ARNNDN_DELAY,
+  ARNNDN_PAD,
   LIGHT,
+  RNNOISE_MODEL,
+  bestLag,
   cleanupFilter,
+  rnnoiseStage,
   gapRegions,
   gatedLoudness,
   preGain,
@@ -17,7 +22,7 @@ import {
   trimGain,
 } from '../src/lib/narration-cleanup.js'
 import { wav } from '../src/lib/voice.js'
-import { cleanTake, pcmSha256, runChain } from '../scripts/lib/narration-cleanup.js'
+import { cleanTake, pcmSha256, rnnoiseModelPath, runChain } from '../scripts/lib/narration-cleanup.js'
 import { which } from '../scripts/lib/run-tools.js'
 
 const fixture = (name: string) => new URL(`./fixtures/narration/${name}.wav`, import.meta.url).pathname
@@ -51,6 +56,47 @@ describe('cleanupFilter', () => {
     const g = cleanupFilter('light', { noiseFloorDb: null, preGainDb: -0.001, trimDb: 0 })
     expect(g).toContain('nf=-50:')
     expect(g).not.toContain('-0.00')
+  })
+})
+
+describe('heavy cleanupFilter', () => {
+  const m = { noiseFloorDb: -53.16, preGainDb: -0.8249, trimDb: 9.94 }
+
+  it("declicks, runs light's afftdn, then RNNoise at 48 kHz, padded and cut back to the take", () => {
+    expect(
+      cleanupFilter('heavy', m, LIGHT, { model: '/repo/scripts/lib/rnnoise/sh.rnnn', samples: 1000 }),
+    ).toBe(
+      [
+        'highpass=f=80',
+        'adeclick',
+        `apad=pad_len=${AFFTDN_DELAY}`,
+        'afftdn=nr=12.0:nf=-43:tn=0',
+        `atrim=start_sample=${AFFTDN_DELAY}`,
+        'asetpts=N/SR/TB',
+        `apad=pad_len=${ARNNDN_PAD}`,
+        'aresample=48000',
+        'arnndn=m=/repo/scripts/lib/rnnoise/sh.rnnn',
+        'aresample=24000',
+        `atrim=start_sample=${ARNNDN_DELAY}:end_sample=${ARNNDN_DELAY + 1000}`,
+        'asetpts=N/SR/TB',
+        'volume=-0.82dB:precision=double',
+        'deesser=i=0.40:m=0.50:f=0.50:s=o',
+        'acompressor=threshold=0.063096:ratio=2.00:attack=10.00:release=120.00:knee=4.00:makeup=1:detection=rms',
+        'volume=9.94dB:precision=double',
+      ].join(','),
+    )
+  })
+
+  it('needs a model path that is safe in a filtergraph and a take length', () => {
+    expect(() => cleanupFilter('heavy', m)).toThrow(/RNNoise model/)
+    for (const model of ['/a b/sh.rnnn', '/a:b.rnnn', "/a'b.rnnn", '/a,b.rnnn', ''])
+      expect(() => cleanupFilter('heavy', m, LIGHT, { model, samples: 10 }), model).toThrow(/filtergraph/)
+    expect(() => rnnoiseStage('/m.rnnn', 0)).toThrow(/take length/)
+    expect(() => rnnoiseStage('/m.rnnn', 1.5)).toThrow(/take length/)
+  })
+
+  it('the vendored model matches its pinned sha256', () => {
+    expect(rnnoiseModelPath()).toMatch(new RegExp(`scripts/lib/rnnoise/${RNNOISE_MODEL.file}$`))
   })
 })
 
@@ -155,4 +201,93 @@ describe.skipIf(!process.env.FFMPEG && !which('ffmpeg'))('cleanTake with ffmpeg'
     expect(peakAt(12_000, 48_000)).toBe(24_000)
     expect(peakAt(60_000, 90_000)).toBe(72_000)
   })
+
+  it(
+    'heavy keeps the sample count, reaches the target, is deterministic and gains SNR over light',
+    { timeout: 60_000 },
+    () => {
+      const d = tmp()
+      const runs = ['a', 'b', 'c'].map((k) =>
+        cleanTake({ input: fixture('noisy-room'), output: join(d, `${k}.wav`), preset: 'heavy', ffmpeg }),
+      )
+      const [a] = runs
+      if (!a) throw new Error('no run')
+      expect(a.outputSamples).toBe(samples('noisy-room').length)
+      // arnndn's last frame holds uninitialised memory: without the three-frame pad these differed about 1 run in 8.
+      expect(new Set(runs.map((r) => r.sha256)).size).toBe(1)
+      expect(a.filter).toContain(`arnndn=m=${rnnoiseModelPath()}`)
+      const out = readPcm16(readFileSync(join(d, 'a.wav'))).samples
+      expect(gatedLoudness(out, a.speech)).toBeCloseTo(LIGHT.speechTargetLufs, 0)
+      const l = cleanTake({ input: fixture('noisy-room'), output: join(d, 'l.wav'), preset: 'light', ffmpeg })
+      const lout = readPcm16(readFileSync(join(d, 'l.wav'))).samples
+      const gaps = gapRegions(a.speech, out.length)
+      // Same speech level, so a lower gap floor is the SNR gain (S13: +12.3 dB heavy vs +7.4 light).
+      expect((rmsDb(out, gaps) ?? 0) - (rmsDb(lout, gaps) ?? 0)).toBeLessThan(-3)
+      expect(l.outputSamples).toBe(a.outputSamples)
+    },
+  )
+
+  it("heavy keeps every take length, on or off arnndn's 10 ms frame grid", { timeout: 60_000 }, () => {
+    const d = tmp()
+    for (const name of ['punch-quiet', 'silence-only', 'near-clip']) {
+      const r = cleanTake({ input: fixture(name), output: join(d, `${name}.wav`), preset: 'heavy', ffmpeg })
+      expect(r.outputSamples, name).toBe(samples(name).length)
+    }
+  })
+
+  it('the RNNoise stage adds no delay: an impulse lands on its own sample', () => {
+    const d = tmp()
+    const pcm = new Int16Array(96_000)
+    let seed = 7
+    for (let i = 0; i < pcm.length; i++) {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff
+      pcm[i] = Math.round(300 * (seed / 0x7fffffff - 0.5))
+    }
+    pcm[24_000] = 20_000
+    pcm[72_000] = 20_000
+    writeFileSync(join(d, 'imp.wav'), wav(new Uint8Array(pcm.buffer)))
+    runChain(
+      join(d, 'imp.wav'),
+      join(d, 'out.wav'),
+      rnnoiseStage(rnnoiseModelPath(), pcm.length).join(','),
+      ffmpeg,
+    )
+    const out = readPcm16(readFileSync(join(d, 'out.wav'))).samples
+    const peakAt = (a: number, b: number) => {
+      let k = a
+      for (let i = a; i < b; i++) if (Math.abs(out[i] ?? 0) > Math.abs(out[k] ?? 0)) k = i
+      return k
+    }
+    expect(out.length).toBe(pcm.length)
+    expect(peakAt(12_000, 48_000)).toBe(24_000)
+    expect(peakAt(60_000, 90_000)).toBe(72_000)
+  })
+
+  it(
+    'the whole heavy chain adds no delay (a chirp burst lines up; adeclick would take a bare impulse)',
+    { timeout: 60_000 },
+    () => {
+      const d = tmp()
+      const pcm = new Int16Array(96_000)
+      for (const at of [24_000, 60_000])
+        for (let k = 0; k < 4800; k++) {
+          const w = 0.5 - 0.5 * Math.cos((2 * Math.PI * k) / 4800)
+          pcm[at + k] = Math.round(
+            8000 * w * Math.sin((2 * Math.PI * (200 * k + (1300 * k * k) / 4800)) / 24_000),
+          )
+        }
+      writeFileSync(join(d, 'chirp.wav'), wav(new Uint8Array(pcm.buffer)))
+      const filter = cleanupFilter(
+        'heavy',
+        { noiseFloorDb: -70, preGainDb: 0, trimDb: 0 },
+        { ...LIGHT, highpassHz: 20 },
+        { model: rnnoiseModelPath(), samples: pcm.length },
+      )
+      runChain(join(d, 'chirp.wav'), join(d, 'out.wav'), filter ?? '', ffmpeg)
+      const out = readPcm16(readFileSync(join(d, 'out.wav'))).samples
+      expect(out.length).toBe(pcm.length)
+      expect(bestLag(pcm, out, { start: 24_000, end: 28_800 }, 2000)).toBe(0)
+      expect(bestLag(pcm, out, { start: 60_000, end: 64_800 }, 2000)).toBe(0)
+    },
+  )
 })

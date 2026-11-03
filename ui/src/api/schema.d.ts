@@ -7827,7 +7827,7 @@ export interface components {
                 };
             };
             /** @enum {string} */
-            cleanup: "off" | "light";
+            cleanup: "off" | "light" | "heavy";
         };
         Composition: {
             duration: number;

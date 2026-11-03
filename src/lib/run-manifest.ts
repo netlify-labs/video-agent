@@ -9,6 +9,7 @@ import {
   MAX_NARRATION_CLIPS,
   MAX_NARRATION_TAKES,
   MAX_OUTPUT_SAMPLES,
+  NARRATION_CLEANUP_PRESETS,
   SAMPLE_RATE,
   type NarrationCleanup,
   type NarrationOp,
@@ -257,7 +258,7 @@ function isFrozenNarration(v: unknown): v is FrozenNarration {
     (n.transcriptionProvider === undefined ||
       ['local', 'elevenlabs', 'off'].includes(n.transcriptionProvider as string)) &&
     int(recipe.pipeline, 1, 1000) &&
-    (recipe.cleanup === 'off' || recipe.cleanup === 'light') &&
+    (NARRATION_CLEANUP_PRESETS as readonly unknown[]).includes(recipe.cleanup) &&
     op.op === 'narration' &&
     op.schema === 1 &&
     op.sampleRate === SAMPLE_RATE &&

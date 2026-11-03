@@ -3012,7 +3012,8 @@
             "type": "string",
             "enum": [
               "off",
-              "light"
+              "light",
+              "heavy"
             ]
           }
         },

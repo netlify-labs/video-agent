@@ -500,6 +500,46 @@ So:
 - **Still open:** the blind A/B with the owner on real (consented) recordings, which can move nr and the de-esser.
   The phase-2 script tests use these fixtures.
 
+**Heavy preset** (opt-in, `cleanup: 'heavy'`, va-2qq.7.2): light's chain with `adeclick` before the denoisers and
+RNNoise after afftdn, with the vendored `rnnoise-models` "somnolent-hogwash" model (`scripts/lib/rnnoise/sh.rnnn`,
+speech over recording-room noise; not subject to copyright; sha256 pinned and checked before use):
+
+```
+highpass=f=80, adeclick,
+apad=pad_len=600, afftdn=..., atrim=start_sample=600, asetpts=N/SR/TB,     # as light
+apad=pad_len=720, aresample=48000, arnndn=m=<sh.rnnn>, aresample=24000,
+atrim=start_sample=240:end_sample=<240 + take samples>, asetpts=N/SR/TB,
+volume=<pre>dB, deesser=..., acompressor=..., volume=<trim>dB                # as light
+```
+
+| Take             | SNR change light → heavy | 4-9 kHz change light / heavy | Gap floor heavy | Heavy speech / TP |
+| ---------------- | ------------------------ | ---------------------------- | --------------- | ----------------- |
+| quiet-laptop     | +10.6 → +10.8            | +2.1 / +1.9                  | -67.2           | -18.0 / -3.8      |
+| noisy-room       | +7.4 → **+12.3**         | +0.4 / +0.3                  | -60.3           | -18.0 / -1.4      |
+| usb-hot          | +3.2 → +4.2              | +0.5 / +0.5                  | -91.3           | -18.0 / -4.2      |
+| near-clip        | +0.8 → +0.9              | -2.3 / -2.2                  | -85.3           | -18.0 / -6.2      |
+| sibilant-headset | +6.3 → +6.8              | -5.3 / -5.3                  | -71.4           | -18.0 / -4.7      |
+| punch-quiet      | +11.1 → +11.3            | +2.7 / +2.5                  | -66.6           | -18.0 / -2.4      |
+| punch-loud       | +8.7 → +8.8              | +2.7 / +2.7                  | -84.8           | -18.0 / -1.8      |
+| silence-only     | n/a                      | n/a                          | -90.5           | no speech         |
+
+- **Sample count** equal on all 8 takes (e.g. noisy-room 251,819 → 251,819); punch pair 0.0 LU apart, as light.
+- **Delay:** arnndn runs at 48 kHz only and delays by one 10 ms frame (480 samples, 240 at 24 kHz); an impulse
+  through the padded, cut RNNoise stage lands on its own sample, and a chirp burst through the whole heavy chain
+  cross-correlates at 0 (an impulse can't be used there: adeclick removes it, which is its job). Cross-correlation on
+  the takes: 0 to -3 samples (light: 0 to -1).
+- **Determinism:** arnndn fills its last frame with uninitialised memory, and that frame's output reaches one frame
+  back, so with a one-frame pad the take's last ~10 ms differed in about 1 run in 8 (float output; noisy-room and
+  punch-loud). Padding three frames puts it all in the cut tail: identical PCM sha256 in 16 of 16 runs, and on all 8
+  takes twice in the table run.
+- **RNNoise alone** (afftdn replaced) lost SNR on every take but the noisy room (-4.3 to -0.4 dB; noisy room +9.3; it leaves the quiet
+  takes' hiss that the pre-gain then lifts), and moving the pre-gain before it didn't fix that, hence afftdn first.
+  Heavy gains most where noise isn't steady (noisy room +4.9 dB over light) and stays within 1 dB of light on clean
+  takes; the speech band is unchanged (4-9 kHz within 0.2 dB of light).
+- **Model:** `bd` ("voice") measured within 0.7 dB SNR of `sh` on every take (`RNNOISE_ALT=... npx tsx
+spikes/s13/run.ts`). Wall time 0.4-1.3 s per take, about 2-3× light. Not run on ffmpeg 6.0 (no build at hand);
+  `adeclick` and `arnndn` exist since 4.2 and 4.3. Heavy needs ears on real takes like light does.
+
 ### S11: speech-to-text on the runner (2026-11-03, `spikes/s11`, run `6ae99c77bed4b69e1b6179d1`, 48 credits)
 
 Kokoro-spoken inputs with a known transcript (20 phrases, two voices) were concatenated into 60 s, 90 s and 600 s

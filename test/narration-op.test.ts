@@ -18,7 +18,7 @@ import {
   type RunManifest,
 } from '../src/lib/run-manifest.js'
 import { readTarGz } from '../src/lib/tar.js'
-import { SAMPLE_RATE } from '../src/lib/timeline.js'
+import { NARRATION_CLEANUP_PRESETS, SAMPLE_RATE } from '../src/lib/timeline.js'
 import { failedSnap, running } from './fakes.js'
 import type { Store } from '../src/store/types.js'
 import { harness, person, pgStore, PROMPT, upload, type Harness } from './helpers.js'
@@ -107,7 +107,8 @@ describe('narration op schema', () => {
   it('refuses other versions, rates and cleanups', () => {
     expect(bad({ schema: 2 })).toBe(false)
     expect(bad({ sampleRate: 48_000 })).toBe(false)
-    expect(bad({ cleanup: 'heavy' })).toBe(false)
+    expect(bad({ cleanup: 'loud' })).toBe(false)
+    for (const cleanup of NARRATION_CLEANUP_PRESETS) expect(bad({ cleanup }), cleanup).toBe(true)
     expect(bad({ tracks: { ...ok.tracks, aiVoice: { mode: 'louder', volumeDb: 0 } } })).toBe(false)
     expect(bad({ clips: Array.from({ length: 201 }, (_, i) => clip('med_abcdef12', { id: `c${i}` })) })).toBe(
       false,
@@ -511,6 +512,23 @@ describe('run manifest narration', () => {
     expect(verify(withStt).bundle?.narration).toEqual(withStt)
     expect(serializeRunManifest(manifest(narr))).not.toContain('transcriptionProvider')
     expect(() => verify({ ...narr, transcriptionProvider: 'whisper' })).toThrow(/bad narration entry/)
+  })
+
+  it('carries the heavy cleanup preset; the op and the recipe must agree', () => {
+    const heavy = {
+      ...narr,
+      op: { ...narr.op, cleanup: 'heavy' as const },
+      recipe: { ...narr.recipe, cleanup: 'heavy' as const },
+    }
+    expect(verify(heavy).bundle?.narration).toEqual(heavy)
+    expect(() => verify({ ...heavy, recipe: narr.recipe })).toThrow(/bad narration entry/)
+    expect(() =>
+      verify({
+        ...heavy,
+        op: { ...heavy.op, cleanup: 'loud' },
+        recipe: { ...heavy.recipe, cleanup: 'loud' },
+      }),
+    ).toThrow(/bad narration entry/)
   })
 
   it('refuses takes outside their own prefix, over the caps, or clips of takes it does not carry', () => {

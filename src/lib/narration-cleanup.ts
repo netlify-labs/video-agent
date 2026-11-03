@@ -7,13 +7,29 @@
 // quarter window (600 samples, 25 ms at 24 kHz, the same in ffmpeg 6.0 and 9.0) and drops the tail by as much, so
 // the graph pads that many samples after the take and cuts them off the front again: no time shift either.
 // Every option used exists in ffmpeg 6.0 (run with the 6.0 static build and 9.0.2: identical PCM), so 6.1 should too.
+//
+// `heavy` (opt-in) declicks before denoising and follows afftdn with RNNoise (arnndn) and a vendored, pinned model
+// (scripts/lib/rnnoise/README.md). arnndn runs at 48 kHz only and delays by one 10 ms frame (480 samples there, 240
+// at 24 kHz), so it gets the same pad-and-trim treatment around an explicit 48 kHz round trip. It also emits whole
+// frames, filling the last one with uninitialised memory (its output then differs from run to run, and reaches one
+// frame back), so the pad is three frames, not one, and the trim cuts at the take's own length.
+import type { NarrationCleanup } from './timeline.js'
 
 export const CLEANUP_SAMPLE_RATE = 24_000
 /** The narration processing recipe's version (plan §6.3): frozen with every render, bumped when the chain changes. */
 export const NARRATION_PIPELINE = 1
-export type CleanupPreset = 'off' | 'light'
+export type CleanupPreset = NarrationCleanup
 /** afftdn's latency in samples at CLEANUP_SAMPLE_RATE (measured with a click; test/narration-cleanup.test.ts). */
 export const AFFTDN_DELAY = 600
+/** arnndn's latency in samples at CLEANUP_SAMPLE_RATE (one RNNoise frame; measured with a chirp, same test file). */
+export const ARNNDN_DELAY = 240
+/** Silence appended before arnndn: its delay plus two frames, so its unstable last frame lands in the cut tail. */
+export const ARNNDN_PAD = 3 * ARNNDN_DELAY
+/** The RNNoise model heavy uses, vendored at scripts/lib/rnnoise/ (rnnoise-models "somnolent-hogwash"). */
+export const RNNOISE_MODEL = {
+  file: 'sh.rnnn',
+  sha256: '70bb6685eb0c2a1d18e2918dca3fbfbd39317010b1802eb1b6ea73a92f3fdec0',
+} as const
 
 type Range = readonly [lo: number, hi: number]
 export interface LightParams {
@@ -75,22 +91,54 @@ const clamp = (v: number, [lo, hi]: Range) => Math.min(hi, Math.max(lo, v))
 const dbToLin = (db: number) => 10 ** (db / 20)
 
 /**
+ * arnndn around a 48 kHz round trip, padded and cut so the output is the input's `samples`, sample-aligned (an
+ * impulse lands on its own sample; test/narration-cleanup.test.ts).
+ */
+export function rnnoiseStage(model: string, samples: number): string[] {
+  if (UNSAFE_PATH.test(model) || !model)
+    throw new Error(`the RNNoise model path can't hold spaces or : , ; = [ ] ' \\ (filtergraph syntax)`)
+  if (!Number.isInteger(samples) || samples < 1) throw new Error('the RNNoise stage needs the take length')
+  return [
+    `apad=pad_len=${ARNNDN_PAD}`,
+    'aresample=48000',
+    `arnndn=m=${model}`,
+    `aresample=${CLEANUP_SAMPLE_RATE}`,
+    `atrim=start_sample=${ARNNDN_DELAY}:end_sample=${ARNNDN_DELAY + samples}`,
+  ]
+}
+
+/** Characters that would need filtergraph escaping in the model path; such a path is refused, not escaped. */
+const UNSAFE_PATH = /[\\':,;=[\]\s]/
+
+/**
  * The ffmpeg -af graph for a take, or null for `off` (a true bypass: the take's bytes are used as they are, no
- * ffmpeg). Numbers are written with fixed decimals so the same inputs always give the same string.
+ * ffmpeg). Numbers are written with fixed decimals so the same inputs always give the same string. `heavy` needs
+ * the RNNoise model's path (scripts/lib/narration-cleanup.ts resolves the vendored one) and the take's length.
  */
 export function cleanupFilter(
   preset: CleanupPreset,
   m: CleanupMeasured,
   p: LightParams = LIGHT,
+  rnnoise?: { model: string; samples: number },
 ): string | null {
   if (preset === 'off') return null
-  const nf = clamp(Math.round((m.noiseFloorDb ?? -60) + p.noiseFloorOffsetDb), p.noiseFloorRange)
   const c = p.compressor
-  return [
-    `highpass=f=${p.highpassHz}`,
+  const nf = clamp(Math.round((m.noiseFloorDb ?? -60) + p.noiseFloorOffsetDb), p.noiseFloorRange)
+  const afftdn = [
     `apad=pad_len=${AFFTDN_DELAY}`,
     `afftdn=nr=${fx(p.noiseReductionDb, 1)}:nf=${nf}:tn=0`,
     `atrim=start_sample=${AFFTDN_DELAY}`,
+  ]
+  let denoise = afftdn
+  if (preset === 'heavy') {
+    if (!rnnoise) throw new Error('heavy cleanup needs the RNNoise model and the take length')
+    // Declick first (a click would steer both denoisers), then light's afftdn for the steady floor, then RNNoise
+    // for what is left (S13: RNNoise alone leaves a quiet take's hiss and loses SNR to light).
+    denoise = ['adeclick', ...afftdn, 'asetpts=N/SR/TB', ...rnnoiseStage(rnnoise.model, rnnoise.samples)]
+  }
+  return [
+    `highpass=f=${p.highpassHz}`,
+    ...denoise,
     'asetpts=N/SR/TB',
     `volume=${fx(m.preGainDb)}dB:precision=double`,
     `deesser=i=${fx(p.deesser.i)}:m=${fx(p.deesser.m)}:f=${fx(p.deesser.f)}:s=o`,

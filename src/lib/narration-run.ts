@@ -11,7 +11,7 @@ import type { CleanupMeasured } from './narration-cleanup.js'
 import { groupWords, withNarrationCues, type CueWord } from './narration-captions.js'
 import { FROZEN_FILES, revoicable } from './revoice.js'
 import type { RunManifest } from './run-manifest.js'
-import type { NarrationOp, Span } from './timeline.js'
+import type { NarrationCleanup, NarrationOp, Span } from './timeline.js'
 
 export type RunStep = 'prepare' | 'revoice' | 'narration' | 'transcribe' | 'check' | 'render'
 
@@ -125,7 +125,7 @@ export interface NarrationReceipt {
   }[]
   recipe: {
     pipeline: number
-    cleanup: 'off' | 'light'
+    cleanup: NarrationCleanup
     /** First line of `ffmpeg -version`. */
     ffmpeg: string
     limiter: typeof BUS_LIMITER
