@@ -310,45 +310,45 @@ everything from `MediaStreamAudioSourceNode` on is the real path. The flags rema
 for a host where they work. Headless rVFC timestamps have no real vsync, so residuals here show only the pipeline's
 own error.
 
-| Check | 30 s take | 10 min take (`S10_LONG=1`, full 600 s) |
-|---|---|---|
-| Captured samples = `ceil(frames × 24000 / 48000)` | 720,128 = 720,128 | 14,400,256 = 14,400,256 |
-| Fill-in / no-input quanta | 0 / 0 | 0 / 0 |
-| Worker file SHA-256 = one-shot SubtleCrypto of the assembled WAV = server's | yes | yes |
-| Streamed PCM hash = one-shot; running hash in the IndexedDB record | yes; yes | yes; yes |
-| Peaks (level 0 bins = ceil(samples / 1024); max diff vs recompute) | 11 levels, 704 bins; 0 | 15 levels, 14,063 bins; 0 |
-| Pipeline consistency: captured beep spacing vs the file's 48,000 samples | 14 intervals, 0 samples error | 299 intervals, 0 samples error |
-| Stop → worker done (flush + writes + file-hash pass) | 92 ms (file hash 61 ms) | 171 ms (file hash 164 ms, 28.8 MB) |
-| Stop → uploaded (adds assemble from IndexedDB + POST to localhost) | 207 ms | 285 ms (604 ms in a 22 MB run) |
-| IndexedDB write per chunk p50 / p99 / max, max pending | 5.8 / 26 / 26 ms, 2 | 0.35 / 18 / 38 ms, 2 |
-| Fit residual RMS / max; slope | 0.002 / 0.005 ms; +31.7 ppm | 8.9 / 18.5 ms; −43 ppm (one-frame step, below) |
-| Render map residual RMS / max | 1.5 / 3.0 ms | 1.5 / 3.1 ms |
-| Output latency implied by `getOutputTimestamp` vs reported `outputLatency + baseLatency` | 30.2 vs 32.3 ms | 30.2 vs 32.3 ms |
-| Monitor vs picture, mean / max | −0.5 / 1.0 ms | +1.9 / 20.6 ms (drift, below) |
-| MediaRecorder (webm/opus, 129 kbps): `start` event / decoded sample 0 on the take's timeline | +53 ms / +4.8 ms | +58 ms / +13.5 ms |
-| Memory during the take (`measureUserAgentSpecificMemory`) | 1.7 MB | 2.2 MB at 48 s → 5.5 MB at 587 s |
+| Check                                                                                        | 30 s take                     | 10 min take (`S10_LONG=1`, full 600 s)         |
+| -------------------------------------------------------------------------------------------- | ----------------------------- | ---------------------------------------------- |
+| Captured samples = `ceil(frames × 24000 / 48000)`                                            | 720,128 = 720,128             | 14,400,256 = 14,400,256                        |
+| Fill-in / no-input quanta                                                                    | 0 / 0                         | 0 / 0                                          |
+| Worker file SHA-256 = one-shot SubtleCrypto of the assembled WAV = server's                  | yes                           | yes                                            |
+| Streamed PCM hash = one-shot; running hash in the IndexedDB record                           | yes; yes                      | yes; yes                                       |
+| Peaks (level 0 bins = ceil(samples / 1024); max diff vs recompute)                           | 11 levels, 704 bins; 0        | 15 levels, 14,063 bins; 0                      |
+| Pipeline consistency: captured beep spacing vs the file's 48,000 samples                     | 14 intervals, 0 samples error | 299 intervals, 0 samples error                 |
+| Stop → worker done (flush + writes + file-hash pass)                                         | 92 ms (file hash 61 ms)       | 171 ms (file hash 164 ms, 28.8 MB)             |
+| Stop → uploaded (adds assemble from IndexedDB + POST to localhost)                           | 207 ms                        | 285 ms (604 ms in a 22 MB run)                 |
+| IndexedDB write per chunk p50 / p99 / max, max pending                                       | 5.8 / 26 / 26 ms, 2           | 0.35 / 18 / 38 ms, 2                           |
+| Fit residual RMS / max; slope                                                                | 0.002 / 0.005 ms; +31.7 ppm   | 8.9 / 18.5 ms; −43 ppm (one-frame step, below) |
+| Render map residual RMS / max                                                                | 1.5 / 3.0 ms                  | 1.5 / 3.1 ms                                   |
+| Output latency implied by `getOutputTimestamp` vs reported `outputLatency + baseLatency`     | 30.2 vs 32.3 ms               | 30.2 vs 32.3 ms                                |
+| Monitor vs picture, mean / max                                                               | −0.5 / 1.0 ms                 | +1.9 / 20.6 ms (drift, below)                  |
+| MediaRecorder (webm/opus, 129 kbps): `start` event / decoded sample 0 on the take's timeline | +53 ms / +4.8 ms              | +58 ms / +13.5 ms                              |
+| Memory during the take (`measureUserAgentSpecificMemory`)                                    | 1.7 MB                        | 2.2 MB at 48 s → 5.5 MB at 587 s               |
 
-| Other automated check | Result |
-|---|---|
-| Stop conditions (simulated at about 3 s: seek, hidden tab, `devicechange`, track `ended`, residual with a 0.01 ms threshold) | each stopped with its own reason; clean part about 72,500 samples |
-| Recovery after a reload at about 5.5 s | 132,000 samples (11 chunks) recovered, running hash matches, clock record has 120 anchors and a fit, 3 ms |
-| Audition: 32 × 10-min takes, 8 active, 200 MB | peak 199.6 MB (decode-all would be 1,758 MB); 1,400 window decodes at 2.2 ms; 1,182 evictions; JS heap peak 204 MB (Chromium counts AudioBuffers in the heap) |
-| Resampler (2 s of 1 kHz + 15 kHz, 48 and 44.1 kHz in) | −91 dB error against the ideal 1 kHz, so the 15 kHz tone is gone; the count is exact; block-wise = one-shot |
-| Onset detector on synthetic 2 kHz beeps | +1 sample (0.04 ms) late, every time |
-| Calibration code paths (a), (b) | run; the numbers are meaningless with a synthetic mic: (a) hears no clicks, and (b)'s "claps" are file beeps |
+| Other automated check                                                                                                        | Result                                                                                                                                                        |
+| ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Stop conditions (simulated at about 3 s: seek, hidden tab, `devicechange`, track `ended`, residual with a 0.01 ms threshold) | each stopped with its own reason; clean part about 72,500 samples                                                                                             |
+| Recovery after a reload at about 5.5 s                                                                                       | 132,000 samples (11 chunks) recovered, running hash matches, clock record has 120 anchors and a fit, 3 ms                                                     |
+| Audition: 32 × 10-min takes, 8 active, 200 MB                                                                                | peak 199.6 MB (decode-all would be 1,758 MB); 1,400 window decodes at 2.2 ms; 1,182 evictions; JS heap peak 204 MB (Chromium counts AudioBuffers in the heap) |
+| Resampler (2 s of 1 kHz + 15 kHz, 48 and 44.1 kHz in)                                                                        | −91 dB error against the ideal 1 kHz, so the 15 kHz tone is gone; the count is exact; block-wise = one-shot                                                   |
+| Onset detector on synthetic 2 kHz beeps                                                                                      | +1 sample (0.04 ms) late, every time                                                                                                                          |
+| Calibration code paths (a), (b)                                                                                              | run; the numbers are meaningless with a synthetic mic: (a) hears no clicks, and (b)'s "claps" are file beeps                                                  |
 
 **API matrix** (Playwright browsers; real Safari and Firefox are in the owner checklist):
 
-| API | Chromium 156 | WebKit 27.2 (Playwright) | Firefox |
-|---|---|---|---|
-| `requestVideoFrameCallback` | yes | yes | not run |
-| `getOutputTimestamp` | yes (live values) | yes (live values) | not run |
-| `outputLatency` / `baseLatency` (headless, fake output) | 27.0 / 5.3 ms | 15.6 / 2.7 ms | not run |
-| AudioWorklet, module Worker, IndexedDB | yes | yes | not run |
-| MediaRecorder types | webm opus/pcm, mp4 aac/opus | webm opus, mp4 aac/opus | not run |
-| `measureUserAgentSpecificMemory` / `performance.memory` | yes / yes | no / no | not run |
-| `AudioContext.setSinkId` | yes | no | not run |
-| Storage quota | 10,240 MB | 1,000 MB | not run |
+| API                                                     | Chromium 156                | WebKit 27.2 (Playwright) | Firefox |
+| ------------------------------------------------------- | --------------------------- | ------------------------ | ------- |
+| `requestVideoFrameCallback`                             | yes                         | yes                      | not run |
+| `getOutputTimestamp`                                    | yes (live values)           | yes (live values)        | not run |
+| `outputLatency` / `baseLatency` (headless, fake output) | 27.0 / 5.3 ms               | 15.6 / 2.7 ms            | not run |
+| AudioWorklet, module Worker, IndexedDB                  | yes                         | yes                      | not run |
+| MediaRecorder types                                     | webm opus/pcm, mp4 aac/opus | webm opus, mp4 aac/opus  | not run |
+| `measureUserAgentSpecificMemory` / `performance.memory` | yes / yes                   | no / no                  | not run |
+| `AudioContext.setSinkId`                                | yes                         | no                       | not run |
+| Storage quota                                           | 10,240 MB                   | 1,000 MB                 | not run |
 
 Playwright's Firefox build (firefox-1555) isn't installed on this machine and wasn't installed for this spike, so
 the config adds the Firefox and WebKit projects only when their executables exist.
@@ -506,29 +506,30 @@ Kokoro-spoken inputs with a known transcript (20 phrases, two voices) were conca
 clips; phrase starts are exact, word starts are estimated within a phrase. Runner: Ubuntu, 4 CPUs, 15.3 GB, Node 24,
 static **ffmpeg 7.0.2**.
 
-| Provider                                         | Result                                                                                   |
-| ------------------------------------------------ | ---------------------------------------------------------------------------------------- |
-| Parakeet (`hyperframes models install parakeet`) | Installs in **3.4 s** (704 MB into `~/.cache/hyperframes`); `parakeet-tdt-0.6b-v3-int8`, sherpa-onnx, **CC-BY-4.0** |
-| Parakeet, 60 / 90 / 600 s                        | WER **0.6 / 0.8 / 1.2 %**; **0.10× / 0.08× / 0.06×** real time; peak ~1.9 GB             |
-| Parakeet phrase starts                           | Consistently **~240 ms early**; with that offset removed, median error **34-48 ms**; phrase ends 430-485 ms late |
-| Outer deadline kill                              | SIGTERM at the deadline, but `npm exec` and a worker thread survived: **children not reaped** |
+| Provider                                         | Result                                                                                                               |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| Parakeet (`hyperframes models install parakeet`) | Installs in **3.4 s** (704 MB into `~/.cache/hyperframes`); `parakeet-tdt-0.6b-v3-int8`, sherpa-onnx, **CC-BY-4.0**  |
+| Parakeet, 60 / 90 / 600 s                        | WER **0.6 / 0.8 / 1.2 %**; **0.10× / 0.08× / 0.06×** real time; peak ~1.9 GB                                         |
+| Parakeet phrase starts                           | Consistently **~240 ms early**; with that offset removed, median error **34-48 ms**; phrase ends 430-485 ms late     |
+| Outer deadline kill                              | SIGTERM at the deadline, but `npm exec` and a worker thread survived: **children not reaped**                        |
 | whisper.cpp v1.9.5                               | **Clone failed** on the runner (exit 1, no stderr). Locally its DTW timestamps were the most accurate (51 ms median) |
 
-So Parakeet is the local provider: about 36 s for 10 minutes of narration, well inside the budget. Captions subtract
-a fixed 240 ms from Parakeet's word starts (re-measure when the model changes). The deadline must kill the whole
+So Parakeet is the local provider: about 36 s for 10 minutes of narration, well inside the budget. Captions add a
+fixed 240 ms to Parakeet's word starts (it reports them early) and leave ends alone (they are already
+430-485 ms late; an end is kept at least 50 ms after its start) (re-measure when the model changes). The deadline must kill the whole
 tree (setsid plus a recursive kill), not just the group leader. whisper.cpp would need a vendored source tarball;
 it isn't needed for v1. Parakeet's CC-BY-4.0 licence is credited in the README.
 
 ### S12: render qualification (2026-11-03, `spikes/s12`, runs `6ae99c7736f6fef837ecc5bb` and `6ae99e7176bcf173e806d8ea`, 65 + 22 + 44 credits)
 
-| Case          | Result                                                                                                       |
-| ------------- | ------------------------------------------------------------------------------------------------------------ |
-| bus90         | 90 s, 2,700 frames exact; all **13 beeps at 0 ms** error in the final AAC                                     |
-| bus600        | 600 s, 18,000 frames exact; render **7.1 min**; all **82 beeps at 0 ms**. A first attempt was cancelled (`render_cancelled_parent_exited`) because the launching shell exited: long renders must run fully detached |
-| automation    | 100 and 400 points honoured. **600 points: silently cut to the first 512**, no warning text                     |
-| remux         | One master gain by re-encoding only the audio: −21.5 → **−14.0 LUFS**, video packets byte-identical, beeps unmoved |
-| hold          | All 180 pre-encode frames identical to the base render in both methods; after H.264 only 152-157 match exactly (PSNR ≥ 80 dB). The appended-beat method gives held frames equal to the last base frame; extending the last beat does not (PSNR ~41 dB) |
-| leftovers     | Every render leaves headless Chrome processes outside its process group                                       |
+| Case       | Result                                                                                                                                                                                                                                                 |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| bus90      | 90 s, 2,700 frames exact; all **13 beeps at 0 ms** error in the final AAC                                                                                                                                                                              |
+| bus600     | 600 s, 18,000 frames exact; render **7.1 min**; all **82 beeps at 0 ms**. A first attempt was cancelled (`render_cancelled_parent_exited`) because the launching shell exited: long renders must run fully detached                                    |
+| automation | 100 and 400 points honoured. **600 points: silently cut to the first 512**, no warning text                                                                                                                                                            |
+| remux      | One master gain by re-encoding only the audio: −21.5 → **−14.0 LUFS**, video packets byte-identical, beeps unmoved                                                                                                                                     |
+| hold       | All 180 pre-encode frames identical to the base render in both methods; after H.264 only 152-157 match exactly (PSNR ≥ 80 dB). The appended-beat method gives held frames equal to the last base frame; extending the last beat does not (PSNR ~41 dB) |
+| leftovers  | Every render leaves headless Chrome processes outside its process group                                                                                                                                                                                |
 
 So: keep automation at ≤ 400 points and treat > 512 as an error ourselves (HyperFrames won't warn). Master by audio
 re-mux. Hold the final frame as an appended beat, and compare frames before encoding in the guard. A 10-minute
