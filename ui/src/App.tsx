@@ -27,6 +27,8 @@ const TimelineDemo = import.meta.env.VITE_MOCK ? lazy(() => import('./mock/Timel
 const NarrationDemo = import.meta.env.VITE_MOCK ? lazy(() => import('./mock/NarrationDemo')) : null
 // Mock builds only: the voice-over recorder on its own (/dev/recorder).
 const RecorderDemo = import.meta.env.VITE_MOCK ? lazy(() => import('./mock/RecorderDemo')) : null
+// Mock builds only: the recorder's picture clock on a muted MP4 (/dev/clock).
+const ClockDemo = import.meta.env.VITE_MOCK ? lazy(() => import('./mock/ClockDemo')) : null
 
 /** /docs opens the REST reference; old /docs?tab=mcp|skills links open their page, keeping the hash. */
 function DocsRedirect() {
@@ -192,6 +194,16 @@ export function App() {
             element={
               <Page>
                 <RecorderDemo />
+              </Page>
+            }
+          />
+        ) : null}
+        {ClockDemo ? (
+          <Route
+            path="/dev/clock"
+            element={
+              <Page>
+                <ClockDemo />
               </Page>
             }
           />
