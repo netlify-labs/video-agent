@@ -261,3 +261,104 @@ hyperframes tts`, free, installed on demand only when a video has a voice-over) 
   (marked `estimated`), good enough for a highlight, never used for cue boundaries.
 - Voice files are files the agent made (`video/assets/voice/`), so the source archive and frozen edit bundles keep
   them like any composition file; a revision reuses each beat's audio while its line, voice and speed are unchanged.
+
+## Voice-over spikes
+
+### S13: speech cleanup chain, light and off (2026-11-03, `spikes/s13`, `npx tsx spikes/s13/run.ts [--sweep]`)
+
+Eight synthetic takes in `test/fixtures/narration/` (macOS `say` voices degraded with ffmpeg: quiet laptop, noisy
+room with a 120 Hz fan, hot USB mic, near-clipping, harsh sibilant headset, silence-only, and a quiet/loud punch
+pair; how each was made is in its README). No real recordings: they need consent, and the A/B listening with the
+owner that the bead asks for is still to do, so the parameters were tuned by measurement only and kept
+conservative. `scripts/lib/narration-cleanup.ts` measures the raw take (an energy speech gate on the 150 Hz-5 kHz
+band, BS.1770 gated loudness of the speech regions, which matches ffmpeg's ebur128 within 0.1 LU, and the RMS of the
+gaps), runs the chain once without the trim to measure it, then once with the trim. ffmpeg runs with `-threads 1
+-filter_threads 1` and bitexact output. Gaps, speech loudness and 4-9 kHz energy are measured on the raw take's
+regions; the output is sample-aligned with the input.
+
+**v1 light chain** (`cleanupFilter` in `src/lib/narration-cleanup.ts`):
+
+```
+highpass=f=80,
+apad=pad_len=600, afftdn=nr=12:nf=<gap RMS + 10, clamped -80..-20>:tn=0, atrim=start_sample=600, asetpts=N/SR/TB,
+volume=<pre>dB,           # speech to -24 LUFS (limits -12..+24 dB)
+deesser=i=0.4:m=0.5:f=0.5:s=o,
+acompressor=threshold=0.063096(-24 dBFS):ratio=2:attack=10:release=120:knee=4:makeup=1:detection=rms,
+volume=<trim>dB           # speech to -18 LUFS, held so the true peak stays at or under -1 dBTP (limits ±12 dB)
+```
+
+`off` is a true bypass: no ffmpeg, the take's bytes are used as they are.
+
+**Results, ffmpeg 9.0.2** (light; speech loudness on the raw take's speech regions; SNR = speech LUFS minus gap RMS):
+
+| Take             | Raw speech / TP         | Light speech / TP | Gap floor raw → light | SNR change | 4-9 kHz change | Pre / trim (dB) |
+| ---------------- | ----------------------- | ----------------- | --------------------- | ---------- | -------------- | --------------- |
+| quiet-laptop     | -40.5 LUFS / -24.9 dBTP | -18.0 / -3.9      | -78.9 → -67.0         | +10.6      | +2.1           | +16.5 / +9.6    |
+| noisy-room       | -23.2 / -6.7            | -18.0 / -1.2      | -53.2 → -55.4         | +7.4       | +0.4           | -0.8 / +9.9     |
+| usb-hot          | -15.2 / -1.4            | -18.0 / -4.2      | -84.3 → -90.3         | +3.2       | +0.5           | -8.8 / +9.6     |
+| near-clip        | -7.5 / +2.0             | -18.0 / -6.6      | -73.9 → -85.2         | +0.8       | -2.3           | -12.0 / +7.0    |
+| sibilant-headset | -22.6 / -8.4            | -18.0 / -4.8      | -69.2 → -70.9         | +6.3       | **-5.3**       | -1.4 / +10.8    |
+| punch-quiet      | -38.1 / -21.4           | -18.0 / -2.2      | -75.4 → -66.4         | +11.1      | +2.7           | +14.1 / +10.0   |
+| punch-loud       | -18.6 / -1.0            | -18.0 / -1.7      | -76.6 → -84.7         | +8.7       | +2.7           | -5.4 / +10.3    |
+| silence-only     | no speech               | no gain, warning  | -76.3 → -90.4         | n/a        | n/a            | 0 / 0           |
+
+| Check                                       | Result                                                                                                   |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Sample count, input = output                | equal on all 8 takes, light and off (e.g. noisy-room 251,819 → 251,819); `cleanTake` throws otherwise    |
+| Time shift (cross-correlation, ±2,000)      | 0 samples (three takes -1: the high-pass's phase); a click at 1.000 s and 3.000 s lands on the sample    |
+| Same-run determinism (process twice)        | identical PCM sha256 on all 8 takes                                                                      |
+| `off`                                       | PCM sha256 equals the input's on all 8 takes                                                             |
+| ffmpeg 6.0 (2023 static build) vs 9.0.2     | same graph, **identical PCM sha256** on all 8 takes                                                      |
+| Punch pair                                  | 19.5 LU apart raw, 0.0 LU after                                                                          |
+| Wall time (two chain passes + measurements) | 0.1-0.3 s per 4-11 s take on an M-series laptop (about 2.5% of real time, so ~15 s for a 10-minute take) |
+
+**Tuning (sweep over the 7 speech takes, `--sweep`):**
+
+| Variant                                 | SNR change avg / worst | 4-9 kHz avg / headset | Speech target error max | Peak-limited takes                  |
+| --------------------------------------- | ---------------------- | --------------------- | ----------------------- | ----------------------------------- |
+| **v1 light**                            | +6.9 / +0.8 dB         | +0.1 / -5.3 dB        | 0.0 LU                  | none                                |
+| Plan order (gain only at the end)       | +5.7 / -6.6            | -2.6 / -6.2           | 10.6 LU                 | none                                |
+| afftdn nf = gap RMS (+0)                | +2.4 / -2.6            | +0.3 / -5.3           | 0.0                     | none                                |
+| afftdn nf = gap +15                     | +8.2 / +4.0            | -0.1 / -5.3           | 0.0                     | none                                |
+| afftdn nf -50 (its default, unmeasured) | +8.1 / +2.6            | -0.5 / -5.3           | 0.0                     | none                                |
+| afftdn nr 6 / nr 20                     | +2.8 / +10.6 avg       | +0.1 / -5.3           | 0.0                     | none                                |
+| De-esser off / 0.3 / 0.5 / 0.6          | +7.3 … +6.5 avg        | +2.1 … -5.6 / 0 … -12 | 0.0                     | none                                |
+| Compressor peak detection               | +7.3 / +1.1            | 0.0 / -5.4            | 0.3                     | noisy-room, punch-loud              |
+| Pre-target -20 LUFS (more compression)  | +5.1 / +0.8            | -0.8 / -7.8           | 0.0                     | none                                |
+| Speech target -16 LUFS                  | +6.9 / +0.8            | +0.1 / -5.3           | 1.7                     | noisy-room, punch-loud, punch-quiet |
+
+So:
+
+- **The plan's chain works with three changes, all inside "S13 tunes these defaults":**
+  1. **afftdn delays its output by 600 samples** (a quarter window, 25 ms at 24 kHz; the same in 6.0 and 9.0)
+     while keeping the sample count, so it silently drops the last 25 ms and shifts the take. The graph pads 600
+     samples at the end and trims them from the front (`AFFTDN_DELAY`, checked with a click test in
+     `test/narration-cleanup.test.ts`). That trim removes the filter's latency, not content.
+  2. **Per-take gain is split**: most of it goes before the de-esser and compressor (speech to -24 LUFS, the
+     compressor's threshold), so every take is de-essed and compressed alike. With gain only at the end, a quiet
+     laptop take passes the compressor untouched and the ±12 dB trim can't reach the target (10.6 LU short),
+     while a hot take is squashed. A trim after the compressor sets the final level (+7 to +11 dB here: 6 dB
+     from -24 to -18 LUFS plus the compressor's ~4 LU).
+  3. **Speech target -18 LUFS** (gated, speech regions), not -16: speech peaks run about 14.5 dB over its loudness
+     after the chain, so -16 hits the -1 dBTP ceiling on 3 of 7 takes and misses by up to 1.7 LU. **For S12:**
+     with that peak-to-loudness ratio, -14 LUFS at -1 dBTP needs about 1.5 dB of limiting somewhere; mastering is
+     one gain (§6.3 step 7, peak wins), so the bus pre-limiter (step 3) has to do it, or the delivered mix lands
+     near -15.5 LUFS with a warning.
+- **afftdn needs a measured noise floor.** Its default (-50) treats quiet speech as noise: on the quiet takes it
+  removes 3 dB of 4-9 kHz (consonants) and barely helps the noisy room (+2.6 dB). The gap RMS + 10 dB keeps the
+  speech band unchanged (within 0.7 dB before compression) and gains +7 to +11 dB of SNR on noisy and quiet takes;
+  +15 starts to take consonants on the noisy room. nr 12 (ffmpeg's default) is the conservative choice; nr 20
+  measures better (+10.6 dB) but its musical-noise risk needs ears, so it's left for the A/B.
+- **De-esser 0.4** after the pre-gain cuts the harsh headset's 4-9 kHz by 5.3 dB and leaves normal takes within
+  -2.3 to +2.7 dB (the rise is the compressor lifting consonants relative to vowels). 0.5 and up start to cut
+  normal takes.
+- **Clean, hot takes gain least** (near-clip +0.8 dB SNR, usb-hot +3.2): the compressor lowers speech peaks but
+  not the room tone, and afftdn has little to remove. Their gap floors end at -85 and -90 dBFS.
+- **Silence-only takes**: no speech regions, so no gain and a `no_speech` warning; the chain still denoises
+  (-76 → -90 dBFS).
+- **ffmpeg 6.x compatibility:** every filter and option (`highpass`, `apad pad_len`, `afftdn nr/nf/tn`,
+  `atrim start_sample`, `asetpts`, `volume precision`, `deesser i/m/f/s`, `acompressor`, `ebur128 peak/framelog`)
+  exists in ffmpeg 6.0, and 6.0 and 9.0.2 give the same PCM, so Ubuntu 24.04's 6.1 should too. Cross-version
+  equality is still only best-effort (plan §6.3); the receipt records the version.
+- **Still open:** the blind A/B with the owner on real (consented) recordings, which can move nr and the de-esser.
+  The phase-2 script tests use these fixtures.
