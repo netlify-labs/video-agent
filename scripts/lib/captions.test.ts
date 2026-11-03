@@ -19,6 +19,7 @@ describe('toVtt', () => {
     )
   })
   it('produces a valid empty file when there are no cues', () => {
-    expect(toVtt(undefined, 10)).toBe('WEBVTT\n')
+    expect(toVtt(undefined, 10)).toBe('WEBVTT\n\n')
+    expect(toVtt([], 10)).toBe('WEBVTT\n\n')
   })
 })

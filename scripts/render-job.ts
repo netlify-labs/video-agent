@@ -23,6 +23,7 @@ import {
   master,
   narrationOf,
 } from './lib/mastering.js'
+import { captionsForRender } from './lib/narration-captions.js'
 import { makePreviews, posterTime } from './lib/previews.js'
 import { uploadReferences } from './lib/references.js'
 import { RenderProgressReporter } from './lib/render-progress.js'
@@ -257,7 +258,7 @@ async function main() {
     '0',
     join(out, 'preview.gif'),
   ])
-  writeFileSync(join(out, 'captions.vtt'), toVtt(summary.captions, durationSec))
+  writeFileSync(join(out, 'captions.vtt'), toVtt(captionsForRender(repoRoot, summary.captions), durationSec))
   run('tar', videoTarArgs(join(out, 'source.tar.gz')))
   // Best effort: a variant that can't be made is left out, and the service falls back to the poster and GIF.
   const previews = makePreviews({ video, out, posterAt, durationSec })

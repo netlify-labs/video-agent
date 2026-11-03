@@ -32,7 +32,8 @@
 //               renders; it holds the final frame while recorded narration runs past the end (docs/spikes.md S12)
 //   captions    summary.json captions carry beat, textId, beatStart, beatEnd (beat-relative) plus the absolute
 //               start, end and text render-job reads; the patcher keeps both in step. Voice cues (voice: true) follow
-//               the spoken words instead of a text, and keep their times when a beat is stretched (audio isn't)
+//               the spoken words instead of a text, and keep their times when a beat is stretched (audio isn't).
+//               Recorded-narration cues (narration: true, id, words) are absolute and belong to no beat
 import {
   defaultTreeAdapter,
   html as h5,
@@ -75,6 +76,13 @@ export interface Caption {
   beatEnd?: number
   /** A narration cue: it follows the beat's voice-over, not an on-screen text. */
   voice?: boolean
+  /**
+   * A recorded-narration cue (src/lib/narration-captions.ts): absolute times from the transcript, a stable id and
+   * its words. It belongs to no beat, so the beat checks skip it, and edits and re-voicing leave it as it is.
+   */
+  narration?: boolean
+  id?: string
+  words?: { text: string; start: number; end: number }[]
 }
 export interface Summary {
   title?: string
@@ -490,6 +498,11 @@ export function validate(html: string, summary?: Summary, opts: ValidateOptions 
     const known = new Map(comp.beats.flatMap((b) => b.texts.map((x) => [x.id, b.id] as const)))
     const voiced = new Set(comp.beats.filter((b) => b.voice).map((b) => b.id))
     for (const c of summary.captions) {
+      if (c.narration) {
+        if (!c.id || !(c.end > c.start) || !c.text.trim())
+          v.push(`Narration caption "${c.text.slice(0, 40)}" needs an id, text and a start before its end.`)
+        continue
+      }
       if (c.voice) {
         if (!c.beat || !voiced.has(c.beat))
           v.push(`Voice caption "${c.text.slice(0, 40)}" needs the beat whose voice-over it follows.`)

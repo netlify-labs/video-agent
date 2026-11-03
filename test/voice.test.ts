@@ -429,6 +429,58 @@ describe('scripts/voice.ts', () => {
     expect(html).toContain('data-automation=')
   })
 
+  it('sync leaves recorded-narration cues as they are', async () => {
+    mkdirSync(join(dir, 'assets/voice'), { recursive: true })
+    writeFileSync(
+      join(dir, 'assets/voice/voice.json'),
+      JSON.stringify({
+        v: 1,
+        provider: 'fake',
+        voice: 'af_heart',
+        speed: 1,
+        beats: [
+          {
+            beat: 'intro',
+            text: '',
+            hash: 'h',
+            file: 'assets/voice/intro.wav',
+            duration: 2.2,
+            cues: [{ text: 'Meet org webhooks.', start: 0, end: 0.9 }],
+            words: [],
+            estimated: true,
+          },
+          {
+            beat: 'outro',
+            text: '',
+            hash: 'h',
+            file: 'assets/voice/outro.wav',
+            duration: 1.5,
+            cues: [{ text: 'Read the docs.', start: 0, end: 1.5 }],
+            words: [],
+            estimated: true,
+          },
+        ],
+      }),
+    )
+    const cue = {
+      narration: true,
+      id: 'nc_0123456789ab',
+      start: 2.6,
+      end: 3.4,
+      text: 'My own words',
+      words: [{ text: 'My', start: 2.6, end: 2.8 }],
+    }
+    writeFileSync(join(dir, 'index.html'), voicedHtml())
+    writeFileSync(
+      join(dir, 'summary.json'),
+      JSON.stringify({ ...baseSummary, captions: [...(baseSummary.captions ?? []), cue] }),
+    )
+    expect(syncVoice(dir)).toEqual([])
+    const summary = JSON.parse(readFileSync(join(dir, 'summary.json'), 'utf8')) as Summary
+    expect(summary.captions?.filter((c) => c.narration)).toEqual([cue])
+    expect(validate(readFileSync(join(dir, 'index.html'), 'utf8'), summary)).toEqual([])
+  })
+
   it('sync refuses a voice placed wrong, and writes nothing', () => {
     mkdirSync(join(dir, 'assets/voice'), { recursive: true })
     writeFileSync(

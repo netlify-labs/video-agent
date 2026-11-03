@@ -13,7 +13,10 @@ const ts = (sec: number) => {
   return `${pad(h)}:${pad(m)}:${pad(s)}.${pad(ms % 1000, 3)}`
 }
 
-/** WebVTT from the agent's caption cues; invalid cues are dropped, times clamped to the video. */
+/**
+ * WebVTT from the agent's caption cues; invalid cues are dropped, times clamped to the video. No cues (a narrated
+ * version whose transcription failed or was off) is still a valid file: "WEBVTT\n\n", which finalize accepts.
+ */
 export function toVtt(cues: unknown, durationSec: number): string {
   const list = Array.isArray(cues) ? cues : []
   const valid = list
@@ -32,6 +35,7 @@ export function toVtt(cues: unknown, durationSec: number): string {
     }))
     .filter((c) => c.text && c.end > c.start)
     .sort((a, b) => a.start - b.start)
+  if (!valid.length) return 'WEBVTT\n\n'
   return [
     'WEBVTT',
     '',
