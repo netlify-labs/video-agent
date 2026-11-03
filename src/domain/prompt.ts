@@ -1,4 +1,5 @@
 // The run prompt: a fixed, versioned template plus the user's request, fenced as a creative brief.
+import { runSteps, STEP_COMMANDS, type RunStep } from '../lib/narration-run.js'
 import { ONE_WAY_WORDS } from '../lib/voice.js'
 import { ASPECTS, type Aspect, type VideoSound, type Voiceover } from './types.js'
 
@@ -320,6 +321,8 @@ export function buildRenderUnchangedPrompt(p: {
   editedFromN: number
   /** Beats whose narration line was changed in the editor: the run re-voices exactly these (and nothing else). */
   revoice?: string[]
+  /** The frozen bundle has recorded narration: the run mixes it with scripts/narration.ts (after any re-voice). */
+  narration?: boolean
   runManifestSha256: string
   callbackUrl: string
   checkpointUrl: string
@@ -329,7 +332,7 @@ export function buildRenderUnchangedPrompt(p: {
   const uploadArg = p.upload.mode === 'blobs' ? '--upload blobs' : `--upload ${p.upload.url}`
   const revoice = p.revoice ?? []
   const render = `npx tsx scripts/render-job.ts --job ${p.jobId} --attempt ${p.attemptId} --callback ${p.callbackUrl} --token ${p.callbackToken} ${uploadArg}`
-  if (!revoice.length)
+  if (!revoice.length && !p.narration)
     return [
       `You are rendering version ${p.versionN} of video ${p.jobId} (attempt ${p.attemptId}) exactly as someone edited it in the browser from version ${p.editedFromN}.`,
       "Don't write, change or delete any file in video/. There is nothing to design: only restore, check and render.",
@@ -347,18 +350,58 @@ export function buildRenderUnchangedPrompt(p: {
     ].join('\n')
   // Beat ids are checked ([a-z0-9-]) before they get here, so they can go in the prompt as they are.
   const beats = revoice.map((b) => `"${b}"`).join(', ')
+  const steps = runSteps({ revoice: revoice.length > 0, narration: p.narration })
+  const lines = revoice.length === 1 ? 'one narration line' : `${revoice.length} narration lines`
+  const what = [
+    revoice.length ? `${lines} to re-voice (beat${revoice.length === 1 ? '' : 's'} ${beats})` : '',
+    p.narration ? 'the recorded narration to mix in' : '',
+  ].filter(Boolean)
+  const doing = [
+    'restore',
+    revoice.length ? 're-voice' : '',
+    p.narration ? 'mix the narration' : '',
+    'check and render',
+  ]
+    .filter(Boolean)
+    .join(', ')
+  const writers = [
+    revoice.length ? 'scripts/voice.ts revoice' : '',
+    p.narration ? 'scripts/narration.ts' : '',
+  ].filter(Boolean)
+  const changed = [revoice.length ? 'the re-voiced lines' : '', p.narration ? 'the narration' : ''].filter(
+    Boolean,
+  )
+  const step: Record<RunStep, string[]> = {
+    prepare: [
+      `Run: npx tsx scripts/prepare-run.ts --job ${p.jobId} --attempt ${p.attemptId} --manifest ${p.runManifestSha256}`,
+      '   It restores video/ and verifies every file. If it fails, stop and report the error.',
+    ],
+    revoice: [
+      `Run from the repo root: ${STEP_COMMANDS.revoice}`,
+      "   It re-speaks exactly the marked lines with the video's own voice and speed, lengthens a beat only if its new line no longer fits (later beats move with it), and updates the narration captions and the music's ducking. If it fails, stop and report the error. Don't run it twice, don't use another text-to-speech tool, and don't run voice.ts any other way.",
+    ],
+    narration: [
+      `Run from the repo root: ${STEP_COMMANDS.narration}`,
+      "   It cleans the recordings prepare-run put in .va-run/narration/ (outside video/), mixes them into video/assets/narration/bus.wav at the video's length, and writes the speech and the music's ducking into index.html. If it fails, stop and report the error. Don't run it twice, don't copy, move or edit anything in .va-run/, and don't process the recordings any other way.",
+    ],
+    check: [
+      'Run `npx hyperframes check` in video/. If it reports any error, stop: fix nothing, and end your answer with the errors.',
+    ],
+    render: [
+      `Run: ${render}`,
+      `   It checks that only ${changed.join(' and ')} changed before rendering. If it fails, stop and report the error; never edit files to make it pass.`,
+    ],
+  }
+  const numbered = steps.flatMap((s, i) => {
+    const [first = '', ...rest] = step[s]
+    return [`${i + 1}. ${first}`, ...rest]
+  })
   return [
-    `You are rendering version ${p.versionN} of video ${p.jobId} (attempt ${p.attemptId}) exactly as someone edited it in the browser from version ${p.editedFromN}, with ${revoice.length === 1 ? 'one narration line' : `${revoice.length} narration lines`} to re-voice (beat${revoice.length === 1 ? '' : 's'} ${beats}).`,
-    "Don't write, change or delete any file in video/ yourself. There is nothing to design: only restore, re-voice, check and render. Only scripts/voice.ts revoice may change files, and only the ones it writes.",
+    `You are rendering version ${p.versionN} of video ${p.jobId} (attempt ${p.attemptId}) exactly as someone edited it in the browser from version ${p.editedFromN}, with ${what.join(' and ')}.`,
+    `Don't write, change or delete any file in video/ yourself. There is nothing to design: only ${doing}. Only ${writers.join(' and ')} may change files, and only the ones ${writers.length === 1 ? 'it writes' : 'they write'}.`,
     '',
-    `1. Run: npx tsx scripts/prepare-run.ts --job ${p.jobId} --attempt ${p.attemptId} --manifest ${p.runManifestSha256}`,
-    '   It restores video/ and verifies every file. If it fails, stop and report the error.',
-    '2. Run from the repo root: npx tsx scripts/voice.ts revoice',
-    "   It re-speaks exactly the marked lines with the video's own voice and speed, lengthens a beat only if its new line no longer fits (later beats move with it), and updates the narration captions and the music's ducking. If it fails, stop and report the error. Don't run it twice, don't use another text-to-speech tool, and don't run voice.ts any other way.",
-    '3. Run `npx hyperframes check` in video/. If it reports any error, stop: fix nothing, and end your answer with the errors.',
-    `4. Run: ${render}`,
-    '   It checks that only the re-voiced lines changed before rendering. If it fails, stop and report the error; never edit files to make it pass.',
-    '5. End your answer with the fenced ```json block render-job.ts prints.',
+    ...numbered,
+    `${steps.length + 1}. End your answer with the fenced \`\`\`json block render-job.ts prints.`,
     `   Once it has succeeded, never run render-job.ts again: if its json block is out of view, print it with cat .render/${p.attemptId}/manifest.json.`,
     '',
     `Optional progress: npx tsx scripts/checkpoint.ts --attempt ${p.attemptId} --url ${p.checkpointUrl} --token ${p.callbackToken} --message "<what you are doing>"`,

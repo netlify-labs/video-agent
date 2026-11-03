@@ -200,6 +200,7 @@ async function startRequest(
       versionN: a.versionN,
       editedFromN: version.editedFromN ?? version.parentN ?? 0,
       revoice: version.frozen.revoice?.beats ?? [],
+      narration: !!version.frozen.narration,
       runManifestSha256: sha256Hex(manifest),
       callbackUrl: `${deps.config.siteUrl}/api/internal/runs/${a.id}/done`,
       checkpointUrl: `${deps.config.siteUrl}/api/internal/runs/${a.id}/checkpoint`,

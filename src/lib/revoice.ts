@@ -5,6 +5,7 @@
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { bundleManifest, excluded, manifestHash } from './bundle-manifest.js'
+import { isReference } from './bundle-references.js'
 import { applyRevoice, load, normalizeLine, read, type RevoicedLine, type Summary } from './contract.js'
 import {
   FPS_TOLERANCE,
@@ -26,10 +27,13 @@ export function revoicable(path: string, beats: readonly string[]): boolean {
   return beats.some((b) => path === `${VOICE_DIR}/${b}.wav`)
 }
 
-/** The canonical manifest hash over the files a re-voicing run must leave alone. */
+/**
+ * The canonical manifest hash over the files a re-voicing run must leave alone. Reference files (the narration bus)
+ * never count: a frozen bundle doesn't hold one, and a narration step writes its own (checkNarration checks it).
+ */
 export function keptHash(files: { path: string; sha256: string }[], beats: readonly string[]): string {
   return manifestHash(
-    files.filter((f) => !excluded(f.path) && !revoicable(f.path, beats)),
+    files.filter((f) => !excluded(f.path) && !isReference(f.path) && !revoicable(f.path, beats)),
     [],
   )
 }
@@ -73,6 +77,28 @@ export function checkRevoiced(
   frozenDir: string,
   expected: { beats: readonly string[]; keptHash: string },
 ): string[] {
+  const { problems, want } = expectRevoiced(videoDir, frozenDir, expected)
+  if (!want) return problems
+  const file = (p: string) => {
+    const full = join(videoDir, p)
+    return existsSync(full) ? readFileSync(full, 'utf8') : null
+  }
+  if (file('index.html') !== want.html)
+    problems.push('index.html differs from the frozen composition with the re-voiced lines.')
+  if (!same(json(file('summary.json') ?? '{}'), want.summary))
+    problems.push('summary.json differs from the frozen captions with the re-voiced lines.')
+  return problems
+}
+
+/**
+ * Everything checkRevoiced checks except the last comparison, plus what index.html and summary.json should be after
+ * re-voicing (`want`, when nothing else is wrong). A narrated run (checkNarration) writes the narration over `want`.
+ */
+export function expectRevoiced(
+  videoDir: string,
+  frozenDir: string,
+  expected: { beats: readonly string[]; keptHash: string },
+): { problems: string[]; want?: { html: string; summary: Summary } } {
   const { beats } = expected
   const problems: string[] = []
   if (keptHash(bundleManifest(videoDir).files, beats) !== expected.keptHash)
@@ -83,7 +109,7 @@ export function checkRevoiced(
   }
   const frozen = Object.fromEntries(FROZEN_FILES.map((p) => [p, file(frozenDir, p)]))
   if (FROZEN_FILES.some((p) => frozen[p] === null))
-    return [...problems, `The frozen copies prepare-run keeps in ${FROZEN_DIR} are missing.`]
+    return { problems: [...problems, `The frozen copies prepare-run keeps in ${FROZEN_DIR} are missing.`] }
   let voice: VoiceFile
   let was: VoiceFile
   let script: VoiceScript
@@ -92,7 +118,7 @@ export function checkRevoiced(
     was = json(frozen[VOICE_JSON] ?? '') as VoiceFile
     script = json(file(videoDir, `${VOICE_DIR}/script.json`) ?? '') as VoiceScript
   } catch {
-    return [...problems, `${VOICE_JSON} or ${VOICE_DIR}/script.json can't be read.`]
+    return { problems: [...problems, `${VOICE_JSON} or ${VOICE_DIR}/script.json can't be read.`] }
   }
   if (voice.provider !== was.provider || voice.voice !== was.voice || voice.speed !== was.speed)
     problems.push('The re-voiced lines must use the video’s voice, provider and speed.')
@@ -117,19 +143,15 @@ export function checkRevoiced(
     if (!(Math.abs(seconds - b.duration) <= FPS_TOLERANCE))
       problems.push(`${b.file} isn't the ${b.duration}s voice.json says.`)
   }
-  if (problems.length) return problems
+  if (problems.length) return { problems }
   try {
     const want = applyRevoice(
       frozen['index.html'] ?? '',
       json(frozen['summary.json'] ?? '{}') as Summary,
       revoiceLines(frozen['index.html'] ?? '', voice, beats),
     )
-    if (file(videoDir, 'index.html') !== want.html)
-      problems.push('index.html differs from the frozen composition with the re-voiced lines.')
-    if (!same(json(file(videoDir, 'summary.json') ?? '{}'), want.summary))
-      problems.push('summary.json differs from the frozen captions with the re-voiced lines.')
+    return { problems, want: { html: want.html, summary: want.summary } }
   } catch (e) {
-    problems.push(e instanceof Error ? e.message : String(e))
+    return { problems: [e instanceof Error ? e.message : String(e)] }
   }
-  return problems
 }

@@ -8,6 +8,7 @@
 //   .va-run/narration/receipt.json       scripts/narration.ts: inputs, recipe, bus digest, spans, attempt id
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import type { NarrationReceipt } from '../../src/lib/narration-run.js'
 import type { CaptionPolicy, FrozenNarration, FrozenTake } from '../../src/lib/run-manifest.js'
 
 export const NARRATION_RUN_DIR = '.va-run/narration'
@@ -51,4 +52,15 @@ export interface NarrationInputs {
 export function readNarrationInputs(root: string): NarrationInputs | null {
   const p = narrationPaths(root).manifest
   return existsSync(p) ? (JSON.parse(readFileSync(p, 'utf8')) as NarrationInputs) : null
+}
+
+/** scripts/narration.ts's receipt, or null when it hasn't run (or wrote something that isn't JSON). */
+export function readNarrationReceipt(root: string): NarrationReceipt | null {
+  const p = narrationPaths(root).receipt
+  if (!existsSync(p)) return null
+  try {
+    return JSON.parse(readFileSync(p, 'utf8')) as NarrationReceipt
+  } catch {
+    return null
+  }
 }

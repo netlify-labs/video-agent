@@ -18,59 +18,20 @@
 // builds that is best-effort (the receipt records the version). Exits non-zero on any failure: stop and report it.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { applyBusNarration, load, NARRATION_SRC, read, validate, type Summary } from '../src/lib/contract.js'
+import { load, NARRATION_SRC, read, validate, type Summary } from '../src/lib/contract.js'
 import { BUS_LIMITER, floatToPcm16, limitBus, pcm16ToFloat } from '../src/lib/narration-bus.js'
-import { NARRATION_PIPELINE, type CleanupMeasured } from '../src/lib/narration-cleanup.js'
+import { NARRATION_PIPELINE } from '../src/lib/narration-cleanup.js'
+import { narrationTransform, type NarrationReceipt } from '../src/lib/narration-run.js'
 import { detectSpeech, VAD_VERSION } from '../src/lib/peaks.js'
 import type { RunManifest } from '../src/lib/run-manifest.js'
-import { MAX_OUTPUT_SAMPLES, SAMPLE_RATE, mixToBuffer, type Span } from '../src/lib/timeline.js'
+import { MAX_OUTPUT_SAMPLES, SAMPLE_RATE, mixToBuffer } from '../src/lib/timeline.js'
 import { wav } from '../src/lib/voice.js'
 import { cleanTake, pcmSha256, readTake } from './lib/narration-cleanup.js'
 import { narrationPaths, readNarrationInputs } from './lib/narration-inputs.js'
 import { StepError, assertNoTakesInVideo, log, repoRoot, run, sha256File } from './lib/run-tools.js'
 
-export interface NarrationReceipt {
-  v: 1
-  pipeline: number
-  jobId: string
-  attemptId: string
-  inputs: {
-    mediaId: string
-    /** The stored original's sha256 (what the render froze). */
-    sha256: string
-    /** The hydrated 24 kHz WAV's sha256 (differs from sha256 when the upload was decoded). */
-    wavSha256: string
-    /** PCM sha256 of the clean take (the bypass: equal to the hydrated take's PCM). */
-    cleanSha256: string
-    samples: number
-    filter: string | null
-    measured: CleanupMeasured | null
-    warnings: string[]
-  }[]
-  recipe: {
-    pipeline: number
-    cleanup: 'off' | 'light'
-    /** First line of `ffmpeg -version`. */
-    ffmpeg: string
-    limiter: typeof BUS_LIMITER
-    vad: number
-  }
-  /** The frozen length and the length mixed (the composition's root duration in samples). */
-  target: { manifestSamples: number; samples: number }
-  bus: {
-    path: typeof NARRATION_SRC
-    /** sha256 of video/assets/narration/bus.wav, and of its PCM alone. */
-    sha256: string
-    pcmSha256: string
-    samples: number
-    truePeakDb: number
-    maxReductionDb: number
-    limitedSamples: number
-  }
-  /** Speech in the processed bus, composition samples (before speechSeconds widens them to frames). */
-  spans: Span[]
-  warnings: string[]
-}
+/** The receipt's shape lives with the guard that reads it (src/lib/narration-run.ts). */
+export type { NarrationReceipt }
 
 const r2 = (n: number) => Math.round(n * 100) / 100
 
@@ -224,15 +185,18 @@ export function runNarration(o: { root?: string; ffmpeg?: string } = {}): Narrat
       mkdirSync(join(videoDir, 'assets', 'narration'), { recursive: true })
       writeFileSync(busPath, wav(le16(floatToPcm16(limited.bus))))
       const speech = detectSpeech(limited.bus)
-      const out = applyBusNarration(html, summary, op, speech).html
-      if (Math.round(read(load(out)).duration * SAMPLE_RATE) !== target)
+      // The same transform render-job's checkNarration recomputes from the frozen files and this receipt.
+      const out = narrationTransform(html, summary, op, speech)
+      if (Math.round(read(load(out.html)).duration * SAMPLE_RATE) !== target)
         throw new StepError("Writing the narration changed the composition's duration. Stop and report this.")
-      const violations = validate(out, summary, { narration: { busSamples: target } })
+      const violations = validate(out.html, out.summary, { narration: { busSamples: target } })
       if (violations.length)
         throw new StepError(
           `The narrated composition breaks the editing contract:\n- ${violations.join('\n- ')}`,
         )
-      writeFileSync(indexPath, out)
+      writeFileSync(indexPath, out.html)
+      if (JSON.stringify(out.summary) !== JSON.stringify(summary))
+        writeFileSync(summaryPath, JSON.stringify(out.summary, null, 2))
       return speech
     },
     (s) => ({ bus: NARRATION_SRC, samples: target, spans: s.length }),

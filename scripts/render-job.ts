@@ -8,10 +8,12 @@ import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } 
 import { join } from 'node:path'
 import { bundleManifest } from '../src/lib/bundle-manifest.js'
 import { validate, type Summary } from '../src/lib/contract.js'
+import { checkNarration } from '../src/lib/narration-guard.js'
 import { checkRevoiced, FROZEN_DIR } from '../src/lib/revoice.js'
 import type { PreviewFile } from '../src/lib/media/previews.js'
 import type { RunManifest } from '../src/lib/run-manifest.js'
 import { postCheckpoint } from './checkpoint.js'
+import { readNarrationReceipt } from './lib/narration-inputs.js'
 import { toVtt } from './lib/captions.js'
 import { makePreviews, posterTime } from './lib/previews.js'
 import { uploadReferences } from './lib/references.js'
@@ -87,7 +89,20 @@ async function main() {
   const runManifestPath = join(repoRoot, '.render', 'run-manifest.json')
   if (existsSync(runManifestPath)) {
     const m = JSON.parse(readFileSync(runManifestPath, 'utf8')) as RunManifest
-    if (m.attemptId === attempt && m.kind === 'render_unchanged' && m.bundle?.revoice) {
+    if (m.attemptId === attempt && m.kind === 'render_unchanged' && m.bundle?.narration) {
+      // Recorded narration (after any re-voice): only the files narration-run.ts's steps write may differ, each
+      // exactly as those steps write it from the frozen files and the receipt (src/lib/narration-guard.ts).
+      const receipt = readNarrationReceipt(repoRoot)
+      const problems = checkNarration(join(repoRoot, FROZEN_DIR), videoDir, receipt, m)
+      if (problems.length)
+        throw new StepError(
+          `narration_guard_failed: ${problems[0]}\nvideo/ changed in ways re-voicing and mixing the narration don't explain. Render-unchanged runs must not edit files. Stop and report this.\n- ${problems.join('\n- ')}`,
+        )
+      log('bundle.verified', {
+        narration: { bus: receipt?.bus.sha256, samples: receipt?.bus.samples },
+        ...(m.bundle.revoice ? { revoiced: m.bundle.revoice.beats } : {}),
+      })
+    } else if (m.attemptId === attempt && m.kind === 'render_unchanged' && m.bundle?.revoice) {
       // Re-voiced lines: only the files voice.ts revoice writes may differ, and exactly as it writes them.
       const problems = checkRevoiced(videoDir, join(repoRoot, FROZEN_DIR), m.bundle.revoice)
       if (problems.length)

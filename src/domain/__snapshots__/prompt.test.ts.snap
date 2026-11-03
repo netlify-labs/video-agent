@@ -1,0 +1,73 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`buildRenderUnchangedPrompt > with recorded narration, mixes it with scripts/narration.ts after any re-voice, in narration-run order 1`] = `
+"You are rendering version 3 of video vid_1 (attempt att_1) exactly as someone edited it in the browser from version 2, with the recorded narration to mix in.
+Don't write, change or delete any file in video/ yourself. There is nothing to design: only restore, mix the narration, check and render. Only scripts/narration.ts may change files, and only the ones it writes.
+
+1. Run: npx tsx scripts/prepare-run.ts --job vid_1 --attempt att_1 --manifest bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+   It restores video/ and verifies every file. If it fails, stop and report the error.
+2. Run from the repo root: npx tsx scripts/narration.ts
+   It cleans the recordings prepare-run put in .va-run/narration/ (outside video/), mixes them into video/assets/narration/bus.wav at the video's length, and writes the speech and the music's ducking into index.html. If it fails, stop and report the error. Don't run it twice, don't copy, move or edit anything in .va-run/, and don't process the recordings any other way.
+3. Run \`npx hyperframes check\` in video/. If it reports any error, stop: fix nothing, and end your answer with the errors.
+4. Run: npx tsx scripts/render-job.ts --job vid_1 --attempt att_1 --callback https://x/done --token tok --upload blobs
+   It checks that only the narration changed before rendering. If it fails, stop and report the error; never edit files to make it pass.
+5. End your answer with the fenced \`\`\`json block render-job.ts prints.
+   Once it has succeeded, never run render-job.ts again: if its json block is out of view, print it with cat .render/att_1/manifest.json.
+
+Optional progress: npx tsx scripts/checkpoint.ts --attempt att_1 --url https://x/cp --token tok --message "<what you are doing>"
+Never ask questions or request authorization. Never print environment variables. Never commit, push or open a pull request."
+`;
+
+exports[`buildRenderUnchangedPrompt > with recorded narration, mixes it with scripts/narration.ts after any re-voice, in narration-run order 2`] = `
+"You are rendering version 3 of video vid_1 (attempt att_1) exactly as someone edited it in the browser from version 2, with one narration line to re-voice (beat "intro") and the recorded narration to mix in.
+Don't write, change or delete any file in video/ yourself. There is nothing to design: only restore, re-voice, mix the narration, check and render. Only scripts/voice.ts revoice and scripts/narration.ts may change files, and only the ones they write.
+
+1. Run: npx tsx scripts/prepare-run.ts --job vid_1 --attempt att_1 --manifest bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+   It restores video/ and verifies every file. If it fails, stop and report the error.
+2. Run from the repo root: npx tsx scripts/voice.ts revoice
+   It re-speaks exactly the marked lines with the video's own voice and speed, lengthens a beat only if its new line no longer fits (later beats move with it), and updates the narration captions and the music's ducking. If it fails, stop and report the error. Don't run it twice, don't use another text-to-speech tool, and don't run voice.ts any other way.
+3. Run from the repo root: npx tsx scripts/narration.ts
+   It cleans the recordings prepare-run put in .va-run/narration/ (outside video/), mixes them into video/assets/narration/bus.wav at the video's length, and writes the speech and the music's ducking into index.html. If it fails, stop and report the error. Don't run it twice, don't copy, move or edit anything in .va-run/, and don't process the recordings any other way.
+4. Run \`npx hyperframes check\` in video/. If it reports any error, stop: fix nothing, and end your answer with the errors.
+5. Run: npx tsx scripts/render-job.ts --job vid_1 --attempt att_1 --callback https://x/done --token tok --upload blobs
+   It checks that only the re-voiced lines and the narration changed before rendering. If it fails, stop and report the error; never edit files to make it pass.
+6. End your answer with the fenced \`\`\`json block render-job.ts prints.
+   Once it has succeeded, never run render-job.ts again: if its json block is out of view, print it with cat .render/att_1/manifest.json.
+
+Optional progress: npx tsx scripts/checkpoint.ts --attempt att_1 --url https://x/cp --token tok --message "<what you are doing>"
+Never ask questions or request authorization. Never print environment variables. Never commit, push or open a pull request."
+`;
+
+exports[`buildRenderUnchangedPrompt > without narration, the prompts are unchanged 1`] = `
+"You are rendering version 3 of video vid_1 (attempt att_1) exactly as someone edited it in the browser from version 2.
+Don't write, change or delete any file in video/. There is nothing to design: only restore, check and render.
+
+1. Run: npx tsx scripts/prepare-run.ts --job vid_1 --attempt att_1 --manifest bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+   It restores video/ and verifies every file. If it fails, stop and report the error.
+2. Run \`npx hyperframes check\` in video/. If it reports any error, stop: fix nothing, and end your answer with the errors.
+3. Run: npx tsx scripts/render-job.ts --job vid_1 --attempt att_1 --callback https://x/done --token tok --upload blobs
+   It checks the files again before rendering. If it fails, stop and report the error; never edit files to make it pass.
+4. End your answer with the fenced \`\`\`json block render-job.ts prints.
+   Once it has succeeded, never run render-job.ts again: if its json block is out of view, print it with cat .render/att_1/manifest.json.
+
+Optional progress: npx tsx scripts/checkpoint.ts --attempt att_1 --url https://x/cp --token tok --message "<what you are doing>"
+Never ask questions or request authorization. Never print environment variables. Never commit, push or open a pull request."
+`;
+
+exports[`buildRenderUnchangedPrompt > without narration, the prompts are unchanged 2`] = `
+"You are rendering version 3 of video vid_1 (attempt att_1) exactly as someone edited it in the browser from version 2, with 2 narration lines to re-voice (beats "intro", "outro").
+Don't write, change or delete any file in video/ yourself. There is nothing to design: only restore, re-voice, check and render. Only scripts/voice.ts revoice may change files, and only the ones it writes.
+
+1. Run: npx tsx scripts/prepare-run.ts --job vid_1 --attempt att_1 --manifest bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+   It restores video/ and verifies every file. If it fails, stop and report the error.
+2. Run from the repo root: npx tsx scripts/voice.ts revoice
+   It re-speaks exactly the marked lines with the video's own voice and speed, lengthens a beat only if its new line no longer fits (later beats move with it), and updates the narration captions and the music's ducking. If it fails, stop and report the error. Don't run it twice, don't use another text-to-speech tool, and don't run voice.ts any other way.
+3. Run \`npx hyperframes check\` in video/. If it reports any error, stop: fix nothing, and end your answer with the errors.
+4. Run: npx tsx scripts/render-job.ts --job vid_1 --attempt att_1 --callback https://x/done --token tok --upload blobs
+   It checks that only the re-voiced lines changed before rendering. If it fails, stop and report the error; never edit files to make it pass.
+5. End your answer with the fenced \`\`\`json block render-job.ts prints.
+   Once it has succeeded, never run render-job.ts again: if its json block is out of view, print it with cat .render/att_1/manifest.json.
+
+Optional progress: npx tsx scripts/checkpoint.ts --attempt att_1 --url https://x/cp --token tok --message "<what you are doing>"
+Never ask questions or request authorization. Never print environment variables. Never commit, push or open a pull request."
+`;

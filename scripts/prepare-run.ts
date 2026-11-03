@@ -21,7 +21,8 @@ import {
 import { dirname, join, relative } from 'node:path'
 import { bundleManifest } from '../src/lib/bundle-manifest.js'
 import type { BundleReference } from '../src/lib/bundle-references.js'
-import { FROZEN_DIR, FROZEN_FILES, keptHash } from '../src/lib/revoice.js'
+import { frozenFilesFor } from '../src/lib/narration-run.js'
+import { FROZEN_DIR, keptHash } from '../src/lib/revoice.js'
 import { readPcm16 } from '../src/lib/narration-cleanup.js'
 import {
   feedbackStillPath,
@@ -359,21 +360,20 @@ export async function prepare(m: RunManifest, opts: { tmp: string; root?: string
         `The restored bundle's files don't match its manifest (got ${actual}). Stop and report this.`,
       )
     log('restored', { kind: 'bundle', key: m.bundle.key, manifestHash: actual })
-    // Lines to re-voice: keep the frozen copies of the files voice.ts revoice rewrites, for render-job's check.
+    // Lines to re-voice or narration to mix: keep the frozen copies of the files those steps rewrite (narration-run.ts),
+    // for render-job's checks.
     const frozen = join(root, FROZEN_DIR)
     rmSync(frozen, { recursive: true, force: true })
-    if (m.bundle.revoice) {
-      if (keptHash(restored.files, m.bundle.revoice.beats) !== m.bundle.revoice.keptHash)
-        throw new StepError("The restored bundle doesn't match its re-voice manifest. Stop and report this.")
-      for (const p of FROZEN_FILES) {
-        const from = join(root, 'video', p)
-        if (!existsSync(from))
-          throw new StepError(`The restored bundle has no video/${p} to re-voice from. Stop and report this.`)
-        mkdirSync(dirname(join(frozen, p)), { recursive: true })
-        copyFileSync(from, join(frozen, p))
-      }
-      log('revoice.planned', { beats: m.bundle.revoice.beats })
+    if (m.bundle.revoice && keptHash(restored.files, m.bundle.revoice.beats) !== m.bundle.revoice.keptHash)
+      throw new StepError("The restored bundle doesn't match its re-voice manifest. Stop and report this.")
+    for (const p of frozenFilesFor(m.bundle)) {
+      const from = join(root, 'video', p)
+      if (!existsSync(from))
+        throw new StepError(`The restored bundle has no video/${p} to work from. Stop and report this.`)
+      mkdirSync(dirname(join(frozen, p)), { recursive: true })
+      copyFileSync(from, join(frozen, p))
     }
+    if (m.bundle.revoice) log('revoice.planned', { beats: m.bundle.revoice.beats })
   }
   await hydrateNarration(root, m, m.bundle?.narration, fetch)
   // Library media by reference (plan v2 §9): exactly the snapshotted bytes, each one verified. PDFs are reference

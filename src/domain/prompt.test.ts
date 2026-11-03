@@ -217,4 +217,31 @@ describe('buildRenderUnchangedPrompt', () => {
     expect(p).toContain('lengthens a beat only if its new line no longer fits')
     expect(p).toContain('never edit files to make it pass')
   })
+
+  it('with recorded narration, mixes it with scripts/narration.ts after any re-voice, in narration-run order', () => {
+    const narrated = buildRenderUnchangedPrompt({ ...ru, narration: true })
+    expect(narrated).toMatchSnapshot()
+    const both = buildRenderUnchangedPrompt({ ...ru, revoice: ['intro'], narration: true })
+    expect(both).toMatchSnapshot()
+    const steps = [
+      '1. Run: npx tsx scripts/prepare-run.ts',
+      '2. Run from the repo root: npx tsx scripts/voice.ts revoice',
+      '3. Run from the repo root: npx tsx scripts/narration.ts',
+      '4. Run `npx hyperframes check`',
+      '5. Run: npx tsx scripts/render-job.ts',
+      '6. End your answer',
+    ]
+    const at = steps.map((s) => both.indexOf(s))
+    expect(at.every((i) => i >= 0)).toBe(true)
+    expect([...at].sort((a, b) => a - b)).toEqual(at)
+    expect(narrated).toContain('2. Run from the repo root: npx tsx scripts/narration.ts')
+    expect(narrated).not.toContain('voice.ts')
+    expect(both).toContain('Only scripts/voice.ts revoice and scripts/narration.ts may change files')
+  })
+
+  it('without narration, the prompts are unchanged', () => {
+    expect(buildRenderUnchangedPrompt({ ...ru, narration: false })).toBe(buildRenderUnchangedPrompt(ru))
+    expect(buildRenderUnchangedPrompt(ru)).toMatchSnapshot()
+    expect(buildRenderUnchangedPrompt({ ...ru, revoice: ['intro', 'outro'] })).toMatchSnapshot()
+  })
 })
