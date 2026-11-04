@@ -19,7 +19,7 @@ import {
 import { modals } from '@mantine/modals'
 import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
-import { IconCheck, IconDots, IconMapPin, IconX } from '@tabler/icons-react'
+import { IconCheck, IconDots, IconMapPin, IconSparkles, IconX } from '@tabler/icons-react'
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import { $api, commentsInit, newIdempotencyKey, type Version, type Video } from '../api/client'
 import type { paths } from '../api/schema'
@@ -779,7 +779,9 @@ export function CommentsCard({
             >
               <Button
                 size="xs"
-                variant="default"
+                variant="light"
+                color="brand"
+                leftSection={<IconSparkles size={14} />}
                 disabled={busy}
                 onClick={() => {
                   setIncorporating(true)
@@ -803,7 +805,13 @@ export function CommentsCard({
                   Add note
                 </Button>
               ) : null}
-              <Button size="xs" loading={posting} disabled={all.length === 0} onClick={postAll}>
+              <Button
+                size="xs"
+                variant="filled"
+                loading={posting}
+                disabled={all.length === 0}
+                onClick={postAll}
+              >
                 {all.length > 1 ? `Post ${all.length} notes` : 'Comment'}
               </Button>
             </Group>

@@ -41,6 +41,11 @@ body {
   --button-color: var(--va-text);
   height: 36px;
 }
+/* The brand tint (no fill): for the one action a card is asking for, beside quieter grey buttons. */
+.va-button[data-variant='light'] {
+  height: 36px;
+  font-weight: 600;
+}
 .va-button:disabled,
 .va-button[data-disabled] {
   --button-bg: var(--va-raised);
