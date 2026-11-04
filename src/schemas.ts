@@ -262,6 +262,16 @@ export const VersionSchema = z
       mine: VerdictSchema.nullable(),
     }),
     incorporates: z.number().int().describe('How many comments this version was asked to incorporate.'),
+    feedback: z
+      .array(
+        z.object({
+          author: z.string().nullable(),
+          body: z.string(),
+          timeSec: z.number().nullable(),
+          spot: z.boolean().openapi({ description: 'The comment marked a spot on the frame' }),
+        }),
+      )
+      .describe('The comments this version was asked to incorporate, as they were sent, in order.'),
     editable: z
       .boolean()
       .describe('Ready and keeps editing contract v1, so it can be edited in the browser.'),

@@ -40,6 +40,12 @@ describe('incorporate feedback', () => {
     expect(res.status).toBe(202)
     const body = await h.json(res)
     expect(body.versions[0]).toMatchObject({ n: 2, incorporates: 2, parentN: 1 })
+    // The notes it was asked to incorporate, in order, as the version's details show them.
+    expect(body.versions[0].feedback).toEqual([
+      { author: expect.any(String), body: 'The logo is too small', timeSec: 1, spot: true },
+      { author: expect.any(String), body: 'End on the docs link', timeSec: null, spot: false },
+    ])
+    expect(body.versions[1].feedback).toEqual([])
     await h.drive(2)
     const req = h.deps.runner.starts[1]
     const prompt = req?.prompt ?? ''

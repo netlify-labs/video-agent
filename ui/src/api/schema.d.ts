@@ -7765,6 +7765,14 @@ export interface components {
             };
             /** @description How many comments this version was asked to incorporate. */
             incorporates: number;
+            /** @description The comments this version was asked to incorporate, as they were sent, in order. */
+            feedback: {
+                author: string | null;
+                body: string;
+                timeSec: number | null;
+                /** @description The comment marked a spot on the frame */
+                spot: boolean;
+            }[];
             /** @description Ready and keeps editing contract v1, so it can be edited in the browser. */
             editable: boolean;
             /**

@@ -37,6 +37,7 @@ import {
 } from '../components/VoiceoverControl'
 import { CommentsCard, ReviewPlayer, VerdictBar, type Pin } from '../components/Review'
 import { CompositionPreview } from '../components/CompositionPreview'
+import { DetailsButton, DetailsCard, VersionDetailsModal } from '../components/VersionDetails'
 import { LanguageSelect, languageName } from '../components/LanguageSelect'
 import {
   IconBell,
@@ -64,7 +65,6 @@ import {
 import { $api, errorMessage, newIdempotencyKey, videoInit, type Version, type Video } from '../api/client'
 import {
   CopyField,
-  Meta,
   STATUS_WORD,
   Status,
   VersionImage,
@@ -87,25 +87,6 @@ const STAGE_WORDS: Record<string, string> = {
   cancelling: 'Stopping the run',
   unresolved: 'Checking whether the run started (an admin can resolve this)',
   finishing: 'Verifying and saving the files',
-}
-
-/** The music the server picked before the run, for the version details. */
-/** What a version sounds like, so a silent one isn't mistaken for missing audio. */
-function soundWords(v: Version): string {
-  const parts = [
-    v.links.narrationAudio ? 'your recorded voice-over' : v.voiceover ? 'AI voice-over' : null,
-    v.sound === 'music' ? 'music' : v.sound === 'music_sfx' ? 'music and sound effects' : null,
-  ].filter(Boolean)
-  if (!parts.length) return 'Silent (no audio track)'
-  const text = parts.join(', ')
-  return text.charAt(0).toUpperCase() + text.slice(1)
-}
-
-function musicWords(m: NonNullable<Version['music']>): string {
-  if (m.status === 'picked')
-    return `${m.title ?? 'A track'} (${m.source === 'library' ? 'from your library' : 'picked from Openverse'})`
-  if (m.status === 'skipped') return 'None found in time; the agent looked itself'
-  return m.title ? `Adding ${m.title}…` : 'Finding music…'
 }
 
 function useTicker() {
@@ -324,10 +305,12 @@ function Filmstrip({
   video,
   selected,
   onSelect,
+  onDetails,
 }: {
   video: Video
   selected: number
   onSelect: (n: number) => void
+  onDetails: (n: number) => void
 }) {
   return (
     <Card>
@@ -341,48 +324,52 @@ function Filmstrip({
         {video.versions.map((x) => {
           const pub = x.publications.some((p) => !p.unpublishedAt)
           return (
-            <button
-              key={x.n}
-              type="button"
-              className="va-version"
-              aria-pressed={x.n === selected}
-              onClick={() => {
-                onSelect(x.n)
-              }}
-            >
-              <div className="va-poster">
-                {x.status === 'ready' ? (
-                  <VersionImage videoId={video.id} v={x} file="poster" sizes="112px" />
-                ) : (
-                  // A black frame with a spinner while it's being made; just the frame if it stopped.
-                  <div
-                    className="va-poster-wait"
-                    role="img"
-                    aria-label={`Stage: ${x.stage === 'finding_music' && x.status === 'running' ? 'Finding music' : STATUS_WORD[x.status]}`}
-                  >
-                    {inProgress(x.status) ? <Loader size={18} color="var(--va-accent)" /> : null}
-                  </div>
-                )}
-              </div>
-              <div style={{ minWidth: 0 }}>
-                <Group justify="space-between" gap={6} wrap="nowrap">
-                  <Text size="sm" fw={500}>
-                    v{x.n}
-                    {x.parentN ? (
-                      <span style={{ color: 'var(--va-faint)', fontWeight: 400 }}> from v{x.parentN}</span>
-                    ) : null}
+            <div key={x.n} className="va-version-wrap">
+              <button
+                type="button"
+                className="va-version"
+                aria-pressed={x.n === selected}
+                onClick={() => {
+                  onSelect(x.n)
+                }}
+              >
+                <div className="va-poster">
+                  {x.status === 'ready' ? (
+                    <VersionImage videoId={video.id} v={x} file="poster" sizes="112px" />
+                  ) : (
+                    // A black frame with a spinner while it's being made; just the frame if it stopped.
+                    <div
+                      className="va-poster-wait"
+                      role="img"
+                      aria-label={`Stage: ${x.stage === 'finding_music' && x.status === 'running' ? 'Finding music' : STATUS_WORD[x.status]}`}
+                    >
+                      {inProgress(x.status) ? <Loader size={18} color="var(--va-accent)" /> : null}
+                    </div>
+                  )}
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <Group justify="space-between" gap={6} wrap="nowrap">
+                    <Text size="sm" fw={500}>
+                      v{x.n}
+                      {x.parentN ? (
+                        <span style={{ color: 'var(--va-faint)', fontWeight: 400 }}> from v{x.parentN}</span>
+                      ) : null}
+                    </Text>
+                    <Status status={x.status} size="xs" />
+                  </Group>
+                  <Text size="sm" c="var(--va-muted)" lineClamp={2}>
+                    {x.prompt}
                   </Text>
-                  <Status status={x.status} size="xs" />
-                </Group>
-                <Text size="sm" c="var(--va-muted)" lineClamp={2}>
-                  {x.prompt}
-                </Text>
-                <Text size="xs" c="var(--va-faint)">
-                  {relativeTime(x.createdAt)}
-                  {pub ? ' · Public' : ''}
-                </Text>
+                  <Text size="xs" c="var(--va-faint)">
+                    {relativeTime(x.createdAt)}
+                    {pub ? ' · Public' : ''}
+                  </Text>
+                </div>
+              </button>
+              <div className="va-version-info">
+                <DetailsButton v={x} size="sm" onOpen={() => onDetails(x.n)} />
               </div>
-            </button>
+            </div>
           )
         })}
       </Stack>
@@ -531,6 +518,8 @@ export function VideoPage() {
   const config = $api.useQuery('get', '/api/v1/config')
   const canPlan = canCreate && config.data?.planningAvailable === true
   const [planningRevision, setPlanningRevision] = useState(false)
+  // The version whose full details are open (How vN was made), if any.
+  const [detailsN, setDetailsN] = useState<number | null>(null)
   const canRemix = useCanRemix()
   // ?remix=n (the share page's link) opens the Remix dialog for that version.
   const [search, setSearch] = useSearchParams()
@@ -1146,48 +1135,10 @@ export function VideoPage() {
         </div>
 
         <div className="va-rail">
-          <Filmstrip video={data} selected={v.n} onSelect={select} />
+          <Filmstrip video={data} selected={v.n} onSelect={select} onDetails={setDetailsN} />
           <PublicLink video={data} v={v} canPublish={canPublish} />
           {v.status === 'ready' ? <TranscriptEditor videoId={data.id} v={v} canEdit={canPublish} /> : null}
-          <Card>
-            <Text fw={600} mb="sm">
-              Details for v{v.n}
-            </Text>
-            <Stack gap={8}>
-              <Meta label="Prompt">{v.prompt.length > 80 ? `${v.prompt.slice(0, 80)}…` : v.prompt}</Meta>
-              <Meta label="Length">
-                {v.output ? duration(v.output.durationSec) : '—'}{' '}
-                {v.targetDurationSec ? `(asked ${v.targetDurationSec} s)` : '(auto)'}
-              </Meta>
-              <Meta label="File">{v.output ? `${(v.output.bytes / 1e6).toFixed(2)} MB` : '—'}</Meta>
-              <Meta label="Credits">{credits(v.usage?.totalCreditsCost)}</Meta>
-              <Meta label="Agent">
-                {v.agent ? [v.agent.agent, v.agent.model].filter(Boolean).join(' · ') || '—' : '—'}
-              </Meta>
-              <Meta label="Sound">{soundWords(v)}</Meta>
-              {v.music ? <Meta label="Music">{musicWords(v.music)}</Meta> : null}
-              <Meta label="Attempts">{v.attempts}</Meta>
-              {v.incorporates ? (
-                <Meta label="Feedback">
-                  {v.incorporates} comment{v.incorporates === 1 ? '' : 's'} from v{v.parentN}
-                </Meta>
-              ) : null}
-              {v.timings?.endedAt && v.timings.startedAt ? (
-                <Meta label="Took">
-                  {duration(
-                    (new Date(v.timings.endedAt).getTime() - new Date(v.timings.startedAt).getTime()) / 1000,
-                  )}
-                </Meta>
-              ) : null}
-              {v.links.netlifyRun ? (
-                <Anchor href={v.links.netlifyRun} target="_blank" size="sm" c="var(--va-muted)" mt={4}>
-                  <Group gap={4}>
-                    View the run in Netlify <IconExternalLink size={14} />
-                  </Group>
-                </Anchor>
-              ) : null}
-            </Stack>
-          </Card>
+          <DetailsCard video={data} v={v} onOpen={() => setDetailsN(v.n)} />
           <Card>
             <Text fw={600} mb={8}>
               {v.output?.summary ? 'What the agent made' : 'The request'}
@@ -1199,6 +1150,14 @@ export function VideoPage() {
           <VersionCredits v={v} />
         </div>
       </div>
+      <VersionDetailsModal
+        video={data}
+        v={data.versions.find((x) => x.n === detailsN) ?? null}
+        opened={detailsN !== null}
+        onClose={() => {
+          setDetailsN(null)
+        }}
+      />
     </>
   )
 }

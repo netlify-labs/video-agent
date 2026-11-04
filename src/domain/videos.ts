@@ -855,7 +855,7 @@ function versionDto(
   pubs: PublicationRow[],
   verdicts: VerdictRow[] = [],
   viewerId: string | null = null,
-  incorporates = 0,
+  fed: VersionCommentRow[] = [],
   signing: { secret: string; job: JobRow; exp: number } | null = null,
   credits: Credit[] = [],
 ) {
@@ -869,7 +869,13 @@ function versionDto(
       mine: mineV?.verdict ?? null,
     },
     plan: v.plan ? { planId: v.plan.planId, brief: v.plan.brief, answers: v.plan.qa } : null,
-    incorporates,
+    incorporates: fed.length,
+    feedback: fed.map((c) => ({
+      author: c.authorName,
+      body: c.body,
+      timeSec: c.timeSec,
+      spot: c.x !== null && c.y !== null,
+    })),
     editable: v.status === 'ready' && v.contract === 1,
     mode: v.mode ?? 'author',
     editedFromN: v.editedFromN ?? null,
@@ -1044,7 +1050,7 @@ async function buildVideoDto(
         pubs,
         verdicts,
         viewer === 'system' ? null : viewer.userId,
-        fed.filter((c) => c.versionN === v.n).length,
+        fed.filter((c) => c.versionN === v.n).sort((a, b) => a.position - b.position),
         signing,
         versionCredits(provenance, v, output?.runCredits),
       )

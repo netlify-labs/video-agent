@@ -48,6 +48,10 @@ const SAMPLES = Object.fromEntries(
 )
 const DEFAULT_VOICE = 'af_heart'
 
+/** A voice's name for people (Heart · US, warm); an ElevenLabs id stays as it is. */
+export const voiceLabel = (voice: string | null | undefined) =>
+  VOICES.find((x) => x.value === (voice ?? ''))?.label ?? voice ?? 'Default (Heart)'
+
 /** One sample plays at a time; returns the voice playing and a toggle. */
 function usePreview() {
   const audio = useRef<HTMLAudioElement | null>(null)

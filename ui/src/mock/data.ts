@@ -63,6 +63,10 @@ function ready(
     music?: V['credits']
     /** Recorded narration: the MP3 and transcript downloads (the mock API answers both). */
     narrated?: boolean
+    /** The comments it was asked to incorporate. */
+    feedback?: V['feedback']
+    /** The plan accepted before it was made. */
+    plan?: V['plan']
   },
 ): V {
   const startedAt = ago(o.at)
@@ -77,11 +81,12 @@ function ready(
     voiceover: null,
     captions: o.narrated ? { status: 'ok', policy: 'sidecar', rev: 0 } : null,
     createdAt: ago(o.at + 0.3),
-    plan: null,
+    plan: o.plan ?? null,
     credits: o.music ?? [],
 
     verdicts: { approved: 0, changesRequested: 0, mine: null },
-    incorporates: 0,
+    incorporates: o.feedback?.length ?? 0,
+    feedback: o.feedback ?? [],
     editable: o.editable ?? false,
     mode: 'author',
     editedFromN: null,
@@ -232,6 +237,7 @@ export const videos: Video[] = [
 
       verdicts: { approved: 0, changesRequested: 0, mine: null },
       incorporates: 0,
+      feedback: [],
       editable: false,
       mode: 'author',
       editedFromN: null,
@@ -268,6 +274,7 @@ export const videos: Video[] = [
 
       verdicts: { approved: 0, changesRequested: 0, mine: null },
       incorporates: 0,
+      feedback: [],
       editable: false,
       mode: 'author',
       editedFromN: null,
@@ -303,6 +310,14 @@ export const videos: Video[] = [
       pub: 'q4czcinsu9',
       editable: true,
       previews: true,
+      feedback: [
+        {
+          author: 'Ada Okafor',
+          body: 'The end card should say "Start free today".',
+          timeSec: 6.5,
+          spot: true,
+        },
+      ],
       summary:
         'An 8-second, calm product teaser on a dark background. "Ship faster" fades in with a teal accent line, then "with preview deploys", and the film ends on a card that reads "Start free today".',
     }),
@@ -322,6 +337,24 @@ export const videos: Video[] = [
         author: people.sam.id,
         target: 8,
         notices: ['Asked for about 6 s; this video is 8.0 s.'],
+        plan: {
+          planId: 'plan_teaser',
+          brief: {
+            goal: 'Tease preview deploys in a few seconds',
+            audience: 'Developers who ship web apps',
+            keyMessage: 'Every change gets its own live preview',
+            beats: [
+              { text: '"Ship faster" fades in', seconds: 3 },
+              { text: '"with preview deploys"', seconds: 3 },
+              { text: 'End card: "Try it today"', seconds: 2 },
+            ],
+            tone: 'Calm, modern',
+            callToAction: 'Try it today',
+            mustInclude: ['A dark background'],
+            avoid: ['Stock footage'],
+          },
+          answers: [{ question: 'Who is it for?', answer: 'Developers' }],
+        },
         summary:
           'An 8-second, calm product teaser on a dark background with three beats and an end card that reads "Try it today".',
       },
@@ -408,6 +441,7 @@ export const videos: Video[] = [
 
       verdicts: { approved: 0, changesRequested: 0, mine: null },
       incorporates: 0,
+      feedback: [],
       editable: false,
       mode: 'author',
       editedFromN: null,
