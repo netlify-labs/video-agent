@@ -1,4 +1,5 @@
 import {
+  ActionIcon,
   Anchor,
   Button,
   Card,
@@ -11,11 +12,12 @@ import {
   TextInput,
   Textarea,
   Title,
+  Tooltip,
   UnstyledButton,
 } from '@mantine/core'
 import { useMediaQuery } from '@mantine/hooks'
 import { notifications } from '@mantine/notifications'
-import { IconBolt, IconListCheck } from '@tabler/icons-react'
+import { IconArrowsShuffle, IconBolt, IconListCheck } from '@tabler/icons-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router'
@@ -23,7 +25,7 @@ import { $api, errorMessage, newIdempotencyKey, useCanCreate, type Version, type
 import { Status, VersionImage, relativeTime } from '../components/bits'
 import { MediaChips, type Media } from '../components/MediaPicker'
 import { PlanPanel } from '../components/PlanPanel'
-import { RemixForm, RemixSourcePicker, useCanRemix } from '../components/RemixDialog'
+import { RemixForm, RemixSourcePicker, latestReady, useCanRemix } from '../components/RemixDialog'
 import { SoundControl, soundAfterPick, type Sound } from '../components/SoundControl'
 import { VOICE_OFF, VoiceoverControl, voiceInput, type VoiceState } from '../components/VoiceoverControl'
 import { brand } from '../theme'
@@ -115,7 +117,8 @@ export function QuickCreate() {
 }
 
 /** Your last few videos, to reuse a prompt or check on one in progress. */
-function RecentMine() {
+/** Your last few videos; each ready one can be remixed here (onRemix turns this page into the remix form). */
+function RecentMine({ onRemix }: { onRemix: ((video: Video, version: Version) => void) | null }) {
   const mine = $api.useQuery('get', '/api/v1/videos', { params: { query: { owner: 'me', limit: 4 } } })
   const items = mine.data?.items ?? []
   return (
@@ -128,29 +131,42 @@ function RecentMine() {
       ) : (
         <Stack gap={4}>
           {items.map((v) => {
-            const ready = v.versions.find((x) => x.status === 'ready')
+            const ready = latestReady(v)
             return (
-              <Link
-                key={v.id}
-                to={`/videos/${v.id}`}
-                className="va-version"
-                style={{ textDecoration: 'none' }}
-              >
-                <div className="va-poster">
-                  {ready ? <VersionImage videoId={v.id} v={ready} file="poster" sizes="112px" /> : null}
-                </div>
-                <div style={{ minWidth: 0 }}>
-                  <Text size="sm" fw={500} truncate>
-                    {v.title}
-                  </Text>
-                  <Group gap={8} mt={2}>
-                    <Status status={v.status} size="xs" />
-                    <Text size="xs" c="var(--va-faint)">
-                      {relativeTime(v.createdAt)}
+              <div key={v.id} className="va-recent">
+                <Link to={`/videos/${v.id}`} className="va-version" style={{ textDecoration: 'none' }}>
+                  <div className="va-poster">
+                    {ready ? <VersionImage videoId={v.id} v={ready} file="poster" sizes="112px" /> : null}
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <Text size="sm" fw={500} truncate>
+                      {v.title}
                     </Text>
-                  </Group>
-                </div>
-              </Link>
+                    <Group gap={8} mt={2}>
+                      <Status status={v.status} size="xs" />
+                      <Text size="xs" c="var(--va-faint)">
+                        {relativeTime(v.createdAt)}
+                      </Text>
+                    </Group>
+                  </div>
+                </Link>
+                {onRemix && ready ? (
+                  <Tooltip label={`Remix: a new video from ${v.title}`}>
+                    <ActionIcon
+                      variant="subtle"
+                      color="gray"
+                      size={32}
+                      aria-label={`Remix ${v.title}`}
+                      title={`Remix: make a new video from ${v.title}, changed as you describe`}
+                      onClick={() => {
+                        onRemix(v, ready)
+                      }}
+                    >
+                      <IconArrowsShuffle size={16} />
+                    </ActionIcon>
+                  </Tooltip>
+                ) : null}
+              </div>
             )
           })}
         </Stack>
@@ -476,7 +492,16 @@ export function NewVideoPage() {
               </Text>
             </Stack>
           </Card>
-          <RecentMine />
+          <RecentMine
+            onRemix={
+              canRemix
+                ? (video, version) => {
+                    setRemixFrom({ video, version })
+                    window.scrollTo({ top: 0 })
+                  }
+                : null
+            }
+          />
         </div>
       </div>
       <Modal

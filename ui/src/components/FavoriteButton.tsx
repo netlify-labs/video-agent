@@ -1,4 +1,4 @@
-import { Button, Tooltip, UnstyledButton } from '@mantine/core'
+import { ActionIcon, Tooltip, UnstyledButton } from '@mantine/core'
 import { IconStar, IconStarFilled } from '@tabler/icons-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
@@ -52,17 +52,23 @@ export function FavoriteStar({ videoId, favorite }: { videoId: string; favorite:
   )
 }
 
-/** The Favorite button in a video page's header. */
+/** The favorite star above a video page's player. */
 export function FavoriteButton({ videoId, favorite }: { videoId: string; favorite: boolean }) {
   const { on, toggle } = useFavorite(videoId, favorite)
+  const label = on ? 'Remove from favorites' : 'Add to favorites'
   return (
-    <Button
-      variant="default"
-      aria-pressed={on}
-      leftSection={on ? <IconStarFilled size={16} color="var(--va-star)" /> : <IconStar size={16} />}
-      onClick={toggle}
-    >
-      {on ? 'Favorited' : 'Favorite'}
-    </Button>
+    <Tooltip label={label}>
+      <ActionIcon
+        variant="default"
+        size={36}
+        radius="md"
+        aria-label={label}
+        title={label}
+        aria-pressed={on}
+        onClick={toggle}
+      >
+        {on ? <IconStarFilled size={18} color="var(--va-star)" /> : <IconStar size={18} />}
+      </ActionIcon>
+    </Tooltip>
   )
 }

@@ -363,6 +363,12 @@ describe('scripts/voice.ts', () => {
     expect(v.beats[0]?.estimated).toBe(true)
   })
 
+  it('reads "backend" as two words, so the stress lands on "back"', () => {
+    expect(spokenText('Backends and a backend. Backend first.')).toBe(
+      'Back ends and a back end. Back end first.',
+    )
+  })
+
   it('says every form of "deploy" with a full "dee"', () => {
     expect(spokenText('Deploy it. We deployed, redeploying deployments.')).toBe(
       'Dee-ploy it. We dee-ployed, ree-dee-ploying dee-ployments.',

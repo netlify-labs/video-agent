@@ -120,3 +120,32 @@ test('admins switch remixing off and on in Settings', async ({ page }) => {
   await sw.click({ force: true })
   await expect(sw).not.toBeChecked()
 })
+
+test('New video: a recent video’s Remix button starts the remix form from it', async ({ page }) => {
+  await page.goto('/new')
+  await page.getByRole('button', { name: 'Remix Ship faster with preview deploys' }).click()
+  await expect(page.getByText(/Starting from Ship faster with preview deploys v\d/)).toBeVisible()
+  await expect(page.getByTestId('remix-form')).toBeVisible()
+})
+
+test('video page: favorite, remix and download sit above the player as labelled icons', async ({ page }) => {
+  await page.goto('/videos/vid_webhooks')
+  const row = page.getByTestId('video-actions')
+  await expect(row.getByRole('button', { name: 'Add to favorites' })).toBeVisible()
+  await expect(row.getByRole('button', { name: 'Remix', exact: true })).toHaveAttribute(
+    'title',
+    /make a new video of your own from this one/,
+  )
+  await expect(row.getByRole('link', { name: 'Download the MP4' })).toHaveAttribute('href', /\.mp4|video/)
+  await row.getByRole('button', { name: 'Add to favorites' }).click()
+  await expect(row.getByRole('button', { name: 'Remove from favorites' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+})
+
+test('version details say what a version sounds like, silent included', async ({ page }) => {
+  await page.goto('/videos/vid_webhooks')
+  const details = page.locator('.mantine-Card-root', { hasText: 'Details for v1' })
+  await expect(details.getByText('Sound', { exact: true })).toBeVisible()
+})

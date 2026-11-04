@@ -88,6 +88,17 @@ const STAGE_WORDS: Record<string, string> = {
 }
 
 /** The music the server picked before the run, for the version details. */
+/** What a version sounds like, so a silent one isn't mistaken for missing audio. */
+function soundWords(v: Version): string {
+  const parts = [
+    v.links.narrationAudio ? 'your recorded voice-over' : v.voiceover ? 'AI voice-over' : null,
+    v.sound === 'music' ? 'music' : v.sound === 'music_sfx' ? 'music and sound effects' : null,
+  ].filter(Boolean)
+  if (!parts.length) return 'Silent (no audio track)'
+  const text = parts.join(', ')
+  return text.charAt(0).toUpperCase() + text.slice(1)
+}
+
 function musicWords(m: NonNullable<Version['music']>): string {
   if (m.status === 'picked')
     return `${m.title ?? 'A track'} (${m.source === 'library' ? 'from your library' : 'picked from Openverse'})`
@@ -511,6 +522,10 @@ function EditableTitle({ title, onSave }: { title: string; onSave: (title: strin
   )
 }
 
+/** What Remix does, for its tooltip and title. */
+const REMIX_HINT =
+  'Remix: make a new video of your own from this one. Say what to change, from swapping a name to a new topic in the same format.'
+
 export function VideoPage() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
@@ -702,18 +717,6 @@ export function VideoPage() {
           ) : null}
         </div>
         <Group gap="sm">
-          <FavoriteButton videoId={data.id} favorite={data.favorite} />
-          {v.status === 'ready' && canRemix ? (
-            <Button
-              variant="default"
-              leftSection={<IconArrowsShuffle size={16} />}
-              onClick={() => {
-                setRemixing(v.n)
-              }}
-            >
-              Remix
-            </Button>
-          ) : null}
           {remixing !== null && data.versions.some((x) => x.n === remixing && x.status === 'ready') ? (
             <RemixDialog
               video={data}
@@ -739,17 +742,6 @@ export function VideoPage() {
                 Edit
               </Button>
             </Tooltip>
-          ) : null}
-          {v.status === 'ready' ? (
-            <Button
-              component="a"
-              href={fileUrl(data.id, v.n, 'video', true)}
-              variant="default"
-              leftSection={<IconDownload size={16} />}
-              title="Download the MP4"
-            >
-              Download
-            </Button>
           ) : null}
           {v.status === 'ready' && canPublish && !live ? (
             <PublishButton
@@ -875,10 +867,9 @@ export function VideoPage() {
 
       <div className="va-split">
         <div className="va-rail">
-          {showProgress ? (
-            <Progress video={data} v={latest} canCancel={canAct(latest.authorId)} />
-          ) : v.status === 'ready' ? (
-            <Stack gap="xs">
+          {/* Actions on this video sit right above it: the view toggle, then favorite, remix and download. */}
+          <Group justify="space-between" gap="xs" wrap="nowrap" data-testid="video-actions">
+            {!showProgress && v.status === 'ready' ? (
               <SegmentedControl
                 size="xs"
                 w="fit-content"
@@ -891,6 +882,48 @@ export function VideoPage() {
                   { value: 'composition', label: 'Live composition' },
                 ]}
               />
+            ) : (
+              <span />
+            )}
+            <Group gap={6} wrap="nowrap">
+              <FavoriteButton videoId={data.id} favorite={data.favorite} />
+              {v.status === 'ready' && canRemix ? (
+                <Tooltip label={REMIX_HINT} multiline w={260}>
+                  <ActionIcon
+                    variant="default"
+                    size={36}
+                    radius="md"
+                    aria-label="Remix"
+                    title={REMIX_HINT}
+                    onClick={() => {
+                      setRemixing(v.n)
+                    }}
+                  >
+                    <IconArrowsShuffle size={18} />
+                  </ActionIcon>
+                </Tooltip>
+              ) : null}
+              {v.status === 'ready' ? (
+                <Tooltip label={`Download v${v.n} (MP4)`}>
+                  <ActionIcon
+                    component="a"
+                    href={fileUrl(data.id, v.n, 'video', true)}
+                    variant="default"
+                    size={36}
+                    radius="md"
+                    aria-label="Download the MP4"
+                    title={`Download v${v.n} (MP4)`}
+                  >
+                    <IconDownload size={18} />
+                  </ActionIcon>
+                </Tooltip>
+              ) : null}
+            </Group>
+          </Group>
+          {showProgress ? (
+            <Progress video={data} v={latest} canCancel={canAct(latest.authorId)} />
+          ) : v.status === 'ready' ? (
+            <Stack gap="xs">
               {view === 'composition' ? (
                 <CompositionPreview
                   key={`${data.id}-${v.n}`}
@@ -1097,16 +1130,6 @@ export function VideoPage() {
               }}
             />
           ) : null}
-
-          <Card>
-            <Text fw={600} mb={8}>
-              {v.output?.summary ? 'What the agent made' : 'The request'}
-            </Text>
-            <Text size="sm" c="var(--va-muted)" style={{ whiteSpace: 'pre-wrap' }}>
-              {v.output?.summary ?? v.prompt}
-            </Text>
-          </Card>
-          <VersionCredits v={v} />
         </div>
 
         <div className="va-rail">
@@ -1128,6 +1151,7 @@ export function VideoPage() {
               <Meta label="Agent">
                 {v.agent ? [v.agent.agent, v.agent.model].filter(Boolean).join(' · ') || '—' : '—'}
               </Meta>
+              <Meta label="Sound">{soundWords(v)}</Meta>
               {v.music ? <Meta label="Music">{musicWords(v.music)}</Meta> : null}
               <Meta label="Attempts">{v.attempts}</Meta>
               {v.incorporates ? (
@@ -1151,6 +1175,15 @@ export function VideoPage() {
               ) : null}
             </Stack>
           </Card>
+          <Card>
+            <Text fw={600} mb={8}>
+              {v.output?.summary ? 'What the agent made' : 'The request'}
+            </Text>
+            <Text size="sm" c="var(--va-muted)" style={{ whiteSpace: 'pre-wrap' }}>
+              {v.output?.summary ?? v.prompt}
+            </Text>
+          </Card>
+          <VersionCredits v={v} />
         </div>
       </div>
     </>

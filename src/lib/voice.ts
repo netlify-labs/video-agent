@@ -58,6 +58,11 @@ export const SPOKEN_AS: Readonly<Record<string, string>> = {
   'i.e.': 'that is',
   'vs.': 'versus',
   vs: 'versus',
+  // "backend" is stressed on its second half ("back-ENDS"); two words read as "BACK ends".
+  backend: 'back end',
+  backends: 'back ends',
+  Backend: 'Back end',
+  Backends: 'Back ends',
   // Kokoro says "deploy" as "dep-ploy" (a reduced first vowel); "dee-ploy" gives it a full "dee". Every form, capitalized too.
   ...Object.fromEntries(
     ['', 's', 'ed', 'ing', 'ment', 'ments'].flatMap((end) => [

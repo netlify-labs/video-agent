@@ -233,6 +233,16 @@ body {
   opacity: 1;
 }
 /* The remix source picker's rows (components/RemixDialog.tsx). */
+/* New video's recent videos: the row's link plus its Remix button beside it. */
+.va-recent {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.va-recent > .va-version {
+  flex: 1;
+  min-width: 0;
+}
 .va-remix-pick {
   display: block;
   padding: 8px 10px;
