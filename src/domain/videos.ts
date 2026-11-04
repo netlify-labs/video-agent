@@ -738,8 +738,11 @@ export async function publishVersion(
     if (active) {
       // Publishing again may change only whether the share page shows the transcript.
       const show = opts.showTranscript ?? active.showTranscript ?? false
-      if (show !== (active.showTranscript ?? false))
+      if (show !== (active.showTranscript ?? false)) {
         await repo.updatePublication(active.slug, { showTranscript: show })
+        // The video's ETag moves, so readers refetch the DTO with the new publication.
+        await repo.updateJob(jobId, { version: job.version + 1 })
+      }
       const row = { ...active, showTranscript: show }
       const mirror = mirrorFor(row, job, version, output, credits)
       // Under the job's lock, like a caption revision's mirror sync, so neither overwrites the other's newer state.
@@ -756,6 +759,7 @@ export async function publishVersion(
       showTranscript: opts.showTranscript ?? false,
     }
     await repo.insertPublication(row)
+    await repo.updateJob(jobId, { version: job.version + 1 })
     return { pub: row, mirror: mirrorFor(row, job, version, output, credits), output, written: false }
   })
   if (!written) await deps.blobs.set('internal', pubKey(pub.slug), JSON.stringify(mirror))
@@ -809,6 +813,7 @@ export async function unpublishVersion(deps: Deps, principal: Principal, jobId: 
     const active = (await repo.listPublications(jobId)).filter((p) => p.versionN === n && !p.unpublishedAt)
     if (active.length === 0) throw new ApiError('not_found', 'This version is not published.')
     for (const p of active) await repo.updatePublication(p.slug, { unpublishedAt: now })
+    await repo.updateJob(jobId, { version: job.version + 1 })
     return active.map((p) => p.slug)
   })
   for (const slug of slugs) await deps.blobs.delete('internal', pubKey(slug))
