@@ -113,10 +113,3 @@ export class OnsetDetector {
     return { sample: at, peak }
   }
 }
-
-export function detectOnsets(x: Float32Array, o: OnsetOptions): Onset[] {
-  const d = new OnsetDetector(o)
-  d.push(x)
-  d.push(new Float32Array(Math.round(0.02 * o.sampleRate)))
-  return d.onsets
-}

@@ -18,8 +18,6 @@ import { assertCan, type Principal } from './policy.js'
 import type { CleanupRow, VersionCaptions, VersionRow } from './types.js'
 import { loadJob, pubKey, type PublicationMirror } from './videos.js'
 
-/** The most cues one revision may send (15 minutes of narration is about 300). */
-export const MAX_REVISION_CUES = 2000
 const MAX_CUE_CHARS = 500
 const MAX_CUE_LINES = 3
 const SYNC_RETRY_MS = 60_000

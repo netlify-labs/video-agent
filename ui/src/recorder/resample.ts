@@ -59,11 +59,6 @@ export class Resampler {
     this.buf = new Float32Array(Math.max(8192, 4 * this.taps))
   }
 
-  /** Output samples produced so far. */
-  get produced(): number {
-    return this.nextOut
-  }
-
   push(block: Float32Array): Float32Array {
     this.append(block)
     this.inTotal += block.length

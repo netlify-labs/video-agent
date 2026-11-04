@@ -7,7 +7,7 @@ import type { Deps, McpOAuthConfig, OAuthPort } from '../deps.js'
 import { emailDomain, liveIdentityUser } from '../domain/auth.js'
 import { assertCan, type Principal } from '../domain/policy.js'
 import type { OAuthGrantRow, OAuthTokenRow, UserRow } from '../domain/types.js'
-import { safeEqual, sha256Hex } from '../lib/crypto.js'
+import { safeEqual, sha256Hex as sha } from '../lib/crypto.js'
 import { ApiError } from '../lib/errors.js'
 import type { Repo } from '../store/types.js'
 import { OAUTH_USER_PREFIX, linkUpstreamUser, type Admission } from './accounts.js'
@@ -46,7 +46,6 @@ export class OAuthError extends Error {
   }
 }
 
-const sha = (v: string) => sha256Hex(v)
 const later = (deps: Deps, ms: number) => new Date(deps.clock.now().getTime() + ms).toISOString()
 
 // ───── clients ─────

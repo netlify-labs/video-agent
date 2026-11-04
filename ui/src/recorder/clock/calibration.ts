@@ -64,7 +64,6 @@ export function routeOf(
 export const latencyToOffsetSamples = (latencyMs: number): number => -Math.round((latencyMs * SAMPLE_RATE) / 1000)
 /** The manual Sync offset (+ = later), in samples. */
 export const msToOffsetSamples = (ms: number): number => Math.round((ms * SAMPLE_RATE) / 1000)
-export const offsetSamplesToMs = (samples: number): number => (samples * 1000) / SAMPLE_RATE
 
 export interface CalibrationResult {
   method: Exclude<CalibrationMethod, 'manual'>

@@ -90,10 +90,6 @@ export class AudioClock {
     }
   }
 
-  get renderPairs(): number {
-    return this.render.count
-  }
-
   get outputSource(): OutputSource {
     return this.out.count > MIN_OUTPUT_PAIRS ? 'getOutputTimestamp' : 'fallback-latency'
   }

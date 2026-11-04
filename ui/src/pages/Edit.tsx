@@ -56,9 +56,9 @@ import {
 } from '../components/narration'
 import { RenderPictureFirst } from '../components/RenderPictureFirst'
 import { humanize, labelFor } from '../lib/labels'
-import { narrationOf, narrationToSave, sameOps, videoSamples, withNarration } from '../lib/narration-panel'
+import { narrationOf, narrationToSave, sameOps, withNarration } from '../lib/narration-panel'
 import { timingChanged } from '../../../src/lib/stale-picture'
-import type { NarrationOp } from '../../../src/lib/timeline'
+import { secondsToSamples, type NarrationOp } from '../../../src/lib/timeline'
 
 type Edit = paths['/api/v1/edits/{id}']['get']['responses'][200]['content']['application/json']
 type Composition = Edit['composition']
@@ -1190,7 +1190,7 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
           opened={renderDialog}
           onClose={() => setRenderDialog(false)}
           op={savedNarration}
-          videoSamples={videoSamples(total)}
+          videoSamples={secondsToSamples(total)}
           next={next}
           pending={render.isPending}
           onRender={(c) => {

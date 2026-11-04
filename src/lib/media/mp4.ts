@@ -8,7 +8,6 @@ export interface Mp4Info {
   /** The first audio track's sample entry (mp4a for AAC), or null with no audio. */
   audioCodec: string | null
   fastStart: boolean
-  topLevel: string[]
 }
 
 export class Mp4Error extends Error {}
@@ -135,7 +134,6 @@ export function inspectMp4(bytes: Uint8Array, opts: { audioOnly?: boolean } = {}
     videoCodec,
     audioCodec,
     fastStart,
-    topLevel: types,
   }
 }
 

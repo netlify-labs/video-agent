@@ -10,7 +10,6 @@ import {
   IDENTITY_FIT,
   outputLimit,
   resolve,
-  secondsToSamples,
   withinOutputLimit,
   type NarrationClip,
   type NarrationOp,
@@ -184,6 +183,3 @@ export function renderPreview(op: NarrationOp, video: number, fps: number): Rend
     fitAllowed: end > 0 && withinOutputLimit(fitTarget(audible, fps), video),
   }
 }
-
-/** The video length in samples for a composition of `seconds`. */
-export const videoSamples = (seconds: number): number => secondsToSamples(seconds)
