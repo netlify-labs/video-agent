@@ -1,6 +1,7 @@
 # Publish destinations: the share page, YouTube, and your own sites — plan
 
-- **Status:** draft 3 (2026-11-04). Not started. No beads yet.
+- **Status:** draft 3 (2026-11-04). Not started. No beads yet. The owner accepted draft 3's proposed defaults
+  (§9, decisions 7-11).
   - Draft 1: written against the code.
   - Draft 2: the owner's answers to draft 1's open questions; targets made fully generic at the owner's request.
   - Draft 3: two remote reviews of draft 2 (commit `2e1d06c`) through `nax run agent`, review only:
@@ -924,7 +925,7 @@ and more types can come later.
 5. **Who can use HTTP destinations:** anyone who can publish.
 6. **Targets are generic** (id, name, description, URL, opaque metadata); nothing in the app is site-specific.
 
-**Proposed in draft 3 (the owner can overrule)**
+**Proposed in draft 3, accepted by the owner (2026-11-04)**
 
 7. **Private videos don't go to external destinations** (YouTube or HTTP). `ready()` says "Make the video visible
    to the team first." The share page keeps today's behaviour.
@@ -1083,4 +1084,5 @@ site-vendor fact in §1 was re-checked locally against revenue-engine `b65b0596`
 - **Codex's "15 minutes may not cover a 2 GiB upload."** True in principle, but each step is bounded and the fenced
   lease lets a later invocation carry on. No time guarantee is needed.
 
-**Questions both reviewers raised** that are now proposed defaults (decisions 7-11) or still open (§9).
+**Questions both reviewers raised** that became decisions 7-11 (proposed in draft 3, accepted by the owner) or are
+still open (§9).
