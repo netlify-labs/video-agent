@@ -1725,6 +1725,67 @@ test('the Notify button says when the browser blocks notifications', async ({ pa
   await expect(page.getByTestId('notify-toggle')).toHaveText('Notifications blocked')
 })
 
+/** A Notification constructor that records what it shows (in window.__notified), with permission granted on asking. */
+const recordNotifications = (page: import('@playwright/test').Page) =>
+  page.addInitScript(() => {
+    const w = globalThis as unknown as { __notified: string[] }
+    w.__notified = []
+    let current = 'default'
+    class FakeNotification {
+      static get permission() {
+        return current
+      }
+      static requestPermission() {
+        current = 'granted'
+        return Promise.resolve(current)
+      }
+      onclick: (() => void) | null = null
+      constructor(title: string) {
+        w.__notified.push(title)
+      }
+      close() {}
+    }
+    Object.defineProperty(globalThis, 'Notification', { value: FakeNotification, configurable: true })
+  })
+const notified = (page: import('@playwright/test').Page) =>
+  page.evaluate(() => (globalThis as unknown as { __notified: string[] }).__notified)
+
+test('Notify: the notification comes with the tab in the background', async ({ page }) => {
+  await recordNotifications(page)
+  await page.goto('/videos/vid_making')
+  await page.getByTestId('notify-toggle').click()
+  await expect(page.getByTestId('notify-toggle')).toHaveText("You'll be notified")
+  // The person switches to another tab: the page's own polling stops (TanStack Query pauses hidden tabs).
+  await page.evaluate(
+    "localStorage.setItem('mockFinish', 'ready'); Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true }); Object.defineProperty(document, 'hidden', { value: true, configurable: true }); document.dispatchEvent(new Event('visibilitychange'))",
+  )
+  await expect
+    .poll(() => notified(page), { timeout: 20_000 })
+    .toEqual(['"Deploy rollbacks in one click" is ready.'])
+})
+
+test('Notify: the notification comes after leaving the video page, and says when a run fails', async ({
+  page,
+}) => {
+  await recordNotifications(page)
+  await page.goto('/videos/vid_making')
+  await page.getByTestId('notify-toggle').click()
+  await expect(page.getByTestId('notify-toggle')).toHaveText("You'll be notified")
+  // A client-side move to the library, the way the app's links go there.
+  await page.evaluate(
+    "localStorage.setItem('mockFinish', 'failed'); history.pushState({}, '', '/'); dispatchEvent(new PopStateEvent('popstate'))",
+  )
+  await expect(page.getByTestId('notify-toggle')).toHaveCount(0)
+  const msg = '"Deploy rollbacks in one click" didn\'t finish.'
+  await expect.poll(() => notified(page), { timeout: 20_000 }).toEqual([msg])
+  // On another page the app says it too; clicking it opens the video.
+  await page.getByText(msg).click()
+  await expect(page).toHaveURL(/\/videos\/vid_making$/)
+  // Told once: the watch is gone.
+  expect(await page.evaluate(() => localStorage.getItem('va-notify-watch'))).toBe('[]')
+  expect(await notified(page)).toEqual([msg])
+})
+
 test('Find music lists other places to find music, each opening in a new tab', async ({ page }) => {
   await page.goto('/media')
   await page.getByRole('button', { name: 'Find music' }).click()

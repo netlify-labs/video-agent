@@ -17,12 +17,25 @@ interface FetchEvent extends ExtendableEvent {
   request: Request
   respondWith(r: Response | Promise<Response>): void
 }
+interface NotificationEvent extends ExtendableEvent {
+  notification: { data?: { url?: unknown }; close(): void }
+}
+interface WindowClient {
+  url: string
+  focus(): Promise<WindowClient>
+  navigate(url: string): Promise<WindowClient | null>
+}
 declare const self: {
   location: Location
   skipWaiting(): Promise<void>
-  clients: { claim(): Promise<void> }
+  clients: {
+    claim(): Promise<void>
+    matchAll(o: { type: 'window'; includeUncontrolled: boolean }): Promise<WindowClient[]>
+    openWindow(url: string): Promise<WindowClient | null>
+  }
   addEventListener(type: 'install' | 'activate', fn: (e: ExtendableEvent) => void): void
   addEventListener(type: 'fetch', fn: (e: FetchEvent) => void): void
+  addEventListener(type: 'notificationclick', fn: (e: NotificationEvent) => void): void
 }
 
 self.addEventListener('install', (e) => {
@@ -36,6 +49,27 @@ self.addEventListener('activate', (e) => {
         if (name.startsWith(CACHE_PREFIX) && name !== CACHE_NAME) await caches.delete(name)
       await self.clients.claim()
     })(),
+  )
+})
+
+// A "your video is ready" notification (ui/src/lib/run-notify.ts): clicking it opens that video, in an open tab of
+// the app when there is one.
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close()
+  const raw = e.notification.data?.url
+  if (typeof raw !== 'string' || !raw.startsWith('/videos/')) return
+  const url = new URL(raw, self.location.origin).href
+  e.waitUntil(
+    (async () => {
+      const tabs = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+      const tab = tabs.find((c) => c.url === url) ?? tabs[0]
+      if (!tab) {
+        await self.clients.openWindow(url)
+        return
+      }
+      await tab.focus()
+      if (tab.url !== url) await tab.navigate(url).catch(() => null)
+    })().catch(() => undefined),
   )
 })
 

@@ -157,6 +157,44 @@ const commentDto = (c: MockComment) => {
   }
 }
 /**
+ * localStorage.mockFinish=ready|failed: the in-progress video's run ends on the second read of it after this is set
+ * (so a poll, not the page's first load, sees it end), ready with another video's files or failed.
+ */
+let finishReads = 0
+function stepMockFinish(id: string) {
+  let how: string | null
+  try {
+    how = localStorage.getItem('mockFinish')
+  } catch {
+    how = null
+  }
+  const vid = videos.find((x) => x.id === id)
+  const latest = vid?.versions[0]
+  if (id !== 'vid_making' || (how !== 'ready' && how !== 'failed') || !vid || latest?.status !== 'running')
+    return
+  if (++finishReads < 2) return
+  const done = videos.flatMap((x) => x.versions).find((x) => x.status === 'ready' && x.output)
+  const endedAt = new Date().toISOString()
+  vid.versions[0] =
+    how === 'ready' && done
+      ? {
+          ...latest,
+          status: 'ready',
+          stage: 'ready',
+          output: done.output,
+          links: done.links,
+          files: done.files,
+        }
+      : {
+          ...latest,
+          status: 'failed',
+          stage: 'failed',
+          error: { category: 'needs_input', message: 'The agent stopped to ask a question.' },
+        }
+  if (latest.timings) vid.versions[0].timings = { ...latest.timings, endedAt }
+  vid.status = vid.versions[0].status
+}
+/**
  * localStorage.mockMusic=searching|picked|library: the in-progress video is finding music before its run, or has found
  * it (on Openverse, or in the library after Openverse found none).
  */
@@ -1042,6 +1080,7 @@ export function installMock() {
       return Response.redirect(new URL(mockFile(m[1], m[3] as 'video'), window.location.origin).href, 302)
     if (m?.[1]) {
       stepPictureRender(m[1])
+      if (method === 'GET') stepMockFinish(m[1])
       const v = videos.find((x) => x.id === m[1])
       if (v && method === 'PATCH') {
         const b = (await readBody(init, input)) as { title?: string; private?: boolean; language?: string }

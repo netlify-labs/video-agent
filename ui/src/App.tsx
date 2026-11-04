@@ -4,6 +4,7 @@ import { Navigate, Route, Routes, useLocation } from 'react-router'
 import { $api } from './api/client'
 import { useAuth } from './auth'
 import { Layout } from './components/Layout'
+import { RunWatcher } from './components/RunWatcher'
 import { LibraryPage } from './pages/Library'
 import { AuthPages } from './pages/SignIn'
 import * as routes from './routes'
@@ -84,7 +85,15 @@ export function App() {
   }
   return (
     <Routes>
-      <Route element={<Layout />}>
+      {/* RunWatcher: the Notify button's notifications, on every signed-in page. */}
+      <Route
+        element={
+          <>
+            <RunWatcher />
+            <Layout />
+          </>
+        }
+      >
         <Route index element={<LibraryPage />} />
         <Route
           path="/new"

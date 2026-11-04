@@ -46,8 +46,18 @@ import {
   IconLock,
   IconLockOpen,
 } from '@tabler/icons-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
+import {
+  canNotify,
+  doneMessage,
+  isWatched,
+  readPref,
+  savePref,
+  subscribeWatches,
+  unwatchRun,
+  watchRun,
+} from '../lib/run-notify'
 import { $api, errorMessage, newIdempotencyKey, videoInit, type Version, type Video } from '../api/client'
 import {
   CopyField,
@@ -100,17 +110,7 @@ function clock(since: string | null | undefined): string {
 }
 
 /** Whether the person asked for a browser notification when a run ends, and still allows them. */
-function notifyOn(): boolean {
-  try {
-    return (
-      localStorage.getItem('notify') === '1' &&
-      'Notification' in window &&
-      Notification.permission === 'granted'
-    )
-  } catch {
-    return false
-  }
-}
+const notifyOn = () => readPref() && canNotify()
 
 function updatedAgo(iso: string): string {
   const s = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000))
@@ -177,6 +177,11 @@ function Progress({ video, v, canCancel }: { video: Video; v: Version; canCancel
   const [notifyBlocked, setNotifyBlocked] = useState(
     () => 'Notification' in window && Notification.permission === 'denied',
   )
+  // With Notify on, RunWatcher (app-wide) watches this run, so the notification comes on another page or with the
+  // tab in the background too. Turned on for an earlier run, it carries over to this one.
+  useEffect(() => {
+    if (notify) watchRun(video.id)
+  }, [notify, video.id])
   return (
     <Card p={0} style={{ overflow: 'hidden' }}>
       {snapshot ? (
@@ -247,11 +252,8 @@ function Progress({ video, v, canCancel }: { video: Video; v: Version; canCancel
                     const on = !notify
                     const save = (x: boolean) => {
                       setNotify(x)
-                      try {
-                        localStorage.setItem('notify', x ? '1' : '0')
-                      } catch {
-                        // private mode
-                      }
+                      savePref(x)
+                      if (!x) unwatchRun(video.id)
                     }
                     if (on && Notification.permission !== 'granted')
                       void Notification.requestPermission().then((p) => {
@@ -516,8 +518,11 @@ export function VideoPage() {
   const config = $api.useQuery('get', '/api/v1/config')
   const canPlan = canCreate && config.data?.planningAvailable === true
   const [planningRevision, setPlanningRevision] = useState(false)
+  // A watched run (Notify) is polled by RunWatcher on the same query, in the background too; polling here as well
+  // would double the requests.
+  const watched = useSyncExternalStore(subscribeWatches, () => isWatched(id))
   const video = $api.useQuery('get', '/api/v1/videos/{id}', videoInit(id), {
-    refetchInterval: (q) => (q.state.data && inProgress(q.state.data.status) ? 5000 : false),
+    refetchInterval: (q) => (!watched && q.state.data && inProgress(q.state.data.status) ? 5000 : false),
   })
   const [selected, setSelected] = useState<number | null>(null)
   const [revision, setRevision] = useState('')
@@ -571,12 +576,8 @@ export function VideoPage() {
     const was = prevStatus.current
     prevStatus.current = data.status
     if (was && inProgress(was as Video['status']) && !inProgress(data.status)) {
-      const msg = data.status === 'ready' ? `"${data.title}" is ready.` : `"${data.title}" didn't finish.`
-      try {
-        if (notifyOn()) new Notification(msg)
-      } catch {
-        // notifications unavailable
-      }
+      // The browser notification, when asked for, is RunWatcher's.
+      const msg = doneMessage(data.title, data.status)
       notifications.show({ color: data.status === 'ready' ? 'teal' : 'red', message: msg })
     }
   }, [data])
