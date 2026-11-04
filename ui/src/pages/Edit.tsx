@@ -29,6 +29,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import {
   IconArrowBackUp,
   IconArrowsMaximize,
+  IconPlayerSkipForward,
   IconArrowLeft,
   IconArrowDown,
   IconArrowUp,
@@ -1045,9 +1046,24 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
             {cur.beats.map((b, i) => (
               <div key={b.id} className="va-beat" data-testid={`beat-${b.id}`} title={b.id}>
                 <Group justify="space-between" wrap="nowrap" gap="xs">
-                  <Text size="sm" fw={600}>
-                    {i + 1}. {labelFor(b.label, b.id)}
-                  </Text>
+                  <Group gap={4} wrap="nowrap" style={{ minWidth: 0 }}>
+                    <Tooltip label="Jump the preview to the start of this scene" openDelay={300}>
+                      <ActionIcon
+                        variant="subtle"
+                        color="gray"
+                        size="sm"
+                        aria-label={`Jump to ${labelFor(b.label, b.id)}`}
+                        onClick={() => {
+                          narrationControl.current?.seekTo(b.start)
+                        }}
+                      >
+                        <IconPlayerSkipForward size={14} />
+                      </ActionIcon>
+                    </Tooltip>
+                    <Text size="sm" fw={600} truncate>
+                      {i + 1}. {labelFor(b.label, b.id)}
+                    </Text>
+                  </Group>
                   <Group gap={4} wrap="nowrap">
                     <NumberInput
                       aria-label={`Length of ${labelFor(b.label, b.id)}`}

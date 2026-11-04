@@ -98,3 +98,14 @@ test('editor: pressing in a lane and dragging scrubs; a click on a narration cli
   await page.mouse.up()
   await expect.poll(() => previewTime(page)).toBeGreaterThan(5)
 })
+
+test('editor: a scene card jumps the preview to the start of its scene', async ({ page }) => {
+  await page.goto('/videos/vid_teaser/edit/2')
+  await expect(page.getByRole('button', { name: 'Play preview' })).toBeEnabled()
+  // Opening 0-3 s, Demo 3-6 s, Outro 6-9 s.
+  await page.getByRole('button', { name: 'Jump to Outro' }).click()
+  await expect.poll(() => previewTime(page)).toBe(6)
+  await page.getByRole('button', { name: 'Jump to Demo' }).click()
+  await expect.poll(() => previewTime(page)).toBe(3)
+  await expect(page.locator('.va-tl-playhead')).toBeVisible()
+})

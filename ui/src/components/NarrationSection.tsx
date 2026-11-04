@@ -122,6 +122,8 @@ export interface NarrationTrackApi {
 export interface NarrationControl {
   /** Selects and shows clip `clipId`, with the playhead at `sample`. */
   jumpTo: (clipId: string, sample: number) => void
+  /** Moves the playhead (and the preview) to `seconds` into the composition. */
+  seekTo: (seconds: number) => void
 }
 
 export interface NarrationSectionProps {
@@ -329,6 +331,9 @@ export function NarrationSection(props: NarrationSectionProps) {
         seek(sample)
         editor.setSelected(clipId)
         focusClip(clipId)
+      },
+      seekTo: (seconds) => {
+        seek(Math.max(0, Math.round(seconds * SAMPLE_RATE)))
       },
     }
   }, [control, seek, editor])
