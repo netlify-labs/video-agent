@@ -2,7 +2,8 @@
 
 - **Status:** draft 2 (2026-11-04). Not started. No beads yet. Not reviewed. Draft 2 folds in the owner's answers
   to draft 1's open questions (§9): a new site per video by default, **adding to one of your existing sites**, and an
-  optional **agent run that works the video into the site's design**.
+  optional **agent run that works the video into the site's design**. It also makes **targets fully generic** (id,
+  name, description, url, opaque metadata), at the owner's request, so nothing in the app is specific to sites.
 - **Ask (owner, 2026-11-04):** someone asked for "a button to post to YouTube". The owner widened it: publishing today
   only means the share page on this app; we want **one generic publishing interface** where the share page, YouTube
   and others are channels. YouTube needs the person to connect their account so we can upload for them. A second
@@ -35,8 +36,11 @@ moves through `queued → running → (waiting) → live | failed`, and later `r
 background function, retried with backoff like webhooks, so a slow YouTube upload or a site build never blocks a
 request. The HTTP destination is the open-source seam: the app POSTs a signed payload with signed links to the
 MP4, poster and captions, and the receiver answers with a URL (now, or later through a callback). A destination can
-also list **targets** (the places it already made for this person, such as their sites), so the publisher picks
-"new" or an existing one, and can take free-text **instructions** ("put it in the hero, above the pricing table").
+also list **targets**: things it already holds for this person, each just an id, a name, an optional description
+and URL, and opaque metadata the app hands back untouched. The publisher picks "new" or an existing one. The app
+knows nothing about what a target is; for the internal Netlify channel it happens to be a site, for another
+destination it could be a playlist, a CMS collection or a page. A destination can also take free-text
+**instructions** ("put it in the hero, above the pricing table").
 Netlify's internal "Netlify site" channel is just an HTTP destination whose receiver lives in revenue-engine and
 uses site-vendor, which gains **blob uploads** so the video lives in the vended site's own Netlify Blobs and an edge
 function on that site streams it. When the publisher adds instructions, the receiver starts an **Agent Runner run**
@@ -105,11 +109,15 @@ type StepResult =
   | { status: 'failed'; error: string } // permanent
   | { status: 'removed' }
 
+/** Generic on purpose: the app shows name, description and url, and never reads metadata. */
 interface Target {
-  id: string // the destination's own id for it (a site's ownerKey, a playlist id)
-  label: string // "acme-launch.netlify.app"
-  url: string | null
-  detail: string | null // "3 videos · updated 2 days ago"
+  id: string // the destination's own id, opaque to the app (≤ 200 characters)
+  name: string // shown in the picker (≤ 200)
+  description: string | null // a second line in the picker (≤ 500)
+  url: string | null // https only; shown as a link
+  /** The destination's own data, sent back verbatim when this target is chosen. Flat: string, number, boolean or
+   * null values; at most 20 keys and 2 KB as JSON. Never shown, never interpreted. */
+  metadata: Record<string, string | number | boolean | null> | null
 }
 ```
 
@@ -134,7 +142,8 @@ destinations
   secret_enc text null             http only; shown once on create/rotate, like webhook secrets
   options_schema jsonb null        http only (§6.3)
   capabilities jsonb               http: what the receiver said it supports in its ping (§3.5):
-                                   { targets: bool, instructions: bool }; built-in kinds: fixed
+                                   { targets: bool, targetNoun?: string, instructions: bool };
+                                   built-in kinds: fixed
   created_by, created_at, updated_at
 
 destination_connections            a person's account at a destination (YouTube)
@@ -150,7 +159,7 @@ destination_publications
   job_id, version_n, destination_id
   status text                      queued | running | waiting | live | failed | removing | removed
   options jsonb                    what the publisher chose (title override, privacy, site name…)
-  target jsonb null                { id, label } of an existing target, or null for "new"
+  target jsonb null                the chosen Target as the destination sent it (§2.2), or null for "new"
   instructions text null           the publisher's free text (≤ 4,000 characters), when the destination takes it
   state jsonb null                 the kind's resumable state
   secret_once_enc text null        a one-time secret the destination handed back (a site password, §3.3);
@@ -199,7 +208,8 @@ step). So existing share links, embeds, the oEmbed work in the CLI plan and the 
   "destination": { "id": "dst_…", "name": "Netlify demo site" },
   "publisher": { "id": "u_…", "name": "…", "email": "…" }, // whose targets these are
   "options": { "name": "acme-launch" }, // what the publisher filled in (§6.3)
-  "target": { "id": "video-agent#u_…#acme", "label": "acme-launch.netlify.app" }, // null: make a new one
+  // The Target the publisher picked, exactly as the receiver listed it (§3.4); null: make a new one
+  "target": { "id": "…", "name": "…", "description": "…", "url": "…", "metadata": { "…": "…" } },
   "instructions": "Put it in the hero, above the pricing table.", // or null
   "video": {/* the Video DTO webhooks send */},
   "version": 3,
@@ -237,27 +247,37 @@ step). So existing share links, embeds, the oEmbed work in the CLI plan and the 
   request; we store only its hash) and
   `{ "status": "working" | "live" | "failed", "url"?, "externalId"?, "message"?, "secretOnce"? }`.
   Idempotent; a late callback for a row already `removed` is ignored. `working` only updates `message` (progress
-  the UI shows, such as "Agent is adding the video to the page"). `secretOnce` is `{ "label": "Site password",
-"value": "…" }`: kept encrypted on the row and shown to the publisher **once**, then erased (or erased after 24
-  hours if nobody looks). It never appears in DTOs, webhooks or logs.
+  the UI shows, such as "Agent is adding the video to the page"). `secretOnce` is
+  `{ "label": "Site password", "value": "…" }`: kept encrypted on the row and shown to the publisher **once**, then
+  erased (or erased after 24 hours if nobody looks). It never appears in DTOs, webhooks or logs.
 - `POST /api/v1/destination-publications/{id}/files` with the same token returns a fresh `files` object, for a
   receiver that needed longer than an hour to copy.
 - Both routes are public (no session or API key), rate-limited, and only work while the row is `waiting` or `running`.
 
 ### 3.4 Targets
 
-When the destination's capabilities include `targets`, opening its Publish dialog asks the receiver for this
-person's targets: `POST {url}` with `{ "event": "targets", "publisher": {…}, "video": {…} }` (signed the same way,
-5 s timeout). The answer is `200 { "targets": [ { "id", "label", "url"?, "detail"? } ] }`, at most 100, newest first.
-The app passes the list through to the dialog and remembers nothing; on publish it sends the chosen target back,
-and the receiver must check that this publisher may use it (the app can't). A failed or slow targets call still
-lets the person publish to a new one.
+The contract is deliberately generic: the app doesn't know whether a target is a site, a playlist, a CMS
+collection or anything else.
+
+- When the destination's capabilities include `targets`, opening its Publish dialog asks the receiver for this
+  person's targets: `POST {url}` with `{ "event": "targets", "publisher": {…}, "video": {…} }` (signed the same
+  way, 5 s timeout).
+- The answer is `200 { "targets": Target[] }` (§2.2: `id`, `name`, optional `description`, `url`, `metadata`), at
+  most 100, in the receiver's order. The app checks the shape and limits, drops entries that break them, and passes
+  the rest to the dialog. It stores nothing until the person publishes.
+- On publish, the chosen target goes back exactly as listed, `metadata` included, so a receiver can carry its own
+  data through without a lookup. The receiver must still check that this publisher may use that target: the app
+  can't, and the publish request is the only trusted moment (it's signed and names the publisher).
+- `capabilities.targetNoun` (optional, ≤ 30 characters, e.g. `"site"`) words the picker: "New site / Your sites".
+  Without it: "New / Existing".
+- A failed or slow targets call still lets the person publish to a new one.
 
 ### 3.5 Admin setup
 
 Admin → **Destinations** → Add an HTTP destination: name, URL (`https:` only, `checkUrl`), and an optional options
 form. The secret is shown once (as for webhooks), with **Rotate** and **Send a test**: an `event: "ping"` with no
-files, which the receiver answers `2xx`, optionally with `{ "capabilities": { "targets": true, "instructions": true } }`.
+files, which the receiver answers `2xx`, optionally with
+`{ "capabilities": { "targets": true, "targetNoun": "site", "instructions": true } }`.
 The app stores what it says (re-checked on every test), and the dialog shows the target picker and the instructions
 box only when they're on. Disabling hides the destination from Publish ▾ and refuses new publications; existing rows
 can still be unpublished. The publisher's name and email go to every HTTP destination, which is why only admins add
@@ -387,12 +407,14 @@ template has:
 ### 5.4 The receiver
 
 A route in revenue-engine (`services/api`, or a small service of its own) that the HTTP destination points at. Its
-ping answers `capabilities: { targets: true, instructions: true }`.
+ping answers `capabilities: { targets: true, targetNoun: "site", instructions: true }`. Everything site-specific
+below is the receiver's business; the app only ever sees generic Targets.
 
 1. Verify `X-Video-Agent-Signature` with the shared secret; reject anything older than 5 minutes.
 2. `targets`: the sites this publisher has, from site-vendor records whose `ownerKey` starts with
    `video-agent#{publisher.id}#` (a new list route, or `labels: { videoAgentUser }` set on ensure; site-vendor
-   chooses). Label = the site URL, detail = how many videos and when it last changed.
+   chooses), mapped to Targets: `id` = the `ownerKey`, `name` = the site's name, `description` = "3 videos ·
+   updated 2 days ago", `url` = the site URL, `metadata` = `{ "siteId": "…", "videos": 3 }`.
 3. `publish`:
    1. **New site (the default, decided):** `ownerKey` = `video-agent#{publisher.id}#{dpub id}`, a desired name from
       the `name` option or the video title; `POST /sites/ensure` with the template's per-site repo. On `409` with
@@ -465,7 +487,8 @@ error, publishedAt, liveAt), additive under shared rule 10.
   dialog), then each enabled destination. A destination that isn't `ready` shows why ("Connect YouTube first" with a
   link to Connected accounts).
 - Each destination opens a dialog:
-  - With `targets`: **Where** — "New site" (selected by default) or one of yours from the list (label, URL, detail).
+  - With `targets`: **Where** — "New {noun}" (selected by default) or one of the listed targets (name, description,
+    link), worded with `targetNoun` ("New site / Your sites"; without it "New / Existing").
   - Its options form.
   - With `instructions`: an optional **"Where should the video go?"** box ("Put it in the hero, above the pricing
     table"), with a line saying an agent will edit the site when it's filled in.
