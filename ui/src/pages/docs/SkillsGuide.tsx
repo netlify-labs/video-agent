@@ -2,8 +2,8 @@
 import { Anchor, Card, Code, Stack, Text } from '@mantine/core'
 import { Link } from 'react-router'
 import { MCP_PROMPTS } from '../../../../src/mcp-catalog'
-import { CopyField } from '../../components/bits'
-import { CatalogTable, DocSections, DocsHeader } from './DocsLayout'
+import { CopyField, PageHeader } from '../../components/bits'
+import { CatalogTable, DocSections } from './DocsLayout'
 
 const SKILL_AGENTS: [string, string][] = [
   ['Claude Code', '~/.claude/skills'],
@@ -16,7 +16,7 @@ export default function SkillsGuidePage() {
   const zipUrl = `${window.location.origin}/skills/netlify-video.zip`
   return (
     <>
-      <DocsHeader
+      <PageHeader
         title="Agent skills"
         sub={
           <>

@@ -64,6 +64,7 @@ import {
 import { recoveryStore } from '../recorder/store'
 import { pictureTime, PrompterLayout, Teleprompter, isTextField } from '../recorder/teleprompter'
 import { useTakeUpload } from '../recorder/use-take-upload'
+import { log } from '../lib/log'
 import { formatTime } from '../lib/timeline-view'
 import { fileUrl } from './bits'
 import type { NarrationTrackApi } from './NarrationSection'
@@ -100,10 +101,6 @@ export const punchText = (p: Punch) => (p.to === null ? `from ${at(p.from)}` : `
 const INTERRUPTED: Record<string, string> = {
   quota: "Your browser's storage is full, so the take stopped there.",
   storage: "The take couldn't be saved in this browser any more, so it stopped there.",
-}
-
-const log = (event: string, fields: Record<string, unknown>) => {
-  console.info(JSON.stringify({ event, ...fields }))
 }
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))

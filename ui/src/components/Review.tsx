@@ -23,7 +23,7 @@ import { IconCheck, IconDots, IconMapPin, IconX } from '@tabler/icons-react'
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import { $api, commentsInit, newIdempotencyKey, type Version, type Video } from '../api/client'
 import type { paths } from '../api/schema'
-import { captionsUrl, clockTime, fileUrl, imageUrl, relativeTime, showError } from './bits'
+import { captionsUrl, clockTime, fileUrl, imageUrl, relativeTime, showError, useAfterWrite } from './bits'
 
 type Comment =
   paths['/api/v1/videos/{id}/comments']['get']['responses'][200]['content']['application/json']['items'][number]
@@ -188,11 +188,8 @@ export function ReviewPlayer({
 
 /** Approve / Request changes. Hidden from the version's author and from viewers; counts show for everyone. */
 export function VerdictBar({ video, v, canReview }: { video: Video; v: Version; canReview: boolean }) {
-  const qc = useQueryClient()
-  const set = $api.useMutation('put', '/api/v1/videos/{id}/versions/{n}/verdict', {
-    onSuccess: () => void qc.invalidateQueries(),
-    onError: showError,
-  })
+  const afterWrite = useAfterWrite()
+  const set = $api.useMutation('put', '/api/v1/videos/{id}/versions/{n}/verdict', afterWrite)
   const { approved, changesRequested, mine } = v.verdicts
   if (!canReview && !approved && !changesRequested) return null
   const ask = (verdict: 'approved' | 'changes_requested') => {

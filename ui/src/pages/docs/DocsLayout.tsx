@@ -1,20 +1,9 @@
-// Shared parts of the docs pages: the title row, a sectioned page with an "On this page" contents list, and the
-// MCP catalog tables. Light on purpose: only the REST page loads the API reference.
-import { Code, Text, Title } from '@mantine/core'
+// Shared parts of the docs pages: a sectioned page with an "On this page" contents list, and the MCP catalog
+// tables. Light on purpose: only the REST page loads the API reference.
+import { Code, Text } from '@mantine/core'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useLocation } from 'react-router'
 import { MCP_ACCESS_LABELS, type McpCatalogEntry } from '../../../../src/mcp-catalog'
-
-export function DocsHeader({ title, sub }: { title: string; sub: ReactNode }) {
-  return (
-    <div className="va-title-row">
-      <div>
-        <Title order={1}>{title}</Title>
-        <div className="va-sub">{sub}</div>
-      </div>
-    </div>
-  )
-}
 
 export interface DocSection {
   id: string

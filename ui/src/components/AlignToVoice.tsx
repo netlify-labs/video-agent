@@ -7,6 +7,7 @@ import { useState } from 'react'
 import type { AlignSuggestion } from '../../../src/lib/narration-align'
 import { SAMPLE_RATE, type NarrationOp } from '../../../src/lib/timeline'
 import { fetchClient } from '../api/client'
+import { log } from '../lib/log'
 import { browserDecoder, type Decoder } from '../lib/narration-decode'
 import { formatTime } from '../lib/timeline-view'
 import type { NarrationEditor } from '../lib/use-narration-editor'
@@ -26,10 +27,6 @@ export interface AlignToVoiceProps {
 
 type State =
   { phase: 'idle' } | { phase: 'working' } | { phase: 'found'; s: AlignSuggestion } | { phase: 'none' }
-
-const log = (event: string, fields: Record<string, unknown>) => {
-  console.info(JSON.stringify({ event, ...fields }))
-}
 
 export function AlignToVoice(props: AlignToVoiceProps) {
   const [state, setState] = useState<State>({ phase: 'idle' })

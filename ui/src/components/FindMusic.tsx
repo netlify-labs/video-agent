@@ -25,7 +25,7 @@ import { useEffect, useRef, useState } from 'react'
 import { errorMessage, fetchClient } from '../api/client'
 import type { paths } from '../api/schema'
 import { MUSIC_SOURCES } from '../lib/music-sources'
-import { relativeTime } from './bits'
+import { relativeTime, showError } from './bits'
 import { duration, type Media } from './MediaPicker'
 
 type Search = paths['/api/v1/media/openverse/search']['get']
@@ -149,7 +149,7 @@ export function FindMusicModal(props: {
       notifications.show({ message: `${m.source?.title ?? m.filename} is in the library.` })
       props.onImported?.(m)
     } catch (e) {
-      notifications.show({ color: 'red', message: errorMessage(e) })
+      showError(e)
     } finally {
       setImporting((s) => {
         const next = new Set(s)

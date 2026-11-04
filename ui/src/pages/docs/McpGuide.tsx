@@ -4,8 +4,8 @@ import { Anchor, Card, Code, Stack, Text } from '@mantine/core'
 import { Link } from 'react-router'
 import { MCP_PROMPTS, MCP_TOOLS } from '../../../../src/mcp-catalog'
 import { $api } from '../../api/client'
-import { CopyField } from '../../components/bits'
-import { CatalogTable, DocSections, DocsHeader } from './DocsLayout'
+import { CopyField, PageHeader } from '../../components/bits'
+import { CatalogTable, DocSections } from './DocsLayout'
 
 const KEY = 'Bearer nva_…'
 
@@ -41,7 +41,7 @@ export default function McpGuidePage() {
   const oauth = config.data?.mcpOAuth === true
   return (
     <>
-      <DocsHeader
+      <PageHeader
         title="MCP for AI tools"
         sub="Connect your AI tools to make, follow, revise and publish videos by asking for them."
       />

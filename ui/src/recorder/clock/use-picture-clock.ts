@@ -5,6 +5,7 @@
 // every take's stop. React state is only the stop reason and a throttled anchor count; the anchors themselves are the
 // live array on the clock.
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { log } from '../../lib/log'
 import type { AudioClock } from './audio-clock'
 import type { StopKind, StopReason } from './fit'
 import { PictureClock, type Anchor, type PictureClockOptions, type TakeClockInput, type TakeFit } from './picture'
@@ -14,10 +15,6 @@ export interface UsePictureClockOptions extends Omit<PictureClockOptions, 'audio
 }
 
 const NO_ANCHORS: readonly Anchor[] = []
-
-const log = (event: string, fields: Record<string, unknown>) => {
-  console.info(JSON.stringify({ event, ...fields }))
-}
 
 export function usePictureClock(videoEl: HTMLVideoElement | null, options: UsePictureClockOptions = {}) {
   const clock = useRef<PictureClock | null>(null)

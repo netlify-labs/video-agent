@@ -1,16 +1,4 @@
-import {
-  Alert,
-  Anchor,
-  Button,
-  Card,
-  Group,
-  NumberInput,
-  Select,
-  Stack,
-  Switch,
-  Text,
-  Title,
-} from '@mantine/core'
+import { Alert, Anchor, Button, Card, Group, NumberInput, Select, Stack, Switch, Text } from '@mantine/core'
 import { modals } from '@mantine/modals'
 import { WebhookCard } from '../components/WebhookCard'
 import { notifications } from '@mantine/notifications'
@@ -18,7 +6,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { Link, Navigate } from 'react-router'
 import { $api } from '../api/client'
-import { relativeTime, showError } from '../components/bits'
+import { PageHeader, relativeTime, showError, useAfterWrite } from '../components/bits'
 
 const STAGE: Record<string, string> = {
   finding_music: 'Finding music',
@@ -106,12 +94,7 @@ export function AdminPage() {
 
   return (
     <>
-      <div className="va-title-row">
-        <div>
-          <Title order={1}>Admin</Title>
-          <div className="va-sub">{finding}</div>
-        </div>
-      </div>
+      <PageHeader title="Admin" sub={finding} />
       <Stack gap="md">
         {s?.queuePausedReason ? (
           <Alert color="red" variant="light" title="New runs are paused">
@@ -410,12 +393,9 @@ const GIB = 1024 ** 3
 
 /** Remixing (docs/plans/2026-11-03-remix.md §4): on by default; off hides every Remix control and refuses new ones. */
 function RemixSettingsCard() {
-  const qc = useQueryClient()
+  const afterWrite = useAfterWrite()
   const settings = $api.useQuery('get', '/api/v1/admin/settings')
-  const save = $api.useMutation('patch', '/api/v1/admin/settings', {
-    onSuccess: () => void qc.invalidateQueries(),
-    onError: showError,
-  })
+  const save = $api.useMutation('patch', '/api/v1/admin/settings', afterWrite)
   const s = settings.data
   return (
     <Card>
@@ -437,12 +417,9 @@ function RemixSettingsCard() {
 
 /** Recorded voice-over: on or off, how takes are transcribed, and each person's storage for recordings. */
 function NarrationSettingsCard() {
-  const qc = useQueryClient()
+  const afterWrite = useAfterWrite()
   const settings = $api.useQuery('get', '/api/v1/admin/settings')
-  const save = $api.useMutation('patch', '/api/v1/admin/settings', {
-    onSuccess: () => void qc.invalidateQueries(),
-    onError: showError,
-  })
+  const save = $api.useMutation('patch', '/api/v1/admin/settings', afterWrite)
   const s = settings.data
   const [quota, setQuota] = useState<number | string>('')
   useEffect(() => {

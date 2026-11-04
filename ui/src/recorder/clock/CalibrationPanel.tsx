@@ -4,6 +4,7 @@
 // armed mic. It prompts when the route has no calibration yet, and reports the offsets placeRecordedTake takes.
 import { Alert, Badge, Box, Button, Group, Progress, Slider, Stack, Text, Title } from '@mantine/core'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { log } from '../../lib/log'
 import {
   CalibrationStore,
   clapCalibration,
@@ -47,10 +48,6 @@ type Phase =
 
 const nextFrame = () => new Promise<number>((r) => requestAnimationFrame(r))
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
-
-const log = (event: string, fields: Record<string, unknown>) => {
-  console.info(JSON.stringify({ event, ...fields }))
-}
 
 export function CalibrationPanel({
   route,

@@ -8,6 +8,7 @@
 // peaks and speech pass (the long part for a long take) runs in a worker, or here when a worker can't start.
 import { decodePeaks, VAD_VERSION, type Peaks } from '../../../src/lib/peaks'
 import type { Span } from '../../../src/lib/timeline'
+import { log } from './log'
 import { analyzeSamples, type AnalyzedAudio } from './narration-analyze'
 import { browserDecoder, parseWav, sliceable, slicePcm16, type Decoder } from './narration-decode'
 import { uploadFile, UploadError, waitReady, type UploadProgress } from './upload'
@@ -28,10 +29,6 @@ export interface ImportedTake {
   name: string
   /** The decoded samples (24 kHz mono), for Align to AI voice; not kept once the suggestion is done. */
   mono?: Float32Array
-}
-
-const log = (event: string, fields: Record<string, unknown>) => {
-  console.info(JSON.stringify({ event, ...fields }))
 }
 
 /** The file as mono samples at 24 kHz. */

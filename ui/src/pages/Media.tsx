@@ -14,7 +14,6 @@ import {
   SegmentedControl,
   Stack,
   Text,
-  Title,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
@@ -22,7 +21,7 @@ import { IconDots, IconMusic, IconUpload } from '@tabler/icons-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { $api, useCanCreate } from '../api/client'
-import { confirmDanger, relativeTime, showError } from '../components/bits'
+import { PageHeader, confirmDanger, relativeTime, showError } from '../components/bits'
 import { FindMusicModal } from '../components/FindMusic'
 import { MEDIA_ACCEPT, Thumb, type Media } from '../components/MediaPicker'
 import { planUploads, retireReplaced, type PlannedUpload } from '../components/Duplicates'
@@ -234,13 +233,10 @@ export function MediaPage() {
   const items = list.data?.items ?? []
   return (
     <>
-      <div className="va-title-row">
-        <div>
-          <Title order={1}>Media</Title>
-          <div className="va-sub">
-            Logos, screenshots, clips, music, fonts and PDFs the agent can use in your videos.
-          </div>
-        </div>
+      <PageHeader
+        title="Media"
+        sub="Logos, screenshots, clips, music, fonts and PDFs the agent can use in your videos."
+      >
         {canUpload ? (
           <Group gap="xs">
             <Button
@@ -261,7 +257,7 @@ export function MediaPage() {
             </FileButton>
           </Group>
         ) : null}
-      </div>
+      </PageHeader>
       {canUpload ? (
         <FindMusicModal
           opened={finding}

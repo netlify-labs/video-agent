@@ -1,8 +1,15 @@
-import { Alert, Button, Card, Code, Group, Modal, Stack, Text, TextInput, Title } from '@mantine/core'
+import { Alert, Button, Card, Code, Group, Modal, Stack, Text, TextInput } from '@mantine/core'
 import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { $api } from '../api/client'
-import { CopyField, confirmDanger, relativeTime, showError } from '../components/bits'
+import {
+  CopyField,
+  PageHeader,
+  confirmDanger,
+  relativeTime,
+  showError,
+  useAfterWrite,
+} from '../components/bits'
 import { WebhookCard } from '../components/WebhookCard'
 
 export function KeysPage() {
@@ -36,16 +43,14 @@ curl -L -H "Authorization: Bearer ${key}" \\
 
   return (
     <>
-      <div className="va-title-row">
-        <div>
-          <Title order={1}>API keys</Title>
-          <div className="va-sub">
-            {keys.isLoading
-              ? 'Loading…'
-              : `${active.length} active ${active.length === 1 ? 'key' : 'keys'}. Keys act as you, with your role.`}
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        title="API keys"
+        sub={
+          keys.isLoading
+            ? 'Loading…'
+            : `${active.length} active ${active.length === 1 ? 'key' : 'keys'}. Keys act as you, with your role.`
+        }
+      />
 
       <section className="va-setting">
         <div>
@@ -189,12 +194,9 @@ curl -L -H "Authorization: Bearer ${key}" \\
 
 /** MCP OAuth is on: clients can sign in with Netlify instead of using a key; the apps you connected, with Revoke. */
 function ConnectedApps({ mcpUrl }: { mcpUrl: string }) {
-  const qc = useQueryClient()
+  const afterWrite = useAfterWrite()
   const grants = $api.useQuery('get', '/api/v1/oauth/grants')
-  const revoke = $api.useMutation('delete', '/api/v1/oauth/grants/{id}', {
-    onSuccess: () => void qc.invalidateQueries(),
-    onError: showError,
-  })
+  const revoke = $api.useMutation('delete', '/api/v1/oauth/grants/{id}', afterWrite)
   const list = grants.data ?? []
   return (
     <section className="va-setting">

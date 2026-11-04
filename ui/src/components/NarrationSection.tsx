@@ -37,7 +37,7 @@ import {
   type NarrationTracks,
   type Span,
 } from '../../../src/lib/timeline'
-import { $api, errorMessage, fetchClient } from '../api/client'
+import { $api, fetchClient } from '../api/client'
 import {
   APPROX_CLEANUP_DESCRIPTION,
   APPROX_CLEANUP_LABEL,
@@ -61,6 +61,7 @@ import { focusClip, useNarrationEditor, type NarrationEditor } from '../lib/use-
 import { useNarrationTakes, type TakeInfo } from '../lib/use-narration-takes'
 import { CompositionPreview, type PreviewCommand } from './CompositionPreview'
 import { AlignToVoice } from './AlignToVoice'
+import { showError } from './bits'
 import { MediaLibraryModal } from './MediaPicker'
 import {
   applyTrackPatch,
@@ -367,7 +368,7 @@ export function NarrationSection(props: NarrationSectionProps) {
           audio.length === 1 && r.ok && r.clipId && take.mono ? { clipId: r.clipId, mono: take.mono } : null,
         )
       } catch (e) {
-        notifications.show({ color: 'red', message: errorMessage(e) })
+        showError(e)
       }
     }
     setImporting(null)
@@ -378,7 +379,7 @@ export function NarrationSection(props: NarrationSectionProps) {
       if (!info.samples) throw new Error("That audio's length isn't known yet. Try again in a moment.")
       insertTake({ mediaId, ...info })
     } catch (e) {
-      notifications.show({ color: 'red', message: errorMessage(e) })
+      showError(e)
     }
   }
   const [picking, setPicking] = useState<'library' | 'recordings' | null>(null)

@@ -1,6 +1,6 @@
-import { Alert, Anchor, Button, Card, Group, Stack, Text, Title } from '@mantine/core'
+import { Alert, Anchor, Button, Card, Group, Stack, Text } from '@mantine/core'
 import { $api } from '../api/client'
-import { Mark } from '../components/bits'
+import { Mark, PageHeader } from '../components/bits'
 
 const WORD = { ok: 'Done', fail: 'Needs fixing', warn: 'Recommended', unknown: 'Not checked' } as const
 const STATE = { ok: 'ready', fail: 'failed', warn: 'idle', unknown: 'idle' } as const
@@ -29,21 +29,20 @@ export function SetupPage({ standalone = false }: { standalone?: boolean }) {
           <Text fw={600}>Video Agent</Text>
         </Group>
       ) : null}
-      <div className="va-title-row">
-        <div>
-          <Title order={1}>Setup</Title>
-          <div className="va-sub">
-            {health.isLoading
-              ? 'Checking…'
-              : health.data?.ready
-                ? 'Everything needed is in place. People can make videos.'
-                : `${left} ${left === 1 ? 'thing needs' : 'things need'} fixing before people can make videos.`}
-          </div>
-        </div>
+      <PageHeader
+        title="Setup"
+        sub={
+          health.isLoading
+            ? 'Checking…'
+            : health.data?.ready
+              ? 'Everything needed is in place. People can make videos.'
+              : `${left} ${left === 1 ? 'thing needs' : 'things need'} fixing before people can make videos.`
+        }
+      >
         <Button variant="default" loading={health.isFetching} onClick={() => void health.refetch()}>
           Check again
         </Button>
-      </div>
+      </PageHeader>
       {health.isError ? (
         <Alert color="red" variant="light">
           The checks couldn't run. Is this the live production deploy?

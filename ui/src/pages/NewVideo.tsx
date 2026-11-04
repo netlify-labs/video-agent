@@ -22,7 +22,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { $api, errorMessage, newIdempotencyKey, useCanCreate, type Version, type Video } from '../api/client'
-import { Status, VersionImage, relativeTime } from '../components/bits'
+import { PageHeader, Status, VersionImage, relativeTime } from '../components/bits'
 import { MediaChips, type Media } from '../components/MediaPicker'
 import { PlanPanel } from '../components/PlanPanel'
 import { RemixForm, RemixSourcePicker, latestReady, useCanRemix } from '../components/RemixDialog'
@@ -236,14 +236,14 @@ export function NewVideoPage() {
   if (remixFrom)
     return (
       <>
-        <div className="va-title-row">
-          <div>
-            <Title order={1}>New video</Title>
-            <div className="va-sub">
+        <PageHeader
+          title="New video"
+          sub={
+            <>
               Starting from {remixFrom.video.title} v{remixFrom.version.n}. Say what should be different.
-            </div>
-          </div>
-        </div>
+            </>
+          }
+        />
         <Card maw={720}>
           <RemixForm
             key={`${remixFrom.video.id}-${remixFrom.version.n}`}
@@ -284,10 +284,10 @@ export function NewVideoPage() {
 
   return (
     <>
-      <div className="va-title-row">
-        <div>
-          <Title order={1}>New video</Title>
-          <div className="va-sub">
+      <PageHeader
+        title="New video"
+        sub={
+          <>
             Describe it once. The agent writes, checks and renders it, usually in 3 to 8 minutes.
             {canRemix ? (
               <>
@@ -304,9 +304,9 @@ export function NewVideoPage() {
                 </Anchor>
               </>
             ) : null}
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      />
       {picker}
       <div className="va-split">
         {/* Not clipped, so the actions row can stick to the window's bottom edge. */}

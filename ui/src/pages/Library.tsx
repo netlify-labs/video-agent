@@ -11,7 +11,6 @@ import {
   Stack,
   Text,
   TextInput,
-  Title,
   Tooltip,
   UnstyledButton,
 } from '@mantine/core'
@@ -21,7 +20,16 @@ import { Suspense, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { $api, commentsInit, errorMessage, useCanCreate, videoInit, type Video } from '../api/client'
-import { Status, VersionImage, duration, inProgress, localUrl, relativeTime } from '../components/bits'
+import {
+  PageHeader,
+  Status,
+  VersionImage,
+  clockTime,
+  duration,
+  inProgress,
+  localUrl,
+  relativeTime,
+} from '../components/bits'
 import { FavoriteStar } from '../components/FavoriteButton'
 import { RemixDialog, latestReady, useCanRemix } from '../components/RemixDialog'
 import { lazyPage, newVideoRoute, videoRoute } from '../routes'
@@ -31,8 +39,7 @@ const QuickCreate = lazyPage(newVideoRoute, (m) => m.QuickCreate)
 
 function elapsed(iso: string | null | undefined): string {
   if (!iso) return ''
-  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000)
-  return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
+  return clockTime(Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000))
 }
 
 /** How wide a tile is at each breakpoint of .va-grid, so the browser picks the 480 or 960 px poster. */
@@ -300,11 +307,7 @@ export function LibraryPage() {
 
   return (
     <Stack gap={0}>
-      <div className="va-title-row">
-        <div>
-          <Title order={1}>Library</Title>
-          <div className="va-sub">{list.isLoading ? 'Loading…' : finding}</div>
-        </div>
+      <PageHeader title="Library" sub={list.isLoading ? 'Loading…' : finding}>
         <Group gap="sm">
           <TextInput
             ref={search}
@@ -325,7 +328,7 @@ export function LibraryPage() {
             </Button>
           ) : null}
         </Group>
-      </div>
+      </PageHeader>
       <Group gap="sm" mb="lg" wrap="wrap">
         <SegmentedControl
           value={owner}

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { NarrationOp, Span } from '../../../src/lib/timeline'
 import { fetchClient } from '../api/client'
 import type { PreviewCommand, PreviewMessage, PreviewTransport } from '../components/CompositionPreview'
+import { log } from './log'
 import { NarrationAudition, type AuditionStats } from './narration-audition'
 import { previewMix } from './preview-mix'
 
@@ -36,9 +37,7 @@ export function useNarrationAudition({ op, takeSamples, takeSpans, html, loadTak
   useEffect(() => {
     const e = new NarrationAudition({
       loadTake: (id) => load.current(id),
-      log: (event, fields) => {
-        console.info(JSON.stringify({ event, ...fields }))
-      },
+      log,
     })
     engine.current = e
     return () => {

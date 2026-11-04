@@ -1,7 +1,8 @@
-import { ActionIcon, CopyButton, Group, Text, TextInput, Tooltip } from '@mantine/core'
+import { ActionIcon, CopyButton, Group, Text, TextInput, Title, Tooltip } from '@mantine/core'
 import { modals } from '@mantine/modals'
 import { notifications } from '@mantine/notifications'
 import { IconCheck, IconCopy } from '@tabler/icons-react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { errorMessage, type Version, type Video } from '../api/client'
 import { mockFile } from '../mock/files'
@@ -18,6 +19,12 @@ export const STATUS_WORD: Record<Video['status'], string> = {
 
 /** Shows a failed request's message as a red toast. */
 export const showError = (e: unknown) => notifications.show({ color: 'red', message: errorMessage(e) })
+
+/** Mutation options for a write that can change anything on screen: refetch every query, or show the error. */
+export function useAfterWrite() {
+  const qc = useQueryClient()
+  return { onSuccess: () => void qc.invalidateQueries(), onError: showError }
+}
 
 /** Asks before something that can't be taken back, with a red confirm button. */
 export function confirmDanger(o: {
@@ -84,6 +91,27 @@ export function PoweredBy({ inSidebar = false }: { inSidebar?: boolean }) {
       </svg>
       Powered by Netlify AI
     </a>
+  )
+}
+
+/** A page's title row: the title, a line under it, and the page's actions (children) on the right. */
+export function PageHeader({
+  title,
+  sub,
+  children,
+}: {
+  title: string
+  sub: React.ReactNode
+  children?: React.ReactNode
+}) {
+  return (
+    <div className="va-title-row">
+      <div>
+        <Title order={1}>{title}</Title>
+        <div className="va-sub">{sub}</div>
+      </div>
+      {children}
+    </div>
   )
 }
 

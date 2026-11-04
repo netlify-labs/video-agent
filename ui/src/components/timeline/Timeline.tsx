@@ -16,6 +16,7 @@ import {
   type KeyboardEvent,
   type MouseEvent,
   type PointerEvent,
+  type ReactNode,
 } from 'react'
 import {
   clipEnd,
@@ -58,6 +59,15 @@ const BUTTON_ZOOM = 1.5
 const db = (v: number) => `${v > 0 ? '+' : ''}${Math.round(v * 10) / 10} dB`
 const percent = (v: number) => `${Math.round(v * 100)}%`
 const overlaps = (s: number, e: number, w: Span) => e > w[0] && s < w[1]
+
+/** One of the zoom buttons in the corner over the track names. */
+const zoomControl = (tip: string, label: string, onClick: () => void, icon: ReactNode) => (
+  <Tooltip label={tip}>
+    <ActionIcon size="sm" variant="subtle" color="gray" aria-label={label} onClick={onClick}>
+      {icon}
+    </ActionIcon>
+  </Tooltip>
+)
 
 export function Timeline(props: TimelineProps) {
   const { op, composition, playhead, range } = props
@@ -348,41 +358,26 @@ export function Timeline(props: TimelineProps) {
     >
       <div className="va-tl-heads">
         <div className="va-tl-corner">
-          <Tooltip label="Zoom out (⌘/Ctrl-scroll)">
-            <ActionIcon
-              size="sm"
-              variant="subtle"
-              color="gray"
-              aria-label="Zoom out"
-              onClick={() => zoomButton(1 / BUTTON_ZOOM)}
-            >
-              <IconZoomOut size={14} />
-            </ActionIcon>
-          </Tooltip>
-          <Tooltip label="Zoom in (⌘/Ctrl-scroll)">
-            <ActionIcon
-              size="sm"
-              variant="subtle"
-              color="gray"
-              aria-label="Zoom in"
-              onClick={() => zoomButton(BUTTON_ZOOM)}
-            >
-              <IconZoomIn size={14} />
-            </ActionIcon>
-          </Tooltip>
-          <Tooltip label="Fit the whole video">
-            <ActionIcon
-              size="sm"
-              variant="subtle"
-              color="gray"
-              aria-label="Zoom to fit"
-              onClick={() => {
-                zoomTo({ pxPerSec: fitZoom(end + TAIL_SAMPLES, viewport), scrollLeft: 0 })
-              }}
-            >
-              <IconArrowsHorizontal size={14} />
-            </ActionIcon>
-          </Tooltip>
+          {zoomControl(
+            'Zoom out (⌘/Ctrl-scroll)',
+            'Zoom out',
+            () => zoomButton(1 / BUTTON_ZOOM),
+            <IconZoomOut size={14} />,
+          )}
+          {zoomControl(
+            'Zoom in (⌘/Ctrl-scroll)',
+            'Zoom in',
+            () => zoomButton(BUTTON_ZOOM),
+            <IconZoomIn size={14} />,
+          )}
+          {zoomControl(
+            'Fit the whole video',
+            'Zoom to fit',
+            () => {
+              zoomTo({ pxPerSec: fitZoom(end + TAIL_SAMPLES, viewport), scrollLeft: 0 })
+            },
+            <IconArrowsHorizontal size={14} />,
+          )}
         </div>
         <Track lane="scenes" name="Scenes" note="Read-only" />
         <Track

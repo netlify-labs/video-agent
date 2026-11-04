@@ -76,6 +76,7 @@ import {
   inProgress,
   relativeTime,
   showError,
+  useAfterWrite,
 } from '../components/bits'
 
 const STAGE_WORDS: Record<string, string> = {
@@ -174,7 +175,7 @@ function Narration({ video, v }: { video: Video; v: Version }) {
 
 function Progress({ video, v, canCancel }: { video: Video; v: Version; canCancel: boolean }) {
   useTicker()
-  const qc = useQueryClient()
+  const afterWrite = useAfterWrite()
   // The agent's latest composition snapshot, when its checkpoints send one (plan v2 §6 A2). Same query as Narration.
   const progress = useProgress(video, v)
   const snapshot =
@@ -183,10 +184,7 @@ function Progress({ video, v, canCancel }: { video: Video; v: Version; canCancel
   const live = progress.data?.versionN === v.n ? progress.data : null
   const stage = live?.stage ?? v.stage ?? 'queued'
   const music = live?.music ?? v.music
-  const cancel = $api.useMutation('post', '/api/v1/videos/{id}/versions/{n}/cancel', {
-    onSuccess: () => void qc.invalidateQueries(),
-    onError: showError,
-  })
+  const cancel = $api.useMutation('post', '/api/v1/videos/{id}/versions/{n}/cancel', afterWrite)
   const [notify, setNotify] = useState(notifyOn)
   const [notifyBlocked, setNotifyBlocked] = useState(
     () => 'Notification' in window && Notification.permission === 'denied',
@@ -425,11 +423,8 @@ function VersionCredits({ v }: { v: Version }) {
 }
 
 function PublicLink({ video, v, canPublish }: { video: Video; v: Version; canPublish: boolean }) {
-  const qc = useQueryClient()
-  const unpublish = $api.useMutation('delete', '/api/v1/videos/{id}/versions/{n}/publish', {
-    onSuccess: () => void qc.invalidateQueries(),
-    onError: showError,
-  })
+  const afterWrite = useAfterWrite()
+  const unpublish = $api.useMutation('delete', '/api/v1/videos/{id}/versions/{n}/publish', afterWrite)
   const live = v.publications.find((p) => !p.unpublishedAt && p.urls)
   if (!live?.urls) return null
   return (

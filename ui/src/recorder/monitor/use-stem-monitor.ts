@@ -5,6 +5,7 @@
 // (and the old one disposed) when any input changes, so change them only between takes.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { NarrationOp, Span } from '../../../../src/lib/timeline'
+import { log } from '../../lib/log'
 import type { AudioClock } from '../clock/audio-clock'
 import type { PictureClock } from '../clock/picture'
 import {
@@ -30,10 +31,6 @@ export interface UseStemMonitorInput {
   /** Composition second the take starts at (a punch-in's pre-roll), for what prepare() loads first. */
   from?: number
   destination?: AudioNode
-}
-
-const log = (event: string, fields: Record<string, unknown>) => {
-  console.info(JSON.stringify({ event, ...fields }))
 }
 
 export function useStemMonitor(input: UseStemMonitorInput) {
