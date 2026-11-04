@@ -107,3 +107,50 @@ test('a plain comment still posts with one click, and goes above older ones', as
   await box.pressSequentially('cool')
   await expect(box).toHaveValue('cool')
 })
+
+test('a C pressed by mistake lets go: Space in the empty box plays on, Esc drops it, and the next C notes the new moment', async ({
+  page,
+}) => {
+  await page.goto('/videos/vid_webhooks')
+  await page.waitForFunction("(document.querySelector('.va-review-frame video')?.readyState ?? 0) >= 1")
+  const box = page.getByRole('textbox', { name: 'Add a comment' })
+  const badge = page.getByTestId('note-moment')
+
+  // C at 0:02, then Space straight away: the video plays on and the moment is gone.
+  await seekTo(page, 2)
+  await page.getByRole('heading', { level: 1 }).click()
+  await page.keyboard.press('c')
+  await expect(box).toBeFocused()
+  await expect(badge).toContainText('0:02')
+  await page.keyboard.press('Space')
+  await expect.poll(() => paused(page)).toBe(false)
+  await expect(box).toHaveValue('')
+  await expect(badge).not.toContainText('0:02')
+  await expect(page.getByRole('button', { name: 'Pin to this moment' })).toBeVisible()
+
+  // C again later notes the new moment.
+  await page.keyboard.press('Space')
+  await expect.poll(() => paused(page)).toBe(true)
+  await seekTo(page, 5)
+  await page.keyboard.press('c')
+  await expect(badge).toContainText('0:05')
+
+  // Esc in the empty box drops it too.
+  await box.press('Escape')
+  await expect(badge).not.toContainText('0:05')
+
+  // Playing with the player's own controls lets go of an empty moment; one with text stays.
+  await page.keyboard.press('c')
+  await expect(badge).toContainText('0:05')
+  await video(page).evaluate((v) => (v as unknown as { play: () => Promise<void> }).play())
+  await expect(badge).not.toContainText('0:05')
+  await video(page).evaluate((v) => {
+    ;(v as unknown as { pause: () => void }).pause()
+  })
+  await seekTo(page, 6)
+  await page.keyboard.press('c')
+  await box.fill('Keep me')
+  await video(page).evaluate((v) => (v as unknown as { play: () => Promise<void> }).play())
+  await expect.poll(() => paused(page)).toBe(false)
+  await expect(badge).toContainText('0:06')
+})

@@ -505,6 +505,23 @@ export function CommentsCard({
     }
   }, [canComment, ready, player, setPending, setPicking])
 
+  // A moment with nothing written (C pressed by mistake, or changed your mind) lets go when the video plays again,
+  // so the next C notes the new moment. A marked spot keeps it: that was on purpose.
+  const loose = useRef(false)
+  loose.current = pending !== null && pending.x === null && !body.trim()
+  useEffect(() => {
+    const onPlay = (e: Event) => {
+      if (e.target !== player.current || !loose.current) return
+      setPending(null)
+      setPicking(false)
+      if (document.activeElement === composer.current) form.current?.focus()
+    }
+    document.addEventListener('play', onPlay, true)
+    return () => {
+      document.removeEventListener('play', onPlay, true)
+    }
+  }, [player, setPending, setPicking])
+
   /** A note's moment, as a button that jumps the player there. */
   const timeButton = (t: number, spot: boolean, label?: string) => (
     <button
@@ -844,7 +861,7 @@ export function CommentsCard({
                 aria-label="Add a comment"
                 placeholder={
                   pending
-                    ? `A note at ${clockTime(pending.timeSec)}… Enter adds it, ${mod}+Enter posts`
+                    ? `A note at ${clockTime(pending.timeSec)}… Enter adds it, ${mod}+Enter posts, Esc drops it`
                     : ready
                       ? 'Add a comment… Press C while watching to note a moment.'
                       : 'Add a comment…'
@@ -859,7 +876,19 @@ export function CommentsCard({
                 }}
                 onKeyDown={(e) => {
                   if (e.key === 'Escape') {
+                    // An empty note's moment goes too.
+                    if (loose.current) {
+                      setPending(null)
+                      setPicking(false)
+                    }
                     form.current?.focus()
+                    return
+                  }
+                  // Space in an empty note keeps watching (and lets go of its moment), as it does outside the box.
+                  if (e.key === ' ' && !body && pending && !e.metaKey && !e.ctrlKey && !e.altKey) {
+                    e.preventDefault()
+                    form.current?.focus()
+                    void player.current?.play().catch(() => undefined)
                     return
                   }
                   if (e.key !== 'Enter' || e.shiftKey) return
