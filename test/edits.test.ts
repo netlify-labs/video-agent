@@ -56,6 +56,24 @@ describe('edit drafts', () => {
     current = null
   })
 
+  it('a version whose contract finalize never recorded becomes editable once its bundle is made', async () => {
+    const h = harness()
+    current = h.deps
+    const id = await editableVideo(h)
+    // Finalize's bundle step failed: no record, no bundle.
+    await h.deps.store.updateVersion(id, 1, { contract: null })
+    await h.deps.blobs.delete('bundles', `${id}/v1/manifest.json`)
+    const before = await h.json(await h.call('GET', `/api/v1/videos/${id}`, { as: h.member }))
+    expect(before.versions[0].editable).toBe(false)
+    // Opening its preview makes the bundle, and records that it keeps the contract.
+    expect((await h.call('GET', `/api/v1/videos/${id}/versions/1/preview`, { as: h.member })).status).toBe(
+      200,
+    )
+    const after = await h.json(await h.call('GET', `/api/v1/videos/${id}`, { as: h.member }))
+    expect(after.versions[0].editable).toBe(true)
+    expect((await open(h, id)).status).toBe(201)
+  })
+
   it('opens one draft per person per version, with the composition to edit', async () => {
     const h = harness()
     const id = await editableVideo(h)

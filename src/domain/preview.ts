@@ -57,6 +57,12 @@ export async function previewLink(
   }
   if (!index?.files.some((f) => f.path === 'index.html'))
     throw new ApiError('not_found', 'This version has no composition to preview.')
+  // Finalize records whether the composition keeps the editing contract when it makes the bundle. When that step
+  // failed, the bundle is made here later, and so is the record: otherwise the version could never be edited.
+  if (v.contract == null && index.contract?.version === 1) {
+    await deps.store.updateVersion(jobId, n, { contract: 1 })
+    deps.log.info('preview.contract_recorded', { jobId, versionN: n })
+  }
   const { base, expiresAt } = await sign(deps, job, jobId, n)
   return { url: `${base}index.html`, expiresAt, seq: null }
 }
