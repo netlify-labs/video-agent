@@ -914,7 +914,7 @@ export function VideoPage() {
 
       <div className="va-split">
         <div className="va-rail">
-          {/* Actions on this video sit right above it: the view toggle, then favorite, remix and download. */}
+          {/* Actions on this video sit right above it: the view toggle, then remix (labelled), favorite and download. */}
           <Group justify="space-between" gap="xs" wrap="nowrap" data-testid="video-actions">
             {!showProgress && v.status === 'ready' ? (
               <SegmentedControl
@@ -933,23 +933,23 @@ export function VideoPage() {
               <span />
             )}
             <Group gap={6} wrap="nowrap">
-              <FavoriteButton videoId={data.id} favorite={data.favorite} />
               {v.status === 'ready' && canRemix ? (
                 <Tooltip label={REMIX_HINT} multiline w={260}>
-                  <ActionIcon
+                  <Button
                     variant="default"
-                    size={36}
+                    h={36}
                     radius="md"
-                    aria-label="Remix"
+                    leftSection={<IconArrowsShuffle size={18} />}
                     title={REMIX_HINT}
                     onClick={() => {
                       setRemixing(v.n)
                     }}
                   >
-                    <IconArrowsShuffle size={18} />
-                  </ActionIcon>
+                    Remix
+                  </Button>
                 </Tooltip>
               ) : null}
+              <FavoriteButton videoId={data.id} favorite={data.favorite} />
               {v.status === 'ready' ? (
                 <Tooltip label={`Download v${v.n} (MP4)`}>
                   <ActionIcon

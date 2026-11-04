@@ -128,14 +128,21 @@ test('New video: a recent video’s Remix button starts the remix form from it',
   await expect(page.getByTestId('remix-form')).toBeVisible()
 })
 
-test('video page: favorite, remix and download sit above the player as labelled icons', async ({ page }) => {
+test('video page: remix (with its word), then favorite and download icons, sit above the player', async ({
+  page,
+}) => {
   await page.goto('/videos/vid_webhooks')
   const row = page.getByTestId('video-actions')
   await expect(row.getByRole('button', { name: 'Add to favorites' })).toBeVisible()
-  await expect(row.getByRole('button', { name: 'Remix', exact: true })).toHaveAttribute(
-    'title',
-    /make a new video of your own from this one/,
-  )
+  const remix = row.getByRole('button', { name: 'Remix', exact: true })
+  await expect(remix).toHaveAttribute('title', /make a new video of your own from this one/)
+  await expect(remix).toHaveText('Remix')
+  // Remix comes first, left of favorite.
+  const [r, f] = await Promise.all([
+    remix.boundingBox(),
+    row.getByRole('button', { name: 'Add to favorites' }).boundingBox(),
+  ])
+  expect(r && f && r.x < f.x).toBe(true)
   await expect(row.getByRole('link', { name: 'Download the MP4' })).toHaveAttribute('href', /\.mp4|video/)
   await row.getByRole('button', { name: 'Add to favorites' }).click()
   await expect(row.getByRole('button', { name: 'Remove from favorites' })).toHaveAttribute(
