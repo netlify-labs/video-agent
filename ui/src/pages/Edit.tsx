@@ -812,8 +812,9 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
               </div>
             </div>
           </Group>
-          <Group gap="xs" wrap="nowrap" style={{ flexShrink: 0 }}>
+          <Group gap={6} wrap="nowrap" className="va-edit-actions" style={{ flexShrink: 0 }}>
             <Button
+              size="xs"
               variant="subtle"
               color="gray"
               leftSection={<IconArrowBackUp size={14} />}
@@ -823,13 +824,14 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
               Revert all
             </Button>
             <Button
+              size="xs"
               variant="subtle"
               color="gray"
               onClick={() => {
                 confirmDanger({
-                  title: 'Discard this draft?',
+                  title: 'Discard your changes?',
                   body: "Your edits are deleted. The video doesn't change.",
-                  confirm: 'Discard',
+                  confirm: 'Discard changes',
                   cancel: 'Keep editing',
                   onConfirm: () => {
                     discard.mutate({ params: { path: { id: draft.id } } })
@@ -837,9 +839,11 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
                 })
               }}
             >
-              Discard
+              Discard changes
             </Button>
             <Button
+              size="xs"
+              variant="filled"
               disabled={!draft.rev || dirty || saving || pictureN !== null}
               loading={render.isPending}
               onClick={() => {

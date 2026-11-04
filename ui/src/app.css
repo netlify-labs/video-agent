@@ -968,6 +968,11 @@ main.va-shell-main {
 .va-composer-input {
   font-size: 14px;
 }
+/* The editor's header actions: a size smaller than page buttons, so three fit beside the title. */
+.va-edit-actions .va-button {
+  height: 32px;
+  font-size: 13px;
+}
 /* A code block in the editor (CodeEditor.tsx): framed like a text box; red edge when the line count is off. */
 .va-code-frame {
   border: 1px solid var(--va-dialog-edge);
