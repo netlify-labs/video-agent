@@ -1343,6 +1343,43 @@ main.va-shell-main {
   border-color: var(--va-accent);
   background: var(--va-accent-tint);
 }
+/* The Media page's drop zone: a raised, clickable target with a stronger dashed edge that lights up on hover or drag. */
+.va-dropzone-media {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 28px 24px;
+  border: 2px dashed var(--va-dialog-edge);
+  background: var(--va-surface);
+  cursor: pointer;
+  transition:
+    border-color 120ms,
+    background 120ms;
+}
+.va-dropzone-media:hover,
+.va-dropzone-media:focus-visible {
+  border-color: color-mix(in srgb, var(--va-accent) 60%, var(--va-dialog-edge));
+  outline: none;
+}
+.va-dropzone-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--va-raised);
+  color: var(--va-accent);
+  margin-bottom: 4px;
+}
+.va-dropzone-link {
+  color: var(--va-accent);
+}
+.va-dropzone-limits {
+  max-width: 620px;
+  line-height: 1.5;
+}
+
 
 /* Find music: other sites to download music from. */
 .va-music-sources {

@@ -7,7 +7,6 @@ import {
   Badge,
   Button,
   Card,
-  FileButton,
   Group,
   Menu,
   Progress,
@@ -18,7 +17,7 @@ import {
 import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
 import { IconDots, IconMusic, IconUpload } from '@tabler/icons-react'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { $api, useCanCreate } from '../api/client'
 import { PageHeader, confirmDanger, relativeTime, showError } from '../components/bits'
@@ -215,6 +214,8 @@ export function MediaPage() {
     }
     void qc.invalidateQueries({ queryKey: ['get', '/api/v1/media'] })
   }
+  const picker = useRef<HTMLInputElement>(null)
+  const choose = () => picker.current?.click()
   const add = async (picked: File[]) => {
     const next = (await planUploads(picked)).uploads.map(({ file, replaces }) => ({
       key: `${file.name}:${file.size}:${file.lastModified}:${Math.random()}`,
@@ -248,13 +249,22 @@ export function MediaPage() {
             >
               Find music
             </Button>
-            <FileButton multiple accept={MEDIA_ACCEPT} onChange={(fs) => void add(fs)}>
-              {(props) => (
-                <Button {...props} leftSection={<IconUpload size={16} />}>
-                  Upload
-                </Button>
-              )}
-            </FileButton>
+            <Button leftSection={<IconUpload size={16} />} onClick={choose}>
+              Upload
+            </Button>
+            {/* One file input for the Upload button and the drop zone. */}
+            <input
+              ref={picker}
+              type="file"
+              multiple
+              accept={MEDIA_ACCEPT}
+              hidden
+              onChange={(e) => {
+                const fs = [...(e.currentTarget.files ?? [])]
+                e.currentTarget.value = ''
+                if (fs.length) void add(fs)
+              }}
+            />
           </Group>
         ) : null}
       </PageHeader>
@@ -268,10 +278,21 @@ export function MediaPage() {
       ) : null}
 
       {canUpload ? (
+        // A clear drop target: dashed edge, an icon, one line to act on, and the limits in small type below.
         <div
-          className="va-dropzone"
+          className="va-dropzone va-dropzone-media"
           data-active={dragging || undefined}
           data-testid="media-dropzone"
+          role="button"
+          tabIndex={0}
+          aria-label="Drop files here, or click to choose files"
+          onClick={choose}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              choose()
+            }
+          }}
           onDragOver={(e) => {
             e.preventDefault()
             setDragging(true)
@@ -285,11 +306,20 @@ export function MediaPage() {
             void add([...e.dataTransfer.files])
           }}
         >
-          <Text size="sm" c="var(--va-muted)">
-            Drop files here: PNG, JPEG, WebP or SVG images up to 5 MB, MP4 clips up to 100 MB and 2 minutes,
-            MP3, M4A, WAV, Ogg or WebM audio up to 50 MB and 10 minutes, WOFF2, TTF or OTF fonts, and PDFs up
-            to 20 MB for the agent to read. Only upload music you have the rights to, or use Find music for
-            CC0 and CC BY tracks from Openverse.
+          <div className="va-dropzone-icon" aria-hidden>
+            <IconUpload size={20} />
+          </div>
+          <Text fw={600}>
+            {dragging ? 'Drop to upload' : 'Drop files here, or '}
+            {dragging ? null : <span className="va-dropzone-link">choose files</span>}
+          </Text>
+          <Text size="xs" c="var(--va-faint)" className="va-dropzone-limits">
+            Images (PNG, JPEG, WebP, SVG) up to 5 MB · MP4 clips up to 100 MB and 2 min · Audio (MP3, M4A,
+            WAV, Ogg, WebM) up to 50 MB and 10 min · Fonts (WOFF2, TTF, OTF) · PDFs up to 20 MB for the agent
+            to read
+          </Text>
+          <Text size="xs" c="var(--va-faint)" className="va-dropzone-limits">
+            Only upload music you have the rights to, or use Find music for CC0 and CC BY tracks.
           </Text>
         </div>
       ) : null}

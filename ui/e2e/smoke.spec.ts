@@ -1029,7 +1029,7 @@ const mp3File = (name = 'theme.mp3') => ({
 
 test('the media library takes audio: an Audio filter and a play button in its row', async ({ page }) => {
   await page.goto('/media')
-  await expect(page.getByText(/MP3,\s+M4A, WAV, Ogg or WebM audio up to 50 MB/)).toBeVisible()
+  await expect(page.getByText(/Audio \(MP3, M4A,\s+WAV, Ogg, WebM\) up to 50 MB/)).toBeVisible()
   await page.locator('input[type=file]').setInputFiles(pngFile())
   await page.locator('input[type=file]').setInputFiles(mp3File())
   const card = page.getByTestId('media-med_mock0002')
