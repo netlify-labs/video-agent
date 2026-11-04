@@ -8,6 +8,7 @@ import {
   Card,
   Checkbox,
   Group,
+  Kbd,
   Menu,
   Modal,
   Stack,
@@ -361,6 +362,15 @@ function IncorporateModal({
   )
 }
 
+/** A note waiting to be posted with the others. */
+interface Draft {
+  key: string
+  body: string
+  timeSec: number | null
+  x: number | null
+  y: number | null
+}
+
 export function CommentsCard({
   video,
   v,
@@ -444,6 +454,239 @@ export function CommentsCard({
     el.currentTime = c.timeSec
   }
 
+  // A pass through the video: notes at moments (C), each with an optional spot, posted together as one block.
+  const [drafts, setDrafts] = useState<Draft[]>([])
+  const composer = useRef<HTMLTextAreaElement>(null)
+  const form = useRef<HTMLFormElement>(null)
+  const addBatch = $api.useMutation('post', '/api/v1/videos/{id}/comments/batch', {
+    onSuccess: () => {
+      setBody('')
+      setDrafts([])
+      setPending(null)
+      setPicking(false)
+      refresh()
+    },
+    onError: showError,
+  })
+  /** Moves the note being written into the draft list. False when there's nothing to move. */
+  const stash = () => {
+    if (!body.trim()) return false
+    setDrafts((d) => [...d, { key: crypto.randomUUID(), body: body.trim(), ...pinOf(pending) }])
+    setBody('')
+    setPending(null)
+    setPicking(false)
+    return true
+  }
+  const stashRef = useRef(stash)
+  stashRef.current = stash
+  // C: pause and start a note at this moment (the one being written, if it has text, becomes a note first).
+  useEffect(() => {
+    if (!canComment || !ready) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'c' && e.key !== 'C') return
+      if (e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return
+      const t = e.target as Element | null
+      if (
+        t?.closest(
+          'input, textarea, select, [contenteditable=""], [contenteditable="true"], [role="textbox"]',
+        )
+      )
+        return
+      if (document.querySelector('[role="dialog"], [role="menu"]')) return
+      const el = player.current
+      if (!el || el.closest('[hidden]')) return
+      e.preventDefault()
+      stashRef.current()
+      el.pause()
+      setPending({ timeSec: Math.round(el.currentTime * 10) / 10, x: null, y: null })
+      setPicking(false)
+      composer.current?.focus()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [canComment, ready, player, setPending, setPicking])
+
+  /** A note's moment, as a button that jumps the player there. */
+  const timeButton = (t: number, spot: boolean, label?: string) => (
+    <button
+      type="button"
+      className="va-comment-time num"
+      aria-label={label}
+      onClick={(e) => {
+        e.stopPropagation()
+        const el = player.current
+        if (!el) return
+        el.pause()
+        el.currentTime = t
+      }}
+    >
+      {spot ? <IconMapPin size={12} /> : null}
+      {clockTime(t)}
+    </button>
+  )
+
+  /** One comment's line: its moment, badges, text (or editor) and actions. A timed one seeks when clicked. */
+  const note = (c: Comment, head: boolean) => (
+    <div
+      key={c.id}
+      className="va-comment"
+      data-resolved={c.resolvedAt ? 'true' : undefined}
+      data-timed={c.timeSec !== null ? 'true' : undefined}
+      data-testid="comment"
+      onClick={(e) => {
+        if (c.timeSec === null || editing?.id === c.id) return
+        // Buttons, menus and text selection keep their own clicks.
+        if ((e.target as Element).closest('button, a, textarea, [role="menu"]')) return
+        if (window.getSelection()?.toString()) return
+        seek(c)
+      }}
+    >
+      <Group justify="space-between" align="flex-start" wrap="nowrap" gap="xs">
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <Group gap={6}>
+            {head ? (
+              <Text size="sm" fw={600}>
+                {c.author.name ?? c.author.email?.split('@')[0]}
+              </Text>
+            ) : null}
+            {c.timeSec !== null ? timeButton(c.timeSec, c.x !== null) : null}
+            {head ? (
+              <Text size="xs" c="var(--va-faint)">
+                {relativeTime(c.createdAt)}
+                {c.editedAt ? ' · edited' : ''}
+              </Text>
+            ) : c.editedAt ? (
+              <Text size="xs" c="var(--va-faint)">
+                edited
+              </Text>
+            ) : null}
+            {c.resolvedAt ? (
+              <Badge size="xs" variant="light" color="gray">
+                Resolved
+              </Badge>
+            ) : null}
+            {c.addressedInN ? (
+              <Badge size="xs" variant="light" color="teal">
+                Addressed in v{c.addressedInN}
+              </Badge>
+            ) : null}
+          </Group>
+          {editing?.id === c.id ? (
+            <Stack gap={6} mt={4}>
+              <Textarea
+                autosize
+                minRows={2}
+                maxLength={2000}
+                value={editing.body}
+                aria-label="Edit comment"
+                onChange={(e) => {
+                  setEditing({ id: c.id, body: e.currentTarget.value })
+                }}
+              />
+              <Group gap="xs">
+                <Button
+                  size="xs"
+                  loading={patch.isPending}
+                  disabled={!editing.body.trim()}
+                  onClick={() => {
+                    patch.mutate({ params: { path: { id: c.id } }, body: { body: editing.body } })
+                  }}
+                >
+                  Save
+                </Button>
+                <Button
+                  size="xs"
+                  variant="subtle"
+                  color="gray"
+                  onClick={() => {
+                    setEditing(null)
+                  }}
+                >
+                  Cancel
+                </Button>
+              </Group>
+            </Stack>
+          ) : (
+            <Text size="sm" c="var(--va-muted)" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+              {c.body}
+            </Text>
+          )}
+        </div>
+        {c.can.edit || c.can.delete || c.can.resolve ? (
+          <Menu position="bottom-end">
+            <Menu.Target>
+              <ActionIcon variant="subtle" color="gray" size="sm" aria-label="Comment actions">
+                <IconDots size={14} />
+              </ActionIcon>
+            </Menu.Target>
+            <Menu.Dropdown>
+              {c.can.resolve ? (
+                <Menu.Item
+                  onClick={() => {
+                    patch.mutate({ params: { path: { id: c.id } }, body: { resolved: !c.resolvedAt } })
+                  }}
+                >
+                  {c.resolvedAt ? 'Reopen' : 'Resolve'}
+                </Menu.Item>
+              ) : null}
+              {c.can.edit ? (
+                <Menu.Item
+                  onClick={() => {
+                    setEditing({ id: c.id, body: c.body })
+                  }}
+                >
+                  Edit
+                </Menu.Item>
+              ) : null}
+              {c.can.delete ? (
+                <Menu.Item
+                  color="red"
+                  onClick={() => {
+                    remove.mutate({ params: { path: { id: c.id } } })
+                  }}
+                >
+                  Delete
+                </Menu.Item>
+              ) : null}
+            </Menu.Dropdown>
+          </Menu>
+        ) : null}
+      </Group>
+    </div>
+  )
+
+  // Notes posted together show as one block (one author line, notes in order); blocks newest first, like YouTube.
+  const blocks: Comment[][] = []
+  for (const c of items) {
+    const last = blocks.at(-1)
+    if (c.groupId && last?.[0]?.groupId === c.groupId) last.push(c)
+    else blocks.push([c])
+  }
+  blocks.reverse()
+
+  const all = [...drafts, ...(body.trim() ? [{ key: 'current', body, ...pinOf(pending) }] : [])]
+  const postAll = () => {
+    const [only] = all
+    if (!only) return
+    if (all.length === 1)
+      add.mutate({
+        params: { path: { id: video.id } },
+        body: { versionN: v.n, body: only.body, ...(only.timeSec !== null ? pinOf(only) : {}) },
+      })
+    else
+      addBatch.mutate({
+        params: { path: { id: video.id } },
+        body: {
+          versionN: v.n,
+          notes: all.map((n) => ({ body: n.body, ...(n.timeSec !== null ? pinOf(n) : {}) })),
+        },
+      })
+  }
+  const posting = add.isPending || addBatch.isPending
+  const mod = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'
+
   return (
     <Card>
       <Group justify="space-between" mb="sm">
@@ -480,150 +723,50 @@ export function CommentsCard({
         />
       ) : null}
       <Stack gap="sm">
-        {items.length === 0 ? (
-          <Text size="sm" c="var(--va-faint)">
-            {canComment
-              ? ready
-                ? 'No comments yet. Pause where something should change and pin a comment there.'
-                : 'No comments yet.'
-              : 'No comments yet.'}
-          </Text>
-        ) : null}
-        {items.map((c) => (
-          <div key={c.id} className="va-comment" data-resolved={c.resolvedAt ? 'true' : undefined}>
-            <Group justify="space-between" align="flex-start" wrap="nowrap" gap="xs">
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <Group gap={6}>
-                  <Text size="sm" fw={600}>
-                    {c.author.name ?? c.author.email?.split('@')[0]}
-                  </Text>
-                  {c.timeSec !== null ? (
-                    <button type="button" className="va-comment-time num" onClick={() => seek(c)}>
-                      {c.x !== null ? <IconMapPin size={12} /> : null}
-                      {clockTime(c.timeSec)}
-                    </button>
-                  ) : null}
-                  <Text size="xs" c="var(--va-faint)">
-                    {relativeTime(c.createdAt)}
-                    {c.editedAt ? ' · edited' : ''}
-                  </Text>
-                  {c.resolvedAt ? (
-                    <Badge size="xs" variant="light" color="gray">
-                      Resolved
-                    </Badge>
-                  ) : null}
-                  {c.addressedInN ? (
-                    <Badge size="xs" variant="light" color="teal">
-                      Addressed in v{c.addressedInN}
-                    </Badge>
-                  ) : null}
-                </Group>
-                {editing?.id === c.id ? (
-                  <Stack gap={6} mt={4}>
-                    <Textarea
-                      autosize
-                      minRows={2}
-                      maxLength={2000}
-                      value={editing.body}
-                      aria-label="Edit comment"
-                      onChange={(e) => {
-                        setEditing({ id: c.id, body: e.currentTarget.value })
-                      }}
-                    />
-                    <Group gap="xs">
-                      <Button
-                        size="xs"
-                        loading={patch.isPending}
-                        disabled={!editing.body.trim()}
-                        onClick={() => {
-                          patch.mutate({ params: { path: { id: c.id } }, body: { body: editing.body } })
-                        }}
-                      >
-                        Save
-                      </Button>
-                      <Button
-                        size="xs"
-                        variant="subtle"
-                        color="gray"
-                        onClick={() => {
-                          setEditing(null)
-                        }}
-                      >
-                        Cancel
-                      </Button>
-                    </Group>
-                  </Stack>
-                ) : (
-                  <Text
-                    size="sm"
-                    c="var(--va-muted)"
-                    style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}
-                  >
-                    {c.body}
-                  </Text>
-                )}
-              </div>
-              {c.can.edit || c.can.delete || c.can.resolve ? (
-                <Menu position="bottom-end">
-                  <Menu.Target>
-                    <ActionIcon variant="subtle" color="gray" size="sm" aria-label="Comment actions">
-                      <IconDots size={14} />
-                    </ActionIcon>
-                  </Menu.Target>
-                  <Menu.Dropdown>
-                    {c.can.resolve ? (
-                      <Menu.Item
-                        onClick={() => {
-                          patch.mutate({ params: { path: { id: c.id } }, body: { resolved: !c.resolvedAt } })
-                        }}
-                      >
-                        {c.resolvedAt ? 'Reopen' : 'Resolve'}
-                      </Menu.Item>
-                    ) : null}
-                    {c.can.edit ? (
-                      <Menu.Item
-                        onClick={() => {
-                          setEditing({ id: c.id, body: c.body })
-                        }}
-                      >
-                        Edit
-                      </Menu.Item>
-                    ) : null}
-                    {c.can.delete ? (
-                      <Menu.Item
-                        color="red"
-                        onClick={() => {
-                          remove.mutate({ params: { path: { id: c.id } } })
-                        }}
-                      >
-                        Delete
-                      </Menu.Item>
-                    ) : null}
-                  </Menu.Dropdown>
-                </Menu>
-              ) : null}
-            </Group>
-          </div>
-        ))}
-
         {canComment ? (
           <form
+            ref={form}
+            tabIndex={-1}
+            className="va-composer"
             onSubmit={(e) => {
               e.preventDefault()
-              add.mutate({
-                params: { path: { id: video.id } },
-                body: {
-                  versionN: v.n,
-                  body,
-                  ...(pending ? { timeSec: pending.timeSec, x: pending.x, y: pending.y } : {}),
-                },
-              })
+              postAll()
             }}
           >
             <Stack gap="xs">
+              {drafts.length ? (
+                <Stack gap={4} data-testid="draft-notes">
+                  {drafts.map((d) => (
+                    <Group key={d.key} gap={6} wrap="nowrap" className="va-draft-note">
+                      {d.timeSec !== null ? timeButton(d.timeSec, d.x !== null) : null}
+                      <Text size="sm" c="var(--va-muted)" truncate style={{ flex: 1, minWidth: 0 }}>
+                        {d.body}
+                      </Text>
+                      <ActionIcon
+                        size="xs"
+                        variant="subtle"
+                        color="gray"
+                        aria-label="Remove this note"
+                        onClick={() => {
+                          setDrafts((all) => all.filter((x) => x.key !== d.key))
+                        }}
+                      >
+                        <IconX size={12} />
+                      </ActionIcon>
+                    </Group>
+                  ))}
+                </Stack>
+              ) : null}
               <Textarea
+                ref={composer}
                 aria-label="Add a comment"
-                placeholder="Add a comment…"
+                placeholder={
+                  pending
+                    ? `A note at ${clockTime(pending.timeSec)}… Enter adds it, ${mod}+Enter posts`
+                    : ready
+                      ? 'Add a comment… Press C while watching to note a moment.'
+                      : 'Add a comment…'
+                }
                 autosize
                 minRows={2}
                 maxLength={2000}
@@ -631,51 +774,133 @@ export function CommentsCard({
                 onChange={(e) => {
                   setBody(e.currentTarget.value)
                 }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    form.current?.focus()
+                    return
+                  }
+                  if (e.key !== 'Enter' || e.shiftKey) return
+                  if (e.metaKey || e.ctrlKey) {
+                    e.preventDefault()
+                    postAll()
+                    return
+                  }
+                  // A note at a moment (or one of several): Enter adds it and steps out of the box, so Space plays.
+                  if (pending || drafts.length) {
+                    e.preventDefault()
+                    if (stash()) form.current?.focus()
+                  }
+                }}
               />
               <Group justify="space-between" gap="xs">
-                {pending ? (
-                  <Badge
-                    variant="light"
-                    size="lg"
-                    leftSection={<IconMapPin size={14} />}
-                    rightSection={
-                      <ActionIcon
-                        size="xs"
-                        variant="transparent"
-                        color="gray"
-                        aria-label="Remove the pin"
-                        onClick={() => {
-                          setPending(null)
-                          setPicking(false)
-                        }}
-                      >
-                        <IconX size={12} />
-                      </ActionIcon>
-                    }
-                  >
-                    {clockTime(pending.timeSec)}
-                    {pending.x !== null ? ' · spot marked' : picking ? ' · click the frame' : ''}
-                  </Badge>
-                ) : ready ? (
-                  <Button
-                    size="xs"
-                    variant="default"
-                    leftSection={<IconMapPin size={14} />}
-                    onClick={startPin}
-                  >
-                    Pin to this moment
+                <Group gap="xs">
+                  {pending ? (
+                    <Badge
+                      variant="light"
+                      size="lg"
+                      leftSection={<IconMapPin size={14} />}
+                      rightSection={
+                        <ActionIcon
+                          size="xs"
+                          variant="transparent"
+                          color="gray"
+                          aria-label="Remove the pin"
+                          onClick={() => {
+                            setPending(null)
+                            setPicking(false)
+                          }}
+                        >
+                          <IconX size={12} />
+                        </ActionIcon>
+                      }
+                    >
+                      {clockTime(pending.timeSec)}
+                      {pending.x !== null ? ' · spot marked' : picking ? ' · click the frame' : ''}
+                    </Badge>
+                  ) : ready ? (
+                    <Button
+                      size="xs"
+                      variant="default"
+                      leftSection={<IconMapPin size={14} />}
+                      onClick={startPin}
+                    >
+                      Pin to this moment
+                    </Button>
+                  ) : null}
+                  {pending && pending.x === null && !picking ? (
+                    <Button
+                      size="xs"
+                      variant="subtle"
+                      color="gray"
+                      onClick={() => {
+                        setPicking(true)
+                      }}
+                    >
+                      Mark a spot
+                    </Button>
+                  ) : null}
+                  {pending && pending.x !== null ? (
+                    <Button
+                      size="xs"
+                      variant="subtle"
+                      color="gray"
+                      onClick={() => {
+                        setPending({ ...pending, x: null, y: null })
+                      }}
+                    >
+                      Remove spot
+                    </Button>
+                  ) : null}
+                </Group>
+                <Group gap="xs">
+                  {(pending || drafts.length > 0) && body.trim() ? (
+                    <Button
+                      size="xs"
+                      variant="default"
+                      onClick={() => {
+                        stash()
+                        composer.current?.focus()
+                      }}
+                    >
+                      Add note
+                    </Button>
+                  ) : null}
+                  <Button type="submit" size="xs" loading={posting} disabled={all.length === 0}>
+                    {all.length > 1 ? `Post ${all.length} notes` : 'Comment'}
                   </Button>
-                ) : (
-                  <span />
-                )}
-                <Button type="submit" size="xs" loading={add.isPending} disabled={!body.trim()}>
-                  Comment
-                </Button>
+                </Group>
               </Group>
+              {ready ? (
+                <Text size="xs" c="var(--va-faint)">
+                  <Kbd size="xs">C</Kbd> notes the moment you're watching · <Kbd size="xs">Enter</Kbd> adds
+                  the note · <Kbd size="xs">Space</Kbd> keeps watching · post them together when you're done
+                </Text>
+              ) : null}
             </Stack>
           </form>
         ) : null}
+        {items.length === 0 ? (
+          <Text size="sm" c="var(--va-faint)">
+            {canComment && ready
+              ? 'No comments yet. Press C while it plays to note a moment, or just write one.'
+              : 'No comments yet.'}
+          </Text>
+        ) : null}
+        {blocks.map((b) =>
+          b.length === 1 && b[0] ? (
+            note(b[0], true)
+          ) : (
+            <div key={b[0]?.groupId ?? b[0]?.id} className="va-comment-block" data-testid="comment-block">
+              {b.map((c, i) => note(c, i === 0))}
+            </div>
+          ),
+        )}
       </Stack>
     </Card>
   )
+}
+
+/** A pin's fields as the API takes them. */
+function pinOf(p: { timeSec: number | null; x: number | null; y: number | null } | null) {
+  return { timeSec: p?.timeSec ?? null, x: p?.x ?? null, y: p?.y ?? null }
 }

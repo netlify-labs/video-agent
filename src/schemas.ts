@@ -631,13 +631,10 @@ export const CreatePlanSchema = z
     aspect: z.enum(['16:9', '9:16', '1:1', '4:5']).optional(),
     durationSec: z.number().int().min(3).max(600).optional(),
     revisionOf: z.object({ videoId: z.string(), version: z.number().int().optional() }).optional(),
-    remixOf: z
-      .object({ videoId: z.string(), version: z.number().int().optional() })
-      .optional()
-      .openapi({
-        description:
-          'Plan a remix of this video (and version, else its latest ready one); not with revisionOf.',
-      }),
+    remixOf: z.object({ videoId: z.string(), version: z.number().int().optional() }).optional().openapi({
+      description:
+        'Plan a remix of this video (and version, else its latest ready one); not with revisionOf.',
+    }),
     mediaIds: z.array(z.string()).max(12).optional().openapi({
       description:
         'Library items to plan around. The planner sees the first few images; the video made from this plan uses them all.',
@@ -1272,6 +1269,12 @@ export const CommentSchema = z
     resolvedAt: z.string().nullable(),
     resolvedBy: PersonRef.nullable(),
     addressedInN: z.number().int().nullable(),
+    groupId: z
+      .string()
+      .nullable()
+      .openapi({
+        description: 'Notes posted together as one review block share this id; null for a lone comment',
+      }),
     can: z.object({ edit: z.boolean(), delete: z.boolean(), resolve: z.boolean() }),
   })
   .openapi('Comment')
@@ -1295,6 +1298,23 @@ export const CreateCommentSchema = z
     y: z.number().min(0).max(1).nullable().optional(),
   })
   .openapi('CreateComment')
+export const CommentNoteSchema = z
+  .object({
+    body: z.string().min(1).max(2000),
+    timeSec: z.number().min(0).nullable().optional(),
+    x: z.number().min(0).max(1).nullable().optional(),
+    y: z.number().min(0).max(1).nullable().optional(),
+  })
+  .openapi('CommentNote')
+export const CreateCommentsSchema = z
+  .object({
+    versionN: z.number().int().positive(),
+    notes: z.array(CommentNoteSchema).min(1).max(20).openapi({
+      description:
+        'Notes from one pass through the video, each optionally at a moment and a spot; posted as one block.',
+    }),
+  })
+  .openapi('CreateComments')
 export const PatchCommentSchema = z
   .object({ body: z.string().min(1).max(2000).optional(), resolved: z.boolean().optional() })
   .openapi('PatchComment')

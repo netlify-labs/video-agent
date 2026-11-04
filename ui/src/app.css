@@ -916,6 +916,33 @@ body {
 .va-comment[data-resolved] {
   opacity: 0.65;
 }
+/* A timed comment jumps the player to its moment when clicked. */
+.va-comment[data-timed] {
+  cursor: pointer;
+}
+.va-comment[data-timed]:hover {
+  background: color-mix(in srgb, var(--va-raised) 85%, var(--va-text));
+}
+/* Notes posted together: one block, one author line, the notes under it. */
+.va-comment-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-radius: var(--mantine-radius-lg);
+  overflow: hidden;
+}
+.va-comment-block > .va-comment {
+  border-radius: 0;
+}
+/* The composer sits on top; it takes focus after a note is added, so Space plays the video. */
+.va-composer:focus {
+  outline: none;
+}
+.va-draft-note {
+  padding: 4px 8px;
+  border-radius: var(--mantine-radius-md);
+  background: var(--va-raised);
+}
 .va-comment-time {
   display: inline-flex;
   align-items: center;

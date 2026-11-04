@@ -6986,6 +6986,98 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/videos/{id}/comments/batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post several notes as one block
+         * @description Posts notes from one pass through the video (each optionally at a moment and a spot) as one review block: one comment per note, sharing a groupId. The owner gets one notification.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateComments"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            items: components["schemas"]["Comment"][];
+                        };
+                    };
+                };
+                /** @description Invalid request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not signed in */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not allowed */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Conflict or not ready */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/videos/{id}/comments/read": {
         parameters: {
             query?: never;
@@ -8786,6 +8878,8 @@ export interface components {
                 email: string | null;
             } | null;
             addressedInN: number | null;
+            /** @description Notes posted together as one review block share this id; null for a lone comment */
+            groupId: string | null;
             can: {
                 edit: boolean;
                 delete: boolean;
@@ -8794,6 +8888,17 @@ export interface components {
         };
         CreateComment: {
             versionN: number;
+            body: string;
+            timeSec?: number | null;
+            x?: number | null;
+            y?: number | null;
+        };
+        CreateComments: {
+            versionN: number;
+            /** @description Notes from one pass through the video, each optionally at a moment and a spot; posted as one block. */
+            notes: components["schemas"]["CommentNote"][];
+        };
+        CommentNote: {
             body: string;
             timeSec?: number | null;
             x?: number | null;

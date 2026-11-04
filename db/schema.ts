@@ -310,6 +310,8 @@ export const comments = pgTable(
     resolvedBy: text('resolved_by'),
     addressedInN: integer('addressed_in_n'),
     deletedAt: ts('deleted_at'),
+    // Notes posted together as one review block share this id (null for a lone comment).
+    groupId: text('group_id'),
   },
   (t) => [index('comments_job_idx').on(t.jobId, t.createdAt)],
 )

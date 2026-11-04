@@ -74,6 +74,7 @@ import { rebaseNarration } from './domain/narration-rebase.js'
 import { receiveCheckpoint } from './domain/checkpoints.js'
 import {
   addComment,
+  addComments,
   deleteComment,
   listComments,
   markCommentsRead,
@@ -1929,6 +1930,24 @@ export function createApp(deps: Deps, opts: AppOptions) {
     }),
     async (c) =>
       c.json(await addComment(deps, c.get('principal'), c.req.valid('param').id, c.req.valid('json')), 201),
+  )
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/v1/videos/{id}/comments/batch',
+      summary: 'Post several notes as one block',
+      description:
+        'Posts notes from one pass through the video (each optionally at a moment and a spot) as one review block: one comment per note, sharing a groupId. The owner gets one notification.',
+      tags: ['comments'],
+      security,
+      request: {
+        params: IdParam,
+        body: { content: { 'application/json': { schema: s.CreateCommentsSchema } }, required: true },
+      },
+      responses: { 201: json(z.object({ items: z.array(s.CommentSchema) }), 'Created'), ...errors },
+    }),
+    async (c) =>
+      c.json(await addComments(deps, c.get('principal'), c.req.valid('param').id, c.req.valid('json')), 201),
   )
   app.openapi(
     createRoute({

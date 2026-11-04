@@ -45,6 +45,8 @@ const me = {
 }
 
 interface MockComment {
+  /** Notes posted together share one (POST …/comments/batch). */
+  groupId?: string | null
   id: string
   videoId: string
   versionN: number
@@ -161,6 +163,7 @@ const commentDto = (c: MockComment) => {
   const moderate = me.role === 'admin' || (owner && me.role === 'creator')
   return {
     ...c,
+    groupId: c.groupId ?? null,
     unread: undefined,
     can: { edit: mine && me.role !== 'viewer', delete: mine || moderate, resolve: moderate },
   }
@@ -950,7 +953,36 @@ export function installMock() {
         seq: live ? w.__previewLinks : null,
       })
     }
-    // Review (plan v2 §5)
+    // Review (plan v2 §5). Several notes posted together share a groupId; the last body is kept for tests.
+    const cb = /^\/api\/v1\/videos\/([^/]+)\/comments\/batch$/.exec(p)
+    if (cb?.[1] && method === 'POST') {
+      if (me.role === 'viewer') return fail(403, 'forbidden', "Your role (viewer) can't comment.")
+      const b = (await readBody(init, input)) as {
+        versionN?: number
+        notes?: { body?: string; timeSec?: number | null; x?: number | null; y?: number | null }[]
+      }
+      ;(window as unknown as { __lastBatch?: unknown }).__lastBatch = b
+      const notes = b.notes ?? []
+      const groupId = notes.length > 1 ? `g_${comments.length + 1}` : null
+      const made = notes.map((n, i): MockComment => ({
+        id: `c_${comments.length + 1 + i}`,
+        groupId,
+        videoId: cb[1] as string,
+        versionN: Number(b.versionN),
+        author: people.sam,
+        body: (n.body ?? '').trim(),
+        timeSec: n.timeSec ?? null,
+        x: n.x ?? null,
+        y: n.y ?? null,
+        createdAt: new Date(Date.now() + i).toISOString(),
+        editedAt: null,
+        resolvedAt: null,
+        resolvedBy: null,
+        addressedInN: null,
+      }))
+      comments.push(...made)
+      return json({ items: made.map(commentDto) }, 201)
+    }
     const cm = /^\/api\/v1\/videos\/([^/]+)\/comments(\/read)?$/.exec(p)
     if (cm?.[1] && cm[2]) {
       for (const c of comments) if (c.videoId === cm[1]) c.unread = false

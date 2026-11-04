@@ -1,0 +1,1 @@
+ALTER TABLE "comments" ADD COLUMN "group_id" text;

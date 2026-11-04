@@ -13,6 +13,8 @@ import { emitEvent } from './webhooks.js'
 
 export const COMMENT_MAX = 2000
 const PAGE_MAX = 200
+/** Notes in one posted review block. */
+export const NOTES_MAX = 20
 
 export interface CommentInput {
   versionN: number
@@ -45,6 +47,7 @@ async function commentDto(repo: Repo, p: Principal, job: JobRow, c: CommentRow) 
     resolvedAt: c.resolvedAt,
     resolvedBy: await person(repo, c.resolvedBy),
     addressedInN: c.addressedInN,
+    groupId: c.groupId ?? null,
     can: {
       edit: mine && can(p, 'comment:create'),
       delete: mine || moderate,
@@ -110,58 +113,116 @@ export async function listComments(
   }
 }
 
+/** One comment on a version, optionally pinned to a moment and a spot. */
 export async function addComment(deps: Deps, p: Principal, jobId: string, input: CommentInput) {
+  const [dto] = await addNotes(deps, p, jobId, input.versionN, [input], null)
+  if (!dto) throw new Error('no comment created')
+  return dto
+}
+
+/**
+ * Several timestamped notes posted together as one review block (a pass through the video): one comment per note, so
+ * each keeps its own moment, spot, still, resolve and Incorporate feedback, sharing a group id. One notification for
+ * the block; one comment.created event per note (webhook consumers see comments either way).
+ */
+export async function addComments(
+  deps: Deps,
+  p: Principal,
+  jobId: string,
+  input: { versionN: number; notes: Omit<CommentInput, 'versionN'>[] },
+) {
+  if (input.notes.length === 0) throw new ApiError('invalid_request', 'Add at least one note.')
+  if (input.notes.length > NOTES_MAX)
+    throw new ApiError('invalid_request', `Post at most ${NOTES_MAX} notes at once.`)
+  const items = await addNotes(
+    deps,
+    p,
+    jobId,
+    input.versionN,
+    input.notes.map((n) => ({ ...n, versionN: input.versionN })),
+    input.notes.length > 1 ? deps.ids.uuid() : null,
+  )
+  return { items }
+}
+
+async function addNotes(
+  deps: Deps,
+  p: Principal,
+  jobId: string,
+  versionN: number,
+  notes: CommentInput[],
+  groupId: string | null,
+) {
   return deps.store.tx(async (repo) => {
     const job = await loadJob(repo, p, jobId)
     assertCan(p, 'comment:create')
-    const v = await repo.getVersion(jobId, input.versionN)
+    const v = await repo.getVersion(jobId, versionN)
     if (!v) throw new ApiError('not_found', 'Version not found.')
-    const body = cleanBody(input.body)
-    const pin = cleanPin(input, (await repo.getOutput(jobId, input.versionN))?.durationSec ?? null)
-    if (pin.timeSec !== null && v.status !== 'ready')
-      throw new ApiError('conflict', 'Pins need a ready version. Leave timeSec out to comment on this one.')
-    const row: CommentRow = {
-      id: deps.ids.uuid(),
-      jobId,
-      versionN: input.versionN,
-      authorId: p.userId,
-      body,
-      ...pin,
-      createdAt: deps.clock.now().toISOString(),
-      editedAt: null,
-      resolvedAt: null,
-      resolvedBy: null,
-      addressedInN: null,
-      deletedAt: null,
-    }
-    await repo.insertComment(row)
-    const dto = await commentDto(repo, p, job, row)
-    await emitEvent(repo, deps, {
-      type: 'comment.created',
-      jobId,
-      versionN: input.versionN,
-      data: {
-        comment: {
-          id: row.id,
-          body,
-          author: dto.author,
-          timeSec: pin.timeSec,
-          x: pin.x,
-          y: pin.y,
+    const durationSec = (await repo.getOutput(jobId, versionN))?.durationSec ?? null
+    const cleaned = notes.map((n) => {
+      const body = cleanBody(n.body)
+      const pin = cleanPin(n, durationSec)
+      if (pin.timeSec !== null && v.status !== 'ready')
+        throw new ApiError('conflict', 'Pins need a ready version. Leave timeSec out to comment on this one.')
+      return { body, pin }
+    })
+    // A millisecond apart, so the notes list in the order they were posted.
+    const now = deps.clock.now().getTime()
+    const dtos = []
+    for (const [i, { body, pin }] of cleaned.entries()) {
+      const row: CommentRow = {
+        id: deps.ids.uuid(),
+        jobId,
+        versionN,
+        authorId: p.userId,
+        body,
+        ...pin,
+        createdAt: new Date(now + i).toISOString(),
+        editedAt: null,
+        resolvedAt: null,
+        resolvedBy: null,
+        addressedInN: null,
+        deletedAt: null,
+        groupId,
+      }
+      await repo.insertComment(row)
+      const dto = await commentDto(repo, p, job, row)
+      dtos.push(dto)
+      await emitEvent(repo, deps, {
+        type: 'comment.created',
+        jobId,
+        versionN,
+        data: {
+          comment: {
+            id: row.id,
+            body,
+            author: dto.author,
+            timeSec: pin.timeSec,
+            x: pin.x,
+            y: pin.y,
+          },
         },
-      },
-    })
-    const at = pin.timeSec !== null ? ` at ${pin.timeSec.toFixed(1)}s` : ''
-    await notifyOwner(repo, deps, {
-      type: 'comment.created',
-      jobId,
-      versionN: input.versionN,
-      actorId: p.userId,
-      summary: `${p.name ?? p.email} commented on v${input.versionN}${at}: ${body}`,
-    })
-    // Your own comment counts as read.
-    await repo.setCommentReadAt(p.userId, jobId, row.createdAt)
-    return dto
+      })
+    }
+    const first = cleaned[0]
+    if (first) {
+      const at = first.pin.timeSec !== null ? ` at ${first.pin.timeSec.toFixed(1)}s` : ''
+      const who = p.name ?? p.email
+      await notifyOwner(repo, deps, {
+        type: 'comment.created',
+        jobId,
+        versionN,
+        actorId: p.userId,
+        summary:
+          cleaned.length > 1
+            ? `${who} left ${cleaned.length} notes on v${versionN}${at}: ${first.body}`
+            : `${who} commented on v${versionN}${at}: ${first.body}`,
+      })
+    }
+    // Your own comments count as read.
+    const last = dtos.at(-1)
+    if (last) await repo.setCommentReadAt(p.userId, jobId, last.createdAt)
+    return dtos
   })
 }
 

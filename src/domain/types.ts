@@ -589,6 +589,8 @@ export interface CommentRow {
   resolvedBy: string | null
   addressedInN: number | null
   deletedAt: string | null
+  /** Notes posted together (a review pass with several timestamps) share one id; null for a lone comment. */
+  groupId?: string | null
 }
 
 export type MediaStatus = 'uploading' | 'verifying' | 'ready' | 'rejected'
