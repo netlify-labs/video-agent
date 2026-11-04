@@ -1368,6 +1368,15 @@ let mockEditHtml: string | null = null
  */
 function contractHtml() {
   const voice = !!localStorage.getItem('mockVoice')
+  // localStorage.mockCode: the opening scene has a syntax-highlighted code block, one field per line.
+  if (localStorage.getItem('mockCode'))
+    return plainHtml.replace(
+      '<h1 class="title" data-va-text="intro-title" data-va-label="Headline">Org webhooks</h1>',
+      `<h1 class="title" data-va-text="intro-title" data-va-label="Headline">Org webhooks</h1>
+          <pre class="code"><span class="ln" data-va-text="code1" data-va-label="Code line 1">const ai = new Anthropic()</span>
+<span class="ln" data-va-text="code2" data-va-label="Code line 2">  <span class="tk-prop">model</span>: <span class="tk-str">'claude-opus-4-8'</span>,</span>
+<span class="ln" data-va-text="code3" data-va-label="Code line 3">})</span></pre>`,
+    )
   if (!voice && !localStorage.getItem('mockMusic')) return plainHtml
   if (!mockMedia.some((m) => m.id === 'med_theme01'))
     mockMedia.push({ ...mockItem('Upbeat theme.mp3', 'audio', 2_400_000), id: 'med_theme01' })

@@ -968,6 +968,14 @@ main.va-shell-main {
 .va-composer-input {
   font-size: 14px;
 }
+/* A code block's lines in the editor: monospace, no wrapping (a line is a line in the video). */
+.va-code-input {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre;
+  overflow-x: auto;
+}
 /* A text box that takes dropped files (AttachFiles.tsx): an accent edge and a label while files are over it. */
 .va-drop-target {
   position: relative;

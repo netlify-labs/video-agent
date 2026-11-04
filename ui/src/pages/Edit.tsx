@@ -142,6 +142,120 @@ function Was({ value, name, onRevert }: { value: string; name: string; onRevert:
   )
 }
 
+/** Text fields labelled "Code line 1", "Code line 2", … in a row: one block, edited as one box. */
+const LINE_LABEL = /^(.*?)\s*line\s*(\d+)$/i
+type Field = { id: string; text: string; label: string | null }
+function groupFields<T extends Field>(
+  texts: T[],
+): ({ kind: 'one'; t: T } | { kind: 'lines'; name: string; items: T[] })[] {
+  const out: ({ kind: 'one'; t: T } | { kind: 'lines'; name: string; items: T[] })[] = []
+  let run: { name: string; n: number; items: T[] } | null = null
+  const flush = () => {
+    if (!run) return
+    if (run.items.length > 1) out.push({ kind: 'lines', name: run.name, items: run.items })
+    else for (const t of run.items) out.push({ kind: 'one', t })
+    run = null
+  }
+  for (const t of texts) {
+    const m = t.label ? LINE_LABEL.exec(t.label.trim()) : null
+    const name = m?.[1]?.trim() ?? ''
+    const n = Number(m?.[2])
+    if (m && name && run && run.name === name && n === run.n + 1) {
+      run.items.push(t)
+      run.n = n
+      continue
+    }
+    flush()
+    if (m && name) run = { name, n, items: [t] }
+    else out.push({ kind: 'one', t })
+  }
+  flush()
+  return out
+}
+
+/**
+ * A code block's lines as one monospace box: each line is still its own field in the video, so a changed line is saved
+ * to its field (and keeps its highlighting). Adding or removing lines changes the composition, so that needs a
+ * revision: until the count matches again nothing is applied.
+ */
+function CodeLines({
+  name,
+  items,
+  was,
+  onLine,
+  register,
+}: {
+  name: string
+  items: Field[]
+  was: (id: string) => string | undefined
+  onLine: (id: string, text: string) => void
+  register: (el: HTMLTextAreaElement | null) => void
+}) {
+  const [typed, setTyped] = useState<string | null>(null)
+  const value = typed ?? items.map((t) => t.text).join('\n')
+  const count = value.split('\n').length
+  const changed = items.filter((t) => {
+    const w = was(t.id)
+    return w !== undefined && w !== t.text
+  })
+  return (
+    <div data-testid="code-lines">
+      <Textarea
+        size="xs"
+        label={`${name} (${items.length} lines)`}
+        description="Each line is a line in the video; indentation and colours come from the video."
+        autosize
+        minRows={Math.min(items.length, 12)}
+        wrap="off"
+        spellCheck={false}
+        classNames={{ input: 'va-code-input' }}
+        value={value}
+        ref={register}
+        error={
+          typed !== null
+            ? `Keep it to ${items.length} lines (now ${count}). Adding or removing lines needs a revision.`
+            : undefined
+        }
+        onChange={(e) => {
+          const v = e.currentTarget.value
+          const lines = v.split('\n')
+          if (lines.length !== items.length) {
+            setTyped(v)
+            return
+          }
+          setTyped(null)
+          for (const [i, t] of items.entries()) {
+            const next = (lines[i] ?? '').trim().slice(0, 500)
+            if (next !== t.text) onLine(t.id, next)
+          }
+        }}
+      />
+      {changed.length ? (
+        <Group gap={6} wrap="nowrap" data-testid="was">
+          <Text size="xs" c="var(--va-faint)" truncate style={{ flex: 1, minWidth: 0 }}>
+            {changed.length === 1
+              ? `Line ${items.indexOf(changed[0] as Field) + 1} was: ${was((changed[0] as Field).id) || '(empty)'}`
+              : `${changed.length} lines changed`}
+          </Text>
+          <Button
+            size="compact-xs"
+            variant="subtle"
+            color="gray"
+            leftSection={<IconArrowBackUp size={12} />}
+            aria-label={`Revert ${name}`}
+            onClick={() => {
+              setTyped(null)
+              for (const t of changed) onLine(t.id, was(t.id) ?? t.text)
+            }}
+          >
+            Revert
+          </Button>
+        </Group>
+      ) : null}
+    </div>
+  )
+}
+
 const percent = (v: number) => `${Math.round(v * 100)}%`
 const fileOf = (src: string) => src.split('/').pop() ?? src
 
@@ -324,7 +438,9 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
   const [saving, setSaving] = useState(false)
   const [renderKey] = useState(newIdempotencyKey)
   const sendRef = useRef<((c: PreviewCommand) => void) | null>(null)
-  const fields = useRef<Record<string, HTMLInputElement | null>>({})
+  const fields = useRef<Record<string, HTMLInputElement | HTMLTextAreaElement | null>>({})
+  // A code line's place in its block's box, so a click on it in the preview selects that line.
+  const fieldLine = useRef<Record<string, number>>({})
   // The slot being replaced, and the library items picked so far (for their thumbnails).
   const [replacing, setReplacing] = useState<Slot | null>(null)
   const [replacingAudio, setReplacingAudio] = useState<Track | null>(null)
@@ -523,7 +639,14 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
     if (el) {
       el.scrollIntoView({ block: 'center', behavior: 'smooth' })
       el.focus()
-      el.select()
+      const line = c.textId ? fieldLine.current[c.textId] : undefined
+      if (line === undefined || !(el instanceof HTMLTextAreaElement)) {
+        el.select()
+        return
+      }
+      const lines = el.value.split('\n')
+      const start = lines.slice(0, line).reduce((n, l) => n + l.length + 1, 0)
+      el.setSelectionRange(start, start + (lines[line]?.length ?? 0))
     }
   }, [])
   const onReady = useCallback((send: (c: PreviewCommand) => void) => {
@@ -947,7 +1070,24 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
                       />
                     ) : null
                   })()}
-                  {b.texts.map((t) => {
+                  {groupFields(b.texts).map((g) => {
+                    if (g.kind === 'lines')
+                      return (
+                        <CodeLines
+                          key={g.items[0]?.id}
+                          name={g.name}
+                          items={g.items}
+                          was={(id) => baseText.get(id)}
+                          onLine={setText}
+                          register={(el) => {
+                            for (const [i, t] of g.items.entries()) {
+                              fields.current[t.id] = el
+                              fieldLine.current[t.id] = i
+                            }
+                          }}
+                        />
+                      )
+                    const t = g.t
                     const was = baseText.get(t.id)
                     const label = labelFor(t.label, t.id, b.id)
                     return (
