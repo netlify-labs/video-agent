@@ -1038,7 +1038,17 @@ const CompositionSchema = z
         duration: z.number(),
         authoredDuration: z.number(),
         label: z.string().nullable(),
-        texts: z.array(z.object({ id: z.string(), text: z.string(), label: z.string().nullable() })),
+        texts: z.array(
+          z.object({
+            id: z.string(),
+            text: z.string(),
+            label: z.string().nullable(),
+            indent: z.string().optional().openapi({
+              description:
+                "The field's leading whitespace in the video (a code line's indentation), when it has any. A text op starting with spaces or tabs replaces it.",
+            }),
+          }),
+        ),
         media: z.array(
           z.object({
             slot: z.string(),
@@ -1269,7 +1279,10 @@ export const CommentAttachmentSchema = z
     kind: z.enum(MEDIA_KINDS),
     filename: z.string(),
     title: z.string().nullable(),
-    url: z.string().nullable().openapi({ description: 'A signed link to the file (an SVG: its sanitized copy)' }),
+    url: z
+      .string()
+      .nullable()
+      .openapi({ description: 'A signed link to the file (an SVG: its sanitized copy)' }),
     poster: z.string().nullable().openapi({ description: "A signed link to a clip's poster frame" }),
   })
   .openapi('CommentAttachment')
@@ -1298,14 +1311,12 @@ export const CommentSchema = z
     resolvedAt: z.string().nullable(),
     resolvedBy: PersonRef.nullable(),
     addressedInN: z.number().int().nullable(),
-    groupId: z
-      .string()
-      .nullable()
-      .openapi({
-        description: 'Notes posted together as one review block share this id; null for a lone comment',
-      }),
+    groupId: z.string().nullable().openapi({
+      description: 'Notes posted together as one review block share this id; null for a lone comment',
+    }),
     attachments: z.array(CommentAttachmentSchema).openapi({
-      description: 'Library media attached to the comment, in order (items deleted from the library since left out)',
+      description:
+        'Library media attached to the comment, in order (items deleted from the library since left out)',
     }),
     can: z.object({ edit: z.boolean(), delete: z.boolean(), resolve: z.boolean() }),
   })

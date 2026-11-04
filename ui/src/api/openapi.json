@@ -3862,6 +3862,10 @@
                           "string",
                           "null"
                         ]
+                      },
+                      "indent": {
+                        "type": "string",
+                        "description": "The field's leading whitespace in the video (a code line's indentation), when it has any. A text op starting with spaces or tabs replaces it."
                       }
                     },
                     "required": [

@@ -176,6 +176,19 @@ describe('contract patcher', () => {
     const plain = line('Org webhooks')
     editText(plain.el, 'Org webhooks, now')
     expect(html(save(plain.d))).toBe('Org webhooks, now')
+    // A line starting with spaces sets its own indentation; the tokens stay.
+    const indent = line(code)
+    editText(indent.el, "    model: 'claude-opus-4-8',")
+    expect(html(save(indent.d))).toBe(
+      `    <span class="tk-prop">model</span>: <span class="tk-str">'claude-opus-4-8'</span>,`,
+    )
+    // The reader reports a field's indentation beside its trimmed text.
+    const read1 = read(
+      load(
+        `<div data-composition-id="x" data-duration="2"><section data-va-beat="b" data-start="0" data-duration="2"><span data-va-text="c6">${code}</span></section></div>`,
+      ),
+    )
+    expect(read1.beats[0]?.texts[0]).toMatchObject({ text: "model: 'claude-opus-4-8',", indent: '  ' })
     expect(changed('abcd', 'abXd')).toEqual([2, 3, 'X'])
     expect(changed('ab', 'abc')).toEqual([2, 2, 'c'])
   })

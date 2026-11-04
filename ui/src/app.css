@@ -968,13 +968,25 @@ main.va-shell-main {
 .va-composer-input {
   font-size: 14px;
 }
-/* A code block's lines in the editor: monospace, no wrapping (a line is a line in the video). */
-.va-code-input {
-  font-family: var(--mantine-font-family-monospace);
-  font-size: 12px;
-  line-height: 1.6;
-  white-space: pre;
-  overflow-x: auto;
+/* A code block in the editor (CodeEditor.tsx): framed like a text box; red edge when the line count is off. */
+.va-code-frame {
+  border: 1px solid var(--va-dialog-edge);
+  border-radius: var(--mantine-radius-md);
+  overflow: hidden;
+  background: var(--va-dialog-raised);
+}
+.va-code-frame:focus-within {
+  border-color: var(--va-accent);
+}
+.va-code-frame[data-error] {
+  border-color: var(--va-negative);
+}
+.va-code-frame .cm-editor {
+  background: transparent;
+}
+.va-code-frame .cm-gutters {
+  background: transparent;
+  border-right: 1px solid var(--va-dialog-edge);
 }
 /* A text box that takes dropped files (AttachFiles.tsx): an accent edge and a label while files are over it. */
 .va-drop-target {

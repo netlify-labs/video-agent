@@ -105,7 +105,7 @@
     const old = nodes.map((x) => x.n.data).join('')
     const lead = (/^\s*/.exec(old) || [''])[0]
     const trail = old.trim() ? (/\s*$/.exec(old) || [''])[0] : ''
-    const next = lead + text + trail
+    const next = (/^[ \t]/.test(text) ? '' : lead) + text + trail
     if (next === old) return
     let p = 0
     while (p < old.length && p < next.length && old[p] === next[p]) p++
@@ -114,9 +114,10 @@
       s++
     const end = old.length - s
     const ins = next.slice(p, next.length - s)
-    let host = nodes.find((x) => p >= x.a && p < x.b)
-    if (!host) for (const x of nodes) if (x.b === p) host = x
-    if (!host) host = nodes[0]
+    const inside = nodes.find((x) => p >= x.a && p < x.b)
+    let before = null
+    for (const x of nodes) if (x.b === p) before = x
+    const host = (end === p ? before || inside : inside || before) || nodes[0]
     for (const x of nodes) {
       const from = Math.max(p, x.a) - x.a
       const to = Math.min(end, x.b) - x.a

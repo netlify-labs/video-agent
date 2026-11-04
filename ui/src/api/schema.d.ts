@@ -8582,6 +8582,8 @@ export interface components {
                     id: string;
                     text: string;
                     label: string | null;
+                    /** @description The field's leading whitespace in the video (a code line's indentation), when it has any. A text op starting with spaces or tabs replaces it. */
+                    indent?: string;
                 }[];
                 media: {
                     slot: string;

@@ -18,6 +18,7 @@ import {
   Slider,
   Stack,
   Text,
+  Modal,
   Textarea,
   TextInput,
   Title,
@@ -27,6 +28,7 @@ import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   IconArrowBackUp,
+  IconArrowsMaximize,
   IconArrowLeft,
   IconArrowDown,
   IconArrowUp,
@@ -44,6 +46,7 @@ import { $api, errorMessage, fetchClient, newIdempotencyKey, useNarrationEnabled
 import type { paths } from '../api/schema'
 import { confirmDanger, showError } from '../components/bits'
 import { CompositionPreview, type PreviewCommand } from '../components/CompositionPreview'
+import { CodeEditor, type CodeEditorHandle } from '../components/CodeEditor'
 import { MediaLibraryModal, type Media } from '../components/MediaPicker'
 import { NarrationRenderDialog, type RenderChoice } from '../components/NarrationRenderDialog'
 import { NarrationRecorder } from '../components/NarrationRecorder'
@@ -144,7 +147,7 @@ function Was({ value, name, onRevert }: { value: string; name: string; onRevert:
 
 /** Text fields labelled "Code line 1", "Code line 2", … in a row: one block, edited as one box. */
 const LINE_LABEL = /^(.*?)\s*line\s*(\d+)$/i
-type Field = { id: string; text: string; label: string | null }
+type Field = { id: string; text: string; label: string | null; indent?: string }
 function groupFields<T extends Field>(
   texts: T[],
 ): ({ kind: 'one'; t: T } | { kind: 'lines'; name: string; items: T[] })[] {
@@ -173,10 +176,13 @@ function groupFields<T extends Field>(
   return out
 }
 
+/** A code line as the editor shows it: its indentation in the video, then its text (a new indentation is in the text). */
+const shown = (t: Field) => (/^[ \t]/.test(t.text) ? t.text : (t.indent ?? '') + t.text)
+
 /**
- * A code block's lines as one monospace box: each line is still its own field in the video, so a changed line is saved
- * to its field (and keeps its highlighting). Adding or removing lines changes the composition, so that needs a
- * revision: until the count matches again nothing is applied.
+ * A code block's lines in a code editor (indentation, highlighting), with Expand for a big one. Each line is still its
+ * own field in the video, so a changed line is saved to its field and keeps its colours there. Adding or removing
+ * lines changes the composition, so that needs a revision: until the count matches again nothing is applied.
  */
 function CodeLines({
   name,
@@ -189,47 +195,70 @@ function CodeLines({
   items: Field[]
   was: (id: string) => string | undefined
   onLine: (id: string, text: string) => void
-  register: (el: HTMLTextAreaElement | null) => void
+  /** Called with a way to select one of the block's lines (a click on it in the preview). */
+  register: (selectLine: ((i: number) => void) | null) => void
 }) {
   const [typed, setTyped] = useState<string | null>(null)
-  const value = typed ?? items.map((t) => t.text).join('\n')
+  const [expanded, setExpanded] = useState(false)
+  const value = typed ?? items.map(shown).join('\n')
   const count = value.split('\n').length
   const changed = items.filter((t) => {
     const w = was(t.id)
     return w !== undefined && w !== t.text
   })
+  const apply = (v: string) => {
+    const lines = v.split('\n')
+    if (lines.length !== items.length) {
+      setTyped(v)
+      return
+    }
+    setTyped(null)
+    for (const [i, t] of items.entries()) {
+      const line = (lines[i] ?? '').replace(/\s+$/, '')
+      const indent = /^[ \t]*/.exec(line)?.[0] ?? ''
+      const body = line.trim()
+      // Same indentation as in the video: the text alone. Different: the text with its new indentation.
+      const next = (indent === (t.indent ?? '') ? body : indent + body).slice(0, 500)
+      if (next !== t.text) onLine(t.id, next)
+    }
+  }
+  const problem =
+    typed !== null
+      ? `Keep it to ${items.length} lines (now ${count}). Adding or removing lines needs a revision.`
+      : null
   return (
     <div data-testid="code-lines">
-      <Textarea
-        size="xs"
-        label={`${name} (${items.length} lines)`}
-        description="Each line is a line in the video; indentation and colours come from the video."
-        autosize
-        minRows={Math.min(items.length, 12)}
-        wrap="off"
-        spellCheck={false}
-        classNames={{ input: 'va-code-input' }}
-        value={value}
-        ref={register}
-        error={
-          typed !== null
-            ? `Keep it to ${items.length} lines (now ${count}). Adding or removing lines needs a revision.`
-            : undefined
-        }
-        onChange={(e) => {
-          const v = e.currentTarget.value
-          const lines = v.split('\n')
-          if (lines.length !== items.length) {
-            setTyped(v)
-            return
-          }
-          setTyped(null)
-          for (const [i, t] of items.entries()) {
-            const next = (lines[i] ?? '').trim().slice(0, 500)
-            if (next !== t.text) onLine(t.id, next)
-          }
-        }}
-      />
+      <Group justify="space-between" gap="xs" mb={4} wrap="nowrap">
+        <Text size="xs" fw={500}>
+          {name} ({items.length} lines)
+        </Text>
+        <Button
+          size="compact-xs"
+          variant="subtle"
+          color="gray"
+          leftSection={<IconArrowsMaximize size={12} />}
+          onClick={() => {
+            setExpanded(true)
+          }}
+        >
+          Expand
+        </Button>
+      </Group>
+      <div className="va-code-frame" data-error={problem ? true : undefined}>
+        <CodeEditor
+          value={value}
+          onChange={apply}
+          label={`${name} (${items.length} lines)`}
+          onHandle={(h: CodeEditorHandle | null) => {
+            register(h ? (i) => h.selectLine(i) : null)
+          }}
+        />
+      </div>
+      {problem ? (
+        <Text size="xs" c="var(--va-negative)" mt={4}>
+          {problem}
+        </Text>
+      ) : null}
       {changed.length ? (
         <Group gap={6} wrap="nowrap" data-testid="was">
           <Text size="xs" c="var(--va-faint)" truncate style={{ flex: 1, minWidth: 0 }}>
@@ -252,6 +281,28 @@ function CodeLines({
           </Button>
         </Group>
       ) : null}
+      <Modal
+        opened={expanded}
+        onClose={() => {
+          setExpanded(false)
+        }}
+        title={`${name} (${items.length} lines)`}
+        size="80%"
+        centered
+      >
+        <Text size="xs" c="var(--va-faint)" mb="xs">
+          Each line is a line in the video. Change lines and their indentation freely; adding or removing
+          lines needs a revision. Esc closes.
+        </Text>
+        <div className="va-code-frame" data-error={problem ? true : undefined}>
+          <CodeEditor value={value} onChange={apply} label={`${name}, expanded`} height="min(70vh, 900px)" />
+        </div>
+        {problem ? (
+          <Text size="xs" c="var(--va-negative)" mt={4}>
+            {problem}
+          </Text>
+        ) : null}
+      </Modal>
     </div>
   )
 }
@@ -438,9 +489,9 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
   const [saving, setSaving] = useState(false)
   const [renderKey] = useState(newIdempotencyKey)
   const sendRef = useRef<((c: PreviewCommand) => void) | null>(null)
-  const fields = useRef<Record<string, HTMLInputElement | HTMLTextAreaElement | null>>({})
-  // A code line's place in its block's box, so a click on it in the preview selects that line.
-  const fieldLine = useRef<Record<string, number>>({})
+  const fields = useRef<Record<string, HTMLInputElement | null>>({})
+  // Code lines: a click on one in the preview selects it in its block's editor.
+  const codeLine = useRef(new Map<string, () => void>())
   // The slot being replaced, and the library items picked so far (for their thumbnails).
   const [replacing, setReplacing] = useState<Slot | null>(null)
   const [replacingAudio, setReplacingAudio] = useState<Track | null>(null)
@@ -635,18 +686,16 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
   }
 
   const onPreviewClick = useCallback((c: { textId: string | null }) => {
+    const code = c.textId ? codeLine.current.get(c.textId) : undefined
+    if (code) {
+      code()
+      return
+    }
     const el = c.textId ? fields.current[c.textId] : null
     if (el) {
       el.scrollIntoView({ block: 'center', behavior: 'smooth' })
       el.focus()
-      const line = c.textId ? fieldLine.current[c.textId] : undefined
-      if (line === undefined || !(el instanceof HTMLTextAreaElement)) {
-        el.select()
-        return
-      }
-      const lines = el.value.split('\n')
-      const start = lines.slice(0, line).reduce((n, l) => n + l.length + 1, 0)
-      el.setSelectionRange(start, start + (lines[line]?.length ?? 0))
+      el.select()
     }
   }, [])
   const onReady = useCallback((send: (c: PreviewCommand) => void) => {
@@ -1079,11 +1128,13 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
                           items={g.items}
                           was={(id) => baseText.get(id)}
                           onLine={setText}
-                          register={(el) => {
-                            for (const [i, t] of g.items.entries()) {
-                              fields.current[t.id] = el
-                              fieldLine.current[t.id] = i
-                            }
+                          register={(select) => {
+                            for (const [i, t] of g.items.entries())
+                              if (select)
+                                codeLine.current.set(t.id, () => {
+                                  select(i)
+                                })
+                              else codeLine.current.delete(t.id)
                           }}
                         />
                       )

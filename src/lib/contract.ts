@@ -98,7 +98,8 @@ export interface Beat {
   start: number
   duration: number
   authoredDuration: number
-  texts: { id: string; text: string; label: string | null }[]
+  /** indent: the field's leading whitespace in the video (a code line's indentation), when it has any. */
+  texts: { id: string; text: string; label: string | null; indent?: string }[]
   media: MediaSlot[]
   /** The beat's voice-over clip, timed in the beat's clock; null when it has none. */
   voice: VoiceClip | null
@@ -180,7 +181,8 @@ function setText(el: Element, text: string) {
 /**
  * Edits an element's text without losing its markup: only the characters that changed are replaced, inside the text
  * node they belong to, so token spans (syntax highlighting), emphasis and indentation around them stay. `text` is
- * the field as people edit it (trimmed): the element's own leading and trailing whitespace is kept.
+ * the field as people edit it (trimmed): the element's own leading and trailing whitespace is kept, unless `text`
+ * starts with spaces or tabs, which then replace the leading whitespace (a code line's new indentation).
  */
 export function editText(el: Element, text: string) {
   const nodes: { n: { value: string }; a: number; b: number }[] = []
@@ -197,11 +199,14 @@ export function editText(el: Element, text: string) {
   if (!nodes.length) return setText(el, text)
   const lead = /^\s*/.exec(old)?.[0] ?? ''
   const trail = old.trim() ? (/\s*$/.exec(old)?.[0] ?? '') : ''
-  const next = lead + text + trail
+  const next = (/^[ \t]/.test(text) ? '' : lead) + text + trail
   if (next === old) return
   const [p, oldEnd, ins] = changed(old, next)
-  // The inserted text goes into the node where the change starts (the earlier one at a boundary).
-  const host = nodes.find((x) => p >= x.a && p < x.b) ?? nodes.findLast((x) => x.b === p) ?? nodes[0]
+  // A replacement goes into the node whose text it replaces; a pure insertion at a boundary between two nodes goes at
+  // the end of the earlier one (new indentation stays indentation, not part of the next token).
+  const inside = nodes.find((x) => p >= x.a && p < x.b)
+  const before = nodes.findLast((x) => x.b === p)
+  const host = (oldEnd === p ? (before ?? inside) : (inside ?? before)) ?? nodes[0]
   for (const x of nodes) {
     const from = Math.max(p, x.a) - x.a
     const to = Math.min(oldEnd, x.b) - x.a
@@ -277,7 +282,16 @@ export function read(d: Doc, lines?: Record<string, string>): Composition {
       authoredDuration: num(attr(b, 'data-va-authored-duration') ?? attr(b, 'data-duration')),
       texts: inner
         .filter((e) => attr(e, 'data-va-text') !== null)
-        .map((e) => ({ id: attr(e, 'data-va-text') ?? '', text: textOf(e).trim(), label: labelOf(e) })),
+        .map((e) => {
+          const raw = textOf(e)
+          const indent = raw.trim() ? (/^[ \t]*/.exec(raw)?.[0] ?? '') : ''
+          return {
+            id: attr(e, 'data-va-text') ?? '',
+            text: raw.trim(),
+            label: labelOf(e),
+            ...(indent ? { indent } : {}),
+          }
+        }),
       media: inner.filter((e) => attr(e, 'data-va-media') !== null).map((e) => mediaOf(e, id)),
       voice: voiceOf(b),
     }
