@@ -960,13 +960,7 @@ export async function videoDto(
   deps: DtoDeps,
   jobId: string,
   viewer: Principal,
-  prefetched?: {
-    verdicts: VerdictRow[]
-    comments: Record<string, CommentCounts>
-    favorites: string[]
-    /** Remixes' source videos on the page, by id (pageRepo only finds the page's own jobs). */
-    remixSources?: Map<string, JobRow | null>
-  },
+  prefetched?: DtoPrefetched,
 ): Promise<VideoDtoShape>
 export async function videoDto(
   repo: Repo,
@@ -979,32 +973,28 @@ export async function videoDto(
   deps: Pick<Deps, 'config' | 'runner'> & Partial<DtoDeps>,
   jobId: string,
   viewer: Principal | 'system',
-  prefetched?: {
-    verdicts: VerdictRow[]
-    comments: Record<string, CommentCounts>
-    favorites: string[]
-    /** Remixes' source videos on the page, by id (pageRepo only finds the page's own jobs). */
-    remixSources?: Map<string, JobRow | null>
-  },
+  prefetched?: DtoPrefetched,
 ) {
   return buildVideoDto(repo, deps, jobId, viewer, prefetched)
 }
 
 type DtoDeps = Pick<Deps, 'config' | 'runner' | 'store' | 'ids' | 'clock' | 'blobs'>
 type VideoDtoShape = Awaited<ReturnType<typeof buildVideoDto>>
+/** What a list page already loaded for all its videos, so each DTO doesn't query it again. */
+interface DtoPrefetched {
+  verdicts: VerdictRow[]
+  comments: Record<string, CommentCounts>
+  favorites: string[]
+  /** Remixes' source videos on the page, by id (pageRepo only finds the page's own jobs). */
+  remixSources?: Map<string, JobRow | null>
+}
 
 async function buildVideoDto(
   repo: Repo,
   deps: Pick<Deps, 'config' | 'runner'> & Partial<DtoDeps>,
   jobId: string,
   viewer: Principal | 'system',
-  prefetched?: {
-    verdicts: VerdictRow[]
-    comments: Record<string, CommentCounts>
-    favorites: string[]
-    /** Remixes' source videos on the page, by id (pageRepo only finds the page's own jobs). */
-    remixSources?: Map<string, JobRow | null>
-  },
+  prefetched?: DtoPrefetched,
 ) {
   const job = await repo.getJob(jobId)
   if (!job || job.deletedAt || (viewer !== 'system' && !canSee(viewer, job)))

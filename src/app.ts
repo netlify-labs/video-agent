@@ -135,6 +135,7 @@ const errors = {
 const security = [{ cookieAuth: [] }, { bearerAuth: [] }]
 
 const IdParam = z.object({ id: z.string().openapi({ param: { name: 'id', in: 'path' } }) })
+const IdempotencyHeader = z.object({ 'idempotency-key': z.string().max(200).optional() })
 const VersionParam = IdParam.extend({
   n: z.coerce
     .number()
@@ -264,7 +265,12 @@ export function createApp(deps: Deps, opts: AppOptions) {
     })
     c.env.context?.waitUntil?.(p)
   }
-  const statusOf = (code: number) => code as 202
+  /** A queued video's response: its location, a kick unless the request was a replay, and the stored status. */
+  const queued = (c: Context<Env>, res: Awaited<ReturnType<typeof createVideo>>) => {
+    c.header('location', res.body.links.self)
+    if (!res.replayed) kick(c)
+    return c.json(res.body, res.status as 202)
+  }
 
   // ───── public ─────
   app.openapi(
@@ -324,7 +330,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       tags: ['videos'],
       security,
       request: {
-        headers: z.object({ 'idempotency-key': z.string().max(200).optional() }),
+        headers: IdempotencyHeader,
         body: { content: { 'application/json': { schema: s.CreateVideoSchema } }, required: true },
       },
       responses: { 202: json(s.VideoSchema, 'Queued'), ...errors, 503: err('Setup required') },
@@ -336,9 +342,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
         c.req.valid('json'),
         c.req.valid('header')['idempotency-key'],
       )
-      c.header('location', res.body.links.self)
-      if (!res.replayed) kick(c)
-      return c.json(res.body, statusOf(res.status))
+      return queued(c, res)
     },
   )
   app.openapi(
@@ -463,7 +467,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       security,
       request: {
         params: IdParam,
-        headers: z.object({ 'idempotency-key': z.string().max(200).optional() }),
+        headers: IdempotencyHeader,
         body: { content: { 'application/json': { schema: s.ReviseSchema } }, required: true },
       },
       responses: { 202: json(s.VideoSchema, 'Queued'), ...errors, 503: err('Setup required') },
@@ -476,9 +480,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
         c.req.valid('json'),
         c.req.valid('header')['idempotency-key'],
       )
-      c.header('location', res.body.links.self)
-      if (!res.replayed) kick(c)
-      return c.json(res.body, statusOf(res.status))
+      return queued(c, res)
     },
   )
   app.openapi(
@@ -492,7 +494,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       security,
       request: {
         params: IdParam,
-        headers: z.object({ 'idempotency-key': z.string().max(200).optional() }),
+        headers: IdempotencyHeader,
         body: { content: { 'application/json': { schema: s.RemixSchema } }, required: true },
       },
       responses: {
@@ -510,9 +512,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
         c.req.valid('json'),
         c.req.valid('header')['idempotency-key'],
       )
-      c.header('location', res.body.links.self)
-      if (!res.replayed) kick(c)
-      return c.json(res.body, statusOf(res.status))
+      return queued(c, res)
     },
   )
   app.openapi(
@@ -1229,7 +1229,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       security,
       request: {
         params: EditParam,
-        headers: z.object({ 'idempotency-key': z.string().max(200).optional() }),
+        headers: IdempotencyHeader,
         body: { content: { 'application/json': { schema: s.RenderEditSchema } }, required: false },
       },
       responses: { 202: json(s.VideoSchema, 'Queued'), ...errors, 503: err('Setup required') },
@@ -1245,9 +1245,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
         c.req.valid('header')['idempotency-key'],
         body.data,
       )
-      c.header('location', res.body.links.self)
-      if (!res.replayed) kick(c)
-      return c.json(res.body, statusOf(res.status))
+      return queued(c, res)
     },
   )
   app.openapi(

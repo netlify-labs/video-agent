@@ -25,7 +25,9 @@ import { parse, type DefaultTreeAdapterMap } from 'parse5'
 import { bundleManifest, manifestHash } from './bundle-manifest.js'
 import { isReference } from './bundle-references.js'
 import {
+  attr,
   FPS,
+  isEl,
   load,
   NARRATION_ID,
   NARRATION_SRC,
@@ -33,6 +35,7 @@ import {
   read,
   speechSeconds,
   validate,
+  walk,
   type Summary,
 } from './contract.js'
 import { groupWords } from './narration-captions.js'
@@ -42,24 +45,12 @@ import type { NarrationReceipt, NarrationTranscript } from './narration-run.js'
 import type { RunManifest } from './run-manifest.js'
 import { SAMPLE_RATE } from './timeline.js'
 
-type Node = DefaultTreeAdapterMap['node']
 type Element = DefaultTreeAdapterMap['element']
 type ParentNode = DefaultTreeAdapterMap['parentNode']
 
 const sha256 = (b: Uint8Array) => createHash('sha256').update(b).digest('hex')
-const isEl = (n: Node): n is Element => 'tagName' in n
-const attr = (el: Element, name: string) => el.attrs.find((a) => a.name === name)?.value ?? null
 const has = (el: Element, name: string) => el.attrs.some((a) => a.name === name)
 const label = (el: Element) => `<${el.tagName}${attr(el, 'id') ? ` id="${attr(el, 'id') ?? ''}"` : ''}>`
-
-/** Every element, template contents included (HyperFrames unwraps a <template> before it reads the audio). */
-function* walk(n: ParentNode): Generator<Element> {
-  for (const c of n.childNodes)
-    if (isEl(c)) {
-      yield c
-      yield* walk(c.tagName === 'template' ? (c as unknown as { content: ParentNode }).content : c)
-    }
-}
 const parents = (el: Element): Element[] => {
   const out: Element[] = []
   for (let p = el.parentNode; p && isEl(p); p = p.parentNode) out.push(p)

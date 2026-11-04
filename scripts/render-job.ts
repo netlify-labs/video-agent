@@ -355,40 +355,23 @@ async function main() {
   > &
     Partial<Record<PreviewFile | NarrationOutput, { sha256: string; bytes: number }>>
 
-  const cli = netlifyCli()
-  for (const name of OUTPUTS) {
-    const [bin, ...pre] = cli as [string, ...string[]]
-    await withRetries(`upload ${name}`, 4, () =>
+  const [bin, ...pre] = netlifyCli() as [string, ...string[]]
+  const upload = (name: string, tries: number, timeoutMs: number) =>
+    withRetries(`upload ${name}`, tries, () =>
       run(
         bin,
         [...pre, 'blobs:set', 'uploads', `${attempt}/${name}`, '--input', join(out, name), '--force'],
-        { timeoutMs: 5 * 60_000 },
+        { timeoutMs },
       ),
     )
-  }
+  for (const name of OUTPUTS) await upload(name, 4, 5 * 60_000)
   for (const name of narrationOutputs) {
-    const [bin, ...pre] = cli as [string, ...string[]]
-    await withRetries(`upload ${name}`, 4, () =>
-      run(
-        bin,
-        [...pre, 'blobs:set', 'uploads', `${attempt}/${name}`, '--input', join(out, name), '--force'],
-        { timeoutMs: 5 * 60_000 },
-      ),
-    )
+    await upload(name, 4, 5 * 60_000)
     files[name] = entry(name)
   }
   for (const name of previews.files) {
-    const [bin, ...pre] = cli as [string, ...string[]]
     try {
-      await withRetries(`upload ${name}`, 2, () =>
-        run(
-          bin,
-          [...pre, 'blobs:set', 'uploads', `${attempt}/${name}`, '--input', join(out, name), '--force'],
-          {
-            timeoutMs: 2 * 60_000,
-          },
-        ),
-      )
+      await upload(name, 2, 2 * 60_000)
       files[name] = entry(name)
     } catch (e) {
       const error = e instanceof Error ? e.message.slice(0, 300) : String(e)

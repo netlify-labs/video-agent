@@ -303,6 +303,8 @@ const KEEP_CHECKING = (id: string) =>
 const VIDEO_CARD_URI = 'ui://video-agent/video-card.html'
 /** Tool metadata that shows the video card (both keys: older MCP Apps hosts read the flat one). */
 const VIDEO_CARD = { ui: { resourceUri: VIDEO_CARD_URI }, 'ui/resourceUri': VIDEO_CARD_URI }
+/** Annotation hints shared by the tools that start a run (create, remix, revise, render with narration). */
+const STARTS_RUN = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true }
 
 async function summarize(deps: Deps, v: VideoDto) {
   const job = (await deps.store.getJob(v.id)) ?? { id: v.id, private: v.private, accessEpoch: 0 }
@@ -426,6 +428,11 @@ export function buildMcpServer(deps: Deps, principal: Principal, kick: () => voi
   )
   const load = (id: string) => videoDto(deps.store, deps, id, principal)
   const run = (fn: () => Promise<Record<string, unknown>>, videoId?: string) => runTool(deps.log, fn, videoId)
+  /** A queued run's result: wakes the worker unless the request was a replay, then the video and the next step. */
+  const queued = async (res: { replayed: boolean; body: VideoDto }, next: string) => {
+    if (!res.replayed) kick()
+    return { ...(await summarize(deps, res.body)), next_actions: [next] }
+  }
 
   const createTool = server.registerTool(
     'create_video',
@@ -483,13 +490,7 @@ Example: {"prompt": "A 20-second launch video for our new webhooks feature, endi
           .describe('Optional. Reusing the same key returns the same video instead of a duplicate.'),
       },
       _meta: VIDEO_CARD,
-      annotations: {
-        title: 'Create a video',
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: false,
-        openWorldHint: true,
-      },
+      annotations: { title: 'Create a video', ...STARTS_RUN },
     },
     (args) =>
       run(async () => {
@@ -508,11 +509,7 @@ Example: {"prompt": "A 20-second launch video for our new webhooks feature, endi
           },
           args.idempotency_key,
         )
-        if (!res.replayed) kick()
-        return {
-          ...(await summarize(deps, res.body)),
-          next_actions: [`It usually takes 3 to 8 minutes. ${KEEP_CHECKING(res.body.id)}`],
-        }
+        return queued(res, `It usually takes 3 to 8 minutes. ${KEEP_CHECKING(res.body.id)}`)
       }),
   )
 
@@ -697,13 +694,7 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Same format, 
           .describe('Optional. A plan from plan_video with remix_of this same video.'),
       },
       _meta: VIDEO_CARD,
-      annotations: {
-        title: 'Remix a video',
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: false,
-        openWorldHint: true,
-      },
+      annotations: { title: 'Remix a video', ...STARTS_RUN },
     },
     (args) =>
       run(async () => {
@@ -718,11 +709,7 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Same format, 
           voiceover: toVoiceover(args.voiceover),
           planId: args.plan_id,
         })
-        if (!res.replayed) kick()
-        return {
-          ...(await summarize(deps, res.body)),
-          next_actions: [`The remix usually takes 3 to 8 minutes. ${KEEP_CHECKING(res.body.id)}`],
-        }
+        return queued(res, `The remix usually takes 3 to 8 minutes. ${KEEP_CHECKING(res.body.id)}`)
       }, args.video_id),
   )
 
@@ -772,13 +759,7 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Make the end 
         ),
       },
       _meta: VIDEO_CARD,
-      annotations: {
-        title: 'Revise a video',
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: false,
-        openWorldHint: true,
-      },
+      annotations: { title: 'Revise a video', ...STARTS_RUN },
     },
     (args) =>
       run(async () => {
@@ -793,13 +774,10 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Make the end 
           sound: args.sound,
           voiceover: toVoiceover(args.voiceover),
         })
-        if (!res.replayed) kick()
-        return {
-          ...(await summarize(deps, res.body)),
-          next_actions: [
-            `Version ${res.body.latestVersion} usually takes 3 to 8 minutes. ${KEEP_CHECKING(id)}`,
-          ],
-        }
+        return queued(
+          res,
+          `Version ${res.body.latestVersion} usually takes 3 to 8 minutes. ${KEEP_CHECKING(id)}`,
+        )
       }, args.video_id),
   )
 
@@ -1527,13 +1505,7 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "mode": "keep_visuals", 
           .optional()
           .describe('Optional. Reusing the same key returns the same render instead of a second one.'),
       },
-      annotations: {
-        title: 'Render with narration',
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: false,
-        openWorldHint: true,
-      },
+      annotations: { title: 'Render with narration', ...STARTS_RUN },
     },
     (args) =>
       run(async () => {
@@ -1558,11 +1530,7 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "mode": "keep_visuals", 
           mode: args.mode,
           holdFinalFrame: args.hold_final_frame,
         })
-        if (!res.replayed) kick()
-        return {
-          ...(await summarize(deps, res.body)),
-          next_actions: [`Version ${res.body.latestVersion} is rendering. ${KEEP_CHECKING(id)}`],
-        }
+        return queued(res, `Version ${res.body.latestVersion} is rendering. ${KEEP_CHECKING(id)}`)
       }, args.video_id),
   )
 

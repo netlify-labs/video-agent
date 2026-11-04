@@ -153,15 +153,16 @@ export class ContractError extends Error {
 }
 
 // ───── tree helpers ─────
-const isEl = (n: Node): n is Element => 'tagName' in n
-const attr = (el: Element, name: string) => el.attrs.find((a) => a.name === name)?.value ?? null
+export const isEl = (n: Node): n is Element => 'tagName' in n
+export const attr = (el: Element, name: string) => el.attrs.find((a) => a.name === name)?.value ?? null
 function setAttr(el: Element, name: string, value: string) {
   const a = el.attrs.find((x) => x.name === name)
   if (a) a.value = value
   else el.attrs.push({ name, value })
 }
 const kids = (el: ParentNode) => el.childNodes.filter(isEl)
-function* walk(n: ParentNode): Generator<Element> {
+/** Every element, template contents included (HyperFrames unwraps a <template> before it reads the audio). */
+export function* walk(n: ParentNode): Generator<Element> {
   for (const c of n.childNodes)
     if (isEl(c)) {
       yield c
@@ -519,6 +520,12 @@ export function validate(html: string, summary?: Summary, opts: ValidateOptions 
   return [...new Set(v)]
 }
 
+/** Throws ContractError with every violation when the composition doesn't conform. */
+function assertValid(html: string, summary: Summary) {
+  const violations = validate(html, summary)
+  if (violations.length) throw new ContractError(violations)
+}
+
 // ───── ducking ─────
 interface LanePoint {
   t: number
@@ -828,8 +835,7 @@ function narrate(
   speech: readonly Span[],
   holdSeconds?: number,
 ) {
-  const before = validate(html, summary)
-  if (before.length) throw new ContractError(before)
+  assertValid(html, summary)
   const d = load(html)
   // A render's held frame goes on first, so the narration layer and its speech span it too. The run's write
   // (applyBusNarration) gets a frozen composition that already holds it.
@@ -837,8 +843,7 @@ function narrate(
   writeNarration(d, op, speech)
   relayout(d)
   const out = save(d)
-  const after = validate(out, summary)
-  if (after.length) throw new ContractError(after)
+  assertValid(out, summary)
   return { html: out, composition: read(load(out)) }
 }
 
@@ -1023,8 +1028,7 @@ function syncCaptions(d: Doc, summary: Summary): Summary {
  * that doesn't conform isn't edited, and an edit that would break it is refused.
  */
 export function applyEdits(html: string, summary: Summary, ops: EditOp[], opts: EditOptions = {}) {
-  const before = validate(html, summary)
-  if (before.length) throw new ContractError(before)
+  assertValid(html, summary)
   const d = load(html)
   // The lines after the edits: voice ops replace them, and the caller writes them back to the voice script.
   const narration = opts.narration ? { ...opts.narration } : undefined
@@ -1032,8 +1036,7 @@ export function applyEdits(html: string, summary: Summary, ops: EditOp[], opts: 
   relayout(d)
   const out = save(d)
   const nextSummary = syncCaptions(d, summary)
-  const after = validate(out, nextSummary)
-  if (after.length) throw new ContractError(after)
+  assertValid(out, nextSummary)
   return { html: out, summary: nextSummary, composition: read(load(out), narration), narration }
 }
 
@@ -1182,8 +1185,7 @@ export interface RevoicedLine {
  * cues. Throws ContractError when a marked clip isn't re-voiced or a line is for a clip that isn't marked.
  */
 export function applyRevoice(html: string, summary: Summary, lines: RevoicedLine[]) {
-  const before = validate(html, summary)
-  if (before.length) throw new ContractError(before)
+  assertValid(html, summary)
   const d = load(html)
   const lengthened: { beat: string; from: number; to: number }[] = []
   const marked = markedForRevoice(d)
@@ -1224,7 +1226,6 @@ export function applyRevoice(html: string, summary: Summary, lines: RevoicedLine
     ),
   ]
   const nextSummary = syncCaptions(d, { ...summary, captions })
-  const after = validate(out, nextSummary)
-  if (after.length) throw new ContractError(after)
+  assertValid(out, nextSummary)
   return { html: out, summary: nextSummary, lengthened }
 }

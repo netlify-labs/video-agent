@@ -9,6 +9,7 @@ import {
   feedbackStillPath,
   runManifestKey,
   serializeRunManifest,
+  type RunManifest,
 } from '../lib/run-manifest.js'
 import { getSettings } from './settings.js'
 import { contextMeta } from '../generated/context.js'
@@ -184,21 +185,32 @@ async function startRequest(
     // Recorded narration: prepare-run hydrates its takes into .va-run/, never video/ (plan 2026-11-02 §6.3).
     ...(f.narration ? { narration: f.narration } : {}),
   })
-  // An edit draft rendered as is (plan v2 §8): restore the frozen bundle, check it, render it, change nothing.
-  if (version.mode === 'render_unchanged' && version.frozen) {
+  // Inputs to restore go in a server-written manifest the run verifies by hash (plan v2 §14 rule 21). Returns the hash.
+  const putManifest = async (m: Omit<RunManifest, 'v' | 'jobId' | 'attemptId' | 'versionN'>) => {
     const manifest = serializeRunManifest({
       v: RUN_MANIFEST_VERSION,
       jobId: a.jobId,
       attemptId: a.id,
       versionN: a.versionN,
+      ...m,
+    })
+    await deps.blobs.set('sources', runManifestKey(a.jobId, a.id), manifest, {
+      contentType: 'application/json',
+    })
+    return sha256Hex(manifest)
+  }
+  const runUrls = {
+    callbackUrl: `${deps.config.siteUrl}/api/internal/runs/${a.id}/done`,
+    checkpointUrl: `${deps.config.siteUrl}/api/internal/runs/${a.id}/checkpoint`,
+  }
+  // An edit draft rendered as is (plan v2 §8): restore the frozen bundle, check it, render it, change nothing.
+  if (version.mode === 'render_unchanged' && version.frozen) {
+    const runManifestSha256 = await putManifest({
       kind: 'render_unchanged',
       source: null,
       bundle: frozenBundle(version.frozen),
       media,
       feedback: null,
-    })
-    await deps.blobs.set('sources', runManifestKey(a.jobId, a.id), manifest, {
-      contentType: 'application/json',
     })
     const prompt = buildRenderUnchangedPrompt({
       jobId: a.jobId,
@@ -207,9 +219,8 @@ async function startRequest(
       editedFromN: version.editedFromN ?? version.parentN ?? 0,
       revoice: version.frozen.revoice?.beats ?? [],
       narration: !!version.frozen.narration,
-      runManifestSha256: sha256Hex(manifest),
-      callbackUrl: `${deps.config.siteUrl}/api/internal/runs/${a.id}/done`,
-      checkpointUrl: `${deps.config.siteUrl}/api/internal/runs/${a.id}/checkpoint`,
+      runManifestSha256,
+      ...runUrls,
       callbackToken,
       upload: { mode: 'blobs' },
     })
@@ -218,19 +229,12 @@ async function startRequest(
   // Fit the video to my narration (plan 2026-11-02 §6.4): an authoring run that starts from the frozen edited draft,
   // never the parent's archive, with the narration it mixes and must not change. Every retry restores the same inputs.
   if (version.frozen?.narration) {
-    const manifest = serializeRunManifest({
-      v: RUN_MANIFEST_VERSION,
-      jobId: a.jobId,
-      attemptId: a.id,
-      versionN: a.versionN,
+    const runManifestSha256 = await putManifest({
       kind: 'author_from_frozen',
       source: null,
       bundle: frozenBundle(version.frozen),
       media,
       feedback: null,
-    })
-    await deps.blobs.set('sources', runManifestKey(a.jobId, a.id), manifest, {
-      contentType: 'application/json',
     })
     const prompt = buildFitPrompt({
       jobId: a.jobId,
@@ -242,9 +246,8 @@ async function startRequest(
       targetSamples: version.frozen.narration.targetSamples,
       revoice: version.frozen.revoice?.beats ?? [],
       sound: version.sound ?? 'silent',
-      runManifestSha256: sha256Hex(manifest),
-      callbackUrl: `${deps.config.siteUrl}/api/internal/runs/${a.id}/done`,
-      checkpointUrl: `${deps.config.siteUrl}/api/internal/runs/${a.id}/checkpoint`,
+      runManifestSha256,
+      ...runUrls,
       callbackToken,
       upload: { mode: 'blobs' },
     })
@@ -308,14 +311,9 @@ async function startRequest(
       still: feedbackVideo && i >= 0 ? feedbackStillPath(i, c.commentId) : null,
     }
   })
-  // Inputs to restore go in a server-written manifest the run verifies by hash (plan v2 §14 rule 21).
   let runManifestSha256: string | null = null
   if (revision || media) {
-    const manifest = serializeRunManifest({
-      v: RUN_MANIFEST_VERSION,
-      jobId: a.jobId,
-      attemptId: a.id,
-      versionN: a.versionN,
+    runManifestSha256 = await putManifest({
       kind: revision ? 'revision' : 'author',
       source: revision && {
         key: revision.sourceKey,
@@ -330,10 +328,6 @@ async function startRequest(
         pins: pins.map((c) => ({ commentId: c.commentId, timeSec: c.timeSec ?? 0, x: c.x, y: c.y })),
       },
     })
-    await deps.blobs.set('sources', runManifestKey(a.jobId, a.id), manifest, {
-      contentType: 'application/json',
-    })
-    runManifestSha256 = sha256Hex(manifest)
   }
   const prompt = buildPrompt({
     jobId: a.jobId,
@@ -343,8 +337,7 @@ async function startRequest(
     userPrompt: version.prompt,
     aspect: job.aspect,
     targetDurationSec: version.targetDurationSec,
-    callbackUrl: `${deps.config.siteUrl}/api/internal/runs/${a.id}/done`,
-    checkpointUrl: `${deps.config.siteUrl}/api/internal/runs/${a.id}/checkpoint`,
+    ...runUrls,
     callbackToken,
     upload: { mode: 'blobs' },
     revision: revision && { parentN: revision.parentN },
