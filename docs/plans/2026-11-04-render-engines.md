@@ -1,16 +1,25 @@
 # Pluggable render engines (HyperFrames by default, Remotion opt-in): plan
 
-- **Status:** draft 3 (2026-11-04). Three review rounds:
+- **Status:** draft 4 (2026-11-04), with the owner's decisions applied. Three review rounds:
   1. an independent review by Fable 5.1 ("sound with changes");
   2. the cross-plan seam review of the six 2026-11-04 plans;
   3. a remote review by Fable 5.1 (high effort) in a Netlify Agent Run, at commit `19740d8` ("sound with changes").
 
   Every claim was checked against the code and Remotion's docs before being folded in, and the review log is §15. Not
-  built yet, and no beads. Phase 0 is spikes E1–E6 (§11): E3–E6 can start now as local evaluation, and E1–E2 wait for
-  the license decision (open question 1).
+  built yet, and no beads.
+- **Owner decisions (2026-11-04) shape the plan:**
+  - Build the engine, off and hidden by default.
+  - Netlify runs **one proof of concept** (the POC, §1.1) and buys no license unless the videos are outstanding.
+  - Deployers who turn Remotion on bring their own license.
+
+  So the order is: Phase 1 (the seam, no Remotion), then Phase 2 (Remotion authoring, built off and hidden), then the
+  POC, then a decision. Phases 3–4 (editing, sound) happen at Netlify only if the POC leads to a license (§11).
 - **Ask (owner, 2026-11-04):** "see if we can use Remotion and Remotion skills to create different video styles",
   picked from the idea-wizard list as #3 ("love it, let's do it"). Make the engine that writes and renders a video
   pluggable. HyperFrames stays the default. Remotion is opt-in, never on by default, and gated on its license.
+- **Owner, on Remotion (2026-11-04):** "We want to add this feature but probably won't use it ourselves. It's there
+  for people who want that route. Maybe hidden for now. I want to build it and run it once to see how it works. We
+  won't buy a license unless it makes incredibly amazing videos." 
 - **Builds on:** the run (`src/domain/prompt.ts`, `scripts/prepare-run.ts`, `scripts/render-job.ts`), finalize and
   bundles (`src/domain/finalize.ts`, `src/domain/bundles.ts`), editing contract v1 (`src/lib/contract.ts`,
   `video/AGENTS.md`), the editor and its sandboxed preview (`src/domain/edits.ts`, `ui/src/pages/Edit.tsx`,
@@ -59,6 +68,10 @@ So the goal is:
 What it isn't: a way to run arbitrary Remotion projects people upload (§10), a license workaround, or a change to the
 default. A fork that never turns Remotion on never installs a Remotion package.
 
+**Hidden by default.** With `ENGINES` unset, nothing about Remotion appears anywhere: the Admin switch, the engine
+select, the `/setup` row, `GET /api/v1/engines` (which then lists only HyperFrames) and the `engines` feature string
+are all absent. The README describes it under "Experimental: the Remotion engine (bring your own license)".
+
 ### Why Remotion has to be opt-in (the license, plainly)
 
 Remotion is source-available, not open source. The license in force today is the 4.x `LICENSE.md` (in the npm
@@ -78,6 +91,18 @@ app. Free License users may build automations without buying renders.
 **What counts as a render.** "The successful generation of a video, audio, GIF, PDF or still image." Studio and
 Player previews don't count. So every snapshot still the agent renders counts (§5.4).
 
+**Two texts, and we follow the stricter.** The package we'd install (`remotion@4.0.540`) ships the v4 `LICENSE.md`
+quoted above. remotion.dev also publishes **Terms and Conditions v5.0**, which the Company License is bound to and
+which are stricter about evaluation:
+
+- evaluation "is not intended for production use, long-term internal use, or ongoing business operations";
+- "the decision to use the Remotion Software in one's technology setup marks the end of the evaluation phase";
+- a license is needed once the personnel of all parties involved in operating Remotion reaches four or more;
+- a service that lets end users upload their own Remotion code is not acceptable without Remotion's prior written
+  approval.
+
+Where the two differ, this plan follows the v5.0 Terms.
+
 **Who must pay.** Eligibility depends on **total headcount**, not on how many people use Remotion (License FAQ).
 **People you work with on the project count already:** the FAQ adds collaborating teams' headcount to yours for the
 threshold. 5.0 writes contractors into the license text itself (v5.0 migration guide).
@@ -93,7 +118,8 @@ threshold. 5.0 writes contractors into the license text itself (v5.0 migration g
 - **Retention:** Remotion keeps the data indefinitely.
 - **Never blocks a render:** a failed telemetry request doesn't fail the render.
 
-Most companies that deploy this template, including Netlify, need a Company License to turn Remotion on. HyperFrames
+Most companies that deploy this template, including Netlify, need a Company License to turn Remotion on for real
+use (Netlify's one evaluation is §1.1). HyperFrames
 (Apache-2.0) has no such condition, so it stays the default. The README, `/setup` and the Admin page say plainly who
 must pay before anyone can turn Remotion on (§7).
 
@@ -107,6 +133,44 @@ must pay before anyone can turn Remotion on (§7).
 The `remotion-dev/skills` repository has no license (GitHub reports `license: null`, there's no LICENSE file, and
 its `package.json` is `private`). It mirrors `remotion-dev/remotion/packages/skills`, which is under the Remotion
 License, so we don't vendor it (§8).
+
+### 1.1 Netlify's one proof of concept: what the license allows, and what it doesn't
+
+Netlify is a company far above the 3-person threshold. Under Remotion's terms, Netlify may use Remotion for free only
+while **evaluating whether it's a good fit, not yet using it commercially**. Under the v5.0 Terms that excludes
+"production use, long-term internal use, or ongoing business operations", and evaluation ends once Netlify decides to
+use Remotion.
+
+**What we read as covered: one bounded evaluation.**
+- **A handful of developers** trying Remotion on their own machines (spikes E3–E5) to judge whether it's a good fit.
+- **A single POC session:** spikes E1 and E2, run together once (§11). A small number of Agent Runner runs make test videos, on a scratch Netlify
+  project that isn't our production deployment, with `ENGINES` set only there.
+  - Every Remotion render is a **development render**: `licenseKey: "free-license"` plus `isProduction: false` where
+    the API allows it. "free-license" declares Free License eligibility, and evaluation is one of its eligibility
+    cases, so it's the accurate value. Remotion's docs say `isProduction` works only with a license key; if it's
+    refused with `"free-license"`, the POC renders without it and says so.
+  - The videos are for the owner to judge, and are never published or used commercially.
+  - Then it stops.
+
+**What isn't covered, so Netlify doesn't do it without a license:**
+- turning Remotion on for our production deployment's users (`ENGINES` stays unset there);
+- recurring Remotion renders at Netlify: CI jobs that render, repeated live tests in later phases, or keeping the scratch
+  project around to make videos;
+- any use of POC videos in marketing, sales or docs;
+- building Phases 3–4 by rendering with Remotion again (§11).
+
+**What's still uncertain, and why it's a question, not a decision.** Shipping a Remotion integration in an open-source
+template Netlify publishes is arguably part of Netlify's business, even if Netlify never renders a video with it.
+- The v4 text doesn't address that case.
+- The v5.0 Terms' "technology setup" wording could be read to end evaluation as soon as the engine is merged.
+
+We don't redistribute Remotion: runs install it from npm, and our `va/` runtime is our own code. But the FAQ says to
+ask Remotion when in doubt, so **owner question 1 is to ask Remotion (hi@remotion.dev) for written OK** for a one-off
+evaluation and for publishing the integration, before the POC session runs. If Remotion says no, the POC waits for a
+license decision, and the code can still be built and unit-tested without rendering (§9).
+
+**What deployers do.** Each deployer who turns Remotion on decides their own license status and records it in the
+Admin dialog (§7). Video Agent never buys or checks a license for anyone.
 
 ---
 
@@ -274,16 +338,13 @@ License, so we don't vendor it (§8).
 8. **Recorded narration is deeply HTML-shaped:** the bus layer, `data-va-speech`, the hold-frame beat, and the guards
    in render-job (`checkNarration`, `checkNarrationModified`). Remotion versions don't get recorded narration in v1
    (§6).
-9. **The license applies to us too.** Netlify has more than 3 people, so anything beyond evaluation needs a license:
-   runs on the runner, CI that renders, live gates and our own deployment.
-   - **What evaluation covers:** the Free License covers "evaluating whether Remotion is a good fit, and … not yet using
-     it in a commercial way". The License FAQ adds "you can already evaluate Remotion before using it commercially".
-   - **So the local spikes run now:** E3–E5 produce no commercial output and count as evaluation, and E6 states that
-     reading in its email to Remotion.
-   - **Not this:** draft 2's "evaluation ends once the stack is set up" came from Terms wording I couldn't find on
-     remotion.dev.
-
-   Open question 1.
+9. **The license applies to us too.** Netlify has more than 3 people, so the only free use open to it is one bounded
+   evaluation (§1.1): local spikes and a single POC session of development renders on a scratch project. CI that
+   renders, repeated live tests, our production deployment, and any commercial use of the results all need a license.
+   The v5.0 Terms' "technology setup" wording makes even publishing the integration uncertain, so owner question 1 asks
+   Remotion for written OK first.
+   - **Correction:** draft 3 said this wording "wasn't on remotion.dev". It is, in the published Terms v5.0, and the
+     plan now follows it.
 10. **Automated QA is thinner for Remotion.** `hyperframes check` covers lint, runtime, layout, motion and contrast.
     Remotion has TypeScript, `selectComposition`, the contract check and a render smoke test. §5.4 says what v1 ships
     and §12 lists the risk.
@@ -781,7 +842,7 @@ run the check it names". Line 12 becomes "Keep the editing contract (in `video/A
     the dialog tell admins to rotate the key on remotion.pro if a run's output ever shows it.
   - `scripts/lib/run-tools.ts`'s logger also masks anything shaped like a Remotion secret key (`rm_sec_…`) in every
     log line as a second guard.
-  - Spikes, CI and live gates pass `isProduction: false`, which needs a license key, so free-license renders there
+  - Spikes, CI and live tests pass `isProduction: false`, which needs a license key, so free-license renders there
     stay at the default.
 - **Progress** comes from `onProgress` and feeds `RenderProgressReporter`.
 - **After the render** everything is today's code: ffprobe checks, poster, GIF, captions VTT, preview variants, the
@@ -800,7 +861,7 @@ run the check it names". Line 12 becomes "Keep the editing contract (in `video/A
   - It sets `audio.music.volume = 10^((−14 − LUFS_src) / 20)`, clamped to the contract's range, the same target as
     today (about −14 LUFS integrated).
   - It checks the true peak at that gain (≤ −1 dBTP) and lowers the gain if needed.
-  - Fades make the result a little quieter, which is inside the Phase 2 live gate's ±1.5 LU tolerance.
+  - Fades make the result a little quieter, which is inside the Phase 2 live test's ±1.5 LU tolerance.
 - Phase 4 adds an audio-only render of the full mix (it counts as a render) once effects and voice can change the
   result.
 - Each look's `sound.musicMood` (looks plan) feeds the server's music pick as it does for HyperFrames.
@@ -954,8 +1015,14 @@ A failed download or hash mismatch stops the run with `engine_skills_unavailable
 ## 9. Tests
 
 All new tests follow the repo's habits: unit and integration tests in `test/` (in-memory store and PGlite), UI tests in
-Playwright, and live gates as `scripts/e2e/*.ts` with `--dry`, a credit ceiling, JSON-line logs and cleanup even on
-failure.
+Playwright, and live tests as `scripts/e2e/*.ts` with `--dry`, a credit ceiling, JSON-line logs and cleanup even on
+failure. A **live test** is a script that makes real videos on a deployed site and checks them, so it costs credits.
+
+**No test in Netlify's CI installs or renders with Remotion** (§1.1). Every test in CI runs without Remotion installed:
+- the service-side tests use pure JSON;
+- the run-side tests use a stub renderer.
+
+That keeps CI free of Remotion use, and keeps the plan's tests runnable by anyone.
 
 **Unit (vitest)**
 
@@ -1006,8 +1073,10 @@ failure.
 - The key never appears in a spawned command's arguments or in the log, and the render passes no `envVariables`.
 - `engine.ts mix` computes the gain from a fixture track's measured loudness and lowers it for true peak.
 
-**Template tests** (`engines/remotion/template`, own lockfile, own CI job `npm run test:remotion`, run only once open
-question 1 is settled):
+**Template tests** (`engines/remotion/template`, own lockfile, `npm run test:remotion`). These render with Remotion,
+so they're **never in Netlify's CI**. Two cases run them:
+- a contributor on their own machine, under their own license status;
+- at Netlify, the POC session, and later only if Netlify buys a license.
 
 - `renderStill` of fixture props at fixed frames gives the same PNG hash twice (determinism).
 - A props edit (retime, reorder) renders the expected frames at beat boundaries.
@@ -1029,17 +1098,22 @@ question 1 is settled):
   - unsupported controls are hidden (Narration; audio and re-voice before Phase 4);
   - in Phase 3, `apply-edits` round-trips through a stub Player page and the bridge.
 
-**Live gates (`scripts/e2e/engines.ts`)**
+**Live tests (`scripts/e2e/engines.ts`)**
 
-- **Inputs:** `VIDEO_AGENT_URL`, `VIDEO_AGENT_KEY`, `CREDIT_CEILING` (default 800), `--dry` (prints the plan and
-  projected credits, makes no requests) and `--keep`.
+- **Inputs:** `VIDEO_AGENT_URL`, `VIDEO_AGENT_KEY`, `CREDIT_CEILING` (default 800), `--dry` and `--keep`.
+- **How each one runs:** first `--dry`, which prints the steps and the projected credits and spends nothing. Then the
+  script **asks the owner before each gate** ("Run gate 2: 3 videos, about 450 credits, ceiling 800? [y/N]"). There's
+  no blanket approval, and it stops at the ceiling.
 - **Logging:** one JSON line per step, `{ step, videoId, attempt, ms, credits, renders, ok, detail }`.
-- **Remotion renders** in gates are development renders (`isProduction: false`).
+- **Remotion renders** in tests are development renders (`"free-license"`, plus `isProduction: false` where the API
+  accepts it).
+- **The POC is the only Remotion live test Netlify runs without a license.** Gates 3 and 4 run at Netlify only after
+  a license, or by a contributor against their own deployment.
 
 | Phase | What the gate does | Checks |
 | --- | --- | --- |
 | 1 (optional) | One HyperFrames create and one browser edit render, ~290 credits. Phase 1's real gate is the unit suite plus the prompt test, since nothing should change. | Status, `engine: hyperframes`, contract 1, edit ops applied, captions synced |
-| 2 | Remotion 16:9 and 9:16 creates, one with music, and one revision | `engine: remotion`; MP4 probe; poster, GIF and captions present; captions match `summary.json`; integrated loudness within ±1.5 LU of −14 for the music video; render counts recorded; time and credits logged next to S1's numbers |
+| POC (E1 + E2, once) | On a scratch project (not production): the install timing run, then S1's three briefs, one with music, and one revision; ~760 credits, ceiling 800 | `engine: remotion`; MP4 probe; poster, GIF and captions present; captions match `summary.json`; integrated loudness within ±1.5 LU of −14 for the music video; render counts recorded; time and credits logged next to S1's numbers |
 | 3 | A Remotion edit (text, retime, reorder, colour) rendered unchanged, ~40 credits | Contract 1; the edited text appears in the captions; beat order in the frames (stills at beat midpoints compared with the draft preview's stills, SSIM ≥ 0.97); a redo of one scene leaves the other beats' files unchanged |
 | 4 | A Remotion video with effects and voice-over, ~250 credits | Voice captions present; music ducked (RMS of the music lower during voice spans) |
 
@@ -1056,37 +1130,36 @@ listed in §13 (with its license caveat) so nobody builds the engine to get it. 
 
 ## 11. Build order
 
-Each phase ends with a gate. Live gates spend credits, so each runs `--dry` first and has a ceiling. The roadmap's
-build order (`docs/plans/2026-11-04-roadmap.md`) places these phases as follows:
+Each phase ends with a gate. Live tests spend credits, so each runs `--dry` first, asks the owner before each gate, and
+has a ceiling (§9). The order follows the owner's decision (2026-11-04): build the engine, run one POC, then decide.
 
-| Phase | Wave | Depends on |
-| --- | --- | --- |
-| 0 (spikes) | 0 | E3–E6 now (local evaluation); E1–E2 wait on the license decision |
-| 1 | 1 | Blocks regenerate-beat phase 1, screen-recording phase 2 and looks phase 5 |
-| 2 | 3 | Engines 1, looks phase 2, the license, E1 and E2 |
-| 3 | 4 | Regenerate-beat phase 1 for the scope hook's HyperFrames side; `contract-core.ts` if it isn't already built |
-| 4 | 5 | Phase 3 |
-| 5 | 5 | cli-and-sdk phase 6, which owns the `/docs` pages |
+| Step | Roadmap wave | What | Depends on |
+| --- | --- | --- | --- |
+| E6 | 0 | Ask Remotion for written OK (owner question 1) | Nothing; first |
+| E3–E5 | 0 | Local spikes: contract, Player sandbox, determinism | E6's answer, or the owner's call to proceed under §1.1's reading |
+| Phase 1 | 1 | The seam, HyperFrames only; no Remotion code | Nothing; blocks regenerate-beat phase 1, screen-recording phase 2, looks phase 5 |
+| Phase 2 | 3 | Remotion authoring, built **off and hidden**; music allowed | Phase 1, looks phase 2, E3–E5 |
+| POC (E1 + E2) | 3 | One session of development renders on a scratch project | Phase 2, E6's answer (or the owner's call), and the owner's yes at each gate |
+| Decision | — | Buy a license, or stop at Phase 2 (owner question 2, decided) | The POC's videos |
+| Phase 3 | 4 | Editing Remotion videos; redo a scene | A license (at Netlify), or a contributor; regenerate-beat phase 1 |
+| Phase 4 | 5 | Effects and voice | Phase 3, same condition |
+| Phase 5 | 5 | Docs (bring your own license); Remotion looks only with a license | cli-and-sdk phase 6 |
 
-### Phase 0: spikes (a new "Engine spikes" section in `docs/spikes.md`, labels E1–E6)
+### Phase 0: local spikes and the license question (a new "Engine spikes" section in `docs/spikes.md`, labels E1–E6)
 
 | Spike  | Question | How | Cost |
 | ------ | -------- | --- | ---- |
-| **E1** | On the runner: first, does `ldd` on Chrome Headless Shell find every shared library (§2)? Then, how long do `npm ci --ignore-scripts` of the template and `npx remotion browser ensure` take, how big are they, and what do they cost? Does the renderer work after `--ignore-scripts`? Does setup time fall inside `deadlineMs = (authoringDeadlineMin + 3) * MIN` (`reconciler.ts:174`), and is it billed? What's the browser archive's sha256? Also time option C (download and unpack from Blobs), and record the time and size of both Chrome installs (HyperFrames' in setup and Chrome Headless Shell) and the median of each install step, which sets the timeouts (§8). | One run with a script-only prompt: install, ensure, render a fixture, time each step; the same with a Blobs tarball. Results go in `docs/spikes.md` next to S1 | 1–2 runs, ~60 credits |
-| **E2** | Authoring quality and cost from scratch with the four skills and our template, on S1's three briefs (launch 16:9, sales 9:16 15 s, tutorial 1:1 60 s). Check rounds × seconds per round (bundle + Chrome launch), renders per video, CRF vs file size (and a note that 5.0's `bt709` default colour space and ANGLE GL renderer will need the calibration redone), whether `renderStill` accepts `licenseKey` at 4.0.540, and which static-scan rules agents actually break | Three runs with `ENGINES` set on a deploy preview or production; same rubric as S1 | 3 runs, ceiling ~700 credits |
+| **E6** | Licensing (start first): email Remotion (hi@remotion.dev) asking for written OK for Netlify's one-off evaluation as §1.1 bounds it (local spikes plus one POC session of development renders) and for publishing the integration in an MIT template. Also ask them to confirm that a deployer's use is Automators and that the Player is covered; when 5.0 ships and what else it changes; does `/remotion-to-hyperframes` render the original with Remotion? The key's format and the free-license value are already answered (§1) | Read the repos, docs and Terms; email Remotion | 0 |
 | **E3** | Does the props-driven contract hold up? Hand-build a contract project, apply every edit op as props, render, compare frames and captions; write the conformance suite's first fixtures | Local (`spikes/e3`) | 0 credits |
 | **E4** | Can `@remotion/player` run in our `/preview` sandbox (CSP `default-src 'none'`, scripts only from the capability path, `sandbox allow-scripts`)? Which of the CSP's allowances the Player relies on (`'unsafe-inline'` scripts and styles; workers, which fall back to `default-src 'none'` with no `worker-src`, `src/lib/preview.ts:57–71`). Bundle size, cold start, seek accuracy vs the MP4 (SSIM, as in S7), bridge round trip | Local Playwright spike modelled on `spikes/s2` | 0 credits |
 | **E5** | Determinism and offline: are the same props rendered twice identical? Do fonts load through `@remotion/fonts` and `staticFile` with the network blocked? Does `OffthreadVideo` work with library clips? Which config files does Remotion's webpack setup read from `video/` (babel, postcss, browserslist, `.env`), so the allowed-paths list (§5.1) is complete? Is a `REMOTION_` variable inlined into the bundle through the Node `bundle()` API too, or only through the CLI? | Local | 0 credits |
-| **E6** | What's left on licensing (start now): ask Remotion to confirm that this template's use is Automators, that the Player is covered, and that our local spikes E3–E5 count as evaluation; when 5.0 ships and what else it changes; does `/remotion-to-hyperframes` render the original with Remotion? The key's format and the free-license value are already answered (§1) | Read the repos, docs and Terms; email Remotion | 0 |
 
-E3–E6 run now:
+E6 goes first: it's an email, and it costs nothing.
+- **If Remotion gives written OK**, E3–E5 go ahead.
+- **Until it answers**, the owner can choose to go ahead with E3–E5 under §1.1's reading. They're a few developers'
+  local evaluation, produce no commercial output, and are never published.
 
-- E3–E5 are local, produce no commercial output, and fall under the Free License's evaluation clause ("evaluating
-  whether Remotion is a good fit, and … not yet using it in a commercial way"; the FAQ: "you can already evaluate
-  Remotion before using it commercially"). E6 states that reading in its email to Remotion.
-- E1–E2 run on Netlify's runner, so they wait for open question 1.
-
-Gate: the spikes are written up, and the owner confirms the install option.
+Gate: the spikes are written up.
 
 ### Phase 1: the engine seam, HyperFrames only (no behaviour change)
 
@@ -1102,7 +1175,7 @@ Gate: the spikes are written up, and the owner confirms the install option.
 5. The DTO's `editing: { engine, capabilities }` next to `editable`.
 
 Gate: every existing test passes untouched, and the HyperFrames prompt is byte-identical (Phase 1 doesn't touch the
-prompt). The live gate is optional.
+prompt). The live test is optional.
 
 ### Phase 2: Remotion authoring, not yet editable (music allowed)
 
@@ -1125,7 +1198,33 @@ prompt). The live gate is optional.
 5. The README "Render engines" section, the trust-model line about license reporting, and the configuration table
    rows (`ENGINES`, `VIDEO_AGENT_REMOTION_KEY`).
 
-Gate: the Phase 2 live gate passes, and E2's quality bar holds.
+Gate: the unit, run-side and Playwright suites pass **with no Remotion installed in CI** (§9). A Netlify developer
+may render locally while building it, inside §1.1's evaluation. Phase 2 merges with `ENGINES` unset everywhere
+Netlify runs, so the engine ships off and hidden.
+
+### The POC: one session, then stop (spikes E1 and E2)
+
+| Spike  | Question | How | Cost |
+| ------ | -------- | --- | ---- |
+| **E1** | On the runner: first, does `ldd` on Chrome Headless Shell find every shared library (§2)? Then, how long do `npm ci --ignore-scripts` of the template and `npx remotion browser ensure` take, how big are they, and what do they cost? Does the renderer work after `--ignore-scripts`? Does setup time fall inside `deadlineMs = (authoringDeadlineMin + 3) * MIN` (`reconciler.ts:174`), and is it billed? What's the browser archive's sha256? Also time option C (download and unpack from Blobs), and record the time and size of both Chrome installs (HyperFrames' in setup and Chrome Headless Shell) and the median of each install step, which sets the timeouts (§8). | Part of the POC session: one run with a script-only prompt (install, ensure, render a fixture, time each step), then the same from a Blobs tarball. Results go in `docs/spikes.md` next to S1 | 1–2 runs, ~60 credits |
+| **E2** | Authoring quality and cost from scratch with the four skills and our template, on S1's three briefs (launch 16:9, sales 9:16 15 s, tutorial 1:1 60 s). Check rounds × seconds per round (bundle + Chrome launch), renders per video, CRF vs file size (and a note that 5.0's `bt709` default colour space and ANGLE GL renderer will need the calibration redone), whether `renderStill` accepts `licenseKey` at 4.0.540, and which static-scan rules agents actually break | Part of the POC session: three create runs and one revision on the scratch project, same rubric as S1. The owner judges whether the videos are "incredibly amazing" (owner question 2) | 4 runs, ~700 credits |
+
+- **Where:** a scratch Netlify project in our team, deployed from the Phase 2 code, with
+  `ENGINES=hyperframes,remotion` set there only and the admin dialog on "Free License" (evaluation). Our production
+  deployment keeps `ENGINES` unset.
+- **How:** `scripts/e2e/engines.ts --poc`, `--dry` first. The owner says yes before each gate (install timing, the
+  three briefs, the revision). The ceiling is 800 credits.
+- **Renders:** development renders only (`"free-license"`, plus `isProduction: false` where accepted).
+- **The videos:** for the owner to judge, never published or used.
+- **Afterwards:** the results go in `docs/spikes.md`. The scratch project's `ENGINES` is removed, or the project is
+  deleted, the same day.
+- **Gate:** the owner decides (owner question 2).
+  - **"Incredibly amazing" → buy Remotion for Automators.** Then Phases 3–4 and Remotion looks go ahead with
+    licensed live tests.
+  - **Otherwise → stop at Phase 2.** The engine stays in the template, off and hidden, as "bring your own license".
+    Phases 3–4 stay in this plan for a contributor with their own license status, who brings their own live-test
+    evidence with the PR. Netlify makes no more Remotion renders.
+
 
 ### Phase 3: editing Remotion videos, and redoing a scene
 
@@ -1138,7 +1237,8 @@ Gate: the Phase 2 live gate passes, and E2's quality bar holds.
    inside it.
 5. `scopeCheckFor('remotion')` and `RunEngine.scopeCheck` for Remotion, so `scopedRevision` is true.
 
-Gate: the Phase 3 live gate, plus a Playwright run of the editor against a real Remotion bundle.
+Gate: the Phase 3 live test (a licensed Netlify run, or a contributor's evidence), plus a Playwright run of the editor
+against a real Remotion bundle, from the same source.
 
 ### Phase 4: effects and voice on Remotion
 
@@ -1146,14 +1246,14 @@ Gate: the Phase 3 live gate, plus a Playwright run of the editor against a real 
 2. `scripts/voice.ts` behind the engine (the tag and sync), and re-voicing in the editor.
 3. Lift `409 engine_unsupported` for Music + effects and voice-over.
 
-Gate: the Phase 4 live gate.
+Gate: the Phase 4 live test, under the same condition as Phase 3.
 
 ### Phase 5: docs and looks
 
 1. The engine docs on cli-and-sdk's `/docs` pages: "Engines" in the API page, and `engine` and `--engine` in the SDK
    and CLI references.
-2. Remotion-only looks (3D product, map story, data charts) in the Looks catalogue. Their template dependencies are
-   added to the lockfile.
+2. Remotion-only looks (3D product, map story, data charts) in the Looks catalogue, only with a license or a
+   contributor (making them takes renders). Their template dependencies are added to the lockfile.
 3. A "Making an engine" contributor doc: the interfaces, the conformance suite, the locked-file rule, and what a third
    engine needs.
 
@@ -1161,7 +1261,9 @@ Gate: the Phase 4 live gate.
 this plan's license notice once. The CLI runtime bundle carries `engines/remotion/template/` (the lockfile, not
 `node_modules`) and runs `npm ci --ignore-scripts` on first use. On someone's own machine an individual is on the Free
 License, so local mode passes `"free-license"` unless they set `VIDEO_AGENT_REMOTION_KEY`. It's the cheapest way to try
-the engine.
+the engine: make one locally, then deploy it for your team (with your own license). The license notice says that the
+Free License covers individuals and organisations of up to 3 people, and that anyone else needs their own license
+beyond evaluation.
 
 ---
 
@@ -1174,6 +1276,12 @@ the engine.
   - a recorded tier, and a key required for "Company License";
   - per-render reporting to Remotion, and a monthly render count shown to the admin;
   - no Remotion package in the app's own dependencies.
+- **Netlify's own evaluation overstepping.** A second "quick look", a scratch project left on, or a POC video used in
+  a deck would turn evaluation into use. Mitigations:
+  - one session, with the owner's yes at each gate;
+  - `ENGINES` removed from the scratch project the same day;
+  - no Remotion in Netlify's CI;
+  - Remotion's written OK asked for first (owner question 1).
 - **Authoring quality may start below HyperFrames'.** HyperFrames' skill and our contract evolved together over 16
   prompt versions. E2 measures it. If it's clearly worse, Remotion ships only with the looks it's best at, not as a
   general choice.
@@ -1199,7 +1307,7 @@ the engine.
   still is reported, and the prompt says each call costs.
 - **Remotion 5.0** changes the license (contractors written in, reporting mandatory), APIs (`inputProps` required)
   and output bytes (`bt709`, ANGLE). We pin 4.0.x and
-  plan the move as its own change (open question 6). Our gate already sends a key or `"free-license"`, so the
+  plan the move as its own change (owner question 8). Our gate already sends a key or `"free-license"`, so the
   reporting rule needs no redesign.
 - **No transitions across beats (`TransitionSeries`)** in v1, because they overlap two sequences. That's a creative
   loss on Remotion. A later contract version could allow a declared transition owned by the next beat.
@@ -1228,7 +1336,7 @@ Kept with their design, so nothing is lost:
 - **Installing in setup (option A):** a gated `run` step in `netlify-agent-kit` (`node scripts/engines-setup.mjs`, a
   no-op unless `ENGINES` includes `remotion`). Revisit only if E1 shows setup time is free.
 - **A third engine.** Motion Canvas is MIT, and would mean "pluggable" isn't only "pluggable into a paid one". The
-  interface, locked-file rule and conformance suite are meant to make it possible (open question 7).
+  interface, locked-file rule and conformance suite are meant to make it possible (owner question 9).
 - **Importing a Remotion project into HyperFrames** (§10): an **Import** entry on New video takes a zip of a Remotion
   project. A run installs `/remotion-to-hyperframes` (a pinned skill source from the HyperFrames repo, or
   `npx hyperframes skills update remotion-to-hyperframes` in setup), converts it, and keeps the contract. **License
@@ -1236,33 +1344,42 @@ Kept with their design, so nothing is lost:
   deploying company's license status applies. E6 finds out. If it does, the import needs the same gate as the engine,
   or skips the comparison and says so.
 
-## 14. Open questions for the owner
+## 14. Owner questions
 
-1. **Does Netlify buy Remotion for Automators** (or get Remotion's written confirmation that our use is covered) before
-   the runner spikes E1–E2, CI template tests, live gates and our own deployment? *Recommended:* yes, Automators ($100
-   a month minimum). Meanwhile, run the local spikes E3–E5 as evaluation, and ask Remotion in E6 to confirm both that
-   reading and that the Player is covered.
-2. **Two locks (env plus the admin's license choice), or env only?** *Recommended:* both. The env controls what runs
-   install, and the dialog records a person's decision and picks the reporting key.
-3. **Live preview of Remotion edits with `@remotion/player` (Phase 3), or MP4-only editing?** *Recommended:* the
-   Player, if E4 passes; MP4-only otherwise.
-4. **Install strategy: per run (B) or a primed, hash-checked tarball (C)?** *Recommended:* C, with B as the fallback
+1. **Ask Remotion for written OK first?** The request covers Netlify's one-off evaluation as §1.1 bounds it (local
+   spikes plus one POC session of development renders on a scratch project) and publishing the integration in an MIT
+   template. *Recommended:* yes, send the email now (spike E6), and run the POC only after an OK.
+   - If Remotion is slow to answer, the owner can let E3–E5 (local only) go ahead under §1.1's reading.
+   - If Remotion says the POC needs a license, the choice is between buying one month of Automators ($100 minimum)
+     for the POC and stopping at Phase 2 unrendered at Netlify.
+2. **Decided (2026-11-04): license only if the POC is outstanding.** Netlify runs one POC and buys Remotion for
+   Automators only if it "makes incredibly amazing videos". The owner judges the E2 videos against S1's.
+   - Without a license, Netlify stops at Phase 2. Phases 3–4 stay open to contributors.
+   - Deployers bring their own license.
+3. **Decided (2026-11-04): off and hidden by default, behind an env var and a database setting.** That's `ENGINES` plus
+   the admin's license choice, both required. With `ENGINES` unset, nothing about Remotion shows (§1).
+4. **Decided (2026-11-04): Remotion stays off on our own production deployment.** "We probably won't use it
+   ourselves." Revisit only after a license.
+5. **Live preview of Remotion edits with `@remotion/player` (Phase 3), or MP4-only editing?** This only matters if
+   Phase 3 happens. *Recommended:* the Player, if E4 passes; MP4-only otherwise.
+6. **Install strategy: per run (B) or a primed, hash-checked tarball (C)?** *Recommended:* C, with B as the fallback
    before a tarball is primed. C pins the browser and `node_modules` to a hash the server chose, even if B is fast.
-   E1 confirms the Blobs download works and is timed.
-5. **`VIDEO_AGENT_REMOTION_KEY` scopes "builds and functions"**, so the server can see it's set (never its value)?
+   The POC (E1) confirms the Blobs download works and is timed.
+7. **`VIDEO_AGENT_REMOTION_KEY` scopes "builds and functions"**, so the server can see it's set (never its value)?
    *Recommended:* yes, marked secret. The name avoids the `REMOTION_` prefix on purpose.
-6. **Remotion version:** pin 4.0.540 and plan 5.0 as its own change? *Recommended:* yes.
+8. **Remotion version:** pin 4.0.540 and plan 5.0 as its own change? *Recommended:* yes.
    - Pin the `@remotion/compositor-*` packages explicitly in the template lockfile.
    - Our key handling already meets 5.0's reporting rule.
    - The move redoes E2's CRF and size calibration for `bt709` and ANGLE.
-7. **A fully open second engine (Motion Canvas, MIT): now or later?** *Recommended:* later. Ship the interface and
-   conformance suite and invite one from the community.
-8. **Import a Remotion project into HyperFrames as its own small plan after Looks?** *Recommended:* yes, once E6 says
-   whether the skill renders with Remotion.
-9. **Turn Remotion on for our own deployment once licensed?** *Recommended:* yes, so we use what we ship.
-10. **Is per-render license reporting to remotion.pro (license key, event type, production or development; kept
-    indefinitely) acceptable for Netlify's own deployment?** *Recommended:* yes. Server-side renders send no domain,
-    IP or content, it's mandatory from 5.0 anyway, and it's disclosed.
+9. **A fully open second engine (Motion Canvas, MIT): now or later?** *Recommended:* later. Ship the interface and
+   conformance suite and invite one from the community. Given the decisions above, an MIT engine is the only kind
+   Netlify could test freely.
+10. **Import a Remotion project into HyperFrames as its own small plan?** *Recommended:* not now. The v5.0 Terms say a
+    service letting end users upload their own Remotion code needs Remotion's written approval, and an import with a
+    frame-by-frame comparison renders uploaded Remotion code. Raise it in the E6 email if we ever want it.
+11. **Is per-render license reporting to remotion.pro (license key, event type, production or development; kept
+    indefinitely) acceptable for the POC?** *Recommended:* yes. Server-side renders send no domain, IP or content, and
+    it's the same for every deployer who turns Remotion on.
 
 ---
 
@@ -1349,6 +1466,15 @@ shared rules 1–10.
 | Coordinator (redo-a-scene draft 3): `scopeCheck` returns the spliced files | **Adopted** | One splice for render-job and finalize; `{ problems, files }` in both hooks |
 | Coordinator (redo-a-scene draft 3): feedback and scope stills last in prepare-run | **Adopted** | `feedbackStills` empties `video/feedback/` and runs last in `prepare()` today (`scripts/prepare-run.ts:459`) |
 | Coordinator (GitHub Action draft 3): the Action has no `engine` input | **Adopted** | Replaces draft 2's "the Action passes `engine` through"; the engine follows the look (§4.2), so the Action needs no Remotion-specific surface |
+
+### Owner decisions (2026-11-04)
+
+| Decision | How it's applied |
+| -------- | ---------------- |
+| Build the Remotion engine, off and hidden by default; one Netlify POC; no license unless the videos are outstanding; deployers bring their own license | §1 (hidden by default), §1.1 (what the POC may and may not do under the v4 license, FAQ and v5.0 Terms), §9 (no Remotion in Netlify's CI), §11 (E6 → E3–E5 → Phase 1 → Phase 2 → POC → decision → Phases 3–4 only with a license or a contributor), §14 Q1–Q4. Correction: the v5.0 Terms do contain the "technology setup ends evaluation" wording that draft 3 said wasn't on remotion.dev |
+| Live tests: `--dry` first, then ask the owner before each gate, with a ceiling | §9; "live test" is defined at first use and used throughout |
+| Local mode ships: "make one locally, then deploy it for your team" | §11 local-mode paragraph |
+| Unscoped package names; default look None; Action from the repo subfolder | No change needed here: this plan names no packages, the engine choice rule already falls back to `hyperframes` with no look, and the Action has no `engine` input |
 
 ---
 

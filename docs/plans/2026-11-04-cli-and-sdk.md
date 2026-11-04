@@ -30,9 +30,9 @@ Three npm packages, one private workspace package, and a few server changes:
 
 | Package                            | What it is                                                                                                                                                                                                                                                | Who it's for                                                  |
 | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| `@netlify-labs/video-agent-sdk`    | A typed TypeScript client for a Video Agent deployment's REST API. Resource methods generated from the OpenAPI spec (`va.videos.create`, `va.versions.publish`, …), plus hand-written helpers for the jobs that need more than one request: wait, download, upload, verify webhooks. | Scripts, CI, backends, the GitHub Action, our own e2e scripts. |
-| `@netlify-labs/video-agent-cli`    | The `video-agent` command. Remote commands talk to a deployment through the SDK only. `video-agent local …` makes a video **on your machine** with the coding agent you already have (Claude Code, Codex or Gemini CLI), inside that agent's OS sandbox. No Netlify account needed. | People in a terminal, coding agents with a shell, CI.          |
-| `@netlify-labs/video-agent-player` | `<video-agent-player>`, a small web component that plays a published video (poster, captions, credits, sized before it loads) on any page. A later phase of this plan, not a separate project.                                                          | Docs sites, blogs, changelogs, product pages.                 |
+| `netlify-video-agent-sdk`    | A typed TypeScript client for a Video Agent deployment's REST API. Resource methods generated from the OpenAPI spec (`va.videos.create`, `va.versions.publish`, …), plus hand-written helpers for the jobs that need more than one request: wait, download, upload, verify webhooks. | Scripts, CI, backends, the GitHub Action, our own e2e scripts. |
+| `netlify-video-agent`    | The `video-agent` command. Remote commands talk to a deployment through the SDK only. `video-agent local …` makes a video **on your machine** with the coding agent you already have (Claude Code, Codex or Gemini CLI), inside that agent's OS sandbox. No Netlify account needed. | People in a terminal, coding agents with a shell, CI.          |
+| `netlify-video-agent-player` | `<video-agent-player>`, a small web component that plays a published video (poster, captions, credits, sized before it loads) on any page. A later phase of this plan, not a separate project.                                                          | Docs sites, blogs, changelogs, product pages.                 |
 | `packages/action` (private)        | The GitHub Action, owned by the github-action plan. In the workspace so it builds and tests with the rest; never published to npm.                                                                                                                         | —                                                             |
 
 In the app: `/docs/cli` and `/docs/sdk` join `/docs/api`, `/docs/mcp` and `/docs/skills` under a docs navigation
@@ -40,7 +40,8 @@ that scales to the other plans' pages; `video-agent login` gets an API key after
 few API additions the SDK needs (operation ids, a version and feature list, the oEmbed JSON the
 share page already advertises).
 
-**Positioning.** Local mode is the front door, not a replacement. "Make one on your laptop in three minutes" is what
+**Positioning: make one locally, then deploy it for your team** (owner decision, 2026-11-04). Local mode is the
+front door, not a replacement. "Make one on your laptop in three minutes" is what
 gets a stranger to try the project. Everything that makes it a team product stays in the hosted app: sign-in and
 roles, review and comments, the browser editor, publishing and share pages, the API and MCP, the queue, planning with
 questions, one library for everyone. Every local run ends with one line pointing at the Deploy to Netlify button, and
@@ -207,17 +208,17 @@ the README says plainly which things need the hosted app (§6.7).
 - **`video-agent` is taken:** someone published `0.0.0` (2025-09-23). It has no `bin`, so `npx video-agent` errors
   rather than running code today, but a later version could add one. We never document `npx video-agent`.
 - **The `@video-agent` org exists and belongs to someone else** (registry org endpoint answers 200, no packages), so
-  we can't publish there. **`@netlify-labs` is unclaimed** (404). The packages are
-  `@netlify-labs/video-agent-sdk`, `@netlify-labs/video-agent-cli` (bin `video-agent`) and
-  `@netlify-labs/video-agent-player`.
+  we can't publish there. That's why the packages are **unscoped** (owner decision, 2026-11-04):
+  `netlify-video-agent` (the CLI, bin `video-agent`), `netlify-video-agent-sdk` and `netlify-video-agent-player`. All
+  three were free on npm on 2026-11-04 (registry 404). Unscoped names need no npm org.
 
 ---
 
 ## 2. Gotchas the design has to handle
 
-1. **Names.** Docs say `npm i -g @netlify-labs/video-agent-cli` or `npx -y @netlify-labs/video-agent-cli@1 …`, never
-   `npx video-agent`. Creating the `netlify-labs` npm org and publishing placeholders comes first (spike C4), because
-   trusted publishing needs the packages to exist (§10).
+1. **Names.** Docs say `npm i -g netlify-video-agent` or `npx -y netlify-video-agent@1 …`, never
+   `npx video-agent`. Publishing `0.0.0` placeholders of the three names comes first (spike C4), to hold them and
+   because trusted publishing needs the packages to exist (§10).
 2. **No operation ids.** Phase 1 adds an `operationId` to every route, plus the SDK name the generator uses (§4.1),
    with a test that they're present and unique.
 3. **OAuth won't work for REST.** Tokens are bound to `/mcp` (§1). The CLI gets an **API key** through a device-style
@@ -276,9 +277,9 @@ the README says plainly which things need the hosted app (§6.7).
 
 ```
 packages/
-  sdk/       @netlify-labs/video-agent-sdk     src/, src/generated/{schema.d.ts,resources.ts}, test/
-  cli/       @netlify-labs/video-agent-cli     src/, src/catalog.ts, src/brief/ (github-action plan), runtime/ (bundled run scripts + template), test/
-  player/    @netlify-labs/video-agent-player  src/, test/
+  sdk/       netlify-video-agent-sdk     src/, src/generated/{schema.d.ts,resources.ts}, test/
+  cli/       netlify-video-agent     src/, src/catalog.ts, src/brief/ (github-action plan), runtime/ (bundled run scripts + template), test/
+  player/    netlify-video-agent-player  src/, test/
   action/    (private, github-action plan)     never published to npm; excluded from Changesets
 ```
 
@@ -288,7 +289,7 @@ packages/
   packages declare none, so a runner's install gains almost nothing. Phase 1 measures it anyway (§11).
 - Each package builds with esbuild to ESM (`dist/index.js` + `.d.ts` via `tsc --emitDeclarationOnly`). The SDK and
   player have **no runtime dependencies**: `openapi-fetch` (MIT, small) is bundled into the SDK's `dist`. The CLI
-  bundles the SDK and its own code into one file, so `npx -y @netlify-labs/video-agent-cli@1` installs one small
+  bundles the SDK and its own code into one file, so `npx -y netlify-video-agent@1` installs one small
   package. **The one exception is `video-agent record`** (screen-recording plan): it needs Playwright, which the CLI
   installs into its cache on first use and `doctor` lists; nobody else pays for it. The local runtime is a separate
   folder inside the CLI package (§6.3).
@@ -302,12 +303,12 @@ and the docs together, and CI checks them together.
 
 ---
 
-## 4. The SDK: `@netlify-labs/video-agent-sdk`
+## 4. The SDK: `netlify-video-agent-sdk`
 
 ### 4.1 Shape: generated resources, hand-written helpers
 
 ```ts
-import { VideoAgent, verifyWebhook, isVideoAgentError } from '@netlify-labs/video-agent-sdk'
+import { VideoAgent, verifyWebhook, isVideoAgentError } from 'netlify-video-agent-sdk'
 
 const va = new VideoAgent({
   url: 'https://acme-video.netlify.app', // or env VIDEO_AGENT_URL
@@ -552,7 +553,7 @@ the page does.
 
 ---
 
-## 6. The CLI: `@netlify-labs/video-agent-cli`
+## 6. The CLI: `netlify-video-agent`
 
 ### 6.1 Principles
 
@@ -626,7 +627,7 @@ status, ms, retry, request id) and each step. Keys are never printed; a test gre
 ### 6.3 Local mode: how it works
 
 ```
-npx -y @netlify-labs/video-agent-cli@1 local "A 20-second launch video for our webhooks feature" --aspect 16:9
+npx -y netlify-video-agent@1 local "A 20-second launch video for our webhooks feature" --aspect 16:9
 ```
 
 1. **Pick an agent.** `--agent claude|codex|gemini`, else the first one installed and signed in, in that order
@@ -807,7 +808,7 @@ Supported in v1: macOS and Linux. Windows through WSL; native Windows is in §14
 
 ---
 
-## 7. The player: `@netlify-labs/video-agent-player` (phase 5)
+## 7. The player: `netlify-video-agent-player` (phase 5)
 
 In scope: the owner's #14 included it. It comes after the SDK and CLI because nothing else depends on it, but its
 server half (`/v/{slug}.json`) lands in phase 1.
@@ -827,7 +828,7 @@ server half (`/v/{slug}.json`) lands in phase 1.
 - **API:** properties and methods mirror `HTMLVideoElement` (`play`, `pause`, `currentTime`, `muted`) and re-dispatch
   its events (`play`, `pause`, `ended`, `timeupdate`), plus `loaded` with the metadata.
 - **Size:** under 6 kB gzipped, no dependencies, Shadow DOM.
-- **Delivery:** npm (`import '@netlify-labs/video-agent-player'`), any npm CDN, and the deployment itself serves
+- **Delivery:** npm (`import 'netlify-video-agent-player'`), any npm CDN, and the deployment itself serves
   `/player.js` (same build, copied by `scripts/build.ts`), so a fork's embeds don't depend on npm or a CDN.
 - **Where it shows up:** the publish dialog and `publish --json` offer a "Player" snippet next to the plain HTML
   embed. The share page and the MCP card keep their own markup in v1.
@@ -842,7 +843,7 @@ Tests: Playwright component tests (sizing before load, captions, credits always 
   grouped: **Build** (REST API, SDK, CLI), **AI tools** (MCP, Agent skills), **Guides** (Looks, GitHub Action, and
   later pages). One list in `ui/src/pages/docs/DocsLayout.tsx` drives it, so another plan adds a page with one entry
   and a route (`ui/src/routes.tsx` `BY_PATH`). Owned here (phase 6.1); other plans add pages only.
-- **`/docs/cli`** (`ui/src/pages/docs/CliGuide.tsx`): install (`npm i -g @netlify-labs/video-agent-cli`),
+- **`/docs/cli`** (`ui/src/pages/docs/CliGuide.tsx`): install (`npm i -g netlify-video-agent`),
   `video-agent login --url <this site>` with the URL filled in (like `McpGuide` fills the MCP URL,
   `ui/src/pages/docs/McpGuide.tsx:39`), the command table from the CLI catalog (`CatalogTable`), JSON output and exit
   codes, environment variables, CI usage, a "Make videos on your laptop" section for `local` (with the sandbox
@@ -851,7 +852,7 @@ Tests: Playwright component tests (sizing before load, captions, credits always 
   downloading, uploads, webhooks verification (Express, Hono, Next.js, Netlify Functions), errors and retries,
   `raw`, and the player snippet (once phase 5 lands). Links to `/docs/api` for request and response shapes.
 - **Tests:** a unit test checks the CLI page's command table matches the catalog; a Playwright test opens both pages
-  and checks the copied commands contain the site URL and the `@netlify-labs/` names.
+  and checks the copied commands contain the site URL and the `netlify-video-agent` package names.
 - **README:** a "Try it on your laptop" section near the top (three commands: install, `doctor`, `local "…"`), then
   "Bring it to your team" with the Deploy button; "From scripts" moves from curl to the SDK and CLI (curl stays as a
   short example); the MCP section links the CLI for agents with a shell.
@@ -874,7 +875,7 @@ Tests: Playwright component tests (sizing before load, captions, credits always 
   versions and changelogs; merging it publishes. Packages version independently. The app is private and not
   published.
 - **Trusted publishing** (OIDC, no npm token in secrets), set up in this order:
-  1. Create the `netlify-labs` npm org (spike C4) and publish a `0.0.0` placeholder of each package by hand with 2FA:
+  1. Publish a `0.0.0` placeholder of each package by hand with 2FA (spike C4; no npm org needed for unscoped names):
      trusted publishing can only be configured for a package that exists.
   2. Configure each package's trusted publisher on npmjs.com (this repo, the release workflow file, and the allowed
      action, which npm requires for configurations made after 2026-05-20).
@@ -897,8 +898,10 @@ Tests: Playwright component tests (sizing before load, captions, credits always 
 
 ## 11. Build order
 
-Each phase ends with a gate. Gates that spend credits run `--dry` first and stop at `CREDIT_CEILING`, like
-`scripts/e2e/remix.ts`. Live gates delete what they made (test media, test videos where possible) in a `finally`.
+Each phase ends with a gate. Some gates include a **live test** (a script that makes real videos on the production
+site and checks them; costs credits). Every live test runs `--dry` first (it prints the steps and the projected credits
+and spends nothing), then **asks the owner before each gate runs**, and stops at its `CREDIT_CEILING`, like
+`scripts/e2e/remix.ts`. There is no blanket pre-approval (owner decision, 2026-11-04). Live gates delete what they made (test media, test videos where possible) in a `finally`.
 Spike labels use `C` (the other plans use `K`, `E`, `B`, `D`, `A`; `docs/spikes.md` already has `S0`–`S13`).
 
 ### Phase 0: spikes (no credits)
@@ -917,8 +920,8 @@ Spike labels use `C` (the other plans use `K`, `E`, `B`, `D`, `A`; `docs/spikes.
   agent finishes both sandboxed and the canaries held. Spends the tester's own subscriptions, not Netlify credits.
 - **C3: Kokoro in a venv** on macOS (Apple silicon) and Ubuntu: create, install, speak one line, time it; list the
   model download hosts for C2's allowlist.
-- **C4: names.** Create the `netlify-labs` npm org (or the owner's chosen scope, question 1) and publish `0.0.0`
-  placeholders of the three packages.
+- **C4: names.** Publish empty `0.0.0` placeholders of `netlify-video-agent`, `netlify-video-agent-sdk` and
+  `netlify-video-agent-player` by hand with 2FA (re-check each is still free first). No npm org.
 - Gate: a short note appended to `docs/spikes.md` and this plan updated (draft 4).
 
 ### Phase 1: API groundwork (server; depends on nothing; blocks every plan's API additions)
@@ -989,7 +992,7 @@ Gate: catalog-vs-docs test, Playwright on both pages, the skill zip still determ
 7.1 Changesets, release workflow with trusted publishing (§10). 7.2 Internal `npm pack` tarballs until the public
 snapshot; then the first npmjs `0.1.0` of the SDK and CLI from the public repo, with provenance (owner question 6). 7.3 Fresh-machine check: on a clean macOS user and a clean Ubuntu container, follow the
 README's "Try it on your laptop" word for word. 7.4 The player's first release with phase 5.
-Gate: the fresh-machine check passes; `npm view @netlify-labs/video-agent-cli` shows the release (and provenance once
+Gate: the fresh-machine check passes; `npm view netlify-video-agent` shows the release (and provenance once
 the repo is public).
 
 Parallel work: phase 0 and phase 1 together; then 2, 4 and 5 together (4 needs C1–C3 and 3.1, the first step of
@@ -1012,10 +1015,10 @@ phase 3, which needs nothing from phase 2 to start); the rest of 3 after 2.
 
 ## 13. Open questions for the owner
 
-1. **npm scope:** `@netlify-labs/*` (recommended: free today, matches the GitHub org, no Netlify npm-org review) or
-   the official `@netlify/*` (more trust, needs Netlify's npm org and its review before launch)?
-2. **Local mode spends no Netlify credits.** It's a funnel, but it is a way to use the project without Netlify.
-   **Recommended:** ship it, with the deploy line after every local run and the README's local-vs-hosted table.
+1. **Package names. Decided (2026-11-04):** unscoped `netlify-video-agent` (CLI, bin `video-agent`),
+   `netlify-video-agent-sdk` and `netlify-video-agent-player`; no npm org. (The `@video-agent` scope is taken.)
+2. **Local mode. Decided (2026-11-04):** ship it, framed as "make one locally, then deploy it for your team", with
+   the deploy line after every local run and the README's local-vs-hosted table.
 3. **CLI login on every deployment by default?** **Recommended:** yes, with the `cliLoginEnabled` admin switch.
 4. **Where keys live:** a 0600 config file (recommended for v1), or the OS keychain where there is one?
 5. **Should a local video be pushable to the team app** (`video-agent local push`, §14)? The strongest funnel, and
@@ -1109,7 +1112,7 @@ Independent review (Fable 5.1, "sound with changes"):
 
 | Item | Decision | Why |
 | --- | --- | --- |
-| A1 `@video-agent` scope is owned; `video-agent` has no bin | **Adopted with changes** | Verified by the orchestrator (org endpoint 200). Names are now `@netlify-labs/video-agent-*` (addendum 16); C4 creates the org and placeholders; Q1 is labs vs `@netlify`. |
+| A1 `@video-agent` scope is owned; `video-agent` has no bin | **Adopted with changes** | Verified by the orchestrator (org endpoint 200). Names are now `@netlify-labs/video-agent-*` (addendum 16); C4 creates the org and placeholders; Q1 is labs vs `@netlify`. (Superseded by the owner's decision: unscoped `netlify-video-agent*` names, no org.) |
 | A2 allowlist isn't a boundary; OS sandbox; ignore user agent config; `--verbose`; proc-tree | **Adopted** | Each point checked: `--verbose`, `--setting-sources`, `--strict-mcp-config`, `--max-turns`, `--max-budget-usd`, `dontAsk` exist in `claude --help` (2.1.280); `proc-tree.ts:1-6` says groups aren't enough. Exact Claude settings keys and Gemini policy behaviour are the reviewer's reading of the docs; C2 confirms them. `--yolo` renamed `--no-sandbox`. |
 | A3 generate the resource layer | **Adopted with changes** | Generated from an explicit `x-sdk` name per route (not derived from paths or operationIds), so names read well; helpers stay hand-written; API report and a test pin the names other plans rely on. |
 | A4 keys can't create keys; mint at claim; no prefilled code | **Adopted** | `keys.ts:17-20` confirmed. `keys create` removed; `createKeyForUser` at first claim; no key at rest; code typed on the page. |
@@ -1180,6 +1183,7 @@ Each claim was checked at today's code before it was adopted.
 | Over-built: CLI variants of skill recipes | **Moved to §14** | `references/cli.md` plus the Action's `brief` flow cover v1. |
 | Seams: roadmap wave for local mode; Looks line 560 says "hand-written resource methods"; Action install ref sha vs `action-v1` tag | **Not edited here** | Other documents; reported to the orchestrator (move local mode to wave 2; Looks should say "generated resource methods plus helpers"; the roadmap should use the Action plan's tag). |
 | Q4 key storage with CI via stdin | **Adopted** | `--key - --no-save`; `VIDEO_AGENT_KEY` in CI. |
+| Owner decisions 2026-11-04 | **Applied** | Unscoped names (no npm org; C4 publishes placeholders only); local mode ships ("make one locally, then deploy it for your team"); live tests run `--dry` and ask the owner before each gate; Q1 and Q2 marked decided. Remotion POC, default look and Action install don't change this plan. |
 | Seam (screen-recording draft 3): `doctor` checks ffmpeg for `record` and `media upload --role screen-recording` | **Adopted** | The recorder re-encodes to H.264 with a 1 s keyframe interval before upload; §6.6. |
 
 ---

@@ -13,7 +13,7 @@
   MCP prompts already teach (`skills/netlify-video/references/recipes.md`, `src/mcp-prompts.ts:33` `pr_video`, `:61`
   `changelog_video`).
 - **Depends on:** [the CLI and SDK plan](2026-11-04-cli-and-sdk.md): its phase 1 (`packages/` workspaces, the
-  `features` registry in `/api/v1/config`), phase 2 (the SDK, `@netlify-labs/video-agent-sdk`) and phase 3.1 (the CLI's command
+  `features` registry in `/api/v1/config`), phase 2 (the SDK, `netlify-video-agent-sdk`) and phase 3.1 (the CLI's command
   catalog, which gets this plan's `brief` group). Picks up `look` from [Looks](2026-11-04-looks.md) and `scope.beats`
   from [Regenerate a beat](2026-11-04-regenerate-beat.md) ("Redo this scene") when the server advertises them, but
   needs neither.
@@ -234,7 +234,7 @@ Details:
 ### 3.2 A JavaScript action on node24, bundled
 
 **Decision: a JavaScript action (`runs.using: node24`), bundled to one file with esbuild**, using `@actions/core`
-(inputs, outputs, summary, masking), `@actions/github` (Octokit), `@netlify-labs/video-agent-sdk`, and the brief builder from
+(inputs, outputs, summary, masking), `@actions/github` (Octokit), `netlify-video-agent-sdk`, and the brief builder from
 `packages/cli/src/brief/`.
 
 Why not a composite action that runs the CLI with `npx`: it would download the CLI on every run (slower, and a
@@ -648,7 +648,7 @@ advertised (an older server would drop it silently); otherwise create-then-`PATC
 
 ## 7. What the action needs from the SDK and the CLI
 
-### 7.1 From `@netlify-labs/video-agent-sdk`
+### 7.1 From `netlify-video-agent-sdk`
 
 - `new VideoAgent({ url, apiKey, userAgent, fetch })`.
 - `videos.create(body, { idempotencyKey })`, `videos.revise(id, body, { idempotencyKey })`,
@@ -675,15 +675,16 @@ release-video:
   image: node:24
   rules: [{ if: $CI_COMMIT_TAG }]
   script:
-    - npx -y @netlify-labs/video-agent-cli@1 brief release "$CI_COMMIT_TAG" --notes-file CHANGELOG.md
-        | npx -y @netlify-labs/video-agent-cli@1 create --prompt-file - --title "What's new in $CI_COMMIT_TAG"
+    - npx -y netlify-video-agent@1 brief release "$CI_COMMIT_TAG" --notes-file CHANGELOG.md
+        | npx -y netlify-video-agent@1 create --prompt-file - --title "What's new in $CI_COMMIT_TAG"
           --idempotency-key "gl:$CI_PROJECT_PATH@$CI_COMMIT_TAG:$CI_PIPELINE_ID" --wait --json > video.json
   variables: { VIDEO_AGENT_URL: $VIDEO_AGENT_URL, VIDEO_AGENT_KEY: $VIDEO_AGENT_KEY }
   artifacts: { paths: [video.json] }
 ```
 
-The package is `@netlify-labs/video-agent-cli` (bin `video-agent`). The `@video-agent` npm scope and the bare name
-`video-agent` both belong to someone else, so `npx video-agent` must never appear in docs (today it fails, because that 0.0.0 package has no `bin`; a later version could run anything). `brief pr` against GitLab merge requests is not in v1; for GitLab, `brief release`
+The CLI's package is the unscoped `netlify-video-agent` (bin `video-agent`), and the SDK is `netlify-video-agent-sdk`
+(owner decision, 2026-11-04). The `@video-agent` npm scope and the bare name `video-agent` both belong to someone else,
+which is why the names are unscoped, so `npx video-agent` must never appear in docs (today it fails, because that 0.0.0 package has no `bin`; a later version could run anything). `brief pr` against GitLab merge requests is not in v1; for GitLab, `brief release`
 and plain prompts work.
 
 ## 8. Example workflows
@@ -820,7 +821,10 @@ jobs:
 
 ## 10. Build order
 
-Live gates spend credits: their scripts run `--dry` first and stop at a credit ceiling, like `scripts/e2e/remix.ts`.
+Some gates are a **live test** (a script that makes real videos on the production site and checks them; costs
+credits). Each live test script runs `--dry` first (it prints the steps and the projected credits and spends
+nothing), then **asks the owner before that gate runs**, and stops at its credit ceiling, like `scripts/e2e/remix.ts`.
+There's no blanket approval: each gate below is asked for on its own.
 
 ### Phase 0: spikes (no code that ships)
 
@@ -856,7 +860,7 @@ Gate: a "spike results" section in this plan.
 10. Release: the body section; `target: release/<tag>`.
 11. `max-versions`, `max-runs-per-day`, `max-credits-per-month`, `dry-run`, job summary, outputs.
 
-Gate: unit and integration tests green (§11); live in a sandbox repo: label a PR → one comment ending "Ready" with the
+Gate: unit and integration tests green (§11); live test in a sandbox repo (owner asked first): label a PR → one comment ending "Ready" with the
 app link; re-run the workflow → no second video; edit the PR description, remove and re-add the label → still the same
 video (lookup); add the label and post `/video` within seconds → one video survives (the race check); `/video revise …`
 → v2 in the same comment; screenshots gone from the library afterwards; a release with `target` from a
@@ -870,7 +874,7 @@ release-please-style step → the release section. Credit ceiling 600.
 4. `/video redo <scene> <change>`, whenever the redo-a-scene plan's `scoped_revision` ships (not part of this phase's
    gate).
 
-Gate: live: push to a labelled PR with `on-push: revise` → one v2 after two quick pushes; a release with `base-video`
+Gate: live test (owner asked first): push to a labelled PR with `on-push: revise` → one v2 after two quick pushes; a release with `base-video`
 → a remix with its own title, GIF in the release notes, MP4 attached. Credit ceiling 900.
 
 ### Phase 3: server additions (§6; after the CLI and SDK plan's phase 1.2)
@@ -884,7 +888,7 @@ Gate: live: push to a labelled PR with `on-push: revise` → one v2 after two qu
 4. `context` and `external_ref` in `features`.
 5. The action and the CLI use them when advertised; tests cover both paths.
 
-Gate: `npm test`, typecheck, lint, openapi check; live: a PR video with `context` reads better than the same PR without
+Gate: `npm test`, typecheck, lint, openapi check; live test (owner asked first): a PR video with `context` reads better than the same PR without
 (side by side, noted here); a video found by `externalRef` and by the reference line agree.
 
 ### Phase 4: docs and the first release
@@ -931,7 +935,7 @@ Gate: a repo outside the team uses the action from the README alone and gets a v
 - **Logging:** each decision with a stable prefix (`video-agent: decision=create reason=label pr=123`), the host at
   start, each API call (method, path, status, ms; never the key), each GitHub call and the remaining GitHub rate limit,
   grouped with `core.startGroup`. Integration tests assert on these lines.
-- **Live gate script** `scripts/e2e/github-action.ts`: drives a sandbox repo with `gh` (open a PR, add the label, wait
+- **Live test script** `scripts/e2e/github-action.ts` (asks the owner before each gate): drives a sandbox repo with `gh` (open a PR, add the label, wait
   for the workflow, read the comment, run commands, publish a release), prints every step and the credits spent, stops
   at `CREDIT_CEILING`, has `--dry` (prints the plan and projected credits, makes no requests), and cleans up (closes
   the PR, deletes the branch and the videos it made unless `--keep`). Reads `VIDEO_AGENT_URL`, `VIDEO_AGENT_KEY`,
@@ -1001,9 +1005,13 @@ Gate: a repo outside the team uses the action from the README alone and gets a v
 
 ## 14. Open questions for the owner
 
-1. **Install path for v1.** Ship from the sub-folder (committed `dist/`, prefixed tags), with the README's examples
-   pinned to a full commit SHA (`…/packages/action@<sha> # action-v1.0.0`) and `@action-v1` as the convenience form,
-   and list on the Marketplace from a separate repo only later? *Recommended: yes.*
+1. **Install path for v1.** **Decided (2026-11-04):** v1 installs from this repo's sub-folder (committed `dist/`,
+   prefixed tags), with the README's examples pinned to a full commit SHA (`…/packages/action@<sha> # action-v1.0.0`)
+   and a moving `action-v1` tag as the convenience form. The Marketplace listing from a separate repo comes later.
+Also decided on 2026-11-04 and applied here: the packages are the unscoped `netlify-video-agent` (CLI, bin
+`video-agent`) and `netlify-video-agent-sdk` (§7); every live test is asked for separately after its `--dry` run
+(§10). The rest stay open:
+
 2. **Publishing default.** `publish: false`, so the comment links to the app and the GIF appears only after
    `/video publish`? *Recommended: false; public repos will usually turn it on.* (`private` with `publish` is refused
    either way.)
@@ -1061,8 +1069,8 @@ Cross-plan seam review (shared rules and this plan's section):
 | Item | Decision | Why |
 | --- | --- | --- |
 | 1 SDK names (`new VideoAgent`, `versions.retry/cancel`, `files.download`, `intervalMs`, `retryAfterSec`, `media.check`) | Adopted | §7.1, §3.8, §3.11 |
-| 2 `npx -y @netlify-labs/video-agent-cli@1` | Adopted | §7.2 |
-| 16 npm scope `@netlify-labs/video-agent-*` (addendum) | Adopted | `@netlify-labs/video-agent-sdk` and `-cli` throughout; the scope choice itself is the CLI plan's owner question |
+| 2 `npx -y netlify-video-agent@1` | Adopted | §7.2 |
+| 16 npm scope `@netlify-labs/video-agent-*` (addendum) | Superseded | Adopted in draft 2; the owner then chose unscoped names on 2026-11-04 (`netlify-video-agent`, `netlify-video-agent-sdk`), see the owner decisions line below |
 | 17 "Telemetry" renamed to the pointer trace (addendum) | No change needed | This plan never used the word; §13's refresh-on-release item uses only `remix { recording }` |
 | 3 Only `context` and `external_ref` in `features` | Adopted | §6 |
 | 4 `/video redo <scene> <change>`, `scope: { beats }`, `scoped_revision` | Adopted | §3.10, people-facing "scene" (shared rule 15) |
@@ -1102,6 +1110,11 @@ cited lines before adoption.
 | Seam: roadmap migration and wave lines | Not changed here | The roadmap should list `versions.context` with `videos.external_ref`, and Action phase 1 "after the SDK" (reported) |
 | Seam: default look | Adopted | §3.4 and §3.6 say "none today" |
 | New owner question on budgets | Adopted | Open question 9 |
+
+**Owner decisions 2026-11-04:** install from the sub-folder with SHA-pinned examples and a moving `action-v1` tag,
+Marketplace later (closes question 1); unscoped package names `netlify-video-agent` and `netlify-video-agent-sdk`
+(§7 wording fixed); each live test asked for separately after `--dry` (§10, §11); no default look until spike K2
+(already reflected in §3.4 and §3.6).
 
 ## Sources
 

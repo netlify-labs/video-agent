@@ -21,8 +21,8 @@
   - The browser editor and render-unchanged runs.
   - Voice-over (`scripts/voice.ts`) and recorded narration.
   - Five plans written alongside this one:
-    - [CLI and SDK](2026-11-04-cli-and-sdk.md): packages `@netlify-labs/video-agent-cli` (bin `video-agent`) and
-      `@netlify-labs/video-agent-sdk`, local mode, the docs pages and the `features` registry.
+    - [CLI and SDK](2026-11-04-cli-and-sdk.md): packages `netlify-video-agent` (bin `video-agent`) and
+      `netlify-video-agent-sdk`, local mode, the docs pages and the `features` registry.
     - [Looks](2026-11-04-looks.md): owns `look.json`, including the `recording` block.
     - [Render engines](2026-11-04-render-engines.md): owns the Engine interface, `EngineCapabilities`,
       `src/lib/contract-core.ts` and the prepare-run step order.
@@ -106,8 +106,12 @@ the scene's own timeline. The editor changes the data and re-renders. Nothing is
 
 **What it costs.** One authoring run, like any new video: roughly 90–210 credits in our tests (README), plus a few
 minutes of runner time for analysis. The run has to fit the authoring deadline (22 minutes by default): download,
-analysis, the agent's work and one render (§10, "Time budget"). Edits afterwards are render-unchanged runs (about 34 credits). Building and
-proving the whole feature (spikes plus live gates) costs about 1,000 credits (§10).
+analysis, the agent's work and one render (§10, "Time budget"). Edits afterwards are render-unchanged runs (about 34
+credits).
+
+Building and proving the whole feature costs about 1,000 credits (§10). That covers the spikes and the **live tests**:
+scripts that make real videos on the production site and check them. They cost credits, and the owner is asked before
+each one.
 
 **What the AI sees.** The agent looks at contact sheets of the recording, so frames from it go to the AI provider of
 the deployment's agent, like every other input to a run. The setup card and the docs say so.
@@ -522,14 +526,14 @@ reference files. This applies to every large clip, not only recordings (gotcha 1
 
 ### 4.6 Path A: `video-agent record` (phase 4)
 
-Lives in `@netlify-labs/video-agent-cli` ([CLI and SDK](2026-11-04-cli-and-sdk.md)).
+Lives in `netlify-video-agent` ([CLI and SDK](2026-11-04-cli-and-sdk.md)).
 - Playwright is an optional dependency, installed on first use with a prompt and listed in `video-agent doctor`. The
   CLI's "one small bundled file" promise is "except `record`".
 - `record` and `media upload --role screen-recording` need **ffmpeg on `PATH`**, for frame assembly and conversion.
   Playwright's own ffmpeg is built for WebM only. `doctor` checks it for these commands.
 
 ```
-npx -y @netlify-labs/video-agent-cli@1 record https://app.acme.com \
+npx -y netlify-video-agent@1 record https://app.acme.com \
   [--viewport 1280x800] [--dpr 2] [--fps 30] \
   [--redact ".api-key, [data-private]"] [--no-target-names] \
   [--storage-state ~/.config/video-agent/auth.json] \
@@ -581,8 +585,9 @@ npx -y @netlify-labs/video-agent-cli@1 record https://app.acme.com \
    - With `--make` it also creates the demo and waits for it, like `video-agent create`.
 5. **Signing in safely.** `--storage-state` files are written with mode 0600 and never under `--out`. `--upload`
    refuses a directory that contains one.
-6. **Local mode.** `video-agent local demo ./demo` runs the whole loop on the person's machine with their own agent, no
-   Netlify needed. The CLI runtime bundle carries `prepare-run` with a file-based fetch mode, `engine.ts`,
+6. **Local mode** (ships, owner decision 2026-11-04: "make one locally, then deploy it for your team"). `video-agent
+   local demo ./demo` runs the whole loop on the person's machine with their own agent, no Netlify needed. It's also how
+   the planner and `compose` are tried without credits. The CLI runtime bundle carries `prepare-run` with a file-based fetch mode, `engine.ts`,
    `scripts/lib/engines/*` and `recording.ts` (the CLI plan's local mode; roadmap Wave 4).
 
 ### 4.7 The pointer trace on the server
@@ -637,7 +642,7 @@ treatment.
 ```json
 {
   "v": 1,
-  "source": { "kind": "cli", "tool": "@netlify-labs/video-agent-cli@1.2.0", "startedAt": "2026-11-04T10:00:00Z" },
+  "source": { "kind": "cli", "tool": "netlify-video-agent@1.2.0", "startedAt": "2026-11-04T10:00:00Z" },
   "frame": { "width": 2560, "height": 1600, "fps": 30, "duration": 94.2 },
   "viewport": { "width": 1280, "height": 800, "dpr": 2 },
   "moves": [[0.000, 0.512, 0.488], [0.016, 0.513, 0.487]],
@@ -1072,7 +1077,7 @@ with the CLI plan's coverage test. The feature string `screen_recording` joins t
 - A recipe in `skills/netlify-video/references/recipes.md` walks an agent through upload → create → check the Hidden
   list → publish.
 
-**SDK (`@netlify-labs/video-agent-sdk`):**
+**SDK (`netlify-video-agent-sdk`):**
 - `media.uploadRecording(file | path, { trace?, onProgress })`: a multipart session with a streaming hash.
 - `media.upload(…, { role })`.
 - `media.setTrace(id, json)` and `media.getTrace(id)`.
@@ -1080,7 +1085,7 @@ with the CLI plan's coverage test. The feature string `screen_recording` joins t
 
 These come in phase 1.5, after the CLI plan's phase 2 builds the SDK.
 
-**CLI (`@netlify-labs/video-agent-cli`, bin `video-agent`):**
+**CLI (`netlify-video-agent`, bin `video-agent`):**
 - `media upload <file> --role screen-recording [--trace t.json]`.
 - `demo <file|id> --prompt "…" [--look …] [--aspect …] [--voiceover …] [--wait] [--download]`: sugar for
   `create --recording <id|file>`.
@@ -1164,7 +1169,9 @@ as "used by screen recordings", and its `clean` look has one (cross-plan item 3)
   `navigate` events) is phase 5 (§13). The schema already accepts them, so looks written today keep working.
 
 **Other rules:**
-- A look without the block gets `wallpaper` with brand colours.
+- A look without the block gets `wallpaper` with brand colours. So does a demo made with **no look**. That's the
+  default until the Looks plan's spike K2 decides whether `clean` becomes the default look (owner decision,
+  2026-11-04).
 - A look that says `"recording": false`, or whose engines don't include HyperFrames, is hidden in the demo picker (looks
   phase 3).
 - **Restyle a demo** is `revise { look }`. **Same recording, another look** is `remix { look }`.
@@ -1236,8 +1243,13 @@ This plan's phase 3 depends on looks phase 1 (schema and `clean`).
 
 ## 10. Build order
 
-Each phase ends with a gate. Live gates spend credits. Their scripts run `--dry` first, print the projected credits,
-and stop at a `CREDIT_CEILING`, like `scripts/e2e/remix.ts`.
+Each phase ends with a gate. Some gates are **live tests**: scripts that make real videos on the production site and
+check them, so they cost credits. Each live test works like this (owner decision, 2026-11-04):
+- It runs `--dry` first, which prints the steps and the projected credits and spends nothing.
+- It **asks the owner before running**, every time. There's no blanket approval.
+- It stops at a `CREDIT_CEILING`, like `scripts/e2e/remix.ts`.
+
+The spikes that use a run (D1, D3) are asked for the same way.
 
 **Credits for the whole build: about 1,000:**
 
@@ -1500,6 +1512,13 @@ Everything in §13.
 
 ## 14. Open questions for the owner
 
+The owner's roadmap answers (2026-11-04) didn't settle any of these. They did decide four things that this plan now
+follows:
+- **Decided (2026-11-04):** package names `netlify-video-agent` (bin `video-agent`) and `netlify-video-agent-sdk`.
+- **Decided (2026-11-04):** local mode ships.
+- **Decided (2026-11-04):** each live test runs `--dry` first and asks the owner first, with a credit ceiling.
+- **Decided (2026-11-04):** no default look until spike K2, so demos default to the wallpaper frame.
+
 1. **Order of input paths:** upload (C) first, then record in the app (B), then the CLI recorder (A)? *Recommended:*
    yes. The docs lead with the CLI once it exists, because it looks best for web apps.
 2. **Limits:** 5 minutes and 150 MB per recording, and 2 GiB stored per person? *Recommended:* yes, revisited after
@@ -1638,7 +1657,7 @@ Everything in §13.
 | 11 `/docs/cli#record` in phase 4 | **Adopted** | — |
 | Shared rule 15: people-facing "scene" | **Adopted** | UI copy says scene; "step" stays the planner's word. |
 | Build order and migration order | **Adopted** | §10. |
-| Addendum 16: `@netlify-labs/video-agent-*` | **Adopted** | Every package name and `npx` line updated. |
+| Addendum 16: `@netlify-labs/video-agent-*` | **Adopted, then superseded** | Every package name and `npx` line updated. The owner later chose unscoped names (below). |
 | Addendum 17: telemetry → pointer trace | **Adopted** | `trace.json`, `traceKey`/`traceSha256`, `trace_key`/`trace_sha256`, `PUT/GET …/trace`, `media.setTrace`/`getTrace`, `uploadRecording(file, { trace })`, `--trace`, `trace_frozen`, `cursorSource`. |
 
 ### Review log (draft 2 → 3): remote review (Fable 5.1 high, Netlify Agent Run at `19740d8`, "sound with changes")
@@ -1676,3 +1695,5 @@ Everything in §13.
 | Owner Q10: prefer the planner's estimate | **Adopted** | §5.4. |
 | Owner Q11: Quick demo API-only in v1 | **Adopted as the recommendation** | §6.1, Q11. |
 | Owner Q12: reserve `source.kind: "script"` | **Adopted** | §5.1. |
+
+**Owner decisions 2026-11-04:** applied the package names (unscoped `netlify-video-agent*`), local mode shipping, a live test that asks the owner each time after `--dry`, and no default look until K2. None of §14's questions were among those answered.

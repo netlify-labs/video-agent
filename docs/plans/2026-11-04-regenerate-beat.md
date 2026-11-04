@@ -39,7 +39,8 @@ and reported while the agent works (`check-contract.ts --fix`), and refused at r
 which checks the uploaded composition against the parent's archive on the server. **What's guaranteed is the saved
 composition:** outside the scope, its `index.html` and `summary.json` are byte-for-byte what splicing the parent
 produces, and every other existing file is the parent's. The MP4 is trusted like every run's, bound to the
-composition by its length, and the live gate checks frozen scenes' frames by SSIM (§4.9).
+composition by its length, and the live gate checks frozen scenes' frames by SSIM (§4.9). (A **live test** or live
+gate is a script that makes real videos on the production site and checks them; it costs credits.)
 
 ## 1. Why this is worth building
 
@@ -657,7 +658,7 @@ live gate passes; their designs are in §11.
   4. Review only that scene.
 
   Also: prefer redoing scenes for feedback on specific moments.
-- **SDK** (`@netlify-labs/video-agent-sdk`, cli-and-sdk plan):
+- **SDK** (`netlify-video-agent-sdk`, cli-and-sdk plan):
   - `client.videos.revise(id, { prompt, fromVersion, scope: { beats } })` from the OpenAPI types;
   - the hand-written sugar `client.videos.redoScenes(id, { beats, prompt, fromVersion?, …opts })`, which fills
     `fromVersion` from the latest ready version when it's omitted and sends an idempotency key;
@@ -667,7 +668,7 @@ live gate passes; their designs are in §11.
     missing.
 
   This plan adds the resource-method rows in its own PR, and the coverage test enforces that.
-- **CLI** (`@netlify-labs/video-agent-cli`, bin `video-agent`):
+- **CLI** (`netlify-video-agent`, bin `video-agent`):
   - `video-agent scenes <video> [--version n]` lists scenes.
   - `video-agent revise <video> --scene <id|label> … "<change>"`: repeatable; accepts an id or a unique label,
     case-insensitive.
@@ -676,8 +677,8 @@ live gate passes; their designs are in §11.
   - Both send an idempotency key (and take `--idempotency-key`) and `--version`; `--wait` follows the run like other
     commands.
   - `not_editable` (409) maps to exit code 7, by the CLI plan's rule.
-- **Local mode** (`video-agent local …`): the splice and checks live in `src/lib/scope.ts` and the scripts, so a local
-  project can do a scoped revision the same way. That's also how the check gets exercised without credits.
+- **Local mode** (`video-agent local …`, "make one locally, then deploy it for your team"): the splice and checks live
+  in `src/lib/scope.ts` and the scripts, so a local project can redo a scene the same way. That's also how the check gets exercised without credits.
 - **GitHub Action:** its `/video redo <scene> <change>` comment command uses `scope.beats` (github-action plan).
 
 ## 5. Data and API changes
@@ -708,7 +709,9 @@ live gate passes; their designs are in §11.
 
 ## 7. Build order
 
-Each phase ends with a gate. Live gates spend credits and run `--dry` first.
+Each phase ends with a gate. Live gates spend credits: each one runs `--dry` first (it prints the steps and projected
+credits and spends nothing), then **asks the owner before it runs**, with a credit ceiling. There's no blanket
+pre-approval.
 
 ### Phase 0: spikes
 
@@ -759,7 +762,8 @@ Each phase ends with a gate. Live gates spend credits and run `--dry` first.
 6. REST schema and DTO, `openapi:gen`; `scoped_revision` in `features`; MCP `revise_video` and `get_video`; the
    catalog row and skill recipe ("Redo a scene").
 
-**Gate:** integration tests green; **live gate part 1** (§10 steps 1–2) on production.
+**Gate:** integration tests green; **live gate part 1** (§10 steps 1–2) on production, after `--dry` and the owner's
+OK.
 
 ### Phase 3: the UI
 
@@ -773,7 +777,7 @@ Each phase ends with a gate. Live gates spend credits and run `--dry` first.
 
 1. SDK rows (`scope` on `revise`, `redoScenes`) and CLI commands (`scenes`, `revise --scene`, `redo`).
 2. README: "Redo a scene". The API docs follow from OpenAPI, and the CLI page is the CLI plan's.
-3. **Live gate part 2** (§10 steps 3–7). Write the numbers into `docs/spikes.md` and this plan's "As built".
+3. **Live gate part 2** (§10 steps 3–6), after asking the owner. Write the numbers into `docs/spikes.md` and this plan's "As built".
 4. After the gate: the editor entry points and the rest of §11's "after the gate" list, if the owner wants them.
 
 Phases 1 and 2.1–2.2 can run in parallel with phase 3's layout work once the DTO shape is fixed.
@@ -896,7 +900,10 @@ Phases 1 and 2.1–2.2 can run in parallel with phase 3's layout work once the D
 
 ## 10. Live gate: `scripts/e2e/regen-beat.ts`
 
-Run with `--dry` first: it checks the env, prints each step and the projected credits, and makes no requests.
+A live test: it makes real videos on the production site and checks them, so it costs credits. Run it with `--dry`
+first: it checks the env, prints each step and the projected credits, and makes no requests. Then **ask the owner
+before each run** (part 1 and part 2 are separate asks), quoting the dry run's projected credits and the
+`CREDIT_CEILING`.
 
 ```sh
 VIDEO_AGENT_URL=https://<site> VIDEO_AGENT_KEY=nva_… SOURCE_ID=vid_… [VOICED_ID=vid_…] [NARRATED_ID=vid_…] \
@@ -1067,7 +1074,7 @@ was used.
 | 7 Spike labels B1–B3 | Adopted | §7. |
 | 8 "Redo a scene" in MCP and skill | Adopted | §4.13. |
 | 9 GitHub Action `/video redo` uses `scope.beats` | Adopted | §4.13. |
-| Shared rules 1, 4, 5, 10, 15, 16 (feature string, template rule, manifest v1, additive DTO, terminology, `@netlify-labs/*` package names) | Adopted | Throughout. |
+| Shared rules 1, 4, 5, 10, 15, 16 (feature string, template rule, manifest v1, additive DTO, terminology, package names) | Adopted | Throughout. Package names later became the unscoped `netlify-video-agent-*` (owner decisions, below). |
 | Build order (phase 1 on engines 1; phase 2 on cli 1; phase 4 on cli 3; migration and template after looks 2) | Adopted | Status block and §7. |
 
 ### Review log (draft 2 → 3): remote Fable 5.1 review (high effort, Netlify Agent Run at `19740d8`)
@@ -1098,3 +1105,12 @@ The verdict was "sound with changes". Every claim was checked against the code a
 | Over-built: make gate step 4 (longer scene) optional | Rejected | Changing length is the riskiest path (R1's relayout, caption shift, MP4 binding), and open question 1 depends on it, so it stays in the pass bar. |
 | Seams: `scopeCheck` signature; prepare-run order note; `contract-core.ts` contents | Adopted | §4.3, §4.5; the first two are recommendations to the orchestrator. |
 | Owner questions Q8 (same inputs as `ensureBundle`), Q2 (defer), Q5 (fewer than half the scenes) | Adopted | Confirmed `bundles.ts:170-188`. Q1 and Q9 unchanged (agreed). |
+
+### Owner decisions 2026-11-04
+
+| Decision | Effect here |
+| --- | --- |
+| Packages are unscoped: `netlify-video-agent` (CLI, bin `video-agent`) and `netlify-video-agent-sdk`. | §4.13 uses them. The draft 1 → 2 log's mention of `@netlify-labs/*` is history. |
+| Local mode ships ("make one locally, then deploy it for your team"). | §4.13 wording. |
+| Live tests run `--dry` first, then ask the owner before each gate, with a credit ceiling. | §0 (definition), §7, §10. |
+| Default look, Action install, Remotion POC. | Don't touch this plan: scoped revisions refuse `look`, and Remotion has no `scopedRevision` in v1. None of this plan's owner questions were answered by them; all stay open. |
