@@ -13,6 +13,8 @@ API key.
 
 - **A web app** for your team: write a prompt, pick a shape (16:9, 9:16, 1:1, 4:5), watch it being made, play and download the result (MP4, poster, GIF preview, captions).
 - **Revisions:** "make the end card orange" starts a new version from the previous one's composition. Every version keeps its prompt and author.
+- **Remix:** a new video of your own that starts from someone's finished video, from "the same video with our new
+  product name" to "this format, about webhooks" ([below](#remix-a-video)).
 - **Publishing:** any version can get a public share page (with link previews for Slack and social), a raw MP4 URL, a GIF and an embed snippet. Unpublishing takes the link down immediately.
 - **An API** with API keys and signed webhooks, so CI and scripts can make videos too. Its reference is built into the app (**API docs**).
 - **MCP tools**, so people can ask Claude, Cursor or any MCP client for a video.
@@ -81,12 +83,12 @@ With Identity, `ALLOWED_EMAIL_DOMAINS` picks one of two modes:
 `ADMIN_EMAILS` become admins on their first sign-in; everyone else joins as a **Creator**. Admins change roles on the
 Admin page:
 
-| Role         | Can                                                                                                      |
-| ------------ | -------------------------------------------------------------------------------------------------------- |
-| **Admin**    | Everything: people and roles, settings, usage, stopping runs, owner actions on any video                 |
-| **Creator**  | Make, revise and plan videos (spends credits); rename, publish, delete and make private their own videos |
-| **Reviewer** | Watch videos and give feedback; never spends credits                                                     |
-| **Viewer**   | Watch videos                                                                                             |
+| Role         | Can                                                                                                             |
+| ------------ | --------------------------------------------------------------------------------------------------------------- |
+| **Admin**    | Everything: people and roles, settings, usage, stopping runs, owner actions on any video                        |
+| **Creator**  | Make, revise, remix and plan videos (spends credits); rename, publish, delete and make private their own videos |
+| **Reviewer** | Watch videos and give feedback; never spends credits                                                            |
+| **Viewer**   | Watch videos                                                                                                    |
 
 API keys and the MCP server act with their owner's role. Disabling someone also revokes their API keys.
 
@@ -140,6 +142,33 @@ Runs can also read the project's Blobs, so they can read uploaded media, includi
 | `MCP_OAUTH_CIMD_HOSTS`                                   | Optional                                       | `claude.ai,claude.com`                         | Hosts whose https client ids (Client ID Metadata Documents) are fetched.                                                                                 |
 | `OPENVERSE_CLIENT_ID`, `OPENVERSE_CLIENT_SECRET`         | Optional                                       | —                                              | A registered Openverse app for Find music and runs' music (higher rate limits). Without them, searches are anonymous ([below](#music-from-openverse)).   |
 | `ELEVENLABS_API_KEY`                                     | Optional                                       | —                                              | ElevenLabs voices (with word timings) for voice-overs. Without it, voice-overs use Kokoro, which is built in. Agent runs read it, so scope it to builds. |
+
+## Remix a video
+
+**Remix** makes a new video, owned by you, that starts from another video's finished composition and changes it as
+you say. There's no mode to pick: "keep everything, but call the product Orbitly" changes just that, and "same format,
+about our payments API" rewrites the script and on-screen text and keeps the style. Remix is on a video's page, in a
+Library tile's **⋯** menu, on its share page (only for signed-in people who can create) and under **New video → Start
+from an existing video**.
+
+- **What carries over:** the composition, and the source's shape, length, sound, AI voice-over settings, language and
+  library media, each of which you can change before you start. The run applies today's brand from `context/`.
+- **What doesn't:** recorded narration is removed from the copy, so the remix has no recorded voice until you record
+  one. Comments, verdicts, publications and the source's webhook stay with the original.
+- **The remix is its own copy.** Deleting or revising the original doesn't change it. It shows "Remix of _title_ vN",
+  linked to the source when you can still see it.
+- **Private stays private.** Only people who can see a video can remix it, so a private video can be remixed by its
+  owner and admins, and its remix starts private. An admin who remixes someone's private video gets a copy of its
+  content and prompt history; the owner isn't notified.
+- **Credits:** a remix is an agent run, so it spends credits like any other.
+- **Admin switch:** **People can remix videos** on the Admin page turns it off for everyone, without a redeploy.
+  Remix disappears from the app, and the API, plans and MCP refuse (`409 remix_disabled`). Remixes already queued
+  still run.
+
+From scripts, `POST /api/v1/videos/{id}/remix` with `{"prompt": "…"}` and, optionally, `fromVersion` (default: the
+latest ready version), `aspect`, `durationSec`, `language`, `sound`, `voiceover`, `mediaIds` (replaces the source's
+set), `planId` and `webhookUrl`. It takes an `Idempotency-Key` header and returns 202 with the new video. From AI
+tools, it's the `remix_video` MCP tool.
 
 ## Your own voice-over
 
@@ -279,7 +308,7 @@ is HMAC-SHA256 of `"<t>.<raw body>"` with the key's webhook secret (shown once w
 ## Use it from AI tools (MCP)
 
 The same video tasks are MCP tools, so people can ask Claude, Cursor or any MCP client for a video:
-`create_video`, `get_video`, `show_video`, `list_videos`, `revise_video`, `publish_video`, `unpublish_video`, `cancel_video`,
+`create_video`, `get_video`, `show_video`, `list_videos`, `revise_video`, `remix_video`, `publish_video`, `unpublish_video`, `cancel_video`,
 `set_verdict`, `list_comments`, `add_comment`, `list_media`, `search_music`, `import_music` and `get_music_job` (CC0
 and CC BY music from Openverse),
 and, when AI Gateway is available, `plan_video` and `plan_brief` (ask a few questions first, then create with the plan). Each key's tool list matches its owner's role: Reviewers see the read and review tools, Viewers read only.
@@ -430,6 +459,19 @@ The phase-1 script stops before uploading anything if A has other unused recordi
 recordings" would delete them too. Set `ALLOW_DELETE_UNUSED=1` to let it continue anyway. Both scripts clean up
 what they made, even when a check fails. The header comment of each script lists every variable it reads and
 every check it makes.
+
+### Remix live gate
+
+`scripts/e2e/remix.ts` checks remixing against a deployed site (remix spec
+[§7](docs/plans/2026-11-03-remix.md)): a targeted remix keeps the first frame, a new-topic remix changes the
+captions, a narrated source loses its narration, and replaying a request with the same idempotency key returns the
+same video. It spends two or three runs and stops starting new ones once `CREDIT_CEILING` (default 600) is reached.
+Run it with `--dry` first.
+
+```sh
+VIDEO_AGENT_URL=https://<site> VIDEO_AGENT_KEY=nva_… SOURCE_ID=vid_… [NARRATED_ID=vid_…] \
+  npx tsx scripts/e2e/remix.ts [--keep]
+```
 
 ## License
 

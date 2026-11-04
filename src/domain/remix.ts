@@ -15,7 +15,8 @@ import { clip } from '../lib/log.js'
 import { cleanRemixSource, RemixSourceError } from '../lib/remix-source.js'
 import type { Repo } from '../store/types.js'
 import { writeAccessMirror } from './files.js'
-import { snapshotMedia } from './media.js'
+import { mediaDto, snapshotMedia } from './media.js'
+import { isTake } from './takes.js'
 import { assertCan, type Principal } from './policy.js'
 import { assertRemixEnabled } from './remix-settings.js'
 import type { Aspect, JobRow, OutputRow, VersionRemix, VersionRow, VideoSound } from './types.js'
@@ -127,6 +128,21 @@ async function copySource(
   const back = await deps.blobs.get('sources', key)
   if (!back || sha256Hex(back) !== cleaned.sha256) throw new Error('remix source copy failed verification')
   return { sha256: cleaned.sha256, narrationDropped: cleaned.narrationDropped }
+}
+
+/**
+ * The library items a version was made with (its snapshot, in order), for the Remix dialog's removable chips. Items
+ * deleted from the library since are listed too: a remix that keeps them still renders them.
+ */
+export async function versionMediaItems(deps: Deps, principal: Principal, jobId: string, n: number) {
+  await loadJob(deps.store, principal, jobId)
+  const items = []
+  for (const r of await deps.store.listVersionMedia(jobId, n)) {
+    const m = await deps.store.getMedia(r.mediaId)
+    if (!m || isTake(m)) continue
+    items.push(await mediaDto(deps, principal, m))
+  }
+  return { items }
 }
 
 export async function remixVideo(

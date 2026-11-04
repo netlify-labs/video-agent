@@ -35,6 +35,13 @@ const notFound = () =>
     status: 404,
     headers: denyMicrophone({ ...NO_STORE, 'content-type': 'text/html; charset=utf-8' }),
   })
+/**
+ * The share page's only script (docs/plans/2026-11-03-remix.md §3.7): a signed-in teammate who can remix sees "Remix in
+ * Video Agent". The page is the same for everyone (no database here), so the browser asks the app who's viewing, and
+ * only when the app's non-secret va_creator hint cookie is there, so the public's views never call the API. Never in
+ * an embed (the page is also the twitter:player iframe).
+ */
+const REMIX_SCRIPT = `<script>(function(){try{if(window.top!==window||!/(?:^|; )va_creator=1(?:;|$)/.test(document.cookie))return;var o={credentials:'same-origin'};Promise.all([fetch('/api/v1/me',o),fetch('/api/v1/config',o)]).then(function(r){return r[0].ok&&r[1].ok?Promise.all([r[0].json(),r[1].json()]):null}).then(function(x){if(!x||!x[1].remixEnabled||(x[0].role!=='admin'&&x[0].role!=='creator'))return;var a=document.querySelector('[data-remix]');if(a)a.hidden=false}).catch(function(){})}catch(e){}})()</script>`
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
 
 export default async (req: Request, context: Context) => {
@@ -100,10 +107,10 @@ export default async (req: Request, context: Context) => {
 <style>:root{color-scheme:dark light}html,body{margin:0;height:100%;background:#0b0d10;color:#e6e8eb;font:16px/1.5 system-ui,sans-serif}
 main{min-height:100%;display:grid;place-items:center;padding:16px;box-sizing:border-box}figure{margin:0;max-width:min(100%,calc(85vh*${pub.width}/${pub.height}))}
 video{width:100%;height:auto;border-radius:12px;background:#000;display:block}figcaption{margin-top:12px;opacity:.8}
-.credits{display:block;margin-top:4px;font-size:13px;opacity:.75}.credits a{color:inherit}
+.credits{display:block;margin-top:4px;font-size:13px;opacity:.75}.credits a{color:inherit}.remix{display:inline-block;margin-top:12px;font-size:14px;color:inherit;opacity:.85}.remix[hidden]{display:none}
 details{margin-top:12px}summary{cursor:pointer}details p{margin:8px 0;max-width:70ch}details a{color:inherit;font-size:13px}</style></head>
 <body><main><figure><video controls playsinline preload="metadata" poster="${poster}" src="${base}.mp4" width="${pub.width}" height="${pub.height}">
-<track kind="captions" src="${base}.vtt" srclang="en" label="Captions"></video><figcaption>${title}${credits ? `<small class="credits" data-credits>${credits}</small>` : ''}</figcaption>${transcript}</figure></main></body></html>`
+<track kind="captions" src="${base}.vtt" srclang="en" label="Captions"></video><figcaption>${title}${credits ? `<small class="credits" data-credits>${credits}</small>` : ''}</figcaption>${transcript}<a class="remix" data-remix hidden href="/videos/${esc(pub.jobId)}?remix=${pub.versionN}">Remix in Video Agent</a></figure></main>${REMIX_SCRIPT}</body></html>`
   // The share page is also the embed player (twitter:player): it never gets the microphone.
   return new Response(html, {
     headers: denyMicrophone({ ...NO_STORE, 'content-type': 'text/html; charset=utf-8' }),

@@ -1,4 +1,5 @@
 import {
+  Anchor,
   Button,
   Card,
   Group,
@@ -18,10 +19,11 @@ import { IconBolt, IconListCheck } from '@tabler/icons-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router'
-import { $api, errorMessage, newIdempotencyKey, useCanCreate } from '../api/client'
+import { $api, errorMessage, newIdempotencyKey, useCanCreate, type Version, type Video } from '../api/client'
 import { Status, VersionImage, relativeTime } from '../components/bits'
 import { MediaChips, type Media } from '../components/MediaPicker'
 import { PlanPanel } from '../components/PlanPanel'
+import { RemixForm, RemixSourcePicker, useCanRemix } from '../components/RemixDialog'
 import { SoundControl, soundAfterPick, type Sound } from '../components/SoundControl'
 import { VOICE_OFF, VoiceoverControl, voiceInput, type VoiceState } from '../components/VoiceoverControl'
 import { brand } from '../theme'
@@ -175,6 +177,10 @@ export function NewVideoPage() {
   const planning = dialog === 'plan'
   const phone = useMediaQuery('(max-width: 48em)')
   const [shapeTouched, setShapeTouched] = useState(false)
+  // Start from an existing video (a remix, docs/plans/2026-11-03-remix.md §3.7).
+  const canRemix = useCanRemix()
+  const [pickingSource, setPickingSource] = useState(false)
+  const [remixFrom, setRemixFrom] = useState<{ video: Video; version: Version } | null>(null)
   const valid =
     prompt.trim().length >= 10 && prompt.length <= 4000 && (lengthMode === 'auto' || Number(seconds) >= 3)
 
@@ -199,6 +205,67 @@ export function NewVideoPage() {
     })
   }
 
+  const picker = (
+    <RemixSourcePicker
+      opened={pickingSource}
+      onClose={() => {
+        setPickingSource(false)
+      }}
+      onPick={(video, version) => {
+        setRemixFrom({ video, version })
+        setPickingSource(false)
+      }}
+    />
+  )
+  if (remixFrom)
+    return (
+      <>
+        <div className="va-title-row">
+          <div>
+            <Title order={1}>New video</Title>
+            <div className="va-sub">
+              Starting from {remixFrom.video.title} v{remixFrom.version.n}. Say what should be different.
+            </div>
+          </div>
+        </div>
+        <Card maw={720}>
+          <RemixForm
+            key={`${remixFrom.video.id}-${remixFrom.version.n}`}
+            video={remixFrom.video}
+            version={remixFrom.version}
+            footer={
+              <Group gap="xs">
+                <Anchor
+                  component="button"
+                  type="button"
+                  size="sm"
+                  onClick={() => {
+                    setPickingSource(true)
+                  }}
+                >
+                  Pick another video
+                </Anchor>
+                <Text size="sm" c="var(--va-faint)">
+                  ·
+                </Text>
+                <Anchor
+                  component="button"
+                  type="button"
+                  size="sm"
+                  onClick={() => {
+                    setRemixFrom(null)
+                  }}
+                >
+                  Start from scratch
+                </Anchor>
+              </Group>
+            }
+          />
+        </Card>
+        {picker}
+      </>
+    )
+
   return (
     <>
       <div className="va-title-row">
@@ -206,9 +273,25 @@ export function NewVideoPage() {
           <Title order={1}>New video</Title>
           <div className="va-sub">
             Describe it once. The agent writes, checks and renders it, usually in 3 to 8 minutes.
+            {canRemix ? (
+              <>
+                {' '}
+                <Anchor
+                  component="button"
+                  type="button"
+                  inherit
+                  onClick={() => {
+                    setPickingSource(true)
+                  }}
+                >
+                  Start from an existing video
+                </Anchor>
+              </>
+            ) : null}
           </div>
         </div>
       </div>
+      {picker}
       <div className="va-split">
         {/* Not clipped, so the actions row can stick to the window's bottom edge. */}
         <Card style={{ overflow: 'visible' }}>

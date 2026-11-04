@@ -516,6 +516,17 @@ export function installMock() {
       })
     }
     // Media library (plan v2 §9): in memory. localStorage.mockFailPart=1 fails one part once, to test resume.
+    // A version's library media (the Remix dialog's chips): the webhooks launch used the first library item.
+    const vmedia = /^\/api\/v1\/videos\/([^/]+)\/versions\/\d+\/media$/.exec(p)
+    if (vmedia?.[1] && method === 'GET') {
+      if (vmedia[1] !== 'vid_webhooks') return json({ items: [] })
+      let logo = mockMedia.find((m) => m.id === 'med_logo01')
+      if (!logo) {
+        logo = { ...mockItem('Acme logo.png', 'image', 42_000), id: 'med_logo01' }
+        mockMedia.push(logo)
+      }
+      return json({ items: [logo] })
+    }
     if (p === '/api/v1/media' && method === 'GET') {
       seedLibraryMusic()
       seedRecordings()

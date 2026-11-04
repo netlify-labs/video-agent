@@ -21,6 +21,7 @@ import { modals } from '@mantine/modals'
 import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
 import { FavoriteButton } from '../components/FavoriteButton'
+import { RemixDialog, useCanRemix } from '../components/RemixDialog'
 import { MediaChips, type Media } from '../components/MediaPicker'
 import { PlanPanel } from '../components/PlanPanel'
 import { PublishButton } from '../components/PublishDialog'
@@ -40,6 +41,7 @@ import {
   IconBell,
   IconBellRinging,
   IconDots,
+  IconArrowsShuffle,
   IconDownload,
   IconExternalLink,
   IconLanguage,
@@ -47,7 +49,7 @@ import {
   IconLockOpen,
 } from '@tabler/icons-react'
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { Link, useNavigate, useParams } from 'react-router'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import {
   canNotify,
   doneMessage,
@@ -518,6 +520,10 @@ export function VideoPage() {
   const config = $api.useQuery('get', '/api/v1/config')
   const canPlan = canCreate && config.data?.planningAvailable === true
   const [planningRevision, setPlanningRevision] = useState(false)
+  const canRemix = useCanRemix()
+  // ?remix=n (the share page's link) opens the Remix dialog for that version.
+  const [search, setSearch] = useSearchParams()
+  const [remixing, setRemixing] = useState<number | null>(null)
   // A watched run (Notify) is polled by RunWatcher on the same query, in the background too; polling here as well
   // would double the requests.
   const watched = useSyncExternalStore(subscribeWatches, () => isWatched(id))
@@ -571,6 +577,15 @@ export function VideoPage() {
   })
 
   const data = video.data
+  useEffect(() => {
+    const asked = search.get('remix')
+    // Waits until this person is known to be able to remix (the config and role load after the video).
+    if (!asked || !data || !canRemix) return
+    setRemixing(Number(asked) || null)
+    const next = new URLSearchParams(search)
+    next.delete('remix')
+    setSearch(next, { replace: true })
+  }, [data, search, canRemix, setSearch])
   useEffect(() => {
     if (!data) return
     const was = prevStatus.current
@@ -676,9 +691,39 @@ export function VideoPage() {
             </Title>
           )}
           <div className="va-sub num">{sub}</div>
+          {data.remixOf ? (
+            <div className="va-sub" data-testid="remix-of">
+              Remix of{' '}
+              <Anchor component={Link} to={`/videos/${data.remixOf.id}`} inherit>
+                {data.remixOf.title}
+              </Anchor>{' '}
+              v{data.remixOf.n}
+            </div>
+          ) : null}
         </div>
         <Group gap="sm">
           <FavoriteButton videoId={data.id} favorite={data.favorite} />
+          {v.status === 'ready' && canRemix ? (
+            <Button
+              variant="default"
+              leftSection={<IconArrowsShuffle size={16} />}
+              onClick={() => {
+                setRemixing(v.n)
+              }}
+            >
+              Remix
+            </Button>
+          ) : null}
+          {remixing !== null && data.versions.some((x) => x.n === remixing && x.status === 'ready') ? (
+            <RemixDialog
+              video={data}
+              version={data.versions.find((x) => x.n === remixing) as Version}
+              opened
+              onClose={() => {
+                setRemixing(null)
+              }}
+            />
+          ) : null}
           {v.status === 'ready' && canCreate ? (
             <Tooltip
               label="This version can't be edited in the browser. Ask for a revision instead."

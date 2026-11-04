@@ -40,7 +40,7 @@ import { webAuthRoutes, webSignInEnabled } from './auth/web.js'
 import * as hooks from './domain/webhook-settings.js'
 import { getAdminSettings, narrationEnabled, updateAdminSettings } from './domain/narration-settings.js'
 import { remixEnabled } from './domain/remix-settings.js'
-import { remixVideo } from './domain/remix.js'
+import { remixVideo, versionMediaItems } from './domain/remix.js'
 import { listNotifications, markNotificationsRead } from './domain/notifications.js'
 import { getProgress } from './domain/progress.js'
 import { previewLink } from './domain/preview.js'
@@ -512,6 +512,23 @@ export function createApp(deps: Deps, opts: AppOptions) {
       c.header('location', res.body.links.self)
       if (!res.replayed) kick(c)
       return c.json(res.body, statusOf(res.status))
+    },
+  )
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/v1/videos/{id}/versions/{n}/media',
+      summary: "A version's library media",
+      description:
+        'The library items a version was made with, in order (items since deleted from the library included). A remix keeps them unless you pass mediaIds.',
+      tags: ['versions'],
+      security,
+      request: { params: VersionParam },
+      responses: { 200: json(z.object({ items: z.array(s.MediaSchema) }), 'Media'), ...errors },
+    }),
+    async (c) => {
+      const p = c.req.valid('param')
+      return c.json(await versionMediaItems(deps, c.get('principal'), p.id, p.n), 200)
     },
   )
   app.openapi(

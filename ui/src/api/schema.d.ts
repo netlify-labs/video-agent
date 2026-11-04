@@ -849,6 +849,95 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/videos/{id}/versions/{n}/media": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A version's library media
+         * @description The library items a version was made with, in order (items since deleted from the library included). A remix keeps them unless you pass mediaIds.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                    n: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Media */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            items: components["schemas"]["Media"][];
+                        };
+                    };
+                };
+                /** @description Invalid request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not signed in */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not allowed */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Conflict or not ready */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/videos/{id}/versions/{n}/retry": {
         parameters: {
             query?: never;
@@ -7883,6 +7972,87 @@ export interface components {
              */
             webhookUrl?: string;
         };
+        Media: {
+            id: string;
+            /** @enum {string} */
+            kind: "image" | "svg" | "video" | "font" | "audio" | "pdf";
+            /** @enum {string} */
+            status: "uploading" | "verifying" | "ready" | "rejected";
+            rejectReason: string | null;
+            filename: string;
+            /** @description The name given in the library; null shows the file name */
+            title: string | null;
+            /** @description Notes on the item. The planner and the agent read them. */
+            caption: string | null;
+            mime: string;
+            bytes: number;
+            width: number | null;
+            height: number | null;
+            durationSec: number | null;
+            uploader: {
+                id: string;
+                name: string | null;
+                email: string | null;
+            };
+            createdAt: string;
+            /** @description Videos you can see that use it */
+            usedIn: number;
+            /** @description Signed for 10 minutes; null until the item is ready */
+            urls: {
+                file: string;
+                original: string;
+                poster: string | null;
+            } | null;
+            canDelete: boolean;
+            source: components["schemas"]["MediaSource"];
+            recording: components["schemas"]["Recording"];
+        };
+        /** @description Where an imported item came from (Openverse), with its licence; null for uploads */
+        MediaSource: {
+            /** @enum {string} */
+            name: "openverse";
+            /** @description Its id at the source */
+            id: string;
+            /** @description The landing page of the work */
+            url: string | null;
+            title: string | null;
+            creator: string | null;
+            creatorUrl: string | null;
+            /** @description cc0 or by */
+            license: string;
+            licenseVersion: string | null;
+            /** @example CC BY 4.0 */
+            licenseLabel: string;
+            licenseUrl: string | null;
+            /** @description The source's own attribution text */
+            attribution: string | null;
+            /** @description True for CC BY: videos that use it credit it (CC0 needs no credit) */
+            creditRequired: boolean;
+        } | null;
+        /** @description For a voice-over recording: its video, where it is used and how long it is kept; null otherwise */
+        Recording: {
+            /**
+             * @description A voice-over recording (take) or uploaded narration
+             * @enum {string}
+             */
+            role: "narration-take" | "narration-upload";
+            /** @description The video it was made for; null if you can no longer see it */
+            videoId: string | null;
+            /** @description Versions of videos you can see, and your own drafts, that use it */
+            usedIn: ({
+                /** @enum {string} */
+                kind: "version";
+                videoId: string;
+                n: number;
+            } | {
+                /** @enum {string} */
+                kind: "draft";
+                videoId: string;
+                draftId: string;
+            })[];
+            /** @description When it's deleted if nothing uses it by then; null while a draft or version uses it */
+            retainUntil: string | null;
+        } | null;
         Publish: {
             /** @description Offer the narration's transcript on the share page. Default off; publishing again changes only this. */
             showTranscript?: boolean;
@@ -8448,87 +8618,6 @@ export interface components {
             lock: components["schemas"]["NarrationLock"];
             previous: components["schemas"]["NarrationLockHolder"] & unknown;
         };
-        Media: {
-            id: string;
-            /** @enum {string} */
-            kind: "image" | "svg" | "video" | "font" | "audio" | "pdf";
-            /** @enum {string} */
-            status: "uploading" | "verifying" | "ready" | "rejected";
-            rejectReason: string | null;
-            filename: string;
-            /** @description The name given in the library; null shows the file name */
-            title: string | null;
-            /** @description Notes on the item. The planner and the agent read them. */
-            caption: string | null;
-            mime: string;
-            bytes: number;
-            width: number | null;
-            height: number | null;
-            durationSec: number | null;
-            uploader: {
-                id: string;
-                name: string | null;
-                email: string | null;
-            };
-            createdAt: string;
-            /** @description Videos you can see that use it */
-            usedIn: number;
-            /** @description Signed for 10 minutes; null until the item is ready */
-            urls: {
-                file: string;
-                original: string;
-                poster: string | null;
-            } | null;
-            canDelete: boolean;
-            source: components["schemas"]["MediaSource"];
-            recording: components["schemas"]["Recording"];
-        };
-        /** @description Where an imported item came from (Openverse), with its licence; null for uploads */
-        MediaSource: {
-            /** @enum {string} */
-            name: "openverse";
-            /** @description Its id at the source */
-            id: string;
-            /** @description The landing page of the work */
-            url: string | null;
-            title: string | null;
-            creator: string | null;
-            creatorUrl: string | null;
-            /** @description cc0 or by */
-            license: string;
-            licenseVersion: string | null;
-            /** @example CC BY 4.0 */
-            licenseLabel: string;
-            licenseUrl: string | null;
-            /** @description The source's own attribution text */
-            attribution: string | null;
-            /** @description True for CC BY: videos that use it credit it (CC0 needs no credit) */
-            creditRequired: boolean;
-        } | null;
-        /** @description For a voice-over recording: its video, where it is used and how long it is kept; null otherwise */
-        Recording: {
-            /**
-             * @description A voice-over recording (take) or uploaded narration
-             * @enum {string}
-             */
-            role: "narration-take" | "narration-upload";
-            /** @description The video it was made for; null if you can no longer see it */
-            videoId: string | null;
-            /** @description Versions of videos you can see, and your own drafts, that use it */
-            usedIn: ({
-                /** @enum {string} */
-                kind: "version";
-                videoId: string;
-                n: number;
-            } | {
-                /** @enum {string} */
-                kind: "draft";
-                videoId: string;
-                draftId: string;
-            })[];
-            /** @description When it's deleted if nothing uses it by then; null while a draft or version uses it */
-            retainUntil: string | null;
-        } | null;
         MediaList: {
             items: components["schemas"]["Media"][];
             nextCursor: string | null;

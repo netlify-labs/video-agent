@@ -1661,6 +1661,347 @@
           "prompt"
         ]
       },
+      "Media": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "image",
+              "svg",
+              "video",
+              "font",
+              "audio",
+              "pdf"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "uploading",
+              "verifying",
+              "ready",
+              "rejected"
+            ]
+          },
+          "rejectReason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "filename": {
+            "type": "string"
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The name given in the library; null shows the file name"
+          },
+          "caption": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Notes on the item. The planner and the agent read them."
+          },
+          "mime": {
+            "type": "string"
+          },
+          "bytes": {
+            "type": "integer"
+          },
+          "width": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "height": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "durationSec": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "uploader": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "email": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "email"
+            ]
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "usedIn": {
+            "type": "integer",
+            "description": "Videos you can see that use it"
+          },
+          "urls": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "file": {
+                "type": "string"
+              },
+              "original": {
+                "type": "string"
+              },
+              "poster": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "file",
+              "original",
+              "poster"
+            ],
+            "description": "Signed for 10 minutes; null until the item is ready"
+          },
+          "canDelete": {
+            "type": "boolean"
+          },
+          "source": {
+            "$ref": "#/components/schemas/MediaSource"
+          },
+          "recording": {
+            "$ref": "#/components/schemas/Recording"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "status",
+          "rejectReason",
+          "filename",
+          "title",
+          "caption",
+          "mime",
+          "bytes",
+          "width",
+          "height",
+          "durationSec",
+          "uploader",
+          "createdAt",
+          "usedIn",
+          "urls",
+          "canDelete",
+          "source",
+          "recording"
+        ]
+      },
+      "MediaSource": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": [
+              "openverse"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "description": "Its id at the source"
+          },
+          "url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The landing page of the work"
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "creator": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "creatorUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "license": {
+            "type": "string",
+            "description": "cc0 or by"
+          },
+          "licenseVersion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "licenseLabel": {
+            "type": "string",
+            "example": "CC BY 4.0"
+          },
+          "licenseUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "attribution": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The source's own attribution text"
+          },
+          "creditRequired": {
+            "type": "boolean",
+            "description": "True for CC BY: videos that use it credit it (CC0 needs no credit)"
+          }
+        },
+        "required": [
+          "name",
+          "id",
+          "url",
+          "title",
+          "creator",
+          "creatorUrl",
+          "license",
+          "licenseVersion",
+          "licenseLabel",
+          "licenseUrl",
+          "attribution",
+          "creditRequired"
+        ],
+        "description": "Where an imported item came from (Openverse), with its licence; null for uploads"
+      },
+      "Recording": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "narration-take",
+              "narration-upload"
+            ],
+            "description": "A voice-over recording (take) or uploaded narration"
+          },
+          "videoId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The video it was made for; null if you can no longer see it"
+          },
+          "usedIn": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "version"
+                      ]
+                    },
+                    "videoId": {
+                      "type": "string"
+                    },
+                    "n": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "videoId",
+                    "n"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "draft"
+                      ]
+                    },
+                    "videoId": {
+                      "type": "string"
+                    },
+                    "draftId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "videoId",
+                    "draftId"
+                  ]
+                }
+              ]
+            },
+            "description": "Versions of videos you can see, and your own drafts, that use it"
+          },
+          "retainUntil": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When it's deleted if nothing uses it by then; null while a draft or version uses it"
+          }
+        },
+        "required": [
+          "role",
+          "videoId",
+          "usedIn",
+          "retainUntil"
+        ],
+        "description": "For a voice-over recording: its video, where it is used and how long it is kept; null otherwise"
+      },
       "Publish": {
         "type": "object",
         "properties": {
@@ -4060,347 +4401,6 @@
           "previous"
         ]
       },
-      "Media": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "kind": {
-            "type": "string",
-            "enum": [
-              "image",
-              "svg",
-              "video",
-              "font",
-              "audio",
-              "pdf"
-            ]
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "uploading",
-              "verifying",
-              "ready",
-              "rejected"
-            ]
-          },
-          "rejectReason": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "filename": {
-            "type": "string"
-          },
-          "title": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "The name given in the library; null shows the file name"
-          },
-          "caption": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Notes on the item. The planner and the agent read them."
-          },
-          "mime": {
-            "type": "string"
-          },
-          "bytes": {
-            "type": "integer"
-          },
-          "width": {
-            "type": [
-              "integer",
-              "null"
-            ]
-          },
-          "height": {
-            "type": [
-              "integer",
-              "null"
-            ]
-          },
-          "durationSec": {
-            "type": [
-              "number",
-              "null"
-            ]
-          },
-          "uploader": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "name": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "email": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              }
-            },
-            "required": [
-              "id",
-              "name",
-              "email"
-            ]
-          },
-          "createdAt": {
-            "type": "string"
-          },
-          "usedIn": {
-            "type": "integer",
-            "description": "Videos you can see that use it"
-          },
-          "urls": {
-            "type": [
-              "object",
-              "null"
-            ],
-            "properties": {
-              "file": {
-                "type": "string"
-              },
-              "original": {
-                "type": "string"
-              },
-              "poster": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              }
-            },
-            "required": [
-              "file",
-              "original",
-              "poster"
-            ],
-            "description": "Signed for 10 minutes; null until the item is ready"
-          },
-          "canDelete": {
-            "type": "boolean"
-          },
-          "source": {
-            "$ref": "#/components/schemas/MediaSource"
-          },
-          "recording": {
-            "$ref": "#/components/schemas/Recording"
-          }
-        },
-        "required": [
-          "id",
-          "kind",
-          "status",
-          "rejectReason",
-          "filename",
-          "title",
-          "caption",
-          "mime",
-          "bytes",
-          "width",
-          "height",
-          "durationSec",
-          "uploader",
-          "createdAt",
-          "usedIn",
-          "urls",
-          "canDelete",
-          "source",
-          "recording"
-        ]
-      },
-      "MediaSource": {
-        "type": [
-          "object",
-          "null"
-        ],
-        "properties": {
-          "name": {
-            "type": "string",
-            "enum": [
-              "openverse"
-            ]
-          },
-          "id": {
-            "type": "string",
-            "description": "Its id at the source"
-          },
-          "url": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "The landing page of the work"
-          },
-          "title": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "creator": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "creatorUrl": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "license": {
-            "type": "string",
-            "description": "cc0 or by"
-          },
-          "licenseVersion": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "licenseLabel": {
-            "type": "string",
-            "example": "CC BY 4.0"
-          },
-          "licenseUrl": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "attribution": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "The source's own attribution text"
-          },
-          "creditRequired": {
-            "type": "boolean",
-            "description": "True for CC BY: videos that use it credit it (CC0 needs no credit)"
-          }
-        },
-        "required": [
-          "name",
-          "id",
-          "url",
-          "title",
-          "creator",
-          "creatorUrl",
-          "license",
-          "licenseVersion",
-          "licenseLabel",
-          "licenseUrl",
-          "attribution",
-          "creditRequired"
-        ],
-        "description": "Where an imported item came from (Openverse), with its licence; null for uploads"
-      },
-      "Recording": {
-        "type": [
-          "object",
-          "null"
-        ],
-        "properties": {
-          "role": {
-            "type": "string",
-            "enum": [
-              "narration-take",
-              "narration-upload"
-            ],
-            "description": "A voice-over recording (take) or uploaded narration"
-          },
-          "videoId": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "The video it was made for; null if you can no longer see it"
-          },
-          "usedIn": {
-            "type": "array",
-            "items": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "kind": {
-                      "type": "string",
-                      "enum": [
-                        "version"
-                      ]
-                    },
-                    "videoId": {
-                      "type": "string"
-                    },
-                    "n": {
-                      "type": "integer"
-                    }
-                  },
-                  "required": [
-                    "kind",
-                    "videoId",
-                    "n"
-                  ]
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "kind": {
-                      "type": "string",
-                      "enum": [
-                        "draft"
-                      ]
-                    },
-                    "videoId": {
-                      "type": "string"
-                    },
-                    "draftId": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "kind",
-                    "videoId",
-                    "draftId"
-                  ]
-                }
-              ]
-            },
-            "description": "Versions of videos you can see, and your own drafts, that use it"
-          },
-          "retainUntil": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "When it's deleted if nothing uses it by then; null while a draft or version uses it"
-          }
-        },
-        "required": [
-          "role",
-          "videoId",
-          "usedIn",
-          "retainUntil"
-        ],
-        "description": "For a voice-over recording: its video, where it is used and how long it is kept; null otherwise"
-      },
       "MediaList": {
         "type": "object",
         "properties": {
@@ -6398,6 +6398,115 @@
           },
           "503": {
             "description": "Setup required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/videos/{id}/versions/{n}/media": {
+      "get": {
+        "summary": "A version's library media",
+        "description": "The library items a version was made with, in order (items since deleted from the library included). A remix keeps them unless you pass mediaIds.",
+        "tags": [
+          "versions"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "required": true,
+            "name": "n",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Media",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Media"
+                      }
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or not ready",
             "content": {
               "application/json": {
                 "schema": {

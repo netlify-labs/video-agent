@@ -357,6 +357,7 @@ export function AdminPage() {
           </Card>
           <WebhookCard scope="team" />
           <NarrationSettingsCard />
+          <RemixSettingsCard />
           <Card>
             <Text fw={600} mb="xs">
               Credits by person
@@ -406,6 +407,33 @@ export function AdminPage() {
 }
 
 const GIB = 1024 ** 3
+
+/** Remixing (docs/plans/2026-11-03-remix.md §4): on by default; off hides every Remix control and refuses new ones. */
+function RemixSettingsCard() {
+  const qc = useQueryClient()
+  const settings = $api.useQuery('get', '/api/v1/admin/settings')
+  const save = $api.useMutation('patch', '/api/v1/admin/settings', {
+    onSuccess: () => void qc.invalidateQueries(),
+    onError: showError,
+  })
+  const s = settings.data
+  return (
+    <Card>
+      <Text fw={600} mb="xs">
+        Remixing
+      </Text>
+      <Switch
+        label="People can remix videos"
+        description="A remix is a new video that starts from another one. Off hides Remix everywhere and refuses new remixes; remixes already queued still run."
+        checked={s?.remixEnabled ?? false}
+        disabled={!s}
+        onChange={(e) => {
+          save.mutate({ body: { remixEnabled: e.currentTarget.checked } })
+        }}
+      />
+    </Card>
+  )
+}
 
 /** Recorded voice-over: on or off, how takes are transcribed, and each person's storage for recordings. */
 function NarrationSettingsCard() {

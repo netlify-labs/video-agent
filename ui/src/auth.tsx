@@ -1,6 +1,7 @@
 // Netlify Identity in the browser. The session lives in the nf_jwt cookie, which the API reads; session.ts
 // keeps it fresh. With Sign in with Netlify (authProvider 'netlify') the Identity SDK isn't used: the server sets
 // an httpOnly session cookie, the current user comes from /api/v1/me, and sign-out is POST /auth/sign-out.
+import { setCreatorHint } from './components/RemixDialog'
 import {
   acceptInvite,
   login,
@@ -214,6 +215,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       signup,
       logout: async () => {
+        // The share page's Remix hint is this person's too.
+        setCreatorHint(false)
         // Cached posters and clips belong to this person; the next one to sign in starts empty.
         if (provider === 'netlify') {
           await fetch('/auth/sign-out', { method: 'POST', credentials: 'same-origin' }).catch(() => undefined)

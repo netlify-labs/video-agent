@@ -5,6 +5,7 @@ import { $api } from './api/client'
 import { useAuth } from './auth'
 import { Layout } from './components/Layout'
 import { RunWatcher } from './components/RunWatcher'
+import { CreatorHint } from './components/RemixDialog'
 import { LibraryPage } from './pages/Library'
 import { AuthPages } from './pages/SignIn'
 import * as routes from './routes'
@@ -90,6 +91,7 @@ export function App() {
         element={
           <>
             <RunWatcher />
+            <CreatorHint />
             <Layout />
           </>
         }

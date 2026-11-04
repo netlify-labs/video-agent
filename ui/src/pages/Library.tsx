@@ -4,6 +4,7 @@ import {
   Center,
   Group,
   Loader,
+  Menu,
   Select,
   SegmentedControl,
   Skeleton,
@@ -11,15 +12,18 @@ import {
   Text,
   TextInput,
   Title,
+  Tooltip,
+  UnstyledButton,
 } from '@mantine/core'
 import { useDebouncedValue, useHotkeys, useReducedMotion } from '@mantine/hooks'
-import { IconLock, IconMessage, IconSearch } from '@tabler/icons-react'
+import { IconArrowsShuffle, IconDots, IconLock, IconMessage, IconSearch } from '@tabler/icons-react'
 import { Suspense, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { $api, commentsInit, errorMessage, useCanCreate, videoInit, type Video } from '../api/client'
 import { Status, VersionImage, duration, inProgress, localUrl, relativeTime } from '../components/bits'
 import { FavoriteStar } from '../components/FavoriteButton'
+import { RemixDialog, latestReady, useCanRemix } from '../components/RemixDialog'
 import { lazyPage, newVideoRoute, videoRoute } from '../routes'
 
 // Shown only in an empty library, so the form's code loads only then.
@@ -182,6 +186,7 @@ function VideoCard({ v, priority }: { v: Video; priority: boolean }) {
               ready?.output ? duration(ready.output.durationSec) : null,
               v.versions.length > 1 ? `${v.versions.length} versions` : null,
               live ? 'Public' : null,
+              v.isRemix ? 'Remix' : null,
               approved ? `${approved} approved` : null,
             ]
               .filter(Boolean)
@@ -190,7 +195,52 @@ function VideoCard({ v, priority }: { v: Video; priority: boolean }) {
         </div>
       </Link>
       <FavoriteStar videoId={v.id} favorite={v.favorite} />
+      <TileMenu v={v} />
     </div>
+  )
+}
+
+/** A tile's "⋯" menu beside the star (outside the tile's link, like the star). Remix uses the latest ready version. */
+function TileMenu({ v }: { v: Video }) {
+  const canRemix = useCanRemix()
+  const [remixing, setRemixing] = useState(false)
+  if (!canRemix) return null
+  const ready = latestReady(v)
+  return (
+    <>
+      <Menu position="bottom-end" withinPortal>
+        <Menu.Target>
+          <UnstyledButton className="va-tile-menu" aria-label={`More for ${v.title}`}>
+            <IconDots size={16} />
+          </UnstyledButton>
+        </Menu.Target>
+        <Menu.Dropdown>
+          <Tooltip label="Remix needs a ready version" disabled={ready !== undefined} position="left">
+            <div>
+              <Menu.Item
+                leftSection={<IconArrowsShuffle size={14} />}
+                disabled={!ready}
+                onClick={() => {
+                  setRemixing(true)
+                }}
+              >
+                Remix
+              </Menu.Item>
+            </div>
+          </Tooltip>
+        </Menu.Dropdown>
+      </Menu>
+      {remixing && ready ? (
+        <RemixDialog
+          video={v}
+          version={ready}
+          opened
+          onClose={() => {
+            setRemixing(false)
+          }}
+        />
+      ) : null}
+    </>
   )
 }
 

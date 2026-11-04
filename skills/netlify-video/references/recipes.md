@@ -1,7 +1,7 @@
 # Recipes
 
-Each recipe ends with a run that costs credits: confirm the brief with the person before `create_video` or
-`revise_video`, unless they already said to go ahead. Then follow the run with `get_video` (`wait_seconds: 8`) and
+Each recipe ends with a run that costs credits: confirm the brief with the person before `create_video`,
+`revise_video` or `remix_video`, unless they already said to go ahead. Then follow the run with `get_video` (`wait_seconds: 8`) and
 share the result.
 
 ## Pull request → demo or launch video
@@ -40,6 +40,32 @@ Aspect is fixed per video, so a vertical cut is a new video made from the long o
    prompt that says it is a vertical social cut of the named video: the one message, large captions that read without
    sound, the hook in the first two seconds, and the same end card.
 4. To trim further, `revise_video` the cut ("shorter opening", "bigger captions") rather than creating again.
+
+## Remix a video
+
+Pick the tool by what the person should end up with:
+
+- `revise_video`: the same video, changed. It adds the next version ("make the end card orange", "shorter").
+- `remix_video`: a NEW video, their own, that starts from an existing video's finished composition. Anything from
+  "the same video with our new product name" to "a video like this one about webhooks", or the same video in another
+  shape. The source can be anyone's video they can see.
+- `create_video`: a new idea with nothing to start from.
+
+1. `get_video` on the source and pick the ready version to start from (`from_version`; the latest ready one by
+   default). Read its prompt and summary so you know what's there.
+2. Write `change` as what should be different, not the whole video. Targeted: "Keep everything, but swap the product
+   name to Orbitly." New topic: "Same format and pacing, but about our payments API. Rewrite the script and on-screen
+   text for it." The agent keeps whatever the change doesn't mention.
+3. Leave out `aspect`, `duration_sec`, `sound`, `voiceover` and `media_ids` to keep the source's. `media_ids` replaces
+   the source's list. A new `aspect` makes the agent re-lay out every scene, so say so to the person.
+4. Optionally plan: `plan_video` with the prompt and `remix_of` set to the source, then `plan_brief`, and pass its
+   `plan_id` to `remix_video`.
+5. `remix_video` returns the new video's `video_id` at once. Follow it with `get_video` like any new video; its
+   `remix_of` names the source.
+
+Recorded narration is dropped (tell the person, if the source had one), and comments, verdicts and publications stay
+with the original. A remix of a private video is private. If an admin has turned remixing off, `remix_video` is
+refused: offer `revise_video` or `create_video` instead.
 
 ## Localise captions and on-screen text
 

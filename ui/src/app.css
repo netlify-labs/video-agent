@@ -232,12 +232,57 @@ body {
   color: #f5b82e;
   opacity: 1;
 }
+/* The remix source picker's rows (components/RemixDialog.tsx). */
+.va-remix-pick {
+  display: block;
+  padding: 8px 10px;
+  border-radius: var(--mantine-radius-md);
+}
+.va-remix-pick:hover,
+.va-remix-pick[data-selected='true'] {
+  background: var(--va-raised);
+}
+.va-remix-pick[data-selected='true'] {
+  outline: 2px solid var(--va-accent);
+}
+.va-remix-source {
+  padding: 8px 10px;
+  border-left: 2px solid var(--va-rule);
+}
+.va-tile-menu {
+  position: absolute;
+  top: 8px;
+  right: 48px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: color-mix(in srgb, #000 55%, transparent);
+  color: #fff;
+  opacity: 0;
+  transition:
+    opacity 120ms ease,
+    background 120ms ease;
+}
+.va-tile-menu:hover {
+  background: color-mix(in srgb, #000 72%, transparent);
+}
+.va-tile-menu:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 1px;
+}
+.va-tile-menu[aria-expanded='true'],
+.va-tile:hover .va-tile-menu,
+.va-tile:focus-within .va-tile-menu,
 .va-tile:hover .va-fav,
 .va-tile:focus-within .va-fav {
   opacity: 1;
 }
 @media (hover: none) {
-  .va-fav {
+  .va-fav,
+  .va-tile-menu {
     opacity: 1;
   }
 }

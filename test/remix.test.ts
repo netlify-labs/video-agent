@@ -218,6 +218,11 @@ describe('remix', () => {
     expect((await h.deps.store.listVersionMedia(v.id, 1)).map((m) => m.mediaId)).toEqual([m1])
     const kept = await h.json(await remix(h, rae, created.id, { prompt: 'Keep the media.' }))
     expect((await h.deps.store.listVersionMedia(kept.id, 1)).map((m) => m.mediaId)).toEqual([m1, m2])
+    // The dialog's chips: the source version's media in order, a since-deleted item included; private sources 404.
+    const chips = await h.json(
+      await h.call('GET', `/api/v1/videos/${created.id}/versions/1/media`, { as: rae }),
+    )
+    expect(chips.items.map((m: { id: string }) => m.id)).toEqual([m1, m2])
     const m3 = (await h.json(await upload(h, h.member, png(), 'filename=three.png'))).id as string
     await h.call('DELETE', `/api/v1/media/${m3}`, { as: h.member })
     expect((await remix(h, rae, created.id, { prompt: 'A deleted pick', mediaIds: [m3] })).status).toBe(400)

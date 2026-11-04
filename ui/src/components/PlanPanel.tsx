@@ -37,6 +37,8 @@ export interface PlanPanelProps {
   aspect?: Aspect | undefined
   durationSec?: number | undefined
   revisionOf?: { videoId: string; version?: number } | undefined
+  /** A remix plan: a new video from this video and version (docs/plans/2026-11-03-remix.md). */
+  remixOf?: { videoId: string; version?: number } | undefined
   /** Library items to plan around; the planner sees the images. */
   mediaIds?: string[] | undefined
   /** The Sound chosen next to the prompt; the planner plans for it. */
@@ -446,6 +448,7 @@ export function PlanPanel(props: PlanPanelProps) {
         ...(props.aspect ? { aspect: props.aspect } : {}),
         ...(props.durationSec ? { durationSec: props.durationSec } : {}),
         ...(props.revisionOf ? { revisionOf: props.revisionOf } : {}),
+        ...(props.remixOf ? { remixOf: props.remixOf } : {}),
         ...(props.mediaIds?.length ? { mediaIds: props.mediaIds } : {}),
         ...(props.sound ? { sound: props.sound } : {}),
         ...(props.voiceover ? { voiceover: props.voiceover } : {}),
@@ -520,7 +523,11 @@ export function PlanPanel(props: PlanPanelProps) {
       {error.message}
     </Alert>
   ) : null
-  const createLabel = props.revisionOf ? 'Make the new version' : 'Create with this brief'
+  const createLabel = props.revisionOf
+    ? 'Make the new version'
+    : props.remixOf
+      ? 'Remix with this brief'
+      : 'Create with this brief'
 
   // ← and → move between questions (→ on the last one writes the brief), except while typing in a field. ↑ and ↓
   // still move between a question's options.
@@ -669,7 +676,7 @@ export function PlanPanel(props: PlanPanelProps) {
         <Group gap="sm">
           {brief ? (
             <Button loading={props.creating || save.isPending} onClick={() => void create()}>
-              {props.revisionOf ? 'Make the new version' : 'Create video'}
+              {props.revisionOf ? 'Make the new version' : props.remixOf ? 'Remix' : 'Create video'}
             </Button>
           ) : null}
           <Button
