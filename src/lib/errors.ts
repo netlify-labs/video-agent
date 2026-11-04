@@ -7,6 +7,7 @@ export type ErrorCode =
   | 'conflict'
   | 'take_deleted'
   | 'narration_disabled'
+  | 'remix_disabled'
   | 'narration_locked'
   | 'gone'
   | 'quota_exceeded'
@@ -25,6 +26,7 @@ const STATUS: Record<ErrorCode, number> = {
   conflict: 409,
   take_deleted: 409,
   narration_disabled: 409,
+  remix_disabled: 409,
   narration_locked: 409,
   gone: 410,
   quota_exceeded: 413,

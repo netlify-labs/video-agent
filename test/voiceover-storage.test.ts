@@ -184,7 +184,8 @@ describe('voiceover_storage migration', () => {
         clean_key, clean_sha256, created_at, updated_at)
         values ('med_1', 'u', 'audio', 'ready', 'a.mp3', 'audio/mpeg', 'mp3', 1, 'o', 'h', 'c', 'h', '${now}', '${now}');
     `)
-    await apply(all[at] as string)
+    // This migration and every later one: the store reads with today's schema, so later columns must exist too.
+    for (const m of all.slice(at)) await apply(m)
     const store = createDrizzleStore(drizzle({ client: pg, schema }))
     expect(await store.getSettings()).toMatchObject(NARRATION_SETTING_DEFAULTS)
     expect(await store.getVersion('job_1', 1)).toMatchObject({ narration: null, captions: null })

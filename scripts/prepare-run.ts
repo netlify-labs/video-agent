@@ -486,7 +486,9 @@ async function main() {
   writeFileSync(join(repoRoot, '.render', 'run-manifest.json'), JSON.stringify(m))
   console.log(
     m.kind === 'revision'
-      ? `Restored video/ from version ${m.source?.parentN}. Continue with the revision.`
+      ? m.source?.parentN == null
+        ? "Restored video/ from the video you're remixing. Continue with the remix."
+        : `Restored video/ from version ${m.source.parentN}. Continue with the revision.`
       : m.kind === 'author_from_frozen'
         ? 'Restored video/ from the edited draft, with the recorded narration to fit. Continue.'
         : 'video/ is ready. Continue.',

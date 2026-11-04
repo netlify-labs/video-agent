@@ -37,7 +37,8 @@ export interface RunManifest {
    * The parent version's source archive (revisions), with its reference files (the narration bus) to fetch into
    * video/ by key from the videos store (src/lib/bundle-references.ts).
    */
-  source: { key: string; sha256: string; parentN: number; references?: BundleReference[] | undefined } | null
+  /** parentN is null for a remix: its source is the copy of another video's composition (remix spec §3.2). */
+  source: { key: string; sha256: string; parentN: number | null; references?: BundleReference[] | undefined } | null
   /**
    * A version-owned frozen bundle (render-unchanged and author-from-frozen runs): archive hash plus the canonical file
    * manifest hash. With

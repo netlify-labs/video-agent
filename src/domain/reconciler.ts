@@ -149,7 +149,8 @@ async function startRequest(
   if (!job || !version) throw new Error('attempt without job/version')
   const author = await deps.store.getUser(version.authorId)
   let revision: {
-    parentN: number
+    /** Null for a remix: it restores the copy of the video it remixes (docs/plans/2026-11-03-remix.md §3.2). */
+    parentN: number | null
     sourceKey: string
     sourceSha256: string
     references: BundleReference[]
@@ -249,7 +250,19 @@ async function startRequest(
     })
     return result(prompt, null)
   }
-  if (version.parentN !== null) {
+  if (version.remix) {
+    // A remix restores its own copy of the source (never the source video, which may be gone): a revision run.
+    const r = version.remix
+    if (!(await deps.blobs.list('sources', r.sourceKey)).includes(r.sourceKey))
+      throw new SourceUnavailable("The remix's copied source is missing.")
+    revision = {
+      parentN: null,
+      sourceKey: r.sourceKey,
+      sourceSha256: r.sourceSha256,
+      references: [],
+      narrationSamples: null,
+    }
+  } else if (version.parentN !== null) {
     const parent = await deps.store.getOutput(a.jobId, version.parentN)
     const sha = parent?.sha256['source.tar.gz']
     if (!parent || !sha) throw new SourceUnavailable(`Version ${version.parentN} has no saved composition.`)
@@ -335,6 +348,7 @@ async function startRequest(
     callbackToken,
     upload: { mode: 'blobs' },
     revision: revision && { parentN: revision.parentN },
+    remix: version.remix ?? null,
     runManifestSha256,
     feedback,
     media: await Promise.all(

@@ -30,6 +30,8 @@ export const settings = pgTable('settings', {
   narrationEnabled: boolean('narration_enabled').notNull().default(true),
   transcriptionProvider: text('transcription_provider').notNull().default('local'),
   takeQuotaBytes: bigint('take_quota_bytes', { mode: 'number' }).notNull().default(2147483648),
+  // Remixing (docs/plans/2026-11-03-remix.md §4): admins can turn it off without a redeploy.
+  remixEnabled: boolean('remix_enabled').notNull().default(true),
 })
 
 export const users = pgTable('users', {
@@ -76,6 +78,9 @@ export const jobs = pgTable(
     accessEpoch: integer('access_epoch').notNull().default(0),
     // The language spoken in the video (BCP-47 primary subtag, src/lib/language.ts): narration is transcribed in it.
     language: text('language').notNull().default('en'),
+    // The video and version this one was remixed from (immediate source only); null for other videos.
+    remixOfJobId: text('remix_of_job_id'),
+    remixOfN: integer('remix_of_n'),
   },
   (t) => [
     index('jobs_created_idx').on(t.createdAt, t.id),
@@ -114,6 +119,8 @@ export const versions = pgTable(
     narration: jsonb('narration'),
     // The version's caption revision (status, policy, rev, files and their hashes); null: the render's own captions.
     captions: jsonb('captions'),
+    // A remix's v1: its copied source and the snapshot its runs use (src/domain/types.ts VersionRemix).
+    remix: jsonb('remix'),
   },
   (t) => [primaryKey({ columns: [t.jobId, t.n] })],
 )
@@ -257,6 +264,9 @@ export const plans = pgTable(
     consumedByN: integer('consumed_by_n'),
     createdAt: ts('created_at').notNull(),
     expiresAt: ts('expires_at').notNull(),
+    // A plan for a remix of this video and version (job_id is null: it makes a new video).
+    remixFromJobId: text('remix_from_job_id'),
+    remixFromN: integer('remix_from_n'),
   },
   (t) => [index('plans_user_idx').on(t.userId, t.createdAt)],
 )

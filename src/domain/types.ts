@@ -115,6 +115,8 @@ export interface SettingsRow {
   transcriptionProvider?: TranscriptionProvider
   /** Stored bytes each person's narration takes may use. Missing: the default. */
   takeQuotaBytes?: number
+  /** Remixing on (the default) or off, without a redeploy (remix spec §4). Missing: the default. */
+  remixEnabled?: boolean
 }
 
 export type TranscriptionProvider = 'local' | 'elevenlabs' | 'off'
@@ -252,6 +254,9 @@ export interface JobRow {
   accessEpoch: number
   /** The language spoken in it (src/lib/language.ts); narration captions are transcribed in it. */
   language: Language
+  /** The video and version this one was remixed from: the immediate source only (remix spec §0, §3.3). */
+  remixOfJobId?: string | null
+  remixOfN?: number | null
 }
 
 export interface VersionRow {
@@ -282,6 +287,30 @@ export interface VersionRow {
   narration?: VersionNarration | null
   /** The current caption revision; null (or missing): the render's own captions. */
   captions?: VersionCaptions | null
+  /** A remix's v1: everything its runs need, snapshotted at creation so nothing is re-read from the source. */
+  remix?: VersionRemix | null
+}
+
+/**
+ * What a remix's first version was made from (remix spec §3.3). Written once when the remix is created and never
+ * updated: the run and every retry read only this, so the source video can change or be deleted meanwhile.
+ */
+export interface VersionRemix {
+  /** The cleaned copy of the source's composition, in the sources store under the remix's own prefix. */
+  sourceKey: string
+  sourceSha256: string
+  fromJobId: string
+  fromN: number
+  fromTitle: string
+  fromOwnerName: string | null
+  /** The source's prompts, oldest first (a remixed source's own history first), capped. */
+  history: string[]
+  /** The source version's agent summary, capped. */
+  fromSummary: string
+  /** The source had recorded narration, which was removed from the copy. */
+  narrationDropped: boolean
+  /** The source version's sound, so the music pick needn't read the source. */
+  sourceSound: VideoSound
 }
 
 /** A version's recorded narration (plan 2026-11-02 §6.1): what was mixed, how, and the resulting bus. */
@@ -524,6 +553,9 @@ export interface PlanRow {
   consumedByN: number | null
   createdAt: string
   expiresAt: string
+  /** A plan for a remix of this video and version (jobId is then null: it makes a new video). */
+  remixFromJobId?: string | null
+  remixFromN?: number | null
 }
 export interface GatewayCallRow {
   id: string

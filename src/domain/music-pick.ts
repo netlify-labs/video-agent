@@ -47,6 +47,9 @@ export async function needsMusicPick(deps: Deps, a: AttemptRow): Promise<boolean
   // An edit (rendered as is, or fitted to its narration) keeps the composition's own sound.
   if (!version || version.mode === 'render_unchanged' || version.frozen) return false
   if ((version.sound ?? 'silent') === 'silent' || brandMusic()) return false
+  // A remix of a version with sound keeps the music its copied composition already has (remix spec §3.2): the
+  // source's sound was snapshotted, so the source itself is never read.
+  if (version.remix && version.remix.sourceSound !== 'silent') return false
   // A revision of a version with music keeps the music its composition already has.
   if (version.parentN !== null) {
     const parent = await deps.store.getVersion(a.jobId, version.parentN)
