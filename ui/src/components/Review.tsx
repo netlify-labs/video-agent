@@ -23,6 +23,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { IconCheck, IconDots, IconMapPin, IconPaperclip, IconSparkles, IconX } from '@tabler/icons-react'
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import { $api, commentsInit, newIdempotencyKey, useCanCreate, type Version, type Video } from '../api/client'
+import { isTyping } from '../lib/media-keys'
 import { AttachButton, DropTarget, PendingUploads, useAttachUploads } from './AttachFiles'
 import { MediaChips, type Media } from './MediaPicker'
 import type { paths } from '../api/schema'
@@ -532,13 +533,7 @@ export function CommentsCard({
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'c' && e.key !== 'C') return
       if (e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return
-      const t = e.target as Element | null
-      if (
-        t?.closest(
-          'input, textarea, select, [contenteditable=""], [contenteditable="true"], [role="textbox"]',
-        )
-      )
-        return
+      if (isTyping(e.target)) return
       if (document.querySelector('[role="dialog"], [role="menu"]')) return
       const el = player.current
       if (!el || el.closest('[hidden]')) return
@@ -562,6 +557,8 @@ export function CommentsCard({
   useEffect(() => {
     const onPlay = (e: Event) => {
       if (e.target !== player.current || !loose.current) return
+      // A play event that arrives after C paused again is from before the note started, not the video playing on.
+      if (player.current?.paused) return
       setPending(null)
       setPicking(false)
       if (document.activeElement === composer.current) form.current?.focus()

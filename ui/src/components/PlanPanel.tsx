@@ -24,6 +24,7 @@ import { IconPlus, IconX } from '@tabler/icons-react'
 import { useEffect, useRef, useState } from 'react'
 import { $api, errorMessage } from '../api/client'
 import type { paths } from '../api/schema'
+import { isTyping } from '../lib/media-keys'
 import type { VoiceoverInput } from './VoiceoverControl'
 
 type Plan = paths['/api/v1/plans/{id}']['get']['responses'][200]['content']['application/json']
@@ -537,11 +538,7 @@ export function PlanPanel(props: PlanPanelProps) {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
       if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return
-      const t = e.target as HTMLElement | null
-      if (
-        t?.closest('textarea, input:not([type=radio]):not([type=checkbox]), [contenteditable="true"], select')
-      )
-        return
+      if (isTyping(e.target)) return
       if (!nav.current) return
       e.preventDefault()
       if (e.key === 'ArrowLeft') nav.current.back()

@@ -6,13 +6,28 @@ import { useEffect, useRef } from 'react'
 
 /** Elements that use these keys themselves. */
 const OWN_KEYS =
-  'input, textarea, select, [contenteditable=""], [contenteditable="true"], [role="slider"], [role="tab"], [role="radio"], [role="option"], [role="menuitem"], [role="textbox"], [role="listbox"], video, .va-tl-ruler, .va-tl-clip'
+  'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="slider"], [role="tab"], [role="radio"], [role="option"], [role="menuitem"], [role="textbox"], [role="listbox"], video, .va-tl-ruler, .va-tl-clip'
+
+/**
+ * True when the target takes typing: a text field, a select, a text box, or anything contenteditable (including
+ * "plaintext-only", like the video title), so single-key shortcuts stand aside.
+ */
+export function isTyping(target: EventTarget | null): boolean {
+  const el = target as (Element & { isContentEditable?: boolean }) | null
+  if (!el || typeof el.closest !== 'function') return false
+  if (el.isContentEditable) return true
+  return (
+    el.closest(
+      'input:not([type=radio]):not([type=checkbox]):not([type=range]):not([type=button]):not([type=submit]), textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]',
+    ) !== null
+  )
+}
 
 /** True when the focused element handles this key itself. */
 export function ownsKey(target: EventTarget | null, key: string): boolean {
-  const el = target as Element | null
+  const el = target as (Element & { isContentEditable?: boolean }) | null
   if (!el || typeof el.closest !== 'function') return false
-  if (el.closest(OWN_KEYS)) return true
+  if (el.isContentEditable || el.closest(OWN_KEYS)) return true
   // Space presses a focused button or link; the arrows are free.
   return key === ' ' && el.closest('button, a[href], [role="button"]') !== null
 }

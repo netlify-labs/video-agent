@@ -20,7 +20,7 @@ test('C notes the moment, Enter adds it, Space keeps watching; the notes post as
 
   // First note at 0:02, with a spot.
   await seekTo(page, 2)
-  await page.getByRole('heading', { level: 1 }).click()
+  await page.locator('.va-video-head .va-sub').first().click()
   await page.keyboard.press('Space')
   await expect.poll(() => paused(page)).toBe(false)
   await page.keyboard.press('c')
@@ -118,7 +118,7 @@ test('a C pressed by mistake lets go: Space in the empty box plays on, Esc drops
 
   // C at 0:02, then Space straight away: the video plays on and the moment is gone.
   await seekTo(page, 2)
-  await page.getByRole('heading', { level: 1 }).click()
+  await page.locator('.va-video-head .va-sub').first().click()
   await page.keyboard.press('c')
   await expect(box).toBeFocused()
   await expect(badge).toContainText('0:02')
