@@ -1463,6 +1463,166 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/videos/{id}/versions/{n}/poster": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set the poster
+         * @description Sets a ready version's poster to a frame or an uploaded image, without a render. Send a JPEG with the video's shape, and WebPs 480 and 960 px wide when you can. The share page follows. Owner or admin.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                    n: number;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["SetPoster"];
+                };
+            };
+            responses: {
+                /** @description Set */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["VersionPoster"];
+                    };
+                };
+                /** @description Invalid request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not signed in */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not allowed */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Conflict or not ready */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        /**
+         * Reset the poster
+         * @description Goes back to the render's own poster. Owner or admin.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                    n: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Reset */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Invalid request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not signed in */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not allowed */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Conflict or not ready */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/videos/{id}/versions/{n}/preview": {
         parameters: {
             query?: never;
@@ -7829,6 +7989,7 @@ export interface components {
                 notices: string[];
             } | null;
             captions: components["schemas"]["VersionCaptions"];
+            poster: components["schemas"]["VersionPoster"];
             links: {
                 video: string;
                 poster: string;
@@ -7936,6 +8097,16 @@ export interface components {
             policy: "sidecar" | "burned";
             /** @description Bumped by every correction; send it back as expectedRev. */
             rev: number;
+        } | null;
+        /** @description A poster someone picked (a frame or an uploaded image); null: the render’s own, taken 30% of the way in. */
+        VersionPoster: {
+            /**
+             * @description A frame picked from the video, or an uploaded image.
+             * @enum {string}
+             */
+            source: "frame" | "upload";
+            /** @description The second the frame was taken at (source frame). */
+            at: number | null;
         } | null;
         Credit: {
             /** @description The library item, or null for music or a sound effect the run fetched from Openverse itself */
@@ -8172,6 +8343,20 @@ export interface components {
             start: number;
             end: number;
             text: string;
+        };
+        SetPoster: {
+            /** @enum {string} */
+            source: "frame" | "upload";
+            /** @description The second the frame was taken at; required for source frame. */
+            at?: number;
+            /** @description A JPEG, 320 to 1920 px wide, with the video's shape. Base64. */
+            jpg: string;
+            /** @description The same picture as a WebP 480 px wide (or the video’s width). Base64. */
+            webp480?: string;
+            /** @description The same picture as a WebP 960 px wide (or the video’s width). Base64. */
+            webp960?: string;
+            /** @description A tiny blurred copy as a WebP or JPEG data URI. */
+            lqip?: string;
         };
         PreviewLink: {
             /** @description Load in <iframe sandbox="allow-scripts">; append #ch=<channel id> */

@@ -2,7 +2,7 @@
 import type { Deps } from '../deps.js'
 import { signPath } from '../lib/crypto.js'
 import { isPreviewFile, type PreviewFile } from '../lib/media/previews.js'
-import type { JobRow, OutputRow, VersionRow } from './types.js'
+import type { JobRow, OutputRow, VersionPoster, VersionRow } from './types.js'
 import { getSettings } from './settings.js'
 
 export const FILE_NAMES = {
@@ -19,17 +19,38 @@ export type FileKind = keyof typeof FILE_NAMES
 
 /** The stored name of one of a version's files, or null when the version has none (no narration, no transcript). */
 export function versionFileName(
-  v: Pick<VersionRow, 'captions'>,
+  v: Pick<VersionRow, 'captions' | 'poster'>,
   o: Pick<OutputRow, 'sha256'>,
   file: FileKind,
 ): string | null {
   // A caption revision (src/domain/captions.ts) has its own immutable names, so each one is a new URL.
   if (file === 'captions') return v.captions?.files.vtt ?? FILE_NAMES.captions
+  // So does a picked poster (src/domain/poster.ts).
+  if (file === 'poster') return v.poster?.custom?.files.jpg ?? FILE_NAMES.poster
   if (file === 'transcript')
     return v.captions?.files.transcript ?? (o.sha256[FILE_NAMES.transcript] ? FILE_NAMES.transcript : null)
   if (file === 'narration-audio')
     return o.sha256[FILE_NAMES['narration-audio']] ? FILE_NAMES['narration-audio'] : null
   return FILE_NAMES[file]
+}
+
+/** A published version's poster keys: the pick's files (src/domain/poster.ts), or the render's. posterWebp null: none. */
+export function posterKeys(
+  jobId: string,
+  n: number,
+  o: Pick<OutputRow, 'posterKey' | 'previews'>,
+  poster: VersionPoster | null | undefined,
+): { poster: string; posterWebp: string | null } {
+  const key = (name: string) => `${jobId}/v${n}/${name}`
+  const c = poster?.custom
+  if (c) {
+    const webp = c.files.webp960 ?? c.files.webp480
+    return { poster: key(c.files.jpg), posterWebp: webp ? key(webp) : null }
+  }
+  return {
+    poster: o.posterKey,
+    posterWebp: o.previews?.files['poster-960.webp'] ? key('poster-960.webp') : null,
+  }
 }
 
 /** Private-video file URLs last at most this long (plan v2 §14 rule 4). */
@@ -72,7 +93,7 @@ export async function signedFilePath(
   job: Pick<JobRow, 'id' | 'private' | 'accessEpoch'>,
   n: number,
   file: FileKind,
-  o: { ttlSec?: number; download?: boolean; stable?: boolean; name?: string } = {},
+  o: { ttlSec?: number; download?: boolean; stable?: boolean; name?: string | undefined } = {},
 ): Promise<string> {
   const { fileSigningSecret } = await getSettings(deps)
   const ttl = fileTtl(job, o.ttlSec ?? 600)

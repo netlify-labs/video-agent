@@ -119,6 +119,8 @@ export const versions = pgTable(
     narration: jsonb('narration'),
     // The version's caption revision (status, policy, rev, files and their hashes); null: the render's own captions.
     captions: jsonb('captions'),
+    // A poster someone picked (a frame or an uploaded image) and its revision counter; null: the render's own.
+    poster: jsonb('poster'),
     // A remix's v1: its copied source and the snapshot its runs use (src/domain/types.ts VersionRemix).
     remix: jsonb('remix'),
   },

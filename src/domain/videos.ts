@@ -7,6 +7,7 @@ import {
   PUBLIC_URL_TTL_SEC,
   accessKey,
   fileTtl,
+  posterKeys,
   signFile,
   stableExp,
   versionFileName,
@@ -45,6 +46,7 @@ import {
   type PublicationRow,
   type Stage,
   type VersionMediaRow,
+  type VersionPoster,
   type VersionRow,
   type VideoSound,
   type Voiceover,
@@ -710,6 +712,9 @@ export interface PublicationMirror {
     /** Recorded narration's downloads (plan 2026-11-02 §6.7), for versions that have them. */
     narration?: string
     transcript?: string
+    /** The 960w WebP poster (a picked poster's own, src/domain/poster.ts); null: none. Missing on older mirrors: the
+     * render's poster-960.webp, when there is one. */
+    posterWebp?: string | null
   }
   /** CC BY media the version was made with; mirrors written before credits existed have none. */
   credits?: Credit[]
@@ -726,7 +731,7 @@ export async function publishVersion(
   n: number,
   opts: { showTranscript?: boolean | undefined } = {},
 ) {
-  const { pub, mirror, output, written } = await deps.store.tx(async (repo) => {
+  const { pub, mirror, output, written, poster } = await deps.store.tx(async (repo) => {
     const job = await loadJob(repo, principal, jobId, true)
     assertCan(principal, 'video:publish', { ownerId: job.ownerId })
     const output = await repo.getOutput(jobId, n)
@@ -747,7 +752,7 @@ export async function publishVersion(
       const mirror = mirrorFor(row, job, version, output, credits)
       // Under the job's lock, like a caption revision's mirror sync, so neither overwrites the other's newer state.
       await deps.blobs.set('internal', pubKey(row.slug), JSON.stringify(mirror))
-      return { pub: row, mirror, output, written: true }
+      return { pub: row, mirror, output, written: true, poster: version.poster ?? null }
     }
     const row: PublicationRow = {
       slug: deps.ids.slug(),
@@ -760,7 +765,13 @@ export async function publishVersion(
     }
     await repo.insertPublication(row)
     await repo.updateJob(jobId, { version: job.version + 1 })
-    return { pub: row, mirror: mirrorFor(row, job, version, output, credits), output, written: false }
+    return {
+      pub: row,
+      mirror: mirrorFor(row, job, version, output, credits),
+      output,
+      written: false,
+      poster: version.poster ?? null,
+    }
   })
   if (!written) await deps.blobs.set('internal', pubKey(pub.slug), JSON.stringify(mirror))
   deps.log.info('publish.done', {
@@ -770,13 +781,13 @@ export async function publishVersion(
     showTranscript: mirror.showTranscript ?? false,
     narration: Boolean(mirror.keys.narration),
   })
-  return publicationDto(deps, pub, output, mirror.credits)
+  return publicationDto(deps, pub, output, mirror.credits, poster)
 }
 
 function mirrorFor(
   p: PublicationRow,
   job: JobRow,
-  v: Pick<VersionRow, 'captions'>,
+  v: Pick<VersionRow, 'captions' | 'poster'>,
   o: OutputRow,
   credits: Credit[],
 ): PublicationMirror {
@@ -793,7 +804,7 @@ function mirrorFor(
     durationSec: o.durationSec,
     keys: {
       video: o.videoKey,
-      poster: o.posterKey,
+      ...posterKeys(job.id, p.versionN, o, v.poster),
       gif: o.gifKey,
       captions: v.captions ? `${prefix}/${captions}` : o.captionsKey,
       ...(versionFileName(v, o, 'narration-audio') ? { narration: `${prefix}/narration.mp3` } : {}),
@@ -833,12 +844,13 @@ function livePubTag(pubs: PublicationRow[]): string {
 export function publicationDto(
   deps: Pick<Deps, 'config'>,
   p: PublicationRow,
-  o: Pick<OutputRow, 'width' | 'height' | 'previews' | 'sha256'> | null = null,
+  o: Pick<OutputRow, 'width' | 'height' | 'previews' | 'sha256' | 'posterKey'> | null = null,
   credits: Credit[] = [],
+  poster: VersionPoster | null = null,
 ) {
   const base = `${deps.config.siteUrl}/v/${p.slug}`
-  // The 960w WebP poster is public only as /v/{slug}.webp, for a published version that has one.
-  const webp = o?.previews?.files['poster-960.webp'] ? `${base}.webp` : null
+  // The 960w WebP poster is public only as /v/{slug}.webp, for a published version that has one (a picked poster's own).
+  const webp = o && posterKeys(p.jobId, p.versionN, o, poster).posterWebp ? `${base}.webp` : null
   const showTranscript = p.showTranscript ?? false
   return {
     slug: p.slug,
@@ -953,6 +965,7 @@ function versionDto(
     captions: v.captions
       ? { status: v.captions.status, policy: v.captions.policy, rev: v.captions.rev }
       : null,
+    poster: v.poster?.custom ? { source: v.poster.custom.source, at: v.poster.custom.at } : null,
     links: {
       video: `${fileBase}/video`,
       poster: `${fileBase}/poster`,
@@ -966,10 +979,15 @@ function versionDto(
       netlifyRun: a?.runnerId ? deps.runner.runUrl(a.runnerId, a.sessionId) : null,
     },
     // Signed image URLs, so the UI skips the redirect. One expiry per DTO keeps them stable for the browser cache.
-    files: o && signing ? signedFiles(deps.config.siteUrl, signing, v.n, o.previews ?? null) : null,
+    files:
+      o && signing
+        ? signedFiles(deps.config.siteUrl, signing, v.n, o.previews ?? null, v.poster ?? null)
+        : null,
     // CC BY media it was made with: the library's provenance, plus Openverse files the run fetched (checked by finalize).
     credits,
-    publications: pubs.filter((p) => p.versionN === v.n).map((p) => publicationDto(deps, p, o, credits)),
+    publications: pubs
+      .filter((p) => p.versionN === v.n)
+      .map((p) => publicationDto(deps, p, o, credits, v.poster ?? null)),
   }
 }
 
@@ -979,29 +997,48 @@ function signedFiles(
   signing: { secret: string; job: JobRow; exp: number },
   n: number,
   previews: Previews | null,
+  poster: VersionPoster | null,
 ) {
-  const url = (file: Parameters<typeof signFile>[3]) =>
-    `${site}${signFile(signing.secret, signing.job, n, file, signing.exp)}`
+  const url = (file: Parameters<typeof signFile>[3], name?: string) =>
+    `${site}${signFile(signing.secret, signing.job, n, file, signing.exp, name)}`
   const has = (f: PreviewFile) => Boolean(previews?.files[f])
+  // A picked poster (src/domain/poster.ts) replaces the render's stills: its own JPEG, WebPs and placeholder.
+  const custom = poster?.custom ?? null
   // Best format first, as <picture> and <video> pick the first source the browser supports.
-  const posterSources = (['avif', 'webp'] as const)
-    .map((fmt) => ({
-      type: `image/${fmt}` as const,
-      srcset: ([480, 960] as const)
-        .filter((w) => has(`poster-${w}.${fmt}`))
-        .map((w) => `${url(`poster-${w}.${fmt}`)} ${w}w`)
-        .join(', '),
-    }))
-    .filter((s) => s.srcset)
+  const posterSources = custom
+    ? [
+        {
+          type: 'image/webp' as const,
+          srcset: (
+            [
+              [480, custom.files.webp480],
+              [960, custom.files.webp960],
+            ] as const
+          )
+            .filter(([, name]) => name)
+            .map(([w, name]) => `${url(`poster-${w}.webp`, name ?? undefined)} ${w}w`)
+            .join(', '),
+        },
+      ].filter((s) => s.srcset)
+    : (['avif', 'webp'] as const)
+        .map((fmt) => ({
+          type: `image/${fmt}` as const,
+          srcset: ([480, 960] as const)
+            .filter((w) => has(`poster-${w}.${fmt}`))
+            .map((w) => `${url(`poster-${w}.${fmt}`)} ${w}w`)
+            .join(', '),
+        }))
+        .filter((s) => s.srcset)
   const clip = (['clip.webm', 'clip.mp4'] as const)
     .filter(has)
     .map((f) => ({ type: f === 'clip.webm' ? ('video/webm' as const) : ('video/mp4' as const), src: url(f) }))
+  const lqip = custom ? custom.lqip : (previews?.lqip ?? null)
   return {
-    poster: url('poster'),
+    poster: url('poster', custom?.files.jpg),
     gif: url('gif'),
     ...(posterSources.length ? { posterSources } : {}),
     ...(clip.length ? { clip } : {}),
-    ...(previews?.lqip ? { lqip: previews.lqip } : {}),
+    ...(lqip ? { lqip } : {}),
   }
 }
 

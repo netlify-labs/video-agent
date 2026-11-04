@@ -212,6 +212,33 @@ export const VersionCaptionsSchema = z
   })
   .openapi('VersionCaptions')
 
+export const VersionPosterSchema = z
+  .object({
+    source: z.enum(['frame', 'upload']).describe('A frame picked from the video, or an uploaded image.'),
+    at: z.number().nullable().describe('The second the frame was taken at (source frame).'),
+  })
+  .openapi('VersionPoster')
+
+const base64 = z.string().max(4_200_000).describe('The file, base64 encoded (3 MB at most).')
+export const SetPosterSchema = z
+  .object({
+    source: z.enum(['frame', 'upload']),
+    at: z
+      .number()
+      .min(0)
+      .optional()
+      .describe('The second the frame was taken at; required for source frame.'),
+    jpg: base64.describe("A JPEG, 320 to 1920 px wide, with the video's shape. Base64."),
+    webp480: base64
+      .optional()
+      .describe('The same picture as a WebP 480 px wide (or the video’s width). Base64.'),
+    webp960: base64
+      .optional()
+      .describe('The same picture as a WebP 960 px wide (or the video’s width). Base64.'),
+    lqip: z.string().max(2048).optional().describe('A tiny blurred copy as a WebP or JPEG data URI.'),
+  })
+  .openapi('SetPoster')
+
 export const VerdictSchema = z.enum(VERDICTS).openapi('Verdict')
 export const SetVerdictSchema = z
   .object({ verdict: VerdictSchema.nullable(), note: z.string().max(500).optional() })
@@ -340,6 +367,9 @@ export const VersionSchema = z
       .nullable(),
     captions: VersionCaptionsSchema.nullable().describe(
       'Recorded narration captions and their current correction; null: the render’s own captions.',
+    ),
+    poster: VersionPosterSchema.nullable().describe(
+      'A poster someone picked (a frame or an uploaded image); null: the render’s own, taken 30% of the way in.',
     ),
     links: z.object({
       video: z.string(),

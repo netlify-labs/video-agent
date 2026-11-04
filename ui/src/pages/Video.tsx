@@ -25,6 +25,7 @@ import { RemixDialog, useCanRemix } from '../components/RemixDialog'
 import { useMediaKeys } from '../lib/media-keys'
 import { MediaChips, type Media } from '../components/MediaPicker'
 import { PlanPanel } from '../components/PlanPanel'
+import { PosterMenu } from '../components/PosterMenu'
 import { PublishButton } from '../components/PublishDialog'
 import { TranscriptEditor } from '../components/TranscriptEditor'
 import { SoundControl, soundAfterPick, type Sound } from '../components/SoundControl'
@@ -914,7 +915,7 @@ export function VideoPage() {
 
       <div className="va-split">
         <div className="va-rail">
-          {/* Actions on this video sit right above it: the view toggle, then remix (labelled), favorite and download. */}
+          {/* Actions on this video sit right above it: the view toggle, then remix (labelled), favorite, poster and download. */}
           <Group justify="space-between" gap="xs" wrap="nowrap" data-testid="video-actions">
             {!showProgress && v.status === 'ready' ? (
               <SegmentedControl
@@ -950,6 +951,15 @@ export function VideoPage() {
                 </Tooltip>
               ) : null}
               <FavoriteButton videoId={data.id} favorite={data.favorite} />
+              {v.status === 'ready' && canPublish ? (
+                <PosterMenu
+                  videoId={data.id}
+                  v={v}
+                  dimensions={v.output ?? data.dimensions}
+                  time={() => player.current?.currentTime ?? 0}
+                  frameDisabled={view === 'composition' ? 'Switch to Video to pick a frame.' : undefined}
+                />
+              ) : null}
               {v.status === 'ready' ? (
                 <Tooltip label={`Download v${v.n} (MP4)`}>
                   <ActionIcon

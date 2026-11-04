@@ -1,5 +1,6 @@
 // Signed, private file delivery: /files/{jobId}/v{n}/{file}?exp=[&e=]&sig= (minted by the API, at most an hour).
-// Caption revisions have their own names (captions.r<k>.vtt, transcript.r<k>.txt), so every file stays immutable.
+// Caption revisions have their own names (captions.r<k>.vtt, transcript.r<k>.txt), and so do picked posters
+// (poster.r<k>.jpg, poster-480.r<k>.webp, poster-960.r<k>.webp), so every file stays immutable.
 import type { Config, Context } from '@netlify/edge-functions'
 import { getStore } from '@netlify/blobs'
 import { CONTENT_TYPES, mediaResponse, verifyFileUrl, type AccessMirror } from '../../src/lib/media/range.ts'
@@ -16,7 +17,7 @@ export default async (req: Request, context: Context) => {
     return notFound()
   const url = new URL(req.url)
   const m =
-    /^\/files\/(vid_[a-z0-9]+)\/v(\d+)\/(video\.mp4|poster\.jpg|preview\.gif|captions(?:\.r\d{1,6})?\.vtt|narration\.mp3|transcript(?:\.r\d{1,6})?\.txt|poster-(?:480|960)\.(?:webp|avif)|clip\.(?:webm|mp4))$/.exec(
+    /^\/files\/(vid_[a-z0-9]+)\/v(\d+)\/(video\.mp4|poster(?:\.r\d{1,6})?\.jpg|preview\.gif|captions(?:\.r\d{1,6})?\.vtt|narration\.mp3|transcript(?:\.r\d{1,6})?\.txt|poster-(?:480|960)\.(?:webp|avif)|poster-(?:480|960)\.r\d{1,6}\.webp|clip\.(?:webm|mp4))$/.exec(
       url.pathname,
     )
   if (!m) return notFound()

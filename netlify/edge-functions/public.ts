@@ -22,6 +22,8 @@ interface Mirror {
     captions: string
     narration?: string
     transcript?: string
+    /** The 960w WebP poster; null: none. Missing on older mirrors: the render's poster-960.webp, when it exists. */
+    posterWebp?: string | null
   }
   /** CC BY media the version was made with (absent on mirrors written before credits). */
   credits?: CreditLine[]
@@ -59,8 +61,10 @@ export default async (req: Request, context: Context) => {
   })) as Mirror | null
   if (!pub) return notFound()
   const videos = getStore({ name: 'videos', consistency: 'strong' })
-  // Preview variants sit next to the version's other files; older versions have none (404, and no WebP poster).
-  const webpKey = `${pub.jobId}/v${pub.versionN}/poster-960.webp`
+  // Preview variants sit next to the version's other files; older versions have none (404, and no WebP poster). A
+  // picked poster names its own, or null when the browser that made it couldn't encode WebP.
+  const webpKey =
+    pub.keys.posterWebp === undefined ? `${pub.jobId}/v${pub.versionN}/poster-960.webp` : pub.keys.posterWebp
   // The transcript is published only with the publisher's consent, separate from the audio's (plan 2026-11-02 §6.7).
   const transcriptKey = pub.showTranscript ? pub.keys.transcript : undefined
 
@@ -70,7 +74,7 @@ export default async (req: Request, context: Context) => {
       jpg: pub.keys.poster,
       gif: pub.keys.gif,
       vtt: pub.keys.captions,
-      webp: webpKey,
+      webp: webpKey ?? undefined,
       mp3: pub.keys.narration,
       txt: transcriptKey,
     }[ext as 'mp4']
@@ -91,7 +95,7 @@ export default async (req: Request, context: Context) => {
 
   const base = `${url.origin}/v/${slug}`
   const title = esc(pub.title || 'Video')
-  const poster = (await videos.getMetadata(webpKey)) ? `${base}.webp` : `${base}.jpg`
+  const poster = webpKey && (await videos.getMetadata(webpKey)) ? `${base}.webp` : `${base}.jpg`
   const credits = Array.isArray(pub.credits) && pub.credits.length ? creditHtml(pub.credits) : ''
   const transcript = transcriptKey ? await transcriptHtml(videos, transcriptKey, `${base}.txt`) : ''
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">

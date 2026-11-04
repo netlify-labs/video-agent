@@ -26,6 +26,7 @@ import {
   videoDto,
 } from './domain/videos.js'
 import { reviseCaptions } from './domain/captions.js'
+import { resetPoster, setPoster } from './domain/poster.js'
 import { signedFilePath, versionFileName } from './domain/files.js'
 import { handleMcp } from './mcp.js'
 import {
@@ -649,6 +650,44 @@ export function createApp(deps: Deps, opts: AppOptions) {
       const p = c.req.valid('param')
       const r = await reviseCaptions(deps, c.get('principal'), p.id, p.n, c.req.valid('json'))
       return c.json({ status: r.status, policy: r.policy, rev: r.rev }, 200)
+    },
+  )
+  app.openapi(
+    createRoute({
+      method: 'put',
+      path: '/api/v1/videos/{id}/versions/{n}/poster',
+      summary: 'Set the poster',
+      description:
+        "Sets a ready version's poster to a frame or an uploaded image, without a render. Send a JPEG with the video's shape, and WebPs 480 and 960 px wide when you can. The share page follows. Owner or admin.",
+      tags: ['versions'],
+      security,
+      request: {
+        params: VersionParam,
+        body: { content: { 'application/json': { schema: s.SetPosterSchema } }, required: true },
+      },
+      responses: { 200: json(s.VersionPosterSchema, 'Set'), ...errors },
+    }),
+    async (c) => {
+      const p = c.req.valid('param')
+      const r = await setPoster(deps, c.get('principal'), p.id, p.n, c.req.valid('json'))
+      return c.json({ source: r.custom?.source ?? 'frame', at: r.custom?.at ?? null }, 200)
+    },
+  )
+  app.openapi(
+    createRoute({
+      method: 'delete',
+      path: '/api/v1/videos/{id}/versions/{n}/poster',
+      summary: 'Reset the poster',
+      description: "Goes back to the render's own poster. Owner or admin.",
+      tags: ['versions'],
+      security,
+      request: { params: VersionParam },
+      responses: { 204: { description: 'Reset' }, ...errors },
+    }),
+    async (c) => {
+      const p = c.req.valid('param')
+      await resetPoster(deps, c.get('principal'), p.id, p.n)
+      return c.body(null, 204)
     },
   )
   // Before the {file} route, which would otherwise take 'preview' as a file name.

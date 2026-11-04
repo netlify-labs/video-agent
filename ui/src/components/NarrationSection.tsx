@@ -124,6 +124,8 @@ export interface NarrationControl {
   jumpTo: (clipId: string, sample: number) => void
   /** Moves the playhead (and the preview) to `seconds` into the composition. */
   seekTo: (seconds: number) => void
+  /** Where the playhead is, in seconds. */
+  time: () => number
 }
 
 export interface NarrationSectionProps {
@@ -204,6 +206,8 @@ export function NarrationSection(props: NarrationSectionProps) {
   const baseSamples = secondsToSamples(lanes.duration)
 
   const [playhead, setPlayhead] = useState(0)
+  const playheadRef = useRef(0)
+  playheadRef.current = playhead
   const [range, setRange] = useState<Span | null>(null)
   const initial = useMemo(() => props.initialOp ?? emptyNarration(), [props.initialOp])
   const [tracks, setTracks] = useState(initial.tracks)
@@ -335,6 +339,7 @@ export function NarrationSection(props: NarrationSectionProps) {
       seekTo: (seconds) => {
         seek(Math.max(0, Math.round(seconds * SAMPLE_RATE)))
       },
+      time: () => playheadRef.current / SAMPLE_RATE,
     }
   }, [control, seek, editor])
 

@@ -1059,6 +1059,22 @@ export function installMock() {
       if (typeof b.resolved === 'boolean') c.resolvedAt = b.resolved ? new Date().toISOString() : null
       return json(commentDto(c))
     }
+    // A picked poster: the mock keeps what was sent (window.__posterBody) and the DTO's poster field; the picture
+    // stays the mock asset.
+    const pm = /^\/api\/v1\/videos\/([^/]+)\/versions\/(\d+)\/poster$/.exec(p)
+    if (pm?.[1] && (method === 'PUT' || method === 'DELETE')) {
+      const vid = videos.find((x) => x.id === pm[1])
+      const ver = vid?.versions.find((x) => x.n === Number(pm[2]))
+      if (!vid || !ver) return fail(404, 'not_found', 'Video not found.')
+      if (method === 'DELETE') {
+        ver.poster = null
+        return new Response(null, { status: 204 })
+      }
+      const b = (await readBody(init, input)) as { source: 'frame' | 'upload'; at?: number }
+      ;(window as unknown as { __posterBody?: unknown }).__posterBody = b
+      ver.poster = { source: b.source, at: b.source === 'frame' ? (b.at ?? 0) : null }
+      return json(ver.poster)
+    }
     const vm = /^\/api\/v1\/videos\/([^/]+)\/versions\/(\d+)\/verdict$/.exec(p)
     if (vm?.[1] && method === 'PUT') {
       const b = await readBody(init, input)

@@ -311,6 +311,13 @@ async function summarize(deps: Deps, v: VideoDto) {
   const ttl = v.private ? PRIVATE_URL_TTL_SEC : 3600
   const ready = v.versions.find((x) => x.status === 'ready')
   const latest = v.versions[0]
+  // File names that change after the render: a picked poster's, a caption revision's.
+  const names = new Map<number, { poster?: string; captions?: string }>()
+  for (const row of await deps.store.listVersions(v.id))
+    names.set(row.n, {
+      ...(row.poster?.custom ? { poster: row.poster.custom.files.jpg } : {}),
+      ...(row.captions ? { captions: row.captions.files.vtt } : {}),
+    })
   const versions = await Promise.all(
     v.versions.map(async (x) => ({
       version: x.n,
@@ -332,9 +339,10 @@ async function summarize(deps: Deps, v: VideoDto) {
             },
             downloads: {
               mp4: `${deps.config.siteUrl}${await signedFilePath(deps, job, x.n, 'video', { ttlSec: ttl, download: true })}`,
-              poster: `${deps.config.siteUrl}${await signedFilePath(deps, job, x.n, 'poster', { ttlSec: ttl })}`,
+              // A picked poster and a caption revision have their own file names.
+              poster: `${deps.config.siteUrl}${await signedFilePath(deps, job, x.n, 'poster', { ttlSec: ttl, name: names.get(x.n)?.poster })}`,
               gif: `${deps.config.siteUrl}${await signedFilePath(deps, job, x.n, 'gif', { ttlSec: ttl })}`,
-              captions: `${deps.config.siteUrl}${await signedFilePath(deps, job, x.n, 'captions', { ttlSec: ttl })}`,
+              captions: `${deps.config.siteUrl}${await signedFilePath(deps, job, x.n, 'captions', { ttlSec: ttl, name: names.get(x.n)?.captions })}`,
               expires_in_sec: ttl,
             },
           }

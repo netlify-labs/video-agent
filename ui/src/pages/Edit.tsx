@@ -46,12 +46,17 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { $api, errorMessage, fetchClient, newIdempotencyKey, useNarrationEnabled } from '../api/client'
 import type { paths } from '../api/schema'
 import { confirmDanger, showError } from '../components/bits'
-import { CompositionPreview, type PreviewCommand } from '../components/CompositionPreview'
+import {
+  CompositionPreview,
+  type PreviewCommand,
+  type PreviewMessage,
+} from '../components/CompositionPreview'
 import { CodeEditor, type CodeEditorHandle } from '../components/CodeEditor'
 import { MediaLibraryModal, type Media } from '../components/MediaPicker'
 import { NarrationRenderDialog, type RenderChoice } from '../components/NarrationRenderDialog'
 import { NarrationRecorder } from '../components/NarrationRecorder'
 import { NarrationSection, type NarrationControl } from '../components/NarrationSection'
+import { PosterMenu } from '../components/PosterMenu'
 import {
   keepMineWarning,
   NarrationLockBanner,
@@ -512,6 +517,12 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
     setNarrationStart((s) => ({ op, key: s.key + 1 }))
   }
   const narrationControl = useRef<NarrationControl | null>(null)
+  // The preview's moment, for "Use this frame" as the poster (the Narration section keeps its own playhead).
+  const previewTime = useRef(0)
+  const onPreviewMessage = useCallback((m: PreviewMessage) => {
+    if (m.type === 'time') previewTime.current = m.time
+  }, [])
+  const me = $api.useQuery('get', '/api/v1/me')
   const [renderDialog, setRenderDialog] = useState(false)
 
   useEffect(() => {
@@ -768,6 +779,7 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
 
   // The preview stays put on the left with the actions above it; the controls scroll on their own on the right.
   const aspect = video.data.dimensions.width / video.data.dimensions.height
+  const baseVersion = video.data.versions.find((x) => x.n === draft.baseN)
   return (
     <div className="va-editor">
       <div
@@ -814,6 +826,21 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
             </div>
           </Group>
           <Group gap={6} wrap="nowrap" className="va-edit-actions" style={{ flexShrink: 0 }}>
+            {baseVersion?.status === 'ready' &&
+            (me.data?.role === 'admin' || me.data?.id === video.data.owner.id) ? (
+              <PosterMenu
+                videoId={id}
+                v={baseVersion}
+                dimensions={baseVersion.output ?? video.data.dimensions}
+                size={30}
+                time={() => (narrationOn ? (narrationControl.current?.time() ?? 0) : previewTime.current)}
+                frameDisabled={
+                  ops.length
+                    ? `The poster is a frame of v${draft.baseN}'s video: render your changes first to pick from them.`
+                    : undefined
+                }
+              />
+            ) : null}
             <Button
               size="xs"
               variant="subtle"
@@ -988,6 +1015,7 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
               draft={{ editId: draft.id, key: previewKey }}
               onClick={onPreviewClick}
               onReady={onReady}
+              onMessage={onPreviewMessage}
               note={false}
             />
           </>

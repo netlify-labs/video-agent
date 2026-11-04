@@ -17,7 +17,7 @@ export const LIMITS = {
 }
 
 const CACHEABLE =
-  /^\/files\/vid_[a-z0-9]+\/v\d+\/(?:poster\.jpg|preview\.gif|poster-(?:480|960)\.(?:webp|avif)|clip\.(?:webm|mp4))$/
+  /^\/files\/vid_[a-z0-9]+\/v\d+\/(?:poster(?:\.r\d{1,6})?\.jpg|preview\.gif|poster-(?:480|960)\.(?:webp|avif)|poster-(?:480|960)\.r\d{1,6}\.webp|clip\.(?:webm|mp4))$/
 
 /** The stable cache key for a request the worker may answer, or null to leave it to the network. */
 export function cacheKey(

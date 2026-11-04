@@ -288,6 +288,8 @@ export interface VersionRow {
   narration?: VersionNarration | null
   /** The current caption revision; null (or missing): the render's own captions. */
   captions?: VersionCaptions | null
+  /** A poster someone picked (src/domain/poster.ts); null (or missing): the render's own. */
+  poster?: VersionPoster | null
   /** A remix's v1: everything its runs need, snapshotted at creation so nothing is re-read from the source. */
   remix?: VersionRemix | null
 }
@@ -341,6 +343,22 @@ export interface VersionCaptions {
   generation: number
   /** Corrections carried from an earlier version with the same narration op (its n and revision). */
   carriedFrom?: { n: number; rev: number }
+}
+
+/**
+ * A version's picked poster (src/domain/poster.ts). Each pick writes new immutable files (poster.r<k>.jpg and its WebP
+ * sizes) next to the render's, which stay as they were. `rev` keeps counting after a reset, so a name is never reused.
+ */
+export interface VersionPoster {
+  rev: number
+  /** The current pick; null: back to the render's poster. */
+  custom: {
+    source: 'frame' | 'upload'
+    /** The second the frame was taken at (source 'frame'). */
+    at: number | null
+    files: { jpg: string; webp480: string | null; webp960: string | null }
+    lqip: string | null
+  } | null
 }
 
 export type VersionMode = 'author' | 'render_unchanged'
