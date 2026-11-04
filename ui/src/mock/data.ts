@@ -200,6 +200,7 @@ function video(
     private: false,
     language: 'en',
     comments: { count: 0, unread: 0 },
+    favorite: false,
     links: { self: `/api/v1/videos/${id}` },
   }
 }

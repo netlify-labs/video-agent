@@ -67,6 +67,8 @@ interface State {
   gatewayCalls: GatewayCallRow[]
   notificationReads: Map<string, string>
   commentReads: Map<string, string>
+  /** `${userId}/${jobId}` → starred at. */
+  favorites: Map<string, string>
   versionComments: VersionCommentRow[]
   checkpoints: Map<string, CheckpointRow>
   edits: Map<string, EditRow>
@@ -110,6 +112,7 @@ const empty = (): State => ({
   gatewayCalls: [],
   notificationReads: new Map(),
   commentReads: new Map(),
+  favorites: new Map(),
   versionComments: [],
   checkpoints: new Map(),
   edits: new Map(),
@@ -214,6 +217,8 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
       if (vis && !vis.all) rows = rows.filter((j) => !j.private || j.ownerId === vis.userId)
       if (q.status) rows = rows.filter((j) => j.status === q.status)
       if (q.published !== undefined) rows = rows.filter((j) => published.has(j.id) === q.published)
+      const fav = q.favoriteOf
+      if (fav) rows = rows.filter((j) => state.favorites.has(`${fav}/${j.id}`))
       if (needle) {
         rows = rows.filter(
           (j) =>
@@ -791,6 +796,12 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
     setCommentReadAt: async (userId, jobId, readAt) => {
       state.commentReads.set(`${userId}/${jobId}`, readAt)
     },
+    setFavorite: async (userId, jobId, on, at) => {
+      const k = `${userId}/${jobId}`
+      if (!on) state.favorites.delete(k)
+      else if (!state.favorites.has(k)) state.favorites.set(k, at)
+    },
+    favoriteJobIds: async (userId, jobIds) => jobIds.filter((id) => state.favorites.has(`${userId}/${id}`)),
     getNotificationReadAt: async (userId) => state.notificationReads.get(userId) ?? null,
     setNotificationReadAt: async (userId, readAt) => {
       state.notificationReads.set(userId, readAt)
@@ -989,6 +1000,12 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
         state.commentReads.delete(k)
         const nk = `${into}/${k.slice(from.length + 1)}`
         if (!state.commentReads.has(nk)) state.commentReads.set(nk, at)
+      }
+      for (const [k, at] of [...state.favorites]) {
+        if (!k.startsWith(`${from}/`)) continue
+        state.favorites.delete(k)
+        const nk = `${into}/${k.slice(from.length + 1)}`
+        if (!state.favorites.has(nk)) state.favorites.set(nk, at)
       }
       for (const n of state.notifications) {
         n.userId = swap(n.userId)

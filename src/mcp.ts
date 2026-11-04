@@ -611,6 +611,7 @@ Example: {"query": "webhooks", "mine": true, "limit": 10}`,
       inputSchema: {
         query: z.string().max(200).optional().describe('Words to search for in prompts and titles.'),
         mine: z.boolean().optional().describe('Only videos made with your account.'),
+        favorites: z.boolean().optional().describe('Only videos you starred in the web app.'),
         status: z
           .enum(['queued', 'running', 'finishing', 'ready', 'failed', 'cancelled', 'timed_out'])
           .optional(),
@@ -624,6 +625,7 @@ Example: {"query": "webhooks", "mine": true, "limit": 10}`,
           owner: args.mine ? 'me' : 'all',
           ...(args.query ? { q: args.query } : {}),
           ...(args.status ? { status: args.status } : {}),
+          ...(args.favorites ? { favorite: true } : {}),
           limit: args.limit ?? 10,
         })
         return {
@@ -637,6 +639,7 @@ Example: {"query": "webhooks", "mine": true, "limit": 10}`,
             owner: v.owner.name ?? v.owner.email,
             created_at: v.createdAt,
             public: v.published,
+            favorite: v.favorite,
             web_url: `${deps.config.siteUrl}/videos/${v.id}`,
           })),
           more: res.nextCursor !== null,

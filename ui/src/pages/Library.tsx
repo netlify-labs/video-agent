@@ -19,6 +19,7 @@ import { Link } from 'react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { $api, commentsInit, errorMessage, useCanCreate, videoInit, type Video } from '../api/client'
 import { Status, VersionImage, duration, inProgress, localUrl, relativeTime } from '../components/bits'
+import { FavoriteStar } from '../components/FavoriteButton'
 import { lazyPage, newVideoRoute, videoRoute } from '../routes'
 
 // Shown only in an empty library, so the form's code loads only then.
@@ -95,11 +96,9 @@ function VideoCard({ v, priority }: { v: Video; priority: boolean }) {
   const approved = v.versions.reduce((n, x) => n + x.verdicts.approved, 0)
   const prefetch = usePrefetchVideo(v.id)
   return (
-    <Link
-      to={`/videos/${v.id}`}
-      className="va-card"
-      onFocus={prefetch}
-      onTouchStart={prefetch}
+    // Hover is the whole tile's, so moving onto the star doesn't stop the clip.
+    <div
+      className="va-tile"
       onMouseEnter={() => {
         setHover(true)
         setArmed(true)
@@ -109,86 +108,89 @@ function VideoCard({ v, priority }: { v: Video; priority: boolean }) {
         setHover(false)
       }}
     >
-      <div className="va-poster">
-        {ready && !working ? (
-          clip ? (
-            <>
-              <VersionImage videoId={v.id} v={ready} file="poster" sizes={TILE_SIZES} priority={priority} />
-              {armed ? <HoverClip sources={clip} playing={hover} /> : null}
-            </>
+      <Link to={`/videos/${v.id}`} className="va-card" onFocus={prefetch} onTouchStart={prefetch}>
+        <div className="va-poster">
+          {ready && !working ? (
+            clip ? (
+              <>
+                <VersionImage videoId={v.id} v={ready} file="poster" sizes={TILE_SIZES} priority={priority} />
+                {armed ? <HoverClip sources={clip} playing={hover} /> : null}
+              </>
+            ) : (
+              <VersionImage
+                videoId={v.id}
+                v={ready}
+                file={hover ? 'gif' : 'poster'}
+                sizes={TILE_SIZES}
+                priority={priority}
+              />
+            )
+          ) : working ? (
+            // A loading state, so a video being made never looks like a finished one: a spinner, what's happening,
+            // and how long it's been going, over a slow sweep of light.
+            <Stack gap={10} align="center" className="va-card-working" data-testid="card-working">
+              <Loader size={30} color="var(--va-accent)" aria-hidden />
+              <Text size="sm" fw={500} role="status">
+                {latest.status === 'queued'
+                  ? 'Waiting for a slot'
+                  : latest.status === 'finishing'
+                    ? 'Saving the files'
+                    : `Making v${latest.n}`}
+              </Text>
+              <Text size="sm" c="var(--va-muted)" className="num" aria-label="Elapsed">
+                {elapsed(latest.timings?.queuedAt)}
+              </Text>
+            </Stack>
           ) : (
-            <VersionImage
-              videoId={v.id}
-              v={ready}
-              file={hover ? 'gif' : 'poster'}
-              sizes={TILE_SIZES}
-              priority={priority}
-            />
-          )
-        ) : working ? (
-          // A loading state, so a video being made never looks like a finished one: a spinner, what's happening,
-          // and how long it's been going, over a slow sweep of light.
-          <Stack gap={10} align="center" className="va-card-working" data-testid="card-working">
-            <Loader size={30} color="var(--va-accent)" aria-hidden />
-            <Text size="sm" fw={500} role="status">
-              {latest.status === 'queued'
-                ? 'Waiting for a slot'
-                : latest.status === 'finishing'
-                  ? 'Saving the files'
-                  : `Making v${latest.n}`}
+            <Text size="sm" c="var(--va-faint)">
+              {latest?.error?.category === 'needs_input' ? 'Needs a clearer prompt' : 'No video'}
             </Text>
-            <Text size="sm" c="var(--va-muted)" className="num" aria-label="Elapsed">
-              {elapsed(latest.timings?.queuedAt)}
-            </Text>
-          </Stack>
-        ) : (
-          <Text size="sm" c="var(--va-faint)">
-            {latest?.error?.category === 'needs_input' ? 'Needs a clearer prompt' : 'No video'}
-          </Text>
-        )}
-      </div>
-      <div className="va-card-body">
-        <Group justify="space-between" wrap="nowrap" gap="xs">
-          <div className="va-card-title">
-            {v.private ? (
-              <IconLock size={13} aria-label="Private" style={{ marginRight: 4, verticalAlign: -1 }} />
-            ) : null}
-            {v.title}
-          </div>
-          <Group gap={6} wrap="nowrap">
-            {v.comments.count > 0 ? (
-              <span
-                className="va-comment-count num"
-                data-unread={v.comments.unread > 0 ? 'true' : undefined}
-                aria-label={
-                  v.comments.unread > 0
-                    ? `${v.comments.unread} unread comments`
-                    : `${v.comments.count} comments`
-                }
-              >
-                <IconMessage size={13} />
-                {v.comments.unread > 0 ? v.comments.unread : v.comments.count}
-              </span>
-            ) : null}
-            {latest ? <Status status={latest.status} size="xs" /> : null}
-          </Group>
-        </Group>
-        <div className="va-prompt">{latest?.prompt}</div>
-        <div className="va-meta num">
-          {[
-            v.owner.name ?? v.owner.email?.split('@')[0],
-            relativeTime(v.createdAt),
-            v.aspect,
-            ready?.output ? duration(ready.output.durationSec) : null,
-            v.versions.length > 1 ? `${v.versions.length} versions` : null,
-            live ? 'Public' : null,
-            approved ? `${approved} approved` : null,
-          ]
-            .filter(Boolean)
-            .join(' · ')}
+          )}
         </div>
-      </div>
-    </Link>
+        <div className="va-card-body">
+          <Group justify="space-between" wrap="nowrap" gap="xs">
+            <div className="va-card-title">
+              {v.private ? (
+                <IconLock size={13} aria-label="Private" style={{ marginRight: 4, verticalAlign: -1 }} />
+              ) : null}
+              {v.title}
+            </div>
+            <Group gap={6} wrap="nowrap">
+              {v.comments.count > 0 ? (
+                <span
+                  className="va-comment-count num"
+                  data-unread={v.comments.unread > 0 ? 'true' : undefined}
+                  aria-label={
+                    v.comments.unread > 0
+                      ? `${v.comments.unread} unread comments`
+                      : `${v.comments.count} comments`
+                  }
+                >
+                  <IconMessage size={13} />
+                  {v.comments.unread > 0 ? v.comments.unread : v.comments.count}
+                </span>
+              ) : null}
+              {latest ? <Status status={latest.status} size="xs" /> : null}
+            </Group>
+          </Group>
+          <div className="va-prompt">{latest?.prompt}</div>
+          <div className="va-meta num">
+            {[
+              v.owner.name ?? v.owner.email?.split('@')[0],
+              relativeTime(v.createdAt),
+              v.aspect,
+              ready?.output ? duration(ready.output.durationSec) : null,
+              v.versions.length > 1 ? `${v.versions.length} versions` : null,
+              live ? 'Public' : null,
+              approved ? `${approved} approved` : null,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+          </div>
+        </div>
+      </Link>
+      <FavoriteStar videoId={v.id} favorite={v.favorite} />
+    </div>
   )
 }
 
@@ -209,7 +211,8 @@ function CardSkeleton() {
 export function LibraryPage() {
   const [q, setQ] = useState('')
   const [debounced] = useDebouncedValue(q, 300)
-  const [owner, setOwner] = useState<'all' | 'me'>('all')
+  // Favorites is a view of its own: your starred videos, by anyone.
+  const [owner, setOwner] = useState<'all' | 'me' | 'favorites'>('all')
   const [status, setStatus] = useState<string | null>(null)
   const canCreate = useCanCreate()
   const [published, setPublished] = useState<string | null>(null)
@@ -217,7 +220,8 @@ export function LibraryPage() {
   useHotkeys([['/', () => search.current?.focus()]])
 
   const query = {
-    owner,
+    owner: owner === 'me' ? ('me' as const) : ('all' as const),
+    ...(owner === 'favorites' ? { favorite: 'true' as const } : {}),
     ...(debounced ? { q: debounced } : {}),
     ...(status ? { status: status as Video['status'] } : {}),
     ...(published ? { published: published as 'true' | 'false' } : {}),
@@ -235,7 +239,7 @@ export function LibraryPage() {
     },
   )
   const items = list.data?.pages.flatMap((p) => p.items) ?? []
-  const filtered = Boolean(debounced || status || published || owner === 'me')
+  const filtered = Boolean(debounced || status || published || owner !== 'all')
   const working = items.filter((v) => inProgress(v.status)).length
   const finding =
     items.length === 0
@@ -281,6 +285,7 @@ export function LibraryPage() {
           data={[
             { label: 'Everyone', value: 'all' },
             { label: 'Mine', value: 'me' },
+            { label: 'Favorites', value: 'favorites' },
           ]}
         />
         <Select
@@ -349,6 +354,8 @@ export function LibraryPage() {
         ) : (
           <div className="va-empty">No videos yet. Creators' videos will show up here.</div>
         )
+      ) : items.length === 0 && owner === 'favorites' && !debounced && !status && !published ? (
+        <div className="va-empty">No favorites yet. Star a video to keep it here.</div>
       ) : items.length === 0 ? (
         <div className="va-empty">No videos match. Clear a filter or search for other words.</div>
       ) : (

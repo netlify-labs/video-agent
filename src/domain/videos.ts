@@ -953,7 +953,7 @@ export async function videoDto(
   deps: DtoDeps,
   jobId: string,
   viewer: Principal,
-  prefetched?: { verdicts: VerdictRow[]; comments: Record<string, CommentCounts> },
+  prefetched?: { verdicts: VerdictRow[]; comments: Record<string, CommentCounts>; favorites: string[] },
 ): Promise<VideoDtoShape>
 export async function videoDto(
   repo: Repo,
@@ -966,7 +966,7 @@ export async function videoDto(
   deps: Pick<Deps, 'config' | 'runner'> & Partial<DtoDeps>,
   jobId: string,
   viewer: Principal | 'system',
-  prefetched?: { verdicts: VerdictRow[]; comments: Record<string, CommentCounts> },
+  prefetched?: { verdicts: VerdictRow[]; comments: Record<string, CommentCounts>; favorites: string[] },
 ) {
   return buildVideoDto(repo, deps, jobId, viewer, prefetched)
 }
@@ -979,7 +979,7 @@ async function buildVideoDto(
   deps: Pick<Deps, 'config' | 'runner'> & Partial<DtoDeps>,
   jobId: string,
   viewer: Principal | 'system',
-  prefetched?: { verdicts: VerdictRow[]; comments: Record<string, CommentCounts> },
+  prefetched?: { verdicts: VerdictRow[]; comments: Record<string, CommentCounts>; favorites: string[] },
 ) {
   const job = await repo.getJob(jobId)
   if (!job || job.deletedAt || (viewer !== 'system' && !canSee(viewer, job)))
@@ -1027,6 +1027,9 @@ async function buildVideoDto(
   const comments = prefetched
     ? prefetched.comments[jobId]
     : (await repo.commentCounts([jobId], viewerId))[jobId]
+  const favorite = prefetched
+    ? prefetched.favorites.includes(jobId)
+    : viewerId !== null && (await repo.favoriteJobIds(viewerId, [jobId])).length > 0
   return {
     id: job.id,
     title: job.title,
@@ -1037,12 +1040,14 @@ async function buildVideoDto(
     latestVersion: job.latestVersion,
     createdAt: job.createdAt,
     updatedAt: job.updatedAt,
-    etag: `"${job.id}-${job.version}"`,
+    // Starring is the viewer's own and doesn't bump job.version, so it's part of the validator.
+    etag: `"${job.id}-${job.version}${favorite ? '-f' : ''}"`,
     versions: out,
     published: pubs.some((p) => !p.unpublishedAt),
     private: job.private,
     language: job.language,
     comments: comments ?? { count: 0, unread: 0 },
+    favorite,
     links: { self: `${deps.config.siteUrl}/api/v1/videos/${job.id}` },
   }
 }
@@ -1106,6 +1111,7 @@ export async function listVideos(
     owner?: 'me' | 'all' | undefined
     status?: JobRow['status'] | undefined
     published?: boolean | undefined
+    favorite?: boolean | undefined
     q?: string | undefined
     cursor?: string | undefined
     limit?: number | undefined
@@ -1118,6 +1124,7 @@ export async function listVideos(
     ...(q.owner === 'me' ? { ownerId: principal.userId } : {}),
     ...(q.status ? { status: q.status } : {}),
     ...(q.published !== undefined ? { published: q.published } : {}),
+    ...(q.favorite ? { favoriteOf: principal.userId } : {}),
     ...(q.q ? { q: q.q } : {}),
     ...(cursor ? { cursor } : {}),
     visibleTo: { userId: principal.userId, all: principal.role === 'admin' },
@@ -1126,16 +1133,24 @@ export async function listVideos(
   const page = rows.slice(0, limit)
   // Verdict counts for the whole page in one query.
   const ids = page.map((j) => j.id)
-  const [verdicts, comments, pageRows] = await Promise.all([
+  const [verdicts, comments, favorites, pageRows] = await Promise.all([
     deps.store.listVerdicts(ids),
     deps.store.commentCounts(ids, principal.userId),
+    deps.store.favoriteJobIds(principal.userId, ids),
     deps.store.videoPage(ids),
   ])
   const repo = pageRepo(deps.store, pageRows)
   const items = await Promise.all(
-    page.map((j) => videoDto(repo, deps, j.id, principal, { verdicts, comments })),
+    page.map((j) => videoDto(repo, deps, j.id, principal, { verdicts, comments, favorites })),
   )
   return { items, nextCursor: nextCursor(rows.length, limit, page) }
+}
+
+/** Stars or unstars a video in your own library. Anyone who can see a video can star it; nobody else sees it. */
+export async function setFavorite(deps: Deps, principal: Principal, jobId: string, on: boolean) {
+  assertCan(principal, 'video:read')
+  await loadJob(deps.store, principal, jobId)
+  await deps.store.setFavorite(principal.userId, jobId, on, deps.clock.now().toISOString())
 }
 
 /** Approved / Changes requested on a ready version (plan v2 §3, §14 rule 8). Never on your own version. */

@@ -200,6 +200,47 @@ body {
   outline: 2px solid var(--va-text);
   outline-offset: 2px;
 }
+/* A tile with its favorite star: the star sits over the poster beside the tile's link, not inside it. */
+.va-tile {
+  position: relative;
+}
+.va-fav {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: color-mix(in srgb, #000 55%, transparent);
+  color: #fff;
+  opacity: 0;
+  transition:
+    opacity 120ms ease,
+    background 120ms ease;
+}
+.va-fav:hover {
+  background: color-mix(in srgb, #000 72%, transparent);
+}
+.va-fav:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 1px;
+}
+.va-fav[data-on='true'] {
+  color: #f5b82e;
+  opacity: 1;
+}
+.va-tile:hover .va-fav,
+.va-tile:focus-within .va-fav {
+  opacity: 1;
+}
+@media (hover: none) {
+  .va-fav {
+    opacity: 1;
+  }
+}
 .va-poster {
   aspect-ratio: 16 / 9;
   background: var(--va-raised);

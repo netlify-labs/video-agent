@@ -579,6 +579,17 @@ export const notifications = pgTable(
   (t) => [index('notifications_user_idx').on(t.userId, t.createdAt)],
 )
 
+// Videos a person starred in their library: private to them, one row per person per video.
+export const favorites = pgTable(
+  'favorites',
+  {
+    userId: text('user_id').notNull(),
+    jobId: text('job_id').notNull(),
+    createdAt: ts('created_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.jobId] })],
+)
+
 export const notificationReads = pgTable('notification_reads', {
   userId: text('user_id').primaryKey(),
   readAt: ts('read_at').notNull(),

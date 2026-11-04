@@ -363,6 +363,12 @@ describe('scripts/voice.ts', () => {
     expect(v.beats[0]?.estimated).toBe(true)
   })
 
+  it('says every form of "deploy" with a full "dee"', () => {
+    expect(spokenText('Deploy it. We deployed, redeploying deployments.')).toBe(
+      'Dee-ploy it. We dee-ployed, ree-dee-ploying dee-ployments.',
+    )
+  })
+
   it('voice files are part of the composition (kept in the source archive and frozen bundles)', async () => {
     await generateVoice(dir, script, { provider: fakeProvider().provider, voice: 'af_heart', speed: 1 })
     writeFileSync(join(dir, 'assets/voice/script.json'), JSON.stringify(script))

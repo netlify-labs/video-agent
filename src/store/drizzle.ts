@@ -188,6 +188,13 @@ function repoFor(db: Db): Repo {
         .where(and(eq(t.publications.jobId, t.jobs.id), isNull(t.publications.unpublishedAt)))
       if (q.published === true) conds.push(exists(livePub))
       if (q.published === false) conds.push(sql`not ${exists(livePub)}`)
+      if (q.favoriteOf) {
+        const starred = db
+          .select({ one: sql`1` })
+          .from(t.favorites)
+          .where(and(eq(t.favorites.jobId, t.jobs.id), eq(t.favorites.userId, q.favoriteOf)))
+        conds.push(exists(starred))
+      }
       if (q.q) {
         const like = `%${q.q.replace(/[%_\\]/g, (c) => `\\${c}`)}%`
         const promptMatch = db
@@ -1082,6 +1089,18 @@ function repoFor(db: Db): Repo {
         .set({ addressedInN: n })
         .where(and(eq(t.comments.jobId, jobId), inArray(t.comments.id, ids), isNull(t.comments.deletedAt)))
     },
+    setFavorite: async (userId, jobId, on, at) => {
+      if (on) await db.insert(t.favorites).values({ userId, jobId, createdAt: at }).onConflictDoNothing()
+      else await db.delete(t.favorites).where(and(eq(t.favorites.userId, userId), eq(t.favorites.jobId, jobId)))
+    },
+    favoriteJobIds: async (userId, jobIds) => {
+      if (jobIds.length === 0) return []
+      const rows = await db
+        .select({ jobId: t.favorites.jobId })
+        .from(t.favorites)
+        .where(and(eq(t.favorites.userId, userId), inArray(t.favorites.jobId, jobIds)))
+      return rows.map((r) => r.jobId)
+    },
     getCommentReadAt: async (userId, jobId) =>
       (
         await db
@@ -1336,6 +1355,8 @@ function repoFor(db: Db): Repo {
         (select 1 from idempotency_keys i where i.principal_id = ${into} and i.operation = f.operation and i.key = f.key)`)
       await db.execute(sql`delete from comment_reads f where user_id = ${from} and exists
         (select 1 from comment_reads i where i.user_id = ${into} and i.job_id = f.job_id)`)
+      await db.execute(sql`delete from favorites f where user_id = ${from} and exists
+        (select 1 from favorites i where i.user_id = ${into} and i.job_id = f.job_id)`)
       await db.execute(sql`delete from verdicts f where user_id = ${from} and exists
         (select 1 from verdicts i where i.user_id = ${into} and i.job_id = f.job_id and i.version_n = f.version_n)`)
       await db.execute(sql`delete from notification_reads where user_id = ${from} and exists
@@ -1361,6 +1382,7 @@ function repoFor(db: Db): Repo {
         ['edits', 'author_id'],
         ['version_comments', 'author_id'],
         ['comment_reads', 'user_id'],
+        ['favorites', 'user_id'],
         ['notifications', 'user_id'],
         ['notifications', 'actor_id'],
         ['notification_reads', 'user_id'],

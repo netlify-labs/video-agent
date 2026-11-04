@@ -402,7 +402,15 @@ export function installMock() {
         )
       if (status) items = items.filter((v) => v.status === status)
       if (owner === 'me') items = items.filter((v) => v.owner.id === me.id)
+      if (url.searchParams.get('favorite') === 'true') items = items.filter((v) => v.favorite)
       return json({ items: items.map(withComments), nextCursor: null })
+    }
+    const fav = /^\/api\/v1\/videos\/([^/]+)\/favorite$/.exec(p)
+    if (fav?.[1] && (method === 'PUT' || method === 'DELETE')) {
+      const found = videos.find((x) => x.id === fav[1])
+      if (!found) return json({ error: { code: 'not_found', message: 'Video not found.' } }, 404)
+      found.favorite = method === 'PUT'
+      return new Response(null, { status: 204 })
     }
     // Live progress (plan v2 §6): the step moves on with every poll; localStorage.mockStale marks it stale.
     const pg = /^\/api\/v1\/videos\/([^/]+)\/progress$/.exec(p)

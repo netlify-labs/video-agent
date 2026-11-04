@@ -14,6 +14,7 @@ import {
   createVideo,
   deleteVideo,
   listVideos,
+  setFavorite,
   publishVersion,
   updateVideo,
   setVerdict,
@@ -348,6 +349,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
           status: s.StatusSchema.optional(),
           owner: z.enum(['me', 'all']).optional(),
           published: z.enum(['true', 'false']).optional(),
+          favorite: z.enum(['true', 'false']).optional().openapi({ description: 'true: only videos you starred' }),
           q: z.string().max(200).optional(),
           cursor: z.string().max(500).optional(),
           limit: z.coerce.number().int().min(1).max(50).optional(),
@@ -360,10 +362,31 @@ export function createApp(deps: Deps, opts: AppOptions) {
       const res = await listVideos(deps, c.get('principal'), {
         ...q,
         published: q.published === undefined ? undefined : q.published === 'true',
+        favorite: q.favorite === 'true',
       })
       return c.json(res, 200)
     },
   )
+  for (const method of ['put', 'delete'] as const)
+    app.openapi(
+      createRoute({
+        method,
+        path: '/api/v1/videos/{id}/favorite',
+        summary: method === 'put' ? 'Star a video' : 'Unstar a video',
+        description:
+          method === 'put'
+            ? 'Adds the video to your favorites. Favorites are per person: only you see them. Idempotent.'
+            : 'Removes the video from your favorites. Idempotent.',
+        tags: ['videos'],
+        security,
+        request: { params: IdParam },
+        responses: { 204: { description: method === 'put' ? 'Starred' : 'Unstarred' }, ...errors },
+      }),
+      async (c) => {
+        await setFavorite(deps, c.get('principal'), c.req.valid('param').id, method === 'put')
+        return c.body(null, 204)
+      },
+    )
   app.openapi(
     createRoute({
       method: 'get',

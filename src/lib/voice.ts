@@ -58,6 +58,15 @@ export const SPOKEN_AS: Readonly<Record<string, string>> = {
   'i.e.': 'that is',
   'vs.': 'versus',
   vs: 'versus',
+  // Kokoro says "deploy" as "dep-ploy" (a reduced first vowel); "dee-ploy" gives it a full "dee". Every form, capitalized too.
+  ...Object.fromEntries(
+    ['', 's', 'ed', 'ing', 'ment', 'ments'].flatMap((end) => [
+      [`deploy${end}`, `dee-ploy${end}`],
+      [`Deploy${end}`, `Dee-ploy${end}`],
+      [`redeploy${end}`, `ree-dee-ploy${end}`],
+      [`Redeploy${end}`, `Ree-dee-ploy${end}`],
+    ]),
+  ),
 }
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')
 const SPOKEN_RE = new RegExp(

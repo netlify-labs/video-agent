@@ -50,6 +50,8 @@ export interface JobQuery {
   ownerId?: string
   status?: VersionStatus
   published?: boolean
+  /** Only videos this person starred. */
+  favoriteOf?: string
   q?: string
   cursor?: { createdAt: string; id: string }
   /** Private videos are returned only to their owner, unless `all` (admins). */
@@ -292,6 +294,10 @@ export interface Repo {
   /** Per video: comments not deleted, and those by others newer than `userId`'s read watermark. */
   commentCounts(jobIds: string[], userId: string | null): Promise<Record<string, CommentCounts>>
   setCommentReadAt(userId: string, jobId: string, readAt: string): Promise<void>
+  /** Stars or unstars a video for one person; idempotent. */
+  setFavorite(userId: string, jobId: string, on: boolean, at: string): Promise<void>
+  /** Which of these videos the person starred. */
+  favoriteJobIds(userId: string, jobIds: string[]): Promise<string[]>
   insertPlan(row: PlanRow): Promise<void>
   getPlan(id: string, opts?: { lock?: boolean }): Promise<PlanRow | null>
   updatePlan(id: string, patch: Partial<PlanRow>): Promise<void>
@@ -367,7 +373,7 @@ export interface Repo {
   deleteExpiredSessions(now: string): Promise<number>
   /**
    * Moves everything `fromId` owns, wrote or holds to `intoId` and deletes the `fromId` user row. Where both have
-   * a row under the same key (a verdict, a read watermark, a personal webhook), `intoId`'s is kept. Call in `tx`.
+   * a row under the same key (a verdict, a read watermark, a favorite, a personal webhook), `intoId`'s is kept. Call in `tx`.
    */
   mergeUser(fromId: string, intoId: string): Promise<void>
 

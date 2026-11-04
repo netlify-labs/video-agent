@@ -20,6 +20,7 @@ import {
 import { modals } from '@mantine/modals'
 import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
+import { FavoriteButton } from '../components/FavoriteButton'
 import { MediaChips, type Media } from '../components/MediaPicker'
 import { PlanPanel } from '../components/PlanPanel'
 import { PublishButton } from '../components/PublishDialog'
@@ -676,6 +677,7 @@ export function VideoPage() {
           <div className="va-sub num">{sub}</div>
         </div>
         <Group gap="sm">
+          <FavoriteButton videoId={data.id} favorite={data.favorite} />
           {v.status === 'ready' && canCreate ? (
             <Tooltip
               label="This version can't be edited in the browser. Ask for a revision instead."

@@ -407,6 +407,7 @@ export const VideoSchema = z
       count: z.number().int(),
       unread: z.number().int().openapi({ description: "Others' comments since you last read them" }),
     }),
+    favorite: z.boolean().openapi({ description: 'You starred this video (only you see your favorites)' }),
     links: z.object({ self: z.string() }),
   })
   .openapi('Video')
