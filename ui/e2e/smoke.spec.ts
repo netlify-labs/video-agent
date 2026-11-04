@@ -560,9 +560,13 @@ test('the owner incorporates feedback: open comments all checked, plus a note', 
   const dialog = page.getByRole('dialog')
   await expect(dialog.getByRole('checkbox')).toHaveCount(2)
   for (const box of await dialog.getByRole('checkbox').all()) await expect(box).toBeChecked()
+  await expect(dialog).toContainText('2 of 2 checked')
   await dialog.getByRole('checkbox').nth(1).uncheck()
-  await dialog.getByRole('textbox', { name: 'Note for the agent (optional)' }).fill('Keep the colours')
-  await dialog.getByRole('button', { name: /Make v3 \(1\)/ }).click()
+  await expect(dialog).toContainText('1 of 2 checked')
+  await dialog
+    .getByRole('textbox', { name: 'Anything else the agent should know? (optional)' })
+    .fill('Keep the colours')
+  await dialog.getByRole('button', { name: 'Make v3 with 1 comment' }).click()
   await expect(dialog).toHaveCount(0)
   const sent = await page.evaluate<{ prompt: string; fromVersion: number; commentIds: string[] }>(
     '(window).__lastRevise',

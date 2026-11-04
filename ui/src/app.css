@@ -41,7 +41,17 @@ body {
   --button-color: var(--va-text);
   height: 36px;
 }
-/* The brand tint (no fill): for the one action a card is asking for, beside quieter grey buttons. */
+/* The brand tint (no fill): for the one action a card is asking for, beside quieter grey buttons. Bright enough
+   to read as the next step on the dark card, with an edge in the accent. */
+/* (Mantine sets its own colours inline as variables, so these set the properties themselves.) */
+.va-button[data-variant='light']:not(:disabled):not([data-disabled]) {
+  background: color-mix(in srgb, var(--va-accent) 22%, transparent);
+  color: color-mix(in srgb, var(--va-accent) 70%, var(--va-text));
+  border: 1px solid color-mix(in srgb, var(--va-accent) 55%, transparent);
+}
+.va-button[data-variant='light']:not(:disabled):not([data-disabled]):hover {
+  background: color-mix(in srgb, var(--va-accent) 32%, transparent);
+}
 .va-button[data-variant='light'] {
   height: 36px;
   font-weight: 600;
@@ -1627,6 +1637,31 @@ main.va-shell-main {
 .va-view-icon {
   vertical-align: -2px;
   margin-right: 6px;
+}
+
+/* Incorporate feedback: the comments to pick on the left, the note and the button on the right. */
+.va-incorporate {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: var(--mantine-spacing-lg);
+}
+.va-incorporate-list {
+  max-height: min(60vh, 560px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.va-incorporate-item {
+  background: var(--va-dialog-raised);
+  border-radius: var(--mantine-radius-md);
+  padding: 10px 12px;
+}
+.va-incorporate-note {
+  min-height: 100%;
+}
+@media (max-width: 760px) {
+  .va-incorporate {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 /* Version details (VersionDetails.tsx): facts as a small label over a left-aligned value, two to a row. */

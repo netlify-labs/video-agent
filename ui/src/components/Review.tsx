@@ -3,6 +3,7 @@
 // only: as markers under the player and as dots on the frame around their moment.
 import {
   ActionIcon,
+  Anchor,
   Badge,
   Button,
   Card,
@@ -299,62 +300,95 @@ function IncorporateModal({
     <Modal
       opened={comments}
       onClose={onClose}
+      size={1040}
       title={`Incorporate feedback into v${video.versions.length + 1}`}
     >
-      <Stack gap="sm">
-        <Text size="sm" c="var(--va-muted)">
-          The agent starts from v{v.n} and works through the comments you leave checked. Pinned comments come
-          with a still of that moment.
-        </Text>
-        <Checkbox.Group value={picked} onChange={setPicked}>
-          <Stack gap={8}>
-            {open.map((c) => (
-              <Checkbox
-                key={c.id}
-                value={c.id}
-                label={
-                  <Text size="sm">
-                    <b>{c.author.name ?? c.author.email?.split('@')[0]}</b>
-                    {c.timeSec !== null ? ` · ${clockTime(c.timeSec)}` : ''}: {c.body}
-                  </Text>
-                }
-              />
-            ))}
-          </Stack>
-        </Checkbox.Group>
-        <Textarea
-          label="Note for the agent (optional)"
-          placeholder='For example: "ignore the colour comments"'
-          autosize
-          minRows={2}
-          maxLength={2000}
-          value={note}
-          onChange={(e) => {
-            setNote(e.currentTarget.value)
-          }}
-        />
-        <Group justify="flex-end" gap="xs">
-          <Button variant="subtle" color="gray" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            loading={revise.isPending}
-            disabled={picked.length === 0}
-            onClick={() => {
-              revise.mutate({
-                params: { path: { id: video.id }, header: { 'idempotency-key': key } },
-                body: {
-                  prompt: note.trim().length >= 3 ? note.trim() : 'Incorporate the feedback below.',
-                  fromVersion: v.n,
-                  commentIds: picked,
-                },
-              })
+      {/* Two columns: the comments to pick from, and what else the agent should know beside the button that sends it. */}
+      <div className="va-incorporate">
+        <div className="va-incorporate-pick">
+          <Group justify="space-between" mb={8} gap="xs">
+            <Text fw={600} size="sm">
+              Comments on v{v.n}{' '}
+              <Text span size="sm" c="var(--va-faint)" className="num">
+                {picked.length} of {open.length} checked
+              </Text>
+            </Text>
+            <Anchor
+              component="button"
+              type="button"
+              size="sm"
+              onClick={() => {
+                setPicked(picked.length === open.length ? [] : open.map((c) => c.id))
+              }}
+            >
+              {picked.length === open.length ? 'Uncheck all' : 'Check all'}
+            </Anchor>
+          </Group>
+          <Checkbox.Group value={picked} onChange={setPicked}>
+            <Stack gap={6} className="va-incorporate-list">
+              {open.map((c) => (
+                <Checkbox
+                  key={c.id}
+                  value={c.id}
+                  className="va-incorporate-item"
+                  label={
+                    <>
+                      <Text size="xs" c="var(--va-faint)">
+                        {c.author.name ?? c.author.email?.split('@')[0]}
+                        {c.timeSec !== null ? ` · ${clockTime(c.timeSec)}` : ''}
+                        {c.x !== null ? ' · spot marked' : ''}
+                      </Text>
+                      <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
+                        {c.body}
+                      </Text>
+                    </>
+                  }
+                />
+              ))}
+            </Stack>
+          </Checkbox.Group>
+        </div>
+        <Stack gap="sm" className="va-incorporate-note">
+          <Text size="sm" c="var(--va-muted)">
+            The agent starts from v{v.n} and works through the comments you leave checked. Pinned comments
+            come with a still of that moment.
+          </Text>
+          <Textarea
+            label="Anything else the agent should know? (optional)"
+            placeholder='For example: "ignore the colour comments", or the context behind the feedback'
+            autosize
+            minRows={8}
+            maxRows={16}
+            maxLength={2000}
+            value={note}
+            onChange={(e) => {
+              setNote(e.currentTarget.value)
             }}
-          >
-            Make v{video.versions.length + 1} ({picked.length})
-          </Button>
-        </Group>
-      </Stack>
+          />
+          <Group justify="flex-end" gap="xs" mt="auto">
+            <Button variant="subtle" color="gray" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              variant="filled"
+              loading={revise.isPending}
+              disabled={picked.length === 0}
+              onClick={() => {
+                revise.mutate({
+                  params: { path: { id: video.id }, header: { 'idempotency-key': key } },
+                  body: {
+                    prompt: note.trim().length >= 3 ? note.trim() : 'Incorporate the feedback below.',
+                    fromVersion: v.n,
+                    commentIds: picked,
+                  },
+                })
+              }}
+            >
+              Make v{video.versions.length + 1} with {picked.length} comment{picked.length === 1 ? '' : 's'}
+            </Button>
+          </Group>
+        </Stack>
+      </div>
     </Modal>
   )
 }
