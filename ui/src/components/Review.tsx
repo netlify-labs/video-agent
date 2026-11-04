@@ -694,7 +694,11 @@ export function CommentsCard({
           </Text>
         </Group>
         {canIncorporate && ready && open.length > 0 ? (
-          <Tooltip label="Wait for the version in progress" disabled={!busy}>
+          <Tooltip
+            label={
+              busy ? 'Wait for the version in progress' : 'Regenerate the video with the comment feedback'
+            }
+          >
             <Button
               size="xs"
               variant="default"
@@ -754,43 +758,8 @@ export function CommentsCard({
                   ))}
                 </Stack>
               ) : null}
-              <Textarea
-                ref={composer}
-                aria-label="Add a comment"
-                placeholder={
-                  pending
-                    ? `A note at ${clockTime(pending.timeSec)}… Enter adds it, ${mod}+Enter posts`
-                    : ready
-                      ? 'Add a comment… Press C while watching to note a moment.'
-                      : 'Add a comment…'
-                }
-                autosize
-                minRows={2}
-                maxLength={2000}
-                value={body}
-                onChange={(e) => {
-                  setBody(e.currentTarget.value)
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape') {
-                    form.current?.focus()
-                    return
-                  }
-                  if (e.key !== 'Enter' || e.shiftKey) return
-                  if (e.metaKey || e.ctrlKey) {
-                    e.preventDefault()
-                    postAll()
-                    return
-                  }
-                  // A note at a moment (or one of several): Enter adds it and steps out of the box, so Space plays.
-                  if (pending || drafts.length) {
-                    e.preventDefault()
-                    if (stash()) form.current?.focus()
-                  }
-                }}
-              />
-              <Group justify="space-between" gap="xs">
-                <Group gap="xs">
+              {pending || ready ? (
+                <Group gap="xs" data-testid="note-moment">
                   {pending ? (
                     <Badge
                       variant="light"
@@ -849,7 +818,54 @@ export function CommentsCard({
                     </Button>
                   ) : null}
                 </Group>
-                <Group gap="xs">
+              ) : null}
+              <Textarea
+                ref={composer}
+                aria-label="Add a comment"
+                placeholder={
+                  pending
+                    ? `A note at ${clockTime(pending.timeSec)}… Enter adds it, ${mod}+Enter posts`
+                    : ready
+                      ? 'Add a comment… Press C while watching to note a moment.'
+                      : 'Add a comment…'
+                }
+                autosize
+                minRows={3}
+                maxLength={2000}
+                classNames={{ input: 'va-composer-input' }}
+                value={body}
+                onChange={(e) => {
+                  setBody(e.currentTarget.value)
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    form.current?.focus()
+                    return
+                  }
+                  if (e.key !== 'Enter' || e.shiftKey) return
+                  if (e.metaKey || e.ctrlKey) {
+                    e.preventDefault()
+                    postAll()
+                    return
+                  }
+                  // A note at a moment (or one of several): Enter adds it and steps out of the box, so Space plays.
+                  if (pending || drafts.length) {
+                    e.preventDefault()
+                    if (stash()) form.current?.focus()
+                  }
+                }}
+              />
+              <Group justify="space-between" gap="xs" wrap="nowrap" align="flex-start">
+                <Text size="xs" c="var(--va-faint)" style={{ flex: 1, minWidth: 0, paddingTop: 4 }}>
+                  {ready ? (
+                    <>
+                      <Kbd size="xs">C</Kbd> notes the moment you're watching · <Kbd size="xs">Enter</Kbd>{' '}
+                      adds the note · <Kbd size="xs">Space</Kbd> keeps watching · post them together when
+                      you're done
+                    </>
+                  ) : null}
+                </Text>
+                <Group gap="xs" wrap="nowrap">
                   {(pending || drafts.length > 0) && body.trim() ? (
                     <Button
                       size="xs"
@@ -867,12 +883,6 @@ export function CommentsCard({
                   </Button>
                 </Group>
               </Group>
-              {ready ? (
-                <Text size="xs" c="var(--va-faint)">
-                  <Kbd size="xs">C</Kbd> notes the moment you're watching · <Kbd size="xs">Enter</Kbd> adds
-                  the note · <Kbd size="xs">Space</Kbd> keeps watching · post them together when you're done
-                </Text>
-              ) : null}
             </Stack>
           </form>
         ) : null}

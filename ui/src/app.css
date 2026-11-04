@@ -152,6 +152,7 @@ body {
   flex-wrap: wrap;
 }
 .va-video-head {
+  margin-top: -12px;
   margin-bottom: 12px;
 }
 .va-sub {
@@ -937,6 +938,15 @@ body {
 /* The composer sits on top; it takes focus after a note is added, so Space plays the video. */
 .va-composer:focus {
   outline: none;
+}
+/* The comment box: a step lighter than the card, with a border, so it reads as the place to type. */
+.va-composer-input {
+  background: var(--va-dialog-raised);
+  border-color: var(--va-dialog-edge);
+  font-size: 14px;
+}
+.va-composer-input:focus {
+  border-color: var(--va-accent);
 }
 .va-draft-note {
   padding: 4px 8px;
