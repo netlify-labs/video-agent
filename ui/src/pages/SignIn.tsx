@@ -3,7 +3,7 @@ import {
   Anchor,
   Button,
   Card,
-  Center,
+  Flex,
   Group,
   PasswordInput,
   Stack,
@@ -57,7 +57,8 @@ export function AuthPages({ setupReady }: { setupReady: boolean }) {
   }
 
   const card = (children: React.ReactNode) => (
-    <Center mih="100vh" p="md">
+    // A column: on phones the badge stops floating and closes the page, so it must sit under the card, not beside it.
+    <Flex direction="column" align="center" justify="center" mih="100dvh" p="md" gap={0}>
       <Card p="xl" w="100%" maw={420}>
         <Stack>
           <div>
@@ -94,7 +95,7 @@ export function AuthPages({ setupReady }: { setupReady: boolean }) {
         </Stack>
       </Card>
       <PoweredBy />
-    </Center>
+    </Flex>
   )
 
   if (auth.provider === 'netlify') {
