@@ -421,8 +421,11 @@ export function MediaChips(props: {
   onChange: (items: Media[]) => void
   disabled?: boolean
   label?: string
+  /** False: chips only (the caller has its own Attach button). */
+  button?: boolean
 }) {
   const [open, setOpen] = useState(false)
+  if (props.button === false && !props.value.length) return null
   return (
     <div>
       <Group gap={6} align="center">
@@ -455,18 +458,20 @@ export function MediaChips(props: {
             )}
           </span>
         ))}
-        <Button
-          size="compact-sm"
-          variant="subtle"
-          color="gray"
-          leftSection={<IconPhoto size={14} />}
-          disabled={props.disabled === true}
-          onClick={() => {
-            setOpen(true)
-          }}
-        >
-          {props.label ?? 'Add media'}
-        </Button>
+        {props.button === false ? null : (
+          <Button
+            size="compact-sm"
+            variant="subtle"
+            color="gray"
+            leftSection={<IconPhoto size={14} />}
+            disabled={props.disabled === true}
+            onClick={() => {
+              setOpen(true)
+            }}
+          >
+            {props.label ?? 'Add media'}
+          </Button>
+        )}
       </Group>
       {open ? (
         <MediaLibraryModal

@@ -20,9 +20,11 @@ import {
 import { modals } from '@mantine/modals'
 import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
-import { IconCheck, IconDots, IconMapPin, IconSparkles, IconX } from '@tabler/icons-react'
+import { IconCheck, IconDots, IconMapPin, IconPaperclip, IconSparkles, IconX } from '@tabler/icons-react'
 import { useEffect, useRef, useState, type RefObject } from 'react'
-import { $api, commentsInit, newIdempotencyKey, type Version, type Video } from '../api/client'
+import { $api, commentsInit, newIdempotencyKey, useCanCreate, type Version, type Video } from '../api/client'
+import { AttachButton, DropTarget, PendingUploads, useAttachUploads } from './AttachFiles'
+import { MediaChips, type Media } from './MediaPicker'
 import type { paths } from '../api/schema'
 import { captionsUrl, clockTime, fileUrl, imageUrl, relativeTime, showError, useAfterWrite } from './bits'
 
@@ -400,7 +402,12 @@ interface Draft {
   timeSec: number | null
   x: number | null
   y: number | null
+  /** Files attached to the note. */
+  files: Media[]
 }
+
+/** Files one comment can carry (the API's limit). */
+const COMMENT_FILES = 5
 
 export function CommentsCard({
   video,
@@ -436,6 +443,7 @@ export function CommentsCard({
   const add = $api.useMutation('post', '/api/v1/videos/{id}/comments', {
     onSuccess: () => {
       setBody('')
+      setFiles([])
       setPending(null)
       setPicking(false)
       refresh()
@@ -487,11 +495,18 @@ export function CommentsCard({
 
   // A pass through the video: notes at moments (C), each with an optional spot, posted together as one block.
   const [drafts, setDrafts] = useState<Draft[]>([])
+  // Files attached to the note being written: picked from the library, or dropped on the box (uploaded first).
+  const [files, setFiles] = useState<Media[]>([])
+  const uploads = useAttachUploads((m) => {
+    setFiles((cur) => (cur.some((x) => x.id === m.id) ? cur : [...cur, m].slice(0, COMMENT_FILES)))
+  })
+  const canAttach = useCanCreate()
   const composer = useRef<HTMLTextAreaElement>(null)
   const form = useRef<HTMLFormElement>(null)
   const addBatch = $api.useMutation('post', '/api/v1/videos/{id}/comments/batch', {
     onSuccess: () => {
       setBody('')
+      setFiles([])
       setDrafts([])
       setPending(null)
       setPicking(false)
@@ -502,8 +517,9 @@ export function CommentsCard({
   /** Moves the note being written into the draft list. False when there's nothing to move. */
   const stash = () => {
     if (!body.trim()) return false
-    setDrafts((d) => [...d, { key: crypto.randomUUID(), body: body.trim(), ...pinOf(pending) }])
+    setDrafts((d) => [...d, { key: crypto.randomUUID(), body: body.trim(), ...pinOf(pending), files }])
     setBody('')
+    setFiles([])
     setPending(null)
     setPicking(false)
     return true
@@ -661,6 +677,29 @@ export function CommentsCard({
               {c.body}
             </Text>
           )}
+          {c.attachments.length ? (
+            <Group gap={6} mt={6} data-testid="comment-files">
+              {c.attachments.map((a) => (
+                <a
+                  key={a.id}
+                  className="va-comment-file"
+                  href={a.url ?? undefined}
+                  target="_blank"
+                  rel="noopener"
+                  title={a.title ?? a.filename}
+                >
+                  {(a.kind === 'image' || a.kind === 'svg') && a.url ? (
+                    <img src={a.url} alt="" />
+                  ) : a.poster ? (
+                    <img src={a.poster} alt="" />
+                  ) : (
+                    <IconPaperclip size={14} />
+                  )}
+                  <span>{a.title ?? a.filename}</span>
+                </a>
+              ))}
+            </Group>
+          ) : null}
         </div>
         {c.can.edit || c.can.delete || c.can.resolve ? (
           <Menu position="bottom-end">
@@ -714,21 +753,27 @@ export function CommentsCard({
   }
   blocks.reverse()
 
-  const all = [...drafts, ...(body.trim() ? [{ key: 'current', body, ...pinOf(pending) }] : [])]
+  const all = [...drafts, ...(body.trim() ? [{ key: 'current', body, ...pinOf(pending), files }] : [])]
+  const filesOf = (n: { files: Media[] }) => (n.files.length ? { mediaIds: n.files.map((m) => m.id) } : {})
   const postAll = () => {
     const [only] = all
     if (!only) return
     if (all.length === 1)
       add.mutate({
         params: { path: { id: video.id } },
-        body: { versionN: v.n, body: only.body, ...(only.timeSec !== null ? pinOf(only) : {}) },
+        body: {
+          versionN: v.n,
+          body: only.body,
+          ...(only.timeSec !== null ? pinOf(only) : {}),
+          ...filesOf(only),
+        },
       })
     else
       addBatch.mutate({
         params: { path: { id: video.id } },
         body: {
           versionN: v.n,
-          notes: all.map((n) => ({ body: n.body, ...(n.timeSec !== null ? pinOf(n) : {}) })),
+          notes: all.map((n) => ({ body: n.body, ...(n.timeSec !== null ? pinOf(n) : {}), ...filesOf(n) })),
         },
       })
   }
@@ -827,6 +872,9 @@ export function CommentsCard({
           ) : null}
           {canComment ? (
             <Group gap="xs" wrap="nowrap">
+              {canAttach ? (
+                <AttachButton value={files} onChange={setFiles} label="Attach" max={COMMENT_FILES} />
+              ) : null}
               {(pending || drafts.length > 0) && body.trim() ? (
                 <Button
                   size="xs"
@@ -883,6 +931,11 @@ export function CommentsCard({
                       <Text size="sm" c="var(--va-muted)" truncate style={{ flex: 1, minWidth: 0 }}>
                         {d.body}
                       </Text>
+                      {d.files.length ? (
+                        <Text size="xs" c="var(--va-faint)" className="num" style={{ flexShrink: 0 }}>
+                          <IconPaperclip size={11} style={{ verticalAlign: -1 }} /> {d.files.length}
+                        </Text>
+                      ) : null}
                       <ActionIcon
                         size="xs"
                         variant="subtle"
@@ -898,54 +951,61 @@ export function CommentsCard({
                   ))}
                 </Stack>
               ) : null}
-              <Textarea
-                ref={composer}
-                aria-label="Add a comment"
-                placeholder={
-                  pending
-                    ? `A note at ${clockTime(pending.timeSec)}… Enter adds it, ${mod}+Enter posts, Esc drops it`
-                    : ready
-                      ? 'Add a comment… Press C while watching to note a moment.'
-                      : 'Add a comment…'
-                }
-                autosize
-                minRows={3}
-                maxLength={2000}
-                classNames={{ input: 'va-composer-input' }}
-                value={body}
-                onChange={(e) => {
-                  setBody(e.currentTarget.value)
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape') {
-                    // An empty note's moment goes too.
-                    if (loose.current) {
-                      setPending(null)
-                      setPicking(false)
+              <DropTarget
+                onFiles={(fs) => void uploads.add(fs.slice(0, Math.max(0, COMMENT_FILES - files.length)))}
+                disabled={!canAttach}
+              >
+                <Textarea
+                  ref={composer}
+                  aria-label="Add a comment"
+                  placeholder={
+                    pending
+                      ? `A note at ${clockTime(pending.timeSec)}… Enter adds it, ${mod}+Enter posts, Esc drops it`
+                      : ready
+                        ? 'Add a comment… Press C while watching to note a moment.'
+                        : 'Add a comment…'
+                  }
+                  autosize
+                  minRows={3}
+                  maxLength={2000}
+                  classNames={{ input: 'va-composer-input' }}
+                  value={body}
+                  onChange={(e) => {
+                    setBody(e.currentTarget.value)
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      // An empty note's moment goes too.
+                      if (loose.current) {
+                        setPending(null)
+                        setPicking(false)
+                      }
+                      form.current?.focus()
+                      return
                     }
-                    form.current?.focus()
-                    return
-                  }
-                  // Space in an empty note keeps watching (and lets go of its moment), as it does outside the box.
-                  if (e.key === ' ' && !body && pending && !e.metaKey && !e.ctrlKey && !e.altKey) {
-                    e.preventDefault()
-                    form.current?.focus()
-                    void player.current?.play().catch(() => undefined)
-                    return
-                  }
-                  if (e.key !== 'Enter' || e.shiftKey) return
-                  if (e.metaKey || e.ctrlKey) {
-                    e.preventDefault()
-                    postAll()
-                    return
-                  }
-                  // A note at a moment (or one of several): Enter adds it and steps out of the box, so Space plays.
-                  if (pending || drafts.length) {
-                    e.preventDefault()
-                    if (stash()) form.current?.focus()
-                  }
-                }}
-              />
+                    // Space in an empty note keeps watching (and lets go of its moment), as it does outside the box.
+                    if (e.key === ' ' && !body && pending && !e.metaKey && !e.ctrlKey && !e.altKey) {
+                      e.preventDefault()
+                      form.current?.focus()
+                      void player.current?.play().catch(() => undefined)
+                      return
+                    }
+                    if (e.key !== 'Enter' || e.shiftKey) return
+                    if (e.metaKey || e.ctrlKey) {
+                      e.preventDefault()
+                      postAll()
+                      return
+                    }
+                    // A note at a moment (or one of several): Enter adds it and steps out of the box, so Space plays.
+                    if (pending || drafts.length) {
+                      e.preventDefault()
+                      if (stash()) form.current?.focus()
+                    }
+                  }}
+                />
+              </DropTarget>
+              <PendingUploads pending={uploads.pending} onDismiss={uploads.dismiss} />
+              <MediaChips value={files} onChange={setFiles} button={false} />
               {ready ? (
                 <Text size="xs" c="var(--va-faint)">
                   <Kbd size="xs">C</Kbd> notes the moment you're watching · <Kbd size="xs">Enter</Kbd> adds

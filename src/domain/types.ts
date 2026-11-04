@@ -592,6 +592,8 @@ export interface CommentRow {
   deletedAt: string | null
   /** Notes posted together (a review pass with several timestamps) share one id; null for a lone comment. */
   groupId?: string | null
+  /** Library media attached to the comment, in order. */
+  mediaIds?: string[] | null
 }
 
 export type MediaStatus = 'uploading' | 'verifying' | 'ready' | 'rejected'
@@ -807,6 +809,8 @@ export interface VersionCommentRow {
   timeSec: number | null
   x: number | null
   y: number | null
+  /** The comment's attached media as the run sees them (assets/media/…). */
+  files?: string[] | null
 }
 
 export type NotificationType = 'comment.created' | 'version.approved' | 'version.changes_requested'

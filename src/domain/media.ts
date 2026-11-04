@@ -184,9 +184,26 @@ export async function uploadMedia(
 
 async function signed(deps: Deps, id: string, file: MediaFile) {
   const { fileSigningSecret } = await getSettings(deps)
+  return mediaUrl(fileSigningSecret, deps.clock.now(), id, file)
+}
+
+/** A signed link to one of a media item's files, for code that has the signing secret already (in a transaction). */
+export function mediaUrl(secret: string, now: Date, id: string, file: MediaFile) {
   const path = `/media/${id}/${file}`
-  const exp = Math.floor(deps.clock.now().getTime() / 1000) + MEDIA_URL_TTL_SEC
-  return `${path}?exp=${exp}&sig=${signPath(fileSigningSecret, path, exp)}`
+  const exp = Math.floor(now.getTime() / 1000) + MEDIA_URL_TTL_SEC
+  return `${path}?exp=${exp}&sig=${signPath(secret, path, exp)}`
+}
+
+/** Library items to attach (to a comment): each ready, in the library and not a voice-over take. */
+export async function attachableMedia(repo: Repo, ids: string[], max: number): Promise<string[]> {
+  const unique = [...new Set(ids)]
+  if (unique.length > max) throw new ApiError('invalid_request', `Attach at most ${max} files.`)
+  for (const id of unique) {
+    const m = await repo.getMedia(id)
+    if (!m || m.deletedAt || m.status !== 'ready' || isTake(m))
+      throw new ApiError('invalid_request', `Media ${id} isn't a ready item in the library.`)
+  }
+  return unique
 }
 
 export async function mediaDto(deps: Deps, p: Principal, m: MediaRow, usage?: Record<string, string[]>) {

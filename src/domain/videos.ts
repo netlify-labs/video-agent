@@ -440,11 +440,12 @@ export async function reviseVideo(
         : null
       // The parent's media comes along (even items deleted from the library since); new picks are added.
       const inherited = await repo.listVersionMedia(jobId, parent.n)
+      // Files attached to the comments being incorporated come along too.
       const media = await snapshotMedia(
         repo,
         jobId,
         n,
-        [...(planned?.mediaIds ?? []), ...(input.mediaIds ?? [])],
+        [...(planned?.mediaIds ?? []), ...(input.mediaIds ?? []), ...feedbackMediaIds(feedback)],
         inherited,
       )
       await repo.insertVersion({
@@ -525,10 +526,28 @@ async function snapshotFeedback(
       timeSec: c.timeSec,
       x: c.x,
       y: c.y,
+      files: await commentFiles(repo, c),
     })
   }
   return rows
 }
+
+/**
+ * A comment's attached media as the run will see them (snapshotMedia names each assets/media/{id}.{ext}), skipping
+ * items deleted from the library since; null for none.
+ */
+async function commentFiles(repo: Repo, c: CommentRow): Promise<string[] | null> {
+  const out = []
+  for (const id of c.mediaIds ?? []) {
+    const m = await repo.getMedia(id)
+    if (m && !m.deletedAt && m.status === 'ready') out.push(`assets/media/${m.id}.${m.ext}`)
+  }
+  return out.length ? out : null
+}
+
+/** The media ids behind a feedback snapshot's files, so the revision downloads them. */
+const feedbackMediaIds = (rows: VersionCommentRow[]) =>
+  rows.flatMap((r) => (r.files ?? []).map((f) => f.replace(/^assets\/media\//, '').replace(/\.[^.]+$/, '')))
 
 export async function retryVersion(deps: Deps, principal: Principal, jobId: string, n: number) {
   return deps.store.tx(async (repo) => {

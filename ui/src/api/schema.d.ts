@@ -8888,11 +8888,24 @@ export interface components {
             addressedInN: number | null;
             /** @description Notes posted together as one review block share this id; null for a lone comment */
             groupId: string | null;
+            /** @description Library media attached to the comment, in order (items deleted from the library since left out) */
+            attachments: components["schemas"]["CommentAttachment"][];
             can: {
                 edit: boolean;
                 delete: boolean;
                 resolve: boolean;
             };
+        };
+        CommentAttachment: {
+            id: string;
+            /** @enum {string} */
+            kind: "image" | "svg" | "video" | "font" | "audio" | "pdf";
+            filename: string;
+            title: string | null;
+            /** @description A signed link to the file (an SVG: its sanitized copy) */
+            url: string | null;
+            /** @description A signed link to a clip's poster frame */
+            poster: string | null;
         };
         CreateComment: {
             versionN: number;
@@ -8900,6 +8913,8 @@ export interface components {
             timeSec?: number | null;
             x?: number | null;
             y?: number | null;
+            /** @description Ready library media to attach (at most 5): upload first, then pass the ids. Incorporating the comment gives them to the agent. */
+            mediaIds?: string[];
         };
         CreateComments: {
             versionN: number;
@@ -8911,6 +8926,8 @@ export interface components {
             timeSec?: number | null;
             x?: number | null;
             y?: number | null;
+            /** @description Ready library media to attach (at most 5): upload first, then pass the ids. Incorporating the comment gives them to the agent. */
+            mediaIds?: string[];
         };
         PatchComment: {
             body?: string;

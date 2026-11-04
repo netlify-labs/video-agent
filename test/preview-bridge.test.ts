@@ -150,3 +150,49 @@ describe('bridge mix command', () => {
     expect(e.voice.getAttribute('data-volume')).toBe('1')
   })
 })
+
+describe('preview bridge text edits', () => {
+  /** Runs the bridge with one editable element made of these text nodes, applies one edit, returns the nodes. */
+  function edit(parts: string[], text: string) {
+    const nodes = parts.map((data) => ({ data }))
+    const el = {}
+    const listeners: Record<string, ((e: unknown) => void)[]> = {}
+    const parent = { postMessage() {} }
+    runInNewContext(source, {
+      window: {
+        __playerReady: true,
+        __player: { getTime: () => 0, getDuration: () => 9, play() {}, pause() {}, seek() {} },
+        addEventListener: (t: string, f: (e: unknown) => void) => (listeners[t] ??= []).push(f),
+      },
+      document: {
+        addEventListener() {},
+        querySelectorAll: () => [],
+        querySelector: (sel: string) => (sel.includes('data-va-text') ? el : null),
+        getElementById: () => null,
+        createTreeWalker: (root: unknown) => {
+          let i = 0
+          return { nextNode: () => (root === el ? (nodes[i++] ?? null) : null) }
+        },
+      },
+      parent,
+      location: { hash: '#ch=c1' },
+      URLSearchParams,
+      requestAnimationFrame: () => 0,
+      setTimeout: () => 0,
+      innerWidth: 100,
+      innerHeight: 100,
+      CSS: { escape: (s: string) => s },
+    })
+    for (const f of listeners.message ?? [])
+      f({ source: parent, data: { channel: 'c1', type: 'apply-edits', edits: [{ id: 'c6', text }] } })
+    return nodes.map((n) => n.data)
+  }
+
+  it('changes only what changed, inside its token, keeping the indent', () => {
+    // "  <prop>model</prop>: <str>'claude-opus-4-8'</str>," as text nodes.
+    const line = ['  ', 'model', ': ', "'claude-opus-4-8'", ',']
+    expect(edit(line, "model: 'claude-opus-5-5',")).toEqual(['  ', 'model', ': ', "'claude-opus-5-5'", ','])
+    expect(edit(line, "model: 'claude-opus-4-8',")).toEqual(line)
+    expect(edit(['Org webhooks'], 'Org webhooks, now')).toEqual(['Org webhooks, now'])
+  })
+})

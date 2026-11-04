@@ -1261,6 +1261,25 @@ export const NotificationListSchema = z
   .openapi('NotificationList')
 
 const PersonRef = z.object({ id: z.string(), name: z.string().nullable(), email: z.string().nullable() })
+/** Files one comment can carry. */
+export const COMMENT_FILES_MAX = 5
+export const CommentAttachmentSchema = z
+  .object({
+    id: z.string(),
+    kind: z.enum(MEDIA_KINDS),
+    filename: z.string(),
+    title: z.string().nullable(),
+    url: z.string().nullable().openapi({ description: 'A signed link to the file (an SVG: its sanitized copy)' }),
+    poster: z.string().nullable().openapi({ description: "A signed link to a clip's poster frame" }),
+  })
+  .openapi('CommentAttachment')
+const attachIds = z
+  .array(z.string())
+  .max(COMMENT_FILES_MAX)
+  .optional()
+  .openapi({
+    description: `Ready library media to attach (at most ${COMMENT_FILES_MAX}): upload first, then pass the ids. Incorporating the comment gives them to the agent.`,
+  })
 export const CommentSchema = z
   .object({
     id: z.string(),
@@ -1285,6 +1304,9 @@ export const CommentSchema = z
       .openapi({
         description: 'Notes posted together as one review block share this id; null for a lone comment',
       }),
+    attachments: z.array(CommentAttachmentSchema).openapi({
+      description: 'Library media attached to the comment, in order (items deleted from the library since left out)',
+    }),
     can: z.object({ edit: z.boolean(), delete: z.boolean(), resolve: z.boolean() }),
   })
   .openapi('Comment')
@@ -1306,6 +1328,7 @@ export const CreateCommentSchema = z
     timeSec: z.number().min(0).nullable().optional(),
     x: z.number().min(0).max(1).nullable().optional(),
     y: z.number().min(0).max(1).nullable().optional(),
+    mediaIds: attachIds,
   })
   .openapi('CreateComment')
 export const CommentNoteSchema = z
@@ -1314,6 +1337,7 @@ export const CommentNoteSchema = z
     timeSec: z.number().min(0).nullable().optional(),
     x: z.number().min(0).max(1).nullable().optional(),
     y: z.number().min(0).max(1).nullable().optional(),
+    mediaIds: attachIds,
   })
   .openapi('CommentNote')
 export const CreateCommentsSchema = z

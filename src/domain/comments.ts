@@ -5,8 +5,11 @@
 import type { Deps } from '../deps.js'
 import { ApiError } from '../lib/errors.js'
 import type { Repo } from '../store/types.js'
+import { COMMENT_FILES_MAX } from '../schemas.js'
+import { attachableMedia, mediaUrl } from './media.js'
 import { notifyOwner } from './notifications.js'
 import { assertCan, can, type Principal } from './policy.js'
+import { getSettings } from './settings.js'
 import type { CommentRow, JobRow } from './types.js'
 import { decodeCursor, loadJob, nextCursor } from './videos.js'
 import { emitEvent } from './webhooks.js'
@@ -22,6 +25,36 @@ export interface CommentInput {
   timeSec?: number | null | undefined
   x?: number | null | undefined
   y?: number | null | undefined
+  /** Ready library media to attach. */
+  mediaIds?: string[] | undefined
+}
+
+/** What a comment's attachment links are signed with: fetched before a transaction, which can't read settings. */
+interface Signing {
+  secret: string
+  now: Date
+}
+const signingFor = async (deps: Deps): Promise<Signing> => ({
+  secret: (await getSettings(deps)).fileSigningSecret,
+  now: deps.clock.now(),
+})
+
+/** A comment's attached media, with signed links; items deleted from the library since are left out. */
+async function attachments(repo: Repo, c: CommentRow, s: Signing) {
+  const out = []
+  for (const id of c.mediaIds ?? []) {
+    const m = await repo.getMedia(id)
+    if (!m || m.deletedAt || m.status !== 'ready') continue
+    out.push({
+      id: m.id,
+      kind: m.kind,
+      filename: m.filename,
+      title: m.title,
+      url: mediaUrl(s.secret, s.now, m.id, 'file'),
+      poster: m.posterKey ? mediaUrl(s.secret, s.now, m.id, 'poster') : null,
+    })
+  }
+  return out
 }
 
 async function person(repo: Repo, id: string | null) {
@@ -30,7 +63,7 @@ async function person(repo: Repo, id: string | null) {
   return { id, name: u?.name ?? null, email: u?.email ?? null }
 }
 
-async function commentDto(repo: Repo, p: Principal, job: JobRow, c: CommentRow) {
+async function commentDto(repo: Repo, p: Principal, job: JobRow, c: CommentRow, s: Signing) {
   const mine = c.authorId === p.userId
   const moderate = can(p, 'comment:moderate', { ownerId: job.ownerId })
   return {
@@ -48,6 +81,7 @@ async function commentDto(repo: Repo, p: Principal, job: JobRow, c: CommentRow) 
     resolvedBy: await person(repo, c.resolvedBy),
     addressedInN: c.addressedInN,
     groupId: c.groupId ?? null,
+    attachments: await attachments(repo, c, s),
     can: {
       edit: mine && can(p, 'comment:create'),
       delete: mine || moderate,
@@ -102,11 +136,12 @@ export async function listComments(
     : all
   const page = rest.slice(0, limit)
   const readAt = await deps.store.getCommentReadAt(p.userId, jobId)
+  const s = await signingFor(deps)
   const unreadCount = (q.versionN === undefined ? all : await deps.store.listComments(jobId)).filter(
     (c) => c.authorId !== p.userId && (readAt === null || c.createdAt > readAt),
   ).length
   return {
-    items: await Promise.all(page.map((c) => commentDto(deps.store, p, job, c))),
+    items: await Promise.all(page.map((c) => commentDto(deps.store, p, job, c, s))),
     unreadCount,
     readAt,
     nextCursor: nextCursor(rest.length, limit, page),
@@ -153,6 +188,7 @@ async function addNotes(
   notes: CommentInput[],
   groupId: string | null,
 ) {
+  const s = await signingFor(deps)
   return deps.store.tx(async (repo) => {
     const job = await loadJob(repo, p, jobId)
     assertCan(p, 'comment:create')
@@ -164,12 +200,13 @@ async function addNotes(
       const pin = cleanPin(n, durationSec)
       if (pin.timeSec !== null && v.status !== 'ready')
         throw new ApiError('conflict', 'Pins need a ready version. Leave timeSec out to comment on this one.')
-      return { body, pin }
+      return { body, pin, mediaIds: n.mediaIds ?? [] }
     })
+    for (const n of cleaned) n.mediaIds = await attachableMedia(repo, n.mediaIds, COMMENT_FILES_MAX)
     // A millisecond apart, so the notes list in the order they were posted.
     const now = deps.clock.now().getTime()
     const dtos = []
-    for (const [i, { body, pin }] of cleaned.entries()) {
+    for (const [i, { body, pin, mediaIds }] of cleaned.entries()) {
       const row: CommentRow = {
         id: deps.ids.uuid(),
         jobId,
@@ -184,9 +221,10 @@ async function addNotes(
         addressedInN: null,
         deletedAt: null,
         groupId,
+        mediaIds: mediaIds.length ? mediaIds : null,
       }
       await repo.insertComment(row)
-      const dto = await commentDto(repo, p, job, row)
+      const dto = await commentDto(repo, p, job, row, s)
       dtos.push(dto)
       await emitEvent(repo, deps, {
         type: 'comment.created',
@@ -241,6 +279,7 @@ export async function updateComment(
   commentId: string,
   patch: { body?: string | undefined; resolved?: boolean | undefined },
 ) {
+  const s = await signingFor(deps)
   return deps.store.tx(async (repo) => {
     const { c, job } = await loadComment(repo, p, commentId, true)
     const now = deps.clock.now().toISOString()
@@ -257,7 +296,7 @@ export async function updateComment(
       if (!patch.resolved && c.resolvedAt) Object.assign(next, { resolvedAt: null, resolvedBy: null })
     }
     if (Object.keys(next).length) await repo.updateComment(commentId, next)
-    return commentDto(repo, p, job, { ...c, ...next })
+    return commentDto(repo, p, job, { ...c, ...next }, s)
   })
 }
 

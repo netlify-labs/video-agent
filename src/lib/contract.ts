@@ -176,6 +176,49 @@ function textOf(n: Node): string {
 function setText(el: Element, text: string) {
   el.childNodes = [{ nodeName: '#text', value: text, parentNode: el } as unknown as ChildNode]
 }
+
+/**
+ * Edits an element's text without losing its markup: only the characters that changed are replaced, inside the text
+ * node they belong to, so token spans (syntax highlighting), emphasis and indentation around them stay. `text` is
+ * the field as people edit it (trimmed): the element's own leading and trailing whitespace is kept.
+ */
+export function editText(el: Element, text: string) {
+  const nodes: { n: { value: string }; a: number; b: number }[] = []
+  let at = 0
+  const collect = (n: Node) => {
+    if (n.nodeName === '#text' && 'value' in n) {
+      const t = n as unknown as { value: string }
+      nodes.push({ n: t, a: at, b: at + t.value.length })
+      at += t.value.length
+    } else if ('childNodes' in n) for (const c of n.childNodes) collect(c)
+  }
+  collect(el)
+  const old = nodes.map((x) => x.n.value).join('')
+  if (!nodes.length) return setText(el, text)
+  const lead = /^\s*/.exec(old)?.[0] ?? ''
+  const trail = old.trim() ? (/\s*$/.exec(old)?.[0] ?? '') : ''
+  const next = lead + text + trail
+  if (next === old) return
+  const [p, oldEnd, ins] = changed(old, next)
+  // The inserted text goes into the node where the change starts (the earlier one at a boundary).
+  const host = nodes.find((x) => p >= x.a && p < x.b) ?? nodes.findLast((x) => x.b === p) ?? nodes[0]
+  for (const x of nodes) {
+    const from = Math.max(p, x.a) - x.a
+    const to = Math.min(oldEnd, x.b) - x.a
+    const v = x.n.value
+    const cut = from < to ? v.slice(0, from) + v.slice(to) : v
+    x.n.value = x === host ? cut.slice(0, p - x.a) + ins + cut.slice(p - x.a) : cut
+  }
+}
+
+/** Where two strings differ: [start, end in a, the replacement from b]. */
+export function changed(a: string, b: string): [number, number, string] {
+  let p = 0
+  while (p < a.length && p < b.length && a[p] === b[p]) p++
+  let s = 0
+  while (s < a.length - p && s < b.length - p && a[a.length - 1 - s] === b[b.length - 1 - s]) s++
+  return [p, a.length - s, b.slice(p, b.length - s)]
+}
 const num = (v: string | null) => (v === null || v.trim() === '' ? NaN : Number(v))
 const sec = (n: number) => Math.round(n * 1e6) / 1e6
 const fmt = (n: number) => String(sec(n))
@@ -1052,7 +1095,7 @@ function applyOne(d: Doc, op: EditOp, opts: EditOptions, narration: Record<strin
       const el = [...walk(d.root)].find((e) => attr(e, 'data-va-text') === op.id)
       if (!el) throw new ContractError([`There's no text "${op.id}".`])
       if (op.text.length > 500) throw new ContractError(['Keep text under 500 characters.'])
-      setText(el, op.text)
+      editText(el, op.text)
       return
     }
     case 'retime': {

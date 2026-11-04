@@ -47,6 +47,8 @@ const me = {
 interface MockComment {
   /** Notes posted together share one (POST …/comments/batch). */
   groupId?: string | null
+  /** Library media attached to the comment. */
+  mediaIds?: string[]
   id: string
   videoId: string
   versionN: number
@@ -164,6 +166,22 @@ const commentDto = (c: MockComment) => {
   return {
     ...c,
     groupId: c.groupId ?? null,
+    mediaIds: undefined,
+    attachments: (c.mediaIds ?? []).flatMap((id) => {
+      const m = mockMedia.find((x) => x.id === id)
+      return m
+        ? [
+            {
+              id: m.id,
+              kind: m.kind,
+              filename: m.filename,
+              title: m.title,
+              url: m.urls?.file ?? null,
+              poster: m.urls?.poster ?? null,
+            },
+          ]
+        : []
+    }),
     unread: undefined,
     can: { edit: mine && me.role !== 'viewer', delete: mine || moderate, resolve: moderate },
   }
@@ -959,7 +977,13 @@ export function installMock() {
       if (me.role === 'viewer') return fail(403, 'forbidden', "Your role (viewer) can't comment.")
       const b = (await readBody(init, input)) as {
         versionN?: number
-        notes?: { body?: string; timeSec?: number | null; x?: number | null; y?: number | null }[]
+        notes?: {
+          body?: string
+          timeSec?: number | null
+          x?: number | null
+          y?: number | null
+          mediaIds?: string[]
+        }[]
       }
       ;(window as unknown as { __lastBatch?: unknown }).__lastBatch = b
       const notes = b.notes ?? []
@@ -974,6 +998,7 @@ export function installMock() {
         timeSec: n.timeSec ?? null,
         x: n.x ?? null,
         y: n.y ?? null,
+        mediaIds: n.mediaIds ?? [],
         createdAt: new Date(Date.now() + i).toISOString(),
         editedAt: null,
         resolvedAt: null,
@@ -1000,6 +1025,7 @@ export function installMock() {
     if (cm?.[1] && method === 'POST') {
       if (me.role === 'viewer') return fail(403, 'forbidden', "Your role (viewer) can't comment.")
       const b = await readBody(init, input)
+      ;(window as unknown as { __lastComment?: unknown }).__lastComment = b
       const c: MockComment = {
         id: `c_${comments.length + 1}`,
         videoId: cm[1],
@@ -1009,6 +1035,7 @@ export function installMock() {
         timeSec: (b.timeSec as number | undefined) ?? null,
         x: (b.x as number | undefined) ?? null,
         y: (b.y as number | undefined) ?? null,
+        mediaIds: (b.mediaIds as string[] | undefined) ?? [],
         createdAt: new Date().toISOString(),
         editedAt: null,
         resolvedAt: null,

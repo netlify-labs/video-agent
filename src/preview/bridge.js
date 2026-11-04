@@ -88,6 +88,43 @@
     }
     post({ type: 'mix-applied', count: applied })
   }
+  // Edits an element's text the way the server does (src/lib/contract.ts editText): only the characters that changed,
+  // inside the text node they belong to, so token spans (syntax highlighting) and indentation stay.
+  function editText(el, text) {
+    const nodes = []
+    let at = 0
+    const walker = document.createTreeWalker(el, 4) // NodeFilter.SHOW_TEXT
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      nodes.push({ n, a: at, b: at + n.data.length })
+      at += n.data.length
+    }
+    if (!nodes.length) {
+      el.textContent = text
+      return
+    }
+    const old = nodes.map((x) => x.n.data).join('')
+    const lead = (/^\s*/.exec(old) || [''])[0]
+    const trail = old.trim() ? (/\s*$/.exec(old) || [''])[0] : ''
+    const next = lead + text + trail
+    if (next === old) return
+    let p = 0
+    while (p < old.length && p < next.length && old[p] === next[p]) p++
+    let s = 0
+    while (s < old.length - p && s < next.length - p && old[old.length - 1 - s] === next[next.length - 1 - s])
+      s++
+    const end = old.length - s
+    const ins = next.slice(p, next.length - s)
+    let host = nodes.find((x) => p >= x.a && p < x.b)
+    if (!host) for (const x of nodes) if (x.b === p) host = x
+    if (!host) host = nodes[0]
+    for (const x of nodes) {
+      const from = Math.max(p, x.a) - x.a
+      const to = Math.min(end, x.b) - x.a
+      const v = x.n.data
+      const cut = from < to ? v.slice(0, from) + v.slice(to) : v
+      x.n.data = x === host ? cut.slice(0, p - x.a) + ins + cut.slice(p - x.a) : cut
+    }
+  }
   window.addEventListener('message', (e) => {
     if (e.source !== parent) return
     const m = e.data
@@ -105,7 +142,7 @@
               document.getElementById(ed.id)
             : null
         if (el && typeof ed.text === 'string') {
-          el.textContent = ed.text // text nodes only, never HTML
+          editText(el, ed.text) // text nodes only, never HTML
           applied++
         }
       }

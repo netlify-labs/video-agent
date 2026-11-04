@@ -1009,7 +1009,7 @@ test('selected media is marked and listed, and the button says what it adds', as
 test('a revision can add media', async ({ page }) => {
   await page.goto('/videos/vid_teaser')
   await page.getByLabel('What should change?').fill('Put our logo on the end card')
-  await page.getByRole('button', { name: 'Add media' }).click()
+  await page.getByRole('button', { name: 'Attach files' }).click()
   const dialog = page.getByRole('dialog')
   await dialog.locator('input[type=file]').setInputFiles(pngFile())
   await dialog.getByTestId('pick-med_mock0001').click()

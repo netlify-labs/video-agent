@@ -5157,6 +5157,13 @@
             ],
             "description": "Notes posted together as one review block share this id; null for a lone comment"
           },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CommentAttachment"
+            },
+            "description": "Library media attached to the comment, in order (items deleted from the library since left out)"
+          },
           "can": {
             "type": "object",
             "properties": {
@@ -5192,7 +5199,58 @@
           "resolvedBy",
           "addressedInN",
           "groupId",
+          "attachments",
           "can"
+        ]
+      },
+      "CommentAttachment": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "image",
+              "svg",
+              "video",
+              "font",
+              "audio",
+              "pdf"
+            ]
+          },
+          "filename": {
+            "type": "string"
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A signed link to the file (an SVG: its sanitized copy)"
+          },
+          "poster": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A signed link to a clip's poster frame"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "filename",
+          "title",
+          "url",
+          "poster"
         ]
       },
       "CreateComment": {
@@ -5229,6 +5287,14 @@
             ],
             "minimum": 0,
             "maximum": 1
+          },
+          "mediaIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 5,
+            "description": "Ready library media to attach (at most 5): upload first, then pass the ids. Incorporating the comment gives them to the agent."
           }
         },
         "required": [
@@ -5288,6 +5354,14 @@
             ],
             "minimum": 0,
             "maximum": 1
+          },
+          "mediaIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 5,
+            "description": "Ready library media to attach (at most 5): upload first, then pass the ids. Incorporating the comment gives them to the agent."
           }
         },
         "required": [

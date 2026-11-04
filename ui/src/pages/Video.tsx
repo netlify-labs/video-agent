@@ -38,6 +38,7 @@ import {
 import { CommentsCard, ReviewPlayer, VerdictBar, type Pin } from '../components/Review'
 import { CompositionPreview } from '../components/CompositionPreview'
 import { DetailsButton, DetailsCard, VersionDetailsModal } from '../components/VersionDetails'
+import { AttachButton, DropTarget, PendingUploads, useAttachUploads } from '../components/AttachFiles'
 import { LanguageSelect, languageName } from '../components/LanguageSelect'
 import {
   IconBell,
@@ -62,7 +63,15 @@ import {
   unwatchRun,
   watchRun,
 } from '../lib/run-notify'
-import { $api, errorMessage, newIdempotencyKey, videoInit, type Version, type Video } from '../api/client'
+import {
+  $api,
+  errorMessage,
+  fetchClient,
+  newIdempotencyKey,
+  videoInit,
+  type Version,
+  type Video,
+} from '../api/client'
 import {
   CopyField,
   STATUS_WORD,
@@ -78,6 +87,9 @@ import {
   showError,
   useAfterWrite,
 } from '../components/bits'
+
+/** Versions whose editing record this page already tried to repair (once per page load). */
+const healed = new Set<string>()
 
 const STAGE_WORDS: Record<string, string> = {
   queued: 'Waiting for a free slot',
@@ -539,6 +551,12 @@ export function VideoPage() {
   const [revVoice, setRevVoice] = useState<VoiceState | null>(null)
   const [revKey, setRevKey] = useState(newIdempotencyKey)
   const revMediaBody = revMedia.length ? { mediaIds: revMedia.map((m) => m.id) } : {}
+  // Files dropped on the revision box upload to the library and are attached when ready (set below, once the
+  // version's sound is known).
+  const revAppend = useRef<(m: Media) => void>(() => undefined)
+  const revUploads = useAttachUploads((m) => {
+    revAppend.current(m)
+  })
   const prevStatus = useRef<string | null>(null)
   const player = useRef<HTMLVideoElement>(null)
   const [picking, setPicking] = useState(false)
@@ -577,6 +595,23 @@ export function VideoPage() {
   })
 
   const data = video.data
+  // A ready agent-made version that isn't editable may only be missing its record (finalize's bundle step failed):
+  // loading its preview link once makes the bundle and records the contract, then the video is read again.
+  const healN =
+    data?.versions.find((x) => x.n === selected) ?? data?.versions.find((x) => x.status === 'ready')
+  const heal =
+    healN && healN.status === 'ready' && !healN.editable && healN.mode === 'author' ? healN.n : null
+  useEffect(() => {
+    if (heal === null || !data) return
+    const key = `${data.id}/${heal}`
+    if (healed.has(key)) return
+    healed.add(key)
+    void fetchClient
+      .GET('/api/v1/videos/{id}/versions/{n}/preview', { params: { path: { id: data.id, n: heal } } })
+      .then(({ data: link }) => {
+        if (link) void video.refetch()
+      })
+  }, [heal, data?.id])
   // Space plays and pauses the video, ← and → step through it (not while typing or on a control's own keys).
   useMediaKeys({
     // Only while the video itself is on screen (not the live composition, nor a version still being made).
@@ -667,6 +702,16 @@ export function VideoPage() {
   const live = v.publications.find((p) => !p.unpublishedAt && p.urls)
   const showProgress = inProgress(latest.status) && (selected === null || selected === latest.n)
   const sound = revSound ?? v.sound
+  const pickRevMedia = (next: Media[]) => {
+    const s = soundAfterPick(sound, revSound !== null, revMedia, next)
+    if (s !== sound) setRevSound(s)
+    setRevMedia(next)
+  }
+  revAppend.current = (m) => {
+    setRevMedia((cur) => (cur.some((x) => x.id === m.id) ? cur : [...cur, m]))
+    const s = soundAfterPick(sound, revSound !== null, revMedia, [...revMedia, m])
+    if (s !== sound) setRevSound(s)
+  }
   const voice = revVoice ?? voiceStateFrom(v.voiceover)
   const voiceChanged = revVoice !== null && !sameVoice(revVoice, voiceStateFrom(v.voiceover))
   const makeRevision = (planId?: string | null) => {
@@ -1042,8 +1087,15 @@ export function VideoPage() {
                 }}
               >
                 <Stack gap="sm">
-                  <Group justify="space-between">
-                    <Text fw={600}>Revise and regenerate this video</Text>
+                  <Group justify="space-between" gap="xs">
+                    <Group gap="sm">
+                      <Text fw={600}>Revise and regenerate this video</Text>
+                      <AttachButton
+                        value={revMedia}
+                        onChange={pickRevMedia}
+                        disabled={busy || v.status !== 'ready' || planningRevision}
+                      />
+                    </Group>
                     <Text size="sm" c="var(--va-faint)">
                       {busy
                         ? 'Wait for the version in progress'
@@ -1052,26 +1104,28 @@ export function VideoPage() {
                           : 'Pick a ready version'}
                     </Text>
                   </Group>
-                  <Textarea
-                    aria-label="What should change?"
-                    autosize
-                    minRows={2}
-                    placeholder='What should change? For example: "make the end card say Start free today"'
-                    value={revision}
-                    disabled={busy || v.status !== 'ready'}
-                    onChange={(e) => {
-                      setRevision(e.currentTarget.value)
-                    }}
-                  />
+                  <DropTarget
+                    onFiles={(fs) => void revUploads.add(fs)}
+                    disabled={busy || v.status !== 'ready' || planningRevision}
+                  >
+                    <Textarea
+                      aria-label="What should change?"
+                      autosize
+                      minRows={3}
+                      placeholder='What should change? For example: "make the end card say Start free today". Drop files here to attach them.'
+                      value={revision}
+                      disabled={busy || v.status !== 'ready'}
+                      onChange={(e) => {
+                        setRevision(e.currentTarget.value)
+                      }}
+                    />
+                  </DropTarget>
+                  <PendingUploads pending={revUploads.pending} onDismiss={revUploads.dismiss} />
                   <MediaChips
                     value={revMedia}
-                    onChange={(next) => {
-                      const s = soundAfterPick(sound, revSound !== null, revMedia, next)
-                      if (s !== sound) setRevSound(s)
-                      setRevMedia(next)
-                    }}
+                    onChange={pickRevMedia}
                     disabled={busy || v.status !== 'ready' || planningRevision}
-                    label="Add media"
+                    button={false}
                   />
                   <SoundControl
                     value={sound}

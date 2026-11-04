@@ -968,6 +968,57 @@ main.va-shell-main {
 .va-composer-input {
   font-size: 14px;
 }
+/* A text box that takes dropped files (AttachFiles.tsx): an accent edge and a label while files are over it. */
+.va-drop-target {
+  position: relative;
+}
+.va-drop-target[data-over] .mantine-Textarea-input {
+  border-color: var(--va-accent);
+  border-style: dashed;
+  background: color-mix(in srgb, var(--va-accent) 10%, var(--va-dialog-raised));
+}
+.va-drop-target[data-over]::after {
+  content: attr(data-label);
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--va-accent);
+  pointer-events: none;
+}
+.va-media-chip[data-error] {
+  color: var(--va-negative);
+}
+/* A file attached to a comment: a small thumbnail (or clip) and its name, opening the file. */
+.va-comment-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  padding: 3px 8px 3px 3px;
+  border-radius: var(--mantine-radius-sm);
+  background: var(--va-raised);
+  color: var(--va-text);
+  font-size: 12px;
+  text-decoration: none;
+}
+.va-comment-file:hover {
+  background: color-mix(in srgb, var(--va-raised) 80%, var(--va-text));
+}
+.va-comment-file img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  border-radius: 3px;
+  background: var(--va-surface);
+}
+.va-comment-file span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .va-draft-note {
   padding: 4px 8px;
   border-radius: var(--mantine-radius-md);

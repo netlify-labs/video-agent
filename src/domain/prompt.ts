@@ -59,6 +59,8 @@ export interface FeedbackItem {
   x: number | null
   y: number | null
   still: string | null
+  /** Files the commenter attached, as the run sees them (assets/media/…). */
+  files?: string[] | null
 }
 
 const FENCE_OPEN = '<<<'
@@ -200,10 +202,11 @@ export function buildPrompt(p: PromptInput): string {
       ...(f.timeSec !== null ? { atSec: f.timeSec } : {}),
       ...(f.x !== null && f.y !== null ? { spot: { x: f.x, y: f.y } } : {}),
       ...(f.still ? { still: `video/${f.still}` } : {}),
+      ...(f.files?.length ? { files: f.files.map((x) => `video/${x}`) } : {}),
     }))
     lines.push(
       '',
-      `Feedback to incorporate (comments on version ${p.revision?.parentN ?? p.versionN - 1}), as JSON. atSec is seconds into that version; spot is where on the frame (0-1 across and down). A comment with a still has a picture of that moment in video/feedback/ with a red dot on the spot: look at it before changing anything.`,
+      `Feedback to incorporate (comments on version ${p.revision?.parentN ?? p.versionN - 1}), as JSON. atSec is seconds into that version; spot is where on the frame (0-1 across and down). A comment with a still has a picture of that moment in video/feedback/ with a red dot on the spot: look at it before changing anything.${p.feedback.some((f) => f.files?.length) ? ' files are what the commenter attached (a logo, a screenshot, a reference): open each and use it the way the comment asks.' : ''}`,
       FENCE_OPEN,
       sanitizeBrief(JSON.stringify(items)),
       FENCE_CLOSE,

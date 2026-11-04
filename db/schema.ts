@@ -312,6 +312,8 @@ export const comments = pgTable(
     deletedAt: ts('deleted_at'),
     // Notes posted together as one review block share this id (null for a lone comment).
     groupId: text('group_id'),
+    // Library media attached to the comment (screenshots, logos, files), in order; null for none.
+    mediaIds: jsonb('media_ids').$type<string[]>(),
   },
   (t) => [index('comments_job_idx').on(t.jobId, t.createdAt)],
 )
@@ -560,6 +562,8 @@ export const versionComments = pgTable(
     timeSec: doublePrecision('time_sec'),
     x: doublePrecision('x'),
     y: doublePrecision('y'),
+    // The comment's attached media as the run sees them (assets/media/…), when it had any.
+    files: jsonb('files').$type<string[]>(),
   },
   (t) => [primaryKey({ columns: [t.jobId, t.versionN, t.commentId] })],
 )

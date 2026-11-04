@@ -309,6 +309,7 @@ async function startRequest(
       x: c.x,
       y: c.y,
       still: feedbackVideo && i >= 0 ? feedbackStillPath(i, c.commentId) : null,
+      files: c.files ?? null,
     }
   })
   let runManifestSha256: string | null = null

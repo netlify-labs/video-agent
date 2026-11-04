@@ -4,7 +4,11 @@ import { describe, expect, it } from 'vitest'
 import {
   applyEdits,
   applyRevoice,
+  changed,
   ContractError,
+  editText,
+  save,
+  walk,
   load,
   read,
   validate,
@@ -143,6 +147,37 @@ describe('contract patcher', () => {
     const out = applyEdits(html, summary, [{ op: 'text', id: 'intro-title', text: '<b>Webhooks</b> & more' }])
     expect(out.html).toContain('&lt;b&gt;Webhooks&lt;/b&gt; &amp; more')
     expect(out.summary.captions?.[0]?.text).toBe('<b>Webhooks</b> & more')
+  })
+
+  it('edits text in place, keeping token spans (syntax highlighting) and indentation', () => {
+    const line = (inner: string) => {
+      const d = load(`<div data-composition-id="x"><span class="ln" data-va-text="c6">${inner}</span></div>`)
+      const el = [...walk(d.root)].find((e) => e.attrs.some((a) => a.name === 'data-va-text'))
+      if (!el) throw new Error('no line')
+      return { d, el }
+    }
+    const html = (src: string) => /<span class="ln" data-va-text="c6">(.*?)<\/span><\/div>/s.exec(src)?.[1]
+    const code = `  <span class="tk-prop">model</span>: <span class="tk-str">'claude-opus-4-8'</span>,`
+    // The model name changes inside its string token; the token and the two-space indent stay.
+    const { d, el } = line(code)
+    editText(el, "model: 'claude-opus-5-5',")
+    expect(html(save(d))).toBe(
+      `  <span class="tk-prop">model</span>: <span class="tk-str">'claude-opus-5-5'</span>,`,
+    )
+    // Unchanged text changes nothing.
+    const same = line(code)
+    editText(same.el, "model: 'claude-opus-4-8',")
+    expect(html(save(same.d))).toBe(code)
+    // A change across tokens trims them, and the new text goes where the change starts.
+    const across = line(code)
+    editText(across.el, 'name: x,')
+    expect(html(save(across.d))).toBe(`  <span class="tk-prop">name: x</span><span class="tk-str"></span>,`)
+    // Plain text, and text in an element that had none, still work.
+    const plain = line('Org webhooks')
+    editText(plain.el, 'Org webhooks, now')
+    expect(html(save(plain.d))).toBe('Org webhooks, now')
+    expect(changed('abcd', 'abXd')).toEqual([2, 3, 'X'])
+    expect(changed('ab', 'abc')).toEqual([2, 2, 'c'])
   })
 
   it('retimes by stretching: later beats shift, the root, layers, video slots and captions follow', () => {
