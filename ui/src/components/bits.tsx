@@ -82,7 +82,7 @@ export function PoweredBy({ inSidebar = false }: { inSidebar?: boolean }) {
       <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden>
         <path d="M12 2 2 12l10 10 10-10z" fill="var(--va-accent)" />
       </svg>
-      Powered by Netlify Agent Runners
+      Powered by Netlify AI
     </a>
   )
 }

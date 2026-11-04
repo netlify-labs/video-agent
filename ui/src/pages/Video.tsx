@@ -22,6 +22,7 @@ import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
 import { FavoriteButton } from '../components/FavoriteButton'
 import { RemixDialog, useCanRemix } from '../components/RemixDialog'
+import { useMediaKeys } from '../lib/media-keys'
 import { MediaChips, type Media } from '../components/MediaPicker'
 import { PlanPanel } from '../components/PlanPanel'
 import { PublishButton } from '../components/PublishDialog'
@@ -592,6 +593,25 @@ export function VideoPage() {
   })
 
   const data = video.data
+  // Space plays and pauses the video, ← and → step through it (not while typing or on a control's own keys).
+  useMediaKeys({
+    // Only while the video itself is on screen (not the live composition, nor a version still being made).
+    enabled: () => view === 'video' && player.current !== null && player.current.closest('[hidden]') === null,
+    toggle: () => {
+      const p = player.current
+      if (!p) return
+      if (p.paused) void p.play().catch(() => undefined)
+      else p.pause()
+    },
+    seekBy: (d) => {
+      const p = player.current
+      if (!p) return
+      p.currentTime = Math.min(
+        Math.max(p.currentTime + d, 0),
+        Number.isFinite(p.duration) ? p.duration : p.currentTime + d,
+      )
+    },
+  })
   useEffect(() => {
     const asked = search.get('remix')
     // Waits until this person is known to be able to remix (the config and role load after the video).
@@ -688,10 +708,8 @@ export function VideoPage() {
 
   return (
     <>
-      <Anchor component={Link} to="/" size="sm" c="var(--va-muted)">
-        Library
-      </Anchor>
-      <div className="va-title-row" style={{ marginTop: 4 }}>
+      {/* No breadcrumb (Library is in the nav): the title sits at the top, so the video and comments fit. */}
+      <div className="va-title-row va-video-head">
         <div style={{ minWidth: 0, flex: 1 }}>
           {canPublish ? (
             <EditableTitle

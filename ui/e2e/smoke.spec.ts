@@ -16,8 +16,8 @@ test('library shows videos, progress and the badge', async ({ page }) => {
   await expect(page.getByText('7 videos, 2 in progress.')).toBeVisible()
   await expect(page.getByText('Making v1')).toBeVisible()
   await expect(page.getByText('Org webhooks launch')).toBeVisible()
-  await expect(page.getByRole('link', { name: 'Powered by Netlify Agent Runners' })).toBeVisible()
-  await expect(page.getByRole('link', { name: 'Powered by Netlify Agent Runners' })).toHaveAttribute(
+  await expect(page.getByRole('link', { name: 'Powered by Netlify AI' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Powered by Netlify AI' })).toHaveAttribute(
     'href',
     '/how-we-built-it/',
   )

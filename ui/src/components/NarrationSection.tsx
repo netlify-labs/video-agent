@@ -72,6 +72,10 @@ import {
 } from './timeline'
 
 /** Where a take goes: composition `start` (or the playhead), a source range, and a recorded take's sync fit. */
+/** How to add narration; on the Add audio button (the lane says "Drop an audio file here" itself). */
+const DROP_HELP =
+  'Add an MP3, M4A, WAV, Ogg or WebM file at the playhead, or drop one on the Narration lane. Drag clips to line them up; your narration plays over the scenes as they are.'
+
 export interface TakePlacement {
   start?: number
   srcStart?: number
@@ -405,10 +409,11 @@ export function NarrationSection(props: NarrationSectionProps) {
         onReady={onReady}
         onMessage={onMessage}
         onTransport={onTransport}
+        note={false}
       />
       {props.hint}
-      <Card data-testid="narration-section">
-        <Group justify="space-between" gap="sm" mb="xs">
+      <Card data-testid="narration-section" p="sm">
+        <Group justify="space-between" gap="sm" mb={6}>
           <Group gap={8}>
             <IconMicrophone size={16} />
             <Text fw={600}>Narration</Text>
@@ -431,6 +436,7 @@ export function NarrationSection(props: NarrationSectionProps) {
                   leftSection={<IconPlus size={14} />}
                   disabled={!!importing || readOnly}
                   data-testid="narration-upload"
+                  title={DROP_HELP}
                 >
                   Add audio
                 </Button>
@@ -463,10 +469,6 @@ export function NarrationSection(props: NarrationSectionProps) {
           </Group>
         </Group>
         {props.banner}
-        <Text size="xs" c="var(--va-faint)" mb="xs">
-          Drop an MP3, M4A, WAV, Ogg or WebM file on the Narration lane, or add one at the playhead. Drag clips to
-          line them up; your narration plays over the scenes as they are.
-        </Text>
         {importing ? (
           <Stack gap={4} mb="xs" data-testid="narration-importing">
             <Text size="xs">

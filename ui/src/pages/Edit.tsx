@@ -27,6 +27,7 @@ import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   IconArrowBackUp,
+  IconArrowLeft,
   IconArrowDown,
   IconArrowUp,
   IconMicrophone,
@@ -591,37 +592,55 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
   // Recording waits while a pending op would move time in the render (plan 2026-11-02 §5.3).
   const timingPending = timingChanged(ops, base)
   const lockedOut = lock.state.status === 'locked' || lock.state.status === 'taken_over'
-  const hint = (
-    <Text size="xs" c="var(--va-faint)">
-      Click any text in the preview to edit it. Text changes show at once; timing, order, colours, media and
-      audio after the draft saves.
-    </Text>
-  )
 
   // The preview stays put on the left with the actions above it; the controls scroll on their own on the right.
   const aspect = video.data.dimensions.width / video.data.dimensions.height
   return (
     <div className="va-editor">
-      <div className="va-editor-stage" style={{ ['--va-aspect' as string]: aspect }}>
-        <Anchor component={Link} to={`/videos/${id}`} size="sm" c="var(--va-muted)">
-          {video.data.title}
-        </Anchor>
-        <div className="va-title-row" style={{ marginTop: 4, marginBottom: 0 }}>
-          <div>
-            <Title order={1}>Edit v{draft.baseN}</Title>
-            <div className="va-sub num" data-testid="edit-status">
-              {Math.round(total * 10) / 10} s · {cur.beats.length}{' '}
-              {cur.beats.length === 1 ? 'scene' : 'scenes'} ·{' '}
-              {saving
-                ? 'Saving…'
-                : dirty
-                  ? 'Unsaved changes'
-                  : draft.ops.length
-                    ? 'Draft saved'
-                    : 'No changes yet'}
+      <div
+        className="va-editor-stage"
+        data-timeline={narrationOn ? '' : undefined}
+        style={{ ['--va-aspect' as string]: aspect }}
+      >
+        {/* One compact row (a back arrow instead of a breadcrumb), so the picture and the timeline both fit. */}
+        <div className="va-title-row va-editor-head">
+          <Group gap="xs" wrap="nowrap" style={{ minWidth: 0, flex: 1 }}>
+            <Tooltip label={`Back to ${video.data.title}`}>
+              <ActionIcon
+                component={Link}
+                to={`/videos/${id}`}
+                variant="subtle"
+                color="gray"
+                size={32}
+                aria-label={`Back to ${video.data.title}`}
+              >
+                <IconArrowLeft size={18} />
+              </ActionIcon>
+            </Tooltip>
+            <div style={{ minWidth: 0 }}>
+              <Title order={1} size="h3">
+                Edit v{draft.baseN}
+              </Title>
+              <div className="va-sub num va-editor-sub">
+                <span className="va-editor-video" title={video.data.title}>
+                  {video.data.title}
+                </span>
+                <span aria-hidden> · </span>
+                <span data-testid="edit-status">
+                  {Math.round(total * 10) / 10} s · {cur.beats.length}{' '}
+                  {cur.beats.length === 1 ? 'scene' : 'scenes'} ·{' '}
+                  {saving
+                    ? 'Saving…'
+                    : dirty
+                      ? 'Unsaved changes'
+                      : draft.ops.length
+                        ? 'Draft saved'
+                        : 'No changes yet'}
+                </span>
+              </div>
             </div>
-          </div>
-          <Group gap="sm">
+          </Group>
+          <Group gap="xs" wrap="nowrap" style={{ flexShrink: 0 }}>
             <Button
               variant="subtle"
               color="gray"
@@ -731,7 +750,6 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
             onPreviewClick={onPreviewClick}
             timingPending={timingPending}
             control={narrationControl}
-            hint={hint}
             readOnly={lockedOut}
             canRecord={lock.canEdit}
             onSaveDraft={saveNarration}
@@ -793,15 +811,17 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
               draft={{ editId: draft.id, key: previewKey }}
               onClick={onPreviewClick}
               onReady={onReady}
+              note={false}
             />
-            {hint}
           </>
         )}
       </div>
       <div className="va-editor-panel" data-testid="edit-panel">
         <Card>
-          <Text fw={600} mb="sm">
-            Scenes
+          <Text fw={600}>Scenes</Text>
+          <Text size="xs" c="var(--va-faint)" mb="sm">
+            Click any text in the preview to edit it. Text shows at once; timing, order, colours, media and
+            audio after the draft saves.
           </Text>
           {reordered ? (
             <Was

@@ -101,7 +101,12 @@ export function Layout() {
                 {colorScheme === 'dark' ? <IconSun size={18} /> : <IconMoon size={18} />}
               </ActionIcon>
             </Tooltip>
-            <Menu position="bottom-end" width={240}>
+            {/* As wide as its lines (an email can be long), at least 240 px, never wider than the screen. */}
+            <Menu
+              position="bottom-end"
+              width="max-content"
+              styles={{ dropdown: { minWidth: 240, maxWidth: 'calc(100vw - 24px)' } }}
+            >
               <Menu.Target>
                 <UnstyledButton aria-label="Account" className="va-avatar">
                   {initial}
@@ -114,10 +119,17 @@ export function Layout() {
                 </Menu.Label>
                 {usage.data ? (
                   <Menu.Label>
-                    This month: {Math.round(usage.data.runs.credits + usage.data.planning.credits)} credits
-                    {usage.data.planning.credits > 0
-                      ? ` (planning ${usage.data.planning.credits.toFixed(1)})`
-                      : ''}
+                    This month:{' '}
+                    {Math.round(usage.data.runs.credits + usage.data.planning.credits).toLocaleString(
+                      'en-US',
+                    )}{' '}
+                    credits
+                    {usage.data.planning.credits > 0 ? (
+                      <>
+                        <br />
+                        including {usage.data.planning.credits.toFixed(1)} for planning
+                      </>
+                    ) : null}
                   </Menu.Label>
                 ) : null}
                 <Menu.Item

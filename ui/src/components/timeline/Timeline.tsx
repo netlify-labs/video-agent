@@ -163,6 +163,15 @@ export function Timeline(props: TimelineProps) {
     return Math.max(0, xToSample(clientX - left, ppsRef.current))
   }, [])
 
+  // A click anywhere in the lanes moves the playhead there, like the ruler; narration clips are picked and dragged
+  // instead (their own pointer handling), and the right button is left alone.
+  const seekFromLane = (e: PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return
+    const t = e.target as Element
+    if (t.closest('.va-tl-clip[data-tone="narration"], .va-tl-handle')) return
+    props.onSeek(Math.min(sampleAt(e.clientX), end))
+  }
+
   const targets = useMemo(
     () => snapTargets({ beats: composition.beats, clips: clips.map((c) => c.clip), playhead }),
     [composition.beats, clips, playhead],
@@ -453,7 +462,7 @@ export function Timeline(props: TimelineProps) {
             hasRange={range !== null}
           />
 
-          <Lane lane="scenes" name="Scenes">
+          <Lane lane="scenes" name="Scenes" onPointerDown={seekFromLane}>
             {composition.beats.map((b) => {
               const s = secondsToSamples(b.start)
               const e = secondsToSamples(b.start + b.duration)
@@ -478,6 +487,7 @@ export function Timeline(props: TimelineProps) {
             muted={narrationMuted}
             onPointerDown={(e) => {
               if (e.target === e.currentTarget && props.selectedClipId) props.onSelectClip(null)
+              seekFromLane(e)
             }}
             {...(drop ? { drop } : {})}
           >
@@ -513,7 +523,7 @@ export function Timeline(props: TimelineProps) {
             })}
           </Lane>
 
-          <Lane lane="aiVoice" name="AI voice" muted={voiceMuted}>
+          <Lane lane="aiVoice" name="AI voice" muted={voiceMuted} onPointerDown={seekFromLane}>
             {voices.map((v) =>
               overlaps(v.start, v.start + v.length, win) ? (
                 <Clip
@@ -534,7 +544,7 @@ export function Timeline(props: TimelineProps) {
             )}
           </Lane>
 
-          <Lane lane="music" name="Music" muted={musicMuted}>
+          <Lane lane="music" name="Music" muted={musicMuted} onPointerDown={seekFromLane}>
             {music && videoEnd > 0 ? (
               <Clip
                 id={music.id}

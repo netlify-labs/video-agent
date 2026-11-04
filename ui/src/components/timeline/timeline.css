@@ -2,10 +2,10 @@
 .va-tl {
   --tl-head: 196px;
   --tl-ruler: 28px;
-  --tl-scenes: 42px;
-  --tl-narration: 64px;
+  --tl-scenes: 44px;
+  --tl-narration: 56px;
   --tl-aiVoice: 56px;
-  --tl-music: 76px;
+  --tl-music: 72px;
   --tl-narration-ink: var(--va-accent);
   display: grid;
   grid-template-columns: var(--tl-head) minmax(0, 1fr);

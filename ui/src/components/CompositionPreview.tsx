@@ -12,6 +12,7 @@ import * as z from 'zod/mini'
 import { fetchClient } from '../api/client'
 import type { MixTracks } from '../lib/preview-mix'
 import { clockTime } from './bits'
+import { useMediaKeys } from '../lib/media-keys'
 
 const Msg = z.discriminatedUnion('type', [
   z.object({ type: z.literal('ready'), channel: z.string(), duration: z.number().check(z.nonnegative()) }),
@@ -61,6 +62,7 @@ export function CompositionPreview({
   onMessage,
   onReady,
   onTransport,
+  note = true,
 }: {
   videoId: string
   versionN: number
@@ -76,6 +78,8 @@ export function CompositionPreview({
   onMessage?: (m: PreviewMessage) => void
   /** Play, pause and seek as the person presses them (in the click, so a parent AudioContext may start). */
   onTransport?: (t: PreviewTransport) => void
+  /** The "A live preview…" line under it; problems and the live-draft note show either way. */
+  note?: boolean
 }) {
   const timeRef = useRef(0)
   const playingRef = useRef(false)
@@ -192,8 +196,12 @@ export function CompositionPreview({
       } else if (m.type === 'time') {
         timeRef.current = m.time
         setTime(m.time)
-      } else if (m.type === 'click') onClick?.({ textId: m.textId, x: m.x, y: m.y })
-      else if (m.type === 'error') setError(m.message)
+      } else if (m.type === 'click') {
+        // A click inside the frame takes focus there, where the page's Space and arrows can't hear it: take it
+        // back first (a field the click opens focuses itself after this).
+        box.current?.focus({ preventScroll: true })
+        onClick?.({ textId: m.textId, x: m.x, y: m.y })
+      } else if (m.type === 'error') setError(m.message)
       onMessage?.(m)
     }
     window.addEventListener('message', onMsg)
@@ -222,10 +230,31 @@ export function CompositionPreview({
     }
   }, [link, load])
 
+  const togglePlay = () => {
+    send({ type: playing ? 'pause' : 'play' })
+    onTransport?.({ type: playing ? 'pause' : 'play', time: timeRef.current })
+    playingRef.current = !playing
+    setPlaying(!playing)
+  }
+  const seekTo = (v: number) => {
+    setTime(v)
+    timeRef.current = v
+    send({ type: 'seek', time: v })
+    onTransport?.({ type: 'seek', time: v })
+  }
+  useMediaKeys({
+    enabled: ready,
+    toggle: togglePlay,
+    seekBy: (d) => {
+      seekTo(Math.min(Math.max(timeRef.current + d, 0), duration))
+    },
+  })
+
   return (
     <Stack gap={6}>
       <div
         ref={box}
+        tabIndex={-1}
         className="va-preview-frame"
         style={{ aspectRatio: `${dimensions.width} / ${dimensions.height}` }}
       >
@@ -273,12 +302,7 @@ export function CompositionPreview({
           variant="default"
           aria-label={playing ? 'Pause preview' : 'Play preview'}
           disabled={!ready}
-          onClick={() => {
-            send({ type: playing ? 'pause' : 'play' })
-            onTransport?.({ type: playing ? 'pause' : 'play', time: timeRef.current })
-            playingRef.current = !playing
-            setPlaying(!playing)
-          }}
+          onClick={togglePlay}
         >
           {playing ? <IconPlayerPauseFilled size={14} /> : <IconPlayerPlayFilled size={14} />}
         </ActionIcon>
@@ -291,23 +315,21 @@ export function CompositionPreview({
           value={Math.min(time, duration)}
           disabled={!ready}
           label={(v) => clockTime(v)}
-          onChange={(v) => {
-            setTime(v)
-            send({ type: 'seek', time: v })
-            onTransport?.({ type: 'seek', time: v })
-          }}
+          onChange={seekTo}
         />
         <Text size="xs" c="var(--va-faint)" className="num" w={78} ta="right">
           {clockTime(time)} / {clockTime(duration)}
         </Text>
       </Group>
-      <Text size="xs" c="var(--va-faint)">
-        {error
-          ? `Preview problem: ${error}`
-          : live
-            ? 'Live draft: what the agent has written so far, played in your browser. The real video appears here when the render finishes.'
-            : 'A live preview of the composition: close to, not exactly, the final video.'}
-      </Text>
+      {error || live || note ? (
+        <Text size="xs" c="var(--va-faint)">
+          {error
+            ? `Preview problem: ${error}`
+            : live
+              ? 'Live draft: what the agent has written so far, played in your browser. The real video appears here when the render finishes.'
+              : 'A live preview of the composition: close to, not exactly, the final video.'}
+        </Text>
+      ) : null}
     </Stack>
   )
 }

@@ -138,7 +138,7 @@ body {
   color: var(--va-text);
 }
 .va-main {
-  padding-top: 28px;
+  padding-top: 20px;
   padding-bottom: 96px;
 }
 
@@ -150,6 +150,9 @@ body {
   gap: 16px;
   margin-bottom: 24px;
   flex-wrap: wrap;
+}
+.va-video-head {
+  margin-bottom: 12px;
 }
 .va-sub {
   color: var(--va-muted);
@@ -836,6 +839,10 @@ body {
 .va-review-frame {
   position: relative;
   aspect-ratio: 16 / 9;
+  /* As wide as the column, but never so tall that the verdict bar and the comment box fall below the fold. */
+  width: min(100%, calc((100dvh - 420px) * 16 / 9));
+  min-width: min(100%, 360px);
+  margin-inline: auto;
   background: #000;
   border-radius: var(--mantine-radius-lg);
   overflow: hidden;
@@ -996,19 +1003,44 @@ body {
 .va-editor-stage {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
   min-height: 0;
   overflow-y: auto;
-  padding: var(--mantine-spacing-lg);
+  padding: 12px var(--mantine-spacing-lg) var(--mantine-spacing-lg);
+}
+/* The editor's one-line header: back arrow, "Edit vN", the video and status; actions on the right. */
+.va-editor-head {
+  align-items: center;
+  margin-bottom: 0;
+  flex-wrap: nowrap;
+}
+.va-editor-sub {
+  display: flex;
+  min-width: 0;
+  white-space: nowrap;
+}
+.va-editor-video {
+  min-width: 0;
+  max-width: 28ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 /* The Narration section sits under the picture: the stage scrolls instead of squeezing it. */
 .va-editor-stage > * {
   flex-shrink: 0;
 }
-/* The picture fits the height left under the title and above the controls, whatever its shape. */
+/* The picture fits the height left under the title and above the controls, whatever its shape. With the narration
+   timeline it leaves room for the whole timeline under it (about 500 px of header, transport and lanes), so the
+   picture and the timeline are on screen together, like a video editor; it never goes below 220 px tall. */
 .va-editor-stage .va-preview-frame {
-  width: min(100%, calc((100dvh - 300px) * var(--va-aspect, 1.7778)));
+  width: min(100%, calc((100dvh - 200px) * var(--va-aspect, 1.7778)));
   margin-inline: auto;
+}
+.va-editor-stage[data-timeline] .va-preview-frame {
+  width: min(
+    100%,
+    max(calc((100dvh - 500px) * var(--va-aspect, 1.7778)), calc(220px * var(--va-aspect, 1.7778)))
+  );
 }
 .va-editor-panel {
   display: flex;
@@ -1026,6 +1058,22 @@ body {
   flex-shrink: 0;
 }
 @media (max-width: 960px) {
+  /* Narrow screens: the header wraps (actions under the title) instead of widening the page. */
+  .va-editor-head {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+  .va-editor-head > .mantine-Group-root:last-child {
+    flex-shrink: 1;
+    flex-wrap: wrap;
+  }
+  .va-editor-video {
+    max-width: 18ch;
+  }
+  .va-editor-sub {
+    flex-wrap: wrap;
+    white-space: normal;
+  }
   .va-editor {
     grid-template-columns: 1fr;
     height: auto;
