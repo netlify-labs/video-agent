@@ -821,6 +821,15 @@ export async function unpublishVersion(deps: Deps, principal: Principal, jobId: 
 
 // ───────────── DTOs ─────────────
 
+/** The live publications and their transcript choice, for the video's ETag; empty when none is live. */
+function livePubTag(pubs: PublicationRow[]): string {
+  const live = pubs
+    .filter((p) => !p.unpublishedAt)
+    .map((p) => `${p.slug}${p.showTranscript ? 't' : ''}`)
+    .sort()
+  return live.length ? `-p${sha256Hex(live.join(',')).slice(0, 8)}` : ''
+}
+
 export function publicationDto(
   deps: Pick<Deps, 'config'>,
   p: PublicationRow,
@@ -1109,7 +1118,8 @@ async function buildVideoDto(
     updatedAt: job.updatedAt,
     // Starring is the viewer's own and doesn't bump job.version, so it's part of the validator.
     // The source's visibility and title are part of it too: a source made private or renamed must not 304.
-    etag: `"${job.id}-${job.version}${favorite ? '-f' : ''}${remixOf ? `-r${sha256Hex(remixOf.title).slice(0, 8)}` : ''}"`,
+    // So are the live publications: ones made before publishing moved job.version must not 304 either.
+    etag: `"${job.id}-${job.version}${favorite ? '-f' : ''}${remixOf ? `-r${sha256Hex(remixOf.title).slice(0, 8)}` : ''}${livePubTag(pubs)}"`,
     versions: out,
     published: pubs.some((p) => !p.unpublishedAt),
     private: job.private,

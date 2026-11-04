@@ -26,4 +26,25 @@ describe('publish etag', () => {
     const after = await h.json(unpublished)
     expect(after.versions[0].publications.every((p: { urls: unknown }) => !p.urls)).toBe(true)
   })
+
+  it('a publication made without moving job.version still changes the ETag', async () => {
+    // Videos published before publishing moved job.version: the live publication alone must change the validator.
+    const h = harness()
+    const id = await readyVideo(h, h.member)
+    const before = await h.call('GET', `/api/v1/videos/${id}`, { as: h.member })
+    await h.deps.store.insertPublication({
+      slug: 'oldpub1234',
+      jobId: id,
+      versionN: 1,
+      publishedBy: h.member,
+      publishedAt: new Date().toISOString(),
+      unpublishedAt: null,
+      showTranscript: false,
+    })
+    const after = await h.call('GET', `/api/v1/videos/${id}`, {
+      as: h.member,
+      headers: { 'if-none-match': before.headers.get('etag') ?? '' },
+    })
+    expect(after.status).toBe(200)
+  })
 })
