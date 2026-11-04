@@ -1,8 +1,9 @@
 # CLI, SDK and player: make videos from a terminal, from code, and on your own machine
 
-- **Status:** draft 2 (2026-11-04). Reviewed: an independent review (Fable 5.1, "sound with changes") and the
-  cross-plan seam review of all six 2026-11-04 plans. Every claim was checked against the code before being folded
-  in; the review log is §16. No beads yet.
+- **Status:** draft 3 (2026-11-04). Reviewed three times: an independent review (Fable 5.1, "sound with changes"),
+  the cross-plan seam review of all six 2026-11-04 plans, and a remote review (Fable 5.1 high, in a Netlify Agent
+  Run at `19740d8`, "sound with changes"). Every claim was checked against the code (and the web for external facts)
+  before being folded in; the review log is §16. No beads yet.
 - **Ask (owner, 2026-11-04):** "We need a CLI for this" (idea #1, run the video loop locally with your own agent)
   and "we want proper CLI that uses proper SDK and we can add to docs section" (idea #14, which includes the
   player). One plan for all of it, because the CLI's remote commands are built on the SDK, and local mode is a CLI
@@ -36,7 +37,7 @@ Three npm packages, one private workspace package, and a few server changes:
 
 In the app: `/docs/cli` and `/docs/sdk` join `/docs/api`, `/docs/mcp` and `/docs/skills` under a docs navigation
 that scales to the other plans' pages; `video-agent login` gets an API key after you approve it in the browser; and a
-few API additions the SDK needs (operation ids, a version and feature list, a server-side wait, the oEmbed JSON the
+few API additions the SDK needs (operation ids, a version and feature list, the oEmbed JSON the
 share page already advertises).
 
 **Positioning.** Local mode is the front door, not a replacement. "Make one on your laptop in three minutes" is what
@@ -63,7 +64,14 @@ the README says plainly which things need the hosted app (§6.7).
 - The spec currently has 67 paths (66 under `/api/v1/`) and 91 operations (counted from `openapi.json` on
   2026-11-04; the reviewer counted 64 and 84 a few hours earlier, and other sessions are adding routes). It includes
   internal run routes `/api/internal/runs/{id}/done` and `/checkpoint` (`src/app.ts:2215`, `:2243`).
-- Lists page with `{ items, nextCursor }` (`src/schemas.ts:431`, `:909`).
+- Most lists page with `{ items, nextCursor }` (`src/schemas.ts:431`, `:909`), but not all: `RecordingListSchema` is
+  `{ items }` with no cursor (`src/schemas.ts:911`).
+- **Idempotency is checked on the exact body.** The server hashes `JSON.stringify(body)` and answers `409 conflict`
+  when a key comes back with a different hash (`src/domain/videos.ts:280-284`); records live 24 hours per user and
+  operation (`IDEMPOTENCY_TTL_MS`, `:54`).
+- **The version DTO already carries some signed URLs.** `files` has signed `poster`, `gif`, the poster variants and
+  the hover clip, with one expiry per DTO (`src/domain/videos.ts:955`, `:962-990`); `video`, `captions` (and narration
+  audio and transcript) are only unsigned API `links` that 302 (`:942-946`).
 - `Idempotency-Key` is accepted on create, revise, remix and similar posts (`src/app.ts:139`, used at `:334`, `:471`,
   `:498`, `:1233`).
 - Rate limits answer `rate_limited` with `Retry-After: 60` (`src/app.ts:180`).
@@ -85,8 +93,14 @@ the README says plainly which things need the hosted app (§6.7).
   checked first, then (only for the MCP, when OAuth is on) other bearer tokens through `otherBearer`
   (`src/domain/auth.ts:113-160`).
 - **Keys can only be created from a signed-in web session:** `createKey` throws `forbidden` ("API keys can only be
-  created from a signed-in session.") unless `p.kind === 'user'` (`src/domain/keys.ts:17-20`). `listKeys` and
-  `revokeKey` (`:39`, `:44`) work with a key.
+  created from a signed-in session.") unless `p.kind === 'user'` (`src/domain/keys.ts:17-20`), and returns the key
+  **and its `webhookSecret`** once (`:35`). `listKeys` and `revokeKey` (`:39`, `:44`) work with a key.
+- Using a key re-checks its owner every time: account disabled, email domain no longer allowed
+  (`src/domain/auth.ts:100-108`), and for Identity, that the user still exists and is confirmed (`:134-139`).
+  Creating a key has no such check beyond the session that asks.
+- Only `/api/v1/config` (and `OPTIONS`) skips the auth middleware (`src/app.ts:238`); every other `/api/v1` route needs
+  a principal. Cookie-session writes go through `assertSameOrigin` (`src/domain/auth.ts:165`).
+- Nothing reads `x-nf-client-connection-ip` yet (`grep` over `src` and `netlify`), so per-IP limits are new work.
 - **OAuth tokens are bound to the MCP resource.** `resourceUrl = ${siteUrl}/mcp` (`src/auth/oauth.ts:33`); authorize
   and token both refuse another `resource` (`:254-256`, `:463-465`), and a grant only verifies for that resource
   (`:568`). So the REST API does not accept OAuth access tokens today.
@@ -105,7 +119,8 @@ the README says plainly which things need the hosted app (§6.7).
   `PART_SIZE = 4 MB`, `:148-149`; `skills/netlify-video/references/connect.md:67-81`). An item must reach
   `status: ready` before it can be used.
 - Webhook signatures are `t=<unix>,v1=<hex>` with hex = HMAC-SHA256 of `"<t>.<raw body>"`
-  (`src/lib/crypto.ts:44-46`; README "The API").
+  (`src/lib/crypto.ts:44-46`; README "The API"). Each delivery also carries `x-video-agent-event` and
+  `x-video-agent-delivery` (`src/domain/webhooks.ts:189-191`); receivers dedupe on `eventId` (README).
 - The share page advertises `<link rel="alternate" type="application/json+oembed" href="/v/{slug}.json">`
   (`netlify/edge-functions/public.ts:106`), **but the handler's path regex only serves `mp4|jpg|gif|vtt|webp|mp3|txt`**
   (`public.ts:53`), so `/v/{slug}.json` is a 404 today. Public files are served with
@@ -148,7 +163,8 @@ the README says plainly which things need the hosted app (§6.7).
   `install` skips, but **`--force` "installs anywhere (your laptop included)"** (agent-kit README, `install` options
   and Troubleshooting). It installs FFmpeg, the `hyperframes`, `hyperframes-cli` and `media-use` skills (into
   `.claude/skills` and `.agents/skills`), HyperFrames' headless Chrome, and a generated `netlify-agent-kit` skill that
-  tells the agent what's installed. Outside the repo it writes tools to `~/.cache/netlify-agent-kit/` and links into
+  tells the agent what's installed. Its FFmpeg is a pair of static builds (`ffmpeg-static`,
+  `@ffprobe-installer/ffprobe`; README tools table). Outside the repo it writes tools to `~/.cache/netlify-agent-kit/` and links into
   `~/.local/bin` (README "What it changes"). Runners run `npm install` at the root (README, "Agent runner setup runs
   `npm install`…").
 - The HyperFrames CLI has `doctor`, `browser` (the render Chrome) and `skills` (`npx hyperframes --help`, 0.8.222).
@@ -156,7 +172,7 @@ the README says plainly which things need the hosted app (§6.7).
   `summary.json`, render with `render-job`, never ask questions, never print env vars, never commit).
 - The repo requires Node 24 (`package.json` `engines.node: ">=24"`, `.nvmrc` = `24`).
 
-### Agent CLIs (checked on this machine, 2026-11-04)
+### Agent CLIs (checked on the author's machine, 2026-11-04; runners don't have them, so C2 re-checks)
 
 - **Claude Code** 2.1.280: `claude -p <prompt>` with `--output-format stream-json` (which **requires `--verbose`**
   with `-p`), `--permission-mode` (choices include `dontAsk`, `acceptEdits`, `plan`), `--settings <file-or-json>`,
@@ -169,7 +185,14 @@ the README says plainly which things need the hosted app (§6.7).
   `--include-directories`, `-o/--output-format text|json|stream-json`, and an undocumented `--policy`. Per Gemini's
   docs (checked by the reviewer; to confirm in spike C2), workspace-level policy files don't take effect, user
   policies live in `~/.gemini/policies`, and in headless mode a tool that would ask is denied, so `auto_edit` denies
-  every shell command.
+  every shell command. Gemini's macOS sandbox uses Seatbelt, and its default profile (`permissive-open`) limits
+  writes to the project but allows broad reads and all network; Linux uses Docker or Podman, where `127.0.0.1` is the
+  container.
+- **Sandboxes and the host's loopback.** Claude Code's sandbox wraps Bash commands only; `Read`, `Write`, `Edit`,
+  `Glob` and `Grep` run in the Claude Code process under its permission rules. Its docs say that on Linux a sandboxed
+  command's `localhost` is private to it (its own network namespace), and on macOS Seatbelt allows only the
+  connection to the sandbox proxy; `sandbox.network.allowLocalBinding` (macOS only) reopens every localhost service.
+  So a server on the host's `127.0.0.1` is unreachable from inside the sandboxes this plan requires.
 
 ### Docs pages and packaging
 
@@ -201,8 +224,11 @@ the README says plainly which things need the hosted app (§6.7).
    approval in the web app (§5.2), which works on every deployment, with Identity or Sign in with Netlify.
 4. **Keys can't make keys.** `createKey` refuses anything but a web session (`keys.ts:17-20`), so the SDK and CLI have
    no `keys create`; the device flow mints the CLI's key server-side, and `keys list`/`revoke` work with a key.
-5. **render-job only knows Blobs.** Local mode needs `--upload local` (keep the files, skip the upload), and the
-   callback must go somewhere: the CLI runs a loopback server that receives checkpoints and the done callback.
+5. **render-job only knows Blobs and HTTPS callbacks.** Local mode needs `--upload local` (keep the files, skip the
+   upload), and the callback must reach the CLI. A loopback server can't: inside the sandboxes §6.5 requires, the
+   agent's `localhost` isn't the host's (§1). So results come back through **files** in the workspace (a `file:`
+   callback and checkpoint URL, §6.3 step 5), which every sandbox can write because the workspace is mounted at the
+   same path. `allowLocalBinding` is never set.
 6. **prepare-run only knows Blobs.** Local revisions and every feature that hooks into prepare-run (looks, engines,
    scoped revisions, recordings) need inputs restored. prepare-run gets a file-based fetch mode (§6.4), so there's one
    preparation path for runners and laptops.
@@ -235,7 +261,10 @@ the README says plainly which things need the hosted app (§6.7).
     and waits for `ready` (or reports `rejected` with `rejectReason`). Screen recordings are the big case.
 17. **Signed file links are short.** File routes 302 to storage URLs valid for 5 to 10 minutes (`src/app.ts:680`).
     Downloads must start right after the redirect, and the redirect target must be fetched **without** the
-    `Authorization` header.
+    `Authorization` header. Poster, GIF and preview variants are already signed in the DTO, so they need no redirect.
+17a. **Retries must resend the same bytes.** The idempotency check hashes the body (§1), so a retry that
+    re-serializes differently (key order, an added default) becomes a `409 conflict` instead of a replay.
+17b. **Not every list has a cursor** (`RecordingListSchema`, §1).
 18. **Runner install time.** Runners `npm install` at the root, which installs every workspace's dependencies. The
     packages declare no devDependencies of their own (all hoisted to the root) and almost no runtime ones.
 19. **Lockfile.** Adding workspaces changes `package-lock.json`. Use `npx npm@11 install` (local npm 10 strips the
@@ -323,9 +352,9 @@ the same PR, and the coverage test (§4.4) refuses a route without them. Names o
 
 | Resource    | Methods (G = generated, H = hand-written helper)                                                                                                                                                                                                                     |
 | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `videos`    | `create` G (with `look`, `engine`, `recording`, `context`, `externalRef` as each plan lands), `get` G, `list` G (with `externalRef`), `listAll` H (async iterator over `nextCursor`), `wait` H, `revise` G (with `scope`, `look`), `remix` G (with `look`, `recording`), `redoScenes` H (`(id, { beats, prompt, …opts })`, sugar for `revise` with `scope: { beats }`; regenerate-beat plan), `favorite` G |
+| `videos`    | `create` G (with `look`, `engine`, `recording`, `context`, `externalRef` as each plan lands), `get` G, `list` G (with `externalRef`), `listAll` H (async iterator over `nextCursor`; offered only for operations whose response has `items` and `nextCursor`, so it's a type error elsewhere, since some lists have no cursor), `wait` H, `revise` G (with `scope`, `look`), `remix` G (with `look`, `recording`), `redoScenes` H (`(id, { beats, prompt, …opts })`, sugar for `revise` with `scope: { beats }`; regenerate-beat plan), `favorite` G |
 | `versions`  | `retry` G (`(id, n)`), `cancel` G (`(id, n)`), `publish` G, `unpublish` G, `setVerdict` G, `captions` G, `progress` G                                                                                                                                                  |
-| `files`     | `url` H (follows the 302 once and returns the signed URL), `download` H (`(video, { file, version?, to? })`)                                                                                                                                                         |
+| `files`     | `url` H (poster, GIF, poster variants and the hover clip come signed in the DTO, `videos.ts:955-990`, so no request; video, captions, narration audio and transcript follow the 302 once), `download` H (`(video, { file, version?, to? })`, same split) |
 | `plans`     | `create` G (with `look`), `questions` G, `brief` G (when `config.planningAvailable`)                                                                                                                                                                                 |
 | `comments`  | `list` G, `add` G, `addBatch` G                                                                                                                                                                                                                                       |
 | `media`     | `upload` H (`(file, { caption?, role?, onProgress? })`: single POST ≤ 4 MB or a multipart session, hashes parts, resumes, waits for `ready`), `uploadRecording` H (`(file, { trace?, onProgress? })`, screen-recording plan), `setTrace` G, `getTrace` G, `check` G (`({ hashes })`), `list` G, `get` G, `delete` G |
@@ -334,7 +363,7 @@ the same PR, and the coverage test (§4.4) refuses a route without them. Names o
 | `engines`   | `list` G (render-engines plan)                                                                                                                                                                                                                                        |
 | `keys`      | `list` G, `revoke` G. **No `create`:** keys are made from a web session or by `video-agent login` (§5.2).                                                                                                                                                            |
 | `me`, `config` | `me.get` G, `me.usage` G, `config.get` H (cached; exposes `features` and `version`), `config.supports(feature)` H                                                                                                                                                  |
-| top-level   | `verifyWebhook({ secret, body, signature, toleranceSec = 300 })` H, `parseWebhook(...)` H (verify + typed event)                                                                                                                                                     |
+| top-level   | `verifyWebhook({ secret, body, signature, toleranceSec = 300 })` H, `parseWebhook({ secret, body, headers })` H (verifies, then returns the typed event with `eventId`, the `x-video-agent-event` type and the `x-video-agent-delivery` id, so receivers can dedupe redeliveries) |
 
 **Why this split:** the reviewer argued for generating the resource layer; draft 1 hand-wrote it. Generation wins for
 coverage and drift (a new route is in the SDK the day it merges, typed, with no second place to forget), and the
@@ -352,7 +381,9 @@ coverage and drift (a new route is in the SDK the day it merges, typed, with no 
   read `Location` and fetch it **without** `Authorization`, at once, because the link lives 5 to 10 minutes.
 - **Idempotency:** `create`, `revise`, `remix` and `redoScenes` send an `Idempotency-Key`: the caller's
   (`opts.idempotencyKey`), or a generated UUID. Retries of the same call reuse the key, so a lost response never makes
-  two videos.
+  two videos. The body is serialized **once** and the same string is sent on every retry, because the server replays
+  only when the body's hash matches and answers `409 conflict` otherwise (`src/domain/videos.ts:280-284`); keys live
+  24 hours per user and operation (`:54`). A `409` on a retry is reported, never retried.
 - **Retries:** GETs, and POSTs that carry an idempotency key, retry on network errors, 429 (honouring `Retry-After`,
   capped at 60 s) and 5xx, with jittered backoff, at most 3 times by default (`retries` option). Other POSTs never
   retry.
@@ -360,11 +391,13 @@ coverage and drift (a new route is in the SDK the day it merges, typed, with no 
   server's `{ error: { code, message } }` body (the shape the UI reads, `ui/src/api/client.ts` `ApiErrorBody`) and
   Netlify's `x-nf-request-id` response header. Codes are the server's (`forbidden`, `not_found`, `conflict`,
   `remix_disabled`, `rate_limited`, …). Helper: `isVideoAgentError(e, 'remix_disabled')`.
-- **Waiting:** `videos.wait(id, { version?, timeoutMs = 30 min, intervalMs?, onProgress, signal })` polls
-  `GET /api/v1/videos/{id}` with `If-None-Match`, treating `304` as "no change". When the server lists `rest_wait`, it
-  passes `wait=8` and the server holds the request until the etag changes or 8 s pass; otherwise it polls every 3 s
-  for the first minute, then 8 s (`intervalMs` overrides). `onProgress` gets stage and step from `/progress` when the
-  etag changes. It resolves on `ready` and throws `VideoAgentError` code `video_failed` (with the version's status and
+- **Waiting:** `videos.wait(id, { version?, timeoutMs?, intervalMs?, onProgress, signal })` polls
+  `GET /api/v1/videos/{id}` with `If-None-Match`, treating `304` as "no change" (a tiny response), every 3 s for the
+  first minute, then 8 s (`intervalMs` overrides). **No timeout unless given:** a run may use the runner's full 25
+  minutes, a retry re-queues, and with `MAX_ACTIVE_RUNS` at 3 a queued video on a busy deployment can wait longer than
+  any fixed default, so a default that gave up would fail healthy CI jobs. `signal` and `timeoutMs` (the CLI's
+  `--timeout`) stop it. `onProgress` gets the status (including `queued`), and stage and step from `/progress`, when
+  the etag changes. (A server-side wait, `rest_wait`, is designed in §14.) It resolves on `ready` and throws `VideoAgentError` code `video_failed` (with the version's status and
   error) on `failed`, `cancelled` or `timed_out` (`src/schemas.ts:62`).
 - **Feature detection:** `va.config.get()` is fetched once. Methods for newer features check
   `features` (§5.1) first and throw `VideoAgentError` code `unsupported_by_server` naming the feature and the server's
@@ -434,12 +467,11 @@ coverage and drift (a new route is in the SDK the day it merges, typed, with no 
    - `features: string[]`, a registry this plan owns. A feature's string appears only when the deployment has it
      **and** it's switched on. Strings (snake_case): `remix`, `narration`, `planning`, `rest_wait`, `cli_login`,
      `looks`, `engines`, `scoped_revision`, `screen_recording`, `context`, `external_ref`. Phase 1 ships the array and
-     the strings for what exists today (`remix`, `narration`, `planning`, plus `rest_wait` and `cli_login` as they
-     land); each other plan adds its own string in its own PR. Nobody else adds the array.
-3. **Server-side wait on `GET /api/v1/videos/{id}`:** `?wait=<0-10>` holds the request until the etag changes or the
-   time passes, reusing the MCP's loop (`src/mcp.ts:541-545`), and honours `If-None-Match`. Netlify synchronous
-   functions may run up to 60 s, so 10 s is safe. Each wait is billed function time; phase 1 measures it against
-   plain polling (requests and GB-s per finished video) before the SDK uses it by default. Advertised as `rest_wait`.
+     the strings for what exists today (`remix`, `narration`, `planning`, plus `cli_login` when it lands); each other
+     plan adds its own string in its own PR. Nobody else adds the array. `rest_wait` stays reserved for the
+     server-side wait in §14.
+3. **No server-side wait in v1.** The SDK's `If-None-Match` polling (§4.2) is cheap: an unchanged video answers a
+   bodyless `304`. The `?wait` design (and its cost measurement) is in §14.
 4. **Request ids:** errors include Netlify's `x-nf-request-id` in the SDK error and CLI output, so an admin can find
    the request in the function logs. No new id scheme.
 5. **`oasdiff` warning job** in CI (§4.4).
@@ -465,22 +497,37 @@ prints "Open https://site/cli/approve and enter ABCD-EFGH", opens the browser at
 POST /api/v1/cli/logins/{loginId}/token
      {deviceCode}  (every intervalSec) ──────► pending | denied | expired | slow_down
                                                approved → mints the key now (createKeyForUser),
-◄── {apiKey, keyId, user}  (once)              status claimed
-saves the key to the config file
+◄── {apiKey, keyId, webhookSecret, user}       re-runs the key-owner checks first (disabled, domain,
+     (once)                                    Identity confirmed); status claimed
+saves the key (and the webhook secret) to the config file
 ```
 
 - **Data:** a `cli_logins` table: `id`, `device_code_hash`, `user_code` (8 characters from an unambiguous alphabet,
-  shown as `ABCD-EFGH`), `label`, `host`, `client_ip`, `status` (`pending|approved|denied|claimed|expired`),
-  `user_id`, `api_key_id`, `failed_attempts`, `created_at`, `expires_at`. **No key is ever stored:** approve records
-  only who approved; the token endpoint mints the key on the first successful claim through an internal
-  `createKeyForUser(userId, name)` (the part of `createKey` after the session check, `keys.ts:21+`), returns it once,
-  and marks the login `claimed`. The sweep deletes rows an hour after they expire.
+  shown as `ABCD-EFGH`), `label` (at most 64 printable ASCII characters), `host` (the same), `client_ip`, `status`
+  (`pending|approved|denied|claimed|expired`), `user_id`, `api_key_id`, `failed_attempts`, `created_at`,
+  `expires_at`. The device code is compared with `safeEqual` on its sha256, as keys are (`auth.ts:129`). **No key is
+  ever stored:** approve records only who approved; the token endpoint mints the key on the first successful claim
+  through an internal `createKeyForUser(userId, name)` (the part of `createKey` after the session check,
+  `keys.ts:21-35`), returns the key **and its webhook secret** once (`createKey` returns both; without the secret a
+  CLI-made key could never verify webhooks), and marks the login `claimed`. The sweep deletes rows an hour after they
+  expire.
+- **Claim-time checks.** The token endpoint has no principal, so before minting it loads the approver's row and
+  answers `denied` if the account is now disabled, no longer in an allowed domain, or (Identity) gone or unconfirmed,
+  using the same helpers `principalFromRequest` uses for a key's owner (`auth.ts:100-108`, `:134-139`). Approving and
+  then being offboarded never yields a working key.
+- **Routes and middleware:** `POST /api/v1/cli/logins` and `POST /api/v1/cli/logins/{id}/token` join `/api/v1/config`
+  in the auth middleware's exemptions (`src/app.ts:238`). `POST /api/v1/cli/logins/approve` needs a `user` principal
+  (a web session, not a key) and `assertSameOrigin`, like every cookie-session write.
 - **The code is typed, never prefilled.** The verification URL has no code in it, and the approve page asks the person
   to type the code their terminal shows (RFC 8628 §5.4: a prefilled link is what a phisher sends). Codes expire in 10
   minutes and work once.
-- **The page says what it does:** the host and label the CLI sent, and that the key will act as you with your role.
+- **The page says what it does:** the host and label the CLI sent (escaped, length-capped: they come from anyone on
+  the internet), the IP address the request came from and when, and that the key will act as you with your role. A
+  login started by a stranger is then recognisable.
 - **Limits:** creating logins is unauthenticated, so it's capped per client IP (Netlify's
   `x-nf-client-connection-ip`; 10 pending per IP) and globally (500 pending), so one client can't lock everyone out.
+  Nothing in the app does per-IP limiting yet, so the helper and its store (counting pending `cli_logins` rows by
+  `client_ip` is enough) are part of phase 3.3.
   Each person can approve at most 10 logins an hour; 5 wrong codes from one session lock approving for 15 minutes.
   Polling faster than `intervalSec` answers `slow_down`.
 - **Role:** the key gets the approver's role, like every key. A Reviewer's CLI can watch, comment and approve; a
@@ -488,7 +535,9 @@ saves the key to the config file
 - **Admin switch:** `cliLoginEnabled` (on by default) in admin settings, like `remixEnabled`. Off, the routes answer
   `409 cli_login_disabled` and the CLI says "create a key on the API keys page and run `video-agent login --key`".
 - **Headless:** `video-agent login --no-browser` prints the URL and code only (SSH, containers).
-  `video-agent login --key nva_…` (or stdin) skips the flow. `video-agent logout --revoke` revokes the key it holds.
+  `video-agent login --key nva_…` (or `--key -` to read it from stdin) skips the flow. In CI, set `VIDEO_AGENT_KEY`
+  or pipe the key with `--key - --no-save`, so it never lands in a file or in argv. `video-agent logout --revoke`
+  revokes the key it holds.
 - **Why not widen OAuth:** OAuth for REST means a second token type on every route, refresh handling in the CLI, and
   it only exists on deployments that configured a Netlify OAuth app. Keys already have roles, revocation, last-used
   times and disable-on-offboard.
@@ -526,7 +575,7 @@ the page does.
 | Command                                                                                                                                           | What it does                                                                                                                                                                                                  |
 | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `login [--url] [--key] [--no-browser]`, `logout [--revoke]`, `whoami`                                                                             | Device approval (§5.2) or a pasted key.                                                                                                                                                                       |
-| `create "<prompt>" [--prompt-file <f\|->] [--aspect] [--duration] [--sound] [--voice] [--media <id\|path>…] [--look] [--engine] [--recording <id\|file>] [--plan] [--title] [--idempotency-key] [--wait] [--out]` | Makes a video. `--media ./shot.png` uploads first. `--plan` runs the questions interactively in a terminal, or prints them with `--json`. `--wait` follows it; `--out` downloads when ready.                   |
+| `create "<prompt>" [--prompt-file <f\|->] [--aspect] [--duration] [--sound] [--voice] [--media <id\|path>…] [--look] [--engine] [--recording <id\|file>] [--plan] [--title] [--idempotency-key] [--wait] [--out]` | Makes a video. `--media ./shot.png` uploads first. `--plan` prints the planning questions (with `--json`, as data) and exits; `--answers <file>` with `--plan-id` answers them and creates with the brief (an interactive terminal Q&A is in §14). `--wait` follows it; `--out` downloads when ready.                   |
 | `revise <video> "<change>" [--from-version] [--comments <ids>] [--media …] [--scene <id\|label>…] [--look] [--idempotency-key] [--wait]`            | Next version. `--scene` (repeatable) limits it to those scenes (`scope: { beats }`, regenerate-beat plan).                                                                                                    |
 | `redo <video> --scene <id\|label>… "<change>"`                                                                                                     | Sugar for `revise --scene` ("Redo this scene"). Hidden until the server lists `scoped_revision`.                                                                                                              |
 | `scenes <video> [--version]`                                                                                                                      | Lists the version's scenes (id, label, start, length) from the version DTO, so you can pick one for `redo`.                                                                                                   |
@@ -549,8 +598,7 @@ the page does.
 
 `<video>` is an id (`vid_…`), a web URL, or a share URL (resolved through the API).
 
-**Config.** One profile in v1: `~/.config/video-agent/config.json` (`$XDG_CONFIG_HOME` honoured; `%APPDATA%` on
-Windows), mode 0600, `{ "url": "…", "apiKey": "nva_…", "keyId": "…" }`. Precedence: flags, then
+**Config.** One profile in v1: `~/.config/video-agent/config.json` (`$XDG_CONFIG_HOME` honoured), mode 0600, `{ "url": "…", "apiKey": "nva_…", "keyId": "…" }`. Precedence: flags, then
 `VIDEO_AGENT_URL` / `VIDEO_AGENT_KEY`, then the file. Several deployments: use env vars (named profiles are in §14).
 A file rather than the OS keychain: it works on every platform and in CI (owner question 4).
 
@@ -608,18 +656,26 @@ npx -y @netlify-labs/video-agent-cli@1 local "A 20-second launch video for our w
    look folder, a recording) under `<ws>/.va-inputs/`, writes a `v: 1` run manifest pointing at them by key, and puts
    its sha256 in the prompt, exactly as the server does. prepare-run then sets `video/` up with its file-based fetch
    mode (§6.4). So looks, engines, scoped revisions and recordings prepare the same way locally as on the runner.
-5. **Start a loopback server** on `127.0.0.1:<random port>` with a random token. `POST /checkpoint` prints the
-   agent's milestone or render percent and keeps the latest `--bundle` (capped at the checkpoint script's own 2 MB,
-   `scripts/checkpoint.ts:12`); `POST /done` takes the manifest. Files named in the manifest are only read from
-   `<ws>/.render/<attempt>/` (names with `/`, `..` or an absolute path are refused). Anything else answers 404.
+5. **No server: results come back through files.** The prompt's callback URL is
+   `file://<ws>/.render/<attempt>/done`, so render-job's own derivation (`/done` → `/checkpoint`,
+   `render-job.ts:196`) gives the checkpoint folder `file://<ws>/.render/<attempt>/checkpoint`. render-job already
+   writes `manifest.json` (`render-job.ts:416`); with a `file:` callback it also writes `done.json` there instead of
+   POSTing. `checkpoint.ts` with a `file:` URL writes `<seq>.json` (message, render percent, and the optional bundle,
+   still capped at its own 2 MB, `checkpoint.ts:12`) into the checkpoint folder. The CLI watches the folder
+   (`fs.watch`, with a 1-second poll as fallback) and prints milestones as they land. Files named in the manifest are
+   only read from `<ws>/.render/<attempt>/` (names with `/`, `..` or an absolute path are refused). This works in
+   every sandbox, because the workspace is mounted at the same path, and it needs no port and no token. A host
+   loopback server would not: inside Claude Code's Linux sandbox and Gemini's Docker one the agent's `127.0.0.1`
+   isn't the host's, macOS Seatbelt allows only the sandbox proxy, and the one setting that opens it
+   (`allowLocalBinding`, macOS only) opens every localhost service too, so it is never set.
 6. **Build the prompt** with the real `buildPrompt` from `src/domain/prompt.ts` (bundled into the CLI), with local ids
-   (`loc_<ulid>`), the loopback callback and checkpoint URLs, `upload: { mode: 'local' }` (new, §6.4), sound, voice,
+   (`loc_<ulid>`), the `file:` callback URL (step 5), the random token render-job and checkpoint still expect, `upload: { mode: 'local' }` (new, §6.4), sound, voice,
    length, aspect, media, look and engine. It's the prompt a hosted run gets, so a local video behaves like one made
    in the app.
 7. **Run the agent headless in its sandbox** (§6.5), streaming its events to `agent.log` and a one-line status to
    the terminal.
 8. **render-job runs inside the agent's turn**, as on the runner: check, contract check, render, master, poster, GIF,
-   captions, source archive, previews, then the callback to the loopback server.
+   captions, source archive, previews, then the `file:` callback (`done.json`).
 9. **Verify and copy out.** The CLI checks each file's sha256 against the manifest (what finalize does with the
    authenticated report), runs the same MP4 check, then copies outputs to `./videos/<slug>/v1/` (or `--out`):
    `video.mp4  poster.jpg  preview.gif  captions.vtt  source.tar.gz  manifest.json  summary.json  prompt.txt  agent.log  run.jsonl`,
@@ -633,11 +689,9 @@ Other local commands in v1:
 - `local revise <dir> "<change>" [--from-version] [--scene …]`: the parent's `source.tar.gz` becomes an input
   (step 4), the prompt gets `revision: { parentN }` (and `scope` with `--scene`), output goes to `v2/`.
 - `local demo <dir>` (screen-recording plan, its phase 4): a recording becomes an input; otherwise the same loop.
-- `local --engine remotion` (render-engines plan) refuses to run without `--accept-remotion-license` and prints that
-  plan's licence notice once. The runtime bundle carries `engines/remotion/template/` (lockfile only; `npm ci` at
-  run time, inside the sandbox's network allowlist).
-
-`local preview`, `local render`, `local init` and `local list` are designed in §14 (later).
+`local --engine remotion`, `local preview`, `local render`, `local init` and `local list` are designed in §14
+(later). The runtime bundle takes whatever `scripts/` has at CLI build time, so `engine.ts`, `scripts/lib/engines/*`
+and `recording.ts` join it when their plans land; local mode doesn't wait for them.
 
 ### 6.4 Changes to the run scripts (single source for runner and laptop)
 
@@ -645,9 +699,11 @@ The bundled runtime is built from this repo's `scripts/` and `src/lib/` at CLI b
 ships to both. The changes keep runner behaviour the same:
 
 1. `scripts/lib/run-tools.ts:12`: `repoRoot = process.env.VA_REPO_ROOT ?? <today's value>`.
-2. `render-job.ts`: `--upload local` skips the Blobs uploads (`:358-381`) and the reference upload; everything else,
-   including the callback, is unchanged. `PromptInput.upload` gains `{ mode: 'local' }`, and `buildPrompt` writes
-   `--upload local`.
+2. `render-job.ts`: `--upload local` skips the Blobs uploads (`:358-381`) and the reference upload. A
+   `--callback file://…` URL writes the manifest to `done.json` at that path instead of POSTing (the 410 "cancelled"
+   branch doesn't apply), and `postCheckpoint` with a `file:` URL writes a numbered JSON file instead of a request
+   (§6.3 step 5). `PromptInput.upload` gains `{ mode: 'local' }`, and `buildPrompt` writes `--upload local`. With an
+   `https:` callback (the runner) nothing changes.
 3. `prepare-run.ts`: a **file-based fetch mode**. Today `download(key, to, store)` runs `netlify blobs:get`
    (`prepare-run.ts:53-55`). With `--inputs <dir>` (or `VA_INPUTS_DIR`), it copies `<dir>/<store>/<key>` instead,
    refusing keys that escape the folder. Everything after the fetch (manifest verification, hashes, restore, media,
@@ -675,8 +731,9 @@ constant.
    limited to an allowlist where the agent supports one.
 3. **Gets an allowlisted environment:** `PATH` (pinned runtime first), `HOME`, `USER`, `LANG`, `TERM`, `TMPDIR`,
    `VA_*`, `RENDER_QUALITY`, an empty `npm_config_userconfig`, and that agent's own auth variables when set. Never
-   `VIDEO_AGENT_*`, `NETLIFY_*` or cloud credentials. `ELEVENLABS_API_KEY` and `OPENVERSE_CLIENT_*` pass only with
-   `--pass-env NAME` (and then their host joins the network allowlist).
+   `VIDEO_AGENT_*`, `NETLIFY_*`, cloud credentials or any other secret: local v1 speaks with Kokoro and searches
+   Openverse anonymously (passing `ELEVENLABS_API_KEY` or `OPENVERSE_CLIENT_*` in with `--pass-env` is designed in
+   §14).
 4. **Has a spend and time limit:** a 30-minute timeout (`--timeout`), and the tree stopped on timeout or Ctrl-C with
    `scripts/lib/proc-tree.ts` (every pid seen, SIGTERM then SIGKILL), never by name or process group alone.
 
@@ -686,28 +743,33 @@ which it reads before the sandboxed shell starts), `~/.docker`, `~/.kube`, `~/.g
 
 **Network allowlist** (where supported): `registry.npmjs.org` (Remotion's `npm ci`), `api.openverse.org` and the
 hosts Openverse audio comes from (Jamendo, Freesound, Wikimedia Commons; `scripts/openverse.ts fetch` downloads from
-them), the HyperFrames model hosts (Kokoro and Parakeet downloads, listed in C2), the agent's own API host, and
-ElevenLabs with `--pass-env`.
+them), the HyperFrames model hosts (Kokoro and Parakeet downloads, listed in C2), and the agent's own API host.
+`registry.npmjs.org` joins it only for `local --engine remotion` (§14).
 
 | Agent       | v1 command (to be confirmed in C2)                                                                                                                                                                                                                                                                                                                      | Escape hatch                                    |
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
-| Claude Code | `claude -p <prompt> --verbose --output-format stream-json --permission-mode dontAsk --setting-sources "" --strict-mcp-config --max-turns <n> --settings <ws>/.va/claude.json`, where the settings file turns on Claude Code's sandbox (enabled, fail if unavailable, no unsandboxed commands, Bash auto-allowed inside it), sets the network allowlist and the deny-read list, blocks reads outside the working directory, allows `Bash`, `Read`, `Write`, `Edit`, `Glob`, `Grep` and denies `WebFetch` and `WebSearch`. `--max-budget-usd` with `--budget` for API-key users. Linux needs `bubblewrap` and `socat` (`doctor` checks). | `--no-sandbox` (warns once, still scrubs env)   |
+| Claude Code | `claude -p <prompt> --verbose --output-format stream-json --permission-mode dontAsk --setting-sources "" --strict-mcp-config --max-turns <n> --settings <ws>/.va/claude.json`, where the settings file turns on Claude Code's sandbox (enabled, fail if unavailable, no unsandboxed commands, Bash auto-allowed inside it), sets `sandbox.network.allowedDomains` and `sandbox.filesystem.denyRead`, **and** adds `permissions.deny` rules for the same paths and for `Read`, `Glob` and `Grep` outside the workspace, because the OS sandbox covers Bash only and the file tools run in the Claude Code process. Allows `Bash`, `Read`, `Write`, `Edit`, `Glob`, `Grep`; denies `WebFetch` and `WebSearch`. Never sets `allowLocalBinding`. `--max-budget-usd` with `--budget` for API-key users. Linux needs `bubblewrap` and `socat` (`doctor` checks). | `--no-sandbox` (warns once, still scrubs env)   |
 | Codex       | `codex exec -C <ws> --skip-git-repo-check --ephemeral --sandbox workspace-write -c sandbox_workspace_write.network_access=true -c 'shell_environment_policy.inherit="none"' -c 'shell_environment_policy.set={…allowlist…}' --json -o <ws>/.render/last.txt <prompt>`, plus deny-read permissions for the list above, and no user MCP config. | `--no-sandbox` → `--dangerously-bypass-approvals-and-sandbox` |
-| Gemini CLI  | `gemini -p <prompt> --sandbox --approval-mode yolo -o stream-json` (yolo only **inside** its sandbox, because headless `auto_edit` denies every shell command and workspace policies don't apply), with a workspace-only settings home so `~/.gemini/settings.json` MCP servers don't load. Never writes to the user's `~/.gemini/policies`. | `--no-sandbox` (yolo without its sandbox; warns) |
+| Gemini CLI  | `gemini -p <prompt> --sandbox --approval-mode yolo -o stream-json` with a **custom Seatbelt profile on macOS** (the default `permissive-open` allows broad reads and all network, so it meets neither the deny-read list nor the allowlist) and Docker/Podman on Linux with only the workspace mounted (yolo only **inside** its sandbox, because headless `auto_edit` denies every shell command and workspace policies don't apply), with a workspace-only settings home so `~/.gemini/settings.json` MCP servers don't load. Never writes to the user's `~/.gemini/policies`. | `--no-sandbox` (yolo without its sandbox; warns) |
 
 - **What leaves the machine:** the prompt and files go to the agent's own provider under the user's own account;
   Openverse searches and downloads when the video has music or sound effects; model downloads the first time. The CLI
   sends nothing to us: no usage telemetry.
+- **What stays on disk:** `agent.log`, `run.jsonl` and `prompt.txt` in `./videos/<slug>/` hold the full prompt, which
+  includes the brand kit text and media captions. Fine on the author's machine; `/docs/cli` says so, and to remove
+  them before attaching them to a public bug report.
 - **Exact flags and settings keys are a spike.** C2 runs each agent through a silent and a narrated-with-music video
   **inside its OS sandbox** and records the smallest settings that finish. An adapter that can't finish sandboxed
-  doesn't ship in v1; the design stays for three.
+  doesn't ship in v1; the design stays for three. Gemini is the one most at risk (its default macOS profile doesn't
+  meet the deny list, and a custom profile is untested), so expect v1 to ship Claude Code and Codex.
 
 ### 6.6 First run and `doctor`
 
 `video-agent doctor` (and the first `local` run) checks, with a fix for each:
 
 - Node version (24 for local until C1 says otherwise; 22 for remote).
-- `ffmpeg` and `ffprobe` on `PATH` ("brew install ffmpeg" / "sudo apt install ffmpeg").
+- `ffmpeg` and `ffprobe`: provided by the pinned runtime's agent-kit install (static builds, §1); a system copy is used
+  only when the runtime's is missing. `doctor` prints which one is active.
 - The pinned runtime (installed, versions match the CLI), and HyperFrames' render Chrome in it.
 - The sandbox: Claude Code's needs `bubblewrap` and `socat` on Linux; Codex's and Gemini's own checks.
 - At least one agent CLI installed and signed in (a version call, never a prompt), and its version against the ones
@@ -715,6 +777,9 @@ ElevenLabs with `--pass-env`.
 - `python3` 3.10+ only when the run asks for an AI voice-over; the venv is created on first use (about 15 s per
   `docs/spikes.md` S9's measurement of the install).
 - Playwright for `record`, when installed.
+- `ffmpeg` and `ffprobe` also when `record` or `media upload --role screen-recording` will be used, not only for
+  local mode: the recorder converts to H.264 with a 1-second keyframe interval before upload (screen-recording plan).
+  The pinned runtime's static builds count; otherwise a system copy.
 - Disk space for the cache (runtime, Chrome, Kokoro model).
 
 Supported in v1: macOS and Linux. Windows through WSL; native Windows is in §14.
@@ -735,8 +800,9 @@ Supported in v1: macOS and Linux. Windows through WSL; native Windows is in §14
 - The `netlify-video` skill gains `references/cli.md` (from the catalog): when the agent has a shell, prefer
   `video-agent create … --json --wait` over the MCP polling loop; how to read exit codes; `media upload` instead of
   the curl recipe in `connect.md`; `local` when the person has no deployment.
-- The skill's recipes (PR → demo video, changelog video) get a CLI variant: `video-agent brief pr … | video-agent
-  create --prompt-file - --wait`.
+- The recipes stay where they are; the CLI flow for a PR or a release is the github-action plan's `brief` command
+  (`video-agent brief pr … | video-agent create --prompt-file - --wait`), documented once in `references/cli.md`.
+  (CLI variants of every skill recipe are in §14.)
 - MCP stays the path for chat clients without a shell (Claude web, ChatGPT).
 
 ---
@@ -757,18 +823,16 @@ server half (`/v/{slug}.json`) lands in phase 1.
 - **Behaviour:** a box sized from the aspect ratio before anything loads (no layout shift); LQIP, then the poster;
   `preload="metadata"`; native controls by default (accessible, keyboard, picture-in-picture, fullscreen); captions
   track on, toggleable; the CC BY credit line under the video whenever the video has one (no attribute removes it);
-  `hover-preview` plays the muted hover clip on hover, like the Library; `autoplay muted loop` for GIF-like use.
+  `autoplay muted loop` for GIF-like use. (Hover preview and a theming surface are in §14.)
 - **API:** properties and methods mirror `HTMLVideoElement` (`play`, `pause`, `currentTime`, `muted`) and re-dispatch
-  its events (`play`, `pause`, `ended`, `timeupdate`), plus `loaded` with the metadata. Styling through
-  `::part(video)`, `::part(credits)` and CSS custom properties (`--va-player-radius`, `--va-player-background`).
+  its events (`play`, `pause`, `ended`, `timeupdate`), plus `loaded` with the metadata.
 - **Size:** under 6 kB gzipped, no dependencies, Shadow DOM.
 - **Delivery:** npm (`import '@netlify-labs/video-agent-player'`), any npm CDN, and the deployment itself serves
   `/player.js` (same build, copied by `scripts/build.ts`), so a fork's embeds don't depend on npm or a CDN.
 - **Where it shows up:** the publish dialog and `publish --json` offer a "Player" snippet next to the plain HTML
   embed. The share page and the MCP card keep their own markup in v1.
 
-Tests: Playwright component tests (sizing before load, captions, credits always shown, events, `hover-preview`,
-attribute changes, a 404 `src` shows a plain error), a size budget check in CI, and an axe accessibility check.
+Tests: Playwright component tests (sizing before load, captions, credits always shown, events, attribute changes, a 404 `src` shows a plain error), a size budget check in CI, and an axe accessibility check.
 
 ---
 
@@ -815,10 +879,12 @@ attribute changes, a 404 `src` shows a plain error), a size budget check in CI, 
   2. Configure each package's trusted publisher on npmjs.com (this repo, the release workflow file, and the allowed
      action, which npm requires for configurations made after 2026-05-20).
   3. The release workflow runs on GitHub-hosted runners only, with `id-token: write`, Node ≥ 22.14 and npm ≥ 11.5.1.
-- **Provenance needs a public repo and package.** Until the going-public snapshot
-  ([2026-11-02-going-public.md](2026-11-02-going-public.md)) exists, either don't publish, or publish 0.x **without**
-  provenance from the private repo. Recommended: publish 0.x without provenance for internal testing, and turn
-  provenance on with the public repo's release workflow (owner question 6).
+- **Nothing goes to npmjs before the repo is public.** The CLI bundles `buildPrompt`, `video/AGENTS.md`, the run
+  scripts and the skills (§6.3), so publishing it would release all of that world-readable, before the going-public
+  snapshot's review ([2026-11-02-going-public.md](2026-11-02-going-public.md)), and without provenance (which needs a
+  public repo and package). Until then, internal testing uses `npm pack` tarballs (attached to a private release or
+  installed by path). The first npmjs publish comes from the public repo, with provenance from day one (owner
+  question 6). The C4 placeholders are empty `0.0.0` packages, only to hold the names and allow trusted publishing.
 - **0.x until the public launch**, then 1.0. In 0.x, minors may break; from 1.0, semver, with the `oasdiff` job
   blocking breaking API changes without a major SDK bump (§4.4).
 - **Compatibility:** each SDK release states the oldest server `version.commit` it's tested against; `features`
@@ -846,23 +912,23 @@ Spike labels use `C` (the other plans use `K`, `E`, `B`, `D`, `A`; `docs/spikes.
 - **C2: each agent headless, sandboxed.** With Claude Code, Codex and Gemini CLI, run the real prompt for a silent
   15 s video, then a narrated one with music, **inside the agent's OS sandbox** with the §6.5 settings. Record:
   finished or not, minutes, which commands or hosts were blocked, the final settings, and that a canary file in a
-  deny-read folder and a canary env var were unreachable. Pass: the agent finishes both sandboxed and the canaries
-  held. Spends the tester's own subscriptions, not Netlify credits.
+  deny-read folder (tried with `cat` **and** with the agent's own Read tool), a canary env var, and a canary server on
+  the host's `127.0.0.1` were all unreachable (the last confirms the `file:` handoff is the only path back). Pass: the
+  agent finishes both sandboxed and the canaries held. Spends the tester's own subscriptions, not Netlify credits.
 - **C3: Kokoro in a venv** on macOS (Apple silicon) and Ubuntu: create, install, speak one line, time it; list the
   model download hosts for C2's allowlist.
 - **C4: names.** Create the `netlify-labs` npm org (or the owner's chosen scope, question 1) and publish `0.0.0`
   placeholders of the three packages.
-- Gate: a short note appended to `docs/spikes.md` and this plan updated (draft 3).
+- Gate: a short note appended to `docs/spikes.md` and this plan updated (draft 4).
 
 ### Phase 1: API groundwork (server; depends on nothing; blocks every plan's API additions)
 
 1.1 `operationId` + `x-sdk` on every route, coverage test. 1.2 `version` and `features` in `/api/v1/config` (the
-registry, §5.1). 1.3 `x-nf-request-id` surfaced in errors. 1.4 `?wait` on `GET /videos/{id}` (`rest_wait`), with the
-cost measurement. 1.5 `oasdiff` warning job. 1.6 npm workspaces (`packages/`, including `packages/action`), hoisted
+registry, §5.1). 1.3 `x-nf-request-id` surfaced in errors. (1.4, the server-side wait, moved to §14.) 1.5 `oasdiff` warning job. 1.6 npm workspaces (`packages/`, including `packages/action`), hoisted
 devDependencies, build and test scripts, lockfile with npm 11; measure `npm install` time on the runner (one cheap
 run, compared with the last week's setup times). 1.7 `/v/{slug}.json`.
 Gate: typecheck, lint, vitest, `openapi:check`, Playwright; the run setup time within 5% of before; the oEmbed JSON
-checked against a published test video on production (no credits).
+checked against a video made for testing, published for the check and unpublished in `finally` (no credits).
 
 ### Phase 2: the SDK (depends on 1.1, 1.2, 1.6)
 
@@ -872,29 +938,37 @@ redirects, errors, retries, logger, User-Agent. 2.3 Helpers: `wait`, `listAll`, 
 22/24 smoke. 2.7 Move `scripts/e2e/headers.ts` and `seed-music.ts` to the SDK.
 Gate: unit + in-process integration green; **live gate** `scripts/e2e/sdk.ts` against production: read-only checks
 with `VIDEO_ID`, a media upload over 4 MB and its deletion (in `finally`), and (with `CREATE_OK=1`) one 10-second
-video created, waited for, downloaded and verified (about 150 credits; `CREDIT_CEILING` default 300).
+video created, waited for, downloaded and verified (about 150 credits; `CREDIT_CEILING` default 300). Live gates run
+by hand once per phase, never in CI.
 
 ### Phase 3: the CLI's remote commands (depends on 2)
 
 3.1 Catalog, router, help, `--json`, exit codes, logging. 3.2 `login`, `logout`, `whoami`, `doctor` (remote part).
-3.3 Server: `cli_logins` table and migration, the three routes, `createKeyForUser`, the approve page, rate limits,
-the admin switch, sweep cleanup. 3.4 Video commands (create, revise, remix, get, list, wait, download, publish,
+3.3 Server: `cli_logins` table and migration, the three routes and their auth-middleware exemptions,
+`createKeyForUser` with the claim-time owner checks, the approve page (typed code, escaped label and host, IP shown,
+`assertSameOrigin`), the per-IP and global caps (new: nothing in the app limits by IP yet), per-person approval
+limits, the admin switch, sweep cleanup. 3.4 Video commands (create, revise, remix, get, list, wait, download, publish,
 cancel, retry, comments, verdict, open). 3.5 `media upload`/`list`/`get`. 3.6 `api`, `keys list|revoke`.
 Gate: CLI tests in-process (the CLI's `main(argv, io)` with the SDK pointed at the in-process app), `--help`
 snapshots, a test that no output contains `nva_`; Playwright for the approve page (approve, deny, wrong code, expired,
-lock after 5 tries, per-IP cap); **live gate** `scripts/e2e/cli.ts`: login with `--key`, list, get, download a ready
-version, publish and unpublish an existing test video (no credits), and with `CREATE_OK=1` one `create --wait --out`
-(about 150 credits).
+lock after 5 tries, per-IP cap, an over-long or HTML label shown escaped); a domain test that approve-then-disable
+claims as `denied` and that the claim returns the webhook secret; **live gate** `scripts/e2e/cli.ts`: login with `--key`, list, get, download a ready
+version, publish and unpublish a video made for testing (unpublished in `finally`; no credits), and with
+`CREATE_OK=1` one `create --wait --out` (about 150 credits), by hand once per phase, never in CI.
 
-### Phase 4: local mode (depends on C1–C3, 3.1, and render-engines phase 1 for the engine scripts)
+### Phase 4: local mode (depends on C1–C3 and 3.1 only; runs beside phase 2)
+
+Local mode is the front door (§0), so it doesn't wait for the remote CLI or for other plans. The runtime bundle takes
+whatever `scripts/` has at CLI build time: `engine.ts` and `recording.ts` join it when their plans land.
 
 4.1 Run-script changes (§6.4) with the prompt tests. 4.2 Runtime bundle, runtime lockfile and template copy at CLI
-build. 4.3 Pinned runtime install, workspace builder, local run manifest, loopback server. 4.4 Agent adapters that
+build. 4.3 Pinned runtime install, workspace builder, local run manifest, the `file:` callback and checkpoint folder
+watcher. 4.4 Agent adapters that
 passed C2 (§6.5), with env allowlist, deny lists, budgets and proc-tree. 4.5 Verify-and-copy-out, `video.json`.
 4.6 `local revise`. 4.7 `doctor` (local part). 4.8 A **fixture agent** (`--agent fixture`, hidden) that copies a
 known composition into `video/` and runs the exact commands the prompt lists, for CI.
 Gate: a CI job on Linux with ffmpeg and Chrome runs `video-agent local --agent fixture` end to end (runtime,
-workspace, manifest, prepare-run `--inputs`, render-job `--upload local`, callback, verify, outputs), checks the MP4
+workspace, manifest, prepare-run `--inputs`, render-job `--upload local`, `done.json`, checkpoints, verify, outputs), checks the MP4
 with ffprobe, the captions and the manifest hashes, and that no `NETLIFY_*` or `VIDEO_AGENT_*` variable reached the
 child; then `local revise --agent fixture`. **Live gate** (manual, the tester's subscriptions): one silent and one
 narrated video with each shipped agent, sandboxed, then `local revise` on each. Results recorded in this plan.
@@ -907,19 +981,19 @@ Gate: Playwright component tests, size budget, axe.
 
 ### Phase 6: docs, navigation and README (depends on 3; the local section on 4)
 
-6.1 The docs navigation (§8) and `/docs/cli`, `/docs/sdk`. 6.2 README sections. 6.3 Skill `references/cli.md` and
-CLI recipe variants.
+6.1 The docs navigation (§8) and `/docs/cli`, `/docs/sdk`. 6.2 README sections. 6.3 Skill `references/cli.md`.
 Gate: catalog-vs-docs test, Playwright on both pages, the skill zip still deterministic (`scripts/build.ts`).
 
 ### Phase 7: release (depends on 2, 3, 4; the player with 5)
 
-7.1 Changesets, release workflow with trusted publishing (§10). 7.2 First `0.1.0` of the SDK and CLI (provenance
-per owner question 6). 7.3 Fresh-machine check: on a clean macOS user and a clean Ubuntu container, follow the
+7.1 Changesets, release workflow with trusted publishing (§10). 7.2 Internal `npm pack` tarballs until the public
+snapshot; then the first npmjs `0.1.0` of the SDK and CLI from the public repo, with provenance (owner question 6). 7.3 Fresh-machine check: on a clean macOS user and a clean Ubuntu container, follow the
 README's "Try it on your laptop" word for word. 7.4 The player's first release with phase 5.
 Gate: the fresh-machine check passes; `npm view @netlify-labs/video-agent-cli` shows the release (and provenance once
 the repo is public).
 
-Parallel work: phase 0 and phase 1 together; then 2 and 5 together; 3 after 2; 4 after C1–C3 and 3.1.
+Parallel work: phase 0 and phase 1 together; then 2, 4 and 5 together (4 needs C1–C3 and 3.1, the first step of
+phase 3, which needs nothing from phase 2 to start); the rest of 3 after 2.
 
 ---
 
@@ -929,7 +1003,7 @@ Parallel work: phase 0 and phase 1 together; then 2 and 5 together; 3 after 2; 4
 | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
 | All                    | `features` registry and `version` (they add their own strings), `operationId` + `x-sdk` on new routes, the coverage test, workspaces               | 1          |
 | looks                  | `looks.list`, `look` on create/revise/remix/plans; CLI `looks`, `--look`, `restyle`; `local --look`; the Looks docs page in the nav                | 2, 3, 4, 6 |
-| render-engines         | `engines.list`, `engine` on create; `--engine`; `local --engine remotion --accept-remotion-license`; `engine.ts` in the runtime bundle               | 2, 3, 4    |
+| render-engines         | `engines.list`, `engine` on create; `--engine`; `engine.ts` in the runtime bundle when it lands; `local --engine remotion --accept-remotion-license` later (§14) | 2, 3, 4    |
 | regenerate-beat        | `scope` on revise, `videos.redoScenes`; CLI `scenes`, `revise --scene`, `redo`                                                                         | 2, 3       |
 | screen-recording-demo  | `media.upload({ role })`, `media.uploadRecording`, `setTrace`/`getTrace`, `recording` on create/remix; CLI `demo`, `media upload --role`, `record` slot, `local demo`; `recording.ts` in the bundle; `/docs/cli#record` | 2, 3, 4, 6 |
 | github-action          | The SDK (`versions.retry/cancel`, `files.download`, `media.check`, `videos.wait`, `externalRef`, `context`); `packages/action` in the workspace; the `brief` command slot | 1, 2, 3    |
@@ -946,14 +1020,18 @@ Parallel work: phase 0 and phase 1 together; then 2 and 5 together; 3 after 2; 4
 4. **Where keys live:** a 0600 config file (recommended for v1), or the OS keychain where there is one?
 5. **Should a local video be pushable to the team app** (`video-agent local push`, §14)? The strongest funnel, and
    real work. **Recommended:** not in v1; revisit after launch.
-6. **Publishing before the repo is public:** 0.x without provenance from the private repo for internal testing
-   (recommended), or wait for the public snapshot and publish with provenance from the start?
+6. **Publishing before the repo is public:** internal `npm pack` tarballs until the public snapshot, then npmjs with
+   provenance from the public repo (recommended), or publish 0.x to npmjs now from the private repo (exposes the prompt
+   template, run scripts and skills before the going-public review)?
 7. **`/player.js` served by every deployment** (recommended), or npm and CDN only?
-8. **An agent that can't finish inside its sandbox in C2:** leave it out of v1 (recommended), or ship it with
-   `--no-sandbox` as its only mode and a warning?
+8. **An agent that can't finish inside its sandbox in C2:** leave it out of v1 (recommended; Gemini is the likely
+   one), or ship it with `--no-sandbox` as its only mode and a warning?
+9. **A server-side wait (`rest_wait`, §14):** leave it out of v1 and let a later measurement decide (recommended), or
+   build it now?
 
 (Settled by the reviews: the server `version` source, now `COMMIT_REF` plus the template version; native Windows, now
-§14; default safety, now the OS sandbox with `--no-sandbox` as the escape hatch.)
+§14; default safety, now the OS sandbox with `--no-sandbox` as the escape hatch. Question 4 stands; CI uses
+`VIDEO_AGENT_KEY` or `--key - --no-save`, so the key never lands in a file there.)
 
 ---
 
@@ -976,7 +1054,24 @@ Parallel work: phase 0 and phase 1 together; then 2 and 5 together; 3 after 2; 4
   half (prepare-run `--inputs`) ships in v1; the other half is render-job's already-typed `signed` upload mode and
   dev-only upload/fetch endpoints, because `netlify blobs:get/set` talk to the linked project's real stores, not
   `netlify dev`'s emulated ones.
-- **Native Windows** (WSL works).
+- **Native Windows** (WSL works). The config would live under `%APPDATA%`.
+- **Server-side wait (`rest_wait`):** `?wait=<0-10>` on `GET /api/v1/videos/{id}` holds the request until the etag
+  changes or the time passes, reusing the MCP's loop (`src/mcp.ts:541-545`), and honours `If-None-Match`. Netlify
+  synchronous functions may run up to 60 s, so 10 s is safe. Each wait is billed function time, so measure it against
+  `If-None-Match` polling (requests and GB-s per finished video) first; ship only on a clear win, advertised as
+  `rest_wait`, and the SDK's `wait` then passes `wait=8`.
+- **Interactive planning in the terminal:** `create --plan` asks each question with arrow-key choices, write-ins and
+  skip, then shows the brief to accept. v1 prints the questions and takes `--answers <file>`.
+- **`local --engine remotion`** (render-engines plan, after its phase 2 and the licence decision): refuses to run
+  without `--accept-remotion-license` and prints that plan's licence notice once. The runtime bundle carries
+  `engines/remotion/template/` (lockfile only; `npm ci` at run time with `registry.npmjs.org` on the sandbox's network
+  allowlist).
+- **`--pass-env NAME`** for `ELEVENLABS_API_KEY` and `OPENVERSE_CLIENT_*`: passes that one variable into the agent's
+  environment and adds its host to the network allowlist. Out of v1 because it puts a secret where an injected
+  instruction could read it; Kokoro and anonymous Openverse need none.
+- **Player extras:** `hover-preview` (plays the muted hover clip on hover, like the Library, from `/v/{slug}.json`'s
+  `hover`); a theming surface (`::part(video)`, `::part(credits)`, `--va-player-radius`, `--va-player-background`).
+- **CLI variants of every skill recipe** (changelog, social cut, localise, review), beside the `brief` flow.
 - Plan-with-questions locally; the browser editor locally; a Python or Go SDK; a React wrapper for the player
   (`<video-agent-player>` works in React 19 as is); admin commands beyond `api`; OAuth for REST; the OS keychain;
   telemetry of any kind.
@@ -993,11 +1088,12 @@ Parallel work: phase 0 and phase 1 together; then 2 and 5 together; 3 after 2; 4
   agent CI job runs the bundle, not the repo copy.
 - **Prompt injection through inputs** (brand kit, captions, Openverse titles, PDFs). The prompt fences them as data;
   the sandbox, deny lists, env scrubbing and network allowlist limit what an injected instruction can reach.
-- **Device-flow phishing and lockout.** Typed codes, short expiry, per-IP and global caps, per-person approval limits,
-  the admin switch (§5.2).
+- **Device-flow phishing and lockout.** Typed codes, short expiry, the requesting IP on the approve page, per-IP and
+  global caps, per-person approval limits, claim-time owner checks, the admin switch (§5.2).
+- **A sandbox setting that quietly reopens the host** (`allowLocalBinding`, a broad Seatbelt profile). The adapters
+  never set them, and C2's canaries test reads through the shell **and** through the agent's file tools.
 - **No spend cap for subscription users of Codex and Gemini.** `--max-turns`/timeouts bound them; Claude Code API-key
   users get `--budget`.
-- **`rest_wait` cost.** Measured in phase 1 before it's the SDK default.
 - **Monorepo install time adds to every run.** Hoisted devDependencies; measured in phase 1.
 - **Support load from strangers' laptops.** Supported matrix stated (macOS, Linux; the agents that passed C2; Node
   versions); everything else is best effort.
@@ -1005,7 +1101,9 @@ Parallel work: phase 0 and phase 1 together; then 2 and 5 together; 3 after 2; 4
 
 ---
 
-## 16. Review log (draft 1 → 2)
+## 16. Review log
+
+### Draft 1 → 2
 
 Independent review (Fable 5.1, "sound with changes"):
 
@@ -1052,6 +1150,38 @@ Cross-plan seam review (changes for cli-and-sdk):
 | Shared rules 4 (template bump), 5 (manifest `v: 1`), 8 (spike labels `C`), 15 (words) | **Adopted** | §6.4, §6.3, §11, §6.1. |
 | Addendum 16 (names), 17 ("telemetry" means usage only; pointer trace) | **Adopted** | Every `@video-agent/` replaced; `--trace`, `setTrace`/`getTrace`. |
 
+### Review log (draft 2 → 3): remote review (Fable 5.1 high, Netlify Agent Run at `19740d8`)
+
+Each claim was checked at today's code before it was adopted.
+
+| Item | Decision | Why |
+| --- | --- | --- |
+| R1 loopback callback unreachable from the sandboxes; use a `file:` handoff | **Adopted** | render-job already writes `manifest.json` before posting (`render-job.ts:416`) and derives the checkpoint URL from the callback (`:196`), so `file://…/done` → `…/checkpoint` works with no other change. Claude Code's sandbox docs (and guides quoting them) confirm Bash-only scope and private localhost; Gemini's Linux sandbox is a container. `allowLocalBinding` is never set; C2 tests a host-loopback canary. |
+| R2 decouple local mode from render-engines; move it up | **Adopted** | The bundle is built from whatever `scripts/` holds at build time, so the engines dependency was not real. Phase 4 now needs C1–C3 and 3.1 only and runs beside phase 2. Roadmap change recommended (wave 4 → 2). |
+| R3 claim-time owner checks, return `webhookSecret`, cap label/host, middleware exemptions, `assertSameOrigin` | **Adopted** | `keys.ts:35` returns the secret; `auth.ts:100-108`, `:134-139` hold the owner checks; `app.ts:238` exempts only config; `assertSameOrigin` is `auth.ts:165`. The review's `auth.ts:124` for `safeEqual` is `:129`. Per-IP limiting named as new work in 3.3. |
+| R4 resend identical bytes on idempotent retries | **Adopted** | `videos.ts:280-284` hashes the body; `IDEMPOTENCY_TTL_MS` at `:54`. |
+| R5 `files`: DTO-signed vs 302 files | **Adopted** | `videos.ts:942-946` (links) and `:955`, `:962-990` (signed poster, GIF, variants, clip). |
+| R6 `wait` with no default timeout; queue position | **Adopted with changes** | No default timeout. There is no queue-position field in the API (`grep` over `src/schemas.ts`, `src/domain/progress.ts`), so `onProgress` reports the `queued` status, not a position. |
+| R7 Claude Code file tools bypass the OS sandbox; add `permissions.deny` | **Adopted** | Consistent with Claude Code's docs and guides: the sandbox covers Bash and its children. C2 canary tries `cat` and Read. |
+| R8 Gemini macOS default profile doesn't deny reads | **Adopted** | Custom Seatbelt profile required, or Gemini doesn't ship (Q8 now names Gemini as the likely one). |
+| R9 `listAll` only where there's a cursor | **Adopted** | `RecordingListSchema` at `schemas.ts:911` has none; §1 now says "most lists". |
+| R10 FFmpeg from the runtime, not brew | **Adopted** | agent-kit README tools table (static `ffmpeg-static`, `@ffprobe-installer/ffprobe`). |
+| Claims: `%APPDATA%` with Windows out of v1; agent CLI versions unverifiable on a runner; `x-nf-client-connection-ip` unread | **Adopted** | `%APPDATA%` moved to §14; §1's heading says where versions were checked; per-IP helper named as new work. |
+| Security: publishing the CLI before the repo is public exposes the prompt and run scripts | **Adopted** | §10 now: `npm pack` tarballs internally; npmjs only from the public repo, with provenance. Q6 rewritten. |
+| Security: show the requesting IP on the approve page | **Adopted** | §5.2. |
+| Security: `parseWebhook` takes delivery headers and exposes event and delivery ids | **Adopted** | Headers at `webhooks.ts:189-191`. |
+| Security: `agent.log`/`run.jsonl` contain the full prompt | **Adopted** | §6.5 note; `/docs/cli` says so. |
+| Security: gates publish real videos; `CREATE_OK` gates per PR | **Adopted** | Gates use a test video unpublished in `finally`; live gates run by hand once per phase, never in CI. |
+| Over-built: `rest_wait` | **Moved to §14 with its design** | `If-None-Match` polling already gets bodyless 304s; the string stays reserved in the registry. New Q9. |
+| Over-built: interactive `--plan` | **Moved to §14** | v1 prints the questions and takes `--answers`. |
+| Over-built: `local --engine remotion` | **Moved to §14** | It needs engines phase 2 and the licence decision anyway. |
+| Over-built: player `hover-preview` and theming | **Moved to §14** | The player itself stays in scope (phase 5): sized box, poster, captions, credits, native controls. |
+| Over-built: `--pass-env` | **Moved to §14** | Kokoro and anonymous Openverse need no secret; passing one is what §6.5 otherwise forbids. |
+| Over-built: CLI variants of skill recipes | **Moved to §14** | `references/cli.md` plus the Action's `brief` flow cover v1. |
+| Seams: roadmap wave for local mode; Looks line 560 says "hand-written resource methods"; Action install ref sha vs `action-v1` tag | **Not edited here** | Other documents; reported to the orchestrator (move local mode to wave 2; Looks should say "generated resource methods plus helpers"; the roadmap should use the Action plan's tag). |
+| Q4 key storage with CI via stdin | **Adopted** | `--key - --no-save`; `VIDEO_AGENT_KEY` in CI. |
+| Seam (screen-recording draft 3): `doctor` checks ffmpeg for `record` and `media upload --role screen-recording` | **Adopted** | The recorder re-encodes to H.264 with a 1 s keyframe interval before upload; §6.6. |
+
 ---
 
 ## Sources
@@ -1068,3 +1198,10 @@ Cross-plan seam review (changes for cli-and-sdk):
   [github/clipboard-copy-element#86](https://github.com/github/clipboard-copy-element/pull/86).
 - [oasdiff](https://github.com/oasdiff/oasdiff) for OpenAPI breaking-change detection.
 - Device authorization flow: RFC 8628 (§5.4 on remote phishing); loopback redirects: RFC 8252 §7.3.
+- Claude Code sandboxing: [code.claude.com/docs/en/sandboxing](https://code.claude.com/docs/en/sandboxing) (cited by
+  the round-3 review), and guides describing the Bash-only scope and `allowLocalBinding`:
+  [TrueFoundry](https://www.truefoundry.com/blog/claude-code-sandboxing),
+  [instagit](https://instagit.com/anthropics/claude-code/configure-sandbox-claude-code),
+  [Zenn](https://zenn.dev/todesking/articles/c1f5b9ff26e4f9).
+- Gemini CLI sandbox profiles: [geminicli.com/docs/cli/sandbox](https://geminicli.com/docs/cli/sandbox/) (cited by the
+  round-3 review).

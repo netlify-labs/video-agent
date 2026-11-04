@@ -1,9 +1,12 @@
 # Redo a scene: regenerate one beat as a scoped revision — plan
 
-- **Status:** draft 2 (2026-11-04). Not started. No beads yet. Written from the idea-wizard list (idea #10) after the
-  owner picked it ("faster/cheaper regens sound cool"). Draft 1 was reviewed by an independent Fable 5.1 review
-  ("sound with changes") and by the cross-plan seam review of the six 2026-11-04 plans. Each claim was checked against
-  the code before it was folded in; §13 is the review log.
+- **Status:** draft 3 (2026-11-04). Not started. No beads yet. Written from the idea-wizard list (idea #10) after the
+  owner picked it ("faster/cheaper regens sound cool"). Reviews:
+  - Draft 1: an independent Fable 5.1 review ("sound with changes") and the cross-plan seam review of the six
+    2026-11-04 plans.
+  - Draft 2: a remote Fable 5.1 review (high effort, a Netlify Agent Run at `19740d8`, "sound with changes").
+
+  Each claim was checked against the code before it was folded in. §13 is the review log.
 - **Ask:** on a finished video, pick one scene (or a few), say what should change, and get a new version where only
   those scenes changed. Everything else stays as it was: the same HTML for the other scenes, so the same pictures, the
   same captions, the same music, the same voice. It should be faster and cheaper than revising the whole video, and it
@@ -34,7 +37,8 @@ composition must be: the parent with the agent's scoped beats put in, re-laid en
 music's ducking rewritten. The splice is what gets rendered. Anything the agent changed outside the scope is put back
 and reported while the agent works (`check-contract.ts --fix`), and refused at render time and again in finalize,
 which checks the uploaded composition against the parent's archive on the server. **What's guaranteed is the saved
-composition:** the other scenes' HTML and files are the parent's. The MP4 is trusted like every run's, bound to the
+composition:** outside the scope, its `index.html` and `summary.json` are byte-for-byte what splicing the parent
+produces, and every other existing file is the parent's. The MP4 is trusted like every run's, bound to the
 composition by its length, and the live gate checks frozen scenes' frames by SSIM (§4.9).
 
 ## 1. Why this is worth building
@@ -72,17 +76,23 @@ composition by its length, and the live gate checks frozen scenes' frames by SSI
 | Run kinds are `author`, `revision`, `render_unchanged`, `author_from_frozen`. A revision's manifest has `source` (the parent's archive and its reference files) and an optional `feedback` (the parent MP4 and pins for stills). | `src/lib/run-manifest.ts:26-62` |
 | `verifyRunManifest` rejects any `v !== 1`, checks the shape of known fields and ignores unknown ones. `feedback.pins` may be empty (it's only capped at 50). | `src/lib/run-manifest.ts:19`, `:121`, `:295-365` |
 | For a revision, the reconciler restores the parent's `source.tar.gz` by key and hash, adds reference files (the narration bus) via `readReferences`, and makes feedback stills from the parent MP4 for pinned comments. | `src/domain/reconciler.ts:268-330` |
-| prepare-run fetches `feedback.video` and makes one still per pin (`feedbackStills`). It keeps a copy of the restored parent in `.render/frozen` only when the parent is narrated. | `scripts/prepare-run.ts:60-99`, `:375-395`, `:453-459` |
+| prepare-run fetches `feedback.video` and makes one still per pin with `feedbackStills`. That function **empties `video/feedback/` first** and runs last in `prepare()`, after any restore and the library media. prepare-run keeps a copy of the restored parent in `.render/frozen` only when the parent is narrated. | `scripts/prepare-run.ts:60-99` (the `rmSync` at `:65`), `:375-395`, `:452-460` |
 | render-job validates the contract and refuses leftover `data-va-revoice` marks. It then runs **one** guard from an `else if` ladder (render-unchanged with narration, fit, narrated revision, re-voice, plain render-unchanged). The narrated-revision branch catches every revision of a narrated parent. | `scripts/render-job.ts:86-176` |
 | The re-voice guard is the pattern to copy. It hashes every file except the ones the step may write (`keptHash`, which excludes the held still because the narration step rewrites it). It compares `voice.json` entry by entry (same provider, voice and speed; only marked beats change). It then recomputes `index.html`/`summary.json` from the frozen copies with `applyRevoice`. | `src/lib/revoice.ts:33-169` |
-| `applyEdits` re-lays the beats with `relayout`. That puts them back to back, snapping each **cumulative** end to whole frames, so a beat that isn't frame-aligned pushes its rounding into the next beat. It also sets the root, layer and video-slot durations, trims speech and rewrites ducking. `syncCaptions` recomputes absolute caption times; text cues stretch by `duration / authoredDuration`, voice cues don't. Both functions are private. | `src/lib/contract.ts:1026-1085` |
+| `relayout` puts the beats back to back, snapping each **cumulative** end to whole frames, so a beat that isn't frame-aligned pushes its rounding into the next beat. It also sets the root, layer and video-slot durations, trims speech and rewrites ducking. `syncCaptions` recomputes absolute caption times, snapping them to frames; text cues stretch by `duration / authoredDuration`, voice cues don't. Both functions are private. | `src/lib/contract.ts:1026-1085` |
+| `relayout` runs only on editor, narration and re-voice paths: `applyFitNarration`, the held frame, `applyEdits` and `applyRevoice`. **An authored composition is never relaid.** `check-contract.ts` and render-job only validate it, and `validate` only needs each start within half a frame of the running sum, so an authored contract-v1 parent can have beats that aren't frame-aligned (3.85 s). | `src/lib/contract.ts:901`, `:984`, `:998`, `:1093`, `:1268`; `:424` |
+| GSAP resolves string targets (`tl.from('.card', …)`, `gsap.utils.toArray('.card')`) against the whole document, not the beat. `vaBeat` hands the beat a plain GSAP timeline. | `video/vendor/va-contract.js:9-16` |
+| The renderer's Chrome is 156 (puppeteer's pinned revision, used by HyperFrames). | `node_modules/puppeteer-core/lib/puppeteer/revisions.js:10` |
+| No read route returns a version's beats. The only route that returns a `Composition` is `POST …/versions/{n}/edits`, which opens a draft as a side effect. | `src/app.ts:1156` |
+| Finalize stores the uploaded `source.tar.gz` exactly as uploaded. | `src/domain/finalize.ts:217` |
 | `load`/`save` are a parse5 round trip. Whitespace text nodes, attribute order and script/style text survive it, so a re-indented file serializes differently. | `src/lib/contract.ts:231-243` |
 | `validate` checks authored rules and derived values alike. Authored rules: beat ids, `data-composition-id`, track 0, the `vaBeat` script, unique text ids, voice placement. Derived values: back-to-back starts, beat sum = root, layers span the total, the ducking lane. Its script isolation check is a regex: `/\bdocument\s*\.|window\.__timelines/`. | `src/lib/contract.ts:395-520`, `:436` |
 | `readColors` reads `--va-color-*` from **every** `<style>` in the document, and the editor's colour op rewrites each one. | `src/lib/contract.ts:249-256`, `:1143-1151` |
-| Finalize checks every upload's hash and the MP4 (H.264, size, duration). It only **notes** a length far from the target; it doesn't reject it. It never derives the MP4 from the archive, for any run kind. It reads the uploaded `source.tar.gz` once for run credits (`runCreditsOf`, `SOURCE_READ_LIMITS`: 5,000 entries, 160 MB), and after a version is ready it builds the bundle and sets `versions.contract`. | `src/domain/finalize.ts:131-236`, `:277-287`, `:435-460` |
+| Finalize checks every upload's hash and the MP4 (H.264, at most 2 GB, duration). It only **notes** a length far from the target; it doesn't reject it. It never derives the MP4 from the archive, for any run kind. It reads the uploaded `source.tar.gz` once for run credits (`runCreditsOf`, called at `:236`, with `SOURCE_READ_LIMITS`: 5,000 entries, 160 MB total, 60 MB per file). After a version is ready, it builds the bundle and sets `versions.contract`. | `src/domain/finalize.ts:131-236`, `:162`, `:277-287`, `:435-439`, `:447-460` |
 | `editable` in the API is `status === 'ready' && contract === 1`. | `src/domain/videos.ts:898` |
 | The server can read any ready version's composition: `ensureBundle` unpacks its source archive (Blobs I/O) and records contract violations. | `src/domain/bundles.ts:136-195` |
-| `readTarGz`'s default limits are 2,000 entries, 50 MB total and 10 MB per file. | `src/lib/tar.ts:12-16` |
+| `readTarGz`'s default limits are `BUNDLE_LIMITS`: 2,000 entries, 50 MB total, 10 MB per file. | `src/lib/tar.ts:12-16`, `:48` |
+| The server's bundle contract check combines `contractOf` over the archive with `missingLocalFiles`, which uses the reference files and the version's library media. | `src/domain/bundles.ts:170-188` |
 | Files that never count and are never archived: dot folders, `node_modules`, `renders`, top-level `.mp4`, `feedback/`, and hydrated library media (`assets/media/med_*`). | `src/lib/bundle-manifest.ts:28-41` |
 | `check-contract.ts` validates `video/`; `--duck` rewrites the music's ducking lane first. | `scripts/check-contract.ts:1-49` |
 | `voice.ts` re-speaks every line that changed in `script.json` and keeps unchanged ones. `voice.ts sync` drops the non-voice cues of voiced beats, adds voice cues for every voiced beat, sorts all cues by start, and rewrites ducking. | `scripts/voice.ts:54-80`, `:145-171` |
@@ -104,15 +114,18 @@ composition by its length, and the live gate checks frozen scenes' frames by SSI
 3. **Byte comparisons of hand-written HTML are fragile.** A parse5 round trip keeps whitespace, attribute order and
    script text, so a formatter re-indenting frozen scenes would look like a violation. Compare semantically (§4.5).
 4. **Changing a beat's length moves everything after it.** Later beats' `data-start`, the root, layer and video-slot
-   durations, caption times, speech spans and the ducking lane all shift. These are derived: compute them, never
-   compare them. And `relayout` snaps cumulative ends, so a non-frame-aligned scoped beat would leak a rounding frame
-   into the next frozen beat unless it's snapped first.
+   durations, caption times, speech spans and the ducking lane all shift. These are derived values, so compute them;
+   never compare them. Plain `relayout` is the wrong tool here. It snaps cumulative ends, and authored parents were
+   never relaid, so their frozen beats may not be frame-aligned: relaying would change a 3.85 s frozen beat to 3.833
+   or 3.867 s. Frozen durations have to be kept verbatim and only scoped ones snapped (§4.5).
 5. **Shared CSS lives outside beats.** `<head>` and root-level `<style>` hold fonts, classes and `--va-color-*`.
    Inside a beat there are several ways to leak styles out: a `<link rel=stylesheet>`, a second `<style>` (also inside
    `<svg>`), a `--va-color-*` declaration (`readColors` would make it an editor colour role), or a
    `data-composition-src` sub-composition.
 6. **Script isolation is a heuristic.** The `vaBeat` check is a regex, and `el.parentElement`, `el.ownerDocument`,
-   `el.closest(…)` or `getRootNode()` escape it. Only frames can prove the other scenes look the same.
+   `el.closest(…)` or `getRootNode()` escape it. So do GSAP **string targets**: GSAP resolves `tl.from('.card', …)`
+   against the whole document, and it's the most common way an agent selects. Only frames can prove the other scenes
+   look the same.
 7. **Neighbours.** The contract puts a transition in the beat it leads into, so the next scene's entrance is frozen
    and the scoped scene's last frame is what that entrance cuts from. The agent can't see the neighbours in the HTML
    alone; it needs stills.
@@ -132,6 +145,14 @@ composition by its length, and the live gate checks frozen scenes' frames by SSI
 14. **No archive I/O inside the revise transaction.** `ensureBundle` reads Blobs. Doing that while the job row is
     locked would hold the lock across network calls.
 15. **Labels are agent-written.** `data-va-label` values reach the next prompt, so they're data in a fence.
+16. **The stills folder gets wiped.** `feedbackStills` empties `video/feedback/` before writing pin stills, so any
+    scope stills written before it would vanish.
+17. **Older versions have no beats list.** Without a read route, the picker can't show scenes for any version made
+    before this plan.
+18. **A semantic check isn't the archive.** Finalize stores the upload as is, so if the check were only semantic, a
+    whitespace-sensitive difference in a frozen scene could still be saved.
+19. **Retries repeat failures.** A scoped attempt refused for out-of-scope changes, retried with the same prompt, has
+    the same odds and spends the same credits.
 
 ## 4. Design
 
@@ -180,9 +201,13 @@ The version stores `scope: { beats: string[] }` (new nullable `versions.scope` j
 inherited from the parent, as now, and the finalize length notice is unchanged.
 
 **No archive I/O in the transaction.** `reviseVideo` reads the parent's `versions.beats` inside the transaction. When
-that's null (a version from before this plan), it calls `ensureBundle` **before** opening the transaction, computes
-the beats, stores them on the parent with a separate update, then proceeds. Nothing is unpacked while the job row is
-locked.
+that's null (a version from before this plan), it fills them first, outside the transaction:
+1. a read-only `loadJob` visibility check (so nobody can make the server unpack a private video they can't see);
+2. only for a ready version, `ensureBundle` (the same fill as the beats route, §4.2);
+3. store the beats on the parent with a separate update;
+4. then open the transaction, which re-checks everything as now.
+
+Nothing is unpacked while the job row is locked.
 
 Why not a separate endpoint (`POST …/beats/{beat}/regenerate`): a scoped revision is a revision in every other way
 (history, attempts, retries, comments, webhooks, credits). One field keeps REST, MCP, SDK and CLI in step and keeps one
@@ -198,14 +223,23 @@ People and agents need the beat list to pick from. Today it's only inside the bu
   - Finalize already un-tars that archive for `runCreditsOf` (`src/domain/finalize.ts:447-456`). Refactor so it's read
     once (`readTarGz(gz, SOURCE_READ_LIMITS)`) and both use the map.
   - It's small: 20 beats is about 1 KB.
-- **`contract` could be set the same way.** It could be computed from the same map and set atomically with ready,
-  instead of after it (`:277-287`, where `editable` briefly lags). That's a small behaviour change for every version,
-  so it's open question 8; recommended yes.
+- **`contract` could be set the same way:** atomically with ready, instead of after it (`:277-287`, where `editable`
+  briefly lags). It would have to use the same inputs as `ensureBundle`: `contractOf` over the archive **plus**
+  `missingLocalFiles` with the reference files and the version's library media (`src/domain/bundles.ts:170-188`).
+  Computing it from `index.html` alone would mark compositions editable that the bundle later finds incomplete. It's a
+  small behaviour change for every version, so it's open question 8; recommended yes, with those inputs.
 - **`VersionDto`** gains `beats: { id, label, start, duration }[] | null` and `scope: { beats: { id, label }[] } |
   null`. The labels come from the parent's beats, so history can say "Redid Features". These are additive
   (cross-plan rule 10). `editable` stays as it is.
-- **Older versions:** their beats fill lazily, when someone opens a scoped revise (§4.1) or the scene picker asks.
-  The editor already reads the bundle, so it never needs `beats`. A one-off backfill script is in §11.
+- **Older versions: `GET /api/v1/videos/{id}/versions/{n}/beats`** (operationId `getVersionBeats`).
+  - It follows the same visibility rule as the video: a private video someone can't see is 404.
+  - When `versions.beats` is null and the version is ready, it runs `ensureBundle` outside any transaction, stores the
+    list and returns `{ beats }`. Non-contract versions get `null`; versions that aren't ready get `409 not_ready`.
+  - The DTO's `beats` is the cached value. When it's null, the revise panel, Redo this part, the CLI's `scenes` and
+    MCP `get_video` (and the recipe's "find the beat") fall back to this route. A scoped revise fills it the same
+    way (§4.1).
+  - The editor still reads the bundle and never needs it.
+  - A one-off backfill script is in §11.
 - **Why store it rather than compute it per request:** the video DTO is on every list and poll path, and unpacking an
   archive there is too slow.
 
@@ -216,34 +250,52 @@ The reconciler builds a revision manifest as today (`src/domain/reconciler.ts:26
 ```ts
 scope?: {
   beats: string[]
-  /** The parent's beats as the agent sees them, for the prompt and the stills. */
-  layout: { id: string; label: string | null; start: number; duration: number }[]
-  /** Stills from the parent MP4 so the agent can match the neighbours, relative to video/. */
-  stills: { atSec: number; path: string; what: 'before' | 'middle' | 'after'; beat: string }[]
+  /** Stills from the parent MP4 so the agent can match the neighbours, relative to video/. Empty: no stills. */
+  stills: { atSec: number; path: string; what: 'before' | 'after'; beat: string }[]
 }
 ```
+
+There's no `layout` in the manifest: prepare-run restores the parent first and reads the same
+`{ id, label, start, duration }` list from it (`read(load(index.html))`), writing it into `.render/frozen/scope.json`.
+The prompt's JSON comes from the reconciler, which has `versions.beats`. One source, nothing to disagree.
 
 - **The parent MP4 comes from the existing `feedback.video`** (`src/lib/run-manifest.ts:56-62`). It's set for scoped
   revisions even when there are no pinned comments, with `pins: []`, which the parser already accepts. No duplicate
   `scope.video`.
 - **Manifest version stays 1** (cross-plan rule 5). `verifyRunManifest` gains a shape check for `scope`:
   - ids as above, at most 20 beats;
-  - `layout` covering every parent beat;
-  - at most 60 stills, each with a `path` under `feedback/scope/`;
-  - `scope` requires `kind === 'revision'` and a `feedback.video`.
+  - at most 40 stills, each with a `path` under `feedback/scope/`;
+  - `scope` requires `kind === 'revision'`, and non-empty `stills` require a `feedback.video`.
 - **prepare-run step order** is the one render-engines §4.3 owns: restore and hydrate, then library media, then look,
-  then recording and **scope files**. For a scoped manifest, prepare-run:
+  then recording and **scope files**. For a scoped manifest, prepare-run's scope step:
   - always copies the restored parent composition into `.render/frozen/` (today it does so only for narrated parents);
-  - writes `.render/frozen/scope.json`;
-  - makes the stills with the same ffmpeg path as feedback pins. Each scoped beat gets three: **before** (the last
-    frame of the previous beat, if any), **middle**, and **after** (the first frame of the next beat, if any).
-    Adjacent scoped beats share stills, which are de-duplicated. Files go to `video/feedback/scope/<beat>-<what>.jpg`;
-    `feedback/` is never archived.
+  - writes `.render/frozen/scope.json` with the beats and the parent's layout read from the restored files.
+- **The stills are made with the feedback stills, last.** `feedbackStills` empties `video/feedback/` and runs last
+  (`scripts/prepare-run.ts:65`, `:452-460`).
+  - One call, `feedbackStills(root, mp4, pins, scopeStills)`, writes pin stills and scope stills from the one
+    downloaded MP4 and lists both in `feedback/index.json`. The scope step doesn't write stills itself.
+  - The engines plan's order gets a note: "feedback and scope stills, last" (recommended to the orchestrator).
+  - Each scoped beat gets two stills: **before** (the last frame of the previous beat, if any) and **after** (the
+    first frame of the next beat, if any). Those are what the scene has to cut from and into; the scene being
+    replaced is in the HTML already.
+  - Adjacent scoped beats share stills, which are de-duplicated, ≤ 40 in total. Files go to
+    `video/feedback/scope/<beat>-<what>.jpg`; `feedback/` is never archived.
+- **A large parent MP4 skips the stills.** Each scoped run downloads the parent MP4 (up to 2 GB, `finalize.ts:162`)
+  just for the stills. When the parent's MP4 is over 300 MB (`outputs.bytes`), the reconciler sends
+  `stills: []` and no `feedback.video` unless there are pins. The prompt then says "There are no stills of the
+  neighbours for this video; read their HTML instead."
 - **Kind:** reuse `revision`, as remix did. A new kind would touch every switch over `RunKind` for no behaviour the
   `scope` field doesn't already select. render-job and check-contract look for `scope` in the manifest.
-- **HyperFrames only in v1** (cross-plan item 3). The splice and checks are this engine's. render-engines adds an
-  optional `scopeCheck?(parent, agent, beats)` to its `Engine`/`RunEngine` interface; this plan's module implements it
-  for HyperFrames, and Remotion has none until the engines plan's phase 3.5.
+- **HyperFrames only in v1** (cross-plan item 3). The splice and checks are this engine's.
+  - render-engines defines `RunEngine.scopeCheck?(frozenDir, videoDir, beats): string[]`
+    (`docs/plans/2026-11-04-render-engines.md:423`). It returns problems only, but render-job also needs the splice's
+    bytes to render.
+  - This plan asks for that signature to become
+    `scopeCheck?(frozenDir, videoDir, beats): { problems: string[]; files?: Record<string, string> }`, where `files`
+    is the splice's `index.html`/`summary.json` (recommended to the orchestrator; the engines doc is the cheaper edit).
+  - Until it changes, render-job calls `spliceScoped` directly for HyperFrames and uses the hook only for the problem
+    list.
+  - Remotion has no hook until the engines plan's phase 3.
 
 ### 4.4 What the agent may change
 
@@ -257,7 +309,7 @@ track 0.
 | Scoped beat length | May change (0.5–120 s, the editor's bounds) when the request needs it; the prompt says keep it otherwise. It's snapped to whole frames before the relayout. Later beats move. **With recorded narration it must stay exactly the same.** |
 | Scoped beat styles | At most one `<style>`, a direct child of the beat, holding exactly one prelude-less `@scope { … }` block (§4.6). No other `<style>` anywhere in the beat (including inside `<svg>`). Colours only through `var(--va-color-…)` roles the root declares; no `--va-color-*` declarations. |
 | Scoped beat script | The `vaBeat` rules, plus a stricter escape check for scoped beats only (§4.6). |
-| Other beats | Frozen: semantically equal to the parent's, ignoring derived attributes (§4.5). After the relayout, each must keep the parent's exact `data-duration`; that's tested, not exempted. |
+| Other beats | Frozen: their `data-duration` is kept verbatim, and they're semantically equal to the parent's apart from derived attributes (§4.5). After the relayout, each must still have the parent's exact `data-duration`; that's asserted and tested. |
 | `<head>`, the root's attributes (except `data-duration`), root-level `<style>` and `<script>` | Frozen. |
 | Layers (music, background, logo bug, narration) | Frozen, except `data-duration` (the new total) and the music's ducking lane (`data-automation`, recomputed). The narration element is never touched, and the existing lock check also runs. |
 | Existing files in `video/` | Byte-identical and still present, except the derived files below. |
@@ -266,7 +318,7 @@ track 0.
 | `assets/voice/script.json`, `voice.json`, `assets/voice/X.wav` | Only scoped beats' entries may change, with the same provider, voice and speed (the re-voice guard's rules). A scoped beat in a voiced video may gain a line; it may not remove another beat's. |
 | `assets/music/credits.json` | Append-only: a fetched sound effect adds its credit, and existing entries stay. |
 | Recorded narration (`assets/narration/bus.wav`, the `va-narration` element, its captions) | Untouched; `checkNarrationKept` runs as for any narrated revision. |
-| Screen-recording beats (screen-recording plan) | `assets/recording/plan.json` is a derived file when a scoped beat is a recording beat. That plan's `recording.ts check` (the redaction guard) runs inside `check-contract --fix` when the composition has recording beats. |
+| Screen-recording beats (screen-recording plan) | Whatever that plan registers in `DERIVED_FILES`: today `assets/recording/plan.json`, plus `assets/recording/<step>.cursor.js` and `assets/recording/<step>.hold.jpg` for the scoped recording steps (screen-recording plan, draft 3). That plan's `recording.ts check` (the redaction guard) runs inside `check-contract --fix` when the composition has recording beats. |
 
 Why let the length change: "make this scene twice as long so people can read it" is a common ask, and the editor
 already lets people retime beats with the same consequences. Why one-in-one-out: comments, captions, edit drafts and
@@ -277,8 +329,8 @@ design (§11).
 
 One module, shared by `check-contract.ts`, render-job and finalize, in the same style as `src/lib/revoice.ts`. The
 frame math (relayout, caption sync) comes from `src/lib/contract-core.ts` (cross-plan rule 6). It's imported, not
-re-exported from `contract.ts`; if this plan lands before render-engines phase 1, it creates that module under that
-name and moves `relayout`/`syncCaptions` into it.
+re-exported from `contract.ts`. If this plan lands before render-engines phase 1, it creates that module under that
+name with `relayout`, the new `relayoutScoped` and `syncCaptions` in it.
 
 ```ts
 export interface ScopeInput {
@@ -294,7 +346,7 @@ export function spliceScoped(i: ScopeInput): { html: string; summary: Summary; p
 export function scopeProblems(i: ScopeInput, splice: { html: string; summary: Summary }): string[]
 /** Files: every parent file outside the derived set is present and byte-identical in the agent's set. */
 export function scopeFileProblems(parent: Map<string, string /*sha256*/>, agent: Map<string, string>, derived: readonly string[]): string[]
-/** The derived set for a scope; other features append to it (screen recordings add assets/recording/plan.json). */
+/** The derived set for a scope; other features append to it (screen recordings add assets/recording/plan.json and, for scoped steps, <step>.cursor.js and <step>.hold.jpg). */
 export const DERIVED_FILES: ((beats: readonly string[], comp: Composition) => string[])[]
 ```
 
@@ -310,12 +362,22 @@ export const DERIVED_FILES: ((beats: readonly string[], comp: Composition) => st
    - Snap each one's `data-duration` to whole frames, and refuse a change when `lockedLength`.
    - Set `data-va-authored-duration` to the duration (it's freshly authored, so its captions don't stretch).
    - Run the style and script checks (§4.6).
-5. **Relayout** with the core module. Then assert that every frozen beat's `data-duration` equals the parent's
-   exactly; that's a test and a runtime assertion, not an exemption.
+5. **Scope-aware relayout:** `relayoutScoped(d, scoped)` in `contract-core.ts`, next to `relayout`.
+   - Frozen beats keep their `data-duration` string **verbatim**.
+   - Only scoped beats are snapped (step 4).
+   - Each beat's `data-start` becomes `fmt(sum of the durations before it)`, which is what `validate` expects (`:424`).
+   - The root, layers and video slots get the new total.
+   - Speech spans and ducking are recomputed as `relayout` does.
+
+   Plain `relayout` would be wrong: it snaps cumulative ends, and an authored parent is never relaid (§2), so a 3.85 s
+   frozen beat would change. After the relayout, frozen durations are asserted equal to the parent's, as a test and a
+   runtime assertion.
 6. **Captions:**
    - Keep the agent's cues whose `beat` is scoped, deriving a missing `beatStart`/`beatEnd` as `start − beat.start`.
-   - Keep the parent's other cues, including recorded-narration cues, which belong to no beat.
-   - Run caption sync so later cues shift.
+     Then compute their absolute times from beat-relative ones, snapped as `syncCaptions` does (a fresh beat).
+   - Keep the parent's other cues, including recorded-narration cues, which belong to no beat. A frozen beat's cues
+     are **shifted by that beat's start delta**, without re-rounding, so unshifted beats keep their cue times exactly.
+     `syncCaptions` snaps every cue (`:1072-1073`), which could move a frozen cue by a frame.
    - Voice cues for voiced scoped beats are recomputed from `voice.json` with the code `syncVoice` uses, so they can't
      be hand-edited.
    - Sort by `(start, beat, textId)`.
@@ -341,7 +403,11 @@ Each difference is named: "`<head>` changed (a `<style>` was added)", "Scene "Op
 - other beats' `voice.json` entries and `script.json` lines;
 - the provider, voice and speed.
 
-A file that is only re-indented has no problems. **The render always uses the splice's bytes**, never the agent's.
+A file that is only re-indented has no problems. **The render always uses the splice's bytes**, never the agent's:
+`save(splice)` for `index.html` and `JSON.stringify(splice.summary, null, 2)` for `summary.json`. render-job writes
+those bytes before it renders and archives. Splicing a splice gives the same bytes again (a fixed point of the parse5
+round trip), so finalize can require **byte equality** (§4.9). The semantic compare is for what the agent sees while
+working, and for messages.
 
 **`scopeFileProblems`** compares hashes:
 
@@ -380,8 +446,13 @@ wrong. The check parses the style with `css-tree`, made a direct dependency at t
 It walks the AST and requires:
 
 - exactly one top-level `@scope` rule, with no prelude;
-- no `@import`, `@font-face`, `@namespace` or `@layer` statements, and no `:root`, `html` or `body` in selectors;
-- `url()` only to paths under `assets/`;
+- **an allow-list of at-rules inside it:** only `@media`, `@supports`, unnamed `@container` and `@keyframes`. Every
+  other at-rule is refused by name (`@import`, `@font-face`, `@namespace`, `@layer`, `@property`, `@counter-style`,
+  `@page`, `@font-palette-values`, `@position-try`, `@view-transition`, named `@container`, and any added later), since
+  many of them are global. An allow-list doesn't need updating with each Chrome release (the renderer is Chrome 156);
+- no `:root`, `html` or `body` in selectors, and no `:has()` that reaches outside the scope root;
+- `url()` only to plain relative paths under `assets/`: no `//`, no scheme (`data:`, `http:`, `javascript:`), no
+  `..`;
 - any `@keyframes` named with the prefix `X-` (keyframe names are global even inside `@scope`);
 - no custom property declarations named `--va-color-*`.
 
@@ -401,8 +472,14 @@ fallback is `@scope ([data-va-beat="X"])` with the prelude checked against the i
 fonts are all there.
 
 **Scripts:** for scoped beats only, the `vaBeat` script check adds
-`parentNode|parentElement|ownerDocument|getRootNode|closest\(|previousElementSibling|nextElementSibling|globalThis|self\.`
-to the existing `document`/`__timelines` regex. It's applied to scoped beats rather than to every beat (as the review
+`parentNode|parentElement|ownerDocument|getRootNode|closest\(|previousElementSibling|nextElementSibling|globalThis|self\.|\bwindow\b|\beval\b|\bFunction\(`
+to the existing `document`/`__timelines` regex. It also refuses **string targets** in GSAP calls, since GSAP resolves
+strings against the whole document:
+`/\b(tl|gsap)\.(from|to|fromTo|set|timeline)\(\s*['"\`]/` and `/gsap\.utils\.toArray\(\s*['"\`]/`. The prompt
+says: "select with el.querySelector(All) and pass elements to the timeline, never selector strings."
+
+`\btop\b`, `\bparent\b` and `\bframes\b` are **not** added: `top` is a CSS property GSAP animates
+(`{ top: 10 }`), and `parent`/`frames` are common words in names. They'd refuse honest scripts. It's applied to scoped beats rather than to every beat (as the review
 proposed) because `validate` runs on every new run and on bundles of existing versions. Tightening it for all beats
 would make working videos non-editable and fail runs that do nothing wrong. Isolation stays a heuristic: a determined
 script can still reach outside its beat. The only check on pixels is the live gate's SSIM over frozen scenes (§10).
@@ -442,12 +519,13 @@ This is a scoped revision of version 3: change only these scenes, as JSON (start
   data-va-beat and data-composition-id, its place in the order, and text ids that start with "features-".
 - Styles it needs go in one <style> directly inside the scene, holding one @scope { … } block (no selector after
   @scope). Use only the --va-color-… roles the root declares and fonts the composition already loads. Put new files in
-  video/assets/beats/features/. Its script selects only inside its own element (el): never its parents or siblings.
+  video/assets/beats/features/. Its script selects only inside its own element: use el.querySelector(All) and pass
+  elements to the timeline, never selector strings, and never its parents or siblings.
 - Keep its length unless the request asks for a change or the new content needs more or less time (0.5 to 120
   seconds); later scenes move with it.
-- Match the neighbours: video/feedback/scope/ has stills of version 3: the last frame of the scene before, this
-  scene's middle, and the first frame of the scene after. Your scene's last frame is what the next scene cuts from,
-  and the next scene starts exactly as it does now.
+- Match the neighbours: video/feedback/scope/ has stills of version 3: the last frame of the scene before and the
+  first frame of the scene after. Your scene's last frame is what the next scene cuts from, and the next scene starts
+  exactly as it does now.
 - In summary.json, write cues only for the scoped scenes' text; the others are put back from version 3.
 - After every change run: npx tsx scripts/check-contract.ts --fix. It re-lays the scenes, puts back everything outside
   the scope (other scenes' captions, the music's ducking, anything you changed there) and says what it put back. Keep
@@ -458,6 +536,12 @@ This is a scoped revision of version 3: change only these scenes, as JSON (start
   npx tsx scripts/voice.ts sync."
 - **With recorded narration:** "Keep each scoped scene exactly as long as it is now", plus the existing
   locked-narration lines.
+- **Without stills** (a parent MP4 over 300 MB, §4.3): "There are no stills of the neighbours for this video; read
+  their HTML instead."
+- **On a retry after a scope refusal:** the attempt's stored error (the `scope_violated` or finalize message, with its
+  list of what was outside the scope) is added as data in its own fence: "The previous attempt was refused for
+  changing these parts outside the scope; leave them as they are: …". It's derived from the version's own attempts, so
+  every retry of the same state gets the same prompt.
 - The numbered steps (read the skill, write, check, summary, render) stay as they are.
 
 The scene list is agent-written data (labels come from `data-va-label`), so it goes in a fence through `sanitizeBrief`
@@ -489,32 +573,32 @@ The scene list is agent-written data (labels come from `data-va-label`), so it g
      `parentOutput.sha256['source.tar.gz']`; read its references with `readReferences` (for the bus length). Missing →
      `source_unavailable`.
    - **Both archives** are parsed with `readTarGz(…, SOURCE_READ_LIMITS)`, never the 50 MB defaults.
-   - **The checks:** run `spliceScoped`, `scopeProblems` and `scopeFileProblems` on both archives' `index.html`,
-     `summary.json`, voice files and file hashes. The uploaded `index.html` must equal the splice semantically.
+   - **The checks:** run `spliceScoped` on the parent's archive and the uploaded one. The uploaded `index.html` and
+     `summary.json` must be **byte-identical** to `save(splice)` and `JSON.stringify(splice.summary, null, 2)`.
+     render-job writes exactly those bytes before archiving, so an honest run always passes. `scopeProblems` is used
+     only to write the message. `scopeFileProblems` runs on file hashes and the voice files as before.
    - **The MP4 binding:** `|MP4 durationSec − splice root duration| ≤ 0.25 s`.
    - **A failure** fails the attempt as `invalid_output` with "This run changed parts of the video outside the scenes
      it was asked to redo: …". Why `invalid_output` and not a new category: the UI already explains it and offers
      **Retry**, and the message says the rest.
 
 **What this guarantees and what it doesn't.** The saved composition (the archive future edits, revisions and remixes
-start from) is guaranteed: outside the scope it's the parent's. Finalize doesn't derive the MP4 from the archive for
+start from) is guaranteed. Outside the scope, its `index.html` and `summary.json` are byte-for-byte what splicing the
+parent produces, and every other existing file is the parent's. Finalize doesn't derive the MP4 from the archive for
 any run kind, so a run that changed render-job could render one thing and upload another. Like every run's MP4, it's
 trusted, bound here by its length. The live gate checks frozen scenes' frames by SSIM. Rendering the archive on the
 server would close this gap for every run kind; that's §11.
 
 ### 4.10 Model, effort and time
 
-- Scoped runs read and write less, so they may suit a faster model or lower effort. Add optional `SCOPED_AGENT_MODEL`
-  and `SCOPED_AGENT_EFFORT`; unset means the same as `AGENT_MODEL`/`AGENT_EFFORT`.
-- **Both attempt callers that serve a scoped version pick them:** revise (`src/domain/videos.ts:474`) and retry
-  (`:565`). Otherwise a retried scoped version would run on the wrong model. `newAttempt` gains an options argument
-  (`{ scoped: boolean }`); the other callers (create, edits, remix) pass nothing. The attempt records what it used, as
-  now.
-- **Default: unset.** The pass criterion (§10) compares scoped against full runs on the default model. Gate step 6
-  optionally tries a cheaper model (Sonnet 5.5) so the README can suggest one; that's advice, not a pass condition.
+- **v1 runs scoped revisions on the deployment's model and effort** (`AGENT_MODEL`/`AGENT_EFFORT`), like every run.
+  The gate measures that.
+- **A separate model for scoped runs is after the gate** (§11). Scoped runs read and write less, so they may suit a
+  faster model, but the knob (`SCOPED_AGENT_MODEL`/`SCOPED_AGENT_EFFORT`, plus `newAttempt` options in revise and
+  retry) isn't added until a measured comparison shows a win.
 - **Expectation to test, not a promise:** 40–100 credits and 2–4 minutes for a 20–60 s video, against 90–250 credits
-  for authoring and about 120 for a revision-kind run (§1). The render is still the whole video; rendering only the
-  changed frames is §11.
+  for authoring and about 120 for a revision-kind run (§1). The time includes downloading the parent MP4 for the stills
+  (skipped over 300 MB, §4.3). The render is still the whole video; rendering only the changed frames is §11.
 - The 22-minute authoring deadline is unchanged.
 
 ### 4.11 Comments: "Redo this part"
@@ -527,7 +611,9 @@ server would close this gap for every run kind; that's §11.
 - **Incorporate feedback** (`IncorporateModal`, `ui/src/components/Review.tsx:274`) gets a switch, **Only change the
   scenes these comments point at**, shown when every picked comment is pinned. On: `scope.beats` is the distinct beats
   of the picked pins and `fromVersion` the commented version. This is likely the most-used path: a reviewer leaves
-  three notes on two scenes, and the owner fixes exactly those two.
+  three notes on two scenes, and the owner fixes exactly those two. The switch starts **on** when the pins fall in
+  fewer than half the scenes and **off** otherwise: a reviewer who commented on every scene wants a whole revision
+  (open question 5).
 - Others who can revise but can't incorporate (a Creator on someone else's video) use the scene picker without the
   comment.
 
@@ -546,6 +632,9 @@ revision").
     server doesn't list `scoped_revision`.
 - **Comments:** Redo this part, and Incorporate's switch (§4.11).
 - **History:** a scoped version says "v4 · Redid Features", with the request.
+- **After a scope refusal:** a failed scoped version whose error is a scope refusal shows **Revise the whole video**
+  next to **Retry** (`ui/src/pages/Video.tsx:682`), opening the revise panel on Whole video with the same request.
+  Retry carries the refusal into the next prompt (§4.8).
 - Other people are editing `Edit.tsx`, `Video.tsx` and `ui/src/api/*` right now; this plan only names where things go.
 
 Editor entry points (beat card, timeline menu), hover-to-seek on chips and the version switcher's jump wait until the
@@ -553,7 +642,8 @@ live gate passes; their designs are in §11.
 
 ### 4.13 MCP, skill, SDK and CLI
 
-- **MCP `get_video`** returns each version's `beats` (id, label, start, duration) so agents can pick.
+- **MCP `get_video`** returns each version's `beats` (id, label, start, duration) so agents can pick. When a version's
+  cached `beats` is null, the tool fills it through the same code as `GET …/versions/{n}/beats`.
 - **MCP `revise_video`** gains `beats` (an array of beat ids) and, with it, requires `from_version`. Description:
   "Optional. Redo only these scenes (ids from get_video's beats for from_version); everything else stays exactly as it
   is. Faster and cheaper than revising the whole video. Needs from_version. Can't be combined with plan_id,
@@ -571,7 +661,8 @@ live gate passes; their designs are in §11.
   - `client.videos.revise(id, { prompt, fromVersion, scope: { beats } })` from the OpenAPI types;
   - the hand-written sugar `client.videos.redoScenes(id, { beats, prompt, fromVersion?, …opts })`, which fills
     `fromVersion` from the latest ready version when it's omitted and sends an idempotency key;
-  - no separate beats call, since the version DTO carries `beats`;
+  - `beats` comes from the version DTO; when it's null, the SDK's generated `getVersionBeats` (and the CLI's
+    `scenes`) call `GET …/versions/{n}/beats`. There's no hand-written beats method beyond that resource row;
   - before sending a scope, it checks `features` for `scoped_revision` and throws `unsupported_by_server` when it's
     missing.
 
@@ -601,8 +692,8 @@ live gate passes; their designs are in §11.
 | `/api/v1/config` `features` | Adds `scoped_revision`. |
 | `RunManifest` | Optional `scope` (§4.3); `feedback` with `pins: []` is allowed. Shape check in `verifyRunManifest`. |
 | `PromptInput` | Optional `scope`; the template constant goes up by one in this plan's PR. |
-| `newAttempt` | Options argument `{ scoped }` (revise and retry). |
-| Config | `SCOPED_AGENT_MODEL`, `SCOPED_AGENT_EFFORT` (optional), in the README's configuration table. |
+| `GET /api/v1/videos/{id}/versions/{n}/beats` | New, operationId `getVersionBeats`: `{ beats }` (null for non-contract versions), filled and stored on first read; video visibility rules; `409 not_ready` before ready. SDK resource row and MCP fallback. |
+| Prompt on retry | A refused scoped attempt's error is added to the next attempt's prompt as fenced data (§4.8). |
 | Webhooks | `video.ready`/`video.failed` carry the version DTO, so `scope` comes along; no new events. |
 | Dependencies | `css-tree` (already installed via `hyperframes`) becomes a direct dependency. |
 
@@ -634,13 +725,15 @@ Each phase ends with a gate. Live gates spend credits and run `--dry` first.
 
 ### Phase 1: the splice and the checks (run side). Needs render-engines phase 1.
 
-1. `contract-core.ts`: import `relayout` and caption sync from it, or create it with them if this plan lands first.
-   No behaviour change; the editor's tests keep passing.
+1. `contract-core.ts`: import `relayout` and caption sync from it, or create it with them if this plan lands first,
+   and add `relayoutScoped` (frozen durations verbatim, scoped ones snapped). No behaviour change to `relayout`; the
+   editor's tests keep passing.
 2. `src/lib/scope.ts`: `spliceScoped`, `scopeProblems` (the semantic compare), `scopeFileProblems`, `DERIVED_FILES`,
    the `css-tree` style check and the scoped script check. All problems in plain words.
 3. Register the HyperFrames `scopeCheck` on the engine (render-engines interface).
 4. `RunManifest.scope` and its checks; `feedback` with empty pins.
-5. prepare-run: the frozen copy, `scope.json`, and the stills (3 per beat, de-duplicated, ≤ 60).
+5. prepare-run: the frozen copy and `scope.json` (with the layout read from the restored parent) in the scope step;
+   the stills (2 per beat, de-duplicated, ≤ 40) in the one `feedbackStills` call, last.
 6. `check-contract.ts --fix` (with `--duck` as an alias) and the scope.
 7. render-job: the separate scope `if`, `scope_violated`, rendering the splice's bytes.
 
@@ -655,12 +748,15 @@ Each phase ends with a gate. Live gates spend credits and run `--dry` first.
 
 1. Migration: `versions.scope`, `versions.beats`.
 2. Finalize: one `readTarGz` for credits and beats; store `beats` with ready (and `contract`, if open question 8 says
-   yes); the server-side scope check with the parent archive and the MP4 length binding.
+   yes, with `ensureBundle`'s inputs); the server-side scope check (byte equality with the splice, file hashes) with
+   the parent archive, and the MP4 length binding.
 3. `reviseVideo`: the scope rules and errors, the engine capability gate, `fromVersion` required, `look_not_allowed`,
    and the lazy beats fill outside the transaction.
-4. Reconciler: `scope` in the manifest with layout and stills, and `feedback.video` set; the `buildPrompt` scope
-   section; the template constant +1; `SCOPED_AGENT_*` via `newAttempt` in revise and retry.
-5. REST schema and DTO, `openapi:gen`; `scoped_revision` in `features`; MCP `revise_video` and `get_video`; the
+4. Reconciler: `scope` in the manifest with stills, and `feedback.video` set (none over 300 MB); the `buildPrompt`
+   scope section, including the no-stills and retry lines; the template constant +1.
+5. `GET …/versions/{n}/beats` with the visibility check and the stored fill; the same fill in `reviseVideo` before
+   its transaction.
+6. REST schema and DTO, `openapi:gen`; `scoped_revision` in `features`; MCP `revise_video` and `get_video`; the
    catalog row and skill recipe ("Redo a scene").
 
 **Gate:** integration tests green; **live gate part 1** (§10 steps 1–2) on production.
@@ -669,7 +765,7 @@ Each phase ends with a gate. Live gates spend credits and run `--dry` first.
 
 1. The revise panel's scene picker.
 2. Redo this part on a comment; Incorporate feedback's scoped switch.
-3. The history label.
+3. The history label, and **Revise the whole video** next to **Retry** after a scope refusal.
 
 **Gate:** Playwright (§8); a person redoes a scene from each entry point on production.
 
@@ -694,6 +790,9 @@ Phases 1 and 2.1–2.2 can run in parallel with phase 3's layout work once the D
   - **A 3.85 s scoped beat** (115.5 frames) is snapped. Every frozen beat after it keeps the parent's exact
     `data-duration`.
   - Shrunk below its voice's end → the splice validation's "make the scene longer".
+  - **A parent whose frozen beats are 3.85 s long** (authored, never relaid): the splice keeps their durations
+    verbatim, the starts validate, and the cues of frozen beats before the scope keep their exact times.
+  - **Fixed point:** splicing the splice gives byte-identical `index.html` and `summary.json`.
 - **Comparison:**
   - **A prettier-formatted file** with no semantic change has no problems: re-indented frozen beats, reordered
     attributes, reflowed head.
@@ -713,8 +812,12 @@ Phases 1 and 2.1–2.2 can run in parallel with phase 3's layout work once the D
     - a second `<style>`, including inside `<svg>`;
     - `<link rel=stylesheet>`;
     - `data-composition-src`.
-- **Scripts:** `el.parentElement`, `el.closest('#root')`, `el.ownerDocument` in a scoped beat → reported. The same
-  code in a frozen beat → not reported (existing videos stay editable).
+- **Scripts:** `el.parentElement`, `el.closest('#root')`, `el.ownerDocument`, `window.x`, `tl.from('.card', …)` and
+  `gsap.utils.toArray('.card')` in a scoped beat → reported. `tl.to(el.querySelector('.card'), { top: 10 })` → fine.
+  The same code in a frozen beat → not reported (existing videos stay editable).
+- **At-rules:** `@media`, `@supports`, unnamed `@container` and prefixed `@keyframes` inside `@scope` → fine;
+  `@property`, `@counter-style`, `@page`, `@layer`, named `@container` → reported. `url(//x)`, `url(data:…)`,
+  `url(../x)` → reported.
 - **Narration:** a length change while locked → refused. A new `<audio>` over speech → refused (by `checkNarrationKept`
   in the same run).
 - **Held frame:** a scope on the last real beat before `va-hold` → refused by `reviseVideo`. A tampered
@@ -740,15 +843,22 @@ Phases 1 and 2.1–2.2 can run in parallel with phase 3's layout work once the D
     `fromVersion`, unknown ids with the list, all beats, the held frame, each refused combination including `look`;
   - the stored scope; an idempotent replay; the `commentIds` policy;
   - the lazy beats fill happens outside the transaction (the fake store asserts no Blobs call while locked).
-- Reconciler: the manifest has scope, layout, de-duplicated stills and `feedback.video` with empty pins.
-  `SCOPED_AGENT_*` is used on revise **and on retry**.
+- Reconciler: the manifest has scope, de-duplicated stills (2 per beat) and `feedback.video` with empty pins; a
+  parent MP4 over 300 MB gives `stills: []`, no `feedback.video` and the no-stills prompt line; a retry after a scope
+  refusal carries the previous error in its prompt, and two retries of the same state get the same prompt.
+- Beats route: returns and stores beats for a pre-plan version; `null` for a non-contract version; `409 not_ready`;
+  404 for a private video the caller can't see; `reviseVideo`'s fill does no Blobs work for a caller who can't see
+  the video.
 - Finalize:
   - A scoped upload that matches → ready, with `beats` set in the same transaction.
   - One that changed another scene → failed `invalid_output` with the message, and **no blobs written**.
   - The parent archive missing → `source_unavailable`.
   - An MP4 0.5 s off the splice's length → `invalid_output`.
+  - An uploaded `index.html` that is semantically equal to the splice but differs in bytes (re-indented frozen scene)
+    → `invalid_output` (finalize requires bytes).
   - The parent archive over the default 50 MB but under `SOURCE_READ_LIMITS` → read fine.
-- prepare-run: the frozen copy and the stills, using ffmpeg on a fixture MP4 as the feedback-still tests do.
+- prepare-run: the frozen copy, and pin stills plus scope stills from one `feedbackStills` call (neither deletes
+  the other, both listed in `feedback/index.json`), using ffmpeg on a fixture MP4 as the feedback-still tests do.
 - render-job: a scoped revision of a narrated parent runs both the narration and the scope checks.
 - `mcp-catalog.test.ts` and an MCP test for `beats`/`from_version` on `revise_video` and `beats` on `get_video`.
 
@@ -777,7 +887,9 @@ Phases 1 and 2.1–2.2 can run in parallel with phase 3's layout work once the D
 | A rounding frame moves into a frozen beat. | Snap scoped durations first; the frozen-duration assertion and its test. |
 | Frozen beats render slightly differently anyway (offsets, GOPs). | The SSIM threshold from B2, not bit equality. The composition is identical, which is the actual guarantee. |
 | Finalize gets slower (two archives). | Both are usually under 1 MB and capped by `SOURCE_READ_LIMITS`; finalize is a background function. Measured in the gate. |
-| Stills fan out (5 × 20 seeks in draft 1). | 3 per beat, de-duplicated, ≤ 60 in total. |
+| Stills fan out (5 × 20 seeks in draft 1) and the parent MP4 download is big. | 2 per beat, de-duplicated, ≤ 40 in total; no stills over 300 MB. |
+| Retries repeat a scope refusal. | The previous refusal goes into the retry prompt; the UI offers **Revise the whole video** next to **Retry** after a scope refusal (§4.12). |
+| Unauthorized Blobs work through the lazy beats fill. | A visibility check before `ensureBundle`, and only for ready versions. |
 | A "scoped" request is really a whole-video change ("make everything blue"). | The dialog explains it; frozen parts can't change; the agent says so in its summary; people revise the whole video instead. |
 | Redo from a comment spends credits by surprise. | It always opens the dialog with the cost line; never a direct POST. |
 | Cost doesn't drop much (most of it is reading the skill and context). | Measure first; the optional cheaper model; reading guidance in the scoped prompt. If the gate shows less than 25% saved, the feature still pays for itself on drift, and the plan says so. |
@@ -788,7 +900,7 @@ Run with `--dry` first: it checks the env, prints each step and the projected cr
 
 ```sh
 VIDEO_AGENT_URL=https://<site> VIDEO_AGENT_KEY=nva_… SOURCE_ID=vid_… [VOICED_ID=vid_…] [NARRATED_ID=vid_…] \
-  [BASELINE=1] [CHEAP_MODEL=1] [CREDIT_CEILING=700] npx tsx scripts/e2e/regen-beat.ts [--keep] [--dry]
+  [BASELINE=1] [CREDIT_CEILING=700] npx tsx scripts/e2e/regen-beat.ts [--keep] [--dry]
 ```
 
 `SOURCE_ID` is a contract v1 video with at least 3 beats and music. Each step logs a JSON line (`step`, `videoId`,
@@ -819,16 +931,14 @@ VIDEO_AGENT_URL=https://<site> VIDEO_AGENT_KEY=nva_… SOURCE_ID=vid_… [VOICED
    - the MP4 length matches.
 5. **Voiced** (`VOICED_ID`): change a scoped scene's line in words. Check that only that beat's WAV and voice cues
    changed and the other voice cues are identical.
-6. **Cheaper model** (`CHEAP_MODEL=1`, needs `SCOPED_AGENT_MODEL` set on the site): step 1's request again. Record
-   credits, time and check rounds. This is advice for the README, not a pass condition.
-7. **Narrated** (`NARRATED_ID`): redo a middle scene. Check the length is unchanged and the narration bus hash equals
+6. **Narrated** (`NARRATED_ID`): redo a middle scene. Check the length is unchanged and the narration bus hash equals
    the parent's.
 
 The script stops starting runs once `CREDIT_CEILING` (default 700) is reached, and deletes what it made unless
 `--keep`. It prints a table of credits, wall time, check rounds and drift for scoped runs against the baseline.
 
 **Pass:**
-- steps 1, 2 and 4 (and 5 and 7 when given) pass every check;
+- steps 1, 2 and 4 (and 5 and 6 when given) pass every check;
 - **scoped median credits ≤ 60% of a full revision's.** The full revision is step 3 when `BASELINE=1`. Otherwise it's
   the parent version's own run credits (`usage.totalCreditsCost` on the version DTO), which is less exact but free;
   the table says which was used;
@@ -850,6 +960,12 @@ then revisit the model default.
 - **Editor timeline:** the same action in each beat block's menu (`ui/src/components/timeline/Timeline.tsx:476`).
 - **Hover-to-seek on scene chips** in the revise panel.
 - **Version switcher jump:** a scoped version's switcher entry seeks to the changed scene.
+- **A separate model for scoped runs.** `SCOPED_AGENT_MODEL` and `SCOPED_AGENT_EFFORT` (unset = the deployment's).
+  `newAttempt(deps, jobId, n, now, { scoped })` picks them in both callers that serve a scoped version, revise
+  (`src/domain/videos.ts:474`) and retry (`:565`), so a retry doesn't fall back to the default model. The other
+  callers (create, edits, remix) pass nothing, and the attempt records what it used, as now. Measured first: a gate
+  step (`CHEAP_MODEL=1`) runs step 1's request with the cheaper model (Sonnet 5.5) and records credits, time and check
+  rounds. The result is README advice, not a pass condition.
 - **`scripts/backfill-beats.ts`**, like `scripts/backfill-previews.ts`: fills `versions.beats` for ready contract
   versions in batches. v1 fills lazily instead (§4.2).
 
@@ -868,7 +984,7 @@ then revisit the model default.
 - **Server-side render** (or a server-side frame check) of the archive, binding the MP4 to the composition for every
   run kind.
 - **Scoped remix**, and scope over layers ("change the music only in this scene").
-- **Non-contract videos**, and **Remotion videos** (render-engines phase 3.5 adds its `scopeCheck`).
+- **Non-contract videos**, and **Remotion videos** (render-engines phase 3 adds its `scopeCheck`).
 - **Redoing the last scene before a held last frame** with recorded narration (needs the hold capture in the scoped
   run).
 - **New fonts in a scoped scene** (needs a controlled `@font-face` path).
@@ -877,17 +993,18 @@ then revisit the model default.
 
 1. **Length:** may redoing a scene change its length, moving later scenes? Recommended: yes, except with recorded
    narration.
-2. **Cheaper model for scoped runs:** keep the same model by default, with `SCOPED_AGENT_MODEL` available to admins,
-   and suggest one in the README only after the gate's optional comparison? Recommended: yes.
+2. **Cheaper model for scoped runs:** leave the knob out of v1 and add `SCOPED_AGENT_MODEL`/`SCOPED_AGENT_EFFORT` only
+   if a measured comparison after the gate shows a win? Recommended: yes.
 3. **Who can redo scenes:** anyone who can revise, as today (recommended), or only owners and admins?
 4. **How many scenes at once:** up to 20, never all of them? Recommended: yes.
-5. **Scoped Incorporate feedback:** on by default when every picked comment is pinned (recommended), or off by
-   default?
+5. **Scoped Incorporate feedback default:** shown when every picked comment is pinned; starts on when the pins fall
+   in fewer than half the scenes, off otherwise? Recommended: yes.
 6. **Variations:** later, as their own plan? Recommended: yes.
 7. **Held last frame:** refuse the last real scene of a narrated video that holds its frame in v1 (recommended), or
    build the hold capture into scoped runs now?
 8. **Finalize sets `contract` atomically with ready** (and `beats`), so `editable` never lags? This is a small change
-   for every version. Recommended: yes.
+   for every version. It must use `ensureBundle`'s inputs (`contractOf` plus `missingLocalFiles` with references and
+   library media), not `index.html` alone. Recommended: yes, with those inputs.
 9. **Editor entry points** (beat card, timeline menu): after the gate (recommended), or in v1?
 10. **New fonts in a scoped scene:** not allowed in v1? Recommended: yes; the brand's fonts are already loaded.
 
@@ -901,7 +1018,9 @@ then revisit the model default.
 - ffmpeg `ssim` filter: https://ffmpeg.org/ffmpeg-filters.html#ssim
 - css-tree: https://github.com/csstree/csstree
 
-## 13. Review log (draft 1 → 2)
+## 13. Review log
+
+### Review log (draft 1 → 2)
 
 Two reviews of draft 1 on 2026-11-04: an independent Fable 5.1 review ("sound with changes"), and the cross-plan seam
 review of the six 2026-11-04 plans (the orchestrator's chosen resolutions). Every code claim was checked before it
@@ -950,3 +1069,32 @@ was used.
 | 9 GitHub Action `/video redo` uses `scope.beats` | Adopted | §4.13. |
 | Shared rules 1, 4, 5, 10, 15, 16 (feature string, template rule, manifest v1, additive DTO, terminology, `@netlify-labs/*` package names) | Adopted | Throughout. |
 | Build order (phase 1 on engines 1; phase 2 on cli 1; phase 4 on cli 3; migration and template after looks 2) | Adopted | Status block and §7. |
+
+### Review log (draft 2 → 3): remote Fable 5.1 review (high effort, Netlify Agent Run at `19740d8`)
+
+The verdict was "sound with changes". Every claim was checked against the code at this commit.
+
+| Item | Decision | Why |
+| --- | --- | --- |
+| R1 Scope-aware relayout: frozen durations verbatim, scoped snapped; shift frozen cues without re-rounding | Adopted | Confirmed: `validate` allows starts within half a frame (`contract.ts:424`), and authored compositions are never relaid. One correction: `relayout` has five callers (`:901`, `:984`, `:998`, `:1093`, `:1268`), not only `applyEdits`, but all are editor, narration or re-voice paths, so the point holds. `syncCaptions` snaps cues (`:1072-1073`). |
+| R2 Scope stills after `feedbackStills` (one call) | Adopted | Confirmed the `rmSync` (`prepare-run.ts:65`) and that it runs last (`:452-460`). The engines plan's order should say "feedback and scope stills, last". |
+| R3 `GET …/versions/{n}/beats` for older versions | Adopted | Confirmed no read route returns beats; `POST …/edits` (`app.ts:1156`) opens a draft. |
+| R4 Finalize requires bytes, and §0 says so | Adopted | Confirmed finalize stores the upload as is (`finalize.ts:217`). render-job writes the splice's bytes and a splice of a splice is a fixed point, so byte equality is stricter and still passes honest runs. |
+| R5 GSAP string targets and more escape words | Adopted with changes | GSAP string targets resolve against the document (`va-contract.js` hands a plain timeline). Added `window`, `eval`, `Function(`. Rejected `\btop\b`, `\bparent\b` and `\bframes\b`: `top` is a CSS property GSAP animates (`{ top: 10 }`), and the other two are common in names, so they'd refuse honest scripts. |
+| R6 At-rule allow-list; stricter `url()` | Adopted | Confirmed Chrome 156 (`puppeteer-core/lib/puppeteer/revisions.js:10`). An allow-list doesn't age. |
+| R7 Drop `scope.layout` from the manifest | Adopted | prepare-run reads it from the restored parent; one source. |
+| R8 Visibility check before the pre-transaction `ensureBundle` | Adopted | Confirmed `ensureBundle` writes Blobs (`bundles.ts:150-166`). |
+| Claims: `scopeCheck` returns problems only | Adopted | Confirmed `render-engines.md:423`. This plan calls `spliceScoped` directly until the engines doc returns the splice files; recommended to the orchestrator. |
+| Claims: recording derived files include `<step>.cursor.js` | Adopted | Confirmed `screen-recording-demo.md:691-693`; the row now defers to that plan's `DERIVED_FILES`. |
+| Seam (screen-recording draft 3): add `<step>.hold.jpg` for scoped recording steps | Adopted | Added next to `plan.json` and `<step>.cursor.js` in §4.4 and the `DERIVED_FILES` comment, at that plan's request. |
+| Claims: `runCreditsOf` lines; 60 MB file cap; `readTarGz` default | Adopted with corrections | `runCreditsOf` is defined at `finalize.ts:447` and called at `:236` (the review said `:238`). The default parameter is `BUNDLE_LIMITS` (`tar.ts:48`), now cited. |
+| Missed: retries repeat the refusal | Adopted with changes | UI offers Revise the whole video next to Retry. The previous refusal goes into the retry prompt as fenced data derived from the version's own attempts, so the same state still gives the same prompt. |
+| Missed: the parent MP4 download (up to 2 GB) | Adopted | No stills above 300 MB (`outputs.bytes`), with a prompt line; noted in §4.10. |
+| Missed: `url()` schemes | Adopted | §4.6. |
+| Over-built: `SCOPED_AGENT_*` and `newAttempt` plumbing | Adopted | Moved to §11 "After the gate" with its full design and the gate step that measures it; open question 2 updated. |
+| Over-built: `scope.layout` | Adopted | R7. |
+| Over-built: three stills per beat | Adopted | Two (before, after), ≤ 40; the scene being replaced is already in the HTML. |
+| Over-built: `credits.json` append-only check | Rejected | `runCreditsOf` keeps only valid entries but can't restore one a run deleted. A frozen music track fetched in an earlier run would lose its CC BY credit, which is an attribution failure, so append-only stays. |
+| Over-built: make gate step 4 (longer scene) optional | Rejected | Changing length is the riskiest path (R1's relayout, caption shift, MP4 binding), and open question 1 depends on it, so it stays in the pass bar. |
+| Seams: `scopeCheck` signature; prepare-run order note; `contract-core.ts` contents | Adopted | §4.3, §4.5; the first two are recommendations to the orchestrator. |
+| Owner questions Q8 (same inputs as `ensureBundle`), Q2 (defer), Q5 (fewer than half the scenes) | Adopted | Confirmed `bundles.ts:170-188`. Q1 and Q9 unchanged (agreed). |

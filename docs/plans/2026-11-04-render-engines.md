@@ -1,9 +1,13 @@
 # Pluggable render engines (HyperFrames by default, Remotion opt-in): plan
 
-- **Status:** draft 2 (2026-11-04). Draft 1 had two reviews: an independent review by Fable 5.1 ("sound with
-  changes") and the cross-plan seam review of the six 2026-11-04 plans. Every claim was checked against the code and
-  Remotion's docs before being folded in, and the review log is at the end (§15). Not built yet, and no beads.
-  Phase 0 is spikes E1–E6 (§11). E6 can start now; the others wait for the license decision (open question 1).
+- **Status:** draft 3 (2026-11-04). Three review rounds:
+  1. an independent review by Fable 5.1 ("sound with changes");
+  2. the cross-plan seam review of the six 2026-11-04 plans;
+  3. a remote review by Fable 5.1 (high effort) in a Netlify Agent Run, at commit `19740d8` ("sound with changes").
+
+  Every claim was checked against the code and Remotion's docs before being folded in, and the review log is §15. Not
+  built yet, and no beads. Phase 0 is spikes E1–E6 (§11): E3–E6 can start now as local evaluation, and E1–E2 wait for
+  the license decision (open question 1).
 - **Ask (owner, 2026-11-04):** "see if we can use Remotion and Remotion skills to create different video styles",
   picked from the idea-wizard list as #3 ("love it, let's do it"). Make the engine that writes and renders a video
   pluggable. HyperFrames stays the default. Remotion is opt-in, never on by default, and gated on its license.
@@ -12,7 +16,8 @@
   `video/AGENTS.md`), the editor and its sandboxed preview (`src/domain/edits.ts`, `ui/src/pages/Edit.tsx`,
   `netlify/edge-functions/preview.ts`, `src/preview/bridge.js`), and runner setup through `netlify-agent-kit`
   (`package.json` → `netlifyAgent`).
-- **Sibling plans (2026-11-04).** The shared rules in the cross-plan review apply. This plan owns four seams:
+- **Sibling plans (2026-11-04).** The roadmap's "Shared rules all six follow" (`docs/plans/2026-11-04-roadmap.md`,
+  rules 1–10) apply, and this plan cites them by those numbers. This plan owns four seams:
   - the Engine interface and `EngineCapabilities`;
   - the name `src/lib/contract-core.ts`;
   - the `scopeCheck` hook;
@@ -24,7 +29,7 @@
   | Regenerate a beat (`2026-11-04-regenerate-beat.md`) | Uses `scopedRevision` and implements the HyperFrames `scopeCheck`. |
   | Screen-recording demo (`2026-11-04-screen-recording-demo.md`) | Adds its edit ops and the `recording` capability; HyperFrames-only in v1. |
   | CLI and SDK (`2026-11-04-cli-and-sdk.md`) | Owns the `features` registry, the SDK and CLI surface, local mode and the `/docs` pages. |
-  | GitHub Action (`2026-11-04-github-action.md`) | Passes `engine` through. |
+  | GitHub Action (`2026-11-04-github-action.md`) | Has no `engine` input; the engine follows the look (engine choice rule, §4.2). |
 
 ---
 
@@ -73,13 +78,20 @@ app. Free License users may build automations without buying renders.
 **What counts as a render.** "The successful generation of a video, audio, GIF, PDF or still image." Studio and
 Player previews don't count. So every snapshot still the agent renders counts (§5.4).
 
-**Who must pay.** Eligibility depends on **total headcount**, not on how many people use Remotion (License FAQ). From
-5.0, contractors count toward team size (v5.0 migration guide).
+**Who must pay.** Eligibility depends on **total headcount**, not on how many people use Remotion (License FAQ).
+**People you work with on the project count already:** the FAQ adds collaborating teams' headcount to yours for the
+threshold. 5.0 writes contractors into the license text itself (v5.0 migration guide).
 
-**Reporting.** From 5.0, every render must send usage telemetry through the `licenseKey` option: a real key for
-Company License holders, or the literal `"free-license"` for the free tier. Today the option is optional. It sends
-the IP address, domain, production or development, and video or still. It sends no video content
-(remotion.dev/docs/licensing, /docs/5-0-migration).
+**Reporting.**
+- **When it's required:** server-side renders send a telemetry event only when `licenseKey` is set. From 5.0 that's
+  mandatory for Remotion for Automators: a real key for Company License holders, or the literal `"free-license"` to
+  declare the free tier (remotion.dev/docs/licensing, /docs/5-0-migration).
+- **What it sends:** the license key and the event type, and whether the render was production or development
+  (`isProduction`).
+- **What it doesn't send:** the host domain and the IP address are recorded only for `@remotion/web-renderer`
+  (client-side rendering), which this plan doesn't use. It sends no video content.
+- **Retention:** Remotion keeps the data indefinitely.
+- **Never blocks a render:** a failed telemetry request doesn't fail the render.
 
 Most companies that deploy this template, including Netlify, need a Company License to turn Remotion on. HyperFrames
 (Apache-2.0) has no such condition, so it stays the default. The README, `/setup` and the Admin page say plainly who
@@ -161,7 +173,9 @@ License, so we don't vendor it (§8).
   about 34 credits and 2–3 minutes, flat).
 - **The preview:**
   - It is the composition itself, served by `/preview/{jobId}/v{n}/{cap}/{path}` with a CSP that allows only the
-    capability path, `sandbox allow-scripts` and `default-src 'none'` (`src/lib/preview.ts:1–60`).
+    capability path, `sandbox allow-scripts` and `default-src 'none'`.
+  - The CSP (`previewCsp`, `src/lib/preview.ts:57–71`) also allows `'unsafe-inline'` scripts and styles, and has no
+    `worker-src`, so workers fall back to `default-src 'none'`.
   - The edge function injects the vendored HyperFrames runtime first and `src/preview/bridge.js` last
     (`scripts/build.ts:157–169` copies the runtime from the pinned package).
   - The bridge sends `ready`, `time`, `click`, `error`, `edits-applied` and `mix-applied`, and accepts `play`,
@@ -199,12 +213,25 @@ License, so we don't vendor it (§8).
 - **Rendering APIs:** `selectComposition()`, `renderMedia()`, `renderStill()` and `renderFrames()` in
   `@remotion/renderer`, with `bundle()` in `@remotion/bundler`. The CLI has `npx remotion render <id> <dir>
   --frames=0,30,90 --image-format=png` for several frames in one call.
-- **`licenseKey` / `--license-key`:** documented for `renderMedia()`, `renderStill()`, the web renderers and Lambda.
-  `--is-production` marks a render as development so it isn't billed, and works only together with a license key.
-  The reviewer gives these version thresholds; I couldn't confirm them, but all are below the 4.0.540 we pin:
-  - `@remotion/licensing` from 4.0.237;
-  - the render functions' `licenseKey` option from 4.0.409;
-  - the CLI flag from 4.0.539.
+- **`licenseKey` / `--license-key`:**
+  - **Where it works:** documented for `renderMedia()`, `renderStill()`, the web renderers and Lambda, and available
+    from v4.0.409 (license-key docs page). **`renderFrames()` isn't listed**, so an image sequence rendered with it
+    wouldn't be reported.
+  - **`--is-production`** marks a render as development so it isn't billed, and works only together with a license
+    key.
+  - **Thresholds below our 4.0.540 pin** (the reviewer's figures, which I couldn't confirm): `@remotion/licensing`
+    from 4.0.237 and the CLI flag from 4.0.539.
+- **One browser, many stills:** `openBrowser()` opens a browser once. Passing it as `puppeteerInstance` to each
+  `renderStill()` call, with the same `serveUrl`, reuses it ("can speed up the rendering process"). We close it
+  ourselves.
+- **Environment variables:**
+  - **The CLI passes env vars prefixed `REMOTION_` into the webpack bundle**, where composition code reads them as
+    `process.env.REMOTION_…`. It also auto-loads `.env` and `.env.local` from the Remotion root.
+  - The Node APIs don't pick variables up by themselves: `renderMedia()` takes them through `envVariables`
+    (env-variables docs page).
+- **5.0 changes output bytes too:** the default `colorSpace` becomes `bt709` (from the bt601-equivalent `"default"`),
+  and the default GL renderer becomes ANGLE with a SwiftShader fallback (v5.0 migration guide, v4.0.498 release
+  notes). Both affect E2's CRF and size calibration.
 - **Agent skills:** `remotion-dev/skills` (latest commit `c7cb2fd`, 2026-11-02; skills versioned `4.0.540`).
   - `remotion-best-practices` is the router.
   - The others are `remotion-create`, `remotion-markup`, `remotion-render`, `remotion-captions`,
@@ -247,9 +274,16 @@ License, so we don't vendor it (§8).
 8. **Recorded narration is deeply HTML-shaped:** the bus layer, `data-va-speech`, the hold-frame beat, and the guards
    in render-job (`checkNarration`, `checkNarrationModified`). Remotion versions don't get recorded narration in v1
    (§6).
-9. **The license applies to us too.** Building and testing the engine at Netlify (spikes that set up the stack, CI that
-   renders, live gates, our own deployment) is use by a company of more than 3 people beyond evaluation. Under a
-   cautious reading of the Terms, evaluation ends once we start setting up the technology stack. Open question 1.
+9. **The license applies to us too.** Netlify has more than 3 people, so anything beyond evaluation needs a license:
+   runs on the runner, CI that renders, live gates and our own deployment.
+   - **What evaluation covers:** the Free License covers "evaluating whether Remotion is a good fit, and … not yet using
+     it in a commercial way". The License FAQ adds "you can already evaluate Remotion before using it commercially".
+   - **So the local spikes run now:** E3–E5 produce no commercial output and count as evaluation, and E6 states that
+     reading in its email to Remotion.
+   - **Not this:** draft 2's "evaluation ends once the stack is set up" came from Terms wording I couldn't find on
+     remotion.dev.
+
+   Open question 1.
 10. **Automated QA is thinner for Remotion.** `hyperframes check` covers lint, runtime, layout, motion and contrast.
     Remotion has TypeScript, `selectComposition`, the contract check and a render smoke test. §5.4 says what v1 ships
     and §12 lists the risk.
@@ -260,8 +294,18 @@ License, so we don't vendor it (§8).
     template byte for byte (§5.1).
 12. **The license key must never appear on a command line or in a log.** Render through the Node API with the key
     read from env, never through `--license-key` (§5.5).
-13. **Every still counts as a render.** Snapshot rounds aren't free, either for Automators billing or in time (each
-    round is a webpack bundle plus a Chrome launch). §5.4 batches them, and E2 measures "rounds × seconds".
+13. **Every still counts as a render, and must be reported.** Snapshot rounds aren't free, either for Automators
+    billing or in time (each round is a webpack bundle plus a Chrome launch). `renderFrames()` isn't documented as
+    taking `licenseKey`, so a sequence rendered with it would go unreported, which 5.0 forbids for Automators. §5.4
+    renders stills with `renderStill()` on one shared browser and a cached bundle, and E2 measures "rounds × seconds".
+14. **`REMOTION_`-prefixed env vars reach composition code.** The CLI inlines them into the webpack bundle, so a key
+    named `REMOTION_LICENSE_KEY` would be readable by any `process.env` reference in agent-written code, and the CLI
+    also reads `.env` files. The key is named `VIDEO_AGENT_REMOTION_KEY` (§5.5), and `process.env` is banned in `src/`
+    (§5.2).
+15. **Other config files Remotion's toolchain may load** from `video/` aren't covered by the locked set:
+    `babel.config.*`, `postcss.config.*`, `browserslist`. Dot-files (`.babelrc`, `.env*`) can't survive an archive
+    (`src/lib/bundle-manifest.ts:34`), but these can. Only the template's files plus the agent's allowed paths may
+    exist (§5.1), and E5 lists what the toolchain actually reads.
 
 ---
 
@@ -337,15 +381,32 @@ version's engine. HyperFrames calls today's function, and any other engine retur
 everything outside the scope is unchanged. The interface lives here so every plan uses one name:
 
 ```ts
-/** Problems with an agent's result for a scoped revision: anything outside `beats` that changed. */
-export type ScopeCheck = (parent: Map<string, Uint8Array>, agent: Map<string, Uint8Array>, beats: string[]) => string[]
+/**
+ * A scoped revision's check and splice in one: the problems (anything outside `beats` that changed) and, when there
+ * are none, the spliced files (the parent's, with the scoped beats' parts taken from the agent's result). render-job
+ * and finalize both use these bytes, so they can't splice differently.
+ */
+export type ScopeCheck = (
+  parent: Map<string, Uint8Array>,
+  agent: Map<string, Uint8Array>,
+  beats: string[],
+) => { problems: string[]; files: Map<string, Uint8Array> | null }
 export function scopeCheckFor(id: EngineId): ScopeCheck | null
 ```
 
 - `scopeCheckFor('hyperframes')` returns the regenerate-beat plan's module when it lands. Until then it returns
   `null`, and HyperFrames' `scopedRevision` capability stays false.
-- `scopeCheckFor('remotion')` returns `null` until Phase 3 (§11). Its freeze compares every other beat's
-  `src/beats/<id>.tsx` hash and `props.json` entry.
+- `scopeCheckFor('remotion')` returns `null` until Phase 3 (§11). Its freeze mirrors regenerate-beat's §4.4 rule for
+  HyperFrames:
+  - **Files:** every file in `video/` stays byte-identical and present, except `src/beats/<X>.tsx` and
+    `assets/beats/<X>/**` for the scoped beats `X` and the generated `src/registry.ts` (§5.1). New files may appear
+    only under `assets/`.
+  - **`props.json`:** only the scoped beats' entries may differ. Every other beat entry, `colors`, `layers` and
+    `audio` are equal, and the beat order is unchanged.
+  - **`summary.json`:** only the scoped beats' cues are the agent's. Every other cue is recomputed from the parent's.
+  - **Locked files:** their hashes (§5.1) are checked as well.
+  - **The splice:** the parent's files, with the scoped beats' files and props entries taken from the agent's result,
+    the scoped beats' caption cues taken from the agent's, and `src/registry.ts` regenerated.
 - `reviseVideo` refuses a `scope` when the version's engine lacks `capabilities.scopedRevision`. It uses the
   regenerate-beat plan's `409 not_editable`, naming the engine, so there's no new error code.
 - The run side has the same hook as an optional `RunEngine.scopeCheck` (§4.3) for render-job's guard.
@@ -363,14 +424,15 @@ relayout and caption sync, shared by every engine's contract:
 
 - **`versions.engine`:** `text not null default 'hyperframes'` (migration in `netlify/database/migrations/`, Drizzle
   in `db/schema.ts`, `VersionRow.engine` in `src/domain/types.ts`). Every row written before this is HyperFrames,
-  which is true. This is the first migration in the cross-plan order (engines phase 1).
+  which is true. This is the first migration in the roadmap's migration order (engines phase 1).
 - **One engine per video:** `reviseVideo`, `remixVideo`, edit renders, retries and incorporate-feedback copy the
   engine from the parent. A domain check refuses a version whose engine differs from its parent's
   (`409 engine_mismatch`), which only a bug could trigger, never a request.
 - **The engine for a new video** follows the looks plan's rule:
   1. `request.engine` if given, checked against the look's `engines` (else `400 engine_not_supported_by_look`) and
      against the enabled engines (else `409 engine_disabled`);
-  2. otherwise the look's first listed engine;
+  2. otherwise the look's first listed engine that's enabled (with a look listing `["remotion", "hyperframes"]` and
+     Remotion off, that's HyperFrames, not a 409);
   3. otherwise `hyperframes`.
 
   A request for a capability the engine lacks gets `409 engine_unsupported`, naming the capability. Examples: Sound
@@ -381,14 +443,16 @@ relayout and caption sync, shared by every engine's contract:
 
   No key or secret goes in the database (§7).
 - **Run manifest:** an optional `engine` field. Absent means `hyperframes`, so manifests already written stay valid.
-  `verifyRunManifest` accepts only known ids, and `v` stays 1 (cross-plan shared rule 5).
+  `verifyRunManifest` accepts only known ids, and `v` stays 1 (roadmap shared rule 4).
 - **render-job's manifest:** gains `engine: { id, version, renders? }` next to the existing `hyperframes` version
-  string, which stays for older readers. `renders` is Remotion's count: `{ video, stills, sequences }` (§5.4).
+  string, which stays for older readers. `renders` is Remotion's count, `{ video, stills, audio }` (§5.4), every one of them
+  reported with `licenseKey`.
 - **Finalize checks the engine twice:**
   1. `engine.id` matches the version's engine.
   2. The bundle's shape matches it. HyperFrames means `index.html` at the root. Remotion means `props.json` plus
-     `src/Root.tsx` and no root `index.html`, plus the template-identical config files (§5.1). This runs where
-     `ensureBundle` builds the bundle index (`bundles.ts:136–195`).
+     `src/Root.tsx` and no root `index.html`, the locked files byte-identical to the template, `src/registry.ts`
+     equal to what `props.json` generates, and no file outside the allowed set (§5.1). This runs where `ensureBundle`
+     builds the bundle index (`bundles.ts:136–195`).
 
   Either mismatch fails the attempt with `engine_mismatch`, so a run that ignored its prompt and wrote the wrong kind
   of project is caught before it becomes a version. Finalize also adds the run's `engine.renders` to the deployment's
@@ -398,47 +462,57 @@ relayout and caption sync, shared by every engine's contract:
 
 ### 4.3 Run side: `scripts/lib/engines/`, `scripts/engine.ts`, and prepare-run's order
 
-The run side is built in Phase 1 because it has a second consumer at once: the CLI plan's local mode bundles
-`engine.ts` and `scripts/lib/engines/*` (cross-plan shared rule 13).
+The run side is built only as far as its consumers need it:
+
+- **Phase 1:** the `RunEngine` type, `scripts/lib/engines/hyperframes.ts` (the `render`, `contract` and `version` that
+  render-job calls), and prepare-run's step order, which other wave-1 plans need. `scaffold` and `hydrate` are optional
+  hook points in prepare-run's step 1, and HyperFrames doesn't implement them, so the order is fixed now with no
+  behaviour change.
+- **Phase 2:** `check`, `snapshot`, `scripts/engine.ts`, and Remotion's `scaffold` and `hydrate` arrive with their
+  first consumer, the Remotion prompt.
+- **Local mode** (CLI plan, roadmap wave 4) bundles whatever exists by then.
 
 ```ts
 // scripts/lib/engines/types.ts
 export interface RunEngine {
   id: EngineId
-  /** Seed video/ for an author run (Remotion: copy engines/remotion/template/, install, ensure the browser). */
-  scaffold(videoDir: string): Promise<void>
-  /** Install what a restored source needs, after checking its config is the template's (Remotion: engine_tampered). */
-  hydrate(videoDir: string): Promise<void>
-  /** The engine's own checks; 0 errors means ready to render. */
-  check(videoDir: string): Promise<{ errors: string[]; warnings: string[] }>
+  /** Seed video/ for an author run (Remotion: copy engines/remotion/template/, install, ensure the browser). Phase 2. */
+  scaffold?(videoDir: string): Promise<void>
+  /** Install what a restored source needs, after checking its files are allowed (Remotion: engine_tampered). Phase 2. */
+  hydrate?(videoDir: string): Promise<void>
+  /** The engine's own checks; 0 errors means ready to render. Phase 2. */
+  check?(videoDir: string): Promise<{ errors: string[]; warnings: string[] }>
   /** The editing contract for this engine. */
   contract(videoDir: string): string[]
-  /** PNG stills at these seconds into .render/snapshots/, in one call (Remotion: one image sequence, §5.4). */
-  snapshot(videoDir: string, atSec: number[]): Promise<string[]>
+  /** PNG stills at these seconds into .render/snapshots/, in one call (Remotion: stills on one browser, §5.4). Phase 2. */
+  snapshot?(videoDir: string, atSec: number[]): Promise<string[]>
   /** The MP4 at the given quality. */
   render(videoDir: string, out: string, quality: string, onProgress: (pct: number) => void): Promise<RenderReport>
   /** The editor's preview bundle (Remotion, Phase 3: esbuild of the Player host, §4.4). */
   previewBundle?(videoDir: string): Promise<void>
-  /** Render-job's guard for a scoped revision (regenerate-beat). */
-  scopeCheck?(frozenDir: string, videoDir: string, beats: string[]): string[]
+  /** Render-job's guard and splice for a scoped revision (regenerate-beat): the same result shape as ScopeCheck. */
+  scopeCheck?(frozenDir: string, videoDir: string, beats: string[]): { problems: string[]; files: Map<string, Uint8Array> | null }
   version(videoDir: string): string
 }
 ```
 
-- **Phase 1** builds only `scripts/lib/engines/hyperframes.ts`: thin wrappers over today's commands, with `scaffold` and
-  `hydrate` doing nothing. `render-job.ts` calls `engine.render(...)` where it ran `npx -y hyperframes render` (`:202`)
-  and `engine.contract(videoDir)` where it checks the contract (`:85`). Everything after the render stays as it is.
-- **`scripts/engine.ts check | snapshot --at 1,3,5 | render | mix`** is one CLI over the run engine named in
+- **Phase 1's HyperFrames engine** is thin wrappers over today's commands. `render-job.ts` calls `engine.render(...)`
+  where it ran `npx -y hyperframes render` (`:202`), and `engine.contract(videoDir)` where it checks the contract
+  (`:85`). Everything after the render stays as it is.
+- **`scripts/engine.ts check | snapshot --at 1,3,5 | render | mix`** (Phase 2) is one CLI over the run engine named in
   `.render/run-manifest.json` (or `--engine` in local mode). The Remotion prompt uses it. The HyperFrames prompt keeps
   `npx hyperframes check` and `snapshot`, which its skill's work loop already teaches.
-- **prepare-run's step order** (owned here, cross-plan shared rule 5; each step skips when the manifest doesn't ask for
+- **prepare-run's step order** (owned here, roadmap shared rule 4; each step skips when the manifest doesn't ask for
   it):
   1. **Source:** `scaffold` for `author` runs, or restore the source/bundle and then `hydrate` for every other kind.
      Revision, render-unchanged and author_from_frozen keep today's restore code.
   2. Library media into `video/assets/media/` (today's step).
   3. The look (looks plan).
   4. Recording files (screen-recording plan), then scope files (regenerate-beat plan).
-  5. `.render/run-manifest.json` for render-job (today's step).
+  5. **Feedback and scope stills, last.** `feedbackStills` empties `video/feedback/` before writing, so it must run
+     after everything else that touches `video/`, as it does today (it's the last step of `prepare()`). The
+     regenerate-beat plan's scope stills join it here.
+  6. `.render/run-manifest.json` for render-job (today's step).
 
   For HyperFrames, step 1's `scaffold`/`hydrate` do nothing, so behaviour is unchanged.
 
@@ -482,8 +556,11 @@ video/
   props.json                # THE editable data (§5.2): the agent writes it, the editor edits it
   summary.json              # same shape as today (captions keyed by beat and textId)
   src/
-    index.ts                # registerRoot(Root)
-    Root.tsx                # import props from '../props.json'; one <Composition id="main" schema={vaSchema} defaultProps={props} calculateMetadata={vaMetadata} fps={30} …>
+    index.ts                # registerRoot(Root). LOCKED
+    Root.tsx                # import props from '../props.json'; one <Composition id="main" schema={vaSchema} defaultProps={props}
+                            # calculateMetadata={vaMetadata} fps={30} …> rendering <VaVideo>. LOCKED
+    registry.ts             # GENERATED from props.json: `import Intro from './beats/intro'` … `export const beats = { intro: Intro, … }`,
+                            # and the same for layers. engine.ts check rewrites it; a stale one is an error
     va/                     # the contract runtime: ours, MIT, read-only for the agent (hash-checked)
       schema.ts             # zod schema of props.json
       Video.tsx             # <VaVideo>: colours as --va-color-* on the root, layers, <Series> of beats in props order
@@ -506,15 +583,30 @@ Why this shape:
   Player can't disagree, and render-job never passes props. The beat components read text, colour, media and audio
   only through the `va/` runtime. An edit is a change to the file, and a render-unchanged run renders exactly the file
   the server wrote.
-- **Beats are files.** Remotion's `scopeCheck` freezes every other beat by file hash plus its props entry.
+- **Beats are files, found through a generated registry.** Webpack can't import a component by a runtime string, so
+  the locked `va/Video.tsx` can't find `beats/intro.tsx` by itself.
+  - `src/registry.ts` maps each beat id (and layer id) in `props.json` to a static import of its file.
+  - `engine.ts check` rewrites it from `props.json` before every check and render, and the server does the same after
+    an edit.
+  - A registry that doesn't equal its regenerated form is an error, so the only way to add a beat is to add it to
+    props and write its file.
+  - Static imports, not lazy ones, so nothing loads asynchronously during a render.
+  - Remotion's `scopeCheck` freezes every other beat's file and props entry (§4.1).
 - **The `va/` runtime is ours** (MIT, in this repo, versioned with the contract). It imports Remotion as a dependency.
   It doesn't copy or modify Remotion code, so it isn't a derivative of Remotion, which is what the license's
   "Disallowed use cases" are about.
-- **The config and runtime are locked (supply chain, gotcha 11).** `package.json`, `package-lock.json`,
-  `remotion.config.ts`, `tsconfig.json` and every file under `src/va/` must be byte-identical to the template's.
-  - Their sha256s are kept in `scripts/lib/engines/remotion.ts`.
-  - `hydrate` checks them before any `npm ci`, and refuses with `engine_tampered` if one differs. `check` checks them
-    again, and finalize checks the bundle (§4.2).
+- **The config, the wiring and the runtime are locked (supply chain and "one source of truth", gotchas 11 and 15).**
+  `package.json`, `package-lock.json`, `remotion.config.ts`, `tsconfig.json`, `src/index.ts`, `src/Root.tsx` and every
+  file under `src/va/` must be byte-identical to the template's.
+  - Without `Root.tsx` in the set, an agent could hard-code `defaultProps`, drop `calculateMetadata` or render its own
+    tree. It would pass `selectComposition`, and the editor's edits would change nothing on screen.
+  - The sha256s are kept in `scripts/lib/engines/remotion.ts`.
+- **Only allowed paths may exist.** Besides the locked files, the agent writes only `props.json`, `summary.json`,
+  `src/beats/*`, `src/layers/*` and `assets/**`. `src/registry.ts` is generated, `AGENTS.md` comes from the template,
+  and `node_modules` is installed. Any other file at the top of `video/` or `src/` (a `babel.config.js`,
+  `postcss.config.js`, `browserslist`, a second entry point) is refused.
+- **Where it's checked:** `hydrate` checks the locked hashes and the allowed paths before any `npm ci`, and refuses
+  with `engine_tampered` if one fails. `check` checks them again, and finalize checks the bundle (§4.2).
   - `npm ci` always runs with `--ignore-scripts`.
   - The agent can't add dependencies in v1. A look that needs one (say `@remotion/three`) ships it in the template
     lockfile, so every Remotion run installs the same set.
@@ -567,13 +659,15 @@ Same model, different carrier. `src/lib/contract-remotion.ts` validates `props.j
 
 1. `props.json` parses against the contract schema. The template's zod schema is exported as a JSON Schema, generated
    at build, so the service doesn't depend on zod tooling.
-2. Every beat id has `src/beats/<id>.tsx`, and every beat file has a beat.
+2. Every beat id (and layer id) has its file in `src/beats/` (`src/layers/`), every such file has an entry in props,
+   and `src/registry.ts` equals what `props.json` generates.
 3. A static scan of `src/**/*.tsx` with the TypeScript compiler API (installed in `video/node_modules`):
    - every `<VaText id>`, `<VaImage slot>` and `<VaClip slot>` is a string literal that exists in that beat's props;
    - every text and slot in props is used exactly once;
-   - no `@remotion/google-fonts` import, and no `http://` or `https://` string in `src/`. A remote font or image
-     breaks an offline render, and the grep is cheap.
-4. The locked files (§5.1) match their hashes.
+   - no `@remotion/google-fonts` import, no `http://` or `https://` string, and no `process.env` in `src/`. A remote
+     font or image breaks an offline render, `process.env` is how a composition would read the deployment's env
+     (gotcha 14), and the grep is cheap.
+4. The locked files match their hashes, and nothing outside the allowed paths exists (§5.1).
 5. `selectComposition()` (from `@remotion/renderer`, with `inputProps: {}` since 5.0 makes it required) returns `main`
    with the expected width, height, fps and `durationInFrames`. `npx remotion compositions` isn't used because it has
    no documented JSON output.
@@ -587,7 +681,16 @@ their design:
 - no `fetch`, `Math.random` or `Date.now`.
 
 `applyEdits` on Remotion uses `contract-core.ts`'s relayout and caption sync, the same code the HyperFrames contract
-uses by then. A **conformance suite** (§9) applies the same op sequences to paired HyperFrames and Remotion fixtures and
+uses by then. It also keeps the files consistent with props, so check rule 2 holds on the render-unchanged run the
+server's own draft produces:
+
+- **`delete`** removes `src/beats/<id>.tsx` and its `assets/beats/<id>/` folder from the returned file map, and
+  regenerates `src/registry.ts`.
+- **`reorder`** changes only props, since `<Series>` follows props order. The registry is keyed by id, not order.
+- **`media` with a library `src`** adds nothing under `src/`. The file arrives in `assets/media/` through the library
+  download step.
+
+A **conformance suite** (§9) applies the same op sequences to paired HyperFrames and Remotion fixtures and
 asserts that the same `Composition` and captions come out. It skips ops an engine doesn't list in `editOps`, so
 screen-recording's ops are tested on HyperFrames only. The suite keeps the two engines meaning the same thing by
 "retime" or "reorder".
@@ -611,8 +714,9 @@ export interface EnginePrompt {
 ```
 
 The HyperFrames implementation returns today's lines word for word. A test asserts the HyperFrames prompt is
-byte-identical to today's for the same `PromptInput`, with no exceptions. `PROMPT_TEMPLATE_VERSION` follows shared
-rule 4: the Phase 2 PR adds 1 to the constant in merge order, because it adds a new template branch. The HyperFrames
+byte-identical to today's for the same `PromptInput`, with no exceptions. `PROMPT_TEMPLATE_VERSION` follows roadmap
+shared rule 3: the Phase 2 PR adds 1 to the constant in merge order, because it adds a new template branch. Phase 1
+doesn't touch the prompt. The HyperFrames
 bytes don't change, so the PR moves `test/remix-run.test.ts:176` to import the constant if no earlier PR has.
 
 The Remotion author steps (draft wording):
@@ -624,8 +728,10 @@ The Remotion author steps (draft wording):
    video/, set up with its dependencies installed."
 2. "Follow the editing contract in video/AGENTS.md ("Editing contract v1 (Remotion)"). Write video/props.json first,
    then one component per beat in video/src/beats/, reading every text, colour and media item through the va/
-   components. Don't change video/src/va/, package.json, the lockfile, remotion.config.ts or tsconfig.json, and don't
-   install packages. Set the composition to {w}x{h}, 30 fps."
+   components. Write only props.json, summary.json, src/beats/, src/layers/ and assets/. Don't change video/src/va/,
+   src/Root.tsx, src/index.ts, src/registry.ts, package.json, the lockfile, remotion.config.ts or tsconfig.json, don't
+   add other config files, and don't install packages or read process.env. `engine.ts check` regenerates the
+   registry for you. Set the composition to {w}x{h}, 30 fps."
 3. "Use only files in video/: fonts from video/assets/fonts with loadFont from @remotion/fonts, never Google Fonts or
    any URL. No fetch, no random numbers, no clock."
 4. "Run `npx tsx scripts/engine.ts check` until it reports 0 errors." That covers tsc, the contract,
@@ -639,19 +745,24 @@ run the check it names". Line 12 becomes "Keep the editing contract (in `video/A
 
 ### 5.4 Checks, snapshots and render counts
 
-- **Render smoke:** `engine.ts check` renders the first frame, each beat's midpoint (up to 4) and the last frame as
-  **one image sequence** (`renderFrames` / `--frames=a,b,c,d`). One call means one Chrome launch and one bundle, and
-  it counts as one image-sequence render rather than several stills. The bundle is cached in `.render/bundle-<hash>`
-  by the source hash, so a snapshot and a check on the same source don't bundle twice.
-- **Snapshots** for the agent work the same way, as one sequence per call.
+- **Render smoke:** `engine.ts check` renders the first frame, each beat's midpoint (up to 4) and the last frame.
+  - **How:** `renderStill()` on one browser. `openBrowser()` runs once, and the browser (`puppeteerInstance`) and the
+    cached `serveUrl` are passed to each call, each with `licenseKey`. One Chrome launch and one bundle per round.
+  - **Reported:** each still is one reported render.
+  - **Bundle cache:** `.render/bundle-<hash>`, keyed by the source hash, so a snapshot and a check on the same source
+    don't bundle twice.
+  - **Why not one sequence:** `renderFrames()` (one image sequence) isn't used, because Remotion's docs don't list it as
+    taking `licenseKey`, and its output would go unreported. E2 confirms `renderStill` takes `licenseKey` at 4.0.540.
+- **Snapshots** for the agent work the same way: stills on one browser per call.
 - **Agent review:** the prompt has the agent look at snapshots at each beat before rendering, as HyperFrames' work
   loop does.
 - **Contrast:** v1 ships without an automated contrast check for Remotion. The design (read `<VaText>` colours from
   the bundle's DOM in the renderer's browser and compute WCAG contrast) is in §13. The version's summary says
   "contrast was reviewed by eye, not measured", like today's "mix measured, not heard" note.
-- **Render counts:** every Remotion render the run makes (the video, each snapshot or smoke sequence, any still) is
-  tallied by `scripts/lib/engines/remotion.ts` into render-job's manifest as `engine.renders = { video, stills,
-  sequences }`. Finalize adds them to the monthly count (§7). We don't claim how Remotion bills them: the count is for
+- **Render counts:** every Remotion render the run makes (the video, each snapshot or smoke still, any audio render
+  in Phase 4) is tallied by `scripts/lib/engines/remotion.ts` into render-job's manifest as
+  `engine.renders = { video, stills, audio }` (`audio` stays 0 until Phase 4). Finalize adds them to the monthly
+  count (§7). We don't claim how Remotion bills them: the count is for
   reconciling against remotion.pro.
 
 ### 5.5 Rendering and outputs
@@ -659,10 +770,15 @@ run the check it names". Line 12 becomes "Keep the editing contract (in `video/A
 - **`render`** calls `renderMedia()` from `@remotion/renderer` (loaded from `video/node_modules`) on the cached
   bundle, with codec h264 and a CRF from the quality map. E2 picks CRFs so file sizes land near today's 1–1.5 MB a
   minute at 1080p.
-- **The key:** `licenseKey` is read from env inside the Node process: `REMOTION_LICENSE_KEY` for a Company License,
+- **The key:** `licenseKey` is read from env inside the Node process: `VIDEO_AGENT_REMOTION_KEY` for a Company License,
   or `"free-license"` for the Free License tier recorded in settings (passed in the run manifest as
   `engine: { id: 'remotion', tier }`).
+  - The name deliberately has no `REMOTION_` prefix, because Remotion's CLI inlines `REMOTION_*` variables into the
+    composition's bundle (gotcha 14). The render passes no `envVariables` to the composition at all.
   - The key never appears on a command line, so nothing shows in a process list or in `runStreaming`'s output tail.
+  - **If it leaks anyway**, someone else could have renders reported against the deployer's remotion.pro account. Runs
+    can read env vars (the README's trust model), so a brief or comment could ask an agent to print it. The README and
+    the dialog tell admins to rotate the key on remotion.pro if a run's output ever shows it.
   - `scripts/lib/run-tools.ts`'s logger also masks anything shaped like a Remotion secret key (`rm_sec_…`) in every
     log line as a second guard.
   - Spikes, CI and live gates pass `isProduction: false`, which needs a license key, so free-license renders there
@@ -677,9 +793,16 @@ run the check it names". Line 12 becomes "Keep the editing contract (in `video/A
 **Phase 2: music only** (bed, fades, level):
 
 - `<VaAudio>` renders `audio.music` with fades and its level.
-- `engine.ts mix` measures the mix with ffmpeg `loudnorm` (first pass on an audio-only render) and writes
-  `audio.music.volume` toward about −14 LUFS integrated, true peak ≤ −1 dBTP, the same target as today.
-- The audio-only render counts as a render.
+- `engine.ts mix` sets the music level with no render at all. With one bed and no other audio, the output's loudness
+  is the source segment's loudness plus the gain.
+  - It measures the music file itself with an ffmpeg `loudnorm` first pass over the first `duration` seconds of
+    `audio.music.src`.
+  - It sets `audio.music.volume = 10^((−14 − LUFS_src) / 20)`, clamped to the contract's range, the same target as
+    today (about −14 LUFS integrated).
+  - It checks the true peak at that gain (≤ −1 dBTP) and lowers the gain if needed.
+  - Fades make the result a little quieter, which is inside the Phase 2 live gate's ±1.5 LU tolerance.
+- Phase 4 adds an audio-only render of the full mix (it counts as a render) once effects and voice can change the
+  result.
 - Each look's `sound.musicMood` (looks plan) feeds the server's music pick as it does for HyperFrames.
 
 **Phase 4: effects, voice-over and re-voicing:**
@@ -712,7 +835,7 @@ run the check it names". Line 12 becomes "Keep the editing contract (in `video/A
 | Live progress (watch it being written)                       | ✓            | Messages only              | Messages only                              | Checkpoint preview bundles are in "Not in v1" (§13)                                         |
 | Browser editor: text, retime, reorder, delete, colour, media | ✓            | ✗ (contract null)          | ✓ Phase 3                                  | Props ops + Player preview                                                                  |
 | Recorded narration, fit to narration, hold frame             | ✓            | ✗                          | ✗ (not planned)                            | Gotcha 8; the UI hides Narration on Remotion videos                                         |
-| Redo a scene (scoped revision)                               | Once regenerate-beat lands | ✗ (`409 not_editable`)   | ✓ Phase 3                     | `scopeCheckFor('remotion')` freezes beat files + props entries                              |
+| Redo a scene (scoped revision)                               | Once regenerate-beat lands | ✗ (`409 not_editable`)   | ✓ Phase 3                     | `scopeCheckFor('remotion')` freezes everything outside the scoped beats (§4.1)                              |
 | Screen-recording demos                                       | Once screen-recording lands | ✗ (`409 engine_unsupported`) | ✗ (not in v1)            | Screen-recording plan is HyperFrames-only in v1; `recording: false`                         |
 | Remix or restyle across engines                              | n/a          | ✗                          | ✗ (not in v1)                              | Source is engine-specific                                                                   |
 
@@ -729,19 +852,21 @@ run the check it names". Line 12 becomes "Keep the editing contract (in `video/A
 2. **An admin's license choice** on the Admin page: **"Use Remotion (a license is required for most companies)"**.
    Turning it on opens a dialog:
 
-   > Remotion isn't open source. It's free for individuals, non-profits and companies of up to 3 people (from Remotion
-   > 5.0, contractors count too). Every other company needs a Remotion Company License before using it here. For this
-   > app that's usually "Remotion for Automators" ($0.01 a render, $100 a month minimum, at remotion.pro), and it also
-   > covers the Remotion Player the editor uses. Video Agent doesn't buy or check this for you. Each render tells
-   > Remotion your site's domain and IP address, never what's in the video.
+   > Remotion isn't open source. It's free for individuals, non-profits and companies of up to 3 people, counting the
+   > people from other teams or contractors you work with on it. Every other company needs a Remotion Company License
+   > before using it here. For this app that's usually "Remotion for Automators" ($0.01 a render, $100 a month minimum,
+   > at remotion.pro), and it also covers the Remotion Player the editor uses. Video Agent doesn't buy or check this
+   > for you. Each render tells Remotion which license key was used, what kind of event it was, and whether it was
+   > production or development, never what's in the video. If a key ever shows up in a run's output, rotate it on
+   > remotion.pro.
    >
    > ( ) My organisation qualifies for the Free License: renders are reported as "free-license"
-   > ( ) My organisation has a Remotion Company License: renders are reported with `REMOTION_LICENSE_KEY`
+   > ( ) My organisation has a Remotion Company License: renders are reported with `VIDEO_AGENT_REMOTION_KEY`
    > Note (optional): license reference or who approved it
 
 **What saving the dialog does:**
 - It records `remotion_license_ack` (who, when, which tier, note) and sets `remotion_enabled`.
-- "Company License" can't be saved unless `REMOTION_LICENSE_KEY` is set on the project, refused with
+- "Company License" can't be saved unless `VIDEO_AGENT_REMOTION_KEY` is set on the project, refused with
   `409 remotion_key_missing`. The server reads only whether it's present, never its value. This closes the case where a
   Company License deployer renders without a key, which from 5.0 is a breach our defaults would have caused.
 - Turning Remotion off stops new Remotion videos at once. Existing Remotion videos keep playing, and their revisions
@@ -753,9 +878,14 @@ run the check it names". Line 12 becomes "Keep the editing contract (in `video/A
 - **`/setup`** gains an Engines row:
   - "HyperFrames ✓; Remotion: off";
   - or "on, Company License recorded by ana@acme.com on 2026-11-20; renders are reported to remotion.pro";
-  - or "in ENGINES but not set up: see Admin". When the last Remotion install failed, the row links to the run log.
-- **`REMOTION_LICENSE_KEY`** (optional; mark it secret; scopes: builds and functions). Functions need it only to see
-  that it's there. The README's trust model already says runs can read env vars, and that applies here too.
+  - or "in ENGINES but not set up: see Admin";
+  - or "last Remotion install failed: `engine_install_failed`", from the latest Remotion attempt's error code, with no
+    link (nothing else tracks install failures).
+- **Admin-only details:** the license record (who, email, note) shows only on the Admin page and on `/setup` (which is
+  admin-only). `GET /api/v1/engines` never returns it.
+- **`VIDEO_AGENT_REMOTION_KEY`** (optional; mark it secret; scopes: builds and functions). Functions need it only to see
+  that it's there. The README's trust model already says runs can read env vars, and that applies here too. It's
+  not `REMOTION_LICENSE_KEY`, because Remotion's CLI exposes `REMOTION_*` variables to composition code.
 - **Telemetry:** "no network during the render" means the composition never fetches. The renderer's license reporting
   to remotion.pro is the one exception, allowed and disclosed in the dialog, the README's trust model and `/setup`.
 - **Who can choose an engine:** anyone who can create, but only among enabled engines, through the look (looks' engine
@@ -764,7 +894,7 @@ run the check it names". Line 12 becomes "Keep the editing contract (in `video/A
 - **Credits:** a Remotion run costs whatever its agent and runner time cost; E2 measures it against S1. If install adds
   a fixed overhead, the New video page shows "Remotion videos take about N more credits" once it's measured.
 - **Remotion's own charges** are between the deployer and Remotion. The Admin usage page shows "Remotion renders this
-  month: N (M videos, K stills or sequences)" from finalize's tally, so they can reconcile it with remotion.pro.
+  month: N (M videos, K stills)" from finalize's tally, so they can reconcile it with remotion.pro.
 - **Discovery:**
   - The `engines` feature string goes in `GET /api/v1/config`'s `features` (cli-and-sdk's registry) once Phase 2
     ships.
@@ -783,10 +913,21 @@ run the check it names". Line 12 becomes "Keep the editing contract (in `video/A
 
 | Option                        | How                                                                                                                                                                                                                                                                                                                      | Cost                                                                                    |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| B. Install per run            | `scaffold` / `hydrate` run `npm ci --ignore-scripts` in `video/` from the template lockfile, then `npx remotion browser ensure`, only for Remotion runs                                                                                                                                                                  | Only Remotion runs pay; it counts against the deadline                                  |
+| B. Install per run            | `scaffold` / `hydrate` run `npm ci --ignore-scripts` in `video/` from the template lockfile, then `npx remotion browser ensure`, only for Remotion runs. Each step has a timeout through `runStreaming`'s `timeoutMs` (`scripts/lib/run-tools.ts:141`). E1 sets it to about 3× the measured median. On expiry the run stops with `engine_install_failed`, so a stuck registry or download ends the attempt in minutes, not at the deadline (`(22 + 3)` minutes, `reconciler.ts:174`) | Only Remotion runs pay; it counts against the deadline                                  |
 | C. Cached tarball (B, faster) | An admin starts a "prime" run from the Admin page. It installs once and uploads `node_modules` plus the browser as a tarball to the `internal` Blobs store, keyed by the lockfile hash. The server records the tarball's sha256 from that run's report after the admin confirms it. Every later run downloads it, checks that sha256 (pinned in the server-written run manifest), and unpacks it | One prime per lockfile change. Faster if Blobs beats npm. Pins the browser download    |
 
-**Recommendation pending E1:** C if `npm ci` plus `browser ensure` takes more than about 60 seconds, otherwise B.
+**Recommendation: lean C, with B as the fallback** when no tarball is primed yet (the first Remotion run on a
+deployment, or right after a lockfile change). C is better even if E1 shows B's install is quick:
+- it pins the browser archive and the whole `node_modules` tree to a hash the server chose;
+- it takes npm's and Google's download servers off the run's critical path;
+- a Blobs overwrite fails closed.
+
+C's Admin "prime" button and `engine_cache_mismatch` are beaded only once E1 confirms the Blobs download and unpack
+work and are timed. The download and unpack have the same timeout rule as B.
+
+**Two Chrome installs per Remotion run.** The `hyperframes` preset installs HyperFrames' Chrome in setup for every run,
+and Remotion adds Chrome Headless Shell. E1 records the time and size of both, so the "about N more credits" note (§7)
+is honest.
 
 - **The browser hash:** C also fixes the unpinned Chrome Headless Shell download, because the browser arrives inside a
   tarball whose hash the server chose. With B, `scripts/lib/engines/remotion.ts` pins the browser archive's sha256 per
@@ -821,7 +962,8 @@ failure.
 - `test/engines.test.ts`:
   - the registry and `enabledEngines` (env × enabled × tier, 8 cases);
   - capabilities per phase;
-  - the engine choice rule (request, look, default);
+  - the engine choice rule (request, the look's first *enabled* engine, default), including a look listing
+    `["remotion", "hyperframes"]` with Remotion off picking HyperFrames;
   - `409 engine_disabled`, `400 engine_not_supported_by_look` and `409 engine_unsupported` at create (REST and MCP);
   - `scopeCheckFor` returns null where the capability is false.
 - `test/prompt.test.ts`: the HyperFrames prompt is byte-identical to today's for the same `PromptInput`. The Remotion
@@ -830,17 +972,25 @@ failure.
 - `test/run-manifest.test.ts`: the `engine` field (absent → hyperframes; unknown → rejected; tier only with remotion).
 - `test/finalize.test.ts`:
   - engine id mismatch and bundle-shape mismatch fail with `engine_mismatch`;
-  - a Remotion bundle with a changed lockfile or `src/va/` file fails;
+  - a Remotion bundle with a changed lockfile, `src/Root.tsx`, `src/index.ts` or `src/va/` file, a stale
+    `src/registry.ts`, or an extra file such as `babel.config.js` fails;
   - `engine.renders` adds to the monthly count.
 - `test/lifecycle.test.ts`: revisions, remixes, edits and retries inherit the engine, and a forced mismatch is refused.
 - `test/settings.test.ts`:
   - only admins can save the license choice;
-  - "Company License" without `REMOTION_LICENSE_KEY` returns `remotion_key_missing`;
+  - "Company License" without `VIDEO_AGENT_REMOTION_KEY` returns `remotion_key_missing`;
   - the record keeps who and when;
   - turning it off keeps existing videos editable.
 - `test/run-tools.test.ts`: the logger masks `rm_sec_…` strings.
 - **Phase 3:**
-  - `test/contract-remotion.test.ts`: every v1 check in §5.2, one fixture per violation and its message.
+  - `test/contract-remotion.test.ts`:
+    - every v1 check in §5.2, one fixture per violation and its message;
+    - `applyEdits` with `delete` removes the beat's file and folder and regenerates the registry, and the result
+      passes check rule 2;
+    - `reorder` leaves the registry unchanged.
+  - `test/scope-remotion.test.ts`: the Remotion `scopeCheck` refuses each change outside the scope (a layer file, a
+    shared helper, the music file, a frozen beat's props entry, `colors`, the beat order, a frozen beat's caption cue),
+    and returns the spliced files when it passes.
   - `test/contract-conformance.test.ts`: paired fixtures (a HyperFrames `index.html` and a Remotion `props.json`
     describing the same video). A table of named op sequences: each op alone, then text+retime, retime+reorder,
     delete+reorder, colour+media, retime to the minimum, delete all but one. Both engines must give the same
@@ -849,16 +999,21 @@ failure.
 
 **Run side (`scripts/lib/engines/remotion.test.ts`)**
 
-- `hydrate` refuses each tampered file with `engine_tampered`.
+- `hydrate` refuses each tampered locked file and each file outside the allowed paths with `engine_tampered`.
+- An install step past its timeout fails with `engine_install_failed`, using a stub that never exits.
 - The skills tarball's hash check, and that only the four named skills are installed.
-- The render-count tally.
+- The render-count tally, and that every still is rendered with `licenseKey` set (a stub renderer records the options).
+- The key never appears in a spawned command's arguments or in the log, and the render passes no `envVariables`.
+- `engine.ts mix` computes the gain from a fixture track's measured loudness and lowers it for true peak.
 
 **Template tests** (`engines/remotion/template`, own lockfile, own CI job `npm run test:remotion`, run only once open
 question 1 is settled):
 
 - `renderStill` of fixture props at fixed frames gives the same PNG hash twice (determinism).
 - A props edit (retime, reorder) renders the expected frames at beat boundaries.
-- The static scan catches each pattern in §5.2's check 3.
+- The static scan catches each pattern in §5.2's check 3, including `process.env`.
+- `renderStill` accepts `licenseKey` at the pinned version (a render with a bad key still completes, since telemetry
+  never blocks a render).
 - Every render passes `isProduction: false`.
 
 **Playwright**
@@ -901,12 +1056,12 @@ listed in §13 (with its license caveat) so nobody builds the engine to get it. 
 
 ## 11. Build order
 
-Each phase ends with a gate. Live gates spend credits, so each runs `--dry` first and has a ceiling. The cross-plan
-build order places these phases as follows:
+Each phase ends with a gate. Live gates spend credits, so each runs `--dry` first and has a ceiling. The roadmap's
+build order (`docs/plans/2026-11-04-roadmap.md`) places these phases as follows:
 
 | Phase | Wave | Depends on |
 | --- | --- | --- |
-| 0 (spikes) | 0 | E1–E2 wait on the license decision |
+| 0 (spikes) | 0 | E3–E6 now (local evaluation); E1–E2 wait on the license decision |
 | 1 | 1 | Blocks regenerate-beat phase 1, screen-recording phase 2 and looks phase 5 |
 | 2 | 3 | Engines 1, looks phase 2, the license, E1 and E2 |
 | 3 | 4 | Regenerate-beat phase 1 for the scope hook's HyperFrames side; `contract-core.ts` if it isn't already built |
@@ -917,16 +1072,21 @@ build order places these phases as follows:
 
 | Spike  | Question | How | Cost |
 | ------ | -------- | --- | ---- |
-| **E1** | On the runner: first, does `ldd` on Chrome Headless Shell find every shared library (§2)? Then, how long do `npm ci --ignore-scripts` of the template and `npx remotion browser ensure` take, how big are they, and what do they cost? Does the renderer work after `--ignore-scripts`? Does setup time fall inside `deadlineMs = (authoringDeadlineMin + 3) * MIN` (`reconciler.ts:174`), and is it billed? What's the browser archive's sha256? Also time option C (download and unpack from Blobs). | One run with a script-only prompt: install, ensure, render a fixture, time each step; the same with a Blobs tarball. Results go in `docs/spikes.md` next to S1 | 1–2 runs, ~60 credits |
-| **E2** | Authoring quality and cost from scratch with the four skills and our template, on S1's three briefs (launch 16:9, sales 9:16 15 s, tutorial 1:1 60 s). Check rounds × seconds per round (bundle + Chrome launch), renders per video, CRF vs file size, and which static-scan rules agents actually break | Three runs with `ENGINES` set on a deploy preview or production; same rubric as S1 | 3 runs, ceiling ~700 credits |
+| **E1** | On the runner: first, does `ldd` on Chrome Headless Shell find every shared library (§2)? Then, how long do `npm ci --ignore-scripts` of the template and `npx remotion browser ensure` take, how big are they, and what do they cost? Does the renderer work after `--ignore-scripts`? Does setup time fall inside `deadlineMs = (authoringDeadlineMin + 3) * MIN` (`reconciler.ts:174`), and is it billed? What's the browser archive's sha256? Also time option C (download and unpack from Blobs), and record the time and size of both Chrome installs (HyperFrames' in setup and Chrome Headless Shell) and the median of each install step, which sets the timeouts (§8). | One run with a script-only prompt: install, ensure, render a fixture, time each step; the same with a Blobs tarball. Results go in `docs/spikes.md` next to S1 | 1–2 runs, ~60 credits |
+| **E2** | Authoring quality and cost from scratch with the four skills and our template, on S1's three briefs (launch 16:9, sales 9:16 15 s, tutorial 1:1 60 s). Check rounds × seconds per round (bundle + Chrome launch), renders per video, CRF vs file size (and a note that 5.0's `bt709` default colour space and ANGLE GL renderer will need the calibration redone), whether `renderStill` accepts `licenseKey` at 4.0.540, and which static-scan rules agents actually break | Three runs with `ENGINES` set on a deploy preview or production; same rubric as S1 | 3 runs, ceiling ~700 credits |
 | **E3** | Does the props-driven contract hold up? Hand-build a contract project, apply every edit op as props, render, compare frames and captions; write the conformance suite's first fixtures | Local (`spikes/e3`) | 0 credits |
-| **E4** | Can `@remotion/player` run in our `/preview` sandbox (CSP `default-src 'none'`, scripts only from the capability path, `sandbox allow-scripts`)? Bundle size, cold start, seek accuracy vs the MP4 (SSIM, as in S7), bridge round trip | Local Playwright spike modelled on `spikes/s2` | 0 credits |
-| **E5** | Determinism and offline: are the same props rendered twice identical? Do fonts load through `@remotion/fonts` and `staticFile` with the network blocked? Does `OffthreadVideo` work with library clips? | Local | 0 credits |
-| **E6** | What's left on licensing (start now): ask Remotion to confirm that this template's use is Automators and that the Player is covered; when 5.0 ships and what else it changes; does `/remotion-to-hyperframes` render the original with Remotion? The key's format and the free-license value are already answered (§1) | Read the repos, docs and Terms; email Remotion | 0 |
+| **E4** | Can `@remotion/player` run in our `/preview` sandbox (CSP `default-src 'none'`, scripts only from the capability path, `sandbox allow-scripts`)? Which of the CSP's allowances the Player relies on (`'unsafe-inline'` scripts and styles; workers, which fall back to `default-src 'none'` with no `worker-src`, `src/lib/preview.ts:57–71`). Bundle size, cold start, seek accuracy vs the MP4 (SSIM, as in S7), bridge round trip | Local Playwright spike modelled on `spikes/s2` | 0 credits |
+| **E5** | Determinism and offline: are the same props rendered twice identical? Do fonts load through `@remotion/fonts` and `staticFile` with the network blocked? Does `OffthreadVideo` work with library clips? Which config files does Remotion's webpack setup read from `video/` (babel, postcss, browserslist, `.env`), so the allowed-paths list (§5.1) is complete? Is a `REMOTION_` variable inlined into the bundle through the Node `bundle()` API too, or only through the CLI? | Local | 0 credits |
+| **E6** | What's left on licensing (start now): ask Remotion to confirm that this template's use is Automators, that the Player is covered, and that our local spikes E3–E5 count as evaluation; when 5.0 ships and what else it changes; does `/remotion-to-hyperframes` render the original with Remotion? The key's format and the free-license value are already answered (§1) | Read the repos, docs and Terms; email Remotion | 0 |
 
-Only E6 runs before open question 1 is settled. E3–E5 are local, but under a cautious reading of the Terms, setting up
-the stack ends evaluation, so they wait for a license (or Remotion's written confirmation). Gate: the spikes are written
-up, and the owner picks the install option.
+E3–E6 run now:
+
+- E3–E5 are local, produce no commercial output, and fall under the Free License's evaluation clause ("evaluating
+  whether Remotion is a good fit, and … not yet using it in a commercial way"; the FAQ: "you can already evaluate
+  Remotion before using it commercially"). E6 states that reading in its email to Remotion.
+- E1–E2 run on Netlify's runner, so they wait for open question 1.
+
+Gate: the spikes are written up, and the owner confirms the install option.
 
 ### Phase 1: the engine seam, HyperFrames only (no behaviour change)
 
@@ -934,10 +1094,11 @@ up, and the owner picks the install option.
    `ScopeCheck` / `scopeCheckFor` hook (returning null until regenerate-beat registers HyperFrames').
 2. `contractOf`'s two callers (`bundles.ts:179`, `edits.ts:409`) switch on the version's engine. Non-HyperFrames
    returns `contract: null`.
-3. The `versions.engine` column (default `hyperframes`, the first migration in the cross-plan order), the run manifest
+3. The `versions.engine` column (default `hyperframes`, the first migration in the roadmap's order), the run manifest
    field, render-job's `engine` manifest field, and finalize's two engine checks.
-4. `scripts/lib/engines/types.ts`, `hyperframes.ts` and `scripts/engine.ts`. render-job and prepare-run call the run
-   engine, and prepare-run follows the step order in §4.3.
+4. `scripts/lib/engines/types.ts` and `hyperframes.ts` (`render`, `contract`, `version`). render-job calls the run
+   engine, and prepare-run follows the step order in §4.3, with the `scaffold`/`hydrate` hook points in step 1.
+   `scripts/engine.ts` waits for Phase 2.
 5. The DTO's `editing: { engine, capabilities }` next to `editable`.
 
 Gate: every existing test passes untouched, and the HyperFrames prompt is byte-identical (Phase 1 doesn't touch the
@@ -950,8 +1111,9 @@ prompt). The live gate is optional.
    (REST, MCP `create_video`, OpenAPI regenerated so the SDK and CLI get it), and the monthly render count on the Admin
    usage page.
 2. `engines/remotion/template/` with the `va/` runtime (music path only), its AGENTS.md and the locked-file hashes.
-   `scripts/lib/engines/remotion.ts` (scaffold, hydrate, check, snapshot, render, mix, render tally, key handling).
-   The install option from E1, and the pinned skills download.
+   It includes the generated `src/registry.ts` and the allowed-paths list.
+   `scripts/lib/engines/remotion.ts` (scaffold, hydrate, check, snapshot, render, mix, render tally, key handling,
+   install timeouts) and `scripts/engine.ts`. The install option from E1, and the pinned skills download.
 3. `EnginePrompt`: HyperFrames' lines moved word for word, plus the Remotion author and revision steps.
    `PROMPT_TEMPLATE_VERSION` +1 in merge order. The root `AGENTS.md` line added.
 4. UI:
@@ -961,7 +1123,7 @@ prompt). The live gate is optional.
    - Narration hidden;
    - Sound limited to Silent or Music.
 5. The README "Render engines" section, the trust-model line about license reporting, and the configuration table
-   rows (`ENGINES`, `REMOTION_LICENSE_KEY`).
+   rows (`ENGINES`, `VIDEO_AGENT_REMOTION_KEY`).
 
 Gate: the Phase 2 live gate passes, and E2's quality bar holds.
 
@@ -998,7 +1160,7 @@ Gate: the Phase 4 live gate.
 **Local mode** (cli-and-sdk plan): `video-agent local --engine remotion` needs `--accept-remotion-license`, and prints
 this plan's license notice once. The CLI runtime bundle carries `engines/remotion/template/` (the lockfile, not
 `node_modules`) and runs `npm ci --ignore-scripts` on first use. On someone's own machine an individual is on the Free
-License, so local mode passes `"free-license"` unless they set `REMOTION_LICENSE_KEY`. It's the cheapest way to try
+License, so local mode passes `"free-license"` unless they set `VIDEO_AGENT_REMOTION_KEY`. It's the cheapest way to try
 the engine.
 
 ---
@@ -1020,15 +1182,23 @@ the engine.
 - **Install time and cost** could make every Remotion video slower and pricier. E1 decides, and option C exists.
 - **Supply chain:**
   - Runs install from npm: lockfile integrity hashes, `npm ci --ignore-scripts`, exact versions.
-  - Restored archives carry config: the locked-file hashes (§5.1).
+  - Restored archives carry config: the locked-file hashes and the allowed-paths list (§5.1).
+  - Installs that hang: a timeout per step and `engine_install_failed`, so they don't burn credits to the deadline.
   - The browser download isn't pinned by Remotion: option C, or our own pinned hash.
   - Skills come from GitHub at scaffold time: a pinned commit and a checked hash.
-- **The key leaking:** never on a command line, read from env inside the renderer process, masked in logs.
-- **Telemetry egress:** Remotion learns each deployment's domain and IP and how often it renders. That's disclosed, and
+- **The key leaking:**
+  - never on a command line, read from env inside the renderer process, masked in logs;
+  - not `REMOTION_`-prefixed, so Remotion's CLI doesn't inline it into composition code, and `process.env` is banned
+    in `src/`.
+  - A leaked key lets someone have renders reported against the deployer's remotion.pro account. Admins are told to
+    rotate it on remotion.pro.
+- **Telemetry egress:** Remotion learns which license key rendered, how often, and whether it was production or
+  development (server-side renders don't send the domain or IP), and keeps it indefinitely. That's disclosed, and
   inherent in using Remotion at all from 5.0.
-- **Snapshot rounds** cost time and renders. They're batched into one sequence per call, the bundle is cached, and the
-  prompt says each call costs.
-- **Remotion 5.0** changes the license (contractors count, reporting mandatory) and may change APIs. We pin 4.0.x and
+- **Snapshot rounds** cost time and renders. Each call renders its stills on one browser, the bundle is cached, every
+  still is reported, and the prompt says each call costs.
+- **Remotion 5.0** changes the license (contractors written in, reporting mandatory), APIs (`inputProps` required)
+  and output bytes (`bt709`, ANGLE). We pin 4.0.x and
   plan the move as its own change (open question 6). Our gate already sends a key or `"free-license"`, so the
   reporting rule needs no redesign.
 - **No transitions across beats (`TransitionSeries`)** in v1, because they overlap two sequences. That's a creative
@@ -1069,31 +1239,40 @@ Kept with their design, so nothing is lost:
 ## 14. Open questions for the owner
 
 1. **Does Netlify buy Remotion for Automators** (or get Remotion's written confirmation that our use is covered) before
-   any spike beyond E6, CI template tests, live gates and our own deployment? Building and testing the engine at
-   Netlify isn't evaluation once we're setting up the stack. *Recommended:* yes, Automators ($100 a month minimum), and
-   ask Remotion in E6 to confirm the Player is covered.
+   the runner spikes E1–E2, CI template tests, live gates and our own deployment? *Recommended:* yes, Automators ($100
+   a month minimum). Meanwhile, run the local spikes E3–E5 as evaluation, and ask Remotion in E6 to confirm both that
+   reading and that the Player is covered.
 2. **Two locks (env plus the admin's license choice), or env only?** *Recommended:* both. The env controls what runs
    install, and the dialog records a person's decision and picks the reporting key.
 3. **Live preview of Remotion edits with `@remotion/player` (Phase 3), or MP4-only editing?** *Recommended:* the
    Player, if E4 passes; MP4-only otherwise.
-4. **Install strategy: per run (B) or a primed, hash-checked tarball (C)?** *Recommended:* decide from E1; C if the
-   install takes more than about 60 seconds, since it also pins the browser.
-5. **`REMOTION_LICENSE_KEY` scopes "builds and functions"**, so the server can see it's set (never its value)?
-   *Recommended:* yes, marked secret.
-6. **Remotion version:** pin 4.0.540 and plan 5.0 as its own change? *Recommended:* yes. Our key handling already
-   meets 5.0's reporting rule.
+4. **Install strategy: per run (B) or a primed, hash-checked tarball (C)?** *Recommended:* C, with B as the fallback
+   before a tarball is primed. C pins the browser and `node_modules` to a hash the server chose, even if B is fast.
+   E1 confirms the Blobs download works and is timed.
+5. **`VIDEO_AGENT_REMOTION_KEY` scopes "builds and functions"**, so the server can see it's set (never its value)?
+   *Recommended:* yes, marked secret. The name avoids the `REMOTION_` prefix on purpose.
+6. **Remotion version:** pin 4.0.540 and plan 5.0 as its own change? *Recommended:* yes.
+   - Pin the `@remotion/compositor-*` packages explicitly in the template lockfile.
+   - Our key handling already meets 5.0's reporting rule.
+   - The move redoes E2's CRF and size calibration for `bt709` and ANGLE.
 7. **A fully open second engine (Motion Canvas, MIT): now or later?** *Recommended:* later. Ship the interface and
    conformance suite and invite one from the community.
 8. **Import a Remotion project into HyperFrames as its own small plan after Looks?** *Recommended:* yes, once E6 says
    whether the skill renders with Remotion.
 9. **Turn Remotion on for our own deployment once licensed?** *Recommended:* yes, so we use what we ship.
-10. **Is per-render license reporting to remotion.pro (domain, IP, production or development, video or still)
-    acceptable for Netlify's own deployment?** *Recommended:* yes. It sends no content, it's mandatory from 5.0
-    anyway, and it's disclosed.
+10. **Is per-render license reporting to remotion.pro (license key, event type, production or development; kept
+    indefinitely) acceptable for Netlify's own deployment?** *Recommended:* yes. Server-side renders send no domain,
+    IP or content, it's mandatory from 5.0 anyway, and it's disclosed.
 
 ---
 
-## 15. Review log (draft 1 → 2)
+## 15. Review log
+
+### Draft 1 → 2
+
+The cross-plan seam review's rule numbers below are that review's numbering. The plan body now cites the roadmap's
+shared rules 1–10.
+
 
 **Independent review (Fable 5.1, "sound with changes")**
 
@@ -1139,6 +1318,38 @@ Kept with their design, so nothing is lost:
 | Shared rule 15: people-facing "scene" | **Adopted** | "Redo a scene" in §6; code keeps `beat` |
 | Build order and migration order | **Adopted** | §11 header, §4.2 |
 
+### Draft 2 → 3 (remote review: Fable 5.1, high effort, Netlify Agent Run at `19740d8`, "sound with changes")
+
+| Item | Decision | Why |
+| ---- | -------- | --- |
+| R1 Lock `src/Root.tsx` and `src/index.ts`; a generated, checked beat/layer registry | **Adopted** | A changed `Root.tsx` would pass `selectComposition` and make editor edits do nothing on screen. Webpack can't import by a runtime string, so the registry is `src/registry.ts`, generated with static imports (not the lazy `() => import()` the review sketched, so nothing loads asynchronously mid-render) |
+| R2 Snapshot stills through `renderStill()` on one browser, not `renderFrames()` | **Adopted** | The license-key docs list `renderMedia()` and `renderStill()`, not `renderFrames()`. The render-still docs confirm `openBrowser()` + `puppeteerInstance` reuse. `renders` becomes `{ video, stills, audio }` (audio kept for Phase 4 instead of the review's two-field shape) |
+| R3 `delete` removes the beat's file so check rule 2 holds | **Adopted** | `EditOp` `delete` (`src/lib/contract.ts:1006`) only touches props otherwise. Also regenerates the registry; `reorder` and library `media` change no files |
+| R4 Freeze everything outside scoped beats on Remotion, mirroring regenerate-beat §4.4 | **Adopted** | Checked against `2026-11-04-regenerate-beat.md:315–316` ("byte-identical and still present … new files only under `assets/`"). Plus the registry is exempt, since it's regenerated |
+| R5 Phase 2 music level from ffmpeg on the source file, no audio render | **Adopted with a note** | With one bed and a linear gain the output's loudness is the source's plus the gain. Fades lower it slightly, inside the gate's ±1.5 LU. The full-mix audio render moves to Phase 4 |
+| R6 Correct telemetry contents and contractor wording | **Adopted with changes** | remotion.dev/docs/licensing: key, host domain (web-renderer only) and event type; IP only for `@remotion/web-renderer`; kept indefinitely. I couldn't confirm a "success flag", so the dialog doesn't claim one. The FAQ's collaboration rule (combined headcount) supports "people you work with count already"; the exact "contractors aggregate" quote wasn't confirmable, so the wording follows the FAQ's collaboration example |
+| R7 Rename the key off the `REMOTION_` prefix; ban `process.env` in `src/` | **Adopted with a note** | The env-variables docs confirm the CLI inlines `REMOTION_*` and reads `.env`. Our render uses the Node APIs, which don't pick env up by themselves, but agents can run the CLI, so the rename is cheap insurance. E5 checks the Node `bundle()` path |
+| R8 Install timeouts and `engine_install_failed` | **Adopted** | `runStreaming` takes `timeoutMs` (`scripts/lib/run-tools.ts:141`); deadline is `(22 + 3)` min (`reconciler.ts:174`) |
+| R9 Engine choice rule: "first listed engine that's enabled" | **Adopted** | Matches looks §4.14 (`2026-11-04-looks.md:603`); the coordinator's Looks note says the same |
+| R10 Phase 1 run side shrinks; `scripts/engine.ts` to Phase 2 | **Adopted with changes** | The roadmap puts local mode in wave 4, so the "consumer at once" reason was wrong. Phase 1 keeps the `RunEngine` type, the HyperFrames `render`/`contract`/`version` and prepare-run's order, with `scaffold`/`hydrate` as optional hook points so the order is fixed for wave-1 plans |
+| Claims: `licenseKey` from 4.0.409 | **Adopted** | The license-key page says so; 4.0.237 and 4.0.539 stay the reviewer's |
+| Claims: shared-rule numbers | **Adopted** | Body now cites roadmap rules 3 and 4 (`roadmap.md:35–61`); the draft 1 → 2 log keeps the seam review's numbers, with a note |
+| Claims: evaluation reading | **Adopted** | The License FAQ bounds evaluation by commercial use only, and draft 2's "setting up the stack" wording wasn't on remotion.dev. E3–E6 now run as local evaluation, which also matches the roadmap's wave 0 |
+| Claims: 5.0 `bt709` and ANGLE | **Adopted** | 5.0 migration guide and v4.0.498 release notes; added to §2, E2, Q6 |
+| Claims: preview CSP has `'unsafe-inline'` and no `worker-src` | **Adopted** | Verified at `src/lib/preview.ts:57–71`; E4 now reports which the Player needs |
+| Missed: other config files Remotion's toolchain loads | **Adopted** | An allowed-paths list in `hydrate`, `check` and finalize; E5 lists what webpack reads |
+| Missed: key blast radius, rotation | **Adopted** | §5.5, the dialog, §12 |
+| Missed: the license record on `/setup` and the detail call | **Adopted** | Admin-only; `GET /api/v1/engines` never returns it |
+| Missed: two Chrome installs per run | **Adopted** | E1 records both; feeds the credits note |
+| Over-built: the `/setup` run-log link | **Adopted** | Shows the error code only |
+| Over-built: option C's prime button before E1 | **Adopted** | Not beaded until E1 confirms; Q4's recommendation now leans C (the review's point about pinning) |
+| Over-built: `renders.sequences` | **Adopted** | Gone with R2 |
+| Seam: roadmap bumps the template in "engines 1 (only if a byte changes)" | **Not ours to change** | The plan bumps in Phase 2 and Phase 1 doesn't touch the prompt; recommended to the orchestrator: roadmap → "engines 2" |
+| Seam: regenerate-beat says "engines phase 3.5" | **Not ours to change** | It's Phase 3 here; reported to the orchestrator |
+| Coordinator (redo-a-scene draft 3): `scopeCheck` returns the spliced files | **Adopted** | One splice for render-job and finalize; `{ problems, files }` in both hooks |
+| Coordinator (redo-a-scene draft 3): feedback and scope stills last in prepare-run | **Adopted** | `feedbackStills` empties `video/feedback/` and runs last in `prepare()` today (`scripts/prepare-run.ts:459`) |
+| Coordinator (GitHub Action draft 3): the Action has no `engine` input | **Adopted** | Replaces draft 2's "the Action passes `engine` through"; the engine follows the look (§4.2), so the Action needs no Remotion-specific surface |
+
 ---
 
 ## Sources
@@ -1164,4 +1375,9 @@ Kept with their design, so nothing is lost:
   `@remotion/renderer`, `@remotion/player`, `@remotion/captions`, `@remotion/zod-types`, `@remotion/licensing`,
   `@remotion/fonts`, `@remotion/media-utils`; `dist.unpackedSize` of `@remotion/compositor-linux-x64-gnu`
 - `node_modules/netlify-agent-kit/README.md` (v0.4.0) for presets, skill sources, `files` and `run`
-- docs/plans/2026-11-04-*.md (sibling plans) and the cross-plan seam review
+- [Licensing (telemetry contents, 5.0 reporting)](https://www.remotion.dev/docs/licensing),
+  [Environment variables](https://www.remotion.dev/docs/env-variables), [renderStill()](https://remotion.dev/docs/renderer/render-still),
+  [renderFrames()](https://remotion.dev/docs/renderer/render-frames), [Color space](https://www.remotion.dev/docs/options/color-space),
+  [v4.0.498 release notes](https://github.com/remotion-dev/remotion/releases/tag/v4.0.498)
+- docs/plans/2026-11-04-*.md (sibling plans), `docs/plans/2026-11-04-roadmap.md`, the cross-plan seam review, and the
+  remote round-3 review (`.nax/agent-sessions/6aebad89fdf415daea61c8b7/result.md`)
