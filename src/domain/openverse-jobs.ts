@@ -29,7 +29,7 @@ import {
   type SearchQuery,
   type SearchRequest,
 } from './openverse.js'
-import { assertCan, type Principal } from './policy.js'
+import { assertCan, userPrincipal, type Principal } from './policy.js'
 import type { OpenverseJobKind, OpenverseJobRow } from './types.js'
 
 /** How long a job (and its result) can be read. */
@@ -411,14 +411,7 @@ async function jobPrincipal(deps: Deps, job: OpenverseJobRow): Promise<Principal
   if (job.userId === SYSTEM_USER_ID) return null
   const user = await deps.store.getUser(job.userId)
   if (!user || user.disabledAt) throw new ApiError('forbidden', 'Your account is no longer active.')
-  const p: Principal = {
-    kind: 'user',
-    userId: user.id,
-    email: user.email,
-    name: user.name,
-    role: user.role,
-    apiKeyId: null,
-  }
+  const p = userPrincipal(user)
   assertCan(p, 'media:upload')
   return p
 }

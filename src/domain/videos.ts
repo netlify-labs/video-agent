@@ -44,6 +44,7 @@ import {
   type OutputRow,
   type PublicationRow,
   type Stage,
+  type VersionMediaRow,
   type VersionRow,
   type VideoSound,
   type Voiceover,
@@ -150,6 +151,27 @@ export async function consumePlan(
       plan.voiceover ?? (plan.brief.voiceover ? { voice: null, speed: null, script: null } : null),
       plan.brief,
     ),
+  }
+}
+
+/**
+ * A new version's sound and voice-over: the request's, else the plan's, else the parent's (silent and none for a new
+ * video). A new audio pick (one not in `inherited`) turns music on for a silent video.
+ */
+export function versionAudio(
+  input: { sound?: VideoSound | undefined; voiceover?: VoiceoverInput | undefined },
+  planned: { sound: VideoSound | null; voiceover: Voiceover | null } | null,
+  parent: Pick<VersionRow, 'sound' | 'voiceover'> | null,
+  media: VersionMediaRow[],
+  inherited: VersionMediaRow[] = [],
+): { sound: VideoSound; voiceover: Voiceover | null } {
+  const parentSound = parent?.sound ?? 'silent'
+  const newAudio = media.some((m) => m.kind === 'audio' && !inherited.some((r) => r.mediaId === m.mediaId))
+  return {
+    sound: input.sound ?? planned?.sound ?? (parentSound === 'silent' && newAudio ? 'music' : parentSound),
+    voiceover: input.voiceover
+      ? voiceoverFrom(input.voiceover)
+      : (planned?.voiceover ?? parent?.voiceover ?? null),
   }
 }
 
@@ -339,8 +361,7 @@ export async function createVideo(
         createdAt: now,
         plan: planned?.frozen ?? null,
         // A picked audio item means music unless the person chose otherwise.
-        sound: input.sound ?? planned?.sound ?? (media.some((m) => m.kind === 'audio') ? 'music' : 'silent'),
-        voiceover: input.voiceover ? voiceoverFrom(input.voiceover) : (planned?.voiceover ?? null),
+        ...versionAudio(input, planned, null, media),
       })
       await repo.insertAttempt(newAttempt(deps, jobId, 1, now))
       return { status: 202, body: await videoDto(repo, deps, jobId, principal) }
@@ -426,11 +447,6 @@ export async function reviseVideo(
         [...(planned?.mediaIds ?? []), ...(input.mediaIds ?? [])],
         inherited,
       )
-      // Sound is inherited unless changed; a new audio pick turns music on for a silent video.
-      const parentSound = parent.sound ?? 'silent'
-      const newAudio = media.some(
-        (m) => m.kind === 'audio' && !inherited.some((r) => r.mediaId === m.mediaId),
-      )
       await repo.insertVersion({
         jobId,
         n,
@@ -448,12 +464,9 @@ export async function reviseVideo(
         status: 'queued',
         createdAt: now,
         plan: planned?.frozen ?? null,
-        sound:
-          input.sound ?? planned?.sound ?? (parentSound === 'silent' && newAudio ? 'music' : parentSound),
-        // A plan without a voice-over choice keeps the parent's; turning it off is an explicit enabled: false.
-        voiceover: input.voiceover
-          ? voiceoverFrom(input.voiceover)
-          : (planned?.voiceover ?? parent.voiceover ?? null),
+        // Sound and voice-over are inherited unless changed; a plan without a voice-over choice keeps the parent's
+        // (turning it off is an explicit enabled: false).
+        ...versionAudio(input, planned, parent, media, inherited),
       })
       await repo.insertVersionComments(feedback)
       await repo.insertVersionMedia(media)

@@ -26,10 +26,11 @@ import {
   deriveTitle,
   loadJob,
   newAttempt,
+  versionAudio,
   videoDto,
   withIdempotency,
 } from './videos.js'
-import { voiceoverFrom, type VoiceoverInput } from './voiceover.js'
+import type { VoiceoverInput } from './voiceover.js'
 
 export interface RemixInput {
   prompt: string
@@ -234,10 +235,6 @@ export async function remixVideo(
       const kept = finalIds ? inherited.filter((m) => finalIds.includes(m.mediaId)) : inherited
       const picks = [...(planned?.mediaIds ?? []), ...(finalIds ?? [])]
       const media = await snapshotMedia(repo, newJobId, 1, picks, kept)
-      const sourceSound = version.sound ?? 'silent'
-      const newAudio = media.some(
-        (m) => m.kind === 'audio' && !inherited.some((r) => r.mediaId === m.mediaId),
-      )
       await repo.insertVersion({
         jobId: newJobId,
         n: 1,
@@ -252,11 +249,7 @@ export async function remixVideo(
         status: 'queued',
         createdAt: now,
         plan: planned?.frozen ?? null,
-        sound:
-          input.sound ?? planned?.sound ?? (sourceSound === 'silent' && newAudio ? 'music' : sourceSound),
-        voiceover: input.voiceover
-          ? voiceoverFrom(input.voiceover)
-          : (planned?.voiceover ?? version.voiceover ?? null),
+        ...versionAudio(input, planned, version, media, inherited),
         remix,
       })
       await repo.insertVersionMedia(media)

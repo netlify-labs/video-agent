@@ -1,7 +1,7 @@
 // Who can do what: one action × role matrix (plan v2 §3), enforced here so REST, MCP and the UI agree.
 // Every route calls `assertCan`; policy.test.ts enumerates every route.
 import { ApiError } from '../lib/errors.js'
-import type { Role } from './types.js'
+import type { Role, UserRow } from './types.js'
 
 export interface Principal {
   kind: 'user' | 'apiKey' | 'oauth'
@@ -14,6 +14,16 @@ export interface Principal {
   oauthGrantId?: string
   oauthClientId?: string
 }
+
+/** A person acting as themselves (signed in, or on their behalf), not through an API key or connected app. */
+export const userPrincipal = (u: Pick<UserRow, 'id' | 'email' | 'name' | 'role'>): Principal => ({
+  kind: 'user',
+  userId: u.id,
+  email: u.email,
+  name: u.name,
+  role: u.role,
+  apiKeyId: null,
+})
 
 export type Action =
   | 'video:read'

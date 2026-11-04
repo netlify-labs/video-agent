@@ -16,10 +16,13 @@ import {
   or,
   sql,
   exists,
+  type Column,
+  type SQL,
 } from 'drizzle-orm'
+import type { PgTable } from 'drizzle-orm/pg-core'
 import type { PgAsyncDatabase } from 'drizzle-orm/pg-core/async/db'
 import * as t from '../../db/schema.js'
-import { SLOT_STAGES, TERMINAL_STAGES } from '../domain/types.js'
+import { MEDIA_ROLES, SLOT_STAGES, TERMINAL_STAGES } from '../domain/types.js'
 import type {
   ApiKeyRow,
   AttemptRow,
@@ -59,7 +62,7 @@ import type {
   SessionRow,
   UserIdentityRow,
 } from '../domain/types.js'
-import { addUsage, type UsageRow } from './memory.js'
+import { addUsage, byVersion, withoutJob, type UsageRow } from './memory.js'
 import type { Repo, Store } from './types.js'
 import { searchWords } from '../lib/search.js'
 
@@ -68,6 +71,14 @@ type Db = PgAsyncDatabase<any, any, any>
 
 // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- the caller names the row type
 const one = <T>(rows: unknown[]): T | null => (rows[0] as T | undefined) ?? null
+/** A select, as `select … for update` when the caller locks the row. */
+const lockIf = <R>(
+  q: PromiseLike<R> & { for(strength: 'update'): PromiseLike<R> },
+  opts?: { lock?: boolean },
+) => (opts?.lock ? q.for('update') : q)
+/** Keyset paging: rows after cursor `c`, newest first. */
+const olderThan = (table: { createdAt: Column; id: Column }, c: { createdAt: string; id: string }) =>
+  or(lt(table.createdAt, c.createdAt), and(eq(table.createdAt, c.createdAt), lt(table.id, c.id)))
 const nonDue = [...TERMINAL_STAGES, 'queued', 'unresolved']
 /** A version's credited media: the version_media row and the media item's source and licence. */
 const MEDIA_PROVENANCE = {
@@ -111,17 +122,6 @@ async function narrationProvenance(db: Db, jobIds: string[]) {
     narration: true,
   })) as (VersionProvenanceRow & { jobId: string })[]
 }
-const withoutJob = <T extends { jobId: string }>(r: T): Omit<T, 'jobId'> => {
-  const row: Partial<T> = { ...r }
-  delete row.jobId
-  return row as Omit<T, 'jobId'>
-}
-/** version_media rows first, then narration ones, each version in turn. */
-const byVersion = <T extends VersionProvenanceRow>(rows: T[]) =>
-  rows.sort(
-    (a, b) =>
-      a.versionN - b.versionN || Number(!!a.narration) - Number(!!b.narration) || a.position - b.position,
-  )
 
 /** Library queries leave narration takes out, except `takesOf`'s own that GC isn't deleting. */
 const takeVisible = (takesOf: string | undefined) =>
@@ -130,6 +130,12 @@ const takeVisible = (takesOf: string | undefined) =>
     : isNull(t.media.role)
 
 function repoFor(db: Db): Repo {
+  /** `select 1 from table where …`, for exists() and notExists(). */
+  const anyRow = (table: PgTable, where: SQL | undefined) =>
+    db
+      .select({ one: sql`1` })
+      .from(table)
+      .where(where)
   return {
     getSettings: async () => one<SettingsRow>(await db.select().from(t.settings).where(eq(t.settings.id, 1))),
     insertSettingsIfAbsent: async (row) => {
@@ -167,10 +173,8 @@ function repoFor(db: Db): Repo {
     insertJob: async (row) => {
       await db.insert(t.jobs).values(row)
     },
-    getJob: async (id, opts) => {
-      const q = db.select().from(t.jobs).where(eq(t.jobs.id, id))
-      return one<JobRow>(opts?.lock ? await q.for('update') : await q)
-    },
+    getJob: async (id, opts) =>
+      one<JobRow>(await lockIf(db.select().from(t.jobs).where(eq(t.jobs.id, id)), opts)),
     updateJob: async (id, patch) => {
       await db.update(t.jobs).set(patch).where(eq(t.jobs.id, id))
     },
@@ -182,34 +186,27 @@ function repoFor(db: Db): Repo {
         if (visible) conds.push(visible)
       }
       if (q.status) conds.push(eq(t.jobs.status, q.status))
-      const livePub = db
-        .select({ one: sql`1` })
-        .from(t.publications)
-        .where(and(eq(t.publications.jobId, t.jobs.id), isNull(t.publications.unpublishedAt)))
+      const livePub = anyRow(
+        t.publications,
+        and(eq(t.publications.jobId, t.jobs.id), isNull(t.publications.unpublishedAt)),
+      )
       if (q.published === true) conds.push(exists(livePub))
       if (q.published === false) conds.push(sql`not ${exists(livePub)}`)
       if (q.favoriteOf) {
-        const starred = db
-          .select({ one: sql`1` })
-          .from(t.favorites)
-          .where(and(eq(t.favorites.jobId, t.jobs.id), eq(t.favorites.userId, q.favoriteOf)))
-        conds.push(exists(starred))
+        const starred = and(eq(t.favorites.jobId, t.jobs.id), eq(t.favorites.userId, q.favoriteOf))
+        conds.push(exists(anyRow(t.favorites, starred)))
       }
       if (q.q) {
         const like = `%${q.q.replace(/[%_\\]/g, (c) => `\\${c}`)}%`
-        const promptMatch = db
-          .select({ one: sql`1` })
-          .from(t.versions)
-          .where(and(eq(t.versions.jobId, t.jobs.id), ilike(t.versions.prompt, like)))
+        const promptMatch = anyRow(
+          t.versions,
+          and(eq(t.versions.jobId, t.jobs.id), ilike(t.versions.prompt, like)),
+        )
         const titleOrPrompt = or(ilike(t.jobs.title, like), exists(promptMatch))
         if (titleOrPrompt) conds.push(titleOrPrompt)
       }
       if (q.cursor) {
-        const c = q.cursor
-        const before = or(
-          lt(t.jobs.createdAt, c.createdAt),
-          and(eq(t.jobs.createdAt, c.createdAt), lt(t.jobs.id, c.id)),
-        )
+        const before = olderThan(t.jobs, q.cursor)
         if (before) conds.push(before)
       }
       return (await db
@@ -245,10 +242,8 @@ function repoFor(db: Db): Repo {
     insertAttempt: async (row) => {
       await db.insert(t.attempts).values(row)
     },
-    getAttempt: async (id, opts) => {
-      const q = db.select().from(t.attempts).where(eq(t.attempts.id, id))
-      return one<AttemptRow>(opts?.lock ? await q.for('update') : await q)
-    },
+    getAttempt: async (id, opts) =>
+      one<AttemptRow>(await lockIf(db.select().from(t.attempts).where(eq(t.attempts.id, id)), opts)),
     updateAttempt: async (id, patch, expectStage) => {
       const where = expectStage
         ? and(eq(t.attempts.id, id), eq(t.attempts.stage, expectStage))
@@ -419,10 +414,8 @@ function repoFor(db: Db): Repo {
     insertPlan: async (row) => {
       await db.insert(t.plans).values(row)
     },
-    getPlan: async (id, opts) => {
-      const q = db.select().from(t.plans).where(eq(t.plans.id, id))
-      return one<PlanRow>(opts?.lock ? await q.for('update') : await q)
-    },
+    getPlan: async (id, opts) =>
+      one<PlanRow>(await lockIf(db.select().from(t.plans).where(eq(t.plans.id, id)), opts)),
     updatePlan: async (id, patch) => {
       await db.update(t.plans).set(patch).where(eq(t.plans.id, id))
     },
@@ -446,10 +439,7 @@ function repoFor(db: Db): Repo {
       const n = t.notifications
       const conds = [eq(n.userId, userId)]
       if (q.before) {
-        const older = or(
-          lt(n.createdAt, q.before.createdAt),
-          and(eq(n.createdAt, q.before.createdAt), lt(n.id, q.before.id)),
-        )
+        const older = olderThan(n, q.before)
         if (older) conds.push(older)
       }
       return (await db
@@ -532,12 +522,7 @@ function repoFor(db: Db): Repo {
                 ilike(m.creator, like),
               )
             }),
-            q.before && (q.sort ?? 'newest') === 'newest'
-              ? or(
-                  lt(m.createdAt, q.before.createdAt),
-                  and(eq(m.createdAt, q.before.createdAt), lt(m.id, q.before.id)),
-                )
-              : undefined,
+            q.before && (q.sort ?? 'newest') === 'newest' ? olderThan(m, q.before) : undefined,
           ),
         )
         .orderBy(
@@ -572,10 +557,10 @@ function repoFor(db: Db): Repo {
     insertUpload: async (row) => {
       await db.insert(t.mediaUploads).values(row)
     },
-    getUpload: async (id, opts) => {
-      const q = db.select().from(t.mediaUploads).where(eq(t.mediaUploads.id, id))
-      return one<MediaUploadRow>(opts?.lock ? await q.for('update') : await q)
-    },
+    getUpload: async (id, opts) =>
+      one<MediaUploadRow>(
+        await lockIf(db.select().from(t.mediaUploads).where(eq(t.mediaUploads.id, id)), opts),
+      ),
     updateUpload: async (id, patch) => {
       await db.update(t.mediaUploads).set(patch).where(eq(t.mediaUploads.id, id))
     },
@@ -817,15 +802,7 @@ function repoFor(db: Db): Repo {
             isNotNull(m.role),
             isNull(m.deletedAt),
             isNull(m.deletingAt),
-            or(
-              eq(m.scopeJobId, jobId),
-              exists(
-                db
-                  .select({ one: sql`1` })
-                  .from(r)
-                  .where(and(eq(r.mediaId, m.id), eq(r.jobId, jobId))),
-              ),
-            ),
+            or(eq(m.scopeJobId, jobId), exists(anyRow(r, and(eq(r.mediaId, m.id), eq(r.jobId, jobId))))),
           ),
         )
         .orderBy(desc(m.createdAt), desc(m.id))
@@ -840,12 +817,7 @@ function repoFor(db: Db): Repo {
           and(
             isNotNull(m.role),
             isNull(m.deletingAt),
-            notExists(
-              db
-                .select({ one: sql`1` })
-                .from(t.mediaRefs)
-                .where(eq(t.mediaRefs.mediaId, m.id)),
-            ),
+            notExists(anyRow(t.mediaRefs, eq(t.mediaRefs.mediaId, m.id))),
             q.uploaderId ? eq(m.uploaderId, q.uploaderId) : undefined,
             q.due
               ? or(
@@ -858,10 +830,10 @@ function repoFor(db: Db): Repo {
         .orderBy(asc(m.createdAt), asc(m.id))
         .limit(q.limit)) as MediaRow[]
     },
-    getNarrationLock: async (jobId, opts) => {
-      const q = db.select().from(t.narrationLocks).where(eq(t.narrationLocks.jobId, jobId))
-      return one<NarrationLockRow>(opts?.lock ? await q.for('update') : await q)
-    },
+    getNarrationLock: async (jobId, opts) =>
+      one<NarrationLockRow>(
+        await lockIf(db.select().from(t.narrationLocks).where(eq(t.narrationLocks.jobId, jobId)), opts),
+      ),
     acquireNarrationLock: async (row, staleBefore) => {
       const l = t.narrationLocks
       const rows = await db
@@ -1019,10 +991,8 @@ function repoFor(db: Db): Repo {
     insertEdit: async (row) => {
       await db.insert(t.edits).values(row)
     },
-    getEdit: async (id, opts) => {
-      const q = db.select().from(t.edits).where(eq(t.edits.id, id))
-      return one<EditRow>(opts?.lock ? await q.for('update') : await q)
-    },
+    getEdit: async (id, opts) =>
+      one<EditRow>(await lockIf(db.select().from(t.edits).where(eq(t.edits.id, id)), opts)),
     updateEdit: async (id, patch) => {
       await db.update(t.edits).set(patch).where(eq(t.edits.id, id))
     },
@@ -1053,10 +1023,10 @@ function repoFor(db: Db): Repo {
         .where(lt(t.edits.expiresAt, now))
         .orderBy(asc(t.edits.expiresAt))
         .limit(limit)) as EditRow[],
-    getCheckpoint: async (attemptId, opts) => {
-      const q = db.select().from(t.checkpoints).where(eq(t.checkpoints.attemptId, attemptId))
-      return one<CheckpointRow>(opts?.lock ? await q.for('update') : await q)
-    },
+    getCheckpoint: async (attemptId, opts) =>
+      one<CheckpointRow>(
+        await lockIf(db.select().from(t.checkpoints).where(eq(t.checkpoints.attemptId, attemptId)), opts),
+      ),
     putCheckpoint: async (row) => {
       // Even two racing first posts keep the highest seq.
       await db
@@ -1216,8 +1186,7 @@ function repoFor(db: Db): Repo {
         'consentHash' in by
           ? eq(t.oauthRequests.consentHash, by.consentHash)
           : eq(t.oauthRequests.codeHash, by.codeHash)
-      const q = db.select().from(t.oauthRequests).where(where)
-      return one<OAuthRequestRow>(opts?.lock ? await q.for('update') : await q)
+      return one<OAuthRequestRow>(await lockIf(db.select().from(t.oauthRequests).where(where), opts))
     },
     updateOAuthRequest: async (id, patch) => {
       await db.update(t.oauthRequests).set(patch).where(eq(t.oauthRequests.id, id))
@@ -1251,10 +1220,10 @@ function repoFor(db: Db): Repo {
     insertOAuthToken: async (row) => {
       await db.insert(t.oauthTokens).values(row)
     },
-    getOAuthToken: async (hash, opts) => {
-      const q = db.select().from(t.oauthTokens).where(eq(t.oauthTokens.hash, hash))
-      return one<OAuthTokenRow>(opts?.lock ? await q.for('update') : await q)
-    },
+    getOAuthToken: async (hash, opts) =>
+      one<OAuthTokenRow>(
+        await lockIf(db.select().from(t.oauthTokens).where(eq(t.oauthTokens.hash, hash)), opts),
+      ),
     updateOAuthToken: async (hash, patch) => {
       await db.update(t.oauthTokens).set(patch).where(eq(t.oauthTokens.hash, hash))
     },
@@ -1272,24 +1241,15 @@ function repoFor(db: Db): Repo {
           .where(or(sql`${t.oauthGrants.revokedAt} is not null`, lte(t.oauthGrants.expiresAt, now)))
           .returning({ id: t.oauthGrants.id }),
       )
-      const liveGrant = db
-        .select({ one: sql`1` })
-        .from(t.oauthGrants)
-        .where(eq(t.oauthGrants.id, t.oauthTokens.grantId))
+      const liveGrant = anyRow(t.oauthGrants, eq(t.oauthGrants.id, t.oauthTokens.grantId))
       n += count(
         await db
           .delete(t.oauthTokens)
           .where(or(lte(t.oauthTokens.expiresAt, now), sql`not ${exists(liveGrant)}`))
           .returning({ hash: t.oauthTokens.hash }),
       )
-      const grantUses = db
-        .select({ one: sql`1` })
-        .from(t.oauthGrants)
-        .where(eq(t.oauthGrants.clientId, t.oauthClients.id))
-      const requestUses = db
-        .select({ one: sql`1` })
-        .from(t.oauthRequests)
-        .where(eq(t.oauthRequests.clientId, t.oauthClients.id))
+      const grantUses = anyRow(t.oauthGrants, eq(t.oauthGrants.clientId, t.oauthClients.id))
+      const requestUses = anyRow(t.oauthRequests, eq(t.oauthRequests.clientId, t.oauthClients.id))
       n += count(
         await db
           .delete(t.oauthClients)
@@ -1446,7 +1406,7 @@ function repoFor(db: Db): Repo {
         .where(
           and(
             eq(m.uploaderId, uploaderId),
-            inArray(m.role, ['narration-take', 'narration-upload']),
+            inArray(m.role, MEDIA_ROLES),
             sql`${m.status} <> 'rejected'`,
             isNull(m.deletingAt),
           ),
@@ -1464,13 +1424,7 @@ function repoFor(db: Db): Repo {
       const rows = await db
         .select({ n: sql<number>`count(*)::int` })
         .from(m)
-        .where(
-          and(
-            eq(m.uploaderId, uploaderId),
-            inArray(m.role, ['narration-take', 'narration-upload']),
-            gte(m.createdAt, since),
-          ),
-        )
+        .where(and(eq(m.uploaderId, uploaderId), inArray(m.role, MEDIA_ROLES), gte(m.createdAt, since)))
       const u = t.mediaUploads
       const open = await db
         .select({ n: sql<number>`count(*)::int` })

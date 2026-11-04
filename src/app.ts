@@ -85,6 +85,7 @@ import { addPreview } from './domain/previews.js'
 import { myUsage, planningByUserWeek } from './domain/usage.js'
 import { ApiError, errorBody } from './lib/errors.js'
 import { MEDIA_KINDS } from './lib/media/classify.js'
+import { MEDIA_ROLES } from './domain/types.js'
 import { AUDIO_CATEGORIES, LICENSE_FILTERS } from './domain/openverse.js'
 import {
   COMMON_SEARCHES,
@@ -1489,7 +1490,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
                 sha256: z.string().regex(/^[0-9a-f]{64}$/),
                 caption: z.string().max(500).optional(),
                 role: z
-                  .enum(['narration-take', 'narration-upload'])
+                  .enum(MEDIA_ROLES)
                   .optional()
                   .openapi({ description: 'A voice-over recording (take) or uploaded narration' }),
                 scopeJobId: z

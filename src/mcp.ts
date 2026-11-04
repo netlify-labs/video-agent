@@ -29,7 +29,7 @@ import {
 } from './domain/openverse-jobs.js'
 import * as planning from './domain/plans.js'
 import { can, type Principal } from './domain/policy.js'
-import { SOUNDS, type Aspect } from './domain/types.js'
+import { SOUNDS, VERDICTS, type Aspect } from './domain/types.js'
 import {
   cancelVersion,
   createVideo,
@@ -893,7 +893,7 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "version": 2, "verdict":
       inputSchema: {
         video_id: z.string().describe('Video id (vid_…) or a link to it.'),
         version: z.number().int().positive(),
-        verdict: z.enum(['approved', 'changes_requested']).nullable(),
+        verdict: z.enum(VERDICTS).nullable(),
         note: z.string().max(500).optional(),
       },
     },

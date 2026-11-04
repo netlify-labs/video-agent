@@ -20,6 +20,7 @@ import {
   type NarrationTracks,
   type Span,
 } from '../../../../src/lib/timeline'
+import { DEFAULT_TRACKS } from '../../lib/narration-panel'
 import { musicLane, type LanePoint } from '../../lib/preview-mix'
 import type { MonitorPlan } from '../clock/monitor-schedule'
 
@@ -56,12 +57,7 @@ export interface MonitorStem {
 
 /** The tracks the monitor plays for a take: the op's (or the defaults with no op yet), with the take's AI voice. */
 export function monitorTracks(op: NarrationOp | null, audio?: MonitorAudio): NarrationTracks {
-  const base: NarrationTracks = op?.tracks ?? {
-    narration: { volumeDb: 0, muted: false, solo: false },
-    aiVoice: { mode: 'replace', volumeDb: -12 },
-    music: { duck: true, duckDb: -12 },
-    original: { muteAll: false },
-  }
+  const base: NarrationTracks = op?.tracks ?? structuredClone(DEFAULT_TRACKS)
   if (!audio) return base
   return {
     ...base,

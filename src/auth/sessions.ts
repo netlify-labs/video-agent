@@ -2,7 +2,7 @@
 // Sessions slide (30 days from last use), rotate daily, end on sign-out or when an admin disables the person, and
 // re-check the Netlify team rule at most once a day.
 import type { Deps } from '../deps.js'
-import type { Principal } from '../domain/policy.js'
+import { userPrincipal, type Principal } from '../domain/policy.js'
 import type { SessionRow, UserRow } from '../domain/types.js'
 import { emailDomain } from '../domain/auth.js'
 import { sha256Hex } from '../lib/crypto.js'
@@ -123,14 +123,7 @@ export async function principalFromSession(
   }
   if (now - Date.parse(user.lastSeenAt) >= TOUCH_MS)
     await deps.store.updateUser(user.id, { lastSeenAt: iso(now) })
-  return {
-    kind: 'user',
-    userId: user.id,
-    email: user.email,
-    name: user.name,
-    role: user.role,
-    apiKeyId: null,
-  }
+  return userPrincipal(user)
 }
 
 /** Sign-out: ends the request's session, if it has one. */

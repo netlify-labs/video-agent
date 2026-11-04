@@ -8,7 +8,8 @@ import type { PreviewFile, Previews } from '../lib/media/previews.js'
 import type { RunCredit } from '../lib/openverse-rules.js'
 
 export type Role = 'admin' | 'creator' | 'reviewer' | 'viewer'
-export type Aspect = '16:9' | '9:16' | '1:1' | '4:5'
+export const ASPECT_RATIOS = ['16:9', '9:16', '1:1', '4:5'] as const
+export type Aspect = (typeof ASPECT_RATIOS)[number]
 /** What a run does with sound: nothing (the default), a music bed, or music plus effects on visible actions. */
 export const SOUNDS = ['silent', 'music', 'music_sfx'] as const
 export type VideoSound = (typeof SOUNDS)[number]
@@ -596,7 +597,8 @@ export interface CommentRow {
 export type MediaStatus = 'uploading' | 'verifying' | 'ready' | 'rejected'
 
 /** Recorded voice-over audio; library items have none. */
-export type MediaRole = 'narration-take' | 'narration-upload'
+export const MEDIA_ROLES = ['narration-take', 'narration-upload'] as const
+export type MediaRole = (typeof MEDIA_ROLES)[number]
 
 export interface MediaRow extends MediaProvenance {
   id: string
@@ -829,7 +831,8 @@ export interface OwnershipTransferRow {
   at: string
 }
 
-export type Verdict = 'approved' | 'changes_requested'
+export const VERDICTS = ['approved', 'changes_requested'] as const
+export type Verdict = (typeof VERDICTS)[number]
 
 export interface VerdictRow {
   jobId: string

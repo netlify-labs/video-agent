@@ -11,7 +11,7 @@ import { ApiError } from '../lib/errors.js'
 import { LIMITS } from '../lib/media/classify.js'
 import type { OpenverseTrack } from '../lib/openverse-rules.js'
 import type { Repo } from '../store/types.js'
-import { can, type Principal } from './policy.js'
+import { can, userPrincipal } from './policy.js'
 import { FAST_MODEL } from './gateway-models.js'
 import { snapshotMedia } from './media.js'
 import { importedTrack, searchRequest, type SearchPage } from './openverse.js'
@@ -269,15 +269,7 @@ export async function libraryTrack(
 ): Promise<MediaRow | null> {
   const author = await deps.store.getUser(version.authorId)
   if (!author || author.disabledAt) return null
-  const p: Principal = {
-    kind: 'user',
-    userId: author.id,
-    email: author.email,
-    name: author.name,
-    role: author.role,
-    apiKeyId: null,
-  }
-  if (!can(p, 'video:read')) return null
+  if (!can(userPrincipal(author), 'video:read')) return null
   const items: MediaRow[] = []
   let before: { createdAt: string; id: string } | undefined
   while (items.length < LIBRARY_SCAN) {

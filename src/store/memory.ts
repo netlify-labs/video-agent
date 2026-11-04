@@ -141,11 +141,40 @@ const rkey = (r: Pick<MediaRefRow, 'mediaId' | 'ownerKind' | 'ownerId'>) =>
   `${r.mediaId}\n${r.ownerKind}\n${r.ownerId}`
 const byCreated = (a: MediaRefRow, b: MediaRefRow) =>
   a.createdAt.localeCompare(b.createdAt) || rkey(a).localeCompare(rkey(b))
-/** Library queries leave narration takes out, except `takesOf`'s own that GC isn't deleting. */
-const takeVisible = (m: MediaRow, takesOf: string | undefined) =>
-  m.role === null || (m.uploaderId === takesOf && m.deletingAt === null)
+type Keyed = { createdAt: string; id: string }
+const newestFirst = (a: Keyed, b: Keyed) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id)
+const oldestFirst = (a: Keyed, b: Keyed) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)
+/** Keyset paging: `r` comes after cursor `c` newest first. */
+const olderThan = (r: Keyed, c: Keyed) =>
+  r.createdAt < c.createdAt || (r.createdAt === c.createdAt && r.id < c.id)
+/**
+ * Library queries: undeleted items, ready or `includePendingOf`'s own, leaving narration takes out except `takesOf`'s
+ * own that GC isn't deleting.
+ */
+const libraryVisible = (
+  m: MediaRow,
+  q: { includePendingOf?: string | undefined; takesOf?: string | undefined },
+) =>
+  !m.deletedAt &&
+  (m.status === 'ready' || m.uploaderId === q.includePendingOf) &&
+  (m.role === null || (m.uploaderId === q.takesOf && m.deletingAt === null))
 const ikey = (provider: string, subject: string) => `${provider}\n${subject}`
 const live = (leaseUntil: string | null, now: string) => leaseUntil !== null && leaseUntil > now
+/** Applies a patch to the row at `k`, if there is one. */
+const patchRow = <T extends object>(m: Map<string, T>, k: string, patch: Partial<T>) => {
+  const r = m.get(k)
+  if (r) Object.assign(r, clone(patch))
+}
+/** Deletes the entries `drop` picks and returns how many. */
+const deleteWhere = <T>(m: Map<string, T>, drop: (v: T, k: string) => boolean) => {
+  let n = 0
+  for (const [k, v] of m)
+    if (drop(v, k)) {
+      m.delete(k)
+      n++
+    }
+  return n
+}
 
 export function createMemoryStore(): Store & { reset(): void; dump(): State } {
   let state = empty()
@@ -175,10 +204,7 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
       if (!state.users.has(row.id)) state.users.set(row.id, clone(row))
       return clone(state.users.get(row.id) as UserRow)
     },
-    updateUser: async (id, patch) => {
-      const u = state.users.get(id)
-      if (u) Object.assign(u, clone(patch))
-    },
+    updateUser: async (id, patch) => patchRow(state.users, id, patch),
     listUsers: async () =>
       clone([...state.users.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt))),
 
@@ -192,20 +218,14 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
           .filter((k) => k.ownerId === ownerId)
           .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
       ),
-    updateKey: async (id, patch) => {
-      const k = state.keys.get(id)
-      if (k) Object.assign(k, clone(patch))
-    },
+    updateKey: async (id, patch) => patchRow(state.keys, id, patch),
 
     insertJob: async (row) => {
       if (state.jobs.has(row.id)) throw new Error(`duplicate job ${row.id}`)
       state.jobs.set(row.id, clone(row))
     },
     getJob: async (id) => clone(state.jobs.get(id) ?? null),
-    updateJob: async (id, patch) => {
-      const j = state.jobs.get(id)
-      if (j) Object.assign(j, clone(patch))
-    },
+    updateJob: async (id, patch) => patchRow(state.jobs, id, patch),
     listJobs: async (q: JobQuery) => {
       const published = new Set(
         [...state.publications.values()].filter((p) => p.unpublishedAt === null).map((p) => p.jobId),
@@ -228,10 +248,10 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
             ),
         )
       }
-      rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))
+      rows.sort(newestFirst)
       if (q.cursor) {
         const c = q.cursor
-        rows = rows.filter((j) => j.createdAt < c.createdAt || (j.createdAt === c.createdAt && j.id < c.id))
+        rows = rows.filter((j) => olderThan(j, c))
       }
       return clone(rows.slice(0, q.limit))
     },
@@ -243,10 +263,7 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
     getVersion: async (jobId, n) => clone(state.versions.get(vkey(jobId, n)) ?? null),
     listVersions: async (jobId) =>
       clone([...state.versions.values()].filter((v) => v.jobId === jobId).sort((a, b) => b.n - a.n)),
-    updateVersion: async (jobId, n, patch) => {
-      const v = state.versions.get(vkey(jobId, n))
-      if (v) Object.assign(v, clone(patch))
-    },
+    updateVersion: async (jobId, n, patch) => patchRow(state.versions, vkey(jobId, n), patch),
 
     insertAttempt: async (row) => {
       state.attempts.set(row.id, clone(row))
@@ -319,10 +336,7 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
           .filter((p) => p.jobId === jobId)
           .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt)),
       ),
-    updatePublication: async (slug, patch) => {
-      const p = state.publications.get(slug)
-      if (p) Object.assign(p, clone(patch))
-    },
+    updatePublication: async (slug, patch) => patchRow(state.publications, slug, patch),
 
     getReceipt: async (id) => clone(state.receipts.get(id) ?? null),
     insertReceipt: async (row) => {
@@ -336,48 +350,25 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
     insertIdempotency: async (row) => {
       state.idem.set(`${row.principalId}|${row.operation}|${row.key}`, clone(row))
     },
-    deleteExpiredPlans: async (now) => {
-      let n = 0
-      for (const [id, p] of state.plans)
-        if (p.expiresAt <= now) {
-          state.plans.delete(id)
-          n++
-        }
-      return n
-    },
-    deleteExpiredIdempotency: async (now) => {
-      let n = 0
-      for (const [k, v] of state.idem) {
-        if (v.expiresAt <= now) {
-          state.idem.delete(k)
-          n++
-        }
-      }
-      return n
-    },
+    deleteExpiredPlans: async (now) => deleteWhere(state.plans, (p) => p.expiresAt <= now),
+    deleteExpiredIdempotency: async (now) => deleteWhere(state.idem, (v) => v.expiresAt <= now),
 
     insertComment: async (row) => {
       state.comments.set(row.id, clone(row))
     },
     getComment: async (id) => clone(state.comments.get(id) ?? null),
-    updateComment: async (id, patch) => {
-      const c = state.comments.get(id)
-      if (c) Object.assign(c, clone(patch))
-    },
+    updateComment: async (id, patch) => patchRow(state.comments, id, patch),
     listComments: async (jobId, n) =>
       clone(
         [...state.comments.values()]
           .filter((c) => c.jobId === jobId && c.deletedAt === null && (n === undefined || c.versionN === n))
-          .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)),
+          .sort(oldestFirst),
       ),
     insertPlan: async (row) => {
       state.plans.set(row.id, clone(row))
     },
     getPlan: async (id) => clone(state.plans.get(id) ?? null),
-    updatePlan: async (id, patch) => {
-      const p = state.plans.get(id)
-      if (p) Object.assign(p, clone(patch))
-    },
+    updatePlan: async (id, patch) => patchRow(state.plans, id, patch),
     insertGatewayCall: async (row) => {
       state.gatewayCalls.push(clone(row))
     },
@@ -391,8 +382,8 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
       return clone(
         state.notifications
           .filter((n) => n.userId === userId)
-          .sort((a, c) => c.createdAt.localeCompare(a.createdAt) || c.id.localeCompare(a.id))
-          .filter((n) => !b || n.createdAt < b.createdAt || (n.createdAt === b.createdAt && n.id < b.id))
+          .sort(newestFirst)
+          .filter((n) => !b || olderThan(n, b))
           .slice(0, q.limit),
       )
     },
@@ -419,18 +410,13 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
           return m ? [m] : []
         }),
       ),
-    updateMedia: async (id, patch) => {
-      const m = state.media.get(id)
-      if (m) Object.assign(m, clone(patch))
-    },
+    updateMedia: async (id, patch) => patchRow(state.media, id, patch),
     findMediaMatches: async (q) =>
       clone(
         [...state.media.values()]
           .filter(
             (m) =>
-              !m.deletedAt &&
-              (m.status === 'ready' || m.uploaderId === q.includePendingOf) &&
-              takeVisible(m, q.takesOf) &&
+              libraryVisible(m, q) &&
               (q.sha256s.includes(m.originalSha256) || q.filenames.includes(m.filename)),
           )
           .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
@@ -441,9 +427,7 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
         [...state.media.values()]
           .filter(
             (m) =>
-              !m.deletedAt &&
-              (m.status === 'ready' || m.uploaderId === q.includePendingOf) &&
-              takeVisible(m, q.takesOf) &&
+              libraryVisible(m, q) &&
               (q.recordings === 'only' ? m.role !== null : q.recordings !== 'exclude' || m.role === null) &&
               (!q.kind || m.kind === q.kind) &&
               searchWords(q.search).every((w) =>
@@ -451,19 +435,16 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
                   f?.toLowerCase().includes(w.toLowerCase()),
                 ),
               ) &&
-              (!q.before ||
-                (q.sort ?? 'newest') !== 'newest' ||
-                m.createdAt < q.before.createdAt ||
-                (m.createdAt === q.before.createdAt && m.id < q.before.id)),
+              (!q.before || (q.sort ?? 'newest') !== 'newest' || olderThan(m, q.before)),
           )
           .sort((a, b) =>
             q.sort === 'oldest'
-              ? a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)
+              ? oldestFirst(a, b)
               : q.sort === 'name'
                 ? (a.title ?? a.filename)
                     .toLowerCase()
                     .localeCompare((b.title ?? b.filename).toLowerCase()) || a.id.localeCompare(b.id)
-                : b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id),
+                : newestFirst(a, b),
           )
           .slice(0, q.limit),
       ),
@@ -471,10 +452,7 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
       state.uploads.set(row.id, clone(row))
     },
     getUpload: async (id) => clone(state.uploads.get(id) ?? null),
-    updateUpload: async (id, patch) => {
-      const u = state.uploads.get(id)
-      if (u) Object.assign(u, clone(patch))
-    },
+    updateUpload: async (id, patch) => patchRow(state.uploads, id, patch),
     deleteUpload: async (id) => {
       state.uploads.delete(id)
     },
@@ -503,8 +481,7 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
         [...state.uploadParts.values()].filter((p) => p.uploadId === uploadId).sort((a, b) => a.idx - b.idx),
       ),
     deleteUploadParts: async (uploadId) => {
-      for (const k of [...state.uploadParts.keys()])
-        if (k.startsWith(`${uploadId}/`)) state.uploadParts.delete(k)
+      deleteWhere(state.uploadParts, (_p, k) => k.startsWith(`${uploadId}/`))
     },
     insertOpenverseJobIfAbsent: async (row) => {
       const inflight = (j: OpenverseJobRow) => j.status === 'queued' || j.status === 'running'
@@ -538,10 +515,7 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
       Object.assign(j, { status: 'running', updatedAt: now })
       return true
     },
-    updateOpenverseJob: async (id, patch) => {
-      const j = state.openverseJobs.get(id)
-      if (j) Object.assign(j, clone(patch))
-    },
+    updateOpenverseJob: async (id, patch) => patchRow(state.openverseJobs, id, patch),
     listStaleOpenverseJobs: async (q) =>
       clone(
         [...state.openverseJobs.values()]
@@ -552,15 +526,7 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
           )
           .slice(0, q.limit),
       ),
-    deleteExpiredOpenverseJobs: async (now) => {
-      let n = 0
-      for (const [id, j] of state.openverseJobs)
-        if (j.expiresAt <= now) {
-          state.openverseJobs.delete(id)
-          n++
-        }
-      return n
-    },
+    deleteExpiredOpenverseJobs: async (now) => deleteWhere(state.openverseJobs, (j) => j.expiresAt <= now),
     getOpenverseSearch: async (key) => clone(state.openverseSearches.get(key) ?? null),
     putOpenverseSearch: async (row) => {
       state.openverseSearches.set(row.key, clone(row))
@@ -588,15 +554,8 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
         .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key))
         .slice(0, limit)
     },
-    deleteOpenverseSearchUses: async (beforeDay) => {
-      let n = 0
-      for (const [k, u] of state.openverseSearchUses)
-        if (u.day < beforeDay) {
-          state.openverseSearchUses.delete(k)
-          n++
-        }
-      return n
-    },
+    deleteOpenverseSearchUses: async (beforeDay) =>
+      deleteWhere(state.openverseSearchUses, (u) => u.day < beforeDay),
     insertVersionMedia: async (rows) => {
       state.versionMedia.push(...clone(rows))
     },
@@ -609,19 +568,12 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
     insertMediaRefs: async (rows) => {
       for (const r of rows) if (!state.mediaRefs.has(rkey(r))) state.mediaRefs.set(rkey(r), clone(r))
     },
-    deleteMediaRefs: async (ownerKind, ownerId, mediaIds) => {
-      let n = 0
-      for (const [k, r] of state.mediaRefs)
-        if (
-          r.ownerKind === ownerKind &&
-          r.ownerId === ownerId &&
-          (!mediaIds || mediaIds.includes(r.mediaId))
-        ) {
-          state.mediaRefs.delete(k)
-          n++
-        }
-      return n
-    },
+    deleteMediaRefs: async (ownerKind, ownerId, mediaIds) =>
+      deleteWhere(
+        state.mediaRefs,
+        (r) =>
+          r.ownerKind === ownerKind && r.ownerId === ownerId && (!mediaIds || mediaIds.includes(r.mediaId)),
+      ),
     listMediaRefsByMedia: async (ids) =>
       clone([...state.mediaRefs.values()].filter((r) => ids.includes(r.mediaId)).sort(byCreated)),
     listMediaRefsByOwner: async (ownerKind, ownerId) =>
@@ -643,7 +595,7 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
               m.deletingAt === null &&
               (m.scopeJobId === jobId || used.has(m.id)),
           )
-          .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))
+          .sort(newestFirst)
           .slice(0, limit),
       )
     },
@@ -660,7 +612,7 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
               (!q.due ||
                 (m.retainUntil !== null ? m.retainUntil <= q.due.now : m.createdAt <= q.due.createdBefore)),
           )
-          .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
+          .sort(oldestFirst)
           .slice(0, q.limit),
       )
     },
@@ -683,15 +635,8 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
       state.narrationLocks.delete(jobId)
       return true
     },
-    deleteStaleNarrationLocks: async (before) => {
-      let n = 0
-      for (const [k, l] of state.narrationLocks)
-        if (l.heartbeatAt < before) {
-          state.narrationLocks.delete(k)
-          n++
-        }
-      return n
-    },
+    deleteStaleNarrationLocks: async (before) =>
+      deleteWhere(state.narrationLocks, (l) => l.heartbeatAt < before),
     mediaUsage: async (ids) => {
       const out: Record<string, string[]> = {}
       const versionRefs = [...state.mediaRefs.values()].filter((r) => r.ownerKind === 'version')
@@ -708,20 +653,12 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
           )
           .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
       ),
-    versionProvenance: async (jobId) =>
-      provenanceOf(state, (id) => id === jobId).map((r) => {
-        const row: Partial<typeof r> = { ...r }
-        delete row.jobId
-        return row as VersionProvenanceRow
-      }),
+    versionProvenance: async (jobId) => provenanceOf(state, (id) => id === jobId).map(withoutJob),
     insertEdit: async (row) => {
       state.edits.set(row.id, clone(row))
     },
     getEdit: async (id) => clone(state.edits.get(id) ?? null),
-    updateEdit: async (id, patch) => {
-      const e = state.edits.get(id)
-      if (e) Object.assign(e, clone(patch))
-    },
+    updateEdit: async (id, patch) => patchRow(state.edits, id, patch),
     deleteEdit: async (id) => {
       state.edits.delete(id)
     },
@@ -843,10 +780,7 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
       for (const d of due) d.leaseUntil = leaseUntil
       return clone(due)
     },
-    updateWebhookDelivery: async (id, patch) => {
-      const d = state.deliveries.get(id)
-      if (d) Object.assign(d, clone(patch))
-    },
+    updateWebhookDelivery: async (id, patch) => patchRow(state.deliveries, id, patch),
     getUserWebhook: async (userId) => clone(state.userWebhooks.get(userId) ?? null),
     putUserWebhook: async (row) => {
       state.userWebhooks.set(row.userId, clone(row))
@@ -862,10 +796,7 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
       clone(
         [...state.cleanup.values()].filter((c) => c.doneAt === null && c.nextActionAt <= now).slice(0, limit),
       ),
-    updateCleanup: async (id, patch) => {
-      const c = state.cleanup.get(id)
-      if (c) Object.assign(c, clone(patch))
-    },
+    updateCleanup: async (id, patch) => patchRow(state.cleanup, id, patch),
 
     usageSince: async (since) => {
       const out = new Map<string, UsageRow>()
@@ -890,10 +821,7 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
       )
       return clone(hit ?? null)
     },
-    updateOAuthRequest: async (id, patch) => {
-      const r = state.oauthRequests.get(id)
-      if (r) Object.assign(r, clone(patch))
-    },
+    updateOAuthRequest: async (id, patch) => patchRow(state.oauthRequests, id, patch),
     insertOAuthGrant: async (row) => {
       state.oauthGrants.set(row.id, clone(row))
     },
@@ -902,12 +830,9 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
       clone(
         [...state.oauthGrants.values()]
           .filter((g) => g.userId === userId && g.revokedAt === null && g.expiresAt > now)
-          .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id)),
+          .sort(newestFirst),
       ),
-    updateOAuthGrant: async (id, patch) => {
-      const g = state.oauthGrants.get(id)
-      if (g) Object.assign(g, clone(patch))
-    },
+    updateOAuthGrant: async (id, patch) => patchRow(state.oauthGrants, id, patch),
     revokeOAuthGrants: async (userId, at) => {
       for (const g of state.oauthGrants.values())
         if (g.userId === userId && g.revokedAt === null) g.revokedAt = at
@@ -916,28 +841,16 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
       state.oauthTokens.set(row.hash, clone(row))
     },
     getOAuthToken: async (hash) => clone(state.oauthTokens.get(hash) ?? null),
-    updateOAuthToken: async (hash, patch) => {
-      const t = state.oauthTokens.get(hash)
-      if (t) Object.assign(t, clone(patch))
-    },
+    updateOAuthToken: async (hash, patch) => patchRow(state.oauthTokens, hash, patch),
     deleteExpiredOAuth: async (now, clientsBefore) => {
-      let n = 0
-      const del = <T>(m: Map<string, T>, k: string) => {
-        m.delete(k)
-        n++
-      }
-      for (const [id, r] of state.oauthRequests) if (r.expiresAt <= now) del(state.oauthRequests, id)
-      for (const [id, g] of state.oauthGrants)
-        if (g.revokedAt !== null || g.expiresAt <= now) del(state.oauthGrants, id)
-      for (const [h, t] of state.oauthTokens)
-        if (t.expiresAt <= now || !state.oauthGrants.has(t.grantId)) del(state.oauthTokens, h)
+      let n = deleteWhere(state.oauthRequests, (r) => r.expiresAt <= now)
+      n += deleteWhere(state.oauthGrants, (g) => g.revokedAt !== null || g.expiresAt <= now)
+      n += deleteWhere(state.oauthTokens, (t) => t.expiresAt <= now || !state.oauthGrants.has(t.grantId))
       const used = new Set([
         ...[...state.oauthGrants.values()].map((g) => g.clientId),
         ...[...state.oauthRequests.values()].map((r) => r.clientId),
       ])
-      for (const [id, c] of state.oauthClients)
-        if (c.createdAt < clientsBefore && !used.has(id)) del(state.oauthClients, id)
-      return n
+      return n + deleteWhere(state.oauthClients, (c, id) => c.createdAt < clientsBefore && !used.has(id))
     },
     getUserIdentity: async (provider, subject) =>
       clone(state.identities.get(ikey(provider, subject)) ?? null),
@@ -946,32 +859,20 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
       if (!state.identities.has(k)) state.identities.set(k, clone(row))
       return clone(state.identities.get(k) as UserIdentityRow)
     },
-    updateUserIdentity: async (provider, subject, patch) => {
-      const r = state.identities.get(ikey(provider, subject))
-      if (r) Object.assign(r, clone(patch))
-    },
+    updateUserIdentity: async (provider, subject, patch) =>
+      patchRow(state.identities, ikey(provider, subject), patch),
     listUserIdentities: async () => clone([...state.identities.values()]),
     insertSession: async (row) => {
       state.sessions.set(row.id, clone(row))
     },
     getSession: async (id) => clone(state.sessions.get(id) ?? null),
-    updateSession: async (id, patch) => {
-      const r = state.sessions.get(id)
-      if (r) Object.assign(r, clone(patch))
-    },
+    updateSession: async (id, patch) => patchRow(state.sessions, id, patch),
     revokeUserSessions: async (userId, at) => {
       for (const r of state.sessions.values())
         if (r.userId === userId && r.revokedAt === null) r.revokedAt = at
     },
-    deleteExpiredSessions: async (now) => {
-      let n = 0
-      for (const [id, r] of state.sessions)
-        if (r.revokedAt !== null || r.expiresAt <= now) {
-          state.sessions.delete(id)
-          n++
-        }
-      return n
-    },
+    deleteExpiredSessions: async (now) =>
+      deleteWhere(state.sessions, (r) => r.revokedAt !== null || r.expiresAt <= now),
     mergeUser: async (from, into) => {
       const swap = (v: string) => (v === from ? into : v)
       for (const k of state.keys.values()) k.ownerId = swap(k.ownerId)
@@ -1144,13 +1045,20 @@ function provenanceOf(state: State, has: (jobId: string) => boolean) {
         },
       ]
     })
-  return [...media, ...narration].sort(
-    (a, b) =>
-      a.versionN - b.versionN ||
-      Number('narration' in a) - Number('narration' in b) ||
-      a.position - b.position,
-  ) as (VersionProvenanceRow & { jobId: string })[]
+  return byVersion([...media, ...narration] as (VersionProvenanceRow & { jobId: string })[])
 }
+
+export const withoutJob = <T extends { jobId: string }>(r: T): Omit<T, 'jobId'> => {
+  const row: Partial<T> = { ...r }
+  delete row.jobId
+  return row as Omit<T, 'jobId'>
+}
+/** version_media rows first, then narration ones, each version in turn. */
+export const byVersion = <T extends VersionProvenanceRow>(rows: T[]) =>
+  rows.sort(
+    (a, b) =>
+      a.versionN - b.versionN || Number(!!a.narration) - Number(!!b.narration) || a.position - b.position,
+  )
 
 function pickProvenance(
   m: MediaRow,

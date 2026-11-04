@@ -1,7 +1,7 @@
 // Request and response schemas: one definition drives validation, types, the OpenAPI spec and the
 // web app's generated client.
 import { z } from '@hono/zod-openapi'
-import { SOUNDS } from './domain/types.js'
+import { ASPECT_RATIOS, MEDIA_ROLES, SOUNDS, VERDICTS } from './domain/types.js'
 import { MAX_NARRATION } from './lib/contract.js'
 import { LANGUAGES } from './lib/language.js'
 import {
@@ -27,7 +27,7 @@ export const ErrorSchema = z
   })
   .openapi('Error')
 
-export const AspectSchema = z.enum(['16:9', '9:16', '1:1', '4:5']).openapi('Aspect')
+export const AspectSchema = z.enum(ASPECT_RATIOS).openapi('Aspect')
 export const SoundSchema = z.enum(SOUNDS).openapi('Sound', {
   description:
     'silent: no audio (the default). music: a music bed (a picked audio item, else the brand music in context/, else none). music_sfx: music plus sound effects on visible actions.',
@@ -212,7 +212,7 @@ export const VersionCaptionsSchema = z
   })
   .openapi('VersionCaptions')
 
-export const VerdictSchema = z.enum(['approved', 'changes_requested']).openapi('Verdict')
+export const VerdictSchema = z.enum(VERDICTS).openapi('Verdict')
 export const SetVerdictSchema = z
   .object({ verdict: VerdictSchema.nullable(), note: z.string().max(500).optional() })
   .openapi('SetVerdict')
@@ -610,7 +610,7 @@ export const PlanSchema = z
       .object({
         needsQuestions: z.boolean(),
         template: z.string(),
-        suggestedAspect: z.enum(['16:9', '9:16', '1:1', '4:5']).nullable(),
+        suggestedAspect: z.enum(ASPECT_RATIOS).nullable(),
       })
       .nullable(),
     questions: z.array(PlanQuestionSchema).nullable(),
@@ -628,7 +628,7 @@ export const PlanSchema = z
 export const CreatePlanSchema = z
   .object({
     prompt: z.string().min(1).max(4000),
-    aspect: z.enum(['16:9', '9:16', '1:1', '4:5']).optional(),
+    aspect: z.enum(ASPECT_RATIOS).optional(),
     durationSec: z.number().int().min(3).max(600).optional(),
     revisionOf: z.object({ videoId: z.string(), version: z.number().int().optional() }).optional(),
     remixOf: z.object({ videoId: z.string(), version: z.number().int().optional() }).optional().openapi({
@@ -686,7 +686,7 @@ export const MediaSourceSchema = z
 
 export const RecordingSchema = z
   .object({
-    role: z.enum(['narration-take', 'narration-upload']).openapi({
+    role: z.enum(MEDIA_ROLES).openapi({
       description: 'A voice-over recording (take) or uploaded narration',
     }),
     videoId: z
@@ -757,7 +757,7 @@ export const UploadSessionSchema = z
     mediaId: z.string().nullable(),
     error: z.string().nullable(),
     expiresAt: z.string(),
-    role: z.enum(['narration-take', 'narration-upload']).nullable().openapi({
+    role: z.enum(MEDIA_ROLES).nullable().openapi({
       description: 'A voice-over recording (take) or uploaded narration; null for library uploads',
     }),
     scopeJobId: z.string().nullable().openapi({ description: 'The video a recording is for' }),

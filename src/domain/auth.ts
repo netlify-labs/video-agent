@@ -5,7 +5,7 @@ import { principalFromSession } from '../auth/sessions.js'
 import type { Deps, IdentityUser } from '../deps.js'
 import { safeEqual, sha256Hex } from '../lib/crypto.js'
 import { ApiError } from '../lib/errors.js'
-import type { Principal } from './policy.js'
+import { userPrincipal, type Principal } from './policy.js'
 import type { UserRow } from './types.js'
 
 const LIVE_TTL_MS = 5 * 60_000
@@ -156,7 +156,7 @@ export async function principalFromRequest(
   if (!live) throw new ApiError('unauthorized', 'Your account no longer exists.')
   if (!live.confirmed) throw new ApiError('unauthorized', 'Confirm your email address first.')
   const row = await ensureUserRow(deps, live)
-  return { kind: 'user', userId: row.id, email: row.email, name: row.name, role: row.role, apiKeyId: null }
+  return userPrincipal(row)
 }
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
