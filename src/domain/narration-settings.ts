@@ -4,6 +4,7 @@
 import type { Deps } from '../deps.js'
 import { ApiError } from '../lib/errors.js'
 import { assertCan, type Principal } from './policy.js'
+import { remixEnabled } from './remix-settings.js'
 import { getSettings } from './settings.js'
 import { NARRATION_SETTING_DEFAULTS, type TranscriptionProvider } from './types.js'
 
@@ -37,22 +38,31 @@ export async function assertNarrationEnabled(deps: Pick<Deps, 'store'>): Promise
     throw new ApiError('narration_disabled', 'Recorded voice-over is turned off for this video agent.')
 }
 
-export async function getAdminSettings(deps: Deps, p: Principal): Promise<NarrationSettings> {
+/** Everything on the admin Settings page: the voice-over settings plus the remix switch (remix spec §4). */
+export interface AdminSettings extends NarrationSettings {
+  remixEnabled: boolean
+}
+
+async function adminSettings(deps: Pick<Deps, 'store'>): Promise<AdminSettings> {
+  return { ...(await narrationSettings(deps)), remixEnabled: await remixEnabled(deps) }
+}
+
+export async function getAdminSettings(deps: Deps, p: Principal): Promise<AdminSettings> {
   assertCan(p, 'settings:manage')
-  return narrationSettings(deps)
+  return adminSettings(deps)
 }
 
 /** Changes the fields given; the rest stay as they are. */
 export async function updateAdminSettings(
   deps: Deps,
   p: Principal,
-  patch: { [K in keyof NarrationSettings]?: NarrationSettings[K] | undefined },
-): Promise<NarrationSettings> {
+  patch: { [K in keyof AdminSettings]?: AdminSettings[K] | undefined },
+): Promise<AdminSettings> {
   assertCan(p, 'settings:manage')
   // The row is created on first use; make sure it exists so the update has something to change.
   await getSettings(deps)
   const changes = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined))
   if (Object.keys(changes).length) await deps.store.updateSettings(changes)
   deps.log.info('settings.updated', { userId: p.userId, changes })
-  return narrationSettings(deps)
+  return adminSettings(deps)
 }

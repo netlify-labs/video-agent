@@ -16,7 +16,10 @@ describe.each([
 ] as const)('admin settings (%s)', (_name, make) => {
   it('reads the defaults, changes only the fields given, and keeps them', async () => {
     const h = harness({}, make ? { store: await make() } : {})
-    expect(await h.json(await h.call('GET', base, { as: h.admin }))).toEqual(NARRATION_SETTING_DEFAULTS)
+    expect(await h.json(await h.call('GET', base, { as: h.admin }))).toEqual({
+      ...NARRATION_SETTING_DEFAULTS,
+      remixEnabled: true,
+    })
     const off = await h.call('PATCH', base, {
       as: h.admin,
       body: { narrationEnabled: false, transcriptionProvider: 'elevenlabs' },
@@ -26,12 +29,14 @@ describe.each([
       narrationEnabled: false,
       transcriptionProvider: 'elevenlabs',
       takeQuotaBytes: NARRATION_SETTING_DEFAULTS.takeQuotaBytes,
+      remixEnabled: true,
     })
     await h.call('PATCH', base, { as: h.admin, body: { takeQuotaBytes: 512 * 1024 ** 2 } })
     expect(await h.json(await h.call('GET', base, { as: h.admin }))).toEqual({
       narrationEnabled: false,
       transcriptionProvider: 'elevenlabs',
       takeQuotaBytes: 512 * 1024 ** 2,
+      remixEnabled: true,
     })
     expect(h.deps.logs.some((l) => l.includes('"settings.updated"'))).toBe(true)
   })

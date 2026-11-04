@@ -84,6 +84,7 @@ const adminSettings: {
   narrationEnabled: boolean
   transcriptionProvider: 'local' | 'elevenlabs' | 'off'
   takeQuotaBytes: number
+  remixEnabled: boolean
 } = {
   narrationEnabled: (() => {
     try {
@@ -94,6 +95,14 @@ const adminSettings: {
   })(),
   transcriptionProvider: 'local',
   takeQuotaBytes: 2 * 1024 ** 3,
+  // localStorage.mockRemixOff = '1' starts with remixing turned off.
+  remixEnabled: (() => {
+    try {
+      return localStorage.getItem('mockRemixOff') !== '1'
+    } catch {
+      return true
+    }
+  })(),
 }
 const grants = [
   {
@@ -344,6 +353,8 @@ export function installMock() {
         ...(b.sound === undefined ? { sound: /music|soundtrack/i.test(prompt) ? 'music' : 'silent' } : {}),
         ...(vo?.enabled ? {} : { voiceover: /voice-?over|narrat/i.test(prompt) }),
       }
+      const ro = b.remixOf as { videoId: string; version?: number } | undefined
+      mockRemixPlan = ro ? { videoId: ro.videoId, version: ro.version ?? 1 } : null
       return json(mockPlan(), 201)
     }
     if (/^\/api\/v1\/plans\/[^/]+\/questions$/.test(p)) return json(mockPlan('questions'))
@@ -366,6 +377,7 @@ export function installMock() {
         authProvider: mockAuthProvider(),
         requiredTeams: mockAuthProvider() === 'netlify' ? ['acme'] : [],
         narrationEnabled: adminSettings.narrationEnabled,
+        remixEnabled: adminSettings.remixEnabled,
         // localStorage.mockMissingSettings = 'RUNNER_API_TOKEN,ADMIN_EMAILS' shows the not-set-up notices.
         missingSettings: mockMissingSettings(),
       })
@@ -993,6 +1005,36 @@ export function installMock() {
       return json(withComments(vid))
     }
     if (p === '/api/v1/videos' && method === 'POST') return json(videos[0], 202)
+    // Remix: a new queued video owned by "me", remixed from the source; the last request body is kept for tests.
+    const rm = /^\/api\/v1\/videos\/([^/]+)\/remix$/.exec(p)
+    if (rm?.[1] && method === 'POST') {
+      const b = (await readBody(init, input)) as {
+        prompt?: string
+        fromVersion?: number
+        aspect?: Video['aspect']
+      }
+      ;(window as unknown as { __lastRemix?: unknown }).__lastRemix = { sourceId: rm[1], ...b }
+      if (!adminSettings.remixEnabled)
+        return fail(409, 'remix_disabled', 'Remixing is turned off by an admin.')
+      const src = videos.find((x) => x.id === rm[1])
+      if (!src) return fail(404, 'not_found', 'Video not found.')
+      const from = b.fromVersion ?? src.versions.find((x) => x.status === 'ready')?.n ?? 1
+      const template = videos.find((x) => x.id === 'vid_queued') as Video
+      const made: Video = {
+        ...structuredClone(template),
+        id: `vid_remix_${videos.length}`,
+        title: (b.prompt ?? 'Remix').slice(0, 80),
+        aspect: b.aspect ?? src.aspect,
+        owner: { id: me.id, name: me.name, email: me.email },
+        isRemix: true,
+        remixOf: { id: src.id, n: from, title: src.title },
+        favorite: false,
+        createdAt: new Date().toISOString(),
+      }
+      made.versions = made.versions.map((x) => ({ ...x, prompt: b.prompt ?? x.prompt }))
+      videos.unshift(made)
+      return json(withComments(made), 202)
+    }
     // Revise (and incorporate): the last request body is kept for tests.
     const rv = /^\/api\/v1\/videos\/([^/]+)\/versions$/.exec(p)
     if (rv?.[1] && method === 'POST') {
@@ -1113,6 +1155,8 @@ const NARRATION = [
   'Read the docs to set it up.',
 ]
 
+/** The remix the current mock plan is for, if any (POST /api/v1/plans remixOf). */
+let mockRemixPlan: { videoId: string; version: number } | null = null
 function mockPlan(stage: 'route' | 'questions' | 'brief' = 'route') {
   const questions = [
     {
@@ -1142,6 +1186,7 @@ function mockPlan(stage: 'route' | 'questions' | 'brief' = 'route') {
     id: 'plan_mock',
     prompt: 'mock',
     revisionOf: null,
+    remixOf: mockRemixPlan,
     route: { needsQuestions: true, template: 'launch', suggestedAspect: null },
     questions: stage === 'route' ? null : questions,
     answers: stage === 'brief' ? [] : null,

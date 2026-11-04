@@ -199,6 +199,7 @@ describe('MCP tools by role', () => {
         'plan_brief',
         'plan_video',
         'publish_video',
+        'remix_video',
         'render_with_narration',
         'revise_video',
         'search_music',

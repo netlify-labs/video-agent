@@ -48,6 +48,11 @@ export const MCP_TOOLS: readonly McpCatalogEntry[] = [
     access: 'creators',
   },
   {
+    name: 'remix_video',
+    summary: 'Make a new video from an existing one, changed as you describe (a name swap to a new topic).',
+    access: 'creators',
+  },
+  {
     name: 'publish_video',
     summary: 'Public share page, MP4, GIF and embed snippet for a ready version.',
     access: 'creators',

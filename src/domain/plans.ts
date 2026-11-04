@@ -28,6 +28,8 @@ import type {
   VideoSound,
   Voiceover,
 } from './types.js'
+import { remixHistory, REMIX_SUMMARY_MAX_CHARS } from './remix.js'
+import { assertRemixEnabled } from './remix-settings.js'
 import { loadJob } from './videos.js'
 import { voiceoverFrom, type VoiceoverInput } from './voiceover.js'
 
@@ -159,8 +161,28 @@ async function loadPlan(deps: Deps, p: Principal, id: string): Promise<PlanRow> 
   if (plan.expiresAt <= deps.clock.now().toISOString())
     throw new ApiError('gone', 'This plan expired. Start a new one.')
   if (plan.jobId) await loadJob(deps.store, p, plan.jobId)
+  if (plan.remixFromJobId) await loadJob(deps.store, p, plan.remixFromJobId)
   return plan
 }
+
+/**
+ * What a remix plan's questions and brief are told about the video it remixes (docs/plans/2026-11-03-remix.md §3.5,
+ * Planning): its title, prompts and summary, as data. Empty for other plans.
+ */
+async function remixSourceBlock(deps: Deps, plan: PlanRow): Promise<string> {
+  if (!plan.remixFromJobId || plan.remixFromN == null) return ''
+  const job = await deps.store.getJob(plan.remixFromJobId)
+  const versions = await deps.store.listVersions(plan.remixFromJobId)
+  const output = await deps.store.getOutput(plan.remixFromJobId, plan.remixFromN)
+  return dataBlock('source_video', {
+    title: job?.title ?? null,
+    prompts: remixHistory(versions, plan.remixFromN),
+    summary: output?.agentSummary.slice(0, REMIX_SUMMARY_MAX_CHARS) ?? null,
+  })
+}
+
+const REMIX_RULE =
+  "This is a remix: a new video that starts from an existing one (source_video), changed as the request says. It may be a small swap or a new topic in the same format. Ask only what the request leaves open about the change; keep the source's format, structure and style unless the request changes them."
 
 async function deepModel(deps: Deps) {
   return clampModel((await deps.store.getSettings())?.planDeepModel)
@@ -171,6 +193,7 @@ export function planDto(plan: PlanRow) {
     id: plan.id,
     prompt: plan.prompt,
     revisionOf: plan.jobId ? { videoId: plan.jobId, version: plan.baseN } : null,
+    remixOf: plan.remixFromJobId ? { videoId: plan.remixFromJobId, version: plan.remixFromN ?? null } : null,
     route: plan.route
       ? {
           needsQuestions: plan.route.needsQuestions,
@@ -266,6 +289,8 @@ export async function createPlan(
     aspect?: string | undefined
     durationSec?: number | undefined
     revisionOf?: { videoId: string; version?: number | undefined } | undefined
+    /** A plan for a remix of this video (and version, else its latest ready one); not with revisionOf. */
+    remixOf?: { videoId: string; version?: number | undefined } | undefined
     mediaIds?: string[] | undefined
     sound?: VideoSound | undefined
     voiceover?: VoiceoverInput | undefined
@@ -291,13 +316,34 @@ export async function createPlan(
     jobId = job.id
     baseN = base.n
   }
+  let remixFrom: { jobId: string; n: number } | null = null
+  if (input.remixOf) {
+    if (input.revisionOf) throw new ApiError('invalid_request', 'Plan a revision or a remix, not both.')
+    await assertRemixEnabled(deps)
+    assertCan(p, 'video:create')
+    const job = await loadJob(deps.store, p, input.remixOf.videoId)
+    const versions = await deps.store.listVersions(job.id)
+    const base =
+      input.remixOf.version !== undefined
+        ? versions.find((v) => v.n === input.remixOf?.version)
+        : [...versions].sort((a, b) => b.n - a.n).find((v) => v.status === 'ready')
+    if (base?.status !== 'ready') throw new ApiError('not_ready', 'There is no ready version to remix.')
+    remixFrom = { jobId: job.id, n: base.n }
+  }
   const history = (await deps.store.listJobs({ ownerId: p.userId, limit: 5 })).map((j) => j.title)
 
   let route: PlanRoute
   const started = Date.now()
   try {
     const r = await deps.gateway.route(
-      { request: jobId ? `Revision of an existing video: ${prompt}` : prompt, history },
+      {
+        request: jobId
+          ? `Revision of an existing video: ${prompt}`
+          : remixFrom
+            ? `Remix of an existing video: ${prompt}`
+            : prompt,
+        history,
+      },
       { signal: AbortSignal.timeout(ROUTE_DEADLINE_MS) },
     )
     await record(deps, p, null, 'router', r.model, started, { usage: r.usage })
@@ -349,6 +395,7 @@ export async function createPlan(
         input.durationSec ?? null,
         jobId,
         baseN,
+        ...(remixFrom ? [remixFrom] : []),
         planningContext.hash,
         mediaIds,
         ...(input.sound ? [input.sound] : []),
@@ -364,6 +411,8 @@ export async function createPlan(
     consumedByN: null,
     createdAt: now.toISOString(),
     expiresAt: new Date(now.getTime() + PLAN_TTL_MS).toISOString(),
+    remixFromJobId: remixFrom?.jobId ?? null,
+    remixFromN: remixFrom?.n ?? null,
   }
   await deps.store.insertPlan(plan)
   return planDto(plan)
@@ -446,7 +495,9 @@ export async function generateQuestions(deps: Deps, p: Principal, planId: string
     `Consider: ${CHECKLISTS[route.template] ?? CHECKLISTS.other}.`,
     plan.jobId
       ? 'This is a revision: ask only about the change, and ask nothing for small, precise changes.'
-      : '',
+      : plan.remixFromJobId
+        ? REMIX_RULE
+        : '',
     DATA_RULE,
     plan.mediaIds.length ? MEDIA_RULE : '',
     'Put the option you recommend first and mark it "recommended": true (one per question at most; mark none when no option is clearly best).',
@@ -462,6 +513,7 @@ export async function generateQuestions(deps: Deps, p: Principal, planId: string
   const media = await mediaContext(deps, plan)
   const user = [
     dataBlock('request', plan.prompt),
+    await remixSourceBlock(deps, plan),
     plan.aspect ? dataBlock('chosen_shape', plan.aspect) : '',
     plan.durationSec ? dataBlock('chosen_length_seconds', plan.durationSec) : '',
     soundLabel(plan.sound, plan.voiceover)
@@ -543,6 +595,7 @@ export async function generateBrief(deps: Deps, p: Principal, planId: string, an
     'Keep their intent; make reasonable choices for anything skipped. Beats are on-screen moments with a length in seconds.',
     '"title" names the video for a library list: 2 to 7 words, specific to this video, no quotes or trailing punctuation (for example "Event-driven functions in 30 seconds").',
     DATA_RULE,
+    plan.remixFromJobId ? REMIX_RULE : '',
     plan.mediaIds.length ? `${MEDIA_RULE} Say in the beats where each file appears.` : '',
     plan.voiceover ? NARRATION_RULE : '',
     ...audio,
@@ -553,6 +606,7 @@ export async function generateBrief(deps: Deps, p: Principal, planId: string, an
   const media = await mediaContext(deps, plan)
   const user = [
     dataBlock('request', plan.prompt),
+    await remixSourceBlock(deps, plan),
     plan.aspect ? dataBlock('chosen_shape', plan.aspect) : '',
     plan.durationSec ? dataBlock('chosen_length_seconds', plan.durationSec) : '',
     soundLabel(plan.sound, plan.voiceover)

@@ -407,6 +407,11 @@ export const VideoSchema = z
       count: z.number().int(),
       unread: z.number().int().openapi({ description: "Others' comments since you last read them" }),
     }),
+    isRemix: z.boolean().openapi({ description: 'This video was remixed from another one' }),
+    remixOf: z
+      .object({ id: z.string(), n: z.number().int(), title: z.string() })
+      .nullable()
+      .openapi({ description: 'The video (and version) this one was remixed from, when you can see it' }),
     favorite: z.boolean().openapi({ description: 'You starred this video (only you see your favorites)' }),
     links: z.object({ self: z.string() }),
   })
@@ -475,6 +480,45 @@ export const ReviseSchema = z
     }),
   })
   .openapi('Revise')
+
+export const RemixSchema = z
+  .object({
+    prompt: z.string().min(3).max(4000).openapi({
+      description: 'What to change: anything from swapping a name to the same format on a new topic.',
+      example: 'Same video, but for our payments API instead of webhooks.',
+    }),
+    fromVersion: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .openapi({ description: 'The version to remix. Omit for the latest ready one.' }),
+    aspect: AspectSchema.optional().openapi({ description: "Omit to keep the source's shape." }),
+    language: LanguageSchema.optional().openapi({ description: "Omit to keep the source's language." }),
+    durationSec: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .openapi({ description: "Target length in seconds. Omit to keep the source's." }),
+    sound: SoundSchema.optional().openapi({ description: "Omit to keep the source's sound." }),
+    voiceover: VoiceoverInputSchema.optional().openapi({
+      description:
+        "Omit to keep the source's AI voice-over settings. Recorded narration is never carried over.",
+    }),
+    mediaIds: z.array(z.string()).max(12).optional().openapi({
+      description: "The remix's library media: replaces the source's set. Omit to keep the source's set.",
+    }),
+    planId: z
+      .string()
+      .optional()
+      .openapi({ description: 'A plan made with remixOf for this same video and version.' }),
+    webhookUrl: z
+      .url()
+      .optional()
+      .openapi({ description: 'HTTPS URL for video.ready / video.failed events (API keys only).' }),
+  })
+  .openapi('Remix')
 
 export const UpdateVideoSchema = z
   .object({
@@ -558,6 +602,10 @@ export const PlanSchema = z
     id: z.string(),
     prompt: z.string(),
     revisionOf: z.object({ videoId: z.string(), version: z.number().int().nullable() }).nullable(),
+    remixOf: z
+      .object({ videoId: z.string(), version: z.number().int().nullable() })
+      .nullable()
+      .openapi({ description: 'The video and version this plan remixes, for a remix plan.' }),
     route: z
       .object({
         needsQuestions: z.boolean(),
@@ -583,6 +631,13 @@ export const CreatePlanSchema = z
     aspect: z.enum(['16:9', '9:16', '1:1', '4:5']).optional(),
     durationSec: z.number().int().min(3).max(600).optional(),
     revisionOf: z.object({ videoId: z.string(), version: z.number().int().optional() }).optional(),
+    remixOf: z
+      .object({ videoId: z.string(), version: z.number().int().optional() })
+      .optional()
+      .openapi({
+        description:
+          'Plan a remix of this video (and version, else its latest ready one); not with revisionOf.',
+      }),
     mediaIds: z.array(z.string()).max(12).optional().openapi({
       description:
         'Library items to plan around. The planner sees the first few images; the video made from this plan uses them all.',
@@ -1293,6 +1348,11 @@ export const AdminSettingsSchema = z
       .number()
       .int()
       .describe("Stored bytes each person's recordings may use (default 2 GiB)."),
+    remixEnabled: z
+      .boolean()
+      .describe(
+        'Remixing is on (the default). Off hides every Remix button and refuses new remixes; queued ones still run.',
+      ),
   })
   .openapi('AdminSettings')
 export const UpdateAdminSettingsSchema = z
@@ -1306,6 +1366,7 @@ export const UpdateAdminSettingsSchema = z
       .max(1024 ** 4)
       .optional()
       .describe('1 MiB to 1 TiB.'),
+    remixEnabled: z.boolean().optional(),
   })
   .openapi('UpdateAdminSettings')
 
@@ -1386,6 +1447,9 @@ export const PublicConfigSchema = z
     narrationEnabled: z
       .boolean()
       .describe('Recorded voice-over is on, so the Narration track and Record are offered.'),
+    remixEnabled: z
+      .boolean()
+      .describe('Remixing is on, so Remix is offered to people who can create videos.'),
     missingSettings: z
       .array(z.enum(['RUNNER_API_TOKEN', 'ALLOWED_EMAIL_DOMAINS', 'ADMIN_EMAILS']))
       .describe(

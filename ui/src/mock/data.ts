@@ -200,6 +200,8 @@ function video(
     private: false,
     language: 'en',
     comments: { count: 0, unread: 0 },
+    isRemix: false,
+    remixOf: null,
     favorite: false,
     links: { self: `/api/v1/videos/${id}` },
   }
@@ -429,6 +431,12 @@ export const videos: Video[] = [
     },
   ]),
 ]
+
+// A remix (docs/plans/2026-11-03-remix.md): the docs video was remixed from the webhooks launch.
+Object.assign(videos.find((v) => v.id === 'vid_docs') as Video, {
+  isRemix: true,
+  remixOf: { id: 'vid_webhooks', n: 1, title: 'Org webhooks launch' },
+})
 
 export const stats: Stats = {
   inFlight: [

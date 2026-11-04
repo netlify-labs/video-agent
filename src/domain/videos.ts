@@ -88,12 +88,13 @@ const INCORPORATE_MAX_CHARS = 20_000
  * belong to the caller, be unexpired and unused, have a brief, and (for revisions) be bound to this video. Returns
  * the frozen copy stored on the version and the length the brief implies.
  */
-async function consumePlan(
+export async function consumePlan(
   repo: Repo,
   deps: Deps,
   principal: Principal,
   planId: string,
-  target: { jobId: string | null; n: number; newJobId: string },
+  /** remixFrom: the source a remix is made from; only a plan made for that same source and version fits. */
+  target: { jobId: string | null; n: number; newJobId: string; remixFrom?: { jobId: string; n: number } },
 ): Promise<{
   frozen: FrozenPlan
   /** The brief's name for the video, if it has one. */
@@ -114,6 +115,12 @@ async function consumePlan(
       'conflict',
       target.jobId ? 'This plan is for a different video.' : 'This plan is for a revision.',
     )
+  // A remix plan makes a remix of exactly its source (docs/plans/2026-11-03-remix.md §3.3), and nothing else does.
+  const planRemix = plan.remixFromJobId ? { jobId: plan.remixFromJobId, n: plan.remixFromN } : null
+  if (planRemix && !target.remixFrom)
+    throw new ApiError('conflict', 'This plan is for a remix. Use it from the Remix dialog.')
+  if (target.remixFrom && (planRemix?.jobId !== target.remixFrom.jobId || planRemix.n !== target.remixFrom.n))
+    throw new ApiError('conflict', 'This plan is for a different video to remix.')
   if (!plan.brief)
     throw new ApiError('conflict', 'Finish the plan (get a brief) first, or create without it.')
   const qa = (plan.questions ?? []).map((q) => {
@@ -146,7 +153,7 @@ async function consumePlan(
   }
 }
 
-function checkWebhook(principal: Principal, url: string | undefined) {
+export function checkWebhook(principal: Principal, url: string | undefined) {
   if (url === undefined) return
   if (principal.kind !== 'apiKey') {
     throw new ApiError(
@@ -953,7 +960,13 @@ export async function videoDto(
   deps: DtoDeps,
   jobId: string,
   viewer: Principal,
-  prefetched?: { verdicts: VerdictRow[]; comments: Record<string, CommentCounts>; favorites: string[] },
+  prefetched?: {
+    verdicts: VerdictRow[]
+    comments: Record<string, CommentCounts>
+    favorites: string[]
+    /** Remixes' source videos on the page, by id (pageRepo only finds the page's own jobs). */
+    remixSources?: Map<string, JobRow | null>
+  },
 ): Promise<VideoDtoShape>
 export async function videoDto(
   repo: Repo,
@@ -966,7 +979,13 @@ export async function videoDto(
   deps: Pick<Deps, 'config' | 'runner'> & Partial<DtoDeps>,
   jobId: string,
   viewer: Principal | 'system',
-  prefetched?: { verdicts: VerdictRow[]; comments: Record<string, CommentCounts>; favorites: string[] },
+  prefetched?: {
+    verdicts: VerdictRow[]
+    comments: Record<string, CommentCounts>
+    favorites: string[]
+    /** Remixes' source videos on the page, by id (pageRepo only finds the page's own jobs). */
+    remixSources?: Map<string, JobRow | null>
+  },
 ) {
   return buildVideoDto(repo, deps, jobId, viewer, prefetched)
 }
@@ -979,7 +998,13 @@ async function buildVideoDto(
   deps: Pick<Deps, 'config' | 'runner'> & Partial<DtoDeps>,
   jobId: string,
   viewer: Principal | 'system',
-  prefetched?: { verdicts: VerdictRow[]; comments: Record<string, CommentCounts>; favorites: string[] },
+  prefetched?: {
+    verdicts: VerdictRow[]
+    comments: Record<string, CommentCounts>
+    favorites: string[]
+    /** Remixes' source videos on the page, by id (pageRepo only finds the page's own jobs). */
+    remixSources?: Map<string, JobRow | null>
+  },
 ) {
   const job = await repo.getJob(jobId)
   if (!job || job.deletedAt || (viewer !== 'system' && !canSee(viewer, job)))
@@ -1030,6 +1055,15 @@ async function buildVideoDto(
   const favorite = prefetched
     ? prefetched.favorites.includes(jobId)
     : viewerId !== null && (await repo.favoriteJobIds(viewerId, [jobId])).length > 0
+  // Provenance (remix spec §3.6): the source only when this viewer can see it; webhooks ('system') never get it.
+  let remixOf: { id: string; n: number; title: string } | null = null
+  if (job.remixOfJobId && viewer !== 'system') {
+    const src = prefetched?.remixSources?.has(job.remixOfJobId)
+      ? (prefetched.remixSources.get(job.remixOfJobId) ?? null)
+      : await repo.getJob(job.remixOfJobId)
+    if (src && !src.deletedAt && canSee(viewer, src))
+      remixOf = { id: src.id, n: job.remixOfN ?? 1, title: src.title }
+  }
   return {
     id: job.id,
     title: job.title,
@@ -1041,12 +1075,15 @@ async function buildVideoDto(
     createdAt: job.createdAt,
     updatedAt: job.updatedAt,
     // Starring is the viewer's own and doesn't bump job.version, so it's part of the validator.
-    etag: `"${job.id}-${job.version}${favorite ? '-f' : ''}"`,
+    // The source's visibility and title are part of it too: a source made private or renamed must not 304.
+    etag: `"${job.id}-${job.version}${favorite ? '-f' : ''}${remixOf ? `-r${sha256Hex(remixOf.title).slice(0, 8)}` : ''}"`,
     versions: out,
     published: pubs.some((p) => !p.unpublishedAt),
     private: job.private,
     language: job.language,
     comments: comments ?? { count: 0, unread: 0 },
+    isRemix: !!job.remixOfJobId,
+    remixOf,
     favorite,
     links: { self: `${deps.config.siteUrl}/api/v1/videos/${job.id}` },
   }
@@ -1140,8 +1177,12 @@ export async function listVideos(
     deps.store.videoPage(ids),
   ])
   const repo = pageRepo(deps.store, pageRows)
+  const sourceIds = [...new Set(page.flatMap((j) => (j.remixOfJobId ? [j.remixOfJobId] : [])))]
+  const remixSources = new Map(
+    await Promise.all(sourceIds.map(async (id) => [id, await deps.store.getJob(id)] as const)),
+  )
   const items = await Promise.all(
-    page.map((j) => videoDto(repo, deps, j.id, principal, { verdicts, comments, favorites })),
+    page.map((j) => videoDto(repo, deps, j.id, principal, { verdicts, comments, favorites, remixSources })),
   )
   return { items, nextCursor: nextCursor(rows.length, limit, page) }
 }

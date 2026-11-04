@@ -197,6 +197,10 @@
             "type": "boolean",
             "description": "Recorded voice-over is on, so the Narration track and Record are offered."
           },
+          "remixEnabled": {
+            "type": "boolean",
+            "description": "Remixing is on, so Remix is offered to people who can create videos."
+          },
           "missingSettings": {
             "type": "array",
             "items": {
@@ -218,6 +222,7 @@
           "authProvider",
           "requiredTeams",
           "narrationEnabled",
+          "remixEnabled",
           "missingSettings"
         ]
       },
@@ -320,6 +325,33 @@
               "unread"
             ]
           },
+          "isRemix": {
+            "type": "boolean",
+            "description": "This video was remixed from another one"
+          },
+          "remixOf": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "n": {
+                "type": "integer"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "n",
+              "title"
+            ],
+            "description": "The video (and version) this one was remixed from, when you can see it"
+          },
           "favorite": {
             "type": "boolean",
             "description": "You starred this video (only you see your favorites)"
@@ -352,6 +384,8 @@
           "private",
           "language",
           "comments",
+          "isRemix",
+          "remixOf",
           "favorite",
           "links"
         ]
@@ -1545,6 +1579,88 @@
           "prompt"
         ]
       },
+      "Remix": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 4000,
+            "description": "What to change: anything from swapping a name to the same format on a new topic.",
+            "example": "Same video, but for our payments API instead of webhooks."
+          },
+          "fromVersion": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "The version to remix. Omit for the latest ready one."
+          },
+          "aspect": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Aspect"
+              },
+              {
+                "description": "Omit to keep the source's shape."
+              }
+            ]
+          },
+          "language": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Language"
+              },
+              {
+                "description": "Omit to keep the source's language."
+              }
+            ]
+          },
+          "durationSec": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Target length in seconds. Omit to keep the source's."
+          },
+          "sound": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Sound"
+              },
+              {
+                "description": "Omit to keep the source's sound."
+              }
+            ]
+          },
+          "voiceover": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/VoiceoverInput"
+              },
+              {
+                "description": "Omit to keep the source's AI voice-over settings. Recorded narration is never carried over."
+              }
+            ]
+          },
+          "mediaIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 12,
+            "description": "The remix's library media: replaces the source's set. Omit to keep the source's set."
+          },
+          "planId": {
+            "type": "string",
+            "description": "A plan made with remixOf for this same video and version."
+          },
+          "webhookUrl": {
+            "type": "string",
+            "format": "uri",
+            "description": "HTTPS URL for video.ready / video.failed events (API keys only)."
+          }
+        },
+        "required": [
+          "prompt"
+        ]
+      },
       "Publish": {
         "type": "object",
         "properties": {
@@ -1922,12 +2038,17 @@
           "takeQuotaBytes": {
             "type": "integer",
             "description": "Stored bytes each person's recordings may use (default 2 GiB)."
+          },
+          "remixEnabled": {
+            "type": "boolean",
+            "description": "Remixing is on (the default). Off hides every Remix button and refuses new remixes; queued ones still run."
           }
         },
         "required": [
           "narrationEnabled",
           "transcriptionProvider",
-          "takeQuotaBytes"
+          "takeQuotaBytes",
+          "remixEnabled"
         ]
       },
       "TranscriptionProvider": {
@@ -1953,6 +2074,9 @@
             "minimum": 1048576,
             "maximum": 1099511627776,
             "description": "1 MiB to 1 TiB."
+          },
+          "remixEnabled": {
+            "type": "boolean"
           }
         }
       },
@@ -1985,6 +2109,28 @@
               "videoId",
               "version"
             ]
+          },
+          "remixOf": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "videoId": {
+                "type": "string"
+              },
+              "version": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "videoId",
+              "version"
+            ],
+            "description": "The video and version this plan remixes, for a remix plan."
           },
           "route": {
             "type": [
@@ -2271,6 +2417,7 @@
           "id",
           "prompt",
           "revisionOf",
+          "remixOf",
           "route",
           "questions",
           "answers",
@@ -2317,6 +2464,21 @@
             "required": [
               "videoId"
             ]
+          },
+          "remixOf": {
+            "type": "object",
+            "properties": {
+              "videoId": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "videoId"
+            ],
+            "description": "Plan a remix of this video (and version, else its latest ready one); not with revisionOf."
           },
           "mediaIds": {
             "type": "array",
@@ -6108,6 +6270,124 @@
           },
           "409": {
             "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Setup required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/videos/{id}/remix": {
+      "post": {
+        "summary": "Remix a video",
+        "description": "Makes a NEW video, owned by you, that starts from this video's finished composition (a ready version) and changes it as the prompt says: anything from swapping a name to the same format on a new topic. Its shape, length, sound, AI voice-over and library media come from the source unless you set them; recorded narration, comments and publications don't carry over. A private video's remix is private. Returns the new video.",
+        "tags": [
+          "videos"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "required": false,
+            "name": "idempotency-key",
+            "in": "header"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Remix"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Queued: the new video",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Video"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not ready, remixing turned off by an admin (remix_disabled), or a key reused",
             "content": {
               "application/json": {
                 "schema": {

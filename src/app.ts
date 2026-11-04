@@ -39,6 +39,8 @@ import { oauthRoutes } from './auth/routes.js'
 import { webAuthRoutes, webSignInEnabled } from './auth/web.js'
 import * as hooks from './domain/webhook-settings.js'
 import { getAdminSettings, narrationEnabled, updateAdminSettings } from './domain/narration-settings.js'
+import { remixEnabled } from './domain/remix-settings.js'
+import { remixVideo } from './domain/remix.js'
 import { listNotifications, markNotificationsRead } from './domain/notifications.js'
 import { getProgress } from './domain/progress.js'
 import { previewLink } from './domain/preview.js'
@@ -113,6 +115,7 @@ const PAID_PATHS = [
   /^\/api\/v1\/edits\/[^/]+\/render$/,
   /^\/api\/v1\/videos$/,
   /^\/api\/v1\/videos\/[^/]+\/versions$/,
+  /^\/api\/v1\/videos\/[^/]+\/remix$/,
   /^\/api\/v1\/videos\/[^/]+\/versions\/\d+\/retry$/,
 ]
 
@@ -298,6 +301,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
           requiredTeams: deps.config.netlifyRequiredTeams,
           // Before the database is set up this reads as the default (on).
           narrationEnabled: await narrationEnabled(deps).catch(() => true),
+          remixEnabled: await remixEnabled(deps).catch(() => true),
           // The deploy form lets these be skipped; say which are still needed (names only, never values).
           missingSettings: [
             ...(deps.config.runnerTokenPresent ? [] : (['RUNNER_API_TOKEN'] as const)),
@@ -349,7 +353,10 @@ export function createApp(deps: Deps, opts: AppOptions) {
           status: s.StatusSchema.optional(),
           owner: z.enum(['me', 'all']).optional(),
           published: z.enum(['true', 'false']).optional(),
-          favorite: z.enum(['true', 'false']).optional().openapi({ description: 'true: only videos you starred' }),
+          favorite: z
+            .enum(['true', 'false'])
+            .optional()
+            .openapi({ description: 'true: only videos you starred' }),
           q: z.string().max(200).optional(),
           cursor: z.string().max(500).optional(),
           limit: z.coerce.number().int().min(1).max(50).optional(),
@@ -462,6 +469,40 @@ export function createApp(deps: Deps, opts: AppOptions) {
     }),
     async (c) => {
       const res = await reviseVideo(
+        deps,
+        c.get('principal'),
+        c.req.valid('param').id,
+        c.req.valid('json'),
+        c.req.valid('header')['idempotency-key'],
+      )
+      c.header('location', res.body.links.self)
+      if (!res.replayed) kick(c)
+      return c.json(res.body, statusOf(res.status))
+    },
+  )
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/v1/videos/{id}/remix',
+      summary: 'Remix a video',
+      description:
+        "Makes a NEW video, owned by you, that starts from this video's finished composition (a ready version) and changes it as the prompt says: anything from swapping a name to the same format on a new topic. Its shape, length, sound, AI voice-over and library media come from the source unless you set them; recorded narration, comments and publications don't carry over. A private video's remix is private. Returns the new video.",
+      tags: ['videos'],
+      security,
+      request: {
+        params: IdParam,
+        headers: z.object({ 'idempotency-key': z.string().max(200).optional() }),
+        body: { content: { 'application/json': { schema: s.RemixSchema } }, required: true },
+      },
+      responses: {
+        202: json(s.VideoSchema, 'Queued: the new video'),
+        ...errors,
+        409: err('Not ready, remixing turned off by an admin (remix_disabled), or a key reused'),
+        503: err('Setup required'),
+      },
+    }),
+    async (c) => {
+      const res = await remixVideo(
         deps,
         c.get('principal'),
         c.req.valid('param').id,

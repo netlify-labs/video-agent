@@ -41,6 +41,10 @@ only watch. The tool list shows only what your role can do.
    an embed snippet. `unpublish_video` takes it down.
 5. **Change.** `revise_video` with `video_id` and `change` (only what should change). Pass `from_version` to branch
    from an earlier ready version, `comment_ids` to fold in feedback, and `media_ids` to add library items.
+6. **Remix.** `remix_video` with `video_id` and `change` makes a NEW video (the person's own) that starts from an
+   existing one: anything from "the same video with our new product name" to "a video like this one about webhooks".
+   Its shape, length, sound, AI voice-over and media come from the source unless you pass them; recorded narration,
+   comments and publications don't carry over. Use it instead of `create_video` when there's a video to start from.
 
 Other tools: `list_videos` (find a video by words in its prompt or title, `mine` for your own), `cancel_video` (stop
 the version in progress), `list_media` (the team's logos, screenshots, clips, fonts and music), `search_music` and
@@ -59,7 +63,7 @@ commands are in [references/narration.md](references/narration.md).
 - **One at a time.** Only one version of a video can be in progress. Don't call `create_video` again for the same
   request while it runs; poll with `get_video`. Use an `idempotency_key` when a retry might double-submit.
 - **Revise, don't recreate.** Small fixes ("bigger logo", "end card says Start free") are a `revise_video`. A new
-  video is for a new idea, or a different aspect (aspect is fixed per video).
+  video in the same format, or the same video in another shape, is a `remix_video`; `create_video` is for a new idea.
 - **Reuse media.** Check `list_media` for the logo, product screenshots and fonts, and pass their ids as `media_ids`
   instead of describing them. To add a screenshot, upload it (see [references/connect.md](references/connect.md)).
 - **Music without a licence worry.** When the library has no fitting track, `search_music` finds CC0 and CC BY music

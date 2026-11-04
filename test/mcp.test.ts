@@ -38,10 +38,10 @@ describe('MCP', () => {
     const { h, key } = await setup()
     const r = await rpc(h, key, 'tools/list', {}, 1, '/mcp')
     expect(r.status).toBe(200)
-    expect((r.body as { result: { tools: unknown[] } }).result.tools).toHaveLength(20)
+    expect((r.body as { result: { tools: unknown[] } }).result.tools).toHaveLength(21)
   })
 
-  it('initializes and lists twenty tools with instructions', async () => {
+  it('initializes and lists twenty-one tools with instructions', async () => {
     const { h, key } = await setup()
     const init = await rpc(h, key, 'initialize', {
       protocolVersion: '2025-06-18',
@@ -67,6 +67,7 @@ describe('MCP', () => {
       'plan_brief',
       'plan_video',
       'publish_video',
+      'remix_video',
       'render_with_narration',
       'revise_video',
       'search_music',
@@ -122,7 +123,7 @@ describe('MCP', () => {
     }
     const withCard = tools.filter((t) => t._meta?.ui?.resourceUri === card).map((t) => t.name)
     // Not get_video: agents call it over and over, and each call would add a card to the chat.
-    expect(withCard.sort()).toEqual(['create_video', 'revise_video', 'show_video'])
+    expect(withCard.sort()).toEqual(['create_video', 'remix_video', 'revise_video', 'show_video'])
 
     const read = ((await rpc(h, key, 'resources/read', { uri: card })).body as any).result as {
       contents: { mimeType: string; text: string; _meta: { ui: { csp: { resourceDomains: string[] } } } }[]

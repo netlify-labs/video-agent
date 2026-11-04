@@ -60,6 +60,7 @@ import { clip } from './lib/log.js'
 import { ONE_WAY_WORDS, SPEED_RANGE, VOICE_ID } from './lib/voice.js'
 import { MEDIA_KINDS } from './lib/media/classify.js'
 import { registerPrompts } from './mcp-prompts.js'
+import { remixVideo } from './domain/remix.js'
 
 const SERVER_INSTRUCTIONS = `Make short videos from a prompt. Each video is made by an AI agent with HyperFrames (HTML/CSS/GSAP rendered to MP4) and takes 3 to 8 minutes.
 
@@ -67,7 +68,7 @@ Typical flow:
 1. create_video with a prompt (quote any exact on-screen text). It returns immediately with status "queued".
 2. Keep checking without asking: call get_video with the id and wait_seconds 8, again and again, until status is "ready" or "failed". Then tell your user it's done, with the web page link. In clients that show MCP Apps, create_video, revise_video and show_video also show a video card that follows progress and plays the video when it's ready.
 3. When ready, the result has signed download URLs (valid 1 hour) and the web page for the video. To play it in the chat again later, call show_video.
-4. revise_video to change something ("make the end card orange"); it creates the next version from the latest ready one.
+4. revise_video to change something ("make the end card orange"); it creates the next version from the latest ready one. remix_video makes a NEW video (yours) that starts from an existing one and changes it as you say: anything from swapping a name to the same format on a new topic.
 5. publish_video to get a public share page, MP4 URL and embed snippet.
 
 Optional planning (when plan_video is listed): call plan_video with the prompt first. If it returns questions, ask your user (they can skip any), then call plan_brief with their answers, show the brief, and pass plan_id to create_video (or revise_video). Skip planning when the request is already specific.
@@ -365,6 +366,9 @@ async function summarize(deps: Deps, v: VideoDto) {
     // The language spoken in it: recorded narration's captions are transcribed in it.
     language: v.language,
     web_url: `${deps.config.siteUrl}/videos/${v.id}`,
+    // A remix: the video and version it was made from, when you can see it (docs/plans/2026-11-03-remix.md §3.6).
+    is_remix: v.isRemix,
+    remix_of: v.remixOf ? { video_id: v.remixOf.id, version: v.remixOf.n, title: v.remixOf.title } : null,
     latest_version: v.latestVersion,
     ready_version: ready?.n ?? null,
     created_at: v.createdAt,
@@ -640,12 +644,86 @@ Example: {"query": "webhooks", "mine": true, "limit": 10}`,
             created_at: v.createdAt,
             public: v.published,
             favorite: v.favorite,
+            is_remix: v.isRemix,
+            remix_of: v.remixOf ? { video_id: v.remixOf.id, version: v.remixOf.n } : null,
             web_url: `${deps.config.siteUrl}/videos/${v.id}`,
           })),
           more: res.nextCursor !== null,
           next_actions: ['Call get_video with a video_id for its status and download URLs.'],
         }
       }),
+  )
+
+  const remixTool = server.registerTool(
+    'remix_video',
+    {
+      title: 'Remix a video',
+      description: `Make a NEW video (owned by you) that starts from an existing video's finished composition and changes it as you describe: anything from "the same video with our new product name" to "a video like this one about webhooks". Its shape, length, sound, AI voice-over and library media come from the source unless you set them; recorded narration, comments and publications don't carry over. Returns at once; ready in a few minutes.
+
+When to use: the user wants a copy of a video with changes, or a new video in the same format. To change the video itself, use revise_video.
+Don't: describe the whole source video; describe what should be different.
+
+Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Same format, but about our payments API"}`,
+      inputSchema: {
+        video_id: z.string().describe('The video to remix: its id (vid_…) or web URL.'),
+        change: z
+          .string()
+          .min(3)
+          .max(4000)
+          .describe('What should be different. Be as descriptive as possible.'),
+        from_version: optionalVersion('Which ready version to start from (default: the latest ready one).'),
+        aspect: z.string().optional().describe("16:9, 9:16, 1:1 or 4:5. Leave out to keep the source's."),
+        duration_sec: z
+          .union([z.number(), z.string()])
+          .optional()
+          .describe("A target length. Leave out to keep the source's."),
+        media_ids: z
+          .array(z.string())
+          .max(12)
+          .optional()
+          .describe(
+            "Optional. The remix's library items (from list_media): replaces the source's. Leave out to keep them.",
+          ),
+        sound: z
+          .enum(SOUNDS)
+          .optional()
+          .describe('Optional. "silent", "music" or "music_sfx". Leave out to keep the source\'s sound.'),
+        voiceover: voiceoverArg(
+          "Optional. true, false or {voice, speed, script}. Leave out to keep the source's AI voice-over settings.",
+        ),
+        plan_id: z
+          .string()
+          .optional()
+          .describe('Optional. A plan from plan_video with remix_of this same video.'),
+      },
+      _meta: VIDEO_CARD,
+      annotations: {
+        title: 'Remix a video',
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
+    },
+    (args) =>
+      run(async () => {
+        const id = normalizeVideoId(args.video_id)
+        const res = await remixVideo(deps, principal, id, {
+          prompt: args.change,
+          fromVersion: args.from_version,
+          aspect: normalizeAspect(args.aspect),
+          durationSec: normalizeDuration(args.duration_sec),
+          mediaIds: args.media_ids,
+          sound: args.sound,
+          voiceover: toVoiceover(args.voiceover),
+          planId: args.plan_id,
+        })
+        if (!res.replayed) kick()
+        return {
+          ...(await summarize(deps, res.body)),
+          next_actions: [`The remix usually takes 3 to 8 minutes. ${KEEP_CHECKING(res.body.id)}`],
+        }
+      }, args.video_id),
   )
 
   const reviseTool = server.registerTool(
@@ -1137,6 +1215,12 @@ Example: {"prompt": "A 30-second launch video for org webhooks, ending on our lo
         aspect: z.string().optional().describe('16:9, 9:16, 1:1 or 4:5, if the user already chose one.'),
         duration_sec: z.union([z.number(), z.string()]).optional(),
         video_id: z.string().optional().describe('Plan a revision of this video instead of a new one.'),
+        remix_of: z
+          .string()
+          .optional()
+          .describe(
+            'Plan a remix of this video (a new video from it) instead; not with video_id. Pass plan_id to remix_video.',
+          ),
         media_ids: z
           .array(z.string())
           .max(12)
@@ -1162,6 +1246,7 @@ Example: {"prompt": "A 30-second launch video for org webhooks, ending on our lo
           aspect: normalizeAspect(args.aspect),
           durationSec: normalizeDuration(args.duration_sec),
           ...(args.video_id ? { revisionOf: { videoId: normalizeVideoId(args.video_id) } } : {}),
+          ...(args.remix_of ? { remixOf: { videoId: normalizeVideoId(args.remix_of) } } : {}),
           mediaIds: args.media_ids,
           sound: args.sound,
           voiceover: toVoiceover(args.voiceover),
@@ -1483,7 +1568,7 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "mode": "keep_visuals", 
 
   // Keys inherit their owner's role, so the tool list shows only what that role can do (plan v2 §3).
   if (!can(principal, 'video:create')) {
-    for (const t of [createTool, reviseTool, publishTool, unpublishTool]) t.remove()
+    for (const t of [createTool, reviseTool, remixTool, publishTool, unpublishTool]) t.remove()
   }
   if (!can(principal, 'media:upload')) {
     searchMusicTool.remove()

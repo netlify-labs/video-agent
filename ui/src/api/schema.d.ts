@@ -748,6 +748,107 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/videos/{id}/remix": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Remix a video
+         * @description Makes a NEW video, owned by you, that starts from this video's finished composition (a ready version) and changes it as the prompt says: anything from swapping a name to the same format on a new topic. Its shape, length, sound, AI voice-over and library media come from the source unless you set them; recorded narration, comments and publications don't carry over. A private video's remix is private. Returns the new video.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: {
+                    "idempotency-key"?: string;
+                };
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["Remix"];
+                };
+            };
+            responses: {
+                /** @description Queued: the new video */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Video"];
+                    };
+                };
+                /** @description Invalid request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not signed in */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not allowed */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not ready, remixing turned off by an admin (remix_disabled), or a key reused */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Setup required */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/videos/{id}/versions/{n}/retry": {
         parameters: {
             query?: never;
@@ -7415,6 +7516,8 @@ export interface components {
             requiredTeams: string[];
             /** @description Recorded voice-over is on, so the Narration track and Record are offered. */
             narrationEnabled: boolean;
+            /** @description Remixing is on, so Remix is offered to people who can create videos. */
+            remixEnabled: boolean;
             /** @description Required settings this deployment doesn't have yet (names only), so the sign-in screen and the app can say what to add. Empty once it's set up. */
             missingSettings: ("RUNNER_API_TOKEN" | "ALLOWED_EMAIL_DOMAINS" | "ADMIN_EMAILS")[];
         };
@@ -7446,6 +7549,14 @@ export interface components {
                 /** @description Others' comments since you last read them */
                 unread: number;
             };
+            /** @description This video was remixed from another one */
+            isRemix: boolean;
+            /** @description The video (and version) this one was remixed from, when you can see it */
+            remixOf: {
+                id: string;
+                n: number;
+                title: string;
+            } | null;
             /** @description You starred this video (only you see your favorites) */
             favorite: boolean;
             links: {
@@ -7748,6 +7859,30 @@ export interface components {
             /** @description Incorporate feedback: open comments on the version being revised (owner or admin). prompt is your note. */
             commentIds?: string[];
         };
+        Remix: {
+            /**
+             * @description What to change: anything from swapping a name to the same format on a new topic.
+             * @example Same video, but for our payments API instead of webhooks.
+             */
+            prompt: string;
+            /** @description The version to remix. Omit for the latest ready one. */
+            fromVersion?: number;
+            aspect?: components["schemas"]["Aspect"] & unknown;
+            language?: components["schemas"]["Language"] & unknown;
+            /** @description Target length in seconds. Omit to keep the source's. */
+            durationSec?: number;
+            sound?: components["schemas"]["Sound"] & unknown;
+            voiceover?: components["schemas"]["VoiceoverInput"] & unknown;
+            /** @description The remix's library media: replaces the source's set. Omit to keep the source's set. */
+            mediaIds?: string[];
+            /** @description A plan made with remixOf for this same video and version. */
+            planId?: string;
+            /**
+             * Format: uri
+             * @description HTTPS URL for video.ready / video.failed events (API keys only).
+             */
+            webhookUrl?: string;
+        };
         Publish: {
             /** @description Offer the narration's transcript on the share page. Default off; publishing again changes only this. */
             showTranscript?: boolean;
@@ -7847,6 +7982,8 @@ export interface components {
             transcriptionProvider: components["schemas"]["TranscriptionProvider"];
             /** @description Stored bytes each person's recordings may use (default 2 GiB). */
             takeQuotaBytes: number;
+            /** @description Remixing is on (the default). Off hides every Remix button and refuses new remixes; queued ones still run. */
+            remixEnabled: boolean;
         };
         /**
          * @description How recorded narration is transcribed for captions: local (the default, audio stays in this deployment), elevenlabs (sends the audio to ElevenLabs) or off (no captions from recordings).
@@ -7858,11 +7995,17 @@ export interface components {
             transcriptionProvider?: components["schemas"]["TranscriptionProvider"];
             /** @description 1 MiB to 1 TiB. */
             takeQuotaBytes?: number;
+            remixEnabled?: boolean;
         };
         Plan: {
             id: string;
             prompt: string;
             revisionOf: {
+                videoId: string;
+                version: number | null;
+            } | null;
+            /** @description The video and version this plan remixes, for a remix plan. */
+            remixOf: {
                 videoId: string;
                 version: number | null;
             } | null;
@@ -7928,6 +8071,11 @@ export interface components {
             aspect?: "16:9" | "9:16" | "1:1" | "4:5";
             durationSec?: number;
             revisionOf?: {
+                videoId: string;
+                version?: number;
+            };
+            /** @description Plan a remix of this video (and version, else its latest ready one); not with revisionOf. */
+            remixOf?: {
                 videoId: string;
                 version?: number;
             };
