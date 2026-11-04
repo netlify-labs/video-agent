@@ -684,6 +684,65 @@ export function CommentsCard({
   const posting = add.isPending || addBatch.isPending
   const mod = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'
 
+  // The moment a note is pinned to, and its spot: beside the heading, so the box stays right under it.
+  const moment =
+    canComment && (pending || ready) ? (
+      <Group gap="xs" ml="xs" data-testid="note-moment">
+        {pending ? (
+          <Badge
+            variant="light"
+            size="lg"
+            leftSection={<IconMapPin size={14} />}
+            rightSection={
+              <ActionIcon
+                size="xs"
+                variant="transparent"
+                color="gray"
+                aria-label="Remove the pin"
+                onClick={() => {
+                  setPending(null)
+                  setPicking(false)
+                }}
+              >
+                <IconX size={12} />
+              </ActionIcon>
+            }
+          >
+            {clockTime(pending.timeSec)}
+            {pending.x !== null ? ' · spot marked' : picking ? ' · click the frame' : ''}
+          </Badge>
+        ) : ready ? (
+          <Button size="xs" variant="default" leftSection={<IconMapPin size={14} />} onClick={startPin}>
+            Pin to this moment
+          </Button>
+        ) : null}
+        {pending && pending.x === null && !picking ? (
+          <Button
+            size="xs"
+            variant="subtle"
+            color="gray"
+            onClick={() => {
+              setPicking(true)
+            }}
+          >
+            Mark a spot
+          </Button>
+        ) : null}
+        {pending && pending.x !== null ? (
+          <Button
+            size="xs"
+            variant="subtle"
+            color="gray"
+            onClick={() => {
+              setPending({ ...pending, x: null, y: null })
+            }}
+          >
+            Remove spot
+          </Button>
+        ) : null}
+      </Group>
+    ) : null
+
   return (
     <Card>
       <Group justify="space-between" mb="sm">
@@ -692,25 +751,47 @@ export function CommentsCard({
           <Text size="sm" c="var(--va-faint)" className="num">
             {items.length}
           </Text>
+          {moment}
         </Group>
-        {canIncorporate && ready && open.length > 0 ? (
-          <Tooltip
-            label={
-              busy ? 'Wait for the version in progress' : 'Regenerate the video with the comment feedback'
-            }
-          >
-            <Button
-              size="xs"
-              variant="default"
-              disabled={busy}
-              onClick={() => {
-                setIncorporating(true)
-              }}
+        <Group gap="xs">
+          {canIncorporate && ready && open.length > 0 ? (
+            <Tooltip
+              label={
+                busy ? 'Wait for the version in progress' : 'Regenerate the video with the comment feedback'
+              }
             >
-              Incorporate feedback
-            </Button>
-          </Tooltip>
-        ) : null}
+              <Button
+                size="xs"
+                variant="default"
+                disabled={busy}
+                onClick={() => {
+                  setIncorporating(true)
+                }}
+              >
+                Incorporate feedback
+              </Button>
+            </Tooltip>
+          ) : null}
+          {canComment ? (
+            <Group gap="xs" wrap="nowrap">
+              {(pending || drafts.length > 0) && body.trim() ? (
+                <Button
+                  size="xs"
+                  variant="default"
+                  onClick={() => {
+                    stash()
+                    composer.current?.focus()
+                  }}
+                >
+                  Add note
+                </Button>
+              ) : null}
+              <Button size="xs" loading={posting} disabled={all.length === 0} onClick={postAll}>
+                {all.length > 1 ? `Post ${all.length} notes` : 'Comment'}
+              </Button>
+            </Group>
+          ) : null}
+        </Group>
       </Group>
       {incorporating ? (
         <IncorporateModal
@@ -758,67 +839,6 @@ export function CommentsCard({
                   ))}
                 </Stack>
               ) : null}
-              {pending || ready ? (
-                <Group gap="xs" data-testid="note-moment">
-                  {pending ? (
-                    <Badge
-                      variant="light"
-                      size="lg"
-                      leftSection={<IconMapPin size={14} />}
-                      rightSection={
-                        <ActionIcon
-                          size="xs"
-                          variant="transparent"
-                          color="gray"
-                          aria-label="Remove the pin"
-                          onClick={() => {
-                            setPending(null)
-                            setPicking(false)
-                          }}
-                        >
-                          <IconX size={12} />
-                        </ActionIcon>
-                      }
-                    >
-                      {clockTime(pending.timeSec)}
-                      {pending.x !== null ? ' · spot marked' : picking ? ' · click the frame' : ''}
-                    </Badge>
-                  ) : ready ? (
-                    <Button
-                      size="xs"
-                      variant="default"
-                      leftSection={<IconMapPin size={14} />}
-                      onClick={startPin}
-                    >
-                      Pin to this moment
-                    </Button>
-                  ) : null}
-                  {pending && pending.x === null && !picking ? (
-                    <Button
-                      size="xs"
-                      variant="subtle"
-                      color="gray"
-                      onClick={() => {
-                        setPicking(true)
-                      }}
-                    >
-                      Mark a spot
-                    </Button>
-                  ) : null}
-                  {pending && pending.x !== null ? (
-                    <Button
-                      size="xs"
-                      variant="subtle"
-                      color="gray"
-                      onClick={() => {
-                        setPending({ ...pending, x: null, y: null })
-                      }}
-                    >
-                      Remove spot
-                    </Button>
-                  ) : null}
-                </Group>
-              ) : null}
               <Textarea
                 ref={composer}
                 aria-label="Add a comment"
@@ -855,34 +875,12 @@ export function CommentsCard({
                   }
                 }}
               />
-              <Group justify="space-between" gap="xs" wrap="nowrap" align="flex-start">
-                <Text size="xs" c="var(--va-faint)" style={{ flex: 1, minWidth: 0, paddingTop: 4 }}>
-                  {ready ? (
-                    <>
-                      <Kbd size="xs">C</Kbd> notes the moment you're watching · <Kbd size="xs">Enter</Kbd>{' '}
-                      adds the note · <Kbd size="xs">Space</Kbd> keeps watching · post them together when
-                      you're done
-                    </>
-                  ) : null}
+              {ready ? (
+                <Text size="xs" c="var(--va-faint)">
+                  <Kbd size="xs">C</Kbd> notes the moment you're watching · <Kbd size="xs">Enter</Kbd> adds
+                  the note · <Kbd size="xs">Space</Kbd> keeps watching · post them together when you're done
                 </Text>
-                <Group gap="xs" wrap="nowrap">
-                  {(pending || drafts.length > 0) && body.trim() ? (
-                    <Button
-                      size="xs"
-                      variant="default"
-                      onClick={() => {
-                        stash()
-                        composer.current?.focus()
-                      }}
-                    >
-                      Add note
-                    </Button>
-                  ) : null}
-                  <Button type="submit" size="xs" loading={posting} disabled={all.length === 0}>
-                    {all.length > 1 ? `Post ${all.length} notes` : 'Comment'}
-                  </Button>
-                </Group>
-              </Group>
+              ) : null}
             </Stack>
           </form>
         ) : null}

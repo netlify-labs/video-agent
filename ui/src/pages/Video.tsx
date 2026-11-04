@@ -1054,7 +1054,7 @@ export function VideoPage() {
               >
                 <Stack gap="sm">
                   <Group justify="space-between">
-                    <Text fw={600}>Revise</Text>
+                    <Text fw={600}>Revise and regenerate this video</Text>
                     <Text size="sm" c="var(--va-faint)">
                       {busy
                         ? 'Wait for the version in progress'

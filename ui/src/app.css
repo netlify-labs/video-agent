@@ -57,6 +57,10 @@ body {
 .va-shell-main {
   background: var(--va-ground);
 }
+/* 12 px less above the content than at the sides, so page titles sit close under the header. */
+main.va-shell-main {
+  padding-top: calc(var(--app-shell-header-offset, 0rem) + var(--app-shell-padding) - 12px);
+}
 .va-navlink {
   border-radius: var(--mantine-radius-sm);
   color: var(--va-muted);
@@ -152,7 +156,6 @@ body {
   flex-wrap: wrap;
 }
 .va-video-head {
-  margin-top: -12px;
   margin-bottom: 12px;
 }
 .va-sub {
@@ -939,14 +942,16 @@ body {
 .va-composer:focus {
   outline: none;
 }
-/* The comment box: a step lighter than the card, with a border, so it reads as the place to type. */
-.va-composer-input {
+/* Text boxes: a step lighter than the card, with a border, so they read as the place to type. */
+.mantine-Textarea-input {
   background: var(--va-dialog-raised);
   border-color: var(--va-dialog-edge);
-  font-size: 14px;
 }
-.va-composer-input:focus {
+.mantine-Textarea-input:focus {
   border-color: var(--va-accent);
+}
+.va-composer-input {
+  font-size: 14px;
 }
 .va-draft-note {
   padding: 4px 8px;
@@ -1028,6 +1033,7 @@ body {
 /* The REST reference fills the content area: cancels the shell's padding, like the editor. */
 .va-docs-full {
   margin: calc(-1 * var(--mantine-spacing-lg));
+  margin-top: calc(12px - var(--mantine-spacing-lg));
   min-height: calc(100dvh - 56px);
 }
 .va-editor {
@@ -1036,6 +1042,7 @@ body {
   grid-template-columns: minmax(0, 1fr) minmax(360px, 440px);
   height: calc(100dvh - 56px);
   margin: calc(-1 * var(--mantine-spacing-lg));
+  margin-top: calc(12px - var(--mantine-spacing-lg));
 }
 .va-editor-stage {
   display: flex;
