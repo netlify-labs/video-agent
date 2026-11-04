@@ -13,7 +13,7 @@ import {
   SAMPLE_RATE,
   slotTakes,
 } from '../../../../src/lib/timeline'
-import { useRef } from 'react'
+import { useRef, type ReactNode } from 'react'
 import { canSplitAt, focusClip, type NarrationEditor } from '../../lib/use-narration-editor'
 
 const FADE_STEP_SAMPLES = SAMPLE_RATE / 2
@@ -173,11 +173,12 @@ const seconds = (samples: number) => Math.round((samples / SAMPLE_RATE) * 100) /
  * The selected clip's gain and fades as number fields, with undo/redo buttons. Typing is one gesture per field (a
  * single undo entry, closed when the field loses focus); editing shortcuts stand aside while a field has focus.
  */
-export function ClipInspector({ editor }: { editor: NarrationEditor }) {
+export function ClipInspector({ editor, start }: { editor: NarrationEditor; start?: ReactNode }) {
   const clip = editor.selected ? editor.op.clips.find((c) => c.id === editor.selected) : undefined
   const max = clip ? seconds(maxFade(clipLength(clip))) : 0
   return (
     <Group gap="sm" align="end" wrap="wrap" data-testid="clip-inspector">
+      {start}
       <Button size="xs" variant="default" disabled={!editor.canUndo} onClick={editor.undo}>
         Undo
       </Button>

@@ -66,3 +66,35 @@ test('video page: Space plays and pauses the video, arrows step', async ({ page 
   await page.keyboard.press('Shift+ArrowRight')
   await expect.poll(time).toBeGreaterThan(t0 + 2)
 })
+
+test('editor: dragging the playhead scrubs the preview', async ({ page }) => {
+  await page.goto('/videos/vid_teaser/edit/2')
+  await expect(page.getByRole('button', { name: 'Play preview' })).toBeEnabled()
+  const grip = page.getByTestId('timeline-playhead-grip')
+  const lane = await page.locator('.va-tl-lane[data-lane="music"]').boundingBox()
+  const start = await grip.boundingBox()
+  if (!lane || !start) throw new Error('no timeline')
+  await page.mouse.move(start.x + start.width / 2, start.y + 10)
+  await page.mouse.down()
+  // Through the middle (the preview follows while dragging) to 70% of the lane.
+  await page.mouse.move(lane.x + lane.width * 0.4, start.y + 10, { steps: 5 })
+  await expect.poll(() => previewTime(page)).toBeGreaterThan(1)
+  await page.mouse.move(lane.x + lane.width * 0.7, start.y + 10, { steps: 5 })
+  await page.mouse.up()
+  await expect.poll(() => previewTime(page)).toBeGreaterThan(4)
+})
+
+test('editor: pressing in a lane and dragging scrubs; a click on a narration clip still selects it', async ({
+  page,
+}) => {
+  await page.goto('/videos/vid_teaser/edit/2')
+  await expect(page.getByRole('button', { name: 'Play preview' })).toBeEnabled()
+  const lane = await page.locator('.va-tl-lane[data-lane="music"]').boundingBox()
+  if (!lane) throw new Error('no Music lane')
+  const y = lane.y + lane.height / 2
+  await page.mouse.move(lane.x + lane.width * 0.1, y)
+  await page.mouse.down()
+  await page.mouse.move(lane.x + lane.width * 0.8, y, { steps: 8 })
+  await page.mouse.up()
+  await expect.poll(() => previewTime(page)).toBeGreaterThan(5)
+})

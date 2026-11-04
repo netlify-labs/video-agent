@@ -163,13 +163,28 @@ export function Timeline(props: TimelineProps) {
     return Math.max(0, xToSample(clientX - left, ppsRef.current))
   }, [])
 
-  // A click anywhere in the lanes moves the playhead there, like the ruler; narration clips are picked and dragged
-  // instead (their own pointer handling), and the right button is left alone.
+  // A press anywhere in the lanes moves the playhead there and keeps scrubbing while the pointer is dragged, like
+  // grabbing the playhead; narration clips are picked and dragged instead (their own pointer handling), and the
+  // right button is left alone.
   const seekFromLane = (e: PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return
     const t = e.target as Element
     if (t.closest('.va-tl-clip[data-tone="narration"], .va-tl-handle')) return
-    props.onSeek(Math.min(sampleAt(e.clientX), end))
+    const seekAt = (x: number) => {
+      props.onSeek(Math.min(sampleAt(x), end))
+    }
+    seekAt(e.clientX)
+    const move = (m: globalThis.PointerEvent) => {
+      seekAt(m.clientX)
+    }
+    const stop = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', stop)
+      window.removeEventListener('pointercancel', stop)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', stop)
+    window.addEventListener('pointercancel', stop)
   }
 
   const targets = useMemo(
@@ -590,7 +605,13 @@ export function Timeline(props: TimelineProps) {
               }}
             />
           ) : null}
-          <Playhead sample={playhead} pxPerSec={pps} />
+          <Playhead
+            sample={playhead}
+            pxPerSec={pps}
+            onScrub={(x) => {
+              props.onSeek(Math.min(sampleAt(x), end))
+            }}
+          />
         </div>
       </div>
       <Text size="xs" className="va-tl-sr" aria-live="polite">

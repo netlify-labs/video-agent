@@ -22,7 +22,7 @@ import {
   Tooltip,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
-import { IconChevronDown, IconFileMusic, IconMicrophone, IconPlus } from '@tabler/icons-react'
+import { IconChevronDown, IconFileMusic, IconMicrophone, IconPlus, IconUpload } from '@tabler/icons-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { FPS } from '../../../src/lib/contract'
 import {
@@ -398,6 +398,53 @@ export function NarrationSection(props: NarrationSectionProps) {
   const overrun =
     baseSamples > 0 ? Math.max(0, op.clips.reduce((m, c) => Math.max(m, clipEnd(c)), 0) - baseSamples) : 0
 
+  // One Add audio menu in the row under the timeline (the timeline sits right under the picture): upload a file,
+  // pick from the library, or reuse a recording made for this video. The file picker is a hidden button it presses.
+  const addAudio = (
+    <Group gap={6} wrap="nowrap">
+      <FileButton accept={NARRATION_ACCEPT} multiple onChange={(fs) => void addFiles(fs, playhead)}>
+        {(p) => (
+          <button {...p} ref={uploadButton} type="button" hidden tabIndex={-1} aria-hidden>
+            Upload
+          </button>
+        )}
+      </FileButton>
+      <Menu position="bottom-start">
+        <Menu.Target>
+          <Button
+            size="xs"
+            variant="default"
+            leftSection={<IconPlus size={14} />}
+            rightSection={<IconChevronDown size={14} />}
+            disabled={!!importing || readOnly}
+            data-testid="narration-upload"
+            title={DROP_HELP}
+          >
+            Add audio
+          </Button>
+        </Menu.Target>
+        <Menu.Dropdown>
+          <Menu.Item leftSection={<IconUpload size={14} />} onClick={openUpload}>
+            Upload a file
+          </Menu.Item>
+          <Menu.Item leftSection={<IconFileMusic size={14} />} onClick={() => setPicking('library')}>
+            From the library
+          </Menu.Item>
+          <Menu.Item leftSection={<IconMicrophone size={14} />} onClick={() => setPicking('recordings')}>
+            Recordings for this video
+          </Menu.Item>
+        </Menu.Dropdown>
+      </Menu>
+      {op.clips.length ? (
+        <Tooltip label={RAW_DESCRIPTION} multiline w={260}>
+          <Badge size="xs" variant="light" color="gray">
+            {RAW_LABEL}
+          </Badge>
+        </Tooltip>
+      ) : null}
+    </Group>
+  )
+
   return (
     <>
       <CompositionPreview
@@ -413,61 +460,6 @@ export function NarrationSection(props: NarrationSectionProps) {
       />
       {props.hint}
       <Card data-testid="narration-section" p="sm">
-        <Group justify="space-between" gap="sm" mb={6}>
-          <Group gap={8}>
-            <IconMicrophone size={16} />
-            <Text fw={600}>Narration</Text>
-            {op.clips.length ? (
-              <Tooltip label={RAW_DESCRIPTION} multiline w={260}>
-                <Badge size="xs" variant="light" color="gray">
-                  {RAW_LABEL}
-                </Badge>
-              </Tooltip>
-            ) : null}
-          </Group>
-          <Group gap="xs">
-            <FileButton accept={NARRATION_ACCEPT} multiple onChange={(fs) => void addFiles(fs, playhead)}>
-              {(p) => (
-                <Button
-                  {...p}
-                  ref={uploadButton}
-                  size="xs"
-                  variant="default"
-                  leftSection={<IconPlus size={14} />}
-                  disabled={!!importing || readOnly}
-                  data-testid="narration-upload"
-                  title={DROP_HELP}
-                >
-                  Add audio
-                </Button>
-              )}
-            </FileButton>
-            <Menu position="bottom-end">
-              <Menu.Target>
-                <Button
-                  size="xs"
-                  variant="default"
-                  aria-label="Add audio from"
-                  rightSection={<IconChevronDown size={14} />}
-                  disabled={!!importing || readOnly}
-                >
-                  From…
-                </Button>
-              </Menu.Target>
-              <Menu.Dropdown>
-                <Menu.Item leftSection={<IconFileMusic size={14} />} onClick={() => setPicking('library')}>
-                  The library
-                </Menu.Item>
-                <Menu.Item
-                  leftSection={<IconMicrophone size={14} />}
-                  onClick={() => setPicking('recordings')}
-                >
-                  Recordings for this video
-                </Menu.Item>
-              </Menu.Dropdown>
-            </Menu>
-          </Group>
-        </Group>
         {props.banner}
         {importing ? (
           <Stack gap={4} mb="xs" data-testid="narration-importing">
@@ -507,7 +499,7 @@ export function NarrationSection(props: NarrationSectionProps) {
         <ClipMenu editor={editor} />
         <EditorAnnouncer editor={editor} />
         <Stack gap="sm" mt="sm">
-          <ClipInspector editor={editor} />
+          <ClipInspector editor={editor} start={addAudio} />
           <Group gap="lg" align="end" wrap="wrap">
             <Stack gap={4}>
               <Text size="xs" c="var(--va-muted)">

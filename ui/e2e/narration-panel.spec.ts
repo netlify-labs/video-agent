@@ -190,7 +190,7 @@ test('a chosen file (decoded by the browser) and a recording of this video land 
   await expect(page.locator('.va-tl-clip[data-clip-id="nar_1"]')).toBeVisible({ timeout: 15_000 })
   await expect.poll(() => span(page)).toEqual(['nar_1', 0, 1])
 
-  await section.getByRole('button', { name: 'Add audio from' }).click()
+  await section.getByRole('button', { name: 'Add audio' }).click()
   await page.getByRole('menuitem', { name: 'Recordings for this video' }).click()
   await page
     .getByRole('dialog', { name: 'Recordings for this video' })
@@ -212,8 +212,8 @@ test('library audio picked from the Narration section lands at the playhead, its
   await mock(page, 'mockLibraryMusic')
   await page.goto('/videos/vid_teaser/edit/2')
   const section = page.getByTestId('narration-section')
-  await section.getByRole('button', { name: 'Add audio from' }).click()
-  await page.getByRole('menuitem', { name: 'The library' }).click()
+  await section.getByRole('button', { name: 'Add audio' }).click()
+  await page.getByRole('menuitem', { name: 'From the library' }).click()
   await page
     .getByRole('dialog', { name: 'Add audio to the narration' })
     .getByTestId('pick-med_libpiano')
