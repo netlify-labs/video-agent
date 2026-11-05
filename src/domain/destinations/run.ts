@@ -83,6 +83,19 @@ export function patchFor(
         nextRunAt: r.checkAfterSec === null ? null : plus(now, r.checkAfterSec * 1000),
       }
     case 'retry': {
+      if (r.retryAt) {
+        // A long wait (a quota reset): past the usual cap, and the deadline moves with it.
+        const later = new Date(Date.parse(r.retryAt) + 24 * 3600_000).toISOString()
+        return {
+          ...base,
+          ...state(r.state),
+          status: working,
+          attempts: p.attempts + 1,
+          error: r.error,
+          nextRunAt: r.retryAt,
+          deadlineAt: later > p.deadlineAt ? later : p.deadlineAt,
+        }
+      }
       const wait =
         r.retryAfterSec !== undefined
           ? Math.min(r.retryAfterSec * 1000, MAX_RETRY_AFTER_MS)

@@ -201,6 +201,10 @@
             "type": "boolean",
             "description": "Remixing is on, so Remix is offered to people who can create videos."
           },
+          "youtubeAvailable": {
+            "type": "boolean",
+            "description": "YouTube is set up and turned on, so people can connect a channel and publish there."
+          },
           "missingSettings": {
             "type": "array",
             "items": {
@@ -223,6 +227,7 @@
           "requiredTeams",
           "narrationEnabled",
           "remixEnabled",
+          "youtubeAvailable",
           "missingSettings"
         ]
       },
@@ -2950,13 +2955,23 @@
           "remixEnabled": {
             "type": "boolean",
             "description": "Remixing is on (the default). Off hides every Remix button and refuses new remixes; queued ones still run."
+          },
+          "youtubeEnabled": {
+            "type": "boolean",
+            "description": "YouTube is offered as a publish destination (needs youtubeConfigured)."
+          },
+          "youtubeConfigured": {
+            "type": "boolean",
+            "description": "GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set (read-only)."
           }
         },
         "required": [
           "narrationEnabled",
           "transcriptionProvider",
           "takeQuotaBytes",
-          "remixEnabled"
+          "remixEnabled",
+          "youtubeEnabled",
+          "youtubeConfigured"
         ]
       },
       "TranscriptionProvider": {
@@ -2984,6 +2999,9 @@
             "description": "1 MiB to 1 TiB."
           },
           "remixEnabled": {
+            "type": "boolean"
+          },
+          "youtubeEnabled": {
             "type": "boolean"
           }
         }
@@ -8874,6 +8892,235 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/me/connections": {
+      "get": {
+        "operationId": "listConnections",
+        "summary": "Your connected accounts",
+        "description": "Accounts you connected for publishing (your YouTube channel), and whether YouTube is set up here.",
+        "tags": [
+          "publishing"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Connections",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "youtube": {
+                      "type": "object",
+                      "properties": {
+                        "configured": {
+                          "type": "boolean"
+                        },
+                        "available": {
+                          "type": "boolean"
+                        },
+                        "connectUrl": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "configured",
+                        "available",
+                        "connectUrl"
+                      ]
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "youtube"
+                            ]
+                          },
+                          "account": {
+                            "type": "string"
+                          },
+                          "accountId": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "ok",
+                              "reconnect"
+                            ]
+                          },
+                          "connectedAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "kind",
+                          "account",
+                          "accountId",
+                          "status",
+                          "connectedAt"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "youtube",
+                    "items"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/me/connections/{id}": {
+      "delete": {
+        "operationId": "deleteConnection",
+        "summary": "Disconnect an account",
+        "description": "Revokes the grant and forgets it. What was already published stays where it is.",
+        "tags": [
+          "publishing"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Disconnected"
           },
           "400": {
             "description": "Invalid request",

@@ -11,6 +11,7 @@ import {
   useAfterWrite,
 } from '../components/bits'
 import { WebhookCard } from '../components/WebhookCard'
+import { ConnectedAccounts } from '../components/ConnectedAccounts'
 
 export function KeysPage() {
   const qc = useQueryClient()
@@ -165,6 +166,8 @@ curl -L -H "Authorization: Bearer ${key}" \\
       <section style={{ marginTop: 32 }}>
         <WebhookCard scope="personal" />
       </section>
+
+      <ConnectedAccounts />
 
       <Modal
         opened={created !== null}

@@ -83,12 +83,23 @@ const mockOAuth = () => {
     return true
   }
 }
+function mockYouTube(): 'connected' | 'unconnected' | null {
+  try {
+    const v = localStorage.getItem('mockYouTube')
+    return v === 'unconnected' ? 'unconnected' : v ? 'connected' : null
+  } catch {
+    return null
+  }
+}
+let mockYtConnected = mockYouTube() === 'connected'
 // Admin settings (GET/PATCH /api/v1/admin/settings); localStorage.mockNarrationOff starts with recording off.
 const adminSettings: {
   narrationEnabled: boolean
   transcriptionProvider: 'local' | 'elevenlabs' | 'off'
   takeQuotaBytes: number
   remixEnabled: boolean
+  youtubeEnabled: boolean
+  youtubeConfigured: boolean
 } = {
   narrationEnabled: (() => {
     try {
@@ -107,6 +118,9 @@ const adminSettings: {
       return true
     }
   })(),
+  // localStorage.mockYouTube = '1' sets YouTube up and turns it on (with a connected channel unless it's 'unconnected').
+  youtubeEnabled: mockYouTube() !== null,
+  youtubeConfigured: mockYouTube() !== null,
 }
 const grants = [
   {
@@ -466,6 +480,7 @@ export function installMock() {
         requiredTeams: mockAuthProvider() === 'netlify' ? ['acme'] : [],
         narrationEnabled: adminSettings.narrationEnabled,
         remixEnabled: adminSettings.remixEnabled,
+        youtubeAvailable: adminSettings.youtubeEnabled,
         // localStorage.mockMissingSettings = 'RUNNER_API_TOKEN,ADMIN_EMAILS' shows the not-set-up notices.
         missingSettings: mockMissingSettings(),
       })
@@ -1245,6 +1260,40 @@ export function installMock() {
           optionsSchema: null,
           unpublishOptionsSchema: null,
         },
+        ...(adminSettings.youtubeEnabled
+          ? [
+              {
+                id: 'youtube',
+                kind: 'youtube',
+                name: 'YouTube',
+                ready: mockYtConnected,
+                reason: mockYtConnected ? null : 'Connect YouTube first (API keys → Connected accounts).',
+                capabilities: {
+                  targets: false,
+                  targetNoun: null,
+                  instructions: false,
+                  instructionsLabel: null,
+                  instructionsHint: null,
+                },
+                optionsSchema: {
+                  type: 'object',
+                  properties: {
+                    title: { type: 'string', title: 'Title', maxLength: 100 },
+                    description: { type: 'string', title: 'Description', maxLength: 5000 },
+                    privacy: {
+                      type: 'string',
+                      title: 'Privacy',
+                      enum: ['unlisted', 'private', 'public'],
+                      default: 'unlisted',
+                    },
+                    captions: { type: 'boolean', title: 'Also add captions', default: true },
+                  },
+                  required: ['title'],
+                },
+                unpublishOptionsSchema: null,
+              },
+            ]
+          : []),
         ...mockDestRows()
           .filter((d) => d.enabled)
           .map((d) => ({
@@ -1292,6 +1341,30 @@ export function installMock() {
         error: null,
       })
     }
+    if (p === '/api/v1/me/connections' && method === 'GET')
+      return json({
+        youtube: {
+          configured: adminSettings.youtubeConfigured,
+          available: adminSettings.youtubeEnabled,
+          connectUrl: '/auth/google/start',
+        },
+        items: mockYtConnected
+          ? [
+              {
+                id: 'dcon_mock',
+                kind: 'youtube',
+                account: 'Acme on YouTube',
+                accountId: 'UCmock',
+                status: 'ok',
+                connectedAt: new Date().toISOString(),
+              },
+            ]
+          : [],
+      })
+    if (p === '/api/v1/me/connections/dcon_mock' && method === 'DELETE') {
+      mockYtConnected = false
+      return new Response(null, { status: 204 })
+    }
     const dpPub = /^\/api\/v1\/videos\/([^/]+)\/versions\/(\d+)\/destinations$/.exec(p)
     if (dpPub?.[1] && method === 'POST') {
       const vid = videos.find((x) => x.id === dpPub[1])
@@ -1299,6 +1372,40 @@ export function installMock() {
       if (!vid || !ver) return fail(404, 'not_found', 'Video not found.')
       const b = await readBody(init, input)
       ;(window as unknown as { __lastDestPublish?: unknown }).__lastDestPublish = b
+      if (b.destination === 'youtube') {
+        const o = (b.options ?? {}) as Record<string, unknown>
+        if (typeof o.title !== 'string' || !o.title) return fail(400, 'invalid_request', 'Give it a title.')
+        const yt: Video['versions'][number]['destinations'][number] = {
+          id: `dpub_yt${String(Math.random()).slice(2, 8)}`,
+          kind: 'youtube',
+          destination: { id: 'youtube', name: 'YouTube' },
+          target: null,
+          status: 'queued',
+          desired: 'published',
+          url: null,
+          message: null,
+          warnings: [],
+          error: null,
+          hasSecret: false,
+          secretLabel: null,
+          publishedAt: new Date().toISOString(),
+          liveAt: null,
+        }
+        ver.destinations = [...ver.destinations, yt]
+        setTimeout(() => Object.assign(yt, { status: 'waiting', message: 'Processing on YouTube' }), 500)
+        setTimeout(
+          () =>
+            Object.assign(yt, {
+              status: 'live',
+              message: null,
+              url: 'https://youtu.be/mockvid1',
+              liveAt: new Date().toISOString(),
+              warnings: ['The custom thumbnail needs a verified YouTube channel; YouTube picked one.'],
+            }),
+          1300,
+        )
+        return json(yt)
+      }
       const d = mockDestRows().find((x) => x.id === b.destination)
       if (!d) return fail(404, 'not_found', 'Destination not found.')
       const target = (b.target as { id: string; name: string; url: string | null } | null | undefined) ?? null

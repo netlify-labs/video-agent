@@ -1500,6 +1500,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Your connected accounts
+         * @description Accounts you connected for publishing (your YouTube channel), and whether YouTube is set up here.
+         */
+        get: operations["listConnections"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/connections/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Disconnect an account
+         * @description Revokes the grant and forgets it. What was already published stays where it is.
+         */
+        delete: operations["deleteConnection"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/destination-callbacks/{id}": {
         parameters: {
             query?: never;
@@ -8118,6 +8158,8 @@ export interface components {
             narrationEnabled: boolean;
             /** @description Remixing is on, so Remix is offered to people who can create videos. */
             remixEnabled: boolean;
+            /** @description YouTube is set up and turned on, so people can connect a channel and publish there. */
+            youtubeAvailable: boolean;
             /** @description Required settings this deployment doesn't have yet (names only), so the sign-in screen and the app can say what to add. Empty once it's set up. */
             missingSettings: ("RUNNER_API_TOKEN" | "ALLOWED_EMAIL_DOMAINS" | "ADMIN_EMAILS")[];
         };
@@ -8803,6 +8845,10 @@ export interface components {
             takeQuotaBytes: number;
             /** @description Remixing is on (the default). Off hides every Remix button and refuses new remixes; queued ones still run. */
             remixEnabled: boolean;
+            /** @description YouTube is offered as a publish destination (needs youtubeConfigured). */
+            youtubeEnabled: boolean;
+            /** @description GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set (read-only). */
+            youtubeConfigured: boolean;
         };
         /**
          * @description How recorded narration is transcribed for captions: local (the default, audio stays in this deployment), elevenlabs (sends the audio to ElevenLabs) or off (no captions from recordings).
@@ -8815,6 +8861,7 @@ export interface components {
             /** @description 1 MiB to 1 TiB. */
             takeQuotaBytes?: number;
             remixEnabled?: boolean;
+            youtubeEnabled?: boolean;
         };
         Plan: {
             id: string;
@@ -10400,6 +10447,152 @@ export interface operations {
                         removing: number;
                     };
                 };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict or not ready */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listConnections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Connections */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        youtube: {
+                            configured: boolean;
+                            available: boolean;
+                            connectUrl: string;
+                        };
+                        items: {
+                            id: string;
+                            /** @enum {string} */
+                            kind: "youtube";
+                            account: string;
+                            accountId: string;
+                            /** @enum {string} */
+                            status: "ok" | "reconnect";
+                            connectedAt: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict or not ready */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Disconnected */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Invalid request */
             400: {

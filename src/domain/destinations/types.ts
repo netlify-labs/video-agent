@@ -13,7 +13,7 @@ import type {
   Target,
 } from '../types.js'
 import type { OptionsSchema } from '../../lib/options-schema.js'
-import type { Manifest } from './manifest.js'
+import type { Manifest, PublishManifest } from './manifest.js'
 
 export type { SafeError, Target }
 
@@ -29,7 +29,7 @@ export interface Destination {
 export type StepResult =
   | { status: 'continue'; state: object }
   | { status: 'waiting'; state?: object; checkAfterSec: number | null; message?: string; externalId?: string }
-  | { status: 'retry'; state?: object; error: SafeError; retryAfterSec?: number }
+  | { status: 'retry'; state?: object; error: SafeError; retryAfterSec?: number; retryAt?: string }
   | { status: 'live'; url: string | null; externalId: string | null; warnings?: string[]; message?: string }
   | { status: 'removed' }
   | { status: 'failed'; error: SafeError }
@@ -61,6 +61,8 @@ export interface DestinationKind {
   unpublishOptionsSchema(d: Destination): OptionsSchema | null
   /** Can this person publish here now? The reason is shown as-is ("Connect YouTube first"). */
   ready(ctx: ReadyCtx): Promise<{ ok: true } | { ok: false; reason: string }>
+  /** Refuses options that can't work with this version before anything starts (null: fine). */
+  checkOptions?(options: Record<string, unknown>, manifest: PublishManifest): string | null
   /** One bounded step of the current operation (one HTTP call, one upload chunk). */
   step(ctx: StepCtx): Promise<StepResult>
 }

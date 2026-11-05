@@ -113,6 +113,8 @@ export async function publishToDestination(
         includeTranscript: input.includeTranscript ?? false,
         sharePage: live ? `${deps.config.siteUrl}/v/${live.slug}` : null,
       })
+      const refused = kind.checkOptions?.(opts.value, manifest) ?? null
+      if (refused) throw new ApiError('invalid_request', refused)
       const now = deps.clock.now().toISOString()
       await repo.insertDestinationPublication({
         id,

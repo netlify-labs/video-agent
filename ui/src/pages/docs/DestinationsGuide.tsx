@@ -243,6 +243,46 @@ export default function DestinationsGuidePage() {
             ),
           },
           {
+            id: 'youtube',
+            title: 'YouTube',
+            children: (
+              <Stack gap="sm">
+                <Text size="sm">
+                  People publish to their own channel after connecting it under API keys → Connected accounts.
+                  Videos upload unlisted by default; the description is the version's summary plus the share
+                  link, editable, with the CC BY credits always kept underneath. Removing a video makes it
+                  private on YouTube.
+                </Text>
+                <Text fw={600} size="sm">
+                  Setting it up (admins)
+                </Text>
+                <Text size="sm" component="div">
+                  <ol style={{ margin: 0, paddingLeft: 20 }}>
+                    <li>In Google Cloud, create a project and enable the YouTube Data API v3.</li>
+                    <li>
+                      Create an OAuth client of type Web application with the redirect URI{' '}
+                      <Code>{`${window.location.origin}/auth/google/callback`}</Code>. The app asks for one
+                      scope, <Code>youtube.force-ssl</Code>.
+                    </li>
+                    <li>
+                      Set <Code>GOOGLE_CLIENT_ID</Code> and <Code>GOOGLE_CLIENT_SECRET</Code> in this site's
+                      environment and redeploy, then turn YouTube on under Admin.
+                    </li>
+                    <li>
+                      Move the OAuth consent screen out of Testing: in Testing, connections stop working after
+                      7 days. Google's app verification is needed before more than 100 people connect.
+                    </li>
+                  </ol>
+                </Text>
+                <Text size="sm">
+                  Quota: each project gets 100 uploads a day plus 10,000 units for everything else (captions
+                  cost 400, a thumbnail 50); one publish uses about 450 units. When the quota runs out,
+                  publishing waits for the daily reset (midnight Pacific) and continues on its own.
+                </Text>
+              </Stack>
+            ),
+          },
+          {
             id: 'example',
             title: 'Example receiver',
             description: 'Complete and dependency-free; Video Agent’s own tests run it against the app.',

@@ -42,6 +42,9 @@ import {
 } from './domain/destinations/admin.js'
 import { listDestinationTargets, revealDestinationSecret } from './domain/destinations/people.js'
 import { destinationFiles, receiveDestinationCallback } from './domain/destinations/callbacks.js'
+import { deleteConnection, listConnections } from './domain/destinations/connections.js'
+import { googleRoutes } from './auth/google.js'
+import { youtubeAvailable } from './domain/destinations/registry.js'
 import {
   listGrants,
   oauthEnabled,
@@ -326,6 +329,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
           // Before the database is set up this reads as the default (on).
           narrationEnabled: await narrationEnabled(deps).catch(() => true),
           remixEnabled: await remixEnabled(deps).catch(() => true),
+          youtubeAvailable: await youtubeAvailable(deps, deps.store).catch(() => false),
           // The deploy form lets these be skipped; say which are still needed (names only, never values).
           missingSettings: [
             ...(deps.config.runnerTokenPresent ? [] : (['RUNNER_API_TOKEN'] as const)),
@@ -921,6 +925,55 @@ export function createApp(deps: Deps, opts: AppOptions) {
     }),
     async (c) =>
       c.json(await removeDestinationEverywhere(deps, c.get('principal'), c.req.valid('param').id), 200),
+  )
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/v1/me/connections',
+      operationId: 'listConnections',
+      summary: 'Your connected accounts',
+      description:
+        'Accounts you connected for publishing (your YouTube channel), and whether YouTube is set up here.',
+      tags: ['publishing'],
+      security,
+      responses: {
+        200: json(
+          z.object({
+            youtube: z.object({ configured: z.boolean(), available: z.boolean(), connectUrl: z.string() }),
+            items: z.array(
+              z.object({
+                id: z.string(),
+                kind: z.literal('youtube'),
+                account: z.string(),
+                accountId: z.string(),
+                status: z.enum(['ok', 'reconnect']),
+                connectedAt: z.string(),
+              }),
+            ),
+          }),
+          'Connections',
+        ),
+        ...errors,
+      },
+    }),
+    async (c) => c.json(await listConnections(deps, c.get('principal')), 200),
+  )
+  app.openapi(
+    createRoute({
+      method: 'delete',
+      path: '/api/v1/me/connections/{id}',
+      operationId: 'deleteConnection',
+      summary: 'Disconnect an account',
+      description: 'Revokes the grant and forgets it. What was already published stays where it is.',
+      tags: ['publishing'],
+      security,
+      request: { params: IdParam },
+      responses: { 204: { description: 'Disconnected' }, ...errors },
+    }),
+    async (c) => {
+      await deleteConnection(deps, c.get('principal'), c.req.valid('param').id)
+      return c.body(null, 204)
+    },
   )
   // Receiver callbacks (publish destinations §3.3, §3.5): no session or API key; a per-operation Bearer token.
   const bearer = (c: Context) => /^Bearer\s+(\S+)$/i.exec(c.req.header('authorization') ?? '')?.[1] ?? null
@@ -2603,6 +2656,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
   app.all('/mcp', mcp)
   if (oauthEnabled(deps)) app.route('/', oauthRoutes(deps))
   if (webSignInEnabled(deps)) app.route('/', webAuthRoutes(deps, { withCallback: !oauthEnabled(deps) }))
+  // Connecting a YouTube channel (publish destinations §4), when the Google OAuth env is set.
+  if (deps.config.google) app.route('/', googleRoutes(deps))
 
   // ───── agent callback (hidden from the public spec) ─────
   app.openapi(

@@ -108,3 +108,50 @@ test('the destination contract page renders its sections, test vector and exampl
   ).toBeVisible()
   await expect(page.getByText('export function createReceiver').first()).toBeVisible()
 })
+
+test('YouTube: the dialog fills in the title and description, keeps credits, counts bytes, and goes live', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('mockYouTube', '1')
+  })
+  await page.goto('/videos/vid_teaser')
+  await page.getByRole('button', { name: 'Publish to' }).click()
+  await page.getByRole('menuitem', { name: /YouTube/ }).click()
+  const dialog = page.getByRole('dialog', { name: /Publish v2 to YouTube/ })
+  await expect(dialog.getByLabel('Title')).not.toHaveValue('')
+  await expect(dialog.getByLabel('Description')).not.toHaveValue('')
+  await expect(dialog).toContainText('bytes, credits included')
+  // Privacy defaults to unlisted.
+  await expect(dialog.getByLabel('Privacy', { exact: true })).toHaveValue('unlisted')
+  // Too long, or < >: Publish is off.
+  await dialog.getByLabel('Description').fill('x'.repeat(5100))
+  await expect(dialog.getByRole('button', { name: 'Publish' })).toBeDisabled()
+  await dialog.getByLabel('Description').fill('A <b>bold</b> launch')
+  await expect(dialog.getByRole('button', { name: 'Publish' })).toBeDisabled()
+  await dialog.getByLabel('Description').fill('The launch video.')
+  await dialog.getByRole('button', { name: 'Publish' }).click()
+  const row = page.getByTestId('published-to-row').first()
+  await expect(row).toContainText('YouTube')
+  await expect(row).toContainText('Live', { timeout: 15_000 })
+  await expect(row).toContainText('verified YouTube channel')
+  await expect(row.getByRole('link', { name: 'Open' })).toHaveAttribute('href', 'https://youtu.be/mockvid1')
+})
+
+test('YouTube: unconnected people are told to connect; Connected accounts connects and disconnects', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('mockYouTube', 'unconnected')
+  })
+  await page.goto('/videos/vid_teaser')
+  await page.getByRole('button', { name: 'Publish to' }).click()
+  await expect(page.getByRole('menuitem', { name: /YouTube/ })).toContainText('Connect YouTube first')
+  await page.keyboard.press('Escape')
+  await page.goto('/keys')
+  const card = page.locator('#connected-accounts')
+  await expect(card.getByRole('link', { name: 'Connect YouTube' })).toHaveAttribute(
+    'href',
+    '/auth/google/start',
+  )
+})

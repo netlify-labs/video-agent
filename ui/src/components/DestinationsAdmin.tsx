@@ -39,6 +39,45 @@ function SecretOnce({ secret, onClose }: { secret: string; onClose: () => void }
   )
 }
 
+/** YouTube on or off, with what setting it up takes (publish destinations §4). */
+export function YouTubeAdminCard() {
+  const afterWrite = useAfterWrite()
+  const settings = $api.useQuery('get', '/api/v1/admin/settings')
+  const save = $api.useMutation('patch', '/api/v1/admin/settings', afterWrite)
+  const s = settings.data
+  return (
+    <Card>
+      <Text fw={600} mb="xs">
+        YouTube
+      </Text>
+      <Switch
+        label="People can publish to their YouTube channel"
+        description={
+          s?.youtubeConfigured
+            ? 'Each person connects their own channel under API keys → Connected accounts.'
+            : 'Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET first (see the checklist).'
+        }
+        checked={s?.youtubeEnabled ?? false}
+        disabled={!s?.youtubeConfigured}
+        onChange={(e) => {
+          save.mutate({ body: { youtubeEnabled: e.currentTarget.checked } })
+        }}
+      />
+      <Stack gap={2} mt="sm">
+        <Text size="xs" c="var(--va-faint)">
+          Setup: a Google Cloud project with the YouTube Data API v3 · an OAuth web client whose redirect URI
+          is {window.location.origin}/auth/google/callback · scope youtube.force-ssl · GOOGLE_CLIENT_ID and
+          GOOGLE_CLIENT_SECRET in this site's environment · move the consent screen out of Testing (in
+          Testing, connections end after 7 days) · Google's verification before more than 100 people connect.
+        </Text>
+        <Anchor href="/docs/destinations#youtube" size="xs">
+          Setup guide
+        </Anchor>
+      </Stack>
+    </Card>
+  )
+}
+
 export function DestinationsAdminCard() {
   const afterWrite = useAfterWrite()
   const list = $api.useQuery('get', '/api/v1/admin/destinations')

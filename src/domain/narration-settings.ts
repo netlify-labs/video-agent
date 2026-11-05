@@ -41,10 +41,19 @@ export async function assertNarrationEnabled(deps: Pick<Deps, 'store'>): Promise
 /** Everything on the admin Settings page: the voice-over settings plus the remix switch (remix spec §4). */
 export interface AdminSettings extends NarrationSettings {
   remixEnabled: boolean
+  /** YouTube as a publish destination (publish destinations §4). */
+  youtubeEnabled: boolean
+  /** The Google OAuth env is set (read-only). */
+  youtubeConfigured: boolean
 }
 
-async function adminSettings(deps: Pick<Deps, 'store'>): Promise<AdminSettings> {
-  return { ...(await narrationSettings(deps)), remixEnabled: await remixEnabled(deps) }
+async function adminSettings(deps: Pick<Deps, 'store' | 'config'>): Promise<AdminSettings> {
+  return {
+    ...(await narrationSettings(deps)),
+    remixEnabled: await remixEnabled(deps),
+    youtubeEnabled: (await deps.store.getSettings())?.youtubeEnabled ?? false,
+    youtubeConfigured: deps.config.google !== null,
+  }
 }
 
 export async function getAdminSettings(deps: Deps, p: Principal): Promise<AdminSettings> {
@@ -61,7 +70,9 @@ export async function updateAdminSettings(
   assertCan(p, 'settings:manage')
   // The row is created on first use; make sure it exists so the update has something to change.
   await getSettings(deps)
-  const changes = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined))
+  const changes = Object.fromEntries(
+    Object.entries(patch).filter(([k, v]) => v !== undefined && k !== 'youtubeConfigured'),
+  )
   if (Object.keys(changes).length) await deps.store.updateSettings(changes)
   deps.log.info('settings.updated', { userId: p.userId, changes })
   return adminSettings(deps)

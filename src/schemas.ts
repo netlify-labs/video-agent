@@ -1514,6 +1514,10 @@ export const AdminSettingsSchema = z
       .describe(
         'Remixing is on (the default). Off hides every Remix button and refuses new remixes; queued ones still run.',
       ),
+    youtubeEnabled: z
+      .boolean()
+      .describe('YouTube is offered as a publish destination (needs youtubeConfigured).'),
+    youtubeConfigured: z.boolean().describe('GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set (read-only).'),
   })
   .openapi('AdminSettings')
 export const UpdateAdminSettingsSchema = z
@@ -1528,6 +1532,7 @@ export const UpdateAdminSettingsSchema = z
       .optional()
       .describe('1 MiB to 1 TiB.'),
     remixEnabled: z.boolean().optional(),
+    youtubeEnabled: z.boolean().optional(),
   })
   .openapi('UpdateAdminSettings')
 
@@ -1611,6 +1616,9 @@ export const PublicConfigSchema = z
     remixEnabled: z
       .boolean()
       .describe('Remixing is on, so Remix is offered to people who can create videos.'),
+    youtubeAvailable: z
+      .boolean()
+      .describe('YouTube is set up and turned on, so people can connect a channel and publish there.'),
     missingSettings: z
       .array(z.enum(['RUNNER_API_TOKEN', 'ALLOWED_EMAIL_DOMAINS', 'ADMIN_EMAILS']))
       .describe(
