@@ -112,8 +112,16 @@ export function which(cmd: string): string | null {
   return r.status === 0 && out ? out : null
 }
 
-/** The netlify CLI isn't on PATH in non-interactive shells inside runs; look in the usual places. */
+/**
+ * The netlify CLI isn't on PATH in non-interactive shells inside runs; look in the usual places. Local mode sets
+ * VA_NETLIFY_CLI=off (cli-and-sdk plan §7): a laptop run must never reach Blobs, so any step that would is a bug.
+ */
 export function netlifyCli(): string[] {
+  if (process.env.VA_NETLIFY_CLI === 'off')
+    throw new StepError(
+      'This is a local run (VA_NETLIFY_CLI=off), which never calls the Netlify CLI, but a step tried to. ' +
+        'Use --upload local, a file: callback and --inputs. Stop and report this.',
+    )
   const found = which('netlify')
   if (found) return [found]
   for (const p of [
@@ -126,10 +134,15 @@ export function netlifyCli(): string[] {
   return ['npx', '-y', 'netlify-cli']
 }
 
-export function run(cmd: string, args: string[], opts: { cwd?: string; timeoutMs?: number } = {}): string {
+export function run(
+  cmd: string,
+  args: string[],
+  opts: { cwd?: string; timeoutMs?: number; env?: NodeJS.ProcessEnv } = {},
+): string {
   try {
     return execFileSync(cmd, args, {
       cwd: opts.cwd ?? repoRoot,
+      ...(opts.env ? { env: opts.env } : {}),
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
       timeout: opts.timeoutMs ?? 15 * 60_000,

@@ -16,15 +16,30 @@ import { StepError, log, run } from './run-tools.js'
 
 const DEFAULT_ELEVENLABS_VOICE = '21m00Tcm4TlvDq8ikWAM'
 
-/** Installs kokoro-onnx for the user once per run; a run without a voice-over never pays for it. */
-function ensureKokoro() {
+/**
+ * Installs kokoro-onnx once per run; a run without a voice-over never pays for it. On a runner it goes into the
+ * user's site-packages. In local mode VA_PYTHON names the interpreter of a venv the CLI made
+ * (~/.cache/video-agent/kokoro-venv): it installs there, never with --user, and ignores the person's pip config
+ * (docs/spikes.md C3). kokoro-onnx>=0.6, so a Python it doesn't support fails here, not on the first line.
+ */
+export function ensureKokoro(env: NodeJS.ProcessEnv = process.env) {
+  const venv = env.VA_PYTHON
+  const python = venv ?? 'python3'
   try {
-    run('python3', ['-c', 'import kokoro_onnx, soundfile'], { timeoutMs: 60_000 })
+    run(python, ['-c', 'import kokoro_onnx, soundfile'], { timeoutMs: 60_000 })
     return
   } catch {
     // Not installed yet.
   }
   const started = Date.now()
+  if (venv) {
+    run(venv, ['-m', 'pip', 'install', '--quiet', 'kokoro-onnx>=0.6', 'soundfile'], {
+      timeoutMs: 5 * 60_000,
+      env: { ...env, PIP_CONFIG_FILE: '/dev/null', PIP_USER: '0' },
+    })
+    log('voice.kokoro_installed', { ms: Date.now() - started, python: venv })
+    return
+  }
   const base = ['-m', 'pip', 'install', '--user', '--quiet', 'kokoro-onnx', 'soundfile']
   try {
     run('python3', base, { timeoutMs: 5 * 60_000 })
@@ -43,6 +58,7 @@ export function kokoro(cwd: string): VoiceProvider {
         ensureKokoro()
         ready = true
       }
+      const venv = process.env.VA_PYTHON
       const dir = mkdtempSync(join(tmpdir(), 'va-tts-'))
       try {
         // The text goes in a file, so nothing in it reaches a shell or an argument parser.
@@ -62,7 +78,12 @@ export function kokoro(cwd: string): VoiceProvider {
             String(opts.speed),
             '--json',
           ],
-          { cwd, timeoutMs: 5 * 60_000 },
+          // hyperframes speaks with HYPERFRAMES_PYTHON when it's set: the venv's interpreter in local mode.
+          {
+            cwd,
+            timeoutMs: 5 * 60_000,
+            ...(venv ? { env: { ...process.env, HYPERFRAMES_PYTHON: venv } } : {}),
+          },
         )
         return Promise.resolve({ audio: new Uint8Array(readFileSync(out)), format: 'wav' })
       } finally {
