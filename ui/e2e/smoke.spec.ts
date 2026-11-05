@@ -573,7 +573,13 @@ test('the owner incorporates feedback: open comments all checked, plus a note', 
   const sent = await page.evaluate<{ prompt: string; fromVersion: number; commentIds: string[] }>(
     '(window).__lastRevise',
   )
-  expect(sent).toEqual({ prompt: 'Keep the colours', fromVersion: 2, commentIds: ['c_1'] })
+  // c_1 is pinned in one of v2's four scenes, so Only change the scenes these comments point at is on by default.
+  expect(sent).toEqual({
+    prompt: 'Keep the colours',
+    fromVersion: 2,
+    commentIds: ['c_1'],
+    scope: { beats: ['hook'] },
+  })
 })
 
 test('viewers and non-owners get no Incorporate button', async ({ page }) => {
