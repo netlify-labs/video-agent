@@ -7,6 +7,7 @@ import { importMusicAndWait } from '../packages/sdk/src/helpers/media.js'
 import { isVideoAgentError, VideoAgent, type UploadProgress } from '../packages/sdk/src/index.js'
 import { PART_SIZE } from '../src/domain/media-uploads.js'
 import { apiKey, harness, type Harness } from './helpers.js'
+import { appFetch } from './sdk-fetch.js'
 
 const fixture = (name: string) => new Uint8Array(readFileSync(new URL(`./fixtures/${name}`, import.meta.url)))
 /** The fixture clip padded with a trailing `free` box: still a valid MP4, big enough for three parts. */
@@ -38,7 +39,7 @@ const sdk = async (
         req.method === 'PUT' || req.method === 'POST' ? await req.clone().arrayBuffer() : new ArrayBuffer(0)
       const what = intercept?.(req, n++) ?? null
       if (what === 'drop-before') throw new TypeError('socket hang up')
-      const res = await h.app.fetch(req, { context: { deploy: { published: true } } })
+      const res = await appFetch(h, req)
       seen.push({
         method: req.method,
         path,

@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { isVideoAgentError, VideoAgent } from '../packages/sdk/src/index.js'
 import { apiKey, harness, readyVideo, type Harness } from './helpers.js'
+import { appFetch } from './sdk-fetch.js'
 
 const SITE = 'https://video.example.com'
 
@@ -19,7 +20,7 @@ const sdk = async (h: Harness, storage: (req: Request) => Response = () => new R
       const req = new Request(input, init)
       if (new URL(req.url).pathname.startsWith('/api/')) {
         api.push(req)
-        return h.app.fetch(req, { context: { deploy: { published: true } } })
+        return appFetch(h, req)
       }
       stored.push(req)
       return storage(req)

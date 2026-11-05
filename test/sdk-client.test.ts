@@ -3,14 +3,14 @@
 import { describe, expect, it } from 'vitest'
 import { isVideoAgentError, VideoAgent } from '../packages/sdk/src/index.js'
 import { apiKey, harness, PROMPT, type Harness } from './helpers.js'
+import { appFetch } from './sdk-fetch.js'
 
 const sdk = async (h: Harness, o: { key?: boolean } = {}) => {
   const events: Record<string, unknown>[] = []
   const va = new VideoAgent({
     url: 'https://video.example.com',
     apiKey: o.key === false ? '' : await apiKey(h, h.member),
-    fetch: async (input: string | URL | Request, init?: RequestInit) =>
-      h.app.fetch(new Request(input, init), { context: { deploy: { published: true } } }),
+    fetch: async (input: string | URL | Request, init?: RequestInit) => appFetch(h, new Request(input, init)),
     logger: (_e, f) => events.push(f),
   })
   return { va, events }

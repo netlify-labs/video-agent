@@ -3,6 +3,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Run it on any branch by hand: gh workflow run ci.yml --ref <branch>
+  workflow_dispatch:
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -27,6 +29,13 @@ jobs:
       # pull_request only, never pull_request_target, so contributed examples run with no secrets.
       - run: npm run look:check
       - run: npm run test:ui
+      # Traces and screenshots of failed specs (playwright.config.ts keeps them on failure).
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: test-results/
+          retention-days: 7
 
   # The built SDK on each Node it supports (cli-and-sdk plan §4.5 Runtime): import and require(), a call over a stub
   # fetch, a webhook signature, and a main entry with no node: imports but the lazy file helpers'.

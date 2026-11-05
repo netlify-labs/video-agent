@@ -5,6 +5,7 @@ import { isVideoAgentError, VideoAgent, type WaitProgress } from '../packages/sd
 import { waitForVideo } from '../packages/sdk/src/helpers/videos.js'
 import { failedSnap, running, succeeded } from './fakes.js'
 import { apiKey, harness, PROMPT, type Harness } from './helpers.js'
+import { appFetch } from './sdk-fetch.js'
 
 /** The default run (it uploads the files), stepping through these snapshots. */
 const withTimeline = (h: Harness, timeline: ReturnType<typeof running>[]) => {
@@ -22,7 +23,7 @@ const sdk = async (h: Harness, o: { drive?: boolean } = {}) => {
       const req = new Request(input, init)
       const path = new URL(req.url).pathname
       if (o.drive && req.method === 'GET' && /^\/api\/v1\/videos\/[^/]+$/.test(path)) await h.drive(1)
-      const res = await h.app.fetch(req, { context: { deploy: { published: true } } })
+      const res = await appFetch(h, req)
       seen.push({ method: req.method, path, status: res.status, inm: req.headers.has('if-none-match') })
       return res
     },
@@ -81,6 +82,36 @@ describe('SDK helpers in process', () => {
     )
     expect(calls).toEqual(['queued', 'queued', 'running', 'progress', 'ready'])
     expect(progressCalls).toBe(1)
+  })
+
+  it('wait reports a step change while the video itself is unchanged (304)', async () => {
+    const changes: WaitProgress[] = []
+    const steps = ['Writing the composition', 'Writing the composition', 'Rendering', null]
+    const statuses = ['running', 'running', 'running', 'ready']
+    const sent: string[] = []
+    await waitForVideo(
+      {
+        send: async (x) => {
+          const status = statuses.shift() ?? 'ready'
+          sent.push(x.headers?.['if-none-match'] ? 'inm' : 'plain')
+          // Same ETag while running: only the agent's step moves, and that's in /progress.
+          if (status === 'running' && x.headers?.['if-none-match']) return new Response(null, { status: 304 })
+          return Response.json(
+            { latestVersion: 1, versions: [{ n: 1, status, stage: null, latestStep: null, error: null }] },
+            { headers: { etag: `"${status}"` } },
+          )
+        },
+        progress: async () => ({ versionN: 1, stage: 'authoring', step: steps.shift() ?? null }) as never,
+      },
+      'vid_0001',
+      { intervalMs: 0, onProgress: (p) => changes.push(p) },
+    )
+    expect(changes.map((c) => [c.status, c.step])).toEqual([
+      ['running', 'Writing the composition'],
+      ['running', 'Rendering'],
+      ['ready', null],
+    ])
+    expect(sent).toEqual(['plain', 'inm', 'inm', 'inm'])
   })
 
   it('wait throws video_failed when the version fails', async () => {
