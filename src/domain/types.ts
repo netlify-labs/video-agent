@@ -308,6 +308,8 @@ export interface VersionRow {
   frozen?: FrozenBundle | null
   /** Missing on rows written before sound existed: silent. */
   sound?: VideoSound
+  /** The look snapshot this version was made with (plan 2026-11-04-looks §4.3); null or missing: no look. */
+  look?: VersionLook | null
   /** The render engine (render-engines plan §4.2). Missing on rows written before engines existed: hyperframes. */
   engine?: EngineId
   /** Null (or missing) when the version has no voice-over. */
