@@ -1,0 +1,21 @@
+{
+  "contract": 1,
+  "width": 1920,
+  "height": 1080,
+  "fps": 30,
+  "colors": { "bg": "#0b0d10", "text": "#f4f5f7", "accent": "#14b8a6" },
+  "layers": [],
+  "beats": [
+    {
+      "id": "intro",
+      "label": "Opening",
+      "duration": 3,
+      "authoredDuration": 3,
+      "texts": { "intro-title": { "text": "Your video", "label": "Headline" } },
+      "media": {},
+      "voice": null,
+      "sfx": []
+    }
+  ],
+  "audio": { "music": null }
+}

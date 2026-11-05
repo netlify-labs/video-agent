@@ -9,6 +9,8 @@ export default tseslint.config(
       'ui/dist-mock',
       '.taste-skill',
       'video',
+      // The Remotion template is linted by its own tsc (Remotion's types aren't installed at the root).
+      'engines/remotion/template',
       '.netlify',
       '.beads',
       '.nax',

@@ -1,0 +1,20 @@
+{
+  "remotion": "4.0.540",
+  "files": {
+    "AGENTS.md": "5c63515435ac939420e0a392b486e618cc74b8330ae77102e495b47e65cddeee",
+    "package.json": "beec284f6f7ff33772afc18f42cbc62b35049393c0ad2152b0f4aaf29e604745",
+    "package-lock.json": "b5d2db0d0ad149dd255e77eb536a5349b72739046f8d1ec482907bcbc467db7f",
+    "remotion.config.ts": "810ec08de09300a275596cfcd58b4593664827946052f1603557f74792c531e3",
+    "tsconfig.json": "16bcc59ff6383184361d8bfda665b8ccab9f0403f46fadecd34a28871c7742ff",
+    "src/index.ts": "e35910ee08917f2a330c8107dfc0389b09b84e82104338888c2274d4e31fa2b5",
+    "src/Root.tsx": "da17b8db0dd9fbab3486455905db19827aa5709dd25bff3ec5d8ec1630d6beef",
+    "src/va/Audio.tsx": "5880955b979984e510808bdaca3500a111867d468f88407407cd89d0b0a2aa48",
+    "src/va/Media.tsx": "1584909ae9975ddff1889793541e6bf379ca26492bdef172b09eb4a4fd981e4a",
+    "src/va/Text.tsx": "f42d3b1537e09fe5df6f404665e41104e92f79682b28c2a896bb07f8cd00e5f3",
+    "src/va/Video.tsx": "eb1006dd54cd0f86345b43aca94ba7abd42d7c91ff89fddf33e5fd22f3ccf052",
+    "src/va/context.ts": "22ee6d3e7958e77509a9466e47ebefbd367e3194a6946657adcdb3eef914096e",
+    "src/va/layout.ts": "00840c4b240f0efa8b1e29b754cb5d29dc0a541a508e0e7cbf694e4f48b4e00b",
+    "src/va/metadata.ts": "84a74a51131d7914cefa89bcefa41216efcdb3cfeba83f256cf46ffa156e6457",
+    "src/va/schema.ts": "0852bc7cadf4a550e9fa58bfd8b1227a88f273bccc7a68ce1687ac9bd7b0db87"
+  }
+}

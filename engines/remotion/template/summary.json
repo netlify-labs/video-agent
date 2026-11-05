@@ -1,0 +1,7 @@
+{
+  "title": "Your video",
+  "summary": "The starter project: one beat with a headline.",
+  "captions": [
+    { "start": 0.4, "end": 3, "text": "Your video", "beat": "intro", "textId": "intro-title", "beatStart": 0.4, "beatEnd": 3 }
+  ]
+}
