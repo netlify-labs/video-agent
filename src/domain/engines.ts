@@ -5,6 +5,7 @@
 import type { Deps } from '../deps.js'
 import type { EditOp } from '../lib/contract.js'
 import { ApiError } from '../lib/errors.js'
+import { REMOTION_LICENSE_NOTICE } from '../lib/remotion-notice.js'
 
 export type EngineId = 'hyperframes' | 'remotion'
 
@@ -178,4 +179,33 @@ export function assertSameEngine(
     'engine_mismatch',
     `Version ${child.n} would be made with ${engineInfo(got).name}, but it comes from a ${engineInfo(want).name} version. A video keeps one engine.`,
   )
+}
+
+/** What a Remotion video costs over a HyperFrames one, in credits, once the POC measures it (E1); null until then. */
+export const REMOTION_EXTRA_CREDITS: number | null = null
+
+export interface EngineListing extends EngineInfo {
+  enabled: boolean
+  /** What anyone choosing it is told (Remotion's license notice); null for HyperFrames. */
+  notice: string | null
+  extraCredits: number | null
+}
+
+/**
+ * The engines people can choose from here (GET /api/v1/engines): HyperFrames always, Remotion only when ENGINES lists
+ * it, with whether it's on, its license notice and its extra cost. Never the admin's license record.
+ */
+export async function listEngines(deps: Pick<Deps, 'config' | 'store'>): Promise<EngineListing[]> {
+  const on = new Set((await enabledEngines(deps)).map((e) => e.id))
+  const out: EngineListing[] = [
+    { ...engineInfo('hyperframes'), enabled: true, notice: null, extraCredits: null },
+  ]
+  if (remotionConfigured(deps))
+    out.push({
+      ...engineInfo('remotion'),
+      enabled: on.has('remotion'),
+      notice: REMOTION_LICENSE_NOTICE,
+      extraCredits: REMOTION_EXTRA_CREDITS,
+    })
+  return out
 }

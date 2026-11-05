@@ -2,6 +2,7 @@
 // A string is listed only when this deployment has the feature AND it's switched on, so the SDK, CLI, MCP and the
 // GitHub Action can hide what a server doesn't offer. Each plan adds its own string here, in its own PR.
 import type { Deps } from '../deps.js'
+import { enabledEngines } from './engines.js'
 import { narrationEnabled } from './narration-settings.js'
 import { remixEnabled } from './remix-settings.js'
 import { youtubeAvailable } from './destinations/registry.js'
@@ -47,5 +48,7 @@ export async function enabledFeatures(deps: Deps): Promise<Feature[]> {
   if (scopeCheckFor('hyperframes')) on.push('scoped_revision')
   if (await youtubeAvailable(deps, deps.store).catch(() => false)) on.push('youtube')
   if (await cliLoginEnabled(deps).catch(() => true)) on.push('cli_login')
+  // Only once Remotion is actually on: with HyperFrames alone there's no engine to choose.
+  if ((await enabledEngines(deps).catch(() => [])).length > 1) on.push('engines')
   return on
 }

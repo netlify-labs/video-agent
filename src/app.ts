@@ -2,6 +2,7 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import type { Context, MiddlewareHandler, Next } from 'hono'
 import type { Deps } from './deps.js'
+import { listEngines } from './domain/engines.js'
 import { assertSameOrigin, principalFromRequest } from './domain/auth.js'
 import { receiveCallback } from './domain/callback.js'
 import { claimLogin, createLogin, decideLogin, lookupLogin } from './domain/cli-login.js'
@@ -1485,6 +1486,21 @@ export function createApp(deps: Deps, opts: AppOptions) {
       await revokeGrant(deps, c.get('principal'), c.req.valid('param').id)
       return c.body(null, 204)
     },
+  )
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/v1/engines',
+      operationId: 'listEngines',
+      'x-sdk': { resource: 'engines', method: 'list', feature: 'engines' },
+      summary: 'List render engines',
+      description:
+        'The engines a video can be made with here: HyperFrames always, and Remotion when this deployment offers it (bring your own license), with its license notice.',
+      tags: ['videos'],
+      security,
+      responses: { 200: json(z.object({ items: z.array(s.EngineSchema) }), 'Engines'), ...errors },
+    }),
+    async (c) => c.json({ items: await listEngines(deps) }, 200),
   )
   app.openapi(
     createRoute({

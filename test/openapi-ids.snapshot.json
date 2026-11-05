@@ -350,6 +350,14 @@
       "method": "revoke"
     }
   },
+  "GET /api/v1/engines": {
+    "operationId": "listEngines",
+    "sdk": {
+      "resource": "engines",
+      "method": "list",
+      "feature": "engines"
+    }
+  },
   "GET /api/v1/me": {
     "operationId": "getMe",
     "sdk": {

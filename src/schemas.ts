@@ -315,6 +315,24 @@ export const BeatInfoSchema = z
   })
   .openapi('BeatInfo')
 
+export const EngineSchema = z
+  .object({
+    id: z.enum(ENGINE_IDS),
+    name: z.string(),
+    license: z.union([
+      z.object({ kind: z.literal('open'), spdx: z.literal('Apache-2.0') }),
+      z.object({ kind: z.literal('remotion'), url: z.string() }),
+    ]),
+    capabilities: EngineCapabilitiesSchema,
+    enabled: z.boolean().describe('Offered for new videos here right now.'),
+    notice: z.string().nullable().describe("What anyone choosing it is told: Remotion's license notice."),
+    extraCredits: z
+      .number()
+      .nullable()
+      .describe('Credits a video costs over a HyperFrames one, once measured; null when unknown or none.'),
+  })
+  .openapi('Engine')
+
 export const VersionPosterSchema = z
   .object({
     source: z.enum(['frame', 'upload']).describe('A frame picked from the video, or an uploaded image.'),

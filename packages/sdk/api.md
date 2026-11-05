@@ -205,6 +205,10 @@ export declare function resources(t: Transport): {
         /** Remove a version from a destination (`unpublishFromDestination`) */
         unpublish: (id: string | number, input?: Input<"/api/v1/destination-publications/{id}", "delete">, opts?: CallOptions) => Promise<Ok<"/api/v1/destination-publications/{id}", "delete">>;
     };
+    engines: {
+        /** List render engines (`listEngines`) */
+        list: (opts?: CallOptions) => Promise<Ok<"/api/v1/engines", "get">>;
+    };
     grants: {
         /** List connected apps (`listGrants`) */
         list: (opts?: CallOptions) => Promise<Ok<"/api/v1/oauth/grants", "get">>;
