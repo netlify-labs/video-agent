@@ -58,6 +58,7 @@ import { getAdminSettings, updateAdminSettings } from './domain/narration-settin
 import { enabledFeatures } from './domain/features.js'
 import { PROMPT_TEMPLATE_VERSION } from './domain/prompt.js'
 import { buildInfo } from './generated/build-info.js'
+import { listLooks } from './domain/looks.js'
 import { remixVideo, versionMediaItems } from './domain/remix.js'
 import { listNotifications, markNotificationsRead } from './domain/notifications.js'
 import { getProgress } from './domain/progress.js'
@@ -369,7 +370,11 @@ export function createApp(deps: Deps, opts: AppOptions) {
       method: 'post',
       path: '/api/v1/videos',
       operationId: 'createVideo',
-      'x-sdk': { resource: 'videos', method: 'create', fieldFeatures: { planId: 'planning' } },
+      'x-sdk': {
+        resource: 'videos',
+        method: 'create',
+        fieldFeatures: { planId: 'planning', look: 'looks' },
+      },
       summary: 'Create a video',
       description: 'Creates a video from a prompt and queues its first version.',
       tags: ['videos'],
@@ -520,7 +525,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       'x-sdk': {
         resource: 'videos',
         method: 'revise',
-        fieldFeatures: { planId: 'planning', scope: 'scoped_revision' },
+        fieldFeatures: { planId: 'planning', scope: 'scoped_revision', look: 'looks' },
       },
       summary: 'Revise a video',
       description:
@@ -554,7 +559,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
         resource: 'videos',
         method: 'remix',
         feature: 'remix',
-        fieldFeatures: { planId: 'planning' },
+        fieldFeatures: { planId: 'planning', look: 'looks' },
       },
       summary: 'Remix a video',
       description:
@@ -711,6 +716,21 @@ export function createApp(deps: Deps, opts: AppOptions) {
     },
   )
   // Publish destinations (docs/plans/2026-11-04-publish-destinations.md §6.1).
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/v1/looks',
+      operationId: 'listLooks',
+      'x-sdk': { resource: 'looks', method: 'list', feature: 'looks' },
+      summary: 'List looks',
+      description:
+        "The visual styles a video can be made in (pass an id as `look` when creating, revising or remixing), each with whether an admin has it on, and the default for creates that omit a look. Every signed-in role can list them; a look's name and description are never private.",
+      tags: ['videos'],
+      security,
+      responses: { 200: json(s.LooksSchema, 'Looks'), ...errors },
+    }),
+    async (c) => c.json(await listLooks(deps), 200),
+  )
   app.openapi(
     createRoute({
       method: 'get',

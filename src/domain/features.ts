@@ -38,6 +38,7 @@ export async function enabledFeatures(deps: Deps): Promise<Feature[]> {
   if (await narrationEnabled(deps).catch(() => true)) on.push('narration')
   if (deps.gateway.available()) on.push('planning')
   if (screenRecordingApi.ready) on.push('screen_recording')
+  if (deps.looks.catalog().length) on.push('looks')
   on.push('destinations')
   // Redo a scene: once HyperFrames' scope check is registered (prodDeps does it at startup).
   if (scopeCheckFor('hyperframes')) on.push('scoped_revision')

@@ -1,5 +1,6 @@
 // Request and response schemas: one definition drives validation, types, the OpenAPI spec and the
 // web app's generated client.
+import { LookRecordingSchema } from './lib/looks.js'
 import { z } from '@hono/zod-openapi'
 import { ASPECT_RATIOS, MEDIA_ROLES, SOUNDS, VERDICTS } from './domain/types.js'
 import { MAX_NARRATION } from './lib/contract.js'
@@ -30,6 +31,8 @@ export const ErrorSchema = z
   .openapi('Error')
 
 export const AspectSchema = z.enum(ASPECT_RATIOS).openapi('Aspect')
+/** A look id from GET /api/v1/looks (looks plan §4.9). */
+const LookIdSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,39}$/)
 export const SoundSchema = z.enum(SOUNDS).openapi('Sound', {
   description:
     'silent: no audio (the default). music: a music bed (a picked audio item, else the brand music in context/, else none). music_sfx: music plus sound effects on visible actions.',
@@ -413,6 +416,11 @@ export const VersionSchema = z
       .nullable()
       .describe(
         'A version that redid only some scenes of the version it came from: which ones, with their names.',
+    look: z
+      .object({ id: z.string(), name: z.string(), hash: z.string() })
+      .nullable()
+      .describe(
+        "The look this version was made with (its name as it was then), and the version of it: hash differs from GET /api/v1/looks' when the look has changed since.",
       ),
     editing: z
       .object({
@@ -616,6 +624,10 @@ export const CreateVideoSchema = z
     voiceover: VoiceoverInputSchema.optional().openapi({
       description: "A spoken narration with captions from its words. Omit for the plan's choice, else none.",
     }),
+    look: LookIdSchema.nullable().optional().openapi({
+      description:
+        "A look id (GET /api/v1/looks). Omit for the plan's look, else the admin's default (none unless set); null for no look. Errors: 400 unknown_look, 409 look_disabled.",
+    }),
   })
   .openapi('CreateVideo')
 
@@ -654,6 +666,10 @@ export const ReviseSchema = z
         description:
           "Redo only these scenes; everything else stays exactly as it is. Needs fromVersion. Can't be combined with planId, durationSec, sound or voiceover.",
       }),
+    look: LookIdSchema.nullable().optional().openapi({
+      description:
+        "Omit to keep the revised version's look; null for no look. A different look (or a newer version of the same one) is a restyle: a full run that keeps the story and rebuilds how it looks. Errors: 400 unknown_look, 409 look_disabled, 409 look_not_allowed (a version with recorded narration).",
+    }),
   })
   .superRefine((v, ctx) => {
     if (v.scope && v.fromVersion === undefined)
@@ -701,6 +717,10 @@ export const RemixSchema = z
       .url()
       .optional()
       .openapi({ description: 'HTTPS URL for video.ready / video.failed events (API keys only).' }),
+    look: LookIdSchema.nullable().optional().openapi({
+      description:
+        "Omit to keep the source version's look; null for no look. Another look restyles the remix (a full run, as any remix). Errors: 400 unknown_look, 409 look_disabled.",
+    }),
   })
   .openapi('Remix')
 
@@ -1336,6 +1356,9 @@ export const RenderEditSchema = z
       description:
         "Render picture first: render the draft's other edits without its recorded narration, so you can record against the new picture. The narration stays in the draft; move it onto the new version with rebase-narration",
     }),
+    look: z.unknown().optional().openapi({
+      description: "Not accepted (400 look_not_allowed): an edit render keeps the edited version's look.",
+    }),
   })
   .openapi('RenderEdit')
 
@@ -1762,3 +1785,38 @@ export const TraceBodySchema = z
     description:
       'Pointer trace v1. Positions are 0-1 fractions of the frame, times seconds into the recording. See /docs/cli#record.',
   })
+// Looks (docs/plans/2026-11-04-looks.md §4.9).
+export const LookSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    description: z.string(),
+    tags: z.array(z.string()),
+    bestFor: z
+      .array(z.string())
+      .describe('Plan templates the look suits: launch, tutorial, social, changelog, sales, other.'),
+    aspects: z.array(AspectSchema).describe('The shapes its rules cover.'),
+    engines: z.array(z.enum(ENGINE_IDS)).describe('Engines it supports, preferred first.'),
+    recording: z
+      .union([z.literal(false), LookRecordingSchema])
+      .nullable()
+      .describe(
+        'How screen recordings are framed in this look; false: hidden from the demo picker; null: the default.',
+      ),
+    hash: z.string().describe('This version of the look; a version made with it keeps it.'),
+    enabled: z
+      .boolean()
+      .describe('Pickers hide looks an admin turned off; versions already made with one keep it.'),
+    preview: z.object({
+      mp4: z.string().nullable().describe('A short muted loop, under the site root.'),
+      poster: z.string().nullable(),
+    }),
+  })
+  .openapi('Look')
+
+export const LooksSchema = z
+  .object({
+    looks: z.array(LookSchema),
+    default: z.string().nullable().describe('The look creates get when they omit one; null: none.'),
+  })
+  .openapi('Looks')

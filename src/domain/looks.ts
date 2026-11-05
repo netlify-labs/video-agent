@@ -5,6 +5,7 @@ import type { Deps } from '../deps.js'
 import { ApiError } from '../lib/errors.js'
 import type { LookCatalogEntry } from '../lib/looks.js'
 import type { EngineId } from './engines.js'
+import { lookSettings } from './look-settings.js'
 import type { Aspect, VersionLook } from './types.js'
 
 export const getLook = (deps: Pick<Deps, 'looks'>, id: string): LookCatalogEntry | null =>
@@ -138,4 +139,25 @@ export function assertRestyleAllowed(restyle: boolean, narrated: boolean) {
       undefined,
       { status: 409 },
     )
+}
+
+/** GET /api/v1/looks (§4.9): every catalog look with whether it's on (no look is secret), and the admin default. */
+export async function listLooks(deps: Pick<Deps, 'looks' | 'store'>) {
+  const { defaultLook, disabledLooks } = await lookSettings(deps)
+  return {
+    looks: deps.looks.catalog().map((l) => ({
+      id: l.id,
+      name: l.name,
+      description: l.description,
+      tags: l.tags,
+      bestFor: l.bestFor,
+      aspects: l.aspects,
+      engines: l.engines,
+      recording: l.recording ?? null,
+      hash: l.hash,
+      enabled: !disabledLooks.includes(l.id),
+      preview: l.preview,
+    })),
+    default: defaultLook,
+  }
 }

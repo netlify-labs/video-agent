@@ -69,6 +69,7 @@ import { adoptLookSnapshot, snapshotLook } from './look-snapshot.js'
 import { lookSettings } from './look-settings.js'
 import {
   assertLookAllowed,
+  aspectNotice,
   assertLookSupportsEngine,
   assertRestyleAllowed,
   chooseEngine,
@@ -1038,7 +1039,7 @@ export function publicationDto(
 }
 
 function versionDto(
-  deps: Pick<Deps, 'config' | 'runner'>,
+  deps: Pick<Deps, 'config' | 'runner'> & Partial<Pick<Deps, 'looks'>>,
   jobId: string,
   v: VersionRow,
   a: AttemptRow | null,
@@ -1052,8 +1053,12 @@ function versionDto(
   credits: Credit[] = [],
   dests: { rows: DestinationPublicationRow[]; names: Map<string, string>; now: string } | null = null,
   parent: VersionRow | null = null,
+  aspect: Aspect | null = null,
 ) {
   const mineV = verdicts.find((x) => x.versionN === v.n && x.userId === viewerId)
+  // The look's name and version (looks plan §4.9), and a note when its current version wasn't made for this shape.
+  const lookEntry = v.look && deps.looks ? getLook({ looks: deps.looks }, v.look.id) : null
+  const lookNotice = lookEntry && aspect ? aspectNotice(lookEntry, aspect) : null
   const fileBase = `${deps.config.siteUrl}/api/v1/videos/${jobId}/versions/${v.n}`
   return {
     verdicts: {
@@ -1083,6 +1088,7 @@ function versionDto(
           })),
         }
       : null,
+    look: v.look ? { id: v.look.id, name: v.look.name, hash: v.look.hash } : null,
     mode: v.mode ?? 'author',
     editedFromN: v.editedFromN ?? null,
     n: v.n,
@@ -1120,7 +1126,7 @@ function versionDto(
           bytes: o.bytes,
           title: o.title,
           summary: o.agentSummary,
-          notices: o.notices ?? [],
+          notices: [...(o.notices ?? []), ...(lookNotice ? [lookNotice] : [])],
         }
       : null,
     captions: v.captions
@@ -1239,7 +1245,7 @@ export async function videoDto(
   return buildVideoDto(repo, deps, jobId, viewer, prefetched)
 }
 
-type DtoDeps = Pick<Deps, 'config' | 'runner' | 'store' | 'ids' | 'clock' | 'blobs'>
+type DtoDeps = Pick<Deps, 'config' | 'runner' | 'store' | 'ids' | 'clock' | 'blobs' | 'looks'>
 type VideoDtoShape = Awaited<ReturnType<typeof buildVideoDto>>
 /** What a list page already loaded for all its videos, so each DTO doesn't query it again. */
 interface DtoPrefetched {
@@ -1304,6 +1310,7 @@ async function buildVideoDto(
         versionCredits(provenance, v, output?.runCredits),
         dests,
         v.parentN !== null ? (versions.find((x) => x.n === v.parentN) ?? null) : null,
+        job.aspect,
       )
     }),
   )
