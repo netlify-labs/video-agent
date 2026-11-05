@@ -62,6 +62,9 @@ export function mockLooks(): Look[] {
   }))
 }
 
+/** The look each mock plan was given, by plan id. */
+const planLooks = new Map<string, { id: string | null; chosen: boolean } | null>()
+
 const ref = (l: Look) => ({ id: l.id, name: l.name, hash: l.hash })
 
 /** The server's refusals for a picked look (resolveLook): unknown 400, turned off 409. */
@@ -145,6 +148,33 @@ export async function looksRoute(
     if (!res.ok) return res
     const body = (await res.json()) as Record<string, unknown>
     return json({ ...body, ...lookSettings })
+  }
+
+  // Plans carry a look (plans.ts planLook): the person's choice, else the first enabled look made for the template.
+  if (p.startsWith('/api/v1/plans') && !off) {
+    const b = method === 'POST' && p === '/api/v1/plans' ? await readJson(init, input) : null
+    if (b) {
+      const refused = refusePick(b.look)
+      if (refused) return refused
+    }
+    const res = await inner()
+    if (!res.ok) return res
+    const plan = (await res.json()) as { id?: string; route?: { template: string } | null; remixOf?: unknown }
+    if (plan.id && b) {
+      const kept = !!(b.revisionOf ?? b.remixOf)
+      const enabled = mockLooks().filter((l) => l.enabled)
+      const fit = enabled.find((l) => l.bestFor.includes(plan.route?.template ?? 'other'))
+      const fallback = enabled.find((l) => l.id === lookSettings.defaultLook)
+      planLooks.set(
+        plan.id,
+        b.look !== undefined
+          ? { id: typeof b.look === 'string' ? b.look : null, chosen: true }
+          : kept
+            ? null
+            : { id: fit?.id ?? fallback?.id ?? null, chosen: false },
+      )
+    }
+    return json(plan.id ? { ...plan, look: planLooks.get(plan.id) ?? null } : plan, res.status)
   }
 
   const create = p === '/api/v1/videos' && method === 'POST'

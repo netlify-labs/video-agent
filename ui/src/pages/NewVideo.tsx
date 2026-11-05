@@ -531,6 +531,8 @@ export function NewVideoPage() {
             mediaIds={media.map((m) => m.id)}
             sound={chosenSound}
             voiceover={voice.enabled ? voiceInput(voice) : undefined}
+            look={look}
+            onLookChange={setLook}
             creating={create.isPending}
             onSuggestAspect={(a) => {
               setShape(a)

@@ -25,6 +25,7 @@ import { useEffect, useRef, useState } from 'react'
 import { $api, errorMessage } from '../api/client'
 import type { paths } from '../api/schema'
 import { isTyping } from '../lib/media-keys'
+import { LookControl } from './LookPicker'
 import type { VoiceoverInput } from './VoiceoverControl'
 
 type Plan = paths['/api/v1/plans/{id}']['get']['responses'][200]['content']['application/json']
@@ -46,6 +47,10 @@ export interface PlanPanelProps {
   sound?: 'silent' | 'music' | 'music_sfx' | undefined
   /** The voice-over chosen next to the prompt; the brief then has a narration line per beat. */
   voiceover?: VoiceoverInput | undefined
+  /** The look picked next to the prompt (null: None); left out, the plan picks one from its template. */
+  look?: string | null | undefined
+  /** With it, the brief shows the plan's look as a chip that can be changed before creating. */
+  onLookChange?: (id: string | null) => void
   /** Called with the plan id to create with it, or null to create without a plan. */
   onCreate: (planId: string | null) => void
   onSuggestAspect?: (aspect: Aspect) => void
@@ -401,6 +406,33 @@ function BriefEditor({
   )
 }
 
+/**
+ * The plan's look on the brief (looks plan §6): a chip showing what the video will be made in, changeable before the
+ * run. The person's own pick (value) wins over the plan's; nothing shows for a plan that keeps its video's look.
+ */
+function PlanLookChip(props: {
+  plan: Plan | null | undefined
+  value: string | null | undefined
+  onChange: ((id: string | null) => void) | undefined
+}) {
+  if (!props.onChange || !props.plan?.look) return null
+  return (
+    <div data-testid="plan-look">
+      <LookControl
+        value={props.value !== undefined ? props.value : props.plan.look.id}
+        onChange={props.onChange}
+        template={props.plan.route?.template}
+        label="Look"
+        hint={
+          props.plan.look.chosen || props.value !== undefined
+            ? undefined
+            : 'Picked for this kind of video. Change it if you like.'
+        }
+      />
+    </div>
+  )
+}
+
 export function PlanPanel(props: PlanPanelProps) {
   const [plan, setPlan] = useState<Plan | null>(null)
   const [answers, setAnswers] = useState<Record<string, Answer>>({})
@@ -453,6 +485,7 @@ export function PlanPanel(props: PlanPanelProps) {
         ...(props.mediaIds?.length ? { mediaIds: props.mediaIds } : {}),
         ...(props.sound ? { sound: props.sound } : {}),
         ...(props.voiceover ? { voiceover: props.voiceover } : {}),
+        ...(props.look !== undefined ? { look: props.look } : {}),
       },
     })
     // Start once per panel; the prompt is fixed while planning.
@@ -594,7 +627,10 @@ export function PlanPanel(props: PlanPanelProps) {
               setAnswer={setAnswer}
             />
           ) : brief ? (
-            <BriefEditor brief={brief} voiceover={!!plan?.voiceover} edit={editBrief} />
+            <>
+              <PlanLookChip plan={plan} value={props.look} onChange={props.onLookChange} />
+              <BriefEditor brief={brief} voiceover={!!plan?.voiceover} edit={editBrief} />
+            </>
           ) : null)}
         <Group justify="space-between" gap="sm" className="va-plan-footer">
           <Group gap="md">
@@ -668,7 +704,12 @@ export function PlanPanel(props: PlanPanelProps) {
           </Text>
         ) : null}
 
-        {brief ? <BriefEditor brief={brief} voiceover={!!plan?.voiceover} edit={editBrief} /> : null}
+        {brief ? (
+          <>
+            <PlanLookChip plan={plan} value={props.look} onChange={props.onLookChange} />
+            <BriefEditor brief={brief} voiceover={!!plan?.voiceover} edit={editBrief} />
+          </>
+        ) : null}
 
         <Group gap="sm">
           {brief ? (

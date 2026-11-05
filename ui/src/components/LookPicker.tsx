@@ -212,7 +212,7 @@ export function LookControl(props: {
   template?: string | null | undefined
   disabled?: boolean
   label?: string
-  hint?: string
+  hint?: string | undefined
 }) {
   const data = useLooks()
   const [open, setOpen] = useState(false)

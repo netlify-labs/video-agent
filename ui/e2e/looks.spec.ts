@@ -318,3 +318,66 @@ test('/docs/looks renders every catalog look and is in the docs nav', async ({ p
     '/docs/looks',
   )
 })
+
+// The brief's look chip (bead va-nifa.4.7): the plan picks a look for its template; changing it changes the create.
+
+async function planToBrief(page: Page) {
+  await page.goto('/new')
+  await page
+    .getByLabel('What should the video show?')
+    .fill('A 30-second launch video for org-wide webhooks, ending on our logo.')
+  await page.getByRole('button', { name: 'Create video', exact: true }).click()
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: /^Plan it first/ })
+    .click()
+  const dialog = page.getByRole('dialog', { name: 'Plan your video' })
+  await expect(dialog.getByText('Who is this video for?')).toBeVisible()
+  await dialog.getByRole('button', { name: 'Next' }).click()
+  await dialog.getByRole('button', { name: 'Write the brief' }).click()
+  await expect(dialog.getByLabel('Call to action')).toBeVisible()
+  return dialog
+}
+
+test("the brief shows the plan's look, and changing it sends the new look on create", async ({ page }) => {
+  // The mock's plans are launches: the first enabled look made for one.
+  const fit = looksCatalog.find((l) => (l.bestFor as string[]).includes('launch'))!
+  const other = looksCatalog.find((l) => l.id !== fit.id)!
+  const dialog = await planToBrief(page)
+  const chip = dialog.getByTestId('plan-look')
+  await expect(chip.getByRole('button', { name: `Look: ${fit.name}` })).toBeVisible()
+  await expect(chip).toContainText('Picked for this kind of video')
+  await chip.getByRole('button', { name: `Look: ${fit.name}` }).click()
+  await card(page, other.id).click()
+  await expect(chip.getByRole('button', { name: `Look: ${other.name}` })).toBeVisible()
+  await dialog.getByRole('button', { name: 'Create with this brief' }).click()
+  await expect.poll(() => sent(page)).toMatchObject({ planId: 'plan_mock', look: other.id })
+})
+
+test('a look picked before planning goes to the plan and the brief shows it', async ({ page }) => {
+  await page.goto('/new')
+  await page.getByRole('button', { name: 'Look: None' }).click()
+  await card(page, 'terminal').click()
+  await page
+    .getByLabel('What should the video show?')
+    .fill('A 30-second launch video for org-wide webhooks, ending on our logo.')
+  await page.getByRole('button', { name: 'Create video', exact: true }).click()
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: /^Plan it first/ })
+    .click()
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (globalThis as unknown as { __sent?: Record<string, { look?: unknown }> }).__sent?.['/api/v1/plans']
+            ?.look,
+      ),
+    )
+    .toBe('terminal')
+  const dialog = page.getByRole('dialog', { name: 'Plan your video' })
+  await dialog.getByRole('button', { name: 'Next' }).click()
+  await dialog.getByRole('button', { name: 'Write the brief' }).click()
+  await expect(dialog.getByTestId('plan-look').getByRole('button', { name: 'Look: Terminal' })).toBeVisible()
+  await expect(dialog.getByTestId('plan-look')).not.toContainText('Picked for this kind of video')
+})
