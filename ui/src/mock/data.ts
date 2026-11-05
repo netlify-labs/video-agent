@@ -153,6 +153,7 @@ function ready(
             },
             showTranscript: false,
             embed: embed(o.pub, o.w, o.h, o.music ?? []),
+            player: player(o.pub),
           },
         ]
       : [],
@@ -163,6 +164,9 @@ function ready(
 /** What the mock API serves as a narrated version's transcript.txt: a paragraph per caption cue. */
 export const MOCK_TRANSCRIPT =
   'Every pull request gets its own URL.\n\nReview the real site, not a screenshot.\n\nMerge with confidence. Book a demo.\n'
+
+export const player = (slug: string) =>
+  `<script type="module" src="${SITE}/player.js"></script><video-agent-player src="${SITE}/v/${slug}"></video-agent-player>`
 
 export function embed(slug: string, w: number, h: number, credits: V['credits']) {
   const v = `<video controls playsinline preload="metadata" width="${w}" height="${h}" style="max-width:100%;height:auto" poster="${SITE}/v/${slug}.jpg"><source src="${SITE}/v/${slug}.mp4" type="video/mp4"><track kind="captions" src="${SITE}/v/${slug}.vtt" srclang="en" label="Captions"></video>`

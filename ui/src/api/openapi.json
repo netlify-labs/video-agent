@@ -1534,6 +1534,13 @@
               "null"
             ],
             "description": "HTML to embed the video; with CC BY media it includes the credit line as a caption"
+          },
+          "player": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The <video-agent-player> snippet: sized before it loads, captions on, credits always shown. Needs its script; the plain embed needs none."
           }
         },
         "required": [
@@ -1543,7 +1550,8 @@
           "unpublishedAt",
           "urls",
           "showTranscript",
-          "embed"
+          "embed",
+          "player"
         ]
       },
       "DestinationPublication": {

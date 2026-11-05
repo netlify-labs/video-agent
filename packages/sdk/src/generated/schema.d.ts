@@ -2157,6 +2157,8 @@ export interface components {
             showTranscript: boolean;
             /** @description HTML to embed the video; with CC BY media it includes the credit line as a caption */
             embed: string | null;
+            /** @description The <video-agent-player> snippet: sized before it loads, captions on, credits always shown. Needs its script; the plain embed needs none. */
+            player: string | null;
         };
         DestinationPublication: {
             id: string;

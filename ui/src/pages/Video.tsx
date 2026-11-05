@@ -445,6 +445,15 @@ function PublicLink({ video, v, canPublish }: { video: Video; v: Version; canPub
         {live.urls.narration ? <CopyField label="Narration (MP3)" value={live.urls.narration} /> : null}
         {live.urls.transcript ? <CopyField label="Transcript" value={live.urls.transcript} /> : null}
         <CopyField label="Embed" value={live.embed ?? ''} />
+        {live.player ? (
+          <div>
+            <CopyField label="Player" value={live.player} />
+            <Text size="xs" c="var(--va-faint)" mt={4}>
+              The player keeps the credits and captions and sizes itself; it needs its script. The embed above
+              needs none.
+            </Text>
+          </div>
+        ) : null}
         {canPublish ? (
           <Group justify="space-between" mt={4}>
             <Text size="xs" c="var(--va-faint)">

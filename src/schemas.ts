@@ -228,6 +228,10 @@ export const PublicationSchema = z
     embed: z.string().nullable().openapi({
       description: 'HTML to embed the video; with CC BY media it includes the credit line as a caption',
     }),
+    player: z.string().nullable().openapi({
+      description:
+        'The <video-agent-player> snippet: sized before it loads, captions on, credits always shown. Needs its script; the plain embed needs none.',
+    }),
   })
   .openapi('Publication')
 

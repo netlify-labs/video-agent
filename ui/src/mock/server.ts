@@ -11,7 +11,7 @@ import voiceHtml from '../../../test/fixtures/contract1-voice/index.html?raw'
 import voiceSummary from '../../../test/fixtures/contract1-voice/summary.json'
 import voiceFile from '../../../test/fixtures/contract1-voice/assets/voice/voice.json'
 import type { Video } from '../api/client'
-import { MOCK_TRANSCRIPT, embed, people, stats, videos } from './data'
+import { MOCK_TRANSCRIPT, embed, people, player, stats, videos } from './data'
 import { mockFile } from './files'
 import { parseVtt, writeVtt, type VttCue } from '../../../src/lib/vtt'
 
@@ -1560,6 +1560,7 @@ export function installMock() {
           ...(showTranscript && ver.links.transcript ? { transcript: `${base}.txt` } : {}),
         },
         embed: embed(slug, w, h, ver.credits),
+        player: player(slug),
       }
       ver.publications = [pub, ...ver.publications.filter((x) => x.slug !== slug)]
       return json(pub)

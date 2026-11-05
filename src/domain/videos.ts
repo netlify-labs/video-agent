@@ -865,6 +865,10 @@ function livePubTag(pubs: PublicationRow[]): string {
   return live.length ? `-p${sha256Hex(live.join(',')).slice(0, 8)}` : ''
 }
 
+/** The <video-agent-player> snippet for a share page: this deployment's /player.js, then the element. */
+export const playerSnippet = (siteUrl: string, sharePage: string) =>
+  `<script type="module" src="${siteUrl}/player.js"></script><video-agent-player src="${sharePage}"></video-agent-player>`
+
 export function publicationDto(
   deps: Pick<Deps, 'config'>,
   p: PublicationRow,
@@ -896,6 +900,7 @@ export function publicationDto(
           ...(showTranscript && o?.sha256['transcript.txt'] ? { transcript: `${base}.txt` } : {}),
         },
     embed: p.unpublishedAt ? null : embedHtml(base, webp, o, credits),
+    player: p.unpublishedAt ? null : playerSnippet(deps.config.siteUrl, base),
   }
 }
 
