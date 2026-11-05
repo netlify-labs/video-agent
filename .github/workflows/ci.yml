@@ -22,6 +22,7 @@ jobs:
       - run: npm run build:packages
       - run: npm test
       - run: npm run openapi:check
+      - run: npm run action:check
       - run: npm run db:check
       - run: npm run build:ui
       - run: npx playwright install --with-deps chromium

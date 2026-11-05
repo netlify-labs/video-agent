@@ -1,5 +1,7 @@
 node_modules/
 dist/
+# The GitHub Action runs from its committed bundle (github-action plan §3.1).
+!packages/action/dist/
 ui/dist/
 .netlify/
 .env

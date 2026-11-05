@@ -19,6 +19,8 @@
     "build": "tsx scripts/build.ts",
     "build:ui": "vite build ui",
     "build:packages": "tsx scripts/build-packages.ts",
+    "action:build": "tsx packages/action/scripts/build.ts",
+    "action:check": "tsx packages/action/scripts/build.ts --check",
     "setup": "tsx scripts/setup.ts",
     "setup:openverse": "tsx scripts/setup-openverse.ts",
     "seed:music": "tsx scripts/seed-music.ts",
