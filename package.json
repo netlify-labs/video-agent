@@ -7,9 +7,6 @@
   "engines": {
     "node": ">=24"
   },
-  "workspaces": [
-    "packages/*"
-  ],
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p ui/tsconfig.json --noEmit && tsc -b packages/*/tsconfig.json",
     "lint": "NODE_OPTIONS=--max-old-space-size=6144 eslint .",
