@@ -1123,8 +1123,12 @@ unchanged (listing and mtimes before/after).
 4. **`npx tsx …` and `npx hyperframes …` resolve to the pinned runtime** through `PATH` and the `node_modules`
    symlinks, with no fetch, on Node 22 and 24. So local mode doesn't need Node 24: Node 22 works.
 
-**Not covered: Linux (Ubuntu).** The Docker daemon wasn't running on the test machine, and starting Docker Desktop
-was out of scope for an agent session. Run `spikes/c1/c1.ts` in an Ubuntu container (or a Linux CI job) before 4.2.
+**Linux (Ubuntu 24.04, x64; 2026-11-05, CI run 42117243317, the hand-run `spikes-linux` job).** Passed on Node
+22.23.4 and 24.22.2, online and then `--offline` from the cache. Every step was ok, and all four runs rendered the same
+MP4 (sha256 `2372b512…a9bb`, 366,882 bytes) as the reference in local mode. The runtime installed in 8.2 s online and
+2.3 s offline (`npm ci` from the cache). agent-kit used the system FFmpeg (`/usr/bin/ffmpeg` from apt), as it did with
+Homebrew's on macOS, and `~/.local/bin` and `~/.cache/netlify-agent-kit` were untouched. Logs:
+`spikes-linux-node{22,24}` artifacts (`c1-online.jsonl`, `c1-offline.jsonl`).
 
 ### C3: Kokoro voice-over from a private venv (2026-11-05, `spikes/c3`, `npx tsx spikes/c3/c3.ts [--cache <dir>] [--python <python3.x>]`, no credits)
 
@@ -1164,5 +1168,9 @@ itself, not in hyperframes.
    gets a venv mode (4.1) instead of `--user`.
 3. C2's allowlist adds the four hosts above for narrated runs.
 
-**Not covered: Ubuntu.** No Docker daemon on the test machine. Run `spikes/c3/c3.ts` in an Ubuntu container before
-4.3, especially with Ubuntu 24.04's Python 3.12 and its externally managed system Python, which this venv sidesteps.
+**Ubuntu 24.04 (2026-11-05, CI run 42117243317, `spikes-linux` on Node 24, apt `python3-venv`).** Passed. The
+system Python 3.12.3 is externally managed, and the venv sidesteps that. The venv took 2.0 s. The install took 5.4 s
+(16 packages, `kokoro-onnx` 0.6.1). The first line, with the model download, took 4.3 s for 3.9 s of speech, and a
+cached line took 2.1 s. The same four hosts were contacted, and the user's
+`~/.local/lib/python3.12/site-packages` was untouched. So on Ubuntu the plan needs no change beyond `python3-venv`,
+which `doctor` should name when `python3 -m venv` is missing.
