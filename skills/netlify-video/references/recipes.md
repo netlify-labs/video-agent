@@ -24,6 +24,8 @@ share the result.
 7. When it's ready, give the person `web_url`. If they want it in the PR, `publish_video` and paste the share page
    link or the GIF into a PR comment.
 
+To do this on every labelled PR, use the GitHub Action (see /docs/github on the Video Agent site).
+
 ## Release notes or changelog → changelog video
 
 1. Read the notes (a CHANGELOG section, a GitHub release, or text the person pastes).
@@ -33,6 +35,8 @@ share the result.
    change with its headline, ending on <URL or call to action>." 30 to 60 seconds, 16:9, or 1:1 for social feeds.
 4. `create_video` with the prompt, `title` (for example "Changelog 2.4"), `media_ids` and `aspect`.
 5. `publish_video` when the person approves, and put the share page or embed in the release notes.
+
+To do this on every release, use the GitHub Action (see /docs/github on the Video Agent site).
 
 ## Long video → 15-second vertical social cut
 
