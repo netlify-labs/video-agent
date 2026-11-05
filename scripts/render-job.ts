@@ -18,6 +18,7 @@ import type { RunManifest } from '../src/lib/run-manifest.js'
 import type { NarrationOp } from '../src/lib/timeline.js'
 import { postCheckpoint } from './checkpoint.js'
 import { engineReport, runEngineFor, runEngineIdFromManifest } from './lib/engines/index.js'
+import { scopeGuard } from './lib/scope-guard.js'
 import { readNarrationReceipt } from './lib/narration-inputs.js'
 import { toVtt } from './lib/captions.js'
 import {
@@ -74,6 +75,8 @@ async function main() {
   log('engine.selected', { id: engine.id, version: engineVersion })
   const entryProblems = engine.entryProblems(videoDir)
   if (entryProblems.length) throw new StepError(entryProblems.join('\n'))
+  // A scoped revision (redo a scene): the scope check first, then everything below sees the splice it writes.
+  scopeGuard(repoRoot, attempt, engine)
 
   const summaryPath = join(videoDir, 'summary.json')
   if (!existsSync(summaryPath))
