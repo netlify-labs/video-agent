@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { expandIPv6, isPrivateAddress, resolvePublic } from './http.js'
+import { createSafeHttp, expandIPv6, isPrivateAddress, resolvePublic } from './http.js'
 
 describe('isPrivateAddress (plan v2 §14 rule 12)', () => {
   it.each([
@@ -56,5 +56,24 @@ describe('resolvePublic', () => {
     ]
     await expect(resolvePublic('evil.example.com', rebinding)).rejects.toThrow(/private address/)
     await expect(resolvePublic('::ffff:7f00:1')).rejects.toThrow(/private address/)
+  })
+})
+
+describe('postJsonForResponse (publish destinations §3.1)', () => {
+  const opts = { timeoutMs: 2000, maxBodyBytes: 1024 }
+  it('refuses http, credentials in the URL, and hosts that resolve to private addresses (even one of many)', async () => {
+    const http = createSafeHttp(async () => [
+      { address: '8.8.8.8', family: 4 },
+      { address: '10.0.0.5', family: 4 },
+    ])
+    await expect(http.postJsonForResponse('http://r.example.com/x', '{}', {}, opts)).rejects.toThrow(/https/)
+    await expect(http.postJsonForResponse('https://u:p@r.example.com/x', '{}', {}, opts)).rejects.toThrow(
+      /credentials/,
+    )
+    await expect(http.postJsonForResponse('https://r.example.com/x', '{}', {}, opts)).rejects.toThrow(
+      /private/,
+    )
+    await expect(http.postJsonForResponse('https://127.0.0.1/x', '{}', {}, opts)).rejects.toThrow(/private/)
+    await expect(http.postJsonForResponse('https://[::1]/x', '{}', {}, opts)).rejects.toThrow(/private/)
   })
 })

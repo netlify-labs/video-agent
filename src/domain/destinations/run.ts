@@ -79,6 +79,7 @@ export function patchFor(
         ...state(r.state),
         status: p.operation === 'remove' ? 'removing' : 'waiting',
         message: r.message ?? p.message,
+        ...(r.externalId ? { externalId: r.externalId } : {}),
         nextRunAt: r.checkAfterSec === null ? null : plus(now, r.checkAfterSec * 1000),
       }
     case 'retry': {

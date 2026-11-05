@@ -38,7 +38,11 @@ only watch. The tool list shows only what your role can do.
 4. **Deliver.** A ready video has signed download URLs (MP4, poster, GIF, captions; valid 1 hour) and a `web_url` in
    the app. `show_video` plays it in the chat in clients that show MCP Apps (Claude, for one); `create_video` and
    `revise_video` show the same card while it's being made. For a permanent public link, `publish_video` returns a share page that unfurls in Slack, the MP4, a GIF and
-   an embed snippet. `unpublish_video` takes it down.
+   an embed snippet. `unpublish_video` takes it down. To publish somewhere else (YouTube, or a destination an admin
+   added, such as a site), `list_destinations` shows what's available and, with `video_id` and `destination`, that
+   destination's targets (things it already holds for the person); pass `destination` (and a `target`, `options` or
+   `instructions`) to `publish_video`. It publishes in the background: `get_video` shows it under
+   `versions[].destinations`; `unpublish_video` with its `publication` id removes it.
 5. **Change.** `revise_video` with `video_id` and `change` (only what should change). Pass `from_version` to branch
    from an earlier ready version, `comment_ids` to fold in feedback, and `media_ids` to add library items.
 6. **Remix.** `remix_video` with `video_id` and `change` makes a NEW video (the person's own) that starts from an

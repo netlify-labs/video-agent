@@ -194,6 +194,7 @@ describe('MCP tools by role', () => {
         'get_video',
         'import_music',
         'list_comments',
+        'list_destinations',
         'list_media',
         'list_videos',
         'plan_brief',

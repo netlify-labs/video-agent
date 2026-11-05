@@ -27,6 +27,7 @@ import { MediaChips, type Media } from '../components/MediaPicker'
 import { PlanPanel } from '../components/PlanPanel'
 import { PosterMenu } from '../components/PosterMenu'
 import { PublishButton } from '../components/PublishDialog'
+import { PublishToMenu, PublishedTo, destinationsActive } from '../components/Destinations'
 import { TranscriptEditor } from '../components/TranscriptEditor'
 import { SoundControl, soundAfterPick, type Sound } from '../components/SoundControl'
 import {
@@ -541,7 +542,10 @@ export function VideoPage() {
   // would double the requests.
   const watched = useSyncExternalStore(subscribeWatches, () => isWatched(id))
   const video = $api.useQuery('get', '/api/v1/videos/{id}', videoInit(id), {
-    refetchInterval: (q) => (!watched && q.state.data && inProgress(q.state.data.status) ? 5000 : false),
+    refetchInterval: (q) =>
+      !watched && q.state.data && (inProgress(q.state.data.status) || destinationsActive(q.state.data))
+        ? 5000
+        : false,
   })
   const [selected, setSelected] = useState<number | null>(null)
   const [revision, setRevision] = useState('')
@@ -791,6 +795,7 @@ export function VideoPage() {
               </Button>
             </Tooltip>
           ) : null}
+          {canPublish ? <PublishToMenu video={data} v={v} /> : null}
           {v.status === 'ready' && canPublish && !live ? (
             <PublishButton
               v={v}
@@ -1201,6 +1206,7 @@ export function VideoPage() {
         <div className="va-rail">
           <Filmstrip video={data} selected={v.n} onSelect={select} onDetails={setDetailsN} />
           <PublicLink video={data} v={v} canPublish={canPublish} />
+          <PublishedTo v={v} canPublish={canPublish} />
           {v.status === 'ready' ? <TranscriptEditor videoId={data.id} v={v} canEdit={canPublish} /> : null}
           <DetailsCard video={data} v={v} onOpen={() => setDetailsN(v.n)} />
           <Card>

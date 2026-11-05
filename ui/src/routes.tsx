@@ -31,6 +31,7 @@ export const setupRoute = route(() => import('./pages/Setup'))
 export const docsApiRoute = route(() => import('./pages/docs/ApiReference'))
 export const docsMcpRoute = route(() => import('./pages/docs/McpGuide'))
 export const docsSkillsRoute = route(() => import('./pages/docs/SkillsGuide'))
+export const docsDestinationsRoute = route(() => import('./pages/docs/DestinationsGuide'))
 
 /**
  * A page component from a route module: the module's component when it has loaded, else a React.lazy one that
@@ -57,6 +58,7 @@ const BY_PATH: Record<string, RouteModule<unknown>> = {
   '/docs/api': docsApiRoute,
   '/docs/mcp': docsMcpRoute,
   '/docs/skills': docsSkillsRoute,
+  '/docs/destinations': docsDestinationsRoute,
 }
 
 /** Where /docs and the old /docs?tab=mcp|skills links go now. */

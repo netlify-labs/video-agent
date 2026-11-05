@@ -31,7 +31,17 @@ import { signedFilePath, versionFileName } from './domain/files.js'
 import { handleMcp } from './mcp.js'
 import { listDestinations } from './domain/destinations/list.js'
 import { publishToDestination, retryDestinationPublication } from './domain/destinations/publish.js'
-import { unpublishFromDestination } from './domain/destinations/remove.js'
+import { removeDestinationEverywhere, unpublishFromDestination } from './domain/destinations/remove.js'
+import {
+  createDestination,
+  deleteDestination,
+  listAdminDestinations,
+  rotateDestinationSecret,
+  testDestination,
+  updateDestination,
+} from './domain/destinations/admin.js'
+import { listDestinationTargets, revealDestinationSecret } from './domain/destinations/people.js'
+import { destinationFiles, receiveDestinationCallback } from './domain/destinations/callbacks.js'
 import {
   listGrants,
   oauthEnabled,
@@ -240,6 +250,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
 
   const requireAuth: MiddlewareHandler<Env> = async (c, next) => {
     if (c.req.path === '/api/v1/config' || c.req.method === 'OPTIONS') return next()
+    // Receiver callbacks authenticate with their own per-operation token (publish destinations §3.3).
+    if (c.req.path.startsWith('/api/v1/destination-callbacks/')) return next()
     const rotated: { cookie?: string } = {}
     const principal = await principalFromRequest(deps, c.req.raw, {
       setCookie: (v) => {
@@ -705,6 +717,256 @@ export function createApp(deps: Deps, opts: AppOptions) {
     }),
     async (c) =>
       c.json(await retryDestinationPublication(deps, c.get('principal'), c.req.valid('param').id), 200),
+  )
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/v1/destinations/{id}/targets',
+      operationId: 'listDestinationTargets',
+      summary: "A destination's targets for a video",
+      description:
+        'Things the destination already holds for you (its own sites, playlists or pages), to add the video to instead of making something new. Empty when it has none or did not answer in time.',
+      tags: ['publishing'],
+      security,
+      request: { params: IdParam, query: z.object({ videoId: z.string() }) },
+      responses: {
+        200: json(
+          z.object({
+            targets: z.array(s.TargetSchema),
+            dropped: z.number().int(),
+            noun: z.string().nullable(),
+            error: z.string().nullable(),
+          }),
+          'Targets',
+        ),
+        ...errors,
+      },
+    }),
+    async (c) =>
+      c.json(
+        await listDestinationTargets(
+          deps,
+          c.get('principal'),
+          c.req.valid('param').id,
+          c.req.valid('query').videoId,
+        ),
+        200,
+      ),
+  )
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/v1/destination-publications/{id}/secret',
+      operationId: 'revealDestinationSecret',
+      summary: 'Reveal a one-time secret',
+      description:
+        'Returns a secret the destination handed back (such as a site password), once, to the publisher only.',
+      tags: ['publishing'],
+      security,
+      request: { params: IdParam },
+      responses: { 200: json(z.object({ label: z.string(), value: z.string() }), 'The secret'), ...errors },
+    }),
+    async (c) => {
+      c.header('cache-control', 'no-store')
+      return c.json(await revealDestinationSecret(deps, c.get('principal'), c.req.valid('param').id), 200)
+    },
+  )
+  const AdminDestinationSchema = z
+    .object({
+      id: z.string(),
+      name: z.string(),
+      url: z.string(),
+      enabled: z.boolean(),
+      optionsSchema: z.unknown().nullable(),
+      capabilities: z.record(z.string(), z.unknown()),
+      sharePublisherContact: z.boolean(),
+      revision: z.number().int(),
+      createdAt: z.string(),
+      updatedAt: z.string(),
+      live: z.number().int(),
+      failed: z.number().int(),
+    })
+    .openapi('AdminDestination')
+  const DestinationInputSchema = z
+    .object({
+      name: z.string().max(60).optional(),
+      url: z.string().max(2000).optional(),
+      enabled: z.boolean().optional(),
+      optionsSchema: z.unknown().optional(),
+      sharePublisherContact: z.boolean().optional(),
+    })
+    .openapi('DestinationInput')
+  const WithSecret = AdminDestinationSchema.extend({ secret: z.string() }).openapi(
+    'AdminDestinationWithSecret',
+  )
+  const adminDest = (
+    path: string,
+    method: 'get' | 'post' | 'patch' | 'delete',
+    operationId: string,
+    summary: string,
+  ) => ({ method, path, operationId, summary, tags: ['admin'], security })
+  app.openapi(
+    createRoute({
+      ...adminDest('/api/v1/admin/destinations', 'get', 'listAdminDestinations', 'List HTTP destinations'),
+      responses: {
+        200: json(z.object({ items: z.array(AdminDestinationSchema) }), 'Destinations'),
+        ...errors,
+      },
+    }),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- optionsSchema is free-form JSON
+    async (c) => c.json({ items: (await listAdminDestinations(deps, c.get('principal'))) as any[] }, 200),
+  )
+  app.openapi(
+    createRoute({
+      ...adminDest('/api/v1/admin/destinations', 'post', 'createDestination', 'Add an HTTP destination'),
+      description: 'Adds an HTTP destination. Its signing secret is in this response only.',
+      request: {
+        body: { content: { 'application/json': { schema: DestinationInputSchema } }, required: true },
+      },
+      responses: { 201: json(WithSecret, 'Added'), ...errors },
+    }),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- optionsSchema is free-form JSON
+    async (c) => c.json((await createDestination(deps, c.get('principal'), c.req.valid('json'))) as any, 201),
+  )
+  app.openapi(
+    createRoute({
+      ...adminDest(
+        '/api/v1/admin/destinations/{id}',
+        'patch',
+        'updateDestination',
+        'Change an HTTP destination',
+      ),
+      request: {
+        params: IdParam,
+        body: { content: { 'application/json': { schema: DestinationInputSchema } }, required: true },
+      },
+      responses: { 200: json(AdminDestinationSchema, 'Changed'), ...errors },
+    }),
+    async (c) =>
+      c.json(
+        (await updateDestination(
+          deps,
+          c.get('principal'),
+          c.req.valid('param').id,
+          c.req.valid('json'),
+        )) as never,
+        200,
+      ),
+  )
+  app.openapi(
+    createRoute({
+      ...adminDest(
+        '/api/v1/admin/destinations/{id}',
+        'delete',
+        'deleteDestination',
+        'Delete an HTTP destination',
+      ),
+      description: 'Refused while it still has publications (Remove from everywhere first).',
+      request: { params: IdParam },
+      responses: { 204: { description: 'Deleted' }, ...errors },
+    }),
+    async (c) => {
+      await deleteDestination(deps, c.get('principal'), c.req.valid('param').id)
+      return c.body(null, 204)
+    },
+  )
+  app.openapi(
+    createRoute({
+      ...adminDest(
+        '/api/v1/admin/destinations/{id}/rotate',
+        'post',
+        'rotateDestinationSecret',
+        'Rotate the signing secret',
+      ),
+      request: { params: IdParam },
+      responses: { 200: json(WithSecret, 'Rotated'), ...errors },
+    }),
+    async (c) =>
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- optionsSchema is free-form JSON
+      c.json((await rotateDestinationSecret(deps, c.get('principal'), c.req.valid('param').id)) as any, 200),
+  )
+  app.openapi(
+    createRoute({
+      ...adminDest('/api/v1/admin/destinations/{id}/test', 'post', 'testDestination', 'Send a test ping'),
+      description: 'Sends a signed ping; stores the capabilities the receiver reports.',
+      request: { params: IdParam },
+      responses: {
+        200: json(
+          z.object({
+            ok: z.boolean(),
+            status: z.number().int(),
+            capabilities: z.record(z.string(), z.unknown()).nullable(),
+            error: z.string().nullable(),
+          }),
+          'Tested',
+        ),
+        ...errors,
+      },
+    }),
+
+    async (c) =>
+      c.json((await testDestination(deps, c.get('principal'), c.req.valid('param').id)) as never, 200),
+  )
+  app.openapi(
+    createRoute({
+      ...adminDest(
+        '/api/v1/admin/destinations/{id}/remove-all',
+        'post',
+        'removeDestinationEverywhere',
+        'Remove from everywhere',
+      ),
+      description: "Removes every one of this destination's publications.",
+      request: { params: IdParam },
+      responses: { 200: json(z.object({ removing: z.number().int() }), 'Removing'), ...errors },
+    }),
+    async (c) =>
+      c.json(await removeDestinationEverywhere(deps, c.get('principal'), c.req.valid('param').id), 200),
+  )
+  // Receiver callbacks (publish destinations §3.3, §3.5): no session or API key; a per-operation Bearer token.
+  const bearer = (c: Context) => /^Bearer\s+(\S+)$/i.exec(c.req.header('authorization') ?? '')?.[1] ?? null
+  const smallBody = async (c: Context) => {
+    const text = await c.req.raw.clone().text()
+    if (text.length > 16 * 1024) throw new ApiError('invalid_request', 'Body too large.')
+    try {
+      return JSON.parse(text) as Record<string, unknown>
+    } catch {
+      throw new ApiError('invalid_request', 'Body must be JSON.')
+    }
+  }
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/v1/destination-callbacks/{id}',
+      operationId: 'destinationCallback',
+      summary: 'Receiver callback',
+      description:
+        "An HTTP destination reports how a publish or removal it answered 202 to ended. Authorization: Bearer <the request's callback token>.",
+      tags: ['publishing'],
+      request: { params: IdParam },
+      responses: { 204: { description: 'Applied (or a duplicate)' }, ...errors, 410: err('Removed') },
+    }),
+    async (c) => {
+      await receiveDestinationCallback(deps, c.req.valid('param').id, bearer(c), await smallBody(c))
+      return c.body(null, 204)
+    },
+  )
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/v1/destination-callbacks/{id}/files',
+      operationId: 'destinationFiles',
+      summary: 'Fresh file links',
+      description:
+        "New signed links to a publication's files, for a receiver that needs more time to copy them.",
+      tags: ['publishing'],
+      request: { params: IdParam },
+      responses: {
+        200: json(z.object({ files: z.array(z.record(z.string(), z.unknown())) }), 'Links'),
+        ...errors,
+      },
+    }),
+    async (c) =>
+      c.json(await destinationFiles(deps, c.req.valid('param').id, bearer(c), await smallBody(c)), 200),
   )
   app.openapi(
     createRoute({

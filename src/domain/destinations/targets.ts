@@ -13,7 +13,8 @@ export function httpsUrl(v: unknown): string | null {
   if (typeof v !== 'string' || v.length > 2000) return null
   try {
     const u = new URL(v)
-    return u.protocol === 'https:' && !u.username && !u.password ? u.toString() : null
+    // Kept as given (not normalised), so a receiver's URL comes back exactly as it sent it.
+    return u.protocol === 'https:' && !u.username && !u.password ? v : null
   } catch {
     return null
   }

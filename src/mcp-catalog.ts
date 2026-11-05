@@ -54,10 +54,20 @@ export const MCP_TOOLS: readonly McpCatalogEntry[] = [
   },
   {
     name: 'publish_video',
-    summary: 'Public share page, MP4, GIF and embed snippet for a ready version.',
+    summary:
+      'Public share page, MP4, GIF and embed snippet for a ready version, or publish it to a destination.',
     access: 'creators',
   },
-  { name: 'unpublish_video', summary: 'Take a public link down.', access: 'creators' },
+  {
+    name: 'unpublish_video',
+    summary: 'Take a public link down, or remove it from a destination.',
+    access: 'creators',
+  },
+  {
+    name: 'list_destinations',
+    summary: 'Where else a version can be published (YouTube, HTTP destinations), and their targets.',
+    access: 'creators',
+  },
   { name: 'cancel_video', summary: 'Stop the version in progress.', access: 'everyone' },
   {
     name: 'set_verdict',

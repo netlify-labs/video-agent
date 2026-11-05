@@ -28,7 +28,7 @@ export interface Destination {
 
 export type StepResult =
   | { status: 'continue'; state: object }
-  | { status: 'waiting'; state?: object; checkAfterSec: number | null; message?: string }
+  | { status: 'waiting'; state?: object; checkAfterSec: number | null; message?: string; externalId?: string }
   | { status: 'retry'; state?: object; error: SafeError; retryAfterSec?: number }
   | { status: 'live'; url: string | null; externalId: string | null; warnings?: string[]; message?: string }
   | { status: 'removed' }

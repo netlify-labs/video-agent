@@ -281,6 +281,73 @@ const readBody = async (init?: RequestInit, input?: RequestInfo | URL) => {
   return {}
 }
 
+interface MockDest {
+  id: string
+  name: string
+  url: string
+  enabled: boolean
+  optionsSchema: unknown
+  capabilities: Record<string, unknown>
+  sharePublisherContact: boolean
+  createdAt: string
+}
+const siteName = (o: unknown) => {
+  const n = o && typeof o === 'object' ? (o as Record<string, unknown>).name : undefined
+  return typeof n === 'string' && n ? n : 'acme-video'
+}
+/** Destinations an admin added in this mock session. */
+const mockAdminDest: MockDest[] = []
+const mockSecrets = new Map<string, string>()
+const adminDestDto = (d: MockDest) => ({
+  id: d.id,
+  name: d.name,
+  url: d.url,
+  enabled: d.enabled,
+  optionsSchema: d.optionsSchema,
+  capabilities: d.capabilities,
+  sharePublisherContact: d.sharePublisherContact,
+  revision: 1,
+  createdAt: d.createdAt,
+  updatedAt: d.createdAt,
+  live: 0,
+  failed: 0,
+})
+/** The demo destination (localStorage.mockDestinations) plus the ones added in Admin. */
+function mockDestRows(): MockDest[] {
+  let demo: MockDest[] = []
+  try {
+    if (localStorage.getItem('mockDestinations'))
+      demo = [
+        {
+          id: 'dst_sites',
+          name: 'Netlify site',
+          url: 'https://receiver.example.com/video-agent',
+          enabled: true,
+          optionsSchema: {
+            type: 'object',
+            properties: {
+              name: { type: 'string', title: 'Site name', maxLength: 40 },
+              password: { type: 'boolean', title: 'Password-protect the site', default: false },
+            },
+          },
+          capabilities: {
+            targets: true,
+            targetNoun: 'site',
+            instructions: true,
+            instructionsLabel: 'Where should the video go?',
+            instructionsHint:
+              'An agent will edit the site to place it. Leave empty to use the standard layout.',
+          },
+          sharePublisherContact: false,
+          createdAt: new Date().toISOString(),
+        },
+      ]
+  } catch {
+    // no storage
+  }
+  return [...demo, ...mockAdminDest]
+}
+
 export function installMock() {
   const real = window.fetch.bind(window)
   window.fetch = async (input, init) => {
@@ -1155,6 +1222,191 @@ export function installMock() {
         mockCues[key] = cues.map((c, i) => ({ ...c, text: next[i]?.text.trim() ?? c.text }))
         capVer.captions = { ...capVer.captions, rev: capVer.captions.rev + 1 }
         return json(capVer.captions)
+      }
+    }
+    // Publish destinations (docs/plans/2026-11-04-publish-destinations.md §6): an HTTP destination with targets and
+    // instructions when localStorage.mockDestinations is set, plus the ones an admin adds. A publication moves
+    // queued → waiting → live on its own, like a receiver that answers 202 and calls back.
+    if (p === '/api/v1/destinations' && method === 'GET') {
+      const items = [
+        {
+          id: 'share_page',
+          kind: 'share_page',
+          name: 'Share page',
+          ready: true,
+          reason: null,
+          capabilities: {
+            targets: false,
+            targetNoun: null,
+            instructions: false,
+            instructionsLabel: null,
+            instructionsHint: null,
+          },
+          optionsSchema: null,
+          unpublishOptionsSchema: null,
+        },
+        ...mockDestRows()
+          .filter((d) => d.enabled)
+          .map((d) => ({
+            id: d.id,
+            kind: 'http',
+            name: d.name,
+            ready: true,
+            reason: null,
+            capabilities: {
+              targets: d.capabilities.targets === true,
+              targetNoun: (d.capabilities.targetNoun as string | undefined) ?? null,
+              instructions: d.capabilities.instructions === true,
+              instructionsLabel: (d.capabilities.instructionsLabel as string | undefined) ?? null,
+              instructionsHint: (d.capabilities.instructionsHint as string | undefined) ?? null,
+            },
+            optionsSchema: d.optionsSchema,
+            unpublishOptionsSchema: null,
+          })),
+      ]
+      return json({ items })
+    }
+    const dt = /^\/api\/v1\/destinations\/([^/]+)\/targets$/.exec(p)
+    if (dt?.[1] && method === 'GET') {
+      const d = mockDestRows().find((x) => x.id === dt[1])
+      if (!d?.capabilities.targets) return json({ targets: [], dropped: 0, noun: null, error: null })
+      return json({
+        targets: [
+          {
+            id: 'site-launch',
+            name: 'acme-launch',
+            description: '2 videos · updated yesterday',
+            url: 'https://acme-launch.netlify.app',
+            metadata: { videos: 2 },
+          },
+          {
+            id: 'site-docs',
+            name: 'acme-docs-demos',
+            description: '1 video · updated last week',
+            url: 'https://acme-docs-demos.netlify.app',
+            metadata: { videos: 1 },
+          },
+        ],
+        dropped: 0,
+        noun: (d.capabilities.targetNoun as string | undefined) ?? null,
+        error: null,
+      })
+    }
+    const dpPub = /^\/api\/v1\/videos\/([^/]+)\/versions\/(\d+)\/destinations$/.exec(p)
+    if (dpPub?.[1] && method === 'POST') {
+      const vid = videos.find((x) => x.id === dpPub[1])
+      const ver = vid?.versions.find((x) => x.n === Number(dpPub[2]))
+      if (!vid || !ver) return fail(404, 'not_found', 'Video not found.')
+      const b = await readBody(init, input)
+      ;(window as unknown as { __lastDestPublish?: unknown }).__lastDestPublish = b
+      const d = mockDestRows().find((x) => x.id === b.destination)
+      if (!d) return fail(404, 'not_found', 'Destination not found.')
+      const target = (b.target as { id: string; name: string; url: string | null } | null | undefined) ?? null
+      const entry: Video['versions'][number]['destinations'][number] = {
+        id: `dpub_mock${String(Math.random()).slice(2, 8)}`,
+        kind: 'http',
+        destination: { id: d.id, name: d.name },
+        target: target ? { name: target.name, url: target.url } : null,
+        status: 'queued',
+        desired: 'published',
+        url: null,
+        message: null,
+        warnings: [],
+        error: null,
+        hasSecret: false,
+        secretLabel: null,
+        publishedAt: new Date().toISOString(),
+        liveAt: null,
+      }
+      ver.destinations = [...ver.destinations, entry]
+      const password = (b.options as Record<string, unknown> | undefined)?.password === true
+      setTimeout(() => {
+        Object.assign(entry, {
+          status: 'waiting',
+          message: b.instructions ? 'Agent is adding the video to the page' : 'Creating the site',
+        })
+      }, 500)
+      setTimeout(() => {
+        Object.assign(entry, {
+          status: 'live',
+          message: null,
+          url: target?.url ?? `https://${siteName(b.options)}.netlify.app`,
+          liveAt: new Date().toISOString(),
+          ...(password ? { hasSecret: true, secretLabel: 'Site password' } : {}),
+        })
+        if (password) mockSecrets.set(entry.id, 'mock-password-4821')
+      }, 1300)
+      return json(entry)
+    }
+    const dpRow = /^\/api\/v1\/destination-publications\/([^/]+)(?:\/(retry|secret))?$/.exec(p)
+    if (dpRow?.[1]) {
+      const found = videos
+        .flatMap((v) => v.versions)
+        .flatMap((v) => v.destinations)
+        .find((x) => x.id === dpRow[1])
+      if (!found) return fail(404, 'not_found', 'Not found.')
+      if (dpRow[2] === 'secret' && method === 'POST') {
+        const value = mockSecrets.get(found.id)
+        if (!value) return fail(410, 'gone', 'This secret was already shown, or it expired.')
+        mockSecrets.delete(found.id)
+        Object.assign(found, { hasSecret: false, secretLabel: null })
+        return json({ label: 'Site password', value })
+      }
+      if (dpRow[2] === 'retry' && method === 'POST') {
+        Object.assign(found, { status: 'queued', error: null })
+        setTimeout(
+          () =>
+            Object.assign(found, {
+              status: 'live',
+              url: 'https://acme-video.netlify.app',
+              liveAt: new Date().toISOString(),
+            }),
+          800,
+        )
+        return json(found)
+      }
+      if (!dpRow[2] && method === 'DELETE') {
+        Object.assign(found, { status: 'removing', desired: 'removed', message: null })
+        setTimeout(() => Object.assign(found, { status: 'removed' }), 600)
+        return json(found)
+      }
+    }
+    if (p === '/api/v1/admin/destinations' && method === 'GET')
+      return json({ items: mockAdminDest.map(adminDestDto) })
+    if (p === '/api/v1/admin/destinations' && method === 'POST') {
+      const b = await readBody(init, input)
+      if (typeof b.url !== 'string' || !b.url.startsWith('https://'))
+        return fail(400, 'invalid_request', 'Destination URLs must use https.')
+      const row: MockDest = {
+        id: `dst_mock${mockAdminDest.length + 1}`,
+        name: typeof b.name === 'string' ? b.name : '',
+        url: b.url,
+        enabled: true,
+        optionsSchema: b.optionsSchema ?? null,
+        capabilities: {},
+        sharePublisherContact: b.sharePublisherContact === true,
+        createdAt: new Date().toISOString(),
+      }
+      mockAdminDest.push(row)
+      return json({ ...adminDestDto(row), secret: 'dsec_mock_shown_once_3f9a' }, 201)
+    }
+    const ad = /^\/api\/v1\/admin\/destinations\/([^/]+)(?:\/(rotate|test|remove-all))?$/.exec(p)
+    if (ad?.[1]) {
+      const row = mockAdminDest.find((x) => x.id === ad[1])
+      if (!row) return fail(404, 'not_found', 'Destination not found.')
+      if (ad[2] === 'rotate') return json({ ...adminDestDto(row), secret: 'dsec_mock_rotated_7c21' })
+      if (ad[2] === 'test') {
+        row.capabilities = { targets: true, targetNoun: 'site', instructions: true }
+        return json({ ok: true, status: 200, capabilities: row.capabilities, error: null })
+      }
+      if (ad[2] === 'remove-all') return json({ removing: 0 })
+      if (method === 'PATCH') {
+        Object.assign(row, await readBody(init, input))
+        return json(adminDestDto(row))
+      }
+      if (method === 'DELETE') {
+        mockAdminDest.splice(mockAdminDest.indexOf(row), 1)
+        return new Response(null, { status: 204 })
       }
     }
     // Publish and unpublish; the last publish body is kept for tests.

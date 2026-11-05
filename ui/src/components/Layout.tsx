@@ -164,6 +164,7 @@ export function Layout() {
           {link('/docs/api', 'REST API')}
           {link('/docs/mcp', 'MCP for AI tools')}
           {link('/docs/skills', 'Agent skills')}
+          {link('/docs/destinations', 'Publish destinations')}
         </NavLink>
         <PoweredBy inSidebar />
       </AppShell.Navbar>

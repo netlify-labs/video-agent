@@ -61,6 +61,10 @@ import { ONE_WAY_WORDS, SPEED_RANGE, VOICE_ID } from './lib/voice.js'
 import { MEDIA_KINDS } from './lib/media/classify.js'
 import { registerPrompts } from './mcp-prompts.js'
 import { remixVideo } from './domain/remix.js'
+import { listDestinations } from './domain/destinations/list.js'
+import { publishToDestination } from './domain/destinations/publish.js'
+import { unpublishFromDestination } from './domain/destinations/remove.js'
+import { listDestinationTargets } from './domain/destinations/people.js'
 
 const SERVER_INSTRUCTIONS = `Make short videos from a prompt. Each video is made by an AI agent with HyperFrames (HTML/CSS/GSAP rendered to MP4) and takes 3 to 8 minutes.
 
@@ -802,6 +806,35 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w"}`,
       inputSchema: {
         video_id: z.string().describe('The video id (vid_…) or its web URL.'),
         version: optionalVersion('Which version (default: the latest ready one).'),
+        destination: z
+          .string()
+          .optional()
+          .describe(
+            "Where to publish (list_destinations): 'share_page' (the default), 'youtube', or an HTTP destination's id. Other than the share page, it publishes in the background: get_video shows it under versions[].destinations.",
+          ),
+        target: z
+          .object({
+            id: z.string(),
+            name: z.string(),
+            description: z.string().nullable(),
+            url: z.string().nullable(),
+            metadata: z
+              .record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()]))
+              .nullable(),
+          })
+          .optional()
+          .describe(
+            "One of list_destinations' targets for that destination, exactly as listed; omit for a new one.",
+          ),
+        options: z
+          .record(z.string(), z.unknown())
+          .optional()
+          .describe("The destination's options form values."),
+        instructions: z
+          .string()
+          .max(4000)
+          .optional()
+          .describe('Free text for destinations that take instructions.'),
       },
       annotations: {
         title: 'Publish a video',
@@ -820,6 +853,22 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w"}`,
           throw new ToolError('NOT_READY', 'This video has no ready version yet.', {
             suggested_tool_calls: [{ name: 'get_video', arguments: { video_id: id, wait_seconds: 8 } }],
           })
+        if (args.destination && args.destination !== 'share_page') {
+          const dp = await publishToDestination(deps, principal, id, n, {
+            destination: args.destination,
+            options: args.options,
+            target: args.target,
+            instructions: args.instructions,
+          })
+          return {
+            video_id: id,
+            version: n,
+            publication: dp,
+            next_actions: [
+              'It publishes in the background: call get_video and read versions[].destinations for its status and url. unpublish_video with this publication id removes it.',
+            ],
+          }
+        }
         const pub = await publishVersion(deps, principal, id, n)
         return {
           video_id: id,
@@ -842,6 +891,12 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "version": 2}`,
       inputSchema: {
         video_id: z.string().describe('The video id (vid_…) or its web URL.'),
         version: optionalVersion('Which version (default: whichever version is public).'),
+        publication: z
+          .string()
+          .optional()
+          .describe(
+            'A destination publication id (dpub_…) to remove from its destination instead of the share page.',
+          ),
       },
       annotations: {
         title: 'Unpublish a video',
@@ -854,11 +909,50 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "version": 2}`,
     (args) =>
       run(async () => {
         const id = normalizeVideoId(args.video_id)
+        if (args.publication) {
+          const dp = await unpublishFromDestination(deps, principal, args.publication)
+          return { video_id: id, publication: dp, unpublished: true }
+        }
         const v = await load(id)
         const n = args.version ?? v.versions.find((x) => x.publications.some((p) => !p.unpublishedAt))?.n
         if (!n) return { video_id: id, unpublished: false, message: 'No version of this video is public.' }
         await unpublishVersion(deps, principal, id, n)
         return { video_id: id, version: n, unpublished: true }
+      }, args.video_id),
+  )
+
+  const listDestinationsTool = server.registerTool(
+    'list_destinations',
+    {
+      title: 'List publish destinations',
+      description: `Where a ready version can be published besides the share page: YouTube (when set up) and HTTP destinations, each with whether it's ready for you. Give video_id and destination to also get that destination's targets (things it already holds for you, such as your sites) to pass to publish_video.
+
+Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "destination": "dst_…"}`,
+      inputSchema: {
+        video_id: z.string().optional().describe('The video, to list a destination’s targets for it.'),
+        destination: z.string().optional().describe('A destination id, to list its targets.'),
+      },
+      annotations: {
+        title: 'List publish destinations',
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
+    },
+    (args) =>
+      run(async () => {
+        const destinations = await listDestinations(deps, principal)
+        if (args.video_id && args.destination) {
+          const t = await listDestinationTargets(
+            deps,
+            principal,
+            args.destination,
+            normalizeVideoId(args.video_id),
+          )
+          return { destinations, targets: t.targets, targets_error: t.error }
+        }
+        return { destinations }
       }, args.video_id),
   )
 
@@ -1544,7 +1638,8 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "mode": "keep_visuals", 
 
   // Keys inherit their owner's role, so the tool list shows only what that role can do (plan v2 §3).
   if (!can(principal, 'video:create')) {
-    for (const t of [createTool, reviseTool, remixTool, publishTool, unpublishTool]) t.remove()
+    for (const t of [createTool, reviseTool, remixTool, publishTool, unpublishTool, listDestinationsTool])
+      t.remove()
   }
   if (!can(principal, 'media:upload')) {
     searchMusicTool.remove()
