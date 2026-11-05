@@ -91,7 +91,7 @@ describe('ROLES', () => {
         gatedBy: 'narration',
         samples: true,
       })
-    expect(UPLOAD_ROLES).toEqual(TAKE_ROLES)
+    expect(UPLOAD_ROLES).toEqual([...TAKE_ROLES, 'screen-recording'])
     expect(budgetRoles('narration-take').sort()).toEqual([...TAKE_ROLES].sort())
     expect(budgetRoles('narration-upload').sort()).toEqual([...TAKE_ROLES].sort())
   })
@@ -117,11 +117,11 @@ describe('createUpload role rules', () => {
         filename: 'a.wav',
         size: 10,
         sha256: 'b'.repeat(64),
-        role: 'screen-recording',
+        role: 'bogus-role',
         scopeJobId: 'job_x',
       },
     })
-    log('unknown role', { role: 'screen-recording', step: 'create', outcome: res.status })
+    log('unknown role', { role: 'bogus-role', step: 'create', outcome: res.status })
     // The request schema refuses it first; the domain's own check names the roles it accepts.
     expect(res.status).toBe(400)
     const e = await createUpload(h.deps, member, {
@@ -133,7 +133,7 @@ describe('createUpload role rules', () => {
     }).catch((x: unknown) => x as ApiError)
     expect(e).toMatchObject({
       code: 'invalid_request',
-      message: 'role must be narration-take or narration-upload.',
+      message: 'role must be narration-take or narration-upload or screen-recording.',
     })
   })
 

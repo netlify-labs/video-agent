@@ -190,6 +190,8 @@ export interface Repo {
   deleteUpload(id: string): Promise<void>
   /** Bytes reserved by the person's open and assembling sessions. */
   reservedUploadBytes(uploaderId: string): Promise<number>
+  /** The person's upload sessions still open or assembling (named when the in-flight reservation is full). */
+  countOpenUploads(uploaderId: string): Promise<number>
   listStaleUploads(now: string, limit: number): Promise<MediaUploadRow[]>
   getUploadPart(uploadId: string, idx: number): Promise<MediaUploadPartRow | null>
   insertUploadPart(row: MediaUploadPartRow): Promise<void>

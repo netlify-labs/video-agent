@@ -589,6 +589,14 @@ function repoFor(db: Db): Repo {
         .where(and(eq(u.uploaderId, uploaderId), inArray(u.status, ['open', 'assembling'])))
       return Number(rows[0]?.total ?? 0)
     },
+    countOpenUploads: async (uploaderId) => {
+      const u = t.mediaUploads
+      const rows = await db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(u)
+        .where(and(eq(u.uploaderId, uploaderId), inArray(u.status, ['open', 'assembling'])))
+      return rows[0]?.n ?? 0
+    },
     listStaleUploads: async (now, limit) => {
       const u = t.mediaUploads
       return (await db

@@ -123,7 +123,12 @@ export async function storeMedia(
     await deps.blobs.set(
       'media',
       metaKey(id),
-      JSON.stringify({ file: cleanKey, original: keys.original, poster: posterKey }),
+      JSON.stringify({
+        file: cleanKey,
+        original: keys.original,
+        poster: posterKey,
+        ...(c.mp4 ? { mp4: c.mp4 } : {}),
+      }),
       { contentType: 'application/json' },
     )
   const now = deps.clock.now().toISOString()

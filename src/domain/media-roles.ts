@@ -58,8 +58,8 @@ export const isScreenRecording = (m: { role: string | null }) => m.role === 'scr
 /** Takes and screen recordings reach a version through their own paths (narration, recording), never as picks. */
 export const isLibraryPick = (m: { role: string | null }) => !isTakeRole(m.role) && !isScreenRecording(m)
 
-/** The roles createUploadSession accepts (screen recordings open with their limits, va-rsk5.2.3). */
-export const UPLOAD_ROLES: readonly MediaRole[] = TAKE_ROLES
+/** The roles createUploadSession accepts. */
+export const UPLOAD_ROLES: readonly MediaRole[] = [...TAKE_ROLES, 'screen-recording']
 
 /** The roles that share a role's budgets: the same policy (takes and uploaded takes count together). */
 export const budgetRoles = (role: MediaRole): MediaRole[] =>

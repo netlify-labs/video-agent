@@ -491,6 +491,10 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
       [...state.uploads.values()]
         .filter((u) => u.uploaderId === uploaderId && (u.status === 'open' || u.status === 'assembling'))
         .reduce((s, u) => s + u.size, 0),
+    countOpenUploads: async (uploaderId) =>
+      [...state.uploads.values()].filter(
+        (u) => u.uploaderId === uploaderId && (u.status === 'open' || u.status === 'assembling'),
+      ).length,
     listStaleUploads: async (now, limit) =>
       clone(
         [...state.uploads.values()]

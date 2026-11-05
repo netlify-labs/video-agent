@@ -29,6 +29,16 @@ export interface Classified {
   width: number | null
   height: number | null
   durationSec: number | null
+  /** MP4 timing facts for a video (stored in meta.json), so a clip can be judged as a recording later. */
+  mp4?: Mp4Facts
+}
+
+export interface Mp4Facts {
+  fps: number
+  cfr: boolean
+  maxKeyframeGapSec: number
+  sizeChanges: boolean
+  fastStart: boolean
 }
 
 export class MediaError extends Error {}
@@ -43,6 +53,55 @@ export const LIMITS = {
   audioBytes: 50 * 1024 * 1024,
   audioSeconds: 600,
   pdfBytes: 20 * 1024 * 1024,
+}
+
+/** A screen recording's limits (screen-recording plan §4.2); the UI, CLI and docs import these, never copies. */
+export const RECORDING_LIMITS = {
+  bytes: 150 * 1024 * 1024,
+  seconds: 300,
+  maxSide: 4096,
+  minFps: 24,
+  maxFps: 30,
+  maxKeyframeGapSec: 2,
+} as const
+
+/** What to run when a recording was made by a script rather than converted by the app. */
+export const RECORDING_FFMPEG_HINT =
+  'ffmpeg -i in.mov -vf scale=trunc(iw/2)*2:trunc(ih/2)*2 -c:v libx264 -g 30 -keyint_min 30 -r 30 -crf 20 -movflags +faststart -an out.mp4'
+
+const convert = `The app converts recordings for you; if you uploaded from a script, run: ${RECORDING_FFMPEG_HINT}`
+
+/** A screen recording's rules over its MP4 facts: one message per rule, each saying what to do. */
+function checkRecording(info: ReturnType<typeof inspectMp4>) {
+  const v = info.video
+  // Structure first: a fragmented file's moov has no samples, so its length would read as zero.
+  if (info.fragmented)
+    throw new MediaError(`This recording is a fragmented MP4, which can't be seeked reliably. ${convert}`)
+  if (!info.fastStart)
+    throw new MediaError(`This recording isn't fast start (its index is at the end of the file). ${convert}`)
+  if (!(info.durationSec > 0) || info.durationSec > RECORDING_LIMITS.seconds + 0.5)
+    throw new MediaError('Screen recordings must be 5 minutes or shorter. Trim it, or record a shorter take.')
+  if (
+    !(info.width > 0 && info.height > 0) ||
+    info.width > RECORDING_LIMITS.maxSide ||
+    info.height > RECORDING_LIMITS.maxSide
+  )
+    throw new MediaError(
+      `Screen recordings must be at most ${RECORDING_LIMITS.maxSide} pixels on each side. ${convert}`,
+    )
+  if (!v || v.sizeChanges)
+    throw new MediaError(
+      `This recording changes picture size partway through, which doesn't play reliably. ${convert}`,
+    )
+  const fps = Math.round(v.fps * 100) / 100
+  if (!v.cfr || v.fps < RECORDING_LIMITS.minFps - 0.1 || v.fps > RECORDING_LIMITS.maxFps + 0.1)
+    throw new MediaError(
+      `This recording needs a constant ${RECORDING_LIMITS.minFps} to ${RECORDING_LIMITS.maxFps} frames per second (it has ${v.cfr ? `${fps} fps` : 'a variable frame rate'}). ${convert}`,
+    )
+  if (v.maxKeyframeGapSec > RECORDING_LIMITS.maxKeyframeGapSec + 1e-6)
+    throw new MediaError(
+      `This recording needs a keyframe every second (its longest gap is ${Math.round(v.maxKeyframeGapSec * 10) / 10} s). ${convert}`,
+    )
 }
 
 const AUDIO_MIME = {
@@ -102,8 +161,12 @@ function image(
   return { kind: 'image', ext, mime, width: size[0], height: size[1], durationSec: null }
 }
 
-/** Classifies a whole file. Videos are checked fully (length, codecs); `head` mode only sniffs the type. */
-export function classify(b: Uint8Array, opts: { head?: boolean } = {}): Classified {
+/**
+ * Classifies a whole file. Videos are checked fully (length, codecs); `head` mode only sniffs the type. With the
+ * screen-recording role an MP4 is held to RECORDING_LIMITS instead of the clip limits.
+ */
+export function classify(b: Uint8Array, opts: { head?: boolean; role?: string | null } = {}): Classified {
+  const recording = opts.role === 'screen-recording'
   if (b[0] === 0x89 && ascii(b, 1, 4) === 'PNG')
     return image(
       'png',
@@ -130,7 +193,10 @@ export function classify(b: Uint8Array, opts: { head?: boolean } = {}): Classifi
   if (magic === 'OTTO') return font('otf', 'font/otf')
   if (u32(b, 0) === 0x00010000 || magic === 'true') return font('ttf', 'font/ttf')
   if (ascii(b, 4, 8) === 'ftyp') {
-    if (b.byteLength > LIMITS.videoBytes) throw new MediaError('Video clips must be 100 MB or smaller.')
+    if (recording && b.byteLength > RECORDING_LIMITS.bytes)
+      throw new MediaError('Screen recordings must be 150 MB or smaller.')
+    if (!recording && b.byteLength > LIMITS.videoBytes)
+      throw new MediaError('Video clips must be 100 MB or smaller.')
     if (opts.head)
       return { kind: 'video', ext: 'mp4', mime: 'video/mp4', width: null, height: null, durationSec: null }
     let info
@@ -142,6 +208,7 @@ export function classify(b: Uint8Array, opts: { head?: boolean } = {}): Classifi
       )
     }
     // No video track: M4A (AAC) audio. A clip with sound stays a video.
+    if (!info.videoCodec && recording) throw new MediaError('A screen recording must be a video (H.264 MP4).')
     if (!info.videoCodec) {
       if (!info.audioCodec) throw new MediaError('The MP4 has no video or audio track.')
       if (info.audioCodec !== 'mp4a')
@@ -149,9 +216,34 @@ export function classify(b: Uint8Array, opts: { head?: boolean } = {}): Classifi
       return audio('m4a', info.durationSec > 0 ? info.durationSec : null, b.byteLength)
     }
     if (info.videoCodec !== 'avc1' && info.videoCodec !== 'avc3')
-      throw new MediaError(`Video clips must be H.264 (this one is ${info.videoCodec || 'unknown'}).`)
+      throw new MediaError(
+        recording
+          ? `Screen recordings must be H.264 (this one is ${info.videoCodec || 'unknown'}). ${convert}`
+          : `Video clips must be H.264 (this one is ${info.videoCodec || 'unknown'}).`,
+      )
     if (info.audioCodec && info.audioCodec !== 'mp4a')
       throw new MediaError(`Audio must be AAC or none (this clip has ${info.audioCodec}).`)
+    const mp4: Mp4Facts | undefined = info.video
+      ? {
+          fps: info.video.fps,
+          cfr: info.video.cfr,
+          maxKeyframeGapSec: info.video.maxKeyframeGapSec,
+          sizeChanges: info.video.sizeChanges,
+          fastStart: info.fastStart,
+        }
+      : undefined
+    if (recording) {
+      checkRecording(info)
+      return {
+        kind: 'video',
+        ext: 'mp4',
+        mime: 'video/mp4',
+        width: info.width,
+        height: info.height,
+        durationSec: info.durationSec,
+        ...(mp4 ? { mp4 } : {}),
+      }
+    }
     if (!(info.durationSec > 0) || info.durationSec > LIMITS.videoSeconds + 0.5)
       throw new MediaError('Video clips must be 2 minutes or shorter.')
     if (!(info.width > 0 && info.height > 0) || info.width > 4096 || info.height > 4096)
@@ -163,6 +255,7 @@ export function classify(b: Uint8Array, opts: { head?: boolean } = {}): Classifi
       width: info.width,
       height: info.height,
       durationSec: info.durationSec,
+      ...(mp4 ? { mp4 } : {}),
     }
   }
   // WebM/Matroska is only ever audio here (one Opus or Vorbis track); a video track refuses the file.

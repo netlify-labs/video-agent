@@ -10,7 +10,7 @@ import { createHash } from 'node:crypto'
 import type { Deps } from '../deps.js'
 import { sha256Hex } from '../lib/crypto.js'
 import { ApiError } from '../lib/errors.js'
-import { classify, LIMITS, MediaError } from '../lib/media/classify.js'
+import { classify, LIMITS, MediaError, RECORDING_LIMITS } from '../lib/media/classify.js'
 import { mediaDto, mergeMediaMeta, readMediaMeta, storeMedia } from './media.js'
 import { assertNarrationEnabled, narrationSettings } from './narration-settings.js'
 import { assertCan, type Principal } from './policy.js'
@@ -123,7 +123,10 @@ export async function createUpload(
     size: number
     sha256: string
     caption?: string | undefined
-    /** A narration take, held to the take budgets; it needs the video it's recorded for. */
+    /**
+     * A narration take (held to the take budgets; it needs the video it's recorded for), or a screen recording
+     * (its own limits and budgets; no video yet).
+     */
     role?: MediaRole | null | undefined
     scopeJobId?: string | undefined
   },
@@ -131,7 +134,9 @@ export async function createUpload(
   assertCan(p, 'media:upload')
   if (!Number.isInteger(input.size) || input.size <= 0)
     throw new ApiError('invalid_request', 'size must be positive.')
-  if (input.size > LIMITS.videoBytes)
+  if (input.role === 'screen-recording' && input.size > RECORDING_LIMITS.bytes)
+    throw new ApiError('invalid_request', 'Screen recordings must be 150 MB or smaller.')
+  if (input.role !== 'screen-recording' && input.size > LIMITS.videoBytes)
     throw new ApiError('invalid_request', 'Files must be 100 MB or smaller.')
   if (!/^[0-9a-f]{64}$/.test(input.sha256))
     throw new ApiError('invalid_request', 'sha256 must be 64 hex characters.')
@@ -141,7 +146,12 @@ export async function createUpload(
   const policy = role ? ROLES[role] : null
   if (policy?.needsScope && !input.scopeJobId)
     throw new ApiError('invalid_request', 'A recording needs scopeJobId: the video it is recorded for.')
-  if (!policy?.needsScope && input.scopeJobId)
+  if (policy && !policy.needsScope && input.scopeJobId)
+    throw new ApiError(
+      'invalid_request',
+      "A screen recording doesn't take scopeJobId: it belongs to no video yet.",
+    )
+  if (!policy && input.scopeJobId)
     throw new ApiError('invalid_request', 'scopeJobId is only for recordings (with a role).')
   if (policy?.gatedBy === 'narration') await assertNarrationEnabled(deps)
   return deps.store.tx(async (repo) => {
@@ -149,11 +159,13 @@ export async function createUpload(
     if (role && input.scopeJobId) await loadJob(repo, p, input.scopeJobId)
     // Quota is reserved now, so parallel sessions can't overrun it.
     const reserved = await repo.reservedUploadBytes(p.userId)
-    if (reserved + input.size > UPLOAD_QUOTA_BYTES)
+    if (reserved + input.size > UPLOAD_QUOTA_BYTES) {
+      const open = await repo.countOpenUploads(p.userId)
       throw new ApiError(
         'rate_limited',
-        'You have too many uploads in progress. Finish or wait for them first.',
+        `You have ${open} upload${open === 1 ? '' : 's'} in progress. Finish or cancel one to start another.`,
       )
+    }
     if (role) {
       await assertRoleRate(deps, p.userId, role, repo)
       await quotaForRole(deps, role, p.userId, input.size, repo)
@@ -392,7 +404,7 @@ export async function assembleUpload(deps: Deps, id: string) {
   memory('parts')
   let c
   try {
-    c = classify(bytes)
+    c = classify(bytes, { role: u.role })
   } catch (e) {
     if (!(e instanceof MediaError)) deps.log.error('media.classify_failed', { uploadId: id, error: e })
     return fail(e instanceof MediaError ? e.message : "The file couldn't be read.")
@@ -420,6 +432,8 @@ export async function assembleUpload(deps: Deps, id: string) {
       file: row.cleanKey,
       original: row.originalKey,
       poster: row.posterKey,
+      // A video's MP4 timing facts, so a clip can later be judged as a recording without reading it again.
+      ...(c.mp4 ? { mp4: c.mp4 } : {}),
       ...(samples !== null && prior?.samples === undefined ? { samples } : {}),
     })
     // Everything verified about the file; the item keeps its id, uploader and creation time.
