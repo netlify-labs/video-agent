@@ -10,3 +10,10 @@ export { VERSION } from './version.js'
 
 /** This package's name, as published. */
 export const PACKAGE_NAME = 'netlify-video-agent-sdk'
+export {
+  parseWebhook,
+  verifyWebhook,
+  type VerifyWebhookOptions,
+  type WebhookEvent,
+  type WebhookEventType,
+} from './webhooks.js'
