@@ -3,11 +3,25 @@
 // Picks VIDEO_ID (or your newest ready video), publishes its newest ready version unless it's already published,
 // checks the oEmbed JSON (fields, types, CORS, cache, HEAD, the embed snippet, the hover clip when named), then
 // unpublishes it in a finally (only what this run published) and checks the JSON 404s. Logs JSON lines; exits
-// non-zero if any check fails. --dry prints the steps and touches nothing.
+// non-zero if any check fails. --dry prints the steps and makes no request.
 import { api, base, fail, key, log } from './lib.js'
+import { dry, dryRun } from './narration-lib.js'
 
-if (!base || !key) throw new Error('Set VIDEO_AGENT_URL and VIDEO_AGENT_KEY.')
-const dry = process.argv.includes('--dry')
+if (dry)
+  dryRun({
+    script: 'scripts/e2e/oembed.ts',
+    required: { VIDEO_AGENT_URL: process.env.VIDEO_AGENT_URL, VIDEO_AGENT_KEY: process.env.VIDEO_AGENT_KEY },
+    optional: { VIDEO_ID: process.env.VIDEO_ID },
+    steps: [
+      'pick VIDEO_ID (or your newest ready video) and its newest ready version (read-only)',
+      'if that version is not published: publish it; its share page and /v/{slug}.json are public until the unpublish',
+      'GET and HEAD /v/{slug}.json: oEmbed fields and types, video_agent block, CORS *, cache, embed html',
+      'HEAD the mp4, poster, captions and hover clip it names',
+      'if this run published it: unpublish in finally, then GET /v/{slug}.json must be 404',
+    ],
+    credits: { projected: 0 },
+  })
+if (!base || !key) throw new Error('Set VIDEO_AGENT_URL and VIDEO_AGENT_KEY (or pass --dry).')
 
 interface Video {
   id: string
@@ -34,7 +48,6 @@ const n = Math.max(...video.versions.filter((v) => v.status === 'ready').map((v)
 if (!Number.isFinite(n)) fail('the video has no ready version', { videoId: video.id })
 const live = video.publications.find((p) => p.versionN === n && !p.unpublishedAt)
 log('plan', {
-  dry,
   site: base,
   videoId: video.id,
   versionN: n,
@@ -47,7 +60,6 @@ log('plan', {
   ],
   credits: 0,
 })
-if (dry) process.exit(0)
 
 let slug = live?.slug ?? null
 let published = false
