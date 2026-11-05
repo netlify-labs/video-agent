@@ -1017,12 +1017,18 @@ then revisit the model default.
 
 ## As built (in progress, 2026-11-05)
 
-Live-test numbers (LT-1, LT-2, LT-3, LT-4) go here and in `docs/spikes.md` once the owner approves each run;
-none has run yet.
+**Live tests:**
+- **LT-1 (steps 1–2) and LT-2 step 4** ran on production on 2026-11-05, owner-approved, and passed. They cost
+  117.7 credits: 67.2 for redoing a scene at the same length, 50.5 for redoing it at twice the length.
+  - **Frozen-scene drift:** the lowest SSIM was 0.99979 per frame and 0.99802 on the worst tile, against
+    thresholds of 0.98 and 0.955.
+  - **Details:** `docs/spikes.md`, "LT-1 and LT-2 step 4".
+- **Still to run:** LT-2's baseline, voiced and narrated steps (3, 5 and 6), LT-3 and LT-4. Each needs the owner's
+  OK.
+- **Credits spent on this plan so far:** 175.3, which is B3's 57.6 plus these 117.7.
 
 **On main:**
-- **Spikes (`b448e7f`–`552b289`):** B1 and B2 are free. B3 cost 57.6 credits, the only credits spent on this plan
-  so far (`docs/spikes.md`).
+- **Spikes (`b448e7f`–`552b289`):** B1 and B2 are free. B3 cost 57.6 credits (`docs/spikes.md`).
 - **Phase 1, the run side (`b9f1a3e`–`8244e21`):**
   - `spliceScoped`, `scopeProblems` and `hyperframesScopeCheck`;
   - prepare-run's frozen parent, `scope.json` and stills;
@@ -1041,7 +1047,7 @@ none has run yet.
 - `SCOPED_AGENT_MODEL` and `SCOPED_AGENT_EFFORT`, unset by default;
 - the chip hover seek, and the version switcher opening a scoped version at the scene it redid;
 - the editor's beat-card and timeline "Redo this scene…" entries, with the draft warning;
-- `regen-beat.ts` step 7, the cheaper-model comparison.
+- `regen-beat.ts` step 7, the cheaper-model comparison, and its fill of a source version's missing beats.
 
 **Deviations from the plan:**
 - **Look refusal:** `look` with a scope isn't refused yet, because `reviseVideo` has no `look` until Looks phase 2

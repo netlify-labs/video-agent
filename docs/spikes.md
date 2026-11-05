@@ -729,6 +729,27 @@ What it changes:
 - **Snapping:** an authored scene that isn't whole frames is snapped when redone, as designed; frozen scenes keep their
   lengths.
 
+### LT-1 and LT-2 step 4: scoped revisions on production (2026-11-05, `scripts/e2e/regen-beat.ts --steps 1,2,4`, owner-approved, 117.7 credits)
+
+These ran on production at `e753376` against `vid_01m6d7shks0mpejbagqc7xft2f`, a three-scene music video (intro,
+race, end). The source was v2. Its scenes weren't stored yet, so the script filled them through `GET …/beats`
+(3 scenes).
+
+| Step | Version | Result | Credits | Wall time | Frozen scenes, lowest frame / tile SSIM |
+| --- | --- | --- | --- | --- | --- |
+| 1. Redo `race`, same length | v3 | pass | 67.2 | 157 s | intro 0.99981 / 0.99916; end 0.99979 / 0.99802 |
+| 2. Four bad requests | none | pass | 0 | 1 s | all refused with 400 |
+| 4. Redo `race`, twice as long | v4 | pass | 50.5 | 140 s | intro 0.99993 / 0.99950; end 0.99979 / 0.99802 (moved +4.69 s) |
+
+- **Frozen scenes are unchanged.** Every frozen-scene sample is well above the B2 thresholds (`SSIM_MIN` 0.98,
+  `SSIM_TILE_MIN` 0.955), and the captions outside `race` are the parent's. In step 4 the end scene and its
+  captions moved by the 4.69 s the scene grew (12 s to 16.7 s), and the MP4 matched the composition.
+- **Credits:** 67.2 and 50.5, a median of 50.5. B3's hand-made run cost 57.6, and this video's first version, a
+  full creation, cost 167.3.
+- **No savings verdict yet.** Without `BASELINE=1` (not approved yet) there's no whole-video revision of the same
+  request to compare against. The script's `savingsBar` is null.
+- **Model:** both runs used the deployment's default (`model` null), since `SCOPED_AGENT_MODEL` isn't on main.
+
 ## Looks spikes (docs/plans/2026-11-04-looks.md §10)
 
 ### K3: the API function reads the build's look archives (2026-11-05, a draft deploy and `netlify functions:serve`, no credits)
