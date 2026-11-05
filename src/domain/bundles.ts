@@ -36,6 +36,9 @@ export interface BundleIndex {
   contract?: { version: 1 | null; violations: string[] }
 }
 
+/** Library media larger than this is served from the media store by key, not copied into the bundle. */
+export const BY_KEY_MIN = 8 * 1024 * 1024
+
 export const bundlePrefix = (jobId: string, n: number) => `${jobId}/v${n}/`
 export const bundleIndexKey = (jobId: string, n: number) => `${bundlePrefix(jobId, n)}manifest.json`
 export const bundleFileKey = (jobId: string, n: number, path: string) => `${bundlePrefix(jobId, n)}f/${path}`
@@ -179,11 +182,20 @@ export async function ensureBundle(
   // Reference files are served from the videos store, checked here first (plan 2026-11-02 §6.2).
   const refs = await readReferences(deps, output)
   const refFiles = await Promise.all(refs.map(async (r) => [r.path, await fetchReference(deps, r)] as const))
-  // Library media is by reference: the preview needs it next to the composition (plan v2 §14 rule 23).
+  // Library media is by reference: the preview needs it next to the composition (plan v2 §14 rule 23). Large items
+  // (a screen recording is up to 150 MB) are served from the media store by key; their keys are per item and never
+  // change after assembly checked the hash, the same trust edit drafts' picks rely on.
+  const byKey: BundleEntry[] = []
   for (const m of await deps.store.listVersionMedia(jobId, n)) {
     if (m.kind === 'pdf') continue
     const path = `assets/media/${m.filename}`
     if (files.some(([p]) => p === path)) continue
+    const size = (await deps.store.getMedia(m.mediaId))?.bytes ?? 0
+    if (size > BY_KEY_MIN) {
+      byKey.push({ path, size, sha256: m.sha256, src: { store: 'media', key: m.key } })
+      deps.log.info('bundle.media', { jobId, n, path, mode: 'by-key', bytes: size })
+      continue
+    }
     const bytes = await deps.blobs.get('media', m.key)
     if (bytes) files.push([path, bytes])
   }
@@ -196,6 +208,7 @@ export async function ensureBundle(
     versionN: n,
     files: [
       ...files.map(([path, bytes]) => ({ path, size: bytes.byteLength, sha256: sha256Hex(bytes) })),
+      ...byKey,
       ...refs.map((r) => ({
         path: r.path,
         size: r.bytes,
@@ -205,6 +218,7 @@ export async function ensureBundle(
     ],
     createdAt: deps.clock.now().toISOString(),
     contract: (() => {
+      // By-key media needs no stand-in here: missingLocalFiles never counts library media as missing.
       const all = new Map([...files, ...refFiles])
       const c = contractForEngine(engine, all)
       const missing = c.version === 1 ? missingLocalFiles(all) : []
