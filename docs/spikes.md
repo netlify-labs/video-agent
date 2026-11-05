@@ -697,3 +697,53 @@ the parent's) still catches text changes directly; tiles are for what captions d
 synthetic fixture with flat colours and simple motion: video clips, grain or gradients that move will score lower, so
 the gate logs every value and the thresholds get revisited after live gate part 1 (LT-1). Nothing here fell below the
 ~0.97 "investigate determinism" line from the plan.
+
+## Looks spikes (docs/plans/2026-11-04-looks.md §10)
+
+### K4: licences of the registry items the starter looks use (2026-11-05, research only, no credits)
+
+Read every file of each item at `heygen-com/hyperframes@v0.8.222` (`registry/<blocks|components>/<name>/`): its
+`registry-item.json` (which files `add` installs), the files themselves (headers, notices, bundled assets, outside
+URLs), and the commit authors of its folder. The repo is Apache-2.0 (`LICENSE` at the tag) with no root `NOTICE` and
+no per-item licence or `LICENSE` file, so every item's own code is Apache-2.0. Credit line for vendored items:
+"HyperFrames contributors (HeyGen), Apache-2.0", recorded per item in `registry.lock.json` by `look:vendor`.
+
+Three things ride along with the code and need handling when a look vendors or inlines an item:
+
+- **GSAP from jsDelivr.** 19 of the item files load `https://cdn.jsdelivr.net/npm/gsap@3.14.2/...`. Inlined into a
+  scene, they use the run's `vendor/gsap.min.js` instead (the project already ships GSAP under its standard licence),
+  and `look:check` refuses outside URLs in the example anyway.
+- **Google Fonts links** in `data-chart`, `beat-freeze-cut` and `chromatic-radial-split` (Inter, Space Mono, Bebas
+  Neue, JetBrains Mono, Lato, Gelasio; all OFL). Dropped when inlining: the brand's fonts or the look's font stack
+  apply (§3), and v1 looks ship no fonts.
+- **Bundled third-party files** in `code-slice-hero`: `assets/gsap-3.14.2.min.js` ("Copyright GreenSock. All rights
+  reserved", GSAP Standard License) and `assets/Geist-Bold.ttf` (OFL-1.1, Vercel). Neither is vendored: GSAP comes
+  from `video/vendor/`, and `.ttf` isn't an allowed look file type (fonts return in phase 4.3).
+
+`camcorder-hud` and `editorial-flash-overlay` carry `demo-backdrop.jpg` (no stated source), but only their
+`demo.html` uses it and `add` doesn't install it, so nothing to vendor.
+
+| Item | Type | Licence | Authors (commits) | Source | Verdict |
+| --- | --- | --- | --- | --- | --- |
+| `browser-device-stage` | component | Apache-2.0 | Miguel Ángel | [folder](https://github.com/heygen-com/hyperframes/tree/v0.8.222/registry/components/browser-device-stage) | keep |
+| `blur-in` | component | Apache-2.0 | Miguel Ángel | [folder](https://github.com/heygen-com/hyperframes/tree/v0.8.222/registry/components/blur-in) | keep |
+| `bottom-up-letters` | component | Apache-2.0 | Miguel Ángel | [folder](https://github.com/heygen-com/hyperframes/tree/v0.8.222/registry/components/bottom-up-letters) | keep |
+| `agent-cursor` | component | Apache-2.0 | Miguel Ángel | [folder](https://github.com/heygen-com/hyperframes/tree/v0.8.222/registry/components/agent-cursor) | keep |
+| `grain-overlay` | component | Apache-2.0 | James Russo, Miguel Ángel | [folder](https://github.com/heygen-com/hyperframes/tree/v0.8.222/registry/components/grain-overlay) | keep |
+| `before-after-wipe` | component | Apache-2.0 | Miguel Ángel | [folder](https://github.com/heygen-com/hyperframes/tree/v0.8.222/registry/components/before-after-wipe) | keep |
+| `lt-clean-bar` | block | Apache-2.0 | Kiyeon Jeon | [folder](https://github.com/heygen-com/hyperframes/tree/v0.8.222/registry/blocks/lt-clean-bar) | keep (inline) |
+| `beat-freeze-cut` | block | Apache-2.0 | Miguel Angel Simon Sierra | [folder](https://github.com/heygen-com/hyperframes/tree/v0.8.222/registry/blocks/beat-freeze-cut) | keep (inline, drop the Google Fonts link) |
+| `editorial-flash-overlay` | block | Apache-2.0 | ukimsanov | [folder](https://github.com/heygen-com/hyperframes/tree/v0.8.222/registry/blocks/editorial-flash-overlay) | keep (inline) |
+| `canopy-part-title` | block | Apache-2.0 code; leaf textures of unstated origin | Miguel Ángel | [folder](https://github.com/heygen-com/hyperframes/tree/v0.8.222/registry/blocks/canopy-part-title) | **replace** |
+| `code-diff` | block | Apache-2.0 | Miguel Ángel, WaterrrForever | [folder](https://github.com/heygen-com/hyperframes/tree/v0.8.222/registry/blocks/code-diff) | keep (inline) |
+| `code-slice-hero` | block | Apache-2.0 code; bundled GSAP (standard licence) and Geist (OFL) | Miguel Ángel | [folder](https://github.com/heygen-com/hyperframes/tree/v0.8.222/registry/blocks/code-slice-hero) | keep the HTML and `shadows.js`/`surface.js` only (inline) |
+| `data-chart` | block | Apache-2.0 | James Russo, Miguel Ángel | [folder](https://github.com/heygen-com/hyperframes/tree/v0.8.222/registry/blocks/data-chart) | keep (inline, drop the Google Fonts link) |
+| `bar-chart-race` | block | Apache-2.0 | Miguel Ángel | [folder](https://github.com/heygen-com/hyperframes/tree/v0.8.222/registry/blocks/bar-chart-race) | keep (inline) |
+| `chromatic-radial-split` | block | Apache-2.0 | James Russo, Miguel Ángel | [folder](https://github.com/heygen-com/hyperframes/tree/v0.8.222/registry/blocks/chromatic-radial-split) | keep (inline, drop the Google Fonts link) |
+| `camcorder-hud` | block | Apache-2.0 | ukimsanov | [folder](https://github.com/heygen-com/hyperframes/tree/v0.8.222/registry/blocks/camcorder-hud) | keep (inline) |
+
+**`canopy-part-title` is replaced** (owner question Q5's default). Its two leaf textures
+(`assets/leaf-surface-{color,normal}.webp`) have no stated source ("ported verbatim from the experiment"), and it
+loads three.js `0.170.0` from jsDelivr at render time, a 58 KB WebGL scene that can't be inlined into a contract scene
+and would need the network on every render. The `editorial` look (phase 4.2) gets a hand-written part title instead:
+a rule, a section number and a serif headline in a slow pan; §5's table is updated to match.
