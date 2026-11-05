@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { isPreviewBuild, videoRunOf, writeVideoRunPreview } from './lib/agent-preview.js'
 import { repoRoot } from './lib/run-tools.js'
+import { unpackZip, ZipError } from './lib/brand-zip.js'
 import { buildMcpApp } from './lib/mcp-app.js'
 import { buildSkills } from './lib/skills.js'
 import { buildInfoModule, buildInfoOf, releaseTag } from './lib/build-info.js'
@@ -31,21 +32,22 @@ type Brand = {
 }
 const svgData = (svg: Buffer) => `data:image/svg+xml;base64,${svg.toString('base64')}`
 
-// Reads brand.json and its logos from the brand zip. Any failure falls back to context/, so a bad URL never
-// breaks the deploy; the URL itself is never logged.
+// Reads brand.json and its logos from the brand zip, within limits (scripts/lib/brand-zip.ts: a timeout, the size,
+// the entries, safe paths). Any failure falls back to context/, so a bad URL never breaks the deploy; the URL itself
+// is never logged, only a reason code.
 async function zipBrand(url: string): Promise<{ brand: Brand; file: (rel: string) => Buffer } | null> {
   const dir = mkdtempSync(join(tmpdir(), 'brand-'))
   try {
-    const res = await fetch(url)
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const zip = join(dir, 'brand.zip')
-    writeFileSync(zip, Buffer.from(await res.arrayBuffer()))
-    execFileSync('unzip', ['-q', zip, '-d', join(dir, 'x')])
-    const file = (rel: string) => readFileSync(join(dir, 'x', rel))
+    const file = await unpackZip(url, dir)
     const brand = JSON.parse(file('brand.json').toString('utf8')) as Brand
+    log('brand-zip', { ok: true })
     return { brand, file }
   } catch (e) {
-    log('brand-zip', { ok: false, error: e instanceof Error ? e.message : String(e) })
+    log('brand-zip', {
+      ok: false,
+      reason: e instanceof ZipError ? e.reason : 'bad_brand',
+      error: e instanceof ZipError ? e.message : e instanceof Error ? e.name : 'error',
+    })
     rmSync(dir, { recursive: true, force: true })
     return null
   }
