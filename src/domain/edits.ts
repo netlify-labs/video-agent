@@ -358,6 +358,7 @@ async function computeRev(
     const m = await repo.getMedia(file.split('.')[0] ?? '')
     const fits = kind === 'image' ? m?.kind === 'image' || m?.kind === 'svg' : m?.kind === kind
     // A narration take isn't a library item: it's placed with the narration op, never as a media or audio pick.
+    // Takes go in through narration, not as a library pick into a slot.
     if (!m || m.deletedAt || m.status !== 'ready' || isTake(m) || `${m.id}.${m.ext}` !== file || !fits)
       throw new ApiError(
         'invalid_request',

@@ -200,6 +200,7 @@ export async function attachableMedia(repo: Repo, ids: string[], max: number): P
   if (unique.length > max) throw new ApiError('invalid_request', `Attach at most ${max} files.`)
   for (const id of unique) {
     const m = await repo.getMedia(id)
+    // Takes aren't library items here: they are private to their uploader and reached through narration.
     if (!m || m.deletedAt || m.status !== 'ready' || isTake(m))
       throw new ApiError('invalid_request', `Media ${id} isn't a ready item in the library.`)
   }
@@ -243,6 +244,7 @@ export async function mediaDto(deps: Deps, p: Principal, m: MediaRow, usage?: Re
       : null,
     canDelete: m.uploaderId === p.userId || p.role === 'admin',
     source: sourceDto(m),
+    // `recording` here is a narration take's details; screen recordings are not takes.
     recording: isTake(m) ? await recordingDto(deps.store, p, m) : null,
   }
 }
@@ -414,6 +416,7 @@ export async function snapshotMedia(
     if (rows.some((r) => r.mediaId === id)) continue
     const m = await repo.getMedia(id)
     // Takes reach a version only through its narration (which checks canReadTake), never as library picks.
+    // Takes aren't library items here: they are private to their uploader and reached through narration.
     if (!m || m.deletedAt || m.status !== 'ready' || isTake(m))
       throw new ApiError('invalid_request', `Media ${id} isn't a ready item in the library.`)
     rows.push({

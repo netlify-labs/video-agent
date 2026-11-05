@@ -58,6 +58,7 @@ async function ownTake(deps: Deps, p: Principal, id: string) {
   const m = await deps.store.getMedia(id)
   if (!m || m.deletedAt || m.deletingAt || m.uploaderId !== p.userId)
     throw new ApiError('not_found', 'Media not found.')
+  // Peaks and speech spans exist only for takes.
   if (!isTake(m)) throw new ApiError('invalid_request', 'Only recordings have peaks and speech spans.')
   if (m.status === 'rejected') throw new ApiError('conflict', 'This recording was rejected.')
   return m
@@ -66,6 +67,7 @@ async function ownTake(deps: Deps, p: Principal, id: string) {
 /** A take the caller may read (loadMedia applies canReadTake); library items have no peaks. */
 async function readableTake(deps: Deps, p: Principal, id: string) {
   const m = await loadMedia(deps, p, id)
+  // Same: only takes have peaks.
   if (!isTake(m)) throw new ApiError('not_found', 'This item has no peaks.')
   return m
 }

@@ -10,6 +10,7 @@ import {
   putPart,
   quotaForTakes,
 } from '../src/domain/media-uploads.js'
+import { TAKE_ROLES } from '../src/domain/media-roles.js'
 import type { Principal } from '../src/domain/policy.js'
 import {
   NARRATION_SETTING_DEFAULTS,
@@ -115,8 +116,8 @@ describe.each([
     // Soft-deleted takes still hold their bytes until GC marks them deleting.
     expect(await store.narrationTakeBytes('u_member')).toBe(175)
     expect(await store.narrationTakeBytes('u_nobody')).toBe(0)
-    expect(await store.countNarrationTakes('u_member', '2026-11-03T10:00:00.000Z')).toBe(6)
-    expect(await store.countNarrationTakes('u_member', '2026-11-03T10:00:00.001Z')).toBe(0)
+    expect(await store.countRoleUploads('u_member', TAKE_ROLES, '2026-11-03T10:00:00.000Z')).toBe(6)
+    expect(await store.countRoleUploads('u_member', TAKE_ROLES, '2026-11-03T10:00:00.001Z')).toBe(0)
   })
 
   it('counts open take sessions (bytes and starts) until their media row does; not other sessions', async () => {
@@ -152,8 +153,8 @@ describe.each([
     ])
       await store.insertUpload(row)
     expect(await store.narrationTakeBytes('u_member')).toBe(130)
-    expect(await store.countNarrationTakes('u_member', at)).toBe(3)
-    expect(await store.countNarrationTakes('u_member', '2026-11-03T10:00:00.001Z')).toBe(0)
+    expect(await store.countRoleUploads('u_member', TAKE_ROLES, at)).toBe(3)
+    expect(await store.countRoleUploads('u_member', TAKE_ROLES, '2026-11-03T10:00:00.001Z')).toBe(0)
   })
 })
 

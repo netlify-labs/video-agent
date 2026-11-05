@@ -223,6 +223,7 @@ async function loadPlanMedia(deps: Deps, ids: string[]): Promise<MediaRow[]> {
   for (const id of unique) {
     const m = await deps.store.getMedia(id)
     // Narration takes aren't library items (takes.ts).
+    // A take is someone's voice, never a library pick for a plan.
     if (!m || m.deletedAt || m.status !== 'ready' || isTake(m))
       throw new ApiError('invalid_request', `Media ${id} isn't a ready item in the library.`)
     rows.push(m)
@@ -235,6 +236,7 @@ async function mediaContext(deps: Deps, plan: PlanRow) {
   if (!plan.mediaIds.length) return { block: '', images: [] }
   // Items deleted since the plan was made are skipped here; creating the video refuses them.
   const rows = (await Promise.all(plan.mediaIds.map((id) => deps.store.getMedia(id)))).filter(
+    // Takes are left out for the same reason as above.
     (m): m is MediaRow => !!m && !m.deletedAt && m.status === 'ready' && !isTake(m),
   )
   const images: { mime: string; base64: string }[] = []

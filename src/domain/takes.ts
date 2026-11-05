@@ -7,6 +7,7 @@
 import type { Deps } from '../deps.js'
 import { ApiError } from '../lib/errors.js'
 import type { Repo } from '../store/types.js'
+import { isTakeRole } from './media-roles.js'
 import { assertCan, creatorOrUp, type Principal } from './policy.js'
 import type { CleanupRow, MediaRefOwnerKind, MediaRow } from './types.js'
 import { canSee } from './videos.js'
@@ -24,7 +25,8 @@ export const takePrefix = (mediaId: string) => `${mediaId}/`
 export const takePeaksKey = (mediaId: string) => `${mediaId}/peaks.bin`
 export const takeTranscriptPrefix = (mediaId: string) => `${mediaId}/transcripts/`
 
-export const isTake = (m: Pick<MediaRow, 'role'>) => m.role !== null
+/** A narration take (recorded or uploaded voice-over). Other roles, such as screen recordings, are not takes. */
+export const isTake = (m: Pick<MediaRow, 'role'>) => isTakeRole(m.role)
 
 /**
  * The one take-read predicate, used on every path that can expose a take: loadMedia and signed links (mediaDto),
@@ -37,6 +39,7 @@ export const isTake = (m: Pick<MediaRow, 'role'>) => m.role !== null
  * version will. "Can see" is the video's own rule, so private videos stay private.
  */
 export async function canReadTake(repo: Repo, p: Principal, m: MediaRow): Promise<boolean> {
+  // Only takes are private to their uploader; every other item reads like the library.
   if (!isTake(m) || m.uploaderId === p.userId || p.role === 'admin') return true
   if (!creatorOrUp(p.role)) return false
   for (const r of await repo.listMediaRefsByMedia([m.id])) {
@@ -121,6 +124,7 @@ async function retainReleased(repo: Repo, deps: Pick<Deps, 'clock'>, locked: Med
   const held = new Set((await repo.listMediaRefsByMedia(locked.map((m) => m.id))).map((r) => r.mediaId))
   const until = new Date(deps.clock.now().getTime() + TAKE_RETAIN_MS).toISOString()
   for (const m of locked)
+    // Take retention only; other roles keep their own rules.
     if (isTake(m) && !held.has(m.id)) await repo.updateMedia(m.id, { retainUntil: until })
 }
 
@@ -239,6 +243,7 @@ const due = (now: Date) => ({
 async function tombstoneTake(deps: Deps, mediaId: string, reason: GcReason): Promise<CleanupRow | null> {
   return deps.store.tx(async (repo) => {
     const [m] = await repo.lockMedia([mediaId])
+    // Takes GC only removes takes.
     if (!m || !isTake(m) || m.deletingAt) return null
     if ((await repo.listMediaRefsByMedia([m.id])).length) return null
     const now = deps.clock.now()

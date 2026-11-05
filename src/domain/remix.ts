@@ -141,6 +141,7 @@ export async function versionMediaItems(deps: Deps, principal: Principal, jobId:
   const items = []
   for (const r of await deps.store.listVersionMedia(jobId, n)) {
     const m = await deps.store.getMedia(r.mediaId)
+    // Takes are someone's voice and don't carry over into a remix.
     if (!m || isTake(m)) continue
     items.push(await mediaDto(deps, principal, m))
   }

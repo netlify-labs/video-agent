@@ -48,6 +48,7 @@ import type {
 } from '../domain/types.js'
 import type { JobQuery, Repo, Store } from './types.js'
 import { searchWords } from '../lib/search.js'
+import { isTakeRole } from '../domain/media-roles.js'
 import { ApiError } from '../lib/errors.js'
 
 interface State {
@@ -167,7 +168,8 @@ const libraryVisible = (
 ) =>
   !m.deletedAt &&
   (m.status === 'ready' || m.uploaderId === q.includePendingOf) &&
-  (m.role === null || (m.uploaderId === q.takesOf && m.deletingAt === null))
+  // Narration takes are the uploader's own; other roles are library items like any other.
+  (!isTakeRole(m.role) || (m.uploaderId === q.takesOf && m.deletingAt === null))
 const ikey = (provider: string, subject: string) => `${provider}\n${subject}`
 const live = (leaseUntil: string | null, now: string) => leaseUntil !== null && leaseUntil > now
 const activeDpub = (
@@ -210,7 +212,7 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
   // Take upload sessions not yet completed: they hold quota and count toward the rate limit until their media row does.
   const openTakeSessions = (uploaderId: string) =>
     [...state.uploads.values()].filter(
-      (u) => u.uploaderId === uploaderId && u.status === 'open' && u.role !== null,
+      (u) => u.uploaderId === uploaderId && u.status === 'open' && isTakeRole(u.role),
     )
 
   const repo: Repo = {
@@ -455,7 +457,9 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
           .filter(
             (m) =>
               libraryVisible(m, q) &&
-              (q.recordings === 'only' ? m.role !== null : q.recordings !== 'exclude' || m.role === null) &&
+              (q.recordings === 'only'
+                ? isTakeRole(m.role)
+                : q.recordings !== 'exclude' || !isTakeRole(m.role)) &&
               (!q.kind || m.kind === q.kind) &&
               searchWords(q.search).every((w) =>
                 [m.title, m.filename, m.caption, m.sourceTitle, m.creator].some((f) =>
@@ -617,7 +621,7 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
         [...state.media.values()]
           .filter(
             (m) =>
-              m.role !== null &&
+              isTakeRole(m.role) &&
               !m.deletedAt &&
               m.deletingAt === null &&
               (m.scopeJobId === jobId || used.has(m.id)),
@@ -632,7 +636,7 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
         [...state.media.values()]
           .filter(
             (m) =>
-              m.role !== null &&
+              isTakeRole(m.role) &&
               m.deletingAt === null &&
               !held.has(m.id) &&
               (!q.uploaderId || m.uploaderId === q.uploaderId) &&
@@ -1090,12 +1094,24 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
 
     narrationTakeBytes: async (uploaderId) =>
       [...state.media.values()]
-        .filter((m) => m.uploaderId === uploaderId && isTake(m) && m.status !== 'rejected' && !m.deletingAt)
+        .filter(
+          (m) =>
+            m.uploaderId === uploaderId && isTakeRole(m.role) && m.status !== 'rejected' && !m.deletingAt,
+        )
         .reduce((n, m) => n + m.bytes, 0) + openTakeSessions(uploaderId).reduce((n, u) => n + u.size, 0),
-    countNarrationTakes: async (uploaderId, since) =>
+    countRoleUploads: async (uploaderId, roles, since) =>
       [...state.media.values()].filter(
-        (m) => m.uploaderId === uploaderId && isTake(m) && m.createdAt >= since,
-      ).length + openTakeSessions(uploaderId).filter((u) => u.createdAt >= since).length,
+        (m) =>
+          m.uploaderId === uploaderId && m.role !== null && roles.includes(m.role) && m.createdAt >= since,
+      ).length +
+      [...state.uploads.values()].filter(
+        (u) =>
+          u.uploaderId === uploaderId &&
+          u.status === 'open' &&
+          u.role !== null &&
+          roles.includes(u.role) &&
+          u.createdAt >= since,
+      ).length,
   }
 
   const store = {
@@ -1173,7 +1189,7 @@ function provenanceOf(state: State, has: (jobId: string) => boolean) {
     .sort((a, b) => a.ownerId.localeCompare(b.ownerId) || a.mediaId.localeCompare(b.mediaId))
     .flatMap((r) => {
       const m = state.media.get(r.mediaId)
-      if (!m?.source || m.role !== null) return []
+      if (!m?.source || isTakeRole(m.role)) return []
       const versionN = Number(r.ownerId.slice(r.ownerId.lastIndexOf('#') + 1))
       return [
         {
@@ -1218,5 +1234,3 @@ function pickProvenance(
     attribution: m.attribution,
   }
 }
-
-const isTake = (m: MediaRow) => m.role === 'narration-take' || m.role === 'narration-upload'

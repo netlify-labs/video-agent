@@ -22,7 +22,7 @@ import {
 import type { PgTable } from 'drizzle-orm/pg-core'
 import type { PgAsyncDatabase } from 'drizzle-orm/pg-core/async/db'
 import * as t from '../../db/schema.js'
-import { MEDIA_ROLES, SLOT_STAGES, TERMINAL_STAGES } from '../domain/types.js'
+import { SLOT_STAGES, TERMINAL_STAGES } from '../domain/types.js'
 import type {
   ApiKeyRow,
   AttemptRow,
@@ -69,6 +69,7 @@ import { addUsage, byVersion, withoutJob, type UsageRow } from './memory.js'
 import type { Repo, Store } from './types.js'
 import { searchWords } from '../lib/search.js'
 import { ApiError } from '../lib/errors.js'
+import { TAKE_ROLES } from '../domain/media-roles.js'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- driver-agnostic (netlify-db, pglite)
 type Db = PgAsyncDatabase<any, any, any>
@@ -117,7 +118,7 @@ async function narrationProvenance(db: Db, jobIds: string[]) {
     .select({ jobId: r.jobId, ownerId: r.ownerId, mediaId: m.id, kind: m.kind, ...MEDIA_PROVENANCE })
     .from(r)
     .innerJoin(m, eq(m.id, r.mediaId))
-    .where(and(inArray(r.jobId, jobIds), eq(r.ownerKind, 'version'), isNull(m.role), isNotNull(m.source)))
+    .where(and(inArray(r.jobId, jobIds), eq(r.ownerKind, 'version'), notTakeCol(m.role), isNotNull(m.source)))
     .orderBy(asc(r.ownerId), asc(r.mediaId))
   return rows.map(({ ownerId, ...row }) => ({
     ...row,
@@ -127,11 +128,15 @@ async function narrationProvenance(db: Db, jobIds: string[]) {
   })) as (VersionProvenanceRow & { jobId: string })[]
 }
 
+/** A narration take (recorded or uploaded voice-over); other roles are library items like any other. */
+const isTakeCol = (role: typeof t.media.role | typeof t.mediaUploads.role) => inArray(role, [...TAKE_ROLES])
+const notTakeCol = (role: typeof t.media.role) => or(isNull(role), notInArray(role, [...TAKE_ROLES]))
+
 /** Library queries leave narration takes out, except `takesOf`'s own that GC isn't deleting. */
 const takeVisible = (takesOf: string | undefined) =>
   takesOf
-    ? or(isNull(t.media.role), and(eq(t.media.uploaderId, takesOf), isNull(t.media.deletingAt)))
-    : isNull(t.media.role)
+    ? or(notTakeCol(t.media.role), and(eq(t.media.uploaderId, takesOf), isNull(t.media.deletingAt)))
+    : notTakeCol(t.media.role)
 
 function repoFor(db: Db): Repo {
   /** `select 1 from table where …`, for exists() and notExists(). */
@@ -515,9 +520,9 @@ function repoFor(db: Db): Repo {
             visible,
             takeVisible(q.takesOf),
             q.recordings === 'only'
-              ? isNotNull(m.role)
+              ? isTakeCol(m.role)
               : q.recordings === 'exclude'
-                ? isNull(m.role)
+                ? notTakeCol(m.role)
                 : undefined,
             q.kind ? eq(m.kind, q.kind) : undefined,
             ...searchWords(q.search).map((w) => {
@@ -807,7 +812,7 @@ function repoFor(db: Db): Repo {
         .from(m)
         .where(
           and(
-            isNotNull(m.role),
+            isTakeCol(m.role),
             isNull(m.deletedAt),
             isNull(m.deletingAt),
             or(eq(m.scopeJobId, jobId), exists(anyRow(r, and(eq(r.mediaId, m.id), eq(r.jobId, jobId))))),
@@ -823,7 +828,7 @@ function repoFor(db: Db): Repo {
         .from(m)
         .where(
           and(
-            isNotNull(m.role),
+            isTakeCol(m.role),
             isNull(m.deletingAt),
             notExists(anyRow(t.mediaRefs, eq(t.mediaRefs.mediaId, m.id))),
             q.uploaderId ? eq(m.uploaderId, q.uploaderId) : undefined,
@@ -1591,7 +1596,7 @@ function repoFor(db: Db): Repo {
         .where(
           and(
             eq(m.uploaderId, uploaderId),
-            inArray(m.role, MEDIA_ROLES),
+            isTakeCol(m.role),
             sql`${m.status} <> 'rejected'`,
             isNull(m.deletingAt),
           ),
@@ -1601,21 +1606,27 @@ function repoFor(db: Db): Repo {
       const open = await db
         .select({ total: sql<string | number>`coalesce(sum(${u.size}), 0)::bigint` })
         .from(u)
-        .where(and(eq(u.uploaderId, uploaderId), eq(u.status, 'open'), isNotNull(u.role)))
+        .where(and(eq(u.uploaderId, uploaderId), eq(u.status, 'open'), isTakeCol(u.role)))
       return Number(rows[0]?.total ?? 0) + Number(open[0]?.total ?? 0)
     },
-    countNarrationTakes: async (uploaderId, since) => {
+    countRoleUploads: async (uploaderId, roles, since) => {
+      if (!roles.length) return 0
       const m = t.media
       const rows = await db
         .select({ n: sql<number>`count(*)::int` })
         .from(m)
-        .where(and(eq(m.uploaderId, uploaderId), inArray(m.role, MEDIA_ROLES), gte(m.createdAt, since)))
+        .where(and(eq(m.uploaderId, uploaderId), inArray(m.role, [...roles]), gte(m.createdAt, since)))
       const u = t.mediaUploads
       const open = await db
         .select({ n: sql<number>`count(*)::int` })
         .from(u)
         .where(
-          and(eq(u.uploaderId, uploaderId), eq(u.status, 'open'), isNotNull(u.role), gte(u.createdAt, since)),
+          and(
+            eq(u.uploaderId, uploaderId),
+            eq(u.status, 'open'),
+            inArray(u.role, [...roles]),
+            gte(u.createdAt, since),
+          ),
         )
       return (rows[0]?.n ?? 0) + (open[0]?.n ?? 0)
     },

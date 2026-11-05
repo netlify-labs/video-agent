@@ -23,6 +23,7 @@ import type {
   VersionCommentRow,
   CheckpointRow,
   EditRow,
+  MediaRole,
   MediaRow,
   MediaUploadRow,
   MediaUploadPartRow,
@@ -445,10 +446,10 @@ export interface Repo {
    */
   narrationTakeBytes(uploaderId: string): Promise<number>
   /**
-   * The person's narration takes created at or after `since` (for the take upload rate limit): media rows, plus open
-   * take upload sessions (a completed session is counted by its media row).
+   * The person's media of these roles created at or after `since` (for a role's upload rate limit): media rows, plus
+   * open upload sessions of those roles (a completed session is counted by its media row).
    */
-  countNarrationTakes(uploaderId: string, since: string): Promise<number>
+  countRoleUploads(uploaderId: string, roles: readonly MediaRole[], since: string): Promise<number>
 }
 
 /** The fenced write a destination worker or callback makes (publish destinations §2.4). */
