@@ -26,6 +26,7 @@ import { base, key, log, sdk } from './lib.js'
 import { dry, dryRun } from './narration-lib.js'
 import {
   PHASE1,
+  PHASE2,
   projectedRuns,
   runScenarios,
   ScenarioError,
@@ -38,14 +39,15 @@ const keep = process.argv.includes('--keep')
 const phase = Number(/--phase[= ](\d)/.exec(process.argv.join(' '))?.[1] ?? '1')
 const sandbox = env.SANDBOX_REPO ?? ''
 const ghToken = env.GH_TOKEN ?? ''
-const ceiling = Number(env.CREDIT_CEILING ?? 600)
+const ceiling = Number(env.CREDIT_CEILING ?? (phase === 2 ? 900 : 600))
+const baseVideo = env.BASE_VIDEO ?? ''
 const perRun = Number(env.PER_RUN ?? 150)
 const runTimeoutMin = Number(env.RUN_TIMEOUT_MINUTES ?? 45)
 const THIS_REPO = 'netlify-labs/video-agent'
 
 const git = (...args: string[]) => spawnSync('git', args, { encoding: 'utf8' })
 const actionRef = env.ACTION_REF ?? git('rev-parse', 'HEAD').stdout.trim()
-const scenarios = phase === 1 ? PHASE1 : []
+const scenarios = phase === 1 ? PHASE1 : phase === 2 ? PHASE2 : []
 
 if (process.argv.includes('--selftest')) {
   const r = spawnSync('npx', ['vitest', 'run', 'scripts/e2e/github-action.test.ts'], { stdio: 'inherit' })
@@ -56,7 +58,9 @@ if (dry) {
   const tool = (bin: string, arg = '--version') => spawnSync(bin, [arg], { encoding: 'utf8' }).status === 0
   const problems: string[] = []
   if (!tool('gh')) problems.push('the gh CLI is needed')
-  if (phase !== 1) problems.push(`phase ${phase} scenarios aren't written yet (2.E and 3.5 add them)`)
+  if (phase !== 1 && phase !== 2) problems.push(`phase ${phase} scenarios aren't written yet (3.5 adds them)`)
+  if (phase === 2 && !baseVideo)
+    problems.push('phase 2 needs BASE_VIDEO: a ready video the CI account can see')
   if (sandbox && !/^[\w.-]+\/[\w.-]+$/.test(sandbox)) problems.push('SANDBOX_REPO must be owner/name')
   dryRun({
     script: 'github-action',
@@ -67,7 +71,12 @@ if (dry) {
       // Never printed: only whether it's set.
       GH_TOKEN: ghToken ? 'set' : undefined,
     },
-    optional: { ACTION_REF: actionRef, CREDIT_CEILING: String(ceiling), PER_RUN: String(perRun) },
+    optional: {
+      ACTION_REF: actionRef,
+      CREDIT_CEILING: String(ceiling),
+      PER_RUN: String(perRun),
+      ...(phase === 2 ? { BASE_VIDEO: baseVideo || undefined } : {}),
+    },
     steps: [
       `check: ${actionRef.slice(0, 12)} is on origin with a fresh packages/action/dist; ${THIS_REPO}'s Actions access is "organization" (checked, never changed)`,
       `setup: commit pr-video.yml, pr-video-commands.yml and release-video.yml to ${sandbox || 'SANDBOX_REPO'}'s default branch, pinned to ${THIS_REPO}/packages/action@${actionRef.slice(0, 12)}; set the VIDEO_AGENT_URL variable and the VIDEO_AGENT_KEY secret (stdin)`,
@@ -110,7 +119,7 @@ const WORKFLOWS: Record<string, string> = {
   'pr-video.yml': `name: PR video (e2e)
 on:
   pull_request:
-    types: [labeled]
+    types: [labeled, synchronize]
 permissions:
   contents: read
   pull-requests: write
@@ -128,6 +137,7 @@ jobs:
           url: \${{ vars.VIDEO_AGENT_URL }}
           api-key: \${{ secrets.VIDEO_AGENT_KEY }}
           max-runs-per-day: '20'
+          on-push: revise
 `,
   'pr-video-commands.yml': `name: PR video commands (e2e)
 on:
@@ -154,6 +164,12 @@ on:
     inputs:
       tag:
         required: true
+      base_video:
+        default: ''
+      publish:
+        default: 'false'
+      release_asset:
+        default: 'false'
 permissions:
   contents: write
 jobs:
@@ -166,6 +182,9 @@ jobs:
           url: \${{ vars.VIDEO_AGENT_URL }}
           api-key: \${{ secrets.VIDEO_AGENT_KEY }}
           target: release/\${{ inputs.tag }}
+          base-video: \${{ inputs.base_video }}
+          publish: \${{ inputs.publish }}
+          release-asset: \${{ inputs.release_asset }}
           max-runs-per-day: '20'
 `,
 }
@@ -211,6 +230,7 @@ async function waitRun(workflow: string, since: string): Promise<WfRun> {
 }
 
 let client: ReturnType<typeof sdk> | null = null
+const releases: string[] = []
 /** Made on first use, after main() has checked VIDEO_AGENT_URL (the SDK refuses an empty URL). */
 const va = () => (client ??= sdk())
 const lastRun = new Map<number, number>()
@@ -277,11 +297,54 @@ const live: Driver = {
     await sleep(10_000)
     gh(['run', 'watch', String(id), '-R', sandbox, '--exit-status'])
   },
-  async release(tag, notes) {
+  async release(tag, notes, inputs = {}) {
     gh(['release', 'create', tag, '-R', sandbox, '--title', tag, '--notes', notes])
     const since = new Date(Date.now() - 2000).toISOString()
-    gh(['workflow', 'run', 'release-video.yml', '-R', sandbox, '-f', `tag=${tag}`])
+    const fields = Object.entries(inputs).flatMap(([k, v]) => ['-f', `${k.replace(/-/g, '_')}=${v}`])
+    gh(['workflow', 'run', 'release-video.yml', '-R', sandbox, '-f', `tag=${tag}`, ...fields])
     await waitRun('release-video.yml', since)
+    releases.push(tag)
+  },
+  async push(n, messages) {
+    const dir = mkdtempSync(join(tmpdir(), 'va-e2e-push-'))
+    try {
+      const branch = ghJson<{ headRefName: string }>([
+        'pr',
+        'view',
+        String(n),
+        '-R',
+        sandbox,
+        '--json',
+        'headRefName',
+      ]).headRefName
+      gh(['repo', 'clone', sandbox, dir, '--', '--depth', '5', '--branch', branch])
+      const g = (...a: string[]) => spawnSync('git', ['-C', dir, ...a], { encoding: 'utf8' })
+      const since = new Date(Date.now() - 2000).toISOString()
+      // Quick succession: the PR workflow's concurrency group keeps one running and one pending run.
+      for (const [i, m] of messages.entries()) {
+        writeFileSync(join(dir, 'docs', `push-${Date.now()}-${i}.md`), `${m}\n`)
+        g('add', '.')
+        g('-c', 'user.name=video-agent-e2e', '-c', 'user.email=e2e@invalid', 'commit', '-m', m)
+        if (g('push', 'origin', branch).status !== 0) throw new ScenarioError('push failed')
+      }
+      await waitRun('pr-video.yml', since)
+      // The last push's run, if it was queued behind the first.
+      await sleep(20_000)
+      await waitRun('pr-video.yml', new Date(Date.now() - 60_000).toISOString()).catch(() => undefined)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  },
+  async releaseAssets(tag) {
+    return ghJson<{ assets: { name: string }[] }>([
+      'release',
+      'view',
+      tag,
+      '-R',
+      sandbox,
+      '--json',
+      'assets',
+    ]).assets.map((a) => a.name)
   },
   async sticky(n) {
     const comments = ghJson<{ body: string; user: { login: string } }[][]>([
@@ -365,10 +428,16 @@ async function main() {
   log('setup', { sandbox, actionRef: actionRef.slice(0, 12), outcome: 'ok' })
 
   const [owner = '', repo = ''] = sandbox.split('/')
-  const ctx: ScenarioContext = { owner, repo, prs: {}, tag: `e2e-v${Date.now()}` }
+  const ctx: ScenarioContext = {
+    owner,
+    repo,
+    prs: {},
+    tag: `e2e-v${Date.now()}`,
+    ...(baseVideo ? { baseVideo } : {}),
+  }
   const refs = () => [
     ...Object.values(ctx.prs).map((n) => `[va-ref github:${owner}/${repo}#pr-${n}]`),
-    `[va-ref github:${owner}/${repo}@${ctx.tag}]`,
+    ...[ctx.tag, ...releases].map((t) => `[va-ref github:${owner}/${repo}@${t}]`),
   ]
   const madeVideos = async () => (await Promise.all(refs().map((r) => live.videosFor(r)))).flat()
   const spent = async () =>
@@ -394,9 +463,10 @@ async function main() {
         spawnSync('gh', ['pr', 'close', String(n), '-R', sandbox, '--delete-branch'], {
           env: { ...env, GH_TOKEN: ghToken },
         })
-      spawnSync('gh', ['release', 'delete', ctx.tag, '-R', sandbox, '--yes', '--cleanup-tag'], {
-        env: { ...env, GH_TOKEN: ghToken },
-      })
+      for (const tag of new Set([ctx.tag, ...releases]))
+        spawnSync('gh', ['release', 'delete', tag, '-R', sandbox, '--yes', '--cleanup-tag'], {
+          env: { ...env, GH_TOKEN: ghToken },
+        })
       for (const v of await madeVideos().catch(() => []))
         await va()
           .videos.delete(v.id)

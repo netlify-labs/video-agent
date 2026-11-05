@@ -27,8 +27,12 @@ export interface Driver {
   labelAndComment(n: number, body: string): Promise<void>
   /** Re-runs the last workflow run for this PR (same run id, next attempt). */
   rerun(n: number): Promise<void>
-  /** Creates a release and runs the release step with target: release/<tag>. */
-  release(tag: string, notes: string): Promise<void>
+  /** Creates a release and runs the release step with target: release/<tag> (and these action inputs). */
+  release(tag: string, notes: string, inputs?: Record<string, string>): Promise<void>
+  /** Pushes commits to the PR's branch in quick succession and waits for the (coalesced) workflow runs. */
+  push(n: number, messages: string[]): Promise<void>
+  /** The release's asset names. */
+  releaseAssets(tag: string): Promise<string[]>
   /** The action's sticky comment on a PR, or null. */
   sticky(n: number): Promise<string | null>
   releaseBody(tag: string): Promise<string>
@@ -49,6 +53,8 @@ export interface Scenario {
 export interface ScenarioContext {
   owner: string
   repo: string
+  /** A ready video the CI account can see, for base-video (phase 2). */
+  baseVideo?: string
   /** PR numbers the scenarios opened, for later steps and cleanup. */
   prs: Record<string, number>
   tag: string
@@ -221,3 +227,61 @@ export async function runScenarios(d: Driver, scenarios: Scenario[], ctx: Scenar
 }
 
 export const projectedRuns = (scenarios: Scenario[]) => scenarios.reduce((n, s) => n + s.runs, 0)
+
+export const PHASE2: Scenario[] = [
+  {
+    name: 'push-label',
+    runs: 1,
+    what: 'open a PR and add the video label (on-push: revise) → v1',
+    async run(d, c) {
+      const n = await d.openPr({
+        title: 'Deploy previews: comment with the preview link',
+        body: 'Every PR gets its preview link in a comment.',
+      })
+      c.prs.push = n
+      await d.label(n)
+      expectThat((await d.videosFor(ref(c, n))).length === 1, 'one video for the PR')
+    },
+  },
+  {
+    name: 'two-pushes',
+    runs: 1,
+    what: 'two quick pushes to the PR → exactly one new version covering both',
+    async run(d, c) {
+      const n = c.prs.push as number
+      await d.push(n, ['feat: show the preview URL', 'feat: link the preview from the PR title'])
+      const v = (await d.videosFor(ref(c, n)))[0]
+      expectThat(v?.versions.length === 2, 'two pushes made one v2', {
+        versions: v?.versions.map((x) => x.n),
+      })
+    },
+  },
+  {
+    name: 'base-video-release',
+    runs: 1,
+    what: 'a release with base-video, publish and release-asset → a remix with its own title, the GIF in the notes, MP4 and VTT attached',
+    async run(d, c) {
+      expectThat(c.baseVideo, 'BASE_VIDEO (a ready video the CI account can see) is set')
+      const tag = `${c.tag}-base`
+      await d.release(tag, '## What changed\n- Preview links in every PR\n- Faster builds', {
+        'base-video': c.baseVideo,
+        publish: 'true',
+        'release-asset': 'true',
+      })
+      const vids = await d.videosFor(`[va-ref github:${c.owner}/${c.repo}@${tag}]`)
+      expectThat(
+        vids.length === 1 && vids[0]?.title.endsWith(`What's new in ${tag}`),
+        'a remix with its own title',
+        { titles: vids.map((v) => v.title) },
+      )
+      const body = await d.releaseBody(tag)
+      expectThat(/\[!\[What's new\]\(.+\.gif\)\]/.test(body), 'the GIF is in the release notes', { body })
+      const assets = await d.releaseAssets(tag)
+      expectThat(
+        assets.includes(`video-${tag}.mp4`) && assets.includes(`video-${tag}.vtt`),
+        'MP4 and captions attached',
+        { assets },
+      )
+    },
+  },
+]

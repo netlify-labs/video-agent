@@ -6,8 +6,10 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { png } from '../../test/helpers.js'
 import { events, makeEnv, runAction, type TestEnv } from '../../packages/action/test/harness/index.js'
+import { readyVideo } from '../../test/helpers.js'
 import {
   PHASE1,
+  PHASE2,
   projectedRuns,
   runScenarios,
   type Driver,
@@ -52,7 +54,7 @@ function harnessDriver(env: TestEnv, logs: string[]): Driver {
       if (p) p.body = body
     },
     async label(n) {
-      lastRun.set(n, await act(events.labeled(env.gh, n)))
+      lastRun.set(n, await act(events.labeled(env.gh, n), undefined, { 'on-push': 'revise' }))
     },
     async unlabel(n) {
       const p = env.gh.state.pulls.get(n)
@@ -69,9 +71,21 @@ function harnessDriver(env: TestEnv, logs: string[]): Driver {
     async rerun(n) {
       await act(events.labeled(env.gh, n), lastRun.get(n))
     },
-    async release(tag, notes) {
+    async release(tag, notes, inputs = {}) {
       env.gh.release({ tag_name: tag, body: notes })
-      await act(events.push(env.gh), undefined, { target: `release/${tag}` })
+      await act(events.push(env.gh), undefined, { target: `release/${tag}`, ...inputs })
+    },
+    async push(n, messages) {
+      // GitHub's concurrency group runs the newest pending push; the run sees every commit since the last version.
+      const p = env.gh.state.pulls.get(n)
+      if (!p) throw new Error(`no PR ${n}`)
+      for (const [i, message] of messages.entries())
+        p.commits.push({ sha: `${p.headSha.slice(0, 8)}-p${i}`, message })
+      p.headSha = p.commits.at(-1)?.sha ?? p.headSha
+      await act(events.synchronize(env.gh, n), undefined, { 'on-push': 'revise' })
+    },
+    async releaseAssets(tag) {
+      return env.gh.state.releases.find((r) => r.tag_name === tag)?.assets.map((a) => a.name) ?? []
     },
     async sticky(n) {
       return (
@@ -120,6 +134,21 @@ describe('github-action live test, in-process', () => {
     const text = [...logs, ...steps].join('\n')
     expect(text).not.toContain(env.key)
     expect(text).not.toContain('ghs_faketoken')
+  })
+
+  it('runs every phase 2 scenario: two quick pushes make one v2; a base-video release with GIF and assets', async () => {
+    const env = await makeEnv()
+    const base = await readyVideo(env.h)
+    const logs: string[] = []
+    const ctx: ScenarioContext = { owner: 'acme', repo: 'web', prs: {}, tag: 'v8', baseVideo: base }
+    const done = await runScenarios(harnessDriver(env, logs), PHASE2, ctx, {
+      ceiling: 10_000,
+      perRun: 150,
+      spent: async () => 0,
+      log: () => undefined,
+    })
+    expect(done).toEqual(PHASE2.map((s) => s.name))
+    expect(logs.join('\n')).not.toContain(env.key)
   })
 
   it('stops before a scenario that would pass the ceiling', async () => {
