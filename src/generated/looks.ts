@@ -42,5 +42,38 @@ export const looksCatalog: LookCatalogEntry[] = [
       "mp4": "/assets/looks/clean.6aa9fa8b5e71.mp4",
       "poster": "/assets/looks/clean.35ac46d44472.webp"
     }
+  },
+  {
+    "id": "kinetic",
+    "name": "Kinetic type",
+    "description": "Big words that move with the beat. Type is the picture.",
+    "tags": [
+      "type",
+      "social",
+      "energetic"
+    ],
+    "bestFor": [
+      "social",
+      "launch"
+    ],
+    "aspects": [
+      "16:9",
+      "9:16",
+      "1:1",
+      "4:5"
+    ],
+    "engines": [
+      "hyperframes"
+    ],
+    "recording": null,
+    "musicMood": "punchy electronic, 120 bpm",
+    "hash": "17ddedc2edaa0eda388c5cd5f0f8266cb8288d5b8af21c590767f6538b9e0aa6",
+    "sha256": "69b5de0be7f14d525fe35ecabe3a3cb2bdad96147eee1f70daea0b8759956412",
+    "bytes": 3832,
+    "source": "builtin",
+    "preview": {
+      "mp4": "/assets/looks/kinetic.1d7e4a535c13.mp4",
+      "poster": "/assets/looks/kinetic.968438493f84.webp"
+    }
   }
 ]
