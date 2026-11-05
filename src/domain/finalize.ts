@@ -23,11 +23,12 @@ import {
   type Previews,
 } from '../lib/media/previews.js'
 import { readRunCredits, RUN_CREDITS_FILE, type RunCredit } from '../lib/openverse-rules.js'
-import { NARRATION_SRC } from '../lib/contract.js'
+import { attr, load, NARRATION_SRC } from '../lib/contract.js'
+import { SCOPE_REFUSED_PREFIX } from '../lib/scope.js'
 import { BUNDLE_LIMITS, readTarGz, type TarLimits } from '../lib/tar.js'
 import { beatsOf } from './beats.js'
 import { bundleContract, bundleShapeProblems, ensureBundle, inBundle } from './bundles.js'
-import { engineInfo, engineOf, isEngineId } from './engines.js'
+import { engineInfo, engineOf, isEngineId, scopeCheckFor, type EngineId } from './engines.js'
 import { carriedCaptions, narrationOpHash } from './captions.js'
 import { getSettings } from './settings.js'
 import { promoteAttemptRefs } from './takes.js'
@@ -213,6 +214,8 @@ export async function finalizeAttempt(deps: Deps, attemptId: string): Promise<Fi
           : `The run didn't save a ${engineInfo(engine).name} project: ${shape.join(' ')}`,
       )
     }
+    // A scoped revision (redo a scene): the saved composition must be exactly the splice of the parent.
+    if (version.scope) await checkScope(deps, a, version, engine, source.files, info.durationSec)
 
     const prefix = `${a.jobId}/v${a.versionN}`
     const keys = {
@@ -480,6 +483,84 @@ const SOURCE_READ_LIMITS: TarLimits = {
   maxEntries: 5000,
   maxTotalBytes: 160 * 1024 * 1024,
   maxFileBytes: 60 * 1024 * 1024,
+}
+
+/** How far a scoped version's MP4 may be from its composition's length. */
+const SCOPE_LENGTH_SLACK_SEC = 0.25
+
+/**
+ * A scoped revision's server-side check (redo a scene, docs/plans/2026-11-04-regenerate-beat.md §4.9): the run checked
+ * itself, but it runs this repo's scripts in its own checkout and could have changed them. So the parent's saved
+ * archive is read again here, the engine's scope check runs on it and the upload, and the upload's index.html and
+ * summary.json must be byte for byte the splice; the MP4 must last as long as the splice says. Anything else fails
+ * the attempt before a single file is stored.
+ */
+async function checkScope(
+  deps: Deps,
+  a: AttemptRow,
+  version: VersionRow,
+  engine: EngineId,
+  uploaded: Map<string, Uint8Array> | null,
+  mp4Seconds: number,
+) {
+  const log = deps.log.child({ attemptId: a.id })
+  const started = Date.now()
+  const beats = version.scope?.beats ?? []
+  const parentN = version.parentN
+  const unavailable = () =>
+    new Invalid(
+      'source_unavailable',
+      `Version ${parentN ?? '?'}'s saved composition is missing, so this scoped run can't be checked.`,
+    )
+  const parentOutput = parentN ? await deps.store.getOutput(a.jobId, parentN) : null
+  const want = parentOutput?.sha256['source.tar.gz']
+  const gz = parentOutput && want ? await deps.blobs.get('sources', parentOutput.sourceKey) : null
+  if (!gz || sha256Hex(gz) !== want) throw unavailable()
+  let parent: Map<string, Uint8Array>
+  try {
+    parent = readTarGz(gz, SOURCE_READ_LIMITS)
+  } catch {
+    throw unavailable()
+  }
+  const check = scopeCheckFor(engine)
+  if (!check || !uploaded)
+    throw new Invalid(
+      'invalid_output',
+      `${SCOPE_REFUSED_PREFIX}: ${!check ? `${engineInfo(engine).name} can't redo scenes one by one` : 'the saved composition is unreadable'}.`,
+    )
+  const r = check(parent, uploaded, [...beats])
+  const problems = [...r.problems]
+  if (!problems.length && r.files)
+    for (const [name, bytes] of r.files) {
+      const mine = uploaded.get(name)
+      if (!mine || sha256Hex(mine) !== sha256Hex(bytes))
+        problems.push(
+          `${name} isn't the composition the scope allows (render-job writes it; run it unchanged)`,
+        )
+    }
+  if (problems.length || !r.files) {
+    if (!problems.length) problems.push("the scenes couldn't be put together")
+    log.warn('finalize.scope_violated', { problems: problems.slice(0, 20) })
+    const shown = problems.slice(0, 10).map((p) => p.replace(/\.$/, ''))
+    throw new Invalid(
+      'invalid_output',
+      `${SCOPE_REFUSED_PREFIX}: ${shown.join('; ')}${problems.length > 10 ? ` and ${problems.length - 10} more` : ''}.`,
+    )
+  }
+  const html = r.files.get('index.html')
+  const total = html ? Number(attr(load(new TextDecoder().decode(html)).root, 'data-duration')) : NaN
+  if (!(Math.abs(mp4Seconds - total) <= SCOPE_LENGTH_SLACK_SEC)) {
+    log.warn('finalize.scope_duration_mismatch', { mp4: mp4Seconds, composition: total })
+    throw new Invalid(
+      'invalid_output',
+      `The video is ${mp4Seconds.toFixed(2)} s long but its composition is ${total.toFixed(2)} s; render the composition render-job wrote.`,
+    )
+  }
+  log.info('finalize.scope_ok', {
+    beats,
+    lengthDelta: (r as { lengthDelta?: number }).lengthDelta ?? null,
+    ms: Date.now() - started,
+  })
 }
 
 /**
