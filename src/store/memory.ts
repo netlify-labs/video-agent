@@ -676,6 +676,11 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
           out[r.mediaId]?.push(r.jobId)
       return out
     },
+    jobsUsingMedia: async (mediaId) =>
+      state.versionMedia
+        .filter((r) => r.mediaId === mediaId && state.jobs.get(r.jobId)?.deletedAt === null)
+        .map((r) => ({ jobId: r.jobId, versionN: r.versionN }))
+        .sort((a, b) => a.jobId.localeCompare(b.jobId) || a.versionN - b.versionN),
     mediaBySource: async (source, ids) =>
       clone(
         [...state.media.values()]

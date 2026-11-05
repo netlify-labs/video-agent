@@ -98,17 +98,22 @@ async function assertRoleRate(
   }
 }
 
-/**
- * The stored-bytes budget named by the role's `quotaSetting`. Every role today uses takeQuotaBytes; the screen
- * recording role (recordingQuotaBytes) adds its branch here.
- */
+/** The stored-bytes budget named by the role's `quotaSetting`. */
 const quotaForRole = (
   deps: Pick<Deps, 'store' | 'log'>,
-  _role: MediaRole,
+  role: MediaRole,
   userId: string,
   incomingBytes: number,
   repo: Repo,
-) => quotaForTakes(deps, userId, incomingBytes, repo)
+) => {
+  switch (ROLES[role].quotaSetting) {
+    case 'takeQuotaBytes':
+      return quotaForTakes(deps, userId, incomingBytes, repo)
+    case 'recordingQuotaBytes':
+      // Enforced with the recordingQuotaBytes setting (va-rsk5.2.6); screen recordings can't be uploaded before it.
+      return null
+  }
+}
 
 export async function createUpload(
   deps: Deps,

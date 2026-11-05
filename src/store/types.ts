@@ -272,6 +272,8 @@ export interface Repo {
   deleteStaleNarrationLocks(before: string): Promise<number>
   /** Per media id, the distinct videos (job ids) whose versions use it. */
   mediaUsage(mediaIds: string[]): Promise<Record<string, string[]>>
+  /** The versions of undeleted videos whose version_media lists this item (who may see a screen recording). */
+  jobsUsingMedia(mediaId: string): Promise<{ jobId: string; versionN: number }[]>
   /** Undeleted items imported from `source` with one of these ids there, newest first. */
   mediaBySource(source: string, sourceIds: string[]): Promise<MediaRow[]>
   /** Every version's imported media (the item's provenance with the version and kind), in version order. */

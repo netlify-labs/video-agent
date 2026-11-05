@@ -7,7 +7,13 @@ import { budgetRoles, isTakeRole, ROLES, TAKE_ROLES, UPLOAD_ROLES } from '../src
 import { createUpload, TAKE_UPLOADS_PER_HOUR } from '../src/domain/media-uploads.js'
 import type { Principal } from '../src/domain/policy.js'
 import { isTake } from '../src/domain/takes.js'
-import { NO_PROVENANCE, type MediaRole, type MediaRow, type MediaUploadRow } from '../src/domain/types.js'
+import {
+  MEDIA_ROLES,
+  NO_PROVENANCE,
+  type MediaRole,
+  type MediaRow,
+  type MediaUploadRow,
+} from '../src/domain/types.js'
 import type { ApiError } from '../src/lib/errors.js'
 import { createMemoryStore } from '../src/store/memory.js'
 import type { Store } from '../src/store/types.js'
@@ -66,7 +72,16 @@ const member: Principal = {
 
 describe('ROLES', () => {
   it('has one row per role, and takes and uploaded takes share one policy', () => {
-    expect(Object.keys(ROLES).sort()).toEqual([...TAKE_ROLES].sort())
+    expect(Object.keys(ROLES).sort()).toEqual([...MEDIA_ROLES].sort())
+    expect(ROLES['screen-recording']).toEqual({
+      audioOnly: false,
+      needsScope: false,
+      quotaSetting: 'recordingQuotaBytes',
+      perHour: 10,
+      gatedBy: null,
+      samples: false,
+    })
+    expect(budgetRoles('screen-recording')).toEqual(['screen-recording'])
     for (const role of TAKE_ROLES)
       expect(ROLES[role]).toEqual({
         audioOnly: true,

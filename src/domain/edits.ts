@@ -53,7 +53,8 @@ import {
 import { assertCan, type Principal } from './policy.js'
 import { assertSameEngine, engineOf } from './engines.js'
 import { snapshotMedia } from './media.js'
-import { addAttemptRefs, canReadTake, isTake, releaseOwnerRefs, replaceDraftRefs } from './takes.js'
+import { addAttemptRefs, canReadMedia, releaseOwnerRefs, replaceDraftRefs } from './takes.js'
+import { isLibraryPick } from './media-roles.js'
 import { getSettings } from './settings.js'
 import { narrationEnabled, narrationSettings } from './narration-settings.js'
 import { assertNarrationLock } from './narration-lock.js'
@@ -154,7 +155,7 @@ async function checkTakeAccess(
     const ok =
       m?.kind === 'audio' &&
       !m.deletingAt &&
-      (inherited.has(id) || (m.status === 'ready' && !m.deletedAt && (await canReadTake(repo, p, m))))
+      (inherited.has(id) || (m.status === 'ready' && !m.deletedAt && (await canReadMedia(repo, p, m))))
     if (!ok)
       throw new ApiError('invalid_request', `That edit can't be made: recording ${id} isn't available.`, {
         mediaId: id,
@@ -358,8 +359,8 @@ async function computeRev(
     const m = await repo.getMedia(file.split('.')[0] ?? '')
     const fits = kind === 'image' ? m?.kind === 'image' || m?.kind === 'svg' : m?.kind === kind
     // A narration take isn't a library item: it's placed with the narration op, never as a media or audio pick.
-    // Takes go in through narration, not as a library pick into a slot.
-    if (!m || m.deletedAt || m.status !== 'ready' || isTake(m) || `${m.id}.${m.ext}` !== file || !fits)
+    // Takes go in through narration and screen recordings through the recording, not as a pick into a slot.
+    if (!m || m.deletedAt || m.status !== 'ready' || !isLibraryPick(m) || `${m.id}.${m.ext}` !== file || !fits)
       throw new ApiError(
         'invalid_request',
         `That edit can't be made: ${file} isn't a ready ${kind} in the library.`,

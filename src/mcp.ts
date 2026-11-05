@@ -12,7 +12,7 @@ import { PRIVATE_URL_TTL_SEC, signedFilePath } from './domain/files.js'
 import { addComment, listComments } from './domain/comments.js'
 import { getEdit, openEdit, renderEdit, saveEdit, takeSummary, type DraftOp } from './domain/edits.js'
 import { acquireNarrationLock } from './domain/narration-lock.js'
-import { canReadTake } from './domain/takes.js'
+import { canReadMedia } from './domain/takes.js'
 import { getProgress } from './domain/progress.js'
 import { listMedia } from './domain/media.js'
 import { videoCardHtml } from './generated/video-card.js'
@@ -1520,7 +1520,7 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "media_id": "med_01jc8x2
           m.status === 'ready' &&
           !m.deletedAt &&
           !m.deletingAt &&
-          (await canReadTake(deps.store, principal, m))
+          (await canReadMedia(deps.store, principal, m))
         if (!m || !readable)
           throw new ToolError('NOT_FOUND', `No audio recording ${args.media_id} that you can use.`, {
             fix_hint: 'Upload the recording first, or pick an audio item from list_media.',

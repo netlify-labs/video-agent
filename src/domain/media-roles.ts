@@ -18,7 +18,7 @@ export interface RolePolicy {
   /** The session names the video it's recorded for (scopeJobId); without the role it's refused. */
   needsScope: boolean
   /** The setting that caps the person's stored bytes for this role. */
-  quotaSetting: 'takeQuotaBytes'
+  quotaSetting: 'takeQuotaBytes' | 'recordingQuotaBytes'
   /** Uploads of this role each person may start in an hour. */
   perHour: number
   /** The setting that must be on to upload this role. */
@@ -39,9 +39,26 @@ const TAKE: RolePolicy = {
 export const ROLES: Record<MediaRole, RolePolicy> = {
   'narration-take': TAKE,
   'narration-upload': TAKE,
+  'screen-recording': {
+    audioOnly: false,
+    needsScope: false,
+    quotaSetting: 'recordingQuotaBytes',
+    perHour: 10,
+    gatedBy: null,
+    samples: false,
+  },
 }
 
-/** The roles createUploadSession accepts. */
+/**
+ * A raw screen recording: private to its uploader until a version uses it (canReadRecording), and never a plain
+ * library pick. It reaches a version through the recording field, which checks who may read it.
+ */
+export const isScreenRecording = (m: { role: string | null }) => m.role === 'screen-recording'
+
+/** Takes and screen recordings reach a version through their own paths (narration, recording), never as picks. */
+export const isLibraryPick = (m: { role: string | null }) => !isTakeRole(m.role) && !isScreenRecording(m)
+
+/** The roles createUploadSession accepts (screen recordings open with their limits, va-rsk5.2.3). */
 export const UPLOAD_ROLES: readonly MediaRole[] = TAKE_ROLES
 
 /** The roles that share a role's budgets: the same policy (takes and uploaded takes count together). */

@@ -624,8 +624,8 @@ export interface CommentRow {
 
 export type MediaStatus = 'uploading' | 'verifying' | 'ready' | 'rejected'
 
-/** Recorded voice-over audio; library items have none. */
-export const MEDIA_ROLES = ['narration-take', 'narration-upload'] as const
+/** Recorded voice-over audio, and raw screen recordings (screen-recording plan §4.2); library items have none. */
+export const MEDIA_ROLES = ['narration-take', 'narration-upload', 'screen-recording'] as const
 export type MediaRole = (typeof MEDIA_ROLES)[number]
 
 export interface MediaRow extends MediaProvenance {

@@ -12,7 +12,8 @@ import { getSettings } from './settings.js'
 import type { Repo } from '../store/types.js'
 import { NO_PROVENANCE, type MediaProvenance, type MediaRow, type VersionMediaRow } from './types.js'
 import { licenseLabel, safeUrl } from './credits.js'
-import { canReadTake, isTake, readableMedia, recordingDto } from './takes.js'
+import { canReadMedia, isTake, readableMedia, recordingDto } from './takes.js'
+import { isLibraryPick } from './media-roles.js'
 import { canSee, decodeCursor, loadJob, nextCursor } from './videos.js'
 
 /** One request carries at most this much (Netlify's request limit is about 4.5 MB); bigger files use sessions. */
@@ -200,16 +201,16 @@ export async function attachableMedia(repo: Repo, ids: string[], max: number): P
   if (unique.length > max) throw new ApiError('invalid_request', `Attach at most ${max} files.`)
   for (const id of unique) {
     const m = await repo.getMedia(id)
-    // Takes aren't library items here: they are private to their uploader and reached through narration.
-    if (!m || m.deletedAt || m.status !== 'ready' || isTake(m))
+    // Takes and screen recordings aren't library picks: they reach a version through narration or the recording.
+    if (!m || m.deletedAt || m.status !== 'ready' || !isLibraryPick(m))
       throw new ApiError('invalid_request', `Media ${id} isn't a ready item in the library.`)
   }
   return unique
 }
 
 export async function mediaDto(deps: Deps, p: Principal, m: MediaRow, usage?: Record<string, string[]>) {
-  // Every signed link is issued here, so a take no one let this person read never gets one.
-  if (!(await canReadTake(deps.store, p, m))) throw new ApiError('not_found', 'Media not found.')
+  // Every signed link is issued here, so a take or screen recording no one let this person read never gets one.
+  if (!(await canReadMedia(deps.store, p, m))) throw new ApiError('not_found', 'Media not found.')
   const uploader = await deps.store.getUser(m.uploaderId)
   // "Used in N videos" counts only videos this person can see.
   const jobs = (usage ?? (await deps.store.mediaUsage([m.id])))[m.id] ?? []
@@ -361,8 +362,8 @@ export async function loadMedia(deps: Deps, p: Principal, id: string) {
   const m = await deps.store.getMedia(id)
   if (!m || m.deletedAt || (m.status !== 'ready' && m.uploaderId !== p.userId))
     throw new ApiError('not_found', 'Media not found.')
-  // A take being deleted, or one this person may not read, doesn't exist for them.
-  if (m.deletingAt || !(await canReadTake(deps.store, p, m)))
+  // A take being deleted, or a take or screen recording this person may not read, doesn't exist for them.
+  if (m.deletingAt || !(await canReadMedia(deps.store, p, m)))
     throw new ApiError('not_found', 'Media not found.')
   return m
 }
@@ -416,8 +417,8 @@ export async function snapshotMedia(
     if (rows.some((r) => r.mediaId === id)) continue
     const m = await repo.getMedia(id)
     // Takes reach a version only through its narration (which checks canReadTake), never as library picks.
-    // Takes aren't library items here: they are private to their uploader and reached through narration.
-    if (!m || m.deletedAt || m.status !== 'ready' || isTake(m))
+    // Takes and screen recordings aren't library picks: they reach a version through narration or the recording.
+    if (!m || m.deletedAt || m.status !== 'ready' || !isLibraryPick(m))
       throw new ApiError('invalid_request', `Media ${id} isn't a ready item in the library.`)
     rows.push({
       jobId,

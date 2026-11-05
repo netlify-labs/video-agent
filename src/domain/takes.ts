@@ -7,7 +7,7 @@
 import type { Deps } from '../deps.js'
 import { ApiError } from '../lib/errors.js'
 import type { Repo } from '../store/types.js'
-import { isTakeRole } from './media-roles.js'
+import { isScreenRecording, isTakeRole } from './media-roles.js'
 import { assertCan, creatorOrUp, type Principal } from './policy.js'
 import type { CleanupRow, MediaRefOwnerKind, MediaRow } from './types.js'
 import { canSee } from './videos.js'
@@ -54,6 +54,32 @@ export async function canReadTake(repo: Repo, p: Principal, m: MediaRow): Promis
   return false
 }
 
+/**
+ * Who may read a raw screen recording (screen-recording plan §9, §14 Q3): its uploader and admins; Reviewers and
+ * Viewers never (they see rendered videos); another Creator once a version of a video they can see lists it in its
+ * version_media. Raw recordings can show more than the video does, so they stay private until used, private videos
+ * keep them private, and deleting the video makes them private again.
+ */
+export async function canReadRecording(repo: Repo, p: Principal, m: MediaRow): Promise<boolean> {
+  if (m.uploaderId === p.userId || p.role === 'admin') return true
+  if (!creatorOrUp(p.role)) return false
+  for (const { jobId } of await repo.jobsUsingMedia(m.id)) {
+    const job = await repo.getJob(jobId)
+    if (job && !job.deletedAt && canSee(p, job)) return true
+  }
+  return false
+}
+
+/**
+ * The one media-read predicate: takes follow canReadTake, screen recordings canReadRecording, and every other item
+ * reads like the library. Callers turn a false into not_found, never forbidden.
+ */
+export async function canReadMedia(repo: Repo, p: Principal, m: MediaRow): Promise<boolean> {
+  if (isTake(m)) return canReadTake(repo, p, m)
+  if (isScreenRecording(m)) return canReadRecording(repo, p, m)
+  return true
+}
+
 /** Where a take is used, as one reader may know it: a version of a video they can see, or a draft of their own. */
 export type TakeUse =
   { kind: 'version'; videoId: string; n: number } | { kind: 'draft'; videoId: string; draftId: string }
@@ -97,9 +123,9 @@ export async function recordingDto(repo: Repo, p: Principal, m: MediaRow) {
   }
 }
 
-/** The rows the principal may read, in order (takes they can't read are dropped). */
+/** The rows the principal may read, in order (takes and screen recordings they can't read are dropped). */
 export async function readableMedia(repo: Repo, p: Principal, rows: MediaRow[]) {
-  const ok = await Promise.all(rows.map((m) => canReadTake(repo, p, m)))
+  const ok = await Promise.all(rows.map((m) => canReadMedia(repo, p, m)))
   return rows.filter((_, i) => ok[i])
 }
 

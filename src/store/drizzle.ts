@@ -918,6 +918,15 @@ function repoFor(db: Db): Repo {
       for (const r of rows) (out[r.mediaId] ??= []).push(r.jobId)
       return out
     },
+    jobsUsingMedia: async (mediaId) => {
+      const vm = t.versionMedia
+      return db
+        .select({ jobId: vm.jobId, versionN: vm.versionN })
+        .from(vm)
+        .innerJoin(t.jobs, eq(t.jobs.id, vm.jobId))
+        .where(and(eq(vm.mediaId, mediaId), isNull(t.jobs.deletedAt)))
+        .orderBy(asc(vm.jobId), asc(vm.versionN))
+    },
     mediaBySource: async (source, ids) => {
       if (!ids.length) return []
       const m = t.media
