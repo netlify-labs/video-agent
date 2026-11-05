@@ -2,7 +2,7 @@
 // Mediabunny, live (path B) and as a conversion (path C), in Chromium, WebKit and Firefox (Playwright builds).
 //   npx tsx spikes/d4/encode.ts --mediabunny <dir with mediabunny.min.mjs> [--out /tmp/va-d4]
 //        [--browsers chromium,webkit,firefox] [--live-seconds 60] [--convert-input <5-min 1440p H.264 mp4>]
-//        [--tests live,convert]
+//        [--tests live,convert] [--latency realtime|quality]
 // Live: an animated 2560x1440 source canvas (text rows, a moving cursor, a frame counter) stands in for the display
 // track (getDisplayMedia can't be granted headless in every browser). Variants:
 //   canvas  the path B pipeline: source track -> <video> -> a canvas at the FIRST frame's size, redrawn every rAF ->
@@ -13,7 +13,8 @@
 // in a module Worker. Every output gets the §4.2 checks with ffprobe here (codec, size, longest keyframe gap, frame
 // durations, fast start, fragments). JSON lines on stderr, a summary between ===D4-JSON=== lines.
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { createReadStream, createWriteStream, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs'
+import { createServer } from 'node:http'
 import { arch, platform, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { chromium, firefox, webkit, type BrowserType } from 'playwright'
@@ -27,8 +28,11 @@ const browsers = (flags.browsers ?? 'chromium,webkit,firefox').split(',')
 const tests = (flags.tests ?? 'live,convert').split(',')
 const LIVE_S = Number(flags['live-seconds'] ?? 60)
 const BITRATE = 3_500_000
+// WebCodecs latencyMode for the CanvasSource fallback: 'realtime' lets the encoder drop frames (Firefox does).
+const LATENCY = flags.latency === 'quality' ? 'quality' : 'realtime'
 mkdirSync(outDir, { recursive: true })
 const TYPES: Record<string, BrowserType> = { chromium, webkit, firefox }
+let closeServer = () => {}
 
 // ---------- Inputs for conversion ----------
 
@@ -113,6 +117,7 @@ const PAGE = `<!doctype html><html><head><meta charset="utf-8"><title>d4</title>
 <script type="module">
 import * as MB from '/mb.mjs'
 window.MB = MB
+const LATENCY = '${LATENCY}'
 const src = document.getElementById('src')
 const ctx = src.getContext('2d')
 let n = 0, running = true
@@ -144,7 +149,48 @@ async function upload(name, buf) {
   await fetch('/upload/' + name, { method: 'POST', body: buf })
 }
 
+// Fallback for browsers that can't hand a track to Mediabunny's worker: draw the display <video> into a canvas at the
+// first frame's size and add a frame every 1/30 s of wall clock with CanvasSource (explicit CFR timestamps).
+async function liveCanvasSource(seconds) {
+  src.width = 2560; src.height = 1440
+  const srcTrack = src.captureStream(30).getVideoTracks()[0]
+  const video = document.createElement('video')
+  video.muted = true; video.srcObject = new MediaStream([srcTrack]); await video.play()
+  while (!video.videoWidth) await new Promise((r) => setTimeout(r, 10))
+  const c = document.createElement('canvas'); c.width = video.videoWidth; c.height = video.videoHeight
+  const cx = c.getContext('2d')
+  const target = new MB.BufferTarget()
+  const output = new MB.Output({ format: new MB.Mp4OutputFormat({ fastStart: 'in-memory' }), target })
+  const source = new MB.CanvasSource(c, { codec: 'avc', bitrate: ${BITRATE}, keyFrameInterval: 1, latencyMode: LATENCY })
+  output.addVideoTrack(source, { frameRate: 30 })
+  await output.start()
+  const t0 = performance.now()
+  let k = 0, late = 0, resized = false, error = null
+  while ((performance.now() - t0) / 1000 < seconds) {
+    const due = t0 + (k * 1000) / 30
+    const wait = due - performance.now()
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait))
+    else if (wait < -1000 / 30) late++
+    if (!resized && performance.now() - t0 > seconds * 500) { src.width = 2000; src.height = 1300; resized = true }
+    const s = Math.min(c.width / video.videoWidth, c.height / video.videoHeight)
+    const dw = video.videoWidth * s, dh = video.videoHeight * s
+    cx.fillStyle = '#000'; cx.fillRect(0, 0, c.width, c.height)
+    cx.drawImage(video, (c.width - dw) / 2, (c.height - dh) / 2, dw, dh)
+    try { await source.add(k / 30, 1 / 30) } catch (e) { error = String(e && e.message || e); break }
+    k++
+  }
+  const elapsed = (performance.now() - t0) / 1000
+  const tf = performance.now()
+  try { await output.finalize() } catch (e) { error = error || String(e && e.message || e) }
+  srcTrack.stop()
+  if (target.buffer) await upload('live-canvassource', target.buffer)
+  return { variant: 'canvassource', elapsedS: elapsed, finalizeMs: performance.now() - tf, bytes: target.buffer ? target.buffer.byteLength : 0, added: k, lateFrames: late, error }
+}
+
 window.live = async (variant, seconds) => {
+  if (variant === 'canvassource') return liveCanvasSource(seconds).catch((e) => ({ variant, error: 'threw: ' + String(e && e.message || e) }))
+  try { return await liveIn(variant, seconds) } catch (e) { return { variant, error: 'threw: ' + String(e && e.message || e) } } }
+async function liveIn(variant, seconds) {
   src.width = 2560; src.height = 1440
   const srcTrack = src.captureStream(30).getVideoTracks()[0]
   let track = srcTrack, stopCopy = () => {}, copied = 0, rafs = 0
@@ -173,7 +219,7 @@ window.live = async (variant, seconds) => {
   }
   const target = new MB.BufferTarget()
   const output = new MB.Output({ format: new MB.Mp4OutputFormat({ fastStart: 'in-memory' }), target })
-  const source = new MB.MediaStreamVideoTrackSource(track, { codec: 'avc', bitrate: ${BITRATE}, keyFrameInterval: 1, sizeChangeBehavior: variant === 'direct' ? 'contain' : 'deny', latencyMode: 'realtime' })
+  const source = new MB.MediaStreamVideoTrackSource(track, { codec: 'avc', bitrate: ${BITRATE}, keyFrameInterval: 1, sizeChangeBehavior: variant === 'direct' ? 'contain' : 'deny', latencyMode: 'realtime' }, { frameRate: 30 })
   let error = null
   source.errorPromise.catch((e) => { error = String(e && e.message || e) })
   output.addVideoTrack(source, { frameRate: 30 })
@@ -242,28 +288,38 @@ self.onmessage = async (e) => {
 async function runBrowser(name: string, inputs: { name: string; file: string; type: string }[]) {
   const dir = join(outDir, name)
   mkdirSync(dir, { recursive: true })
+  // A real server, not page.route: routing 140-320 MB bodies through Playwright crashed the page.
+  const server = createServer((req, res) => {
+    const path = new URL(req.url ?? '/', 'http://localhost').pathname
+    const send = (type: string, body: string) => res.writeHead(200, { 'content-type': type }).end(body)
+    if (path === '/') return send('text/html', PAGE)
+    if (path === '/worker.mjs') return send('text/javascript', WORKER)
+    if (path === '/mb.mjs') return createReadStream(join(mbDir!, 'mediabunny.min.mjs')).pipe(res.writeHead(200, { 'content-type': 'text/javascript' }))
+    const input = inputs.find((i) => path === `/input/${i.name}`)
+    if (input) return createReadStream(input.file).pipe(res.writeHead(200, { 'content-type': input.type, 'content-length': statSync(input.file).size }))
+    if (path.startsWith('/upload/') && req.method === 'POST') {
+      const out = createWriteStream(join(dir, `${path.slice(8)}.mp4`))
+      req.pipe(out)
+      return out.on('finish', () => res.writeHead(204).end())
+    }
+    res.writeHead(404).end()
+  })
+  await new Promise<void>((r) => server.listen(4747, 'localhost', r))
+  closeServer = () => {
+    server.closeAllConnections()
+    server.close()
+  }
   const browser = await TYPES[name]!.launch({ headless: true })
   const page = await (await browser.newContext()).newPage()
+  page.setDefaultTimeout(0)
   page.on('console', (m) => m.type() === 'error' && log('console', { browser: name, text: m.text().slice(0, 300) }))
-  await page.route('http://localhost:4747/**', async (route) => {
-    const url = new URL(route.request().url())
-    if (url.pathname === '/') return route.fulfill({ contentType: 'text/html', body: PAGE })
-    if (url.pathname === '/mb.mjs') return route.fulfill({ contentType: 'text/javascript', path: join(mbDir!, 'mediabunny.min.mjs') })
-    if (url.pathname === '/worker.mjs') return route.fulfill({ contentType: 'text/javascript', body: WORKER })
-    const input = inputs.find((i) => url.pathname === `/input/${i.name}`)
-    if (input) return route.fulfill({ contentType: input.type, path: input.file })
-    if (url.pathname.startsWith('/upload/')) {
-      writeFileSync(join(dir, `${url.pathname.slice(8)}.mp4`), route.request().postDataBuffer() ?? Buffer.alloc(0))
-      return route.fulfill({ status: 204 })
-    }
-    return route.fulfill({ status: 404 })
-  })
+  page.on('pageerror', (e) => log('pageerror', { browser: name, text: e.message.slice(0, 300) }))
   await page.goto('http://localhost:4747/')
-  await page.waitForFunction(() => 'MB' in window)
+  await page.waitForFunction(() => 'MB' in window, undefined, { timeout: 30_000 })
   const result: Record<string, unknown> = { version: browser.version(), support: await page.evaluate('support()') }
   log('support', { browser: name, ...(result.support as object) })
   if (tests.includes('live'))
-    for (const variant of ['canvas', 'direct']) {
+    for (const variant of ['canvas', 'direct', 'canvassource']) {
       const r = (await page.evaluate(`live(${JSON.stringify(variant)}, ${LIVE_S})`)) as { elapsedS: number; error: string | null }
       const file = join(dir, `live-${variant}.mp4`)
       const c = existsSync(file) && statSync(file).size > 0 ? check(file) : null
@@ -281,6 +337,7 @@ async function runBrowser(name: string, inputs: { name: string; file: string; ty
         log('convert', { browser: name, input: input.name, worker, ...r, check: c ? c.pass42 : null })
       }
   await browser.close()
+  closeServer()
   return result
 }
 
@@ -293,6 +350,7 @@ for (const b of browsers) {
   } catch (e) {
     summary[b] = { error: e instanceof Error ? e.message.slice(0, 800) : String(e) }
     log('browser_failed', { browser: b, error: summary[b] })
+    closeServer()
   }
 }
 printSummary('D4-JSON', join(outDir, 'summary.json'), summary)
