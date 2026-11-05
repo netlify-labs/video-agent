@@ -1231,3 +1231,127 @@ system Python 3.12.3 is externally managed, and the venv sidesteps that. The ven
 cached line took 2.1 s. The same four hosts were contacted, and the user's
 `~/.local/lib/python3.12/site-packages` was untouched. So on Ubuntu the plan needs no change beyond `python3-venv`,
 which `doctor` should name when `python3 -m venv` is missing.
+
+Still to prove on Netlify: that the Blobs edge accepts a streamed (chunked) 150 MB PUT from a background function, and
+the peak there (the function already logs `rssMb`).
+
+## Engine spikes (docs/plans/2026-11-04-render-engines.md §11)
+
+Labels E1–E6. E1 and E2 are the POC (one session on a scratch project, still waiting). E6 is the email to Remotion:
+the draft is waiting for the owner's approval, unsent. The owner allowed the local spikes E3–E5 to go ahead under §1.1
+before Remotion answers ("E3–E5 can go ahead locally", 2026-11-05). They are a local evaluation on one developer's
+machine: development renders with `licenseKey: "free-license"` and `isProduction: false`, nothing published. Remotion
+4.0.540 is installed in `spikes/e3/` only (`spikes/e4` and `spikes/e5` link its `node_modules`). The root tsconfig
+excludes the three folders.
+
+### E3: the props.json contract holds for every edit op (2026-11-05, `spikes/e3`, `npx tsx run.ts`)
+
+`spikes/e3/project` is the planned template, built by hand:
+- `Root.tsx` imports `props.json`;
+- one `<Composition id="main">` with a zod schema and `calculateMetadata`;
+- a `<Series>` of beats in props order, found through a generated `src/registry.ts`;
+- `va/` components for text, media and audio.
+
+`contract-props.ts` is `applyEdits` over `props.json`. The script derives the props from the HyperFrames fixture
+`test/fixtures/contract1-voice` (music, two voices, an image slot and a clip slot), applies the same ops to both, and
+compares the `Composition` and the captions field by field.
+
+- **The model matches.** All 21 cases agree with `contract.ts`:
+  - every op alone (text, retime, retime off-frame, reorder, delete, color, media, audio, voice);
+  - sequences: text+retime, retime+reorder, delete+reorder, color+media, delete all but one;
+  - refusals, which match message for message: the last beat, too short a retime, the wrong media kind, a beat with
+    no voice.
+- **The renders match the model.**
+  - A still at every beat midpoint (43 stills, `renderStill` on one browser) changes exactly where the edit should
+    show.
+  - `selectComposition`'s `durationInFrames` equals the HyperFrames duration × 30 in every case.
+  - A delete was also rendered from a project with the beat's file removed and the registry regenerated: same stills,
+    180 frames.
+- **Two things a props contract has to copy from `contract.ts`:**
+  - **Microsecond rounding.** `contract.ts` writes times through `sec()`, rounded to the microsecond. Without it, a
+    3.85 s retime reads back as 3.8666666666666663, not 3.866667.
+  - **The voice-over rule.** A beat can't be shorter than its voice-over (with 0.5/30 s of slack). It's a model rule,
+    not a markup rule.
+
+  Both now live in `src/lib/contract-core.ts` on `swarm/redo`.
+- **Speed.** Bundling took 4.6 s cold and 1 s warm; launching the browser took 6.3 s cold and 0.4 s warm. A still
+  takes about 0.7 s on a loaded laptop.
+- **Fixtures for the conformance suite (3.3):**
+  - `test/fixtures/engines/contract1-voice/` (the HyperFrames pair plus `narration.json`);
+  - `test/fixtures/engines/contract1-voice.remotion.json` (the Remotion project as one path → text map).
+
+### E4: the Remotion Player runs in the /preview sandbox (2026-11-05, `spikes/e4`)
+
+`player-entry.tsx` mounts `@remotion/player` with the E3 composition and speaks `bridge.js`'s protocol. esbuild builds
+it into `preview/player.js`. `server.ts` serves it with the app's own `previewHeaders`: the CSP scoped to the
+capability path, `sandbox allow-scripts`. The page sets `window.remotion_staticBase` to its capability path, so
+`staticFile()` resolves inside the bundle. Chromium and WebKit, through Playwright. Run with
+`cd spikes/e4 && npx tsx build.ts`, then `npx playwright test -c spikes/e4`.
+
+| | Chromium | WebKit |
+| --- | --- | --- |
+| `player.js` | 588 KB, 186 KB gzipped, esbuild 0.2 s | same |
+| Cold start (iframe src → `ready`) | 70–460 ms | 47–112 ms |
+| Seek SSIM vs the renderer's MP4 (intro, clip beat, outro) | 0.989, 0.971, 0.990 | 0.991, 0.961, 0.992 |
+| `apply-edits` → `edits-applied` | 19–20 ms, picture changes | 34–35 ms, picture changes |
+| Play/pause | time advances | time advances |
+| CSP violations, default Player | 8× `media-src` blocked `data:` | same |
+| CSP violations, `numberOfSharedAudioTags={0}` | none | none |
+
+- **Answer: yes, with no change to the CSP.** The Player needs no workers, no `eval` and nothing outside the capability
+  path.
+- **The one exception is the Player's pool of shared `<audio>` tags.** They use a silent `data:` source, which
+  `media-src` refuses. The preview bundle must pass `numberOfSharedAudioTags={0}`; the alternative is allowing
+  `media-src data:`, which we shouldn't.
+  - With the pool off, audio elements are created on play, so Phase 3 must check sound playback after a user gesture
+    in the editor.
+- **The clip beat is below S7's bar in WebKit (0.961 against 0.97).** Text and still images agree to 0.99, but the
+  browser's `<video>` decode differs from the renderer's frame extraction. Phase 3's gate should compare beats without
+  clips at 0.97 and clip beats at a lower bar, or compare at a frame where the clip has settled.
+
+### E5: determinism, offline, config files and env (2026-11-05, `spikes/e5`, `npx tsx run.ts`)
+
+- **Deterministic.** The same props render to the same bytes:
+  - stills at 4 frames, twice in one browser and again in a new one;
+  - a 60-frame h264 MP4 rendered twice is byte-identical, 166,423 bytes both times.
+- **Offline works with local files only.** The test ran the renderer under macOS `sandbox-exec`, with every outbound
+  connection denied except loopback.
+  - A font loaded with `@remotion/fonts` `loadFont` from `staticFile('fonts/…')` loads.
+  - An `OffthreadVideo` library clip renders the same frame as online.
+  - A font from fonts.googleapis.com times out (`delayRender` … not cleared). The static scan's no-URL rule is needed.
+  - The renderer's usage event to remotion.pro fails silently offline and the render still succeeds, so "telemetry
+    never blocks a render" holds.
+- **Config files.** The Node API is `bundle()` + `renderStill`/`renderMedia`, which render-job will use. Each
+  candidate was tested on its own, either leaving a marker when loaded or being invalid so that reading it would fail
+  the bundle:
+  - Not read: `babel.config.js`, `.babelrc`, `postcss.config.js`, `webpack.config.js`, `tsconfig.json`,
+    `remotion.config.ts`, `.env`, `.env.local` and `.browserslistrc`.
+  - Read: **`package.json`'s `browserslist` field**. A valid query changes the emitted bundle, an invalid one is
+    ignored, and a `browserslist` file next to a `package.json` field fails the bundle ("contains both browserslist
+    and package.json with browsers").
+  - `package.json` is a locked file and the allowed-paths rule refuses any other top-level file, so §5.1's list holds.
+    Add `browserslist` and `.browserslistrc` to its examples.
+- **Env.** Through the Node API a composition sees **nothing** from the environment:
+  - `REMOTION_*` in `process.env` isn't inlined into the bundle;
+  - `.env` isn't read;
+  - only `envVariables` passed to `renderStill`/`renderMedia` arrive.
+
+  Through the **CLI** (`remotion still`) a composition sees the shell's `REMOTION_*` variables and `.env` values, and
+  `remotion.config.ts` executes. `VIDEO_AGENT_REMOTION_KEY` reached composition code by neither path. That confirms
+  gotchas 12 and 14: render-job must use the Node API and pass no `envVariables`. `remotion bundle` by itself inlines
+  nothing.
+- **Remotion facts that correct the plan** (§2, §5.4, §5.5):
+  - **The CLI rejects `--license-key free-license`** ("Pass a private API key starting with rm_sec_"). The Node API
+    accepts `"free-license"` and still **sends a usage event** to remotion.pro, with `apiKey: null` and the
+    `isProduction` flag. Only an omitted key sends nothing, and it logs a warning. So `"free-license"` does declare the
+    free tier, and only through the Node API.
+  - **`renderFrames()` takes no `licenseKey`** (`render-frames.d.ts`) while `renderStill` and `renderMedia` do, as §5.4
+    assumed.
+  - **The 4.0.540 CLI expects zod 4.6.7** ("Version mismatch … required 4.6.7"). The Node API ran our zod 3.25.76
+    schema without complaint. The template should pin zod 4.6.7.
+  - **The CLI stops without a `tsconfig.json`** at the Remotion root. The root is the nearest folder with a
+    `package.json`, so `video/` needs its own.
+  - **npm 11 skips esbuild's postinstall** unless approved (`npm install-scripts`). Bundling still worked, because the
+    platform binary comes from the optional package. That matches the plan's `npm ci --ignore-scripts`.
+  - **Install size.** `node_modules` is 275 MB, plus the Chrome Headless Shell download, which lands inside it
+    (`node_modules/.remotion`): 1.3 GB in all on macOS arm64. E1 measures the Linux runner.
