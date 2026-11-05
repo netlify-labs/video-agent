@@ -33,7 +33,7 @@ import {
 import { dirname, join, relative } from 'node:path'
 import { archiveFiles, bundleManifest } from '../src/lib/bundle-manifest.js'
 import type { BundleReference } from '../src/lib/bundle-references.js'
-import { NARRATION_SRC } from '../src/lib/contract.js'
+import { NARRATION_SRC, load, read } from '../src/lib/contract.js'
 import { frozenFilesFor, optionalFrozenFilesFor } from '../src/lib/narration-run.js'
 import { FROZEN_DIR, keptHash } from '../src/lib/revoice.js'
 import { readPcm16 } from '../src/lib/narration-cleanup.js'
@@ -45,6 +45,7 @@ import {
   runEngineId,
   type FrozenNarration,
   type RunManifest,
+  type ScopeStill,
 } from '../src/lib/run-manifest.js'
 import { MAX_OUTPUT_SAMPLES, SAMPLE_RATE } from '../src/lib/timeline.js'
 import { runEngineFor } from './lib/engines/index.js'
@@ -70,33 +71,41 @@ const download: Fetch = async (key, to, store = 'sources') => {
   )
 }
 
+/** Where prepare-run writes a scoped revision's beats and the parent's layout, inside FROZEN_DIR. */
+export const SCOPE_LAYOUT_FILE = 'scope.json'
+export interface ScopeLayout {
+  beats: string[]
+  layout: { id: string; label: string | null; start: number; duration: number }[]
+}
+
 /**
  * One still per pinned comment from the parent MP4, with a dot at the spot, into video/feedback/ (plan v2 §5).
- * index.json maps each still to its comment so the agent can match them with the comments in the prompt.
+ * index.json maps each still to its comment so the agent can match them with the comments in the prompt. A scoped
+ * revision's stills of its neighbours (redo a scene, plan §4.3) come from the same MP4 in the same call, with no dot,
+ * listed after the pins: this function empties video/feedback/ first, so it's the only place stills are made.
  */
-export function feedbackStills(root: string, parentMp4: string, pins: FeedbackPin[]) {
+export function feedbackStills(
+  root: string,
+  parentMp4: string,
+  pins: FeedbackPin[],
+  scopeStills: readonly ScopeStill[] = [],
+) {
   const dir = join(root, 'video', 'feedback')
   rmSync(dir, { recursive: true, force: true })
   mkdirSync(dir, { recursive: true })
+  if (scopeStills.length) mkdirSync(join(dir, 'scope'), { recursive: true })
   const duration = Number(
     run('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', parentMp4]).trim(),
   )
-  const index = pins.map((p, i) => {
-    // A pin at (or past) the very end still gets the last frame.
-    const at = Math.max(0, Math.min(p.timeSec, duration > 0.1 ? duration - 0.05 : 0))
-    const filters = ["scale='min(1280,iw)':-2"]
-    if (p.x !== null && p.y !== null)
-      filters.push(
-        `drawbox=x=iw*${p.x}-15:y=ih*${p.y}-15:w=30:h=30:color=white@0.95:t=fill`,
-        `drawbox=x=iw*${p.x}-10:y=ih*${p.y}-10:w=20:h=20:color=red@0.95:t=fill`,
-      )
-    const still = feedbackStillPath(i, p.commentId)
+  // A still at (or past) the very end still gets the last frame.
+  const clamp = (t: number) => Math.max(0, Math.min(t, duration > 0.1 ? duration - 0.05 : 0))
+  const grab = (still: string, atSec: number, filters: string[]) =>
     run('ffmpeg', [
       '-y',
       '-loglevel',
       'error',
       '-ss',
-      at.toFixed(3),
+      clamp(atSec).toFixed(3),
       '-i',
       parentMp4,
       '-frames:v',
@@ -107,10 +116,25 @@ export function feedbackStills(root: string, parentMp4: string, pins: FeedbackPi
       '3',
       join(root, 'video', still),
     ])
+  const scale = "scale='min(1280,iw)':-2"
+  const pinned = pins.map((p, i) => {
+    const filters = [scale]
+    if (p.x !== null && p.y !== null)
+      filters.push(
+        `drawbox=x=iw*${p.x}-15:y=ih*${p.y}-15:w=30:h=30:color=white@0.95:t=fill`,
+        `drawbox=x=iw*${p.x}-10:y=ih*${p.y}-10:w=20:h=20:color=red@0.95:t=fill`,
+      )
+    const still = feedbackStillPath(i, p.commentId)
+    grab(still, p.timeSec, filters)
     return { still, commentId: p.commentId, timeSec: p.timeSec, x: p.x, y: p.y }
   })
+  const scoped = scopeStills.map((s) => {
+    grab(s.path, s.atSec, [scale])
+    return { still: s.path, beat: s.beat, what: s.what, atSec: s.atSec }
+  })
+  const index = [...pinned, ...scoped]
   writeFileSync(join(dir, 'index.json'), JSON.stringify(index, null, 2))
-  log('feedback.stills', { count: index.length })
+  log('feedback.stills', { count: index.length, pins: pinned.length, scope: scoped.length })
   return index
 }
 
@@ -406,16 +430,20 @@ export async function prepare(
     restoreArchive(root, archive, m.source.sha256, 'composition')
     await restoreReferences(root, m.source.references, fetch, 'composition')
     log('restored', { kind: 'source', key: m.source.key, parentN: m.source.parentN })
-    // A narrated parent's narration stays locked through the revision (plan 2026-11-02 §6.4): keep its composition
-    // as restored, for render-job's narration_modified check (src/lib/narration-modified.ts checkNarrationKept).
+    // A narrated parent's narration stays locked through the revision (plan 2026-11-02 §6.4), and a scoped revision
+    // may only change its scenes (redo a scene, plan §4.5): keep the composition as restored, before library media or
+    // any later step writes into video/, for render-job's narration_modified and scope checks. One copy serves both.
     const frozen = join(root, FROZEN_DIR)
     rmSync(frozen, { recursive: true, force: true })
-    if (m.source.references?.some((r) => r.path === NARRATION_SRC)) {
-      for (const p of archiveFiles(join(root, 'video'))) {
+    const narrated = m.source.references?.some((r) => r.path === NARRATION_SRC) ?? false
+    if (narrated || m.scope) {
+      const files = archiveFiles(join(root, 'video'))
+      for (const p of files) {
         mkdirSync(dirname(join(frozen, p)), { recursive: true })
         copyFileSync(join(root, 'video', p), join(frozen, p))
       }
-      log('narration.locked', { parentN: m.source.parentN })
+      if (narrated) log('narration.locked', { parentN: m.source.parentN })
+      if (m.scope) log('scope.frozen', { parentN: m.source.parentN, files: files.length })
     }
   }
   if (m.bundle) {
@@ -478,7 +506,32 @@ export async function prepare(
     log('media', { count: m.media.length, files: m.media.map((x) => x.filename) })
   }
   stepDone('media', !m.media?.length)
-  // 3. The look, and 4. recording, then scope files: their plans add them here.
+  // 3. The look: the looks plan adds it here.
+  // 4. Recording files (the screen-recording plan adds them here), then scope files: the scoped beats and the
+  // parent's layout, read from the frozen copy (what check-contract --fix and render-job splice against).
+  if (m.scope) {
+    const html = readFileSync(join(root, FROZEN_DIR, 'index.html'), 'utf8')
+    let layout: ScopeLayout['layout']
+    try {
+      layout = read(load(html)).beats.map((b) => ({
+        id: b.id,
+        label: b.label,
+        start: b.start,
+        duration: b.duration,
+      }))
+    } catch {
+      throw new StepError("The restored composition can't be read as scenes. Stop and report this.")
+    }
+    const missing = m.scope.beats.filter((b) => !layout.some((x) => x.id === b))
+    if (missing.length)
+      throw new StepError(
+        `The restored composition has no scene ${missing.map((b) => `"${b}"`).join(', ')}. Stop and report this.`,
+      )
+    const scope: ScopeLayout = { beats: [...m.scope.beats], layout }
+    writeFileSync(join(root, FROZEN_DIR, SCOPE_LAYOUT_FILE), JSON.stringify(scope, null, 2))
+    log('scope.layout', { beats: m.scope.beats, scenes: layout.length })
+  }
+  stepDone('scope', !m.scope)
   // 5. Stills, last: after any restore and every other write, so they land in the final video/.
   if (m.feedback) {
     const mp4 = join(tmp, 'parent.mp4')
@@ -486,7 +539,7 @@ export async function prepare(
     const actual = sha256File(mp4)
     if (actual !== m.feedback.video.sha256)
       throw new StepError(`The parent video doesn't match its hash (got ${actual}). Stop and report this.`)
-    feedbackStills(root, mp4, m.feedback.pins)
+    feedbackStills(root, mp4, m.feedback.pins, m.scope?.stills ?? [])
   }
   stepDone('stills', !m.feedback)
 }

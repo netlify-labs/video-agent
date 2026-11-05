@@ -4,12 +4,13 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync, copyFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
-import { feedbackStills, prepare } from '../scripts/prepare-run.js'
+import { describe, expect, it, vi } from 'vitest'
+import { feedbackStills, prepare, SCOPE_LAYOUT_FILE } from '../scripts/prepare-run.js'
 import { uploadReferences } from '../scripts/lib/references.js'
 import { archiveFiles, bundleManifest, compositionFiles, excluded } from '../src/lib/bundle-manifest.js'
 import { isReference, REFERENCE_FILES, type BundleReference } from '../src/lib/bundle-references.js'
-import { NARRATION_SRC } from '../src/lib/contract.js'
+import { load, NARRATION_SRC, read } from '../src/lib/contract.js'
+import { FROZEN_DIR } from '../src/lib/revoice.js'
 import {
   RUN_MANIFEST_VERSION,
   runEngineId,
@@ -527,6 +528,197 @@ describe('feedback stills', () => {
       { tmp: target, root: target, fetch },
     )
     expect(readFileSync(join(target, 'video', 'feedback', 'index.json'), 'utf8')).toContain('c_1')
+  })
+
+  it('makes pin stills and scope stills in one call, scope stills without a dot, listed after the pins', () => {
+    const root = mkdtempSync(join(tmpdir(), 'va-fb-'))
+    mkdirSync(join(root, 'video'))
+    const mp4 = join(process.cwd(), 'test/fixtures/a169.mp4')
+    const index = feedbackStills(
+      root,
+      mp4,
+      [{ commentId: 'c_dot', timeSec: 0.5, x: 0.25, y: 0.5 }],
+      [
+        { atSec: 0.5, path: 'feedback/scope/features-before.jpg', what: 'before', beat: 'features' },
+        { atSec: 9999, path: 'feedback/scope/features-after.jpg', what: 'after', beat: 'features' },
+      ],
+    )
+    expect(index.map((i) => i.still)).toEqual([
+      'feedback/01-c_dot.jpg',
+      'feedback/scope/features-before.jpg',
+      'feedback/scope/features-after.jpg',
+    ])
+    for (const i of index) expect(existsSync(join(root, 'video', i.still))).toBe(true)
+    const written = JSON.parse(readFileSync(join(root, 'video', 'feedback', 'index.json'), 'utf8'))
+    expect(written[1]).toEqual({
+      still: 'feedback/scope/features-before.jpg',
+      beat: 'features',
+      what: 'before',
+      atSec: 0.5,
+    })
+    const [w, h] = execFileSync(
+      'ffprobe',
+      [
+        '-v',
+        'error',
+        '-show_entries',
+        'stream=width,height',
+        '-of',
+        'csv=p=0',
+        join(root, 'video', index[1]!.still),
+      ],
+      { encoding: 'utf8' },
+    )
+      .trim()
+      .split(',')
+      .map(Number) as [number, number]
+    // Same moment as the pin, but no dot at its spot.
+    const [r, g] = pixel(join(root, 'video', index[1]!.still), Math.round(w * 0.25), Math.round(h * 0.5))
+    expect(r > 180 && g < 90).toBe(false)
+    expect(bundleManifest(join(root, 'video')).files).toEqual([])
+  })
+})
+
+describe('prepare-run for a scoped revision (redo a scene)', () => {
+  const music = readFileSync(join(process.cwd(), 'test/fixtures/contract1-music/index.html'), 'utf8')
+  const media = 'library clip bytes'
+  /** Serves each key from a map of local files. */
+  const fetchKeys =
+    (files: Record<string, string>, calls: string[] = []) =>
+    async (key: string, to: string, store?: string) => {
+      calls.push(`${store ?? 'sources'}:${key}`)
+      const from = files[key]
+      if (!from) throw new Error(`no ${key}`)
+      copyFileSync(from, to)
+    }
+  const logs = async (f: () => Promise<unknown>) => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      await f()
+      return spy.mock.calls.map((c) => JSON.parse(String(c[0])) as { step: string; [k: string]: unknown })
+    } finally {
+      spy.mockRestore()
+    }
+  }
+
+  it('freezes the restored parent before library media, and writes the layout read from it', async () => {
+    const src = workspace({
+      'index.html': music,
+      'summary.json': '{"captions":[]}',
+      'assets/a.svg': '<svg/>',
+    })
+    const target = mkdtempSync(join(tmpdir(), 'va-target-'))
+    const mediaFile = join(target, 'media.bin')
+    writeFileSync(mediaFile, media)
+    const calls: string[] = []
+    const out = await logs(() =>
+      prepare(
+        {
+          ...base,
+          source: { key: 'vid_1/v1/source.tar.gz', sha256: src.sha256, parentN: 1 },
+          media: [
+            {
+              key: 'med_abcdefgh/original.png',
+              sha256: sha256Hex(media),
+              filename: 'med_abcdefgh.png',
+              kind: 'image',
+            },
+          ],
+          scope: { beats: ['demo'], stills: [] },
+        },
+        {
+          tmp: target,
+          root: target,
+          fetch: fetchKeys(
+            { 'vid_1/v1/source.tar.gz': src.archive, 'med_abcdefgh/original.png': mediaFile },
+            calls,
+          ),
+        },
+      ),
+    )
+    const frozen = join(target, FROZEN_DIR)
+    expect(archiveFiles(frozen).filter((p) => p !== SCOPE_LAYOUT_FILE)).toEqual(
+      archiveFiles(join(src.root, 'video')),
+    )
+    for (const p of archiveFiles(join(src.root, 'video')))
+      expect(readFileSync(join(frozen, p))).toEqual(readFileSync(join(src.root, 'video', p)))
+    expect(existsSync(join(target, 'video', 'assets/media/med_abcdefgh.png'))).toBe(true)
+    expect(existsSync(join(frozen, 'assets/media/med_abcdefgh.png'))).toBe(false)
+    const scope = JSON.parse(readFileSync(join(frozen, SCOPE_LAYOUT_FILE), 'utf8'))
+    expect(scope.beats).toEqual(['demo'])
+    expect(scope.layout).toEqual(
+      read(load(music)).beats.map((b) => ({
+        id: b.id,
+        label: b.label,
+        start: b.start,
+        duration: b.duration,
+      })),
+    )
+    expect(scope.layout.map((b: { id: string }) => b.id)).toEqual(['intro', 'demo', 'outro'])
+    // No stills and no feedback: the parent MP4 is never fetched.
+    expect(calls.some((c) => c.startsWith('videos:'))).toBe(false)
+    expect(out.find((l) => l.step === 'scope.frozen')).toMatchObject({ parentN: 1, files: 3 })
+    expect(out.find((l) => l.step === 'scope.layout')).toMatchObject({ beats: ['demo'], scenes: 3 })
+    expect(out.some((l) => l.step === 'narration.locked')).toBe(false)
+  })
+
+  it('keeps one frozen copy for a scoped revision of a narrated parent, logging both checks', async () => {
+    const src = workspace({ 'index.html': music })
+    const target = mkdtempSync(join(tmpdir(), 'va-target-'))
+    const bus = join(target, 'bus.wav')
+    writeFileSync(bus, 'RIFFbus!')
+    const ref = {
+      path: NARRATION_SRC,
+      key: 'vid_1/v1/narration-bus.wav',
+      sha256: sha256Hex('RIFFbus!'),
+      bytes: 8,
+    }
+    const out = await logs(() =>
+      prepare(
+        {
+          ...base,
+          source: { key: 'vid_1/v1/source.tar.gz', sha256: src.sha256, parentN: 1, references: [ref] },
+          scope: { beats: ['intro'], stills: [] },
+        },
+        {
+          tmp: target,
+          root: target,
+          fetch: fetchKeys({ 'vid_1/v1/source.tar.gz': src.archive, 'vid_1/v1/narration-bus.wav': bus }),
+        },
+      ),
+    )
+    expect(out.map((l) => l.step)).toEqual(expect.arrayContaining(['narration.locked', 'scope.frozen']))
+    expect(existsSync(join(target, FROZEN_DIR, 'index.html'))).toBe(true)
+    expect(existsSync(join(target, FROZEN_DIR, SCOPE_LAYOUT_FILE))).toBe(true)
+  })
+
+  it('stops when a scoped beat is not in the restored composition', async () => {
+    const src = workspace({ 'index.html': music })
+    const target = mkdtempSync(join(tmpdir(), 'va-target-'))
+    await expect(
+      logs(() =>
+        prepare(
+          {
+            ...base,
+            source: { key: 'vid_1/v1/source.tar.gz', sha256: src.sha256, parentN: 1 },
+            scope: { beats: ['features'], stills: [] },
+          },
+          { tmp: target, root: target, fetch: fetchKeys({ 'vid_1/v1/source.tar.gz': src.archive }) },
+        ),
+      ),
+    ).rejects.toThrow(/no scene "features"/)
+  })
+
+  it('keeps no frozen copy for an unscoped, unnarrated revision (unchanged)', async () => {
+    const src = workspace({ 'index.html': music })
+    const target = mkdtempSync(join(tmpdir(), 'va-target-'))
+    await logs(() =>
+      prepare(
+        { ...base, source: { key: 'vid_1/v1/source.tar.gz', sha256: src.sha256, parentN: 1 } },
+        { tmp: target, root: target, fetch: fetchKeys({ 'vid_1/v1/source.tar.gz': src.archive }) },
+      ),
+    )
+    expect(existsSync(join(target, FROZEN_DIR))).toBe(false)
   })
 })
 
