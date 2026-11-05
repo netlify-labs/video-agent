@@ -6,6 +6,7 @@
 //   mockLookDefault=<id>      the admin default look
 //   mockLooksDisabled=a,b     looks an admin turned off
 //   mockNoLooks=1             the deployment has no looks feature (the pickers hide)
+//   mockLookUpdated=<id>      that look changed since the mock's versions were made (a newer catalog hash)
 import cleanMp4 from '../../../looks/clean/preview.mp4?url'
 import cleanPoster from '../../../looks/clean/poster.webp?url'
 import kineticMp4 from '../../../looks/kinetic/preview.mp4?url'
@@ -51,7 +52,7 @@ export function mockLooks(): Look[] {
     engines: l.engines,
     // The same JSON; only exactOptionalPropertyTypes tells the zod output and the OpenAPI type apart.
     recording: (l.recording ?? null) as Look['recording'],
-    hash: l.hash,
+    hash: setting('mockLookUpdated') === l.id ? `${l.hash.slice(0, -4)}beef` : l.hash,
     enabled: !lookSettings.disabledLooks.includes(l.id),
     preview: PREVIEWS[l.id] ?? { mp4: null, poster: null },
   }))

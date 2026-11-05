@@ -226,6 +226,7 @@ function Everything({
           </Fact>
           <Fact label="Language">{languageName(video.language)}</Fact>
           <Fact label="Sound">{soundWords(v)}</Fact>
+          {v.look ? <Fact label="Look">{v.look.name}</Fact> : null}
           {v.music ? <Fact label="Music">{musicWords(v.music)}</Fact> : null}
           {v.music?.query ? <Fact label="Music search">{v.music.query}</Fact> : null}
           {v.voiceover ? (
@@ -416,6 +417,7 @@ export function DetailsCard({ video, v, onOpen }: { video: Video; v: Version; on
       <div className="va-facts">
         <Fact label="Length">{lengthWords(v)}</Fact>
         <Fact label="Sound">{soundWords(v)}</Fact>
+        {v.look ? <Fact label="Look">{v.look.name}</Fact> : null}
         {v.music ? <Fact label="Music">{musicWords(v.music)}</Fact> : null}
         {v.context ? <Fact label="Context">{v.context.label}</Fact> : null}
         <Fact label="Credits">{credits(v.usage?.totalCreditsCost)}</Fact>

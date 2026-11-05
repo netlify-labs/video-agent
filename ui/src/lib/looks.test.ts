@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { aspectNote, defaultLook, looksForDemo, pickable, sortForTemplate, type Look } from './looks'
+import {
+  aspectNote,
+  defaultLook,
+  lookMark,
+  looksForDemo,
+  pickable,
+  sortForTemplate,
+  type Look,
+} from './looks'
 
 const look = (id: string, o: Partial<Look> = {}): Look => ({
   id,
@@ -68,5 +76,14 @@ describe('defaultLook', () => {
     expect(defaultLook({ looks, default: 'kinetic' })).toBeNull()
     expect(defaultLook({ looks, default: null })).toBeNull()
     expect(defaultLook(undefined)).toBeNull()
+  })
+})
+
+describe('lookMark', () => {
+  it("marks the version's own look Current at the same hash and Updated at a newer one", () => {
+    expect(lookMark(look('clean'), { id: 'clean', hash: 'h_clean' })).toBe('current')
+    expect(lookMark(look('clean'), { id: 'clean', hash: 'h_old' })).toBe('updated')
+    expect(lookMark(look('kinetic'), { id: 'clean', hash: 'h_clean' })).toBeNull()
+    expect(lookMark(look('clean'), null)).toBeNull()
   })
 })

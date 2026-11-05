@@ -1,6 +1,6 @@
 // Looks in the web app (plan 2026-11-04-looks §6, beads va-nifa.4.1 and 4.2): the mock's looks routes and the New video
 // picker. Previews cost bandwidth, so the picker loads posters only until a card is hovered or focused.
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Locator, type Page } from '@playwright/test'
 
 /** Sets a mock API switch in localStorage before the app loads. */
 const mock = (page: Page, key: string, value = '1') =>
@@ -35,6 +35,8 @@ const card = (page: Page, id: string) => page.locator(`.va-look-pick[data-look="
 
 test('the mock answers GET /api/v1/looks and lists looks in the config', async ({ page }) => {
   await page.goto('/')
+  // The mock API is installed before the app's first request: wait for the app.
+  await expect(page.getByRole('heading', { level: 1, name: 'Library' })).toBeVisible()
   const body = await page.evaluate(async () => {
     const [looks, config] = await Promise.all([fetch('/api/v1/looks'), fetch('/api/v1/config')])
     return {
@@ -130,4 +132,135 @@ test('a deployment without looks shows no Look control', async ({ page }) => {
   await page.goto('/new')
   await expect(page.getByRole('button', { name: 'Create video' })).toBeVisible()
   await expect(page.getByTestId('look-control')).toHaveCount(0)
+})
+
+// Video page: the Look detail and Restyle (bead va-nifa.4.3). vid_webhooks v1 was made in the kinetic look.
+
+/** Restyle sits with the actions above the player, or in More actions on a phone. */
+async function openRestyle(page: Page, isMobile: boolean) {
+  if (isMobile) {
+    await page.getByRole('button', { name: 'More actions' }).click()
+    await page.getByRole('menuitem', { name: 'Restyle…' }).click()
+  } else await page.getByRole('button', { name: 'Restyle v1' }).click()
+}
+
+/**
+ * Presses a button low in a full-screen dialog. On the phone project the video page is wider than the screen (its
+ * header, before looks), the browser zooms out, and a pointer click there lands beside the button; Enter doesn't.
+ */
+async function press(button: Locator) {
+  await button.focus()
+  await button.press('Enter')
+}
+
+const lastRevise = (page: Page) =>
+  page.evaluate(() => (globalThis as unknown as { __lastRevise?: Record<string, unknown> }).__lastRevise)
+
+test('the details show the look, and Restyle sends a revision with the look and the text', async ({
+  page,
+  isMobile,
+}) => {
+  await page.goto('/videos/vid_webhooks')
+  await expect(page.locator('.va-fact', { hasText: 'Look' })).toContainText('Kinetic type')
+  await openRestyle(page, isMobile)
+  const dialog = page.getByRole('dialog', { name: 'Restyle v1' })
+  await expect(dialog.getByTestId('restyle-cost')).toHaveText(
+    'This makes a new version (a full run). v1 took 206 credits.',
+  )
+  // The version's own look at the same hash isn't a restyle.
+  await expect(card(page, 'kinetic')).toBeDisabled()
+  await expect(card(page, 'kinetic')).toContainText('Current')
+  await expect(dialog.getByRole('button', { name: 'Make v2' })).toBeDisabled()
+  await card(page, 'terminal').click()
+  await expect(dialog.getByLabel('Anything else?')).toHaveValue('Restyle this video in the Terminal look.')
+  await dialog
+    .getByLabel('Anything else?')
+    .fill('Restyle this video in the Terminal look. Keep the end card.')
+  await press(dialog.getByRole('button', { name: 'Make v2' }))
+  await expect(dialog).toBeHidden()
+  expect(await lastRevise(page)).toEqual({
+    prompt: 'Restyle this video in the Terminal look. Keep the end card.',
+    fromVersion: 1,
+    look: 'terminal',
+  })
+})
+
+test('Restyle into the same look once the catalog has a newer version of it', async ({ page, isMobile }) => {
+  await mock(page, 'mockLookUpdated', 'kinetic')
+  await page.goto('/videos/vid_webhooks')
+  await openRestyle(page, isMobile)
+  await expect(card(page, 'kinetic')).toBeEnabled()
+  await expect(card(page, 'kinetic')).toContainText('Updated')
+  await card(page, 'kinetic').click()
+  await press(page.getByRole('dialog', { name: 'Restyle v1' }).getByRole('button', { name: 'Make v2' }))
+  await expect.poll(() => lastRevise(page)).toMatchObject({ look: 'kinetic' })
+})
+
+test('Restyle is hidden for recorded narration and for reviewers; a stale refusal shows inline', async ({
+  page,
+  isMobile,
+}) => {
+  await page.goto('/videos/vid_sales')
+  await expect(page.getByRole('heading', { level: 1, name: /Deploy previews/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Restyle v1' })).toHaveCount(0)
+  await expect(page.getByRole('menuitem', { name: 'Restyle…' })).toHaveCount(0)
+
+  // A page that loaded before the narration landed: the server refuses with 409, shown in the dialog.
+  await page.goto('/videos/vid_webhooks')
+  await openRestyle(page, isMobile)
+  await page.evaluate(() => {
+    const w = globalThis as unknown as { fetch: typeof fetch }
+    const inner = w.fetch
+    w.fetch = (input, init) =>
+      String(input instanceof Request ? input.url : input).endsWith('/versions')
+        ? Promise.resolve(
+            new Response(
+              JSON.stringify({
+                error: {
+                  code: 'look_not_allowed',
+                  message: "Restyle isn't available for videos with recorded narration yet.",
+                },
+              }),
+              { status: 409, headers: { 'content-type': 'application/json' } },
+            ),
+          )
+        : inner(input, init)
+  })
+  await card(page, 'clean').click()
+  await press(page.getByRole('dialog', { name: 'Restyle v1' }).getByRole('button', { name: 'Make v2' }))
+  await expect(page.getByTestId('restyle-error')).toContainText(
+    "Restyle isn't available for videos with recorded narration yet.",
+  )
+
+  await mock(page, 'mockRole', 'reviewer')
+  await page.goto('/videos/vid_webhooks')
+  await expect(page.getByRole('heading', { level: 1, name: 'Org webhooks launch' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Restyle v1' })).toHaveCount(0)
+  await expect(page.getByRole('menuitem', { name: 'Restyle…' })).toHaveCount(0)
+})
+
+// Remix: a Look control defaulting to the source's look (bead va-nifa.4.4).
+
+const lastRemix = (page: Page) =>
+  page.evaluate(() => (globalThis as unknown as { __lastRemix?: Record<string, unknown> }).__lastRemix)
+
+test("Remix shows the source's look, leaves it out unchanged and sends a change", async ({ page }) => {
+  await page.goto('/videos/vid_webhooks')
+  await page.getByRole('button', { name: 'Remix', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: /Remix Org webhooks launch v1/ })
+  await expect(dialog.getByRole('button', { name: 'Look: Kinetic type' })).toBeVisible()
+  await dialog.getByLabel('What would you change?').fill('Same story for the payments team')
+  await dialog.getByRole('button', { name: 'Remix', exact: true }).click()
+  await expect.poll(() => lastRemix(page)).toBeTruthy()
+  expect(await lastRemix(page)).not.toHaveProperty('look')
+
+  await page.goto('/videos/vid_webhooks')
+  await page.getByRole('button', { name: 'Remix', exact: true }).click()
+  const again = page.getByRole('dialog', { name: /Remix Org webhooks launch v1/ })
+  await again.getByRole('button', { name: 'Look: Kinetic type' }).click()
+  await card(page, 'none').click()
+  await expect(again.getByRole('button', { name: 'Look: None' })).toBeVisible()
+  await again.getByLabel('What would you change?').fill('Same story, no look')
+  await again.getByRole('button', { name: 'Remix', exact: true }).click()
+  await expect.poll(() => lastRemix(page)).toMatchObject({ look: null })
 })

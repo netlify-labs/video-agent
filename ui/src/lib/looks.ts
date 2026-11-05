@@ -43,3 +43,17 @@ export function defaultLook(data: Looks | undefined): Look | null {
   if (!data?.default) return null
   return data.looks.find((l) => l.id === data.default && l.enabled) ?? null
 }
+
+export type LookMark = 'current' | 'updated' | null
+
+/**
+ * A restyle picker's mark for a look (§4.3): the version's own look at the same hash is "Current" (picking it wouldn't
+ * be a restyle); once the catalog has a newer hash it's "Updated", and picking it restyles into the newer version.
+ */
+export function lookMark(
+  look: Pick<Look, 'id' | 'hash'>,
+  current: { id: string; hash: string } | null | undefined,
+): LookMark {
+  if (!current || current.id !== look.id) return null
+  return current.hash === look.hash ? 'current' : 'updated'
+}

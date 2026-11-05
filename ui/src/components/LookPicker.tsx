@@ -6,7 +6,16 @@ import { useMediaQuery } from '@mantine/hooks'
 import { IconPlayerPlay } from '@tabler/icons-react'
 import { useRef, useState, type KeyboardEvent } from 'react'
 import { $api } from '../api/client'
-import { aspectNote, defaultLook, pickable, sortForTemplate, type Look, type Looks } from '../lib/looks'
+import {
+  aspectNote,
+  defaultLook,
+  lookMark,
+  pickable,
+  sortForTemplate,
+  type Look,
+  type LookMark,
+  type Looks,
+} from '../lib/looks'
 import './look-picker.css'
 
 const TEMPLATE_LABEL: Record<string, string> = {
@@ -34,7 +43,13 @@ export const shownLook = (data: Looks | undefined, value: string | null | undefi
       ? null
       : (data?.looks.find((l) => l.id === value) ?? null)
 
-function LookCard(props: { look: Look; fits: string | null; selected: boolean; onPick: () => void }) {
+function LookCard(props: {
+  look: Look
+  fits: string | null
+  selected: boolean
+  mark: LookMark
+  onPick: () => void
+}) {
   const { look } = props
   const reduced = useMediaQuery('(prefers-reduced-motion: reduce)')
   const [active, setActive] = useState(false)
@@ -48,6 +63,7 @@ function LookCard(props: { look: Look; fits: string | null; selected: boolean; o
         className="va-look-pick va-raised"
         data-look={look.id}
         aria-pressed={props.selected}
+        disabled={props.mark === 'current'}
         onClick={props.onPick}
         // A mouse hover previews; on touch a tap picks, so a tap's emulated hover mustn't start a clip.
         onPointerEnter={(e) => {
@@ -73,6 +89,7 @@ function LookCard(props: { look: Look; fits: string | null; selected: boolean; o
         <div className="va-look-text">
           <Text size="sm" fw={600}>
             {look.name}
+            {props.mark ? <span className="va-look-mark">{MARK_LABEL[props.mark]}</span> : null}
           </Text>
           <Text size="xs" c="var(--va-muted)" lineClamp={2}>
             {look.description}
@@ -111,13 +128,20 @@ function LookCard(props: { look: Look; fits: string | null; selected: boolean; o
   )
 }
 
-/** The cards: None first, then the enabled looks (those made for the plan's template first). */
+const MARK_LABEL = { current: 'Current', updated: 'Updated' } as const
+
+/**
+ * The cards: None first, then the enabled looks (those made for the plan's template first). `value` undefined: none
+ * picked yet. With `current` (a restyle), the version's own look is marked and can't be picked again at the same hash.
+ */
 export function LookPicker(props: {
   looks: readonly Look[]
-  value: string | null
+  value: string | null | undefined
   onPick: (id: string | null) => void
   template?: string | null | undefined
+  current?: { id: string; hash: string } | null | undefined
 }) {
+  const noneMark = props.current === null ? 'current' : null
   const grid = useRef<HTMLDivElement>(null)
   const rows = sortForTemplate(pickable(props.looks), props.template)
   const fits = props.template ? (TEMPLATE_LABEL[props.template] ?? null) : null
@@ -126,7 +150,7 @@ export function LookPicker(props: {
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     const dir = ({ ArrowRight: 1, ArrowLeft: -1, ArrowDown: 2, ArrowUp: -2 } as Record<string, number>)[e.key]
     if (!dir || !grid.current) return
-    const cards = [...grid.current.querySelectorAll<HTMLElement>('.va-look-pick')]
+    const cards = [...grid.current.querySelectorAll<HTMLElement>('.va-look-pick:not(:disabled)')]
     const at = cards.indexOf(document.activeElement as HTMLElement)
     if (at < 0) return
     e.preventDefault()
@@ -143,6 +167,7 @@ export function LookPicker(props: {
           className="va-look-pick va-raised"
           data-look="none"
           aria-pressed={props.value === null}
+          disabled={noneMark === 'current'}
           onClick={() => {
             props.onPick(null)
           }}
@@ -151,6 +176,7 @@ export function LookPicker(props: {
           <div className="va-look-text">
             <Text size="sm" fw={600}>
               No look
+              {noneMark ? <span className="va-look-mark">Current</span> : null}
             </Text>
             <Text size="xs" c="var(--va-muted)">
               The agent decides, as before.
@@ -164,6 +190,7 @@ export function LookPicker(props: {
           look={r.look}
           fits={r.fits ? fits : null}
           selected={props.value === r.look.id}
+          mark={lookMark(r.look, props.current)}
           onPick={() => {
             props.onPick(r.look.id)
           }}
@@ -175,11 +202,13 @@ export function LookPicker(props: {
 
 /**
  * The settings-row control: the current look's poster and name, opening the picker. `value` undefined means untouched
- * (the request leaves look out and the server default applies); null is None.
+ * (the request leaves look out and the server default applies, or with `inherit`, the source's look); null is None.
  */
 export function LookControl(props: {
   value: string | null | undefined
   onChange: (id: string | null) => void
+  /** What untouched means when it isn't the admin default: a remix keeps its source version's look. */
+  inherit?: { id: string; name: string } | null
   template?: string | null | undefined
   disabled?: boolean
   label?: string
@@ -188,7 +217,20 @@ export function LookControl(props: {
   const data = useLooks()
   const [open, setOpen] = useState(false)
   if (!data || pickable(data.looks).length === 0) return null
-  const shown = shownLook(data, props.value)
+  const inherited = props.value === undefined && props.inherit !== undefined
+  const catalogLook = (id: string | undefined) => data.looks.find((l) => l.id === id) ?? null
+  const shown = inherited
+    ? props.inherit
+      ? {
+          name: props.inherit.name,
+          id: props.inherit.id,
+          poster: catalogLook(props.inherit.id)?.preview.poster,
+        }
+      : null
+    : (() => {
+        const l = shownLook(data, props.value)
+        return l ? { name: l.name, id: l.id, poster: l.preview.poster } : null
+      })()
   return (
     <div>
       <Text size="sm" fw={500} mb={8}>
@@ -201,9 +243,7 @@ export function LookControl(props: {
         onClick={() => {
           setOpen(true)
         }}
-        leftSection={
-          shown?.preview.poster ? <img className="va-look-thumb" src={shown.preview.poster} alt="" /> : null
-        }
+        leftSection={shown?.poster ? <img className="va-look-thumb" src={shown.poster} alt="" /> : null}
         data-testid="look-control"
       >
         Look: {shown?.name ?? 'None'}

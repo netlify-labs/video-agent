@@ -64,3 +64,15 @@
   background: var(--va-raised, #111);
   flex: none;
 }
+
+.va-look-mark {
+  margin-left: 6px;
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 500;
+  color: var(--va-muted);
+}
+
+.va-look-pick:disabled {
+  cursor: default;
+  opacity: 0.6;
+}

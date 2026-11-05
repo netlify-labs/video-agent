@@ -27,6 +27,7 @@ import { showError } from './bits'
 import { LanguageSelect } from './LanguageSelect'
 import { MediaChips, type Media } from './MediaPicker'
 import { PlanPanel } from './PlanPanel'
+import { LookControl } from './LookPicker'
 import { SoundControl, soundAfterPick, type Sound } from './SoundControl'
 import { VoiceoverControl, sameVoice, voiceInput, voiceStateFrom, type VoiceState } from './VoiceoverControl'
 
@@ -82,6 +83,8 @@ export function RemixForm({ video, version, onDone, onCancel, footer }: RemixFor
   const [seconds, setSeconds] = useState<number | string>(sourceSeconds ?? '')
   const [sound, setSound] = useState<Sound | null>(null)
   const [voice, setVoice] = useState<VoiceState | null>(null)
+  // Undefined: the source version's look (the server inherits it); sent only when changed, null for None.
+  const [look, setLook] = useState<string | null | undefined>(undefined)
   const [media, setMedia] = useState<Media[] | null>(null)
   const [planning, setPlanning] = useState(false)
   const [showSource, setShowSource] = useState(false)
@@ -117,6 +120,7 @@ export function RemixForm({ video, version, onDone, onCancel, footer }: RemixFor
     ...(sound ? { sound } : {}),
     ...(voiceChanged && (!planId || !effVoice.enabled) ? { voiceover: voiceInput(effVoice) } : {}),
     ...(mediaChanged ? { mediaIds: chips.map((m) => m.id) } : {}),
+    ...(look !== undefined ? { look } : {}),
     ...(planId ? { planId } : {}),
   })
   const remix = $api.useMutation('post', '/api/v1/videos/{id}/remix', {
@@ -249,6 +253,13 @@ export function RemixForm({ video, version, onDone, onCancel, footer }: RemixFor
           }}
         />
         <VoiceoverControl value={effVoice} planning={canPlan} onChange={setVoice} />
+        <LookControl
+          value={look}
+          inherit={version.look}
+          onChange={(id) => {
+            setLook(id === (version.look?.id ?? null) ? undefined : id)
+          }}
+        />
         {narrated ? (
           <Alert variant="light" color="gray" p="xs">
             <Text size="sm">Your recorded narration isn’t carried over.</Text>

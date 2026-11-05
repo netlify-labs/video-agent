@@ -22,6 +22,7 @@ import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
 import { FavoriteButton } from '../components/FavoriteButton'
 import { RemixDialog, useCanRemix } from '../components/RemixDialog'
+import { RestyleDialog, canRestyle } from '../components/RestyleDialog'
 import { useMediaKeys } from '../lib/media-keys'
 import { MediaChips, type Media } from '../components/MediaPicker'
 import { PlanPanel } from '../components/PlanPanel'
@@ -48,6 +49,7 @@ import {
   IconBellRinging,
   IconDots,
   IconArrowsShuffle,
+  IconPalette,
   IconDownload,
   IconExternalLink,
   IconLanguage,
@@ -567,6 +569,8 @@ export function VideoPage() {
   // ?remix=n (the share page's link) opens the Remix dialog for that version.
   const [search, setSearch] = useSearchParams()
   const [remixing, setRemixing] = useState<number | null>(null)
+  const [restyling, setRestyling] = useState<number | null>(null)
+  const looksOn = config.data?.features.includes('looks') === true
   // A watched run (Notify) is polled by RunWatcher on the same query, in the background too; polling here as well
   // would double the requests.
   const watched = useSyncExternalStore(subscribeWatches, () => isWatched(id))
@@ -862,6 +866,16 @@ export function VideoPage() {
               }}
             />
           ) : null}
+          {restyling !== null ? (
+            <RestyleDialog
+              video={data}
+              version={data.versions.find((x) => x.n === restyling) as Version}
+              opened
+              onClose={() => {
+                setRestyling(null)
+              }}
+            />
+          ) : null}
           {v.status === 'ready' && canCreate ? (
             <Tooltip
               label="This version can't be edited in the browser. Ask for a revision instead."
@@ -903,6 +917,17 @@ export function VideoPage() {
                 </ActionIcon>
               </Menu.Target>
               <Menu.Dropdown>
+                {canCreate && canRestyle(v, looksOn) ? (
+                  <Menu.Item
+                    hiddenFrom="sm"
+                    leftSection={<IconPalette size={14} />}
+                    onClick={() => {
+                      setRestyling(v.n)
+                    }}
+                  >
+                    Restyle…
+                  </Menu.Item>
+                ) : null}
                 {v.status === 'ready'
                   ? (
                       [
@@ -1036,6 +1061,23 @@ export function VideoPage() {
                   >
                     Remix
                   </Button>
+                </Tooltip>
+              ) : null}
+              {/* Phones get Restyle in the More actions menu: the row has no room for another icon. */}
+              {canCreate && canRestyle(v, looksOn) ? (
+                <Tooltip label="Restyle: a new version in another look">
+                  <ActionIcon
+                    visibleFrom="sm"
+                    variant="default"
+                    size={36}
+                    radius="md"
+                    aria-label={`Restyle v${v.n}`}
+                    onClick={() => {
+                      setRestyling(v.n)
+                    }}
+                  >
+                    <IconPalette size={18} />
+                  </ActionIcon>
                 </Tooltip>
               ) : null}
               <FavoriteButton videoId={data.id} favorite={data.favorite} />
