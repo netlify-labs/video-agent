@@ -1,0 +1,15 @@
+{
+  "id": "terminal",
+  "name": "Terminal",
+  "description": "Commands typed live, code diffs, a blinking cursor, monospace everything. For changelogs and dev tools.",
+  "tags": ["code", "developer", "changelog"],
+  "bestFor": ["changelog", "tutorial"],
+  "aspects": ["16:9", "9:16", "1:1", "4:5"],
+  "engines": ["hyperframes"],
+  "colors": { "roles": ["bg", "text", "muted", "accent"], "derived": ["surface", "added", "removed"] },
+  "sound": { "musicMood": "minimal electronic, steady 110 bpm" },
+  "registry": [],
+  "authors": ["Video Agent maintainers"],
+  "license": "MIT",
+  "since": "2026-11-05"
+}

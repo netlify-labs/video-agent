@@ -75,5 +75,38 @@ export const looksCatalog: LookCatalogEntry[] = [
       "mp4": "/assets/looks/kinetic.1d7e4a535c13.mp4",
       "poster": "/assets/looks/kinetic.968438493f84.webp"
     }
+  },
+  {
+    "id": "terminal",
+    "name": "Terminal",
+    "description": "Commands typed live, code diffs, a blinking cursor, monospace everything. For changelogs and dev tools.",
+    "tags": [
+      "code",
+      "developer",
+      "changelog"
+    ],
+    "bestFor": [
+      "changelog",
+      "tutorial"
+    ],
+    "aspects": [
+      "16:9",
+      "9:16",
+      "1:1",
+      "4:5"
+    ],
+    "engines": [
+      "hyperframes"
+    ],
+    "recording": null,
+    "musicMood": "minimal electronic, steady 110 bpm",
+    "hash": "3cdf421a143ea1531eb05bdb79e5f782b3386662a457ee909d486cdb4365bd4f",
+    "sha256": "29f09dbc530e6c022aac55163a53c086fa224a1ca2ec4925e031d2b4e5633d4d",
+    "bytes": 5155,
+    "source": "builtin",
+    "preview": {
+      "mp4": "/assets/looks/terminal.630349b2698e.mp4",
+      "poster": "/assets/looks/terminal.592e4a3c5cb0.webp"
+    }
   }
 ]
