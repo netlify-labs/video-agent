@@ -1388,4 +1388,4 @@ development renders, Remotion on for nothing else, nothing published.
   - **No setup timings or sizes.** The agent wrote its summary to `.netlify/results.md` and left out the JSON block the
     prompt asked for (the same as S1's finding). So `poc.ts`'s per-step timings, sizes and ldd list didn't come back.
     E1's install numbers are still unmeasured.
-  - **The "free-license" usage events:** about 6 stills and 1 video. They went to remotion.pro with `apiKey: null`.
+  - **The "free-license" usage events:** 8 stills (2 rounds × 4 beats) and 1 video. They went to remotion.pro with `apiKey: null`.
