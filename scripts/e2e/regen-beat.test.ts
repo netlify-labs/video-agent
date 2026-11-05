@@ -35,5 +35,16 @@ describe('scripts/e2e/regen-beat.ts', () => {
     const out = lines(ready.stdout)
     expect(out.filter((l) => l.step === 'dry_step')).toHaveLength(2)
     expect(out.find((l) => l.step === 'dry_credits')).toMatchObject({ projected: 60, ceiling: 700 })
+    // The cheaper-model step projects one more scoped run, only when asked for.
+    const cheap = run(['--dry', '--steps', '1,7'], {
+      VIDEO_AGENT_URL: 'https://example.invalid',
+      VIDEO_AGENT_KEY: 'nva_test',
+      NETLIFY_SITE_ID: 'site',
+      SOURCE_ID: 'vid_test',
+      CHEAP_MODEL: '1',
+      EXPECT_MODEL: 'claude-sonnet-5',
+    })
+    expect(cheap.status).toBe(0)
+    expect(lines(cheap.stdout).find((l) => l.step === 'dry_credits')).toMatchObject({ projected: 120 })
   }, 60_000)
 })

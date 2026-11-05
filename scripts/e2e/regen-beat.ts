@@ -5,7 +5,7 @@
 //   npx tsx scripts/e2e/regen-beat.ts --dry        # checks the env, prints the steps and credits; no network
 //   npx tsx scripts/e2e/regen-beat.ts --selftest   # the frame and caption analysis on local fixtures; no network
 //   VIDEO_AGENT_URL=https://<site> VIDEO_AGENT_KEY=nva_… NETLIFY_SITE_ID=<site id> SOURCE_ID=vid_… \
-//     [VOICED_ID=vid_…] [NARRATED_ID=vid_…] [BASELINE=1] [CREDIT_CEILING=700] \
+//     [VOICED_ID=vid_…] [NARRATED_ID=vid_…] [BASELINE=1] [CHEAP_MODEL=1 EXPECT_MODEL=…] [CREDIT_CEILING=700] \
 //     npx tsx scripts/e2e/regen-beat.ts [--steps 1,2]
 //
 // SOURCE_ID is a ready contract-v1 test video with three or more scenes and music. The versions this adds to the
@@ -20,6 +20,8 @@
 //      shift by it, the root grows by it and the MP4 matches the composition.
 //   5. Voiced (VOICED_ID): change a scene's line in words; only that scene's voice entry and WAV change.
 //   6. Narrated (NARRATED_ID): redo a middle scene; the length is unchanged and the narration element is the parent's.
+//   7. Cheaper model (CHEAP_MODEL=1, after an admin sets SCOPED_AGENT_MODEL on the site to EXPECT_MODEL): step 1's
+//      request again; the run used EXPECT_MODEL, step 1's checks pass, and its credits and time sit beside step 1's.
 // Pass: every step run passes; scoped median credits ≤ 60% of a full revision's (step 3 with BASELINE=1, else the
 // parent version's own credits; the summary says which). Exits non-zero on a failed check.
 import { execFileSync, spawnSync } from 'node:child_process'
@@ -41,7 +43,7 @@ const ceiling = Number(env.CREDIT_CEILING ?? 700)
 const steps = new Set(
   (process.argv.includes('--steps')
     ? (process.argv[process.argv.indexOf('--steps') + 1] ?? '')
-    : '1,2,3,4,5,6'
+    : '1,2,3,4,5,6,7'
   )
     .split(',')
     .map(Number),
@@ -51,6 +53,16 @@ const sourceId = env.SOURCE_ID ?? ''
 const voicedId = env.VOICED_ID ?? ''
 const narratedId = env.NARRATED_ID ?? ''
 const baseline = env.BASELINE === '1'
+const cheap = env.CHEAP_MODEL === '1'
+const expectModel = env.EXPECT_MODEL ?? ''
+/** The steps that start a scoped run (each projected at SCOPED_CREDITS). */
+const scopedSteps = [
+  1,
+  4,
+  ...(voicedId ? [5] : []),
+  ...(narratedId ? [6] : []),
+  ...(cheap ? [7] : []),
+].filter((s) => steps.has(s))
 
 // ───── the analysis (also what --selftest exercises) ─────
 
@@ -134,6 +146,8 @@ if (dry)
       VOICED_ID: voicedId,
       NARRATED_ID: narratedId,
       BASELINE: env.BASELINE,
+      CHEAP_MODEL: env.CHEAP_MODEL,
+      EXPECT_MODEL: expectModel,
       CREDIT_CEILING: env.CREDIT_CEILING,
     },
     steps: [
@@ -143,17 +157,14 @@ if (dry)
       '4. Scoped, longer: the scene twice as long; later scenes, captions, root and MP4 move by the delta.',
       `5. Voiced: ${voicedId ? 'change a scene line of VOICED_ID' : 'skipped (no VOICED_ID)'}.`,
       `6. Narrated: ${narratedId ? 'redo a middle scene of NARRATED_ID; length and narration unchanged' : 'skipped (no NARRATED_ID)'}.`,
+      `7. Cheaper model: ${cheap ? `step 1's request again on SCOPED_AGENT_MODEL (expects ${expectModel || 'EXPECT_MODEL, unset'}); credits and time beside step 1's` : 'skipped (CHEAP_MODEL=1 runs it, once SCOPED_AGENT_MODEL is set on the site)'}.`,
       'Versions added to these videos are kept: use test videos.',
     ].filter((s) => steps.has(Number(s[0]))),
     credits: {
-      scopedRuns: [1, 4, ...(voicedId ? [5] : []), ...(narratedId ? [6] : [])].filter((s) => steps.has(s))
-        .length,
+      scopedRuns: scopedSteps.length,
       perScoped: SCOPED_CREDITS,
       baseline: baseline && steps.has(3) ? FULL_CREDITS : 0,
-      projected:
-        [1, 4, ...(voicedId ? [5] : []), ...(narratedId ? [6] : [])].filter((s) => steps.has(s)).length *
-          SCOPED_CREDITS +
-        (baseline && steps.has(3) ? FULL_CREDITS : 0),
+      projected: scopedSteps.length * SCOPED_CREDITS + (baseline && steps.has(3) ? FULL_CREDITS : 0),
       ceiling,
     },
   })
@@ -167,6 +178,7 @@ interface Version {
   beats: { id: string; label: string | null; start: number; duration: number }[] | null
   scope: { beats: { id: string; label: string }[] } | null
   usage: { totalCreditsCost?: number } | null
+  agent?: { model: string | null; effort: string | null } | null
   links?: { video?: string } | null
   output: { durationSec: number } | null
   error?: unknown
@@ -180,6 +192,7 @@ const runs: {
   credits: number | null
   sec: number
   scoped: boolean
+  model: string | null
 }[] = []
 const passed: string[] = []
 const ok = (name: string, f: Record<string, unknown> = {}) => {
@@ -236,8 +249,9 @@ async function revise(step: number, id: string, from: number, change: string, be
   const credits = v?.usage?.totalCreditsCost ?? null
   creditsUsed += credits ?? projected
   const sec = Math.round((Date.now() - t0) / 1000)
-  runs.push({ step, videoId: id, n, credits, sec, scoped: !!beats })
-  log('run', { step, videoId: id, version: n, status: v?.status, credits, sec })
+  const model = v?.agent?.model ?? null
+  runs.push({ step, videoId: id, n, credits, sec, scoped: !!beats, model })
+  log('run', { step, videoId: id, version: n, status: v?.status, credits, sec, model })
   check(v?.status === 'ready', `step ${step}: the version is ready`, { status: v?.status, error: v?.error })
   return v
 }
@@ -303,21 +317,28 @@ try {
   const pBeats = must(p.beats, 'SOURCE_ID has no scenes')
   const middle = middleOf(pBeats, 'SOURCE_ID')
 
-  if (steps.has(1)) {
+  /** Step 1's request and checks (step 7 repeats them on the cheaper model). */
+  const sameLength = async (step: number) => {
     const v = await revise(
-      1,
+      step,
       sourceId,
       p.n,
       "Make the headline say 'Ship on Friday' and slide it in from the left.",
       [middle],
     )
-    check(v.scope?.beats.map((b) => b.id).join() === middle, 'step 1: scope recorded', { scope: v.scope })
-    const r = await frozenUnchanged(1, sourceId, p, v, [middle])
+    check(v.scope?.beats.map((b) => b.id).join() === middle, `step ${step}: scope recorded`, {
+      scope: v.scope,
+    })
+    const r = await frozenUnchanged(step, sourceId, p, v, [middle])
     check(
       sceneCues(r.cs, middle).join(' ').includes('Ship on Friday'),
-      "step 1: the scene's captions have the phrase",
+      `step ${step}: the scene's captions have the phrase`,
     )
-    check(/data-va-layer="music"/.test(r.html), 'step 1: the music is still there')
+    check(/data-va-layer="music"/.test(r.html), `step ${step}: the music is still there`)
+    return v
+  }
+  if (steps.has(1)) {
+    await sameLength(1)
     ok('step 1')
   }
   if (steps.has(2)) {
@@ -428,6 +449,22 @@ try {
     const root = (m: Map<string, Uint8Array>) => attr(load(text(m, 'index.html')).root, 'data-duration')
     check(root(pf) === root(cf), 'step 6: the length is unchanged', { was: root(pf), now: root(cf) })
     ok('step 6')
+  }
+  if (steps.has(7) && cheap) {
+    check(expectModel !== '', 'step 7: EXPECT_MODEL names the model SCOPED_AGENT_MODEL is set to')
+    const v = await sameLength(7)
+    check(v.agent?.model === expectModel, 'step 7: the run used the scoped model', {
+      model: v.agent?.model,
+      expected: expectModel,
+    })
+    const one = runs.find((r) => r.step === 1)
+    const seven = runs.find((r) => r.step === 7)
+    log('compare', {
+      default: one ? { model: one.model, credits: one.credits, sec: one.sec } : 'step 1 not run here',
+      cheaper: seven ? { model: seven.model, credits: seven.credits, sec: seven.sec } : null,
+      note: 'Score both results by hand (docs/spikes.md) before writing advice in the README.',
+    })
+    ok('step 7')
   }
 } catch (e) {
   failure = e instanceof Error ? e : new Error(String(e))
