@@ -250,7 +250,10 @@ export function newAttempt(
   jobId: string,
   versionN: number,
   now: string,
+  /** A scoped revision (redo a scene): SCOPED_AGENT_MODEL / SCOPED_AGENT_EFFORT, when set, pick its model. */
+  o: { scoped?: boolean } = {},
 ): AttemptRow {
+  const c = deps.config
   return {
     id: deps.ids.uuid(),
     jobId,
@@ -259,9 +262,9 @@ export function newAttempt(
     nextActionAt: now,
     leaseUntil: null,
     deployId: null,
-    agent: deps.config.agent,
-    model: deps.config.agentModel,
-    effort: deps.config.agentEffort,
+    agent: c.agent,
+    model: (o.scoped ? c.scopedAgentModel : null) ?? c.agentModel,
+    effort: (o.scoped ? c.scopedAgentEffort : null) ?? c.agentEffort,
     promptTemplateVersion: 0,
     toolVersions: null,
     parentSourceSha256: null,
@@ -616,7 +619,7 @@ export async function reviseVideo(
       if (look && restyle) await adoptLookSnapshot(repo, deps, jobId, look, now)
       await repo.insertVersionComments(feedback)
       await repo.insertVersionMedia(media)
-      await repo.insertAttempt(newAttempt(deps, jobId, n, now))
+      await repo.insertAttempt(newAttempt(deps, jobId, n, now, { scoped: !!scope }))
       await repo.updateJob(jobId, {
         latestVersion: n,
         nextVersionN: n + 1,
@@ -767,7 +770,7 @@ export async function retryVersion(deps: Deps, principal: Principal, jobId: stri
     if (await hasUnfinished(repo, jobId))
       throw new ApiError('conflict', 'Another version of this video is still in progress.')
     const now = deps.clock.now().toISOString()
-    const attempt = newAttempt(deps, jobId, n, now)
+    const attempt = newAttempt(deps, jobId, n, now, { scoped: !!version.scope })
     await repo.insertAttempt(attempt)
     // A frozen narration's takes move to the new attempt (re-locked and re-checked), so a failed one holds nothing.
     const takes = version.frozen?.narration?.takes.map((t) => t.mediaId) ?? []

@@ -13,6 +13,9 @@ export interface Config {
   agent: string
   agentModel: string | null
   agentEffort: string | null
+  /** Redo a scene: the model and effort of scoped runs (revise and retry); null: the deployment's. */
+  scopedAgentModel: string | null
+  scopedAgentEffort: string | null
   maxActiveRuns: number
   authoringDeadlineMin: number
   queueTimeoutMin: number
@@ -91,6 +94,8 @@ export function readConfig(env: Record<string, string | undefined>): Config {
     agent: env.AGENT ?? 'claude',
     agentModel: env.AGENT_MODEL ?? null,
     agentEffort: env.AGENT_EFFORT ?? null,
+    scopedAgentModel: env.SCOPED_AGENT_MODEL || null,
+    scopedAgentEffort: env.SCOPED_AGENT_EFFORT || null,
     maxActiveRuns: num(env.MAX_ACTIVE_RUNS, 3),
     authoringDeadlineMin: num(env.AUTHORING_DEADLINE_MIN, 22),
     queueTimeoutMin: num(env.QUEUE_TIMEOUT_MIN, 60),
