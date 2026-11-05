@@ -1,9 +1,12 @@
 // Preview bundles (plan v2 §7): extracted from each ready version's source archive, validated, immutable, staged
 // then committed, and never resurrected for a deleted video.
 import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
 import {
   bundleFileKey,
   bundleIndexKey,
+  contractForEngine,
+  contractOf,
   ensureBundle,
   missingLocalFiles,
   readBundleIndex,
@@ -153,5 +156,43 @@ describe('preview bundles', () => {
     // CSS url() references count too.
     files.set('style.css', new TextEncoder().encode("h1 { background: url('fonts/missing.woff2') }"))
     expect(missingLocalFiles(files)).toEqual(['fonts/missing.woff2'])
+  })
+})
+
+describe('contract per engine (render-engines §4.1)', () => {
+  const fx = (f: string) => readFileSync(new URL(`./fixtures/contract1/${f}`, import.meta.url), 'utf8')
+  const files = () =>
+    new Map([
+      ['index.html', new TextEncoder().encode(fx('index.html'))],
+      ['summary.json', new TextEncoder().encode(fx('summary.json'))],
+    ])
+
+  it('HyperFrames, or a row from before engines, gets the contract check unchanged', () => {
+    expect(contractForEngine('hyperframes', files())).toEqual(contractOf(files()))
+    expect(contractForEngine(undefined, files())).toEqual({ version: 1, violations: [] })
+  })
+
+  it('another engine is not editable yet, whatever its files', () => {
+    expect(contractForEngine('remotion', files())).toEqual({
+      version: null,
+      violations: ["Editing isn't available for Remotion videos yet."],
+    })
+  })
+
+  it("a Remotion version's bundle records no contract, so it isn't editable", async () => {
+    const h = harness()
+    h.deps.nextSource = tarGz([
+      { name: 'video/index.html', body: fx('index.html') },
+      { name: 'video/summary.json', body: fx('summary.json') },
+    ])
+    const v = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }))
+    await h.deps.store.updateVersion(v.id, 1, { engine: 'remotion' })
+    await h.drive(4)
+    const video = await h.json(await h.call('GET', `/api/v1/videos/${v.id}`, { as: h.member }))
+    expect(video.versions[0]).toMatchObject({ status: 'ready', editable: false })
+    expect((await readBundleIndex(h.deps, v.id, 1))?.contract).toEqual({
+      version: null,
+      violations: ["Editing isn't available for Remotion videos yet."],
+    })
   })
 })

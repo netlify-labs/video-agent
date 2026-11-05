@@ -105,6 +105,27 @@ describe('edit drafts', () => {
     expect((await h.json(res)).error.message).toContain('Ask for a revision instead')
   })
 
+  it('a rev of a version on another engine records no contract (render-engines §4.1)', async () => {
+    const h = harness()
+    const id = await editableVideo(h)
+    const e = await h.json<Edit>(await open(h, id))
+    const manifest = async (rev: number) =>
+      JSON.parse(
+        new TextDecoder().decode(
+          await h.deps.blobs.get('bundles', `${editRevPrefix(id, 1, e.id, rev)}manifest.json`),
+        ),
+      )
+    await save(h, e.id, { rev: 0, ops: [{ op: 'retime', beat: 'intro', duration: 4.5 }] })
+    expect((await manifest(1)).contract).toEqual({ version: 1, violations: [] })
+    // Only a bug could put a draft on a Remotion version; the rev still says it isn't editable.
+    await h.deps.store.updateVersion(id, 1, { engine: 'remotion' })
+    await save(h, e.id, { rev: 1, ops: [{ op: 'retime', beat: 'intro', duration: 5 }] })
+    expect((await manifest(2)).contract).toEqual({
+      version: null,
+      violations: ["Editing isn't available for Remotion videos yet."],
+    })
+  })
+
   it('saves the full op list as the next rev, re-applied on the server', async () => {
     const h = harness()
     const id = await editableVideo(h)

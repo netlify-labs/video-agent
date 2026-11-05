@@ -13,6 +13,7 @@ import {
 import { sha256Hex } from '../lib/crypto.js'
 import { validate, type Summary } from '../lib/contract.js'
 import { readTarGz, TarError } from '../lib/tar.js'
+import { engineInfo, type EngineId } from './engines.js'
 import type { OutputRow } from './types.js'
 
 export interface BundleEntry {
@@ -96,6 +97,19 @@ export function contractOf(files: Map<string, Uint8Array>): { version: 1 | null;
 }
 
 /**
+ * The contract check for a version's engine (render-engines plan §4.1): HyperFrames has editing contract v1; any other
+ * engine isn't editable until its own contract lands. A missing engine is a row written before engines: HyperFrames.
+ */
+export function contractForEngine(
+  engine: EngineId | undefined,
+  files: Map<string, Uint8Array>,
+): { version: 1 | null; violations: string[] } {
+  const id = engine ?? 'hyperframes'
+  if (id === 'hyperframes') return contractOf(files)
+  return { version: null, violations: [`Editing isn't available for ${engineInfo(id).name} videos yet.`] }
+}
+
+/**
  * A version's reference entries (src/lib/bundle-references.ts), as finalize wrote them next to its source archive.
  * None for a version without (every one saved before them). Throws TarError when the list isn't the one pinned.
  */
@@ -160,6 +174,7 @@ export async function ensureBundle(
   }
 
   for (const [path, bytes] of files) await deps.blobs.set('bundles', bundleFileKey(jobId, n, path), bytes)
+  const engine = (await deps.store.getVersion(jobId, n))?.engine
   const index: BundleIndex = {
     v: 1,
     jobId,
@@ -176,7 +191,7 @@ export async function ensureBundle(
     createdAt: deps.clock.now().toISOString(),
     contract: (() => {
       const all = new Map([...files, ...refFiles])
-      const c = contractOf(all)
+      const c = contractForEngine(engine, all)
       const missing = c.version === 1 ? missingLocalFiles(all) : []
       // Editing renders the saved composition as is, so it must have every file it uses.
       return missing.length

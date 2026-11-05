@@ -45,7 +45,7 @@ import { contextMeta } from '../generated/context.js'
 import {
   bundleFileKey,
   bundlePrefix,
-  contractOf,
+  contractForEngine,
   ensureBundle,
   type BundleEntry,
   type BundleIndex,
@@ -400,13 +400,14 @@ async function buildRev(
   const { changed, list } = r
   const prefix = editRevPrefix(e.jobId, e.baseN, e.id, rev)
   for (const [path, bytes] of changed) await deps.blobs.set('bundles', `${prefix}f/${path}`, bytes)
+  const engine = (await repo.getVersion(e.jobId, e.baseN))?.engine
   const index: BundleIndex = {
     v: 1,
     jobId: e.jobId,
     versionN: e.baseN,
     files: list,
     createdAt: deps.clock.now().toISOString(),
-    contract: contractOf(changed),
+    contract: contractForEngine(engine, changed),
   }
   await deps.blobs.set('bundles', `${prefix}manifest.json`, JSON.stringify(index), {
     contentType: 'application/json',
