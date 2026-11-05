@@ -855,7 +855,7 @@ a rule, a section number and a serif headline in a slow pan; §5's table is upda
 
 ## Screen recording demo spikes (docs/plans/2026-11-04-screen-recording-demo.md §10 Phase 0)
 
-### D1: recording clips at an offset and a rate in a later scene (2026-11-05, `spikes/d1`, `npx tsx spikes/d1/render.ts`; local only so far)
+### D1: recording clips at an offset and a rate in a later scene (2026-11-05, `spikes/d1`, `npx tsx spikes/d1/render.ts`; local, then run `6aec398430f5a5123b566e38`)
 
 The fixture is 2560×1440 H.264 at 30 fps with 1 s GOPs (`-g 30 -sc_threshold 0`). Every frame carries its own number
 as a 4×4 grid of 160 px blocks (11 bits plus 5 check bits), so output frames are read back by sampling block
@@ -887,7 +887,10 @@ What this means:
 - `data-media-start` is the step's `in` in source seconds. `data-playback-rate` = (out − in) / slot.
 - Snap `in` to frame times (k/30) so planned frames don't sit on a rounding boundary.
 - Holds still need `<step>.hold.jpg` (§5.3), because a clip doesn't hold a mid-file frame past its `data-duration`.
-- The runner render speed (pass: under 4 s per output second) is still to be measured, in the same run as D3.
+- **On the runner** (run `6aec398430f5a5123b566e38`, shared with D3, 108 credits for both): **0 wrong frames**, render
+  about **1.6 s per output second** (pass: under 4 s). A 90 s demo renders in about 2.5 minutes, well inside the
+  22-minute run.
+- **Pass.**
 
 ### D2: CDP screencast frame rate and clock (2026-11-05, `spikes/d2`, `npx tsx spikes/d2/screencast.ts`)
 
@@ -927,7 +930,7 @@ Changes for 4.1a:
   An idle page sends nothing, so gaps can be long.
 - The default viewport stays 1280×800.
 
-### D3: recording analysis time (2026-11-05, `spikes/d3`, `npx tsx spikes/d3/analyze.ts`; local only so far)
+### D3: recording analysis time (2026-11-05, `spikes/d3`, `npx tsx spikes/d3/analyze.ts`; local, then run `6aec398430f5a5123b566e38`)
 
 The fixture is drawn by ffmpeg to look like a screen recording:
 - 2560×1440 at 30 fps, H.264 with 1 s GOPs, about 3.7 Mbps, 5 minutes, 131 MB.
@@ -955,7 +958,15 @@ What this means for `recording.ts analyze`:
 - Take **idle from the diff pass**, not from freezedetect, which misses cursor-only motion. freezedetect can stay as a
   cheap cross-check.
 - scdet threshold 10 holds for this fixture.
-- The runner number (4 CPUs) is still to come, from the same run as D1.
+- **On the runner** (4 CPUs, same run as D1): pipeline about **65 s** (pass: under 3 min), from the cache about
+  **16 s** (pass: under 20 s, but with little room: the cache path makes 72 + 12 seeks at 1440p, so cap the sheets or
+  reuse them from the archive if it creeps up). That includes the Kokoro speech fixture and Parakeet on 5 minutes.
+- **Pass.**
+- **What was lost:** the run's final answer was replaced by the platform's deploy-fix note (below), so only the
+  run's summary numbers survived, not the per-stage JSON. Rerun `spikes/prompts/d1-d3.md` if stage detail is needed.
+- **Lesson for runs on spike branches:** cut the branch from **current main**. This branch predated
+  `20261105062314_engines`. That migration was already applied to the shared preview database, so the run's preview
+  deploy failed until the agent restored the file. Nothing was published or landed.
 
 ### D4: H.264 in the browser with Mediabunny (2026-11-05, `spikes/d4`, `npx tsx spikes/d4/encode.ts --mediabunny <dist/bundles>`)
 

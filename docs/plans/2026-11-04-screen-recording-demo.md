@@ -1295,6 +1295,31 @@ The prompt tells the agent the budget and asks for one render, at the end.
 | D5 | Assembly memory for a 150 MB upload in `media-assemble-background`, after removing the extra copy (pass the `Buffer` through) and hashing part by part | A synthetic upload on a deploy preview with `ALLOW_NON_PRODUCTION` | Peak under 700 MB at the default 1024 MB; otherwise recordings drop to 100 MB and streaming assembly moves into phase 5 |
 | D6 | Does the auto zoom look good? | `recording.ts compose` on 10 real recordings (5 from the CLI prototype, 5 uploads), rendered locally with `npx hyperframes render` (no credits), shown to the owner | The owner picks "good" for 8 of 10 without edits |
 
+**Phase 0 as built (2026-11-05, results in `docs/spikes.md` D1–D5):** every spike passed, with these changes to
+the plan.
+- **D1:**
+  - Recording clips use `data-start="0"` inside their beat and **no** `data-hf-media-start-basis`. The basis changes
+    nothing, and `global` would break retimes.
+  - Snap `in` to frame times.
+  - Holds keep `<step>.hold.jpg`: a clip shows nothing past its `data-duration`.
+  - Render is about 1.6 s per output second on the runner.
+- **D2:** `video-agent record` launches with `--force-device-scale-factor=2`, `viewport: null` and a CDP
+  `Emulation.setDeviceMetricsOverride`. Playwright's `deviceScaleFactor` alone gives 1×-size frames. It also runs a
+  click-flash calibration before the take, about 46 ms of paint latency, stored in the trace header.
+- **D3:**
+  - One ffmpeg decode, split into freezedetect + scdet and the grey diff frames.
+  - Idle comes from the diff pass, because freezedetect misses cursor-only motion.
+  - scdet threshold 10.
+  - The pipeline is about 65 s on the runner and about 16 s from the cache.
+- **D4:**
+  - Path B uses `MediaStreamVideoTrackSource` with `sizeChangeBehavior: 'contain'` where it works (Chromium).
+  - WebKit and Firefox use a `CanvasSource` fallback with `latencyMode: 'quality'`. MediaRecorder isn't needed.
+  - Conversion runs in a Worker at about 0.2× real time.
+  - Mediabunny is pinned to a release at least two weeks old.
+- **D5:** removing the copy isn't enough. Assembly preallocates one buffer and stores it as a **stream** (about
+  430 MB peak, against 800–1,000 MB for any buffered body). The real 150 MB check on Netlify is part of 1.2c
+  (owner, 2026-11-05).
+
 ### Phase 1: recordings in the library
 
 - **1.1** The role table replaces the `isTakeRole` branches in `media-uploads.ts`. Takes keep their behaviour, and a
