@@ -284,7 +284,8 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
     insertVersion: async (row) => {
       const k = vkey(row.jobId, row.n)
       if (state.versions.has(k)) throw new Error(`duplicate version ${k}`)
-      state.versions.set(k, clone(row))
+      // Postgres fills the column default; so does the memory store.
+      state.versions.set(k, clone({ ...row, engine: row.engine ?? 'hyperframes' }))
     },
     getVersion: async (jobId, n) => clone(state.versions.get(vkey(jobId, n)) ?? null),
     listVersions: async (jobId) =>

@@ -1,6 +1,35 @@
 // The same lifecycle against real Postgres semantics (PGlite + the committed migrations).
 import { describe, expect, it } from 'vitest'
+import type { VersionRow } from '../src/domain/types.js'
+import { createMemoryStore } from '../src/store/memory.js'
+import type { Store } from '../src/store/types.js'
 import { harness, pgStore, PROMPT } from './helpers.js'
+
+const bareVersion = (jobId: string, extra: Partial<VersionRow> = {}): VersionRow => ({
+  jobId,
+  n: 1,
+  prompt: PROMPT,
+  authorId: 'u_member',
+  apiKeyId: null,
+  targetDurationSec: null,
+  parentN: null,
+  webhookUrl: null,
+  status: 'queued',
+  createdAt: '2026-11-05T00:00:00.000Z',
+  ...extra,
+})
+
+// versions.engine (render-engines plan §4.2): rows that don't say read as hyperframes; remotion round-trips.
+async function engineRoundTrip(store: Store) {
+  await store.tx(async (repo) => {
+    await repo.insertVersion(bareVersion('j_default'))
+    await repo.insertVersion(bareVersion('j_remotion', { engine: 'remotion' }))
+  })
+  return store.tx(async (repo) => [
+    (await repo.getVersion('j_default', 1))?.engine,
+    (await repo.getVersion('j_remotion', 1))?.engine,
+  ])
+}
 
 describe('postgres store', () => {
   it('runs create → ready → revise → publish → list → delete', async () => {
@@ -44,5 +73,21 @@ describe('postgres store', () => {
     }
     expect(max).toBeLessThanOrEqual(2)
     expect(h.deps.runner.starts).toHaveLength(6)
+  })
+
+  it('versions.engine defaults to hyperframes and round-trips remotion', async () => {
+    expect(await engineRoundTrip(await pgStore())).toEqual(['hyperframes', 'remotion'])
+  })
+
+  it('the memory store fills the same default', async () => {
+    expect(await engineRoundTrip(createMemoryStore())).toEqual(['hyperframes', 'remotion'])
+  })
+
+  it('a video made through the API records hyperframes', async () => {
+    const h = harness({}, { store: await pgStore() })
+    const video = await h.json(
+      await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }),
+    )
+    expect((await h.deps.store.tx((repo) => repo.getVersion(video.id, 1)))?.engine).toBe('hyperframes')
   })
 })

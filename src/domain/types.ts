@@ -1,5 +1,6 @@
 // Domain records. These mirror the database tables (db/schema.ts) and the in-memory store.
 import type { BundleReference } from '../lib/bundle-references.js'
+import type { EngineId } from './engines.js'
 import type { Language } from '../lib/language.js'
 import type { FrozenNarration } from '../lib/run-manifest.js'
 import type { MediaKind } from '../lib/media/classify.js'
@@ -284,6 +285,8 @@ export interface VersionRow {
   frozen?: FrozenBundle | null
   /** Missing on rows written before sound existed: silent. */
   sound?: VideoSound
+  /** The render engine (render-engines plan §4.2). Missing on rows written before engines existed: hyperframes. */
+  engine?: EngineId
   /** Null (or missing) when the version has no voice-over. */
   voiceover?: Voiceover | null
   /** Recorded narration; null (or missing) when the version has none. */

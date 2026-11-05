@@ -116,6 +116,8 @@ export const versions = pgTable(
     frozen: jsonb('frozen'),
     // 'silent', 'music' or 'music_sfx': what the run is asked to do with sound.
     sound: text('sound').notNull().default('silent'),
+    // The render engine that wrote the composition (src/domain/engines.ts); a video's engine never changes.
+    engine: text('engine').notNull().default('hyperframes'),
     // { voice, speed, script } when the run speaks a voice-over; null when it doesn't.
     voiceover: jsonb('voiceover'),
     // Recorded narration: the resolved op, how the bus was made and the bus itself; null when there is none.
