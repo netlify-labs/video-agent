@@ -1,0 +1,19 @@
+# Spike A4: can GITHUB_TOKEN download images pasted into a private repo's PR description?
+# Copy to .github/workflows/ in the private sandbox repo, with spikes/a/scripts/a4-probe.mjs at .github/a4-probe.mjs.
+# Open a PR whose description has a pasted PNG (drag it into the editor, so it becomes a user-attachments link).
+name: A4 probe
+on:
+  pull_request:
+    types: [opened, edited, labeled]
+permissions:
+  contents: read
+  pull-requests: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { sparse-checkout: .github }
+      - run: node .github/a4-probe.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}

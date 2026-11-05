@@ -1,0 +1,865 @@
+# Spike A3: run the probe (scripts/a3-probe.mjs, embedded below so no job needs contents: read for a checkout)
+# under each permissions block, on every event the action handles. Copy to .github/workflows/ in the sandbox repo.
+# Regenerate with: python3 spikes/a/scripts/gen-a3-workflow.py
+# A3_LOGINS (repo variable): extra logins to check with the collaborator-permission endpoint, for example the private
+# org member and the outside account.
+name: A3 probe
+on:
+  pull_request:
+    types: [opened, labeled, synchronize]
+  issue_comment:
+    types: [created]
+  release:
+    types: [published]
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  none:
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          PERMS_LABEL: none
+          A3_LOGINS: ${{ vars.A3_LOGINS }}
+        run: |
+          cat > "$RUNNER_TEMP/a3-probe.mjs" <<'EOF_PROBE'
+            // Spike A3: which GITHUB_TOKEN permissions each operation needs, per event, and what the collaborator-permission
+            // endpoint says about a private org member. Runs in the sandbox repo under several `permissions:` blocks
+            // (workflows/a3-probe.yml) and writes one row per operation to the job summary. Cleans up what it creates.
+            // No dependencies; Node 20+.
+            import { appendFileSync, readFileSync } from 'node:fs'
+
+            const token = process.env.GH_TOKEN
+            const repo = process.env.GITHUB_REPOSITORY
+            const label = process.env.PERMS_LABEL ?? '?'
+            const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'))
+            const eventName = process.env.GITHUB_EVENT_NAME
+            const api = 'https://api.github.com'
+            const rows = []
+
+            async function gh(method, path, body, extraHeaders = {}) {
+              const url = path.startsWith('http') ? path : `${api}${path}`
+              const res = await fetch(url, {
+                method,
+                headers: {
+                  authorization: `Bearer ${token}`,
+                  accept: 'application/vnd.github+json',
+                  'x-github-api-version': '2022-11-28',
+                  ...(body && !(body instanceof Uint8Array) ? { 'content-type': 'application/json' } : {}),
+                  ...extraHeaders,
+                },
+                body: body instanceof Uint8Array ? body : body ? JSON.stringify(body) : undefined,
+              })
+              const text = await res.text()
+              let json = null
+              try {
+                json = text ? JSON.parse(text) : null
+              } catch {
+                json = null
+              }
+              return { status: res.status, json, remaining: res.headers.get('x-ratelimit-remaining') }
+            }
+
+            function row(op, r, note = '') {
+              rows.push({ op, status: r.status, note: note || (r.json?.message ?? '') })
+              console.log(`a3 perms=${label} event=${eventName} op=${op} status=${r.status} ${note}`)
+            }
+
+            const pr = event.pull_request ?? (event.issue?.pull_request ? event.issue : null)
+            const issueNumber = pr?.number
+
+            // People: the sender, the PR author, the commenter, plus any logins named in A3_LOGINS (comma-separated).
+            const people = new Map()
+            const add = (login, why, assoc) => {
+              if (!login) return
+              const p = people.get(login) ?? { why: [], assoc: new Set() }
+              p.why.push(why)
+              if (assoc) p.assoc.add(assoc)
+              people.set(login, p)
+            }
+            add(event.sender?.login, 'sender')
+            add(pr?.user?.login, 'pr author', pr?.author_association)
+            add(event.comment?.user?.login, 'commenter', event.comment?.author_association)
+            for (const l of (process.env.A3_LOGINS ?? '')
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean))
+              add(l, 'listed')
+
+            for (const [login, p] of people) {
+              const r = await gh('GET', `/repos/${repo}/collaborators/${login}/permission`)
+              row(
+                `permission ${login} (${p.why.join('+')})`,
+                r,
+                `permission=${r.json?.permission ?? '-'} role_name=${r.json?.role_name ?? '-'} author_association=${[...p.assoc].join('/') || '-'}`,
+              )
+            }
+
+            row('GET /user', await gh('GET', '/user'))
+
+            if (issueNumber) {
+              const c = await gh('POST', `/repos/${repo}/issues/${issueNumber}/comments`, {
+                body: `<!-- a3-probe -->\nA3 probe (${label}, ${eventName}). Deleted right after.`,
+              })
+              row('create PR comment', c, c.json?.user ? `author=${c.json.user.login} type=${c.json.user.type}` : '')
+              if (c.json?.id) {
+                row(
+                  'edit PR comment',
+                  await gh('PATCH', `/repos/${repo}/issues/comments/${c.json.id}`, { body: 'A3 probe (edited)' }),
+                )
+                row('list PR comments', await gh('GET', `/repos/${repo}/issues/${issueNumber}/comments?per_page=5`))
+                row('delete PR comment', await gh('DELETE', `/repos/${repo}/issues/comments/${c.json.id}`))
+              }
+            }
+
+            if (event.comment?.id) {
+              const r = await gh('POST', `/repos/${repo}/issues/comments/${event.comment.id}/reactions`, {
+                content: 'eyes',
+              })
+              row('react to comment', r)
+              if (r.json?.id)
+                await gh('DELETE', `/repos/${repo}/issues/comments/${event.comment.id}/reactions/${r.json.id}`)
+            }
+
+            if (event.release?.id) {
+              const id = event.release.id
+              const body = `${event.release.body ?? ''}\n<!-- video-agent:start -->A3 probe<!-- video-agent:end -->`
+              row('edit release body', await gh('PATCH', `/repos/${repo}/releases/${id}`, { body }))
+              await gh('PATCH', `/repos/${repo}/releases/${id}`, { body: event.release.body ?? '' })
+              const uploadUrl = event.release.upload_url.replace(/\{.*\}$/, '')
+              const a = await gh('POST', `${uploadUrl}?name=a3-probe-${label}.txt`, new TextEncoder().encode('a3'), {
+                'content-type': 'text/plain',
+              })
+              row('upload release asset', a)
+              if (a.json?.id) await gh('DELETE', `/repos/${repo}/releases/assets/${a.json.id}`)
+            }
+
+            const rl = await gh('GET', '/rate_limit')
+            row(
+              'rate limit',
+              rl,
+              `core remaining=${rl.json?.resources?.core?.remaining} limit=${rl.json?.resources?.core?.limit}`,
+            )
+
+            const md = [
+              `### A3 probe: \`${label}\` on \`${eventName}\`${event.action ? ` (${event.action})` : ''}`,
+              '',
+              '| Operation | Status | Note |',
+              '| --- | --- | --- |',
+              ...rows.map((r) => `| ${r.op} | ${r.status} | ${String(r.note).replace(/\|/g, '\\|')} |`),
+              '',
+            ].join('\n')
+            if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, md)
+            console.log(md)
+          EOF_PROBE
+          node "$RUNNER_TEMP/a3-probe.mjs"
+  pr-write:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          PERMS_LABEL: pr-write
+          A3_LOGINS: ${{ vars.A3_LOGINS }}
+        run: |
+          cat > "$RUNNER_TEMP/a3-probe.mjs" <<'EOF_PROBE'
+            // Spike A3: which GITHUB_TOKEN permissions each operation needs, per event, and what the collaborator-permission
+            // endpoint says about a private org member. Runs in the sandbox repo under several `permissions:` blocks
+            // (workflows/a3-probe.yml) and writes one row per operation to the job summary. Cleans up what it creates.
+            // No dependencies; Node 20+.
+            import { appendFileSync, readFileSync } from 'node:fs'
+
+            const token = process.env.GH_TOKEN
+            const repo = process.env.GITHUB_REPOSITORY
+            const label = process.env.PERMS_LABEL ?? '?'
+            const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'))
+            const eventName = process.env.GITHUB_EVENT_NAME
+            const api = 'https://api.github.com'
+            const rows = []
+
+            async function gh(method, path, body, extraHeaders = {}) {
+              const url = path.startsWith('http') ? path : `${api}${path}`
+              const res = await fetch(url, {
+                method,
+                headers: {
+                  authorization: `Bearer ${token}`,
+                  accept: 'application/vnd.github+json',
+                  'x-github-api-version': '2022-11-28',
+                  ...(body && !(body instanceof Uint8Array) ? { 'content-type': 'application/json' } : {}),
+                  ...extraHeaders,
+                },
+                body: body instanceof Uint8Array ? body : body ? JSON.stringify(body) : undefined,
+              })
+              const text = await res.text()
+              let json = null
+              try {
+                json = text ? JSON.parse(text) : null
+              } catch {
+                json = null
+              }
+              return { status: res.status, json, remaining: res.headers.get('x-ratelimit-remaining') }
+            }
+
+            function row(op, r, note = '') {
+              rows.push({ op, status: r.status, note: note || (r.json?.message ?? '') })
+              console.log(`a3 perms=${label} event=${eventName} op=${op} status=${r.status} ${note}`)
+            }
+
+            const pr = event.pull_request ?? (event.issue?.pull_request ? event.issue : null)
+            const issueNumber = pr?.number
+
+            // People: the sender, the PR author, the commenter, plus any logins named in A3_LOGINS (comma-separated).
+            const people = new Map()
+            const add = (login, why, assoc) => {
+              if (!login) return
+              const p = people.get(login) ?? { why: [], assoc: new Set() }
+              p.why.push(why)
+              if (assoc) p.assoc.add(assoc)
+              people.set(login, p)
+            }
+            add(event.sender?.login, 'sender')
+            add(pr?.user?.login, 'pr author', pr?.author_association)
+            add(event.comment?.user?.login, 'commenter', event.comment?.author_association)
+            for (const l of (process.env.A3_LOGINS ?? '')
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean))
+              add(l, 'listed')
+
+            for (const [login, p] of people) {
+              const r = await gh('GET', `/repos/${repo}/collaborators/${login}/permission`)
+              row(
+                `permission ${login} (${p.why.join('+')})`,
+                r,
+                `permission=${r.json?.permission ?? '-'} role_name=${r.json?.role_name ?? '-'} author_association=${[...p.assoc].join('/') || '-'}`,
+              )
+            }
+
+            row('GET /user', await gh('GET', '/user'))
+
+            if (issueNumber) {
+              const c = await gh('POST', `/repos/${repo}/issues/${issueNumber}/comments`, {
+                body: `<!-- a3-probe -->\nA3 probe (${label}, ${eventName}). Deleted right after.`,
+              })
+              row('create PR comment', c, c.json?.user ? `author=${c.json.user.login} type=${c.json.user.type}` : '')
+              if (c.json?.id) {
+                row(
+                  'edit PR comment',
+                  await gh('PATCH', `/repos/${repo}/issues/comments/${c.json.id}`, { body: 'A3 probe (edited)' }),
+                )
+                row('list PR comments', await gh('GET', `/repos/${repo}/issues/${issueNumber}/comments?per_page=5`))
+                row('delete PR comment', await gh('DELETE', `/repos/${repo}/issues/comments/${c.json.id}`))
+              }
+            }
+
+            if (event.comment?.id) {
+              const r = await gh('POST', `/repos/${repo}/issues/comments/${event.comment.id}/reactions`, {
+                content: 'eyes',
+              })
+              row('react to comment', r)
+              if (r.json?.id)
+                await gh('DELETE', `/repos/${repo}/issues/comments/${event.comment.id}/reactions/${r.json.id}`)
+            }
+
+            if (event.release?.id) {
+              const id = event.release.id
+              const body = `${event.release.body ?? ''}\n<!-- video-agent:start -->A3 probe<!-- video-agent:end -->`
+              row('edit release body', await gh('PATCH', `/repos/${repo}/releases/${id}`, { body }))
+              await gh('PATCH', `/repos/${repo}/releases/${id}`, { body: event.release.body ?? '' })
+              const uploadUrl = event.release.upload_url.replace(/\{.*\}$/, '')
+              const a = await gh('POST', `${uploadUrl}?name=a3-probe-${label}.txt`, new TextEncoder().encode('a3'), {
+                'content-type': 'text/plain',
+              })
+              row('upload release asset', a)
+              if (a.json?.id) await gh('DELETE', `/repos/${repo}/releases/assets/${a.json.id}`)
+            }
+
+            const rl = await gh('GET', '/rate_limit')
+            row(
+              'rate limit',
+              rl,
+              `core remaining=${rl.json?.resources?.core?.remaining} limit=${rl.json?.resources?.core?.limit}`,
+            )
+
+            const md = [
+              `### A3 probe: \`${label}\` on \`${eventName}\`${event.action ? ` (${event.action})` : ''}`,
+              '',
+              '| Operation | Status | Note |',
+              '| --- | --- | --- |',
+              ...rows.map((r) => `| ${r.op} | ${r.status} | ${String(r.note).replace(/\|/g, '\\|')} |`),
+              '',
+            ].join('\n')
+            if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, md)
+            console.log(md)
+          EOF_PROBE
+          node "$RUNNER_TEMP/a3-probe.mjs"
+  issues-write:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          PERMS_LABEL: issues-write
+          A3_LOGINS: ${{ vars.A3_LOGINS }}
+        run: |
+          cat > "$RUNNER_TEMP/a3-probe.mjs" <<'EOF_PROBE'
+            // Spike A3: which GITHUB_TOKEN permissions each operation needs, per event, and what the collaborator-permission
+            // endpoint says about a private org member. Runs in the sandbox repo under several `permissions:` blocks
+            // (workflows/a3-probe.yml) and writes one row per operation to the job summary. Cleans up what it creates.
+            // No dependencies; Node 20+.
+            import { appendFileSync, readFileSync } from 'node:fs'
+
+            const token = process.env.GH_TOKEN
+            const repo = process.env.GITHUB_REPOSITORY
+            const label = process.env.PERMS_LABEL ?? '?'
+            const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'))
+            const eventName = process.env.GITHUB_EVENT_NAME
+            const api = 'https://api.github.com'
+            const rows = []
+
+            async function gh(method, path, body, extraHeaders = {}) {
+              const url = path.startsWith('http') ? path : `${api}${path}`
+              const res = await fetch(url, {
+                method,
+                headers: {
+                  authorization: `Bearer ${token}`,
+                  accept: 'application/vnd.github+json',
+                  'x-github-api-version': '2022-11-28',
+                  ...(body && !(body instanceof Uint8Array) ? { 'content-type': 'application/json' } : {}),
+                  ...extraHeaders,
+                },
+                body: body instanceof Uint8Array ? body : body ? JSON.stringify(body) : undefined,
+              })
+              const text = await res.text()
+              let json = null
+              try {
+                json = text ? JSON.parse(text) : null
+              } catch {
+                json = null
+              }
+              return { status: res.status, json, remaining: res.headers.get('x-ratelimit-remaining') }
+            }
+
+            function row(op, r, note = '') {
+              rows.push({ op, status: r.status, note: note || (r.json?.message ?? '') })
+              console.log(`a3 perms=${label} event=${eventName} op=${op} status=${r.status} ${note}`)
+            }
+
+            const pr = event.pull_request ?? (event.issue?.pull_request ? event.issue : null)
+            const issueNumber = pr?.number
+
+            // People: the sender, the PR author, the commenter, plus any logins named in A3_LOGINS (comma-separated).
+            const people = new Map()
+            const add = (login, why, assoc) => {
+              if (!login) return
+              const p = people.get(login) ?? { why: [], assoc: new Set() }
+              p.why.push(why)
+              if (assoc) p.assoc.add(assoc)
+              people.set(login, p)
+            }
+            add(event.sender?.login, 'sender')
+            add(pr?.user?.login, 'pr author', pr?.author_association)
+            add(event.comment?.user?.login, 'commenter', event.comment?.author_association)
+            for (const l of (process.env.A3_LOGINS ?? '')
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean))
+              add(l, 'listed')
+
+            for (const [login, p] of people) {
+              const r = await gh('GET', `/repos/${repo}/collaborators/${login}/permission`)
+              row(
+                `permission ${login} (${p.why.join('+')})`,
+                r,
+                `permission=${r.json?.permission ?? '-'} role_name=${r.json?.role_name ?? '-'} author_association=${[...p.assoc].join('/') || '-'}`,
+              )
+            }
+
+            row('GET /user', await gh('GET', '/user'))
+
+            if (issueNumber) {
+              const c = await gh('POST', `/repos/${repo}/issues/${issueNumber}/comments`, {
+                body: `<!-- a3-probe -->\nA3 probe (${label}, ${eventName}). Deleted right after.`,
+              })
+              row('create PR comment', c, c.json?.user ? `author=${c.json.user.login} type=${c.json.user.type}` : '')
+              if (c.json?.id) {
+                row(
+                  'edit PR comment',
+                  await gh('PATCH', `/repos/${repo}/issues/comments/${c.json.id}`, { body: 'A3 probe (edited)' }),
+                )
+                row('list PR comments', await gh('GET', `/repos/${repo}/issues/${issueNumber}/comments?per_page=5`))
+                row('delete PR comment', await gh('DELETE', `/repos/${repo}/issues/comments/${c.json.id}`))
+              }
+            }
+
+            if (event.comment?.id) {
+              const r = await gh('POST', `/repos/${repo}/issues/comments/${event.comment.id}/reactions`, {
+                content: 'eyes',
+              })
+              row('react to comment', r)
+              if (r.json?.id)
+                await gh('DELETE', `/repos/${repo}/issues/comments/${event.comment.id}/reactions/${r.json.id}`)
+            }
+
+            if (event.release?.id) {
+              const id = event.release.id
+              const body = `${event.release.body ?? ''}\n<!-- video-agent:start -->A3 probe<!-- video-agent:end -->`
+              row('edit release body', await gh('PATCH', `/repos/${repo}/releases/${id}`, { body }))
+              await gh('PATCH', `/repos/${repo}/releases/${id}`, { body: event.release.body ?? '' })
+              const uploadUrl = event.release.upload_url.replace(/\{.*\}$/, '')
+              const a = await gh('POST', `${uploadUrl}?name=a3-probe-${label}.txt`, new TextEncoder().encode('a3'), {
+                'content-type': 'text/plain',
+              })
+              row('upload release asset', a)
+              if (a.json?.id) await gh('DELETE', `/repos/${repo}/releases/assets/${a.json.id}`)
+            }
+
+            const rl = await gh('GET', '/rate_limit')
+            row(
+              'rate limit',
+              rl,
+              `core remaining=${rl.json?.resources?.core?.remaining} limit=${rl.json?.resources?.core?.limit}`,
+            )
+
+            const md = [
+              `### A3 probe: \`${label}\` on \`${eventName}\`${event.action ? ` (${event.action})` : ''}`,
+              '',
+              '| Operation | Status | Note |',
+              '| --- | --- | --- |',
+              ...rows.map((r) => `| ${r.op} | ${r.status} | ${String(r.note).replace(/\|/g, '\\|')} |`),
+              '',
+            ].join('\n')
+            if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, md)
+            console.log(md)
+          EOF_PROBE
+          node "$RUNNER_TEMP/a3-probe.mjs"
+  contents-read-pr-write:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          PERMS_LABEL: contents-read-pr-write
+          A3_LOGINS: ${{ vars.A3_LOGINS }}
+        run: |
+          cat > "$RUNNER_TEMP/a3-probe.mjs" <<'EOF_PROBE'
+            // Spike A3: which GITHUB_TOKEN permissions each operation needs, per event, and what the collaborator-permission
+            // endpoint says about a private org member. Runs in the sandbox repo under several `permissions:` blocks
+            // (workflows/a3-probe.yml) and writes one row per operation to the job summary. Cleans up what it creates.
+            // No dependencies; Node 20+.
+            import { appendFileSync, readFileSync } from 'node:fs'
+
+            const token = process.env.GH_TOKEN
+            const repo = process.env.GITHUB_REPOSITORY
+            const label = process.env.PERMS_LABEL ?? '?'
+            const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'))
+            const eventName = process.env.GITHUB_EVENT_NAME
+            const api = 'https://api.github.com'
+            const rows = []
+
+            async function gh(method, path, body, extraHeaders = {}) {
+              const url = path.startsWith('http') ? path : `${api}${path}`
+              const res = await fetch(url, {
+                method,
+                headers: {
+                  authorization: `Bearer ${token}`,
+                  accept: 'application/vnd.github+json',
+                  'x-github-api-version': '2022-11-28',
+                  ...(body && !(body instanceof Uint8Array) ? { 'content-type': 'application/json' } : {}),
+                  ...extraHeaders,
+                },
+                body: body instanceof Uint8Array ? body : body ? JSON.stringify(body) : undefined,
+              })
+              const text = await res.text()
+              let json = null
+              try {
+                json = text ? JSON.parse(text) : null
+              } catch {
+                json = null
+              }
+              return { status: res.status, json, remaining: res.headers.get('x-ratelimit-remaining') }
+            }
+
+            function row(op, r, note = '') {
+              rows.push({ op, status: r.status, note: note || (r.json?.message ?? '') })
+              console.log(`a3 perms=${label} event=${eventName} op=${op} status=${r.status} ${note}`)
+            }
+
+            const pr = event.pull_request ?? (event.issue?.pull_request ? event.issue : null)
+            const issueNumber = pr?.number
+
+            // People: the sender, the PR author, the commenter, plus any logins named in A3_LOGINS (comma-separated).
+            const people = new Map()
+            const add = (login, why, assoc) => {
+              if (!login) return
+              const p = people.get(login) ?? { why: [], assoc: new Set() }
+              p.why.push(why)
+              if (assoc) p.assoc.add(assoc)
+              people.set(login, p)
+            }
+            add(event.sender?.login, 'sender')
+            add(pr?.user?.login, 'pr author', pr?.author_association)
+            add(event.comment?.user?.login, 'commenter', event.comment?.author_association)
+            for (const l of (process.env.A3_LOGINS ?? '')
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean))
+              add(l, 'listed')
+
+            for (const [login, p] of people) {
+              const r = await gh('GET', `/repos/${repo}/collaborators/${login}/permission`)
+              row(
+                `permission ${login} (${p.why.join('+')})`,
+                r,
+                `permission=${r.json?.permission ?? '-'} role_name=${r.json?.role_name ?? '-'} author_association=${[...p.assoc].join('/') || '-'}`,
+              )
+            }
+
+            row('GET /user', await gh('GET', '/user'))
+
+            if (issueNumber) {
+              const c = await gh('POST', `/repos/${repo}/issues/${issueNumber}/comments`, {
+                body: `<!-- a3-probe -->\nA3 probe (${label}, ${eventName}). Deleted right after.`,
+              })
+              row('create PR comment', c, c.json?.user ? `author=${c.json.user.login} type=${c.json.user.type}` : '')
+              if (c.json?.id) {
+                row(
+                  'edit PR comment',
+                  await gh('PATCH', `/repos/${repo}/issues/comments/${c.json.id}`, { body: 'A3 probe (edited)' }),
+                )
+                row('list PR comments', await gh('GET', `/repos/${repo}/issues/${issueNumber}/comments?per_page=5`))
+                row('delete PR comment', await gh('DELETE', `/repos/${repo}/issues/comments/${c.json.id}`))
+              }
+            }
+
+            if (event.comment?.id) {
+              const r = await gh('POST', `/repos/${repo}/issues/comments/${event.comment.id}/reactions`, {
+                content: 'eyes',
+              })
+              row('react to comment', r)
+              if (r.json?.id)
+                await gh('DELETE', `/repos/${repo}/issues/comments/${event.comment.id}/reactions/${r.json.id}`)
+            }
+
+            if (event.release?.id) {
+              const id = event.release.id
+              const body = `${event.release.body ?? ''}\n<!-- video-agent:start -->A3 probe<!-- video-agent:end -->`
+              row('edit release body', await gh('PATCH', `/repos/${repo}/releases/${id}`, { body }))
+              await gh('PATCH', `/repos/${repo}/releases/${id}`, { body: event.release.body ?? '' })
+              const uploadUrl = event.release.upload_url.replace(/\{.*\}$/, '')
+              const a = await gh('POST', `${uploadUrl}?name=a3-probe-${label}.txt`, new TextEncoder().encode('a3'), {
+                'content-type': 'text/plain',
+              })
+              row('upload release asset', a)
+              if (a.json?.id) await gh('DELETE', `/repos/${repo}/releases/assets/${a.json.id}`)
+            }
+
+            const rl = await gh('GET', '/rate_limit')
+            row(
+              'rate limit',
+              rl,
+              `core remaining=${rl.json?.resources?.core?.remaining} limit=${rl.json?.resources?.core?.limit}`,
+            )
+
+            const md = [
+              `### A3 probe: \`${label}\` on \`${eventName}\`${event.action ? ` (${event.action})` : ''}`,
+              '',
+              '| Operation | Status | Note |',
+              '| --- | --- | --- |',
+              ...rows.map((r) => `| ${r.op} | ${r.status} | ${String(r.note).replace(/\|/g, '\\|')} |`),
+              '',
+            ].join('\n')
+            if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, md)
+            console.log(md)
+          EOF_PROBE
+          node "$RUNNER_TEMP/a3-probe.mjs"
+  contents-write:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          PERMS_LABEL: contents-write
+          A3_LOGINS: ${{ vars.A3_LOGINS }}
+        run: |
+          cat > "$RUNNER_TEMP/a3-probe.mjs" <<'EOF_PROBE'
+            // Spike A3: which GITHUB_TOKEN permissions each operation needs, per event, and what the collaborator-permission
+            // endpoint says about a private org member. Runs in the sandbox repo under several `permissions:` blocks
+            // (workflows/a3-probe.yml) and writes one row per operation to the job summary. Cleans up what it creates.
+            // No dependencies; Node 20+.
+            import { appendFileSync, readFileSync } from 'node:fs'
+
+            const token = process.env.GH_TOKEN
+            const repo = process.env.GITHUB_REPOSITORY
+            const label = process.env.PERMS_LABEL ?? '?'
+            const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'))
+            const eventName = process.env.GITHUB_EVENT_NAME
+            const api = 'https://api.github.com'
+            const rows = []
+
+            async function gh(method, path, body, extraHeaders = {}) {
+              const url = path.startsWith('http') ? path : `${api}${path}`
+              const res = await fetch(url, {
+                method,
+                headers: {
+                  authorization: `Bearer ${token}`,
+                  accept: 'application/vnd.github+json',
+                  'x-github-api-version': '2022-11-28',
+                  ...(body && !(body instanceof Uint8Array) ? { 'content-type': 'application/json' } : {}),
+                  ...extraHeaders,
+                },
+                body: body instanceof Uint8Array ? body : body ? JSON.stringify(body) : undefined,
+              })
+              const text = await res.text()
+              let json = null
+              try {
+                json = text ? JSON.parse(text) : null
+              } catch {
+                json = null
+              }
+              return { status: res.status, json, remaining: res.headers.get('x-ratelimit-remaining') }
+            }
+
+            function row(op, r, note = '') {
+              rows.push({ op, status: r.status, note: note || (r.json?.message ?? '') })
+              console.log(`a3 perms=${label} event=${eventName} op=${op} status=${r.status} ${note}`)
+            }
+
+            const pr = event.pull_request ?? (event.issue?.pull_request ? event.issue : null)
+            const issueNumber = pr?.number
+
+            // People: the sender, the PR author, the commenter, plus any logins named in A3_LOGINS (comma-separated).
+            const people = new Map()
+            const add = (login, why, assoc) => {
+              if (!login) return
+              const p = people.get(login) ?? { why: [], assoc: new Set() }
+              p.why.push(why)
+              if (assoc) p.assoc.add(assoc)
+              people.set(login, p)
+            }
+            add(event.sender?.login, 'sender')
+            add(pr?.user?.login, 'pr author', pr?.author_association)
+            add(event.comment?.user?.login, 'commenter', event.comment?.author_association)
+            for (const l of (process.env.A3_LOGINS ?? '')
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean))
+              add(l, 'listed')
+
+            for (const [login, p] of people) {
+              const r = await gh('GET', `/repos/${repo}/collaborators/${login}/permission`)
+              row(
+                `permission ${login} (${p.why.join('+')})`,
+                r,
+                `permission=${r.json?.permission ?? '-'} role_name=${r.json?.role_name ?? '-'} author_association=${[...p.assoc].join('/') || '-'}`,
+              )
+            }
+
+            row('GET /user', await gh('GET', '/user'))
+
+            if (issueNumber) {
+              const c = await gh('POST', `/repos/${repo}/issues/${issueNumber}/comments`, {
+                body: `<!-- a3-probe -->\nA3 probe (${label}, ${eventName}). Deleted right after.`,
+              })
+              row('create PR comment', c, c.json?.user ? `author=${c.json.user.login} type=${c.json.user.type}` : '')
+              if (c.json?.id) {
+                row(
+                  'edit PR comment',
+                  await gh('PATCH', `/repos/${repo}/issues/comments/${c.json.id}`, { body: 'A3 probe (edited)' }),
+                )
+                row('list PR comments', await gh('GET', `/repos/${repo}/issues/${issueNumber}/comments?per_page=5`))
+                row('delete PR comment', await gh('DELETE', `/repos/${repo}/issues/comments/${c.json.id}`))
+              }
+            }
+
+            if (event.comment?.id) {
+              const r = await gh('POST', `/repos/${repo}/issues/comments/${event.comment.id}/reactions`, {
+                content: 'eyes',
+              })
+              row('react to comment', r)
+              if (r.json?.id)
+                await gh('DELETE', `/repos/${repo}/issues/comments/${event.comment.id}/reactions/${r.json.id}`)
+            }
+
+            if (event.release?.id) {
+              const id = event.release.id
+              const body = `${event.release.body ?? ''}\n<!-- video-agent:start -->A3 probe<!-- video-agent:end -->`
+              row('edit release body', await gh('PATCH', `/repos/${repo}/releases/${id}`, { body }))
+              await gh('PATCH', `/repos/${repo}/releases/${id}`, { body: event.release.body ?? '' })
+              const uploadUrl = event.release.upload_url.replace(/\{.*\}$/, '')
+              const a = await gh('POST', `${uploadUrl}?name=a3-probe-${label}.txt`, new TextEncoder().encode('a3'), {
+                'content-type': 'text/plain',
+              })
+              row('upload release asset', a)
+              if (a.json?.id) await gh('DELETE', `/repos/${repo}/releases/assets/${a.json.id}`)
+            }
+
+            const rl = await gh('GET', '/rate_limit')
+            row(
+              'rate limit',
+              rl,
+              `core remaining=${rl.json?.resources?.core?.remaining} limit=${rl.json?.resources?.core?.limit}`,
+            )
+
+            const md = [
+              `### A3 probe: \`${label}\` on \`${eventName}\`${event.action ? ` (${event.action})` : ''}`,
+              '',
+              '| Operation | Status | Note |',
+              '| --- | --- | --- |',
+              ...rows.map((r) => `| ${r.op} | ${r.status} | ${String(r.note).replace(/\|/g, '\\|')} |`),
+              '',
+            ].join('\n')
+            if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, md)
+            console.log(md)
+          EOF_PROBE
+          node "$RUNNER_TEMP/a3-probe.mjs"
+  plan-pr-commands:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          PERMS_LABEL: plan-pr-commands
+          A3_LOGINS: ${{ vars.A3_LOGINS }}
+        run: |
+          cat > "$RUNNER_TEMP/a3-probe.mjs" <<'EOF_PROBE'
+            // Spike A3: which GITHUB_TOKEN permissions each operation needs, per event, and what the collaborator-permission
+            // endpoint says about a private org member. Runs in the sandbox repo under several `permissions:` blocks
+            // (workflows/a3-probe.yml) and writes one row per operation to the job summary. Cleans up what it creates.
+            // No dependencies; Node 20+.
+            import { appendFileSync, readFileSync } from 'node:fs'
+
+            const token = process.env.GH_TOKEN
+            const repo = process.env.GITHUB_REPOSITORY
+            const label = process.env.PERMS_LABEL ?? '?'
+            const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'))
+            const eventName = process.env.GITHUB_EVENT_NAME
+            const api = 'https://api.github.com'
+            const rows = []
+
+            async function gh(method, path, body, extraHeaders = {}) {
+              const url = path.startsWith('http') ? path : `${api}${path}`
+              const res = await fetch(url, {
+                method,
+                headers: {
+                  authorization: `Bearer ${token}`,
+                  accept: 'application/vnd.github+json',
+                  'x-github-api-version': '2022-11-28',
+                  ...(body && !(body instanceof Uint8Array) ? { 'content-type': 'application/json' } : {}),
+                  ...extraHeaders,
+                },
+                body: body instanceof Uint8Array ? body : body ? JSON.stringify(body) : undefined,
+              })
+              const text = await res.text()
+              let json = null
+              try {
+                json = text ? JSON.parse(text) : null
+              } catch {
+                json = null
+              }
+              return { status: res.status, json, remaining: res.headers.get('x-ratelimit-remaining') }
+            }
+
+            function row(op, r, note = '') {
+              rows.push({ op, status: r.status, note: note || (r.json?.message ?? '') })
+              console.log(`a3 perms=${label} event=${eventName} op=${op} status=${r.status} ${note}`)
+            }
+
+            const pr = event.pull_request ?? (event.issue?.pull_request ? event.issue : null)
+            const issueNumber = pr?.number
+
+            // People: the sender, the PR author, the commenter, plus any logins named in A3_LOGINS (comma-separated).
+            const people = new Map()
+            const add = (login, why, assoc) => {
+              if (!login) return
+              const p = people.get(login) ?? { why: [], assoc: new Set() }
+              p.why.push(why)
+              if (assoc) p.assoc.add(assoc)
+              people.set(login, p)
+            }
+            add(event.sender?.login, 'sender')
+            add(pr?.user?.login, 'pr author', pr?.author_association)
+            add(event.comment?.user?.login, 'commenter', event.comment?.author_association)
+            for (const l of (process.env.A3_LOGINS ?? '')
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean))
+              add(l, 'listed')
+
+            for (const [login, p] of people) {
+              const r = await gh('GET', `/repos/${repo}/collaborators/${login}/permission`)
+              row(
+                `permission ${login} (${p.why.join('+')})`,
+                r,
+                `permission=${r.json?.permission ?? '-'} role_name=${r.json?.role_name ?? '-'} author_association=${[...p.assoc].join('/') || '-'}`,
+              )
+            }
+
+            row('GET /user', await gh('GET', '/user'))
+
+            if (issueNumber) {
+              const c = await gh('POST', `/repos/${repo}/issues/${issueNumber}/comments`, {
+                body: `<!-- a3-probe -->\nA3 probe (${label}, ${eventName}). Deleted right after.`,
+              })
+              row('create PR comment', c, c.json?.user ? `author=${c.json.user.login} type=${c.json.user.type}` : '')
+              if (c.json?.id) {
+                row(
+                  'edit PR comment',
+                  await gh('PATCH', `/repos/${repo}/issues/comments/${c.json.id}`, { body: 'A3 probe (edited)' }),
+                )
+                row('list PR comments', await gh('GET', `/repos/${repo}/issues/${issueNumber}/comments?per_page=5`))
+                row('delete PR comment', await gh('DELETE', `/repos/${repo}/issues/comments/${c.json.id}`))
+              }
+            }
+
+            if (event.comment?.id) {
+              const r = await gh('POST', `/repos/${repo}/issues/comments/${event.comment.id}/reactions`, {
+                content: 'eyes',
+              })
+              row('react to comment', r)
+              if (r.json?.id)
+                await gh('DELETE', `/repos/${repo}/issues/comments/${event.comment.id}/reactions/${r.json.id}`)
+            }
+
+            if (event.release?.id) {
+              const id = event.release.id
+              const body = `${event.release.body ?? ''}\n<!-- video-agent:start -->A3 probe<!-- video-agent:end -->`
+              row('edit release body', await gh('PATCH', `/repos/${repo}/releases/${id}`, { body }))
+              await gh('PATCH', `/repos/${repo}/releases/${id}`, { body: event.release.body ?? '' })
+              const uploadUrl = event.release.upload_url.replace(/\{.*\}$/, '')
+              const a = await gh('POST', `${uploadUrl}?name=a3-probe-${label}.txt`, new TextEncoder().encode('a3'), {
+                'content-type': 'text/plain',
+              })
+              row('upload release asset', a)
+              if (a.json?.id) await gh('DELETE', `/repos/${repo}/releases/assets/${a.json.id}`)
+            }
+
+            const rl = await gh('GET', '/rate_limit')
+            row(
+              'rate limit',
+              rl,
+              `core remaining=${rl.json?.resources?.core?.remaining} limit=${rl.json?.resources?.core?.limit}`,
+            )
+
+            const md = [
+              `### A3 probe: \`${label}\` on \`${eventName}\`${event.action ? ` (${event.action})` : ''}`,
+              '',
+              '| Operation | Status | Note |',
+              '| --- | --- | --- |',
+              ...rows.map((r) => `| ${r.op} | ${r.status} | ${String(r.note).replace(/\|/g, '\\|')} |`),
+              '',
+            ].join('\n')
+            if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, md)
+            console.log(md)
+          EOF_PROBE
+          node "$RUNNER_TEMP/a3-probe.mjs"

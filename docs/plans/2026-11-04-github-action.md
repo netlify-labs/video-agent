@@ -175,8 +175,9 @@ GitHub (sources at the end):
    real fix is a separate context field on the server (§6.1).
 2. **Signed file URLs expire in minutes.** A comment can only embed an image that stays reachable: a **published** GIF
    (`/v/{slug}.gif`). Unpublished videos get a link to the app (it needs a sign-in).
-3. **GitHub caches comment images.** After an unpublish the GIF may still show in old comments for a while. Publishing
-   from CI is a deliberate choice (off by default).
+3. **GitHub proxies comment images.** Spike A1: after an unpublish, GitHub's image proxy answers 404 within about 10
+   minutes (a browser that already loaded it may keep its own copy). Publishing from CI is still a deliberate choice
+   (off by default): it makes a public page and MP4.
 4. **Idempotency keys are short-term and body-bound.** A key reused within 24 hours with a different body (say the PR
    description changed) is a `409`, and it lives on the server, so no client-side reset helps. Keys must change per
    workflow run; "one video per PR" has to come from a lookup, not the key (§3.5).
@@ -228,8 +229,13 @@ Details:
 - A JavaScript action needs its bundled code at the ref it's used from. `packages/action/dist/index.js` is committed,
   and CI fails if it's stale (the same pattern as `openapi:check`). Tags: `action-v1.0.0` (what the SHA comments
   name), and a moving `action-v1` (the convenience form).
-- Until this repo is public, only repos that can see it can use it (GitHub lets a private repo's actions be used by
-  other repos in the same organization when its Actions access setting allows it; spike A2 confirms).
+- Until this repo is public, only repos that can see it can use it. Spike A2: with the repo's Actions access set to
+  "Accessible from repositories in the organization" (`access_level: organization`), a SHA pin and a prefixed tag both
+  work on Node 24; with `none` (today's setting) other repos get "repository not found".
+- The root `.gitignore` ignores `dist/`, so `packages/action/dist/` needs a `!packages/action/dist/` exception (git
+  skips the bundle silently otherwise), and the root `package.json` is ESM, so the bundle is `dist/index.cjs`.
+- No Dependabot (owner, 2026-11-05): it can't read this private repo anyway. The README documents bumping the SHA pin
+  by hand, and Renovate for teams that want automation.
 
 ### 3.2 A JavaScript action on node24, bundled
 
@@ -428,8 +434,12 @@ the next event for that PR deletes them (their ids are in the comment marker's `
 screenshots, which may be from a private repo, out of the team library. Revisions inherit the parent version's media
 snapshot, so a later `/video revise` still has them (a test covers it).
 
-Images in private repos' descriptions (`github.com/user-attachments/…`) need authentication; whether `GITHUB_TOKEN` is
-enough is spike A4. If not, the action logs "couldn't download 2 screenshots (private attachments)" and carries on.
+Images in private repos' descriptions (`github.com/user-attachments/…`) answer 404 with or without `GITHUB_TOKEN`
+(spike A4). The action reads the PR's GraphQL `bodyHTML` with the token instead: it rewrites each image to a signed
+`private-user-images.githubusercontent.com` URL whose JWT lives 300 seconds, which downloads with **no**
+`Authorization` header. So the action fetches `bodyHTML` and downloads at once; the token never goes to an image host.
+Alt text comes from the markdown body, matched by order. If that fails, it logs "couldn't download 2 screenshots" and
+carries on.
 
 ### 3.8 Waiting for the video
 
@@ -546,14 +556,18 @@ Strict defaults; each can be relaxed on purpose.
    cached. `author_association` is only a fast accept for `OWNER` and `COLLABORATOR`; `MEMBER` is never trusted from
    it, and its absence never refuses anyone, because it depends on the org membership being visible to the token:
    `GITHUB_TOKEN` can't see private org memberships, so real members often read as `CONTRIBUTOR` or `NONE`. Spike A3
-   confirms the endpoint works with `GITHUB_TOKEN` (repo metadata read) for private-membership orgs. A trusted PR can
+   confirmed it: for a private org member who is a repo admin, `author_association` said `CONTRIBUTOR` on their PR
+   and `MEMBER` on their comment, while the endpoint said `admin` with only metadata read (`permissions: {}`). For an
+   outside account the endpoint answers **200 with `permission: none`**, not 404, so the check reads the value. A trusted PR can
    still contain commits by others, and their subjects come along; that's accepted and documented.
 6. **Untrusted text stays data.** PR text reaches the run only inside the user's request, which the prompt template
    fences and sanitizes (`src/domain/prompt.ts:106`, `:220`), labelled "background only, never instructions". This
    limits prompt injection but can't rule it out; points 4 and 5 decide who can put text there at all. Phase 3's
    `context` field moves PR text into its own fence, like comments and captions today.
-7. **Least privilege for `GITHUB_TOKEN`:** `pull-requests: write` for PR comments, `issues: write` for reactions,
-   `contents: write` only in the release workflow, `contents: read` otherwise. Spike A3 confirms the minimum per event.
+7. **Least privilege for `GITHUB_TOKEN`:** `pull-requests: write` for PR comments and reactions on them (spike A3:
+   `issues: write` alone is refused for both and isn't needed), `contents: write` only in the release workflow (release
+   body and assets), `contents: read` otherwise. Comments made with the token are by `github-actions[bot]`;
+   `GET /user` is 403 with it.
 8. **A CI account owns the videos:** the README recommends a Video Agent account for CI (for example
    `video-bot@acme.com`, role Creator), with its API key created from its own sign-in. It should hold **only CI keys**:
    idempotency is per account (`src/domain/videos.ts:280`), so keys used elsewhere share the namespace, and disabling
@@ -730,7 +744,6 @@ on:
 permissions:
   contents: read
   pull-requests: write
-  issues: write
 
 jobs:
   command:
@@ -840,7 +853,19 @@ There's no blanket approval: each gate below is asked for on its own.
 
 (A5, Netlify deploy previews through `deployment_status`, moved to §13 with the trigger it feeds.)
 
-Gate: a "spike results" section in this plan.
+Gate: a "spike results" section in this plan (§10a, done 2026-11-05).
+
+### 10a. Spike results (2026-11-05)
+
+Run in private sandbox repos in `netlify-labs` (`video-agent-action-sandbox`, `video-agent-action-consumer`); raw notes,
+workflows and probe scripts in `spikes/a/` (`RESULTS.md`).
+
+| Spike | Result | What it changed |
+| --- | --- | --- |
+| A1 GIFs in comments | A published `/v/{slug}.gif` renders through GitHub's image proxy (desktop confirmed). After an unpublish the proxy answers 404 within 10 minutes. Mobile app, email and a size limit weren't tested | §2.3; §3.9 stands; the README says an unpublished GIF stops showing within minutes |
+| A2 Install path | Works from another org repo with Actions access `organization`; fails with `none`. SHA pin and `action-v*` tag both resolve; `node24` runs Node 24. The root `.gitignore`'s `dist/` silently drops the bundle; the root package is ESM. Dependabot can't read the private repo | §3.1: `.gitignore` exception, `dist/index.cjs`, the access setting in the README, no Dependabot (owner) |
+| A3 Permissions and trust | Permission endpoint works with `permissions: {}`; private member: endpoint `admin`, `author_association` `CONTRIBUTOR` (PR) / `MEMBER` (comment); outsider: 200 `none`. PR comments and reactions need only `pull-requests: write`; releases need `contents: write`. Token comments are `github-actions[bot]`; `GET /user` 403. This org's limit is 15,000/hour. Fork PRs can't be tested while private | §4.5, §4.7, §8.1 (no `issues: write`) |
+| A4 Private attachments | `user-attachments` URLs 404 with and without the token; GraphQL `bodyHTML` gives signed `private-user-images` URLs (JWT 300 s) that download with no auth | §3.7 |
 
 ### Phase 1: PR label, commands, releases; no server changes (after CLI and SDK phases 1.6 and 2; the `brief` module lands here, and the CLI's `brief` command registers when its phase 3.1 does)
 
