@@ -17,12 +17,12 @@ export const BUNDLE_LIMITS: TarLimits = {
 
 export class TarError extends Error {}
 
-/** `video/a/b.css` → `a/b.css`; null for the video/ directory itself. Throws on anything outside video/. */
-export function bundlePath(raw: string): string | null {
+/** `video/a/b.css` → `a/b.css`; null for the video/ directory itself. Throws on anything outside video/ (or `root`). */
+export function bundlePath(raw: string, root = 'video'): string | null {
   const p = raw.replace(/^\.\//, '')
-  if (p === 'video' || p === 'video/') return null
-  if (!p.startsWith('video/')) throw new TarError(`Entry outside video/: ${raw.slice(0, 120)}`)
-  const rest = p.slice('video/'.length).replace(/\/$/, '')
+  if (p === root || p === `${root}/`) return null
+  if (!p.startsWith(`${root}/`)) throw new TarError(`Entry outside ${root}/: ${raw.slice(0, 120)}`)
+  const rest = p.slice(`${root}/`.length).replace(/\/$/, '')
   const parts = rest.split('/')
   if (
     !rest ||
@@ -44,8 +44,13 @@ const octal = (b: Uint8Array) => {
   return s ? parseInt(s, 8) : 0
 }
 
-/** Regular files of the archive, keyed by path relative to video/. */
-export function readTarGz(gz: Uint8Array, limits: TarLimits = BUNDLE_LIMITS): Map<string, Uint8Array> {
+/** Regular files of the archive, keyed by path relative to video/ (or `opts.root`, such as `look` for look archives). */
+export function readTarGz(
+  gz: Uint8Array,
+  limits: TarLimits = BUNDLE_LIMITS,
+  opts: { root?: string } = {},
+): Map<string, Uint8Array> {
+  const root = opts.root ?? 'video'
   let buf: Uint8Array
   try {
     buf = gunzipSync(gz, { maxOutputLength: limits.maxTotalBytes + 1024 * 1024 })
@@ -86,12 +91,12 @@ export function readTarGz(gz: Uint8Array, limits: TarLimits = BUNDLE_LIMITS): Ma
     longName = null
     paxPath = null
     if (type === '5') {
-      bundlePath(full)
+      bundlePath(full, root)
       continue
     }
     if (type !== '0' && type !== '\0')
       throw new TarError(`Links and special files aren't allowed (${full.slice(0, 120)}).`)
-    const path = bundlePath(full)
+    const path = bundlePath(full, root)
     if (path === null) continue
     if (size > limits.maxFileBytes) throw new TarError(`${path} is over ${limits.maxFileBytes} bytes.`)
     total += size
@@ -120,12 +125,14 @@ function header(name: string, size: number, type: '0' | 'L') {
   return h
 }
 
-/** A .tar.gz of `files` under video/ (regular files; GNU long names past 100 bytes), as runs make with tar. */
-export function writeTarGz(files: Map<string, Uint8Array>): Uint8Array {
+/** A .tar.gz of `files` under video/ (or `opts.prefix`, such as `look/` for look archives; regular files; GNU long
+ * names past 100 bytes), as runs make with tar. Sorted entries and fixed mtimes, so the same files give the same bytes. */
+export function writeTarGz(files: Map<string, Uint8Array>, opts: { prefix?: string } = {}): Uint8Array {
+  const prefix = opts.prefix ?? 'video/'
   const parts: Buffer[] = []
   const pad = (n: number) => Buffer.alloc((512 - (n % 512)) % 512)
   for (const [path, bytes] of [...files].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
-    const name = `video/${path}`
+    const name = `${prefix}${path}`
     if (Buffer.byteLength(name) > 100) {
       const long = Buffer.from(`${name}\0`)
       parts.push(header('././@LongLink', long.length, 'L'), long, pad(long.length))
