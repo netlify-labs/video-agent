@@ -57,14 +57,25 @@ import {
   type NarrationOp,
   type Span,
 } from './timeline.js'
+import {
+  FPS,
+  FRAME_SLACK,
+  sec,
+  fmt,
+  frames,
+  layoutBeats,
+  layoutScoped,
+  syncCaptionsFor,
+  voiceFits,
+} from './contract-core.js'
 
 type Node = DefaultTreeAdapterMap['node']
 type Element = DefaultTreeAdapterMap['element']
 type ParentNode = DefaultTreeAdapterMap['parentNode']
 type ChildNode = DefaultTreeAdapterMap['childNode']
 
-export const FPS = 30
-export const frames = (sec: number) => Math.round(sec * FPS) / FPS
+// The frame math lives in contract-core.ts; these two stay importable from here for the code that already does.
+export { FPS, frames }
 
 export interface Caption {
   start: number
@@ -225,8 +236,6 @@ export function changed(a: string, b: string): [number, number, string] {
   return [p, a.length - s, b.slice(p, b.length - s)]
 }
 const num = (v: string | null) => (v === null || v.trim() === '' ? NaN : Number(v))
-const sec = (n: number) => Math.round(n * 1e6) / 1e6
-const fmt = (n: number) => String(sec(n))
 
 export interface Doc {
   doc: DefaultTreeAdapterMap['document']
@@ -421,7 +430,7 @@ export function validate(html: string, summary?: Summary, opts: ValidateOptions 
     if (!(dur > 0)) v.push(`Beat "${id}" needs a positive data-duration.`)
     if (!(num(attr(b, 'data-va-authored-duration') ?? attr(b, 'data-duration')) > 0))
       v.push(`Beat "${id}" needs data-va-authored-duration.`)
-    if (Math.abs(start - t) > 0.5 / FPS)
+    if (Math.abs(start - t) > FRAME_SLACK)
       v.push(`Beat "${id}" should start at ${fmt(t)}s, right after the beat before it.`)
     const track = attr(b, 'data-track-index')
     if (track !== null && track !== '0') v.push(`Beat "${id}" must be on track 0.`)
@@ -440,7 +449,7 @@ export function validate(html: string, summary?: Summary, opts: ValidateOptions 
         v.push(`Beat "${id}" refers to beat "${other}".`)
   })
   v.push(...holdProblems(root, beats))
-  if (beats.length && Math.abs(t - total) > 0.5 / FPS)
+  if (beats.length && Math.abs(t - total) > FRAME_SLACK)
     v.push(`The beats add up to ${fmt(t)}s but the root says ${fmt(total)}s.`)
 
   for (const e of kids(root)) {
@@ -448,7 +457,7 @@ export function validate(html: string, summary?: Summary, opts: ValidateOptions 
     if (attr(e, 'data-va-layer') !== null) {
       const track = num(attr(e, 'data-track-index'))
       if (!(track >= 1)) v.push(`Layer "${attr(e, 'data-va-layer') ?? ''}" must be on track 1 or higher.`)
-      if (num(attr(e, 'data-start')) !== 0 || Math.abs(num(attr(e, 'data-duration')) - total) > 0.5 / FPS)
+      if (num(attr(e, 'data-start')) !== 0 || Math.abs(num(attr(e, 'data-duration')) - total) > FRAME_SLACK)
         v.push(`Layer "${attr(e, 'data-va-layer') ?? ''}" must span the whole video.`)
     } else if (attr(e, 'data-start') !== null)
       v.push(
@@ -494,7 +503,7 @@ export function validate(html: string, summary?: Summary, opts: ValidateOptions 
     if (!(start >= 0) || !(dur > 0)) v.push(`Voice "${id}" needs data-start and a positive data-duration.`)
     else {
       const beatDur = num(attr(parent, 'data-duration'))
-      if (start + dur > beatDur + 0.5 / FPS)
+      if (!voiceFits(beatDur, start, dur))
         v.push(
           `Beat "${id}" is ${fmt(beatDur)}s but its voice-over runs to ${fmt(start + dur)}s; make the beat longer.`,
         )
@@ -735,7 +744,7 @@ function checkBus(root: Element, buses: Element[], total: number, state: 'draft'
         ([s, x], i) =>
           s >= 0 &&
           x > s &&
-          x <= total + 0.5 / FPS &&
+          x <= total + FRAME_SLACK &&
           s > (speech[i - 1]?.[1] ?? -1) &&
           onFrame(s) &&
           onFrame(x),
@@ -1024,20 +1033,50 @@ export interface EditOptions {
 
 /** Lays the beats back to back from 0 in whole frames and sets the root, layer and video-slot durations to match. */
 function relayout(d: Doc) {
-  let t = 0
-  let end = 0 // where the beats end unsnapped, so snapping doesn't add a frame per beat to the total
-  for (const b of beatsOf(d.root)) {
-    setAttr(b, 'data-start', fmt(t))
-    // Whole frames, so the starts land where validate expects even when the agent wrote, say, 3.85 s (115.5 frames).
-    end += num(attr(b, 'data-duration'))
-    const dur = frames(end) - t
-    setAttr(b, 'data-duration', fmt(dur))
-    for (const vid of [...walk(b)].filter((e) => attr(e, 'data-va-kind') === 'video')) {
-      setAttr(vid, 'data-start', '0')
-      setAttr(vid, 'data-duration', fmt(dur)) // longer clips are trimmed to the beat
-    }
-    t = frames(end)
+  const beats = beatsOf(d.root)
+  // Whole frames, so the starts land where validate expects even when the agent wrote, say, 3.85 s (115.5 frames).
+  const { beats: spans, total } = layoutBeats(beats.map((b) => num(attr(b, 'data-duration'))))
+  beats.forEach((b, i) => {
+    const { start, duration } = spans[i] ?? { start: 0, duration: 0 }
+    setAttr(b, 'data-start', fmt(start))
+    setAttr(b, 'data-duration', fmt(duration))
+    fitVideoSlots(b, duration)
+  })
+  setTotal(d, total)
+}
+
+/**
+ * The relayout of a scoped revision (redo a scene, docs/plans/2026-11-04-regenerate-beat.md §4.5): frozen beats keep
+ * their data-duration string and everything inside them exactly as it is; scoped beats, already snapped to whole frames
+ * by the caller, get their video slots fitted. Starts, the root, layers, speech spans and ducking follow as in relayout.
+ */
+export function relayoutScoped(d: Doc, scoped: ReadonlySet<string>) {
+  const beats = beatsOf(d.root)
+  const ids = beats.map((b) => attr(b, 'data-va-beat') ?? '')
+  const { beats: spans, total } = layoutScoped(
+    beats.map((b, i) => ({
+      id: ids[i] ?? '',
+      duration: num(attr(b, 'data-duration')),
+      scoped: scoped.has(ids[i] ?? ''),
+    })),
+  )
+  beats.forEach((b, i) => {
+    const { start, duration } = spans[i] ?? { start: 0, duration: 0 }
+    setAttr(b, 'data-start', fmt(start))
+    if (scoped.has(ids[i] ?? '')) fitVideoSlots(b, duration)
+  })
+  setTotal(d, total)
+}
+
+function fitVideoSlots(beat: Element, duration: number) {
+  for (const vid of [...walk(beat)].filter((e) => attr(e, 'data-va-kind') === 'video')) {
+    setAttr(vid, 'data-start', '0')
+    setAttr(vid, 'data-duration', fmt(duration)) // longer clips are trimmed to the beat
   }
+}
+
+/** The root and layers to the new total; speech past a shorter end cut off; the music's ducking redone. */
+function setTotal(d: Doc, t: number) {
   setAttr(d.root, 'data-duration', fmt(t))
   for (const l of kids(d.root).filter((e) => attr(e, 'data-va-layer') !== null)) {
     setAttr(l, 'data-start', '0')
@@ -1056,29 +1095,8 @@ function relayout(d: Doc) {
   applyDucking(d)
 }
 
-/** Absolute caption times and texts from the beat-relative, keyed ones. */
-function syncCaptions(d: Doc, summary: Summary): Summary {
-  if (!summary.captions) return summary
-  const comp = read(d)
-  const beats = new Map(comp.beats.map((b) => [b.id, b]))
-  const texts = new Map(comp.beats.flatMap((b) => b.texts.map((x) => [x.id, x.text] as const)))
-  const captions = summary.captions
-    .filter((c) => !c.beat || beats.has(c.beat))
-    .map((c) => {
-      const b = c.beat ? beats.get(c.beat) : undefined
-      if (!b || c.beatStart === undefined || c.beatEnd === undefined) return c
-      // Text captions stretch with their beat; voice ones follow the audio, which keeps its speed.
-      const k = c.voice ? 1 : b.duration / b.authoredDuration
-      return {
-        ...c,
-        start: frames(b.start + c.beatStart * k),
-        end: frames(Math.min(b.start + b.duration, b.start + c.beatEnd * k)),
-        text: (c.textId && texts.get(c.textId)) || c.text,
-      }
-    })
-    .sort((a, b) => a.start - b.start)
-  return { ...summary, captions }
-}
+/** Absolute caption times and texts from the beat-relative, keyed ones (contract-core.ts syncCaptionsFor). */
+const syncCaptions = (d: Doc, summary: Summary): Summary => syncCaptionsFor(read(d), summary)
 
 /**
  * Applies edits in order and returns the new composition and summary. Validates before and after: a composition
