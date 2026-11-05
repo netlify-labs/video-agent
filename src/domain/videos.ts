@@ -76,7 +76,7 @@ import {
   getLook,
   resolveLook,
 } from './looks.js'
-import type { DestinationPublicationRow } from './types.js'
+import type { DestinationPublicationRow, VersionContext } from './types.js'
 
 const IDEMPOTENCY_TTL_MS = 24 * 3600_000
 
@@ -97,6 +97,8 @@ export interface CreateVideoInput {
   externalUrl?: string | undefined
   /** Private from the start (needs video:private). */
   private?: boolean | undefined
+  /** Background for the run outside the prompt (github-action plan §6.1). */
+  context?: VersionContext | undefined
 }
 
 export interface ReviseInput {
@@ -117,6 +119,8 @@ export interface ReviseInput {
   scope?: { beats: string[] } | undefined
   /** A look id: a restyle unless it's the parent's own look at the same version; null: no look; omitted: the parent's. */
   look?: string | null | undefined
+  /** Background for this version's run; never inherited from the parent. */
+  context?: VersionContext | undefined
 }
 
 export const INCORPORATE_MAX_COMMENTS = 50
@@ -425,6 +429,7 @@ export async function createVideo(
         // The look's first enabled engine, else HyperFrames (looks plan §4.14).
         engine,
         look,
+        context: input.context ?? null,
       })
       if (look) await adoptLookSnapshot(repo, deps, jobId, look, now)
       await repo.insertAttempt(newAttempt(deps, jobId, 1, now))
@@ -565,6 +570,8 @@ export async function reviseVideo(
         engine: engineOf(parent),
         ...(scope ? { scope } : {}),
         look,
+        // Background describes this change only, so a revision never inherits its parent's.
+        context: input.context ?? null,
       }
       assertSameEngine(deps, parent, row)
       // A restyle keeps the video's engine, so the new look must support it (§4.14).
@@ -1086,6 +1093,7 @@ function versionDto(
       timeSec: c.timeSec,
       spot: c.x !== null && c.y !== null,
     })),
+    context: v.context ?? null,
     editable: v.status === 'ready' && v.contract === 1,
     // What the editor may offer on this version's engine (render-engines §4.2); editable still decides whether it opens.
     editing: { engine: engineOf(v), capabilities: engineInfo(engineOf(v)).capabilities },

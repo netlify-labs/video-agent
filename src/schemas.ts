@@ -374,6 +374,23 @@ export const planBriefShape = z.object({
 // Registered for non-null uses; nullable spots use the plain shape (openapi-typescript can't express a nullable $ref).
 export const PlanBriefSchema = planBriefShape.openapi('PlanBrief')
 
+/** Someone else's words the run reads as background, outside the 4,000-character prompt (github-action plan §6.1). */
+export const ContextSchema = z
+  .object({
+    source: z.enum(['github_pr', 'github_release', 'changelog', 'text']),
+    label: z.string().min(1).max(120).openapi({ example: 'GitHub PR #123' }),
+    url: z
+      .url()
+      .max(500)
+      .refine((u) => u.startsWith('https://'), 'url must be an https URL.')
+      .optional(),
+    text: z.string().min(1).max(16000),
+  })
+  .openapi('Context', {
+    description:
+      'Background for the run (a pull request, release notes), given to it in its own fence as data, never instructions.',
+  })
+
 export const VersionSchema = z
   .object({
     plan: z
@@ -402,6 +419,7 @@ export const VersionSchema = z
         }),
       )
       .describe('The comments this version was asked to incorporate, as they were sent, in order.'),
+    context: ContextSchema.nullable().describe('Background this version was made with, if any.'),
     editable: z
       .boolean()
       .describe('Ready and keeps editing contract v1, so it can be edited in the browser.'),
@@ -659,6 +677,9 @@ export const CreateVideoSchema = z
         "A look id (GET /api/v1/looks). Omit for the plan's look, else the admin's default (none unless set); null for no look. Errors: 400 unknown_look, 409 look_disabled.",
     }),
     ...ExternalFields,
+    context: ContextSchema.optional().openapi({
+      description: 'Background for the run (a PR, release notes) outside the prompt, read as data.',
+    }),
   })
   .openapi('CreateVideo')
 
@@ -700,6 +721,10 @@ export const ReviseSchema = z
     look: LookIdSchema.nullable().optional().openapi({
       description:
         "Omit to keep the revised version's look; null for no look. A different look (or a newer version of the same one) is a restyle: a full run that keeps the story and rebuilds how it looks. Errors: 400 unknown_look, 409 look_disabled, 409 look_not_allowed (a version with recorded narration).",
+    }),
+    context: ContextSchema.optional().openapi({
+      description:
+        "Background for this version's run, read as data. Not inherited: a revision without one has none.",
     }),
   })
   .superRefine((v, ctx) => {
@@ -756,6 +781,9 @@ export const RemixSchema = z
     private: ExternalFields.private.openapi({
       description:
         "Make the remix private (you and admins only) from the start. A private video's remix is private either way.",
+    }),
+    context: ContextSchema.optional().openapi({
+      description: 'Background for the run (a PR, release notes) outside the prompt, read as data.',
     }),
   })
   .openapi('Remix')

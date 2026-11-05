@@ -23,7 +23,16 @@ import { adoptLookSnapshot, snapshotLook } from './look-snapshot.js'
 import { lookSettings } from './look-settings.js'
 import { assertLookSupportsEngine, isRestyle, resolveLook } from './looks.js'
 import { assertRemixEnabled } from './remix-settings.js'
-import type { Aspect, JobRow, OutputRow, VersionLook, VersionRemix, VersionRow, VideoSound } from './types.js'
+import type {
+  Aspect,
+  JobRow,
+  OutputRow,
+  VersionContext,
+  VersionLook,
+  VersionRemix,
+  VersionRow,
+  VideoSound,
+} from './types.js'
 import {
   checkWebhook,
   consumePlan,
@@ -57,6 +66,8 @@ export interface RemixInput {
   externalUrl?: string | undefined
   /** Private from the start (needs video:private). A private source's remix is private regardless. */
   private?: boolean | undefined
+  /** Background for the run outside the prompt (github-action plan §6.1). */
+  context?: VersionContext | undefined
 }
 
 /** How much of the source's history the snapshot keeps (§3.3). */
@@ -289,6 +300,7 @@ export async function remixVideo(
         // The source's engine: a remix is made the way its source was (render-engines §4.2).
         engine: engineOf(version),
         look,
+        context: input.context ?? null,
       }
       assertSameEngine(deps, version, row)
       await repo.insertVersion(row)

@@ -462,6 +462,22 @@ export function buildMcpServer(deps: Deps, principal: Principal, kick: () => voi
     return { ...(await summarize(deps, res.body)), next_actions: [next] }
   }
 
+  const contextArg = z
+    .object({
+      source: z.enum(['github_pr', 'github_release', 'changelog', 'text']),
+      label: z.string().min(1).max(120).describe('What it is, like "GitHub PR #123".'),
+      url: z
+        .url()
+        .max(500)
+        .refine((u) => u.startsWith('https://'), 'url must be https')
+        .optional(),
+      text: z.string().min(1).max(16000),
+    })
+    .optional()
+    .describe(
+      "Optional. Background the agent reads as data, outside the prompt: a pull request's description, release notes. Up to 16,000 characters.",
+    )
+
   const externalArgs = {
     external_ref: z
       .string()
@@ -533,6 +549,7 @@ Example: {"prompt": "A 20-second launch video for our new webhooks feature, endi
           .optional()
           .describe('Optional. Reusing the same key returns the same video instead of a duplicate.'),
         ...externalArgs,
+        context: contextArg,
       },
       _meta: VIDEO_CARD,
       annotations: { title: 'Create a video', ...STARTS_RUN },
@@ -554,6 +571,7 @@ Example: {"prompt": "A 20-second launch video for our new webhooks feature, endi
             look: args.look,
             externalRef: args.external_ref,
             private: args.private,
+            context: args.context,
           },
           args.idempotency_key,
         )
@@ -753,6 +771,7 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Same format, 
           .describe('Optional. A plan from plan_video with remix_of this same video.'),
         look: lookArg(true),
         ...externalArgs,
+        context: contextArg,
       },
       _meta: VIDEO_CARD,
       annotations: { title: 'Remix a video', ...STARTS_RUN },
@@ -772,6 +791,7 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Same format, 
           look: args.look,
           externalRef: args.external_ref,
           private: args.private,
+          context: args.context,
         })
         return queued(res, `The remix usually takes 3 to 8 minutes. ${KEEP_CHECKING(res.body.id)}`)
       }, args.video_id),
@@ -831,6 +851,7 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Make the end 
             "Optional. Redo only these scenes (ids from get_video's beats for from_version); everything else stays exactly as it is. Faster and cheaper than revising the whole video. Needs from_version. Can't be combined with plan_id, duration_sec, sound or voiceover.",
           ),
         look: lookArg(true),
+        context: contextArg,
       },
       _meta: VIDEO_CARD,
       annotations: { title: 'Revise a video', ...STARTS_RUN },
@@ -849,6 +870,7 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Make the end 
           voiceover: toVoiceover(args.voiceover),
           scope: args.beats ? { beats: args.beats } : undefined,
           look: args.look,
+          context: args.context,
         })
         return queued(
           res,

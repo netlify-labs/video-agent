@@ -365,6 +365,7 @@ async function startRequest(
     upload: { mode: 'blobs' },
     revision: revision && { parentN: revision.parentN },
     remix: version.remix ?? null,
+    context: version.context ?? null,
     runManifestSha256,
     feedback,
     media: await Promise.all(

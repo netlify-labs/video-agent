@@ -402,7 +402,7 @@ export interface VersionContext {
   source: 'github_pr' | 'github_release' | 'changelog' | 'text'
   /** What it is, for the fence and the video page: "GitHub PR #123". At most 120 characters. */
   label: string
-  url?: string
+  url?: string | undefined
   /** At most 16,000 characters. */
   text: string
 }

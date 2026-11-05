@@ -85,6 +85,8 @@ function ready(
     beats?: V['beats']
     /** The scenes it redid of its parent. */
     scope?: V['scope']
+    /** Background it was made with (a pull request, release notes). */
+    context?: V['context']
   },
 ): V {
   const startedAt = ago(o.at)
@@ -106,6 +108,7 @@ function ready(
     verdicts: { approved: 0, changesRequested: 0, mine: null },
     incorporates: o.feedback?.length ?? 0,
     feedback: o.feedback ?? [],
+    context: o.context ?? null,
     editable: o.editable ?? false,
     editing: hyperframes,
     look: null,
@@ -271,6 +274,7 @@ export const videos: Video[] = [
       verdicts: { approved: 0, changesRequested: 0, mine: null },
       incorporates: 0,
       feedback: [],
+      context: null,
       editable: false,
       editing: hyperframes,
       look: null,
@@ -314,6 +318,7 @@ export const videos: Video[] = [
       verdicts: { approved: 0, changesRequested: 0, mine: null },
       incorporates: 0,
       feedback: [],
+      context: null,
       editable: false,
       editing: hyperframes,
       look: null,
@@ -352,6 +357,7 @@ export const videos: Video[] = [
       parent: 1,
       target: 8,
       pub: 'q4czcinsu9',
+      context: null,
       editable: true,
       // Its scenes (redo a scene): an 8 s teaser in four.
       beats: [
@@ -432,6 +438,12 @@ export const videos: Video[] = [
           title: 'Org webhooks',
           author: people.ada.id,
           pub: 'h7m2q9xwka',
+          context: {
+            source: 'github_pr',
+            label: 'GitHub PR #123',
+            url: 'https://github.com/acme/web/pull/123',
+            text: 'Title: Org webhooks\nDescription:\nTeams can subscribe to events across every project in their organization from one place.',
+          },
           music: [mockCredit],
           summary:
             'A 22.5-second before-and-after story: twelve project tiles collapse into one organization webhook, then events from nine projects arrive at one endpoint. Ends on an end card pointing to Organization settings → Webhooks.',
@@ -508,6 +520,7 @@ export const videos: Video[] = [
       verdicts: { approved: 0, changesRequested: 0, mine: null },
       incorporates: 0,
       feedback: [],
+      context: null,
       editable: false,
       editing: hyperframes,
       look: null,

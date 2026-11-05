@@ -174,6 +174,26 @@ function Everything({
         </Text>
       </Part>
 
+      {v.context ? (
+        // Background from elsewhere (github-action plan §6.1): read-only, the run read it as data.
+        <Part
+          title={`Context from ${v.context.label}`}
+          aside={
+            v.context.url ? (
+              <Anchor href={v.context.url} target="_blank" rel="noopener noreferrer" size="xs">
+                <Group gap={4} wrap="nowrap">
+                  Open <IconExternalLink size={12} />
+                </Group>
+              </Anchor>
+            ) : null
+          }
+        >
+          <Text size="sm" className="va-details-prompt" data-testid="version-context" lineClamp={12}>
+            {v.context.text}
+          </Text>
+        </Part>
+      ) : null}
+
       {v.feedback.length ? (
         <Part title={`Feedback it was asked to incorporate (${v.feedback.length})`}>
           <Stack gap={6}>
@@ -397,6 +417,7 @@ export function DetailsCard({ video, v, onOpen }: { video: Video; v: Version; on
         <Fact label="Length">{lengthWords(v)}</Fact>
         <Fact label="Sound">{soundWords(v)}</Fact>
         {v.music ? <Fact label="Music">{musicWords(v.music)}</Fact> : null}
+        {v.context ? <Fact label="Context">{v.context.label}</Fact> : null}
         <Fact label="Credits">{credits(v.usage?.totalCreditsCost)}</Fact>
         <Fact label="Took">{took(v) ?? '—'}</Fact>
       </div>

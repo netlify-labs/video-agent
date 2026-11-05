@@ -385,6 +385,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
           externalRef: 'external_ref',
           externalUrl: 'external_ref',
           private: 'external_ref',
+          context: 'context',
         },
       },
       summary: 'Create a video',
@@ -540,7 +541,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       'x-sdk': {
         resource: 'videos',
         method: 'revise',
-        fieldFeatures: { planId: 'planning', scope: 'scoped_revision', look: 'looks' },
+        fieldFeatures: { planId: 'planning', scope: 'scoped_revision', look: 'looks', context: 'context' },
       },
       summary: 'Revise a video',
       description:
@@ -580,6 +581,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
           externalRef: 'external_ref',
           externalUrl: 'external_ref',
           private: 'external_ref',
+          context: 'context',
         },
       },
       summary: 'Remix a video',
