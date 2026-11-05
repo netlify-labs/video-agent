@@ -95,7 +95,8 @@ describe('router', () => {
     await t.run(['help', '--json'])
     const body = JSON.parse(t.out.stdout) as { cli: string; commands: { name: string }[] }
     expect(body.cli).toBe(VERSION)
-    expect(body.commands.map((c) => c.name)).toEqual(['help', 'version'])
+    expect(body.commands.map((c) => c.name)).toEqual(COMMANDS.filter((c) => c.ready).map((c) => c.name))
+    expect(body.commands.map((c) => c.name)).toEqual(expect.arrayContaining(['help', 'version']))
     await expect(`${JSON.stringify(body, null, 2)}\n`).toMatchFileSnapshot('./__snapshots__/help.json.txt')
   })
 

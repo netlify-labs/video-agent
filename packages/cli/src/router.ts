@@ -5,6 +5,7 @@ import { parseArgs } from 'node:util'
 import { VideoAgent } from '../../sdk/src/index.js'
 import { COMMANDS, findCommand, GLOBAL_FLAGS, type CommandSpec, type FlagSpec } from './catalog.js'
 import { readConfig, resolveConnection, type CliConfig } from './config.js'
+import { READ_COMMANDS } from './commands/read.js'
 import { CliError, errorJson, EXIT, exitCodeFor, UsageError } from './exit.js'
 import { helpJson, helpText } from './help.js'
 import type { Io } from './io.js'
@@ -51,6 +52,7 @@ const helpHandler: Handler = async (ctx) => {
 
 /** Commands that exist, by catalog name. Exported so tests can register stubs. */
 export const HANDLERS: Record<string, Handler> = {
+  ...READ_COMMANDS,
   help: helpHandler,
   version: async (ctx) => {
     let server: { commit: string | null; promptTemplate: number; release: string | null } | null = null

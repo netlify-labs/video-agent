@@ -41,6 +41,163 @@
       "feature": null,
       "needsHostedApp": false,
       "local": true
+    },
+    {
+      "name": "get",
+      "summary": "Show a video.",
+      "args": [
+        {
+          "name": "video",
+          "type": "video",
+          "required": true,
+          "description": "A video id (vid_…), its web address or a share link."
+        }
+      ],
+      "flags": {},
+      "examples": [
+        "video-agent get vid_01… --json"
+      ],
+      "sdk": [
+        "videos.get",
+        "videos.resolve"
+      ],
+      "feature": null,
+      "needsHostedApp": true,
+      "local": false
+    },
+    {
+      "name": "list",
+      "summary": "List videos.",
+      "args": [],
+      "flags": {
+        "mine": {
+          "type": "boolean",
+          "description": "Only yours."
+        },
+        "search": {
+          "type": "string",
+          "description": "Search titles and prompts."
+        },
+        "status": {
+          "type": "string",
+          "description": "queued, running, finishing, ready, failed, cancelled or timed_out."
+        },
+        "published": {
+          "type": "boolean",
+          "description": "Only published ones."
+        },
+        "favorite": {
+          "type": "boolean",
+          "description": "Only the ones you starred."
+        },
+        "limit": {
+          "type": "number",
+          "description": "How many per page."
+        },
+        "all": {
+          "type": "boolean",
+          "description": "Every page, not just the first."
+        }
+      },
+      "examples": [
+        "video-agent list --mine --json"
+      ],
+      "sdk": [
+        "videos.list",
+        "videos.listAll"
+      ],
+      "feature": null,
+      "needsHostedApp": true,
+      "local": false
+    },
+    {
+      "name": "wait",
+      "summary": "Follow a run until the video is ready.",
+      "args": [
+        {
+          "name": "video",
+          "type": "video",
+          "required": true,
+          "description": "A video id (vid_…), its web address or a share link."
+        }
+      ],
+      "flags": {
+        "version": {
+          "type": "number",
+          "description": "The version (default: the latest)."
+        },
+        "timeout": {
+          "type": "string",
+          "description": "Give up after this long: seconds, or 30m, 2h (exit 6)."
+        }
+      },
+      "examples": [
+        "video-agent wait vid_01… --timeout 1800"
+      ],
+      "sdk": [
+        "videos.wait"
+      ],
+      "feature": null,
+      "needsHostedApp": true,
+      "local": false
+    },
+    {
+      "name": "download",
+      "summary": "Download a version's files.",
+      "args": [
+        {
+          "name": "video",
+          "type": "video",
+          "required": true,
+          "description": "A video id (vid_…), its web address or a share link."
+        }
+      ],
+      "flags": {
+        "version": {
+          "type": "number",
+          "description": "The version (default: the latest)."
+        },
+        "file": {
+          "type": "string",
+          "description": "video, poster, gif, captions, narration or all.",
+          "default": "video"
+        },
+        "out": {
+          "type": "string",
+          "description": "A file, or a folder (with --file all, default <id>-v<n>)."
+        }
+      },
+      "examples": [
+        "video-agent download vid_01… --out launch.mp4"
+      ],
+      "sdk": [
+        "files.download"
+      ],
+      "feature": null,
+      "needsHostedApp": true,
+      "local": false
+    },
+    {
+      "name": "open",
+      "summary": "Open a video's page in the browser.",
+      "args": [
+        {
+          "name": "video",
+          "type": "video",
+          "required": true,
+          "description": "A video id (vid_…), its web address or a share link."
+        }
+      ],
+      "flags": {},
+      "examples": [
+        "video-agent open vid_01…"
+      ],
+      "sdk": [
+        "videos.resolve"
+      ],
+      "feature": null,
+      "needsHostedApp": true,
+      "local": false
     }
   ],
   "globalFlags": {

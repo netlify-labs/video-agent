@@ -566,6 +566,7 @@ export declare function send(o: HttpOptions, x: Exchange): Promise<Response>;
 ## index.d.ts
 
 ```ts
+import type { components } from './generated/schema.js';
 export { VideoAgent, type ServerConfig, type VideoAgentOptions } from './client.js';
 export { VideoAgentError, isVideoAgentError } from './errors.js';
 export type { Logger } from './http.js';
@@ -582,6 +583,18 @@ export type { FileHelpers } from './client.js';
 export type { FileOptions, VersionFile } from './helpers/files.js';
 export type { ConfigHelpers, MediaHelpers, MusicHelpers } from './client.js';
 export { SINGLE_UPLOAD_MAX, type UploadOptions, type UploadProgress } from './helpers/media.js';
+/** A video, as GET /api/v1/videos/{id} returns it. */
+export type Video = components['schemas']['Video'];
+/** One version of a video. */
+export type Version = components['schemas']['Version'];
+/** A media library item. */
+export type Media = components['schemas']['Media'];
+/** A plan (Plan it first). */
+export type Plan = components['schemas']['Plan'];
+/** A comment on a video. */
+export type Comment = components['schemas']['Comment'];
+/** A publication of a version (share link, MP4 link, embed snippet). */
+export type Publication = components['schemas']['Publication'];
 ```
 
 ## transport.d.ts
