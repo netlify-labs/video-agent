@@ -10,8 +10,8 @@ type Op = { tags?: string[]; operationId?: string; 'x-sdk'?: unknown }
 
 const VERBS = new Set(
   (
-    'abort add ask cancel check complete correct create delete discard favorite get import list mark publish rebase ' +
-    'receive refresh release remix remove render report reset resolve resume retry reveal revise revoke rotate save ' +
+    'abort add ask cancel check claim complete correct create decide delete discard favorite get import list mark publish rebase ' +
+    'lookup receive refresh release remix remove render report reset resolve resume retry reveal revise revoke rotate save ' +
     'search set take test transfer unfavorite unpublish update upload write'
   ).split(' '),
 )

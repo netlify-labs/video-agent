@@ -292,6 +292,28 @@
     "operationId": "createKey",
     "sdk": false
   },
+  "POST /api/v1/cli/logins": {
+    "operationId": "createCliLogin",
+    "sdk": {
+      "resource": "cliLogins",
+      "method": "create"
+    }
+  },
+  "POST /api/v1/cli/logins/{id}/token": {
+    "operationId": "claimCliLogin",
+    "sdk": {
+      "resource": "cliLogins",
+      "method": "claim"
+    }
+  },
+  "POST /api/v1/cli/logins/lookup": {
+    "operationId": "lookupCliLogin",
+    "sdk": false
+  },
+  "POST /api/v1/cli/logins/approve": {
+    "operationId": "decideCliLogin",
+    "sdk": false
+  },
   "DELETE /api/v1/keys/{id}": {
     "operationId": "revokeKey",
     "sdk": {

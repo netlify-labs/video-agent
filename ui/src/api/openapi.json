@@ -57,6 +57,11 @@
       "x-displayName": "Keys and webhooks"
     },
     {
+      "name": "cli",
+      "description": "video-agent login: the CLI starts a login, you approve it in the browser, it gets a key.",
+      "x-displayName": "CLI login"
+    },
+    {
       "name": "me",
       "description": "Who you are.",
       "x-displayName": "Account"
@@ -3249,6 +3254,212 @@
           "name"
         ]
       },
+      "CliLogin": {
+        "type": "object",
+        "properties": {
+          "loginId": {
+            "type": "string"
+          },
+          "deviceCode": {
+            "type": "string",
+            "description": "Secret: only this CLI claims the key with it."
+          },
+          "userCode": {
+            "type": "string",
+            "example": "BCDF-GHJK",
+            "description": "The person types this on the approve page."
+          },
+          "verificationUrl": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string"
+          },
+          "intervalSec": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "loginId",
+          "deviceCode",
+          "userCode",
+          "verificationUrl",
+          "expiresAt",
+          "intervalSec"
+        ]
+      },
+      "CreateCliLogin": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[\\x20-\\x7e]+$"
+          },
+          "host": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[\\x20-\\x7e]+$"
+          }
+        },
+        "required": [
+          "label",
+          "host"
+        ]
+      },
+      "CliLoginClaim": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "slow_down",
+              "denied",
+              "expired",
+              "claimed"
+            ]
+          },
+          "apiKey": {
+            "type": "string",
+            "description": "With claimed: the new key, shown once."
+          },
+          "keyId": {
+            "type": "string"
+          },
+          "webhookSecret": {
+            "type": "string"
+          },
+          "user": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "email": {
+                "type": "string"
+              },
+              "role": {
+                "$ref": "#/components/schemas/Role"
+              }
+            },
+            "required": [
+              "id",
+              "email",
+              "role"
+            ]
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "Role": {
+        "type": "string",
+        "enum": [
+          "admin",
+          "creator",
+          "reviewer",
+          "viewer"
+        ]
+      },
+      "ClaimCliLogin": {
+        "type": "object",
+        "properties": {
+          "deviceCode": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          }
+        },
+        "required": [
+          "deviceCode"
+        ]
+      },
+      "CliLoginRequest": {
+        "type": "object",
+        "properties": {
+          "loginId": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "host": {
+            "type": "string"
+          },
+          "clientIp": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          }
+        },
+        "required": [
+          "loginId",
+          "label",
+          "host",
+          "clientIp",
+          "createdAt",
+          "expiresAt",
+          "role"
+        ]
+      },
+      "LookupCliLogin": {
+        "type": "object",
+        "properties": {
+          "userCode": {
+            "type": "string",
+            "pattern": "^[A-Za-z]{4}[- ]?[A-Za-z]{4}$"
+          }
+        },
+        "required": [
+          "userCode"
+        ]
+      },
+      "CliLoginDecision": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "approved",
+              "denied"
+            ]
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "DecideCliLogin": {
+        "type": "object",
+        "properties": {
+          "userCode": {
+            "type": "string",
+            "pattern": "^[A-Za-z]{4}[- ]?[A-Za-z]{4}$"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "approve",
+              "deny"
+            ]
+          }
+        },
+        "required": [
+          "userCode",
+          "decision"
+        ]
+      },
       "OAuthGrant": {
         "type": "object",
         "properties": {
@@ -3311,15 +3522,6 @@
           "name",
           "role",
           "via"
-        ]
-      },
-      "Role": {
-        "type": "string",
-        "enum": [
-          "admin",
-          "creator",
-          "reviewer",
-          "viewer"
         ]
       },
       "User": {
@@ -3488,6 +3690,10 @@
               "type": "string"
             },
             "description": "Looks turned off: hidden from pickers and refused for new videos; videos made with one keep it."
+          },
+          "cliLoginEnabled": {
+            "type": "boolean",
+            "description": "video-agent login can get a key by approving the CLI in the browser (the default). Off: paste a key."
           }
         },
         "required": [
@@ -3499,7 +3705,8 @@
           "youtubeEnabled",
           "youtubeConfigured",
           "defaultLook",
-          "disabledLooks"
+          "disabledLooks",
+          "cliLoginEnabled"
         ]
       },
       "TranscriptionProvider": {
@@ -3554,6 +3761,9 @@
             },
             "maxItems": 100,
             "description": "The full list of looks to turn off."
+          },
+          "cliLoginEnabled": {
+            "type": "boolean"
           }
         }
       },
@@ -11286,6 +11496,370 @@
           },
           "409": {
             "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cli/logins": {
+      "post": {
+        "operationId": "createCliLogin",
+        "x-sdk": {
+          "resource": "cliLogins",
+          "method": "create"
+        },
+        "summary": "Start a CLI login",
+        "description": "Starts video-agent login. No credentials: returns a device code for the CLI and a user code the person types on the approve page.",
+        "tags": [
+          "cli"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCliLogin"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Started",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CliLogin"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Browser login is off",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cli/logins/{id}/token": {
+      "post": {
+        "operationId": "claimCliLogin",
+        "x-sdk": {
+          "resource": "cliLogins",
+          "method": "claim"
+        },
+        "summary": "Claim a CLI login",
+        "description": "The CLI's poll. Pending until the person approves; then claimed once, with a new API key. Poll no faster than intervalSec.",
+        "tags": [
+          "cli"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimCliLogin"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CliLoginClaim"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Browser login is off",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cli/logins/lookup": {
+      "post": {
+        "operationId": "lookupCliLogin",
+        "x-sdk": false,
+        "summary": "Look up a CLI login by its code",
+        "description": "For the approve page: the login waiting for the code you typed. Signed-in browser sessions only.",
+        "tags": [
+          "cli"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LookupCliLogin"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CliLoginRequest"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Browser login is off",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cli/logins/approve": {
+      "post": {
+        "operationId": "decideCliLogin",
+        "x-sdk": false,
+        "summary": "Approve or deny a CLI login",
+        "description": "Approves or denies the login waiting for the code you typed. Signed-in browser sessions only.",
+        "tags": [
+          "cli"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecideCliLogin"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Decided",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CliLoginDecision"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Browser login is off",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many",
             "content": {
               "application/json": {
                 "schema": {

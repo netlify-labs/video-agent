@@ -731,6 +731,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/cli/logins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start a CLI login
+         * @description Starts video-agent login. No credentials: returns a device code for the CLI and a user code the person types on the approve page.
+         */
+        post: operations["createCliLogin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cli/logins/{id}/token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Claim a CLI login
+         * @description The CLI's poll. Pending until the person approves; then claimed once, with a new API key. Poll no faster than intervalSec.
+         */
+        post: operations["claimCliLogin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cli/logins/lookup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Look up a CLI login by its code
+         * @description For the approve page: the login waiting for the code you typed. Signed-in browser sessions only.
+         */
+        post: operations["lookupCliLogin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cli/logins/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve or deny a CLI login
+         * @description Approves or denies the login waiting for the code you typed. Signed-in browser sessions only.
+         */
+        post: operations["decideCliLogin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/keys/{id}": {
         parameters: {
             query?: never;
@@ -2618,6 +2698,62 @@ export interface components {
         CreateApiKey: {
             name: string;
         };
+        CliLogin: {
+            loginId: string;
+            /** @description Secret: only this CLI claims the key with it. */
+            deviceCode: string;
+            /**
+             * @description The person types this on the approve page.
+             * @example BCDF-GHJK
+             */
+            userCode: string;
+            verificationUrl: string;
+            expiresAt: string;
+            intervalSec: number;
+        };
+        CreateCliLogin: {
+            label: string;
+            host: string;
+        };
+        CliLoginClaim: {
+            /** @enum {string} */
+            status: "pending" | "slow_down" | "denied" | "expired" | "claimed";
+            /** @description With claimed: the new key, shown once. */
+            apiKey?: string;
+            keyId?: string;
+            webhookSecret?: string;
+            user?: {
+                id: string;
+                email: string;
+                role: components["schemas"]["Role"];
+            };
+        };
+        /** @enum {string} */
+        Role: "admin" | "creator" | "reviewer" | "viewer";
+        ClaimCliLogin: {
+            deviceCode: string;
+        };
+        CliLoginRequest: {
+            loginId: string;
+            label: string;
+            host: string;
+            clientIp: string;
+            createdAt: string;
+            expiresAt: string;
+            role: components["schemas"]["Role"];
+        };
+        LookupCliLogin: {
+            userCode: string;
+        };
+        CliLoginDecision: {
+            /** @enum {string} */
+            status: "approved" | "denied";
+        };
+        DecideCliLogin: {
+            userCode: string;
+            /** @enum {string} */
+            decision: "approve" | "deny";
+        };
         OAuthGrant: {
             id: string;
             clientId: string;
@@ -2633,8 +2769,6 @@ export interface components {
             /** @enum {string} */
             via: "session" | "apiKey";
         };
-        /** @enum {string} */
-        Role: "admin" | "creator" | "reviewer" | "viewer";
         User: {
             id: string;
             email: string;
@@ -2686,6 +2820,8 @@ export interface components {
             defaultLook: string | null;
             /** @description Looks turned off: hidden from pickers and refused for new videos; videos made with one keep it. */
             disabledLooks: string[];
+            /** @description video-agent login can get a key by approving the CLI in the browser (the default). Off: paste a key. */
+            cliLoginEnabled: boolean;
         };
         /**
          * @description How recorded narration is transcribed for captions: local (the default, audio stays in this deployment), elevenlabs (sends the audio to ElevenLabs) or off (no captions from recordings).
@@ -2705,6 +2841,7 @@ export interface components {
             defaultLook?: string | null;
             /** @description The full list of looks to turn off. */
             disabledLooks?: string[];
+            cliLoginEnabled?: boolean;
         };
         Plan: {
             id: string;
@@ -6468,6 +6605,284 @@ export interface operations {
             };
             /** @description Conflict or not ready */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createCliLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCliLogin"];
+            };
+        };
+        responses: {
+            /** @description Started */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CliLogin"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Browser login is off */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too many */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    claimCliLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClaimCliLogin"];
+            };
+        };
+        responses: {
+            /** @description Status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CliLoginClaim"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Browser login is off */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too many */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    lookupCliLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LookupCliLogin"];
+            };
+        };
+        responses: {
+            /** @description Login */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CliLoginRequest"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Browser login is off */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too many */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    decideCliLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecideCliLogin"];
+            };
+        };
+        responses: {
+            /** @description Decided */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CliLoginDecision"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Browser login is off */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too many */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

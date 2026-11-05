@@ -763,6 +763,59 @@ export const OAuthGrantSchema = z
 export const CreateKeySchema = z.object({ name: z.string().min(1).max(80) }).openapi('CreateApiKey')
 
 export const RoleSchema = z.enum(['admin', 'creator', 'reviewer', 'viewer']).openapi('Role')
+
+// video-agent login (cli-and-sdk plan §5.2). Label and host are shown on the approve page: capped, printable ASCII.
+const Printable = z
+  .string()
+  .min(1)
+  .max(64)
+  .regex(/^[\x20-\x7e]+$/, 'Printable ASCII only.')
+const UserCode = z
+  .string()
+  .regex(/^[A-Za-z]{4}[- ]?[A-Za-z]{4}$/, 'The 8-letter code from your terminal, like BCDF-GHJK.')
+export const CreateCliLoginSchema = z.object({ label: Printable, host: Printable }).openapi('CreateCliLogin')
+export const CliLoginSchema = z
+  .object({
+    loginId: z.string(),
+    deviceCode: z.string().openapi({ description: 'Secret: only this CLI claims the key with it.' }),
+    userCode: z
+      .string()
+      .openapi({ example: 'BCDF-GHJK', description: 'The person types this on the approve page.' }),
+    verificationUrl: z.string(),
+    expiresAt: z.string(),
+    intervalSec: z.number().int(),
+  })
+  .openapi('CliLogin')
+export const ClaimCliLoginSchema = z
+  .object({ deviceCode: z.string().min(1).max(64) })
+  .openapi('ClaimCliLogin')
+export const CliLoginClaimSchema = z
+  .object({
+    status: z.enum(['pending', 'slow_down', 'denied', 'expired', 'claimed']),
+    apiKey: z.string().optional().openapi({ description: 'With claimed: the new key, shown once.' }),
+    keyId: z.string().optional(),
+    webhookSecret: z.string().optional(),
+    user: z.object({ id: z.string(), email: z.string(), role: RoleSchema }).optional(),
+  })
+  .openapi('CliLoginClaim')
+export const LookupCliLoginSchema = z.object({ userCode: UserCode }).openapi('LookupCliLogin')
+export const CliLoginRequestSchema = z
+  .object({
+    loginId: z.string(),
+    label: z.string(),
+    host: z.string(),
+    clientIp: z.string(),
+    createdAt: z.string(),
+    expiresAt: z.string(),
+    role: RoleSchema,
+  })
+  .openapi('CliLoginRequest')
+export const DecideCliLoginSchema = z
+  .object({ userCode: UserCode, decision: z.enum(['approve', 'deny']) })
+  .openapi('DecideCliLogin')
+export const CliLoginDecisionSchema = z
+  .object({ status: z.enum(['approved', 'denied']) })
+  .openapi('CliLoginDecision')
 export const UserSchema = z
   .object({
     id: z.string(),

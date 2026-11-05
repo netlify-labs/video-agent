@@ -4,6 +4,7 @@ import type { Context, MiddlewareHandler, Next } from 'hono'
 import type { Deps } from './deps.js'
 import { assertSameOrigin, principalFromRequest } from './domain/auth.js'
 import { receiveCallback } from './domain/callback.js'
+import { claimLogin, createLogin, decideLogin, lookupLogin } from './domain/cli-login.js'
 import { createKey, listKeys, revokeKey } from './domain/keys.js'
 import { assertCan, type Principal } from './domain/policy.js'
 import { resolveUnresolved, tick } from './domain/reconciler.js'
@@ -156,6 +157,9 @@ const errors = {
   409: err('Conflict or not ready'),
 }
 const security = [{ cookieAuth: [] }, { bearerAuth: [] }]
+/** The only paths besides /api/v1/config that skip requireAuth, and only for POST. */
+const CLI_LOGIN_OPEN = [/^\/api\/v1\/cli\/logins$/, /^\/api\/v1\/cli\/logins\/cli_[\w-]+\/token$/]
+const clientIp = (c: Context<Env>) => c.req.header('x-nf-client-connection-ip') ?? 'unknown'
 
 const IdParam = z.object({ id: z.string().openapi({ param: { name: 'id', in: 'path' } }) })
 const IdempotencyHeader = z.object({ 'idempotency-key': z.string().max(200).optional() })
@@ -269,6 +273,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
 
   const requireAuth: MiddlewareHandler<Env> = async (c, next) => {
     if (c.req.path === '/api/v1/config' || c.req.method === 'OPTIONS') return next()
+    // video-agent login: the CLI has no credentials yet; it starts a login and claims it with its device code.
+    if (c.req.method === 'POST' && CLI_LOGIN_OPEN.some((r) => r.test(c.req.path))) return next()
     // Receiver callbacks authenticate with their own per-operation token (publish destinations §3.3).
     if (c.req.path.startsWith('/api/v1/destination-callbacks/')) return next()
     const rotated: { cookie?: string } = {}
@@ -1334,6 +1340,81 @@ export function createApp(deps: Deps, opts: AppOptions) {
       responses: { 201: json(s.NewKeySchema, 'Created'), ...errors },
     }),
     async (c) => c.json(await createKey(deps, c.get('principal'), c.req.valid('json').name), 201),
+  )
+  const cliErrors = { 404: err('Not found'), 409: err('Browser login is off'), 429: err('Too many') }
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/v1/cli/logins',
+      operationId: 'createCliLogin',
+      'x-sdk': { resource: 'cliLogins', method: 'create' },
+      summary: 'Start a CLI login',
+      description:
+        'Starts video-agent login. No credentials: returns a device code for the CLI and a user code the person types on the approve page.',
+      tags: ['cli'],
+      request: {
+        body: { content: { 'application/json': { schema: s.CreateCliLoginSchema } }, required: true },
+      },
+      responses: { 201: json(s.CliLoginSchema, 'Started'), 400: err('Invalid request'), ...cliErrors },
+    }),
+    async (c) => c.json(await createLogin(deps, { ...c.req.valid('json'), clientIp: clientIp(c) }), 201),
+  )
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/v1/cli/logins/{id}/token',
+      operationId: 'claimCliLogin',
+      'x-sdk': { resource: 'cliLogins', method: 'claim' },
+      summary: 'Claim a CLI login',
+      description:
+        "The CLI's poll. Pending until the person approves; then claimed once, with a new API key. Poll no faster than intervalSec.",
+      tags: ['cli'],
+      request: {
+        params: IdParam,
+        body: { content: { 'application/json': { schema: s.ClaimCliLoginSchema } }, required: true },
+      },
+      responses: { 200: json(s.CliLoginClaimSchema, 'Status'), 400: err('Invalid request'), ...cliErrors },
+    }),
+    async (c) => c.json(await claimLogin(deps, c.req.valid('param').id, c.req.valid('json').deviceCode), 200),
+  )
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/v1/cli/logins/lookup',
+      operationId: 'lookupCliLogin',
+      'x-sdk': false,
+      summary: 'Look up a CLI login by its code',
+      description:
+        'For the approve page: the login waiting for the code you typed. Signed-in browser sessions only.',
+      tags: ['cli'],
+      security,
+      request: {
+        body: { content: { 'application/json': { schema: s.LookupCliLoginSchema } }, required: true },
+      },
+      responses: { 200: json(s.CliLoginRequestSchema, 'Login'), ...errors, ...cliErrors },
+    }),
+    async (c) => c.json(await lookupLogin(deps, c.get('principal'), c.req.valid('json').userCode), 200),
+  )
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/v1/cli/logins/approve',
+      operationId: 'decideCliLogin',
+      'x-sdk': false,
+      summary: 'Approve or deny a CLI login',
+      description:
+        'Approves or denies the login waiting for the code you typed. Signed-in browser sessions only.',
+      tags: ['cli'],
+      security,
+      request: {
+        body: { content: { 'application/json': { schema: s.DecideCliLoginSchema } }, required: true },
+      },
+      responses: { 200: json(s.CliLoginDecisionSchema, 'Decided'), ...errors, ...cliErrors },
+    }),
+    async (c) => {
+      const { userCode, decision } = c.req.valid('json')
+      return c.json(await decideLogin(deps, c.get('principal'), userCode, decision), 200)
+    },
   )
   app.openapi(
     createRoute({
@@ -3106,6 +3187,11 @@ export function createApp(deps: Deps, opts: AppOptions) {
         tag('media', 'Media', "The team's media library: uploads, music from Openverse and captions."),
         tag('notifications', 'Notifications', 'Comments and approvals on your videos.'),
         tag('keys', 'Keys and webhooks', 'API keys, connected OAuth apps and your webhook.'),
+        tag(
+          'cli',
+          'CLI login',
+          'video-agent login: the CLI starts a login, you approve it in the browser, it gets a key.',
+        ),
         tag('me', 'Account', 'Who you are.'),
         tag('usage', 'Usage', 'Your AI credits this month.'),
         tag(

@@ -4,6 +4,45 @@ import type { CallOptions, Input, Ok, Transport } from '../transport.js'
 /** The generated resource methods: one namespace per x-sdk resource. */
 export function resources(t: Transport) {
   return {
+    cliLogins: {
+      /** Claim a CLI login (`claimCliLogin`) */
+      claim: (
+        id: string | number,
+        input: Input<'/api/v1/cli/logins/{id}/token', 'post'>,
+        opts?: CallOptions,
+      ): Promise<Ok<'/api/v1/cli/logins/{id}/token', 'post'>> =>
+        t.call<Ok<'/api/v1/cli/logins/{id}/token', 'post'>>(
+          {
+            method: 'POST',
+            path: '/api/v1/cli/logins/{id}/token',
+            pathParams: { id },
+            input,
+            query: [],
+            body: ['deviceCode'],
+            features: [],
+            operationId: 'claimCliLogin',
+          },
+          opts,
+        ),
+      /** Start a CLI login (`createCliLogin`) */
+      create: (
+        input: Input<'/api/v1/cli/logins', 'post'>,
+        opts?: CallOptions,
+      ): Promise<Ok<'/api/v1/cli/logins', 'post'>> =>
+        t.call<Ok<'/api/v1/cli/logins', 'post'>>(
+          {
+            method: 'POST',
+            path: '/api/v1/cli/logins',
+            pathParams: {},
+            input,
+            query: [],
+            body: ['label', 'host'],
+            features: [],
+            operationId: 'createCliLogin',
+          },
+          opts,
+        ),
+    },
     comments: {
       /** Add a comment (`addComment`) */
       add: (

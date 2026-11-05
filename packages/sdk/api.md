@@ -161,6 +161,12 @@ export declare function retryAfterOf(res: Response): number | undefined;
 import type { CallOptions, Input, Ok, Transport } from '../transport.js';
 /** The generated resource methods: one namespace per x-sdk resource. */
 export declare function resources(t: Transport): {
+    cliLogins: {
+        /** Claim a CLI login (`claimCliLogin`) */
+        claim: (id: string | number, input: Input<"/api/v1/cli/logins/{id}/token", "post">, opts?: CallOptions) => Promise<Ok<"/api/v1/cli/logins/{id}/token", "post">>;
+        /** Start a CLI login (`createCliLogin`) */
+        create: (input: Input<"/api/v1/cli/logins", "post">, opts?: CallOptions) => Promise<Ok<"/api/v1/cli/logins", "post">>;
+    };
     comments: {
         /** Add a comment (`addComment`) */
         add: (id: string | number, input: Input<"/api/v1/videos/{id}/comments", "post">, opts?: CallOptions) => Promise<Ok<"/api/v1/videos/{id}/comments", "post">>;

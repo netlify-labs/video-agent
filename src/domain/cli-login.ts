@@ -9,7 +9,7 @@ import { ApiError } from '../lib/errors.js'
 import { keyOwner } from './auth.js'
 import { createKeyForUser } from './keys.js'
 import type { Principal } from './policy.js'
-import type { CliLoginRow } from './types.js'
+import type { CliLoginRow, UserRow } from './types.js'
 
 /** RFC 8628 §6.1: consonants only, so codes don't spell words, and no look-alikes. */
 const ALPHABET = 'BCDFGHJKLMNPQRSTVWXZ'
@@ -160,7 +160,7 @@ export type ClaimResult =
       apiKey: string
       keyId: string
       webhookSecret: string
-      user: { id: string; email: string; role: string }
+      user: { id: string; email: string; role: UserRow['role'] }
     }
 
 /** The CLI's poll. On the first claim after approval the key is minted, once; every later claim is expired. */
