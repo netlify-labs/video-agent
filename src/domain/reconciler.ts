@@ -199,6 +199,8 @@ async function startRequest(
     ...(f.references?.length ? { references: f.references } : {}),
     // Recorded narration: prepare-run hydrates its takes into .va-run/, never video/ (plan 2026-11-02 §6.3).
     ...(f.narration ? { narration: f.narration } : {}),
+    // Held recording scenes' stills the run makes (screen-recording plan §5.3).
+    ...(f.recordingHolds?.length ? { recordingHolds: f.recordingHolds } : {}),
   })
   // Inputs to restore go in a server-written manifest the run verifies by hash (plan v2 §14 rule 21). Returns the hash.
   const putManifest = async (m: Omit<RunManifest, 'v' | 'jobId' | 'attemptId' | 'versionN'>) => {
@@ -239,6 +241,7 @@ async function startRequest(
       editedFromN: version.editedFromN ?? version.parentN ?? 0,
       revoice: version.frozen.revoice?.beats ?? [],
       narration: !!version.frozen.narration,
+      recordingHolds: (version.frozen.recordingHolds?.length ?? 0) > 0,
       runManifestSha256,
       ...runUrls,
       callbackToken,

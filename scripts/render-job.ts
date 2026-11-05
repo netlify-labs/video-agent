@@ -7,17 +7,19 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { MasteringReport, NarrationOutput, NarrationReport } from '../src/domain/types.js'
-import { bundleManifest, compositionFiles } from '../src/lib/bundle-manifest.js'
+import { bundleManifest, compositionFiles, manifestHash } from '../src/lib/bundle-manifest.js'
 import { NARRATION_SRC } from '../src/lib/contract.js'
 import { groupWords, transcriptText } from '../src/lib/narration-captions.js'
 import { checkNarration } from '../src/lib/narration-guard.js'
 import { checkNarrationKept, checkNarrationModified } from '../src/lib/narration-modified.js'
 import { checkRevoiced, FROZEN_DIR } from '../src/lib/revoice.js'
+import { sniff } from '../src/lib/media/mp4.js'
 import type { PreviewFile } from '../src/lib/media/previews.js'
 import type { RunManifest } from '../src/lib/run-manifest.js'
 import type { NarrationOp } from '../src/lib/timeline.js'
 import { postCheckpoint } from './checkpoint.js'
 import { engineReport, runEngineFor, runEngineIdFromManifest } from './lib/engines/index.js'
+import { holdStillTo } from './lib/recording-emit.js'
 import { scopeGuard } from './lib/scope-guard.js'
 import { readNarrationReceipt } from './lib/narration-inputs.js'
 import { toVtt } from './lib/captions.js'
@@ -163,6 +165,34 @@ async function main() {
           `video/ changed in ways re-voicing doesn't explain. Render-unchanged runs must not edit files. Stop and report this.\n- ${problems.join('\n- ')}`,
         )
       log('bundle.verified', { revoiced: m.bundle.revoice.beats })
+    } else if (m.attemptId === attempt && m.kind === 'render_unchanged' && m.bundle?.recordingHolds?.length) {
+      // Held recording scenes (screen-recording plan §5.3): the run added exactly their stills (emit --holds-only).
+      // Everything else must be as frozen; each still must be what a fresh extraction makes, byte for byte.
+      const holds = m.bundle.recordingHolds
+      const bm = bundleManifest(videoDir)
+      const actual = manifestHash(
+        bm.files.filter((f) => !holds.includes(f.path)),
+        bm.media,
+      )
+      if (actual !== m.bundle.manifestHash)
+        throw new StepError(
+          `video/ changed since prepare-run restored it (got ${actual}). Render-unchanged runs must not edit files. Stop and report this.`,
+        )
+      const fresh = join(repoRoot, '.render', `${attempt}-holds`)
+      mkdirSync(fresh, { recursive: true })
+      for (const rel of holds) {
+        const still = join(videoDir, rel)
+        if (!existsSync(still))
+          throw new StepError(`${rel} is missing: run npx tsx scripts/recording.ts emit --holds-only first.`)
+        const bytes = readFileSync(still)
+        if (sniff(new Uint8Array(bytes)) !== 'jpeg')
+          throw new StepError(`${rel} isn't a JPEG. Stop and report this.`)
+        const check = join(fresh, rel.split('/').at(-1) ?? 'hold.jpg')
+        holdStillTo(videoDir, readFileSync(join(videoDir, 'index.html'), 'utf8'), rel, check)
+        if (!bytes.equals(readFileSync(check)))
+          throw new StepError(`${rel} isn't the still of its scene's last frame. Stop and report this.`)
+      }
+      log('bundle.verified', { manifestHash: actual, recordingHolds: holds })
     } else if (m.attemptId === attempt && m.kind === 'render_unchanged' && m.bundle) {
       const actual = bundleManifest(videoDir).hash
       if (actual !== m.bundle.manifestHash)

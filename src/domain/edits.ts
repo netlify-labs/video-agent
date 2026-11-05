@@ -10,6 +10,7 @@ import {
   ContractError,
   FPS,
   load,
+  pendingStills,
   read as readComposition,
   type EditOp,
   type RecordingOp,
@@ -764,6 +765,11 @@ export async function renderEdit(
       for (const f of r.list)
         if (!files.has(f.path) && frozenFile(f.path)) files.set(f.path, await readEntry(deps, f))
       const archive = writeTarGz(files)
+      // Held recording scenes whose stills the bundle doesn't have yet: the render makes them (emit --holds-only).
+      const index = files.get('index.html')
+      const recordingHolds = index
+        ? pendingStills(new TextDecoder().decode(index)).filter((p) => !files.has(p))
+        : []
       const key = `${e.jobId}/v${n}/frozen.tar.gz`
       await deps.blobs.set('sources', key, archive, { contentType: 'application/gzip' })
       const now = deps.clock.now().toISOString()
@@ -801,6 +807,7 @@ export async function renderEdit(
           editId: e.id,
           ...(revoice ? { revoice } : {}),
           ...(narration ? { narration } : {}),
+          ...(recordingHolds.length ? { recordingHolds } : {}),
         },
         // The composition (and any audio in it) is the base's, so its sound and voice-over are too.
         sound: base?.sound ?? 'silent',

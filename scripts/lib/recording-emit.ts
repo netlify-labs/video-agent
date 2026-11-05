@@ -210,6 +210,19 @@ export function emitStep(o: EmitOptions) {
   return { markup, files, hold, rate, duration, slotDuration: slotDur, cursor: style }
 }
 
+/**
+ * Writes the still a held scene names (`rel`, assets/recording/<step>.hold.jpg) to `out`, exactly as emit and
+ * --holds-only make it: the same ffmpeg command on the same input, so render-job can compare bytes.
+ */
+export function holdStillTo(videoDir: string, html: string, rel: string, out: string): number {
+  const b = read(load(html)).beats.find((x) => x.recording?.hold && recHoldSrc(x.recording.step) === rel)
+  const r = b?.recording
+  if (!r) throw new StepError(`No held scene names ${rel}.`)
+  const file = join(videoDir, r.src)
+  if (!existsSync(file)) throw new StepError(`The held scene "${b.id}" needs ${r.src}, which isn't there.`)
+  return writeStill(file, r.out - 1 / 30, out)
+}
+
 /** Writes the hold stills index.html's held slots name and lack; returns what it wrote. Never changes index.html. */
 export function holdsOnly(videoDir: string) {
   const started = Date.now()
@@ -220,10 +233,7 @@ export function holdsOnly(videoDir: string) {
     if (!r?.hold) continue
     const rel = recHoldSrc(r.step)
     if (existsSync(join(videoDir, rel))) continue
-    const file = join(videoDir, r.src)
-    if (!existsSync(file)) throw new StepError(`The held scene "${b.id}" needs ${r.src}, which isn't there.`)
-    const bytes = writeStill(file, r.out - 1 / 30, join(videoDir, rel))
-    written.push({ path: rel, bytes })
+    written.push({ path: rel, bytes: holdStillTo(videoDir, html, rel, join(videoDir, rel)) })
   }
   log('recording.emit_holds', { files: written, ms: Date.now() - started })
   return written

@@ -489,6 +489,11 @@ export interface FrozenBundle {
   references?: BundleReference[]
   /** Keep-visuals renders of a draft with recorded narration: what the run mixes over the frozen visuals. */
   narration?: FrozenNarration
+  /**
+   * Hold stills the draft's held recording scenes name and the bundle lacks (screen-recording plan §5.3): the run makes
+   * them with recording.ts emit --holds-only, and render-job accepts exactly these as added (va-rsk5.3.15).
+   */
+  recordingHolds?: string[]
 }
 
 export interface RevoicePlan {

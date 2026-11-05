@@ -61,6 +61,8 @@ export interface RunManifest {
     references?: BundleReference[] | undefined
     /** Recorded narration to mix (keep-visuals and fit renders): prepare-run hydrates its takes outside video/. */
     narration?: FrozenNarration | undefined
+    /** Hold stills the run adds (recording.ts emit --holds-only); render-job leaves them out of the hash. */
+    recordingHolds?: string[] | undefined
   } | null
   /** Library media to download into video/assets/media/ (plan v2 §9, §14 rule 27). */
   media: RunMedia[] | null
@@ -329,6 +331,7 @@ export function serializeRunManifest(m: RunManifest): string {
         : {}),
       ...refs(m.bundle.references),
       ...(m.bundle.narration ? { narration: narrationOf(m.bundle.narration) } : {}),
+      ...(m.bundle.recordingHolds?.length ? { recordingHolds: [...m.bundle.recordingHolds] } : {}),
     },
     media:
       m.media && m.media.map((x) => ({ key: x.key, sha256: x.sha256, filename: x.filename, kind: x.kind })),
@@ -382,6 +385,7 @@ export const sha256Hex = (s: string | Uint8Array) => createHash('sha256').update
 const HEX = /^[0-9a-f]{64}$/
 const ID = /^[A-Za-z0-9_-]{1,80}$/
 const MEDIA_ID = /^med_[a-z0-9]{8,40}$/
+const HOLD_STILL = /^assets\/recording\/[a-z0-9-]{1,40}\.hold\.jpg$/
 
 /** Parsed JSON: a frozen narration's shape, its takes' keys inside their own media prefix, and its caps. */
 function isFrozenNarration(v: unknown): v is FrozenNarration {
@@ -535,6 +539,16 @@ export function verifyRunManifest(raw: string, expected: { attemptId: string; sh
     throw new Error('The run manifest has a bad re-voice entry.')
   if (m.bundle?.narration !== undefined && !isFrozenNarration(m.bundle.narration))
     throw new Error('The run manifest has a bad narration entry.')
+  if (m.bundle?.recordingHolds !== undefined) {
+    const holds: unknown = m.bundle.recordingHolds
+    if (
+      m.kind !== 'render_unchanged' ||
+      !Array.isArray(holds) ||
+      holds.length > 12 ||
+      !holds.every((p) => typeof p === 'string' && HOLD_STILL.test(p))
+    )
+      throw new Error('The run manifest has a bad recording holds entry.')
+  }
   if (m.media) {
     if (!Array.isArray(m.media) || m.media.length > 50) throw new Error('The run manifest has bad media.')
     for (const x of m.media)

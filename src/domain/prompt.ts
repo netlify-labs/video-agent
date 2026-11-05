@@ -565,6 +565,8 @@ export function buildRenderUnchangedPrompt(p: {
   revoice?: string[]
   /** The frozen bundle has recorded narration: the run mixes it with scripts/narration.ts (after any re-voice). */
   narration?: boolean
+  /** Held recording scenes need their stills made (recording.ts emit --holds-only), the only files the run adds. */
+  recordingHolds?: boolean
   runManifestSha256: string
   callbackUrl: string
   checkpointUrl: string
@@ -581,6 +583,11 @@ export function buildRenderUnchangedPrompt(p: {
       '',
       `1. Run: npx tsx scripts/prepare-run.ts --job ${p.jobId} --attempt ${p.attemptId} --manifest ${p.runManifestSha256}`,
       '   It restores video/ and verifies every file. If it fails, stop and report the error.',
+      ...(p.recordingHolds
+        ? [
+            "   Then run: npx tsx scripts/recording.ts emit --holds-only (it makes the held scenes' stills, the only files it adds).",
+          ]
+        : []),
       '2. Run `npx hyperframes check` in video/. If it reports any error, stop: fix nothing, and end your answer with the errors.',
       `3. Run: ${render}`,
       '   It checks the files again before rendering. If it fails, stop and report the error; never edit files to make it pass.',
