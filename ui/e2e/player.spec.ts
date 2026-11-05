@@ -3,6 +3,7 @@
 // player is bundled from packages/player/src with esbuild; a fake site (page.route) serves the page, the share
 // link's JSON and real fixture media.
 import { readFileSync } from 'node:fs'
+import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page, type Route } from '@playwright/test'
 import { buildSync } from 'esbuild'
 
@@ -220,4 +221,16 @@ test('changing src or the explicit sources reloads; an unpublished link shows a 
     )
     .toBe(`${SITE}/v/x.mp4`)
   expect(await shadowText(page, '.error')).toBeNull()
+})
+
+test('has no accessibility violations (axe), loaded and in its error state', async ({ page }) => {
+  await site(
+    page,
+    `<main><h1>Player</h1><video-agent-player src="${SITE}/v/wideslugs"></video-agent-player><video-agent-player src="${SITE}/v/goneslugs"></video-agent-player></main>`,
+  )
+  // Playwright's text locators reach into open shadow roots.
+  await expect(page.getByText('This video is not published.')).toBeVisible()
+  await expect(page.getByText(/^Music:/)).toBeVisible()
+  const results = await new AxeBuilder({ page }).include('video-agent-player').analyze()
+  expect(results.violations.map((v) => `${v.id}: ${v.help}`)).toEqual([])
 })
