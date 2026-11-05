@@ -61,6 +61,9 @@ import {
 } from './destinations/dto.js'
 import { removeAllForJob } from './destinations/remove.js'
 import { assertSameEngine, engineInfo, engineOf } from './engines.js'
+import { fillBeats } from './beats.js'
+import { enabledFeatures } from './features.js'
+import { scopeRules } from '../lib/scope.js'
 import type { DestinationPublicationRow } from './types.js'
 
 const IDEMPOTENCY_TTL_MS = 24 * 3600_000
@@ -91,6 +94,8 @@ export interface ReviseInput {
   sound?: VideoSound | undefined
   /** Omitted: the plan's voice-over, else the parent's. */
   voiceover?: VoiceoverInput | undefined
+  /** Redo only these scenes (beat ids of fromVersion); everything else stays exactly as it is (redo a scene, §4.1). */
+  scope?: { beats: string[] } | undefined
 }
 
 export const INCORPORATE_MAX_COMMENTS = 50
@@ -428,7 +433,10 @@ export async function reviseVideo(
     mediaIds: input.mediaIds ?? [],
     sound: input.sound ?? null,
     voiceover: input.voiceover ?? null,
+    ...(input.scope ? { scope: input.scope.beats } : {}),
   })
+  // A scoped revision's checks that may read Blobs (the parent's scenes) run before the transaction.
+  if (input.scope) await checkScopedRevise(deps, principal, jobId, input)
   return deps.store.tx(async (repo) => {
     // Visibility first: a replay must not return a saved response for a video that has since gone private.
     await loadJob(repo, principal, jobId)
@@ -444,6 +452,7 @@ export async function reviseVideo(
       if (!parent) throw new ApiError('conflict', 'There is no ready version to revise from.')
       if (parent.status !== 'ready')
         throw new ApiError('conflict', `Version ${parent.n} isn't ready, so it can't be revised.`)
+      const scope = input.scope ? scopeOf(parent, input.scope.beats) : null
       const now = deps.clock.now().toISOString()
       const n = job.nextVersionN
       const feedback = input.commentIds?.length
@@ -484,6 +493,7 @@ export async function reviseVideo(
         ...versionAudio(input, planned, parent, media, inherited),
         // The parent's engine: a video keeps one (render-engines §4.2).
         engine: engineOf(parent),
+        ...(scope ? { scope } : {}),
       }
       assertSameEngine(deps, parent, row)
       await repo.insertVersion(row)
@@ -500,6 +510,66 @@ export async function reviseVideo(
       return { status: 202, body: await videoDto(repo, deps, jobId, principal) }
     })
   })
+}
+
+/**
+ * A scoped revision's checks outside the transaction (redo a scene, docs/plans/2026-11-04-regenerate-beat.md §4.1):
+ * the server offers it, the request is one it can be, and the parent can be redone scene by scene. A parent made
+ * before versions recorded their scenes gets them now (fillBeats checks visibility first and unpacks the archive),
+ * so nothing reads Blobs while the job row is locked; the transaction then reads the stored scenes.
+ */
+async function checkScopedRevise(deps: Deps, principal: Principal, jobId: string, input: ReviseInput) {
+  if (!(await enabledFeatures(deps)).includes('scoped_revision'))
+    throw new ApiError('invalid_request', "This server can't redo single scenes yet.")
+  const refused: [unknown, string][] = [
+    [input.planId, 'A plan describes the whole video, so it can’t be used to redo scenes; leave out planId.'],
+    [
+      input.durationSec,
+      'Redoing scenes keeps the video’s length setting; leave out durationSec and say in the request if a scene should run longer.',
+    ],
+    [input.sound, 'Redoing scenes keeps the video’s sound; leave out sound.'],
+    [
+      input.voiceover,
+      'Redoing scenes keeps the video’s voice-over; leave out voiceover and say in the request how a scene’s line should change.',
+    ],
+  ]
+  for (const [value, message] of refused)
+    if (value !== undefined) throw new ApiError('invalid_request', message)
+  if (input.fromVersion === undefined)
+    throw new ApiError(
+      'invalid_request',
+      'Say which version the scenes are from (fromVersion): scene ids belong to one version.',
+    )
+  await loadJob(deps.store, principal, jobId)
+  const parent = await deps.store.getVersion(jobId, input.fromVersion)
+  if (!parent) throw new ApiError('not_found', `Version ${input.fromVersion} not found.`)
+  assertScopable(parent)
+  if (!parent.beats) await fillBeats(deps, principal, jobId, parent.n)
+}
+
+/** The parent can be redone scene by scene: ready, keeping the editing contract, made by an engine that can. */
+function assertScopable(parent: VersionRow) {
+  const engine = engineOf(parent)
+  if (!engineInfo(engine).capabilities.scopedRevision)
+    throw new ApiError(
+      'not_editable',
+      `Version ${parent.n} was made with ${engineInfo(engine).name}, which can't redo scenes one by one yet. Revise the whole video instead.`,
+    )
+  if (parent.status !== 'ready' || parent.contract !== 1)
+    throw new ApiError(
+      'not_editable',
+      `Version ${parent.n} can't be edited scene by scene (${parent.status !== 'ready' ? "it isn't ready" : "it doesn't keep the editing contract"}). Revise the whole video instead.`,
+    )
+}
+
+/** The stored scope for a revision of `parent`: the beat rules on its scenes (src/lib/scope.ts scopeRules). */
+function scopeOf(parent: VersionRow, beats: string[]): { beats: string[] } {
+  assertScopable(parent)
+  if (!parent.beats)
+    throw new ApiError('conflict', `Version ${parent.n}'s scenes aren't known yet. Try again.`)
+  const r = scopeRules(parent.beats, beats)
+  if ('refusal' in r) throw new ApiError('invalid_request', r.refusal)
+  return { beats: r.beats }
 }
 
 /**

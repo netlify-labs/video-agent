@@ -762,3 +762,47 @@ export function hyperframesScopeCheck(
       : new Map(Object.entries(spliceBytes(splice)).map(([p, s]) => [p, new TextEncoder().encode(s)]))
   return { problems, putBack: splice.putBack, files, lengthDelta: splice.lengthDelta }
 }
+
+// ───── which scenes a request may redo ─────
+
+export const MAX_SCOPED_BEATS = 20
+const SCOPE_BEAT_ID = /^[a-z0-9][a-z0-9-]{0,40}$/
+
+/**
+ * The beat rules for a scoped revision (plan §4.1): 1-20 ids, each a scene of the parent, not every scene, and not the
+ * held last frame or the scene it holds. The beats come back de-duplicated and in the parent's order, so the stored
+ * scope, the manifest and the prompt don't depend on the order a client sent. reviseVideo and local mode both use
+ * this, so they refuse with the same words.
+ */
+export function scopeRules(
+  parentBeats: readonly { id: string; label: string | null }[],
+  requested: readonly string[],
+): { beats: string[] } | { refusal: string } {
+  const unique = [...new Set(requested)]
+  if (unique.length === 0) return { refusal: 'Pick at least one scene to redo.' }
+  if (unique.length > MAX_SCOPED_BEATS) return { refusal: `Pick at most ${MAX_SCOPED_BEATS} scenes to redo.` }
+  const bad = unique.filter((b) => !SCOPE_BEAT_ID.test(b))
+  if (bad.length)
+    return {
+      refusal: `Scene ids are lowercase letters, digits and dashes: ${bad.map((b) => `"${b.slice(0, 60)}"`).join(', ')}.`,
+    }
+  const held = parentBeats.some((b) => b.id === HOLD_BEAT)
+  const real = parentBeats.filter((b) => b.id !== HOLD_BEAT)
+  const unknown = unique.filter((b) => b !== HOLD_BEAT && !real.some((x) => x.id === b))
+  if (unknown.length) {
+    const list = real.map((b) => (b.label ? `${b.id} (${b.label})` : b.id)).join(', ')
+    const names = unknown.map((b) => `"${b}"`).join(', ')
+    return {
+      refusal: `There's no scene ${names}${unknown.length > 1 ? ' among them' : ''}. This video's scenes: ${list}.`,
+    }
+  }
+  const last = real.at(-1)?.id
+  if (unique.includes(HOLD_BEAT) || (held && last !== undefined && unique.includes(last)))
+    return {
+      refusal:
+        'This scene ends the video under your recorded narration and holds its last frame; redo it with a whole-video revision.',
+    }
+  if (real.every((b) => unique.includes(b.id)))
+    return { refusal: "That's every scene: revise the whole video instead (leave out scope)." }
+  return { beats: real.map((b) => b.id).filter((id) => unique.includes(id)) }
+}

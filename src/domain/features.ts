@@ -5,6 +5,7 @@ import type { Deps } from '../deps.js'
 import { narrationEnabled } from './narration-settings.js'
 import { remixEnabled } from './remix-settings.js'
 import { youtubeAvailable } from './destinations/registry.js'
+import { scopeCheckFor } from './engines.js'
 
 export const FEATURES = [
   'remix', // remixing; admin switch remixEnabled
@@ -38,6 +39,8 @@ export async function enabledFeatures(deps: Deps): Promise<Feature[]> {
   if (deps.gateway.available()) on.push('planning')
   if (screenRecordingApi.ready) on.push('screen_recording')
   on.push('destinations')
+  // Redo a scene: once HyperFrames' scope check is registered (prodDeps does it at startup).
+  if (scopeCheckFor('hyperframes')) on.push('scoped_revision')
   if (await youtubeAvailable(deps, deps.store).catch(() => false)) on.push('youtube')
   return on
 }

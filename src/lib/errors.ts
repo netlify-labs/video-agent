@@ -4,6 +4,8 @@ export type ErrorCode =
   | 'forbidden'
   | 'not_found'
   | 'not_ready'
+  /** The version can't be changed this way (redo a scene on a version without the editing contract, or its engine). */
+  | 'not_editable'
   | 'conflict'
   | 'take_deleted'
   | 'trace_frozen'
@@ -25,6 +27,7 @@ const STATUS: Record<ErrorCode, number> = {
   forbidden: 403,
   not_found: 404,
   not_ready: 409,
+  not_editable: 409,
   conflict: 409,
   take_deleted: 409,
   trace_frozen: 409,
