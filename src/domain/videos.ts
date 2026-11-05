@@ -988,6 +988,7 @@ function versionDto(
   signing: { secret: string; job: JobRow; exp: number } | null = null,
   credits: Credit[] = [],
   dests: { rows: DestinationPublicationRow[]; names: Map<string, string>; now: string } | null = null,
+  parent: VersionRow | null = null,
 ) {
   const mineV = verdicts.find((x) => x.versionN === v.n && x.userId === viewerId)
   const fileBase = `${deps.config.siteUrl}/api/v1/videos/${jobId}/versions/${v.n}`
@@ -1009,6 +1010,16 @@ function versionDto(
     editable: v.status === 'ready' && v.contract === 1,
     // What the editor may offer on this version's engine (render-engines §4.2); editable still decides whether it opens.
     editing: { engine: engineOf(v), capabilities: engineInfo(engineOf(v)).capabilities },
+    beats: v.beats ?? null,
+    // The redone scenes, named from the version they came from ("Redid Features"); an id is its own fallback.
+    scope: v.scope
+      ? {
+          beats: v.scope.beats.map((id) => ({
+            id,
+            label: parent?.beats?.find((b) => b.id === id)?.label ?? id,
+          })),
+        }
+      : null,
     mode: v.mode ?? 'author',
     editedFromN: v.editedFromN ?? null,
     n: v.n,
@@ -1229,6 +1240,7 @@ async function buildVideoDto(
         signing,
         versionCredits(provenance, v, output?.runCredits),
         dests,
+        v.parentN !== null ? (versions.find((x) => x.n === v.parentN) ?? null) : null,
       )
     }),
   )

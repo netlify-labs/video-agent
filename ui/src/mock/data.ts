@@ -81,6 +81,10 @@ function ready(
     feedback?: V['feedback']
     /** The plan accepted before it was made. */
     plan?: V['plan']
+    /** Its scenes (redo a scene); null when not known. */
+    beats?: V['beats']
+    /** The scenes it redid of its parent. */
+    scope?: V['scope']
   },
 ): V {
   const startedAt = ago(o.at)
@@ -104,6 +108,8 @@ function ready(
     feedback: o.feedback ?? [],
     editable: o.editable ?? false,
     editing: hyperframes,
+    beats: o.beats ?? null,
+    scope: o.scope ?? null,
     mode: 'author',
     editedFromN: null,
 
@@ -262,6 +268,8 @@ export const videos: Video[] = [
       feedback: [],
       editable: false,
       editing: hyperframes,
+      beats: null,
+      scope: null,
       mode: 'author',
       editedFromN: null,
 
@@ -302,6 +310,8 @@ export const videos: Video[] = [
       feedback: [],
       editable: false,
       editing: hyperframes,
+      beats: null,
+      scope: null,
       mode: 'author',
       editedFromN: null,
 
@@ -336,6 +346,13 @@ export const videos: Video[] = [
       target: 8,
       pub: 'q4czcinsu9',
       editable: true,
+      // Its scenes (redo a scene): an 8 s teaser in four.
+      beats: [
+        { id: 'hook', label: 'Hook', start: 0, duration: 2 },
+        { id: 'problem', label: 'Problem', start: 2, duration: 2 },
+        { id: 'demo', label: 'Demo', start: 4, duration: 2.5 },
+        { id: 'end', label: 'End card', start: 6.5, duration: 1.5 },
+      ],
       previews: true,
       feedback: [
         {
@@ -472,6 +489,8 @@ export const videos: Video[] = [
       feedback: [],
       editable: false,
       editing: hyperframes,
+      beats: null,
+      scope: null,
       mode: 'author',
       editedFromN: null,
 

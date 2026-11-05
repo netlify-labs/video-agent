@@ -402,6 +402,18 @@ export const VersionSchema = z
     editable: z
       .boolean()
       .describe('Ready and keeps editing contract v1, so it can be edited in the browser.'),
+    beats: z
+      .array(BeatInfoSchema)
+      .nullable()
+      .describe(
+        "This version's scenes, when known. Null: not known yet (ask GET …/versions/{n}/beats) or not a version that can be redone scene by scene.",
+      ),
+    scope: z
+      .object({ beats: z.array(z.object({ id: z.string(), label: z.string() })) })
+      .nullable()
+      .describe(
+        'A version that redid only some scenes of the version it came from: which ones, with their names.',
+      ),
     editing: z
       .object({
         engine: z.enum(ENGINE_IDS),
@@ -629,6 +641,27 @@ export const ReviseSchema = z
       description:
         'Incorporate feedback: open comments on the version being revised (owner or admin). prompt is your note.',
     }),
+    scope: z
+      .object({
+        beats: z
+          .array(z.string().regex(/^[a-z0-9][a-z0-9-]{0,40}$/))
+          .min(1)
+          .max(20)
+          .describe("Scene ids from fromVersion's beats (GET …/versions/{n}/beats)."),
+      })
+      .optional()
+      .openapi({
+        description:
+          "Redo only these scenes; everything else stays exactly as it is. Needs fromVersion. Can't be combined with planId, durationSec, sound or voiceover.",
+      }),
+  })
+  .superRefine((v, ctx) => {
+    if (v.scope && v.fromVersion === undefined)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['fromVersion'],
+        message: 'Say which version the scenes are from (fromVersion): scene ids belong to one version.',
+      })
   })
   .openapi('Revise')
 

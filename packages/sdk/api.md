@@ -276,6 +276,8 @@ export declare function resources(t: Transport): {
         get: (id: string | number, opts?: CallOptions) => Promise<Ok<"/api/v1/media/uploads/{id}", "get">>;
     };
     versions: {
+        /** A version's scenes (`getVersionBeats`) */
+        beats: (id: string | number, n: string | number, opts?: CallOptions) => Promise<Ok<"/api/v1/videos/{id}/versions/{n}/beats", "get">>;
         /** Cancel a version (`cancelVersion`) */
         cancel: (id: string | number, n: string | number, opts?: CallOptions) => Promise<Ok<"/api/v1/videos/{id}/versions/{n}/cancel", "post">>;
         /** Correct the captions (`correctCaptions`) */

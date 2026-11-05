@@ -481,6 +481,8 @@ export function installMock() {
           'planning',
           'destinations',
           ...(adminSettings.youtubeEnabled ? ['youtube'] : []),
+          // Redo a scene; localStorage.mockNoScopedRevision=1 leaves it out, to test the hidden UI.
+          ...(localStorage.getItem('mockNoScopedRevision') === '1' ? [] : ['scoped_revision']),
         ],
         admission: ['acme.com'],
         siteUrl: window.location.origin,
@@ -630,6 +632,14 @@ export function installMock() {
     }
     // Media library (plan v2 §9): in memory. localStorage.mockFailPart=1 fails one part once, to test resume.
     // A version's library media (the Remix dialog's chips): the webhooks launch used the first library item.
+    // A version's scenes (redo a scene): what the mock version carries.
+    const vbeats = /^\/api\/v1\/videos\/([^/]+)\/versions\/(\d+)\/beats$/.exec(p)
+    if (vbeats?.[1] && method === 'GET') {
+      const v = videos.find((x) => x.id === vbeats[1])?.versions.find((x) => x.n === Number(vbeats[2]))
+      if (!v) return fail(404, 'not_found', 'Version not found.')
+      if (v.status !== 'ready') return fail(409, 'not_ready', `Version ${v.n} isn't ready yet.`)
+      return json({ beats: v.beats })
+    }
     const vmedia = /^\/api\/v1\/videos\/([^/]+)\/versions\/\d+\/media$/.exec(p)
     if (vmedia?.[1] && method === 'GET') {
       if (vmedia[1] !== 'vid_webhooks') return json({ items: [] })
@@ -1219,7 +1229,34 @@ export function installMock() {
       const b = await readBody(init, input)
       ;(window as unknown as { __lastRevise?: unknown }).__lastRevise = b
       const vid = videos.find((x) => x.id === rv[1])
-      return vid ? json(withComments(vid), 202) : fail(404, 'not_found', 'Video not found.')
+      if (!vid) return fail(404, 'not_found', 'Video not found.')
+      // Redo a scene: the same first checks the server makes (src/domain/videos.ts checkScopedRevise, scopeRules).
+      const scope = (b as { scope?: { beats?: string[] }; fromVersion?: number }).scope
+      if (scope) {
+        const from = (b as { fromVersion?: number }).fromVersion
+        if (from === undefined)
+          return fail(
+            400,
+            'invalid_request',
+            'Say which version the scenes are from (fromVersion): scene ids belong to one version.',
+          )
+        const parent = vid.versions.find((x) => x.n === from)
+        if (!parent?.editable || !parent.beats)
+          return fail(
+            409,
+            'not_editable',
+            `Version ${from} can't be edited scene by scene (it doesn't keep the editing contract). Revise the whole video instead.`,
+          )
+        const known = parent.beats.map((x) => x.id)
+        const unknown = (scope.beats ?? []).filter((x) => !known.includes(x))
+        if (unknown.length)
+          return fail(
+            400,
+            'invalid_request',
+            `There's no scene ${unknown.map((x) => `"${x}"`).join(', ')}. This video's scenes: ${parent.beats.map((x) => (x.label ? `${x.id} (${x.label})` : x.id)).join(', ')}.`,
+          )
+      }
+      return json(withComments(vid), 202)
     }
     // Narration captions and their corrections (POST: compare-and-swap on the revision, text-only).
     const cp = /^\/api\/v1\/videos\/([^/]+)\/versions\/(\d+)\/captions$/.exec(p)

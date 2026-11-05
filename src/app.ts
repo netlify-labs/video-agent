@@ -517,9 +517,14 @@ export function createApp(deps: Deps, opts: AppOptions) {
       method: 'post',
       path: '/api/v1/videos/{id}/versions',
       operationId: 'reviseVideo',
-      'x-sdk': { resource: 'videos', method: 'revise', fieldFeatures: { planId: 'planning' } },
+      'x-sdk': {
+        resource: 'videos',
+        method: 'revise',
+        fieldFeatures: { planId: 'planning', scope: 'scoped_revision' },
+      },
       summary: 'Revise a video',
-      description: 'Starts the next version from a ready one.',
+      description:
+        "Starts the next version from a ready one. With scope, only those scenes of fromVersion are redone and everything else stays exactly as it is (redo a scene): 409 not_editable when that version can't be redone scene by scene (no editing contract, or its engine can't), 400 for scene ids it doesn't have.",
       tags: ['versions'],
       security,
       request: {

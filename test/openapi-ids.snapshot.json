@@ -68,7 +68,8 @@
       "resource": "videos",
       "method": "revise",
       "fieldFeatures": {
-        "planId": "planning"
+        "planId": "planning",
+        "scope": "scoped_revision"
       }
     }
   },
