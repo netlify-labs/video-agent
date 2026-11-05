@@ -32,6 +32,9 @@ export const settings = pgTable('settings', {
   takeQuotaBytes: bigint('take_quota_bytes', { mode: 'number' }).notNull().default(2147483648),
   // Remixing (docs/plans/2026-11-03-remix.md §4): admins can turn it off without a redeploy.
   remixEnabled: boolean('remix_enabled').notNull().default(true),
+  // Publish destinations (docs/plans/2026-11-04-publish-destinations.md §4): YouTube is offered only when the Google
+  // OAuth env is set and an admin turns it on.
+  youtubeEnabled: boolean('youtube_enabled').notNull().default(false),
 })
 
 export const users = pgTable('users', {
@@ -792,4 +795,95 @@ export const sessions = pgTable(
     revokedAt: ts('revoked_at'),
   },
   (t) => [index('sessions_user_idx').on(t.userId), index('sessions_expires_idx').on(t.expiresAt)],
+)
+
+// Publish destinations (docs/plans/2026-11-04-publish-destinations.md §2.3). Built-in kinds (the share page, YouTube)
+// are virtual: only HTTP destinations are rows. The share page keeps its state in `publications` and never has rows in
+// destination_publications.
+export const destinations = pgTable('destinations', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  enabled: boolean('enabled').notNull(),
+  url: text('url').notNull(),
+  secretEnc: text('secret_enc').notNull(),
+  optionsSchema: jsonb('options_schema'),
+  capabilities: jsonb('capabilities').notNull(),
+  sharePublisherContact: boolean('share_publisher_contact').notNull().default(false),
+  revision: integer('revision').notNull(),
+  createdBy: text('created_by').notNull(),
+  createdAt: ts('created_at').notNull(),
+  updatedAt: ts('updated_at').notNull(),
+})
+
+// A person's account at a built-in destination (YouTube): one per person and kind in v1.
+export const destinationConnections = pgTable(
+  'destination_connections',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull(),
+    kind: text('kind').notNull(),
+    accountId: text('account_id').notNull(),
+    accountLabel: text('account_label').notNull(),
+    tokenEnc: text('token_enc').notNull(),
+    scopes: jsonb('scopes').$type<string[]>().notNull(),
+    status: text('status').notNull(),
+    createdAt: ts('created_at').notNull(),
+    updatedAt: ts('updated_at').notNull(),
+    revokedAt: ts('revoked_at'),
+  },
+  (t) => [uniqueIndex('destination_connections_user_kind_idx').on(t.userId, t.kind)],
+)
+
+// One version at one target of one destination. desired is what the person wants; status is where the worker is;
+// generation and lease_fence fence every write (§2.4).
+export const destinationPublications = pgTable(
+  'destination_publications',
+  {
+    id: text('id').primaryKey(),
+    jobId: text('job_id').notNull(),
+    versionN: integer('version_n').notNull(),
+    kind: text('kind').notNull(),
+    destinationId: text('destination_id'),
+    destinationRevision: integer('destination_revision'),
+    connectionId: text('connection_id'),
+    targetKey: text('target_key').notNull(),
+    target: jsonb('target'),
+    options: jsonb('options').notNull(),
+    instructions: text('instructions'),
+    desired: text('desired').notNull(),
+    status: text('status').notNull(),
+    generation: integer('generation').notNull(),
+    operation: text('operation').notNull(),
+    manifest: jsonb('manifest').notNull(),
+    stateEnc: text('state_enc'),
+    externalId: text('external_id'),
+    url: text('url'),
+    message: text('message'),
+    warnings: jsonb('warnings').$type<string[]>(),
+    error: jsonb('error'),
+    attempts: integer('attempts').notNull(),
+    nextRunAt: ts('next_run_at'),
+    deadlineAt: ts('deadline_at').notNull(),
+    leaseUntil: ts('lease_until'),
+    leaseFence: integer('lease_fence').notNull(),
+    secretOnceEnc: text('secret_once_enc'),
+    secretOnceLabel: text('secret_once_label'),
+    secretOnceIssuedAt: ts('secret_once_issued_at'),
+    secretOnceExpiresAt: ts('secret_once_expires_at'),
+    secretOnceConsumedAt: ts('secret_once_consumed_at'),
+    publishedBy: text('published_by').notNull(),
+    createdAt: ts('created_at').notNull(),
+    updatedAt: ts('updated_at').notNull(),
+    liveAt: ts('live_at'),
+    removedAt: ts('removed_at'),
+  },
+  (t) => [
+    index('destination_publications_job_idx').on(t.jobId),
+    index('destination_publications_due_idx')
+      .on(t.nextRunAt)
+      .where(sql`${t.status} in ('queued', 'running', 'waiting', 'removing')`),
+    uniqueIndex('destination_publications_active_idx')
+      .on(t.jobId, t.versionN, t.kind, sql`coalesce(${t.destinationId}, '')`, t.targetKey)
+      .where(sql`${t.desired} = 'published'`),
+  ],
 )

@@ -132,6 +132,69 @@ export const CreditSchema = z
   })
   .openapi('Credit')
 
+// Publish destinations (docs/plans/2026-11-04-publish-destinations.md §6.1).
+export const DestinationPublicationSchema = z
+  .object({
+    id: z.string(),
+    kind: z.enum(['share_page', 'youtube', 'http']),
+    destination: z.object({ id: z.string(), name: z.string() }),
+    target: z.object({ name: z.string(), url: z.string().nullable() }).nullable(),
+    status: z.enum(['queued', 'running', 'waiting', 'live', 'removing', 'removed', 'failed']),
+    desired: z.enum(['published', 'removed']),
+    url: z.string().nullable(),
+    message: z.string().nullable().describe("The destination's latest progress note, plain text."),
+    warnings: z.array(z.string()),
+    error: z.object({ code: z.string(), message: z.string() }).nullable(),
+    hasSecret: z
+      .boolean()
+      .describe('A one-time secret (such as a site password) waits to be revealed, once.'),
+    secretLabel: z.string().nullable(),
+    publishedAt: z.string(),
+    liveAt: z.string().nullable(),
+  })
+  .openapi('DestinationPublication')
+
+export const DestinationSchema = z
+  .object({
+    id: z.string(),
+    kind: z.enum(['share_page', 'youtube', 'http']),
+    name: z.string(),
+    ready: z.boolean(),
+    reason: z.string().nullable().describe('Why it is not ready (shown as-is).'),
+    capabilities: z.object({
+      targets: z.boolean(),
+      targetNoun: z.string().nullable(),
+      instructions: z.boolean(),
+      instructionsLabel: z.string().nullable(),
+      instructionsHint: z.string().nullable(),
+    }),
+    optionsSchema: z.unknown().nullable().describe('The options form (a JSON-Schema subset), or null.'),
+    unpublishOptionsSchema: z.unknown().nullable(),
+  })
+  .openapi('Destination')
+
+export const TargetSchema = z
+  .object({
+    id: z.string().max(200),
+    name: z.string().max(200),
+    description: z.string().max(500).nullable(),
+    url: z.string().nullable(),
+    metadata: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).nullable(),
+  })
+  .openapi('Target')
+
+export const PublishToDestinationSchema = z
+  .object({
+    destination: z.string().describe("'share_page', 'youtube' or an HTTP destination's id."),
+    options: z.record(z.string(), z.unknown()).optional(),
+    target: TargetSchema.nullable()
+      .optional()
+      .describe('One of listDestinationTargets, exactly as listed; null: new.'),
+    instructions: z.string().max(4000).nullable().optional(),
+    includeTranscript: z.boolean().optional(),
+  })
+  .openapi('PublishToDestination')
+
 export const PublicationSchema = z
   .object({
     slug: z.string(),
@@ -418,6 +481,9 @@ export const VersionSchema = z
         'CC BY media this version was made with (Openverse music from the library, or fetched by the run itself): show the credit wherever the video is shown',
     }),
     publications: z.array(PublicationSchema),
+    destinations: z
+      .array(DestinationPublicationSchema)
+      .describe('Where this version is published: the share page and every destination.'),
   })
   .openapi('Version')
 

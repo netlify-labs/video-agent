@@ -29,6 +29,9 @@ import { reviseCaptions } from './domain/captions.js'
 import { resetPoster, setPoster } from './domain/poster.js'
 import { signedFilePath, versionFileName } from './domain/files.js'
 import { handleMcp } from './mcp.js'
+import { listDestinations } from './domain/destinations/list.js'
+import { publishToDestination, retryDestinationPublication } from './domain/destinations/publish.js'
+import { unpublishFromDestination } from './domain/destinations/remove.js'
 import {
   listGrants,
   oauthEnabled,
@@ -610,6 +613,98 @@ export function createApp(deps: Deps, opts: AppOptions) {
       await unpublishVersion(deps, c.get('principal'), p.id, p.n)
       return c.body(null, 204)
     },
+  )
+  // Publish destinations (docs/plans/2026-11-04-publish-destinations.md §6.1).
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/v1/destinations',
+      operationId: 'listDestinations',
+      summary: 'List destinations',
+      description:
+        'Where a ready version can be published: the share page, YouTube (when set up) and HTTP destinations, each with whether it is ready for you and, if not, why.',
+      tags: ['publishing'],
+      security,
+      responses: { 200: json(z.object({ items: z.array(s.DestinationSchema) }), 'Destinations'), ...errors },
+    }),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- optionsSchema is free-form JSON
+    async (c) => c.json({ items: (await listDestinations(deps, c.get('principal'))) as any[] }, 200),
+  )
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/v1/videos/{id}/versions/{n}/destinations',
+      operationId: 'publishToDestination',
+      summary: 'Publish a version to a destination',
+      description:
+        "Publishes a ready version to a destination. The share page publishes at once; others publish in the background: watch the version's destinations list.",
+      tags: ['publishing'],
+      security,
+      request: {
+        params: VersionParam,
+        headers: IdempotencyHeader,
+        body: { content: { 'application/json': { schema: s.PublishToDestinationSchema } }, required: true },
+      },
+      responses: { 200: json(s.DestinationPublicationSchema, 'Publishing'), ...errors },
+    }),
+    async (c) => {
+      const p = c.req.valid('param')
+      const dto = await publishToDestination(
+        deps,
+        c.get('principal'),
+        p.id,
+        p.n,
+        c.req.valid('json'),
+        c.req.valid('header')['idempotency-key'],
+      )
+      return c.json(dto, 200)
+    },
+  )
+  app.openapi(
+    createRoute({
+      method: 'delete',
+      path: '/api/v1/destination-publications/{id}',
+      operationId: 'unpublishFromDestination',
+      summary: 'Remove a version from a destination',
+      description: 'Removes a destination publication, from any state. Removal runs in the background.',
+      tags: ['publishing'],
+      security,
+      request: {
+        params: IdParam,
+        body: {
+          content: {
+            'application/json': {
+              schema: z.object({ options: z.record(z.string(), z.unknown()).optional() }),
+            },
+          },
+          required: false,
+        },
+      },
+      responses: { 200: json(s.DestinationPublicationSchema, 'Removing'), ...errors },
+    }),
+    async (c) => {
+      const body = (c.req.valid('json') as { options?: Record<string, unknown> } | undefined) ?? {}
+      return c.json(
+        await unpublishFromDestination(deps, c.get('principal'), c.req.valid('param').id, body.options),
+        200,
+      )
+    },
+  )
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/v1/destination-publications/{id}/retry',
+      operationId: 'retryDestinationPublication',
+      summary: 'Try a failed destination publication again',
+      description:
+        'Starts a new attempt on the same publication, so the destination can find what an earlier one made.',
+      tags: ['publishing'],
+      security,
+      request: { params: IdParam },
+      responses: { 200: json(s.DestinationPublicationSchema, 'Trying again'), ...errors },
+    }),
+    async (c) =>
+      c.json(await retryDestinationPublication(deps, c.get('principal'), c.req.valid('param').id), 200),
   )
   app.openapi(
     createRoute({

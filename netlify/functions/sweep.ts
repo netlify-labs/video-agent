@@ -5,6 +5,7 @@ import { prodDeps } from '../../src/adapters/prod.js'
 import { runCleanup } from '../../src/domain/cleanup.js'
 import { tick } from '../../src/domain/reconciler.js'
 import { deliverWebhooks } from '../../src/domain/webhooks.js'
+import { duePublications } from '../../src/domain/destinations/sweep.js'
 
 export default async () => {
   const deps = prodDeps()
@@ -13,8 +14,9 @@ export default async () => {
   try {
     const r = await tick(deps, budget)
     const delivered = await deliverWebhooks(deps, budget)
+    const destinations = await duePublications(deps, budget)
     const cleaned = await runCleanup(deps, { ...budget, maxItems: 5 })
-    deps.log.info('sweep.done', { ...r, delivered, cleaned, ms: Date.now() - started })
+    deps.log.info('sweep.done', { ...r, delivered, destinations, cleaned, ms: Date.now() - started })
   } catch (e) {
     deps.log.error('sweep.failed', { error: e, ms: Date.now() - started })
   }

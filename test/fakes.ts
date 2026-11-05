@@ -10,6 +10,7 @@ import type {
   Config,
   Deps,
   HttpPort,
+  HttpResponse,
   IdentityPort,
   IdentitySettings,
   IdentityUser,
@@ -75,6 +76,20 @@ export class FakeBlobs implements BlobsPort {
     return [...this.data.keys()]
       .filter((k) => k.startsWith(`${s}:${prefix}`))
       .map((k) => k.slice(s.length + 1))
+  }
+  async stream(s: BlobStoreName, key: string, range?: { start: number; end: number }) {
+    const v = this.data.get(this.k(s, key))
+    if (!v) return null
+    const bytes = range ? v.subarray(range.start, range.end + 1) : v
+    return new ReadableStream<Uint8Array>({
+      start(ctl) {
+        // Two chunks, so readers that assume one chunk get caught.
+        const mid = Math.floor(bytes.byteLength / 2)
+        if (mid > 0) ctl.enqueue(bytes.slice(0, mid))
+        ctl.enqueue(bytes.slice(mid))
+        ctl.close()
+      },
+    })
   }
   text(s: BlobStoreName, key: string) {
     const v = this.data.get(this.k(s, key))
@@ -226,6 +241,13 @@ export class FakePlatform implements PlatformPort {
     this.dispatched.push(attemptId)
     if (this.onDispatch) await this.onDispatch(attemptId)
   }
+  /** Publish dispatches (publish destinations): recorded; onPublish runs them when a test wants it. */
+  publishes: string[] = []
+  onPublish: ((publicationId: string) => Promise<void>) | null = null
+  async dispatchPublish(publicationId: string) {
+    this.publishes.push(publicationId)
+    if (this.onPublish) await this.onPublish(publicationId)
+  }
   assemblies: string[] = []
   onAssemble: ((uploadId: string) => Promise<void>) | null = null
   async dispatchMediaAssembly(uploadId: string) {
@@ -246,9 +268,38 @@ export class FakePlatform implements PlatformPort {
 export class FakeHttp implements HttpPort {
   calls: { url: string; body: string; headers: Record<string, string> }[] = []
   status = 200
+  /** Answers postJsonForResponse (publish destinations): a fake receiver. Default: 404. */
+  receiver:
+    | ((req: {
+        url: string
+        body: string
+        headers: Record<string, string>
+      }) => Promise<Partial<HttpResponse> | Error> | Partial<HttpResponse> | Error)
+    | null = null
+  responseCalls: { url: string; body: string; headers: Record<string, string> }[] = []
   async postJson(url: string, body: string, headers: Record<string, string>) {
     this.calls.push({ url, body, headers })
     return { status: this.status }
+  }
+  async postJsonForResponse(
+    url: string,
+    body: string,
+    headers: Record<string, string>,
+    opts: { timeoutMs: number; maxBodyBytes: number },
+  ): Promise<HttpResponse> {
+    const u = new URL(url)
+    if (u.protocol !== 'https:') throw new Error('URL must be https')
+    if (u.username || u.password) throw new Error('URLs must not carry credentials')
+    this.responseCalls.push({ url, body, headers })
+    const r = this.receiver ? await this.receiver({ url, body, headers }) : { status: 404 }
+    if (r instanceof Error) throw r
+    const text = r.body ?? ''
+    return {
+      status: r.status ?? 200,
+      headers: { contentType: 'application/json', retryAfter: null, ...r.headers },
+      body: text.slice(0, opts.maxBodyBytes),
+      truncated: text.length > opts.maxBodyBytes,
+    }
   }
 }
 

@@ -141,6 +141,7 @@ function ready(
           },
         ]
       : [],
+    destinations: [],
   }
 }
 
@@ -256,6 +257,7 @@ export const videos: Video[] = [
       links: files('vid_making', 1),
       files: null,
       publications: [],
+      destinations: [],
       credits: [],
     },
   ]),
@@ -294,6 +296,7 @@ export const videos: Video[] = [
       links: files('vid_queued', 1),
       files: null,
       publications: [],
+      destinations: [],
       credits: [],
     },
   ]),
@@ -465,6 +468,7 @@ export const videos: Video[] = [
       links: files('vid_failed', 1),
       files: null,
       publications: [],
+      destinations: [],
       credits: [],
     },
   ]),

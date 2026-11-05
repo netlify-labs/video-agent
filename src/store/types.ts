@@ -44,6 +44,9 @@ import type {
   OAuthTokenRow,
   SessionRow,
   UserIdentityRow,
+  DestinationRow,
+  DestinationConnectionRow,
+  DestinationPublicationRow,
 } from '../domain/types.js'
 
 export interface JobQuery {
@@ -73,6 +76,7 @@ export interface VideoPageRows {
   versionComments: VersionCommentRow[]
   provenance: (VersionProvenanceRow & { jobId: string })[]
   owners: UserRow[]
+  destinationPublications: DestinationPublicationRow[]
 }
 
 export interface Repo {
@@ -324,6 +328,56 @@ export interface Repo {
   /** Atomically leases up to `limit` due deliveries (skipping rows other sweeps hold) and returns them. */
   claimDueWebhookDeliveries(now: string, leaseUntil: string, limit: number): Promise<WebhookDeliveryRow[]>
   updateWebhookDelivery(id: string, patch: Partial<WebhookDeliveryRow>): Promise<void>
+  // Publish destinations (docs/plans/2026-11-04-publish-destinations.md §2.3-§2.4).
+  listDestinations(): Promise<DestinationRow[]>
+  getDestination(id: string): Promise<DestinationRow | null>
+  insertDestination(row: DestinationRow): Promise<void>
+  updateDestination(id: string, patch: Partial<DestinationRow>): Promise<void>
+  deleteDestination(id: string): Promise<void>
+  getDestinationConnection(id: string): Promise<DestinationConnectionRow | null>
+  getUserConnection(
+    userId: string,
+    kind: DestinationConnectionRow['kind'],
+  ): Promise<DestinationConnectionRow | null>
+  listUserConnections(userId: string): Promise<DestinationConnectionRow[]>
+  /** Inserts or replaces the person's connection of that kind. */
+  putDestinationConnection(row: DestinationConnectionRow): Promise<void>
+  updateDestinationConnection(id: string, patch: Partial<DestinationConnectionRow>): Promise<void>
+  deleteDestinationConnection(id: string): Promise<void>
+  /** Throws ApiError conflict when an active publication already holds the same (job, version, kind, destination,
+   * target key). */
+  insertDestinationPublication(row: DestinationPublicationRow): Promise<void>
+  getDestinationPublication(id: string, opts?: { lock?: boolean }): Promise<DestinationPublicationRow | null>
+  listDestinationPublications(jobId: string): Promise<DestinationPublicationRow[]>
+  listDestinationPublicationsFor(destinationId: string): Promise<DestinationPublicationRow[]>
+  /** The active publication holding that key, if any. */
+  findActiveDestinationPublication(
+    k: Pick<DestinationPublicationRow, 'jobId' | 'versionN' | 'kind' | 'destinationId' | 'targetKey'>,
+  ): Promise<DestinationPublicationRow | null>
+  /** Unconditional patch, for domain code that holds the job's lock (start, remove, retry). */
+  updateDestinationPublication(id: string, patch: Partial<DestinationPublicationRow>): Promise<void>
+  /** Takes the worker lease when no live lease exists: sets lease_until and increments lease_fence. */
+  claimDestinationPublication(
+    id: string,
+    now: string,
+    leaseUntil: string,
+  ): Promise<DestinationPublicationRow | null>
+  /** Applies the patch only if the fence, generation and desired still match; false = the row moved on. */
+  commitDestinationPublication(
+    id: string,
+    f: PublicationFence,
+    patch: Partial<DestinationPublicationRow>,
+  ): Promise<boolean>
+  /** Rows to dispatch (due, no live lease) or to expire (past their deadline), for the sweep. */
+  listDueDestinationPublications(now: string, limit: number): Promise<DestinationPublicationRow[]>
+  /** Rows whose one-time secret has expired and still has ciphertext. */
+  listExpiredSecrets(now: string, limit: number): Promise<DestinationPublicationRow[]>
+  /** Atomically consumes the one-time secret for its publisher; null if absent, consumed, expired or not theirs. */
+  consumeSecretOnce(
+    id: string,
+    userId: string,
+    now: string,
+  ): Promise<{ label: string; valueEnc: string } | null>
   getUserWebhook(userId: string): Promise<UserWebhookRow | null>
   putUserWebhook(row: UserWebhookRow): Promise<void>
   deleteUserWebhook(userId: string): Promise<void>
@@ -395,6 +449,13 @@ export interface Repo {
    * take upload sessions (a completed session is counted by its media row).
    */
   countNarrationTakes(uploaderId: string, since: string): Promise<number>
+}
+
+/** The fenced write a destination worker or callback makes (publish destinations §2.4). */
+export interface PublicationFence {
+  fence: number
+  generation: number
+  desired: DestinationPublicationRow['desired']
 }
 
 export interface Store extends Repo {

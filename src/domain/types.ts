@@ -118,6 +118,8 @@ export interface SettingsRow {
   takeQuotaBytes?: number
   /** Remixing on (the default) or off, without a redeploy (remix spec §4). Missing: the default. */
   remixEnabled?: boolean
+  /** YouTube offered as a publish destination (needs the Google OAuth env too). Missing: off. */
+  youtubeEnabled?: boolean
 }
 
 export type TranscriptionProvider = 'local' | 'elevenlabs' | 'off'
@@ -866,7 +868,15 @@ export interface VerdictRow {
 }
 
 export type WebhookEventType =
-  'video.ready' | 'video.failed' | 'comment.created' | 'version.approved' | 'version.changes_requested'
+  | 'video.ready'
+  | 'video.failed'
+  | 'comment.created'
+  | 'version.approved'
+  | 'version.changes_requested'
+  // Publish destinations (§6.4): terminal outcomes only.
+  | 'destination.live'
+  | 'destination.failed'
+  | 'destination.removed'
 
 /** A logical event; each destination gets its own delivery row (plan v2 §14 rule 10). */
 export interface WebhookEventRow {
@@ -995,3 +1005,107 @@ export const NARRATION_OUTPUTS = {
   'transcript.txt': 'text/plain; charset=utf-8',
 } as const
 export type NarrationOutput = keyof typeof NARRATION_OUTPUTS
+
+// ───────────── Publish destinations (docs/plans/2026-11-04-publish-destinations.md §2.3) ─────────────
+
+export type DestinationKindName = 'share_page' | 'youtube' | 'http'
+
+/** What an HTTP destination's receiver says it supports in its ping (§3.6). */
+export interface DestinationCapabilities {
+  targets?: boolean
+  targetNoun?: string
+  instructions?: boolean
+  instructionsLabel?: string
+  instructionsHint?: string
+}
+
+/** An admin-configured HTTP destination. Built-in kinds are virtual and have no row. */
+export interface DestinationRow {
+  id: string
+  name: string
+  enabled: boolean
+  url: string
+  secretEnc: string
+  optionsSchema: unknown
+  capabilities: DestinationCapabilities
+  sharePublisherContact: boolean
+  revision: number
+  createdBy: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface DestinationConnectionRow {
+  id: string
+  userId: string
+  kind: 'youtube'
+  /** The YouTube channel id. */
+  accountId: string
+  accountLabel: string
+  /** The refresh token, encrypted. */
+  tokenEnc: string
+  scopes: string[]
+  status: 'ok' | 'reconnect'
+  createdAt: string
+  updatedAt: string
+  revokedAt: string | null
+}
+
+export type DestinationStatus = 'queued' | 'running' | 'waiting' | 'live' | 'removing' | 'removed' | 'failed'
+
+/** A short code plus plain text we wrote or validated (≤ 300 characters). Never a raw receiver body. */
+export interface SafeError {
+  code: string
+  message: string
+}
+
+/** Generic on purpose: the app shows name, description and url, and never reads metadata (§2.2). */
+export interface Target {
+  id: string
+  name: string
+  description: string | null
+  url: string | null
+  metadata: Record<string, string | number | boolean | null> | null
+}
+
+export interface DestinationPublicationRow {
+  id: string
+  jobId: string
+  versionN: number
+  kind: DestinationKindName
+  destinationId: string | null
+  destinationRevision: number | null
+  connectionId: string | null
+  /** http: the chosen target's id, or the publication id for "new"; youtube: the channel id. */
+  targetKey: string
+  target: Target | null
+  options: Record<string, unknown>
+  instructions: string | null
+  desired: 'published' | 'removed'
+  status: DestinationStatus
+  generation: number
+  operation: 'publish' | 'remove'
+  /** The current operation's immutable payload (§2.5). */
+  manifest: unknown
+  stateEnc: string | null
+  externalId: string | null
+  url: string | null
+  message: string | null
+  warnings: string[] | null
+  error: SafeError | null
+  attempts: number
+  nextRunAt: string | null
+  deadlineAt: string
+  leaseUntil: string | null
+  leaseFence: number
+  secretOnceEnc: string | null
+  secretOnceLabel: string | null
+  secretOnceIssuedAt: string | null
+  secretOnceExpiresAt: string | null
+  secretOnceConsumedAt: string | null
+  publishedBy: string
+  createdAt: string
+  updatedAt: string
+  liveAt: string | null
+  removedAt: string | null
+}

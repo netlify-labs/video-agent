@@ -23,6 +23,8 @@ export interface Config {
   uploadMode: 'blobs' | 'signed'
   /** Optional OAuth for the MCP; null (off) unless a provider and its credentials are set. */
   mcpOAuth: McpOAuthConfig | null
+  /** Google OAuth for the YouTube destination (publish destinations §4); null when the env isn't set. */
+  google: { clientId: string; clientSecret: string } | null
   /** How people sign in to the web app: Netlify Identity (the default) or Sign in with Netlify. */
   authProvider: 'identity' | 'netlify'
   /** The Netlify OAuth app (web sign-in and MCP OAuth share it); null unless both values are set. */
@@ -98,6 +100,10 @@ export function readConfig(env: Record<string, string | undefined>): Config {
     runnerTokenPresent: Boolean(env.RUNNER_API_TOKEN),
     uploadMode: env.UPLOAD_MODE === 'signed' ? 'signed' : 'blobs',
     mcpOAuth: readMcpOAuth(env, list, admission),
+    google:
+      env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
+        ? { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET }
+        : null,
     authProvider: env.AUTH_PROVIDER?.trim().toLowerCase() === 'netlify' ? 'netlify' : 'identity',
     netlifyOAuth:
       env.NETLIFY_OAUTH_CLIENT_ID?.trim() && env.NETLIFY_OAUTH_CLIENT_SECRET?.trim()
@@ -149,6 +155,12 @@ export interface BlobsPort {
   ): Promise<void>
   delete(store: BlobStoreName, key: string): Promise<void>
   list(store: BlobStoreName, prefix: string): Promise<string[]>
+  /** Streams a blob, optionally a byte range [start, end] inclusive; null when it's missing. */
+  stream(
+    store: BlobStoreName,
+    key: string,
+    range?: { start: number; end: number },
+  ): Promise<ReadableStream<Uint8Array> | null>
 }
 
 export interface StartRequest {
@@ -206,6 +218,8 @@ export interface PlatformPort {
   dispatchMediaAssembly(uploadId: string): Promise<void>
   /** Asks the platform to run one Openverse search or import job (openverse-background). */
   dispatchOpenverseJob(jobId: string): Promise<void>
+  /** Asks the platform to run publish-background for one destination publication (publish destinations §2.4). */
+  dispatchPublish(publicationId: string): Promise<void>
   /** Checks for /setup: plan, agent runners, token, identity. */
   setupFacts(): Promise<SetupFacts>
 }
@@ -225,6 +239,23 @@ export interface HttpPort {
     headers: Record<string, string>,
     timeoutMs: number,
   ): Promise<{ status: number }>
+  /**
+   * Publish destinations (§3.1): the same protections as postJson (https only, every resolved address public, pinned,
+   * no redirects, no credentials in the URL), but returns the status, a few headers and the body up to maxBodyBytes.
+   */
+  postJsonForResponse(
+    url: string,
+    body: string,
+    headers: Record<string, string>,
+    opts: { timeoutMs: number; maxBodyBytes: number },
+  ): Promise<HttpResponse>
+}
+
+export interface HttpResponse {
+  status: number
+  headers: { contentType: string | null; retryAfter: string | null }
+  body: string
+  truncated: boolean
 }
 
 /**

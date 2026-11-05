@@ -56,6 +56,16 @@ export function createPlatform(opts: {
       })
       if (res.status !== 202) throw new Error(`openverse dispatch returned ${res.status}`)
     },
+    async dispatchPublish(publicationId) {
+      const sig = hmacHex(await opts.signingSecret(), `publish:${publicationId}`)
+      const res = await fetch(`${opts.siteUrl}/.netlify/functions/publish-background`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-publish-signature': sig },
+        body: JSON.stringify({ publicationId }),
+        signal: AbortSignal.timeout(8000),
+      })
+      if (res.status !== 202) throw new Error(`publish dispatch returned ${res.status}`)
+    },
     async setupFacts() {
       const out = {
         tokenValid: null as boolean | null,

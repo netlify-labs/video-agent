@@ -52,6 +52,14 @@ import {
   type Voiceover,
 } from './types.js'
 import { voiceoverFrom, withPlanNarration, type VoiceoverInput } from './voiceover.js'
+import {
+  destinationNames,
+  destinationPublicationDto,
+  destinationTag,
+  sharePageEntry,
+} from './destinations/dto.js'
+import { removeAllForJob } from './destinations/remove.js'
+import type { DestinationPublicationRow } from './types.js'
 
 const IDEMPOTENCY_TTL_MS = 24 * 3600_000
 
@@ -671,6 +679,8 @@ export async function deleteVideo(deps: Deps, principal: Principal, jobId: strin
         ended.push(p.slug)
       }
     }
+    // Destination publications turn towards removed before the byte cleanup is queued (the sweep dispatches them).
+    await removeAllForJob(repo, deps, jobId)
     for (const a of await repo.listAttempts(jobId)) {
       if (!isTerminal(a.stage) && a.stage !== 'unresolved') await requestCancel(repo, deps, a, 'user')
       await releaseOwnerRefs(repo, deps, 'frozen_attempt', a.id)
@@ -903,6 +913,7 @@ function versionDto(
   fed: VersionCommentRow[] = [],
   signing: { secret: string; job: JobRow; exp: number } | null = null,
   credits: Credit[] = [],
+  dests: { rows: DestinationPublicationRow[]; names: Map<string, string>; now: string } | null = null,
 ) {
   const mineV = verdicts.find((x) => x.versionN === v.n && x.userId === viewerId)
   const fileBase = `${deps.config.siteUrl}/api/v1/videos/${jobId}/versions/${v.n}`
@@ -988,6 +999,17 @@ function versionDto(
     publications: pubs
       .filter((p) => p.versionN === v.n)
       .map((p) => publicationDto(deps, p, o, credits, v.poster ?? null)),
+    // Publish destinations (§6.1): the share page's entries, then each destination publication.
+    destinations: [
+      ...pubs
+        .filter((p) => p.versionN === v.n)
+        .map((p) => sharePageEntry(p, `${deps.config.siteUrl}/v/${p.slug}`)),
+      ...(dests?.rows ?? [])
+        .filter((p) => p.versionN === v.n)
+        .map((p) =>
+          destinationPublicationDto(p, dests?.names ?? new Map<string, string>(), dests?.now ?? ''),
+        ),
+    ],
   }
 }
 
@@ -1088,14 +1110,21 @@ async function buildVideoDto(
   const job = await repo.getJob(jobId)
   if (!job || job.deletedAt || (viewer !== 'system' && !canSee(viewer, job)))
     throw new ApiError('not_found', 'Video not found.')
-  const [versions, attempts, pubs, verdicts, fed, provenance] = await Promise.all([
+  const [versions, attempts, pubs, verdicts, fed, provenance, dpubs, destRows] = await Promise.all([
     repo.listVersions(jobId),
     repo.listAttempts(jobId),
     repo.listPublications(jobId),
     prefetched ? prefetched.verdicts.filter((x) => x.jobId === jobId) : repo.listVerdicts([jobId]),
     repo.listVersionComments(jobId),
     repo.versionProvenance(jobId),
+    repo.listDestinationPublications(jobId),
+    repo.listDestinations(),
   ])
+  const dests = {
+    rows: dpubs,
+    names: destinationNames(destRows),
+    now: (deps.clock ?? { now: () => new Date() }).now().toISOString(),
+  }
   // Webhooks ('system') get no signed URLs: they'd expire long before anyone used them.
   const { store, ids, clock, blobs } = deps
   const signing =
@@ -1123,6 +1152,7 @@ async function buildVideoDto(
         fed.filter((c) => c.versionN === v.n).sort((a, b) => a.position - b.position),
         signing,
         versionCredits(provenance, v, output?.runCredits),
+        dests,
       )
     }),
   )
@@ -1156,9 +1186,9 @@ async function buildVideoDto(
     // Starring is the viewer's own and doesn't bump job.version, so it's part of the validator.
     // The source's visibility and title are part of it too: a source made private or renamed must not 304.
     // So are the live publications: ones made before publishing moved job.version must not 304 either.
-    etag: `"${job.id}-${job.version}${favorite ? '-f' : ''}${remixOf ? `-r${sha256Hex(remixOf.title).slice(0, 8)}` : ''}${livePubTag(pubs)}"`,
+    etag: `"${job.id}-${job.version}${favorite ? '-f' : ''}${remixOf ? `-r${sha256Hex(remixOf.title).slice(0, 8)}` : ''}${livePubTag(pubs)}${destinationTag(dpubs)}"`,
     versions: out,
-    published: pubs.some((p) => !p.unpublishedAt),
+    published: pubs.some((p) => !p.unpublishedAt) || dpubs.some((p) => p.status === 'live'),
     private: job.private,
     language: job.language,
     comments: comments ?? { count: 0, unread: 0 },
@@ -1197,7 +1227,10 @@ export function nextCursor(total: number, limit: number, page: Cursor[]): string
  */
 function pageRepo(store: Repo, rows: VideoPageRows): Repo {
   const of = <T extends { jobId: string }>(list: T[], jobId: string) => list.filter((r) => r.jobId === jobId)
+  let destinations: ReturnType<Repo['listDestinations']> | null = null
   const reads: Partial<Repo> = {
+    // One read for the whole page (the names of HTTP destinations).
+    listDestinations: () => (destinations ??= store.listDestinations()),
     getJob: async (id, opts) =>
       opts?.lock ? store.getJob(id, opts) : (rows.jobs.find((j) => j.id === id) ?? null),
     listVersions: async (jobId) => of(rows.versions, jobId),
@@ -1214,6 +1247,7 @@ function pageRepo(store: Repo, rows: VideoPageRows): Repo {
         return row as VersionProvenanceRow
       }),
     getUser: async (id) => rows.owners.find((u) => u.id === id) ?? store.getUser(id),
+    listDestinationPublications: async (jobId) => of(rows.destinationPublications, jobId),
   }
   return new Proxy(store, {
     get: (target, key, receiver): unknown =>

@@ -42,9 +42,13 @@ import type {
   OAuthTokenRow,
   SessionRow,
   UserIdentityRow,
+  DestinationRow,
+  DestinationConnectionRow,
+  DestinationPublicationRow,
 } from '../domain/types.js'
 import type { JobQuery, Repo, Store } from './types.js'
 import { searchWords } from '../lib/search.js'
+import { ApiError } from '../lib/errors.js'
 
 interface State {
   settings: SettingsRow | null
@@ -89,6 +93,9 @@ interface State {
   oauthTokens: Map<string, OAuthTokenRow>
   identities: Map<string, UserIdentityRow>
   sessions: Map<string, SessionRow>
+  destinations: Map<string, DestinationRow>
+  connections: Map<string, DestinationConnectionRow>
+  dpubs: Map<string, DestinationPublicationRow>
 }
 
 const empty = (): State => ({
@@ -133,6 +140,9 @@ const empty = (): State => ({
   oauthTokens: new Map(),
   identities: new Map(),
   sessions: new Map(),
+  destinations: new Map(),
+  connections: new Map(),
+  dpubs: new Map(),
 })
 
 const clone = <T>(v: T): T => structuredClone(v)
@@ -160,6 +170,21 @@ const libraryVisible = (
   (m.role === null || (m.uploaderId === q.takesOf && m.deletingAt === null))
 const ikey = (provider: string, subject: string) => `${provider}\n${subject}`
 const live = (leaseUntil: string | null, now: string) => leaseUntil !== null && leaseUntil > now
+const activeDpub = (
+  state: State,
+  k: Pick<DestinationPublicationRow, 'jobId' | 'versionN' | 'kind' | 'destinationId' | 'targetKey'>,
+  except?: string,
+) =>
+  [...state.dpubs.values()].find(
+    (p) =>
+      p.id !== except &&
+      p.desired === 'published' &&
+      p.jobId === k.jobId &&
+      p.versionN === k.versionN &&
+      p.kind === k.kind &&
+      (p.destinationId ?? '') === (k.destinationId ?? '') &&
+      p.targetKey === k.targetKey,
+  )
 /** Applies a patch to the row at `k`, if there is one. */
 const patchRow = <T extends object>(m: Map<string, T>, k: string, patch: Partial<T>) => {
   const r = m.get(k)
@@ -227,9 +252,10 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
     getJob: async (id) => clone(state.jobs.get(id) ?? null),
     updateJob: async (id, patch) => patchRow(state.jobs, id, patch),
     listJobs: async (q: JobQuery) => {
-      const published = new Set(
-        [...state.publications.values()].filter((p) => p.unpublishedAt === null).map((p) => p.jobId),
-      )
+      const published = new Set([
+        ...[...state.publications.values()].filter((p) => p.unpublishedAt === null).map((p) => p.jobId),
+        ...[...state.dpubs.values()].filter((p) => p.status === 'live').map((p) => p.jobId),
+      ])
       const needle = q.q?.toLowerCase()
       let rows = [...state.jobs.values()].filter((j) => j.deletedAt === null)
       if (q.ownerId) rows = rows.filter((j) => j.ownerId === q.ownerId)
@@ -717,6 +743,11 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
         ),
         provenance: provenanceOf(state, has),
         owners,
+        destinationPublications: clone(
+          [...state.dpubs.values()]
+            .filter((p) => has(p.jobId))
+            .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)),
+        ),
       }
     },
     listVersionComments: async (jobId, n) =>
@@ -781,6 +812,108 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
       return clone(due)
     },
     updateWebhookDelivery: async (id, patch) => patchRow(state.deliveries, id, patch),
+    listDestinations: async () =>
+      clone([...state.destinations.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt))),
+    getDestination: async (id) => clone(state.destinations.get(id) ?? null),
+    insertDestination: async (row) => {
+      state.destinations.set(row.id, clone(row))
+    },
+    updateDestination: async (id, patch) => patchRow(state.destinations, id, patch),
+    deleteDestination: async (id) => {
+      state.destinations.delete(id)
+    },
+    getDestinationConnection: async (id) => clone(state.connections.get(id) ?? null),
+    getUserConnection: async (userId, kind) =>
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- one connection kind today; more later
+      clone([...state.connections.values()].find((c) => c.userId === userId && c.kind === kind) ?? null),
+    listUserConnections: async (userId) =>
+      clone([...state.connections.values()].filter((c) => c.userId === userId)),
+    putDestinationConnection: async (row) => {
+      for (const [k, c] of state.connections) {
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- one connection kind today; more later
+        if (c.userId === row.userId && c.kind === row.kind) state.connections.delete(k)
+      }
+      state.connections.set(row.id, clone(row))
+    },
+    updateDestinationConnection: async (id, patch) => patchRow(state.connections, id, patch),
+    deleteDestinationConnection: async (id) => {
+      state.connections.delete(id)
+    },
+    insertDestinationPublication: async (row) => {
+      if (row.desired === 'published' && activeDpub(state, row)) {
+        throw new ApiError('conflict', 'This version is already published there.')
+      }
+      state.dpubs.set(row.id, clone(row))
+    },
+    getDestinationPublication: async (id) => clone(state.dpubs.get(id) ?? null),
+    listDestinationPublications: async (jobId) =>
+      clone(
+        [...state.dpubs.values()]
+          .filter((p) => p.jobId === jobId)
+          .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)),
+      ),
+    listDestinationPublicationsFor: async (destinationId) =>
+      clone([...state.dpubs.values()].filter((p) => p.destinationId === destinationId)),
+    findActiveDestinationPublication: async (k) => clone(activeDpub(state, k) ?? null),
+    updateDestinationPublication: async (id, patch) => {
+      const cur = state.dpubs.get(id)
+      if (!cur) return
+      const next = { ...cur, ...clone(patch) }
+      if (next.desired === 'published' && cur.desired !== 'published' && activeDpub(state, next, id)) {
+        throw new ApiError('conflict', 'This version is already published there.')
+      }
+      state.dpubs.set(id, next)
+    },
+    claimDestinationPublication: async (id, now, leaseUntil) => {
+      const p = state.dpubs.get(id)
+      if (!p || live(p.leaseUntil, now)) return null
+      p.leaseUntil = leaseUntil
+      p.leaseFence += 1
+      return clone(p)
+    },
+    commitDestinationPublication: async (id, f, patch) => {
+      const p = state.dpubs.get(id)
+      if (!p || p.leaseFence !== f.fence || p.generation !== f.generation || p.desired !== f.desired)
+        return false
+      Object.assign(p, clone(patch))
+      return true
+    },
+    listDueDestinationPublications: async (now, limit) =>
+      clone(
+        [...state.dpubs.values()]
+          .filter(
+            (p) =>
+              ['queued', 'running', 'waiting', 'removing'].includes(p.status) &&
+              !live(p.leaseUntil, now) &&
+              ((p.nextRunAt !== null && p.nextRunAt <= now) || p.deadlineAt <= now),
+          )
+          .sort((a, b) => (a.nextRunAt ?? a.deadlineAt).localeCompare(b.nextRunAt ?? b.deadlineAt))
+          .slice(0, limit),
+      ),
+    listExpiredSecrets: async (now, limit) =>
+      clone(
+        [...state.dpubs.values()]
+          .filter(
+            (p) => p.secretOnceEnc !== null && p.secretOnceExpiresAt !== null && p.secretOnceExpiresAt <= now,
+          )
+          .slice(0, limit),
+      ),
+    consumeSecretOnce: async (id, userId, now) => {
+      const p = state.dpubs.get(id)
+      if (
+        !p ||
+        p.publishedBy !== userId ||
+        p.secretOnceEnc === null ||
+        p.secretOnceConsumedAt !== null ||
+        p.secretOnceExpiresAt === null ||
+        p.secretOnceExpiresAt <= now
+      )
+        return null
+      const out = { label: p.secretOnceLabel ?? 'Secret', valueEnc: p.secretOnceEnc }
+      p.secretOnceEnc = null
+      p.secretOnceConsumedAt = now
+      return out
+    },
     getUserWebhook: async (userId) => clone(state.userWebhooks.get(userId) ?? null),
     putUserWebhook: async (row) => {
       state.userWebhooks.set(row.userId, clone(row))
@@ -879,6 +1012,14 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
       for (const j of state.jobs.values()) j.ownerId = swap(j.ownerId)
       for (const v of state.versions.values()) v.authorId = swap(v.authorId)
       for (const p of state.publications.values()) p.publishedBy = swap(p.publishedBy)
+      for (const p of state.dpubs.values()) p.publishedBy = swap(p.publishedBy)
+      for (const c of [...state.connections.values()]) {
+        if (c.userId !== from) continue
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- one connection kind today; more later
+        if ([...state.connections.values()].some((x) => x.userId === into && x.kind === c.kind))
+          state.connections.delete(c.id)
+        else c.userId = into
+      }
       for (const [k, r] of [...state.idem]) {
         if (r.principalId !== from) continue
         state.idem.delete(k)

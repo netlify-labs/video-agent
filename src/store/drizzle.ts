@@ -61,10 +61,14 @@ import type {
   OAuthTokenRow,
   SessionRow,
   UserIdentityRow,
+  DestinationRow,
+  DestinationConnectionRow,
+  DestinationPublicationRow,
 } from '../domain/types.js'
 import { addUsage, byVersion, withoutJob, type UsageRow } from './memory.js'
 import type { Repo, Store } from './types.js'
 import { searchWords } from '../lib/search.js'
+import { ApiError } from '../lib/errors.js'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- driver-agnostic (netlify-db, pglite)
 type Db = PgAsyncDatabase<any, any, any>
@@ -190,8 +194,12 @@ function repoFor(db: Db): Repo {
         t.publications,
         and(eq(t.publications.jobId, t.jobs.id), isNull(t.publications.unpublishedAt)),
       )
-      if (q.published === true) conds.push(exists(livePub))
-      if (q.published === false) conds.push(sql`not ${exists(livePub)}`)
+      const liveDest = anyRow(
+        t.destinationPublications,
+        and(eq(t.destinationPublications.jobId, t.jobs.id), eq(t.destinationPublications.status, 'live')),
+      )
+      if (q.published === true) conds.push(or(exists(livePub), exists(liveDest)) as SQL)
+      if (q.published === false) conds.push(sql`not ${exists(livePub)} and not ${exists(liveDest)}`)
       if (q.favoriteOf) {
         const starred = and(eq(t.favorites.jobId, t.jobs.id), eq(t.favorites.userId, q.favoriteOf))
         conds.push(exists(anyRow(t.favorites, starred)))
@@ -939,10 +947,11 @@ function repoFor(db: Db): Repo {
           versionComments: [],
           provenance: [],
           owners: [],
+          destinationPublications: [],
         }
       const v = t.versionMedia
       const m = t.media
-      const [jobs, versions, attempts, publications, outputs, versionComments, provenance, narration] =
+      const [jobs, versions, attempts, publications, outputs, versionComments, provenance, narration, dpubs] =
         await Promise.all([
           db.select().from(t.jobs).where(inArray(t.jobs.id, jobIds)),
           db.select().from(t.versions).where(inArray(t.versions.jobId, jobIds)).orderBy(desc(t.versions.n)),
@@ -969,6 +978,11 @@ function repoFor(db: Db): Repo {
             .where(and(inArray(v.jobId, jobIds), isNotNull(m.source)))
             .orderBy(asc(v.versionN), asc(v.position)),
           narrationProvenance(db, jobIds),
+          db
+            .select()
+            .from(t.destinationPublications)
+            .where(inArray(t.destinationPublications.jobId, jobIds))
+            .orderBy(asc(t.destinationPublications.createdAt), asc(t.destinationPublications.id)),
         ])
       const ownerIds = [...new Set(jobs.map((j) => j.ownerId))]
       const owners = ownerIds.length
@@ -986,6 +1000,7 @@ function repoFor(db: Db): Repo {
           ...narration,
         ]),
         owners: owners as UserRow[],
+        destinationPublications: dpubs as DestinationPublicationRow[],
       }
     },
     insertEdit: async (row) => {
@@ -1061,7 +1076,8 @@ function repoFor(db: Db): Repo {
     },
     setFavorite: async (userId, jobId, on, at) => {
       if (on) await db.insert(t.favorites).values({ userId, jobId, createdAt: at }).onConflictDoNothing()
-      else await db.delete(t.favorites).where(and(eq(t.favorites.userId, userId), eq(t.favorites.jobId, jobId)))
+      else
+        await db.delete(t.favorites).where(and(eq(t.favorites.userId, userId), eq(t.favorites.jobId, jobId)))
     },
     favoriteJobIds: async (userId, jobIds) => {
       if (jobIds.length === 0) return []
@@ -1143,6 +1159,171 @@ function repoFor(db: Db): Repo {
     },
     updateWebhookDelivery: async (id, patch) => {
       await db.update(t.webhookDeliveries).set(patch).where(eq(t.webhookDeliveries.id, id))
+    },
+    listDestinations: async () =>
+      (await db.select().from(t.destinations).orderBy(asc(t.destinations.createdAt))) as DestinationRow[],
+    getDestination: async (id) =>
+      one<DestinationRow>(await db.select().from(t.destinations).where(eq(t.destinations.id, id))),
+    insertDestination: async (row) => {
+      await db.insert(t.destinations).values(row)
+    },
+    updateDestination: async (id, patch) => {
+      await db.update(t.destinations).set(patch).where(eq(t.destinations.id, id))
+    },
+    deleteDestination: async (id) => {
+      await db.delete(t.destinations).where(eq(t.destinations.id, id))
+    },
+    getDestinationConnection: async (id) =>
+      one<DestinationConnectionRow>(
+        await db.select().from(t.destinationConnections).where(eq(t.destinationConnections.id, id)),
+      ),
+    getUserConnection: async (userId, kind) =>
+      one<DestinationConnectionRow>(
+        await db
+          .select()
+          .from(t.destinationConnections)
+          .where(and(eq(t.destinationConnections.userId, userId), eq(t.destinationConnections.kind, kind))),
+      ),
+    listUserConnections: async (userId) =>
+      (await db
+        .select()
+        .from(t.destinationConnections)
+        .where(eq(t.destinationConnections.userId, userId))) as DestinationConnectionRow[],
+    putDestinationConnection: async (row) => {
+      await db
+        .delete(t.destinationConnections)
+        .where(
+          and(eq(t.destinationConnections.userId, row.userId), eq(t.destinationConnections.kind, row.kind)),
+        )
+      await db.insert(t.destinationConnections).values(row)
+    },
+    updateDestinationConnection: async (id, patch) => {
+      await db.update(t.destinationConnections).set(patch).where(eq(t.destinationConnections.id, id))
+    },
+    deleteDestinationConnection: async (id) => {
+      await db.delete(t.destinationConnections).where(eq(t.destinationConnections.id, id))
+    },
+    insertDestinationPublication: async (row) => {
+      const done = await db
+        .insert(t.destinationPublications)
+        .values(row)
+        .onConflictDoNothing()
+        .returning({ id: t.destinationPublications.id })
+      if (!done.length) throw new ApiError('conflict', 'This version is already published there.')
+    },
+    getDestinationPublication: async (id, opts) =>
+      one<DestinationPublicationRow>(
+        await lockIf(
+          db.select().from(t.destinationPublications).where(eq(t.destinationPublications.id, id)),
+          opts,
+        ),
+      ),
+    listDestinationPublications: async (jobId) =>
+      (await db
+        .select()
+        .from(t.destinationPublications)
+        .where(eq(t.destinationPublications.jobId, jobId))
+        .orderBy(
+          asc(t.destinationPublications.createdAt),
+          asc(t.destinationPublications.id),
+        )) as DestinationPublicationRow[],
+    listDestinationPublicationsFor: async (destinationId) =>
+      (await db
+        .select()
+        .from(t.destinationPublications)
+        .where(eq(t.destinationPublications.destinationId, destinationId))) as DestinationPublicationRow[],
+    findActiveDestinationPublication: async (k) => {
+      const d = t.destinationPublications
+      return one<DestinationPublicationRow>(
+        await db
+          .select()
+          .from(d)
+          .where(
+            and(
+              eq(d.desired, 'published'),
+              eq(d.jobId, k.jobId),
+              eq(d.versionN, k.versionN),
+              eq(d.kind, k.kind),
+              sql`coalesce(${d.destinationId}, '') = ${k.destinationId ?? ''}`,
+              eq(d.targetKey, k.targetKey),
+            ),
+          ),
+      )
+    },
+    updateDestinationPublication: async (id, patch) => {
+      await db.update(t.destinationPublications).set(patch).where(eq(t.destinationPublications.id, id))
+    },
+    claimDestinationPublication: async (id, now, leaseUntil) => {
+      const d = t.destinationPublications
+      return one<DestinationPublicationRow>(
+        await db
+          .update(d)
+          .set({ leaseUntil, leaseFence: sql`${d.leaseFence} + 1` })
+          .where(and(eq(d.id, id), or(isNull(d.leaseUntil), lte(d.leaseUntil, now))))
+          .returning(),
+      )
+    },
+    commitDestinationPublication: async (id, f, patch) => {
+      const d = t.destinationPublications
+      const done = await db
+        .update(d)
+        .set(patch)
+        .where(
+          and(
+            eq(d.id, id),
+            eq(d.leaseFence, f.fence),
+            eq(d.generation, f.generation),
+            eq(d.desired, f.desired),
+          ),
+        )
+        .returning({ id: d.id })
+      return done.length > 0
+    },
+    listDueDestinationPublications: async (now, limit) => {
+      const d = t.destinationPublications
+      return (await db
+        .select()
+        .from(d)
+        .where(
+          and(
+            inArray(d.status, ['queued', 'running', 'waiting', 'removing']),
+            or(isNull(d.leaseUntil), lte(d.leaseUntil, now)),
+            or(and(isNotNull(d.nextRunAt), lte(d.nextRunAt, now)), lte(d.deadlineAt, now)),
+          ),
+        )
+        .orderBy(asc(d.nextRunAt))
+        .limit(limit)) as DestinationPublicationRow[]
+    },
+    listExpiredSecrets: async (now, limit) => {
+      const d = t.destinationPublications
+      return (await db
+        .select()
+        .from(d)
+        .where(
+          and(isNotNull(d.secretOnceEnc), isNotNull(d.secretOnceExpiresAt), lte(d.secretOnceExpiresAt, now)),
+        )
+        .limit(limit)) as DestinationPublicationRow[]
+    },
+    consumeSecretOnce: async (id, userId, now) => {
+      const d = t.destinationPublications
+      // Marking it consumed is the atomic step (one winner); the ciphertext is cleared right after.
+      const won = await db
+        .update(d)
+        .set({ secretOnceConsumedAt: now })
+        .where(
+          and(
+            eq(d.id, id),
+            eq(d.publishedBy, userId),
+            isNotNull(d.secretOnceEnc),
+            isNull(d.secretOnceConsumedAt),
+            sql`${d.secretOnceExpiresAt} > ${now}`,
+          ),
+        )
+        .returning({ enc: d.secretOnceEnc, label: d.secretOnceLabel })
+      const w = won[0]
+      if (!w?.enc) return null
+      await db.update(d).set({ secretOnceEnc: null }).where(eq(d.id, id))
+      return { label: w.label ?? 'Secret', valueEnc: w.enc }
     },
     getUserWebhook: async (userId) =>
       one<UserWebhookRow>(await db.select().from(t.userWebhooks).where(eq(t.userWebhooks.userId, userId))),
@@ -1323,6 +1504,8 @@ function repoFor(db: Db): Repo {
         (select 1 from notification_reads i where i.user_id = ${into})`)
       await db.execute(sql`delete from user_webhooks where user_id = ${from} and exists
         (select 1 from user_webhooks i where i.user_id = ${into})`)
+      await db.execute(sql`delete from destination_connections f where user_id = ${from} and exists
+        (select 1 from destination_connections i where i.user_id = ${into} and i.kind = f.kind)`)
       await db.execute(sql`delete from openverse_jobs f where user_id = ${from} and status in ('queued', 'running')
         and exists (select 1 from openverse_jobs i where i.user_id = ${into} and i.kind = f.kind and i.key = f.key
         and i.status in ('queued', 'running'))`)
@@ -1331,6 +1514,8 @@ function repoFor(db: Db): Repo {
         ['jobs', 'owner_id'],
         ['versions', 'author_id'],
         ['publications', 'published_by'],
+        ['destination_publications', 'published_by'],
+        ['destination_connections', 'user_id'],
         ['idempotency_keys', 'principal_id'],
         ['plans', 'user_id'],
         ['gateway_calls', 'caller_id'],

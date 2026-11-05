@@ -1281,6 +1281,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/destinations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List destinations
+         * @description Where a ready version can be published: the share page, YouTube (when set up) and HTTP destinations, each with whether it is ready for you and, if not, why.
+         */
+        get: operations["listDestinations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/videos/{id}/versions/{n}/destinations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Publish a version to a destination
+         * @description Publishes a ready version to a destination. The share page publishes at once; others publish in the background: watch the version's destinations list.
+         */
+        post: operations["publishToDestination"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/destination-publications/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a version from a destination
+         * @description Removes a destination publication, from any state. Removal runs in the background.
+         */
+        delete: operations["unpublishFromDestination"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/destination-publications/{id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Try a failed destination publication again
+         * @description Starts a new attempt on the same publication, so the destination can find what an earlier one made.
+         */
+        post: operations["retryDestinationPublication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/videos/{id}/versions/{n}/verdict": {
         parameters: {
             query?: never;
@@ -8023,6 +8103,8 @@ export interface components {
             /** @description CC BY media this version was made with (Openverse music from the library, or fetched by the run itself): show the credit wherever the video is shown */
             credits: components["schemas"]["Credit"][];
             publications: components["schemas"]["Publication"][];
+            /** @description Where this version is published: the share page and every destination. */
+            destinations: components["schemas"]["DestinationPublication"][];
         };
         PlanBrief: {
             title?: string;
@@ -8152,6 +8234,36 @@ export interface components {
             showTranscript: boolean;
             /** @description HTML to embed the video; with CC BY media it includes the credit line as a caption */
             embed: string | null;
+        };
+        DestinationPublication: {
+            id: string;
+            /** @enum {string} */
+            kind: "share_page" | "youtube" | "http";
+            destination: {
+                id: string;
+                name: string;
+            };
+            target: {
+                name: string;
+                url: string | null;
+            } | null;
+            /** @enum {string} */
+            status: "queued" | "running" | "waiting" | "live" | "removing" | "removed" | "failed";
+            /** @enum {string} */
+            desired: "published" | "removed";
+            url: string | null;
+            /** @description The destination's latest progress note, plain text. */
+            message: string | null;
+            warnings: string[];
+            error: {
+                code: string;
+                message: string;
+            } | null;
+            /** @description A one-time secret (such as a site password) waits to be revealed, once. */
+            hasSecret: boolean;
+            secretLabel: string | null;
+            publishedAt: string;
+            liveAt: string | null;
         };
         /**
          * @description The language spoken in the video (BCP-47 primary subtag): recorded narration is transcribed for captions in it. The local transcriber covers the European languages; the others need ElevenLabs.
@@ -8327,6 +8439,44 @@ export interface components {
         Publish: {
             /** @description Offer the narration's transcript on the share page. Default off; publishing again changes only this. */
             showTranscript?: boolean;
+        };
+        Destination: {
+            id: string;
+            /** @enum {string} */
+            kind: "share_page" | "youtube" | "http";
+            name: string;
+            ready: boolean;
+            /** @description Why it is not ready (shown as-is). */
+            reason: string | null;
+            capabilities: {
+                targets: boolean;
+                targetNoun: string | null;
+                instructions: boolean;
+                instructionsLabel: string | null;
+                instructionsHint: string | null;
+            };
+            /** @description The options form (a JSON-Schema subset), or null. */
+            optionsSchema?: unknown;
+            unpublishOptionsSchema?: unknown;
+        };
+        PublishToDestination: {
+            /** @description 'share_page', 'youtube' or an HTTP destination's id. */
+            destination: string;
+            options?: {
+                [key: string]: unknown;
+            };
+            /** @description One of listDestinationTargets, exactly as listed; null: new. */
+            target?: {
+                id: string;
+                name: string;
+                description: string | null;
+                url: string | null;
+                metadata: {
+                    [key: string]: string | number | boolean | null;
+                } | null;
+            } | null;
+            instructions?: string | null;
+            includeTranscript?: boolean;
         };
         SetVerdict: {
             verdict: components["schemas"]["Verdict"];
@@ -9174,4 +9324,288 @@ export interface components {
     pathItems: never;
 }
 export type $defs = Record<string, never>;
-export type operations = Record<string, never>;
+export interface operations {
+    listDestinations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Destinations */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["Destination"][];
+                    };
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict or not ready */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    publishToDestination: {
+        parameters: {
+            query?: never;
+            header?: {
+                "idempotency-key"?: string;
+            };
+            path: {
+                id: string;
+                n: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublishToDestination"];
+            };
+        };
+        responses: {
+            /** @description Publishing */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DestinationPublication"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict or not ready */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    unpublishFromDestination: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    options?: {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Removing */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DestinationPublication"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict or not ready */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    retryDestinationPublication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Trying again */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DestinationPublication"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict or not ready */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+}

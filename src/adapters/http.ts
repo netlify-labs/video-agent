@@ -4,7 +4,7 @@
 import { lookup as dnsLookup } from 'node:dns/promises'
 import { request } from 'node:https'
 import { isIP } from 'node:net'
-import type { FetchPort, HttpPort } from '../deps.js'
+import type { FetchPort, HttpPort, HttpResponse } from '../deps.js'
 
 /** Expands an IPv6 address to 8 hextets (handles `::`, embedded dotted IPv4 and zone ids). */
 export function expandIPv6(ip: string): number[] | null {
@@ -75,8 +75,98 @@ export async function resolvePublic(
   return addrs[0] as { address: string; family: number }
 }
 
+/** A pinned HTTPS POST: connects only to the validated public address, never follows redirects. */
+async function pinnedPost(
+  url: string,
+  body: string,
+  headers: Record<string, string>,
+  timeoutMs: number,
+  resolver: Resolver,
+  onResponse: (
+    res: import('node:http').IncomingMessage,
+    done: (v: unknown) => void,
+    fail: (e: Error) => void,
+  ) => void,
+): Promise<unknown> {
+  const u = new URL(url)
+  if (u.protocol !== 'https:') throw new Error('URL must be https')
+  if (u.username || u.password) throw new Error('URLs must not carry credentials')
+  const host = u.hostname.replace(/^\[|\]$/g, '')
+  const pinned = await resolvePublic(host, resolver)
+  return new Promise((resolve, reject) => {
+    const req = request(
+      {
+        protocol: 'https:',
+        host,
+        port: u.port || 443,
+        path: `${u.pathname}${u.search}`,
+        method: 'POST',
+        servername: isIP(host) ? undefined : host,
+        headers: {
+          'content-type': 'application/json',
+          'content-length': Buffer.byteLength(body),
+          'user-agent': 'video-agent-webhooks/1',
+          ...headers,
+        },
+        lookup: ((_h: string, o: { all?: boolean }, cb: (...args: unknown[]) => void) => {
+          if (o.all) cb(null, [{ address: pinned.address, family: pinned.family }])
+          else cb(null, pinned.address, pinned.family)
+        }) as never,
+        timeout: timeoutMs,
+      },
+      (res) => {
+        const status = res.statusCode ?? 0
+        if (status >= 300 && status < 400) {
+          res.resume()
+          reject(new Error(`redirects are not followed (HTTP ${status})`))
+          return
+        }
+        onResponse(res, resolve, reject)
+      },
+    )
+    // One overall deadline, not just an idle timeout.
+    const deadline = setTimeout(() => req.destroy(new Error('request timed out')), timeoutMs)
+    req.on('close', () => {
+      clearTimeout(deadline)
+    })
+    req.on('timeout', () => req.destroy(new Error('request timed out')))
+    req.on('error', reject)
+    req.end(body)
+  })
+}
+
 export function createSafeHttp(resolver: Resolver = defaultResolver): HttpPort {
   return {
+    async postJsonForResponse(url, body, headers, opts) {
+      return (await pinnedPost(url, body, headers, opts.timeoutMs, resolver, (res, done, fail) => {
+        const chunks: Buffer[] = []
+        let size = 0
+        let truncated = false
+        res.on('data', (c: Buffer) => {
+          if (truncated) return
+          size += c.length
+          if (size > opts.maxBodyBytes) {
+            truncated = true
+            chunks.push(c.subarray(0, c.length - (size - opts.maxBodyBytes)))
+            res.destroy()
+            done(finish())
+          } else chunks.push(c)
+        })
+        const finish = (): HttpResponse => ({
+          status: res.statusCode ?? 0,
+          headers: {
+            contentType: res.headers['content-type'] ?? null,
+            retryAfter: res.headers['retry-after'] ?? null,
+          },
+          body: Buffer.concat(chunks).toString('utf8'),
+          truncated,
+        })
+        res.on('end', () => {
+          if (!truncated) done(finish())
+        })
+        res.on('error', fail)
+      })) as HttpResponse
+    },
     async postJson(url, body, headers, timeoutMs) {
       const u = new URL(url)
       if (u.protocol !== 'https:') throw new Error('webhook URL must be https')
