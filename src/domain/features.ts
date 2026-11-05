@@ -41,6 +41,8 @@ export async function enabledFeatures(deps: Deps): Promise<Feature[]> {
   if (screenRecordingApi.ready) on.push('screen_recording')
   if (deps.looks.catalog().length) on.push('looks')
   on.push('destinations')
+  // The GitHub Action plan's server additions (phase 3): always on once deployed.
+  on.push('context', 'external_ref')
   // Redo a scene: once HyperFrames' scope check is registered (prodDeps does it at startup).
   if (scopeCheckFor('hyperframes')) on.push('scoped_revision')
   if (await youtubeAvailable(deps, deps.store).catch(() => false)) on.push('youtube')
