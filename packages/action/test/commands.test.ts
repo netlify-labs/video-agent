@@ -5,14 +5,22 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { png, upload } from '../../../test/helpers.js'
-import { events, expectLog, makeEnv, outcomes, runAction, type TestEnv } from './harness/index.js'
+import {
+  events,
+  expectLog,
+  makeEnv,
+  outcomes,
+  runAction,
+  type TestEnv,
+  PHASE3_FEATURES,
+} from './harness/index.js'
 
 const PNG = new Uint8Array(png())
 /** Starts like a PNG but isn't one: the server refuses it. */
 const BROKEN = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4])
 
 async function setup() {
-  const env = await makeEnv()
+  const env = await makeEnv({ hide: PHASE3_FEATURES })
   env.gh.pull({
     number: 123,
     title: 'Webhooks: retry failed deliveries',
@@ -369,7 +377,7 @@ describe('the gate’s remaining paths', () => {
 
 describe('releases', () => {
   it('a published release gets one video and a section in its notes; a re-run replaces it', async () => {
-    const env = await makeEnv()
+    const env = await makeEnv({ hide: PHASE3_FEATURES })
     env.gh.release({
       tag_name: 'v2.4.0',
       body: '## What changed\n* Faster deploys by @lee in https://github.com/acme/web/pull/130',
@@ -389,7 +397,7 @@ describe('releases', () => {
   })
 
   it('target release/<tag> works from a push step, and a missing release skips', async () => {
-    const env = await makeEnv()
+    const env = await makeEnv({ hide: PHASE3_FEATURES })
     env.gh.release({ tag_name: 'v3.0.0', body: '- One thing' })
     const r = await runAction(env, { event: events.push(env.gh), inputs: { target: 'release/v3.0.0' } })
     expect(r.status).toBe('ready')
@@ -404,7 +412,7 @@ describe('releases', () => {
 
 describe('one-off videos', () => {
   it('workflow_dispatch with no target makes a video from the prompt, with no comment', async () => {
-    const env = await makeEnv()
+    const env = await makeEnv({ hide: PHASE3_FEATURES })
     const r = await runAction(env, {
       event: events.dispatch(env.gh),
       inputs: { prompt: 'A 20-second teaser for our launch.' },

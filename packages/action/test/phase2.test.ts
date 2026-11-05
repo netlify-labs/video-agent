@@ -7,10 +7,10 @@ import { load, save } from '../../../src/lib/contract.js'
 import { hyperframesScopeCheck } from '../../../src/lib/scope.js'
 import { readyVideo } from '../../../test/helpers.js'
 import { tarGz } from '../../../test/tarball.js'
-import { events, expectLog, makeEnv, runAction, type TestEnv } from './harness/index.js'
+import { events, expectLog, makeEnv, runAction, type TestEnv, PHASE3_FEATURES } from './harness/index.js'
 
 async function withPr(n = 123) {
-  const env = await makeEnv()
+  const env = await makeEnv({ hide: PHASE3_FEATURES })
   env.gh.pull({
     number: n,
     title: 'Webhooks: retry failed deliveries',
@@ -96,7 +96,7 @@ describe('on-push: revise', () => {
 
 describe('base-video', () => {
   it('a release remixes the house video with its own title, and the next run finds it', async () => {
-    const env = await makeEnv()
+    const env = await makeEnv({ hide: PHASE3_FEATURES })
     const base = await readyVideo(env.h)
     env.gh.release({ tag_name: 'v2.4.0', body: '- Retry failed deliveries\n- One webhook per org' })
     const r = await runAction(env, {
@@ -121,7 +121,7 @@ describe('base-video', () => {
   })
 
   it('reports remixing turned off and a base video the account can’t see', async () => {
-    const env = await makeEnv()
+    const env = await makeEnv({ hide: PHASE3_FEATURES })
     const base = await readyVideo(env.h)
     await env.h.call('PATCH', '/api/v1/admin/settings', { as: env.h.admin, body: { remixEnabled: false } })
     env.gh.release({ tag_name: 'v1', body: '- A thing' })
@@ -150,7 +150,7 @@ describe('publishing and release assets', () => {
   })
 
   it('release-asset attaches the MP4 and captions, and a re-run replaces them', async () => {
-    const env = await makeEnv()
+    const env = await makeEnv({ hide: PHASE3_FEATURES })
     env.gh.release({ tag_name: 'v3.0.0', body: '- New editor' })
     const inputs = { 'release-asset': 'true', publish: 'true' }
     const r = await runAction(env, { event: events.release(env.gh, 'v3.0.0'), inputs })
@@ -167,7 +167,7 @@ describe('publishing and release assets', () => {
   })
 
   it('release-asset on a public repo without publish is refused before anything runs', async () => {
-    const env = await makeEnv({ gh: { visibility: 'public' } })
+    const env = await makeEnv({ gh: { visibility: 'public' }, hide: PHASE3_FEATURES })
     env.gh.release({ tag_name: 'v1', body: '- x' })
     const r = await runAction(env, {
       event: events.release(env.gh, 'v1'),

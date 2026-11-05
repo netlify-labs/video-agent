@@ -1,6 +1,7 @@
 // Changelog-video briefs: from a release's notes (the skill's changelog recipe), and from a list of merged PRs for
 // `video-agent brief changelog --since` (docs/plans/2026-11-04-github-action.md §3.6, §7.2).
 import {
+  CONTEXT_BUDGET,
   GITHUB_BUDGET,
   joinWithin,
   MAX_PROMPT,
@@ -24,6 +25,8 @@ export interface ReleaseInput {
   extra?: string
   /** Where the video should send people at the end (the product or the release page). */
   url?: string
+  /** Context mode: the notes go in `context` (up to 12,000 characters), the prompt stays short. */
+  withContext?: { url?: string }
 }
 
 export const RELEASE_DURATION_SEC = 45
@@ -86,7 +89,7 @@ export function releaseBrief(input: ReleaseInput): Brief {
       target,
     ).length
   const extra = fitExtra(tidy(input.extra ?? ''), fixed(''), warnings)
-  const budget = Math.min(GITHUB_BUDGET, MAX_PROMPT - fixed(extra))
+  const budget = input.withContext ? CONTEXT_BUDGET : Math.min(GITHUB_BUDGET, MAX_PROMPT - fixed(extra))
 
   const body = tidy(scrub(input.body ?? '', removed))
   const bullets = releaseBullets(body).map((b) => `- ${trimLine(b, 200)}`)
@@ -101,19 +104,30 @@ export function releaseBrief(input: ReleaseInput): Brief {
   }
 
   const head = extra ? [intro, extra] : [intro]
+  const ctx = input.withContext
   const lines = [
     ...head,
     '',
     guide(`What's new in ${tag}`, input.url),
     '',
-    header,
-    releaseLine,
-    ...(notes ? [notes] : []),
+    ...(ctx
+      ? ['The release notes are attached as background.']
+      : [header, releaseLine, ...(notes ? [notes] : [])]),
   ]
   const prompt = appendRef(lines.join('\n'), target)
   if (prompt.length > MAX_PROMPT) throw new Error(`releaseBrief: ${prompt.length} characters (bug)`)
   return {
     prompt,
+    ...(ctx
+      ? {
+          context: {
+            source: 'github_release' as const,
+            label: trimLine(`GitHub release ${tag}`, 120),
+            ...(ctx.url ? { url: ctx.url } : {}),
+            text: [releaseLine, ...(notes ? [notes] : [])].join('\n'),
+          },
+        }
+      : {}),
     title: releaseTitle(input.repo, tag),
     reference: refFor(target),
     durationSec: RELEASE_DURATION_SEC,

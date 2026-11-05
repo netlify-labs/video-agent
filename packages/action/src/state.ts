@@ -124,17 +124,31 @@ export async function lookupAll(va: VideoAgent, target: RefTarget): Promise<Vide
 }
 
 /** The target's video: the marker's, if it still exists, else the oldest reference match, else null. */
+/** "github:acme/web#pr-123" or "github:acme/web@v1.2.0": the externalRef phase 3 servers index (§6.2). */
+export const externalRefFor = (t: RefTarget) =>
+  t.kind === 'pr' ? `github:${t.owner}/${t.repo}#pr-${t.number}` : `github:${t.owner}/${t.repo}@${t.tag}`
+
 export async function findVideo(
   va: VideoAgent,
   target: RefTarget,
   marker: Marker | null,
   log: Log,
+  features: readonly string[] = [],
 ): Promise<Video | null> {
   if (marker) {
     const v = await va.videos.get(marker.videoId).catch(() => null)
     if (v) {
       log.line({ lookup: 'marker', video: v.id })
       return v
+    }
+  }
+  // The indexed exact match first; the reference line still finds videos made before phase 3.
+  if (features.includes('external_ref')) {
+    const page = await va.videos.list({ owner: 'me', externalRef: externalRefFor(target), limit: 50 })
+    const oldest = [...page.items].sort(older)[0]
+    if (oldest) {
+      log.line({ lookup: 'externalRef', candidates: page.items.length, video: oldest.id })
+      return oldest
     }
   }
   const all = await lookupAll(va, target)

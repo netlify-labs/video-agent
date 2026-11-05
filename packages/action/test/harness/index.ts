@@ -20,7 +20,11 @@ export { BOT, fakeGitHub, type FakeGitHub } from './fake-github.js'
 export const SITE = 'https://video.example.com'
 
 /** The app's fetch, the way the SDK calls it: background work (waitUntil) finishes before the response returns. */
-export function appFetch(h: Harness, storage?: { headers: Record<string, string> }[]): typeof fetch {
+export function appFetch(
+  h: Harness,
+  storage?: { headers: Record<string, string> }[],
+  hide: readonly string[] = [],
+): typeof fetch {
   return async (input: string | URL | Request, init?: RequestInit) => {
     const req = input instanceof Request ? input : new Request(input, init)
     // Signed file links point at storage (served outside the API in production): a stand-in, like the SDK's tests.
@@ -35,9 +39,18 @@ export function appFetch(h: Harness, storage?: { headers: Record<string, string>
       context: { deploy: { published: true }, waitUntil: (p: Promise<unknown>) => void pending.push(p) },
     })
     await Promise.all(pending)
+    // An older server: the same app with some features left out of /api/v1/config.
+    if (hide.length && new URL(req.url).pathname === '/api/v1/config') {
+      const body = (await res.json()) as { features: string[] }
+      body.features = body.features.filter((f) => !hide.includes(f))
+      return Response.json(body)
+    }
     return res
   }
 }
+
+/** The GitHub Action plan's phase 3 features: hide them to test the action against a server from before. */
+export const PHASE3_FEATURES = ['context', 'external_ref'] as const
 
 /** A fake image host: url → response. Records every request's headers (no Authorization may reach an image host). */
 export function fakeImageHost() {
@@ -81,10 +94,12 @@ export interface TestEnv {
   outcome(timeline: RunnerSnapshot[]): void
   /** Requests to the storage host (signed file links): never with the key. */
   storage: { headers: Record<string, string> }[]
+  /** Features /api/v1/config leaves out (an older server). */
+  hide: readonly string[]
 }
 
 export async function makeEnv(
-  o: { store?: 'memory' | 'pglite'; gh?: Parameters<typeof fakeGitHub>[0] } = {},
+  o: { store?: 'memory' | 'pglite'; gh?: Parameters<typeof fakeGitHub>[0]; hide?: readonly string[] } = {},
 ) {
   const h = o.store === 'pglite' ? harness({}, { store: await pgStore() }) : harness()
   const key = await apiKey(h, h.member, 'ci')
@@ -96,6 +111,7 @@ export async function makeEnv(
     images: fakeImageHost(),
     pauses: new Map(),
     storage: [],
+    hide: o.hide ?? [],
     outcome: (timeline) => {
       const base = h.deps.runner.defaultScript
       h.deps.runner.defaultScript = (req) => ({ ...base(req), timeline })
@@ -279,7 +295,7 @@ export async function runAction(
   const deps: ActionDeps = {
     env: vars,
     core,
-    fetch: appFetch(h, env.storage),
+    fetch: appFetch(h, env.storage, env.hide),
     ghFetch: env.gh.fetch,
     imageFetch: env.images.fetch,
     // Test hosts: *.internal and 10.x resolve privately; everything else is public.

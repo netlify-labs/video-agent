@@ -14,4 +14,18 @@ export interface Brief {
   removed: Removed
   /** Things the caller should log: text left out or trimmed, and why. */
   warnings: string[]
+  /**
+   * In context mode (servers that list `context`): the GitHub text, sent beside a short prompt and given to the run in
+   * its own fence as data (github-action plan §6.1).
+   */
+  context?: ContextField
+}
+
+export interface ContextField {
+  source: 'github_pr' | 'github_release' | 'changelog' | 'text'
+  /** At most 120 characters. */
+  label: string
+  url?: string
+  /** At most 12,000 characters here (the API takes 16,000). */
+  text: string
 }

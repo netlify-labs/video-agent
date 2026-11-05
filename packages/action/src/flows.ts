@@ -11,6 +11,7 @@ import {
   reviseBrief,
   describeRemoved,
   type Brief,
+  type ContextField,
   type Target as RefTarget,
 } from '../../cli/src/brief/index.js'
 import { isVideoAgentError, VideoAgent, type VideoAgentError } from '../../sdk/src/index.js'
@@ -35,6 +36,7 @@ import {
   latestReady,
   lookupAll,
   parseMarker,
+  externalRefFor,
   type Marker,
   type Version,
   type Video,
@@ -50,6 +52,8 @@ interface Surface {
 
 export interface PrInfo {
   number: number
+  /** The PR's page (html_url). */
+  url: string
   title: string
   body: string
   headSha: string
@@ -158,7 +162,9 @@ async function create(
   ctx: Ctx,
   o: {
     target: RefTarget | null
-    brief: (captions: string[]) => Brief
+    brief: (captions: string[], withContext: boolean) => Brief
+    /** The PR's or release's page, for externalUrl and the context's link. */
+    url?: string
     title: string | undefined
     durationSec: number
     key: string
@@ -177,7 +183,10 @@ async function create(
   }
   const shots = await o.shots()
   if (inputs.dryRun) {
-    const brief = o.brief(shots.map((s, i) => `screenshot ${i + 1}${s.alt ? `: ${s.alt}` : ''}`))
+    const brief = o.brief(
+      shots.map((s, i) => `screenshot ${i + 1}${s.alt ? `: ${s.alt}` : ''}`),
+      ctx.features.includes('context'),
+    )
     dryRun(ctx, brief, [
       ...shots.map(
         (s) =>
@@ -194,8 +203,9 @@ async function create(
   const prepared: Prepared = shots.length
     ? await prepare(run, va, shots, o.target?.kind === 'pr' ? o.target.number : null)
     : { mediaIds: [], uploaded: [], captions: [] }
-  const brief = o.brief(prepared.captions)
+  const brief = o.brief(prepared.captions, ctx.features.includes('context'))
   logBrief(run, brief)
+  const ext = externalFields(ctx, o.target, o.url)
   await run.deps.hook?.('before-create')
   const made = await va.videos.create(
     {
@@ -204,14 +214,16 @@ async function create(
       aspect: inputs.aspect,
       durationSec: o.durationSec,
       ...(prepared.mediaIds.length ? { mediaIds: prepared.mediaIds.slice(0, 12) } : {}),
+      ...(brief.context ? { context: brief.context } : {}),
+      ...ext,
     },
     { idempotencyKey: o.key },
   )
   // A replay returns the response stored at creation: read the video as it is now.
   let video = await va.videos.get(made.id)
-  run.log.decision('created', { video: video.id, key: o.key })
-  // Private right away (the API has no private on create before phase 3's external_ref).
-  if (inputs.private) video = await va.videos.update(video.id, { private: true })
+  run.log.decision('created', { video: video.id, key: o.key, context: brief.context ? true : undefined })
+  // Private right away: on create when the server takes it (external_ref), else a PATCH straight after.
+  if (inputs.private && !ext.private) video = await va.videos.update(video.id, { private: true })
   setOutputs(run, { prompt: brief.prompt, 'video-id': video.id })
   if (o.target) {
     const settled = await settle(ctx, o.target, video, prepared.uploaded)
@@ -248,6 +260,7 @@ async function remixBase(
     changes: r.changes(),
     extra: inputs.prompt,
   })
+  const ext = externalFields(ctx, o.target, o.url)
   logBrief(run, brief)
   await run.deps.hook?.('before-create')
   let made: Video
@@ -260,6 +273,7 @@ async function remixBase(
         ...(inputs.aspect !== '16:9' ? { aspect: inputs.aspect } : {}),
         ...(inputs.duration ? { durationSec: inputs.duration } : {}),
         ...(prepared.mediaIds.length ? { mediaIds: prepared.mediaIds.slice(0, 12) } : {}),
+        ...ext,
       },
       { idempotencyKey: o.key },
     )
@@ -279,7 +293,7 @@ async function remixBase(
   }
   let video = await va.videos.update(made.id, {
     ...(o.title ? { title: o.title } : {}),
-    ...(inputs.private ? { private: true } : {}),
+    ...(inputs.private && !ext.private ? { private: true } : {}),
   })
   run.log.decision('remixed', { video: video.id, base, key: o.key })
   setOutputs(run, { prompt: brief.prompt, 'video-id': video.id })
@@ -289,6 +303,23 @@ async function remixBase(
   }
   video = await va.videos.get(video.id)
   return { video, n: 1, uploaded: prepared.uploaded }
+}
+
+/**
+ * Phase 3 fields (github-action plan §6.2-6.3), sent only when the server lists external_ref (an older server would drop
+ * them silently): the exact reference the lookup indexes, its link, and private from the first moment.
+ */
+function externalFields(
+  ctx: Ctx,
+  target: RefTarget | null,
+  url: string | undefined,
+): { externalRef?: string; externalUrl?: string; private?: boolean } {
+  if (!target || !ctx.features.includes('external_ref')) return {}
+  return {
+    externalRef: externalRefFor(target),
+    ...(url?.startsWith('https://') ? { externalUrl: url } : {}),
+    ...(ctx.inputs.private ? { private: true } : {}),
+  }
 }
 
 /**
@@ -515,7 +546,7 @@ export async function handlePr(
     const left = await cleanup(run, va, marker.pending)
     surface.set({ ...marker, pending: left })
   }
-  const video = await findVideo(va, target, marker, run.log)
+  const video = await findVideo(va, target, marker, run.log, ctx.features)
   const markerFor = (videoId: string, pending: string[], made: number) => ({
     videoId,
     headSha: pr.headSha,
@@ -536,8 +567,9 @@ export async function handlePr(
     })
     return { status: s.status, ok: true }
   }
-  const brief = (captions: string[]) =>
+  const brief = (captions: string[], withContext = false) =>
     prBrief({
+      ...(withContext ? { withContext: { url: pr.url } } : {}),
       owner: gh.owner,
       repo: gh.repo,
       number: pr.number,
@@ -550,11 +582,14 @@ export async function handlePr(
       extra: inputs.prompt,
       screenshots: captions,
     })
+  /** The PR's own words as context for a revision, when the server takes it. */
+  const prContext = () => (ctx.features.includes('context') ? brief([], true).context : undefined)
   const createNew = async (key: string) => {
     await run.deps.hook?.('after-lookup')
     const out = await create(ctx, {
       target,
       brief,
+      url: pr.url,
       title: prTitle(pr.number, pr.title),
       durationSec: inputs.duration ?? 30,
       key,
@@ -620,6 +655,7 @@ export async function handlePr(
       return revise(ctx, video, surface, {
         made,
         scene: action.scene,
+        context: prContext(),
         prompt: () =>
           reviseBrief({
             target,
@@ -650,6 +686,7 @@ export async function handlePr(
         action.kind === 'push' && marker?.headSha ? await sinceLast(ctx, marker.headSha, pr) : null
       return revise(ctx, video, surface, {
         made,
+        context: prContext(),
         prompt: () =>
           action.kind === 'revise'
             ? reviseBrief({
@@ -737,6 +774,8 @@ async function revise(
     markerFor: (id: string, pending: string[], made: number) => Marker
     /** /video redo: only this scene (an id or a unique label of the version it starts from). */
     scene?: string
+    /** The PR's text as context, when the server lists context. */
+    context?: ContextField | undefined
   },
 ): Promise<Outcome> {
   const { run, inputs, va } = ctx
@@ -787,12 +826,12 @@ async function revise(
   const res = beats
     ? await va.videos.redoScenes(
         current.id,
-        { beats, prompt: brief.prompt, fromVersion: from.n },
+        { beats, prompt: brief.prompt, fromVersion: from.n, ...(o.context ? { context: o.context } : {}) },
         { idempotencyKey: o.key },
       )
     : await va.videos.revise(
         current.id,
-        { prompt: brief.prompt, fromVersion: from.n },
+        { prompt: brief.prompt, fromVersion: from.n, ...(o.context ? { context: o.context } : {}) },
         { idempotencyKey: o.key },
       )
   const after = await va.videos.get(res.id)
@@ -885,7 +924,7 @@ export async function handleRelease(ctx: Ctx, release: ReleaseInfo): Promise<Out
   }
   if (marker?.pending?.length && !inputs.dryRun)
     marker = { ...marker, pending: await cleanup(run, va, marker.pending) }
-  const video = await findVideo(va, target, marker, run.log)
+  const video = await findVideo(va, target, marker, run.log, ctx.features)
   if (video) {
     marker = {
       videoId: video.id,
@@ -907,8 +946,10 @@ export async function handleRelease(ctx: Ctx, release: ReleaseInfo): Promise<Out
   run.log.decision('create', { reason: 'release', tag: release.tag })
   const out = await create(ctx, {
     target,
-    brief: () =>
+    url: release.url,
+    brief: (_captions, withContext) =>
       releaseBrief({
+        ...(withContext ? { withContext: { url: release.url } } : {}),
         owner: gh.owner,
         repo: gh.repo,
         tag: release.tag,

@@ -40,6 +40,12 @@ export interface Driver {
   videosFor(ref: string): Promise<VideoSummary[]>
   /** Library items whose captions start with this text. */
   library(captionPrefix: string): Promise<string[]>
+  /** Videos with this exact externalRef (phase 3), oldest first. */
+  videosByExternalRef(externalRef: string): Promise<VideoSummary[]>
+  /** A video made straight through the API (for a side-by-side comparison); returns its id once it's done. */
+  createDirect(prompt: string, title: string): Promise<string>
+  /** The app page of a video, for the owner to look at. */
+  webUrl(id: string): string
 }
 
 export interface Scenario {
@@ -47,7 +53,11 @@ export interface Scenario {
   /** Runs it may start (each about PER_RUN credits). */
   runs: number
   what: string
-  run(d: Driver, ctx: ScenarioContext): Promise<void>
+  run(
+    d: Driver,
+    ctx: ScenarioContext,
+    log?: (step: string, f?: Record<string, unknown>) => void,
+  ): Promise<void>
 }
 
 export interface ScenarioContext {
@@ -214,7 +224,7 @@ export async function runScenarios(d: Driver, scenarios: Scenario[], ctx: Scenar
     }
     const t = Date.now()
     o.log('scenario', { scenario: s.name, what: s.what, creditsSoFar: spent })
-    await s.run(d, ctx)
+    await s.run(d, ctx, o.log)
     done.push(s.name)
     o.log('scenario_ok', {
       scenario: s.name,
@@ -282,6 +292,54 @@ export const PHASE2: Scenario[] = [
         'MP4 and captions attached',
         { assets },
       )
+    },
+  },
+]
+
+export const PHASE3: Scenario[] = [
+  {
+    name: 'context-pr',
+    runs: 1,
+    what: "label a PR on a server with context and external_ref → the PR's words travel as context, externalRef is set",
+    async run(d, c) {
+      const n = await d.openPr({
+        title: 'Audit log: filter by actor and export to CSV',
+        body: 'Admins can now filter the audit log by who did it, and export what they see to CSV.\n\nSecurity reviews asked for this every quarter.',
+      })
+      c.prs.context = n
+      await d.label(n)
+      const byRef = await d.videosFor(ref(c, n))
+      const byExternal = await d.videosByExternalRef(`github:${c.owner}/${c.repo}#pr-${n}`)
+      expectThat(byRef.length === 1 && byExternal.length === 1, 'one video, found both ways', {
+        byRef: byRef.length,
+        byExternal: byExternal.length,
+      })
+      expectThat(
+        byRef[0]?.id === byExternal[0]?.id,
+        'externalRef and the reference line find the same video',
+        {
+          byRef: byRef[0]?.id,
+          byExternal: byExternal[0]?.id,
+        },
+      )
+    },
+  },
+  {
+    name: 'side-by-side',
+    runs: 1,
+    what: 'the same PR as one prompt with no context, made straight through the API → both links logged for the owner to compare',
+    async run(d, c, log) {
+      const n = c.prs.context as number
+      const id = await d.createDirect(
+        'A demo video of a new change, for people who use the product: admins can now filter the audit log by who did it, and export what they see to CSV. Security reviews asked for this every quarter. Three or four scenes, exact on-screen text in quotes, an end card with the feature name.',
+        `PR #${n} without context (comparison)`,
+      )
+      const withContext = (await d.videosFor(ref(c, n)))[0]?.id ?? ''
+      log?.('compare', {
+        withContext: d.webUrl(withContext),
+        withoutContext: d.webUrl(id),
+        ask: 'which reads better? note it in the plan',
+      })
     },
   },
 ]

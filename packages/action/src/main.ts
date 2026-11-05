@@ -146,6 +146,7 @@ export async function run(deps: ActionDeps = productionDeps()): Promise<RunResul
       if (!(await trust.check('sender', sender)).trusted) return done('refused')
       va = client(r, inputs)
       const features = (await va.config.get()).features
+      log.line({ features: features.join(',') })
       const flow: Ctx = { run: r, inputs, gh, va, features }
       if (decision.kind === 'dispatch') {
         if (inputs.prompt.length < 10)
@@ -222,6 +223,7 @@ export async function run(deps: ActionDeps = productionDeps()): Promise<RunResul
     const info = await prInfo(gh, pull, author.trusted && !fork)
     va = client(r, inputs)
     const features = (await va.config.get()).features
+    log.line({ features: features.join(',') })
     const out = await handlePr({ run: r, inputs, gh, va, features }, info, action, commentId)
     if (!out.ok && out.message) log.warn(out.message)
     if (commentId !== null) await react(gh, commentId, out.ok ? '+1' : 'confused')
@@ -240,6 +242,7 @@ const str = (v: unknown) => (typeof v === 'string' ? v : '')
 
 interface Pull {
   number: number
+  html_url: string
   title: string
   body: string | null
   user: { login: string } | null
@@ -280,6 +283,7 @@ async function prInfo(gh: GitHub, pull: Pull, authorTrusted: boolean): Promise<P
   }
   return {
     number: pull.number,
+    url: pull.html_url,
     title: pull.title,
     body: authorTrusted ? (pull.body ?? '') : '',
     headSha: pull.head.sha,

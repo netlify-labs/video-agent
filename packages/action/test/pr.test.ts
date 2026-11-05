@@ -1,12 +1,20 @@
 // The PR flows end to end against the real app (beads va-mg4i.2.7-2.10, 2.14, 2.15): a label makes one video and one
 // comment, re-runs and new runs find it, failures and timeouts say so, budgets stop before spending.
 import { describe, expect, it } from 'vitest'
-import { events, expectLog, makeEnv, outcomes, runAction, type TestEnv } from './harness/index.js'
+import {
+  events,
+  expectLog,
+  makeEnv,
+  outcomes,
+  runAction,
+  type TestEnv,
+  PHASE3_FEATURES,
+} from './harness/index.js'
 
 const VIDEOS = 'POST /api/v1/videos'
 
 async function setup(store: 'memory' | 'pglite' = 'memory') {
-  const env = await makeEnv({ store })
+  const env = await makeEnv({ store, hide: PHASE3_FEATURES })
   env.gh.pull({
     number: 123,
     title: 'Webhooks: retry failed deliveries from the list',

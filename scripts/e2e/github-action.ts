@@ -27,6 +27,7 @@ import { dry, dryRun } from './narration-lib.js'
 import {
   PHASE1,
   PHASE2,
+  PHASE3,
   projectedRuns,
   runScenarios,
   ScenarioError,
@@ -39,7 +40,7 @@ const keep = process.argv.includes('--keep')
 const phase = Number(/--phase[= ](\d)/.exec(process.argv.join(' '))?.[1] ?? '1')
 const sandbox = env.SANDBOX_REPO ?? ''
 const ghToken = env.GH_TOKEN ?? ''
-const ceiling = Number(env.CREDIT_CEILING ?? (phase === 2 ? 900 : 600))
+const ceiling = Number(env.CREDIT_CEILING ?? (phase === 2 ? 900 : phase === 3 ? 450 : 600))
 const baseVideo = env.BASE_VIDEO ?? ''
 const perRun = Number(env.PER_RUN ?? 150)
 const runTimeoutMin = Number(env.RUN_TIMEOUT_MINUTES ?? 45)
@@ -47,7 +48,7 @@ const THIS_REPO = 'netlify-labs/video-agent'
 
 const git = (...args: string[]) => spawnSync('git', args, { encoding: 'utf8' })
 const actionRef = env.ACTION_REF ?? git('rev-parse', 'HEAD').stdout.trim()
-const scenarios = phase === 1 ? PHASE1 : phase === 2 ? PHASE2 : []
+const scenarios = phase === 1 ? PHASE1 : phase === 2 ? PHASE2 : phase === 3 ? PHASE3 : []
 
 if (process.argv.includes('--selftest')) {
   const r = spawnSync('npx', ['vitest', 'run', 'scripts/e2e/github-action.test.ts'], { stdio: 'inherit' })
@@ -58,7 +59,8 @@ if (dry) {
   const tool = (bin: string, arg = '--version') => spawnSync(bin, [arg], { encoding: 'utf8' }).status === 0
   const problems: string[] = []
   if (!tool('gh')) problems.push('the gh CLI is needed')
-  if (phase !== 1 && phase !== 2) problems.push(`phase ${phase} scenarios aren't written yet (3.5 adds them)`)
+  if (phase < 1 || phase > 3)
+    problems.push(`there are no phase ${phase} scenarios (4's live test uses only the README)`)
   if (phase === 2 && !baseVideo)
     problems.push('phase 2 needs BASE_VIDEO: a ready video the CI account can see')
   if (sandbox && !/^[\w.-]+\/[\w.-]+$/.test(sandbox)) problems.push('SANDBOX_REPO must be owner/name')
@@ -231,6 +233,8 @@ async function waitRun(workflow: string, since: string): Promise<WfRun> {
 
 let client: ReturnType<typeof sdk> | null = null
 const releases: string[] = []
+/** Videos made straight through the API (the phase 3 comparison), deleted at cleanup. */
+const made: string[] = []
 /** Made on first use, after main() has checked VIDEO_AGENT_URL (the SDK refuses an empty URL). */
 const va = () => (client ??= sdk())
 const lastRun = new Map<number, number>()
@@ -335,6 +339,17 @@ const live: Driver = {
       rmSync(dir, { recursive: true, force: true })
     }
   },
+  async videosByExternalRef(externalRef) {
+    const page = await va().videos.list({ owner: 'me', externalRef, limit: 50 })
+    return [...page.items].sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+  },
+  async createDirect(prompt, title) {
+    const v = await va().videos.create({ prompt, title })
+    made.push(v.id)
+    await va().videos.wait(v.id, { timeoutMs: runTimeoutMin * 60_000 })
+    return v.id
+  },
+  webUrl: (id) => `${base}/videos/${id}`,
   async releaseAssets(tag) {
     return ghJson<{ assets: { name: string }[] }>([
       'release',
@@ -439,7 +454,18 @@ async function main() {
     ...Object.values(ctx.prs).map((n) => `[va-ref github:${owner}/${repo}#pr-${n}]`),
     ...[ctx.tag, ...releases].map((t) => `[va-ref github:${owner}/${repo}@${t}]`),
   ]
-  const madeVideos = async () => (await Promise.all(refs().map((r) => live.videosFor(r)))).flat()
+  const madeVideos = async () => [
+    ...(await Promise.all(refs().map((r) => live.videosFor(r)))).flat(),
+    ...(
+      await Promise.all(
+        made.map((id) =>
+          va()
+            .videos.get(id)
+            .catch(() => null),
+        ),
+      )
+    ).filter((v) => v !== null),
+  ]
   const spent = async () =>
     Math.round(
       (await madeVideos()).reduce(

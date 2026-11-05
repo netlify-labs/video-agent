@@ -10,6 +10,7 @@ import { readyVideo } from '../../test/helpers.js'
 import {
   PHASE1,
   PHASE2,
+  PHASE3,
   projectedRuns,
   runScenarios,
   type Driver,
@@ -84,6 +85,22 @@ function harnessDriver(env: TestEnv, logs: string[]): Driver {
       p.headSha = p.commits.at(-1)?.sha ?? p.headSha
       await act(events.synchronize(env.gh, n), undefined, { 'on-push': 'revise' })
     },
+    async videosByExternalRef(externalRef) {
+      const page = await json(
+        `/api/v1/videos?owner=me&limit=50&externalRef=${encodeURIComponent(externalRef)}`,
+      )
+      return (page.items as (VideoSummary & { createdAt: string })[]).sort((a, b) =>
+        a.createdAt.localeCompare(b.createdAt),
+      )
+    },
+    async createDirect(prompt, title) {
+      const v = await env.h.json(
+        await env.h.call('POST', '/api/v1/videos', { key: env.key, body: { prompt, title } }),
+      )
+      await env.h.drive(4)
+      return v.id as string
+    },
+    webUrl: (id) => `https://video.example.com/videos/${id}`,
     async releaseAssets(tag) {
       return env.gh.state.releases.find((r) => r.tag_name === tag)?.assets.map((a) => a.name) ?? []
     },
@@ -149,6 +166,23 @@ describe('github-action live test, in-process', () => {
     })
     expect(done).toEqual(PHASE2.map((s) => s.name))
     expect(logs.join('\n')).not.toContain(env.key)
+  })
+
+  it('runs the phase 3 scenarios: externalRef and the reference line agree; both comparison links are logged', async () => {
+    const env = await makeEnv()
+    const steps: Record<string, unknown>[] = []
+    const ctx: ScenarioContext = { owner: 'acme', repo: 'web', prs: {}, tag: 'v7' }
+    const done = await runScenarios(harnessDriver(env, []), PHASE3, ctx, {
+      ceiling: 10_000,
+      perRun: 150,
+      spent: async () => 0,
+      log: (step, f) => steps.push({ step, ...f }),
+    })
+    expect(done).toEqual(PHASE3.map((s) => s.name))
+    expect(steps.find((s) => s.step === 'compare')).toMatchObject({
+      withContext: expect.stringMatching(/\/videos\/vid_/),
+      withoutContext: expect.stringMatching(/\/videos\/vid_/),
+    })
   })
 
   it('stops before a scenario that would pass the ceiling', async () => {

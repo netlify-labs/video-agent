@@ -4,6 +4,7 @@
 export {
   dedupeCommits,
   excludedBecause,
+  CONTEXT_BUDGET,
   GITHUB_BUDGET,
   MAX_PROMPT,
   MAX_TITLE,
@@ -39,4 +40,4 @@ export {
   type ReviseInput,
 } from './revise.js'
 export { describeRemoved, looksRandom, scrub, secretsRemoved, type Removed, type ScrubKind } from './scrub.js'
-export type { Brief } from './types.js'
+export type { Brief, ContextField } from './types.js'

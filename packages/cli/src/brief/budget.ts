@@ -5,6 +5,8 @@
 export const MAX_PROMPT = 4000
 export const MIN_CREATE_PROMPT = 10
 export const GITHUB_BUDGET = 3000
+/** GitHub text in context mode, where it travels beside the prompt (the API takes up to 16,000). */
+export const CONTEXT_BUDGET = 12000
 export const MAX_TITLE = 120
 
 const ELLIPSIS = '…'
