@@ -24,8 +24,9 @@ import {
 } from '../lib/media/previews.js'
 import { readRunCredits, RUN_CREDITS_FILE, type RunCredit } from '../lib/openverse-rules.js'
 import { NARRATION_SRC } from '../lib/contract.js'
-import { readTarGz, type TarLimits } from '../lib/tar.js'
-import { ensureBundle } from './bundles.js'
+import { readTarGz, TarError, type TarLimits } from '../lib/tar.js'
+import { bundleShapeProblems, ensureBundle } from './bundles.js'
+import { engineInfo, engineOf, isEngineId } from './engines.js'
 import { carriedCaptions, narrationOpHash } from './captions.js'
 import { getSettings } from './settings.js'
 import { promoteAttemptRefs } from './takes.js'
@@ -82,6 +83,10 @@ export function isManifest(v: unknown, attemptId: string): v is Manifest {
   if (m.attemptId !== attemptId || typeof m.title !== 'string' || typeof m.summary !== 'string') return false
   if (!files || typeof files !== 'object') return false
   if (m.references !== undefined && !areReferenceUploads(m.references)) return false
+  if (m.engine !== undefined) {
+    const e = m.engine
+    if (!e || typeof e !== 'object' || typeof (e as { id?: unknown }).id !== 'string') return false
+  }
   return OUTPUT_FILES.every((f) => {
     const e = (files as Record<string, unknown>)[f] as { sha256?: unknown; bytes?: unknown } | undefined
     return typeof e?.sha256 === 'string' && /^[0-9a-f]{64}$/.test(e.sha256)
@@ -189,6 +194,27 @@ export async function finalizeAttempt(deps: Deps, attemptId: string): Promise<Fi
       throw new Invalid('invalid_output', 'The preview is not a GIF.')
     if (sniff(files['captions.vtt']) !== 'vtt')
       throw new Invalid('invalid_output', 'The captions are not WebVTT.')
+    // The engine twice (render-engines §4.2): the one the run says rendered it, and the shape of what it saved.
+    const engine = engineOf(version)
+    const got = manifest.engine?.id ?? 'hyperframes'
+    let shape: string[] = []
+    if (got === engine)
+      try {
+        shape = bundleShapeProblems(engine, readTarGz(files['source.tar.gz']))
+      } catch (e) {
+        // A bad archive is ensureBundle's to report (best effort, after ready), as before engines.
+        if (!(e instanceof TarError)) throw e
+      }
+    if (got !== engine || shape.length) {
+      log.warn('finalize.engine_mismatch', { expected: engine, got, problems: shape })
+      const name = isEngineId(got) ? engineInfo(got).name : got
+      throw new Invalid(
+        'engine_mismatch',
+        got !== engine
+          ? `The run produced a ${name} project for a ${engineInfo(engine).name} video.`
+          : `The run didn't save a ${engineInfo(engine).name} project: ${shape.join(' ')}`,
+      )
+    }
 
     const prefix = `${a.jobId}/v${a.versionN}`
     const keys = {

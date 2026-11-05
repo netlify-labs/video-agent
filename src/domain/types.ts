@@ -93,6 +93,9 @@ export type FailureCategory =
   | 'queue_timeout'
   /** A render-unchanged run stopped because the edited composition failed `hyperframes check` (plan v2 §8). */
   | 'check_failed'
+  /** The run made the wrong kind of project for the version's engine (render-engines §4.2): only a bug or an agent
+   * that ignored its prompt gets here. */
+  | 'engine_mismatch'
 
 export interface Usage {
   totalCreditsCost?: number
@@ -951,6 +954,8 @@ export interface Manifest {
   width: number
   height: number
   tools?: Record<string, string>
+  /** The engine that rendered it (scripts/lib/engines/); missing from runs before engines: HyperFrames. */
+  engine?: { id: string; version?: string; renders?: { video: number; stills: number; audio: number } }
   /** Narrated renders only: the final mix's loudness before and after the master gain (scripts/lib/mastering.ts). */
   mastering?: MasteringReport
   /** Narrated renders only: what scripts/narration.ts's receipt says it made, and how transcription went. */

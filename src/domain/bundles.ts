@@ -110,6 +110,21 @@ export function contractForEngine(
 }
 
 /**
+ * What's wrong with a finished composition's shape for its engine (render-engines §4.2): finalize refuses a run that
+ * wrote the wrong kind of project. HyperFrames: index.html at the top. Remotion: props.json and src/Root.tsx and no
+ * index.html (its locked files and allowed paths are checked once its engine exists, Phase 2).
+ */
+export function bundleShapeProblems(engine: EngineId, files: Map<string, Uint8Array>): string[] {
+  if (engine === 'hyperframes')
+    return files.has('index.html') ? [] : ['There is no index.html at the top of video/.']
+  return [
+    ...(files.has('props.json') ? [] : ['There is no props.json at the top of video/.']),
+    ...(files.has('src/Root.tsx') ? [] : ['There is no src/Root.tsx in video/.']),
+    ...(files.has('index.html') ? ['video/index.html belongs to a HyperFrames composition.'] : []),
+  ]
+}
+
+/**
  * A version's reference entries (src/lib/bundle-references.ts), as finalize wrote them next to its source archive.
  * None for a version without (every one saved before them). Throws TarError when the list isn't the one pinned.
  */

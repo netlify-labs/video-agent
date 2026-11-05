@@ -26,6 +26,7 @@ const FAILURE: Record<string, string> = {
   unresolved_start: 'Unresolved start',
   runner_failed: 'Agent run failed',
   queue_timeout: 'Waited too long in the queue',
+  engine_mismatch: 'Wrong engine for this video',
 }
 
 export function AdminPage() {
