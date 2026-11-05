@@ -17,3 +17,5 @@ export {
   type WebhookEvent,
   type WebhookEventType,
 } from './webhooks.js'
+export type { VideoHelpers } from './client.js'
+export type { Pageable, ResolvedVideo, WaitOptions, WaitProgress } from './helpers/videos.js'

@@ -4,8 +4,16 @@ import createClient, { type Client } from 'openapi-fetch'
 import { VideoAgentError } from './errors.js'
 import type { paths } from './generated/schema.js'
 import { resources, type Resources } from './generated/resources.js'
-import { send, type HttpOptions, type Logger } from './http.js'
-import { prepare, type Call, type CallOptions, type Transport } from './transport.js'
+import { send, type Exchange, type HttpOptions, type Logger } from './http.js'
+import {
+  listAll,
+  resolveVideo,
+  waitForVideo,
+  type Pageable,
+  type ResolvedVideo,
+  type WaitOptions,
+} from './helpers/videos.js'
+import { prepare, type Call, type CallOptions, type Input, type Ok, type Transport } from './transport.js'
 import { VERSION } from './version.js'
 
 export interface VideoAgentOptions {
@@ -34,9 +42,26 @@ const IDEMPOTENT = new Set(['createVideo', 'reviseVideo', 'remixVideo'])
 const env = (name: string): string | undefined =>
   (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.[name]
 
+type Video = Ok<'/api/v1/videos/{id}', 'get'>
+
+/** The hand-written helpers on va.videos, beside the generated methods. */
+export interface VideoHelpers {
+  /** Waits until the version is ready (no timeout unless given); throws video_failed on failed, cancelled, timed_out. */
+  wait(id: string, o?: WaitOptions): Promise<Video>
+  /** Every video matching the list's filters, page by page. */
+  listAll(
+    input?: Omit<Input<'/api/v1/videos', 'get'>, 'cursor'>,
+    opts?: { signal?: AbortSignal },
+  ): AsyncGenerator<Video>
+  /** A video id, web URL or share URL → { id, versionN? }. */
+  resolve(ref: string): Promise<ResolvedVideo>
+}
+
 // Resources are copied onto the instance in the constructor, so the class carries their types too.
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type, @typescript-eslint/no-unsafe-declaration-merging
-export interface VideoAgent extends Resources {}
+// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
+export interface VideoAgent extends Omit<Resources, 'videos'> {
+  readonly videos: Resources['videos'] & VideoHelpers
+}
 
 // eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export class VideoAgent {
@@ -65,7 +90,15 @@ export class VideoAgent {
       logger: o.logger,
     }
     const transport: Transport = { call: (call, opts) => this.#call(call, opts) }
-    Object.assign(this, resources(transport))
+    const generated = resources(transport)
+    const videos: VideoAgent['videos'] = {
+      ...generated.videos,
+      wait: (id, o) =>
+        waitForVideo({ send: (x) => this.send(x), progress: (v) => generated.videos.progress(v) }, id, o),
+      listAll: (input, opts) => listAll(generated.videos.list, input, opts),
+      resolve: (ref) => resolveVideo(f, ref),
+    }
+    Object.assign(this, generated, { videos })
     this.raw = createClient<paths>({
       baseUrl: url,
       fetch: async (req: Request) => {
@@ -83,6 +116,20 @@ export class VideoAgent {
         })
       },
     })
+  }
+
+  /** Every item of any list that pages with { items, nextCursor }: `va.listAll(va.media.list, { kind: 'audio' })`. */
+  listAll<I extends { cursor?: string }, T>(
+    list: Pageable<I, T>,
+    input?: Omit<I, 'cursor'>,
+    opts?: { signal?: AbortSignal },
+  ): AsyncGenerator<T> {
+    return listAll(list, input, opts)
+  }
+
+  /** One request through the client's auth, retries and errors (for helpers that need the raw Response). */
+  send(x: Exchange): Promise<Response> {
+    return send(this.#http, x)
   }
 
   /** The server's version and features, fetched once and cached. A server older than both reads as no features. */
