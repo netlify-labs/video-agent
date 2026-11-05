@@ -1,0 +1,27 @@
+{
+  "name": "netlify-video-agent-sdk",
+  "description": "Typed client for a Video Agent deployment's REST API: create, wait for, download and publish videos, upload media, verify webhooks.",
+  "version": "0.0.0",
+  "type": "module",
+  "license": "MIT",
+  "homepage": "https://github.com/netlify-labs/video-agent#readme",
+  "bugs": "https://github.com/netlify-labs/video-agent/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/netlify-labs/video-agent.git",
+    "directory": "packages/sdk"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "name": "video-agent-action",
+  "private": true,
+  "description": "The Video Agent GitHub Action (never published to npm; see the github-action plan).",
+  "version": "0.0.0",
+  "type": "module",
+  "license": "MIT",
+  "homepage": "https://github.com/netlify-labs/video-agent#readme",
+  "bugs": "https://github.com/netlify-labs/video-agent/issues"
+}

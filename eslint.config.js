@@ -3,7 +3,23 @@ import tseslint from 'typescript-eslint'
 
 export default tseslint.config(
   {
-    ignores: ['node_modules', 'ui/dist', 'ui/dist-mock', '.taste-skill', 'video', '.netlify', '.beads', '.nax', '.render', 'netlify/database/migrations', 'netlify/edge-functions', 'spikes', 'ui/src/api/schema.d.ts', '**/*.cjs'],
+    ignores: [
+      'node_modules',
+      'ui/dist',
+      'ui/dist-mock',
+      '.taste-skill',
+      'video',
+      '.netlify',
+      '.beads',
+      '.nax',
+      '.render',
+      'netlify/database/migrations',
+      'netlify/edge-functions',
+      'spikes',
+      'ui/src/api/schema.d.ts',
+      '**/*.cjs',
+      'packages/*/dist',
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.strictTypeChecked,
@@ -18,7 +34,7 @@ export default tseslint.config(
   },
   {
     // Tests read untyped JSON responses on purpose.
-    files: ['test/**/*.ts', '**/*.test.ts'],
+    files: ['test/**/*.ts', '**/*.test.ts', 'ui/e2e/**/*.ts'],
     rules: {
       '@typescript-eslint/no-unsafe-assignment': 'off',
       '@typescript-eslint/no-unsafe-member-access': 'off',

@@ -1,0 +1,24 @@
+{
+  "name": "netlify-video-agent-player",
+  "description": "<video-agent-player>: a small web component that plays a published Video Agent video.",
+  "version": "0.0.0",
+  "type": "module",
+  "license": "MIT",
+  "homepage": "https://github.com/netlify-labs/video-agent#readme",
+  "bugs": "https://github.com/netlify-labs/video-agent/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/netlify-labs/video-agent.git",
+    "directory": "packages/player"
+  },
+  "sideEffects": true,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ]
+}
