@@ -215,8 +215,8 @@ narration is locked (fitting a video to it, or revising a narrated video):
 - Add no sound while it speaks: no `<audio>`, and no `<video>` without `muted`. Sound effects may go in its pauses.
 - The root lasts exactly as long as the bus (the prompt says how long, in seconds and frames), and every layer with it.
 - Keep `summary.json`'s narration cues (`"narration": true`) as they are; their times are the recording's.
-- After a timing change, `npx tsx scripts/check-contract.ts --duck` rewrites the music's ducking lane; without
-  `--duck` it checks the length against the bus.
+- After a timing change, `npx tsx scripts/check-contract.ts --fix` (`--duck` still works) rewrites the music's
+  ducking lane; without `--fix` it checks the length against the bus.
 - `render-job` refuses a video whose narration changed (`narration_modified`), with the reason.
 
 ## Key Rules
