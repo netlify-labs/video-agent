@@ -5,13 +5,14 @@ import {
   Group,
   Menu,
   NavLink,
+  Text,
   Tooltip,
   UnstyledButton,
   useComputedColorScheme,
   useMantineColorScheme,
 } from '@mantine/core'
 import { useDisclosure, useHotkeys } from '@mantine/hooks'
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import {
   IconBook,
   IconKey,
@@ -26,6 +27,7 @@ import {
 } from '@tabler/icons-react'
 import { Link, NavLink as RouterLink, Outlet, useLocation, useNavigate } from 'react-router'
 import { $api } from '../api/client'
+import { DOCS_GROUPS, DOCS_PAGES } from '../pages/docs/nav'
 import { useAuth } from '../auth'
 import { brand } from '../theme'
 import { Mark, PoweredBy } from './bits'
@@ -161,10 +163,19 @@ export function Layout() {
           active={onDocs && !docsOpened}
           childrenOffset={28}
         >
-          {link('/docs/api', 'REST API')}
-          {link('/docs/mcp', 'MCP for AI tools')}
-          {link('/docs/skills', 'Agent skills')}
-          {link('/docs/destinations', 'Publish destinations')}
+          {DOCS_GROUPS.map((group) => {
+            const pages = DOCS_PAGES.filter((p) => p.group === group)
+            return pages.length ? (
+              <div key={group} role="group" aria-label={group}>
+                <Text size="xs" c="dimmed" fw={600} tt="uppercase" px="sm" pt={6} pb={2} aria-hidden>
+                  {group}
+                </Text>
+                {pages.map((p) => (
+                  <Fragment key={p.path}>{link(p.path, p.label)}</Fragment>
+                ))}
+              </div>
+            ) : null
+          })}
         </NavLink>
         <PoweredBy inSidebar />
       </AppShell.Navbar>
