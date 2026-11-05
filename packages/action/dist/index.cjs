@@ -644,6 +644,36 @@ function retryAfterOf(res) {
 // packages/sdk/src/generated/resources.ts
 function resources(t) {
   return {
+    cliLogins: {
+      /** Claim a CLI login (`claimCliLogin`) */
+      claim: (id, input, opts) => t.call(
+        {
+          method: "POST",
+          path: "/api/v1/cli/logins/{id}/token",
+          pathParams: { id },
+          input,
+          query: [],
+          body: ["deviceCode"],
+          features: [],
+          operationId: "claimCliLogin"
+        },
+        opts
+      ),
+      /** Start a CLI login (`createCliLogin`) */
+      create: (input, opts) => t.call(
+        {
+          method: "POST",
+          path: "/api/v1/cli/logins",
+          pathParams: {},
+          input,
+          query: [],
+          body: ["label", "host"],
+          features: [],
+          operationId: "createCliLogin"
+        },
+        opts
+      )
+    },
     comments: {
       /** Add a comment (`addComment`) */
       add: (id, input, opts) => t.call(
