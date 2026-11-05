@@ -132,6 +132,11 @@ export const versions = pgTable(
     remix: jsonb('remix'),
     // A demo made from a screen recording: its inputs and results (src/domain/types.ts VersionRecording).
     recording: jsonb('recording'),
+    // A scoped revision ("redo a scene"): { beats: string[] }, the parent's beats it may change; null: the whole video.
+    scope: jsonb('scope'),
+    // The composition's beats [{ id, label, start, duration }], set at finalize for contract-v1 versions (or filled
+    // on first read for older ones); null: not known yet, or not a contract-v1 composition.
+    beats: jsonb('beats'),
   },
   (t) => [primaryKey({ columns: [t.jobId, t.n] })],
 )

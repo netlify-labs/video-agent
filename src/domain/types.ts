@@ -305,6 +305,26 @@ export interface VersionRow {
   remix?: VersionRemix | null
   /** A demo made from a screen recording: its inputs (frozen trace, trim, boxes) and results (summary, hidden areas). */
   recording?: VersionRecording | null
+  /** A scoped revision (redo a scene): the parent's beats it may change. Null (or missing): the whole video. */
+  scope?: VersionScope | null
+  /**
+   * The composition's beats, from its index.html at finalize (contract v1 only), or filled on first read for versions
+   * made before. Labels are agent-written (data-va-label): fence them before they reach a prompt. Null (or missing):
+   * not known yet, or not a contract-v1 composition.
+   */
+  beats?: BeatInfo[] | null
+}
+
+/** One beat of a finished version, in seconds of that version. */
+export interface BeatInfo {
+  id: string
+  label: string | null
+  start: number
+  duration: number
+}
+
+export interface VersionScope {
+  beats: string[]
 }
 
 /**
