@@ -125,4 +125,13 @@ describe('netlify-video skill package', () => {
     // The skill covers every tool.
     for (const name of toolNames) expect(mentioned, `the skill never mentions ${name}`).toContain(name)
   })
+
+  it('never tells agents to use the PR URL as a long-lived idempotency key', () => {
+    // A key is body-bound for 24 hours, so one video per PR comes from a list_videos lookup instead.
+    for (const [file, text] of sources()) {
+      expect(text.replace(/\s+/g, ' '), file).not.toMatch(/Use the PR URL as the `?idempotency_key/i)
+    }
+    const recipes = sources().find(([file]) => file.endsWith('recipes.md'))?.[1] ?? ''
+    expect(recipes).toContain("Look for the PR's video first")
+  })
 })

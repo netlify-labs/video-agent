@@ -15,8 +15,12 @@ share the result.
 4. Write the prompt: who it's for, the one message, three or four beats (problem, the new thing on screen, the result),
    exact on-screen text in quotes, and the end card (for example the feature name and "Available today").
 5. Optionally plan: `plan_video` with that prompt and the `media_ids`, ask the questions, `plan_brief`.
-6. `create_video` with the prompt, `aspect` (16:9 for docs and launches), `duration_sec` (20 to 45), `media_ids` and
-   `plan_id` if you planned. Use the PR URL as the `idempotency_key` so a retry doesn't make a second video.
+6. Look for the PR's video first: `list_videos` with the PR URL as `query` and `mine: true`. If one exists,
+   `revise_video` it with what changed rather than making a second video. Otherwise `create_video` with the prompt,
+   `aspect` (16:9 for docs and launches), `duration_sec` (20 to 45), `media_ids` and `plan_id` if you planned. End the
+   prompt with a line `Pull request: <PR URL>` so the lookup finds it next time. Don't use the PR URL alone as the
+   `idempotency_key`: a key is tied to its exact request for 24 hours, so once the description changes it answers
+   `409`. If you need one for retries, make it new per attempt (the PR URL plus the time).
 7. When it's ready, give the person `web_url`. If they want it in the PR, `publish_video` and paste the share page
    link or the GIF into a PR comment.
 
