@@ -213,7 +213,15 @@ when the deployment supports it. From AI tools, pass `beats` (with `from_version
 `get_video` lists each version's scenes. From the SDK:
 
 ```ts
-await va.videos.revise(id, { prompt: 'Show the preview URL', fromVersion: 2, scope: { beats: ['demo'] } })
+await va.videos.redoScenes(id, { beats: ['demo'], prompt: 'Show the preview URL' }) // from the latest ready version
+```
+
+From the CLI, a scene is its id or its label:
+
+```sh
+video-agent scenes vid_…                                   # ids, labels and times
+video-agent redo vid_… --scene demo "Show the preview URL" --wait
+video-agent revise vid_… --scene Opening --scene outro "Brighter" --from-version 2
 ```
 
 ## Your own voice-over

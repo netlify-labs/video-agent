@@ -10,6 +10,7 @@ import { BRIEF_COMMANDS } from './commands/brief.js'
 import { LIBRARY_COMMANDS } from './commands/library.js'
 import { MAKE_COMMANDS } from './commands/make.js'
 import { READ_COMMANDS } from './commands/read.js'
+import { SCENE_COMMANDS } from './commands/scenes.js'
 import { REVIEW_COMMANDS } from './commands/review.js'
 import { CliError, errorJson, EXIT, exitCodeFor, UsageError } from './exit.js'
 import { helpJson, helpText } from './help.js'
@@ -63,6 +64,7 @@ export const HANDLERS: Record<string, Handler> = {
   ...REVIEW_COMMANDS,
   ...LIBRARY_COMMANDS,
   ...MAKE_COMMANDS,
+  ...SCENE_COMMANDS,
   ...ACCOUNT_COMMANDS,
   ...BRIEF_COMMANDS,
   help: helpHandler,

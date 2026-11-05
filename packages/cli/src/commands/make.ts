@@ -1,4 +1,4 @@
-// create, revise, remix (cli-and-sdk plan §6.2; bead va-p1th.4.6). Flags map to the API's own fields
+// create, revise, remix and redo (cli-and-sdk plan §6.2; beads va-p1th.4.6, va-8cy4.5.2). Flags map to the API's own fields
 // (CreateVideoSchema, ReviseSchema, RemixSchema). --media takes ids or files (uploaded first, deduped), --wait
 // follows the run with a progress line on stderr, --out downloads the video, poster and captions.
 import { readFile, stat } from 'node:fs/promises'
@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import type { Video } from '../../../sdk/src/index.js'
 import { CliError, EXIT, UsageError } from '../exit.js'
 import type { Ctx, Handler } from '../router.js'
+import { sceneFlags, scopeFor } from './scenes.js'
 import { describeProgress, durationMs, progressLine, resolveVideoArg } from './shared.js'
 
 const str = (ctx: Ctx, flag: string) => {
@@ -179,12 +180,17 @@ const create: Handler = async (ctx) => {
 const revise: Handler = async (ctx) => {
   const ref = await resolveVideoArg(ctx)
   const comments = str(ctx, 'comments')
+  // --scene: a scoped revision of the scenes named (ids or labels) in --from-version, default the latest ready.
+  const scope = sceneFlags(ctx).length
+    ? await scopeFor(ctx, await ctx.sdk().videos.get(ref.id), num(ctx, 'from-version'))
+    : null
   const video = await ctx.sdk().videos.revise(
     ref.id,
     {
       prompt: await promptOf(ctx, 1),
       ...(await common(ctx)),
-      ...opt('fromVersion', num(ctx, 'from-version')),
+      ...opt('fromVersion', scope?.fromVersion ?? num(ctx, 'from-version')),
+      ...(scope ? { scope: { beats: scope.beats } } : {}),
       ...(comments
         ? {
             commentIds: comments
@@ -215,4 +221,18 @@ const remix: Handler = async (ctx) => {
   return follow(ctx, video, video.latestVersion)
 }
 
-export const MAKE_COMMANDS: Record<string, Handler> = { create, revise, remix }
+/** redo: revise --scene's short form, through the SDK's redoScenes (hidden until the server lists scoped_revision). */
+const redo: Handler = async (ctx) => {
+  const ref = await resolveVideoArg(ctx)
+  if (!sceneFlags(ctx).length) throw new UsageError('Name at least one --scene (an id or a label).')
+  const va = ctx.sdk()
+  const { fromVersion, beats } = await scopeFor(ctx, await va.videos.get(ref.id), num(ctx, 'from-version'))
+  const video = await va.videos.redoScenes(
+    ref.id,
+    { beats, prompt: await promptOf(ctx, 1), fromVersion },
+    opts(ctx),
+  )
+  return follow(ctx, video, video.latestVersion)
+}
+
+export const MAKE_COMMANDS: Record<string, Handler> = { create, revise, remix, redo }
