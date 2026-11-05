@@ -21,6 +21,7 @@ import {
   verifyRunManifest,
   type RunManifest,
 } from '../src/lib/run-manifest.js'
+import { getSettings } from '../src/domain/settings.js'
 import { harness } from './helpers.js'
 
 const H = (c: string) => c.repeat(64)
@@ -788,8 +789,18 @@ describe('server side', () => {
 
   it("the reconciler names a non-HyperFrames version's engine in its manifest", async () => {
     // One run at a time, so the revision waits in the queue while its engine is set by hand (only a Remotion
-    // deployment, Phase 2, makes such a version).
-    const h = harness({ MAX_ACTIVE_RUNS: '1' })
+    // deployment makes such a version, and its runs need Remotion installed and a license recorded).
+    const h = harness({ MAX_ACTIVE_RUNS: '1', ENGINES: 'remotion' })
+    await getSettings(h.deps)
+    await h.deps.store.updateSettings({
+      remotionLicenseAck: {
+        by: 'u_admin',
+        email: 'admin@acme.com',
+        at: '2026-11-05T00:00:00Z',
+        tier: 'free',
+        note: null,
+      },
+    })
     const create = async (prompt: string) =>
       (await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt } }))).id as string
     const id = await create('A short launch video for org webhooks, with three beats and an end card.')
@@ -806,6 +817,9 @@ describe('server side', () => {
     const attemptId = req?.requestId ?? ''
     const raw = await h.deps.blobs.get('sources', runManifestKey(id, attemptId))
     const text = new TextDecoder().decode(raw ?? new Uint8Array())
-    expect(verifyRunManifest(text, { attemptId, sha256: sha256Hex(text) }).engine).toEqual({ id: 'remotion' })
+    expect(verifyRunManifest(text, { attemptId, sha256: sha256Hex(text) }).engine).toEqual({
+      id: 'remotion',
+      tier: 'free',
+    })
   })
 })

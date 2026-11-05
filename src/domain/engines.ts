@@ -6,6 +6,7 @@ import type { Deps } from '../deps.js'
 import type { EditOp } from '../lib/contract.js'
 import { ApiError } from '../lib/errors.js'
 import { REMOTION_LICENSE_NOTICE } from '../lib/remotion-notice.js'
+import type { RunEngine } from '../lib/run-manifest.js'
 
 export type EngineId = 'hyperframes' | 'remotion'
 
@@ -179,6 +180,38 @@ export function assertSameEngine(
     'engine_mismatch',
     `Version ${child.n} would be made with ${engineInfo(got).name}, but it comes from a ${engineInfo(want).name} version. A video keeps one engine.`,
   )
+}
+
+/**
+ * A run's engine entry for its manifest (render-engines plan §4.2), or why this deployment can't run it (§7). Remotion
+ * needs ENGINES to list it (or the run can't install it), a recorded license tier (which picks the key the render
+ * reports with) and, for a Company License, its key. The admin switch isn't checked: turning Remotion off stops new
+ * videos only, and never strands work on existing ones. HyperFrames: no entry, so its manifests keep their bytes.
+ */
+export async function runEngineEntry(
+  deps: Pick<Deps, 'config' | 'store'>,
+  id: EngineId,
+): Promise<{ engine: RunEngine | undefined } | { unavailable: string }> {
+  if (id === 'hyperframes') return { engine: undefined }
+  if (!remotionConfigured(deps))
+    return {
+      unavailable:
+        "Remotion isn't installed on this deployment (ENGINES doesn't include remotion). An admin can add it back, then retry.",
+    }
+  const ack = (await deps.store.getSettings())?.remotionLicenseAck ?? null
+  if (!ack)
+    return {
+      unavailable:
+        'No Remotion license is recorded on this deployment. An admin can record one in Admin, then retry.',
+    }
+  if (ack.tier === 'company' && !deps.config.remotionKeySet)
+    return {
+      unavailable:
+        "VIDEO_AGENT_REMOTION_KEY isn't set, and this deployment's Remotion license is a Company License. Set it on the project, then retry.",
+    }
+  return {
+    engine: { id, tier: ack.tier, ...(deps.config.remotionDevelopmentRenders ? { development: true } : {}) },
+  }
 }
 
 /** What a Remotion video costs over a HyperFrames one, in credits, once the POC measures it (E1); null until then. */

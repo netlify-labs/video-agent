@@ -128,9 +128,9 @@ describe('picking the run engine', () => {
     ).toThrow(StepError)
   })
 
-  it('has only HyperFrames to run in Phase 1', () => {
+  it('runs each engine the manifest can name', () => {
     expect(runEngineFor('hyperframes').id).toBe('hyperframes')
-    expect(() => runEngineFor('remotion')).toThrow(/can't render Remotion videos yet/)
+    expect(runEngineFor('remotion').id).toBe('remotion')
   })
 
   it('reports the engine for the manifest, with render counts only when it has them', () => {

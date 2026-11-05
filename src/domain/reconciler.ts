@@ -33,6 +33,7 @@ import { readReferences } from './bundles.js'
 import type { BundleReference } from '../lib/bundle-references.js'
 import { MUSIC_POLL_MS, advanceMusicPick, attachTrack, needsMusicPick, newMusicPick } from './music-pick.js'
 import { emitTerminalEvent } from './webhooks.js'
+import { engineOf, runEngineEntry } from './engines.js'
 import type { AttemptRow, FailureCategory, FrozenBundle } from './types.js'
 
 const MIN = 60_000
@@ -160,6 +161,9 @@ async function startRequest(
   const job = await deps.store.getJob(a.jobId)
   const version = await deps.store.getVersion(a.jobId, a.versionN)
   if (!job || !version) throw new Error('attempt without job/version')
+  // Before anything else: a run this deployment can't install never starts (render-engines plan §7).
+  const runEngine = await runEngineEntry(deps, engineOf(version))
+  if ('unavailable' in runEngine) throw new EngineUnavailable(runEngine.unavailable)
   const author = await deps.store.getUser(version.authorId)
   let revision: {
     /** Null for a remix: it restores the copy of the video it remixes (docs/plans/2026-11-03-remix.md §3.2). */
@@ -213,7 +217,7 @@ async function startRequest(
       // A demo's recording inputs (screen-recording plan §5.5); absent otherwise, so other manifests keep their bytes.
       ...(recording ? { recording } : {}),
       // Named only for other engines, so HyperFrames manifests (and the hash the prompt pins) keep their bytes.
-      ...(version.engine && version.engine !== 'hyperframes' ? { engine: { id: version.engine } } : {}),
+      ...(runEngine.engine ? { engine: runEngine.engine } : {}),
     })
     await deps.blobs.set('sources', runManifestKey(a.jobId, a.id), manifest, {
       contentType: 'application/json',
@@ -352,7 +356,8 @@ async function startRequest(
     }
   })
   let runManifestSha256: string | null = null
-  if (revision || media || look) {
+  // Another engine always needs one: prepare-run sets video/ up from it (render-engines plan §5.1).
+  if (revision || media || look || runEngine.engine) {
     runManifestSha256 = await putManifest({
       kind: revision ? 'revision' : 'author',
       source: revision && {
@@ -502,6 +507,7 @@ async function trackFacts(deps: Deps, mediaId: string) {
 }
 
 class SourceUnavailable extends Error {}
+class EngineUnavailable extends Error {}
 
 async function start(deps: Deps, a: AttemptRow): Promise<void> {
   const now = deps.clock.now()
@@ -568,6 +574,14 @@ async function start(deps: Deps, a: AttemptRow): Promise<void> {
   try {
     ;({ req, parentSha } = await startRequest(deps, { ...a, deployId }, token))
   } catch (e) {
+    if (e instanceof EngineUnavailable) {
+      deps.log.warn('attempt.engine_unavailable', { attemptId: a.id, jobId: a.jobId, reason: e.message })
+      await deps.store.tx(async (repo) => {
+        await setStage(repo, a, 'failed', terminal(now, 'engine_unavailable', e.message), now.toISOString())
+        await emitTerminalEvent(repo, deps, a.id)
+      })
+      return
+    }
     if (!(e instanceof SourceUnavailable)) throw e
     deps.log.warn('attempt.source_unavailable', {
       attemptId: a.id,

@@ -1,14 +1,14 @@
 // Picks the run engine: the one the run manifest names (render-engines plan §4.2), HyperFrames when it names none.
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { engineInfo, isEngineId, type EngineId } from '../../../src/domain/engines.js'
-import { StepError } from '../run-tools.js'
+import { isEngineId, type EngineId } from '../../../src/domain/engines.js'
+import { log as runLog, StepError } from '../run-tools.js'
 import { hyperframesEngine } from './hyperframes.js'
+import { remotionEngine } from './remotion.js'
 import type { RenderReport, RunEngine } from './types.js'
 
 export function runEngineFor(id: EngineId): RunEngine {
-  if (id === 'hyperframes') return hyperframesEngine()
-  throw new StepError(`This run can't render ${engineInfo(id).name} videos yet. Stop and report this.`)
+  return id === 'hyperframes' ? hyperframesEngine() : remotionEngine()
 }
 
 /** The engine for this attempt from .render/run-manifest.json; HyperFrames without one, or one for another attempt. */
@@ -29,4 +29,22 @@ export function engineReport(
   report: RenderReport,
 ): { id: EngineId; version: string; renders?: NonNullable<RenderReport['renders']> } {
   return { id: engine.id, version, ...(report.renders ? { renders: report.renders } : {}) }
+}
+
+/**
+ * An engine with its own checks (Remotion) must pass them before anything renders (render-engines plan §5.1); its
+ * errors stop render-job with engine_check_failed and the command that shows them. HyperFrames has none here.
+ */
+export async function checkBeforeRender(
+  engine: Pick<RunEngine, 'check'>,
+  videoDir: string,
+  log: typeof runLog = runLog,
+): Promise<void> {
+  if (!engine.check) return
+  const checked = await engine.check(videoDir)
+  if (checked.errors.length)
+    throw new StepError(
+      `engine_check_failed: run npx tsx scripts/engine.ts check and fix:\n- ${checked.errors.join('\n- ')}`,
+    )
+  log('engine.check_ok', { warnings: checked.warnings.length })
 }

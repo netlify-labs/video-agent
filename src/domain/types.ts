@@ -97,6 +97,15 @@ export type FailureCategory =
   /** The run made the wrong kind of project for the version's engine (render-engines §4.2): only a bug or an agent
    * that ignored its prompt gets here. */
   | 'engine_mismatch'
+  /** A run this deployment can't install (ENGINES without it, no license recorded, a Company License without its key):
+   * refused before the runner starts (render-engines §7). */
+  | 'engine_unavailable'
+  /** Run-side engine errors (render-engines §5.1), from the code the agent's answer carries: a restored project that
+   * breaks the template's rules, a failed install, the pinned skills missing, a failed engine check. */
+  | 'engine_tampered'
+  | 'engine_install_failed'
+  | 'engine_skills_unavailable'
+  | 'engine_check_failed'
 
 export interface Usage {
   totalCreditsCost?: number

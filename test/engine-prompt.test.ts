@@ -2,6 +2,7 @@
 // not, and a Remotion prompt names no HyperFrames tool and carries the Remotion rules.
 import { describe, expect, it } from 'vitest'
 import { buildPrompt, type PromptInput } from '../src/domain/prompt.js'
+import { getSettings } from '../src/domain/settings.js'
 import { runManifestKey } from '../src/lib/run-manifest.js'
 import { harness } from './helpers.js'
 
@@ -78,7 +79,18 @@ describe('the prompt per engine', () => {
   })
 
   it('the reconciler names the engine only for a non-HyperFrames version', async () => {
-    const h = harness({ MAX_ACTIVE_RUNS: '1' })
+    // Remotion runs need it installed and a license recorded (render-engines plan §7).
+    const h = harness({ MAX_ACTIVE_RUNS: '1', ENGINES: 'remotion' })
+    await getSettings(h.deps)
+    await h.deps.store.updateSettings({
+      remotionLicenseAck: {
+        by: 'u_admin',
+        email: 'admin@acme.com',
+        at: '2026-11-05T00:00:00Z',
+        tier: 'free',
+        note: null,
+      },
+    })
     const create = async (prompt: string) =>
       (await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt } }))).id as string
     const first = await create('A short launch video for org webhooks.')
@@ -94,6 +106,9 @@ describe('the prompt per engine', () => {
     // The run manifest names the engine too, so prepare-run hydrates it.
     const req = h.deps.runner.starts[2]
     const raw = await h.deps.blobs.get('sources', runManifestKey(first, req?.requestId ?? ''))
-    expect(JSON.parse(new TextDecoder().decode(raw ?? new Uint8Array())).engine).toEqual({ id: 'remotion' })
+    expect(JSON.parse(new TextDecoder().decode(raw ?? new Uint8Array())).engine).toEqual({
+      id: 'remotion',
+      tier: 'free',
+    })
   })
 })

@@ -18,7 +18,12 @@ import type { PreviewFile } from '../src/lib/media/previews.js'
 import type { RunManifest } from '../src/lib/run-manifest.js'
 import type { NarrationOp } from '../src/lib/timeline.js'
 import { postCheckpoint } from './checkpoint.js'
-import { engineReport, runEngineFor, runEngineIdFromManifest } from './lib/engines/index.js'
+import {
+  checkBeforeRender,
+  engineReport,
+  runEngineFor,
+  runEngineIdFromManifest,
+} from './lib/engines/index.js'
 import { holdStillTo } from './lib/recording-emit.js'
 import { scopeGuard } from './lib/scope-guard.js'
 import { readNarrationReceipt } from './lib/narration-inputs.js'
@@ -97,7 +102,10 @@ async function main() {
   if (contract?.length) throw new StepError(contract[0] ?? '')
   if (contract) log('contract.ok')
   else log('contract.absent', { note: 'This video will not be editable in the browser.' })
-  const indexHtml = readFileSync(join(videoDir, 'index.html'), 'utf8')
+  await checkBeforeRender(engine, videoDir)
+  // HyperFrames' entry file: what the lane cap, the audio check and narration read. Other engines have none.
+  const html = engine.id === 'hyperframes'
+  const indexHtml = html ? readFileSync(join(videoDir, 'index.html'), 'utf8') : ''
 
   // Render-unchanged runs render exactly the frozen bundle prepare-run restored (plan v2 §14 rule 21).
   const runManifestPath = join(repoRoot, '.render', 'run-manifest.json')
@@ -207,10 +215,8 @@ async function main() {
   assertNoTakesInVideo()
   // HyperFrames keeps only the first 512 points of a lane and says nothing (docs/spikes.md S12): refuse lanes it would
   // cut. Narrated renders keep their own, stricter cap (the duck lane under narration stays at MAX_AUTOMATION_POINTS).
-  const cap = narrationOf(readFileSync(join(videoDir, 'index.html'), 'utf8')).narrated
-    ? MAX_AUTOMATION_POINTS
-    : HYPERFRAMES_AUTOMATION_POINTS
-  const longLanes = compositionFiles(videoDir)
+  const cap = narrationOf(indexHtml).narrated ? MAX_AUTOMATION_POINTS : HYPERFRAMES_AUTOMATION_POINTS
+  const longLanes = (html ? compositionFiles(videoDir) : [])
     .filter((f) => f.endsWith('.html'))
     .flatMap((f) =>
       automationOverCap(readFileSync(join(videoDir, f), 'utf8'), cap).map((l) => ({ file: f, ...l })),
