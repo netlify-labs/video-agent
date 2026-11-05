@@ -14,6 +14,13 @@ Commands:
   comments list  List a video's comments.
   comments add   Comment on a version.
   verdict        Approve a version or ask for changes.
+  media upload   Upload files to the media library; waits until each is ready.
+  media list     List the media library.
+  media get      Show a media item.
+  keys list      List your API keys.
+  keys revoke    Revoke an API key.
+  keys create    Explains where API keys come from (the API keys page, or login).
   open           Open a video's page in the browser.
+  api            Call any API route, like gh api.
 
 Run "video-agent help <command>" for its flags. Add --json for one JSON object on stdout.

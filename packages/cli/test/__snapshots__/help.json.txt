@@ -399,6 +399,130 @@
       "local": false
     },
     {
+      "name": "media upload",
+      "summary": "Upload files to the media library; waits until each is ready.",
+      "args": [
+        {
+          "name": "file",
+          "type": "file",
+          "required": true,
+          "variadic": true,
+          "description": "Files to upload."
+        }
+      ],
+      "flags": {
+        "caption": {
+          "type": "string",
+          "description": "What the file shows (the agent reads it)."
+        }
+      },
+      "examples": [
+        "video-agent media upload ./checkout.png --caption \"New checkout page\""
+      ],
+      "sdk": [
+        "media.upload"
+      ],
+      "feature": null,
+      "needsHostedApp": true,
+      "local": false
+    },
+    {
+      "name": "media list",
+      "summary": "List the media library.",
+      "args": [],
+      "flags": {
+        "kind": {
+          "type": "string",
+          "description": "image, svg, video, font, audio or pdf."
+        },
+        "search": {
+          "type": "string",
+          "description": "Search names and captions."
+        }
+      },
+      "examples": [
+        "video-agent media list --json"
+      ],
+      "sdk": [
+        "media.list"
+      ],
+      "feature": null,
+      "needsHostedApp": true,
+      "local": false
+    },
+    {
+      "name": "media get",
+      "summary": "Show a media item.",
+      "args": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "description": "A media id."
+        }
+      ],
+      "flags": {},
+      "examples": [
+        "video-agent media get med_01…"
+      ],
+      "sdk": [
+        "media.get"
+      ],
+      "feature": null,
+      "needsHostedApp": true,
+      "local": false
+    },
+    {
+      "name": "keys list",
+      "summary": "List your API keys.",
+      "args": [],
+      "flags": {},
+      "examples": [
+        "video-agent keys list"
+      ],
+      "sdk": [
+        "keys.list"
+      ],
+      "feature": null,
+      "needsHostedApp": true,
+      "local": false
+    },
+    {
+      "name": "keys revoke",
+      "summary": "Revoke an API key.",
+      "args": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "description": "A key id."
+        }
+      ],
+      "flags": {},
+      "examples": [
+        "video-agent keys revoke key_01…"
+      ],
+      "sdk": [
+        "keys.revoke"
+      ],
+      "feature": null,
+      "needsHostedApp": true,
+      "local": false
+    },
+    {
+      "name": "keys create",
+      "summary": "Explains where API keys come from (the API keys page, or login).",
+      "args": [],
+      "flags": {},
+      "examples": [
+        "video-agent keys create"
+      ],
+      "sdk": [],
+      "feature": null,
+      "needsHostedApp": true,
+      "local": false
+    },
+    {
       "name": "open",
       "summary": "Open a video's page in the browser.",
       "args": [
@@ -415,6 +539,39 @@
       ],
       "sdk": [
         "videos.resolve"
+      ],
+      "feature": null,
+      "needsHostedApp": true,
+      "local": false
+    },
+    {
+      "name": "api",
+      "summary": "Call any API route, like gh api.",
+      "args": [
+        {
+          "name": "method",
+          "type": "string",
+          "required": true,
+          "description": "GET, POST, PUT, PATCH or DELETE."
+        },
+        {
+          "name": "path",
+          "type": "string",
+          "required": true,
+          "description": "e.g. /api/v1/stats"
+        }
+      ],
+      "flags": {
+        "data": {
+          "type": "string",
+          "description": "A JSON body, or @file."
+        }
+      },
+      "examples": [
+        "video-agent api GET /api/v1/me/usage"
+      ],
+      "sdk": [
+        "raw"
       ],
       "feature": null,
       "needsHostedApp": true,
