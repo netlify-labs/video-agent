@@ -8,7 +8,10 @@ import { archiveFiles } from '../../src/lib/bundle-manifest.js'
 import { NARRATION_SRC } from '../../src/lib/contract.js'
 import { NARRATION_RUN_DIR, narrationPaths, readNarrationInputs } from './narration-inputs.js'
 
-export const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
+/** The repo the run works in. Local mode runs the bundled scripts against a workspace elsewhere (VA_REPO_ROOT). */
+export const repoRoot = process.env.VA_REPO_ROOT
+  ? resolve(process.env.VA_REPO_ROOT)
+  : resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
 
 /**
  * Hides Remotion secret keys in anything a run prints (render-engines plan §5.5): anything shaped like one, and the
