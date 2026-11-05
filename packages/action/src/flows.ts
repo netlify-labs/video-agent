@@ -216,6 +216,7 @@ async function create(
       ...(prepared.mediaIds.length ? { mediaIds: prepared.mediaIds.slice(0, 12) } : {}),
       ...(brief.context ? { context: brief.context } : {}),
       ...ext,
+      ...lookFor(ctx),
     },
     { idempotencyKey: o.key },
   )
@@ -274,6 +275,7 @@ async function remixBase(
         ...(inputs.duration ? { durationSec: inputs.duration } : {}),
         ...(prepared.mediaIds.length ? { mediaIds: prepared.mediaIds.slice(0, 12) } : {}),
         ...ext,
+        ...lookFor(ctx),
       },
       { idempotencyKey: o.key },
     )
@@ -320,6 +322,16 @@ function externalFields(
     ...(url?.startsWith('https://') ? { externalUrl: url } : {}),
     ...(ctx.inputs.private ? { private: true } : {}),
   }
+}
+
+/**
+ * The look input (bead va-mg4i.3.8), sent only when the server lists looks (an older server would drop it). Without
+ * the input nothing is sent: a remix keeps its base's look and a create gets the deployment's default.
+ */
+function lookFor(ctx: Ctx): { look?: string } {
+  if (!ctx.inputs.look) return {}
+  if (!ctx.features.includes('looks')) return {}
+  return { look: ctx.inputs.look }
 }
 
 /**
@@ -826,12 +838,23 @@ async function revise(
   const res = beats
     ? await va.videos.redoScenes(
         current.id,
-        { beats, prompt: brief.prompt, fromVersion: from.n, ...(o.context ? { context: o.context } : {}) },
+        {
+          beats,
+          prompt: brief.prompt,
+          fromVersion: from.n,
+          ...(o.context ? { context: o.context } : {}),
+          ...lookFor(ctx),
+        },
         { idempotencyKey: o.key },
       )
     : await va.videos.revise(
         current.id,
-        { prompt: brief.prompt, fromVersion: from.n, ...(o.context ? { context: o.context } : {}) },
+        {
+          prompt: brief.prompt,
+          fromVersion: from.n,
+          ...(o.context ? { context: o.context } : {}),
+          ...lookFor(ctx),
+        },
         { idempotencyKey: o.key },
       )
   const after = await va.videos.get(res.id)

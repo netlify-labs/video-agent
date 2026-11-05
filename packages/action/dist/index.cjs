@@ -1425,11 +1425,19 @@ function resources(t) {
             "mediaIds",
             "sound",
             "voiceover",
-            "look"
+            "look",
+            "externalRef",
+            "externalUrl",
+            "private",
+            "context"
           ],
           features: [
             ...input.planId !== void 0 ? ["planning"] : [],
-            ...input.look !== void 0 ? ["looks"] : []
+            ...input.look !== void 0 ? ["looks"] : [],
+            ...input.externalRef !== void 0 ? ["external_ref"] : [],
+            ...input.externalUrl !== void 0 ? ["external_ref"] : [],
+            ...input.private !== void 0 ? ["external_ref"] : [],
+            ...input.context !== void 0 ? ["context"] : []
           ],
           operationId: "createVideo"
         },
@@ -1475,9 +1483,9 @@ function resources(t) {
           path: "/api/v1/videos",
           pathParams: {},
           input,
-          query: ["status", "owner", "published", "favorite", "q", "cursor", "limit"],
+          query: ["status", "owner", "published", "favorite", "q", "externalRef", "cursor", "limit"],
           body: null,
-          features: [],
+          features: [...input?.externalRef !== void 0 ? ["external_ref"] : []],
           operationId: "listVideos"
         },
         opts
@@ -1512,12 +1520,20 @@ function resources(t) {
             "mediaIds",
             "planId",
             "webhookUrl",
-            "look"
+            "look",
+            "externalRef",
+            "externalUrl",
+            "private",
+            "context"
           ],
           features: [
             ...["remix"],
             ...input.planId !== void 0 ? ["planning"] : [],
-            ...input.look !== void 0 ? ["looks"] : []
+            ...input.look !== void 0 ? ["looks"] : [],
+            ...input.externalRef !== void 0 ? ["external_ref"] : [],
+            ...input.externalUrl !== void 0 ? ["external_ref"] : [],
+            ...input.private !== void 0 ? ["external_ref"] : [],
+            ...input.context !== void 0 ? ["context"] : []
           ],
           operationId: "remixVideo"
         },
@@ -1542,12 +1558,14 @@ function resources(t) {
             "voiceover",
             "commentIds",
             "scope",
-            "look"
+            "look",
+            "context"
           ],
           features: [
             ...input.planId !== void 0 ? ["planning"] : [],
             ...input.scope !== void 0 ? ["scoped_revision"] : [],
-            ...input.look !== void 0 ? ["looks"] : []
+            ...input.look !== void 0 ? ["looks"] : [],
+            ...input.context !== void 0 ? ["context"] : []
           ],
           operationId: "reviseVideo"
         },
@@ -3712,7 +3730,8 @@ async function create(ctx, o) {
       durationSec: o.durationSec,
       ...prepared.mediaIds.length ? { mediaIds: prepared.mediaIds.slice(0, 12) } : {},
       ...brief.context ? { context: brief.context } : {},
-      ...ext
+      ...ext,
+      ...lookFor(ctx)
     },
     { idempotencyKey: o.key }
   );
@@ -3756,7 +3775,8 @@ async function remixBase(ctx, o, r, shots) {
         ...inputs.aspect !== "16:9" ? { aspect: inputs.aspect } : {},
         ...inputs.duration ? { durationSec: inputs.duration } : {},
         ...prepared.mediaIds.length ? { mediaIds: prepared.mediaIds.slice(0, 12) } : {},
-        ...ext
+        ...ext,
+        ...lookFor(ctx)
       },
       { idempotencyKey: o.key }
     );
@@ -3794,6 +3814,11 @@ function externalFields(ctx, target, url) {
     ...url?.startsWith("https://") ? { externalUrl: url } : {},
     ...ctx.inputs.private ? { private: true } : {}
   };
+}
+function lookFor(ctx) {
+  if (!ctx.inputs.look) return {};
+  if (!ctx.features.includes("looks")) return {};
+  return { look: ctx.inputs.look };
 }
 async function settle(ctx, target, mine, uploaded) {
   const { run: run2, va } = ctx;
@@ -4198,11 +4223,22 @@ async function revise(ctx, video, surface, o) {
   logBrief(run2, brief);
   const res = beats ? await va.videos.redoScenes(
     current.id,
-    { beats, prompt: brief.prompt, fromVersion: from.n, ...o.context ? { context: o.context } : {} },
+    {
+      beats,
+      prompt: brief.prompt,
+      fromVersion: from.n,
+      ...o.context ? { context: o.context } : {},
+      ...lookFor(ctx)
+    },
     { idempotencyKey: o.key }
   ) : await va.videos.revise(
     current.id,
-    { prompt: brief.prompt, fromVersion: from.n, ...o.context ? { context: o.context } : {} },
+    {
+      prompt: brief.prompt,
+      fromVersion: from.n,
+      ...o.context ? { context: o.context } : {},
+      ...lookFor(ctx)
+    },
     { idempotencyKey: o.key }
   );
   const after = await va.videos.get(res.id);
@@ -4661,7 +4697,6 @@ async function run(deps = productionDeps()) {
   });
   let va;
   try {
-    if (inputs.look) log.warn("look is not supported by this action version yet; ignored");
     if (inputs.baseVideo) log.warn("base-video is not supported by this action version yet; ignored");
     const repoInfo = obj2(ctx.event.repository);
     const repoPrivate = typeof repoInfo.private === "boolean" ? repoInfo.private : (await gh.request("GET /repos/{owner}/{repo}")).data.private;
@@ -4674,6 +4709,7 @@ async function run(deps = productionDeps()) {
       va = client(r, inputs);
       const features2 = (await va.config.get()).features;
       log.line({ features: features2.join(",") });
+      if (inputs.look && !features2.includes("looks")) log.warn("this server has no looks; look ignored");
       const flow = { run: r, inputs, gh, va, features: features2 };
       if (decision.kind === "dispatch") {
         if (inputs.prompt.length < 10)
@@ -4738,6 +4774,7 @@ async function run(deps = productionDeps()) {
     va = client(r, inputs);
     const features = (await va.config.get()).features;
     log.line({ features: features.join(",") });
+    if (inputs.look && !features.includes("looks")) log.warn("this server has no looks; look ignored");
     const out = await handlePr({ run: r, inputs, gh, va, features }, info, action, commentId);
     if (!out.ok && out.message) log.warn(out.message);
     if (commentId !== null) await react(gh, commentId, out.ok ? "+1" : "confused");

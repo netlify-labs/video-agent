@@ -130,7 +130,6 @@ export async function run(deps: ActionDeps = productionDeps()): Promise<RunResul
   })
   let va: VideoAgent | undefined
   try {
-    if (inputs.look) log.warn('look is not supported by this action version yet; ignored')
     if (inputs.baseVideo) log.warn('base-video is not supported by this action version yet; ignored')
     const repoInfo = obj(ctx.event.repository)
     const repoPrivate =
@@ -147,6 +146,7 @@ export async function run(deps: ActionDeps = productionDeps()): Promise<RunResul
       va = client(r, inputs)
       const features = (await va.config.get()).features
       log.line({ features: features.join(',') })
+      if (inputs.look && !features.includes('looks')) log.warn('this server has no looks; look ignored')
       const flow: Ctx = { run: r, inputs, gh, va, features }
       if (decision.kind === 'dispatch') {
         if (inputs.prompt.length < 10)
@@ -224,6 +224,7 @@ export async function run(deps: ActionDeps = productionDeps()): Promise<RunResul
     va = client(r, inputs)
     const features = (await va.config.get()).features
     log.line({ features: features.join(',') })
+    if (inputs.look && !features.includes('looks')) log.warn('this server has no looks; look ignored')
     const out = await handlePr({ run: r, inputs, gh, va, features }, info, action, commentId)
     if (!out.ok && out.message) log.warn(out.message)
     if (commentId !== null) await react(gh, commentId, out.ok ? '+1' : 'confused')
