@@ -92,10 +92,15 @@ export const jobs = pgTable(
     // The video and version this one was remixed from (immediate source only); null for other videos.
     remixOfJobId: text('remix_of_job_id'),
     remixOfN: integer('remix_of_n'),
+    // What the video is for outside the app ("github:acme/web#pr-123") and its link; set by API clients such as the
+    // GitHub Action, which look the video up by it (github-action plan §6.2). Not unique.
+    externalRef: text('external_ref'),
+    externalUrl: text('external_url'),
   },
   (t) => [
     index('jobs_created_idx').on(t.createdAt, t.id),
     index('jobs_owner_idx').on(t.ownerId, t.createdAt),
+    index('jobs_owner_external_ref_idx').on(t.ownerId, t.externalRef),
   ],
 )
 
@@ -145,6 +150,8 @@ export const versions = pgTable(
     beats: jsonb('beats'),
     // The look snapshot the version was made with (src/domain/types.ts VersionLook); null: no look.
     look: jsonb('look'),
+    // Background for the run outside the 4,000-character prompt (src/domain/types.ts VersionContext); null: none.
+    context: jsonb('context'),
   },
   (t) => [primaryKey({ columns: [t.jobId, t.n] })],
 )

@@ -307,6 +307,10 @@ export interface JobRow {
   /** The video and version this one was remixed from: the immediate source only (remix spec §0, §3.3). */
   remixOfJobId?: string | null
   remixOfN?: number | null
+  /** What the video is for outside the app ("github:acme/web#pr-123"), set by an API client; not unique. */
+  externalRef?: string | null
+  /** A link to that thing (https). */
+  externalUrl?: string | null
 }
 
 /**
@@ -377,6 +381,8 @@ export interface VersionRow {
    * not known yet, or not a contract-v1 composition.
    */
   beats?: BeatInfo[] | null
+  /** Background text from elsewhere (a PR, release notes), given to the run in its own fence; null (or missing): none. */
+  context?: VersionContext | null
 }
 
 /** One beat of a finished version, in seconds of that version. */
@@ -389,6 +395,16 @@ export interface BeatInfo {
 
 export interface VersionScope {
   beats: string[]
+}
+
+/** Someone else's words the run reads as data, never instructions (github-action plan §6.1). */
+export interface VersionContext {
+  source: 'github_pr' | 'github_release' | 'changelog' | 'text'
+  /** What it is, for the fence and the video page: "GitHub PR #123". At most 120 characters. */
+  label: string
+  url?: string
+  /** At most 16,000 characters. */
+  text: string
 }
 
 /**

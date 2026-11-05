@@ -59,6 +59,8 @@ export interface JobQuery {
   /** Only videos this person starred. */
   favoriteOf?: string
   q?: string
+  /** Exact match on the video's externalRef. */
+  externalRef?: string
   cursor?: { createdAt: string; id: string }
   /** Private videos are returned only to their owner, unless `all` (admins). */
   visibleTo?: { userId: string; all: boolean }

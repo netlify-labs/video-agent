@@ -197,6 +197,7 @@ function repoFor(db: Db): Repo {
         if (visible) conds.push(visible)
       }
       if (q.status) conds.push(eq(t.jobs.status, q.status))
+      if (q.externalRef !== undefined) conds.push(eq(t.jobs.externalRef, q.externalRef))
       const livePub = anyRow(
         t.publications,
         and(eq(t.publications.jobId, t.jobs.id), isNull(t.publications.unpublishedAt)),
