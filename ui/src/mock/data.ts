@@ -1,5 +1,6 @@
 // Mock mode (VITE_MOCK=1): realistic data for screenshots and UI tests, built from videos this
 // agent actually made (posters and the teaser MP4 in ui/mock-assets). Never shipped in production builds.
+import { looksCatalog } from '../../../src/generated/looks'
 import type { Stats, Video } from '../api/client'
 
 const now = Date.now()
@@ -21,6 +22,13 @@ const hyperframes: V['editing'] = {
     recording: false,
   },
 }
+/** A version's look: the catalog's name and hash (src/generated/looks.ts, built from looks/). */
+const lookRef = (id: string): V['look'] => {
+  const l = looksCatalog.find((x) => x.id === id)
+  if (!l) throw new Error(`no look ${id}`)
+  return { id: l.id, name: l.name, hash: l.hash }
+}
+
 const files = (id: string, n: number): V['links'] => ({
   video: `/api/v1/videos/${id}/versions/${n}/video`,
   poster: `/api/v1/videos/${id}/versions/${n}/poster`,
@@ -81,6 +89,8 @@ function ready(
     feedback?: V['feedback']
     /** The plan accepted before it was made. */
     plan?: V['plan']
+    /** The look it was made with (looks/); none when missing. */
+    look?: string
     /** Its scenes (redo a scene); null when not known. */
     beats?: V['beats']
     /** The scenes it redid of its parent. */
@@ -111,7 +121,7 @@ function ready(
     context: o.context ?? null,
     editable: o.editable ?? false,
     editing: hyperframes,
-    look: null,
+    look: o.look ? lookRef(o.look) : null,
     beats: o.beats ?? null,
     scope: o.scope ?? null,
     mode: 'author',
@@ -445,6 +455,7 @@ export const videos: Video[] = [
             text: 'Title: Org webhooks\nDescription:\nTeams can subscribe to events across every project in their organization from one place.',
           },
           music: [mockCredit],
+          look: 'kinetic',
           summary:
             'A 22.5-second before-and-after story: twelve project tiles collapse into one organization webhook, then events from nine projects arrive at one endpoint. Ends on an end card pointing to Organization settings → Webhooks.',
         },

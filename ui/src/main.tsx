@@ -40,8 +40,9 @@ if (previewOnly) {
 
 // The mock API (and the contract code it uses) is loaded only in mock builds, before the app's first request.
 const ready = import.meta.env.VITE_MOCK
-  ? import('./mock/server').then((m) => {
+  ? Promise.all([import('./mock/server'), import('./mock/looks')]).then(([m, looks]) => {
       m.installMock()
+      looks.installLooksMock()
     })
   : Promise.resolve()
 

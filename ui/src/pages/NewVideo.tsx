@@ -24,6 +24,7 @@ import { Link, useNavigate } from 'react-router'
 import { $api, errorMessage, newIdempotencyKey, useCanCreate, type Version, type Video } from '../api/client'
 import { PageHeader, Status, VersionImage, relativeTime } from '../components/bits'
 import { MediaChips, type Media } from '../components/MediaPicker'
+import { LookControl } from '../components/LookPicker'
 import { PlanPanel } from '../components/PlanPanel'
 import { RemixForm, RemixSourcePicker, latestReady, useCanRemix } from '../components/RemixDialog'
 import { SoundControl, soundAfterPick, type Sound } from '../components/SoundControl'
@@ -185,6 +186,8 @@ export function NewVideoPage() {
   const [sound, setSound] = useState<Sound>('silent')
   const [soundTouched, setSoundTouched] = useState(false)
   const [voice, setVoice] = useState<VoiceState>(VOICE_OFF)
+  // Undefined until the person picks: the request then leaves look out and the admin default applies.
+  const [look, setLook] = useState<string | null | undefined>(undefined)
   const { create, key } = useCreate()
   const config = $api.useQuery('get', '/api/v1/config')
   const canPlan = useCanCreate() && config.data?.planningAvailable === true
@@ -216,6 +219,7 @@ export function NewVideoPage() {
         ...(planId && !chosenSound ? {} : { sound }),
         // A plan carries the voice-over (with its narration), so only a direct create sends it.
         ...(voice.enabled && !planId ? { voiceover: voiceInput(voice) } : {}),
+        ...(look !== undefined ? { look } : {}),
       },
       params: { header: { 'idempotency-key': key } },
     })
@@ -434,6 +438,7 @@ export function NewVideoPage() {
                 }}
               />
               <VoiceoverControl value={voice} onChange={setVoice} disabled={planning} planning={canPlan} />
+              <LookControl value={look} onChange={setLook} disabled={planning} />
               <TextInput
                 label="Title"
                 description="Optional. The agent names it otherwise."

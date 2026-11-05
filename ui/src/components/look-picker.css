@@ -1,0 +1,66 @@
+.va-look-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.va-look-card {
+  position: relative;
+  border-radius: var(--mantine-radius-md);
+}
+
+.va-look-card > .va-look-pick {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0 0 10px;
+  border-radius: inherit;
+  overflow: hidden;
+}
+
+.va-look-card[data-selected] > .va-look-pick {
+  outline: 2px solid var(--va-text);
+  outline-offset: -2px;
+}
+
+.va-look-frame {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: var(--va-raised, #111);
+  overflow: hidden;
+}
+
+.va-look-frame img,
+.va-look-frame video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.va-look-none {
+  display: grid;
+  place-items: center;
+  color: var(--va-muted);
+  font-size: var(--mantine-font-size-sm);
+}
+
+.va-look-text {
+  padding: 8px 10px 0;
+}
+
+.va-look-play {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}
+
+.va-look-thumb {
+  width: 40px;
+  aspect-ratio: 16 / 9;
+  border-radius: 4px;
+  object-fit: cover;
+  background: var(--va-raised, #111);
+  flex: none;
+}
