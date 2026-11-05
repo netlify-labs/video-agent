@@ -9,6 +9,7 @@ import {
   pinnedScenes,
   redidLabel,
   sceneChipLabel,
+  scopedStart,
   type Beat,
 } from './scenes'
 
@@ -113,5 +114,13 @@ describe('pinnedScenes', () => {
     expect(pinnedScenes(held, [13])).toBeNull()
     expect(pinnedScenes(held, [11])).toBeNull()
     expect(pinnedScenes(held, [1, 5])?.beats.map((b) => b.id)).toEqual(['hook', 'features'])
+  })
+})
+
+describe('scopedStart', () => {
+  it('is where the first redone scene starts in the scoped version, null for a whole one', () => {
+    expect(scopedStart({ beats, scope: { beats: [{ id: 'end' }, { id: 'features' }] } })).toBe(4)
+    expect(scopedStart({ beats, scope: null })).toBeNull()
+    expect(scopedStart({ beats: null, scope: { beats: [{ id: 'end' }] } })).toBeNull()
   })
 })

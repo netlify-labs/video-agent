@@ -89,6 +89,15 @@ export function pinnedScenes(
   return { beats: scenes, byDefault: scenes.length < chips.length / 2 }
 }
 
+/** Where a scoped version's first redone scene starts in it (seconds), or null for a whole-video version. */
+export function scopedStart(v: {
+  beats: readonly Beat[] | null
+  scope: { beats: readonly { id: string }[] } | null
+}): number | null {
+  const ids = new Set(v.scope?.beats.map((b) => b.id))
+  return v.beats?.find((b) => ids.has(b.id))?.start ?? null
+}
+
 /** Whether a failed version's error is a scope refusal (isScopeRefusal in src/lib/scope.ts). */
 export const isScopeRefusal = (message: string | null | undefined): boolean =>
   !!message && (message.startsWith(`${SCOPE_VIOLATED}:`) || message.startsWith(SCOPE_REFUSED_PREFIX))

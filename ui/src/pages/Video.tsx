@@ -66,7 +66,7 @@ import {
   unwatchRun,
   watchRun,
 } from '../lib/run-notify'
-import { isScopeRefusal, redidLabel } from '../lib/scenes'
+import { isScopeRefusal, redidLabel, scopedStart } from '../lib/scenes'
 import {
   $api,
   errorMessage,
@@ -600,7 +600,11 @@ export function VideoPage() {
   const [picking, setPicking] = useState(false)
   const [pending, setPending] = useState<Pin | null>(null)
   const [view, setView] = useState<'video' | 'composition'>('video')
+  // Switching to a scoped version starts its player at the first scene it redid (once the new element has loaded).
+  const [seekTo, setSeekTo] = useState<number | null>(null)
   const select = (n: number) => {
+    const x = video.data?.versions.find((y) => y.n === n)
+    setSeekTo(x && x.status === 'ready' ? scopedStart(x) : null)
     setSelected(n)
     setRevSound(null)
     setRevVoice(null)
@@ -608,6 +612,22 @@ export function VideoPage() {
     setPicking(false)
     setPending(null)
   }
+  useEffect(() => {
+    const el = player.current
+    if (seekTo === null || !el) return
+    const go = () => {
+      el.currentTime = seekTo
+      setSeekTo(null)
+    }
+    if (el.readyState >= 1) {
+      go()
+      return
+    }
+    el.addEventListener('loadedmetadata', go, { once: true })
+    return () => {
+      el.removeEventListener('loadedmetadata', go)
+    }
+  }, [seekTo, selected])
 
   const revise = $api.useMutation('post', '/api/v1/videos/{id}/versions', {
     onSuccess: () => {
@@ -1226,6 +1246,10 @@ export function VideoPage() {
                             value={revBeats}
                             onChange={setRevBeats}
                             disabled={busy}
+                            onPreview={(b) => {
+                              // Hovering a scene shows where it starts.
+                              if (player.current && view === 'video') player.current.currentTime = b.start
+                            }}
                           />
                           <Text size="sm" c="var(--va-faint)">
                             Length, sound and voice stay as they are. Say in the request if a scene should run

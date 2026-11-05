@@ -215,3 +215,30 @@ test('Incorporate with the switch off is an ordinary revision; pins on every sce
   await expect(dialog).toContainText('4 of 5 checked')
   await expect(only).toHaveCount(0)
 })
+
+// After the gate: hovering a scene chip seeks the player (va-8cy4.5.9); switching to a scoped version starts at the
+// scene it redid (va-8cy4.5.10).
+const currentTime = (page: Page) =>
+  page.locator('.va-review-frame video').evaluate((v: HTMLVideoElement) => v.currentTime)
+
+test('hovering a scene chip seeks the player to that scene', async ({ page }) => {
+  await page.goto('/videos/vid_teaser')
+  await expect
+    .poll(() => page.locator('.va-review-frame video').evaluate((v: HTMLVideoElement) => v.readyState))
+    .toBeGreaterThan(0)
+  await scope(page).getByText('Some scenes').click()
+  await pick(page, /Demo/).hover()
+  await expect.poll(() => currentTime(page)).toBe(4)
+  await pick(page, /Problem/).hover()
+  await expect.poll(() => currentTime(page)).toBe(2)
+})
+
+test('switching to a scoped version starts at the scene it redid', async ({ page }) => {
+  await mock(page, 'mockRedo')
+  await page.goto('/videos/vid_teaser')
+  await page.getByRole('button', { name: /v2 from v1/ }).click()
+  await expect.poll(() => currentTime(page)).toBe(0)
+  // v3 redid the demo, which starts at 0:04 in it.
+  await page.getByRole('button', { name: /v3 from v2/ }).click()
+  await expect.poll(() => currentTime(page)).toBe(4)
+})

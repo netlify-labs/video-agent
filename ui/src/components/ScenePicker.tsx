@@ -5,9 +5,9 @@
 import { Button, Checkbox, Chip, Group, Loader, Modal, Stack, Text, Textarea, Tooltip } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { $api, errorMessage, newIdempotencyKey, type Version, type Video } from '../api/client'
-import { pickable, sceneChipLabel } from '../lib/scenes'
+import { pickable, sceneChipLabel, type Beat } from '../lib/scenes'
 import { clockTime, showError } from './bits'
 
 /** Whether this deployment and this version let some of its scenes be redone on their own. */
@@ -42,8 +42,20 @@ export function ScenePicker(props: {
   value: string[]
   onChange: (beats: string[]) => void
   disabled?: boolean
+  /** A chip was hovered or focused (debounced): the page seeks its player to the scene. */
+  onPreview?: (beat: Beat) => void
 }) {
   const { beats, loading, error } = useScenes(props.videoId, props.v)
+  const hover = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const preview = (beat: Beat | null) => {
+    if (hover.current) clearTimeout(hover.current)
+    hover.current = null
+    const on = props.onPreview
+    if (beat && on)
+      hover.current = setTimeout(() => {
+        on(beat)
+      }, 150)
+  }
   if (loading) return <Loader size="sm" />
   if (error)
     return (
@@ -62,7 +74,17 @@ export function ScenePicker(props: {
     <Group gap={6} data-testid="scene-picker" role="group" aria-label="Scenes to redo">
       {chips.map(({ beat, picked, disabled }, i) => (
         <Tooltip key={beat.id} label={disabled} disabled={!disabled} multiline w={260}>
-          <span>
+          <span
+            onMouseEnter={() => {
+              preview(beat)
+            }}
+            onMouseLeave={() => {
+              preview(null)
+            }}
+            onFocus={() => {
+              preview(beat)
+            }}
+          >
             <Chip
               size="sm"
               checked={picked}
