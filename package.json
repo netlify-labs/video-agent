@@ -24,7 +24,11 @@
     "seed:music": "tsx scripts/seed-music.ts",
     "postinstall": "netlify-agent-kit install --strict",
     "openapi:check": "tsx scripts/gen-openapi.ts --check && npx -y openapi-typescript@7.13.0 ui/src/api/openapi.json --check -o ui/src/api/schema.d.ts",
-    "test:ui": "playwright test"
+    "test:ui": "playwright test",
+    "look:check": "tsx scripts/look-check.ts",
+    "look:new": "tsx scripts/look-new.ts",
+    "look:vendor": "tsx scripts/look-vendor.ts",
+    "looks:gen": "tsx scripts/looks-gen.ts"
   },
   "dependencies": {
     "@hono/netlify": "1.0.2",

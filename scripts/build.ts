@@ -9,6 +9,7 @@ import { join } from 'node:path'
 import { isPreviewBuild, videoRunOf, writeVideoRunPreview } from './lib/agent-preview.js'
 import { repoRoot } from './lib/run-tools.js'
 import { unpackZip, ZipError } from './lib/brand-zip.js'
+import { buildLooks, copyLookPreviews, LookBuildError, writeLooksModule } from './lib/looks.js'
 import { buildMcpApp } from './lib/mcp-app.js'
 import { buildSkills } from './lib/skills.js'
 import { buildInfoModule, buildInfoOf, releaseTag } from './lib/build-info.js'
@@ -132,6 +133,30 @@ log('context', {
 })
 log('mcp-app', await buildMcpApp(repoRoot))
 
+// Looks (plan 2026-11-04-looks §4.8), for every build: the API function carries looks-build/*.tar.gz (netlify.toml
+// included_files), video-run previews included. A look that fails look:check --static fails the deploy.
+let looks
+try {
+  looks = buildLooks({
+    repoRoot,
+    hyperframesVersion: (
+      JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8')) as {
+        netlifyAgent: { hyperframes: { version: string } }
+      }
+    ).netlifyAgent.hyperframes.version,
+    writeArchives: true,
+  })
+} catch (e) {
+  if (e instanceof LookBuildError) log('looks', { ok: false, problems: e.problems })
+  throw e
+}
+writeLooksModule(repoRoot, looks)
+log('looks', {
+  count: looks.length,
+  ids: looks.map((l) => l.id),
+  bytes: looks.reduce((n, l) => n + l.bytes, 0),
+})
+
 const agentRun = Object.keys(process.env).some((k) => k.startsWith('NETLIFY_AGENT_RUNNER_'))
 log('build-env', {
   context: process.env.CONTEXT ?? null,
@@ -181,4 +206,6 @@ if (videoRun && process.env.FORCE_UI_BUILD !== 'true') {
     process.env.URL ?? 'http://localhost:8888',
   )
   log('skills', { skills: skills.map((s) => ({ name: s.name, bytes: s.bytes, sha256: s.sha256 })) })
+  // The picker's clips and posters, content-hashed under /assets/ (immutable cache); after vite empties ui/dist.
+  log('looks-previews', { copied: copyLookPreviews(repoRoot, looks, join(repoRoot, 'ui/dist')) })
 }

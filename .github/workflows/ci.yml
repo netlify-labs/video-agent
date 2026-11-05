@@ -23,6 +23,9 @@ jobs:
       - run: npm run db:check
       - run: npm run build:ui
       - run: npx playwright install --with-deps chromium
+      # Looks: the static checks and each example through hyperframes check (needs the Chromium above). Runs on
+      # pull_request only, never pull_request_target, so contributed examples run with no secrets.
+      - run: npm run look:check
       - run: npm run test:ui
 
   # Breaking-change check on the REST API (cli-and-sdk plan §4.4): /api/v1 is additive, and the SDK relies on it.
