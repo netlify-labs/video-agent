@@ -730,7 +730,7 @@ Contact sheet (6 frames each): `spikes/out/k2/contact-sheet.png` (gitignored; vi
 - **Copying:** neither look run reused the example's words ("Orbit", its lines) or media.
 - **Brand vs look:** the kinetic run followed the brand where they disagreed (tracking −0.02em, not the look's
   −0.04em; a dark brand teal instead of a full accent fill), as §3 says.
-- **Owner verdict and default look:** pending.
+- **Owner verdict (2026-11-05, relayed):** go ahead; **the default look stays None**. `clean` ships as an option.
 
 ### K1: inlining registry blocks into contract scenes (2026-11-05, `spikes/k1`, `npx tsx spikes/k1/run.ts [--render] [case…]`, no credits)
 
