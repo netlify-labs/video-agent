@@ -677,9 +677,12 @@ export async function renderEdit(
   p: Principal,
   id: string,
   idemKey?: string,
-  input: { [K in keyof RenderSettings]?: RenderSettings[K] | undefined } = {},
+  input: { [K in keyof RenderSettings]?: RenderSettings[K] | undefined } & { look?: unknown } = {},
 ) {
   assertCan(p, 'edit:create')
+  // An edit render and a fit keep the edited version's look (looks plan §4.3): a look in the request is refused.
+  if (input.look !== undefined)
+    throw new ApiError('look_not_allowed', "An edit render keeps the edited version's look.")
   const settings: RenderSettings = {
     mode: input.mode ?? 'keep_visuals',
     holdFinalFrame: input.holdFinalFrame ?? false,
@@ -795,6 +798,8 @@ export async function renderEdit(
         voiceover: base?.voiceover ?? null,
         // The base's engine: an edit renders the base's composition (render-engines §4.2).
         engine: engineOf(base),
+        // The base's look: shown on a render as is, and the fit's run reads it (never a restyle).
+        look: base?.look ? { ...base.look, restyle: false } : null,
       }
       if (base) assertSameEngine(deps, base, row)
       await repo.insertVersion(row)

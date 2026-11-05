@@ -114,3 +114,28 @@ export function aspectNotice(
 ): string | null {
   return look.aspects.includes(aspect) ? null : `${look.name} wasn't made for ${aspect}.`
 }
+
+/**
+ * Where a look is never accepted (looks plan §4.3): an edit render, a fit to recorded narration, a scoped revision
+ * (redo a scene). The regenerate-beat plan calls this with its scope.
+ */
+export function assertLookAllowed(o: { look?: string | null | undefined; scope?: unknown; what?: string }) {
+  if (o.look === undefined) return
+  if (o.scope !== undefined && o.scope !== null)
+    throw new ApiError(
+      'look_not_allowed',
+      "Redoing a scene keeps the video's look; pick a look with a full revision.",
+    )
+  if (o.what) throw new ApiError('look_not_allowed', `${o.what} keeps the version's look.`)
+}
+
+/** A restyle of a version with recorded narration isn't possible yet (§4.3): its scenes must keep their exact lengths. */
+export function assertRestyleAllowed(restyle: boolean, narrated: boolean) {
+  if (restyle && narrated)
+    throw new ApiError(
+      'look_not_allowed',
+      "Restyle isn't available for videos with recorded narration yet.",
+      undefined,
+      { status: 409 },
+    )
+}

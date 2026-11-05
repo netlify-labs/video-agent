@@ -32,6 +32,7 @@ import type {
   Verdict,
   VerdictRow,
   VersionCommentRow,
+  VersionLook,
   VersionProvenanceRow,
 } from './types.js'
 import { planningContext } from '../generated/planning-context.js'
@@ -60,10 +61,20 @@ import {
   sharePageEntry,
 } from './destinations/dto.js'
 import { removeAllForJob } from './destinations/remove.js'
-import { assertSameEngine, engineInfo, engineOf } from './engines.js'
+import { assertSameEngine, enabledEngines, engineInfo, engineOf } from './engines.js'
 import { fillBeats } from './beats.js'
 import { enabledFeatures } from './features.js'
 import { scopeRules } from '../lib/scope.js'
+import { adoptLookSnapshot, snapshotLook } from './look-snapshot.js'
+import { lookSettings } from './look-settings.js'
+import {
+  assertLookAllowed,
+  assertLookSupportsEngine,
+  assertRestyleAllowed,
+  chooseEngine,
+  getLook,
+  resolveLook,
+} from './looks.js'
 import type { DestinationPublicationRow } from './types.js'
 
 const IDEMPOTENCY_TTL_MS = 24 * 3600_000
@@ -78,6 +89,8 @@ export interface CreateVideoInput {
   mediaIds?: string[] | undefined
   sound?: VideoSound | undefined
   voiceover?: VoiceoverInput | undefined
+  /** A look id (looks plan §4.3); null: no look; omitted: the plan's look, else the admin default, else none. */
+  look?: string | null | undefined
 }
 
 export interface ReviseInput {
@@ -96,6 +109,8 @@ export interface ReviseInput {
   voiceover?: VoiceoverInput | undefined
   /** Redo only these scenes (beat ids of fromVersion); everything else stays exactly as it is (redo a scene, §4.1). */
   scope?: { beats: string[] } | undefined
+  /** A look id: a restyle unless it's the parent's own look at the same version; null: no look; omitted: the parent's. */
+  look?: string | null | undefined
 }
 
 export const INCORPORATE_MAX_COMMENTS = 50
@@ -331,11 +346,27 @@ export async function createVideo(
     mediaIds: input.mediaIds ?? [],
     sound: input.sound ?? null,
     voiceover: input.voiceover ?? null,
+    look: input.look ?? null,
+  })
+  // The look, resolved and copied before the transaction (blob writes can't roll back), under an id minted now.
+  const settings = await lookSettings(deps)
+  const resolved = resolveLook(deps, input, {
+    defaultLook: settings.defaultLook,
+    disabled: settings.disabledLooks,
+  })
+  const presetJobId = resolved.kind === 'pick' ? deps.ids.videoId() : null
+  const look =
+    resolved.kind === 'pick' && presetJobId
+      ? await snapshotLook(deps, presetJobId, { from: 'bundle', entry: resolved.entry }, false)
+      : null
+  const engine = chooseEngine({
+    look: resolved.kind === 'pick' ? resolved.entry : null,
+    enabled: (await enabledEngines(deps)).map((e) => e.id),
   })
   return deps.store.tx((repo) =>
     withIdempotency(repo, deps, principal, 'videos.create', idemKey, input, async () => {
       const now = deps.clock.now().toISOString()
-      const jobId = deps.ids.videoId()
+      const jobId = presetJobId ?? deps.ids.videoId()
       const planned = input.planId
         ? await consumePlan(repo, deps, principal, input.planId, { jobId: null, n: 1, newJobId: jobId })
         : null
@@ -379,9 +410,11 @@ export async function createVideo(
         plan: planned?.frozen ?? null,
         // A picked audio item means music unless the person chose otherwise.
         ...versionAudio(input, planned, null, media),
-        // HyperFrames until the looks plan's engine choice rule lands (render-engines §4.2).
-        engine: 'hyperframes',
+        // The look's first enabled engine, else HyperFrames (looks plan §4.14).
+        engine,
+        look,
       })
+      if (look) await adoptLookSnapshot(repo, deps, jobId, look, now)
       await repo.insertAttempt(newAttempt(deps, jobId, 1, now))
       return { status: 202, body: await videoDto(repo, deps, jobId, principal) }
     }),
@@ -434,9 +467,21 @@ export async function reviseVideo(
     sound: input.sound ?? null,
     voiceover: input.voiceover ?? null,
     ...(input.scope ? { scope: input.scope.beats } : {}),
+    look: input.look ?? null,
   })
+  // Redoing a scene keeps the video's look (looks plan §4.3).
+  assertLookAllowed({ look: input.look, scope: input.scope })
   // A scoped revision's checks that may read Blobs (the parent's scenes) run before the transaction.
   if (input.scope) await checkScopedRevise(deps, principal, jobId, input)
+  // A picked look is copied before the transaction: the copy depends only on this video and the look's version, so
+  // the parent (and whether it's a restyle) is decided inside. Visibility is checked first.
+  const settings = await lookSettings(deps)
+  let picked: VersionLook | null = null
+  if (typeof input.look === 'string') {
+    await loadJob(deps.store, principal, jobId)
+    const r = resolveLook(deps, input, { defaultLook: null, disabled: settings.disabledLooks })
+    if (r.kind === 'pick') picked = await snapshotLook(deps, jobId, { from: 'bundle', entry: r.entry }, false)
+  }
   return deps.store.tx(async (repo) => {
     // Visibility first: a replay must not return a saved response for a video that has since gone private.
     await loadJob(repo, principal, jobId)
@@ -455,6 +500,19 @@ export async function reviseVideo(
       const scope = input.scope ? scopeOf(parent, input.scope.beats) : null
       const now = deps.clock.now().toISOString()
       const n = job.nextVersionN
+      // The look: the parent's snapshot unless the request picks one (null: none); a different snapshot is a restyle.
+      const parentLook = parent.look ?? null
+      const restyle = picked !== null && picked.hash !== parentLook?.hash
+      assertRestyleAllowed(restyle, !!parent.narration)
+      const look: VersionLook | null =
+        input.look === null
+          ? null
+          : picked
+            ? restyle
+              ? { ...picked, restyle: true }
+              : { ...(parentLook ?? picked), restyle: false }
+            : parentLook && { ...parentLook, restyle: false }
+      deps.log.debug('video.revise_look', { jobId, n, look: look?.id ?? null, restyle })
       const feedback = input.commentIds?.length
         ? await snapshotFeedback(repo, principal, job, parent.n, n, input.commentIds)
         : []
@@ -494,9 +552,14 @@ export async function reviseVideo(
         // The parent's engine: a video keeps one (render-engines §4.2).
         engine: engineOf(parent),
         ...(scope ? { scope } : {}),
+        look,
       }
       assertSameEngine(deps, parent, row)
+      // A restyle keeps the video's engine, so the new look must support it (§4.14).
+      const entry = look && restyle ? getLook(deps, look.id) : null
+      if (entry) assertLookSupportsEngine(entry, engineOf(row))
       await repo.insertVersion(row)
+      if (look && restyle) await adoptLookSnapshot(repo, deps, jobId, look, now)
       await repo.insertVersionComments(feedback)
       await repo.insertVersionMedia(media)
       await repo.insertAttempt(newAttempt(deps, jobId, n, now))

@@ -19,8 +19,11 @@ import { mediaDto, snapshotMedia } from './media.js'
 import { isTake } from './takes.js'
 import { assertCan, type Principal } from './policy.js'
 import { assertSameEngine, engineOf } from './engines.js'
+import { adoptLookSnapshot, snapshotLook } from './look-snapshot.js'
+import { lookSettings } from './look-settings.js'
+import { assertLookSupportsEngine, isRestyle, resolveLook } from './looks.js'
 import { assertRemixEnabled } from './remix-settings.js'
-import type { Aspect, JobRow, OutputRow, VersionRemix, VersionRow, VideoSound } from './types.js'
+import type { Aspect, JobRow, OutputRow, VersionLook, VersionRemix, VersionRow, VideoSound } from './types.js'
 import {
   checkWebhook,
   consumePlan,
@@ -47,6 +50,8 @@ export interface RemixInput {
   planId?: string | undefined
   /** The remixer's own (API keys only); the source's is never copied. */
   webhookUrl?: string | undefined
+  /** A look id (a restyle into it, as a new video); null: no look; omitted: the source version's look. */
+  look?: string | null | undefined
 }
 
 /** How much of the source's history the snapshot keeps (§3.3). */
@@ -166,6 +171,7 @@ export async function remixVideo(
     change: clip(input.prompt),
     planId: input.planId ?? null,
     mediaIds: input.mediaIds ?? null,
+    look: input.look ?? null,
   })
   const operation = `videos.remix:${sourceId}`
   // Visibility before anything else, a replay included: a key can't replay a remix of a video you can't see now.
@@ -175,10 +181,29 @@ export async function remixVideo(
   // Checked and copied outside the transaction: blob writes can't roll back, so the reservation must be committed.
   let copy: { sha256: string; narrationDropped: boolean } | null = null
   let newJobId = ''
+  // The look, copied under the remix's own prefix next to the source copy: the source's snapshot when omitted (from
+  // its own blob, since the catalog may have moved on), or a newly picked look, which makes the remix a restyle.
+  let look: VersionLook | null = null
   if (!replay) {
     const { version, output } = await sourceVersion(deps.store, source, input.fromVersion)
+    const resolved = resolveLook(deps, input, {
+      inherited: version.look ?? null,
+      defaultLook: null,
+      disabled: (await lookSettings(deps)).disabledLooks,
+    })
     newJobId = deps.ids.videoId()
     copy = await copySource(deps, newJobId, version, output)
+    if (resolved.kind === 'inherit')
+      look = await snapshotLook(deps, newJobId, { from: 'blob', look: resolved.look }, false)
+    if (resolved.kind === 'pick') {
+      assertLookSupportsEngine(resolved.entry, engineOf(version))
+      look = await snapshotLook(
+        deps,
+        newJobId,
+        { from: 'bundle', entry: resolved.entry },
+        isRestyle(version.look ?? null, resolved),
+      )
+    }
   }
   const res = await deps.store.tx(async (repo) => {
     await loadJob(repo, principal, sourceId)
@@ -255,13 +280,15 @@ export async function remixVideo(
         remix,
         // The source's engine: a remix is made the way its source was (render-engines §4.2).
         engine: engineOf(version),
+        look,
       }
       assertSameEngine(deps, version, row)
       await repo.insertVersion(row)
       await repo.insertVersionMedia(media)
       await repo.insertAttempt(newAttempt(deps, newJobId, 1, now))
-      // Adopt the copy: the reservation row is done, so the sweep never deletes it.
+      // Adopt the copies: their reservation rows are done, so the sweep never deletes them.
       await repo.updateCleanup(remixReservationId(newJobId), { doneAt: now })
+      if (look) await adoptLookSnapshot(repo, deps, newJobId, look, now)
       deps.log.info('video.remixed', {
         sourceId: job.id,
         fromN: version.n,
@@ -269,6 +296,8 @@ export async function remixVideo(
         userId: principal.userId,
         narrationDropped: copy.narrationDropped,
         media: media.length,
+        look: look?.id ?? null,
+        restyle: look?.restyle ?? false,
       })
       return { status: 202, body: await videoDto(repo, deps, newJobId, principal) }
     })
