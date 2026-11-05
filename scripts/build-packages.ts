@@ -5,6 +5,7 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { build } from 'esbuild'
+import { packageBuildOptions } from './lib/player-build.js'
 import { repoRoot } from './lib/run-tools.js'
 
 const log = (step: string, f: Record<string, unknown> = {}) => console.log(JSON.stringify({ step, ...f }))
@@ -22,15 +23,7 @@ for (const dir of readdirSync(join(repoRoot, 'packages')).sort()) {
   const started = Date.now()
   rmSync(join(root, 'dist'), { recursive: true, force: true })
   const node = Boolean(pkg.bin)
-  await build({
-    entryPoints: [join(root, 'src/index.ts'), ...(node ? [join(root, 'src/bin.ts')] : [])],
-    outdir: join(root, 'dist'),
-    bundle: true,
-    format: 'esm',
-    platform: node ? 'node' : 'neutral',
-    target: node ? 'node22' : 'es2022',
-    logLevel: 'warning',
-  })
+  await build({ ...packageBuildOptions(root, node), outdir: join(root, 'dist') })
   execFileSync('npx', ['tsc', '-p', join(root, 'tsconfig.build.json')], { stdio: 'inherit' })
   log('package', { name: pkg.name, ms: Date.now() - started })
 }

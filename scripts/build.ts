@@ -3,6 +3,7 @@
 // With BRAND_ZIP_URL set, the web app's name, accent and logo come from that zip's brand.json, the same
 // zip netlify-agent-kit unpacks into context/brand/ for agent runs.
 import { execFileSync } from 'node:child_process'
+import { build as esbuild } from 'esbuild'
 import { copyFileSync, cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -12,6 +13,7 @@ import { unpackZip, ZipError } from './lib/brand-zip.js'
 import { buildLooks, copyLookPreviews, LookBuildError, writeLooksModule } from './lib/looks.js'
 import { buildMcpApp } from './lib/mcp-app.js'
 import { buildSkills } from './lib/skills.js'
+import { playerBuildOptions } from './lib/player-build.js'
 import { buildInfoModule, buildInfoOf, releaseTag } from './lib/build-info.js'
 import {
   buildContextDigest,
@@ -206,6 +208,9 @@ if (videoRun && process.env.FORCE_UI_BUILD !== 'true') {
     process.env.URL ?? 'http://localhost:8888',
   )
   log('skills', { skills: skills.map((s) => ({ name: s.name, bytes: s.bytes, sha256: s.sha256 })) })
+  // <video-agent-player> at /player.js, the same bytes as the npm package's dist (cli-and-sdk plan §7).
+  await esbuild(playerBuildOptions(repoRoot, join(repoRoot, 'ui/dist/player.js')))
+  log('player', { file: 'ui/dist/player.js' })
   // The picker's clips and posters, content-hashed under /assets/ (immutable cache); after vite empties ui/dist.
   log('looks-previews', { copied: copyLookPreviews(repoRoot, looks, join(repoRoot, 'ui/dist')) })
 }
