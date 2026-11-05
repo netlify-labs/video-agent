@@ -1,8 +1,17 @@
 # Publish destinations: the share page, YouTube, and your own sites — plan
 
-- **Status:** built (2026-11-05): phases 1, 2 and 4 live in this repo; phase 3 in revenue-engine PR #404 and
-  netlify-labs/video-site-template. Was: draft 3 (2026-11-04). No beads yet. The owner accepted draft 3's proposed defaults
+- **Status:** built (2026-11-05): phases 1, 2 and 4 live in this repo; phase 3 merged in revenue-engine PR #404
+  (`929471ad`) and netlify-labs/video-site-template (pinned by branch `release/0ea69c6`, since Netlify builds a linked
+  repo from a branch, not a SHA). Was: draft 3 (2026-11-04). The owner accepted draft 3's proposed defaults
   (§9, decisions 7-11).
+  - First real publish (2026-11-05): the "Netlify Artifacts" HTTP destination, registered in Video Agent production
+    against site-vendor **dev** (`/video-agent/revenue-engine`), published "Netlify: Every AI primitive you need" to a
+    new, unprotected site, https://ai-on-netlify.netlify.app/. Checked from outside: page 200, `site.json` lists the
+    video, and the 8.1 MB mp4 answers a Range request with 206 (`bytes 0-1023/8125713`). The dev smoke separately
+    passed a password-protected site: 401 without the password, 206 for two ranges and 416 past the end with it.
+  - Still open: the 40 MB copy (gate 3a), site-vendor in production (smart-ci's plan fails on an unrelated ops-stack
+    `SYSTEM_TABLE` check), publishing to an existing site and a real agent run (gate 3b, spike P6), and YouTube
+    (P4, P5, 4.G, deferred by the owner).
   - Draft 1: written against the code.
   - Draft 2: the owner's answers to draft 1's open questions; targets made fully generic at the owner's request.
   - Draft 3: two remote reviews of draft 2 (commit `2e1d06c`) through `nax run agent`, review only:
