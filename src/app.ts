@@ -2481,7 +2481,11 @@ export function createApp(deps: Deps, opts: AppOptions) {
       request: { params: MediaParam },
       responses: { 200: json(s.TraceBodySchema, 'The trace'), ...errors },
     }),
-    async (c) => c.json(await getMediaTrace(deps, c.get('principal'), c.req.valid('param').id), 200),
+    async (c) => {
+      const trace = await getMediaTrace(deps, c.get('principal'), c.req.valid('param').id)
+      // The stored trace passed the domain's full schema; the API schema only declares its top level.
+      return c.json(trace as unknown as z.infer<typeof s.TraceBodySchema>, 200)
+    },
   )
   // A recording's waveform peaks and speech spans (voice-over plan §5.1, §6.1): the uploader sends them; readers of
   // the take get them.

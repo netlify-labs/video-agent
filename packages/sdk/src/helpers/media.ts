@@ -25,8 +25,11 @@ export interface UploadOptions {
   /** Default: the path's or File's name. */
   filename?: string
   caption?: string
-  /** A voice-over recording; needs scopeJobId (the video it's for). Always goes through a session. */
-  role?: 'narration-take' | 'narration-upload'
+  /**
+   * A voice-over recording (needs scopeJobId, the video it's for) or a raw screen recording (needs the server's
+   * screen_recording feature). Always goes through a session.
+   */
+  role?: 'narration-take' | 'narration-upload' | 'screen-recording'
   scopeJobId?: string
   /** Return an identical file already in the library instead of uploading (default true). */
   dedupe?: boolean

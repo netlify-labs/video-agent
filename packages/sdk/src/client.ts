@@ -2,7 +2,7 @@
 // cached server config that feature checks read.
 import createClient, { type Client } from 'openapi-fetch'
 import { VideoAgentError } from './errors.js'
-import type { paths } from './generated/schema.js'
+import type { components, paths } from './generated/schema.js'
 import { resources, type Resources } from './generated/resources.js'
 import { send, type Exchange, type HttpOptions, type Logger } from './http.js'
 import {
@@ -80,6 +80,17 @@ type Media = Ok<'/api/v1/media/{id}', 'get'>
 export interface MediaHelpers {
   /** Uploads a path (Node), Blob/File or bytes of any size, resuming parts after a failure, and waits for ready. */
   upload(file: string | Blob | Uint8Array, o?: UploadOptions): Promise<Media>
+  /**
+   * Uploads a screen recording (H.264 MP4, fast start, a keyframe at least every 2 s; the server refuses anything
+   * else with the reason), waits for ready, then stores its pointer trace when given. Needs the screen_recording
+   * feature.
+   */
+  uploadRecording(
+    file: string | Blob | Uint8Array,
+    o?: Omit<UploadOptions, 'role' | 'scopeJobId' | 'dedupe'> & {
+      trace?: components['schemas']['PointerTrace']
+    },
+  ): Promise<Media>
 }
 export interface MusicHelpers {
   /** Imports an Openverse track, following a slow (202) import's job until it's done. */
@@ -154,7 +165,17 @@ export class VideoAgent {
     const mediaDeps = { send: (x: Exchange) => this.send(x), retries: o.retries ?? 3, log: o.logger }
     const media: VideoAgent['media'] = {
       ...generated.media,
-      upload: (file, uo) => uploadMedia(mediaDeps, file, uo),
+      upload: async (file, uo) => {
+        // The role field is shared with takes, so the feature is checked here rather than on the route.
+        if (uo?.role === 'screen-recording') await this.requireFeatures(['screen_recording'])
+        return uploadMedia(mediaDeps, file, uo)
+      },
+      uploadRecording: async (file, ro = {}) => {
+        await this.requireFeatures(['screen_recording'])
+        const { trace, ...uo } = ro
+        const item = await uploadMedia(mediaDeps, file, { ...uo, role: 'screen-recording', dedupe: false })
+        return trace ? generated.media.setTrace(item.id, trace) : item
+      },
     }
     const music: VideoAgent['music'] = {
       ...generated.music,

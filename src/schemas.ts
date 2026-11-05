@@ -1685,10 +1685,31 @@ export const PublicConfigSchema = z
   .openapi('PublicConfig')
 
 /**
- * A pointer trace as sent and stored (schema v1, src/lib/recording-trace.ts): checked and scrubbed by the domain, so
- * the request schema only says it's an object.
+ * A pointer trace as sent and stored (schema v1, src/lib/recording-trace.ts). The top level is declared so clients
+ * know its fields; the domain checks the rest (caps, ranges, order) and scrubs page text.
  */
-export const TraceBodySchema = z.record(z.string(), z.unknown()).openapi('PointerTrace', {
-  description:
-    'Pointer trace v1: { v: 1, source, frame, viewport, moves: [t, x, y][], events, redact }. Positions are 0-1 fractions of the frame, times seconds into the recording. See /docs/cli#record.',
-})
+export const TraceBodySchema = z
+  .object({
+    v: z.literal(1),
+    source: z
+      .record(z.string(), z.unknown())
+      .openapi({ description: "{ kind: 'cli' | 'upload' | 'browser' | 'script', tool, startedAt }" }),
+    frame: z
+      .record(z.string(), z.unknown())
+      .openapi({ description: '{ width, height, fps, duration }: must match the recording' }),
+    viewport: z.record(z.string(), z.unknown()).openapi({ description: '{ width, height, dpr }' }),
+    moves: z
+      .array(z.array(z.number()))
+      .openapi({ description: '[t, x, y] with x, y as 0-1 fractions of the frame, at most 30,000' }),
+    events: z.array(z.record(z.string(), z.unknown())).openapi({
+      description:
+        'click, type, scroll, focus, drag and navigate events, each with `kind` and `t`; at most 5,000',
+    }),
+    redact: z.array(z.record(z.string(), z.unknown())).openapi({
+      description: '{ start, end, reason, boxes: [t, x, y, w, h][] } areas to hide, keyframed; at most 200',
+    }),
+  })
+  .openapi('PointerTrace', {
+    description:
+      'Pointer trace v1. Positions are 0-1 fractions of the frame, times seconds into the recording. See /docs/cli#record.',
+  })
