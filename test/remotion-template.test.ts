@@ -2,8 +2,8 @@
 // lock of template-owned files is current, the root never depends on Remotion, the package set is pinned, and the
 // starter project passes the project rules.
 import { execFileSync } from 'node:child_process'
-import { readdirSync, readFileSync, statSync } from 'node:fs'
-import { join, relative } from 'node:path'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   LOCKED_FILES,
@@ -11,24 +11,9 @@ import {
   propsProblems,
   registryProblems,
 } from '../src/lib/remotion-project.js'
+import { template, templateFiles } from './remotion-files.js'
 
 const root = join(import.meta.dirname, '..')
-const template = join(root, 'engines', 'remotion', 'template')
-
-/** The template as a project's files, the way a run or finalize sees them (no node_modules). */
-export function templateFiles(): Map<string, Uint8Array> {
-  const out = new Map<string, Uint8Array>()
-  const walk = (d: string) => {
-    for (const n of readdirSync(d)) {
-      const p = join(d, n)
-      if (n === 'node_modules') continue
-      if (statSync(p).isDirectory()) walk(p)
-      else out.set(relative(template, p), new Uint8Array(readFileSync(p)))
-    }
-  }
-  walk(template)
-  return out
-}
 
 describe('the Remotion template', () => {
   it('src/lib/remotion-locked.json, the props schema and the starter registry are current', () => {
