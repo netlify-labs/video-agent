@@ -10,13 +10,24 @@ export default defineConfig({
   timeout: CI ? 60_000 : 30_000,
   expect: { timeout: CI ? 15_000 : 5_000 },
   retries: CI ? 1 : 0,
-  use: { baseURL: 'http://localhost:4198', trace: 'retain-on-failure', ...(process.env.CI ? {} : { channel: 'chrome' }) },
+  use: {
+    baseURL: 'http://localhost:4198',
+    trace: 'retain-on-failure',
+    ...(process.env.CI ? {} : { channel: 'chrome' }),
+  },
   projects: [
     { name: 'desktop', use: { viewport: { width: 1440, height: 900 } } },
     { name: 'phone', use: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } },
+    // vendor/va-recording.js in real Chromium on a static fixture served by route (screen-recording plan, va-rsk5.3.8).
+    {
+      name: 'recording-runtime',
+      testDir: 'test/recording-runtime',
+      use: { viewport: { width: 1920, height: 1080 } },
+    },
   ],
   webServer: {
-    command: 'VITE_MOCK=1 npx vite build ui --outDir dist-mock && VITE_MOCK=1 npx vite preview ui --outDir dist-mock --port 4198 --strictPort',
+    command:
+      'VITE_MOCK=1 npx vite build ui --outDir dist-mock && VITE_MOCK=1 npx vite preview ui --outDir dist-mock --port 4198 --strictPort',
     url: 'http://localhost:4198',
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
