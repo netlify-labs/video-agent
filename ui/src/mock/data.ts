@@ -209,6 +209,7 @@ function video(
   aspect: Video['aspect'],
   owner: { id: string; name: string; email: string },
   versions: V[],
+  extra: Partial<Video> = {},
 ): Video {
   const dims = {
     '16:9': { width: 1920, height: 1080 },
@@ -236,7 +237,10 @@ function video(
     isRemix: false,
     remixOf: null,
     favorite: false,
+    externalRef: null,
+    externalUrl: null,
     links: { self: `/api/v1/videos/${id}` },
+    ...extra,
   }
 }
 
@@ -407,50 +411,64 @@ export const videos: Video[] = [
       },
     ),
   ]),
-  video('vid_webhooks', 'Org webhooks launch', '16:9', people.ada, [
-    ready(
-      'vid_webhooks',
-      1,
-      'A launch video announcing Org webhooks: teams can now subscribe to events across every project in their organization from one place.',
-      {
-        at: 190,
-        took: 7.4,
-        credits: 206,
-        sec: 22.5,
-        w: 1920,
-        h: 1080,
-        bytes: 1424311,
-        title: 'Org webhooks',
-        author: people.ada.id,
-        pub: 'h7m2q9xwka',
-        music: [mockCredit],
-        summary:
-          'A 22.5-second before-and-after story: twelve project tiles collapse into one organization webhook, then events from nine projects arrive at one endpoint. Ends on an end card pointing to Organization settings → Webhooks.',
-      },
-    ),
-  ]),
-  video('vid_sales', 'Deploy previews for every pull request', '9:16', people.priya, [
-    ready(
-      'vid_sales',
-      1,
-      'A vertical social clip for the sales team: "Deploy previews for every pull request". Three short beats and an end card with "Book a demo".',
-      {
-        at: 300,
-        took: 3.2,
-        credits: 92,
-        sec: 15,
-        w: 1080,
-        h: 1920,
-        bytes: 1017831,
-        title: 'Deploy previews for every pull request',
-        author: people.priya.id,
-        target: 15,
-        narrated: true,
-        summary:
-          'A 15-second vertical clip in three beats: every pull request gets its own URL, review the real site, merge with confidence. Ends on "Book a demo".',
-      },
-    ),
-  ]),
+  video(
+    'vid_webhooks',
+    'Org webhooks launch',
+    '16:9',
+    people.ada,
+    [
+      ready(
+        'vid_webhooks',
+        1,
+        'A launch video announcing Org webhooks: teams can now subscribe to events across every project in their organization from one place.',
+        {
+          at: 190,
+          took: 7.4,
+          credits: 206,
+          sec: 22.5,
+          w: 1920,
+          h: 1080,
+          bytes: 1424311,
+          title: 'Org webhooks',
+          author: people.ada.id,
+          pub: 'h7m2q9xwka',
+          music: [mockCredit],
+          summary:
+            'A 22.5-second before-and-after story: twelve project tiles collapse into one organization webhook, then events from nine projects arrive at one endpoint. Ends on an end card pointing to Organization settings → Webhooks.',
+        },
+      ),
+    ],
+    { externalRef: 'github:acme/web#pr-123', externalUrl: 'https://github.com/acme/web/pull/123' },
+  ),
+  video(
+    'vid_sales',
+    'Deploy previews for every pull request',
+    '9:16',
+    people.priya,
+    [
+      ready(
+        'vid_sales',
+        1,
+        'A vertical social clip for the sales team: "Deploy previews for every pull request". Three short beats and an end card with "Book a demo".',
+        {
+          at: 300,
+          took: 3.2,
+          credits: 92,
+          sec: 15,
+          w: 1080,
+          h: 1920,
+          bytes: 1017831,
+          title: 'Deploy previews for every pull request',
+          author: people.priya.id,
+          target: 15,
+          narrated: true,
+          summary:
+            'A 15-second vertical clip in three beats: every pull request gets its own URL, review the real site, merge with confidence. Ends on "Book a demo".',
+        },
+      ),
+    ],
+    { externalRef: 'github:acme/web@v2.4.0' },
+  ),
   video('vid_docs', 'Add an environment variable, then redeploy', '1:1', people.marco, [
     ready(
       'vid_docs',

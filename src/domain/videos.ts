@@ -92,6 +92,11 @@ export interface CreateVideoInput {
   voiceover?: VoiceoverInput | undefined
   /** A look id (looks plan §4.3); null: no look; omitted: the plan's look, else the admin default, else none. */
   look?: string | null | undefined
+  /** What the video is for outside the app; set once (github-action plan §6.2). */
+  externalRef?: string | undefined
+  externalUrl?: string | undefined
+  /** Private from the start (needs video:private). */
+  private?: boolean | undefined
 }
 
 export interface ReviseInput {
@@ -335,6 +340,7 @@ export async function createVideo(
   idemKey?: string,
 ) {
   assertCan(principal, 'video:create')
+  if (input.private) assertCan(principal, 'video:private', { ownerId: principal.userId })
   checkWebhook(principal, input.webhookUrl)
   deps.log.debug('video.create_requested', {
     userId: principal.userId,
@@ -347,6 +353,8 @@ export async function createVideo(
     mediaIds: input.mediaIds ?? [],
     sound: input.sound ?? null,
     voiceover: input.voiceover ?? null,
+    externalRef: input.externalRef ?? null,
+    private: input.private ?? false,
     look: input.look ?? null,
   })
   // The look, resolved and copied before the transaction (blob writes can't roll back), under an id minted now.
@@ -383,11 +391,14 @@ export async function createVideo(
         updatedAt: now,
         deletedAt: null,
         version: 1,
-        private: false,
+        private: input.private ?? false,
         accessEpoch: 0,
         language: DEFAULT_LANGUAGE,
+        externalRef: input.externalRef ?? null,
+        externalUrl: input.externalUrl ?? null,
       }
       await repo.insertJob(job)
+      if (job.private) await writeAccessMirror(deps, job)
       // Media attached while planning comes first, then any picked when creating.
       const media = await snapshotMedia(
         repo,
@@ -1353,6 +1364,8 @@ async function buildVideoDto(
     isRemix: !!job.remixOfJobId,
     remixOf,
     favorite,
+    externalRef: job.externalRef ?? null,
+    externalUrl: job.externalUrl ?? null,
     links: { self: `${deps.config.siteUrl}/api/v1/videos/${job.id}` },
   }
 }
@@ -1422,6 +1435,7 @@ export async function listVideos(
     published?: boolean | undefined
     favorite?: boolean | undefined
     q?: string | undefined
+    externalRef?: string | undefined
     cursor?: string | undefined
     limit?: number | undefined
   },
@@ -1435,6 +1449,7 @@ export async function listVideos(
     ...(q.published !== undefined ? { published: q.published } : {}),
     ...(q.favorite ? { favoriteOf: principal.userId } : {}),
     ...(q.q ? { q: q.q } : {}),
+    ...(q.externalRef ? { externalRef: q.externalRef } : {}),
     ...(cursor ? { cursor } : {}),
     visibleTo: { userId: principal.userId, all: principal.role === 'admin' },
     limit: limit + 1,

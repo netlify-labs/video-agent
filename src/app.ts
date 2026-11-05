@@ -379,7 +379,13 @@ export function createApp(deps: Deps, opts: AppOptions) {
       'x-sdk': {
         resource: 'videos',
         method: 'create',
-        fieldFeatures: { planId: 'planning', look: 'looks' },
+        fieldFeatures: {
+          planId: 'planning',
+          look: 'looks',
+          externalRef: 'external_ref',
+          externalUrl: 'external_ref',
+          private: 'external_ref',
+        },
       },
       summary: 'Create a video',
       description: 'Creates a video from a prompt and queues its first version.',
@@ -406,7 +412,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       method: 'get',
       path: '/api/v1/videos',
       operationId: 'listVideos',
-      'x-sdk': { resource: 'videos', method: 'list' },
+      'x-sdk': { resource: 'videos', method: 'list', fieldFeatures: { externalRef: 'external_ref' } },
       summary: 'List videos',
       description: 'Lists videos, newest first.',
       tags: ['videos'],
@@ -421,6 +427,9 @@ export function createApp(deps: Deps, opts: AppOptions) {
             .optional()
             .openapi({ description: 'true: only videos you starred' }),
           q: z.string().max(200).optional(),
+          externalRef: s.ExternalRefSchema.optional().openapi({
+            description: 'Only videos made with this externalRef (exact match), newest first',
+          }),
           cursor: z.string().max(500).optional(),
           limit: z.coerce.number().int().min(1).max(50).optional(),
         }),
@@ -565,7 +574,13 @@ export function createApp(deps: Deps, opts: AppOptions) {
         resource: 'videos',
         method: 'remix',
         feature: 'remix',
-        fieldFeatures: { planId: 'planning', look: 'looks' },
+        fieldFeatures: {
+          planId: 'planning',
+          look: 'looks',
+          externalRef: 'external_ref',
+          externalUrl: 'external_ref',
+          private: 'external_ref',
+        },
       },
       summary: 'Remix a video',
       description:

@@ -559,6 +559,30 @@ export const LanguageSchema = z.enum(LANGUAGES).openapi('Language', {
   example: 'en',
 })
 
+/** "github:acme/web#pr-123": a scheme, a colon, no spaces. */
+export const ExternalRefSchema = z
+  .string()
+  .max(200)
+  .regex(/^[a-z]+:[^\s]+$/, 'Use scheme:reference, for example github:acme/web#pr-123.')
+  .openapi({ example: 'github:acme/web#pr-123' })
+
+const ExternalFields = {
+  externalRef: ExternalRefSchema.optional().openapi({
+    description:
+      'What the video is for outside the app. Set once; find the video again with GET /api/v1/videos?externalRef=. Not unique.',
+  }),
+  externalUrl: z
+    .url()
+    .max(500)
+    .refine((u) => u.startsWith('https://'), 'externalUrl must be an https URL.')
+    .optional()
+    .openapi({ description: 'A link to that thing (https), shown on the video page.' }),
+  private: z.boolean().optional().openapi({
+    description:
+      'Make the video private (you and admins only) from the start. Needs permission to make videos private.',
+  }),
+}
+
 export const VideoSchema = z
   .object({
     id: z.string().openapi({ example: 'vid_01jc8k0000000000000000000' }),
@@ -585,6 +609,11 @@ export const VideoSchema = z
       .nullable()
       .openapi({ description: 'The video (and version) this one was remixed from, when you can see it' }),
     favorite: z.boolean().openapi({ description: 'You starred this video (only you see your favorites)' }),
+    externalRef: z
+      .string()
+      .nullable()
+      .openapi({ description: 'What the video is for outside the app (set at creation), or null' }),
+    externalUrl: z.string().nullable().openapi({ description: 'A link to it, or null' }),
     links: z.object({ self: z.string() }),
   })
   .openapi('Video')
@@ -629,6 +658,7 @@ export const CreateVideoSchema = z
       description:
         "A look id (GET /api/v1/looks). Omit for the plan's look, else the admin's default (none unless set); null for no look. Errors: 400 unknown_look, 409 look_disabled.",
     }),
+    ...ExternalFields,
   })
   .openapi('CreateVideo')
 
@@ -721,6 +751,11 @@ export const RemixSchema = z
     look: LookIdSchema.nullable().optional().openapi({
       description:
         "Omit to keep the source version's look; null for no look. Another look restyles the remix (a full run, as any remix). Errors: 400 unknown_look, 409 look_disabled.",
+    }),
+    ...ExternalFields,
+    private: ExternalFields.private.openapi({
+      description:
+        "Make the remix private (you and admins only) from the start. A private video's remix is private either way.",
     }),
   })
   .openapi('Remix')

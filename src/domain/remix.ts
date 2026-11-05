@@ -52,6 +52,11 @@ export interface RemixInput {
   webhookUrl?: string | undefined
   /** A look id (a restyle into it, as a new video); null: no look; omitted: the source version's look. */
   look?: string | null | undefined
+  /** What the remix is for outside the app; set once (github-action plan §6.2). */
+  externalRef?: string | undefined
+  externalUrl?: string | undefined
+  /** Private from the start (needs video:private). A private source's remix is private regardless. */
+  private?: boolean | undefined
 }
 
 /** How much of the source's history the snapshot keeps (§3.3). */
@@ -161,6 +166,7 @@ export async function remixVideo(
   idemKey?: string,
 ) {
   assertCan(principal, 'video:create')
+  if (input.private) assertCan(principal, 'video:private', { ownerId: principal.userId })
   await assertRemixEnabled(deps)
   checkWebhook(principal, input.webhookUrl)
   deps.log.debug('video.remix_requested', {
@@ -246,12 +252,14 @@ export async function remixVideo(
         updatedAt: now,
         deletedAt: null,
         version: 1,
-        // A remix of a private video stays private (§5).
-        private: job.private,
+        // A remix of a private video stays private (§5); `private: true` makes any remix private.
+        private: job.private || input.private === true,
         accessEpoch: 0,
         language: input.language ?? job.language,
         remixOfJobId: job.id,
         remixOfN: version.n,
+        externalRef: input.externalRef ?? null,
+        externalUrl: input.externalUrl ?? null,
       }
       await repo.insertJob(created)
       if (created.private) await writeAccessMirror(deps, created)

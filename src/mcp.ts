@@ -462,6 +462,21 @@ export function buildMcpServer(deps: Deps, principal: Principal, kick: () => voi
     return { ...(await summarize(deps, res.body)), next_actions: [next] }
   }
 
+  const externalArgs = {
+    external_ref: z
+      .string()
+      .max(200)
+      .regex(/^[a-z]+:[^\s]+$/)
+      .optional()
+      .describe(
+        'Optional. What the video is for outside the app, like "github:acme/web#pr-123". Find it again with list_videos.',
+      ),
+    private: z
+      .boolean()
+      .optional()
+      .describe('Optional. true: only you and admins can see it, from the start.'),
+  }
+
   const createTool = server.registerTool(
     'create_video',
     {
@@ -517,6 +532,7 @@ Example: {"prompt": "A 20-second launch video for our new webhooks feature, endi
           .max(200)
           .optional()
           .describe('Optional. Reusing the same key returns the same video instead of a duplicate.'),
+        ...externalArgs,
       },
       _meta: VIDEO_CARD,
       annotations: { title: 'Create a video', ...STARTS_RUN },
@@ -536,6 +552,8 @@ Example: {"prompt": "A 20-second launch video for our new webhooks feature, endi
             sound: args.sound,
             voiceover: toVoiceover(args.voiceover),
             look: args.look,
+            externalRef: args.external_ref,
+            private: args.private,
           },
           args.idempotency_key,
         )
@@ -647,6 +665,11 @@ Example: {"query": "webhooks", "mine": true, "limit": 10}`,
         query: z.string().max(200).optional().describe('Words to search for in prompts and titles.'),
         mine: z.boolean().optional().describe('Only videos made with your account.'),
         favorites: z.boolean().optional().describe('Only videos you starred in the web app.'),
+        external_ref: z
+          .string()
+          .max(200)
+          .optional()
+          .describe('Only videos made with this external_ref (exact match), like "github:acme/web#pr-123".'),
         status: z
           .enum(['queued', 'running', 'finishing', 'ready', 'failed', 'cancelled', 'timed_out'])
           .optional(),
@@ -661,6 +684,7 @@ Example: {"query": "webhooks", "mine": true, "limit": 10}`,
           ...(args.query ? { q: args.query } : {}),
           ...(args.status ? { status: args.status } : {}),
           ...(args.favorites ? { favorite: true } : {}),
+          ...(args.external_ref ? { externalRef: args.external_ref } : {}),
           limit: args.limit ?? 10,
         })
         return {
@@ -677,6 +701,7 @@ Example: {"query": "webhooks", "mine": true, "limit": 10}`,
             favorite: v.favorite,
             is_remix: v.isRemix,
             remix_of: v.remixOf ? { video_id: v.remixOf.id, version: v.remixOf.n } : null,
+            ...(v.externalRef ? { external_ref: v.externalRef } : {}),
             web_url: `${deps.config.siteUrl}/videos/${v.id}`,
           })),
           more: res.nextCursor !== null,
@@ -727,6 +752,7 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Same format, 
           .optional()
           .describe('Optional. A plan from plan_video with remix_of this same video.'),
         look: lookArg(true),
+        ...externalArgs,
       },
       _meta: VIDEO_CARD,
       annotations: { title: 'Remix a video', ...STARTS_RUN },
@@ -744,6 +770,8 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Same format, 
           voiceover: toVoiceover(args.voiceover),
           planId: args.plan_id,
           look: args.look,
+          externalRef: args.external_ref,
+          private: args.private,
         })
         return queued(res, `The remix usually takes 3 to 8 minutes. ${KEEP_CHECKING(res.body.id)}`)
       }, args.video_id),

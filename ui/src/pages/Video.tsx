@@ -124,6 +124,18 @@ function clock(since: string | null | undefined): string {
 /** Whether the person asked for a browser notification when a run ends, and still allows them. */
 const notifyOn = () => readPref() && canNotify()
 
+/**
+ * "From GitHub: acme/web#123" for an externalRef like github:acme/web#pr-123 (github-action plan §6.2); other schemes
+ * show as they are.
+ */
+function externalLabel(ref: string): { from: string; text: string } {
+  const i = ref.indexOf(':')
+  const scheme = ref.slice(0, i)
+  const rest = ref.slice(i + 1)
+  if (scheme === 'github') return { from: 'From GitHub:', text: rest.replace(/#pr-(\d+)$/, '#$1') }
+  return { from: `From ${scheme}:`, text: rest }
+}
+
 function updatedAgo(iso: string): string {
   const s = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000))
   return s < 5 ? 'updated just now' : s < 60 ? `updated ${s} s ago` : `updated ${relativeTime(iso)}`
@@ -797,6 +809,18 @@ export function VideoPage() {
             </Title>
           )}
           <div className="va-sub num">{sub}</div>
+          {data.externalRef ? (
+            <div className="va-sub" data-testid="external-ref">
+              {externalLabel(data.externalRef).from}{' '}
+              {data.externalUrl ? (
+                <Anchor href={data.externalUrl} target="_blank" rel="noopener noreferrer" inherit>
+                  {externalLabel(data.externalRef).text}
+                </Anchor>
+              ) : (
+                externalLabel(data.externalRef).text
+              )}
+            </div>
+          ) : null}
           {data.remixOf ? (
             <div className="va-sub" data-testid="remix-of">
               Remix of{' '}

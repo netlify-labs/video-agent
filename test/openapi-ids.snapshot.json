@@ -25,7 +25,10 @@
     "operationId": "listVideos",
     "sdk": {
       "resource": "videos",
-      "method": "list"
+      "method": "list",
+      "fieldFeatures": {
+        "externalRef": "external_ref"
+      }
     }
   },
   "PUT /api/v1/videos/{id}/favorite": {
