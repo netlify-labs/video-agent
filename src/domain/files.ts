@@ -53,6 +53,14 @@ export function posterKeys(
   }
 }
 
+/** The poster's blurred placeholder: a picked poster's own, else the render's; null when there's none. */
+export function posterLqip(
+  o: Pick<OutputRow, 'previews'>,
+  poster: VersionPoster | null | undefined,
+): string | null {
+  return poster?.custom ? poster.custom.lqip : (o.previews?.lqip ?? null)
+}
+
 /** Private-video file URLs last at most this long (plan v2 §14 rule 4). */
 export const PRIVATE_URL_TTL_SEC = 600
 

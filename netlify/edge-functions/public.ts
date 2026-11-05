@@ -1,10 +1,13 @@
 // Published versions: /v/{slug} share page, and /v/{slug}.mp4 | .jpg | .gif | .vtt | .webp (the 960w poster, when the
-// version has one) | .mp3 (recorded narration) | .txt (its transcript, only when the publisher chose to show it).
-// Every request checks the publication, so unpublishing takes effect immediately (no caching in v1).
+// version has one) | .mp3 (recorded narration) | .txt (its transcript, only when the publisher chose to show it) |
+// .hover.mp4 (the silent hover clip, when the version has one) | .json (the oEmbed the page advertises, plus what the
+// <video-agent-player> needs; cli-and-sdk plan §5.3). Every request checks the publication, so unpublishing takes
+// effect immediately (the JSON is cached for a minute at most).
 import type { Config, Context } from '@netlify/edge-functions'
 import { getStore } from '@netlify/blobs'
 import { CONTENT_TYPES, mediaResponse } from '../../src/lib/media/range.ts'
-import { creditHtml, type CreditLine } from '../../src/lib/credit-html.ts'
+import { creditHtml, embedHtml, type CreditLine } from '../../src/lib/credit-html.ts'
+import { contextMeta } from '../../src/generated/context.ts'
 import { denyMicrophone } from '../../src/lib/permissions-policy.ts'
 
 interface Mirror {
@@ -24,7 +27,11 @@ interface Mirror {
     transcript?: string
     /** The 960w WebP poster; null: none. Missing on older mirrors: the render's poster-960.webp, when it exists. */
     posterWebp?: string | null
+    /** The silent hover clip; null or missing: none (or a mirror written before it). */
+    hover?: string | null
   }
+  /** The poster's blurred placeholder (a data URL); null or missing: none (or a mirror written before it). */
+  lqip?: string | null
   /** CC BY media the version was made with (absent on mirrors written before credits). */
   credits?: CreditLine[]
   /** The publisher chose to offer the transcript (absent: no). */
@@ -52,19 +59,19 @@ export default async (req: Request, context: Context) => {
   if (context.deploy?.published !== true && Netlify.env.get('ALLOW_NON_PRODUCTION') !== 'true')
     return notFound()
   const url = new URL(req.url)
-  const m = /^\/v\/([a-z2-9]{6,32})(?:\.(mp4|jpg|gif|vtt|webp|mp3|txt))?$/.exec(url.pathname)
+  const m = /^\/v\/([a-z2-9]{6,32})(?:\.(hover\.mp4|mp4|jpg|gif|vtt|webp|mp3|txt|json))?$/.exec(url.pathname)
   if (!m?.[1]) return notFound()
   const slug = m[1]
   const ext = m[2]
   const pub = (await getStore({ name: 'internal', consistency: 'strong' }).get(`pub/${slug}.json`, {
     type: 'json',
   })) as Mirror | null
+  if (ext === 'json') return oembed(req, url, slug, pub)
   if (!pub) return notFound()
   const videos = getStore({ name: 'videos', consistency: 'strong' })
   // Preview variants sit next to the version's other files; older versions have none (404, and no WebP poster). A
   // picked poster names its own, or null when the browser that made it couldn't encode WebP.
-  const webpKey =
-    pub.keys.posterWebp === undefined ? `${pub.jobId}/v${pub.versionN}/poster-960.webp` : pub.keys.posterWebp
+  const webpKey = webpKeyOf(pub)
   // The transcript is published only with the publisher's consent, separate from the audio's (plan 2026-11-02 §6.7).
   const transcriptKey = pub.showTranscript ? pub.keys.transcript : undefined
 
@@ -77,6 +84,7 @@ export default async (req: Request, context: Context) => {
       webp: webpKey ?? undefined,
       mp3: pub.keys.narration,
       txt: transcriptKey,
+      'hover.mp4': pub.keys.hover ?? undefined,
     }[ext as 'mp4']
     if (!key) return notFound()
     const meta = await videos.getMetadata(key)
@@ -88,7 +96,7 @@ export default async (req: Request, context: Context) => {
         etag: meta.etag ?? null,
         open: async () => (await videos.get(key, { type: 'stream' })) as ReadableStream<Uint8Array> | null,
       },
-      CONTENT_TYPES[ext] ?? 'application/octet-stream',
+      CONTENT_TYPES[ext === 'hover.mp4' ? 'mp4' : ext] ?? 'application/octet-stream',
       { ...NO_STORE, 'access-control-allow-origin': '*', 'cross-origin-resource-policy': 'cross-origin' },
     )
   }
@@ -119,6 +127,70 @@ details{margin-top:12px}summary{cursor:pointer}details p{margin:8px 0;max-width:
   return new Response(html, {
     headers: denyMicrophone({ ...NO_STORE, 'content-type': 'text/html; charset=utf-8' }),
   })
+}
+
+const JSON_HEADERS = {
+  'content-type': 'application/json+oembed; charset=utf-8',
+  'access-control-allow-origin': '*',
+}
+
+/** The 960w WebP poster's key: a picked poster's own (or null), else the render's for mirrors written before it. */
+const webpKeyOf = (pub: Mirror) =>
+  pub.keys.posterWebp === undefined ? `${pub.jobId}/v${pub.versionN}/poster-960.webp` : pub.keys.posterWebp
+
+/** /v/{slug}.json: oEmbed 1.0 for a published version, plus a video_agent block for the player. */
+async function oembed(req: Request, url: URL, slug: string, pub: Mirror | null): Promise<Response> {
+  const started = Date.now()
+  const done = (res: Response) => {
+    console.log(
+      JSON.stringify({ event: 'public.oembed', slug, status: res.status, ms: Date.now() - started }),
+    )
+    return req.method === 'HEAD' ? new Response(null, { status: res.status, headers: res.headers }) : res
+  }
+  if (!pub)
+    return done(
+      new Response(JSON.stringify({ error: 'not_found' }), {
+        status: 404,
+        headers: { ...JSON_HEADERS, ...NO_STORE, 'content-type': 'application/json; charset=utf-8' },
+      }),
+    )
+  const videos = getStore({ name: 'videos', consistency: 'strong' })
+  const base = `${url.origin}/v/${slug}`
+  const webpKey = webpKeyOf(pub)
+  const posterWebp = webpKey && (await videos.getMetadata(webpKey)) ? `${base}.webp` : null
+  const credits = Array.isArray(pub.credits) ? pub.credits : []
+  const size = { width: pub.width, height: pub.height }
+  const body = {
+    type: 'video',
+    version: '1.0',
+    title: pub.title || 'Video',
+    provider_name: contextMeta.appName || 'Video Agent',
+    provider_url: url.origin,
+    width: pub.width,
+    height: pub.height,
+    thumbnail_url: `${base}.jpg`,
+    thumbnail_width: pub.width,
+    thumbnail_height: pub.height,
+    html: embedHtml(base, posterWebp, size, credits),
+    video_agent: {
+      videoId: pub.jobId,
+      versionN: pub.versionN,
+      page: base,
+      mp4: `${base}.mp4`,
+      poster: `${base}.jpg`,
+      posterWebp,
+      captions: `${base}.vtt`,
+      durationSec: pub.durationSec,
+      credits,
+      lqip: pub.lqip ?? null,
+      hover: pub.keys.hover ? `${base}.hover.mp4` : null,
+    },
+  }
+  return done(
+    new Response(JSON.stringify(body), {
+      headers: { ...JSON_HEADERS, 'cache-control': 'public, max-age=60' },
+    }),
+  )
 }
 
 /** The transcript as a closed disclosure: a paragraph per caption cue, escaped, with a link to the text file. */

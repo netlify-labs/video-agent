@@ -8,6 +8,7 @@ import {
   accessKey,
   fileTtl,
   posterKeys,
+  posterLqip,
   signFile,
   stableExp,
   versionFileName,
@@ -19,7 +20,7 @@ import { snapshotMedia } from './media.js'
 import { addAttemptRefs, releaseOwnerRefs } from './takes.js'
 import { musicPickDto } from './music-pick.js'
 import { versionCredits, type Credit } from './credits.js'
-import { creditHtml } from '../lib/credit-html.js'
+import { embedHtml } from '../lib/credit-html.js'
 import { notifyOwner } from './notifications.js'
 import { ApiError } from '../lib/errors.js'
 import { DEFAULT_LANGUAGE, type Language } from '../lib/language.js'
@@ -725,7 +726,11 @@ export interface PublicationMirror {
     /** The 960w WebP poster (a picked poster's own, src/domain/poster.ts); null: none. Missing on older mirrors: the
      * render's poster-960.webp, when there is one. */
     posterWebp?: string | null
+    /** The silent hover clip (clip.mp4), for the player; null: none. Missing on mirrors written before it. */
+    hover?: string | null
   }
+  /** The poster's blurred placeholder (a data URL); null: none. Missing on mirrors written before it. */
+  lqip?: string | null
   /** CC BY media the version was made with; mirrors written before credits existed have none. */
   credits?: Credit[]
   /** The share page offers the transcript (the publisher's choice); missing: no. */
@@ -819,7 +824,9 @@ function mirrorFor(
       captions: v.captions ? `${prefix}/${captions}` : o.captionsKey,
       ...(versionFileName(v, o, 'narration-audio') ? { narration: `${prefix}/narration.mp3` } : {}),
       ...(transcript ? { transcript: `${prefix}/${transcript}` } : {}),
+      hover: o.previews?.files['clip.mp4'] ? `${prefix}/clip.mp4` : null,
     },
+    lqip: posterLqip(o, v.poster),
     credits,
     showTranscript: p.showTranscript ?? false,
     ...(v.captions ? { captionsGeneration: v.captions.generation } : {}),
@@ -883,21 +890,6 @@ export function publicationDto(
         },
     embed: p.unpublishedAt ? null : embedHtml(base, webp, o, credits),
   }
-}
-
-/** The embed snippet: only the metadata loads until play, the box is sized before it does, and the poster is the
- * small WebP when the version has one. The MP4 is the only full-length file, so it is the one source. A version
- * with CC BY media carries its credit line as a caption, as the licence asks. */
-function embedHtml(
-  base: string,
-  webp: string | null,
-  o: Pick<OutputRow, 'width' | 'height'> | null,
-  credits: Credit[],
-) {
-  const size = o ? ` width="${o.width}" height="${o.height}" style="max-width:100%;height:auto"` : ''
-  const video = `<video controls playsinline preload="metadata"${size} poster="${webp ?? `${base}.jpg`}"><source src="${base}.mp4" type="video/mp4"><track kind="captions" src="${base}.vtt" srclang="en" label="Captions"></video>`
-  if (!credits.length) return video
-  return `<figure style="margin:0">${video}<figcaption style="font:12px/1.4 system-ui,sans-serif;opacity:.8">${creditHtml(credits)}</figcaption></figure>`
 }
 
 function versionDto(

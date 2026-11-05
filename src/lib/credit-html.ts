@@ -1,5 +1,6 @@
-// The credit line for CC BY media, as HTML: shared by the embed snippet (src/domain/videos.ts) and the public share
-// page (netlify/edge-functions/public.ts), so it has no imports. Every value is escaped, and only http(s) URLs link.
+// The credit line for CC BY media and the embed snippet, as HTML: shared by the publication DTO (src/domain/videos.ts)
+// and the public share page and its oEmbed JSON (netlify/edge-functions/public.ts), so it has no imports. Every value
+// is escaped, and only http(s) URLs link.
 
 export interface CreditLine {
   role: string
@@ -26,4 +27,19 @@ export function creditHtml(credits: CreditLine[]): string {
         `${esc(c.role)}: ${link(c.title, c.sourceUrl)}${c.creator ? ` by ${link(c.creator, c.creatorUrl)}` : ''}, ${link(c.licenseLabel, c.licenseUrl)}`,
     )
     .join('; ')
+}
+
+/** The embed snippet: only the metadata loads until play, the box is sized before it does, and the poster is the
+ * small WebP when the version has one. The MP4 is the only full-length file, so it is the one source. A version
+ * with CC BY media carries its credit line as a caption, as the licence asks. */
+export function embedHtml(
+  base: string,
+  webp: string | null,
+  size: { width: number; height: number } | null,
+  credits: CreditLine[],
+): string {
+  const box = size ? ` width="${size.width}" height="${size.height}" style="max-width:100%;height:auto"` : ''
+  const video = `<video controls playsinline preload="metadata"${box} poster="${webp ?? `${base}.jpg`}"><source src="${base}.mp4" type="video/mp4"><track kind="captions" src="${base}.vtt" srclang="en" label="Captions"></video>`
+  if (!credits.length) return video
+  return `<figure style="margin:0">${video}<figcaption style="font:12px/1.4 system-ui,sans-serif;opacity:.8">${creditHtml(credits)}</figcaption></figure>`
 }

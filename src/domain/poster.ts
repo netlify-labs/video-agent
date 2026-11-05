@@ -12,7 +12,7 @@ import { classify } from '../lib/media/classify.js'
 import { isLqip } from '../lib/media/previews.js'
 import type { Repo } from '../store/types.js'
 import { assertCan, type Principal } from './policy.js'
-import { posterKeys } from './files.js'
+import { posterKeys, posterLqip } from './files.js'
 import type { JobRow, VersionPoster } from './types.js'
 import { loadJob, pubKey, type PublicationMirror } from './videos.js'
 
@@ -87,7 +87,11 @@ async function syncMirrors(
     await deps.blobs.set(
       'internal',
       pubKey(p.slug),
-      JSON.stringify({ ...mirror, keys: { ...mirror.keys, ...keys } } satisfies PublicationMirror),
+      JSON.stringify({
+        ...mirror,
+        keys: { ...mirror.keys, ...keys },
+        lqip: posterLqip(output, poster),
+      } satisfies PublicationMirror),
     )
   }
   return pubs.length
