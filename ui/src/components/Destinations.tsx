@@ -22,7 +22,7 @@ import {
   Textarea,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
-import { IconChevronDown, IconExternalLink, IconSend } from '@tabler/icons-react'
+import { IconChevronDown, IconSend, IconTrash } from '@tabler/icons-react'
 import { useMemo, useState } from 'react'
 import { $api, errorMessage, newIdempotencyKey, type Version, type Video } from '../api/client'
 import { confirmDanger, useAfterWrite } from './bits'
@@ -365,8 +365,8 @@ export function PublishedTo({ v, canPublish }: { v: Version; canPublish: boolean
       <Stack gap="sm">
         {rows.map((d) => (
           <Stack key={d.id} gap={4} data-testid="published-to-row">
-            <Group justify="space-between" wrap="nowrap">
-              <Group gap={8} wrap="nowrap">
+            <Group justify="space-between" wrap="nowrap" gap="sm">
+              <Group gap={8} style={{ minWidth: 0 }}>
                 <Text size="sm" fw={500}>
                   {d.destination.name}
                   {d.target ? ` · ${d.target.name}` : ''}
@@ -374,24 +374,53 @@ export function PublishedTo({ v, canPublish }: { v: Version; canPublish: boolean
                 <Badge
                   size="sm"
                   variant="light"
+                  style={{ flexShrink: 0 }}
                   color={d.status === 'live' ? 'green' : d.status === 'failed' ? 'red' : 'gray'}
                   leftSection={ACTIVE.includes(d.status) ? <Loader size={10} color="currentColor" /> : null}
                 >
                   {STATUS_WORD[d.status]}
                 </Badge>
               </Group>
-              {d.url ? (
-                <Anchor href={d.url} target="_blank" size="sm">
-                  <Group gap={4} wrap="nowrap">
-                    Open <IconExternalLink size={14} />
-                  </Group>
-                </Anchor>
+              {canPublish && d.desired === 'published' ? (
+                <Button
+                  size="compact-xs"
+                  variant="light"
+                  color="red"
+                  style={{ flexShrink: 0 }}
+                  leftSection={<IconTrash size={14} />}
+                  loading={remove.isPending}
+                  onClick={() => {
+                    confirmDanger({
+                      title: `Remove it from ${d.destination.name}?`,
+                      body: 'It is taken down there. Copies people already saved there can’t be recalled.',
+                      confirm: 'Remove',
+                      cancel: 'Keep it',
+                      onConfirm: () => {
+                        remove.mutate({ params: { path: { id: d.id } } })
+                      },
+                    })
+                  }}
+                >
+                  Remove
+                </Button>
               ) : null}
             </Group>
             {d.status === 'failed' && d.error ? (
               <Text size="xs" c="red">
                 {d.error.message}
               </Text>
+            ) : d.status === 'live' && d.url ? (
+              // Live: the address itself is the link (no progress text, no separate "Open").
+              <Anchor
+                href={d.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                size="sm"
+                truncate="end"
+                title={d.url}
+              >
+                {d.url.replace(/^https:\/\//, '').replace(/\/$/, '')}
+              </Anchor>
             ) : ACTIVE.includes(d.status) ? (
               <Text size="xs" c="var(--va-faint)">
                 {d.message ?? 'Processing'}
@@ -406,7 +435,7 @@ export function PublishedTo({ v, canPublish }: { v: Version; canPublish: boolean
                 {w}
               </Text>
             ))}
-            {canPublish ? (
+            {canPublish && (d.hasSecret || d.status === 'failed') ? (
               <Group gap="xs">
                 {d.hasSecret ? <RevealSecret id={d.id} label={d.secretLabel ?? 'Secret'} /> : null}
                 {d.status === 'failed' ? (
@@ -419,27 +448,6 @@ export function PublishedTo({ v, canPublish }: { v: Version; canPublish: boolean
                     }}
                   >
                     Try again
-                  </Button>
-                ) : null}
-                {d.desired === 'published' ? (
-                  <Button
-                    size="compact-xs"
-                    variant="subtle"
-                    color="red"
-                    loading={remove.isPending}
-                    onClick={() => {
-                      confirmDanger({
-                        title: `Remove it from ${d.destination.name}?`,
-                        body: 'It is taken down there. Copies people already saved there can’t be recalled.',
-                        confirm: 'Remove',
-                        cancel: 'Keep it',
-                        onConfirm: () => {
-                          remove.mutate({ params: { path: { id: d.id } } })
-                        },
-                      })
-                    }}
-                  >
-                    Remove
                   </Button>
                 ) : null}
               </Group>

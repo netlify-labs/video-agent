@@ -39,10 +39,12 @@ test('publish a version to a destination: an existing site, instructions, then r
   const row = page.getByTestId('published-to-row').first()
   await expect(row).toContainText('Netlify site · acme-launch')
   await expect(row).toContainText('Live', { timeout: 15_000 })
-  await expect(row.getByRole('link', { name: 'Open' })).toHaveAttribute(
+  // Live: the address is the link, with no progress text left over.
+  await expect(row.getByRole('link', { name: 'acme-launch.netlify.app' })).toHaveAttribute(
     'href',
     'https://acme-launch.netlify.app',
   )
+  await expect(row.getByRole('link', { name: 'acme-launch.netlify.app' })).toHaveAttribute('target', '_blank')
   // Reveal the password once; the button is gone after.
   await row.getByRole('button', { name: 'Reveal site password' }).click()
   const secret = page.getByRole('dialog', { name: 'Site password' })
@@ -135,7 +137,10 @@ test('YouTube: the dialog fills in the title and description, keeps credits, cou
   await expect(row).toContainText('YouTube')
   await expect(row).toContainText('Live', { timeout: 15_000 })
   await expect(row).toContainText('verified YouTube channel')
-  await expect(row.getByRole('link', { name: 'Open' })).toHaveAttribute('href', 'https://youtu.be/mockvid1')
+  await expect(row.getByRole('link', { name: 'youtu.be/mockvid1' })).toHaveAttribute(
+    'href',
+    'https://youtu.be/mockvid1',
+  )
 })
 
 test('YouTube: unconnected people are told to connect; Connected accounts connects and disconnects', async ({
