@@ -1887,6 +1887,12 @@ export interface components {
             }[];
             /** @description Ready and keeps editing contract v1, so it can be edited in the browser. */
             editable: boolean;
+            /** @description The render engine that made this version (a video keeps one) and what the editor may offer on it. editable still decides whether the editor opens. */
+            editing: {
+                /** @enum {string} */
+                engine: "hyperframes" | "remotion";
+                capabilities: components["schemas"]["EngineCapabilities"];
+            };
             /**
              * @description render_unchanged: an edit made in the browser, rendered as is (no agent authoring). author: an agent run, including an edit fitted to its recorded narration (editedFromN set).
              * @enum {string}
@@ -1998,6 +2004,27 @@ export interface components {
         };
         /** @enum {string|null} */
         Verdict: "approved" | "changes_requested" | null;
+        EngineCapabilities: {
+            /** @description The edit operations the browser editor may offer on this engine. */
+            editOps: ("text" | "retime" | "reorder" | "delete" | "color" | "media" | "audio" | "voice" | "span" | "camera" | "cursor" | "redact")[];
+            /** @description The editor plays drafts live; otherwise it shows the last render. */
+            liveDraftPreview: boolean;
+            /**
+             * @description What Sound may be: music is a bed only, all allows effects too.
+             * @enum {string}
+             */
+            sound: "none" | "music" | "all";
+            /** @description A generated voice-over is possible. */
+            voiceover: boolean;
+            /** @description A voiced line can be changed in the editor. */
+            revoice: boolean;
+            /** @description Recorded narration (Edit → Narration) is possible. */
+            recordedNarration: boolean;
+            /** @description One or more scenes can be redone on their own. */
+            scopedRevision: boolean;
+            /** @description Screen-recording demos are possible. */
+            recording: boolean;
+        };
         /**
          * @description silent: no audio (the default). music: a music bed (a picked audio item, else the brand music in context/, else none). music_sfx: music plus sound effects on visible actions.
          * @enum {string}
