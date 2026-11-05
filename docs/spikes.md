@@ -1355,3 +1355,37 @@ capability path, `sandbox allow-scripts`. The page sets `window.remotion_staticB
     platform binary comes from the optional package. That matches the plan's `npm ci --ignore-scripts`.
   - **Install size.** `node_modules` is 275 MB, plus the Chrome Headless Shell download, which lands inside it
     (`node_modules/.remotion`): 1.3 GB in all on macOS arm64. E1 measures the Linux runner.
+
+### POC: one Remotion video in a real Agent Runner run (2026-11-05, run `6aec3319ed01b77cdba95fc3`, 96.7 credits)
+
+The owner asked for one quick proof, without waiting for Remotion's answer to the E6 email: exactly one video,
+development renders, Remotion on for nothing else, nothing published.
+
+- **How it ran:** a standalone run started by `spikes/e3/poc-launch.ts --yes` (`spikes/start-run.ts`, `land: "none"`)
+  on the internal deployment, from branch `spike/remotion-poc` at `1ae7cc2`. The app wasn't involved: no `ENGINES`,
+  no setting, no API call.
+- **Steps:**
+  - `poc.ts setup`: `npm ci --ignore-scripts` in `spikes/e3`, plus Chrome Headless Shell.
+  - The agent wrote `props.json`, the beats and a layer into the E3 template.
+  - `poc.ts check`: stills at each beat midpoint.
+  - `poc.ts render --upload`.
+- **Licence:** every render passed `licenseKey: "free-license"` and `isProduction: false`.
+- **Result: it works.** The run succeeded in 204 s (setup was ready at 37 s) for 96.7 credits, against 206 for S1's
+  HyperFrames run on the same brief.
+  - **The video:** 15.0 s, 1920×1080, h264 at 30 fps, 1,445,391 bytes, sha256 `043beb240ff1…`. Four beats: title, "one
+    webhook per project", a fan-in diagram (projects → organization → `POST /hooks`, with event chips) and an end card.
+    Text is legible, nothing is clipped, and the look is neutral.
+  - **Two check rounds.** The first round's stills showed a wrapped hub label and chips overlapping a connector line;
+    the agent fixed both in round two.
+  - **Rendering:** about 18 s for the MP4, according to the agent.
+  - **Where the MP4 is:** Blobs store `spike-remotion` on the internal deployment, key
+    `poc/2026-11-05-043beb240ff1.mp4`. It's private and unpublished.
+- **What setup showed:**
+  - Chrome Headless Shell installed and ran on the runner image with no extra libraries.
+  - `npm ci --ignore-scripts` was enough.
+  - The S1 HyperFrames toolchain from the repo's setup was present but unused.
+- **Gaps:**
+  - **No setup timings or sizes.** The agent wrote its summary to `.netlify/results.md` and left out the JSON block the
+    prompt asked for (the same as S1's finding). So `poc.ts`'s per-step timings, sizes and ldd list didn't come back.
+    E1's install numbers are still unmeasured.
+  - **The "free-license" usage events:** about 6 stills and 1 video. They went to remotion.pro with `apiKey: null`.
