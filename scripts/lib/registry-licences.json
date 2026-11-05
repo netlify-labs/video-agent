@@ -1,0 +1,24 @@
+{
+  "$comment": "Licences of HyperFrames registry items looks may vendor (docs/spikes.md K4, read at v0.8.222). look:vendor refuses any item not listed here. `exclude` lists installed files that aren't vendored (bundled third-party copies; fonts aren't look files in v1).",
+  "items": {
+    "agent-cursor": { "license": "Apache-2.0", "author": "HyperFrames contributors (HeyGen): Miguel Ángel" },
+    "bar-chart-race": { "license": "Apache-2.0", "author": "HyperFrames contributors (HeyGen): Miguel Ángel" },
+    "beat-freeze-cut": { "license": "Apache-2.0", "author": "HyperFrames contributors (HeyGen): Miguel Angel Simon Sierra" },
+    "before-after-wipe": { "license": "Apache-2.0", "author": "HyperFrames contributors (HeyGen): Miguel Ángel" },
+    "blur-in": { "license": "Apache-2.0", "author": "HyperFrames contributors (HeyGen): Miguel Ángel" },
+    "bottom-up-letters": { "license": "Apache-2.0", "author": "HyperFrames contributors (HeyGen): Miguel Ángel" },
+    "browser-device-stage": { "license": "Apache-2.0", "author": "HyperFrames contributors (HeyGen): Miguel Ángel" },
+    "camcorder-hud": { "license": "Apache-2.0", "author": "HyperFrames contributors (HeyGen): ukimsanov" },
+    "chromatic-radial-split": { "license": "Apache-2.0", "author": "HyperFrames contributors (HeyGen): James Russo, Miguel Ángel" },
+    "code-diff": { "license": "Apache-2.0", "author": "HyperFrames contributors (HeyGen): Miguel Ángel, WaterrrForever" },
+    "code-slice-hero": {
+      "license": "Apache-2.0",
+      "author": "HyperFrames contributors (HeyGen): Miguel Ángel",
+      "exclude": ["assets/gsap-3.14.2.min.js", "assets/GSAP-NOTICE.txt", "assets/Geist-Bold.ttf", "assets/Geist-OFL.txt"]
+    },
+    "data-chart": { "license": "Apache-2.0", "author": "HyperFrames contributors (HeyGen): James Russo, Miguel Ángel" },
+    "editorial-flash-overlay": { "license": "Apache-2.0", "author": "HyperFrames contributors (HeyGen): ukimsanov" },
+    "grain-overlay": { "license": "Apache-2.0", "author": "HyperFrames contributors (HeyGen): James Russo, Miguel Ángel" },
+    "lt-clean-bar": { "license": "Apache-2.0", "author": "HyperFrames contributors (HeyGen): Kiyeon Jeon" }
+  }
+}

@@ -66,6 +66,7 @@ function writeLock(dir: string, tag: string, fileSha: string) {
           type: 'component',
           upstream: 'registry/components/bottom-up-letters',
           license: 'Apache-2.0',
+          author: 'HyperFrames contributors (HeyGen)',
           files: [{ path: 'bottom-up-letters.html', sha256: fileSha }],
         },
       ],

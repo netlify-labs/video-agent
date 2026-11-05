@@ -212,6 +212,7 @@ export const RegistryLockSchema = z.strictObject({
       type: z.enum(['component', 'block']),
       upstream: z.string().min(1).max(300),
       license: z.string().min(1).max(60),
+      author: z.string().min(1).max(200),
       files: z.array(z.strictObject({ path: relPath, sha256: sha256Hex })).min(1),
     }),
   ),
