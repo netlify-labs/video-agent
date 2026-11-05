@@ -17,9 +17,43 @@ jobs:
       - run: npm run lint
       # The feedback-still tests run ffmpeg/ffprobe, as prepare-run does inside runs.
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends ffmpeg
+      - run: npm run build:packages
       - run: npm test
       - run: npm run openapi:check
       - run: npm run db:check
       - run: npm run build:ui
       - run: npx playwright install --with-deps chromium
       - run: npm run test:ui
+
+  # Breaking-change check on the REST API (cli-and-sdk plan §4.4): /api/v1 is additive, and the SDK relies on it.
+  # v1 only warns. From the SDK's 1.0 this becomes blocking unless the PR has the `api-breaking` label and a
+  # changeset with a major SDK bump.
+  api-breaking:
+    runs-on: ubuntu-latest
+    env:
+      OASDIFF_VERSION: 1.35.0
+      OASDIFF_SHA256: a8023002fcb2eaa7f5758148a9303cb63d33b939886df312268bc0fc7b939140
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install oasdiff (pinned, checksum verified)
+        run: |
+          curl -fsSL -o oasdiff.tar.gz "https://github.com/oasdiff/oasdiff/releases/download/v${OASDIFF_VERSION}/oasdiff_${OASDIFF_VERSION}_linux_amd64.tar.gz"
+          echo "${OASDIFF_SHA256}  oasdiff.tar.gz" | sha256sum -c -
+          tar xzf oasdiff.tar.gz oasdiff
+      - name: Compare the spec with its base (warnings only)
+        run: |
+          base="${{ github.event.pull_request.base.sha || github.event.before }}"
+          if ! git show "$base:ui/src/api/openapi.json" > base.json 2>/dev/null; then
+            echo "No base spec at ${base:-?}; nothing to compare."
+            exit 0
+          fi
+          echo "oasdiff ${OASDIFF_VERSION}: breaking ${base} -> ${GITHUB_SHA}"
+          ./oasdiff breaking base.json ui/src/api/openapi.json --format githubactions | sed 's/^::error /::warning /' || true
+          {
+            echo "### Breaking API changes (oasdiff ${OASDIFF_VERSION}, warning only in v1)"
+            echo '```'
+            ./oasdiff breaking base.json ui/src/api/openapi.json || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
