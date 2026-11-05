@@ -366,6 +366,18 @@ export function resources(t: Transport) {
           },
           opts,
         ),
+      /** Get a screen recording's pointer trace (`getMediaTrace`) */
+      getTrace: (id: string | number, opts?: CallOptions): Promise<Ok<'/api/v1/media/{id}/trace', 'get'>> =>
+        t.call<Ok<'/api/v1/media/{id}/trace', 'get'>>(
+          {
+            method: 'GET',
+            path: '/api/v1/media/{id}/trace',
+            pathParams: { id },
+            features: [...['screen_recording']],
+            operationId: 'getMediaTrace',
+          },
+          opts,
+        ),
       /** List media (`listMedia`) */
       list: (
         input?: Input<'/api/v1/media', 'get'>,
@@ -396,6 +408,25 @@ export function resources(t: Transport) {
             pathParams: { id },
             features: [],
             operationId: 'listRecordings',
+          },
+          opts,
+        ),
+      /** Set a screen recording's pointer trace (`setMediaTrace`) */
+      setTrace: (
+        id: string | number,
+        input: Input<'/api/v1/media/{id}/trace', 'put'>,
+        opts?: CallOptions,
+      ): Promise<Ok<'/api/v1/media/{id}/trace', 'put'>> =>
+        t.call<Ok<'/api/v1/media/{id}/trace', 'put'>>(
+          {
+            method: 'PUT',
+            path: '/api/v1/media/{id}/trace',
+            pathParams: { id },
+            input,
+            query: [],
+            body: ['v', 'source', 'frame', 'viewport', 'moves', 'events', 'redact'],
+            features: [...['screen_recording']],
+            operationId: 'setMediaTrace',
           },
           opts,
         ),

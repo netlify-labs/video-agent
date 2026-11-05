@@ -1346,7 +1346,7 @@ export interface paths {
         put?: never;
         /**
          * Start an upload
-         * @description Starts an upload session for a file over 4 MB, or for any voice-over recording. Declare its size and sha256 (a recorder may send the hash it computed while recording; the server checks every part and the whole file); quota is reserved. A recording names its role and the video it's for (scopeJobId), which you must be able to see.
+         * @description Starts an upload session for a file over 4 MB, or for any voice-over recording. Declare its size and sha256 (a recorder may send the hash it computed while recording; the server checks every part and the whole file); quota is reserved. A voice-over recording names its role and the video it's for (scopeJobId), which you must be able to see. A screen recording (role screen-recording, needs the screen_recording feature) names no video and is held to its own limits: H.264 MP4, 150 MB, 5 minutes, a constant 24-30 fps, a keyframe at least every 2 s, fast start.
          */
         post: operations["createUpload"];
         delete?: never;
@@ -1545,6 +1545,30 @@ export interface paths {
          * @description Changes the title (the name shown in the library) or the caption (notes the planner and agent read). Uploader or admin. Leave a field out to keep it; null clears it.
          */
         patch: operations["updateMedia"];
+        trace?: never;
+    };
+    "/api/v1/media/{id}/trace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a screen recording's pointer trace
+         * @description The stored (normalized) pointer trace, for the recording's uploader and admins only.
+         */
+        get: operations["getMediaTrace"];
+        /**
+         * Set a screen recording's pointer trace
+         * @description Stores the pointer trace (the cursor and click log, schema v1, at most 4 MB) for a ready screen recording: its uploader or an admin. Text from the recorded page is scrubbed. Sending again replaces it until a video uses the recording, then 409 trace_frozen. Shares the 10-an-hour budget with recording uploads.
+         */
+        put: operations["setMediaTrace"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/media/{id}/peaks": {
@@ -2287,6 +2311,13 @@ export interface components {
             } | null;
             canDelete: boolean;
             source: components["schemas"]["MediaSource"];
+            /**
+             * @description What the item is for: a voice-over take, uploaded narration, or a raw screen recording (private to its uploader until a video uses it); null for library items
+             * @enum {string|null}
+             */
+            role: "narration-take" | "narration-upload" | "screen-recording" | null;
+            /** @description A screen recording with a pointer trace (PUT …/trace) */
+            hasTrace: boolean;
             recording: components["schemas"]["Recording"];
         };
         /** @description Where an imported item came from (Openverse), with its licence; null for uploads */
@@ -2317,7 +2348,7 @@ export interface components {
              * @description A voice-over recording (take) or uploaded narration
              * @enum {string}
              */
-            role: "narration-take" | "narration-upload";
+            role: "narration-take" | "narration-upload" | "screen-recording";
             /** @description The video it was made for; null if you can no longer see it */
             videoId: string | null;
             /** @description Versions of videos you can see, and your own drafts, that use it */
@@ -2519,8 +2550,10 @@ export interface components {
             /** @description Recorded voice-over is on (the default). Off hides recording and refuses narration changes; versions that already have narration keep playing. */
             narrationEnabled: boolean;
             transcriptionProvider: components["schemas"]["TranscriptionProvider"];
-            /** @description Stored bytes each person's recordings may use (default 2 GiB). */
+            /** @description Stored bytes each person's voice recordings (narration takes) may use (default 2 GiB). */
             takeQuotaBytes: number;
+            /** @description Stored bytes each person's screen recordings may use (default 2 GiB). */
+            recordingQuotaBytes: number;
             /** @description Remixing is on (the default). Off hides every Remix button and refuses new remixes; queued ones still run. */
             remixEnabled: boolean;
             /** @description YouTube is offered as a publish destination (needs youtubeConfigured). */
@@ -2538,6 +2571,8 @@ export interface components {
             transcriptionProvider?: components["schemas"]["TranscriptionProvider"];
             /** @description 1 MiB to 1 TiB. */
             takeQuotaBytes?: number;
+            /** @description 1 MiB to 1 TiB. */
+            recordingQuotaBytes?: number;
             remixEnabled?: boolean;
             youtubeEnabled?: boolean;
         };
@@ -3036,7 +3071,7 @@ export interface components {
              * @description A voice-over recording (take) or uploaded narration; null for library uploads
              * @enum {string|null}
              */
-            role: "narration-take" | "narration-upload" | null;
+            role: "narration-take" | "narration-upload" | "screen-recording" | null;
             /** @description The video a recording is for */
             scopeJobId: string | null;
         };
@@ -3112,6 +3147,33 @@ export interface components {
              *     ]
              */
             queries: string[];
+        };
+        /** @description Pointer trace v1. Positions are 0-1 fractions of the frame, times seconds into the recording. See /docs/cli#record. */
+        PointerTrace: {
+            /** @enum {number} */
+            v: 1;
+            /** @description { kind: 'cli' | 'upload' | 'browser' | 'script', tool, startedAt } */
+            source: {
+                [key: string]: unknown;
+            };
+            /** @description { width, height, fps, duration }: must match the recording */
+            frame: {
+                [key: string]: unknown;
+            };
+            /** @description { width, height, dpr } */
+            viewport: {
+                [key: string]: unknown;
+            };
+            /** @description [t, x, y] with x, y as 0-1 fractions of the frame, at most 30,000 */
+            moves: number[][];
+            /** @description click, type, scroll, focus, drag and navigate events, each with `kind` and `t`; at most 5,000 */
+            events: {
+                [key: string]: unknown;
+            }[];
+            /** @description { start, end, reason, boxes: [t, x, y, w, h][] } areas to hide, keyframed; at most 200 */
+            redact: {
+                [key: string]: unknown;
+            }[];
         };
         TakePeaksStored: {
             mediaId: string;
@@ -8970,7 +9032,7 @@ export interface operations {
                      * @description A voice-over recording (take) or uploaded narration
                      * @enum {string}
                      */
-                    role?: "narration-take" | "narration-upload";
+                    role?: "narration-take" | "narration-upload" | "screen-recording";
                     /** @description The video a recording is for (required with role) */
                     scopeJobId?: string;
                 };
@@ -9902,6 +9964,144 @@ export interface operations {
         };
         responses: {
             /** @description Updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Media"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict or not ready */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getMediaTrace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The trace */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PointerTrace"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict or not ready */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    setMediaTrace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PointerTrace"];
+            };
+        };
+        responses: {
+            /** @description The recording, with its trace */
             200: {
                 headers: {
                     [name: string]: unknown;
