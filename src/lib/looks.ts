@@ -245,3 +245,24 @@ export const CreditsSchema = z.array(
     }),
 )
 export type Credits = z.infer<typeof CreditsSchema>
+
+/** One look in the catalog the build writes (src/generated/looks.ts), shared by the server and the UI. */
+export interface LookCatalogEntry {
+  id: string
+  name: string
+  description: string
+  tags: string[]
+  bestFor: LookJson['bestFor']
+  aspects: LookJson['aspects']
+  engines: LookJson['engines']
+  recording: LookJson['recording'] | null
+  /** sound.musicMood, for the music pick. */
+  musicMood: string | null
+  /** lookHash of the run files; the archive's sha256 and size. */
+  hash: string
+  sha256: string
+  bytes: number
+  source: 'builtin' | 'team'
+  /** Paths under the site root, content-hashed and served immutable (/assets/*), or null without a preview. */
+  preview: { mp4: string | null; poster: string | null }
+}

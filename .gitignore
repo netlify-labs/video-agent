@@ -28,3 +28,7 @@ spikes/s10/out/
 # Run inputs outside video/ (recorded narration takes; scripts/lib/narration-inputs.ts)
 .va-run/
 *.tsbuildinfo
+
+# Look archives the build packs for the API function (scripts/lib/looks.ts), and the look prepare-run restores in runs
+looks-build/
+context/look/
