@@ -89,7 +89,7 @@ outputs:
   version:
     description: 'The version this run made or followed.'
   status:
-    description: 'ready, failed, timed_out, cancelled, running (still making it), skipped, refused, limited, dry_run or none.'
+    description: 'ready, failed, cancelled, timed_out, still-making, queued, skipped, refused, dry-run, none or error.'
   web-url:
     description: 'The video in the app (needs a sign-in).'
   share-url:

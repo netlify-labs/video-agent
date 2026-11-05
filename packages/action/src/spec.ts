@@ -105,7 +105,7 @@ export const OUTPUTS = [
   {
     name: 'status',
     description:
-      'ready, failed, timed_out, cancelled, running (still making it), skipped, refused, limited, dry_run or none.',
+      'ready, failed, cancelled, timed_out, still-making, queued, skipped, refused, dry-run, none or error.',
   },
   { name: 'web-url', description: 'The video in the app (needs a sign-in).' },
   { name: 'share-url', description: 'The public share page, when published.' },
