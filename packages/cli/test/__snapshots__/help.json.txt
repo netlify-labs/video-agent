@@ -1,0 +1,69 @@
+{
+  "cli": "0.0.0",
+  "serverFeatures": null,
+  "commands": [
+    {
+      "name": "help",
+      "summary": "List the commands, or explain one.",
+      "args": [
+        {
+          "name": "command",
+          "type": "string",
+          "variadic": true,
+          "description": "A command, e.g. \"media upload\"."
+        }
+      ],
+      "flags": {},
+      "examples": [
+        "video-agent help",
+        "video-agent help create",
+        "video-agent help --json"
+      ],
+      "sdk": [
+        "config.get"
+      ],
+      "feature": null,
+      "needsHostedApp": false,
+      "local": true
+    },
+    {
+      "name": "version",
+      "summary": "Print the CLI's version, and the server's when one is configured.",
+      "args": [],
+      "flags": {},
+      "examples": [
+        "video-agent version",
+        "video-agent version --json"
+      ],
+      "sdk": [
+        "config.get"
+      ],
+      "feature": null,
+      "needsHostedApp": false,
+      "local": true
+    }
+  ],
+  "globalFlags": {
+    "json": {
+      "type": "boolean",
+      "description": "Print one JSON object on stdout and nothing else there."
+    },
+    "verbose": {
+      "type": "boolean",
+      "description": "Log each request and step as JSON lines on stderr (or VIDEO_AGENT_DEBUG=1)."
+    },
+    "url": {
+      "type": "string",
+      "description": "The deployment (else VIDEO_AGENT_URL, else the config file)."
+    },
+    "key": {
+      "type": "string",
+      "description": "An API key, nva_… (else VIDEO_AGENT_KEY, else the config file). '-' reads stdin."
+    },
+    "help": {
+      "type": "boolean",
+      "short": "h",
+      "description": "Show help for the command."
+    }
+  }
+}

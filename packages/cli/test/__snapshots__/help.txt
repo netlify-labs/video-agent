@@ -1,0 +1,7 @@
+video-agent 0.0.0: make videos with a Video Agent deployment, or on this machine with your own coding agent.
+
+Commands:
+  help     List the commands, or explain one.
+  version  Print the CLI's version, and the server's when one is configured.
+
+Run "video-agent help <command>" for its flags. Add --json for one JSON object on stdout.

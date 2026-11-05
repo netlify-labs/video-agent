@@ -18,12 +18,15 @@ for (const dir of readdirSync(join(repoRoot, 'packages')).sort()) {
     name: string
     private?: boolean
     bin?: Record<string, string>
+    exports?: Record<string, { types?: string }>
   }
   if (pkg.private || (only.length && !only.includes(dir))) continue
   const started = Date.now()
   rmSync(join(root, 'dist'), { recursive: true, force: true })
   const node = Boolean(pkg.bin)
   await build({ ...packageBuildOptions(root, node), outdir: join(root, 'dist') })
-  execFileSync('npx', ['tsc', '-p', join(root, 'tsconfig.build.json')], { stdio: 'inherit' })
+  // Declarations only for packages that export types (the CLI is a command, not a library).
+  if (pkg.exports?.['.']?.types)
+    execFileSync('npx', ['tsc', '-p', join(root, 'tsconfig.build.json')], { stdio: 'inherit' })
   log('package', { name: pkg.name, ms: Date.now() - started })
 }

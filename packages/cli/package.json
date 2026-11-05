@@ -17,12 +17,6 @@
   "bin": {
     "video-agent": "./dist/bin.js"
   },
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    }
-  },
   "files": [
     "dist"
   ]
