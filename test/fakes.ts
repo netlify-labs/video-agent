@@ -14,6 +14,7 @@ import type {
   IdentityPort,
   IdentitySettings,
   IdentityUser,
+  LooksPort,
   PlatformPort,
   RunnerPort,
   RunnerSnapshot,
@@ -24,6 +25,7 @@ import type {
 } from '../src/deps.js'
 import { RunnerError, readConfig } from '../src/deps.js'
 import { ids as realIds } from '../src/lib/ids.js'
+import { buildLookArchive, type LookCatalogEntry } from '../src/lib/looks.js'
 import { createLogger, verboseFromEnv, type Logger } from '../src/lib/log.js'
 import { createMemoryStore } from '../src/store/memory.js'
 import { resetAuthCache } from '../src/domain/auth.js'
@@ -441,6 +443,57 @@ export class FakeOAuth implements OAuthPort {
   }
 }
 
+/** A look catalog for tests (plan 2026-11-04-looks): three small looks with real archives, swappable per test, so a test
+ * can change the catalog between a version and its retry. */
+export class FakeLooks implements LooksPort {
+  entries: LookCatalogEntry[]
+  archives = new Map<string, Uint8Array>()
+  constructor(ids: string[] = ['clean', 'kinetic', 'terminal']) {
+    this.entries = ids.map((id) => this.make(id))
+  }
+  /** A catalog entry with a real archive of a tiny look; `body` changes its LOOK.md, so its hash. */
+  make(id: string, o: Partial<LookCatalogEntry> & { body?: string } = {}): LookCatalogEntry {
+    const { body, ...entry } = o
+    const files = new Map<string, Uint8Array>([
+      ['look.json', new TextEncoder().encode(JSON.stringify({ id }))],
+      ['LOOK.md', new TextEncoder().encode(body ?? `# ${id}\n`)],
+    ])
+    const a = buildLookArchive(files)
+    this.archives.set(`${id}:${a.hash}`, a.bytes)
+    return {
+      id,
+      name: id.charAt(0).toUpperCase() + id.slice(1),
+      description: `The ${id} look.`,
+      tags: [],
+      bestFor:
+        id === 'clean'
+          ? ['launch', 'tutorial', 'sales']
+          : id === 'kinetic'
+            ? ['social', 'launch']
+            : ['changelog'],
+      aspects: ['16:9', '9:16', '1:1', '4:5'],
+      engines: ['hyperframes'],
+      recording: null,
+      musicMood: null,
+      hash: a.hash,
+      sha256: a.sha256,
+      bytes: a.bytesLength,
+      source: 'builtin',
+      preview: { mp4: null, poster: null },
+      ...entry,
+    }
+  }
+  catalog() {
+    return this.entries
+  }
+  async archive(id: string) {
+    const e = this.entries.find((x) => x.id === id)
+    const bytes = e && this.archives.get(`${id}:${e.hash}`)
+    if (!bytes) throw new Error(`no archive for look ${id}`)
+    return bytes
+  }
+}
+
 export interface TestDeps extends Deps {
   clock: FakeClock
   blobs: FakeBlobs
@@ -452,6 +505,7 @@ export interface TestDeps extends Deps {
   outbound: FakeFetch
   gateway: FakeGateway
   oauth: FakeOAuth
+  looks: FakeLooks
   logs: string[]
   /** The source.tar.gz the next fake run uploads (once), instead of the default fixture. */
   nextSource: Uint8Array | null
@@ -504,6 +558,7 @@ export function makeDeps(env: Record<string, string> = {}, store?: Deps['store']
     ids: { ...realIds, videoId: () => `vid_${String(++n).padStart(4, '0')}` },
     log,
     logs,
+    looks: new FakeLooks(),
   }
 }
 

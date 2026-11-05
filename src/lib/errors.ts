@@ -12,6 +12,11 @@ export type ErrorCode =
   | 'narration_disabled'
   | 'remix_disabled'
   | 'engine_mismatch'
+  | 'unknown_look'
+  | 'look_disabled'
+  | 'look_not_allowed'
+  | 'engine_not_supported_by_look'
+  | 'engine_disabled'
   | 'narration_locked'
   | 'gone'
   | 'quota_exceeded'
@@ -34,6 +39,13 @@ const STATUS: Record<ErrorCode, number> = {
   narration_disabled: 409,
   remix_disabled: 409,
   engine_mismatch: 409,
+  unknown_look: 400,
+  look_disabled: 409,
+  /** 400 where a look is never accepted (render-unchanged, fit, a scoped revision); 409 for a restyle of a version with
+   * recorded narration, passed as the status override. */
+  look_not_allowed: 400,
+  engine_not_supported_by_look: 400,
+  engine_disabled: 409,
   narration_locked: 409,
   gone: 410,
   quota_exceeded: 413,
@@ -50,9 +62,11 @@ export class ApiError extends Error {
     readonly code: ErrorCode,
     message: string,
     readonly details?: unknown,
+    /** A code's status is fixed except where one code means two things (look_not_allowed: 400, or 409). */
+    opts: { status?: number } = {},
   ) {
     super(message)
-    this.status = STATUS[code]
+    this.status = opts.status ?? STATUS[code]
   }
 }
 

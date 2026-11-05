@@ -269,6 +269,23 @@ export interface JobRow {
   remixOfN?: number | null
 }
 
+/**
+ * The look a version was made with (plan 2026-11-04-looks §4.3): a snapshot of its run files, copied once per video into
+ * the sources store, so retries and revisions get exactly these rules even after the look changes in the repo.
+ */
+export interface VersionLook {
+  id: string
+  /** Kept so the UI can name a look that has since left the catalog. */
+  name: string
+  /** lookHash of the run files (src/lib/looks.ts). */
+  hash: string
+  /** '<jobId>/looks/<hash>.tar.gz' in the sources store. */
+  key: string
+  sha256: string
+  bytes: number
+  source: 'builtin' | 'team'
+}
+
 export interface VersionRow {
   jobId: string
   n: number

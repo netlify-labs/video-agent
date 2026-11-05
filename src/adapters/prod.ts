@@ -17,6 +17,7 @@ import { createPlatform } from './platform.js'
 import { createRunner } from './runner.js'
 
 let deps: Deps | null = null
+import { builtinLooks } from './looks.js'
 
 export function prodDeps(): Deps {
   if (deps) return deps
@@ -65,6 +66,7 @@ export function prodDeps(): Deps {
           }
         : null,
     log,
+    looks: builtinLooks,
   }
   return deps
 }

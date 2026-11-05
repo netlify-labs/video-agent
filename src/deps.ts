@@ -5,6 +5,7 @@ import type { Ids } from './lib/ids.js'
 import type { Store } from './store/types.js'
 import type { Usage } from './domain/types.js'
 import type { UpstreamIdentity } from './auth/upstream.js'
+import type { LookCatalogEntry } from './lib/looks.js'
 
 export interface Config {
   allowedEmailDomains: string[] | 'invite-only' | null
@@ -294,6 +295,14 @@ export interface Deps {
   clock: Clock
   ids: Ids
   log: Logger
+  /** The looks this deploy carries (plan 2026-11-04-looks §4.8). */
+  looks: LooksPort
+}
+
+/** The deploy's look catalog and its build-time archives (looks-build/<id>.tar.gz, read in task 2.2b). */
+export interface LooksPort {
+  catalog(): LookCatalogEntry[]
+  archive(id: string): Promise<Uint8Array>
 }
 
 /** AI Gateway (plan v2 §4): a fast TypeSafe `jev` router and Anthropic Messages for questions and briefs. */

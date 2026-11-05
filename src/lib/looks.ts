@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto'
 import { lstatSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { z } from 'zod'
+import { ENGINE_IDS } from '../domain/engines.js'
 import { ASPECT_RATIOS } from '../domain/types.js'
 import { manifestHash } from './bundle-manifest.js'
 import { writeTarGz } from './tar.js'
@@ -15,8 +16,8 @@ export const LOOK_ID = /^[a-z0-9][a-z0-9-]{0,39}$/
 /** Plan templates a look can be best for: the planner router's templates (src/domain/plans.ts CHECKLISTS keys). */
 export const LOOK_TEMPLATES = ['launch', 'tutorial', 'social', 'changelog', 'sales', 'other'] as const
 
-/** Engines a look can list. The render-engines plan widens this (va-ed2s); built-ins write ['hyperframes']. */
-export const LOOK_ENGINES = ['hyperframes'] as const
+/** Engines a look can list (the render-engines plan's ids); built-ins write ['hyperframes']. */
+export const LOOK_ENGINES = ENGINE_IDS
 
 /** The archive prefix: a look archive's entries are look/<path>, and prepare-run unpacks them to context/look/. */
 export const LOOK_ARCHIVE_ROOT = 'look'

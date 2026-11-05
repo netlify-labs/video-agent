@@ -102,7 +102,8 @@ describe('look.json schema', () => {
     expect(ok({ ...valid(), aspects: [] })).toBe(false)
     expect(ok({ ...valid(), aspects: ['21:9'] })).toBe(false)
     expect(ok({ ...valid(), engines: [] })).toBe(false)
-    expect(ok({ ...valid(), engines: ['remotion'] })).toBe(false)
+    expect(ok({ ...valid(), engines: ['remotion', 'hyperframes'] })).toBe(true)
+    expect(ok({ ...valid(), engines: ['blender'] })).toBe(false)
   })
 
   it('takes colour role names, not values', () => {
