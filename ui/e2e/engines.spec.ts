@@ -43,3 +43,15 @@ test('with the key set, a Company License saves', async ({ page }) => {
   await dialog.getByRole('button', { name: 'Turn Remotion on' }).click()
   await expect(page.getByText(/Company License, recorded by/)).toBeVisible()
 })
+
+test('the monthly Remotion render count shows only when ENGINES lists Remotion', async ({ page }) => {
+  await page.goto('/admin')
+  await expect(page.getByText('Credits by person')).toBeVisible()
+  await expect(page.getByTestId('remotion-renders')).toHaveCount(0)
+  await mock(page, 'mockEngines', 'remotion')
+  await page.goto('/admin')
+  await expect(page.getByTestId('remotion-renders')).toContainText(
+    'Remotion renders this month: 27 (3 videos, 24 stills).',
+  )
+  await expect(page.getByTestId('remotion-renders')).toContainText('Reconcile with remotion.pro')
+})

@@ -2,7 +2,7 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import type { Context, MiddlewareHandler, Next } from 'hono'
 import type { Deps } from './deps.js'
-import { listEngines } from './domain/engines.js'
+import { listEngines, remotionConfigured } from './domain/engines.js'
 import { assertSameOrigin, principalFromRequest } from './domain/auth.js'
 import { receiveCallback } from './domain/callback.js'
 import { claimLogin, createLogin, decideLogin, lookupLogin } from './domain/cli-login.js'
@@ -106,7 +106,7 @@ import {
 } from './domain/comments.js'
 import * as planning from './domain/plans.js'
 import { addPreview } from './domain/previews.js'
-import { myUsage, planningByUserWeek } from './domain/usage.js'
+import { myUsage, planningByUserWeek, remotionRendersThisMonth } from './domain/usage.js'
 import { ApiError, errorBody } from './lib/errors.js'
 import { MEDIA_KINDS } from './lib/media/classify.js'
 import { MEDIA_ROLES } from './domain/types.js'
@@ -2992,6 +2992,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
           ],
           maxActiveRuns: deps.config.maxActiveRuns,
           queuePausedReason: settings?.queuePausedReason ?? null,
+          ...(remotionConfigured(deps) ? { remotionRenders: await remotionRendersThisMonth(deps) } : {}),
         },
         200,
       )

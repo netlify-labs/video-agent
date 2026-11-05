@@ -58,3 +58,15 @@ export async function myUsage(deps: Deps, p: Principal) {
     planning: { credits: Math.round(pc * 100) / 100, calls: pcalls, unknown },
   }
 }
+
+/**
+ * This calendar month's Remotion renders (UTC; render-engines §7), from finalize's tally on each attempt. Failed
+ * attempts count too: their renders were reported to Remotion all the same.
+ */
+export async function remotionRendersThisMonth(deps: Pick<Deps, 'store' | 'clock'>) {
+  const since = monthStart(deps.clock.now())
+  const rows = await deps.store.engineRendersSince(since)
+  const sum = (k: 'video' | 'stills' | 'audio') => rows.reduce((t, r) => t + r[k], 0)
+  const [videos, stills, audio] = [sum('video'), sum('stills'), sum('audio')]
+  return { since, total: videos + stills + audio, videos, stills, audio, attempts: rows.length }
+}

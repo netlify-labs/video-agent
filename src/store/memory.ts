@@ -987,6 +987,12 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
       ),
     updateCleanup: async (id, patch) => patchRow(state.cleanup, id, patch),
 
+    engineRendersSince: async (since) =>
+      clone(
+        [...state.attempts.values()]
+          .filter((a) => a.endedAt !== null && a.endedAt >= since && a.engineRenders)
+          .map((a) => a.engineRenders as { video: number; stills: number; audio: number }),
+      ),
     usageSince: async (since) => {
       const out = new Map<string, UsageRow>()
       for (const a of state.attempts.values()) {

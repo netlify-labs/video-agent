@@ -472,6 +472,8 @@ export interface Repo {
     since: string,
   ): Promise<{ userId: string; week: string; credits: number | null; videos: number }[]>
   failuresSince(since: string): Promise<{ category: string; count: number }[]>
+  /** Remotion render counts of attempts that ended at or after `since` (render-engines §7), failed ones included. */
+  engineRendersSince(since: string): Promise<{ video: number; stills: number; audio: number }[]>
 
   // narration take budgets (voice-over plan §8)
   /**

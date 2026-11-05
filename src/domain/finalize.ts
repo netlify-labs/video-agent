@@ -79,6 +79,15 @@ export function manifestFromResult(text: string | null): unknown {
   }
 }
 
+/** render-job's Remotion render counts, when they're whole numbers of zero or more; null otherwise. */
+function renderCounts(v: unknown): { video: number; stills: number; audio: number } | null {
+  const r = (v ?? {}) as Record<string, unknown>
+  const ok = (n: unknown): n is number => Number.isInteger(n) && (n as number) >= 0 && (n as number) < 1e6
+  return ok(r.video) && ok(r.stills) && ok(r.audio)
+    ? { video: r.video, stills: r.stills, audio: r.audio }
+    : null
+}
+
 export function isManifest(v: unknown, attemptId: string): v is Manifest {
   if (!v || typeof v !== 'object') return false
   const m = v as Record<string, unknown>
@@ -138,6 +147,17 @@ export async function finalizeAttempt(deps: Deps, attemptId: string): Promise<Fi
 
     const manifest = await manifestFor(deps, a)
     if (!manifest) throw new NotYet('No manifest yet (no callback receipt and none in the final answer).')
+    // Remotion's renders were reported to Remotion whatever happens next, so they're kept before any check can fail.
+    if (manifest.engine?.renders !== undefined) {
+      const renders = renderCounts(manifest.engine.renders)
+      if (renders) {
+        await deps.store.updateAttempt(a.id, { engineRenders: renders }, 'finishing')
+        log.info('finalize.engine_renders', renders)
+      } else
+        log.warn('finalize.engine_renders_invalid', {
+          got: JSON.stringify(manifest.engine.renders).slice(0, 200),
+        })
+    }
 
     const files = {} as Record<OutputFile, Uint8Array>
     for (const name of OUTPUT_FILES) {

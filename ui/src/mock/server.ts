@@ -574,7 +574,22 @@ export function installMock() {
       return new Response(null, { status: 204 })
     }
     if (p === '/api/v1/me') return json(me)
-    if (p === '/api/v1/stats') return json(stats)
+    if (p === '/api/v1/stats')
+      return json(
+        adminSettings.remotion
+          ? {
+              ...stats,
+              remotionRenders: {
+                since: new Date().toISOString().slice(0, 8) + '01T00:00:00.000Z',
+                total: 27,
+                videos: 3,
+                stills: 24,
+                audio: 0,
+                attempts: 4,
+              },
+            }
+          : stats,
+      )
     if ((p === '/api/v1/cli/logins/lookup' || p === '/api/v1/cli/logins/approve') && method === 'POST') {
       if (!adminSettings.cliLoginEnabled)
         return fail(409, 'cli_login_disabled', 'Browser login for the CLI is turned off.')

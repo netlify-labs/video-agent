@@ -1712,6 +1712,13 @@ function repoFor(db: Db): Repo {
       await db.delete(t.users).where(eq(t.users.id, from))
     },
 
+    engineRendersSince: async (since) =>
+      (
+        await db
+          .select({ renders: t.attempts.engineRenders })
+          .from(t.attempts)
+          .where(and(gte(t.attempts.endedAt, since), isNotNull(t.attempts.engineRenders)))
+      ).map((r) => r.renders as { video: number; stills: number; audio: number }),
     usageSince: async (since) => {
       const rows = await db
         .select({

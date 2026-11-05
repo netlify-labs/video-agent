@@ -407,6 +407,16 @@ export function AdminPage() {
                 </tbody>
               </table>
             )}
+            {s?.remotionRenders ? (
+              <Text size="sm" mt="sm" data-testid="remotion-renders">
+                Remotion renders this month: {s.remotionRenders.total} ({s.remotionRenders.videos}{' '}
+                {s.remotionRenders.videos === 1 ? 'video' : 'videos'}, {s.remotionRenders.stills}{' '}
+                {s.remotionRenders.stills === 1 ? 'still' : 'stills'}).{' '}
+                <Text span size="xs" c="var(--va-faint)">
+                  Reconcile with remotion.pro; Video Agent doesn't know how Remotion bills them.
+                </Text>
+              </Text>
+            ) : null}
           </Card>
         </div>
       </Stack>

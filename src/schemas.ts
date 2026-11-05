@@ -2006,6 +2006,19 @@ export const StatsSchema = z
     ),
     maxActiveRuns: z.number().int(),
     queuePausedReason: z.string().nullable(),
+    remotionRenders: z
+      .object({
+        since: z.string(),
+        total: z.number().int(),
+        videos: z.number().int(),
+        stills: z.number().int(),
+        audio: z.number().int(),
+        attempts: z.number().int(),
+      })
+      .optional()
+      .describe(
+        "This month's Remotion renders (UTC), failed runs included; only when ENGINES lists remotion. Reconcile with remotion.pro.",
+      ),
   })
   .openapi('Stats')
 
