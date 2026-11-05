@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Record test page</title>
+    <style>
+      body { margin: 0; font: 18px system-ui, sans-serif; background: #f4f5f7; }
+      header { height: 80px; background: #14b8a6; }
+      main { padding: 40px; }
+      button { font: inherit; padding: 12px 20px; }
+      #flash { position: fixed; right: 0; top: 0; width: 80px; height: 80px; background: rgb(0, 0, 0); }
+      .spacer { height: 900px; }
+    </style>
+  </head>
+  <body>
+    <!-- va-rsk5.5.1/5.5.2 test page: a labelled button, a link whose name holds an email, a password field low on a
+         scrolling page, and a corner box that turns red on click (to line clicks up with frames). -->
+    <div id="flash"></div>
+    <header></header>
+    <main>
+      <button id="add" aria-label="Add new site">Add</button>
+      <p><a href="#contact">Contact jane.doe@acme.com today</a></p>
+      <div class="spacer"></div>
+      <label>Password <input id="pw" type="password" /></label>
+      <div class="spacer"></div>
+    </main>
+    <script>
+      addEventListener('pointerdown', () => { document.getElementById('flash').style.background = 'rgb(255, 0, 0)' }, { capture: true })
+    </script>
+  </body>
+</html>
