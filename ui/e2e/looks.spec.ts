@@ -18,7 +18,9 @@ function clips(page: Page) {
 const sent = (page: Page) =>
   page.evaluate(
     () =>
-      (window as unknown as { __sent?: Record<string, Record<string, unknown>> }).__sent?.['/api/v1/videos'],
+      (globalThis as unknown as { __sent?: Record<string, Record<string, unknown>> }).__sent?.[
+        '/api/v1/videos'
+      ],
   )
 
 async function createNow(page: Page) {
