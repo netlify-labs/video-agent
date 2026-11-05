@@ -10,7 +10,8 @@
 // spike-remotion for the owner to watch; nothing is published.
 import { createHash } from 'node:crypto'
 import { execFileSync, spawnSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 
 const SITE = '3a3f4565-083a-4b98-b01b-9011f70f53df'
@@ -26,7 +27,9 @@ const git = (...args: string[]) => execFileSync('git', args, { cwd: root, encodi
 const prompt = readFileSync(join(root, PROMPT), 'utf8')
 const head = git('rev-parse', 'HEAD')
 const dirty = git('status', '--porcelain', '--', 'spikes/e3', PROMPT, 'spikes/start-run.ts')
-const hasRunnerAuth = !!process.env.RUNNER_API_TOKEN || spawnSync('netlify', ['status'], { stdio: 'ignore' }).status === 0
+// The SDK falls back to the Netlify CLI's login: its config file (never read here, only whether it exists).
+const cliConfig = join(homedir(), process.platform === 'darwin' ? 'Library/Preferences/netlify/config.json' : '.config/netlify/config.json')
+const hasRunnerAuth = !!process.env.RUNNER_API_TOKEN || existsSync(cliConfig)
 const plan = {
   run: 'one standalone Agent Runner run (spikes/start-run.ts), land "none": no commit, no deploy, no PR',
   site: `${SITE} (the internal deployment, as S1's spike runs); the app isn't used and Remotion is enabled nowhere`,
