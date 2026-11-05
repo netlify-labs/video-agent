@@ -3,7 +3,7 @@
 //   npx tsx scripts/engine.ts check                 the engine's checks; exits 1 on any error
 //   npx tsx scripts/engine.ts snapshot --at 1,3,5   stills at those seconds (all in one call: each one is a render)
 //   npx tsx scripts/engine.ts render                render-job renders runs; this says so (local mode, CLI plan)
-//   npx tsx scripts/engine.ts mix                   the music level (HyperFrames: normalize-audio; Remotion: 3.10)
+//   npx tsx scripts/engine.ts mix                   the music level (HyperFrames: normalize-audio; Remotion: from its loudness)
 // HyperFrames hands each command to its own CLI, which its skill's work loop already teaches. Prints one JSON line as
 // its last line for the Remotion engine.
 import { spawnSync } from 'node:child_process'
@@ -12,13 +12,16 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { isEngineId, type EngineId } from '../src/domain/engines.js'
 import { remotionEngine } from './lib/engines/remotion.js'
+import { mixMusic, type MixReport } from './lib/engines/remotion-mix.js'
 import type { RunEngine } from './lib/engines/types.js'
-import { repoRoot, StepError } from './lib/run-tools.js'
+import { log, repoRoot, StepError } from './lib/run-tools.js'
 
 export interface EngineCliDeps {
   root: string
   /** The Remotion engine (tests pass a stub). */
   remotion: () => Pick<RunEngine, 'check' | 'snapshot'>
+  /** The Remotion music level (no render). */
+  mix: (videoDir: string) => MixReport | null
   /** Runs a command with the output passed through, returning its exit code. */
   spawn: (cmd: string, args: string[], cwd: string) => number
   out: (line: string) => void
@@ -99,8 +102,9 @@ export async function runEngineCli(argv: string[], d: EngineCliDeps): Promise<nu
     return 2
   }
   if (cmd === 'mix') {
-    d.out('engine_unavailable: mix for Remotion arrives with va-ed2s.3.10.')
-    return 2
+    const report = d.mix(video)
+    d.out(JSON.stringify({ step: 'engine.mix', engine, ...(report ?? { skipped: 'no music' }) }))
+    return 0
   }
   d.out(USAGE)
   return 2
@@ -112,6 +116,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href)
       await runEngineCli(process.argv.slice(2), {
         root: repoRoot,
         remotion: () => remotionEngine(),
+        mix: (video) => mixMusic(video, { log }),
         spawn: (cmd, args, cwd) => spawnSync(cmd, args, { cwd, stdio: 'inherit' }).status ?? 1,
         out: (l) => {
           console.log(l)

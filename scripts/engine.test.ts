@@ -29,6 +29,7 @@ function cli(dir: string, check = { errors: [] as string[], warnings: [] as stri
         return Promise.resolve(at.map((s) => `${v}/.render/snapshots/${s}.png`))
       },
     }),
+    mix: () => ({ lufsSrc: -20, truePeakSrc: -6, volume: 1.995, truePeakAtGain: 0, clamped: false }),
     spawn: (cmd: string, args: string[], cwd: string) => {
       spawned.push([cwd.endsWith('/video') ? 'video/' : cwd, cmd, ...args])
       return 0
@@ -83,11 +84,16 @@ describe('engine.ts', () => {
     expect(bad.out[0]).toBe('error: props.json.fps must be 30.')
   })
 
-  it('points render at render-job, and says which bead brings Remotion’s mix', async () => {
+  it('points render at render-job, and sets Remotion’s music level', async () => {
     const c = cli(root({ id: 'remotion' }))
     expect(await runEngineCli(['render'], c.deps)).toBe(2)
     expect(c.out.at(-1)).toContain('render-job.ts')
-    expect(await runEngineCli(['mix'], c.deps)).toBe(2)
+    expect(await runEngineCli(['mix'], c.deps)).toBe(0)
+    expect(JSON.parse(c.out.at(-1) ?? '{}')).toMatchObject({
+      step: 'engine.mix',
+      engine: 'remotion',
+      volume: 1.995,
+    })
     expect(await runEngineCli(['nope'], c.deps)).toBe(2)
   })
 })
