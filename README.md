@@ -170,6 +170,51 @@ latest ready version), `aspect`, `durationSec`, `language`, `sound`, `voiceover`
 set), `planId` and `webhookUrl`. It takes an `Idempotency-Key` header and returns 202 with the new video. From AI
 tools, it's the `remix_video` MCP tool.
 
+## Redo a scene
+
+A **scoped revision** redoes one or more scenes of a finished version and leaves the rest alone. Pick the scenes, say
+what should change, and you get a new version where only those scenes were rewritten. Everything else in the
+composition is copied from the version you started from, not regenerated.
+
+- **What's guaranteed:** the saved composition outside the picked scenes is the parent's, byte for byte. The run gets
+  a spliced copy where the frozen scenes are put back verbatim, and finalize checks that again before it stores
+  anything. A run that changes a frozen scene is refused, nothing is stored, and **Try again** tells the next run
+  what it touched.
+- **What's checked more loosely:** the rendered MP4 is checked by length (within a quarter of a second of the
+  spliced composition). Pixels in frozen scenes aren't compared frame by frame on every run; the redo-a-scene live
+  test measures how far they drift.
+- **Limits:**
+  - The version must keep the editing contract (the versions you can **Edit** in the browser) and be made with
+    HyperFrames.
+  - Pick 1 to 20 scenes, and not every scene: that's a whole-video revision.
+  - Name the version the scenes are from (`fromVersion`), since scene ids belong to one version.
+  - Length, sound, voice-over and plans stay the parent's. Say in the request if a scene should run longer; the
+    scenes after it move.
+  - The scene that ends the video under recorded narration holds its last frame, so it's redone only with a
+    whole-video revision.
+  - Fonts, shared classes and colour roles are frozen too. A redone scene may restyle itself, never the rest of the
+    video.
+- **Credits:** it's an agent run, so it spends credits like any revision.
+
+**Where to find it:**
+
+- On a video's page, **Revise** has **Whole video** and **Some scenes**: the version's scenes are chips with their
+  times.
+- On a pinned comment, **Redo this part** (owners and admins) opens the same choice with that comment's scene picked.
+- **Incorporate feedback** offers **Only change the scenes these comments point at** when every comment you pick is
+  pinned.
+- History shows what each scoped version redid ("Redid Features").
+
+From scripts, list a version's scenes with `GET /api/v1/videos/{id}/versions/{n}/beats` (or read `beats` on the
+version), then `POST /api/v1/videos/{id}/versions` with `{"prompt": "…", "fromVersion": n, "scope": {"beats": ["demo"]}}`.
+A version that can't be redone scene by scene answers `409 not_editable`. `/api/v1/config` lists `scoped_revision`
+when the deployment supports it. From AI tools, pass `beats` (with `from_version`) to the `revise_video` MCP tool.
+`get_video` lists each version's scenes. From the SDK:
+
+```ts
+await va.videos.revise(id, { prompt: 'Show the preview URL', fromVersion: 2, scope: { beats: ['demo'] } })
+```
+
 ## Your own voice-over
 
 Creators can narrate a video themselves: open **Edit → Narration**, record while the video plays (or drop in an
@@ -474,6 +519,19 @@ Run it with `--dry` first.
 ```sh
 VIDEO_AGENT_URL=https://<site> VIDEO_AGENT_KEY=nva_… SOURCE_ID=vid_… [NARRATED_ID=vid_…] \
   npx tsx scripts/e2e/remix.ts [--keep]
+```
+
+### Redo-a-scene live gate
+
+`scripts/e2e/regen-beat.ts` checks scoped revisions against a deployed site (regenerate-beat spec
+[§7](docs/plans/2026-11-04-regenerate-beat.md)). It redoes one scene of a ready contract-v1 video, then compares the
+frozen scenes' frames and captions with the parent's and reads the stored composition back from Blobs. It stops
+starting runs once `CREDIT_CEILING` (default 700) is reached. `--dry` lists the steps and the projected credits
+without sending anything, and `--selftest` runs its frame and caption checks on local fixtures.
+
+```sh
+VIDEO_AGENT_URL=https://<site> VIDEO_AGENT_KEY=nva_… NETLIFY_SITE_ID=… SOURCE_ID=vid_… \
+  npx tsx scripts/e2e/regen-beat.ts [--dry] [--steps 1,2]
 ```
 
 ## License
