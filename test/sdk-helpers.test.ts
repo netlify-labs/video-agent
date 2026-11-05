@@ -18,14 +18,14 @@ const sdk = async (h: Harness, o: { drive?: boolean } = {}) => {
   const va = new VideoAgent({
     url: 'https://video.example.com',
     apiKey: await apiKey(h, h.member),
-    fetch: (async (input: string | URL | Request, init?: RequestInit) => {
+    fetch: async (input: string | URL | Request, init?: RequestInit) => {
       const req = new Request(input, init)
       const path = new URL(req.url).pathname
       if (o.drive && req.method === 'GET' && /^\/api\/v1\/videos\/[^/]+$/.test(path)) await h.drive(1)
       const res = await h.app.fetch(req, { context: { deploy: { published: true } } })
       seen.push({ method: req.method, path, status: res.status, inm: req.headers.has('if-none-match') })
       return res
-    }),
+    },
   })
   return { va, seen }
 }
@@ -128,10 +128,10 @@ describe('videos.resolve', () => {
     const va = new VideoAgent({
       url: 'https://video.example.com',
       apiKey: 'nva_secret',
-      fetch: (async (input: string | URL | Request, init?: RequestInit) => {
+      fetch: async (input: string | URL | Request, init?: RequestInit) => {
         calls.push(new Request(input, init))
         return answer.clone()
-      }),
+      },
     })
     return { va, calls }
   }

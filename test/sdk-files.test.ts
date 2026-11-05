@@ -15,7 +15,7 @@ const sdk = async (h: Harness, storage: (req: Request) => Response = () => new R
   const va = new VideoAgent({
     url: SITE,
     apiKey: await apiKey(h, h.member),
-    fetch: (async (input: string | URL | Request, init?: RequestInit) => {
+    fetch: async (input: string | URL | Request, init?: RequestInit) => {
       const req = new Request(input, init)
       if (new URL(req.url).pathname.startsWith('/api/')) {
         api.push(req)
@@ -23,7 +23,7 @@ const sdk = async (h: Harness, storage: (req: Request) => Response = () => new R
       }
       stored.push(req)
       return storage(req)
-    }),
+    },
   })
   return { va, api, stored }
 }
