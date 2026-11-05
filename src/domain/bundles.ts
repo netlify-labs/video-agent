@@ -54,7 +54,7 @@ export const liveFileKey = (jobId: string, n: number, seq: number, path: string)
  * The composition's own files: the same set the bundle manifest counts (run inputs and caches stay out), less the
  * reference files, which never come from an archive.
  */
-const keep = (path: string) => !excluded(path) && !isReference(path)
+export const inBundle = (path: string) => !excluded(path) && !isReference(path)
 
 /**
  * Local media files index.html and its stylesheets point at that aren't in the bundle (library media aside).
@@ -77,6 +77,23 @@ export function missingLocalFiles(files: Map<string, Uint8Array>): string[] {
     .filter((r) => r && !r.startsWith('/'))
   // Library media is downloaded into every run from the version's snapshot, so only agent-made files can be missing.
   return [...new Set(local)].filter((r) => !isLibraryMedia(r) && !files.has(decodeURI(r))).sort()
+}
+
+/**
+ * Whether a saved composition is editable: its engine's contract holds and it has every file it uses. `all` is the
+ * bundle's files (inBundle) plus its reference files. Finalize and ensureBundle both use it, so they always agree.
+ */
+export function bundleContract(
+  engine: EngineId | undefined,
+  all: Map<string, Uint8Array>,
+): { version: 1 | null; violations: string[] } {
+  const c = contractForEngine(engine, all)
+  // By-key media needs no stand-in here: missingLocalFiles never counts library media as missing.
+  const missing = c.version === 1 ? missingLocalFiles(all) : []
+  // Editing renders the saved composition as is, so it must have every file it uses.
+  return missing.length
+    ? { version: null, violations: [`It uses files that weren't saved: ${missing.slice(0, 5).join(', ')}.`] }
+    : c
 }
 
 /** Whether a composition keeps the editing contract (plan v2 §8): only ones that declare it are checked. */
@@ -178,7 +195,7 @@ export async function ensureBundle(
   const gz = await deps.blobs.get('sources', output.sourceKey)
   if (!gz) return null
   if (sha256Hex(gz) !== want) throw new TarError("The saved composition doesn't match its hash.")
-  const files = [...readTarGz(gz)].filter(([path]) => keep(path))
+  const files = [...readTarGz(gz)].filter(([path]) => inBundle(path))
   // Reference files are served from the videos store, checked here first (plan 2026-11-02 §6.2).
   const refs = await readReferences(deps, output)
   const refFiles = await Promise.all(refs.map(async (r) => [r.path, await fetchReference(deps, r)] as const))
@@ -217,19 +234,7 @@ export async function ensureBundle(
       })),
     ],
     createdAt: deps.clock.now().toISOString(),
-    contract: (() => {
-      // By-key media needs no stand-in here: missingLocalFiles never counts library media as missing.
-      const all = new Map([...files, ...refFiles])
-      const c = contractForEngine(engine, all)
-      const missing = c.version === 1 ? missingLocalFiles(all) : []
-      // Editing renders the saved composition as is, so it must have every file it uses.
-      return missing.length
-        ? {
-            version: null,
-            violations: [`It uses files that weren't saved: ${missing.slice(0, 5).join(', ')}.`],
-          }
-        : c
-    })(),
+    contract: bundleContract(engine, new Map([...files, ...refFiles])),
   }
   await deps.blobs.set('bundles', bundleIndexKey(jobId, n), JSON.stringify(index), {
     contentType: 'application/json',
@@ -253,7 +258,7 @@ export async function writeLiveSnapshot(
   seq: number,
   files: Map<string, Uint8Array>,
 ) {
-  const kept = [...files].filter(([path]) => keep(path))
+  const kept = [...files].filter(([path]) => inBundle(path))
   for (const [path, bytes] of kept) await deps.blobs.set('bundles', liveFileKey(jobId, n, seq, path), bytes)
   const index: BundleIndex = {
     v: 1,

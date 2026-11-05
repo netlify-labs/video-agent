@@ -24,8 +24,9 @@ import {
 } from '../lib/media/previews.js'
 import { readRunCredits, RUN_CREDITS_FILE, type RunCredit } from '../lib/openverse-rules.js'
 import { NARRATION_SRC } from '../lib/contract.js'
-import { readTarGz, TarError, type TarLimits } from '../lib/tar.js'
-import { bundleShapeProblems, ensureBundle } from './bundles.js'
+import { BUNDLE_LIMITS, readTarGz, type TarLimits } from '../lib/tar.js'
+import { beatsOf } from './beats.js'
+import { bundleContract, bundleShapeProblems, ensureBundle, inBundle } from './bundles.js'
 import { engineInfo, engineOf, isEngineId } from './engines.js'
 import { carriedCaptions, narrationOpHash } from './captions.js'
 import { getSettings } from './settings.js'
@@ -194,17 +195,14 @@ export async function finalizeAttempt(deps: Deps, attemptId: string): Promise<Fi
       throw new Invalid('invalid_output', 'The preview is not a GIF.')
     if (sniff(files['captions.vtt']) !== 'vtt')
       throw new Invalid('invalid_output', 'The captions are not WebVTT.')
+    // The saved composition, read once before anything is stored: its engine's shape, its credits, its beats and
+    // whether it's editable.
+    const source = readSource(deps, a.id, files['source.tar.gz'])
     // The engine twice (render-engines §4.2): the one the run says rendered it, and the shape of what it saved.
     const engine = engineOf(version)
     const got = manifest.engine?.id ?? 'hyperframes'
-    let shape: string[] = []
-    if (got === engine)
-      try {
-        shape = bundleShapeProblems(engine, readTarGz(files['source.tar.gz']))
-      } catch (e) {
-        // A bad archive is ensureBundle's to report (best effort, after ready), as before engines.
-        if (!(e instanceof TarError)) throw e
-      }
+    // A bad archive is ensureBundle's to report (best effort, after ready), as before engines.
+    const shape = got === engine && source.files ? bundleShapeProblems(engine, source.files) : []
     if (got !== engine || shape.length) {
       log.warn('finalize.engine_mismatch', { expected: engine, got, problems: shape })
       const name = isEngineId(got) ? engineInfo(got).name : got
@@ -259,7 +257,24 @@ export async function finalizeAttempt(deps: Deps, attemptId: string): Promise<Fi
       sha256[REFERENCES_FILE] = sha256Hex(list)
     }
     const previews = await storePreviews(deps, a.id, prefix, manifest, sha256)
-    const runCredits = runCreditsOf(deps, a.id, files['source.tar.gz'])
+    const runCredits = runCreditsOf(deps, a.id, source.files)
+    // Editable and its scenes, stored with ready so `editable` never lags (redo a scene, plan §4.2, owner Q8): the same
+    // inputs ensureBundle checks (bundleContract over the bundle's files and the reference files), and only for an
+    // archive the bundle can hold, as before.
+    const contract =
+      source.files && source.bundleable
+        ? bundleContract(
+            engine,
+            new Map([
+              ...[...source.files].filter(([p]) => inBundle(p)),
+              ...references.map((r) => [r.entry.path, r.bytes] as const),
+            ]),
+          )
+        : null
+    const beats = source.files ? beatsOf(source.files) : null
+    if (contract && contract.version === null)
+      log.info('finalize.not_editable', { reasons: contract.violations.slice(0, 5) })
+    if (beats) log.info('finalize.beats', { count: beats.length })
     const narrated = version.frozen?.narration
       ? await storeNarrationOutputs(deps, a.id, prefix, manifest, sha256)
       : new Set<NarrationOutput>()
@@ -298,16 +313,19 @@ export async function finalizeAttempt(deps: Deps, attemptId: string): Promise<Fi
         runCredits,
         notices: notices.length ? notices : null,
       },
-      recorded,
+      { ...recorded, contract: contract?.version ?? null, beats },
     )
     // The preview bundle (plan v2 §7). Best effort: a version without one is still ready and is extracted later.
     if (result === 'ready') {
       try {
         const bundle = await ensureBundle(deps, a.jobId, a.versionN)
-        // Editable in the browser only when the finished composition keeps the contract (plan v2 §8).
-        await deps.store.updateVersion(a.jobId, a.versionN, { contract: bundle?.contract?.version ?? null })
-        if (bundle?.contract?.version === null)
-          log.info('finalize.not_editable', { reasons: bundle.contract.violations.slice(0, 5) })
+        // Both read the same files the same way; a difference would be a bug.
+        if (bundle && (bundle.contract?.version ?? null) !== (contract?.version ?? null))
+          log.warn('finalize.contract_mismatch', {
+            version: a.versionN,
+            stored: contract?.version ?? null,
+            bundle: bundle.contract?.version ?? null,
+          })
       } catch (e) {
         log.warn('finalize.bundle_failed', { error: e })
       }
@@ -465,19 +483,39 @@ const SOURCE_READ_LIMITS: TarLimits = {
 }
 
 /**
+ * The uploaded composition's files, read once. `bundleable`: within the preview bundle's limits, which an editable
+ * version has to be (ensureBundle reads it with them). A larger archive is read with SOURCE_READ_LIMITS for its
+ * credits only; an unreadable one gives no files.
+ */
+export function readSource(
+  deps: Pick<Deps, 'log'>,
+  attemptId: string,
+  gz: Uint8Array,
+): { files: Map<string, Uint8Array> | null; bundleable: boolean } {
+  try {
+    return { files: readTarGz(gz, BUNDLE_LIMITS), bundleable: true }
+  } catch {
+    try {
+      return { files: readTarGz(gz, SOURCE_READ_LIMITS), bundleable: false }
+    } catch (e) {
+      deps.log.warn('finalize.source_unreadable', { attemptId, error: e })
+      return { files: null, bundleable: false }
+    }
+  }
+}
+
+/**
  * Credits for the Openverse files the run fetched itself (scripts/openverse.ts records them in
  * video/assets/music/credits.json, saved with the composition). The file is the agent's, so it is checked strictly:
  * entries that fail are dropped and logged, and an unreadable archive or file gives none. Revisions and edits carry
  * the file in their source, so their credits are read the same way.
  */
-export function runCreditsOf(deps: Pick<Deps, 'log'>, attemptId: string, gz: Uint8Array): RunCredit[] | null {
-  let files: Map<string, Uint8Array>
-  try {
-    files = readTarGz(gz, SOURCE_READ_LIMITS)
-  } catch (e) {
-    deps.log.warn('finalize.run_credits_unreadable', { attemptId, error: e })
-    return null
-  }
+export function runCreditsOf(
+  deps: Pick<Deps, 'log'>,
+  attemptId: string,
+  files: Map<string, Uint8Array> | null,
+): RunCredit[] | null {
+  if (!files) return null
   const raw = files.get(RUN_CREDITS_FILE)
   if (!raw) return null
   const { credits, dropped } = readRunCredits(new TextDecoder().decode(raw), files)
@@ -491,7 +529,7 @@ async function finish(
   outcome: 'ready' | 'failed' | 'cancelled',
   error: { category: FailureCategory; message: string } | null,
   output: Parameters<Deps['store']['upsertOutput']>[0] | null,
-  recorded: Pick<VersionRow, 'narration' | 'captions'> | null = null,
+  recorded: Pick<VersionRow, 'narration' | 'captions' | 'contract' | 'beats'> | null = null,
 ): Promise<FinalizeResult> {
   const now = deps.clock.now().toISOString()
   return deps.store.tx(async (repo) => {
