@@ -155,6 +155,7 @@ Looks are instructions to the agent, like `context/`, so only people who can cha
 
 <p>
   <a href="looks/clean/LOOK.md"><img src="looks/clean/poster.webp" alt="Clean product" width="260"></a>
+  <a href="looks/editorial/LOOK.md"><img src="looks/editorial/poster.webp" alt="Editorial" width="260"></a>
   <a href="looks/kinetic/LOOK.md"><img src="looks/kinetic/poster.webp" alt="Kinetic type" width="260"></a>
   <a href="looks/terminal/LOOK.md"><img src="looks/terminal/poster.webp" alt="Terminal" width="260"></a>
 </p>

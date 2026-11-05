@@ -1,0 +1,15 @@
+{
+  "id": "editorial",
+  "name": "Editorial",
+  "description": "A magazine spread that moves: a big serif headline, thin rules, captions and slow pans. For considered stories.",
+  "tags": ["serif", "magazine", "calm"],
+  "bestFor": ["sales", "other", "launch"],
+  "aspects": ["16:9", "9:16", "1:1", "4:5"],
+  "engines": ["hyperframes"],
+  "colors": { "roles": ["bg", "text", "muted", "accent"], "derived": [] },
+  "sound": { "musicMood": "warm piano and strings, 80 to 90 bpm" },
+  "registry": [],
+  "authors": ["Video Agent maintainers"],
+  "license": "MIT",
+  "since": "2026-11-05"
+}

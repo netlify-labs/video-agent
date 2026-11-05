@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="vendor/gsap.min.js"></script>
+    <script src="vendor/va-contract.js"></script>
+    <style>
+      /* Editorial example: the fictional product Orbit, placeholder words. Runs reuse its grid, tiers and moves, never
+         its words. Colours are the brand's roles, written as literal colours. */
+      #root {
+        --va-color-bg: #f6f3ee;
+        --va-color-text: #1b1a17;
+        --va-color-muted: #6b665e;
+        --va-color-accent: #b4532a;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1920px; height: 1080px; overflow: hidden; background: #f6f3ee; }
+      #root { width: 100%; height: 100%; position: relative; font-family: system-ui, sans-serif; background: var(--va-color-bg); }
+      .beat { position: absolute; inset: 0; padding: 0 115px; display: grid; grid-template-columns: repeat(12, 1fr); column-gap: 38px; align-content: center; }
+      .text { grid-column: 1 / span 7; }
+      .kicker { color: var(--va-color-muted); font-size: 24px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.18em; }
+      .kicker::before { content: ''; display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: var(--va-color-accent); margin-right: 14px; vertical-align: 1px; }
+      .rule { height: 1px; background: var(--va-color-muted); margin: 24px 0 36px; }
+      .title { color: var(--va-color-text); font-family: Georgia, "Times New Roman", serif; font-size: 112px; font-weight: 400; line-height: 1.05; letter-spacing: -0.01em; }
+      .title em { color: var(--va-color-accent); }
+      .deck { color: var(--va-color-text); font-size: 36px; line-height: 1.35; margin-top: 36px; max-width: 900px; }
+      .figure { grid-column: 8 / span 5; }
+      .frame { height: 560px; overflow: hidden; background: #ffffff; border: 1px solid #d9d4cb; }
+      .ui { width: 100%; height: 100%; padding: 36px; display: flex; flex-direction: column; gap: 18px; }
+      .bar { height: 22px; background: #e8e3da; }
+      .bar.short { width: 55%; }
+      .bar.hit { background: #e9c9b8; }
+      .caption { color: var(--va-color-muted); font-size: 26px; line-height: 1.35; margin-top: 18px; }
+      [data-va-beat="end"] { justify-items: center; text-align: center; }
+      [data-va-beat="end"] .text { grid-column: 3 / span 8; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-va-contract="1" data-start="0" data-duration="11" data-width="1920" data-height="1080">
+      <section id="open" class="clip beat" data-va-beat="open" data-va-label="Opening" data-composition-id="open" data-start="0" data-duration="4" data-va-authored-duration="4" data-track-index="0">
+        <div class="text">
+          <p class="kicker" data-va-text="open-kicker" data-va-label="Kicker">New in Orbit</p>
+          <div class="rule"></div>
+          <h1 class="title" data-va-text="open-title" data-va-label="Headline">Everything you wrote, <em>found in a moment</em></h1>
+        </div>
+        <script>
+          vaBeat('open', (tl, el) => {
+            tl.fromTo(el.querySelector('.rule'), { scaleX: 0 }, { scaleX: 1, duration: 0.8, ease: 'power2.out', transformOrigin: '0% 50%' }, 0)
+              .fromTo(el.querySelector('[data-va-text="open-kicker"]'), { opacity: 0 }, { opacity: 1, duration: 0.6 }, 0.2)
+              .fromTo(el.querySelector('[data-va-text="open-title"]'), { y: 30, opacity: 0 }, { y: 0, opacity: 1, duration: 1, ease: 'power3.out' }, 0.5)
+              .to(el, { opacity: 0, duration: 0.5 }, 3.5)
+          })
+        </script>
+      </section>
+      <section id="story" class="clip beat" data-va-beat="story" data-va-label="Story" data-composition-id="story" data-start="4" data-duration="4" data-va-authored-duration="4" data-track-index="0">
+        <div class="text">
+          <p class="kicker" data-va-text="story-kicker" data-va-label="Kicker">How it works</p>
+          <div class="rule"></div>
+          <h2 class="title" data-va-text="story-title" data-va-label="Headline">One box for every page</h2>
+          <p class="deck" data-va-text="story-deck" data-va-label="Deck">Type a word and Orbit reads every note, doc and comment your team has written.</p>
+        </div>
+        <div class="figure">
+          <div class="frame">
+            <div class="ui">
+              <div class="bar"></div>
+              <div class="bar hit"></div>
+              <div class="bar short"></div>
+              <div class="bar"></div>
+              <div class="bar short"></div>
+            </div>
+          </div>
+          <p class="caption" data-va-text="story-caption" data-va-label="Caption">Results arrive as you type.</p>
+        </div>
+        <script>
+          vaBeat('story', (tl, el) => {
+            tl.fromTo(el, { opacity: 0 }, { opacity: 1, duration: 0.5 }, 0)
+              .fromTo(el.querySelector('.rule'), { scaleX: 0 }, { scaleX: 1, duration: 0.8, ease: 'power2.out', transformOrigin: '0% 50%' }, 0.1)
+              .fromTo(el.querySelector('[data-va-text="story-title"]'), { y: 30, opacity: 0 }, { y: 0, opacity: 1, duration: 1, ease: 'power3.out' }, 0.3)
+              .fromTo(el.querySelector('[data-va-text="story-deck"]'), { opacity: 0 }, { opacity: 1, duration: 0.8 }, 0.9)
+              .fromTo(el.querySelector('.ui'), { scale: 1.04 }, { scale: 1, duration: 4, ease: 'none' }, 0)
+              .fromTo(el.querySelector('[data-va-text="story-caption"]'), { opacity: 0 }, { opacity: 1, duration: 0.6 }, 1.2)
+              .to(el, { opacity: 0, duration: 0.5 }, 3.5)
+          })
+        </script>
+      </section>
+      <section id="end" class="clip beat" data-va-beat="end" data-va-label="End card" data-composition-id="end" data-start="8" data-duration="3" data-va-authored-duration="3" data-track-index="0">
+        <div class="text">
+          <h2 class="title" data-va-text="end-title" data-va-label="Product name">Orbit</h2>
+          <p class="deck" data-va-text="end-cta" data-va-label="Call to action">Try it free at orbit.example</p>
+        </div>
+        <script>
+          vaBeat('end', (tl, el) => {
+            tl.fromTo(el, { opacity: 0 }, { opacity: 1, duration: 0.5 }, 0)
+              .fromTo(el.querySelector('[data-va-text="end-title"]'), { y: 30, opacity: 0 }, { y: 0, opacity: 1, duration: 1, ease: 'power3.out' }, 0.2)
+              .fromTo(el.querySelector('[data-va-text="end-cta"]'), { opacity: 0 }, { opacity: 1, duration: 0.8 }, 0.9)
+          })
+        </script>
+      </section>
+    </div>
+    <script>
+      window.__timelines['main'] = gsap.timeline({ paused: true })
+    </script>
+  </body>
+</html>

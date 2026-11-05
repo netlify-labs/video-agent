@@ -44,6 +44,40 @@ export const looksCatalog: LookCatalogEntry[] = [
     }
   },
   {
+    "id": "editorial",
+    "name": "Editorial",
+    "description": "A magazine spread that moves: a big serif headline, thin rules, captions and slow pans. For considered stories.",
+    "tags": [
+      "serif",
+      "magazine",
+      "calm"
+    ],
+    "bestFor": [
+      "sales",
+      "other",
+      "launch"
+    ],
+    "aspects": [
+      "16:9",
+      "9:16",
+      "1:1",
+      "4:5"
+    ],
+    "engines": [
+      "hyperframes"
+    ],
+    "recording": null,
+    "musicMood": "warm piano and strings, 80 to 90 bpm",
+    "hash": "ec00d04022fe14745d961aa6316ecb822d94e2cef65c8e1b207c7d3004274339",
+    "sha256": "f9c3cfacef9843e8614cde9c15258bf82d2fb3db82697b1609981250c96783d7",
+    "bytes": 4199,
+    "source": "builtin",
+    "preview": {
+      "mp4": "/assets/looks/editorial.7b2ef2f7648f.mp4",
+      "poster": "/assets/looks/editorial.50e48aeef954.webp"
+    }
+  },
+  {
     "id": "kinetic",
     "name": "Kinetic type",
     "description": "Big words that move with the beat. Type is the picture.",
