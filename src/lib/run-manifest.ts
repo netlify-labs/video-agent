@@ -3,6 +3,7 @@
 // chose: nothing the model writes (or a request smuggles in) can point it somewhere else.
 import { createHash } from 'node:crypto'
 import { isEngineId, type EngineId } from '../domain/engines.js'
+import { LOOK_ID } from './looks.js'
 import { isBundleReference, type BundleReference } from './bundle-references.js'
 import { isLanguage, type Language } from './language.js'
 import { MEDIA_KINDS, type MediaKind } from './media/classify.js'
@@ -78,6 +79,20 @@ export interface RunManifest {
    * The stills of their neighbours come from `feedback.video` (with no pins when nothing was commented).
    */
   scope?: RunScope | undefined
+  /**
+   * The video's look (plan 2026-11-04-looks §4.6): its snapshot in the sources store, which prepare-run unpacks into
+   * context/look/ and checks against `hash`. Absent with no look, so every other manifest keeps its bytes.
+   */
+  look?: RunLook | undefined
+}
+
+export interface RunLook {
+  id: string
+  /** '<jobId>/looks/<hash>.tar.gz' in the sources store. */
+  key: string
+  sha256: string
+  /** lookHash of the unpacked files (src/lib/looks.ts). */
+  hash: string
 }
 
 export interface RunScope {
@@ -269,6 +284,8 @@ export function serializeRunManifest(m: RunManifest): string {
           },
         }
       : {}),
+    // Only with a look, so every other manifest keeps its bytes.
+    ...(m.look ? { look: { id: m.look.id, key: m.look.key, sha256: m.look.sha256, hash: m.look.hash } } : {}),
   })
 }
 
@@ -471,6 +488,23 @@ export function verifyRunManifest(raw: string, expected: { attemptId: string; sh
   }
   if (m.scope !== undefined && !isScope(m.scope, m.kind, m.feedback !== null))
     throw new Error('The run manifest has a bad scope entry.')
+  if (m.look !== undefined) {
+    // Parsed JSON: check the shape rather than trust the type.
+    const raw: unknown = m.look
+    const l = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+    if (
+      typeof l.id !== 'string' ||
+      !LOOK_ID.test(l.id) ||
+      typeof l.hash !== 'string' ||
+      !HEX.test(l.hash) ||
+      typeof l.sha256 !== 'string' ||
+      !HEX.test(l.sha256) ||
+      l.key !== `${m.jobId}/looks/${l.hash}.tar.gz`
+    )
+      throw new Error('The run manifest has a bad look entry.')
+    // A render of the edited composition reads no look (§4.6).
+    if (m.kind === 'render_unchanged') throw new Error('A render-unchanged run has no look.')
+  }
   if (m.kind === 'revision' && !m.source) throw new Error('A revision run needs a source.')
   if (m.kind === 'render_unchanged' && !m.bundle) throw new Error('A render-unchanged run needs a bundle.')
   // A fit starts from the frozen draft alone, and exists for its narration (the guard and the bus target need it).

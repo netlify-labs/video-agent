@@ -171,6 +171,40 @@ describe('run manifest', () => {
   })
 })
 
+describe('run manifest look (looks plan §4.6)', () => {
+  const look = { id: 'kinetic', key: `vid_1/looks/${H('c')}.tar.gz`, sha256: H('d'), hash: H('c') }
+  const bad = /bad look entry/
+
+  it('keeps every manifest without a look byte-identical, and round-trips one with a look', () => {
+    expect(serializeRunManifest({ ...base, look: undefined })).toBe(serializeRunManifest(base))
+    expect(serializeRunManifest(base)).not.toContain('look')
+    expect(verify({ ...base, look }).look).toEqual(look)
+    const author: RunManifest = { ...base, kind: 'author', source: null, look }
+    expect(verify(author).look).toEqual(look)
+  })
+
+  it('refuses a look outside the job prefix, a key that is not its hash, bad hashes or a bad id', () => {
+    expect(() => verify({ ...base, look: { ...look, key: `vid_2/looks/${H('c')}.tar.gz` } })).toThrow(bad)
+    expect(() => verify({ ...base, look: { ...look, key: `vid_1/looks/${H('e')}.tar.gz` } })).toThrow(bad)
+    expect(() => verify({ ...base, look: { ...look, key: 'vid_1/looks/../x.tar.gz' } })).toThrow(bad)
+    expect(() => verify({ ...base, look: { ...look, sha256: 'nope' } })).toThrow(bad)
+    expect(() => verify({ ...base, look: { ...look, id: 'Kinetic!' } })).toThrow(bad)
+    const raw = serializeRunManifest(base).replace(/}$/, ',"look":"kinetic"}')
+    expect(() => verify(base, raw)).toThrow(bad)
+  })
+
+  it('refuses a look on a render-unchanged run', () => {
+    const m: RunManifest = {
+      ...base,
+      kind: 'render_unchanged',
+      source: null,
+      bundle: { key: 'vid_1/v2/bundle.tar.gz', sha256: H('a'), manifestHash: H('b') },
+      look,
+    }
+    expect(() => verify(m)).toThrow(/render-unchanged run has no look/)
+  })
+})
+
 describe('run manifest scope (redo a scene)', () => {
   const video = { key: 'vid_1/v1/video.mp4', sha256: H('e') }
   const still = (beat: string, what: 'before' | 'after', atSec = 3.95) => ({

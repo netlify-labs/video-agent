@@ -77,6 +77,7 @@ describe('prepare-run steps', () => {
     expect(steps(spy)).toEqual([
       ['source', false],
       ['media', true],
+      ['look', true],
       ['scope', true],
       ['stills', true],
     ])
@@ -116,8 +117,8 @@ describe('prepare-run steps', () => {
     const author = setup()
     await prepare(base, { tmp: author.target, root: author.target, fetch: author.fetch })
     expect(readdirSync(join(author.target, 'video'))).toEqual([])
-    // source, media, scope, stills: the author run's source step is the fourth from the end.
-    expect(steps(spy).at(-4)).toEqual(['source', true])
+    // source, media, look, scope, stills: the author run's source step is the fifth from the end.
+    expect(steps(spy).at(-5)).toEqual(['source', true])
   })
 
   it('stops on an engine this run has no code for', async () => {

@@ -35,6 +35,7 @@ import { archiveFiles, bundleManifest } from '../src/lib/bundle-manifest.js'
 import type { BundleReference } from '../src/lib/bundle-references.js'
 import { NARRATION_SRC, load, read } from '../src/lib/contract.js'
 import { frozenFilesFor, optionalFrozenFilesFor } from '../src/lib/narration-run.js'
+import { LOOK_ARCHIVE_ROOT, lookFiles, lookHash } from '../src/lib/looks.js'
 import { FROZEN_DIR, keptHash } from '../src/lib/revoice.js'
 import { SCOPE_LAYOUT_FILE, type ScopeLayout } from '../src/lib/scope.js'
 import { readPcm16 } from '../src/lib/narration-cleanup.js'
@@ -45,6 +46,7 @@ import {
   type FeedbackPin,
   runEngineId,
   type FrozenNarration,
+  type RunLook,
   type RunManifest,
   type ScopeStill,
 } from '../src/lib/run-manifest.js'
@@ -145,6 +147,38 @@ function restoreArchive(root: string, archive: string, sha256: string, what: str
       throw new StepError(`The saved ${what} has an unexpected entry (${entry}). Stop and report this.`)
   rmSync(join(root, 'video'), { recursive: true, force: true })
   run('tar', ['-xzf', archive, '-C', root])
+}
+
+/**
+ * Unpacks the version's look snapshot into <root>/context/look/ and checks it: the archive's sha256, entries only under
+ * look/, and the unpacked files' look hash (the same lookHash the build recorded), so the run reads exactly the rules
+ * the version was made with.
+ */
+async function restoreLook(root: string, look: RunLook, tmp: string, fetch: Fetch) {
+  const archive = join(tmp, 'look.tar.gz')
+  await fetch(look.key, archive)
+  const actual = sha256File(archive)
+  if (actual !== look.sha256)
+    throw new StepError(`The saved look doesn't match its hash (got ${actual}). Stop and report this.`)
+  const listing = run('tar', ['-tzf', archive]) // validates the archive before touching context/look/
+  for (const entry of listing.split('\n').filter(Boolean))
+    if (!entry.startsWith(`${LOOK_ARCHIVE_ROOT}/`) || entry.split('/').includes('..'))
+      throw new StepError(`The saved look has an unexpected entry (${entry}). Stop and report this.`)
+  const unpacked = join(tmp, 'look-unpacked')
+  rmSync(unpacked, { recursive: true, force: true })
+  mkdirSync(unpacked, { recursive: true })
+  run('tar', ['-xzf', archive, '-C', unpacked])
+  const dir = join(root, 'context', 'look')
+  rmSync(dir, { recursive: true, force: true })
+  mkdirSync(dirname(dir), { recursive: true })
+  renameSync(join(unpacked, LOOK_ARCHIVE_ROOT), dir)
+  const files = new Map(lookFiles(dir).map((p) => [p, new Uint8Array(readFileSync(join(dir, p)))]))
+  const hash = lookHash(files)
+  if (hash !== look.hash) {
+    rmSync(dir, { recursive: true, force: true })
+    throw new StepError(`The restored look's files don't match its hash (got ${hash}). Stop and report this.`)
+  }
+  log('look.restored', { id: look.id, hash, files: files.size })
 }
 
 /** Fetches an archive's reference files into <root>/video by key, each checked against its entry. */
@@ -502,7 +536,9 @@ export async function prepare(
     log('media', { count: m.media.length, files: m.media.map((x) => x.filename) })
   }
   stepDone('media', !m.media?.length)
-  // 3. The look: the looks plan adds it here.
+  // 3. The look (looks plan §4.6): its snapshot into context/look/, outside the composition, so it's never archived.
+  if (m.look) await restoreLook(root, m.look, tmp, fetch)
+  stepDone('look', !m.look)
   // 4. Recording files (the screen-recording plan adds them here), then scope files: the scoped beats and the
   // parent's layout, read from the frozen copy (what check-contract --fix and render-job splice against).
   if (m.scope) {
