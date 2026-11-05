@@ -750,6 +750,32 @@ race, end). The source was v2. Its scenes weren't stored yet, so the script fill
   request to compare against. The script's `savingsBar` is null.
 - **Model:** both runs used the deployment's default (`model` null), since `SCOPED_AGENT_MODEL` isn't on main.
 
+### LT-2 steps 3 and 6: the whole-video baseline and a narrated video (2026-11-05, `scripts/e2e/regen-beat.ts --steps 3,6`, owner-approved, 97.6 credits)
+
+These ran on production at `e753376`.
+- **Step 3, the baseline (pass):** the same request as step 1 ("Make the headline say 'Ship on Friday'…"), sent as
+  a whole-video revision of `vid_01m6d7shks0mpejbagqc7xft2f` v4. It made v5 for **36.2 credits in 110 s**. Outside
+  `race` it drifted where the scoped runs didn't: intro's lowest frame SSIM was 0.951 and its worst tile 0.781.
+  The end scene was unchanged (1.0).
+- **Step 6, narrated (pass):** redid the middle scene of `vid_01m6d0vrstkq7dd3ythwfz66bn` v6, "Openverse music
+  test", the only editable video with recorded narration (read-only lookup). It made v7 for **61.4 credits in
+  125 s**. The length is unchanged, and the narration element is the parent's.
+- **Step 5, voiced:** not run. Production has no ready video with an AI voice-over, and making one is a new run the
+  owner hasn't approved.
+
+**Savings verdict: the bar is missed.** The plan's bar is a scoped median ≤ 60% of a full revision's credits.
+| | Credits |
+| --- | --- |
+| The four scoped runs | 67.2, 50.5, 61.4 (and B3's hand-made 57.6) |
+| Scoped median | 59.5 (61.4 counting only the three gate runs) |
+| The one whole revision measured | 36.2 |
+
+Scoped runs cost about as much as a revision, or more: the run still reads the whole composition, writes the scope
+files and runs the scope checks. What they buy is the guarantee: the frozen scenes stay byte for byte the parent's
+(SSIM ≥ 0.9998 across all four), while the whole revision rewrote a scene it wasn't asked to touch. Per the plan's
+rule ("If savings miss the bar but drift is zero, ship anyway and record the numbers"), it ships. The README says
+so plainly, with no savings claim.
+
 ## Looks spikes (docs/plans/2026-11-04-looks.md §10)
 
 ### K3: the API function reads the build's look archives (2026-11-05, a draft deploy and `netlify functions:serve`, no credits)

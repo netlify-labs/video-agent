@@ -1023,9 +1023,15 @@ then revisit the model default.
   - **Frozen-scene drift:** the lowest SSIM was 0.99979 per frame and 0.99802 on the worst tile, against
     thresholds of 0.98 and 0.955.
   - **Details:** `docs/spikes.md`, "LT-1 and LT-2 step 4".
-- **Still to run:** LT-2's baseline, voiced and narrated steps (3, 5 and 6), LT-3 and LT-4. Each needs the owner's
-  OK.
-- **Credits spent on this plan so far:** 175.3, which is B3's 57.6 plus these 117.7.
+- **LT-2 steps 3 and 6** ran the same day, owner-approved, and passed for 97.6 credits.
+  - **Step 3, the baseline:** a whole-video revision of the same request cost 36.2 credits, and it drifted in a
+    scene it wasn't asked to change (SSIM 0.951 per frame, 0.781 on the worst tile).
+  - **Step 6, narrated:** cost 61.4 credits; the length and the narration are unchanged.
+  - **Step 5:** not run, since production has no voiced video.
+- **The savings bar is missed:** the scoped median is about 60 credits, against 36.2 for the whole revision.
+  Following the plan's rule, it ships anyway: the frozen scenes stay unchanged. The README makes no savings claim.
+- **Still to run:** LT-2 step 5 (needs a voiced source), LT-3 and LT-4. Each needs the owner's OK.
+- **Credits spent on this plan so far:** 272.9, which is B3's 57.6 plus 117.7 plus 97.6.
 
 **On main:**
 - **Spikes (`b448e7f`–`552b289`):** B1 and B2 are free. B3 cost 57.6 credits (`docs/spikes.md`).

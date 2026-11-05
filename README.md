@@ -195,7 +195,9 @@ composition is copied from the version you started from, not regenerated.
     whole-video revision.
   - Fonts, shared classes and colour roles are frozen too. A redone scene may restyle itself, never the rest of the
     video.
-- **Credits:** it's an agent run, so it spends credits like any revision.
+- **Credits:** it's an agent run, so it costs about what a revision does, sometimes more. In our tests it cost 50–67
+  credits per run, against 36 for a whole-video revision of the same request. You pay for the guarantee that the
+  rest stays as it was, not for a discount.
 
 **Where to find it:**
 
