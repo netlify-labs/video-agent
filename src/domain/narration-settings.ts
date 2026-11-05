@@ -55,6 +55,8 @@ export interface AdminSettings extends NarrationSettings {
   defaultLook: string | null
   /** Looks an admin has turned off. */
   disabledLooks: string[]
+  /** video-agent login's browser approval (cli-and-sdk plan §5.2). */
+  cliLoginEnabled: boolean
 }
 
 async function adminSettings(deps: Pick<Deps, 'store' | 'config'>): Promise<AdminSettings> {
@@ -65,6 +67,7 @@ async function adminSettings(deps: Pick<Deps, 'store' | 'config'>): Promise<Admi
     youtubeConfigured: deps.config.google !== null,
     recordingQuotaBytes: (await deps.store.getSettings())?.recordingQuotaBytes ?? RECORDING_QUOTA_DEFAULT,
     ...(await lookSettings(deps)),
+    cliLoginEnabled: (await deps.store.getSettings())?.cliLoginEnabled ?? true,
   }
 }
 

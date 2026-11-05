@@ -131,6 +131,8 @@ export interface SettingsRow {
   defaultLook?: string | null
   /** Looks an admin has turned off. Missing: none. */
   disabledLooks?: string[]
+  /** video-agent login's browser approval on (the default) or off (cli-and-sdk plan §5.2). Missing: the default. */
+  cliLoginEnabled?: boolean
 }
 
 export type TranscriptionProvider = 'local' | 'elevenlabs' | 'off'
@@ -167,6 +169,40 @@ export interface OAuthClientRow {
  * One authorization in progress: created at /oauth/authorize (keyed by the hash of the state sent upstream),
  * given a user and a consent secret at the callback, then a code; kept until expiry to detect a reused code.
  */
+export type CliLoginStatus = 'pending' | 'approved' | 'denied' | 'claimed' | 'expired'
+
+/**
+ * A `video-agent login` in progress (cli-and-sdk plan §5.2): the CLI holds the device code (only its sha256 is here),
+ * the person types the user code in the browser. No key is ever stored: the claim mints it.
+ */
+export interface CliLoginRow {
+  id: string
+  deviceCodeHash: string
+  /** 8 letters from BCDFGHJKLMNPQRSTVWXZ, without the dash (shown ABCD-EFGH). */
+  userCode: string
+  label: string
+  host: string
+  clientIp: string
+  status: CliLoginStatus
+  /** Who approved or denied it. */
+  userId: string | null
+  approvedAt: string | null
+  apiKeyId: string | null
+  /** Wrong device codes against this login; 5 expire it. */
+  failedAttempts: number
+  /** The last claim poll, for slow_down. */
+  lastPolledAt: string | null
+  createdAt: string
+  expiresAt: string
+}
+
+/** One wrong typed code from a signed-in person (5 in 15 minutes lock approving). */
+export interface CliLoginFailureRow {
+  id: string
+  userId: string
+  createdAt: string
+}
+
 export interface OAuthRequestRow {
   id: string
   clientId: string

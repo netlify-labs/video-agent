@@ -11,6 +11,8 @@ export type ErrorCode =
   | 'trace_frozen'
   | 'narration_disabled'
   | 'remix_disabled'
+  /** video-agent login's browser approval is off (cli-and-sdk plan §5.2). */
+  | 'cli_login_disabled'
   | 'engine_mismatch'
   | 'unknown_look'
   | 'look_disabled'
@@ -38,6 +40,7 @@ const STATUS: Record<ErrorCode, number> = {
   trace_frozen: 409,
   narration_disabled: 409,
   remix_disabled: 409,
+  cli_login_disabled: 409,
   engine_mismatch: 409,
   unknown_look: 400,
   look_disabled: 409,

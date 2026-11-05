@@ -24,6 +24,7 @@ describe.each([
       recordingQuotaBytes: 2 * 1024 ** 3,
       defaultLook: null,
       disabledLooks: [],
+      cliLoginEnabled: true,
     })
     const off = await h.call('PATCH', base, {
       as: h.admin,
@@ -40,6 +41,7 @@ describe.each([
       recordingQuotaBytes: 2 * 1024 ** 3,
       defaultLook: null,
       disabledLooks: [],
+      cliLoginEnabled: true,
     })
     await h.call('PATCH', base, {
       as: h.admin,
@@ -55,6 +57,7 @@ describe.each([
       recordingQuotaBytes: 3 * 1024 ** 3,
       defaultLook: null,
       disabledLooks: [],
+      cliLoginEnabled: true,
     })
     expect(h.deps.logs.some((l) => l.includes('"settings.updated"'))).toBe(true)
   })

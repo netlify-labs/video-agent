@@ -4,6 +4,7 @@ import {
   asc,
   desc,
   eq,
+  gt,
   gte,
   ilike,
   inArray,
@@ -27,6 +28,7 @@ import type {
   ApiKeyRow,
   AttemptRow,
   CleanupRow,
+  CliLoginRow,
   IdempotencyRow,
   JobRow,
   OutputRow,
@@ -1442,6 +1444,73 @@ function repoFor(db: Db): Repo {
       await db.update(t.cleanup).set(patch).where(eq(t.cleanup.id, id))
     },
 
+    insertCliLogin: async (row) => {
+      await db.insert(t.cliLogins).values(row)
+    },
+    getCliLogin: async (id, opts) =>
+      one<CliLoginRow>(await lockIf(db.select().from(t.cliLogins).where(eq(t.cliLogins.id, id)), opts)),
+    findPendingCliLogin: async (userCode, now) =>
+      one<CliLoginRow>(
+        await db
+          .select()
+          .from(t.cliLogins)
+          .where(
+            and(
+              eq(t.cliLogins.userCode, userCode),
+              eq(t.cliLogins.status, 'pending'),
+              gt(t.cliLogins.expiresAt, now),
+            ),
+          ),
+      ),
+    updateCliLogin: async (id, patch) => {
+      await db.update(t.cliLogins).set(patch).where(eq(t.cliLogins.id, id))
+    },
+    countPendingCliLogins: async (now, clientIp) => {
+      const [r] = await db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(t.cliLogins)
+        .where(
+          and(
+            eq(t.cliLogins.status, 'pending'),
+            gt(t.cliLogins.expiresAt, now),
+            clientIp === undefined ? undefined : eq(t.cliLogins.clientIp, clientIp),
+          ),
+        )
+      return r?.n ?? 0
+    },
+    countCliLoginApprovals: async (userId, since) => {
+      const [r] = await db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(t.cliLogins)
+        .where(and(eq(t.cliLogins.userId, userId), gte(t.cliLogins.approvedAt, since)))
+      return r?.n ?? 0
+    },
+    insertCliLoginFailure: async (row) => {
+      await db.insert(t.cliLoginFailures).values(row)
+    },
+    countCliLoginFailures: async (userId, since) => {
+      const [r] = await db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(t.cliLoginFailures)
+        .where(and(eq(t.cliLoginFailures.userId, userId), gte(t.cliLoginFailures.createdAt, since)))
+      return r?.n ?? 0
+    },
+    sweepCliLogins: async (now, deleteBefore, failuresBefore) => {
+      const marked = await db
+        .update(t.cliLogins)
+        .set({ status: 'expired' })
+        .where(and(eq(t.cliLogins.status, 'pending'), lte(t.cliLogins.expiresAt, now)))
+        .returning({ id: t.cliLogins.id })
+      const gone = await db
+        .delete(t.cliLogins)
+        .where(lt(t.cliLogins.expiresAt, deleteBefore))
+        .returning({ id: t.cliLogins.id })
+      const failures = await db
+        .delete(t.cliLoginFailures)
+        .where(lt(t.cliLoginFailures.createdAt, failuresBefore))
+        .returning({ id: t.cliLoginFailures.id })
+      return marked.length + gone.length + failures.length
+    },
     insertOAuthClient: async (row) => {
       await db.insert(t.oauthClients).values(row)
     },

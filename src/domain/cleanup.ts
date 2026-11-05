@@ -46,6 +46,13 @@ export async function runCleanup(
     new Date(now.getTime() - CLIENT_IDLE_MS).toISOString(),
   )
   await deps.store.deleteExpiredSessions(now.toISOString())
+  // CLI logins (cli-and-sdk plan §5.2): pending ones past expiry become expired, deleted an hour later; wrong-code
+  // records go after a day.
+  await deps.store.sweepCliLogins(
+    now.toISOString(),
+    new Date(now.getTime() - 3_600_000).toISOString(),
+    new Date(now.getTime() - 86_400_000).toISOString(),
+  )
   await deleteExpiredEdits(deps)
   await sweepUploads(deps)
   await sweepOpenverseJobs(deps)

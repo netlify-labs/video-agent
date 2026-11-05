@@ -1638,6 +1638,11 @@ export const AdminSettingsSchema = z
       .describe(
         'Looks turned off: hidden from pickers and refused for new videos; videos made with one keep it.',
       ),
+    cliLoginEnabled: z
+      .boolean()
+      .describe(
+        'video-agent login can get a key by approving the CLI in the browser (the default). Off: paste a key.',
+      ),
   })
   .openapi('AdminSettings')
 export const UpdateAdminSettingsSchema = z
@@ -1662,6 +1667,7 @@ export const UpdateAdminSettingsSchema = z
     youtubeEnabled: z.boolean().optional(),
     defaultLook: LookIdSchema.nullable().optional().describe('A look id, or null for none.'),
     disabledLooks: z.array(LookIdSchema).max(100).optional().describe('The full list of looks to turn off.'),
+    cliLoginEnabled: z.boolean().optional(),
   })
   .openapi('UpdateAdminSettings')
 

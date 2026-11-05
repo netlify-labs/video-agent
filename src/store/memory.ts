@@ -6,6 +6,8 @@ import type {
   ApiKeyRow,
   AttemptRow,
   CleanupRow,
+  CliLoginFailureRow,
+  CliLoginRow,
   IdempotencyRow,
   JobRow,
   OutputRow,
@@ -90,6 +92,8 @@ interface State {
   cleanup: Map<string, CleanupRow>
   oauthClients: Map<string, OAuthClientRow>
   oauthRequests: Map<string, OAuthRequestRow>
+  cliLogins: Map<string, CliLoginRow>
+  cliLoginFailures: Map<string, CliLoginFailureRow>
   oauthGrants: Map<string, OAuthGrantRow>
   oauthTokens: Map<string, OAuthTokenRow>
   identities: Map<string, UserIdentityRow>
@@ -137,6 +141,8 @@ const empty = (): State => ({
   cleanup: new Map(),
   oauthClients: new Map(),
   oauthRequests: new Map(),
+  cliLogins: new Map(),
+  cliLoginFailures: new Map(),
   oauthGrants: new Map(),
   oauthTokens: new Map(),
   identities: new Map(),
@@ -988,6 +994,41 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
         if (v) addUsage(out, v.authorId, a.queuedAt, a.stage, a.usage?.totalCreditsCost)
       }
       return [...out.values()]
+    },
+    insertCliLogin: async (row) => {
+      state.cliLogins.set(row.id, clone(row))
+    },
+    getCliLogin: async (id) => clone(state.cliLogins.get(id) ?? null),
+    findPendingCliLogin: async (userCode, now) =>
+      clone(
+        [...state.cliLogins.values()].find(
+          (l) => l.userCode === userCode && l.status === 'pending' && l.expiresAt > now,
+        ) ?? null,
+      ),
+    updateCliLogin: async (id, patch) => patchRow(state.cliLogins, id, patch),
+    countPendingCliLogins: async (now, clientIp) =>
+      [...state.cliLogins.values()].filter(
+        (l) =>
+          l.status === 'pending' && l.expiresAt > now && (clientIp === undefined || l.clientIp === clientIp),
+      ).length,
+    countCliLoginApprovals: async (userId, since) =>
+      [...state.cliLogins.values()].filter(
+        (l) => l.userId === userId && l.approvedAt !== null && l.approvedAt >= since,
+      ).length,
+    insertCliLoginFailure: async (row) => {
+      state.cliLoginFailures.set(row.id, clone(row))
+    },
+    countCliLoginFailures: async (userId, since) =>
+      [...state.cliLoginFailures.values()].filter((f) => f.userId === userId && f.createdAt >= since).length,
+    sweepCliLogins: async (now, deleteBefore, failuresBefore) => {
+      let n = 0
+      for (const l of state.cliLogins.values())
+        if (l.status === 'pending' && l.expiresAt <= now) {
+          l.status = 'expired'
+          n++
+        }
+      n += deleteWhere(state.cliLogins, (l) => l.expiresAt < deleteBefore)
+      return n + deleteWhere(state.cliLoginFailures, (f) => f.createdAt < failuresBefore)
     },
     insertOAuthClient: async (row) => {
       state.oauthClients.set(row.id, clone(row))

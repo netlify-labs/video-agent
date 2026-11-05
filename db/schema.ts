@@ -41,6 +41,8 @@ export const settings = pgTable('settings', {
   // choice after spike K2), and the looks an admin has turned off.
   defaultLook: text('default_look'),
   disabledLooks: jsonb('disabled_looks').$type<string[]>().notNull().default([]),
+  // video-agent login's browser approval (docs/plans/2026-11-04-cli-and-sdk.md §5.2): on unless an admin turns it off.
+  cliLoginEnabled: boolean('cli_login_enabled').notNull().default(true),
 })
 
 export const users = pgTable('users', {
@@ -725,6 +727,43 @@ export const oauthClients = pgTable('oauth_clients', {
   redirectUris: jsonb('redirect_uris').$type<string[]>().notNull(),
   createdAt: ts('created_at').notNull(),
 })
+
+// video-agent login (cli-and-sdk plan §5.2): a device-style approval that ends in an ordinary API key. Only the device
+// code's hash is stored, never a key.
+export const cliLogins = pgTable(
+  'cli_logins',
+  {
+    id: text('id').primaryKey(),
+    deviceCodeHash: text('device_code_hash').notNull(),
+    userCode: text('user_code').notNull(),
+    label: text('label').notNull(),
+    host: text('host').notNull(),
+    clientIp: text('client_ip').notNull(),
+    status: text('status').notNull(),
+    userId: text('user_id'),
+    approvedAt: ts('approved_at'),
+    apiKeyId: text('api_key_id'),
+    failedAttempts: integer('failed_attempts').notNull().default(0),
+    lastPolledAt: ts('last_polled_at'),
+    createdAt: ts('created_at').notNull(),
+    expiresAt: ts('expires_at').notNull(),
+  },
+  (t) => [
+    index('cli_logins_user_code_idx').on(t.userCode),
+    index('cli_logins_status_ip_idx').on(t.status, t.clientIp),
+    index('cli_logins_expires_idx').on(t.expiresAt),
+  ],
+)
+
+export const cliLoginFailures = pgTable(
+  'cli_login_failures',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull(),
+    createdAt: ts('created_at').notNull(),
+  },
+  (t) => [index('cli_login_failures_user_idx').on(t.userId, t.createdAt)],
+)
 
 export const oauthRequests = pgTable(
   'oauth_requests',

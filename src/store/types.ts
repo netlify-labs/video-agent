@@ -41,6 +41,8 @@ import type {
   UserWebhookRow,
   OAuthClientRow,
   OAuthRequestRow,
+  CliLoginRow,
+  CliLoginFailureRow,
   OAuthGrantRow,
   OAuthTokenRow,
   SessionRow,
@@ -401,6 +403,21 @@ export interface Repo {
   insertCleanup(row: CleanupRow): Promise<void>
   listDueCleanup(now: string, limit: number): Promise<CleanupRow[]>
   updateCleanup(id: string, patch: Partial<CleanupRow>): Promise<void>
+
+  // video-agent login (cli-and-sdk plan §5.2)
+  insertCliLogin(row: CliLoginRow): Promise<void>
+  getCliLogin(id: string, opts?: { lock?: boolean }): Promise<CliLoginRow | null>
+  /** The pending, unexpired login with this user code, if any. */
+  findPendingCliLogin(userCode: string, now: string): Promise<CliLoginRow | null>
+  updateCliLogin(id: string, patch: Partial<CliLoginRow>): Promise<void>
+  /** Pending, unexpired logins, overall or from one client IP. */
+  countPendingCliLogins(now: string, clientIp?: string): Promise<number>
+  /** Logins this person approved since `since`. */
+  countCliLoginApprovals(userId: string, since: string): Promise<number>
+  insertCliLoginFailure(row: CliLoginFailureRow): Promise<void>
+  countCliLoginFailures(userId: string, since: string): Promise<number>
+  /** Marks pending logins past expiry expired; deletes logins expired before `deleteBefore` and older failures. */
+  sweepCliLogins(now: string, deleteBefore: string, failuresBefore: string): Promise<number>
 
   // MCP OAuth (used only when it's enabled)
   insertOAuthClient(row: OAuthClientRow): Promise<void>
