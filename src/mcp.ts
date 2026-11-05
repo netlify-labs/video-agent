@@ -61,6 +61,7 @@ import { clip } from './lib/log.js'
 import { ONE_WAY_WORDS, SPEED_RANGE, VOICE_ID } from './lib/voice.js'
 import { MEDIA_KINDS } from './lib/media/classify.js'
 import { registerPrompts } from './mcp-prompts.js'
+import { enabledEngines, type EngineId } from './domain/engines.js'
 import { listLooks } from './domain/looks.js'
 import { remixVideo } from './domain/remix.js'
 import { listDestinations } from './domain/destinations/list.js'
@@ -507,7 +508,14 @@ function narrationSummary(op: NarrationOp | null) {
 
 // ───────────── server ─────────────
 
-export function buildMcpServer(deps: Deps, principal: Principal, kick: () => void): McpServer {
+export function buildMcpServer(
+  deps: Deps,
+  principal: Principal,
+  kick: () => void,
+  /** Engines on here right now: create_video offers an engine only when there's more than HyperFrames. */
+  opts: { engines?: EngineId[] } = {},
+): McpServer {
+  const engines = opts.engines ?? ['hyperframes']
   const server = new McpServer(
     { name: 'video-agent', version: '1.0.0' },
     { instructions: SERVER_INSTRUCTIONS },
@@ -602,6 +610,17 @@ Example: {"prompt": "A 20-second launch video for our new webhooks feature, endi
         ),
         look: lookArg(false),
         ...RECORDING_ARGS,
+        // Only where another engine is on (render-engines plan §7): everywhere else the argument doesn't exist.
+        ...(engines.length > 1
+          ? {
+              engine: z
+                .enum(engines as [EngineId, ...EngineId[]])
+                .optional()
+                .describe(
+                  "Optional. The render engine; leave out for the look's choice. Some engines can't make sound effects or a voice-over.",
+                ),
+            }
+          : {}),
         idempotency_key: z
           .string()
           .max(200)
@@ -632,6 +651,7 @@ Example: {"prompt": "A 20-second launch video for our new webhooks feature, endi
             private: args.private,
             context: args.context,
             recording: toRecording(args),
+            engine: (args as { engine?: EngineId }).engine,
           },
           args.idempotency_key,
         )
@@ -1866,7 +1886,8 @@ export async function handleMcp(
   req: Request,
   kick: () => void,
 ): Promise<Response> {
-  const server = buildMcpServer(deps, principal, kick)
+  const engines = (await enabledEngines(deps)).map((e) => e.id)
+  const server = buildMcpServer(deps, principal, kick, { engines })
   const transport = new WebStandardStreamableHTTPServerTransport({ enableJsonResponse: true }) // no sessionIdGenerator: stateless
   await server.connect(transport)
   // Kept to explain a refused request (and, verbose, to log the call); the transport reads the original.

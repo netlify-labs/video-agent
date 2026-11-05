@@ -61,7 +61,14 @@ import {
   sharePageEntry,
 } from './destinations/dto.js'
 import { removeAllForJob } from './destinations/remove.js'
-import { assertSameEngine, enabledEngines, engineInfo, engineOf } from './engines.js'
+import {
+  assertCapabilities,
+  assertSameEngine,
+  enabledEngines,
+  engineInfo,
+  engineOf,
+  type EngineId,
+} from './engines.js'
 import { fillBeats } from './beats.js'
 import { enabledFeatures } from './features.js'
 import { scopeRules } from '../lib/scope.js'
@@ -110,6 +117,8 @@ export interface CreateVideoInput {
   recording?: RecordingRequest | undefined
   /** false: a Quick demo, composed with no agent authoring (needs recording). */
   agent?: boolean | undefined
+  /** The render engine (render-engines plan §4.2): must be enabled and listed by the look; omitted: the look's choice. */
+  engine?: EngineId | undefined
 }
 
 export interface ReviseInput {
@@ -374,6 +383,7 @@ export async function createVideo(
     externalRef: input.externalRef ?? null,
     private: input.private ?? false,
     look: input.look ?? null,
+    engine: input.engine ?? null,
   })
   // The look, resolved and copied before the transaction (blob writes can't roll back), under an id minted now.
   const settings = await lookSettings(deps)
@@ -381,15 +391,18 @@ export async function createVideo(
     defaultLook: settings.defaultLook,
     disabled: settings.disabledLooks,
   })
+  // The engine first, so a refused one copies nothing (render-engines plan §4.2, looks plan §4.14).
+  const engine = chooseEngine({
+    requestEngine: input.engine,
+    look: resolved.kind === 'pick' ? resolved.entry : null,
+    enabled: (await enabledEngines(deps)).map((e) => e.id),
+  })
+  assertCapabilities(engine, { sound: input.sound, voiceover: input.voiceover?.enabled })
   const presetJobId = resolved.kind === 'pick' ? deps.ids.videoId() : null
   const look =
     resolved.kind === 'pick' && presetJobId
       ? await snapshotLook(deps, presetJobId, { from: 'bundle', entry: resolved.entry }, false)
       : null
-  const engine = chooseEngine({
-    look: resolved.kind === 'pick' ? resolved.entry : null,
-    enabled: (await enabledEngines(deps)).map((e) => e.id),
-  })
   // A demo (screen-recording plan §6.1): HyperFrames only, and an ordinary clip must already meet the recording rules.
   if (input.agent === false) {
     if (!input.recording)
@@ -446,6 +459,9 @@ export async function createVideo(
         demo ? [demo.row] : [],
       )
       await repo.insertVersionMedia(media)
+      // Again with the plan's choices and a picked audio item folded in: what the version would actually get.
+      const audio = versionAudio(input, planned, null, media)
+      assertCapabilities(engine, audio)
       await repo.insertVersion({
         jobId,
         n: 1,
@@ -460,8 +476,8 @@ export async function createVideo(
         createdAt: now,
         plan: planned?.frozen ?? null,
         // A picked audio item means music unless the person chose otherwise.
-        ...versionAudio(input, planned, null, media),
-        // The look's first enabled engine, else HyperFrames (looks plan §4.14).
+        ...audio,
+        // The requested engine, else the look's first enabled one, else HyperFrames (looks plan §4.14).
         engine,
         look,
         context: input.context ?? null,
@@ -612,6 +628,8 @@ export async function reviseVideo(
         ...(parent.recording ? { recording: inheritRecording(parent.recording) } : {}),
       }
       assertSameEngine(deps, parent, row)
+      // Turning an engine off never refuses work on its videos (§7), but what it can't make is refused.
+      assertCapabilities(engineOf(row), row)
       // A restyle keeps the video's engine, so the new look must support it (§4.14).
       const entry = look && restyle ? getLook(deps, look.id) : null
       if (entry) assertLookSupportsEngine(entry, engineOf(row))

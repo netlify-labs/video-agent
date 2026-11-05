@@ -183,6 +183,26 @@ export function assertSameEngine(
 }
 
 /**
+ * Refuses what an engine can't make yet (render-engines plan §4.2, §6): 409 engine_unsupported, naming the capability.
+ * Called with what the version would actually get (the request's choices, the plan's and the parent's), so a Remotion
+ * video can't end up with sound effects, a voice-over or recorded narration by any route.
+ */
+export function assertCapabilities(
+  id: EngineId,
+  want: { sound?: string | null | undefined; voiceover?: unknown; recordedNarration?: boolean | undefined },
+): void {
+  const { name, capabilities: c } = engineInfo(id)
+  const refuse = (capability: string, what: string) => {
+    throw new ApiError('engine_unsupported', `${name} videos can't have ${what} yet.`, { capability })
+  }
+  if (want.sound === 'music_sfx' && c.sound !== 'all')
+    refuse('sound', 'sound effects (choose music or silent)')
+  if (want.sound && want.sound !== 'silent' && c.sound === 'none') refuse('sound', 'sound')
+  if (want.voiceover && !c.voiceover) refuse('voiceover', 'a voice-over')
+  if (want.recordedNarration && !c.recordedNarration) refuse('recordedNarration', 'recorded narration')
+}
+
+/**
  * A run's engine entry for its manifest (render-engines plan §4.2), or why this deployment can't run it (§7). Remotion
  * needs ENGINES to list it (or the run can't install it), a recorded license tier (which picks the key the render
  * reports with) and, for a Company License, its key. The admin switch isn't checked: turning Remotion off stops new

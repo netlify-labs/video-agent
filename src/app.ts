@@ -389,6 +389,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
           context: 'context',
           recording: 'screen_recording',
           agent: 'screen_recording',
+          engine: 'engines',
         },
       },
       summary: 'Create a video',

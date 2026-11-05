@@ -770,6 +770,10 @@ export const CreateVideoSchema = z
       description:
         'false: a Quick demo, made from the recording with no agent authoring (a stock intro and outro, a scene per step, callouts from what was clicked); costs about as much as an edit. Needs recording; no voiceover.',
     }),
+    engine: z.enum(ENGINE_IDS).optional().openapi({
+      description:
+        "The render engine (GET /api/v1/engines). Omit for the look's choice, else hyperframes. Errors: 409 engine_disabled when it isn't on here, 400 engine_not_supported_by_look, 409 engine_unsupported for sound effects or a voice-over it can't make.",
+    }),
   })
   .openapi('CreateVideo')
 

@@ -18,7 +18,7 @@ import { writeAccessMirror } from './files.js'
 import { mediaDto, snapshotMedia } from './media.js'
 import { isTake } from './takes.js'
 import { assertCan, type Principal } from './policy.js'
-import { assertSameEngine, engineOf } from './engines.js'
+import { assertCapabilities, assertSameEngine, enabledEngines, engineInfo, engineOf } from './engines.js'
 import { adoptLookSnapshot, snapshotLook } from './look-snapshot.js'
 import { lookSettings } from './look-settings.js'
 import { assertLookSupportsEngine, isRestyle, resolveLook } from './looks.js'
@@ -213,6 +213,15 @@ export async function remixVideo(
   let look: VersionLook | null = null
   if (!replay) {
     const { version, output } = await sourceVersion(deps.store, source, input.fromVersion)
+    // A remix is a new video made the way its source was: that engine must be on here (render-engines plan §7).
+    const engine = engineOf(version)
+    if (!(await enabledEngines(deps)).some((e) => e.id === engine)) {
+      deps.log.info('video.remix_refused', { sourceId, engine, code: 'engine_disabled' })
+      throw new ApiError(
+        'engine_disabled',
+        `This video was made with ${engineInfo(engine).name}, which is turned off on this deployment, so it can't be remixed.`,
+      )
+    }
     const resolved = resolveLook(deps, input, {
       inherited: version.look ?? null,
       defaultLook: null,
@@ -332,6 +341,7 @@ export async function remixVideo(
             : {}),
       }
       assertSameEngine(deps, version, row)
+      assertCapabilities(engineOf(row), row)
       await repo.insertVersion(row)
       await repo.insertVersionMedia(media)
       await repo.insertAttempt(newAttempt(deps, newJobId, 1, now))
