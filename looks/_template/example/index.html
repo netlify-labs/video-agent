@@ -30,8 +30,9 @@
         </div>
         <script>
           vaBeat('intro', (tl, el) => {
+            // The title is on screen at 0 s: the first frame is the thumbnail on social players.
             tl.fromTo(el.querySelector('[data-va-text="intro-kicker"]'), { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.5, ease: 'power3.out' }, 0.1)
-              .fromTo(el.querySelector('[data-va-text="intro-title"]'), { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.6, ease: 'power3.out' }, 0.3)
+              .fromTo(el.querySelector('[data-va-text="intro-title"]'), { y: 12 }, { y: 0, duration: 0.6, ease: 'power3.out' }, 0)
           })
         </script>
       </section>
