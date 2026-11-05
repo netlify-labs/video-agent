@@ -26,6 +26,38 @@ const png = () => {
 const webp = () =>
   Buffer.concat([Buffer.from('RIFF'), Buffer.alloc(4), Buffer.from('WEBPVP8 '), Buffer.alloc(20)])
 
+/** A WOFF2 header the sniffer accepts: signature, the length field equal to the size, one table. */
+const woff2 = (size = 64) => {
+  const b = Buffer.alloc(size)
+  b.write('wOF2', 0, 'ascii')
+  b.writeUInt32BE(size, 8)
+  b.writeUInt16BE(1, 12)
+  return b
+}
+
+/** Adds a hand font to the look: the file, its credits line and look.json's fonts entry. */
+function addFont(d: string, bytes: Buffer = woff2(), listed = true) {
+  mkdirSync(join(d, 'assets', 'fonts'), { recursive: true })
+  writeFileSync(join(d, 'assets', 'fonts', 'marker.woff2'), bytes)
+  edit(join(d, 'assets', 'credits.json'), (s) =>
+    JSON.stringify([...JSON.parse(s), { file: 'fonts/marker.woff2', license: 'OFL-1.1' }]),
+  )
+  if (listed)
+    edit(join(d, 'look.json'), (s) =>
+      JSON.stringify({
+        ...JSON.parse(s),
+        fonts: [
+          {
+            role: 'hand',
+            file: 'assets/fonts/marker.woff2',
+            license: 'OFL-1.1',
+            useWhen: 'handwritten notes',
+          },
+        ],
+      }),
+    )
+}
+
 const COMPONENT = '<div class="bul">letters</div>\n'
 
 /** A copy of looks/_template as a complete look called `good`, with previews, an asset and one vendored item. */
@@ -160,6 +192,49 @@ describe('look:check --static', () => {
     expect(broken((d) => writeFileSync(join(d, 'assets', 'notes.txt'), 'x'))).toEqual([
       "look:good: assets/notes.txt: .txt isn't allowed in a look",
       "look:good: assets/notes.txt isn't listed in assets/credits.json",
+    ])
+  })
+
+  it('accepts a real WOFF2 font look.json lists, and refuses fake, unlisted, missing and oversized ones', () => {
+    expect(broken((d) => addFont(d))).toEqual([])
+    expect(broken((d) => addFont(d, Buffer.from('not a font')))).toEqual([
+      "look:good: assets/fonts/marker.woff2 isn't a real WOFF2 file",
+    ])
+    const truncated = woff2()
+    truncated.writeUInt32BE(999, 8)
+    expect(broken((d) => addFont(d, truncated))).toEqual([
+      "look:good: assets/fonts/marker.woff2 isn't a real WOFF2 file",
+    ])
+    expect(broken((d) => addFont(d, woff2(), false))).toEqual([
+      'look:good: assets/fonts/marker.woff2: a font must be listed in look.json fonts (with its role and licence)',
+    ])
+    expect(
+      broken((d) =>
+        edit(join(d, 'look.json'), (s) =>
+          JSON.stringify({
+            ...JSON.parse(s),
+            fonts: [{ role: 'hand', file: 'assets/fonts/gone.woff2', license: 'OFL-1.1', useWhen: 'notes' }],
+          }),
+        ),
+      ),
+    ).toEqual(["look:good: look.json fonts lists assets/fonts/gone.woff2, which doesn't exist"])
+    const big = broken((d) => addFont(d, woff2(1024 * 1024 + 1)))
+    expect(
+      big.some((x) => x.startsWith('look:good: assets/fonts/marker.woff2 is') && x.endsWith('for one file')),
+    ).toBe(true)
+    expect(big.some((x) => x.includes('assets/ is'))).toBe(true)
+    expect(
+      broken((d) =>
+        edit(join(d, 'look.json'), (s) =>
+          JSON.stringify({
+            ...JSON.parse(s),
+            fonts: [{ role: 'hand', file: 'fonts/marker.ttf', license: 'proprietary', useWhen: 'notes' }],
+          }),
+        ),
+      ),
+    ).toEqual([
+      'look:good: look.json fonts.0.file: assets/fonts/<name>.woff2',
+      expect.stringContaining('look:good: look.json fonts.0.license'),
     ])
   })
 

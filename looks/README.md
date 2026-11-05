@@ -24,8 +24,9 @@ So a look never brings its own brand colours or logo:
   text never on accent". It may add roles derived from them, written as **literal colours** the agent computes
   (`--va-color-glow: #ffb38a;`, "the accent mixed 40 % toward white"), never `color-mix(…)` or `var(…)`, so the
   editor's colour picker works on them.
-- **Fonts.** The brand's fonts win. In v1 a look ships no fonts; for a role the brand lacks it names a CSS font stack
-  that starts with a family the renderer has (for monospace: `"JetBrains Mono", ui-monospace, Menlo, monospace`).
+- **Fonts.** The brand's fonts win. For a role the brand lacks, a look names a CSS font stack that starts with a
+  family the renderer has (for monospace: `"JetBrains Mono", ui-monospace, Menlo, monospace`), or ships its own font
+  (`fonts` below): an OFL or Apache WOFF2 under `assets/fonts/`, used only when the brand has none for that role.
 - **Type scale.** The look owns sizes and ratios unless the brand states hard sizes.
 - **Sound.** The look suggests a music mood; it never turns sound on.
 
@@ -78,8 +79,12 @@ Asset licences: `CC0-1.0`, `CC-BY-3.0` or `CC-BY-4.0` (with a `credit`), `OFL-1.
 - `aspects` are the shapes the rules cover. Built-in looks cover all four.
 - `colors` lists the roles the example uses; `derived` the ones the look computes from them.
 - `recording` (optional) frames screen recordings: `{ "frame": "wallpaper" | "browser" | "device" | "none",
-  "padding", "radius", "shadow", "wallpaper", "cursor": { "shape", "scale", "color" }, "ripple", "callout",
-  "zoomMax" }`, or `false` when the look doesn't suit demos.
+"padding", "radius", "shadow", "wallpaper", "cursor": { "shape", "scale", "color" }, "ripple", "callout",
+"zoomMax" }`, or `false` when the look doesn't suit demos.
+- `fonts` (optional, up to 4): `[{ "role": "sans" | "serif" | "mono" | "display" | "hand", "file":
+"assets/fonts/<name>.woff2", "license": "OFL-1.1" | "Apache-2.0", "useWhen": "up to 80 characters" }]`. Each font
+  is also in `assets/credits.json`, counts toward the 1 MB `assets/` cap, and must be a real WOFF2 (`look:check`
+  reads its header). A `.woff2` that `fonts` doesn't list is refused.
 - Unknown keys are refused.
 
 ### LOOK.md

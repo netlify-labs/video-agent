@@ -40,6 +40,16 @@ const extOf = (p: string) => {
   return i > p.lastIndexOf('/') ? p.slice(i).toLowerCase() : ''
 }
 
+/**
+ * Whether bytes aren't a WOFF2 font: the wOF2 signature, a 48-byte header whose length field is the file's size, and
+ * at least one table. Chrome parses a look's fonts at render time, so only real ones get that far.
+ */
+export function woff2Problem(b: Uint8Array): boolean {
+  if (b.byteLength < 48) return true
+  const v = new DataView(b.buffer, b.byteOffset, b.byteLength)
+  return v.getUint32(0) !== 0x774f4632 || v.getUint32(8) !== b.byteLength || v.getUint16(12) === 0
+}
+
 /** Bytes that aren't what their extension says, as a problem, or null. */
 export function sniffProblem(path: string, b: Uint8Array): string | null {
   const ext = extOf(path)
@@ -57,6 +67,7 @@ export function sniffProblem(path: string, b: Uint8Array): string | null {
     // Unreadable or unrecognised bytes (sizes can't trip the media limits: look files are 1 MB at most).
     return wrong
   }
+  if (ext === '.woff2') return woff2Problem(b) ? wrong : null
   if (ext === '.svg') return svgProblem(path, b)
   // Text files: valid UTF-8 with no NUL bytes; JSON parses.
   let text: string
@@ -266,6 +277,17 @@ function lookMdProblems(dir: string): string[] {
 
 /** Every static problem with the look folder `dir` (its basename is the id), as `<problem>` lines without the
  * `look:<id>:` prefix. Empty when it passes. */
+/** Every font look.json lists exists, and every .woff2 is one look.json lists (a font is never a stray file). */
+function fontProblems(look: LookJson | null, files: string[]): string[] {
+  const listed = (look?.fonts ?? []).map((f) => f.file)
+  return [
+    ...listed.filter((f) => !files.includes(f)).map((f) => `look.json fonts lists ${f}, which doesn't exist`),
+    ...files
+      .filter((f) => extOf(f) === '.woff2' && !listed.includes(f))
+      .map((f) => `${f}: a font must be listed in look.json fonts (with its role and licence)`),
+  ]
+}
+
 export function checkLookStatic(dir: string, opts: StaticCheckOptions): string[] {
   const p: string[] = []
   let files: string[]
@@ -337,6 +359,7 @@ export function checkLookStatic(dir: string, opts: StaticCheckOptions): string[]
       p.push(`${f}: only preview.mp4 and poster.webp are allowed at the top of a look`)
 
   p.push(...lookMdProblems(dir))
+  p.push(...fontProblems(look, files))
   p.push(...registryProblems(dir, look, files, opts.hyperframesVersion))
   p.push(...creditsProblems(dir, files))
   p.push(...exampleProblems(dir, look, files))
