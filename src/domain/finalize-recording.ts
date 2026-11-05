@@ -48,6 +48,23 @@ export async function finalizeRecording(
   }
   const media = (await deps.store.listVersionMedia(jobId, versionN)).find((m) => m.mediaId === r.mediaId)
   const row = await deps.store.getMedia(r.mediaId)
+  // Hidden areas only work inside recording scenes. With any locked ones, a composition that can't be read, or that
+  // shows the recording outside a recording scene, would show it uncovered.
+  const locked = traceRedact.length + r.boxes.length
+  let beatsWithRecording: number
+  try {
+    beatsWithRecording = read(load(html)).beats.filter((b) => b.recording).length
+  } catch {
+    if (locked)
+      return fail('redaction_removed', '*', "the saved composition can't be checked for its hidden areas.")
+    return { ok: true, recording: { ...r, summary: null, hidden: [] } }
+  }
+  if (locked && !beatsWithRecording && html.includes(r.mediaId))
+    return fail(
+      'redaction_removed',
+      '*',
+      'the recording is shown outside a recording scene, without its hidden areas.',
+    )
   const problems = recordingCheck({
     html,
     readFile: (p) => text(files, p),
@@ -63,8 +80,8 @@ export async function finalizeRecording(
 
   // The Hidden list: every hidden area, per scene it shows in, clipped to the part shown.
   const beats = read(load(html)).beats.filter((b) => b.recording)
-  const locked = parseRedactScript(text(files, LOCKED_SRC) ?? '')
-  const lockedEntries = locked.ok ? locked.entries : []
+  const lockedFile = parseRedactScript(text(files, LOCKED_SRC) ?? '')
+  const lockedEntries = lockedFile.ok ? lockedFile.entries : []
   const baseN = version.editedFromN ?? version.parentN
   const base = baseN ? await deps.store.getVersion(jobId, baseN) : null
   const before = new Map((base?.recording?.hidden ?? []).map((h) => [`${h.id}@${h.beat}`, h]))

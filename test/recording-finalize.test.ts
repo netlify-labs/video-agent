@@ -137,6 +137,33 @@ describe('finalize: recording', () => {
     expect(r?.ok === false && r.message).toMatch(/^recording_file_invalid: scene "step-2": /)
   })
 
+  it('locked hidden areas: an unreadable composition, or the recording outside a recording scene, is redaction_removed', async () => {
+    const h = await setup()
+    const enc = (t: string) => new TextEncoder().encode(t)
+    const unreadable = new Map([['index.html', enc('<p>no composition here</p>')]])
+    expect(await finalizeRecording(h.deps, JOB, 1, version, unreadable)).toMatchObject({
+      ok: false,
+      code: 'redaction_removed',
+    })
+    const raw = new Map([
+      [
+        'index.html',
+        enc(
+          `<div id="root" data-composition-id="main" data-va-contract="1" data-duration="5"><section data-va-beat="a" data-composition-id="a" data-start="0" data-duration="5"><video src="assets/media/${ID}.mp4"></video></section></div>`,
+        ),
+      ],
+    ])
+    const r = await finalizeRecording(h.deps, JOB, 1, version, raw)
+    expect(r).toMatchObject({ ok: false, code: 'redaction_removed' })
+    expect(r?.ok === false && r.message).toMatch(/outside a recording scene/)
+    // Nothing locked: nothing to protect, so an unreadable one passes with no Hidden list.
+    const open = { ...version, recording: { ...rec, trace: null, boxes: [] } }
+    expect(await finalizeRecording(h.deps, JOB, 1, open, unreadable)).toMatchObject({
+      ok: true,
+      recording: { hidden: [] },
+    })
+  })
+
   it("a trace whose stored hash doesn't match fails", async () => {
     const h = await setup()
     await h.deps.blobs.set('media', `${ID}/trace.json`, traceText.replace('"v":1', '"v":1 '))
