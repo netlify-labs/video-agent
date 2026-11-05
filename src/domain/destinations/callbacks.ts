@@ -94,7 +94,9 @@ export async function receiveDestinationCallback(
       leaseUntil: null,
       leaseFence: p.leaseFence + 1,
       nextRunAt: null,
-      ...(message ? { message } : {}),
+      // A progress message ("Creating the site") belongs to the work; a finished publication keeps only the final
+      // callback's own message, like a synchronous answer does (run.ts).
+      message: message ?? null,
     }
     if (status === 'live') {
       const url = body.url == null ? null : httpsUrl(body.url)

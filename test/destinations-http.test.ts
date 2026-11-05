@@ -338,6 +338,8 @@ async function scenario(h: Harness) {
   ).toBe(204)
   const after = await h.deps.store.getDestinationPublication(wid)
   expect(after).toMatchObject({ status: 'live', url: 'https://site.example.com' })
+  // The progress message ("Copying the video") doesn't outlive the work: a live callback without one clears it.
+  expect(after?.message).toBeNull()
   // The secret: never in the DTO, revealed once, to the publisher only.
   const v = await h.json(await h.call('GET', `/api/v1/videos/${id}`, { as: h.member }))
   const entry = v.versions[0].destinations.find((d: { id: string }) => d.id === wid)
