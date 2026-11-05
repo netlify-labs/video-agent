@@ -700,6 +700,38 @@ the gate logs every value and the thresholds get revisited after live gate part 
 
 ## Looks spikes (docs/plans/2026-11-04-looks.md §10)
 
+### K2: does a LOOK.md change the output, and what does it cost? (2026-11-05, `spikes/k2`, five Agent Runner runs, 1,083 credits)
+
+Draft looks `clean` and `kinetic` (`spikes/k2/looks/`) were committed at `context/look/` on spike branches
+(`spike/k2-none|clean|kinetic`, never merged). Each prompt was the production `buildPrompt` plus the §4.6 look lines,
+rendering locally for the run's preview deploy instead of render-job (`spikes/k2/prompts.ts`). Owner ceiling: 900, then
+"fix the deploy issue first, then rerun the launch brief".
+
+**First pair (729 credits, wasted):** none 374, kinetic 355. Both run deploys failed: root npm `workspaces` (CLI phase
+1) made netlify-cli refuse to deploy from the repo root in CI ("Projects detected"), and the agents spent credits
+fighting it. Fixed on main in `20df76a` (no root workspaces). Runs `6aec2348d23c74a7e621c0f0`,
+`6aec2348ea92bbe0293fdb24`.
+
+**Launch brief, after the fix** (16:9, 20 s, the Lumen brief in `looks/PROMPTS.md`):
+
+| Look | Run | Credits | Tokens | Time | Contract | hyperframes check |
+| --- | --- | --- | --- | --- | --- | --- |
+| none | `6aec295d7eb4e01d9139fbc9` | 141.0 | 890 K | 4.6 min | ok | 0 errors |
+| clean | `6aec295db6f2ac7dad417f3d` | 110.0 | 690 K | 3.9 min | ok | 0 errors |
+| kinetic | `6aec295d5f269da95f634157` | 103.1 | 673 K | 3.6 min | ok | 0 errors |
+
+Contact sheet (6 frames each): `spikes/out/k2/contact-sheet.png` (gitignored; videos in `spikes/out/k2/videos/`).
+
+- **Different?** `kinetic` is unmistakable: huge uppercase words with letter rises, one accent word, an inverted
+  accent scene. `clean` is close to no look, as intended ("today's behaviour written down"), but plainer: left text
+  beside a drawn card, one idea per scene, where no look built a richer search demo with highlighted results.
+- **Cost:** with a look the run read less and decided faster: clean −22 % and kinetic −27 % against no look, on one
+  sample each. Well inside the plan's "about 5 % more" bar; one sample is noisy.
+- **Copying:** neither look run reused the example's words ("Orbit", its lines) or media.
+- **Brand vs look:** the kinetic run followed the brand where they disagreed (tracking −0.02em, not the look's
+  −0.04em; a dark brand teal instead of a full accent fill), as §3 says.
+- **Owner verdict and default look:** pending.
+
 ### K1: inlining registry blocks into contract scenes (2026-11-05, `spikes/k1`, `npx tsx spikes/k1/run.ts [--render] [case…]`, no credits)
 
 Each case in `spikes/k1/cases/<block>/` is a contract composition: an intro scene plus one scene holding the block,
