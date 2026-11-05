@@ -137,9 +137,19 @@ function Everything({
   const brief = v.plan?.brief
   return (
     <Stack gap="lg" data-testid="version-details">
-      <Text size="sm" c="var(--va-muted)">
-        {origin(video, v)} · {new Date(v.createdAt).toLocaleString()}
-      </Text>
+      <Group gap={6} wrap="wrap">
+        <Text size="sm" c="var(--va-muted)">
+          {origin(video, v)} · {new Date(v.createdAt).toLocaleString()}
+        </Text>
+        {/* The agent run that made it, up top so it's seen without scrolling. */}
+        {v.links.netlifyRun ? (
+          <Anchor href={v.links.netlifyRun} target="_blank" size="sm" data-testid="agent-run-link">
+            <Group gap={4} wrap="nowrap">
+              View the agent run <IconExternalLink size={14} />
+            </Group>
+          </Anchor>
+        ) : null}
+      </Group>
 
       <Part
         title="Prompt"
@@ -332,20 +342,6 @@ function Everything({
           <Text size="sm" c="var(--va-negative)" mt="sm">
             {v.error.message}
           </Text>
-        ) : null}
-        {v.links.netlifyRun ? (
-          <Anchor
-            href={v.links.netlifyRun}
-            target="_blank"
-            size="sm"
-            c="var(--va-muted)"
-            mt="sm"
-            display="block"
-          >
-            <Group gap={4}>
-              View the run in Netlify <IconExternalLink size={14} />
-            </Group>
-          </Anchor>
         ) : null}
       </Part>
     </Stack>

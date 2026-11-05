@@ -13,6 +13,8 @@ test('the Details card opens everything a version was made with, and Esc closes 
   const modal = page.getByTestId('version-details')
   await expect(page.getByRole('dialog', { name: 'How v2 was made' })).toBeVisible()
   await expect(modal).toContainText('Keep everything, but make the end card text "Start free today".')
+  // The agent run that made it, at the top.
+  await expect(modal.getByTestId('agent-run-link')).toHaveAttribute('href', /agent-runs\//)
   // The feedback it was asked to incorporate, as it was sent.
   await expect(modal).toContainText('Feedback it was asked to incorporate (1)')
   await expect(modal).toContainText('Ada Okafor')

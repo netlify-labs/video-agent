@@ -855,6 +855,9 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
               size="xs"
               variant="subtle"
               color="gray"
+              // Only when there's something to discard: the draft holds no changes until one is made.
+              disabled={!ops.length && !draft.ops.length}
+              title={!ops.length && !draft.ops.length ? 'No changes to discard' : undefined}
               onClick={() => {
                 confirmDanger({
                   title: 'Discard your changes?',
