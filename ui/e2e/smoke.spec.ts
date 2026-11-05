@@ -408,7 +408,9 @@ test('admins turn recorded voice-over off and size its storage', async ({ page }
   await page.goto('/admin')
   const toggle = page.getByRole('switch', { name: 'People can record their own voice-over' })
   await expect(toggle).toBeChecked()
-  await toggle.click({ force: true })
+  // Middle of the screen, then a real click (see remix.spec.ts: under the sticky header a forced click did nothing).
+  await toggle.evaluate("(el) => el.scrollIntoView({ block: 'center' })")
+  await toggle.click()
   await expect(toggle).not.toBeChecked()
   const sent = () => page.evaluate("window.__sent['/api/v1/admin/settings']")
   expect(await sent()).toEqual({ narrationEnabled: false })

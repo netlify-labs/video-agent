@@ -117,7 +117,10 @@ test('admins switch remixing off and on in Settings', async ({ page }) => {
   await page.goto('/admin')
   const sw = page.getByRole('switch', { name: 'People can remix videos' })
   await expect(sw).toBeChecked()
-  await sw.click({ force: true })
+  // Middle of the screen, then a real click: scrolled only "into view" it can sit under the sticky header, where a
+  // forced click toggled nothing (CI's layout).
+  await sw.evaluate("(el) => el.scrollIntoView({ block: 'center' })")
+  await sw.click()
   await expect(sw).not.toBeChecked()
 })
 
