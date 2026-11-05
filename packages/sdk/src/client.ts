@@ -14,6 +14,7 @@ import {
   type WaitOptions,
 } from './helpers/videos.js'
 import { downloadFile, fileUrl, type FileOptions } from './helpers/files.js'
+import { importMusicAndWait, uploadMedia, type UploadOptions } from './helpers/media.js'
 import { prepare, type Call, type CallOptions, type Input, type Ok, type Transport } from './transport.js'
 import { VERSION } from './version.js'
 
@@ -73,11 +74,35 @@ export interface FileHelpers {
   ): Promise<Response>
 }
 
+type Media = Ok<'/api/v1/media/{id}', 'get'>
+
+/** The hand-written helpers on va.media, va.music and va.config. */
+export interface MediaHelpers {
+  /** Uploads a path (Node), Blob/File or bytes of any size, resuming parts after a failure, and waits for ready. */
+  upload(file: string | Blob | Uint8Array, o?: UploadOptions): Promise<Media>
+}
+export interface MusicHelpers {
+  /** Imports an Openverse track, following a slow (202) import's job until it's done. */
+  importAndWait(
+    input: { id: string; caption?: string },
+    o?: { signal?: AbortSignal; pollIntervalMs?: number },
+  ): Promise<Media>
+}
+export interface ConfigHelpers {
+  /** The server's version and features (cached for the client's life). */
+  get(): Promise<ServerConfig>
+  /** Whether the server lists this feature. */
+  supports(feature: string): Promise<boolean>
+}
+
 // Resources are copied onto the instance in the constructor, so the class carries their types too.
 // eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
-export interface VideoAgent extends Omit<Resources, 'videos'> {
+export interface VideoAgent extends Omit<Resources, 'videos' | 'media' | 'music' | 'config'> {
   readonly videos: Resources['videos'] & VideoHelpers
   readonly files: FileHelpers
+  readonly media: Resources['media'] & MediaHelpers
+  readonly music: Resources['music'] & MusicHelpers
+  readonly config: ConfigHelpers
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
@@ -126,7 +151,20 @@ export class VideoAgent {
       download: ((video: Video | string, fo: FileOptions & { to?: string; signal?: AbortSignal }) =>
         downloadFile(fileDeps, video, fo as FileOptions & { to: string })) as FileHelpers['download'],
     }
-    Object.assign(this, generated, { videos, files })
+    const mediaDeps = { send: (x: Exchange) => this.send(x), retries: o.retries ?? 3, log: o.logger }
+    const media: VideoAgent['media'] = {
+      ...generated.media,
+      upload: (file, uo) => uploadMedia(mediaDeps, file, uo),
+    }
+    const music: VideoAgent['music'] = {
+      ...generated.music,
+      importAndWait: (input, mo) => importMusicAndWait(mediaDeps, input, mo),
+    }
+    const config: ConfigHelpers = {
+      get: () => this.serverConfig(),
+      supports: async (feature) => (await this.serverConfig()).features.includes(feature),
+    }
+    Object.assign(this, generated, { videos, files, media, music, config })
     this.raw = createClient<paths>({
       baseUrl: url,
       fetch: async (req: Request) => {
