@@ -124,6 +124,8 @@ export interface Beat {
   recording?: RecordingBeat
 }
 export interface RecordingBeat {
+  /** The plan step it shows (its .va-recording's data-va-recording). */
+  step: string
   slot: string
   src: string
   /** Source seconds the scene shows. */
@@ -1081,6 +1083,7 @@ function recordingOf(beat: Element): { recording?: RecordingBeat } {
   const size = cursor ? num(attr(cursor, 'data-va-cursor-size')) : NaN
   return {
     recording: {
+      step: stepOf(slot, beat),
       slot: attr(slot, 'data-va-media') ?? '',
       src: attr(slot, 'src') ?? '',
       in: num(attr(slot, REC_IN)),

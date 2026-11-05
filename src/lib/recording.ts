@@ -93,3 +93,99 @@ export function cameraAt(keys: CameraKey[], t: number): [number, number, number]
   const last = keys.at(-1) as CameraKey
   return [last[1], last[2], last[3]]
 }
+
+// ───── data files (§5.2 emit, review R8) ─────
+// A composition can't fetch, so a scene's cursor path and the recording's locked hidden areas are scripts loaded with
+// <script src>. The preview runs them, so each must be data in exactly one form: one statement, JSON with at most 4
+// decimals, nothing else. emit writes them; check and finalize read them back with these parsers.
+export const CURSOR_MAX_POINTS = 6000
+export const LOCKED_SRC = 'assets/recording/redact.js'
+export const cursorSrc = (step: string) => `assets/recording/${step}.cursor.js`
+export const STEP_ID = /^[a-z0-9-]{1,40}$/
+
+export type LockedEntry = RedactEntry & { id: string; origin: 'trace' | 'setup' }
+
+/** Numbers to 4 places, arrays and plain objects only (no other JSON can reach the data files). */
+const json4 = (v: unknown) =>
+  JSON.stringify(v, (_k, x: unknown) => (typeof x === 'number' ? round4(x) + 0 : x))
+
+export function cursorScript(step: string, points: ClickKey[]): string {
+  if (!STEP_ID.test(step)) throw new Error(`Step id "${step}" must be lowercase letters, digits and dashes.`)
+  return `window.__vaCursor=window.__vaCursor||{};window.__vaCursor["${step}"]=${json4(points)};`
+}
+
+export const redactScript = (entries: LockedEntry[]) => `window.__vaRedact=${json4(entries)};`
+
+const finite4 = (n: unknown) => typeof n === 'number' && Number.isFinite(n) && round4(n) === n
+
+/**
+ * The cursor path in a <step>.cursor.js, or the reason it isn't exactly the form emit writes: [t, x, y] finite
+ * numbers to 4 places, sorted by t, x and y in 0-1, inside in..out when given, at most 6,000 points.
+ */
+export function parseCursorScript(
+  text: string,
+  step: string,
+  span?: { in: number; out: number },
+): { ok: true; points: ClickKey[] } | { ok: false; reason: string } {
+  const head = `window.__vaCursor=window.__vaCursor||{};window.__vaCursor["${step}"]=`
+  const body = text.trimEnd()
+  if (!body.startsWith(head) || !body.endsWith(';'))
+    return { ok: false, reason: `isn't the one statement emit writes for step "${step}"` }
+  let points: unknown
+  try {
+    points = JSON.parse(body.slice(head.length, -1))
+  } catch {
+    return { ok: false, reason: "its path isn't JSON" }
+  }
+  if (!Array.isArray(points)) return { ok: false, reason: "its path isn't an array" }
+  if (points.length > CURSOR_MAX_POINTS)
+    return { ok: false, reason: `has more than ${CURSOR_MAX_POINTS} points` }
+  let last = -Infinity
+  for (const p of points as unknown[]) {
+    if (!Array.isArray(p) || p.length !== 3 || !p.every(finite4))
+      return { ok: false, reason: "has a point that isn't [t, x, y] numbers to 4 places" }
+    const [t, x, y] = p as ClickKey
+    if (t < last) return { ok: false, reason: "isn't sorted by time" }
+    if (x < 0 || x > 1 || y < 0 || y > 1) return { ok: false, reason: 'has a point outside the frame' }
+    if (span && (t < span.in - 1e-4 || t > span.out + 1e-4))
+      return {
+        ok: false,
+        reason: `has a point at ${String(t)} s, outside ${String(span.in)}-${String(span.out)}`,
+      }
+    last = t
+  }
+  return { ok: true, points: points as ClickKey[] }
+}
+
+/** The locked entries in redact.js, or the reason it isn't exactly the form emit writes. */
+export function parseRedactScript(
+  text: string,
+): { ok: true; entries: LockedEntry[] } | { ok: false; reason: string } {
+  const head = 'window.__vaRedact='
+  const body = text.trimEnd()
+  if (!body.startsWith(head) || !body.endsWith(';'))
+    return { ok: false, reason: "isn't the one statement emit writes" }
+  let entries: unknown
+  try {
+    entries = JSON.parse(body.slice(head.length, -1))
+  } catch {
+    return { ok: false, reason: "isn't JSON" }
+  }
+  if (!Array.isArray(entries)) return { ok: false, reason: "isn't an array" }
+  for (const e of entries as unknown[]) {
+    if (!e || typeof e !== 'object') return { ok: false, reason: "has an entry that isn't an object" }
+    const r = e as Record<string, unknown>
+    const keys = Array.isArray(r.boxes) ? (r.boxes as unknown[]) : null
+    if (
+      typeof r.id !== 'string' ||
+      (r.origin !== 'trace' && r.origin !== 'setup') ||
+      !finite4(r.start) ||
+      !finite4(r.end) ||
+      typeof r.reason !== 'string' ||
+      !keys?.length ||
+      !keys.every((k) => Array.isArray(k) && k.length === 5 && k.every(finite4))
+    )
+      return { ok: false, reason: "has an entry that isn't { id, origin, start, end, reason, boxes }" }
+  }
+  return { ok: true, entries: entries as LockedEntry[] }
+}

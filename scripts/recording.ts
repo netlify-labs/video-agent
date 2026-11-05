@@ -20,12 +20,21 @@
 // video/assets/recording/plan.json, which the agent edits. Prints the clicked elements per step, fenced, then the JSON
 // summary with checkpointMessage. Then a focus crop per step (at most 12) in context/recording/<id>/focus/.
 // --analysis, --trace, --input, --look, --out, --full, --file and --context override the paths.
+//
+//   npx tsx scripts/recording.ts emit --step <id> [--beat <scene id>] [--label <name>] [--start <s>] [--duration <s>]
+//   npx tsx scripts/recording.ts emit --holds-only
+//
+// emit: prints a recording scene's markup from the kept plan (scripts/lib/recording-emit.ts) and writes its data files
+// (cursor path, locked hidden areas, the hold still when --duration is past 0.5x) under video/assets/recording/.
+// --holds-only writes only the missing stills index.html's held scenes name. --video, --plan, --analysis and --trace
+// override the paths.
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { basename, dirname, extname, join } from 'node:path'
 import { parseTrace } from '../src/lib/recording-trace.js'
 import { analyzeRecording } from './lib/recording-analyze.js'
 import { ASPECTS, keptPlan, type Aspect } from '../src/lib/recording.js'
 import type { Analysis } from './lib/recording-analyze.js'
+import { emitStep, holdsOnly, readKeptPlan } from './lib/recording-emit.js'
 import { cachedAnalysis, makeFocusCrops, makeSheets, transcribeRecording } from './lib/recording-extras.js'
 import {
   checkpointMessage,
@@ -157,7 +166,46 @@ function plan() {
   }
 }
 
-const commands: Record<string, () => unknown> = { analyze, plan }
+function emit() {
+  const videoDir = args.video ?? join(repoRoot, 'video')
+  if ('holds-only' in args) return { ok: true, written: holdsOnly(videoDir) }
+  if (!args.step) throw new StepError('emit needs --step <id> (or --holds-only).')
+  const plan = readKeptPlan(args.plan ?? join(videoDir, 'assets', 'recording', 'plan.json'))
+  const analysisPath = args.analysis ?? join(videoDir, 'assets', 'recording', 'analysis.json')
+  if (!existsSync(analysisPath))
+    throw new StepError(`No analysis at ${analysisPath}: run recording.ts analyze first.`)
+  const tracePath = args.trace ?? join(repoRoot, '.va-run', 'recording', plan.mediaId, 'trace.json')
+  const num = (v: string | undefined, name: string) => {
+    if (v === undefined) return undefined
+    const n = Number(v)
+    if (!Number.isFinite(n) || n < 0) throw new StepError(`--${name} must be a number of seconds.`)
+    return n
+  }
+  const r = emitStep({
+    videoDir,
+    plan,
+    step: args.step,
+    analysis: readJson(analysisPath) as Analysis,
+    trace: existsSync(tracePath) ? parseTrace(readFileSync(tracePath, 'utf8')) : null,
+    beat: args.beat,
+    label: args.label,
+    start: num(args.start, 'start'),
+    duration: num(args.duration, 'duration'),
+  })
+  // The markup for the agent to paste, then the JSON result.
+  console.log(r.markup)
+  return {
+    ok: true,
+    files: r.files,
+    hold: r.hold,
+    rate: r.rate,
+    duration: r.duration,
+    slotDuration: r.slotDuration,
+    cursor: r.cursor,
+  }
+}
+
+const commands: Record<string, () => unknown> = { analyze, plan, emit }
 
 try {
   const run = command ? commands[command] : undefined

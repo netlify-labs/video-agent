@@ -659,6 +659,7 @@ describe('contract: recording scenes', () => {
     expect(c.beats.map((b) => b.recording ?? null)).toEqual([
       null,
       {
+        step: 'add-site',
         slot: 'add-site-screen',
         src: 'assets/media/med_rec.mp4',
         in: 2,
