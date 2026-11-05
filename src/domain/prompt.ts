@@ -92,7 +92,14 @@ const mss = (s: number) => `${String(Math.floor(s / 60))}:${String(Math.floor(s 
 /** The Screen recording section (screen-recording plan §5.4): the loop, fenced clicked elements, the rules. */
 function recordingLines(
   r: RecordingPrompt,
-  p: { aspect: Aspect; target: number | null; revision: boolean; restyle: boolean; voice: boolean },
+  p: {
+    aspect: Aspect
+    target: number | null
+    revision: boolean
+    restyle: boolean
+    voice: boolean
+    scoped: boolean
+  },
 ): string[] {
   const id = r.mediaId
   const target = p.target === null ? '' : ` --target ${String(p.target)}`
@@ -100,7 +107,11 @@ function recordingLines(
     '',
     `Screen recording: this video is a demo made from ${r.file}, a screen recording${r.seconds === null ? '' : ` ${mss(r.seconds)} long`}${r.trace ? ', with a pointer trace (exact clicks and cursor)' : ' without a pointer trace (clicks and the cursor are inferred)'}. Follow "Screen recordings" in video/AGENTS.md. Time: you have ${String(r.deadlineMin)} minutes in all; analysis takes up to 3 of them; render once, at the end.`,
   ]
-  if (p.revision)
+  if (p.scoped)
+    lines.push(
+      "Only some scenes are being redone: emit only the scoped scenes; don't run plan again unless the request asks to re-plan them.",
+    )
+  else if (p.revision)
     lines.push(
       p.restyle
         ? 'The composition already has its recording scenes. Keep the steps and assets/recording/plan.json; rebuild the framing, cursor style, callouts, intro and outro in the look.'
@@ -338,6 +349,7 @@ export function buildPrompt(p: PromptInput): string {
         revision: p.revision !== null,
         restyle: Boolean(p.look && p.restyle),
         voice: !p.narration && Boolean(p.voiceover),
+        scoped: Boolean(p.scope),
       }),
     )
   if (p.revision && !p.remix) {

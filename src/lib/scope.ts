@@ -600,7 +600,8 @@ export const CREDITS_FILE = 'assets/music/credits.json'
 /**
  * Files a scoped run may rewrite, besides the scoped scenes' new files: the composition, its captions, the voice-over
  * files and the run-fetched credits (append-only, checked by creditsAppendOnly). Other features add theirs with
- * registerDerivedFiles (the screen-recording plan: its plan.json and the scoped steps' cursor and hold files).
+ * registerDerivedFiles. Screen recordings' (the kept plan.json and the scoped steps' cursor and hold files) are listed
+ * here, so every scope check has them whatever it imported.
  */
 export const DERIVED_FILES: ((beats: readonly string[], comp: Composition | null) => string[])[] = [
   (beats) => [
@@ -611,6 +612,21 @@ export const DERIVED_FILES: ((beats: readonly string[], comp: Composition | null
     CREDITS_FILE,
     ...beats.map((b) => `${VOICE_DIR}/${b}.wav`),
   ],
+  // Screen recordings (screen-recording plan §5.2 scoped revisions): the kept plan, and the scoped steps' cursor and
+  // hold files. Never analysis.json or redact.js, and never another step's files.
+  (beats, comp) => {
+    const recorded = (comp?.beats ?? []).filter((b) => b.recording)
+    if (!recorded.length) return []
+    return [
+      'assets/recording/plan.json',
+      ...recorded
+        .filter((b) => beats.includes(b.id))
+        .flatMap((b) => {
+          const step = b.recording?.step ?? b.id
+          return [`assets/recording/${step}.cursor.js`, `assets/recording/${step}.hold.jpg`]
+        }),
+    ]
+  },
 ]
 export const registerDerivedFiles = (
   fn: (beats: readonly string[], comp: Composition | null) => string[],
