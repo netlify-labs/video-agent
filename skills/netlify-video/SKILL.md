@@ -30,8 +30,9 @@ only watch. The tool list shows only what your role can do.
    `answers` (`question_id` plus `choice_ids`, `other` text, or `skipped`). Show the brief. Skip planning when the
    request is already specific.
 2. **Create.** `create_video` with `prompt` (quote exact on-screen text), and optionally `aspect` (16:9, 9:16, 1:1,
-   4:5), `duration_sec`, `title`, `plan_id`, `media_ids` and an `idempotency_key`. It returns at once with status
-   "queued" and a `video_id`.
+   4:5), `duration_sec`, `title`, `plan_id`, `media_ids`, a `look` and an `idempotency_key`. It returns at once with
+   status "queued" and a `video_id`. Unless the person named a style, call `list_looks` first and offer two or three
+   looks that fit (Clean product, Kinetic type, Terminal, …); pass the one they pick as `look`.
 3. **Follow.** `get_video` with `video_id` and `wait_seconds: 8`, again each time it's still in progress, until the
    status is "ready" or "failed", without asking the person whether to keep checking. While it runs, the result carries `progress` (stage and step); tell the person what the agent is doing
    rather than polling silently.
@@ -67,6 +68,8 @@ commands are in [references/narration.md](references/narration.md).
 
 - **Ask before spending a run.** Each create or revise starts an agent run that costs credits. Confirm the prompt, the
   aspect and the length with the person first, unless they already asked you to go ahead.
+- **Restyling is a full run.** A `look` on `revise_video` or `remix_video` that differs from the video's own rebuilds
+  how the whole video looks and moves. Before restyling a video the person didn't make, say so and ask first.
 - **One at a time.** Only one version of a video can be in progress. Don't call `create_video` again for the same
   request while it runs; poll with `get_video`. Use an `idempotency_key` when a retry might double-submit.
 - **Revise, don't recreate.** Small fixes ("bigger logo", "end card says Start free") are a `revise_video`. A new

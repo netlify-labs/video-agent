@@ -61,6 +61,7 @@ import { clip } from './lib/log.js'
 import { ONE_WAY_WORDS, SPEED_RANGE, VOICE_ID } from './lib/voice.js'
 import { MEDIA_KINDS } from './lib/media/classify.js'
 import { registerPrompts } from './mcp-prompts.js'
+import { listLooks } from './domain/looks.js'
 import { remixVideo } from './domain/remix.js'
 import { listDestinations } from './domain/destinations/list.js'
 import { publishToDestination } from './domain/destinations/publish.js'
@@ -150,6 +151,17 @@ const ASPECT_ALIASES: Record<string, Aspect> = {
   instagram: '4:5',
   linkedin: '4:5',
 }
+
+const lookArg = (restyle: boolean) =>
+  z
+    .string()
+    .nullable()
+    .optional()
+    .describe(
+      restyle
+        ? 'Optional. A look id from list_looks; leave out to keep the current look, null for none. A different look is a restyle, a full run.'
+        : 'Optional. A look id from list_looks (a named visual style); leave out for the default, null for none.',
+    )
 
 export function normalizeAspect(v: string | undefined): Aspect | undefined {
   if (v === undefined || v.trim() === '') return undefined
@@ -499,6 +511,7 @@ Example: {"prompt": "A 20-second launch video for our new webhooks feature, endi
         voiceover: voiceoverArg(
           'Optional. A spoken narration, with captions from its words: true, or {voice, speed, script}. Works with any sound; music dips under the voice.',
         ),
+        look: lookArg(false),
         idempotency_key: z
           .string()
           .max(200)
@@ -522,6 +535,7 @@ Example: {"prompt": "A 20-second launch video for our new webhooks feature, endi
             mediaIds: args.media_ids,
             sound: args.sound,
             voiceover: toVoiceover(args.voiceover),
+            look: args.look,
           },
           args.idempotency_key,
         )
@@ -712,6 +726,7 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Same format, 
           .string()
           .optional()
           .describe('Optional. A plan from plan_video with remix_of this same video.'),
+        look: lookArg(true),
       },
       _meta: VIDEO_CARD,
       annotations: { title: 'Remix a video', ...STARTS_RUN },
@@ -728,6 +743,7 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Same format, 
           sound: args.sound,
           voiceover: toVoiceover(args.voiceover),
           planId: args.plan_id,
+          look: args.look,
         })
         return queued(res, `The remix usually takes 3 to 8 minutes. ${KEEP_CHECKING(res.body.id)}`)
       }, args.video_id),
@@ -786,6 +802,7 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Make the end 
           .describe(
             "Optional. Redo only these scenes (ids from get_video's beats for from_version); everything else stays exactly as it is. Faster and cheaper than revising the whole video. Needs from_version. Can't be combined with plan_id, duration_sec, sound or voiceover.",
           ),
+        look: lookArg(true),
       },
       _meta: VIDEO_CARD,
       annotations: { title: 'Revise a video', ...STARTS_RUN },
@@ -803,6 +820,7 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Make the end 
           sound: args.sound,
           voiceover: toVoiceover(args.voiceover),
           scope: args.beats ? { beats: args.beats } : undefined,
+          look: args.look,
         })
         return queued(
           res,
@@ -937,6 +955,45 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "version": 2}`,
         await unpublishVersion(deps, principal, id, n)
         return { video_id: id, version: n, unpublished: true }
       }, args.video_id),
+  )
+
+  server.registerTool(
+    'list_looks',
+    {
+      title: 'List looks',
+      description: `The named visual styles a video can be made in (Clean product, Kinetic type, Terminal, …), with what each suits and a preview clip. Pass an id as look to create_video, revise_video or remix_video.
+
+When to use: before creating a video, unless the person already named a style: offer two or three that fit.`,
+      inputSchema: {},
+      annotations: {
+        title: 'List looks',
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    () =>
+      run(async () => {
+        const { looks, default: defaultLook } = await listLooks(deps)
+        return {
+          // Looks an admin turned off are left out: they can't be picked.
+          looks: looks
+            .filter((l) => l.enabled)
+            .map((l) => ({
+              id: l.id,
+              name: l.name,
+              description: l.description,
+              tags: l.tags,
+              best_for: l.bestFor,
+              preview: {
+                mp4: l.preview.mp4 && `${deps.config.siteUrl}${l.preview.mp4}`,
+                poster: l.preview.poster && `${deps.config.siteUrl}${l.preview.poster}`,
+              },
+            })),
+          default: defaultLook,
+        }
+      }),
   )
 
   const listDestinationsTool = server.registerTool(

@@ -65,6 +65,11 @@ export const MCP_TOOLS: readonly McpCatalogEntry[] = [
     access: 'creators',
   },
   {
+    name: 'list_looks',
+    summary: 'The named visual styles a video can be made in, with previews; pass one as look.',
+    access: 'everyone',
+  },
+  {
     name: 'list_destinations',
     summary: 'Where else a version can be published (YouTube, HTTP destinations), and their targets.',
     access: 'creators',
