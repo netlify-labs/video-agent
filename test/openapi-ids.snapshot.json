@@ -17,7 +17,11 @@
       "method": "create",
       "fieldFeatures": {
         "planId": "planning",
-        "look": "looks"
+        "look": "looks",
+        "externalRef": "external_ref",
+        "externalUrl": "external_ref",
+        "private": "external_ref",
+        "context": "context"
       }
     }
   },
@@ -74,7 +78,8 @@
       "fieldFeatures": {
         "planId": "planning",
         "scope": "scoped_revision",
-        "look": "looks"
+        "look": "looks",
+        "context": "context"
       }
     }
   },
@@ -86,7 +91,11 @@
       "feature": "remix",
       "fieldFeatures": {
         "planId": "planning",
-        "look": "looks"
+        "look": "looks",
+        "externalRef": "external_ref",
+        "externalUrl": "external_ref",
+        "private": "external_ref",
+        "context": "context"
       }
     }
   },
