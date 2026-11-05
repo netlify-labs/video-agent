@@ -27,3 +27,11 @@ describe('README.md', () => {
     }
   })
 })
+
+describe('contributing a look', () => {
+  it('CONTRIBUTING.md and the issue template point to looks/README.md', () => {
+    expect(read('CONTRIBUTING.md')).toContain('(looks/README.md)')
+    expect(read('.github/ISSUE_TEMPLATE/propose-a-look.md')).toContain('looks/README.md')
+    expect(read('.github/ISSUE_TEMPLATE/propose-a-look.md')).toContain("labels: ['good first issue']")
+  })
+})
