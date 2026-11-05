@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="vendor/gsap.min.js"></script>
+    <script src="vendor/va-contract.js"></script>
+    <style>
+      /* Kinetic type example: the fictional product Orbit, placeholder words. Runs reuse its structure and moves,
+         never its words. Colours are the brand's roles, written as literal colours. */
+      #root {
+        --va-color-bg: #0b0d10;
+        --va-color-text: #f4f5f7;
+        --va-color-accent: #14b8a6;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1920px; height: 1080px; overflow: hidden; background: #0b0d10; }
+      #root { width: 100%; height: 100%; position: relative; font-family: system-ui, sans-serif; background: var(--va-color-bg); }
+      .beat { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; padding: 0 120px; }
+      .hero { color: var(--va-color-text); font-size: 230px; font-weight: 900; text-transform: uppercase; letter-spacing: -0.04em; line-height: 0.9; }
+      .hot { color: var(--va-color-accent); }
+      .support { color: var(--va-color-text); font-size: 44px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; margin-top: 40px; }
+      [data-va-beat="end"] { align-items: center; text-align: center; }
+      [data-va-beat="end"] .flash { position: absolute; inset: 0; background: var(--va-color-accent); }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-va-contract="1" data-start="0" data-duration="7" data-width="1920" data-height="1080">
+      <section id="hook" class="clip beat" data-va-beat="hook" data-va-label="Hook" data-composition-id="hook" data-start="0" data-duration="2" data-va-authored-duration="2" data-track-index="0">
+        <h1 class="hero" data-va-text="hook-title" data-va-label="Headline">Stop</h1>
+        <h1 class="hero hot" data-va-text="hook-accent" data-va-label="Accent word">searching</h1>
+        <script>
+          vaBeat('hook', (tl, el) => {
+            const split = (sel) => {
+              const word = el.querySelector(sel)
+              const chars = Array.from(word.textContent).map((c) => {
+                const s = el.ownerDocument.createElement('span')
+                s.textContent = c === ' ' ? ' ' : c
+                s.style.display = 'inline-block'
+                return s
+              })
+              word.replaceChildren(...chars)
+              return chars
+            }
+            tl.fromTo(split('[data-va-text="hook-title"]'), { y: '0.85em', opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: 'back.out(1.7)', stagger: 0.025 }, 0.05)
+              .fromTo(split('[data-va-text="hook-accent"]'), { y: '0.85em', opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: 'back.out(1.7)', stagger: 0.025 }, 0.3)
+              .fromTo(el.querySelector('[data-va-text="hook-accent"]'), { scale: 1.15 }, { scale: 1, duration: 0.25, ease: 'power4.out', transformOrigin: '0% 50%' }, 1)
+          })
+        </script>
+      </section>
+      <section id="claim" class="clip beat" data-va-beat="claim" data-va-label="Claim" data-composition-id="claim" data-start="2" data-duration="2.5" data-va-authored-duration="2.5" data-track-index="0">
+        <h2 class="hero" data-va-text="claim-title" data-va-label="Headline">Find it</h2>
+        <h2 class="hero hot" data-va-text="claim-accent" data-va-label="Accent word">instantly</h2>
+        <p class="support" data-va-text="claim-support" data-va-label="Support line">Every file, every project</p>
+        <script>
+          vaBeat('claim', (tl, el) => {
+            const split = (sel) => {
+              const word = el.querySelector(sel)
+              const chars = Array.from(word.textContent).map((c) => {
+                const s = el.ownerDocument.createElement('span')
+                s.textContent = c === ' ' ? ' ' : c
+                s.style.display = 'inline-block'
+                return s
+              })
+              word.replaceChildren(...chars)
+              return chars
+            }
+            tl.fromTo(split('[data-va-text="claim-title"]'), { y: '0.85em', opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: 'back.out(1.7)', stagger: 0.025 }, 0.05)
+              .fromTo(split('[data-va-text="claim-accent"]'), { y: '0.85em', opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: 'back.out(1.7)', stagger: 0.02 }, 0.25)
+              .fromTo(el.querySelector('[data-va-text="claim-support"]'), { opacity: 0 }, { opacity: 1, duration: 0.2 }, 0.8)
+          })
+        </script>
+      </section>
+      <section id="end" class="clip beat" data-va-beat="end" data-va-label="End card" data-composition-id="end" data-start="4.5" data-duration="2.5" data-va-authored-duration="2.5" data-track-index="0">
+        <div class="flash"></div>
+        <h2 class="hero hot" data-va-text="end-title" data-va-label="Product name">Orbit</h2>
+        <p class="support" data-va-text="end-cta" data-va-label="Call to action">orbit.example</p>
+        <script>
+          vaBeat('end', (tl, el) => {
+            tl.fromTo(el.querySelector('.flash'), { opacity: 1 }, { opacity: 0, duration: 0.08 }, 0)
+              .fromTo(el.querySelector('[data-va-text="end-title"]'), { scale: 1.15 }, { scale: 1, duration: 0.3, ease: 'power4.out' }, 0)
+              .fromTo(el.querySelector('[data-va-text="end-cta"]'), { opacity: 0 }, { opacity: 1, duration: 0.2 }, 0.5)
+          })
+        </script>
+      </section>
+    </div>
+    <script>
+      window.__timelines['main'] = gsap.timeline({ paused: true })
+    </script>
+  </body>
+</html>

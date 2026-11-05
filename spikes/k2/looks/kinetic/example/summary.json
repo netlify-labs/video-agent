@@ -1,0 +1,9 @@
+{
+  "title": "Orbit",
+  "summary": "A kinetic type example for the fictional product Orbit.",
+  "captions": [
+    { "start": 0.6, "end": 2, "text": "Stop searching", "beat": "hook", "textId": "hook-title", "beatStart": 0.6, "beatEnd": 2 },
+    { "start": 2.8, "end": 4.5, "text": "Find it instantly. Every file, every project", "beat": "claim", "textId": "claim-title", "beatStart": 0.8, "beatEnd": 2.5 },
+    { "start": 4.5, "end": 7, "text": "Orbit", "beat": "end", "textId": "end-title", "beatStart": 0, "beatEnd": 2.5 }
+  ]
+}
