@@ -4,7 +4,8 @@
 //     locked narration can't edit by hand (plan 2026-11-02 §6.4);
 //   - a scoped revision (redo a scene, docs/plans/2026-11-04-regenerate-beat.md §4.9): the splice, which re-lays the
 //     scenes and puts back everything outside the scope, saying what it put back.
-// With a recorded narration bus in video/ the composition must also last as long as the bus.
+// With a recorded narration bus in video/ the composition must also last as long as the bus. With recording scenes, the
+// recording check runs too (scripts/lib/recording-inputs.ts).
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { applyDucking, load, NARRATION_SRC, save, validate, type Summary } from '../../src/lib/contract.js'
@@ -12,6 +13,7 @@ import { readPcm16 } from '../../src/lib/narration-cleanup.js'
 import { FROZEN_DIR } from '../../src/lib/revoice.js'
 import { isEngineId } from '../../src/domain/engines.js'
 import { runEngineFor } from './engines/index.js'
+import { checkRecordingScenes, hasRecording } from './recording-inputs.js'
 import { log } from './run-tools.js'
 
 /** --fix, or its old name --duck. */
@@ -128,6 +130,10 @@ export function checkContract(root: string, opts: { fix: boolean }): CheckResult
     return { lines: [...lines, `video/${NARRATION_SRC} isn't a 24 kHz PCM16 WAV.`], code: 1 }
   }
   const violations = validate(html, summary, busSamples === null ? {} : { narration: { busSamples } })
+  // Recording scenes: what their slots name (data files, locked hidden areas, holds), on every invocation.
+  if (hasRecording(html))
+    for (const p of checkRecordingScenes(root, html))
+      violations.push(`${p.scene === '*' ? 'Recording' : `Scene "${p.scene}"`} (${p.rule}): ${p.message}`)
   if (violations.length) return { lines: [...lines, ...violations.map((v) => `- ${v}`)], code: 1 }
   lines.push(scope ? `Contract v1: OK (scope: ${scope.beats.join(', ')})` : 'Contract v1: OK')
   return { lines, code: 0 }

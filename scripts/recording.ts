@@ -32,6 +32,11 @@
 //   npx tsx scripts/recording.ts compose --plan <full plan.json> [--look <id|none>] [--title <text>]
 //
 // compose: a whole demo with no agent (scripts/lib/recording-compose.ts): intro, a scene per step, outro, captions.
+//
+//   npx tsx scripts/recording.ts check
+//
+// check: the recording scenes of video/index.html against the run's inputs (src/lib/recording-check.ts): one line per
+// problem naming the scene and the rule, exit 1. check-contract runs the same check.
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { basename, dirname, extname, join } from 'node:path'
 import { parseTrace } from '../src/lib/recording-trace.js'
@@ -40,6 +45,7 @@ import { ASPECTS, keptPlan, type Aspect, type PlanV1 } from '../src/lib/recordin
 import type { Analysis } from './lib/recording-analyze.js'
 import { composeDemo } from './lib/recording-compose.js'
 import { emitStep, holdsOnly, readKeptPlan } from './lib/recording-emit.js'
+import { checkRecordingScenes } from './lib/recording-inputs.js'
 import { cachedAnalysis, makeFocusCrops, makeSheets, transcribeRecording } from './lib/recording-extras.js'
 import {
   checkpointMessage,
@@ -252,7 +258,21 @@ function compose() {
   }
 }
 
-const commands: Record<string, () => unknown> = { analyze, plan, emit, compose }
+function check() {
+  // --root: another checkout laid out like a run (tests).
+  const root = args.root ?? repoRoot
+  const html = readFileSync(join(root, 'video', 'index.html'), 'utf8')
+  const problems = checkRecordingScenes(root, html)
+  for (const p of problems)
+    console.error(`${p.scene === '*' ? 'Recording' : `Scene "${p.scene}"`} (${p.rule}): ${p.message}`)
+  if (problems.length) {
+    console.log(JSON.stringify({ ok: false, problems }))
+    process.exit(1)
+  }
+  return { ok: true, problems: [] }
+}
+
+const commands: Record<string, () => unknown> = { analyze, plan, emit, compose, check }
 
 try {
   const run = command ? commands[command] : undefined
