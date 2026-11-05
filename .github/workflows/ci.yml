@@ -28,6 +28,23 @@ jobs:
       - run: npm run look:check
       - run: npm run test:ui
 
+  # The built SDK on each Node it supports (cli-and-sdk plan §4.5 Runtime): import and require(), a call over a stub
+  # fetch, a webhook signature, and a main entry with no node: imports but the lazy file helpers'.
+  sdk-smoke:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run build:packages
+      - run: node scripts/sdk-smoke.mjs
+
   # Breaking-change check on the REST API (cli-and-sdk plan §4.4): /api/v1 is additive, and the SDK relies on it.
   # v1 only warns. From the SDK's 1.0 this becomes blocking unless the PR has the `api-breaking` label and a
   # changeset with a major SDK bump.
