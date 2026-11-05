@@ -7,9 +7,11 @@ import { resources, type Resources } from './generated/resources.js'
 import { send, type Exchange, type HttpOptions, type Logger } from './http.js'
 import {
   listAll,
+  redoScenes,
   resolveVideo,
   waitForVideo,
   type Pageable,
+  type RedoScenesInput,
   type ResolvedVideo,
   type WaitOptions,
 } from './helpers/videos.js'
@@ -57,6 +59,8 @@ export interface VideoHelpers {
   ): AsyncGenerator<Video>
   /** A video id, web URL or share URL → { id, versionN? }. */
   resolve(ref: string): Promise<ResolvedVideo>
+  /** Redoes some scenes: a revision with scope.beats, from the latest ready version unless fromVersion is given. */
+  redoScenes(id: string, input: RedoScenesInput, opts?: CallOptions): Promise<Video>
 }
 
 /** va.files: links and downloads for a version's files. */
@@ -150,6 +154,8 @@ export class VideoAgent {
         waitForVideo({ send: (x) => this.send(x), progress: (v) => generated.videos.progress(v) }, id, o),
       listAll: (input, opts) => listAll(generated.videos.list, input, opts),
       resolve: (ref) => resolveVideo(f, ref),
+      redoScenes: (id, input, opts) =>
+        redoScenes({ get: (v) => generated.videos.get(v), revise: generated.videos.revise }, id, input, opts),
     }
     const fileDeps = {
       baseUrl: url,

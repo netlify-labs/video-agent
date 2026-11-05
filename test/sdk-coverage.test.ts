@@ -25,6 +25,7 @@ const RELIED_ON = [
   'videos.progress',
   'videos.wait',
   'videos.resolve',
+  'videos.redoScenes',
   'versions.retry',
   'versions.cancel',
   'versions.publish',

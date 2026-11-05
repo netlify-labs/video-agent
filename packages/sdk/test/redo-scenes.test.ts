@@ -60,6 +60,13 @@ describe('redo a scene in the SDK', () => {
       scope: { beats: ['intro', 'demo'] },
     })
     expect(post?.headers['idempotency-key']).toMatch(/^[0-9a-f-]{36}$/)
+    // The same through va.videos.redoScenes.
+    const viaClient = server(['scoped_revision'])
+    await viaClient.va.videos.redoScenes('vid_1', { beats: ['demo'], prompt: 'Faster.' })
+    expect(JSON.parse(viaClient.posts()[0]?.body ?? '')).toMatchObject({
+      fromVersion: 2,
+      scope: { beats: ['demo'] },
+    })
     // A given fromVersion is used as is, without reading the video.
     const again = server(['scoped_revision'])
     await redoScenes(
