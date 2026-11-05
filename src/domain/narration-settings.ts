@@ -6,6 +6,12 @@ import { lookSettings } from './look-settings.js'
 import { checkLookSettings } from './looks.js'
 import type { Deps } from '../deps.js'
 import { ApiError } from '../lib/errors.js'
+import {
+  remotionChanges,
+  remotionSettings,
+  type RemotionSettings,
+  type RemotionSettingsPatch,
+} from './engine-settings.js'
 import { assertCan, type Principal } from './policy.js'
 import { remixEnabled } from './remix-settings.js'
 import { getSettings } from './settings.js'
@@ -57,17 +63,22 @@ export interface AdminSettings extends NarrationSettings {
   disabledLooks: string[]
   /** video-agent login's browser approval (cli-and-sdk plan §5.2). */
   cliLoginEnabled: boolean
+  /** The Remotion switch and license record; present only when ENGINES lists Remotion (render-engines §7). */
+  remotion?: RemotionSettings
 }
 
 async function adminSettings(deps: Pick<Deps, 'store' | 'config'>): Promise<AdminSettings> {
+  const row = await deps.store.getSettings()
+  const remotion = remotionSettings(deps, row)
   return {
     ...(await narrationSettings(deps)),
     remixEnabled: await remixEnabled(deps),
-    youtubeEnabled: (await deps.store.getSettings())?.youtubeEnabled ?? false,
+    youtubeEnabled: row?.youtubeEnabled ?? false,
     youtubeConfigured: deps.config.google !== null,
-    recordingQuotaBytes: (await deps.store.getSettings())?.recordingQuotaBytes ?? RECORDING_QUOTA_DEFAULT,
+    recordingQuotaBytes: row?.recordingQuotaBytes ?? RECORDING_QUOTA_DEFAULT,
     ...(await lookSettings(deps)),
-    cliLoginEnabled: (await deps.store.getSettings())?.cliLoginEnabled ?? true,
+    cliLoginEnabled: row?.cliLoginEnabled ?? true,
+    ...(remotion ? { remotion } : {}),
   }
 }
 
@@ -80,14 +91,20 @@ export async function getAdminSettings(deps: Deps, p: Principal): Promise<AdminS
 export async function updateAdminSettings(
   deps: Deps,
   p: Principal,
-  patch: { [K in keyof AdminSettings]?: AdminSettings[K] | undefined },
+  patch: {
+    [K in Exclude<keyof AdminSettings, 'remotion'>]?: AdminSettings[K] | undefined
+  } & RemotionSettingsPatch,
 ): Promise<AdminSettings> {
   assertCan(p, 'settings:manage')
   // The row is created on first use; make sure it exists so the update has something to change.
   await getSettings(deps)
-  const changes: Record<string, unknown> = Object.fromEntries(
-    Object.entries(patch).filter(([k, v]) => v !== undefined && k !== 'youtubeConfigured'),
-  )
+  const { remotionEnabled, remotionLicense, ...rest } = patch
+  const changes: Record<string, unknown> = {
+    ...Object.fromEntries(
+      Object.entries(rest).filter(([k, v]) => v !== undefined && k !== 'youtubeConfigured'),
+    ),
+    ...(await remotionChanges(deps, p, { remotionEnabled, remotionLicense })),
+  }
   // Looks are checked as they'd be after the patch (looks plan §6).
   if (patch.defaultLook !== undefined || patch.disabledLooks !== undefined)
     Object.assign(

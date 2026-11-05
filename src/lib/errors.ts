@@ -20,6 +20,8 @@ export type ErrorCode =
   | 'look_not_allowed'
   | 'engine_not_supported_by_look'
   | 'engine_disabled'
+  | 'remotion_key_missing'
+  | 'remotion_license_required'
   | 'narration_locked'
   | 'gone'
   | 'quota_exceeded'
@@ -51,6 +53,8 @@ const STATUS: Record<ErrorCode, number> = {
   look_not_allowed: 400,
   engine_not_supported_by_look: 400,
   engine_disabled: 409,
+  remotion_key_missing: 409,
+  remotion_license_required: 400,
   narration_locked: 409,
   gone: 410,
   quota_exceeded: 413,

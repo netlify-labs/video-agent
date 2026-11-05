@@ -102,6 +102,11 @@ const adminSettings: {
   youtubeEnabled: boolean
   youtubeConfigured: boolean
   cliLoginEnabled: boolean
+  remotion?: {
+    enabled: boolean
+    license: { by: string; email: string; at: string; tier: 'free' | 'company'; note: string | null } | null
+    keySet: boolean
+  }
 } = {
   narrationEnabled: (() => {
     try {
@@ -131,6 +136,18 @@ const adminSettings: {
     } catch {
       return true
     }
+  })(),
+  // localStorage.mockEngines = 'remotion' lists Remotion in ENGINES; 'remotion-key' also sets its key.
+  ...(() => {
+    let engines: string | null
+    try {
+      engines = localStorage.getItem('mockEngines')
+    } catch {
+      engines = null
+    }
+    return engines?.startsWith('remotion')
+      ? { remotion: { enabled: false, license: null, keySet: engines === 'remotion-key' } }
+      : {}
   })(),
 }
 // video-agent login's approve page. Fixed codes: BCDF-GHJK waits normally, SCRP-TTAG has an HTML label and a 64-letter
@@ -588,7 +605,38 @@ export function installMock() {
       return json({ status: b.decision === 'deny' ? 'denied' : 'approved' })
     }
     if (p === '/api/v1/admin/settings') {
-      if (method === 'PATCH') Object.assign(adminSettings, await readBody(init, input))
+      if (method === 'PATCH') {
+        const { remotionEnabled, remotionLicense, ...rest } = (await readBody(init, input)) as Record<
+          string,
+          unknown
+        > & {
+          remotionEnabled?: boolean
+          remotionLicense?: { tier: 'free' | 'company'; note?: string | null }
+        }
+        const r = adminSettings.remotion
+        if (remotionEnabled !== undefined || remotionLicense !== undefined) {
+          if (!r)
+            return fail(409, 'engine_disabled', "Remotion isn't offered here: add remotion to ENGINES first.")
+          if ((remotionLicense?.tier ?? r.license?.tier) === 'company' && !r.keySet)
+            return fail(
+              409,
+              'remotion_key_missing',
+              "Set VIDEO_AGENT_REMOTION_KEY on the project first; the server only checks that it's set.",
+            )
+          if (remotionLicense)
+            r.license = {
+              by: me.id,
+              email: me.email,
+              at: new Date().toISOString(),
+              tier: remotionLicense.tier,
+              note: remotionLicense.note ?? null,
+            }
+          if (remotionEnabled && !r.license)
+            return fail(400, 'remotion_license_required', 'Choose the license your organisation has first.')
+          if (remotionEnabled !== undefined) r.enabled = remotionEnabled
+        }
+        Object.assign(adminSettings, rest)
+      }
       return json(adminSettings)
     }
     if (p === '/api/v1/users') {

@@ -1886,6 +1886,25 @@ export const AdminSettingsSchema = z
       .describe(
         'video-agent login can get a key by approving the CLI in the browser (the default). Off: paste a key.',
       ),
+    remotion: z
+      .object({
+        enabled: z.boolean().describe('Remotion is offered for new videos (with a recorded license choice).'),
+        license: z
+          .object({
+            by: z.string(),
+            email: z.string(),
+            at: z.string(),
+            tier: z.enum(['free', 'company']),
+            note: z.string().nullable(),
+          })
+          .nullable()
+          .describe('Who recorded the license choice, when, and which; null until someone does.'),
+        keySet: z
+          .boolean()
+          .describe('VIDEO_AGENT_REMOTION_KEY is set (its value is never read by the server).'),
+      })
+      .optional()
+      .describe('The Remotion engine (bring your own license); present only when ENGINES lists remotion.'),
   })
   .openapi('AdminSettings')
 export const UpdateAdminSettingsSchema = z
@@ -1911,6 +1930,19 @@ export const UpdateAdminSettingsSchema = z
     defaultLook: LookIdSchema.nullable().optional().describe('A look id, or null for none.'),
     disabledLooks: z.array(LookIdSchema).max(100).optional().describe('The full list of looks to turn off.'),
     cliLoginEnabled: z.boolean().optional(),
+    remotionEnabled: z
+      .boolean()
+      .optional()
+      .describe('Turn Remotion on or off for new videos. Needs remotion in ENGINES and a license choice.'),
+    remotionLicense: z
+      .object({
+        tier: z.enum(['free', 'company']),
+        note: z.string().max(500).nullable().optional().describe('A license reference or who approved it.'),
+      })
+      .optional()
+      .describe(
+        'The license your organisation has. company needs VIDEO_AGENT_REMOTION_KEY set on the project.',
+      ),
   })
   .openapi('UpdateAdminSettings')
 

@@ -1,4 +1,18 @@
-import { Alert, Anchor, Button, Card, Group, NumberInput, Select, Stack, Switch, Text } from '@mantine/core'
+import {
+  Alert,
+  Anchor,
+  Button,
+  Card,
+  Group,
+  Modal,
+  NumberInput,
+  Radio,
+  Select,
+  Stack,
+  Switch,
+  Text,
+  TextInput,
+} from '@mantine/core'
 import { modals } from '@mantine/modals'
 import { WebhookCard } from '../components/WebhookCard'
 import { DestinationsAdminCard, YouTubeAdminCard } from '../components/DestinationsAdmin'
@@ -7,6 +21,11 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { Link, Navigate } from 'react-router'
 import { $api } from '../api/client'
+import {
+  REMOTION_LICENSE_NOTICE,
+  REMOTION_LICENSE_TIERS,
+  REMOTION_SWITCH_LABEL,
+} from '../../../src/lib/remotion-notice'
 import { PageHeader, relativeTime, showError, useAfterWrite } from '../components/bits'
 
 const STAGE: Record<string, string> = {
@@ -344,6 +363,7 @@ export function AdminPage() {
           <NarrationSettingsCard />
           <RemixSettingsCard />
           <CliLoginSettingsCard />
+          <RemotionSettingsCard />
           <DestinationsAdminCard />
           <YouTubeAdminCard />
           <Card>
@@ -440,6 +460,99 @@ function CliLoginSettingsCard() {
           save.mutate({ body: { cliLoginEnabled: e.currentTarget.checked } })
         }}
       />
+    </Card>
+  )
+}
+
+/**
+ * The Remotion engine (render-engines plan §7): shown only when ENGINES lists it. Turning it on asks which license the
+ * organisation has, after the notice everyone sees word for word; the server records who chose and when.
+ */
+function RemotionSettingsCard() {
+  const afterWrite = useAfterWrite()
+  const settings = $api.useQuery('get', '/api/v1/admin/settings')
+  const [asking, setAsking] = useState(false)
+  const [tier, setTier] = useState<'free' | 'company' | null>(null)
+  const [note, setNote] = useState('')
+  const save = $api.useMutation('patch', '/api/v1/admin/settings', {
+    onSuccess: () => {
+      setAsking(false)
+      afterWrite.onSuccess()
+    },
+    onError: afterWrite.onError,
+  })
+  const r = settings.data?.remotion
+  if (!r) return null
+  const license = r.license
+  return (
+    <Card>
+      <Text fw={600} mb="xs">
+        Render engines
+      </Text>
+      <Stack gap="xs">
+        <Switch
+          label={REMOTION_SWITCH_LABEL}
+          description="HyperFrames stays the default. Remotion videos can't be edited in the browser yet."
+          checked={r.enabled}
+          onChange={(e) => {
+            if (e.currentTarget.checked) {
+              setTier(license?.tier ?? null)
+              setNote(license?.note ?? '')
+              setAsking(true)
+            } else save.mutate({ body: { remotionEnabled: false } })
+          }}
+        />
+        {license ? (
+          <Text size="xs" c="var(--va-faint)">
+            {license.tier === 'free' ? 'Free License' : 'Company License'}, recorded by {license.email}{' '}
+            {relativeTime(license.at)}
+            {license.note ? ` (${license.note})` : ''}
+          </Text>
+        ) : null}
+      </Stack>
+      <Modal opened={asking} onClose={() => setAsking(false)} title="Use Remotion" size="lg">
+        <Stack gap="sm">
+          <Text size="sm">{REMOTION_LICENSE_NOTICE}</Text>
+          <Radio.Group
+            value={tier ?? ''}
+            onChange={(v) => setTier(v === 'free' || v === 'company' ? v : null)}
+          >
+            <Stack gap="xs">
+              <Radio value="free" label={REMOTION_LICENSE_TIERS.free} />
+              <Radio value="company" label={REMOTION_LICENSE_TIERS.company} />
+            </Stack>
+          </Radio.Group>
+          {tier === 'company' && !r.keySet ? (
+            <Alert color="orange" title="VIDEO_AGENT_REMOTION_KEY isn't set">
+              Set VIDEO_AGENT_REMOTION_KEY on the project first; the server only checks that it's set.
+            </Alert>
+          ) : null}
+          <TextInput
+            label="License reference or who approved it"
+            size="sm"
+            value={note}
+            maxLength={500}
+            onChange={(e) => setNote(e.currentTarget.value)}
+          />
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setAsking(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!tier}
+              loading={save.isPending}
+              onClick={() => {
+                if (tier)
+                  save.mutate({
+                    body: { remotionEnabled: true, remotionLicense: { tier, note: note.trim() || null } },
+                  })
+              }}
+            >
+              Turn Remotion on
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </Card>
   )
 }
