@@ -14,6 +14,7 @@ import {
 import { sha256Hex } from '../src/lib/crypto.js'
 import { readTarGz, TarError } from '../src/lib/tar.js'
 import { harness, PROMPT } from './helpers.js'
+import { remotionBundle } from './remotion-files.js'
 import { tarGz } from './tarball.js'
 
 describe('tar reader', () => {
@@ -182,11 +183,7 @@ describe('contract per engine (render-engines §4.1)', () => {
   it("a Remotion version's bundle records no contract, so it isn't editable", async () => {
     const h = harness()
     // What a Remotion run would save and report (Phase 2), so finalize's engine checks pass.
-    h.deps.nextSource = tarGz([
-      { name: 'video/props.json', body: '{"contract":1}' },
-      { name: 'video/src/Root.tsx', body: 'export const Root = () => null' },
-      { name: 'video/summary.json', body: fx('summary.json') },
-    ])
+    h.deps.nextSource = tarGz(remotionBundle({ 'summary.json': fx('summary.json') }))
     h.deps.nextExtra = { manifest: { engine: { id: 'remotion', version: '4.0.540' } } }
     const v = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }))
     await h.deps.store.updateVersion(v.id, 1, { engine: 'remotion' })

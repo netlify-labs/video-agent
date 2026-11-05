@@ -180,3 +180,15 @@ export function propsProblems(raw: Uint8Array | string | undefined): string[] {
   }
   return validate(propsSchema, v, 'props.json')
 }
+
+/**
+ * Everything wrong with a Remotion project's files (render-engines plan §5.1, reviews A5, A8, R1): the locked files and
+ * allowed paths, props.json against its schema, and src/registry.ts against what those props generate. One rule set
+ * for the run (before anything in a restored project runs) and finalize (before anything becomes a version).
+ */
+export function remotionProjectProblems(files: Map<string, Uint8Array>): string[] {
+  const props = propsProblems(files.get('props.json'))
+  if (props.length) return [...projectFileProblems(files), ...props]
+  const parsed = JSON.parse(new TextDecoder().decode(files.get('props.json'))) as Ids
+  return [...projectFileProblems(files), ...registryProblems(files, parsed)]
+}

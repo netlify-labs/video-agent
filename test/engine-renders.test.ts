@@ -3,15 +3,12 @@
 import { describe, expect, it } from 'vitest'
 import { remotionRendersThisMonth } from '../src/domain/usage.js'
 import { harness, pgStore, PROMPT, type Harness } from './helpers.js'
+import { remotionBundle } from './remotion-files.js'
 import { tarGz } from './tarball.js'
 
 /** One finished Remotion run whose manifest reports these renders (a valid Remotion bundle, so it finalizes). */
 async function remotionRun(h: Harness, renders: unknown) {
-  h.deps.nextSource = tarGz([
-    { name: 'video/props.json', body: '{"contract":1}' },
-    { name: 'video/src/Root.tsx', body: 'export const Root = () => null' },
-    { name: 'video/summary.json', body: '{}' },
-  ])
+  h.deps.nextSource = tarGz(remotionBundle())
   h.deps.nextExtra = { manifest: { engine: { id: 'remotion', version: '4.0.540', renders } as never } }
   const v = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }))
   await h.deps.store.updateVersion(v.id, 1, { engine: 'remotion' })

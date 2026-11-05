@@ -131,6 +131,28 @@ async function manifestFor(deps: Deps, a: AttemptRow): Promise<Manifest | null> 
   return isManifest(parsed, a.id) ? parsed : null
 }
 
+/** Run-side engine errors and the category each is recorded under; a missing license key means the engine can't run. */
+const ENGINE_FAILURES: Record<string, FailureCategory> = {
+  engine_tampered: 'engine_tampered',
+  engine_install_failed: 'engine_install_failed',
+  engine_skills_unavailable: 'engine_skills_unavailable',
+  engine_check_failed: 'engine_check_failed',
+  engine_license_key_missing: 'engine_unavailable',
+}
+
+/**
+ * The first run-side engine error in the agent's answer (each starts with its code and a colon, render-engines plan
+ * §5.1), as the attempt's failure: the line it came from is the message. Null when there's none.
+ */
+export function engineFailureOf(text: string | null): { category: FailureCategory; message: string } | null {
+  for (const line of (text ?? '').split('\n')) {
+    const code = /\b(engine_[a-z_]+):/.exec(line)?.[1]
+    const category = code ? ENGINE_FAILURES[code] : undefined
+    if (category) return { category, message: line.trim().slice(0, 500) }
+  }
+  return null
+}
+
 export async function finalizeAttempt(deps: Deps, attemptId: string): Promise<FinalizeResult> {
   const log = deps.log.child({ attemptId })
   const a0 = await deps.store.getAttempt(attemptId)
@@ -378,22 +400,27 @@ export async function finalizeAttempt(deps: Deps, attemptId: string): Promise<Fi
       // its check, plan v2 §8): say so soon, with the agent's reason, instead of waiting out the deadline.
       const version = await deps.store.getVersion(a.jobId, a.versionN)
       const edited = version?.mode === 'render_unchanged'
-      const deadline = (edited ? 2 : deps.config.finalizeDeadlineMin) * MIN
+      // A run that stopped on an engine error (render-engines plan §5.1) also stopped on purpose, under that code.
+      const engineFailure = engineFailureOf(a.resultText ?? null)
+      const deadline = (edited || engineFailure ? 2 : deps.config.finalizeDeadlineMin) * MIN
       if (deps.clock.now().getTime() - finishingSince > deadline) {
         const reason = summarizeResult(a.resultText ?? null)
+        if (engineFailure) log.warn('finalize.engine_failure', { category: engineFailure.category })
         return finish(
           deps,
           a,
           'failed',
-          edited
-            ? {
-                category: 'check_failed',
-                message: `The edited composition didn't pass its check, so nothing was rendered.${reason ? ` ${reason}` : ''} Edit it again or ask for a revision instead.`,
-              }
-            : {
-                category: 'artifacts_missing',
-                message: reason ? `The run ended without saving a video. ${reason}` : e.message,
-              },
+          engineFailure
+            ? engineFailure
+            : edited
+              ? {
+                  category: 'check_failed',
+                  message: `The edited composition didn't pass its check, so nothing was rendered.${reason ? ` ${reason}` : ''} Edit it again or ask for a revision instead.`,
+                }
+              : {
+                  category: 'artifacts_missing',
+                  message: reason ? `The run ended without saving a video. ${reason}` : e.message,
+                },
           null,
         )
       }

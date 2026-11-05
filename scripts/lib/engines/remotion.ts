@@ -17,12 +17,7 @@ import {
 } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { dirname, join, relative } from 'node:path'
-import {
-  REMOTION_VERSION,
-  projectFileProblems,
-  propsProblems,
-  registryProblems,
-} from '../../../src/lib/remotion-project.js'
+import { REMOTION_VERSION, remotionProjectProblems } from '../../../src/lib/remotion-project.js'
 import { readTarGz, TarError } from '../../../src/lib/tar.js'
 import { log as runLog, repoRoot as defaultRoot, runStreaming, StepError } from '../run-tools.js'
 import {
@@ -93,14 +88,7 @@ export function readProject(dir: string): Map<string, Uint8Array> {
 }
 
 /** The rules a restored project must pass before anything in it runs; [] when it does. */
-export function restoredProblems(files: Map<string, Uint8Array>): string[] {
-  const props = propsProblems(files.get('props.json'))
-  if (props.length) return [...projectFileProblems(files), ...props]
-  const parsed = JSON.parse(new TextDecoder().decode(files.get('props.json'))) as Parameters<
-    typeof registryProblems
-  >[1]
-  return [...projectFileProblems(files), ...registryProblems(files, parsed)]
-}
+export const restoredProblems = remotionProjectProblems
 
 export function remotionEngine(overrides: Partial<RemotionRunDeps> = {}): RunEngine & {
   install(videoDir: string): Promise<void>
