@@ -20,6 +20,8 @@ export interface ActionDeps {
   readFile: (path: string) => Promise<Uint8Array>
   /** The workspace (GITHUB_WORKSPACE), where screenshot globs resolve. */
   cwd: string
+  /** Called at named points of a run; tests hold a run there to interleave two (the post-create race check). */
+  hook?: (point: string) => Promise<void>
 }
 
 export function productionDeps(env: Record<string, string | undefined> = process.env): ActionDeps {

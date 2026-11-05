@@ -12,3 +12,4 @@ ui/dist-mock
 .taste-skill
 test/fixtures
 spikes/*/fixture
+packages/action/dist
