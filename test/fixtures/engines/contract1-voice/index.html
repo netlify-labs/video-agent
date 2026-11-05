@@ -1,0 +1,74 @@
+<!DOCTYPE html><html lang="en"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=1920, height=1080">
+    <script src="vendor/gsap.min.js"></script>
+    <script src="vendor/va-contract.js"></script>
+    <style>
+      #root {
+        --va-color-bg: #0b0d10;
+        --va-color-text: #f4f5f7;
+        --va-color-muted: #9aa3ad;
+        --va-color-accent: #14b8a6;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--va-color-bg, #0b0d10); }
+      #root { width: 100%; height: 100%; position: relative; font-family: system-ui, sans-serif; background: var(--va-color-bg); }
+      .beat { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; }
+      .kicker { color: var(--va-color-accent); font-size: 28px; letter-spacing: 0.18em; text-transform: uppercase; }
+      .title { color: var(--va-color-text); font-size: 96px; font-weight: 700; margin-top: 16px; }
+      .sub { color: var(--va-color-muted); font-size: 36px; margin-top: 20px; }
+      #bg-glow { position: absolute; inset: 0; background: radial-gradient(circle at 70% 30%, rgba(20, 184, 166, 0.18), transparent 60%); }
+      .slot { width: 640px; height: 360px; object-fit: cover; border-radius: 16px; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-va-contract="1" data-start="0" data-duration="9" data-width="1920" data-height="1080">
+      <audio id="music" data-va-layer="music" data-va-label="Music" data-va-duck="0.3" src="assets/media/med_theme01.mp3" data-start="0" data-duration="9" data-track-index="2" data-volume="0.8" data-fade-in="1" data-fade-out="1.5" data-automation="{&quot;version&quot;:1,&quot;lanes&quot;:[{&quot;target&quot;:&quot;volume&quot;,&quot;points&quot;:[{&quot;t&quot;:0,&quot;v&quot;:1},{&quot;t&quot;:0.05,&quot;v&quot;:1},{&quot;t&quot;:0.3,&quot;v&quot;:0.3},{&quot;t&quot;:2.5,&quot;v&quot;:0.3},{&quot;t&quot;:2.9,&quot;v&quot;:1},{&quot;t&quot;:5.95,&quot;v&quot;:1},{&quot;t&quot;:6.2,&quot;v&quot;:0.3},{&quot;t&quot;:7.7,&quot;v&quot;:0.3},{&quot;t&quot;:8.1,&quot;v&quot;:1}]}]}"></audio>
+      <div id="bg-glow" class="clip" data-va-layer="glow" data-start="0" data-duration="9" data-track-index="1"></div>
+
+      <section id="intro" class="clip beat" data-va-beat="intro" data-va-label="Opening" data-composition-id="intro" data-start="0" data-duration="3" data-va-authored-duration="3" data-track-index="0">
+        <audio id="voice-intro" data-va-voice="intro" src="assets/voice/intro.wav" data-start="0.3" data-duration="2.2" data-track-index="3" data-volume="1"></audio>
+        <div>
+          <div class="kicker" data-va-text="intro-kicker">Netlify</div>
+          <h1 class="title" data-va-text="intro-title" data-va-label="Headline">Org webhooks</h1>
+        </div>
+        <script>
+          vaBeat('intro', (tl, el) => {
+            tl.from(el.querySelector('[data-va-text="intro-kicker"]'), { opacity: 0, y: 16, duration: 0.5 }, 0.2)
+              .from(el.querySelector('[data-va-text="intro-title"]'), { opacity: 0, y: 24, duration: 0.6 }, 0.4)
+          })
+        </script>
+      </section>
+
+      <section id="demo" class="clip beat" data-va-beat="demo" data-composition-id="demo" data-start="3" data-duration="3" data-va-authored-duration="3" data-track-index="0">
+        <div>
+          <video id="slot-hero-clip" class="slot" data-va-media="hero-clip" data-va-kind="video" src="assets/media/med_clip.mp4" muted="" playsinline="" data-start="0" data-duration="3"></video>
+          <p class="sub" data-va-text="demo-sub">One subscription for every project</p>
+        </div>
+        <script>
+          vaBeat('demo', (tl, el) => {
+            tl.from(el.querySelector('[data-va-media="hero-clip"]'), { scale: 0.9, opacity: 0, duration: 0.6 }, 0)
+              .from(el.querySelector('[data-va-text="demo-sub"]'), { opacity: 0, duration: 0.5 }, 0.5)
+          })
+        </script>
+      </section>
+
+      <section id="outro" class="clip beat" data-va-beat="outro" data-composition-id="outro" data-start="6" data-duration="3" data-va-authored-duration="3" data-track-index="0">
+        <audio id="voice-outro" data-va-voice="outro" src="assets/voice/outro.wav" data-start="0.2" data-duration="1.5" data-track-index="3" data-volume="1"></audio>
+        <div>
+          <img id="slot-logo" class="slot" data-va-media="logo" data-va-kind="image" src="assets/media/med_logo.svg" alt="" style="width: 200px; height: 80px; object-fit: contain">
+          <h2 class="title" data-va-text="outro-cta">Read the docs</h2>
+        </div>
+        <script>
+          vaBeat('outro', (tl, el) => {
+            tl.from(el.querySelector('[data-va-text="outro-cta"]'), { opacity: 0, scale: 0.96, duration: 0.6 }, 0.2)
+          })
+        </script>
+      </section>
+    </div>
+    <script>
+      window.__timelines['main'] = gsap.timeline({ paused: true })
+    </script>
+  
+
+</body></html>

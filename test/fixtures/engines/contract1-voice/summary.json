@@ -1,0 +1,42 @@
+{
+  "title": "Org webhooks",
+  "summary": "Contract-1 spike fixture: three beats, a background layer, an image and a video slot.",
+  "captions": [
+    {
+      "start": 0.3,
+      "end": 1.2,
+      "text": "Meet org webhooks.",
+      "beat": "intro",
+      "voice": true,
+      "beatStart": 0.3,
+      "beatEnd": 1.2
+    },
+    {
+      "start": 1.5,
+      "end": 2.5,
+      "text": "One place for every event.",
+      "beat": "intro",
+      "voice": true,
+      "beatStart": 1.5,
+      "beatEnd": 2.5
+    },
+    {
+      "start": 3.5,
+      "end": 6,
+      "text": "One subscription for every project",
+      "beat": "demo",
+      "textId": "demo-sub",
+      "beatStart": 0.5,
+      "beatEnd": 3
+    },
+    {
+      "start": 6.2,
+      "end": 7.7,
+      "text": "Read the docs.",
+      "beat": "outro",
+      "voice": true,
+      "beatStart": 0.2,
+      "beatEnd": 1.7
+    }
+  ]
+}
