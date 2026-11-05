@@ -2,16 +2,22 @@
 // prints a JSON result on stdout and logs every stage with its timing (scripts/lib/run-tools.ts log) on stderr.
 //
 //   npx tsx scripts/recording.ts analyze (--media <id> | --file <path>) [--trace <trace.json>] [--out <analysis.json>]
+//     [--context <dir>] [--no-transcript]
 //
 // analyze: refuses a recording that isn't normalized (§4.2) with the reason, then writes what happens in it (idle,
 // scene changes, activity, the cursor and clicks: times and positions only, no names) to
 // video/assets/recording/analysis.json. --media finds the library file in video/assets/media/ (<id>.<ext>); the
-// trace, when the recording has one, is .va-run/recording/<id>/trace.json unless --trace says otherwise.
+// trace, when the recording has one, is .va-run/recording/<id>/trace.json unless --trace says otherwise. An
+// analysis.json for the same bytes and analyzer version is reused. Contact sheets per scene and, when the recording
+// has speech, an on-device transcript go to context/recording/<id>/ (or --context): for the agent to read, never
+// archived (scripts/lib/recording-extras.ts).
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { basename, dirname, extname, join } from 'node:path'
 import { parseTrace } from '../src/lib/recording-trace.js'
 import { analyzeRecording } from './lib/recording-analyze.js'
-import { log, parseArgs, repoRoot, StepError } from './lib/run-tools.js'
+import { cachedAnalysis, makeSheets, transcribeRecording } from './lib/recording-extras.js'
+import { log, parseArgs, repoRoot, sha256File, StepError } from './lib/run-tools.js'
+import { parakeet } from './lib/stt/parakeet.js'
 
 const [command, ...rest] = process.argv.slice(2)
 const args = parseArgs(rest)
@@ -31,12 +37,32 @@ async function analyze() {
     args.trace ?? (args.media ? join(repoRoot, '.va-run', 'recording', args.media, 'trace.json') : undefined)
   const trace = tracePath && existsSync(tracePath) ? parseTrace(readFileSync(tracePath, 'utf8')) : null
   const out = args.out ?? join(repoRoot, 'video', 'assets', 'recording', 'analysis.json')
-  const analysis = await analyzeRecording(file, trace)
-  mkdirSync(dirname(out), { recursive: true })
-  writeFileSync(out, `${JSON.stringify(analysis)}\n`)
+  const id = args.media ?? basename(file, extname(file))
+  const context = args.context ?? join(repoRoot, 'context', 'recording', id)
+  const cached = cachedAnalysis(out, sha256File(file))
+  log('recording.analyze_cache', { hit: Boolean(cached) })
+  const analysis = cached ?? (await analyzeRecording(file, trace))
+  if (!cached) {
+    mkdirSync(dirname(out), { recursive: true })
+    writeFileSync(out, `${JSON.stringify(analysis)}\n`)
+  }
+  const sheets = makeSheets(file, analysis, join(context, 'sheets'))
+  // The transcript isn't redone on a cache hit when it's there already: same bytes, same words.
+  const transcriptPath = join(context, 'transcript.json')
+  const words =
+    'no-transcript' in args || (cached && existsSync(transcriptPath))
+      ? null
+      : await transcribeRecording(file, transcriptPath, parakeet(), {
+          workDir: join(repoRoot, '.va-run', 'recording', id, 'stt'),
+          cwd: join(repoRoot, 'video'),
+          deadlineAt: Date.now() + 10 * 60_000,
+        })
   return {
     ok: true,
     out,
+    cached: Boolean(cached),
+    sheets: sheets.length,
+    transcript: existsSync(transcriptPath) ? { path: transcriptPath, words: words?.length ?? null } : null,
     cursorSource: analysis.cursorSource,
     idle: analysis.idle,
     scenes: analysis.scenes,

@@ -34,3 +34,4 @@ spikes/s10/out/
 # Look archives the build packs for the API function (scripts/lib/looks.ts), and the look prepare-run restores in runs
 looks-build/
 context/look/
+context/recording/

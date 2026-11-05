@@ -16,9 +16,14 @@ let file = ''
 /** Runs `recording.ts analyze` like a run does; returns its stdout JSON, stderr log lines and the analysis file. */
 function analyze(args: string[]) {
   const out = join(dir, `analysis-${Math.random().toString(36).slice(2)}.json`)
-  const r = spawnSync('npx', ['tsx', 'scripts/recording.ts', 'analyze', ...args, '--out', out], {
-    encoding: 'utf8',
-  })
+  const context = join(dir, 'context')
+  const r = spawnSync(
+    'npx',
+    ['tsx', 'scripts/recording.ts', 'analyze', ...args, '--out', out, '--context', context],
+    {
+      encoding: 'utf8',
+    },
+  )
   const logs = r.stderr
     .split('\n')
     .filter((l) => l.startsWith('{'))
