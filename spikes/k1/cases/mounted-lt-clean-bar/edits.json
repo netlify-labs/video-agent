@@ -1,0 +1,4 @@
+[
+  { "op": "text", "id": "intro-title", "text": "Meet Orbit 2" },
+  { "op": "retime", "beat": "speaker", "duration": 3.6 }
+]

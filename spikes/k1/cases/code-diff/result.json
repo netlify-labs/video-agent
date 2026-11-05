@@ -1,0 +1,14 @@
+{
+  "case": "code-diff",
+  "bytes": 8759,
+  "contract": [],
+  "hf-check": [],
+  "edit": [],
+  "contract-edited": [],
+  "hf-check-edited": [
+    "warning craft line_unread: \"- function greet(name) {\" (3 words) is on screen 1.00 s (±0.01 s), under its 1.05 s floor: hold it about 0.5 s + 0.3 s a word (1.40 s here) before it leaves or changes; see references/motion.md. (div.code > div:nth-of-type(1))",
+    "warning craft line_unread: \"- console.log(\"hi \" + name)\" (4 words) is on screen 1.04 s (±0.01 s), under its 1.27 s floor: hold it about 0.5 s + 0.3 s a word (1.70 s here) before it leaves or changes; see references/motion.md. (div.code > div:nth-of-type(2))"
+  ],
+  "render": [],
+  "render-edited": []
+}

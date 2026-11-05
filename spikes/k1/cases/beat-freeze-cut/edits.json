@@ -1,0 +1,4 @@
+[
+  { "op": "text", "id": "drop-sub", "text": "Change it once and it's everywhere." },
+  { "op": "retime", "beat": "drop", "duration": 5 }
+]

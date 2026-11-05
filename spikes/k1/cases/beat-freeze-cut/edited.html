@@ -1,0 +1,228 @@
+<!DOCTYPE html><html lang="en"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=1920, height=1080">
+    <script src="vendor/gsap.min.js"></script>
+    <script src="vendor/va-contract.js"></script>
+    <style>
+      #root {
+        --va-color-bg: #0b0d10;
+        --va-color-text: #f4f6f8;
+        --va-color-muted: #a0a8b0;
+        --va-color-accent: #00e5c7;
+        --va-color-on-accent: #04120f;
+        --va-color-panel: #14181f;
+        --va-color-panel-2: #1a2029;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1920px; height: 1080px; overflow: hidden; background: #0b0d10; }
+      #root { width: 100%; height: 100%; position: relative; font-family: system-ui, sans-serif; background: var(--va-color-bg); }
+      .beat { position: absolute; inset: 0; overflow: hidden; }
+      [data-va-beat="intro"] { display: grid; place-items: center; }
+      [data-va-beat="intro"] .title { color: var(--va-color-text); font-size: 96px; font-weight: 700; }
+
+      /* beat-freeze-cut (HyperFrames registry, Apache-2.0), inlined: ids became classes, every selector is scoped to
+         the beat, its colours are the brand's roles (accent tints via color-mix), small labels raised to 28 px. */
+      [data-va-beat="drop"] { color: var(--va-color-text); --line: rgba(255, 255, 255, 0.08); }
+      [data-va-beat="drop"] .bfc-bg { position: absolute; inset: 0; background: radial-gradient(ellipse 80% 60% at 50% 40%, color-mix(in srgb, var(--va-color-accent) 7%, transparent) 0%, transparent 55%), radial-gradient(ellipse 50% 40% at 80% 80%, rgba(255, 255, 255, 0.03) 0%, transparent 50%), var(--va-color-bg); }
+      [data-va-beat="drop"] .bfc-grid { position: absolute; inset: 0; opacity: 0.22; background-image: linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px); background-size: 80px 80px; mask-image: radial-gradient(ellipse 70% 60% at 50% 45%, #000 20%, transparent 75%); }
+      [data-va-beat="drop"] .bfc-stage { position: absolute; inset: 0; transform-origin: 50% 48%; }
+      [data-va-beat="drop"] .bfc-shot { position: absolute; inset: 0; overflow: hidden; }
+      [data-va-beat="drop"] .bfc-shot-b { visibility: hidden; opacity: 0; }
+      [data-va-beat="drop"] .bfc-a-crop { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+      [data-va-beat="drop"] .bfc-a-card { position: relative; width: 680px; height: 720px; border-radius: 36px; background: linear-gradient(160deg, rgba(255, 255, 255, 0.06) 0%, transparent 40%), linear-gradient(180deg, var(--va-color-panel-2) 0%, var(--va-color-panel) 100%); border: 1px solid var(--line); box-shadow: 0 40px 120px rgba(0, 0, 0, 0.55), 0 0 0 1px color-mix(in srgb, var(--va-color-accent) 8%, transparent); overflow: hidden; }
+      [data-va-beat="drop"] .bfc-a-card-glow { position: absolute; left: 50%; top: 28%; width: 420px; height: 420px; margin: -210px 0 0 -210px; border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--va-color-accent) 28%, transparent) 0%, transparent 68%); opacity: 0.85; }
+      [data-va-beat="drop"] .bfc-a-wave { position: absolute; left: 64px; right: 64px; top: 120px; height: 220px; }
+      [data-va-beat="drop"] .bfc-a-wave svg { width: 100%; height: 100%; display: block; }
+      [data-va-beat="drop"] .bfc-wave-path { fill: none; stroke: var(--va-color-accent); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; opacity: 0.95; }
+      [data-va-beat="drop"] .bfc-wave-fill { fill: var(--va-color-accent); opacity: 0.12; }
+      [data-va-beat="drop"] .bfc-a-bars { position: absolute; left: 80px; right: 80px; bottom: 170px; height: 96px; display: flex; align-items: flex-end; gap: 10px; }
+      [data-va-beat="drop"] .bfc-bar { flex: 1; border-radius: 6px 6px 2px 2px; background: linear-gradient(180deg, var(--va-color-accent) 0%, color-mix(in srgb, var(--va-color-accent) 25%, transparent) 100%); transform-origin: 50% 100%; }
+      [data-va-beat="drop"] .bfc-a-meta { position: absolute; left: 64px; right: 64px; bottom: 56px; display: flex; align-items: center; justify-content: space-between; }
+      [data-va-beat="drop"] .bfc-a-kicker { font-size: 28px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--va-color-muted); }
+      [data-va-beat="drop"] .bfc-a-pill { font-size: 28px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--va-color-on-accent); background: var(--va-color-accent); padding: 8px 18px; border-radius: 999px; }
+      [data-va-beat="drop"] .bfc-b-layout { position: absolute; inset: 0; display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 48px; padding: 100px 110px; align-items: center; }
+      [data-va-beat="drop"] .bfc-b-left { display: flex; flex-direction: column; gap: 28px; }
+      [data-va-beat="drop"] .bfc-b-eyebrow { font-size: 28px; font-weight: 700; letter-spacing: 0.22em; text-transform: uppercase; color: var(--va-color-accent); }
+      [data-va-beat="drop"] .bfc-b-title { font-size: 128px; font-weight: 900; line-height: 0.92; letter-spacing: -0.04em; text-transform: uppercase; color: var(--va-color-text); }
+      [data-va-beat="drop"] .bfc-b-sub { font-size: 32px; font-weight: 500; color: var(--va-color-muted); max-width: 560px; line-height: 1.35; }
+      [data-va-beat="drop"] .bfc-b-right { display: flex; flex-direction: column; gap: 18px; }
+      [data-va-beat="drop"] .bfc-b-card { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 28px 32px; border-radius: 20px; background: linear-gradient(135deg, var(--va-color-panel-2), var(--va-color-panel)); border: 1px solid var(--line); box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35); }
+      [data-va-beat="drop"] .bfc-b-card-label { font-size: 28px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--va-color-muted); }
+      [data-va-beat="drop"] .bfc-b-card-value { font-size: 42px; font-weight: 800; letter-spacing: -0.03em; color: var(--va-color-text); }
+      [data-va-beat="drop"] .bfc-b-card-value.accent { color: var(--va-color-accent); }
+      [data-va-beat="drop"] .bfc-b-accent-bar { width: 120px; height: 6px; border-radius: 999px; background: var(--va-color-accent); opacity: 0.9; }
+      [data-va-beat="drop"] .bfc-intro { position: absolute; left: 0; right: 0; top: 72px; display: flex; justify-content: center; z-index: 20; opacity: 0; visibility: hidden; }
+      [data-va-beat="drop"] .bfc-intro-label { font-size: 28px; font-weight: 700; letter-spacing: 0.24em; text-transform: uppercase; color: var(--va-color-muted); padding: 10px 20px; border: 1px solid var(--line); border-radius: 999px; background: rgba(11, 13, 16, 0.55); }
+      [data-va-beat="drop"] .bfc-hit { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 30; opacity: 0; visibility: hidden; }
+      [data-va-beat="drop"] .bfc-hit-text { font-size: 160px; font-weight: 900; letter-spacing: -0.04em; text-transform: uppercase; color: var(--va-color-text); text-shadow: 0 0 40px color-mix(in srgb, var(--va-color-accent) 35%, transparent), 0 8px 40px rgba(0, 0, 0, 0.55); -webkit-text-stroke: 2px rgba(0, 0, 0, 0.35); paint-order: stroke fill; }
+      [data-va-beat="drop"] .bfc-freeze { position: absolute; inset: 0; z-index: 25; opacity: 0; visibility: hidden; }
+      [data-va-beat="drop"] .bfc-freeze-outline { position: absolute; inset: 48px; border: 3px solid var(--va-color-accent); border-radius: 8px; box-shadow: 0 0 48px color-mix(in srgb, var(--va-color-accent) 20%, transparent); opacity: 0; }
+      [data-va-beat="drop"] .bfc-freeze-flash { position: absolute; inset: 0; background: #ffffff; opacity: 0; mix-blend-mode: screen; }
+      [data-va-beat="drop"] .bfc-freeze-contour { position: absolute; inset: 0; background: linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--va-color-accent) 8%, transparent) 48%, transparent 52%), radial-gradient(ellipse 40% 55% at 50% 48%, transparent 40%, color-mix(in srgb, var(--va-color-accent) 18%, transparent) 100%); opacity: 0; mix-blend-mode: screen; }
+      [data-va-beat="drop"] .bfc-freeze-badge { position: absolute; top: 80px; right: 96px; font-size: 28px; font-weight: 800; letter-spacing: 0.2em; text-transform: uppercase; color: var(--va-color-on-accent); background: var(--va-color-accent); padding: 10px 18px; border-radius: 6px; opacity: 0; }
+      [data-va-beat="drop"] .bfc-cut { position: absolute; inset: -8% -20%; z-index: 40; opacity: 0; visibility: hidden; background: linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--va-color-accent) 12%, transparent) 35%, rgba(255, 255, 255, 0.55) 50%, color-mix(in srgb, var(--va-color-accent) 12%, transparent) 65%, transparent 100%); filter: blur(18px); }
+      [data-va-beat="drop"] .bfc-vignette { position: absolute; inset: 0; z-index: 15; background: radial-gradient(ellipse 75% 70% at 50% 50%, transparent 45%, rgba(0, 0, 0, 0.55) 100%); opacity: 0.85; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-va-contract="1" data-start="0" data-duration="8" data-width="1920" data-height="1080">
+      <section id="intro" class="clip beat" data-va-beat="intro" data-composition-id="intro" data-start="0" data-duration="3" data-va-authored-duration="3" data-track-index="0">
+        <h1 class="title" data-va-text="intro-title">Meet Orbit</h1>
+        <script>
+          vaBeat('intro', (tl, el) => {
+            tl.fromTo(el.querySelector('[data-va-text="intro-title"]'), { y: 12 }, { y: 0, duration: 0.6, ease: 'power3.out' }, 0)
+          })
+        </script>
+      </section>
+      <section id="drop" class="clip beat" data-va-beat="drop" data-va-label="The drop" data-composition-id="drop" data-start="3" data-duration="5" data-va-authored-duration="6" data-track-index="0">
+        <div class="bfc-bg"></div>
+        <div class="bfc-grid"></div>
+        <div class="bfc-stage">
+          <div class="bfc-shot bfc-shot-a">
+            <div class="bfc-a-crop" data-layout-allow-overflow="">
+              <div class="bfc-a-card" data-layout-allow-overflow="">
+                <div class="bfc-a-card-glow"></div>
+                <div class="bfc-a-wave">
+                  <svg viewBox="0 0 592 220" preserveAspectRatio="none">
+                    <path class="bfc-wave-fill" d="M0,160 C40,150 60,90 100,100 C140,110 160,40 200,55 C240,70 260,150 300,140 C340,130 360,30 400,45 C440,60 460,130 500,120 C540,110 560,70 592,80 L592,220 L0,220 Z"></path>
+                    <path class="bfc-wave-path" d="M0,160 C40,150 60,90 100,100 C140,110 160,40 200,55 C240,70 260,150 300,140 C340,130 360,30 400,45 C440,60 460,130 500,120 C540,110 560,70 592,80"></path>
+                  </svg>
+                </div>
+                <div class="bfc-a-bars">
+                  <div class="bfc-bar" style="height: 34%"></div><div class="bfc-bar" style="height: 58%"></div><div class="bfc-bar" style="height: 42%"></div><div class="bfc-bar" style="height: 78%"></div>
+                  <div class="bfc-bar" style="height: 52%"></div><div class="bfc-bar" style="height: 88%"></div><div class="bfc-bar" style="height: 46%"></div><div class="bfc-bar" style="height: 64%"></div>
+                  <div class="bfc-bar" style="height: 36%"></div><div class="bfc-bar" style="height: 72%"></div><div class="bfc-bar" style="height: 48%"></div><div class="bfc-bar" style="height: 92%"></div>
+                </div>
+                <div class="bfc-a-meta">
+                  <span class="bfc-a-kicker" data-va-text="drop-kicker" data-va-label="Card label">Orbit Sync</span>
+                  <span class="bfc-a-pill" data-va-text="drop-pill" data-va-label="Card pill">Live</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="bfc-shot bfc-shot-b">
+            <div class="bfc-b-layout">
+              <div class="bfc-b-left">
+                <div class="bfc-b-eyebrow" data-va-text="drop-eyebrow" data-va-label="Eyebrow">New in Orbit</div>
+                <div class="bfc-b-title"><div data-va-text="drop-title-1" data-va-label="Title line 1">Always</div><div data-va-text="drop-title-2" data-va-label="Title line 2">in sync</div></div>
+                <div class="bfc-b-accent-bar"></div>
+                <div class="bfc-b-sub" data-va-text="drop-sub" data-va-label="Subtitle">Change it once and it's everywhere.</div>
+              </div>
+              <div class="bfc-b-right">
+                <div class="bfc-b-card"><span class="bfc-b-card-label" data-va-text="drop-stat-1-label" data-va-label="Stat 1 label">Devices</span><span class="bfc-b-card-value accent" data-va-text="drop-stat-1" data-va-label="Stat 1">All</span></div>
+                <div class="bfc-b-card"><span class="bfc-b-card-label" data-va-text="drop-stat-2-label" data-va-label="Stat 2 label">Latency</span><span class="bfc-b-card-value" data-va-text="drop-stat-2" data-va-label="Stat 2">0.8s</span></div>
+                <div class="bfc-b-card"><span class="bfc-b-card-label" data-va-text="drop-stat-3-label" data-va-label="Stat 3 label">Setup</span><span class="bfc-b-card-value accent" data-va-text="drop-stat-3" data-va-label="Stat 3">None</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="bfc-vignette"></div>
+        <div class="bfc-intro"><span class="bfc-intro-label" data-va-text="drop-intro" data-va-label="Intro label">On the beat</span></div>
+        <div class="bfc-hit"><span class="bfc-hit-text" data-va-text="drop-hit" data-va-label="Hit word">Drop</span></div>
+        <div class="bfc-freeze">
+          <div class="bfc-freeze-flash"></div>
+          <div class="bfc-freeze-contour"></div>
+          <div class="bfc-freeze-outline"></div>
+          <div class="bfc-freeze-badge" data-va-text="drop-badge" data-va-label="Freeze badge">Freeze</div>
+        </div>
+        <div class="bfc-cut"></div>
+        <script>
+          vaBeat('drop', (tl, el) => {
+            const q = (s) => el.querySelector(s)
+            const stage = q('.bfc-stage')
+            const shotA = q('.bfc-shot-a')
+            const shotB = q('.bfc-shot-b')
+            const aCrop = q('.bfc-a-crop')
+            const aCard = q('.bfc-a-card')
+            const intro = q('.bfc-intro')
+            const hit = q('.bfc-hit')
+            const freeze = q('.bfc-freeze')
+            const outline = q('.bfc-freeze-outline')
+            const flash = q('.bfc-freeze-flash')
+            const contour = q('.bfc-freeze-contour')
+            const badge = q('.bfc-freeze-badge')
+            const cut = q('.bfc-cut')
+            const bLeft = q('.bfc-b-left')
+            const bCards = [...el.querySelectorAll('.bfc-b-card')]
+            const bars = [...el.querySelectorAll('.bfc-bar')]
+            // Upstream's CONFIG (authored seconds; a retime stretches them all).
+            const beat1 = 0.7
+            const freezeAt = 2.2
+            const cutAt = 3.0
+            const beat3 = 4.7
+            const holdAt = 5.2
+            const pattern = [0.55, 1.15, 0.7, 1.35, 0.9, 1.4, 0.65, 1.1, 0.5, 1.25, 0.8, 1.45]
+
+            // Starting states at 0 on the timeline (not gsap.set outside it), so seeking back restores them.
+            tl.set(stage, { scale: 1, x: 0, y: 0, filter: 'blur(0px) brightness(1)' }, 0)
+              .set(aCrop, { scale: 1, x: 0, y: 0 }, 0)
+              .set(shotA, { opacity: 1, visibility: 'visible' }, 0)
+              .set(shotB, { opacity: 0, visibility: 'hidden' }, 0)
+              .set(intro, { opacity: 0, visibility: 'hidden', y: -12 }, 0)
+              .set(hit, { opacity: 0, visibility: 'hidden', scale: 1.15 }, 0)
+              .set(freeze, { opacity: 0, visibility: 'hidden' }, 0)
+              .set([outline, flash, contour, badge], { opacity: 0 }, 0)
+              .set(cut, { opacity: 0, visibility: 'hidden', scaleX: 0.4, x: -200 }, 0)
+              .set(bLeft, { opacity: 0, x: -48 }, 0)
+              .set(bCards, { opacity: 0, x: 40 }, 0)
+              .set(bars, { scaleY: 0.55 }, 0)
+
+            // 0–0.7: push-in and the intro label.
+            tl.fromTo(aCard, { scale: 0.9, y: 20 }, { scale: 1, y: 0, duration: 0.55, ease: 'power3.out' }, 0)
+              .to(stage, { scale: 1.04, duration: 0.7, ease: 'power1.out' }, 0)
+              .to(bars, { scaleY: 1, duration: 0.5, ease: 'power2.out', stagger: 0.02 }, 0.12)
+              .set(intro, { visibility: 'visible' }, 0.12)
+              .to(intro, { opacity: 1, y: 0, duration: 0.28, ease: 'power2.out' }, 0.12)
+              .to(intro, { opacity: 0, y: -8, duration: 0.18, ease: 'power2.in' }, 0.52)
+              .set(intro, { visibility: 'hidden', opacity: 0 }, 0.7)
+            // 0.7–1.35: beat 1, a hard reframe.
+            tl.to(aCrop, { scale: 1.18, x: -80, y: 24, duration: 0.22, ease: 'power4.out' }, beat1)
+              .to(stage, { scale: 1.08, duration: 0.28, ease: 'expo.out' }, beat1)
+              .to(bars, { scaleY: (i) => pattern[i % pattern.length], duration: 0.18, ease: 'power3.out', stagger: 0.01 }, beat1)
+            // 1.35–2.2: speed ramp into the freeze.
+            const rampDur = freezeAt - 1.35
+            tl.to(aCrop, { scale: 1.28, x: 28, y: -12, duration: rampDur, ease: 'power3.in' }, 1.35)
+              .to(stage, { scale: 1.12, filter: 'blur(0px) brightness(1.08)', duration: rampDur, ease: 'power2.in' }, 1.35)
+              .to(bars, { scaleY: 1.55, duration: rampDur * 0.85, ease: 'power2.in', stagger: { each: 0.012, from: 'center' } }, 1.35)
+            // 2.2–3.0: the freeze hit.
+            tl.set(freeze, { visibility: 'visible', opacity: 1 }, freezeAt)
+              .set(outline, { opacity: 1 }, freezeAt)
+              .set(contour, { opacity: 0.85 }, freezeAt)
+              .set(badge, { opacity: 1 }, freezeAt)
+              .set(hit, { visibility: 'visible', opacity: 1, scale: 1 }, freezeAt)
+              .to(stage, { scale: 1.12, filter: 'blur(0px) brightness(1.15)', duration: 0.05, ease: 'power4.out' }, freezeAt)
+              .fromTo(flash, { opacity: 0.55 }, { opacity: 0, duration: 0.28, ease: 'power2.out' }, freezeAt)
+              .to(hit, { opacity: 0, scale: 0.96, duration: 0.2, ease: 'power2.in' }, freezeAt + 0.55)
+              .set(hit, { visibility: 'hidden', opacity: 0 }, freezeAt + 0.78)
+              .to([outline, contour, badge], { opacity: 0.75, duration: 0.35, ease: 'sine.out' }, freezeAt + 0.35)
+            // 3.0–3.35: the hard cut to shot B.
+            const switchAt = cutAt + 0.14
+            tl.set(cut, { visibility: 'visible' }, cutAt)
+              .fromTo(cut, { opacity: 0, scaleX: 0.35, x: -280 }, { opacity: 0.95, scaleX: 1.6, x: 120, duration: 0.12, ease: 'power4.in' }, cutAt)
+              .to(stage, { filter: 'blur(14px) brightness(1.35)', scaleX: 1.35, scaleY: 0.92, duration: 0.12, ease: 'power3.in' }, cutAt)
+              .set(shotA, { opacity: 0, visibility: 'hidden' }, switchAt)
+              .set(shotB, { opacity: 1, visibility: 'visible' }, switchAt)
+              .set([freeze, outline, flash, contour, badge], { opacity: 0, visibility: 'hidden' }, switchAt)
+              .set(bLeft, { opacity: 1, x: -24 }, switchAt)
+              .set(bCards, { opacity: 1, x: 24 }, switchAt)
+              .to(stage, { filter: 'blur(0px) brightness(1)', scale: 1, scaleX: 1, scaleY: 1, x: 0, y: 0, duration: 0.18, ease: 'power3.out' }, switchAt)
+              .to(cut, { opacity: 0, x: 360, duration: 0.16, ease: 'power2.out' }, cutAt + 0.16)
+              .set(cut, { visibility: 'hidden', opacity: 0 }, cutAt + 0.34)
+              .to(bLeft, { x: 0, duration: 0.4, ease: 'power3.out' }, switchAt)
+              .to(bCards, { x: 0, duration: 0.38, ease: 'power3.out', stagger: 0.06 }, switchAt + 0.04)
+              .to(stage, { scale: 1.02, duration: 1.17, ease: 'sine.out' }, switchAt + 0.18)
+            // 4.7–5.2: the final punch-in; then a readable hold to the end.
+            tl.to(stage, { scale: 1.08, duration: 0.14, ease: 'power4.out' }, beat3)
+              .to(bCards[1], { scale: 1.04, duration: 0.12, ease: 'power3.out' }, beat3)
+              .to(bCards[1], { scale: 1, duration: 0.22, ease: 'power2.out' }, beat3 + 0.14)
+              .to(stage, { scale: 1.03, duration: 0.35, ease: 'power2.out' }, holdAt)
+          })
+        </script>
+      </section>
+    </div>
+    <script>
+      window.__timelines['main'] = gsap.timeline({ paused: true })
+    </script>
+  
+
+</body></html>

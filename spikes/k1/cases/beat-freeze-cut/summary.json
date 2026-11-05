@@ -1,0 +1,9 @@
+{
+  "title": "K1 beat-freeze-cut",
+  "summary": "beat-freeze-cut inlined into a contract beat.",
+  "captions": [
+    { "start": 0, "end": 3, "text": "Meet Orbit", "beat": "intro", "textId": "intro-title", "beatStart": 0, "beatEnd": 3 },
+    { "start": 5.2, "end": 6.0, "text": "Drop", "beat": "drop", "textId": "drop-hit", "beatStart": 2.2, "beatEnd": 3.0 },
+    { "start": 6.14, "end": 9, "text": "Every change lands everywhere the moment you make it.", "beat": "drop", "textId": "drop-sub", "beatStart": 3.14, "beatEnd": 6 }
+  ]
+}

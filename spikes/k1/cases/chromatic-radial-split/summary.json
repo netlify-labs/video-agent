@@ -1,0 +1,9 @@
+{
+  "title": "K1 chromatic-radial-split",
+  "summary": "chromatic-radial-split inlined into a contract beat.",
+  "captions": [
+    { "start": 0, "end": 3, "text": "Meet Orbit", "beat": "intro", "textId": "intro-title", "beatStart": 0, "beatEnd": 3 },
+    { "start": 3, "end": 5, "text": "Scattered", "beat": "split", "textId": "split-before", "beatStart": 0, "beatEnd": 2 },
+    { "start": 5, "end": 7, "text": "Together", "beat": "split", "textId": "split-after", "beatStart": 2, "beatEnd": 4 }
+  ]
+}

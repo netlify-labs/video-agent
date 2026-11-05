@@ -1,0 +1,4 @@
+[
+  { "op": "text", "id": "diff-line-4", "text": "  const msg = translate(\"hello\", lang)" },
+  { "op": "retime", "beat": "diff", "duration": 4.5 }
+]

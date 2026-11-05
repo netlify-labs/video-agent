@@ -1,0 +1,4 @@
+[
+  { "op": "text", "id": "reveal-headline", "text": "All your work, one home" },
+  { "op": "retime", "beat": "reveal", "duration": 3 }
+]

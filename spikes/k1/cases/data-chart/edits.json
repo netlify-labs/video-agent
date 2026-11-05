@@ -1,0 +1,5 @@
+[
+  { "op": "text", "id": "chart-title", "text": "Quarterly revenue vs. signups" },
+  { "op": "text", "id": "chart-bar-6", "text": "$31K" },
+  { "op": "retime", "beat": "chart", "duration": 8 }
+]

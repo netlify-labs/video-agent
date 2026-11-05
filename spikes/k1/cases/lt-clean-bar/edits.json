@@ -1,0 +1,4 @@
+[
+  { "op": "text", "id": "speaker-name", "text": "Sam Okafor" },
+  { "op": "retime", "beat": "speaker", "duration": 3.6 }
+]

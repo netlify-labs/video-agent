@@ -1,0 +1,8 @@
+{
+  "title": "K1 code-diff",
+  "summary": "code-diff inlined into a contract beat.",
+  "captions": [
+    { "start": 0, "end": 3, "text": "Meet Orbit", "beat": "intro", "textId": "intro-title", "beatStart": 0, "beatEnd": 3 },
+    { "start": 3, "end": 9, "text": "greet.js", "beat": "diff", "textId": "diff-filename", "beatStart": 0, "beatEnd": 6 }
+  ]
+}

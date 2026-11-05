@@ -700,6 +700,60 @@ the gate logs every value and the thresholds get revisited after live gate part 
 
 ## Looks spikes (docs/plans/2026-11-04-looks.md §10)
 
+### K1: inlining registry blocks into contract scenes (2026-11-05, `spikes/k1`, `npx tsx spikes/k1/run.ts [--render] [case…]`, no credits)
+
+Each case in `spikes/k1/cases/<block>/` is a contract composition: an intro scene plus one scene holding the block,
+rewritten by hand. The harness runs the contract validator, `hyperframes check` (0.8.222), the editor's own edit
+operations through `applyEdits` (a text edit on the block's text and a retime of its scene: the same code the browser
+editor and the server run), both checks again, and with `--render` a draft render of both versions. Frames of every
+edited render were looked at: the new text and timing show.
+
+| Block | Inlinable | Effort | Notes |
+| --- | --- | --- | --- |
+| `lt-clean-bar` | yes | 10 min | Direct port; the role line raised from 27 to 28 px |
+| `beat-freeze-cut` | yes | 15 min, full rewrite of 27 KB | Ids to classes, 14 editable texts, six labels raised to 28 px; one `line_unread` warning by design (a 0.47 s flash label) |
+| `editorial-flash-overlay` | yes | 8 min | Has no text of its own: the scene's headline swaps in under the flash, which now hits at 0.6 s as the transition into the scene; the overlay needs `data-layout-allow-overflow` |
+| `chromatic-radial-split` | yes | 12 min | WebGL kept; its two panels stay in the DOM (hidden, tagged) and are drawn into textures when the scene is built; the shader's progress is a tweened value (seek-safe), with a crossfade fallback. Canvas text is one line: labels must stay short |
+| `camcorder-hud` | yes | 8 min | The counter fills itself from the timeline and scales by `data-duration / data-va-authored-duration`, or a retimed scene shows the wrong time |
+| `code-diff` | yes | 15 min | Baked Shiki tokens became static token spans with syntax colours as roles; one `data-va-text` per code line, and a text edit keeps the token colours |
+| `data-chart` | yes | 15 min | The SVG is static markup (it was built with `createElementNS`); counting labels now fade in; editing a value doesn't change its bar |
+| `bar-chart-race` | yes | 15 min | The driver is a tweened value in the scene's vaBeat; rows carry their data in `data-*`; names and titles are editable, values and ticks are drawn by the script |
+| `code-slice-hero` | **no** | assessed only | WebGL scene whose headlines are drawn into textures (no DOM text to edit), built asynchronously after a font load, redrawn on a window `hf-seek` event, helpers call `document.createElement`, and 42 KB with its helpers. **Replace by hand** in `terminal`: a DOM code hero with per-character spans flipped in by a staggered `rotateX` |
+
+**Mounted with `data-composition-src` inside a scene** (`cases/mounted-lt-clean-bar`): the contract validator and
+`hyperframes check` both pass and it renders, but its text isn't in `index.html`, so the editor can't edit it, and a
+retime doesn't reach it: `relayout` leaves the mount's own `data-duration` and its timeline isn't under the scene's
+time-scale, so after shortening the scene the block never plays its exit and is cut at the scene's end. Inlining stays
+the rule (plan §4.5). `look:check` could refuse `data-composition-src` in examples; the contract doesn't see it today.
+
+**The Building blocks pattern** (for each look's LOOK.md):
+
+1. Markup inside the `<section data-va-beat>`; ids become classes (several scenes may use the same block); every CSS
+   selector scoped to `[data-va-beat="<id>"]`.
+2. The timeline is rewritten inside `vaBeat('<id>', (tl, el) => …)`, selecting only inside `el`. Initial states are
+   `tl.set(…, 0)` or `tl.fromTo`, never `gsap.set` outside the timeline.
+3. No `document.` anywhere in a scene script: the contract refuses it even for `createElement`. Helper elements (ticks,
+   grid lines, a scratch canvas) go in the scene's markup; to split text into spans, create them with
+   `el.ownerDocument.createElement`.
+4. Every visible text has its own `data-va-text` and `data-va-label`; a `<br>` inside a text becomes one element per
+   line; code gets one text per line. Scripts never write the text of a `data-va-text` element (an edit would be
+   overwritten): text a script draws (counters, values) starts empty and has no text id.
+5. Anything that shows time or progress scales by `data-duration / data-va-authored-duration`, so a retime keeps it
+   right. Script-driven blocks animate a tweened value (`tl.fromTo(driver, { t: 0 }, { t: END, onUpdate })`), which
+   seeks.
+6. Block variables become `data-*` attributes on the scene or its rows.
+7. Upstream colours become the brand's roles; tints are `color-mix(in srgb, var(--va-color-<role>) N%, transparent)`
+   inside gradients and shadows (only a role's own value must be a literal).
+8. No jsDelivr GSAP, no Google Fonts: the vendored GSAP and the brand's fonts or the look's font stack. Every reading
+   text at 28 px or more (inside an SVG, in viewBox units that still render at 28 px). Full-bleed overlays get
+   `data-layout-allow-overflow`. A standalone transition block is retimed to lead into its scene.
+
+**Fonts (changes plan §3):** in the HyperFrames render, the planned `terminal` stack
+`ui-monospace, "SF Mono", Menlo, "DejaVu Sans Mono", monospace` came out as a proportional sans; a stack starting
+with `"JetBrains Mono"` rendered monospace, and Georgia rendered as a serif. So a look's font stack must lead with a
+family the renderer has, and `terminal`'s becomes `"JetBrains Mono", ui-monospace, Menlo, monospace` (to confirm on
+the runner in K2 or with fonts in looks, phase 4.3).
+
 ### K4: licences of the registry items the starter looks use (2026-11-05, research only, no credits)
 
 Read every file of each item at `heygen-com/hyperframes@v0.8.222` (`registry/<blocks|components>/<name>/`): its

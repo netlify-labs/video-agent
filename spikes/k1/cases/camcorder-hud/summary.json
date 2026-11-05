@@ -1,0 +1,8 @@
+{
+  "title": "K1 camcorder-hud",
+  "summary": "camcorder-hud inlined into a contract beat.",
+  "captions": [
+    { "start": 0, "end": 3, "text": "Meet Orbit", "beat": "intro", "textId": "intro-title", "beatStart": 0, "beatEnd": 3 },
+    { "start": 3, "end": 7, "text": "Day one at Orbit", "beat": "footage", "textId": "footage-headline", "beatStart": 0, "beatEnd": 4 }
+  ]
+}
