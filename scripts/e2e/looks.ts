@@ -6,7 +6,8 @@
 //   npx tsx scripts/e2e/looks.ts --dry       # checks the env and local tools, prints the steps and credits; no network
 //   npx tsx scripts/e2e/looks.ts --selftest  # the offline checks on fixtures; no network
 //   VIDEO_AGENT_URL=https://<site> VIDEO_AGENT_KEY=nva_… [LOOKS=clean,kinetic,terminal] [CREDIT_CEILING=700] \
-//     [RESTYLE=1] [RETRY_CHECK=0] [FONT_LOOKS=…] npx tsx scripts/e2e/looks.ts [--keep]
+//     [RESTYLE=1] [RETRY_CHECK=0] [FONT_LOOKS=…] [RESTYLE_FROM=<videoId>] npx tsx scripts/e2e/looks.ts [--keep]
+//   RESTYLE_FROM: finish a run whose creates passed: restyle that kept video (made in the first look) only.
 //
 // Steps, each logged as one JSON line ({"step":"create","look":"kinetic","videoId":…,"ms":…,"credits":…}):
 //   1. For each look: create a 15 s 16:9 video from a fixed prompt with that look; wait for ready; check version.look,
@@ -44,6 +45,8 @@ const ceiling = Number(env.CREDIT_CEILING ?? 700)
 const perRun = Number(env.LOOK_RUN_CREDITS ?? 140)
 const restyle = (env.RESTYLE ?? '1') === '1'
 const retryCheck = env.RETRY_CHECK === '1'
+/** A kept video made in the first look: restyle it instead of making the videos again (finishing a run). */
+const restyleFrom = env.RESTYLE_FROM ?? ''
 const fontLooks = (env.FONT_LOOKS ?? '')
   .split(',')
   .map((s) => s.trim())
@@ -53,11 +56,11 @@ const PROMPT =
   'A 15-second launch video for Lumen, a shared notebook for small teams. The news: instant search across everything. End with "Try Lumen free".'
 
 const tool = (bin: string) => spawnSync(bin, ['-version'], { encoding: 'utf8' }).status === 0
-const runs = looks.length + (restyle && looks.length > 1 ? 1 : 0) + (retryCheck ? 1 : 0)
+const runs = (restyleFrom ? 0 : looks.length) + (restyle && looks.length > 1 ? 1 : 0) + (retryCheck ? 1 : 0)
 const projected = runs * perRun
 
 export const STEPS = [
-  ...looks.map(
+  ...(restyleFrom ? [] : looks).map(
     (l) =>
       `create a 15 s 16:9 video in the ${l} look (≈${perRun} credits): wait ready; version.look is ${l}; editable; download; contact sheet${tool(FFMPEG) ? '' : ' (no ffmpeg: skipped, weak check)'}`,
   ),
@@ -131,6 +134,7 @@ async function main() {
         LOOK_RUN_CREDITS: env.LOOK_RUN_CREDITS,
         RESTYLE: env.RESTYLE,
         RETRY_CHECK: env.RETRY_CHECK,
+        RESTYLE_FROM: env.RESTYLE_FROM,
         FONT_LOOKS: env.FONT_LOOKS,
         FFMPEG: env.FFMPEG,
       },
@@ -200,8 +204,8 @@ async function main() {
   }
 
   try {
-    const first: Record<string, string> = {}
-    for (const look of looks) {
+    const first: Record<string, string> = restyleFrom ? { [looks[0] ?? '']: restyleFrom } : {}
+    for (const look of restyleFrom ? [] : looks) {
       const { id, v } = await run('create', look, async () => {
         const r = await call<{ id: string }>(key, 'POST', '/api/v1/videos', {
           prompt: PROMPT,
@@ -227,8 +231,9 @@ async function main() {
       const [from = '', to = ''] = looks
       const id = first[from] ?? ''
       const { v } = await run('restyle', to, async () => {
-        const r = await call(key, 'POST', `/api/v1/videos/${id}/revise`, {
+        const r = await call(key, 'POST', `/api/v1/videos/${id}/versions`, {
           prompt: `Restyle this video in the ${to} look.`,
+          fromVersion: 1,
           look: to,
         })
         check(r.status === 202, 'restyle', { status: r.status, body: r.json })
