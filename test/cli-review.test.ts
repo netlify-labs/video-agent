@@ -18,9 +18,13 @@ describe('video-agent publish and unpublish', () => {
     expect(pub.urls.page).toMatch(/\/v\/[a-z2-9]+$/)
     expect(pub.urls.mp4).toBe(`${pub.urls.page}.mp4`)
     expect(pub.embed).toContain('<video')
+    expect(pub.player).toBe(
+      `<script type="module" src="${SITE}/player.js"></script><video-agent-player src="${pub.urls.page}"></video-agent-player>`,
+    )
     expect(Object.keys(pub).sort()).toMatchInlineSnapshot(`
       [
         "embed",
+        "player",
         "publishedAt",
         "showTranscript",
         "slug",
@@ -32,6 +36,8 @@ describe('video-agent publish and unpublish', () => {
     const human = await run(['publish', id])
     expect(human.stdout).toContain(`share  ${pub.urls.page}`)
     expect(human.stdout).toContain('Embed:')
+    expect(human.stdout).toContain('Player:')
+    expect(human.stdout).toContain(`<video-agent-player src="${pub.urls.page}">`)
     expect((await run(['unpublish', id])).stdout).toContain('Unpublished v1')
     expect((await run(['unpublish', id, '--json'])).code).toBe(EXIT.notFound)
   })

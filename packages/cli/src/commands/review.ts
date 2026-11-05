@@ -26,6 +26,7 @@ const publish: Handler = async (ctx) => {
       '',
       'Embed:',
       pub.embed ?? '',
+      ...(pub.player ? ['', 'Player:', pub.player] : []),
     ].join('\n'),
   }
 }

@@ -207,6 +207,28 @@ await va.videos.create({ prompt: 'A 20-second demo of the new checkout', mediaId
             ),
           },
           {
+            id: 'player',
+            title: 'Player',
+            description: (
+              <>
+                <Code>{'<video-agent-player>'}</Code> plays a published video on any page: sized before it
+                loads, captions on, CC BY credits always shown. No dependencies. The publish response's{' '}
+                <Code>player</Code> field has this snippet for each video.
+              </>
+            ),
+            children: (
+              <Card>
+                <CodeBlock
+                  code={`<script type="module" src="${site}/player.js"></script>
+<video-agent-player src="${site}/v/<slug>"></video-agent-player>
+
+<!-- Or from npm: import 'netlify-video-agent-player' -->`}
+                  lang="http"
+                />
+              </Card>
+            ),
+          },
+          {
             id: 'browser',
             title: 'In a browser',
             children: (
