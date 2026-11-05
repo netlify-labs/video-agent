@@ -2,7 +2,7 @@
 // mode, HyperFrames when neither says.
 //   npx tsx scripts/engine.ts check                 the engine's checks; exits 1 on any error
 //   npx tsx scripts/engine.ts snapshot --at 1,3,5   stills at those seconds (all in one call: each one is a render)
-//   npx tsx scripts/engine.ts render                render-job renders runs; this says so (local mode, later)
+//   npx tsx scripts/engine.ts render                render-job renders runs; this says so (local mode, CLI plan)
 //   npx tsx scripts/engine.ts mix                   the music level (HyperFrames: normalize-audio; Remotion: 3.10)
 // HyperFrames hands each command to its own CLI, which its skill's work loop already teaches. Prints one JSON line as
 // its last line for the Remotion engine.
@@ -40,7 +40,8 @@ export function engineOf(root: string, argv: string[]): EngineId {
     ? (JSON.parse(readFileSync(path, 'utf8')) as { engine?: { id?: unknown } }).engine?.id
     : undefined
   if (id === undefined) return 'hyperframes'
-  if (!isEngineId(id)) throw new StepError(`The run manifest names an unknown engine (${JSON.stringify(id)}).`)
+  if (!isEngineId(id))
+    throw new StepError(`The run manifest names an unknown engine (${JSON.stringify(id)}).`)
   return id
 }
 
@@ -68,7 +69,7 @@ export async function runEngineCli(argv: string[], d: EngineCliDeps): Promise<nu
         video,
       )
     if (cmd === 'render') {
-      d.out('HyperFrames runs render with scripts/render-job.ts, exactly as your prompt says.')
+      d.out('Runs render with scripts/render-job.ts, exactly as your prompt says.')
       return 2
     }
     d.out(USAGE)
@@ -93,10 +94,12 @@ export async function runEngineCli(argv: string[], d: EngineCliDeps): Promise<nu
     d.out(JSON.stringify({ step: 'engine.snapshot', engine, files }))
     return 0
   }
-  if (cmd === 'render' || cmd === 'mix') {
-    d.out(
-      `engine_unavailable: ${cmd} for Remotion arrives with ${cmd === 'render' ? 'va-ed2s.3.9' : 'va-ed2s.3.10'}.`,
-    )
+  if (cmd === 'render') {
+    d.out('Runs render with scripts/render-job.ts, exactly as your prompt says.')
+    return 2
+  }
+  if (cmd === 'mix') {
+    d.out('engine_unavailable: mix for Remotion arrives with va-ed2s.3.10.')
     return 2
   }
   d.out(USAGE)

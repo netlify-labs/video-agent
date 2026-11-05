@@ -26,7 +26,10 @@ import {
 import { readTarGz, TarError } from '../../../src/lib/tar.js'
 import { log as runLog, repoRoot as defaultRoot, runStreaming, StepError } from '../run-tools.js'
 import {
+  bundleFor,
   checkProject,
+  countRenders,
+  licenseFor,
   loadRemotion,
   loadTypeScript,
   snapshotProject,
@@ -47,6 +50,9 @@ export const SKILLS = {
   /** Added when the run's look asks for maps. */
   maps: 'remotion-maps',
 }
+/** render-job's quality names → h264 CRF. Placeholders until E2 calibrates them (5.0's bt709 default will move them). */
+export const QUALITY_CRF: Record<string, number> = { looks: 23, standard: 20, delivery: 17 }
+
 /** Chrome Headless Shell's sha256 per Remotion version, from E1. Until it's measured the hash is logged, not checked. */
 export const BROWSER_SHA256: Record<string, string> = {}
 
@@ -242,8 +248,31 @@ export function remotionEngine(overrides: Partial<RemotionRunDeps> = {}): RunEng
         : ['video/props.json does not exist. Write the props first.'],
     // Editing Remotion videos arrives in Phase 3: no contract yet, so a version is never editable.
     contract: () => null,
-    render: () =>
-      Promise.reject(new StepError('engine_unavailable: rendering with Remotion arrives with va-ed2s.3.9.')),
+    async render(videoDir, out, quality, onProgress) {
+      const deps = checkDeps()
+      const { serveUrl } = await bundleFor(deps, videoDir)
+      const api = d.remotion(videoDir)
+      const license = licenseFor(d.root, process.env, d.log)
+      const composition = await api.selectComposition({ serveUrl, id: 'main', inputProps: {}, ...license })
+      const crf = QUALITY_CRF[quality] ?? QUALITY_CRF.standard
+      const t = Date.now()
+      // No envVariables: nothing from the deployment's environment reaches composition code (spikes E5).
+      await api.renderMedia({
+        composition,
+        serveUrl,
+        codec: 'h264',
+        crf,
+        inputProps: {},
+        outputLocation: out,
+        onProgress: ({ progress }: { progress: number }) => {
+          onProgress(Math.floor(progress * 100))
+        },
+        ...license,
+      })
+      const renders = countRenders(videoDir, { video: 1 })
+      d.log('engine.render', { ms: Date.now() - t, quality, crf, renders })
+      return { renders }
+    },
     version: () => REMOTION_VERSION,
   }
 }

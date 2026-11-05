@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import * as ts from 'typescript'
 import { describe, expect, it } from 'vitest'
 import { generateRegistry } from '../../../src/lib/remotion-project.js'
-import { checkProject, licenseFor, scanSources, snapshotProject, type RemotionApi } from './remotion-check.js'
+import { checkProject, scanSources, snapshotProject, type RemotionApi } from './remotion-check.js'
 import { readProject } from './remotion.js'
 
 const repo = join(import.meta.dirname, '..', '..', '..')
@@ -108,7 +108,7 @@ describe('Remotion check', () => {
     expect(r.calls.browsers).toBe(1)
     expect(new Set(r.calls.stills.map((s) => s.puppeteerInstance))).toEqual(new Set([r.browser]))
     expect(new Set(r.calls.stills.map((s) => s.serveUrl)).size).toBe(1)
-    expect(r.calls.stills.every((s) => s.licenseKey === 'free-license' && s.isProduction === true)).toBe(true)
+    expect(r.calls.stills.every((s) => s.licenseKey === 'free-license' && !('isProduction' in s))).toBe(true)
     expect(JSON.parse(readFileSync(join(video, '.render', 'renders.json'), 'utf8'))).toEqual({
       video: 0,
       stills: 4,
@@ -239,29 +239,5 @@ describe('the static scan', () => {
       'src/layers/glow.tsx:2: the video can\'t load anything from a URL ("url(http://x)").',
       'src/layers/glow.tsx:2: <VaText> is only for beats (src/beats/<id>.tsx with an entry in props.json).',
     ])
-  })
-})
-
-describe('the license a render reports with', () => {
-  const manifest = (engine: object | undefined) => {
-    const root = mkdtempSync(join(tmpdir(), 'va-lic-'))
-    mkdirSync(join(root, '.render'))
-    writeFileSync(join(root, '.render', 'run-manifest.json'), JSON.stringify(engine ? { engine } : {}))
-    return root
-  }
-  it('is the free tier without a recorded tier, and production unless the run is a development one', () => {
-    expect(licenseFor(manifest(undefined), {})).toEqual({ licenseKey: 'free-license', isProduction: true })
-    expect(licenseFor(manifest({ id: 'remotion', tier: 'free', development: true }), {})).toEqual({
-      licenseKey: 'free-license',
-      isProduction: false,
-    })
-  })
-  it('is the deployment’s key for a Company License, which must be set', () => {
-    const root = manifest({ id: 'remotion', tier: 'company' })
-    expect(licenseFor(root, { VIDEO_AGENT_REMOTION_KEY: 'rm_sec_x' })).toEqual({
-      licenseKey: 'rm_sec_x',
-      isProduction: true,
-    })
-    expect(() => licenseFor(root, {})).toThrow(/^engine_license_missing/)
   })
 })

@@ -83,10 +83,10 @@ describe('engine.ts', () => {
     expect(bad.out[0]).toBe('error: props.json.fps must be 30.')
   })
 
-  it('says which bead brings Remotion’s render and mix', async () => {
+  it('points render at render-job, and says which bead brings Remotion’s mix', async () => {
     const c = cli(root({ id: 'remotion' }))
     expect(await runEngineCli(['render'], c.deps)).toBe(2)
-    expect(c.out.at(-1)).toMatch(/^engine_unavailable: render for Remotion arrives with va-ed2s\.3\.9/)
+    expect(c.out.at(-1)).toContain('render-job.ts')
     expect(await runEngineCli(['mix'], c.deps)).toBe(2)
     expect(await runEngineCli(['nope'], c.deps)).toBe(2)
   })

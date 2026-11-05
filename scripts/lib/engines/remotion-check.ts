@@ -40,22 +40,41 @@ export function loadTypeScript(videoDir: string): typeof TS {
   return createRequire(join(videoDir, 'package.json'))('typescript') as typeof TS
 }
 
-/** The key renders report with: the tier the admin recorded, from the run manifest (§5.5). Never on a command line. */
-export function licenseFor(root: string, env: Record<string, string | undefined> = process.env) {
+/**
+ * Whether remotion.pro takes isProduction with the "free-license" value. Remotion's docs say isProduction needs a license
+ * key; the Node API forwards it either way (spikes E5), but what the service does with it is E6's open question.
+ */
+export const FREE_LICENSE_ACCEPTS_IS_PRODUCTION: boolean = false
+
+/**
+ * The key renders report with (§5.5): the tier the admin recorded, from the run manifest. Read in this process only,
+ * never put on a command line or in a log. isProduction: false marks a development deployment's renders, passed only
+ * where it's known to be accepted; otherwise it's left out and the render counts as production.
+ */
+export function licenseFor(
+  root: string,
+  env: Record<string, string | undefined> = process.env,
+  log: (step: string, fields?: Record<string, unknown>) => void = () => {},
+): { licenseKey: string; isProduction?: false } {
   const path = join(root, '.render', 'run-manifest.json')
   const engine = existsSync(path)
     ? ((JSON.parse(readFileSync(path, 'utf8')) as { engine?: { tier?: string; development?: boolean } })
         .engine ?? {})
     : {}
+  let licenseKey = 'free-license'
   if (engine.tier === 'company') {
     const key = env.VIDEO_AGENT_REMOTION_KEY
     if (!key)
       throw new StepError(
-        'engine_license_missing: the Company License key (VIDEO_AGENT_REMOTION_KEY) is not set.',
+        "engine_license_key_missing: the admin recorded a Company License but VIDEO_AGENT_REMOTION_KEY isn't set on this project.",
       )
-    return { licenseKey: key, isProduction: !engine.development }
+    licenseKey = key
   }
-  return { licenseKey: 'free-license', isProduction: !engine.development }
+  if (!engine.development) return { licenseKey }
+  if (engine.tier === 'company' || FREE_LICENSE_ACCEPTS_IS_PRODUCTION)
+    return { licenseKey, isProduction: false }
+  log('engine.is_production_omitted', { reason: 'not yet known to be accepted with "free-license"' })
+  return { licenseKey }
 }
 
 /** How many renders the run made (the license counts every still and video), kept across commands. */
@@ -193,13 +212,11 @@ export async function bundleFor(d: CheckDeps, videoDir: string, files = d.readPr
   if (existsSync(join(dir, 'index.html'))) return { serveUrl: dir, cached: true }
   const tmp = `${dir}.tmp`
   rmSync(tmp, { recursive: true, force: true })
-  await d
-    .remotion(videoDir)
-    .bundle({
-      entryPoint: join(videoDir, 'src', 'index.ts'),
-      publicDir: join(videoDir, 'assets'),
-      outDir: tmp,
-    })
+  await d.remotion(videoDir).bundle({
+    entryPoint: join(videoDir, 'src', 'index.ts'),
+    publicDir: join(videoDir, 'assets'),
+    outDir: tmp,
+  })
   renameSync(tmp, dir)
   return { serveUrl: dir, cached: false }
 }
@@ -212,7 +229,7 @@ async function stills(
   frames: { frame: number; out: string }[],
 ) {
   const api = d.remotion(videoDir)
-  const license = licenseFor(d.root)
+  const license = licenseFor(d.root, process.env, d.log)
   const browser = await api.openBrowser('chrome', { logLevel: 'error' })
   try {
     const composition = await api.selectComposition({

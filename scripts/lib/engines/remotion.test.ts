@@ -179,13 +179,12 @@ describe('Remotion install failures', () => {
   })
 })
 
-describe('Remotion engine before Phase 2 is wired', () => {
-  it('needs props.json, has no editing contract yet, and doesn’t render yet', async () => {
+describe('Remotion engine basics', () => {
+  it('needs props.json and has no editing contract yet', () => {
     const { root, video } = workspace()
     const { e } = engine(root)
     expect(e.entryProblems(video)).toEqual(['video/props.json does not exist. Write the props first.'])
     expect(e.contract(video)).toBeNull()
     expect(e.version(video)).toBe('4.0.540')
-    await expect(e.render(video, '/out.mp4', 'standard', () => {})).rejects.toThrow(/^engine_unavailable/)
   })
 })

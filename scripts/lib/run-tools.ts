@@ -10,8 +10,17 @@ import { NARRATION_RUN_DIR, narrationPaths, readNarrationInputs } from './narrat
 
 export const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
 
+/**
+ * Hides Remotion secret keys in anything a run prints (render-engines plan §5.5): anything shaped like one, and the
+ * configured key's own value. A second guard: the key is never put on a command line or in a log on purpose.
+ */
+export function maskSecrets(text: string, key = process.env.VIDEO_AGENT_REMOTION_KEY): string {
+  const masked = text.replace(/rm_sec_[A-Za-z0-9_-]+/g, 'rm_sec_***')
+  return key && key.length >= 8 ? masked.split(key).join('***') : masked
+}
+
 export const log = (step: string, fields: Record<string, unknown> = {}) => {
-  console.error(JSON.stringify({ ts: new Date().toISOString(), step, ...fields }))
+  console.error(maskSecrets(JSON.stringify({ ts: new Date().toISOString(), step, ...fields })))
 }
 
 export class StepError extends Error {}
@@ -145,7 +154,7 @@ export function runStreaming(
     let tail = ''
     const keep = (b: Buffer) => {
       const s = b.toString('utf8')
-      tail = (tail + s).slice(-8000)
+      tail = maskSecrets(tail + s).slice(-8000)
       opts.onOutput?.(s)
     }
     child.stdout.on('data', keep)
@@ -161,7 +170,9 @@ export function runStreaming(
       else
         reject(
           new StepError(
-            `${cmd} ${args.slice(0, 3).join(' ')} failed (${signal ?? `exit ${code}`}): ${tail.trim().slice(-2000)}`,
+            maskSecrets(
+              `${cmd} ${args.slice(0, 3).join(' ')} failed (${signal ?? `exit ${code}`}): ${tail.trim().slice(-2000)}`,
+            ),
           ),
         )
     })
