@@ -37,6 +37,10 @@ export const settings = pgTable('settings', {
   // Publish destinations (docs/plans/2026-11-04-publish-destinations.md §4): YouTube is offered only when the Google
   // OAuth env is set and an admin turns it on.
   youtubeEnabled: boolean('youtube_enabled').notNull().default(false),
+  // Looks (docs/plans/2026-11-04-looks.md §6): the default for creates that omit a look (null: none, the owner's
+  // choice after spike K2), and the looks an admin has turned off.
+  defaultLook: text('default_look'),
+  disabledLooks: jsonb('disabled_looks').$type<string[]>().notNull().default([]),
 })
 
 export const users = pgTable('users', {
@@ -137,6 +141,8 @@ export const versions = pgTable(
     // The composition's beats [{ id, label, start, duration }], set at finalize for contract-v1 versions (or filled
     // on first read for older ones); null: not known yet, or not a contract-v1 composition.
     beats: jsonb('beats'),
+    // The look snapshot the version was made with (src/domain/types.ts VersionLook); null: no look.
+    look: jsonb('look'),
   },
   (t) => [primaryKey({ columns: [t.jobId, t.n] })],
 )

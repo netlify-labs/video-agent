@@ -22,6 +22,7 @@ const snapshot = (id: string, hash: string): VersionLook => ({
   sha256: 'a'.repeat(64),
   bytes: 10,
   source: 'builtin',
+  restyle: false,
 })
 
 const code = (f: () => unknown) => {

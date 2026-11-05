@@ -127,6 +127,10 @@ export interface SettingsRow {
   remixEnabled?: boolean
   /** YouTube offered as a publish destination (needs the Google OAuth env too). Missing: off. */
   youtubeEnabled?: boolean
+  /** The look creates get when they omit one (looks plan §6). Missing or null: none. */
+  defaultLook?: string | null
+  /** Looks an admin has turned off. Missing: none. */
+  disabledLooks?: string[]
 }
 
 export type TranscriptionProvider = 'local' | 'elevenlabs' | 'off'
@@ -284,6 +288,11 @@ export interface VersionLook {
   sha256: string
   bytes: number
   source: 'builtin' | 'team'
+  /**
+   * Whether this version restyled its parent or remix source (another look, or the same look at a newer hash), decided
+   * once at creation so every retry builds the same prompt without re-reading a parent that may be gone.
+   */
+  restyle: boolean
 }
 
 export interface VersionRow {

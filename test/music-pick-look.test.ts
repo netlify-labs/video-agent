@@ -59,6 +59,7 @@ describe('a look never turns sound on', () => {
         sha256: look.sha256,
         bytes: look.bytes,
         source: 'builtin',
+        restyle: false,
       },
     })
     const a = (await h.attempts(id)).find((x) => x.versionN === 1) as AttemptRow
