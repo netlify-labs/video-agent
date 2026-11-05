@@ -14,6 +14,7 @@ const RESOURCES: [string, string][] = [
   ['media', 'upload, check, list, get, update, delete'],
   ['music', 'search, library, import, importAndWait'],
   ['plans', 'create, get, questions, brief, update'],
+  ['looks', 'list'],
   ['comments', 'list, add, addBatch, update, delete'],
   ['webhooks', 'get, set, delete, test'],
   ['keys', 'list, revoke'],
@@ -156,6 +157,30 @@ await va.videos.create({ prompt: 'A 20-second demo of the new checkout', mediaId
                   Any size: files over 4 MB go in parts, resume after a failure and wait until the item is
                   ready. An identical file already in the library is returned instead of uploaded again.
                 </Text>
+              </Card>
+            ),
+          },
+          {
+            id: 'looks',
+            title: 'Looks',
+            description: (
+              <>
+                A look is a named style for a video (
+                <Anchor component={Link} to="/docs/looks" inherit>
+                  Looks
+                </Anchor>
+                ). Pass its id as <Code>look</Code>; <Code>null</Code> is none.
+              </>
+            ),
+            children: (
+              <Card>
+                <CodeBlock
+                  code={`const { looks } = await va.looks.list()
+const video = await va.videos.create({ prompt: 'A 20-second launch video for webhooks', look: 'kinetic' })
+// A revision with another look restyles it: same story, new style.
+await va.videos.revise(video.id, { prompt: 'Restyle it', look: 'terminal' })`}
+                  lang="ts"
+                />
               </Card>
             ),
           },

@@ -1,6 +1,6 @@
-// /docs/looks (plan 2026-11-04-looks §6): every look in this deployment's catalog, and how to use looks from the API and
-// MCP. The SDK and CLI sections are added with their looks commands (beads va-nifa.5.1, 5.2), so this page never
-// documents a command that doesn't exist yet.
+// /docs/looks (plan 2026-11-04-looks §6): every look in this deployment's catalog, and how to use looks from the API,
+// MCP and the SDK. The CLI section is added with its looks commands (bead va-nifa.5.2), so this page never documents a
+// command that doesn't exist yet.
 import { Anchor, Code, Text } from '@mantine/core'
 import { useState } from 'react'
 import { Link } from 'react-router'
@@ -121,6 +121,27 @@ authorization: Bearer <your API key>
 content-type: application/json
 
 { "prompt": "A 20-second launch video for org webhooks", "look": "kinetic" }`}
+              />
+            ),
+          },
+          {
+            id: 'sdk',
+            title: 'From the SDK',
+            description: (
+              <>
+                <Code>va.looks.list()</Code>, and <Code>look</Code> on <Code>videos.create</Code>,{' '}
+                <Code>revise</Code> and <Code>remix</Code> (
+                <Anchor component={Link} to="/docs/sdk#looks" c="var(--va-text)" inherit>
+                  TypeScript SDK
+                </Anchor>
+                ).
+              </>
+            ),
+            children: (
+              <CodeBlock
+                lang="ts"
+                code={`const { looks } = await va.looks.list()
+await va.videos.create({ prompt: 'A 20-second launch video for org webhooks', look: 'kinetic' })`}
               />
             ),
           },
