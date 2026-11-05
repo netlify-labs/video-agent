@@ -15,6 +15,7 @@ import {
 } from '@mantine/core'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
+import { IconLogin2 } from '@tabler/icons-react'
 import { $api } from '../api/client'
 import { useAuth } from '../auth'
 import { brand } from '../theme'
@@ -107,7 +108,7 @@ export function AuthPages({ setupReady }: { setupReady: boolean }) {
           component="a"
           href={`/auth/netlify/start?return_to=${encodeURIComponent(back)}`}
           size="md"
-          leftSection={<NetlifyMark />}
+          leftSection={<IconLogin2 size={18} />}
         >
           Sign in with Netlify
         </Button>
@@ -261,12 +262,4 @@ function signInRule(admission: string[] | 'invite-only' | null | undefined, team
     return `Use the Netlify account for your ${admission.join(' or ')} email address.${team}`
   if (admission === 'invite-only') return `Only people who already have an account here can sign in.${team}`
   return `Use your Netlify account.${team}`
-}
-
-function NetlifyMark() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
-      <path d="M12 2 2 12l10 10 10-10L12 2Zm0 4.2L17.8 12 12 17.8 6.2 12 12 6.2Z" />
-    </svg>
-  )
 }
