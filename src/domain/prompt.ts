@@ -56,6 +56,10 @@ export interface PromptInput {
    * was refused for changing things outside the scope. Missing: the prompt is exactly as before scoped revisions.
    */
   scope?: ScopePrompt | null
+  /** The video's look (docs/plans/2026-11-04-looks.md §4.6), restored into context/look/; none when missing. */
+  look?: { id: string; name: string } | null
+  /** This version restyles its parent or remix source into `look` (VersionLook.restyle, decided at creation). */
+  restyle?: boolean
 }
 
 export interface ScopePrompt {
@@ -122,6 +126,20 @@ export function sanitizeBrief(text: string): string {
   return text.replaceAll(FENCE_CLOSE, '> > >').replaceAll(FENCE_OPEN, '< < <').trim()
 }
 
+/** The look's lines (looks plan §4.6 step 4): where its rules are and who wins; its name is data, fenced. */
+function lookLines(look: { id: string; name: string }): string[] {
+  return [
+    "The look for this video is in context/look/ (prepare-run puts it there). Read context/look/LOOK.md before you design anything. context/look/example/ shows how its rules become a composition: skim the scene that matches the one you're writing, and reuse its structure and building blocks, never its words or media. The look governs layout, type scale, pacing, motion, transitions, textures and how colour roles are used. The brand in context/ still decides colours, logo, fonts and wording; where they disagree, the brand wins, and the request wins over both. Write any colour role you derive as a literal colour. Copy any look asset you use (textures, effects) into video/assets/look/, and add a credits line for any that needs one. Its name, as JSON:",
+    FENCE_OPEN,
+    sanitizeBrief(JSON.stringify({ id: look.id, name: look.name })),
+    FENCE_CLOSE,
+  ]
+}
+
+/** A restyle keeps the story and rebuilds how it looks (looks plan §4.6); the request still wins (§3). */
+const RESTYLE_LINE =
+  "This is a restyle into that look. Apart from what the request asks to change, keep the story: the scenes in order, their beat ids, the on-screen words (and their data-va-text ids), the media and any voice-over. Rebuild how it looks and moves to follow the look. A scene's length may change by up to a quarter where the look's pacing needs it, never shorter than its voice-over (run npx tsx scripts/voice.ts sync after any timing change); the total stays within the target."
+
 export function buildPrompt(p: PromptInput): string {
   const { width, height } = ASPECTS[p.aspect]
   const uploadArg = p.upload.mode === 'blobs' ? '--upload blobs' : `--upload ${p.upload.url}`
@@ -151,12 +169,14 @@ export function buildPrompt(p: PromptInput): string {
   lines.push(
     "Read context/ first. It describes the company, its brand and its products. If context/brand/ exists, it is this deployment's brand kit (copy any fonts you use into video/): it overrides the rest of context/. Follow the brand unless the request explicitly asks for something different.",
     '',
+    ...(p.look ? [...lookLines(p.look), ''] : []),
     `Request (from ${sanitizeBrief(p.requesterName)}):`,
     FENCE_OPEN,
     sanitizeBrief(p.userPrompt),
     FENCE_CLOSE,
   )
   if (p.remix) lines.push(...remixLines(p.remix, (p.media ?? []).length > 0))
+  if (p.look && p.restyle) lines.push('', RESTYLE_LINE)
   if (p.plan) {
     // The plan is data the person accepted, encoded as JSON inside its own fence (§14 rule 16).
     lines.push(
@@ -614,6 +634,8 @@ export function buildFitPrompt(p: {
   checkpointUrl: string
   callbackToken: string
   upload: { mode: 'blobs' } | { mode: 'signed'; url: string }
+  /** The version's look: the fit gets the look lines, never the restyle lines. */
+  look?: { id: string; name: string } | null
 }): string {
   const { width, height } = ASPECTS[p.aspect]
   const uploadArg = p.upload.mode === 'blobs' ? '--upload blobs' : `--upload ${p.upload.url}`
@@ -661,6 +683,8 @@ export function buildFitPrompt(p: {
     `You are making version ${p.versionN} of video ${p.jobId} (attempt ${p.attemptId}): ${sanitizeBrief(p.requesterName)} edited version ${p.editedFromN} in the browser and recorded their own narration. Fit the video to that narration. Work only inside video/.`,
     "Read context/ first. It describes the company, its brand and its products. If context/brand/ exists, it is this deployment's brand kit: it overrides the rest of context/.",
     '',
+    // The fit keeps the version's look; it never restyles.
+    ...(p.look ? [...lookLines(p.look), ''] : []),
     `Format: ${width}x${height}, 30 fps, with sound (the recorded narration${music ? ', and the music already in the draft' : ''}). Exactly ${target}.`,
     ...lockedNarrationLines('fit'),
     'Never ask questions or request authorization. If something is unclear, make a reasonable choice and say so in your summary.',
