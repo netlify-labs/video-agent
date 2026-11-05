@@ -4,7 +4,7 @@
 // checks the oEmbed JSON (fields, types, CORS, cache, HEAD, the embed snippet, the hover clip when named), then
 // unpublishes it in a finally (only what this run published) and checks the JSON 404s. Logs JSON lines; exits
 // non-zero if any check fails. --dry prints the steps and makes no request.
-import { api, base, fail, key, log } from './lib.js'
+import { base, fail, key, log, sdk } from './lib.js'
 import { dry, dryRun } from './narration-lib.js'
 
 if (dry)
@@ -23,30 +23,22 @@ if (dry)
   })
 if (!base || !key) throw new Error('Set VIDEO_AGENT_URL and VIDEO_AGENT_KEY (or pass --dry).')
 
-interface Video {
-  id: string
-  title: string
-  versions: { n: number; status: string }[]
-  publications: { slug: string; versionN: number; unpublishedAt: string | null }[]
-}
-
 const failures: string[] = []
 const check = (name: string, ok: boolean, f: Record<string, unknown> = {}) => {
   log(ok ? 'ok' : 'FAIL', { check: name, ...f })
   if (!ok) failures.push(name)
 }
 
-const video = process.env.VIDEO_ID
-  ? (await api<Video>('GET', `/api/v1/videos/${process.env.VIDEO_ID}`)).json
-  : await (async () => {
-      const list = (await api<{ items: Video[] }>('GET', '/api/v1/videos?owner=me&status=ready&limit=1')).json
-      const first = list.items[0]
-      if (!first) return fail('no ready video of yours; set VIDEO_ID')
-      return (await api<Video>('GET', `/api/v1/videos/${first.id}`)).json
-    })()
+const va = sdk()
+const video = await va.videos.get(
+  process.env.VIDEO_ID ??
+    (await va.videos.list({ owner: 'me', status: 'ready', limit: 1 })).items[0]?.id ??
+    fail('no ready video of yours; set VIDEO_ID'),
+)
 const n = Math.max(...video.versions.filter((v) => v.status === 'ready').map((v) => v.n))
 if (!Number.isFinite(n)) fail('the video has no ready version', { videoId: video.id })
-const live = video.publications.find((p) => p.versionN === n && !p.unpublishedAt)
+// Publications are per version.
+const live = video.versions.find((v) => v.n === n)?.publications.find((p) => !p.unpublishedAt)
 log('plan', {
   site: base,
   videoId: video.id,
@@ -65,10 +57,8 @@ let slug = live?.slug ?? null
 let published = false
 try {
   if (!slug) {
-    const res = await api<{ slug: string }>('POST', `/api/v1/videos/${video.id}/versions/${n}/publish`, {})
-    if (res.status !== 200 && res.status !== 201)
-      fail('publish failed', { status: res.status, body: res.json })
-    slug = res.json.slug
+    const pub = await va.versions.publish(video.id, n)
+    slug = pub.slug
     published = true
     log('published', { slug })
   }
@@ -87,25 +77,28 @@ try {
   for (const f of ['title', 'provider_name', 'provider_url', 'thumbnail_url', 'html'])
     check(`${f} is a string`, typeof body[f] === 'string' && body[f].length > 0)
   check('html is the embed', String(body.html).includes(`${base}/v/${slug}.mp4`))
-  const va = body.video_agent
-  check('videoId', va.videoId === video.id)
-  check('versionN', va.versionN === n)
-  check('durationSec', typeof va.durationSec === 'number' && va.durationSec > 0)
-  check('credits is a list', Array.isArray(va.credits))
+  const meta = body.video_agent
+  check('videoId', meta.videoId === video.id)
+  check('versionN', meta.versionN === n)
+  check('durationSec', typeof meta.durationSec === 'number' && meta.durationSec > 0)
+  check('credits is a list', Array.isArray(meta.credits))
   for (const f of ['posterWebp', 'lqip', 'hover'])
-    check(`${f} is a string or null`, va[f] === null || typeof va[f] === 'string', {
-      value: typeof va[f] === 'string' ? va[f].slice(0, 60) : va[f],
+    check(`${f} is a string or null`, meta[f] === null || typeof meta[f] === 'string', {
+      value: typeof meta[f] === 'string' ? meta[f].slice(0, 60) : meta[f],
     })
-  for (const f of ['mp4', 'poster', 'captions', ...(va.hover ? ['hover'] : [])]) {
-    const r = await fetch(String(va[f]), { method: 'HEAD' })
+  for (const f of ['mp4', 'poster', 'captions', ...(meta.hover ? ['hover'] : [])]) {
+    const r = await fetch(String(meta[f]), { method: 'HEAD' })
     check(`${f} is served`, r.ok, { status: r.status })
   }
   const head = await fetch(url, { method: 'HEAD' })
   check('HEAD', head.status === 200 && (await head.text()) === '')
 } finally {
   if (published && slug) {
-    const res = await api('DELETE', `/api/v1/videos/${video.id}/versions/${n}/publish`)
-    log('unpublished', { slug, status: res.status })
+    const res = await va.versions.unpublish(video.id, n).then(
+      () => 204,
+      (e: unknown) => String(e),
+    )
+    log('unpublished', { slug, status: res })
     const gone = await fetch(`${base}/v/${slug}.json`)
     check('404 after unpublish', gone.status === 404, { status: gone.status })
   }
