@@ -25,6 +25,13 @@ import {
 } from '../../../src/lib/remotion-project.js'
 import { readTarGz, TarError } from '../../../src/lib/tar.js'
 import { log as runLog, repoRoot as defaultRoot, runStreaming, StepError } from '../run-tools.js'
+import {
+  checkProject,
+  loadRemotion,
+  loadTypeScript,
+  snapshotProject,
+  type RemotionApi,
+} from './remotion-check.js'
 import type { RunEngine } from './types.js'
 
 /** Each install step's limit: 3x E1's median once it's measured; a placeholder until then. */
@@ -53,6 +60,9 @@ export interface RemotionRunDeps {
   extraSkills: string[]
   /** The skills archive's commit and sha256 (tests pin their own). */
   skillsPin: { commit: string; sha256: string }
+  /** Remotion and TypeScript, loaded from video/node_modules at call time (tests pass stubs). */
+  remotion: (videoDir: string) => RemotionApi
+  ts: typeof loadTypeScript
 }
 
 const fetchBytes = async (url: string, timeoutMs: number) => {
@@ -98,8 +108,18 @@ export function remotionEngine(overrides: Partial<RemotionRunDeps> = {}): RunEng
     timeoutMs: INSTALL_TIMEOUT_MS,
     extraSkills: [],
     skillsPin: { commit: SKILLS.commit, sha256: SKILLS.sha256 },
+    remotion: loadRemotion,
+    ts: loadTypeScript,
     ...overrides,
   }
+  const checkDeps = () => ({
+    root: d.root,
+    remotion: d.remotion,
+    ts: d.ts,
+    run: d.run,
+    log: d.log,
+    readProject,
+  })
   const template = join(d.root, 'engines', 'remotion', 'template')
 
   /** One install step, logged; a timeout or a failure becomes engine_install_failed with the step's name. */
@@ -214,6 +234,8 @@ export function remotionEngine(overrides: Partial<RemotionRunDeps> = {}): RunEng
     },
     install,
     skills,
+    check: (videoDir) => checkProject(checkDeps(), videoDir),
+    snapshot: (videoDir, atSec) => snapshotProject(checkDeps(), videoDir, atSec),
     entryProblems: (videoDir) =>
       existsSync(join(videoDir, 'props.json'))
         ? []
