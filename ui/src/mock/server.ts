@@ -455,9 +455,16 @@ function mockDestRows(): MockDest[] {
   return [...demo, ...mockAdminDest]
 }
 
+/** Extra mock routes (./looks.ts), tried before the built-in ones; a route returns null to pass. */
+export const mockRoutes: ((
+  input: RequestInfo | URL,
+  init: RequestInit | undefined,
+  next: () => Promise<Response>,
+) => Promise<Response | null>)[] = []
+
 export function installMock() {
   const real = window.fetch.bind(window)
-  window.fetch = async (input, init) => {
+  const handle = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url = new URL(
       typeof input === 'string' ? input : input instanceof URL ? input.href : input.url,
       window.location.origin,
@@ -1799,6 +1806,13 @@ export function installMock() {
       return v ? json(withComments(v)) : fail(404, 'not_found', 'Video not found.')
     }
     return fail(404, 'not_found', `Mock has no ${method} ${p}`)
+  }
+  window.fetch = async (input, init) => {
+    for (const route of mockRoutes) {
+      const res = await route(input, init, () => handle(input, init))
+      if (res) return res
+    }
+    return handle(input, init)
   }
 }
 

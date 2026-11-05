@@ -1,5 +1,5 @@
-// Mock mode: the looks routes (plan 2026-11-04-looks §6), layered over installMock()'s fetch so they mirror the server
-// (src/domain/looks.ts) without growing server.ts. The catalog is the real one (src/generated/looks.ts) and the
+// Mock mode: the looks routes (plan 2026-11-04-looks §6), a mockRoutes entry tried before the mock API's own, so they
+// mirror the server (src/domain/looks.ts) without growing server.ts. The catalog is the real one (src/generated/looks.ts) and the
 // posters and clips are the real looks/<id>/ files, bundled only into mock builds.
 //
 // localStorage switches, set before the app loads:
@@ -106,78 +106,75 @@ const readJson = async (init?: RequestInit, input?: RequestInfo | URL): Promise<
   return {}
 }
 
-/** Installs the looks routes over the mock API (call after installMock). */
-export function installLooksMock() {
-  const inner = window.fetch.bind(window)
+/** The looks routes, tried before the mock API's own (mockRoutes in ./server.ts); null passes to it. */
+export async function looksRoute(
+  input: RequestInfo | URL,
+  init: RequestInit | undefined,
+  inner: () => Promise<Response>,
+): Promise<Response | null> {
   const off = setting('mockNoLooks') === '1'
-  window.fetch = async (input, init) => {
-    const url = new URL(
-      typeof input === 'string' ? input : input instanceof URL ? input.href : input.url,
-      window.location.origin,
-    )
-    const p = url.pathname
-    if (!p.startsWith('/api/')) return inner(input, init)
-    const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase()
+  const url = new URL(
+    typeof input === 'string' ? input : input instanceof URL ? input.href : input.url,
+    window.location.origin,
+  )
+  const p = url.pathname
+  if (!p.startsWith('/api/')) return null
+  const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase()
 
-    if (p === '/api/v1/looks' && method === 'GET') {
-      if (off) return fail(404, 'not_found', 'Not found.')
-      await new Promise((r) => setTimeout(r, 120))
-      return json({ looks: mockLooks(), default: lookSettings.defaultLook })
-    }
-    if (p === '/api/v1/config') {
-      const res = await inner(input, init)
-      const body = (await res.json()) as { features: string[] }
-      return json({ ...body, features: off ? body.features : [...body.features, 'looks'] }, res.status)
-    }
-    if (p === '/api/v1/admin/settings') {
-      if (method === 'PATCH') {
-        const b = (await readJson(init, input)) as { defaultLook?: string | null; disabledLooks?: string[] }
-        const refused = patchSettings(b)
-        if (refused) return refused
-      }
-      const res = await inner(input, init)
-      if (!res.ok) return res
-      const body = (await res.json()) as Record<string, unknown>
-      return json({ ...body, ...lookSettings })
-    }
-
-    const create = p === '/api/v1/videos' && method === 'POST'
-    const revise = /^\/api\/v1\/videos\/([^/]+)\/versions$/.exec(p)
-    const remix = /^\/api\/v1\/videos\/([^/]+)\/remix$/.exec(p)
-    if (method !== 'POST' || !(create || revise || remix)) return inner(input, init)
-    const b = await readJson(init, input)
-    const refused = refusePick(b.look)
-    if (refused) return refused
-    if (revise?.[1] && b.look !== undefined) {
-      if (b.scope !== undefined && b.scope !== null)
-        return fail(
-          400,
-          'look_not_allowed',
-          "Redoing a scene keeps the video's look; pick a look with a full revision.",
-        )
-      // A restyle of a version with recorded narration (assertRestyleAllowed).
-      const vid = videos.find((v) => v.id === revise[1])
-      const base =
-        vid?.versions.find((v) => v.n === (b.fromVersion as number | undefined)) ??
-        vid?.versions.find((v) => v.status === 'ready')
-      const restyle = (typeof b.look === 'string' ? b.look : null) !== (base?.look?.id ?? null)
-      if (restyle && base?.links.narrationAudio)
-        return fail(
-          409,
-          'look_not_allowed',
-          "Restyle isn't available for videos with recorded narration yet.",
-        )
-    }
-    const res = await inner(input, init)
-    if (!remix?.[1] || !res.ok) return res
-    // The remix's version: the picked look, None, or (omitted) the source version's own.
-    const made = (await res.json()) as (typeof videos)[number]
-    const src = videos.find((v) => v.id === remix[1])
-    const from = src?.versions.find((v) => v.n === made.remixOf?.n)
-    const picked = typeof b.look === 'string' ? mockLooks().find((l) => l.id === b.look) : null
-    const look = b.look === undefined ? (from?.look ?? null) : picked ? ref(picked) : null
-    const stored = videos.find((v) => v.id === made.id)
-    for (const v of [...made.versions, ...(stored?.versions ?? [])]) v.look = look
-    return json(made, res.status)
+  if (p === '/api/v1/looks' && method === 'GET') {
+    if (off) return fail(404, 'not_found', 'Not found.')
+    await new Promise((r) => setTimeout(r, 120))
+    return json({ looks: mockLooks(), default: lookSettings.defaultLook })
   }
+  if (p === '/api/v1/config') {
+    const res = await inner()
+    const body = (await res.json()) as { features: string[] }
+    return json({ ...body, features: off ? body.features : [...body.features, 'looks'] }, res.status)
+  }
+  if (p === '/api/v1/admin/settings') {
+    if (method === 'PATCH') {
+      const b = (await readJson(init, input)) as { defaultLook?: string | null; disabledLooks?: string[] }
+      const refused = patchSettings(b)
+      if (refused) return refused
+    }
+    const res = await inner()
+    if (!res.ok) return res
+    const body = (await res.json()) as Record<string, unknown>
+    return json({ ...body, ...lookSettings })
+  }
+
+  const create = p === '/api/v1/videos' && method === 'POST'
+  const revise = /^\/api\/v1\/videos\/([^/]+)\/versions$/.exec(p)
+  const remix = /^\/api\/v1\/videos\/([^/]+)\/remix$/.exec(p)
+  if (method !== 'POST' || !(create || revise || remix)) return null
+  const b = await readJson(init, input)
+  const refused = refusePick(b.look)
+  if (refused) return refused
+  if (revise?.[1] && b.look !== undefined) {
+    if (b.scope !== undefined && b.scope !== null)
+      return fail(
+        400,
+        'look_not_allowed',
+        "Redoing a scene keeps the video's look; pick a look with a full revision.",
+      )
+    // A restyle of a version with recorded narration (assertRestyleAllowed).
+    const vid = videos.find((v) => v.id === revise[1])
+    const base =
+      vid?.versions.find((v) => v.n === (b.fromVersion as number | undefined)) ??
+      vid?.versions.find((v) => v.status === 'ready')
+    const restyle = (typeof b.look === 'string' ? b.look : null) !== (base?.look?.id ?? null)
+    if (restyle && base?.links.narrationAudio)
+      return fail(409, 'look_not_allowed', "Restyle isn't available for videos with recorded narration yet.")
+  }
+  const res = await inner()
+  if (!remix?.[1] || !res.ok) return res
+  // The remix's version: the picked look, None, or (omitted) the source version's own.
+  const made = (await res.json()) as (typeof videos)[number]
+  const src = videos.find((v) => v.id === remix[1])
+  const from = src?.versions.find((v) => v.n === made.remixOf?.n)
+  const picked = typeof b.look === 'string' ? mockLooks().find((l) => l.id === b.look) : null
+  const look = b.look === undefined ? (from?.look ?? null) : picked ? ref(picked) : null
+  const stored = videos.find((v) => v.id === made.id)
+  for (const v of [...made.versions, ...(stored?.versions ?? [])]) v.look = look
+  return json(made, res.status)
 }

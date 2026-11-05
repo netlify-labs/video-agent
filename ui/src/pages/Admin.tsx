@@ -15,6 +15,7 @@ import {
 } from '@mantine/core'
 import { modals } from '@mantine/modals'
 import { WebhookCard } from '../components/WebhookCard'
+import { LooksSettingsCard } from '../components/LooksAdmin'
 import { DestinationsAdminCard, YouTubeAdminCard } from '../components/DestinationsAdmin'
 import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
@@ -367,6 +368,7 @@ export function AdminPage() {
           <WebhookCard scope="team" />
           <NarrationSettingsCard />
           <RemixSettingsCard />
+          <LooksSettingsCard />
           <CliLoginSettingsCard />
           <RemotionSettingsCard />
           <DestinationsAdminCard />

@@ -266,3 +266,35 @@ test("Remix shows the source's look, leaves it out unchanged and sends a change"
   await again.getByRole('button', { name: 'Remix', exact: true }).click()
   await expect.poll(() => lastRemix(page)).toMatchObject({ look: null })
 })
+
+// Admin: the Looks section (bead va-nifa.4.5). The mock keeps settings in memory, so the test moves within the app.
+
+test('an admin turns a look off and it leaves the picker; a disabled default is refused inline', async ({
+  page,
+}) => {
+  await page.goto('/admin')
+  const looks = page.getByTestId('looks-settings')
+  await looks.getByRole('switch', { name: 'Terminal look' }).click({ force: true })
+  await expect(looks.getByRole('switch', { name: 'Terminal look' })).not.toBeChecked()
+
+  // A default that's turned off is refused, and the card says why.
+  await looks.getByLabel('Default for new videos').click()
+  await page.getByRole('option', { name: 'Terminal' }).click()
+  await expect(looks.getByTestId('looks-settings-error')).toContainText('turned off')
+  await looks.getByLabel('Default for new videos').click()
+  await page.getByRole('option', { name: 'Kinetic type' }).click()
+  await expect(looks.getByLabel('Default for new videos')).toHaveValue('Kinetic type')
+
+  await page.evaluate(() => {
+    const w = globalThis as unknown as {
+      history: { pushState: (a: null, b: string, c: string) => void }
+      dispatchEvent: (e: unknown) => void
+      PopStateEvent: new (t: string) => unknown
+    }
+    w.history.pushState(null, '', '/new')
+    w.dispatchEvent(new w.PopStateEvent('popstate'))
+  })
+  await page.getByRole('button', { name: 'Look: Kinetic type' }).click()
+  await expect(card(page, 'terminal')).toHaveCount(0)
+  await expect(card(page, 'clean')).toBeVisible()
+})
