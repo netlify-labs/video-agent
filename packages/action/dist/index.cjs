@@ -2324,15 +2324,6 @@ var VideoAgent = class {
 };
 
 // packages/action/src/commands.ts
-var COMMANDS = [
-  "/video",
-  "/video revise <what to change>",
-  "/video redo <scene> <what to change>",
-  "/video status",
-  "/video publish",
-  "/video retry",
-  "/video cancel"
-];
 function parseCommand(body2, commentId) {
   const text = body2.replace(/\r\n?/g, "\n");
   const first = /^\/video[ \t]*([^\s]*)[ \t]*/.exec(text);
@@ -3663,6 +3654,15 @@ async function cleanup(run2, va, ids) {
 
 // packages/action/src/spec.ts
 var ACTION_VERSION = "1.0.0";
+var COMMANDS = [
+  "/video",
+  "/video revise <what to change>",
+  "/video redo <scene> <what to change>",
+  "/video status",
+  "/video publish",
+  "/video retry",
+  "/video cancel"
+];
 
 // packages/action/src/flows.ts
 var MAX_ATTEMPTS = 2;

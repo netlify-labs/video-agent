@@ -124,6 +124,17 @@ export type OutputName = (typeof OUTPUTS)[number]['name']
 /** Sent in the SDK's User-Agent (video-agent-action/<version>) so the deployment's logs show the action. */
 export const ACTION_VERSION = '1.0.0'
 
+/** The `/video` commands, as the docs and the unknown-command warning list them (parsed in commands.ts). */
+export const COMMANDS = [
+  '/video',
+  '/video revise <what to change>',
+  '/video redo <scene> <what to change>',
+  '/video status',
+  '/video publish',
+  '/video retry',
+  '/video cancel',
+]
+
 /** Every value outputs.status takes, so later steps can branch on it (the README's table is checked against this). */
 export const OUTPUT_STATUSES = [
   'ready',

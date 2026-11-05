@@ -35,6 +35,7 @@ export const docsSkillsRoute = route(() => import('./pages/docs/SkillsGuide'))
 export const docsDestinationsRoute = route(() => import('./pages/docs/DestinationsGuide'))
 export const docsSdkRoute = route(() => import('./pages/docs/SdkGuide'))
 export const docsLooksRoute = route(() => import('./pages/docs/LooksGuide'))
+export const docsGithubRoute = route(() => import('./pages/docs/GithubGuide'))
 
 /**
  * A page component from a route module: the module's component when it has loaded, else a React.lazy one that
@@ -64,6 +65,7 @@ const BY_PATH: Record<string, RouteModule<unknown>> = {
   '/docs/destinations': docsDestinationsRoute,
   '/docs/sdk': docsSdkRoute,
   '/docs/looks': docsLooksRoute,
+  '/docs/github': docsGithubRoute,
 }
 
 /** Where /docs and the old /docs?tab=mcp|skills links go now. */

@@ -6,7 +6,7 @@ import { readContext, type RunContext } from './context.js'
 import { envCore, type Core } from './core.js'
 import { createLog, type Log } from './log.js'
 import { isVideoAgentError, type VideoAgent } from '../../sdk/src/index.js'
-import { COMMANDS, parseCommand, react } from './commands.js'
+import { parseCommand, react } from './commands.js'
 import {
   client,
   handleDispatch,
@@ -20,7 +20,7 @@ import {
 import { createGitHub, GitHubError, type GitHub } from './github.js'
 import { checkConnection, checkVisibility, InputError, readInputs, type Inputs } from './inputs.js'
 import { route } from './router.js'
-import { ACTION_VERSION, type OutputName } from './spec.js'
+import { ACTION_VERSION, COMMANDS, type OutputName } from './spec.js'
 import { isFork, Trust } from './trust.js'
 
 export interface ActionDeps {

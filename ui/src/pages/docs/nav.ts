@@ -19,4 +19,5 @@ export const DOCS_PAGES: readonly DocsPage[] = [
   { path: '/docs/skills', label: 'Agent skills', group: 'AI tools' },
   { path: '/docs/destinations', label: 'Publish destinations', group: 'Guides' },
   { path: '/docs/looks', label: 'Looks', group: 'Guides' },
+  { path: '/docs/github', label: 'GitHub Action', group: 'Guides' },
 ]

@@ -3,9 +3,8 @@
 // inputs and outputs (packages/action/src/spec.ts, action.yml's too), security and costs.
 import { Anchor, Badge, Card, Code, Group, List, Stack, Table, Text } from '@mantine/core'
 import { Link } from 'react-router'
-import { COMMANDS } from '../../../../packages/action/src/commands'
 import { EXAMPLES, FEATURE_NOTES, SHOOT_SCRIPT } from '../../../../packages/action/src/examples'
-import { INPUTS, OUTPUT_STATUSES, OUTPUTS } from '../../../../packages/action/src/spec'
+import { COMMANDS, INPUTS, OUTPUT_STATUSES, OUTPUTS } from '../../../../packages/action/src/spec'
 import { $api } from '../../api/client'
 import { CopyField, PageHeader } from '../../components/bits'
 import { CodeBlock } from '../../components/CodeBlock'
