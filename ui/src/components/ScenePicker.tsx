@@ -1,17 +1,33 @@
-// Redo a scene (regenerate-beat plan §4.12): the shown version's scenes as chips to pick from. The version's beats
-// come with it, or from GET …/beats for a version made before they were stored. The chips follow the server's rules
-// (lib/scenes.ts pickable), each disabled one saying why.
-import { Chip, Group, Loader, Text, Tooltip } from '@mantine/core'
-import { $api, errorMessage, type Version } from '../api/client'
+// Redo a scene (regenerate-beat plan §4.12): the shown version's scenes as chips to pick from, and the dialog that
+// redoes some of them (Redo this part on a pinned comment). The version's beats come with it, or from GET …/beats for
+// a version made before they were stored. The chips follow the server's rules (lib/scenes.ts pickable), each disabled
+// one saying why.
+import { Button, Checkbox, Chip, Group, Loader, Modal, Stack, Text, Textarea, Tooltip } from '@mantine/core'
+import { notifications } from '@mantine/notifications'
+import { useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
+import { $api, errorMessage, newIdempotencyKey, type Version, type Video } from '../api/client'
 import { pickable, sceneChipLabel } from '../lib/scenes'
+import { clockTime, showError } from './bits'
 
-/** The version's scenes: from the DTO, else asked for once. Null while loading or when it has none. */
-function useScenes(videoId: string, v: Version) {
+/** Whether this deployment and this version let some of its scenes be redone on their own. */
+export function useCanRedoScenes(v: Version): boolean {
+  const config = $api.useQuery('get', '/api/v1/config')
+  return (
+    config.data?.features.includes('scoped_revision') === true &&
+    v.status === 'ready' &&
+    v.editable &&
+    v.editing.capabilities.scopedRevision
+  )
+}
+
+/** The version's scenes: from the DTO, else asked for once (when `enabled`). Null while loading or when it has none. */
+export function useScenes(videoId: string, v: Version, enabled = true) {
   const fill = $api.useQuery(
     'get',
     '/api/v1/videos/{id}/versions/{n}/beats',
     { params: { path: { id: videoId, n: v.n } } },
-    { enabled: v.beats === null && v.status === 'ready' && v.editable },
+    { enabled: enabled && v.beats === null && v.status === 'ready' && v.editable },
   )
   return {
     beats: v.beats ?? fill.data?.beats ?? null,
@@ -65,5 +81,101 @@ export function ScenePicker(props: {
         </Tooltip>
       ))}
     </Group>
+  )
+}
+
+/**
+ * Redo some scenes of a version, in a dialog: the scenes (preselected), the comment that led here (checked), and what
+ * should change. Nothing is sent until the button is pressed.
+ */
+export function RedoScenesModal({
+  video,
+  v,
+  beats,
+  comment,
+  onClose,
+}: {
+  video: Video
+  v: Version
+  /** The scenes picked to start with. */
+  beats: string[]
+  comment?: { id: string; body: string; timeSec: number | null }
+  onClose: () => void
+}) {
+  const qc = useQueryClient()
+  const [picked, setPicked] = useState(beats)
+  const [withComment, setWithComment] = useState(comment !== undefined)
+  const [note, setNote] = useState('')
+  const [key] = useState(newIdempotencyKey)
+  const next = video.versions.length + 1
+  const revise = $api.useMutation('post', '/api/v1/videos/{id}/versions', {
+    onSuccess: () => {
+      onClose()
+      void qc.invalidateQueries()
+      notifications.show({ color: 'teal', message: `Making v${next}: redoing the scenes you picked.` })
+    },
+    onError: showError,
+  })
+  const sendComment = comment !== undefined && withComment
+  return (
+    <Modal opened onClose={onClose} size="lg" title={`Redo part of v${v.n}`}>
+      <Stack gap="sm">
+        <ScenePicker videoId={video.id} v={v} value={picked} onChange={setPicked} />
+        {comment ? (
+          <Checkbox
+            checked={withComment}
+            onChange={(e) => {
+              setWithComment(e.currentTarget.checked)
+            }}
+            label={
+              <>
+                <Text size="xs" c="var(--va-faint)">
+                  The comment{comment.timeSec !== null ? ` at ${clockTime(comment.timeSec)}` : ''}
+                </Text>
+                <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
+                  {comment.body}
+                </Text>
+              </>
+            }
+          />
+        ) : null}
+        <Textarea
+          label={sendComment ? 'Anything else the agent should know? (optional)' : 'What should change?'}
+          autosize
+          minRows={3}
+          maxLength={2000}
+          value={note}
+          onChange={(e) => {
+            setNote(e.currentTarget.value)
+          }}
+        />
+        <Text size="sm" c="var(--va-faint)">
+          Everything else stays as it is in v{v.n}, and so do length, sound and voice. Say in the request if a
+          scene should run longer.
+        </Text>
+        <Group justify="flex-end" gap="xs">
+          <Button variant="subtle" color="gray" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            loading={revise.isPending}
+            disabled={picked.length === 0 || (!sendComment && note.trim().length < 3)}
+            onClick={() => {
+              revise.mutate({
+                params: { path: { id: video.id }, header: { 'idempotency-key': key } },
+                body: {
+                  prompt: note.trim().length >= 3 ? note.trim() : 'Incorporate the feedback below.',
+                  fromVersion: v.n,
+                  scope: { beats: picked },
+                  ...(sendComment ? { commentIds: [comment.id] } : {}),
+                },
+              })
+            }}
+          >
+            Make v{next}
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
   )
 }

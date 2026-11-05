@@ -61,12 +61,32 @@ export function pickable(
   })
 }
 
+/** 'Features', 'Hook and Demo', 'Hook, Demo and End card'. */
+export function sceneList(scenes: readonly { id: string; label: string | null }[]): string {
+  const names = scenes.map(sceneName)
+  return names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names.at(-1) ?? ''}`
+}
+
 /** 'Redid Features', 'Redid Hook and Demo', 'Redid Hook, Demo and End card'. */
-export function redidLabel(scope: { beats: { id: string; label: string | null }[] }): string {
-  const names = scope.beats.map(sceneName)
-  const list =
-    names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names.at(-1) ?? ''}`
-  return `Redid ${list}`
+export const redidLabel = (scope: { beats: { id: string; label: string | null }[] }): string =>
+  `Redid ${sceneList(scope.beats)}`
+
+/**
+ * The scenes pinned comments point at, for a scoped Incorporate (plan §4.12): null when a comment isn't pinned or the
+ * scenes can't be redone on their own (every scene, the held one, more than 20). On by default when they fall in
+ * fewer than half the scenes; a reviewer who commented on every scene wants a whole revision.
+ */
+export function pinnedScenes(
+  beats: readonly Beat[],
+  times: readonly (number | null)[],
+): { beats: Beat[]; byDefault: boolean } | null {
+  if (times.length === 0 || times.some((t) => t === null)) return null
+  const hit = new Set(times.map((t) => beatAt(beats, t ?? 0)?.id))
+  const scenes = real(beats).filter((b) => hit.has(b.id))
+  const chips = pickable(beats, [])
+  const blocked = scenes.some((b) => chips.find((c) => c.beat.id === b.id)?.disabled)
+  if (!scenes.length || blocked || scenes.length >= chips.length || scenes.length > MAX_PICKS) return null
+  return { beats: scenes, byDefault: scenes.length < chips.length / 2 }
 }
 
 /** Whether a failed version's error is a scope refusal (isScopeRefusal in src/lib/scope.ts). */

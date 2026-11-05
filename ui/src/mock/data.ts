@@ -516,15 +516,16 @@ export const videos: Video[] = [
 ]
 
 // Redo a scene (localStorage.mockRedo=1): the teaser gets v3, which redid its demo and ends on a held frame under
-// recorded narration, and v4, a scoped run of v3 that was refused for touching a frozen scene.
-const redoOn = (() => {
+// recorded narration, and v4, a scoped run of v3 that was refused for touching a frozen scene. The webhooks launch
+// (Ada's) gets its scenes too; the mock API adds pinned comments on all three (server.ts).
+export const mockRedo = (() => {
   try {
     return typeof localStorage !== 'undefined' && localStorage.getItem('mockRedo') === '1'
   } catch {
     return false
   }
 })()
-if (redoOn) {
+if (mockRedo) {
   const teaser = videos.find((v) => v.id === 'vid_teaser') as Video
   const v3 = ready('vid_teaser', 3, 'Make the demo scene show the deploy preview URL.', {
     at: 30,
@@ -542,9 +543,10 @@ if (redoOn) {
     beats: [
       { id: 'hook', label: 'Hook', start: 0, duration: 2 },
       { id: 'problem', label: 'Problem', start: 2, duration: 2 },
-      { id: 'demo', label: 'Demo', start: 4, duration: 2.5 },
-      { id: 'end', label: 'End card', start: 6.5, duration: 1.5 },
-      { id: 'va-hold', label: null, start: 8, duration: 1 },
+      { id: 'demo', label: 'Demo', start: 4, duration: 2 },
+      { id: 'proof', label: 'Proof', start: 6, duration: 1.5 },
+      { id: 'end', label: 'End card', start: 7.5, duration: 1 },
+      { id: 'va-hold', label: null, start: 8.5, duration: 1 },
     ],
     scope: { beats: [{ id: 'demo', label: 'Demo' }] },
     summary: 'The demo scene now shows the preview URL; everything else is v2 as it was.',
@@ -581,6 +583,15 @@ if (redoOn) {
     latestVersion: 4,
     etag: '"vid_teaser-4"',
     updatedAt: v4.createdAt,
+  })
+  const hooks = videos.find((v) => v.id === 'vid_webhooks')?.versions[0] as V
+  Object.assign(hooks, {
+    editable: true,
+    beats: [
+      { id: 'before', label: 'Before', start: 0, duration: 8 },
+      { id: 'after', label: 'After', start: 8, duration: 9 },
+      { id: 'end', label: 'End card', start: 17, duration: 5.5 },
+    ],
   })
 }
 

@@ -53,7 +53,7 @@ test('the chips follow the server’s rules: all but one picked, the held frame'
   await page.goto('/videos/vid_teaser')
   await expect(page.getByTestId('video-actions')).toBeVisible()
   await scope(page).getByText('Some scenes').click()
-  await expect(page.getByTestId('scene-picker').getByRole('checkbox')).toHaveCount(4)
+  await expect(page.getByTestId('scene-picker').getByRole('checkbox')).toHaveCount(5)
   await expect(chip(page, /End card/)).toBeDisabled()
   await pick(page, /End card/).hover()
   await expect(page.getByText('holds its last frame; redo it with a whole-video revision')).toBeVisible()
@@ -106,4 +106,112 @@ test('history names the scenes a version redid; a scope refusal offers Revise th
   await expect(page.getByText('Starts from v3')).toBeVisible()
   await expect(page.getByLabel('What should change?')).toHaveValue('Make the problem scene darker.')
   await expect(scope(page).getByRole('radio', { name: 'Whole video' })).toBeChecked()
+})
+
+// Redo this part (va-8cy4.4.2) and the scoped Incorporate (va-8cy4.4.3), on the mockRedo comments (server.ts).
+const comment = (page: Page, body: string) => page.getByTestId('comment').filter({ hasText: body })
+
+test('Redo this part opens the dialog with the comment’s scene and the comment, and sends nothing until asked', async ({
+  page,
+}) => {
+  await mock(page, 'mockRedo')
+  await page.goto('/videos/vid_teaser')
+  await expect(comment(page, 'The hook needs a bigger title.')).toBeVisible()
+  // Every open pinned comment but the one in the held frame; never the unpinned one.
+  await expect(page.getByRole('button', { name: 'Redo this part' })).toHaveCount(4)
+  await expect(
+    comment(page, 'Hold the last frame a bit longer.').getByRole('button', { name: 'Redo this part' }),
+  ).toHaveCount(0)
+  await expect(
+    comment(page, 'Overall the pacing is good.').getByRole('button', { name: 'Redo this part' }),
+  ).toHaveCount(0)
+  // A pin at 0:04, the boundary between the problem and the demo, is the demo's.
+  await comment(page, 'Start the demo on the dashboard.')
+    .getByRole('button', { name: 'Redo this part' })
+    .click()
+  const dialog = page.getByRole('dialog', { name: 'Redo part of v3' })
+  await expect(dialog.getByRole('checkbox', { name: /Demo/ })).toBeChecked()
+  await expect(dialog.getByRole('checkbox', { name: /Problem/ })).not.toBeChecked()
+  await expect(dialog.getByRole('checkbox', { name: /Start the demo on the dashboard/ })).toBeChecked()
+  expect(await lastRevise(page)).toBeUndefined()
+  await dialog.getByRole('button', { name: 'Make v5' }).click()
+  await expect(dialog).toHaveCount(0)
+  expect(await lastRevise(page)).toEqual({
+    prompt: 'Incorporate the feedback below.',
+    fromVersion: 3,
+    scope: { beats: ['demo'] },
+    commentIds: ['c_r2'],
+  })
+})
+
+test('Redo this part is for the owner or an admin: not a Creator on someone else’s video', async ({
+  page,
+}) => {
+  await mock(page, 'mockRedo')
+  await mock(page, 'mockRole', 'creator')
+  await page.goto('/videos/vid_webhooks')
+  await expect(comment(page, 'Show the endpoint URL here.')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Redo this part' })).toHaveCount(0)
+  // They can still pick scenes in the revise panel.
+  await scope(page).getByText('Some scenes').click()
+  await expect(pick(page, '2. After · 0:08–0:17')).toBeVisible()
+})
+
+test('Incorporate offers only-these-scenes when every pick is pinned, on by default under half the scenes', async ({
+  page,
+}) => {
+  await mock(page, 'mockRedo')
+  await page.goto('/videos/vid_teaser')
+  await page.getByRole('button', { name: 'Incorporate feedback' }).click()
+  const dialog = page.getByRole('dialog')
+  const only = dialog.getByRole('switch', { name: 'Only change the scenes these comments point at' })
+  const box = (body: string) => dialog.getByRole('checkbox', { name: new RegExp(body) })
+  // An unpinned pick, or one in the held frame, rules it out.
+  await expect(only).toHaveCount(0)
+  await box('Overall the pacing is good.').uncheck()
+  await expect(only).toHaveCount(0)
+  await box('Hold the last frame').uncheck()
+  // Hook, demo and proof: 3 of 5 scenes, off by default.
+  await expect(only).not.toBeChecked()
+  await box('Add a customer logo').uncheck()
+  // Hook and demo: 2 of 5, on, saying which.
+  await expect(only).toBeChecked()
+  await expect(dialog.getByText('Redoes Hook and Demo.')).toBeVisible()
+  await dialog.getByRole('button', { name: 'Make v5 with 3 comments' }).click()
+  await expect(dialog).toHaveCount(0)
+  expect(await lastRevise(page)).toEqual({
+    prompt: 'Incorporate the feedback below.',
+    fromVersion: 3,
+    commentIds: ['c_r1', 'c_r2', 'c_r3'],
+    scope: { beats: ['hook', 'demo'] },
+  })
+})
+
+test('Incorporate with the switch off is an ordinary revision; pins on every scene hide it', async ({
+  page,
+}) => {
+  await mock(page, 'mockRedo')
+  await page.goto('/videos/vid_teaser')
+  await page.getByRole('button', { name: 'Incorporate feedback' }).click()
+  const dialog = page.getByRole('dialog')
+  const only = dialog.getByRole('switch', { name: 'Only change the scenes these comments point at' })
+  for (const b of ['Overall the pacing', 'Hold the last frame', 'Add a customer logo', 'The demo cursor'])
+    await dialog.getByRole('checkbox', { name: new RegExp(b) }).uncheck()
+  await expect(only).toBeChecked()
+  await only.click({ force: true })
+  await expect(only).not.toBeChecked()
+  await dialog.getByRole('button', { name: 'Make v5 with 2 comments' }).click()
+  await expect(dialog).toHaveCount(0)
+  expect(await lastRevise(page)).toEqual({
+    prompt: 'Incorporate the feedback below.',
+    fromVersion: 3,
+    commentIds: ['c_r1', 'c_r2'],
+  })
+
+  // v2 has a pinned comment in each of its four scenes: that's every scene.
+  await page.getByRole('button', { name: /v2 from v1/ }).click()
+  await page.getByRole('button', { name: 'Incorporate feedback' }).click()
+  await dialog.getByRole('checkbox', { name: /Love the end card/ }).uncheck()
+  await expect(dialog).toContainText('4 of 5 checked')
+  await expect(only).toHaveCount(0)
 })

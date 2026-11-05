@@ -11,7 +11,7 @@ import voiceHtml from '../../../test/fixtures/contract1-voice/index.html?raw'
 import voiceSummary from '../../../test/fixtures/contract1-voice/summary.json'
 import voiceFile from '../../../test/fixtures/contract1-voice/assets/voice/voice.json'
 import type { Video } from '../api/client'
-import { MOCK_TRANSCRIPT, embed, people, player, stats, videos } from './data'
+import { MOCK_TRANSCRIPT, embed, mockRedo, people, player, stats, videos } from './data'
 import { mockFile } from './files'
 import { parseVtt, writeVtt, type VttCue } from '../../../src/lib/vtt'
 
@@ -175,6 +175,38 @@ const comments: MockComment[] = [
     unread: true,
   },
 ]
+// Redo a scene (localStorage.mockRedo=1): pinned comments to redo scenes from. On the teaser's v3 (five scenes and a
+// held frame) one per scene but the end card, one at a boundary (0:04, the demo), one in the held frame and one
+// unpinned; on v2 one in each of its four scenes; one on Ada's webhooks launch.
+if (mockRedo) {
+  const pinned = (id: string, videoId: string, versionN: number, timeSec: number | null, body: string) => ({
+    id,
+    videoId,
+    versionN,
+    author: people.ada,
+    body,
+    timeSec,
+    x: null,
+    y: null,
+    createdAt: new Date(Date.now() - 1800_000).toISOString(),
+    editedAt: null,
+    resolvedAt: null,
+    resolvedBy: null,
+    addressedInN: null,
+  })
+  comments.push(
+    pinned('c_r1', 'vid_teaser', 3, 1, 'The hook needs a bigger title.'),
+    pinned('c_r2', 'vid_teaser', 3, 4, 'Start the demo on the dashboard.'),
+    pinned('c_r3', 'vid_teaser', 3, 5, 'The demo cursor moves too fast.'),
+    pinned('c_r4', 'vid_teaser', 3, 6.5, 'Add a customer logo to the proof.'),
+    pinned('c_r5', 'vid_teaser', 3, 9, 'Hold the last frame a bit longer.'),
+    pinned('c_r6', 'vid_teaser', 3, null, 'Overall the pacing is good.'),
+    pinned('c_r7', 'vid_teaser', 2, 3, 'The problem needs a clearer example.'),
+    pinned('c_r8', 'vid_teaser', 2, 5, 'The demo is too dark.'),
+    pinned('c_r9', 'vid_teaser', 2, 7, 'The end card font is too thin.'),
+    pinned('c_r10', 'vid_webhooks', 1, 9, 'Show the endpoint URL here.'),
+  )
+}
 const commentDto = (c: MockComment) => {
   const owner = videos.find((v) => v.id === c.videoId)?.owner.id === me.id
   const mine = c.author.id === me.id

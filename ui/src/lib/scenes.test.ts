@@ -6,6 +6,7 @@ import {
   MAX_PICKS,
   MAX_REASON,
   pickable,
+  pinnedScenes,
   redidLabel,
   sceneChipLabel,
   type Beat,
@@ -82,5 +83,35 @@ describe('labels and refusals', () => {
         ],
       }),
     ).toBe('Redid Hook, Features and end')
+  })
+})
+
+describe('pinnedScenes', () => {
+  const five: Beat[] = [
+    { id: 'hook', label: 'Hook', start: 0, duration: 2 },
+    { id: 'problem', label: null, start: 2, duration: 2 },
+    { id: 'demo', label: 'Demo', start: 4, duration: 2 },
+    { id: 'proof', label: null, start: 6, duration: 2 },
+    { id: 'end', label: null, start: 8, duration: 2 },
+  ]
+  const ids5 = (times: (number | null)[]) => pinnedScenes(five, times)?.beats.map((b) => b.id) ?? null
+
+  it('maps pins to distinct scenes in order, a boundary to the later scene', () => {
+    expect(ids5([5, 1, 4.5])).toEqual(['hook', 'demo'])
+    expect(ids5([4])).toEqual(['demo'])
+  })
+
+  it('is on by default under half the scenes, off from half', () => {
+    expect(pinnedScenes(five, [1, 5])?.byDefault).toBe(true)
+    expect(pinnedScenes(five, [1, 5, 7])?.byDefault).toBe(false)
+  })
+
+  it('refuses an unpinned comment, every scene and the held one', () => {
+    expect(ids5([1, null])).toBeNull()
+    expect(ids5([])).toBeNull()
+    expect(ids5([1, 3, 5, 7, 9])).toBeNull()
+    expect(pinnedScenes(held, [13])).toBeNull()
+    expect(pinnedScenes(held, [11])).toBeNull()
+    expect(pinnedScenes(held, [1, 5])?.beats.map((b) => b.id)).toEqual(['hook', 'features'])
   })
 })
