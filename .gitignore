@@ -27,3 +27,4 @@ spikes/s10/out/
 
 # Run inputs outside video/ (recorded narration takes; scripts/lib/narration-inputs.ts)
 .va-run/
+*.tsbuildinfo
