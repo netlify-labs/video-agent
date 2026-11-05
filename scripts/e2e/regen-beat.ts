@@ -308,6 +308,16 @@ let failure: Error | null = null
 try {
   const versions = await videoOf(sourceId)
   const parent = versions.find((v) => v.status === 'ready')
+  // A version made before finalize stored scenes has beats null until something asks for them (as the app does).
+  if (parent?.editable && parent.beats === null) {
+    const r = await call<{ beats: Version['beats'] }>(
+      key,
+      'GET',
+      `/api/v1/videos/${sourceId}/versions/${parent.n}/beats`,
+    )
+    log('beats_filled', { n: parent.n, status: r.status, count: r.json.beats?.length ?? null })
+    if (r.status === 200) parent.beats = r.json.beats
+  }
   check(
     !!parent?.editable && !!parent.beats && parent.beats.length >= 3,
     'SOURCE_ID has an editable ready version with 3+ scenes',
