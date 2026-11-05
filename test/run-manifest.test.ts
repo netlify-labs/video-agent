@@ -14,6 +14,7 @@ import {
   RUN_MANIFEST_VERSION,
   runEngineId,
   runManifestKey,
+  scopeStillPath,
   serializeRunManifest,
   sha256Hex,
   verifyRunManifest,
@@ -166,6 +167,87 @@ describe('run manifest', () => {
     const { bundle, kind, ...rest } = base
     const reordered: RunManifest = { bundle, ...rest, kind }
     expect(serializeRunManifest(reordered)).toBe(serializeRunManifest(base))
+  })
+})
+
+describe('run manifest scope (redo a scene)', () => {
+  const video = { key: 'vid_1/v1/video.mp4', sha256: H('e') }
+  const still = (beat: string, what: 'before' | 'after', atSec = 3.95) => ({
+    atSec,
+    path: scopeStillPath(beat, what),
+    what,
+    beat,
+  })
+  const scoped: RunManifest = {
+    ...base,
+    feedback: { video, pins: [] },
+    scope: { beats: ['features'], stills: [still('features', 'before'), still('features', 'after', 10.5)] },
+  }
+  const bad = /bad scope entry/
+
+  it('keeps every manifest without a scope byte-identical', () => {
+    const m: RunManifest = {
+      ...base,
+      feedback: { video, pins: [{ commentId: 'cmt_1', timeSec: 2.5, x: 0.25, y: null }] },
+    }
+    expect(serializeRunManifest(m)).toBe(
+      `{"v":1,"jobId":"vid_1","attemptId":"att_1","versionN":2,"kind":"revision","source":{"key":"vid_1/v1/source.tar.gz","sha256":"${H('a')}","parentN":1},"bundle":null,"media":null,"feedback":{"video":{"key":"vid_1/v1/video.mp4","sha256":"${H('e')}"},"pins":[{"commentId":"cmt_1","timeSec":2.5,"x":0.25,"y":null}]}}`,
+    )
+    expect(serializeRunManifest({ ...m, scope: undefined })).toBe(serializeRunManifest(m))
+  })
+
+  it('accepts a scope with stills and empty feedback pins, or no stills and no feedback', () => {
+    expect(verify(scoped).scope).toEqual(scoped.scope)
+    expect(verify(scoped).feedback?.pins).toEqual([])
+    const noStills: RunManifest = { ...base, scope: { beats: ['features', 'outro'], stills: [] } }
+    expect(verify(noStills).scope).toEqual({ beats: ['features', 'outro'], stills: [] })
+  })
+
+  it('serializes scope in a fixed order and round-trips it byte for byte', () => {
+    const shuffled: RunManifest = {
+      ...scoped,
+      scope: {
+        stills: scoped.scope!.stills.map(({ beat, what, path, atSec }) => ({ beat, what, path, atSec })),
+        beats: scoped.scope!.beats,
+      },
+    }
+    const raw = serializeRunManifest(shuffled)
+    expect(raw).toBe(serializeRunManifest(scoped))
+    expect(
+      raw.endsWith(
+        `"scope":{"beats":["features"],"stills":[{"atSec":3.95,"path":"feedback/scope/features-before.jpg","what":"before","beat":"features"},{"atSec":10.5,"path":"feedback/scope/features-after.jpg","what":"after","beat":"features"}]}}`,
+      ),
+    ).toBe(true)
+    expect(serializeRunManifest(verify(scoped))).toBe(raw)
+  })
+
+  it('refuses a bad scope', () => {
+    const many = (n: number) => Array.from({ length: n }, (_, i) => `b${i}`)
+    for (const scope of [
+      { beats: ['Features!'], stills: [] },
+      { beats: many(21), stills: [] },
+      { beats: ['features', 'features'], stills: [] },
+      { beats: [], stills: [] },
+      {
+        beats: ['features'],
+        stills: [{ ...still('features', 'before'), path: 'feedback/features-before.jpg' }],
+      },
+      {
+        beats: ['features'],
+        stills: [{ ...still('features', 'before'), path: 'feedback/scope/../x-before.jpg' }],
+      },
+      { beats: ['features'], stills: [still('intro', 'before')] },
+      { beats: ['features'], stills: Array.from({ length: 41 }, () => still('features', 'after')) },
+      { beats: ['features'], stills: [still('features', 'before', -1)] },
+      { beats: ['features'], stills: [{ ...still('features', 'before'), atSec: Number.NaN }] },
+      { beats: ['features'], stills: [{ ...still('features', 'before'), what: 'middle' }] },
+      { beats: 'features', stills: [] },
+    ])
+      expect(() => verify({ ...scoped, scope: scope as never })).toThrow(bad)
+    const bundle = { key: 'vid_1/v2/frozen.tar.gz', sha256: H('b'), manifestHash: H('c') }
+    expect(() => verify({ ...scoped, kind: 'author', source: null })).toThrow(bad)
+    expect(() => verify({ ...scoped, kind: 'render_unchanged', source: null, bundle })).toThrow(bad)
+    expect(() => verify({ ...scoped, feedback: null })).toThrow(bad)
   })
 })
 

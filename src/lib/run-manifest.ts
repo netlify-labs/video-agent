@@ -73,6 +73,24 @@ export interface RunManifest {
    * tier picks the key the render reports with, and `development` marks a test deployment's renders.
    */
   engine?: RunEngine | undefined
+  /**
+   * A scoped revision (redo a scene, docs/plans/2026-11-04-regenerate-beat.md §4.3): only these beats may change.
+   * The stills of their neighbours come from `feedback.video` (with no pins when nothing was commented).
+   */
+  scope?: RunScope | undefined
+}
+
+export interface RunScope {
+  beats: string[]
+  /** Stills from the parent MP4 so the agent can match the neighbours, relative to video/. Empty: no stills. */
+  stills: ScopeStill[]
+}
+
+export interface ScopeStill {
+  atSec: number
+  path: string
+  what: 'before' | 'after'
+  beat: string
 }
 
 export interface RunEngine {
@@ -140,6 +158,13 @@ export const feedbackStillPath = (index: number, commentId: string) =>
   `feedback/${String(index + 1).padStart(2, '0')}-${commentId}.jpg`
 
 const MAX_PINS = 50
+export const MAX_SCOPE_BEATS = 20
+export const MAX_SCOPE_STILLS = 40
+const BEAT_ID = /^[a-z0-9][a-z0-9-]{0,40}$/
+const SCOPE_STILL = /^feedback\/scope\/[a-z0-9][a-z0-9-]{0,40}-(before|after)\.jpg$/
+
+/** Where prepare-run writes a scope still, relative to video/ (feedback/ is never archived). */
+export const scopeStillPath = (beat: string, what: ScopeStill['what']) => `feedback/scope/${beat}-${what}.jpg`
 
 export const runManifestKey = (jobId: string, attemptId: string) => `${jobId}/runs/${attemptId}.json`
 
@@ -235,6 +260,15 @@ export function serializeRunManifest(m: RunManifest): string {
           },
         }
       : {}),
+    // Only when scoped, so every other manifest keeps its bytes.
+    ...(m.scope
+      ? {
+          scope: {
+            beats: [...m.scope.beats],
+            stills: m.scope.stills.map((x) => ({ atSec: x.atSec, path: x.path, what: x.what, beat: x.beat })),
+          },
+        }
+      : {}),
   })
 }
 
@@ -322,6 +356,35 @@ function isFrozenNarration(v: unknown): v is FrozenNarration {
   )
 }
 
+/** Parsed JSON: a scope's beats and stills, only on a revision; stills need the parent MP4 (feedback.video). */
+function isScope(v: unknown, kind: RunKind, hasFeedback: boolean): v is RunScope {
+  if (!v || typeof v !== 'object' || kind !== 'revision') return false
+  const { beats, stills } = v as { beats?: unknown; stills?: unknown }
+  if (
+    !Array.isArray(beats) ||
+    beats.length === 0 ||
+    beats.length > MAX_SCOPE_BEATS ||
+    !beats.every((b) => typeof b === 'string' && BEAT_ID.test(b)) ||
+    new Set(beats).size !== beats.length
+  )
+    return false
+  if (!Array.isArray(stills) || stills.length > MAX_SCOPE_STILLS || (stills.length > 0 && !hasFeedback))
+    return false
+  return stills.every((x: unknown) => {
+    const s = (x && typeof x === 'object' ? x : {}) as Record<string, unknown>
+    return (
+      typeof s.atSec === 'number' &&
+      Number.isFinite(s.atSec) &&
+      s.atSec >= 0 &&
+      (s.what === 'before' || s.what === 'after') &&
+      typeof s.beat === 'string' &&
+      beats.includes(s.beat) &&
+      typeof s.path === 'string' &&
+      SCOPE_STILL.test(s.path)
+    )
+  })
+}
+
 /** Parses and checks a downloaded manifest against the attempt and the hash from the prompt. Throws a message. */
 export function verifyRunManifest(raw: string, expected: { attemptId: string; sha256: string }): RunManifest {
   if (sha256Hex(raw) !== expected.sha256)
@@ -406,6 +469,8 @@ export function verifyRunManifest(raw: string, expected: { attemptId: string; sh
         'The run manifest has a bad engine development flag: only a Remotion run has one, true.',
       )
   }
+  if (m.scope !== undefined && !isScope(m.scope, m.kind, m.feedback !== null))
+    throw new Error('The run manifest has a bad scope entry.')
   if (m.kind === 'revision' && !m.source) throw new Error('A revision run needs a source.')
   if (m.kind === 'render_unchanged' && !m.bundle) throw new Error('A render-unchanged run needs a bundle.')
   // A fit starts from the frozen draft alone, and exists for its narration (the guard and the bus target need it).
