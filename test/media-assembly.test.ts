@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setEnvironmentContext } from '@netlify/blobs'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { netlifyBlobs, STREAM_ABOVE, viewStream } from '../src/adapters/blobs.js'
+import { netlifyBlobs, streamAbove, viewStream } from '../src/adapters/blobs.js'
 import { PART_SIZE } from '../src/domain/media-uploads.js'
 import { harness, raw } from './helpers.js'
 
@@ -75,7 +75,10 @@ describe('blobs adapter streaming', () => {
     // The server runs in its own process, as in spike D5, so this process's memory is the client's alone.
     let server: ChildProcess
     let dir: string
+    const STREAM_ABOVE = 8 * 1024 * 1024
     beforeAll(async () => {
+      // Lowered from production's 100 MiB so the streamed path is exercised with small bodies.
+      streamAbove.bytes = STREAM_ABOVE
       dir = mkdtempSync(join(tmpdir(), 'va-blobs-'))
       const code = `import { BlobsServer } from '@netlify/blobs/server'
         const s = new BlobsServer({ directory: ${JSON.stringify(dir)}, token: 'local', port: 0 })
@@ -91,6 +94,7 @@ describe('blobs adapter streaming', () => {
       setEnvironmentContext({ siteID: 'local-site', token: 'local', edgeURL: url, uncachedEdgeURL: url })
     })
     afterAll(() => {
+      streamAbove.bytes = 100 * 1024 * 1024
       server.kill()
       rmSync(dir, { recursive: true, force: true })
     })

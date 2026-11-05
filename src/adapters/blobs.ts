@@ -3,8 +3,12 @@ import type { BlobStoreName, BlobsPort } from '../deps.js'
 
 const store = (name: BlobStoreName) => getStore({ name, consistency: 'strong' })
 
-/** Bodies above this go out as a stream of views: fetch copies a buffered body whole (spike D5), a stream it doesn't. */
-export const STREAM_ABOVE = 8 * 1024 * 1024
+/**
+ * Bodies above this go out as a stream of views: fetch copies a buffered body whole (spike D5), a stream it doesn't.
+ * 100 MiB, the clip cap, so only screen recordings over it stream until the phase 1 gate (va-rsk5.2.12) has shown the
+ * Blobs service takes a streamed 150 MB write; then it can come down. Tests lower it.
+ */
+export const streamAbove = { bytes: 100 * 1024 * 1024 }
 const STREAM_CHUNK = 1024 * 1024
 const STREAM_ATTEMPTS = 3
 
@@ -27,7 +31,7 @@ export const netlifyBlobs: BlobsPort = {
   },
   async set(name, key, data, metadata) {
     const opts = metadata ? { metadata } : {}
-    if (typeof data !== 'string' && data.byteLength > STREAM_ABOVE) {
+    if (typeof data !== 'string' && data.byteLength > streamAbove.bytes) {
       // The SDK passes a ReadableStream body to fetch (duplex: 'half') though its types don't list it. Its own retry
       // would resend the spent stream, so retries happen here with a fresh one.
       for (let attempt = 1; ; attempt++) {
