@@ -2,7 +2,9 @@
 // messages, so a HyperFrames run behaves exactly as it did.
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { compositionFiles } from '../../../src/lib/bundle-manifest.js'
 import { validate, type Summary } from '../../../src/lib/contract.js'
+import { hyperframesScopeCheck, SCOPE_LAYOUT_FILE } from '../../../src/lib/scope.js'
 import { RenderProgressReporter } from '../render-progress.js'
 import { run, runStreaming } from '../run-tools.js'
 import type { RunEngine } from './types.js'
@@ -54,7 +56,19 @@ export function hyperframesEngine(exec: Exec = { run, runStreaming }): RunEngine
       lines.end()
       return {}
     },
+    // Redo a scene: the splice and every check, over the frozen parent and video/ (src/lib/scope.ts).
+    scopeCheck: (frozenDir, dir, beats) => {
+      // The frozen copy also holds prepare-run's scope.json, which isn't one of the parent's files.
+      const parent = filesOf(frozenDir)
+      parent.delete(SCOPE_LAYOUT_FILE)
+      return hyperframesScopeCheck(parent, filesOf(dir), beats)
+    },
     version: (videoDir) =>
       exec.run('npx', ['-y', 'hyperframes', '--version'], { cwd: videoDir }).trim().split('\n').pop() ?? '',
   }
+}
+
+/** A composition's files as bytes, with the same exclusions as its bundle (no caches, renders, feedback stills). */
+export function filesOf(dir: string): Map<string, Uint8Array> {
+  return new Map(compositionFiles(dir).map((p) => [p, readFileSync(join(dir, p))]))
 }

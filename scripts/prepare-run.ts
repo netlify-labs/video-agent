@@ -36,6 +36,7 @@ import type { BundleReference } from '../src/lib/bundle-references.js'
 import { NARRATION_SRC, load, read } from '../src/lib/contract.js'
 import { frozenFilesFor, optionalFrozenFilesFor } from '../src/lib/narration-run.js'
 import { FROZEN_DIR, keptHash } from '../src/lib/revoice.js'
+import { SCOPE_LAYOUT_FILE, type ScopeLayout } from '../src/lib/scope.js'
 import { readPcm16 } from '../src/lib/narration-cleanup.js'
 import {
   feedbackStillPath,
@@ -71,12 +72,7 @@ const download: Fetch = async (key, to, store = 'sources') => {
   )
 }
 
-/** Where prepare-run writes a scoped revision's beats and the parent's layout, inside FROZEN_DIR. */
-export const SCOPE_LAYOUT_FILE = 'scope.json'
-export interface ScopeLayout {
-  beats: string[]
-  layout: { id: string; label: string | null; start: number; duration: number }[]
-}
+export { SCOPE_LAYOUT_FILE, type ScopeLayout } from '../src/lib/scope.js'
 
 /**
  * One still per pinned comment from the parent MP4, with a dot at the spot, into video/feedback/ (plan v2 §5).

@@ -1,8 +1,10 @@
 // Production wiring for Netlify Functions.
 import { drizzle } from 'drizzle-orm/netlify-db'
 import { readConfig, type Deps } from '../deps.js'
+import { registerScopeCheck } from '../domain/engines.js'
 import { getSettings } from '../domain/settings.js'
 import { ids } from '../lib/ids.js'
+import { hyperframesScopeCheck } from '../lib/scope.js'
 import { createLogger, verboseFromEnv } from '../lib/log.js'
 import { boundedJson, netlifyUpstream } from '../auth/upstream.js'
 import { createDrizzleStore } from '../store/drizzle.js'
@@ -18,6 +20,9 @@ let deps: Deps | null = null
 
 export function prodDeps(): Deps {
   if (deps) return deps
+  // Redo a scene: HyperFrames' scope check (src/lib/scope.ts). Registering it turns its scopedRevision capability on;
+  // the API, finalize and every background function build their deps here, so they all agree.
+  registerScopeCheck('hyperframes', hyperframesScopeCheck)
   const log = createLogger({ service: 'video-agent' }, undefined, { verbose: verboseFromEnv() })
   const env = process.env
   const config = readConfig(env)

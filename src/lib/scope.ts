@@ -43,6 +43,13 @@ type Node = DefaultTreeAdapterMap['node']
 const sha256 = (b: Uint8Array) => createHash('sha256').update(b).digest('hex')
 type Element = DefaultTreeAdapterMap['element']
 
+/** Where prepare-run writes a scoped revision's beats and the parent's layout, inside the frozen copy. */
+export const SCOPE_LAYOUT_FILE = 'scope.json'
+export interface ScopeLayout {
+  beats: string[]
+  layout: { id: string; label: string | null; start: number; duration: number }[]
+}
+
 /** render-job's StepError prefix for a refused scoped render. */
 export const SCOPE_VIOLATED = 'scope_violated'
 /** Finalize's invalid_output message for a scoped version that changed parts outside its scope. */
