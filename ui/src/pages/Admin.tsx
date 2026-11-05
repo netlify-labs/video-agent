@@ -46,6 +46,11 @@ const FAILURE: Record<string, string> = {
   runner_failed: 'Agent run failed',
   queue_timeout: 'Waited too long in the queue',
   engine_mismatch: 'Wrong engine for this video',
+  engine_unavailable: 'Engine not installed here',
+  engine_tampered: 'Engine project changed',
+  engine_install_failed: 'Engine install failed',
+  engine_skills_unavailable: 'Engine skills missing',
+  engine_check_failed: 'Engine check failed',
 }
 
 export function AdminPage() {
