@@ -44,6 +44,39 @@ export const looksCatalog: LookCatalogEntry[] = [
     }
   },
   {
+    "id": "bold-blocks",
+    "name": "Bold blocks",
+    "description": "Thick borders, hard offset shadows and flat colour fields, cut fast. Loud, friendly and easy to read on a phone.",
+    "tags": [
+      "bold",
+      "flat",
+      "playful"
+    ],
+    "bestFor": [
+      "social",
+      "launch"
+    ],
+    "aspects": [
+      "16:9",
+      "9:16",
+      "1:1",
+      "4:5"
+    ],
+    "engines": [
+      "hyperframes"
+    ],
+    "recording": null,
+    "musicMood": "upbeat indie pop, 120 to 128 bpm",
+    "hash": "51a972db0ff70b4f2de778db5d06272f59cb3c1cebf4821268be396b4285ca14",
+    "sha256": "ea8427922200be21edc078c63069705fe8214e94d4686367a40714348e8925da",
+    "bytes": 3704,
+    "source": "builtin",
+    "preview": {
+      "mp4": "/assets/looks/bold-blocks.7d1f53082f4a.mp4",
+      "poster": "/assets/looks/bold-blocks.09f64a9fdf2c.webp"
+    }
+  },
+  {
     "id": "data-story",
     "name": "Data story",
     "description": "Numbers first: counters that run up, charts that build bar by bar, and one annotation that says why it matters.",
