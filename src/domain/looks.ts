@@ -161,3 +161,50 @@ export async function listLooks(deps: Pick<Deps, 'looks' | 'store'>) {
     default: defaultLook,
   }
 }
+
+/**
+ * The look settings as they'd be after an admin's patch (§6), checked: every id is a catalog look, the default isn't
+ * turned off (nor turned off by this patch: pick another default first), and the default has an enabled engine.
+ * Returns the disabled list de-duplicated in catalog order. Refusals are 400 invalid_request naming the look.
+ */
+export function checkLookSettings(
+  deps: Pick<Deps, 'looks'>,
+  current: { defaultLook: string | null; disabledLooks: string[] },
+  patch: { defaultLook?: string | null | undefined; disabledLooks?: string[] | undefined },
+  enabledEngines: EngineId[],
+): { defaultLook: string | null; disabledLooks: string[] } {
+  const catalog = deps.looks.catalog()
+  const known = new Set(catalog.map((l) => l.id))
+  const next = {
+    defaultLook: patch.defaultLook === undefined ? current.defaultLook : patch.defaultLook,
+    disabledLooks: patch.disabledLooks ?? current.disabledLooks,
+  }
+  for (const id of patch.disabledLooks ?? [])
+    if (!known.has(id)) throw new ApiError('invalid_request', `There's no look called "${id}" to turn off.`)
+  // A stored id a later deploy removed stays (harmless); only ids in this patch must exist.
+  const disabledLooks = [
+    ...catalog.filter((l) => next.disabledLooks.includes(l.id)).map((l) => l.id),
+    ...next.disabledLooks.filter((id, i, all) => !known.has(id) && all.indexOf(id) === i),
+  ]
+  if (next.defaultLook !== null) {
+    const entry = getLook(deps, next.defaultLook)
+    if (patch.defaultLook !== undefined && !entry)
+      throw new ApiError(
+        'invalid_request',
+        `There's no look called "${next.defaultLook}" to make the default.`,
+      )
+    if (entry && disabledLooks.includes(entry.id))
+      throw new ApiError(
+        'invalid_request',
+        patch.defaultLook === undefined
+          ? `${entry.name} is the default look. Pick another default first, or None.`
+          : `${entry.name} is turned off, so it can't be the default.`,
+      )
+    if (entry && !entry.engines.some((e) => enabledEngines.includes(e)))
+      throw new ApiError(
+        'invalid_request',
+        `${entry.name} needs an engine that's turned off, so it can't be the default.`,
+      )
+  }
+  return { defaultLook: next.defaultLook, disabledLooks }
+}

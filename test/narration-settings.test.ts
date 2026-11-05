@@ -22,6 +22,8 @@ describe.each([
       youtubeEnabled: false,
       youtubeConfigured: false,
       recordingQuotaBytes: 2 * 1024 ** 3,
+      defaultLook: null,
+      disabledLooks: [],
     })
     const off = await h.call('PATCH', base, {
       as: h.admin,
@@ -36,6 +38,8 @@ describe.each([
       youtubeEnabled: false,
       youtubeConfigured: false,
       recordingQuotaBytes: 2 * 1024 ** 3,
+      defaultLook: null,
+      disabledLooks: [],
     })
     await h.call('PATCH', base, {
       as: h.admin,
@@ -49,6 +53,8 @@ describe.each([
       youtubeEnabled: false,
       youtubeConfigured: false,
       recordingQuotaBytes: 3 * 1024 ** 3,
+      defaultLook: null,
+      disabledLooks: [],
     })
     expect(h.deps.logs.some((l) => l.includes('"settings.updated"'))).toBe(true)
   })

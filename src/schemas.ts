@@ -1628,6 +1628,15 @@ export const AdminSettingsSchema = z
       .boolean()
       .describe('YouTube is offered as a publish destination (needs youtubeConfigured).'),
     youtubeConfigured: z.boolean().describe('GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set (read-only).'),
+    defaultLook: z
+      .string()
+      .nullable()
+      .describe('The look creates get when they omit one (API, MCP and the GitHub Action too); null: none.'),
+    disabledLooks: z
+      .array(z.string())
+      .describe(
+        'Looks turned off: hidden from pickers and refused for new videos; videos made with one keep it.',
+      ),
   })
   .openapi('AdminSettings')
 export const UpdateAdminSettingsSchema = z
@@ -1650,6 +1659,8 @@ export const UpdateAdminSettingsSchema = z
       .describe('1 MiB to 1 TiB.'),
     remixEnabled: z.boolean().optional(),
     youtubeEnabled: z.boolean().optional(),
+    defaultLook: LookIdSchema.nullable().optional().describe('A look id, or null for none.'),
+    disabledLooks: z.array(LookIdSchema).max(100).optional().describe('The full list of looks to turn off.'),
   })
   .openapi('UpdateAdminSettings')
 

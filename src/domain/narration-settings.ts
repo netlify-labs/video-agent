@@ -1,6 +1,9 @@
 // Recorded voice-over settings (voice-over plan §6.1, §12 decisions 4 and 15): on by default, and an admin can turn
 // it off, pick how takes are transcribed and size the per-person take quota without a redeploy. They're read from
 // the settings row on every use, not the cached copy in settings.ts, so a change reaches every function instance.
+import { enabledEngines } from './engines.js'
+import { lookSettings } from './look-settings.js'
+import { checkLookSettings } from './looks.js'
 import type { Deps } from '../deps.js'
 import { ApiError } from '../lib/errors.js'
 import { assertCan, type Principal } from './policy.js'
@@ -48,6 +51,10 @@ export interface AdminSettings extends NarrationSettings {
   youtubeConfigured: boolean
   /** Stored bytes each person's screen recordings may use (screen-recording plan §4.2). */
   recordingQuotaBytes: number
+  /** The look creates get when they omit one (looks plan §6); null: none. */
+  defaultLook: string | null
+  /** Looks an admin has turned off. */
+  disabledLooks: string[]
 }
 
 async function adminSettings(deps: Pick<Deps, 'store' | 'config'>): Promise<AdminSettings> {
@@ -57,6 +64,7 @@ async function adminSettings(deps: Pick<Deps, 'store' | 'config'>): Promise<Admi
     youtubeEnabled: (await deps.store.getSettings())?.youtubeEnabled ?? false,
     youtubeConfigured: deps.config.google !== null,
     recordingQuotaBytes: (await deps.store.getSettings())?.recordingQuotaBytes ?? RECORDING_QUOTA_DEFAULT,
+    ...(await lookSettings(deps)),
   }
 }
 
@@ -74,9 +82,20 @@ export async function updateAdminSettings(
   assertCan(p, 'settings:manage')
   // The row is created on first use; make sure it exists so the update has something to change.
   await getSettings(deps)
-  const changes = Object.fromEntries(
+  const changes: Record<string, unknown> = Object.fromEntries(
     Object.entries(patch).filter(([k, v]) => v !== undefined && k !== 'youtubeConfigured'),
   )
+  // Looks are checked as they'd be after the patch (looks plan §6).
+  if (patch.defaultLook !== undefined || patch.disabledLooks !== undefined)
+    Object.assign(
+      changes,
+      checkLookSettings(
+        deps,
+        await lookSettings(deps),
+        patch,
+        (await enabledEngines(deps)).map((e) => e.id),
+      ),
+    )
   if (Object.keys(changes).length) await deps.store.updateSettings(changes)
   deps.log.info('settings.updated', { userId: p.userId, changes })
   return adminSettings(deps)
