@@ -1,8 +1,16 @@
 // A demo's recording across versions and runs (screen-recording plan §5.5): revisions and editor versions inherit the
 // parent's inputs (the frozen trace, the person's boxes and trim), and every run of such a version gets them in its
 // manifest, next to the recording's own library media entry.
+import type { Deps } from '../deps.js'
+import { ApiError } from '../lib/errors.js'
+import { classify, MediaError } from '../lib/media/classify.js'
+import { parseTrace } from '../lib/recording-trace.js'
 import type { RunMedia, RunRecording } from '../lib/run-manifest.js'
-import type { VersionRecording } from './types.js'
+import type { Principal } from './policy.js'
+import { isScreenRecording } from './media-roles.js'
+import type { Repo } from '../store/types.js'
+import { canReadMedia } from './takes.js'
+import type { VersionMediaRow, VersionRecording } from './types.js'
 
 /** The inputs a new version keeps from its parent's recording; the results (summary, hidden areas) are its run's. */
 export function inheritRecording(parent: VersionRecording | null | undefined): VersionRecording | null {
@@ -39,4 +47,103 @@ export function manifestRecording(
     ...(r.trim ? { trim: r.trim } : {}),
     ...(r.compose ? { compose: true } : {}),
   }
+}
+
+// ───── creating a demo (screen-recording plan §6.1; va-rsk5.3.16) ─────
+
+/** A demo's target length when the request gives none: about 0.4 of the recording used, 20 to 90 seconds. */
+export const demoDuration = (sourceSec: number) => Math.min(90, Math.max(20, Math.round(sourceSec * 0.4)))
+
+export interface RecordingRequest {
+  mediaId: string
+  trim?: [number, number] | undefined
+  redact?: { start: number; end: number; box: [number, number, number, number] }[] | undefined
+}
+
+/**
+ * The checks that read bytes, before the transaction: an ordinary clip (not uploaded as a screen recording) is usable
+ * when it already meets the recording rules (§4.2), else 400 with what to run.
+ */
+export async function checkRecordingBytes(deps: Pick<Deps, 'store' | 'blobs'>, req: RecordingRequest) {
+  const m = await deps.store.getMedia(req.mediaId)
+  if (!m || m.kind !== 'video' || isScreenRecording(m)) return
+  const bytes = await deps.blobs.get('media', m.originalKey)
+  if (!bytes) return
+  try {
+    const c = classify(bytes, { role: 'screen-recording' })
+    if (c.kind !== 'video') throw new MediaError("It isn't a video.")
+  } catch (e) {
+    if (e instanceof MediaError)
+      throw new ApiError('invalid_request', `This clip can't be used as a recording: ${e.message}`)
+    throw e
+  }
+}
+
+/**
+ * The recording a new demo is made from, inside the create transaction: a ready video the caller can read, not being
+ * deleted, a trim inside it, boxes inside the frame. Returns the version's recording, its media row and whether the
+ * video starts private (anything hidden: setup boxes, or redact entries in its trace).
+ */
+export async function demoRecording(
+  repo: Repo,
+  deps: Pick<Deps, 'blobs'>,
+  p: Principal,
+  req: RecordingRequest,
+  jobId: string,
+  n: number,
+) {
+  const m = await repo.getMedia(req.mediaId)
+  if (!m || m.deletedAt || !(await canReadMedia(repo, p, m)))
+    throw new ApiError('not_found', 'Media not found.')
+  if (m.deletingAt) throw new ApiError('gone', 'This recording is being deleted; upload it again.')
+  if (m.kind !== 'video' || m.status !== 'ready')
+    throw new ApiError('invalid_request', `Media ${m.id} isn't a ready video, so it can't be a recording.`)
+  const length = m.durationSec ?? 0
+  const [tin, tout] = req.trim ?? [0, length]
+  if (req.trim && !(tin >= 0 && tout > tin && tout <= length + 0.5 && tout - tin >= 2))
+    throw new ApiError(
+      'invalid_request',
+      `trim must be [in, out] inside the recording (0 to ${String(Math.round(length * 10) / 10)} s), at least 2 seconds.`,
+    )
+  const boxes = (req.redact ?? []).map((r, i) => {
+    const [x, y, w, h] = r.box
+    if (!(r.end > r.start) || x + w > 1 + 1e-9 || y + h > 1 + 1e-9 || !(w > 0 && h > 0))
+      throw new ApiError(
+        'invalid_request',
+        `Hidden area ${String(i + 1)} must be inside the frame, start before end.`,
+      )
+    return {
+      start: r.start,
+      end: Math.min(r.end, length || r.end),
+      reason: 'Hidden by you',
+      boxes: [[r.start, x, y, w, h]] as [number, number, number, number, number][],
+    }
+  })
+  const trace = m.traceKey && m.traceSha256 ? { key: m.traceKey, sha256: m.traceSha256 } : null
+  let traceHides = 0
+  if (trace) {
+    const bytes = await deps.blobs.get('media', trace.key)
+    traceHides = bytes ? parseTrace(new TextDecoder().decode(bytes)).redact.length : 0
+  }
+  const recording: VersionRecording = {
+    mediaId: m.id,
+    trace,
+    trim: req.trim ? [tin, tout] : null,
+    boxes,
+    compose: false,
+    summary: null,
+    hidden: [],
+  }
+  const row: VersionMediaRow = {
+    jobId,
+    versionN: n,
+    mediaId: m.id,
+    position: 0,
+    kind: 'video',
+    key: m.cleanKey,
+    sha256: m.cleanSha256,
+    filename: `${m.id}.${m.ext}`,
+    caption: null,
+  }
+  return { recording, row, private: boxes.length > 0 || traceHides > 0, sourceSec: tout - tin }
 }

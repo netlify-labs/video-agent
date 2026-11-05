@@ -12,6 +12,7 @@ import {
   load,
   read as readComposition,
   type EditOp,
+  type RecordingOp,
   type Summary,
 } from '../lib/contract.js'
 import type { Language } from '../lib/language.js'
@@ -69,7 +70,7 @@ const MAX_OPS = 500
 const AUDIO_FILE = /\.(mp3|m4a|aac|wav|ogg|opus|webm)$/i
 
 /** A draft's ops: the contract's edits, plus at most one whole-track narration op (plan 2026-11-02 §6.1). */
-export type DraftOp = EditOp | NarrationOp
+export type DraftOp = EditOp | RecordingOp | NarrationOp
 
 export const editPrefix = (jobId: string, n: number, editId: string) =>
   `${bundlePrefix(jobId, n)}e/${editId}/`

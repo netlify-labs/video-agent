@@ -31,16 +31,29 @@ describe('engines', () => {
     })
   })
 
-  it('HyperFrames has the eight contract ops and every authoring feature', () => {
+  it("HyperFrames has the eight contract ops, the recording scenes' four and every authoring feature", () => {
     expect(engineInfo('hyperframes').capabilities).toEqual({
-      editOps: ['text', 'retime', 'reorder', 'delete', 'color', 'media', 'audio', 'voice'],
+      editOps: [
+        'text',
+        'retime',
+        'reorder',
+        'delete',
+        'color',
+        'media',
+        'audio',
+        'voice',
+        'span',
+        'camera',
+        'cursor',
+        'redact',
+      ],
       liveDraftPreview: true,
       sound: 'all',
       voiceover: true,
       revoice: true,
       recordedNarration: true,
       scopedRevision: false,
-      recording: false,
+      recording: true,
     })
   })
 

@@ -1410,9 +1410,19 @@ export type EditOp =
  */
 export type RecordingOp =
   | { op: 'span'; beat: string; in: number; out: number }
-  | { op: 'camera'; beat: string; keys: unknown[] }
+  | { op: 'camera'; beat: string; keys: (number | string)[][] }
   | { op: 'cursor'; beat: string; style: 'smooth' | 'highlight' | 'none'; size: number }
-  | { op: 'redact'; beat: string; entries: unknown[] }
+  | { op: 'redact'; beat: string; entries: RecordingRedactEntry[] }
+
+/** A scene's own hidden area as the editor sends it (ids and origin are filled in when missing). */
+export interface RecordingRedactEntry {
+  id?: string | undefined
+  origin?: 'agent' | 'editor' | undefined
+  start: number
+  end: number
+  reason?: string | undefined
+  boxes: number[][]
+}
 
 export interface EditOptions {
   /** Filled by span ops: per beat, the stretches of the recording a widened span shows with no cursor data. */

@@ -44,17 +44,18 @@ async function item(h: Harness, id: string, over: Partial<MediaRow>) {
 }
 
 describe('screen recordings in the API', () => {
+  // On by default since the demo API landed (va-rsk5.3.16); tests that need it off switch it and this restores it.
   afterEach(() => {
-    screenRecordingApi.ready = false
+    screenRecordingApi.ready = true
   })
 
   it('lists screen_recording in features only when the whole API is in', async () => {
     const h = harness()
     const features = async () =>
       (await h.json<{ features: string[] }>(await h.call('GET', '/api/v1/config'))).features
-    expect(await features()).not.toContain('screen_recording')
-    screenRecordingApi.ready = true
     expect(await features()).toContain('screen_recording')
+    screenRecordingApi.ready = false
+    expect(await features()).not.toContain('screen_recording')
     log({ test: 'features', ok: true })
   })
 

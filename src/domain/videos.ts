@@ -77,7 +77,13 @@ import {
   resolveLook,
 } from './looks.js'
 import type { DestinationPublicationRow, VersionContext } from './types.js'
-import { inheritRecording } from './demo-recording.js'
+import {
+  checkRecordingBytes,
+  demoDuration,
+  demoRecording,
+  inheritRecording,
+  type RecordingRequest,
+} from './demo-recording.js'
 
 const IDEMPOTENCY_TTL_MS = 24 * 3600_000
 
@@ -100,6 +106,8 @@ export interface CreateVideoInput {
   private?: boolean | undefined
   /** Background for the run outside the prompt (github-action plan §6.1). */
   context?: VersionContext | undefined
+  /** A demo made from a screen recording (screen-recording plan §6.1). */
+  recording?: RecordingRequest | undefined
 }
 
 export interface ReviseInput {
@@ -377,10 +385,19 @@ export async function createVideo(
     look: resolved.kind === 'pick' ? resolved.entry : null,
     enabled: (await enabledEngines(deps)).map((e) => e.id),
   })
+  // A demo (screen-recording plan §6.1): HyperFrames only, and an ordinary clip must already meet the recording rules.
+  if (input.recording) {
+    if (engine !== 'hyperframes')
+      throw new ApiError('engine_unsupported', 'Screen-recording demos are made with HyperFrames only.')
+    await checkRecordingBytes(deps, input.recording)
+  }
   return deps.store.tx((repo) =>
     withIdempotency(repo, deps, principal, 'videos.create', idemKey, input, async () => {
       const now = deps.clock.now().toISOString()
       const jobId = presetJobId ?? deps.ids.videoId()
+      const demo = input.recording
+        ? await demoRecording(repo, deps, principal, input.recording, jobId, 1)
+        : null
       const planned = input.planId
         ? await consumePlan(repo, deps, principal, input.planId, { jobId: null, n: 1, newJobId: jobId })
         : null
@@ -396,7 +413,9 @@ export async function createVideo(
         updatedAt: now,
         deletedAt: null,
         version: 1,
-        private: input.private ?? false,
+        // Private on request; a demo with anything hidden starts private too (screen-recording §9): hiding is
+        // cosmetic, so someone checks it first.
+        private: (input.private ?? false) || (demo?.private ?? false),
         accessEpoch: 0,
         language: DEFAULT_LANGUAGE,
         externalRef: input.externalRef ?? null,
@@ -404,13 +423,13 @@ export async function createVideo(
       }
       await repo.insertJob(job)
       if (job.private) await writeAccessMirror(deps, job)
-      // Media attached while planning comes first, then any picked when creating.
+      // A demo's recording first, then media attached while planning, then any picked when creating.
       const media = await snapshotMedia(
         repo,
         jobId,
         1,
         [...(planned?.mediaIds ?? []), ...(input.mediaIds ?? [])],
-        [],
+        demo ? [demo.row] : [],
       )
       await repo.insertVersionMedia(media)
       await repo.insertVersion({
@@ -419,7 +438,8 @@ export async function createVideo(
         prompt: input.prompt,
         authorId: principal.userId,
         apiKeyId: principal.apiKeyId,
-        targetDurationSec: input.durationSec ?? planned?.durationSec ?? null,
+        targetDurationSec:
+          input.durationSec ?? planned?.durationSec ?? (demo ? demoDuration(demo.sourceSec) : null),
         parentN: null,
         webhookUrl: input.webhookUrl ?? null,
         status: 'queued',
@@ -431,6 +451,7 @@ export async function createVideo(
         engine,
         look,
         context: input.context ?? null,
+        ...(demo ? { recording: demo.recording } : {}),
       })
       if (look) await adoptLookSnapshot(repo, deps, jobId, look, now)
       await repo.insertAttempt(newAttempt(deps, jobId, 1, now))
@@ -1111,6 +1132,16 @@ function versionDto(
         }
       : null,
     look: v.look ? { id: v.look.id, name: v.look.name, hash: v.look.hash } : null,
+    // A demo's recording (screen-recording plan §6.1): the inputs' shape and what the run made of them.
+    recording: v.recording
+      ? {
+          mediaId: v.recording.mediaId,
+          trace: v.recording.trace !== null,
+          compose: v.recording.compose,
+          summary: v.recording.summary,
+          hidden: v.recording.hidden,
+        }
+      : null,
     mode: v.mode ?? 'author',
     editedFromN: v.editedFromN ?? null,
     n: v.n,

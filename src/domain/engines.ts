@@ -96,14 +96,15 @@ function capabilities(id: EngineId): EngineCapabilities {
   const scopedRevision = scopeChecks.has(id)
   if (id === 'hyperframes')
     return {
-      editOps: Object.keys(CONTRACT_OPS) as EditOpName[],
+      // The contract's ops, then the recording scenes' (screen-recording plan §5.3).
+      editOps: [...(Object.keys(CONTRACT_OPS) as EditOpName[]), 'span', 'camera', 'cursor', 'redact'],
       liveDraftPreview: true,
       sound: 'all',
       voiceover: true,
       revoice: true,
       recordedNarration: true,
       scopedRevision,
-      recording: false,
+      recording: true,
     }
   // Remotion as Phase 2 builds it (§4.1's table): authoring with a music bed, not yet editable.
   return {

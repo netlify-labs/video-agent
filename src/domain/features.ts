@@ -30,7 +30,7 @@ export type Feature = (typeof FEATURES)[number]
  * Screen recordings are listed only once the whole API is in: the upload role and trace routes (phase 1) and
  * `recording` on create and remix (va-rsk5.3.16 sets ready), so clients never see half the feature.
  */
-export const screenRecordingApi: { ready: boolean } = { ready: false }
+export const screenRecordingApi: { ready: boolean } = { ready: true }
 
 /** The features this deployment offers right now. Before the database is set up, switches read as their defaults. */
 export async function enabledFeatures(deps: Deps): Promise<Feature[]> {

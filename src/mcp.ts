@@ -317,6 +317,64 @@ async function runTool(
 const KEEP_CHECKING = (id: string) =>
   `Keep checking without asking your user: call get_video with video_id "${id}" and wait_seconds 8, and call it again each time it's still in progress, until status is "ready" or "failed". Then tell your user it's done, with web_url.`
 
+/** A demo's recording (screen-recording plan §6.2), on create_video and remix_video. */
+const RECORDING_ARGS = {
+  recording_media_id: z
+    .string()
+    .max(80)
+    .optional()
+    .describe(
+      "Optional. Make a demo from a screen recording in the library (role screen-recording, from list_media): the agent turns its steps into scenes with auto zoom, a cursor and hidden areas. Check the version's Hidden list in get_video before publishing.",
+    ),
+  trim: z
+    .array(z.number())
+    .length(2)
+    .optional()
+    .describe('Optional, with recording_media_id. Seconds of the recording to use: [in, out].'),
+  redact: z
+    .array(
+      z.object({
+        start: z.number().min(0),
+        end: z.number().positive(),
+        box: z
+          .array(z.number().min(0).max(1))
+          .length(4)
+          .describe('[x, y, width, height], fractions of the frame.'),
+      }),
+    )
+    .max(50)
+    .optional()
+    .describe(
+      'Optional, with recording_media_id. Areas to hide from the start; the video then starts private.',
+    ),
+}
+
+function toRecording(args: {
+  recording_media_id?: string | undefined
+  trim?: number[] | undefined
+  redact?: { start: number; end: number; box: number[] }[] | undefined
+}) {
+  if (!args.recording_media_id) return undefined
+  return {
+    mediaId: args.recording_media_id,
+    ...(args.trim ? { trim: [args.trim[0] ?? 0, args.trim[1] ?? 0] as [number, number] } : {}),
+    ...(args.redact
+      ? {
+          redact: args.redact.map((r) => ({
+            start: r.start,
+            end: r.end,
+            box: [r.box[0] ?? 0, r.box[1] ?? 0, r.box[2] ?? 0, r.box[3] ?? 0] as [
+              number,
+              number,
+              number,
+              number,
+            ],
+          })),
+        }
+      : {}),
+  }
+}
+
 const VIDEO_CARD_URI = 'ui://video-agent/video-card.html'
 /** Tool metadata that shows the video card (both keys: older MCP Apps hosts read the flat one). */
 const VIDEO_CARD = { ui: { resourceUri: VIDEO_CARD_URI }, 'ui/resourceUri': VIDEO_CARD_URI }
@@ -543,6 +601,7 @@ Example: {"prompt": "A 20-second launch video for our new webhooks feature, endi
           'Optional. A spoken narration, with captions from its words: true, or {voice, speed, script}. Works with any sound; music dips under the voice.',
         ),
         look: lookArg(false),
+        ...RECORDING_ARGS,
         idempotency_key: z
           .string()
           .max(200)
@@ -572,6 +631,7 @@ Example: {"prompt": "A 20-second launch video for our new webhooks feature, endi
             externalRef: args.external_ref,
             private: args.private,
             context: args.context,
+            recording: toRecording(args),
           },
           args.idempotency_key,
         )
@@ -772,6 +832,7 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Same format, 
         look: lookArg(true),
         ...externalArgs,
         context: contextArg,
+        ...RECORDING_ARGS,
       },
       _meta: VIDEO_CARD,
       annotations: { title: 'Remix a video', ...STARTS_RUN },
@@ -792,6 +853,7 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Same format, 
           externalRef: args.external_ref,
           private: args.private,
           context: args.context,
+          recording: toRecording(args),
         })
         return queued(res, `The remix usually takes 3 to 8 minutes. ${KEEP_CHECKING(res.body.id)}`)
       }, args.video_id),

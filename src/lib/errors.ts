@@ -16,6 +16,7 @@ export type ErrorCode =
   | 'engine_mismatch'
   | 'unknown_look'
   | 'look_disabled'
+  | 'engine_unsupported'
   | 'look_not_allowed'
   | 'engine_not_supported_by_look'
   | 'engine_disabled'
@@ -44,6 +45,7 @@ const STATUS: Record<ErrorCode, number> = {
   engine_mismatch: 409,
   unknown_look: 400,
   look_disabled: 409,
+  engine_unsupported: 409,
   /** 400 where a look is never accepted (render-unchanged, fit, a scoped revision); 409 for a restyle of a version with
    * recorded narration, passed as the status override. */
   look_not_allowed: 400,

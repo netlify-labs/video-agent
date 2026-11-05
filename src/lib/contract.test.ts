@@ -990,7 +990,8 @@ describe('contract: recording scenes', () => {
       )
       refused(
         'a trace origin',
-        [{ op: 'redact', beat: 'add-site', entries: [{ ...box, origin: 'trace' }] }],
+        // A forged origin (the API's schema refuses it too).
+        [{ op: 'redact', beat: 'add-site', entries: [{ ...box, origin: 'trace' as 'agent' }] }],
         /can't be removed/,
       )
       refused(

@@ -441,6 +441,39 @@ export const VersionSchema = z
       .describe(
         "The look this version was made with (its name as it was then), and the version of it: hash differs from GET /api/v1/looks' when the look has changed since.",
       ),
+    recording: z
+      .object({
+        mediaId: z.string(),
+        trace: z.boolean().describe('The recording came with a pointer trace (exact clicks and cursor).'),
+        compose: z.boolean().describe('Made with no agent authoring (a Quick demo).'),
+        summary: z
+          .object({
+            sourceSec: z.number(),
+            steps: z.number(),
+            cutSec: z.number(),
+            spedUpSec: z.number(),
+            redactionsAdded: z.number(),
+          })
+          .nullable()
+          .describe('What the run made of the recording; null until it is ready.'),
+        hidden: z
+          .array(
+            z.object({
+              id: z.string(),
+              source: z.enum(['trace', 'setup', 'agent', 'editor']),
+              beat: z.string(),
+              start: z.number(),
+              end: z.number(),
+              reason: z.string(),
+              checkedBy: z.string().nullable(),
+              checkedAt: z.string().nullable(),
+            }),
+          )
+          .describe('Every hidden area, per scene, with who checked it. Hiding is cosmetic: see the README.'),
+      })
+      .nullable()
+      .optional()
+      .describe('A demo made from a screen recording; null (or absent) for any other video.'),
     editing: z
       .object({
         engine: z.enum(ENGINE_IDS),
@@ -640,6 +673,37 @@ export const VideoListSchema = z
   .object({ items: z.array(VideoSchema), nextCursor: z.string().nullable() })
   .openapi('VideoList')
 
+/** A demo's recording (screen-recording plan §6.1): the library item, its ends, and boxes to hide from the start. */
+export const RecordingInputSchema = z
+  .object({
+    mediaId: z.string().min(1).max(80).describe('A screen recording from the library (GET /api/v1/media).'),
+    trim: z
+      .tuple([z.number().min(0), z.number().positive()])
+      .optional()
+      .describe(
+        'Seconds of the recording to use, [in, out]: in before out, at least 2 seconds, inside the file.',
+      ),
+    redact: z
+      .array(
+        z.object({
+          start: z.number().min(0),
+          end: z.number().positive(),
+          box: z
+            .tuple([
+              z.number().min(0).max(1),
+              z.number().min(0).max(1),
+              z.number().min(0).max(1),
+              z.number().min(0).max(1),
+            ])
+            .describe('[x, y, width, height] as fractions of the frame.'),
+        }),
+      )
+      .max(50)
+      .optional()
+      .describe('Areas to hide from the start (seconds of the recording). A demo with any starts private.'),
+  })
+  .openapi('RecordingInput')
+
 export const CreateVideoSchema = z
   .object({
     prompt: z
@@ -679,6 +743,10 @@ export const CreateVideoSchema = z
     ...ExternalFields,
     context: ContextSchema.optional().openapi({
       description: 'Background for the run (a PR, release notes) outside the prompt, read as data.',
+    }),
+    recording: RecordingInputSchema.optional().openapi({
+      description:
+        'Make a demo from a screen recording (feature screen_recording): the agent turns its steps into scenes with auto zoom, a cursor and hidden areas. HyperFrames only (409 engine_unsupported). durationSec defaults to about 0.4 of the recording, 20 to 90 seconds.',
     }),
   })
   .openapi('CreateVideo')
@@ -784,6 +852,10 @@ export const RemixSchema = z
     }),
     context: ContextSchema.optional().openapi({
       description: 'Background for the run (a PR, release notes) outside the prompt, read as data.',
+    }),
+    recording: RecordingInputSchema.optional().openapi({
+      description:
+        "Remix a demo with a new screen recording: the request, look and settings carry over, the steps are planned fresh. Omit to keep the source's recording.",
     }),
   })
   .openapi('Remix')
@@ -1340,6 +1412,57 @@ const EditOpSchema = z.discriminatedUnion('op', [
     .openapi({
       description:
         "Change a voiced beat's narration line (plain text). The draft preview keeps the old audio; the render re-voices the line, lengthening the beat only if the new line no longer fits",
+    }),
+  // Recording scenes (screen-recording plan §5.3): times in seconds of the recording, positions as fractions.
+  z
+    .object({
+      op: z.literal('span'),
+      beat: z.string().max(80),
+      in: z.number().min(0),
+      out: z.number().positive(),
+    })
+    .openapi({
+      description: 'Trim a recording scene: which seconds of the recording it shows (0.5x to 4x its length).',
+    }),
+  z
+    .object({
+      op: z.literal('camera'),
+      beat: z.string().max(80),
+      keys: z.array(z.array(z.union([z.number(), z.string()]))).max(64),
+    })
+    .openapi({
+      description: "A recording scene's camera keys: [seconds, x, y, zoom 1-4, ease?], in time order.",
+    }),
+  z
+    .object({
+      op: z.literal('cursor'),
+      beat: z.string().max(80),
+      style: z.enum(['smooth', 'highlight', 'none']),
+      size: z.number().min(0.5).max(2),
+    })
+    .openapi({
+      description: "How a recording scene's cursor looks (never its path); smooth needs a pointer trace.",
+    }),
+  z
+    .object({
+      op: z.literal('redact'),
+      beat: z.string().max(80),
+      entries: z
+        .array(
+          z.object({
+            id: z.string().max(24).optional(),
+            origin: z.enum(['agent', 'editor']).optional(),
+            start: z.number().min(0),
+            end: z.number().min(0),
+            reason: z.string().max(60).optional(),
+            boxes: z.array(z.array(z.number()).length(5)).min(1).max(600),
+          }),
+        )
+        .max(200),
+    })
+    .openapi({
+      description:
+        "A recording scene's own hidden areas (keyframed boxes). Areas from the pointer trace or the demo's setup can't be removed or changed.",
     }),
   NarrationOpSchema,
 ])

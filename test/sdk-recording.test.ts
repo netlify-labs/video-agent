@@ -43,11 +43,13 @@ const failure = (p: Promise<unknown>) =>
   )
 
 describe('SDK screen recordings', () => {
+  // On by default since the demo API landed (va-rsk5.3.16); tests that need it off switch it and this restores it.
   afterEach(() => {
-    screenRecordingApi.ready = false
+    screenRecordingApi.ready = true
   })
 
   it('refuses every recording call while the server lacks screen_recording', async () => {
+    screenRecordingApi.ready = false
     const h = harness()
     const va = await client(h)
     const file = mp4('gop30.mp4')

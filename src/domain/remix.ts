@@ -44,6 +44,13 @@ import {
   withIdempotency,
 } from './videos.js'
 import type { VoiceoverInput } from './voiceover.js'
+import {
+  checkRecordingBytes,
+  demoDuration,
+  demoRecording,
+  inheritRecording,
+  type RecordingRequest,
+} from './demo-recording.js'
 
 export interface RemixInput {
   prompt: string
@@ -68,6 +75,8 @@ export interface RemixInput {
   private?: boolean | undefined
   /** Background for the run outside the prompt (github-action plan §6.1). */
   context?: VersionContext | undefined
+  /** A new recording for a demo (screen-recording plan §6.1); omitted: the source's recording, when it has one. */
+  recording?: RecordingRequest | undefined
 }
 
 /** How much of the source's history the snapshot keeps (§3.3). */
@@ -179,6 +188,7 @@ export async function remixVideo(
   assertCan(principal, 'video:create')
   if (input.private) assertCan(principal, 'video:private', { ownerId: principal.userId })
   await assertRemixEnabled(deps)
+  if (input.recording) await checkRecordingBytes(deps, input.recording)
   checkWebhook(principal, input.webhookUrl)
   deps.log.debug('video.remix_requested', {
     userId: principal.userId,
@@ -251,6 +261,12 @@ export async function remixVideo(
         narrationDropped: copy.narrationDropped,
         sourceSound: version.sound ?? 'silent',
       }
+      // A demo: a new recording replaces the source's; without one, the source's carries on.
+      if (input.recording && engineOf(version) !== 'hyperframes')
+        throw new ApiError('engine_unsupported', 'Screen-recording demos are made with HyperFrames only.')
+      const demo = input.recording
+        ? await demoRecording(repo, deps, principal, input.recording, newJobId, 1)
+        : null
       const created: JobRow = {
         id: newJobId,
         title: planned?.title || deriveTitle(input.prompt),
@@ -263,8 +279,9 @@ export async function remixVideo(
         updatedAt: now,
         deletedAt: null,
         version: 1,
-        // A remix of a private video stays private (§5); `private: true` makes any remix private.
-        private: job.private || input.private === true,
+        // A remix of a private video stays private (§5); `private: true` makes any remix private; so does a demo
+        // with anything hidden (screen-recording §9).
+        private: job.private || input.private === true || (demo?.private ?? false),
         accessEpoch: 0,
         language: input.language ?? job.language,
         remixOfJobId: job.id,
@@ -278,16 +295,22 @@ export async function remixVideo(
       // since); new ones must be live library items. Omitted mediaIds keep the whole set.
       const inherited = await repo.listVersionMedia(job.id, version.n)
       const finalIds = input.mediaIds
-      const kept = finalIds ? inherited.filter((m) => finalIds.includes(m.mediaId)) : inherited
+      const sourceRec = version.recording?.mediaId ?? null
+      const kept = inherited.filter((m) =>
+        m.mediaId === sourceRec ? !demo : !finalIds || finalIds.includes(m.mediaId),
+      )
       const picks = [...(planned?.mediaIds ?? []), ...(finalIds ?? [])]
-      const media = await snapshotMedia(repo, newJobId, 1, picks, kept)
+      const media = await snapshotMedia(repo, newJobId, 1, picks, demo ? [demo.row, ...kept] : kept)
       const row: VersionRow = {
         jobId: newJobId,
         n: 1,
         prompt: input.prompt,
         authorId: principal.userId,
         apiKeyId: principal.apiKeyId,
-        targetDurationSec: input.durationSec ?? planned?.durationSec ?? version.targetDurationSec,
+        targetDurationSec:
+          input.durationSec ??
+          planned?.durationSec ??
+          (demo ? demoDuration(demo.sourceSec) : version.targetDurationSec),
         parentN: null,
         // Always authored by the agent, even when the source was an edit rendered as is.
         mode: 'author',
@@ -301,6 +324,12 @@ export async function remixVideo(
         engine: engineOf(version),
         look,
         context: input.context ?? null,
+        // Analysis and planning run fresh for a new recording; the source's own recording keeps its inputs.
+        ...(demo
+          ? { recording: demo.recording }
+          : version.recording
+            ? { recording: inheritRecording(version.recording) }
+            : {}),
       }
       assertSameEngine(deps, version, row)
       await repo.insertVersion(row)
