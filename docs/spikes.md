@@ -1068,3 +1068,60 @@ Changes for 1.2c:
 
 Still to prove on Netlify: that the Blobs edge accepts a streamed (chunked) 150 MB PUT from a background function, and
 the peak there (the function already logs `rssMb`).
+
+## CLI spikes (docs/plans/2026-11-04-cli-and-sdk.md §11 Phase 0)
+
+### C1: the run scripts from a bundled copy, with pinned tools, in a workspace outside the repo (2026-11-05, `spikes/c1`, `npx tsx spikes/c1/c1.ts [--cache <dir>] [--offline]`, no credits)
+
+**Question.** Can local mode run `prepare-run` and `render-job` from esbuild bundles, in a workspace with no repo
+checkout, with pinned `hyperframes`/`tsx`/`netlify-agent-kit`, and without writing to the person's home?
+
+**Setup.** Seven run scripts bundled to `.mjs`. `run-tools`' `repoRoot` reads `VA_REPO_ROOT` through an esbuild
+`onLoad` rewrite, which prototypes the 4.1 change. The runtime is `npm install`/`ci` of exact pins into
+`<cache>/runtime`, with an empty `npm_config_userconfig` and its own npm cache. The workspace gets:
+- `video/` (the template plus the `contract1` fixture);
+- `context/` and `AGENTS.md`;
+- one-line `scripts/<name>.ts` shims (`import '<runtime>/bundle/<name>.mjs'`);
+- `node_modules` symlinks;
+- a fake `netlify` first on `PATH` that serves `blobs:get`/`blobs:set` from `.va-inputs/` and `.va-uploads/`. This
+  prototypes `--inputs` and `--upload local`.
+
+`netlify-agent-kit install --force` ran with `HOME=<cache>/agent-kit-home`. A v1 run manifest (author, one library
+image) went in `.va-inputs/sources/`. Then prepare-run ran, then render-job with a loopback callback receiver.
+
+**Results** (macOS, Apple silicon):
+
+| | Node 22.22.0 | Node 24.19.0 |
+| --- | --- | --- |
+| bundle (7 scripts) | 2.06 MB, 40–85 ms | same |
+| runtime install, cold (empty npm cache) | 6.4 s, 107 MB in node_modules (121 MB dir) | 3.0 s |
+| runtime, second run with `npm_config_offline=true` | `npm ci` 1.1 s, no fetch | — |
+| agent-kit `install --force` (redirected HOME) | 6.5 s cold; 4 skills into `.claude/skills` and `.agents/skills`; Chrome into the redirected home (199 MB) | 4.0 s |
+| prepare-run (manifest verified, media into `video/assets/media/`, `.render/run-manifest.json`) | pass | pass |
+| render-job (9 s 1080p fixture: render, master, poster, GIF, captions, source, previews, uploads, callback 202) | pass, 9.5–12.7 s | pass, 14.4 s |
+| `video.mp4` sha256 | `cd05249a…c5a` | `cd05249a…c5a` |
+
+The MP4 hash was identical across:
+- the online and offline runs;
+- Node 22 and Node 24;
+- a reference render of the same `video/` with the repo's own `node_modules/.bin/hyperframes`.
+
+Renders are byte-deterministic on one machine. The real `~/.local/bin` and `~/.cache/netlify-agent-kit` were
+unchanged (listing and mtimes before/after).
+
+**Findings that change the plan:**
+1. **`css-tree` can't be bundled.** It loads `../data/patch.json` relative to itself (through `createRequire`), and
+   redo's scope checks pull it into prepare-run. It stays a package in the pinned runtime, so 4.2's runtime lockfile
+   needs `css-tree` next to `hyperframes`, `tsx` and `netlify-agent-kit`. ESM bundles also need a `createRequire`
+   banner for the CJS dependencies they inline.
+2. **agent-kit used the existing FFmpeg instead of installing its own.** With Homebrew's `ffmpeg` on `PATH` it linked
+   nothing, and `<home>/.local/bin` was never created. That Homebrew build has no libwebp, so render-job skipped the
+   two WebP posters (AVIF and the clips were made). This is harmless, because previews are optional, but `doctor`
+   should say which FFmpeg a run will use.
+3. **The callback must answer 202.** render-job treats anything else as a rejection and retries it. Phase 4's `file:`
+   handoff (`done.json`) replaces the loopback receiver, which only works here because C1 runs unsandboxed (C2).
+4. **`npx tsx …` and `npx hyperframes …` resolve to the pinned runtime** through `PATH` and the `node_modules`
+   symlinks, with no fetch, on Node 22 and 24. So local mode doesn't need Node 24: Node 22 works.
+
+**Not covered: Linux (Ubuntu).** The Docker daemon wasn't running on the test machine, and starting Docker Desktop
+was out of scope for an agent session. Run `spikes/c1/c1.ts` in an Ubuntu container (or a Linux CI job) before 4.2.
