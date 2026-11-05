@@ -273,11 +273,11 @@ for (const variant of variants) {
   const decoded = readFrames(output)
   summary[variant] = {
     check: findings,
-    render: { ...metrics(r), secondsPerOutputSecond: round(r.wallMs / 1000 / TOTAL, 2), renderedInS: Number(/rendered in ([\d.]+)s/.exec(text)?.[1] ?? 'NaN') },
+    render: { ...metrics(r), escapedGroup: r.escapedGroup.length, secondsPerOutputSecond: round(r.wallMs / 1000 / TOTAL, 2), renderedInS: Number(/rendered in ([\d.]+)s/.exec(text)?.[1] ?? 'NaN') },
     outputFrames: decoded.length,
     scenes: analyse(decoded),
   }
 }
 summary.wallMs = Date.now() - started
 writeFileSync(join(outDir, 'summary.json'), JSON.stringify(summary, null, 2))
-printSummary('D1', join(outDir, 'summary.json'), summary)
+printSummary('D1-JSON', join(outDir, 'summary.json'), summary)
