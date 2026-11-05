@@ -13,6 +13,7 @@ import {
   type ResolvedVideo,
   type WaitOptions,
 } from './helpers/videos.js'
+import { downloadFile, fileUrl, type FileOptions } from './helpers/files.js'
 import { prepare, type Call, type CallOptions, type Input, type Ok, type Transport } from './transport.js'
 import { VERSION } from './version.js'
 
@@ -57,10 +58,26 @@ export interface VideoHelpers {
   resolve(ref: string): Promise<ResolvedVideo>
 }
 
+/** va.files: links and downloads for a version's files. */
+export interface FileHelpers {
+  /** A URL to fetch without the key (signed in the DTO, or the file route's short-lived redirect). */
+  url(video: Video | string, o: FileOptions): Promise<string>
+  /** Streams the file to `to` (atomically) and resolves { path, bytes }; without `to`, resolves the Response. */
+  download(
+    video: Video | string,
+    o: FileOptions & { to: string; signal?: AbortSignal },
+  ): Promise<{ path: string; bytes: number }>
+  download(
+    video: Video | string,
+    o: FileOptions & { to?: undefined; signal?: AbortSignal },
+  ): Promise<Response>
+}
+
 // Resources are copied onto the instance in the constructor, so the class carries their types too.
 // eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export interface VideoAgent extends Omit<Resources, 'videos'> {
   readonly videos: Resources['videos'] & VideoHelpers
+  readonly files: FileHelpers
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
@@ -98,7 +115,18 @@ export class VideoAgent {
       listAll: (input, opts) => listAll(generated.videos.list, input, opts),
       resolve: (ref) => resolveVideo(f, ref),
     }
-    Object.assign(this, generated, { videos })
+    const fileDeps = {
+      baseUrl: url,
+      send: (x: Exchange) => this.send(x),
+      fetch: f,
+      getVideo: (id: string) => generated.videos.get(id),
+    }
+    const files: FileHelpers = {
+      url: (video, fo) => fileUrl(fileDeps, video, fo),
+      download: ((video: Video | string, fo: FileOptions & { to?: string; signal?: AbortSignal }) =>
+        downloadFile(fileDeps, video, fo as FileOptions & { to: string })) as FileHelpers['download'],
+    }
+    Object.assign(this, generated, { videos, files })
     this.raw = createClient<paths>({
       baseUrl: url,
       fetch: async (req: Request) => {
