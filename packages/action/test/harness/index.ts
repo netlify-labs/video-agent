@@ -12,6 +12,7 @@ import { apiKey, harness, pgStore, type Harness } from '../../../../test/helpers
 import type { Core } from '../../src/core.js'
 import type { ActionDeps, RunResult } from '../../src/main.js'
 import { run } from '../../src/main.js'
+import { INPUTS } from '../../src/spec.js'
 import { fakeGitHub, type FakeGitHub, type FakePull, type FakeUser } from './fake-github.js'
 
 export { BOT, fakeGitHub, type FakeGitHub } from './fake-github.js'
@@ -215,7 +216,15 @@ export async function runAction(
   const dir = mkdtempSync(join(tmpdir(), 'action-run-'))
   const eventPath = join(dir, 'event.json')
   writeFileSync(eventPath, JSON.stringify(o.event.payload))
+  // GitHub fills each input's action.yml default when the workflow leaves it out.
+  const defaults = Object.fromEntries(
+    INPUTS.filter((i) => 'default' in i && i.name !== 'github-token').map((i) => [
+      i.name,
+      (i as { default: string }).default,
+    ]),
+  )
   const inputs: Record<string, string> = {
+    ...defaults,
     url: SITE,
     'api-key': env.key,
     'github-token': 'ghs_faketoken',
@@ -263,6 +272,8 @@ export async function runAction(
     fetch: appFetch(h),
     ghFetch: env.gh.fetch,
     imageFetch: env.images.fetch,
+    // Test hosts: *.internal and 10.x resolve privately; everything else is public.
+    resolve: async (host) => (host.endsWith('.internal') ? ['10.0.0.5'] : ['93.184.216.34']),
     now: () => h.deps.clock.now().getTime(),
     sleep: async (ms) => {
       h.deps.clock.advance(ms)

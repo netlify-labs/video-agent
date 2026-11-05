@@ -187,6 +187,6 @@ describe('bundle', () => {
       encoding: 'utf8',
     })
     expect(stdout).toContain('video-agent: decision=none reason="nothing to do for event push"')
-    expect(readFileSync(out, 'utf8')).toMatch(/^status<<\S+\nnone\n/)
+    expect(readFileSync(out, 'utf8')).toMatch(/^status<<\S+\nskipped\n/)
   })
 })

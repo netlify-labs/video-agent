@@ -120,3 +120,21 @@ export const OUTPUTS = [
 ] as const
 
 export type OutputName = (typeof OUTPUTS)[number]['name']
+
+/** Sent in the SDK's User-Agent (video-agent-action/<version>) so the deployment's logs show the action. */
+export const ACTION_VERSION = '1.0.0'
+
+/** Every value outputs.status takes, so later steps can branch on it (the README's table is checked against this). */
+export const OUTPUT_STATUSES = [
+  'ready',
+  'failed',
+  'cancelled',
+  'timed_out',
+  'still-making',
+  'queued',
+  'skipped',
+  'refused',
+  'dry-run',
+  'none',
+  'error',
+] as const

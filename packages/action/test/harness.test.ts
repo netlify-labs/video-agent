@@ -107,7 +107,7 @@ describe.each(['memory', 'pglite'] as const)('the app and the clock (%s)', (stor
   it('runs the action against the app: a push with no target does nothing', async () => {
     const env = await makeEnv({ store })
     const r = await runAction(env, { event: events.push(env.gh) })
-    expect(r.status).toBe('none')
+    expect(r.status).toBe('skipped')
     expect(r.failed).toBeNull()
     expectLog(r.logs, { decision: 'none', reason: 'nothing to do for event push' })
   })
@@ -122,7 +122,7 @@ describe.each(['memory', 'pglite'] as const)('the app and the clock (%s)', (stor
     let status = video.status
     // The same loop the action's wait will use: poll, then sleep (advance the clock and tick the reconciler).
     const r = await runAction(env, { event: events.push(env.gh), deps: {} })
-    expect(r.status).toBe('none')
+    expect(r.status).toBe('skipped')
     for (let i = 0; i < 20 && status !== 'ready'; i++) {
       env.h.deps.clock.advance(15_000)
       await env.h.drive(1)
