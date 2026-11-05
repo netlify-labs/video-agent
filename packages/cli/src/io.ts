@@ -11,4 +11,6 @@ export interface Io {
   openBrowser: (url: string) => Promise<void>
   /** Where config.json lives: $XDG_CONFIG_HOME/video-agent, else ~/.config/video-agent. */
   configDir: string
+  /** Poll interval for waits; tests set 0. Unset: the SDK's own (3 s, then 8 s). */
+  pollMs?: number
 }

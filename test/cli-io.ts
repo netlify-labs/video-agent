@@ -26,6 +26,8 @@ export async function cli(
     /** Answers requests that aren't for the app (signed storage links, share JSON on other hosts). */
     other?: (req: Request) => Response | Promise<Response>
     stdin?: string
+    /** Move the fake run one sweep tick on each poll of a video, so --wait walks the lifecycle. */
+    drive?: boolean
   } = {},
 ) {
   const key = o.key === null ? undefined : (o.key ?? (await apiKey(h, o.as ?? h.member)))
@@ -40,17 +42,20 @@ export async function cli(
       stderr: (t) => (stderr += t),
       stdin: async () => o.stdin ?? '',
       env: { VIDEO_AGENT_URL: SITE, ...(key ? { VIDEO_AGENT_KEY: key } : {}) },
-      fetch: (async (input: string | URL | Request, init?: RequestInit) => {
+      fetch: async (input: string | URL | Request, init?: RequestInit) => {
         const req = new Request(input, init)
         requests.push(req.clone())
         const url = new URL(req.url)
+        if (o.drive && req.method === 'GET' && /^\/api\/v1\/videos\/[^/]+$/.test(url.pathname))
+          await h.drive(1)
         if (url.origin === SITE && url.pathname.startsWith('/api/')) return appFetch(h, req)
         if (o.other) return o.other(req)
         return new Response('not found', { status: 404 })
-      }),
+      },
       now: () => Date.now(),
       openBrowser: async (u) => void opened.push(u),
       configDir,
+      pollMs: 0,
     }
     const code = await main(argv, io)
     return { code, stdout, stderr, json: () => JSON.parse(stdout) }

@@ -6,6 +6,7 @@ import { VideoAgent } from '../../sdk/src/index.js'
 import { COMMANDS, findCommand, GLOBAL_FLAGS, type CommandSpec, type FlagSpec } from './catalog.js'
 import { readConfig, resolveConnection, type CliConfig } from './config.js'
 import { LIBRARY_COMMANDS } from './commands/library.js'
+import { MAKE_COMMANDS } from './commands/make.js'
 import { READ_COMMANDS } from './commands/read.js'
 import { REVIEW_COMMANDS } from './commands/review.js'
 import { CliError, errorJson, EXIT, exitCodeFor, UsageError } from './exit.js'
@@ -57,6 +58,7 @@ export const HANDLERS: Record<string, Handler> = {
   ...READ_COMMANDS,
   ...REVIEW_COMMANDS,
   ...LIBRARY_COMMANDS,
+  ...MAKE_COMMANDS,
   help: helpHandler,
   version: async (ctx) => {
     let server: { commit: string | null; promptTemplate: number; release: string | null } | null = null

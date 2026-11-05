@@ -73,6 +73,7 @@ const wait: Handler = async (ctx) => {
   const video = await ctx.sdk().videos.wait(ref.id, {
     ...(typeof ctx.flags.version === 'number' ? { version: ctx.flags.version } : {}),
     ...(timeout !== undefined ? { timeoutMs: durationMs(timeout as string, 'timeout') } : {}),
+    ...(ctx.io.pollMs !== undefined ? { intervalMs: ctx.io.pollMs } : {}),
     onProgress: (p) => {
       ctx.log('wait.progress', { ...p })
       if (!ctx.json) show(`v${p.version} · ${describeProgress(p)}`)

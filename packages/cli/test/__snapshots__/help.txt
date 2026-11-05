@@ -3,6 +3,9 @@ video-agent 0.0.0: make videos with a Video Agent deployment, or on this machine
 Commands:
   help           List the commands, or explain one.
   version        Print the CLI's version, and the server's when one is configured.
+  create         Make a video from a prompt.
+  revise         Make the next version of a video.
+  remix          Make a new video from another one. (needs a server with remix)
   get            Show a video.
   list           List videos.
   wait           Follow a run until the video is ready.

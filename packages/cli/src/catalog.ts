@@ -80,7 +80,10 @@ const video: ArgSpec = {
 const versionFlag: FlagSpec = { type: 'number', description: 'The version (default: the latest).' }
 const waitFlags: Record<string, FlagSpec> = {
   wait: { type: 'boolean', description: 'Follow the run until the video is ready.' },
-  timeout: { type: 'number', description: 'With --wait: give up after this many seconds (exit 6).' },
+  timeout: {
+    type: 'string',
+    description: 'With --wait: give up after this long: seconds, or 30m, 2h (exit 6).',
+  },
 }
 
 export const COMMANDS: CommandSpec[] = [
@@ -151,24 +154,35 @@ export const COMMANDS: CommandSpec[] = [
     summary: 'Make a video from a prompt.',
     args: [{ name: 'prompt', type: 'string', description: 'What the video is about (or --prompt-file).' }],
     flags: {
-      'prompt-file': { type: 'string', description: "Read the prompt from a file, or '-' for stdin." },
       aspect: { type: 'string', description: '16:9, 9:16, 1:1 or 4:5.' },
+      title: { type: 'string', description: 'The video title.' },
+      look: { type: 'string', description: 'A Look id.' },
+      engine: { type: 'string', description: 'A render engine id.' },
+      plan: {
+        type: 'boolean',
+        description: 'Ask the planning questions and stop (needs planning on the server).',
+      },
+      'plan-id': {
+        type: 'string',
+        description: 'With --answers: answer a plan and make the video from its brief.',
+      },
+      answers: { type: 'string', description: "The answers: a JSON file, or '-' for stdin." },
       duration: { type: 'number', description: 'Target length in seconds.' },
       sound: { type: 'string', description: 'silent, music or music_sfx.' },
-      voice: { type: 'string', description: 'A voice-over: a voice id, or "auto".' },
+      voice: { type: 'string', description: 'A voice-over in this voice (e.g. af_heart), or off.' },
       media: {
         type: 'string',
         multiple: true,
-        description: 'A media id, or a file to upload first (repeatable).',
+        description:
+          'A media id, or a file to upload first (file:"caption" sets its caption). Repeatable, up to 12.',
       },
-      look: { type: 'string', description: 'A Look id.' },
-      engine: { type: 'string', description: 'A render engine id.' },
-      title: { type: 'string', description: 'The video title.' },
-      'idempotency-key': {
+      'webhook-url': { type: 'string', description: "Also send this video's webhook events here." },
+      'idempotency-key': { type: 'string', description: 'Retrying with the same key never makes two.' },
+      'prompt-file': { type: 'string', description: "Read the prompt from a file, or '-' for stdin." },
+      out: {
         type: 'string',
-        description: 'Retrying with the same key never makes two videos.',
+        description: 'Follow it, then download the video, poster and captions into this folder.',
       },
-      out: { type: 'string', description: 'With --wait: download the MP4 here.' },
       ...waitFlags,
     },
     examples: [
@@ -176,7 +190,7 @@ export const COMMANDS: CommandSpec[] = [
     ],
     sdk: ['videos.create', 'videos.wait', 'media.upload', 'files.download'],
     needsHostedApp: true,
-    ready: false,
+    ready: true,
   },
   {
     name: 'revise',
@@ -184,22 +198,35 @@ export const COMMANDS: CommandSpec[] = [
     args: [video, { name: 'change', type: 'string', required: true, description: 'What to change.' }],
     flags: {
       'from-version': versionFlag,
+      comments: { type: 'string', description: 'Comment ids to address, comma-separated.' },
       scene: {
         type: 'string',
         multiple: true,
         description: 'Only redo these scenes (id or label; repeatable).',
       },
       look: { type: 'string', description: 'Restyle with this Look.' },
-      'idempotency-key': {
+      duration: { type: 'number', description: 'Target length in seconds.' },
+      sound: { type: 'string', description: 'silent, music or music_sfx.' },
+      voice: { type: 'string', description: 'A voice-over in this voice (e.g. af_heart), or off.' },
+      media: {
         type: 'string',
-        description: 'Retrying with the same key never makes two versions.',
+        multiple: true,
+        description:
+          'A media id, or a file to upload first (file:"caption" sets its caption). Repeatable, up to 12.',
+      },
+      'webhook-url': { type: 'string', description: "Also send this video's webhook events here." },
+      'idempotency-key': { type: 'string', description: 'Retrying with the same key never makes two.' },
+      'prompt-file': { type: 'string', description: "Read the prompt from a file, or '-' for stdin." },
+      out: {
+        type: 'string',
+        description: 'Follow it, then download the video, poster and captions into this folder.',
       },
       ...waitFlags,
     },
     examples: ['video-agent revise vid_01… "Make the end card orange" --wait'],
     sdk: ['videos.revise', 'videos.wait'],
     needsHostedApp: true,
-    ready: false,
+    ready: true,
   },
   {
     name: 'redo',
@@ -226,12 +253,34 @@ export const COMMANDS: CommandSpec[] = [
     name: 'remix',
     summary: 'Make a new video from another one.',
     args: [video, { name: 'change', type: 'string', required: true, description: 'What the remix changes.' }],
-    flags: { look: { type: 'string', description: 'A Look id.' }, ...waitFlags },
+    flags: {
+      'from-version': versionFlag,
+      aspect: { type: 'string', description: "16:9, 9:16, 1:1 or 4:5 (default: the source's)." },
+      language: { type: 'string', description: "The language (default: the source's)." },
+      look: { type: 'string', description: 'A Look id.' },
+      duration: { type: 'number', description: 'Target length in seconds.' },
+      sound: { type: 'string', description: 'silent, music or music_sfx.' },
+      voice: { type: 'string', description: 'A voice-over in this voice (e.g. af_heart), or off.' },
+      media: {
+        type: 'string',
+        multiple: true,
+        description:
+          'A media id, or a file to upload first (file:"caption" sets its caption). Repeatable, up to 12.',
+      },
+      'webhook-url': { type: 'string', description: "Also send this video's webhook events here." },
+      'idempotency-key': { type: 'string', description: 'Retrying with the same key never makes two.' },
+      'prompt-file': { type: 'string', description: "Read the prompt from a file, or '-' for stdin." },
+      out: {
+        type: 'string',
+        description: 'Follow it, then download the video, poster and captions into this folder.',
+      },
+      ...waitFlags,
+    },
     examples: ['video-agent remix vid_01… "Same format, about edge functions"'],
     sdk: ['videos.remix'],
     feature: 'remix',
     needsHostedApp: true,
-    ready: false,
+    ready: true,
   },
   {
     name: 'looks',

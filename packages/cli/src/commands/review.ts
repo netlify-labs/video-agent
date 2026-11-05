@@ -54,7 +54,10 @@ const retry: Handler = async (ctx) => {
   const r = await va.versions.retry(video.id, n)
   if (!ctx.flags.wait)
     return { json: r, text: `Retrying v${n} of ${video.title}. Follow it: video-agent wait ${video.id}` }
-  const ready = await va.videos.wait(video.id, { version: n })
+  const ready = await va.videos.wait(video.id, {
+    version: n,
+    ...(ctx.io.pollMs !== undefined ? { intervalMs: ctx.io.pollMs } : {}),
+  })
   return { json: ready, text: `v${n} of ${ready.title} is ready: ${va.url}/videos/${ready.id}` }
 }
 
