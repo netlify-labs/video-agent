@@ -414,7 +414,7 @@ test('admins turn recorded voice-over off and size its storage', async ({ page }
   await expect(toggle).not.toBeChecked()
   const sent = () => page.evaluate("window.__sent['/api/v1/admin/settings']")
   expect(await sent()).toEqual({ narrationEnabled: false })
-  const quota = page.getByLabel("Storage for each person's recordings")
+  const quota = page.getByLabel('Voice recordings per person')
   await expect(quota).toHaveValue('2 GiB')
   await quota.fill('5')
   await quota.press('Enter')

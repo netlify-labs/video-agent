@@ -274,6 +274,16 @@ export interface Repo {
   deleteStaleNarrationLocks(before: string): Promise<number>
   /** Per media id, the distinct videos (job ids) whose versions use it. */
   mediaUsage(mediaIds: string[]): Promise<Record<string, string[]>>
+  /**
+   * Screen recordings no undeleted video uses, oldest first, that GC isn't deleting: each with `everUsed` (a version
+   * of a since-deleted video listed it), so retention can start when the last using video went.
+   */
+  listUnusedRecordings(q: {
+    uploaderId?: string
+    limit: number
+  }): Promise<{ row: MediaRow; everUsed: boolean }[]>
+  /** The person's screen recordings' stored bytes (not rejected, not being deleted) plus open recording sessions. */
+  screenRecordingBytes(uploaderId: string): Promise<number>
   /** Trace writes (media.trace_writes) at or after `since` over the person's own items (the trace rate limit). */
   recentTraceWrites(uploaderId: string, since: string): Promise<string[]>
   /** The versions of undeleted videos whose version_media lists this item (who may see a screen recording). */

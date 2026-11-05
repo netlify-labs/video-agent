@@ -8,7 +8,7 @@ import type { Deps } from '../deps.js'
 import { ApiError } from '../lib/errors.js'
 import type { Repo } from '../store/types.js'
 import { isScreenRecording, isTakeRole } from './media-roles.js'
-import { assertCan, creatorOrUp, type Principal } from './policy.js'
+import { creatorOrUp, type Principal } from './policy.js'
 import type { CleanupRow, MediaRefOwnerKind, MediaRow } from './types.js'
 import { canSee } from './videos.js'
 
@@ -250,8 +250,6 @@ const GC_BATCH = 20
 // A failed byte deletion is retried after as long as it has been failing (so the waits double), within these bounds.
 const RETRY_MIN_MS = 60_000
 const RETRY_MAX_MS = 6 * 3600_000
-/** How long "Delete unused recordings" deletes bytes before leaving the rest to the sweep. */
-const DELETE_NOW_MS = 10_000
 
 type GcReason = 'retention' | 'user'
 
@@ -339,21 +337,14 @@ export async function sweepTakes(deps: Deps, budget: { deadline: number }, limit
 }
 
 /**
- * "Delete unused recordings": the caller's own takes that nothing references go now, through the same two phases
- * as GC (not by shortening their retention), so they're gone from the list at once. Bytes that can't be deleted
- * within the request are left to the sweep. Anyone may clear their own recordings, whatever their role now.
+ * "Delete unused recordings", takes half: the caller's own takes that nothing references are tombstoned now (GC's
+ * first phase, not a shorter retention), so they're gone from the list at once. Anyone may clear their own.
  */
-export async function deleteUnusedRecordings(deps: Deps, p: Principal) {
-  assertCan(p, 'video:read')
-  const started = Date.now()
+export async function tombstoneUnusedTakes(deps: Deps, uploaderId: string): Promise<CleanupRow[]> {
   const items: CleanupRow[] = []
-  for (const m of await deps.store.listUnreferencedTakes({ uploaderId: p.userId, limit: 500 })) {
+  for (const m of await deps.store.listUnreferencedTakes({ uploaderId, limit: 500 })) {
     const item = await tombstoneTake(deps, m.id, 'user')
     if (item) items.push(item)
   }
-  for (const item of items) {
-    if (Date.now() - started > DELETE_NOW_MS) break
-    await deleteTakeBytes(deps, item)
-  }
-  return { deleted: items.length }
+  return items
 }

@@ -186,6 +186,9 @@ run, and it always replaces the AI voice-over). Captions come from your recordin
   private.
 - **Retention:** a recording that nothing uses any more is deleted 30 days after its last use (or right away with
   **Delete unused recordings** on the Media page). Each person can store up to 2 GiB of recordings by default.
+  Screen recordings (for demos) follow the same rule: deleted 30 days after upload if no video used them, or 30 days
+  after the last video using them was deleted, together with their pointer trace; they have their own 2 GiB budget
+  per person, set next to the voice recordings' on the Admin page.
 - **Transcription** runs inside the render, locally, with NVIDIA's
   [Parakeet TDT 0.6B v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) model (CC-BY-4.0) through HyperFrames;
   nothing leaves the run. An admin can switch transcription to ElevenLabs (it then sends the narration to ElevenLabs;

@@ -6,6 +6,7 @@ import { ApiError } from '../lib/errors.js'
 import { assertCan, type Principal } from './policy.js'
 import { remixEnabled } from './remix-settings.js'
 import { getSettings } from './settings.js'
+import { RECORDING_QUOTA_DEFAULT } from './media-roles.js'
 import { NARRATION_SETTING_DEFAULTS, type TranscriptionProvider } from './types.js'
 
 export interface NarrationSettings {
@@ -45,6 +46,8 @@ export interface AdminSettings extends NarrationSettings {
   youtubeEnabled: boolean
   /** The Google OAuth env is set (read-only). */
   youtubeConfigured: boolean
+  /** Stored bytes each person's screen recordings may use (screen-recording plan §4.2). */
+  recordingQuotaBytes: number
 }
 
 async function adminSettings(deps: Pick<Deps, 'store' | 'config'>): Promise<AdminSettings> {
@@ -53,6 +56,7 @@ async function adminSettings(deps: Pick<Deps, 'store' | 'config'>): Promise<Admi
     remixEnabled: await remixEnabled(deps),
     youtubeEnabled: (await deps.store.getSettings())?.youtubeEnabled ?? false,
     youtubeConfigured: deps.config.google !== null,
+    recordingQuotaBytes: (await deps.store.getSettings())?.recordingQuotaBytes ?? RECORDING_QUOTA_DEFAULT,
   }
 }
 

@@ -426,13 +426,22 @@ function NarrationSettingsCard() {
   const save = $api.useMutation('patch', '/api/v1/admin/settings', afterWrite)
   const s = settings.data
   const [quota, setQuota] = useState<number | string>('')
+  const [screenQuota, setScreenQuota] = useState<number | string>('')
   useEffect(() => {
-    if (s) setQuota(s.takeQuotaBytes / GIB)
+    if (s) {
+      setQuota(s.takeQuotaBytes / GIB)
+      setScreenQuota(s.recordingQuotaBytes / GIB)
+    }
   }, [s])
   const saveQuota = () => {
     const gib = Number(quota)
     if (s && Number.isFinite(gib) && gib > 0 && Math.round(gib * GIB) !== s.takeQuotaBytes)
       save.mutate({ body: { takeQuotaBytes: Math.round(gib * GIB) } })
+  }
+  const saveScreenQuota = () => {
+    const gib = Number(screenQuota)
+    if (s && Number.isFinite(gib) && gib > 0 && Math.round(gib * GIB) !== s.recordingQuotaBytes)
+      save.mutate({ body: { recordingQuotaBytes: Math.round(gib * GIB) } })
   }
   return (
     <Card>
@@ -466,7 +475,7 @@ function NarrationSettingsCard() {
           }}
         />
         <NumberInput
-          label="Storage for each person's recordings"
+          label="Voice recordings per person"
           size="sm"
           suffix=" GiB"
           min={0.01}
@@ -478,6 +487,22 @@ function NarrationSettingsCard() {
           onBlur={saveQuota}
           onKeyDown={(e) => {
             if (e.key === 'Enter') saveQuota()
+          }}
+        />
+        <NumberInput
+          label="Screen recordings per person"
+          description="Raw recordings for demos. Unused ones are deleted 30 days after their last use."
+          size="sm"
+          suffix=" GiB"
+          min={0.01}
+          max={1024}
+          decimalScale={2}
+          value={screenQuota}
+          disabled={!s}
+          onChange={setScreenQuota}
+          onBlur={saveScreenQuota}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') saveScreenQuota()
           }}
         />
       </Stack>

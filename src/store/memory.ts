@@ -680,6 +680,35 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
           out[r.mediaId]?.push(r.jobId)
       return out
     },
+    listUnusedRecordings: async (q) =>
+      [...state.media.values()]
+        .filter(
+          (m) =>
+            m.role === 'screen-recording' &&
+            !m.deletedAt &&
+            !m.deletingAt &&
+            (!q.uploaderId || m.uploaderId === q.uploaderId) &&
+            !state.versionMedia.some(
+              (r) => r.mediaId === m.id && state.jobs.get(r.jobId)?.deletedAt === null,
+            ),
+        )
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
+        .slice(0, q.limit)
+        .map((m) => ({ row: clone(m), everUsed: state.versionMedia.some((r) => r.mediaId === m.id) })),
+    screenRecordingBytes: async (uploaderId) =>
+      [...state.media.values()]
+        .filter(
+          (m) =>
+            m.uploaderId === uploaderId &&
+            m.role === 'screen-recording' &&
+            m.status !== 'rejected' &&
+            !m.deletingAt &&
+            !m.deletedAt,
+        )
+        .reduce((n, m) => n + m.bytes, 0) +
+      [...state.uploads.values()]
+        .filter((u) => u.uploaderId === uploaderId && u.status === 'open' && u.role === 'screen-recording')
+        .reduce((n, u) => n + u.size, 0),
     recentTraceWrites: async (uploaderId, since) =>
       [...state.media.values()]
         .filter((m) => m.uploaderId === uploaderId)

@@ -926,6 +926,64 @@ function repoFor(db: Db): Repo {
       for (const r of rows) (out[r.mediaId] ??= []).push(r.jobId)
       return out
     },
+    listUnusedRecordings: async (q) => {
+      const m = t.media
+      const vm = t.versionMedia
+      const live = and(
+        eq(vm.mediaId, m.id),
+        notExists(anyRow(t.jobs, and(eq(t.jobs.id, vm.jobId), isNotNull(t.jobs.deletedAt)))),
+      )
+      const rows = (await db
+        .select()
+        .from(m)
+        .where(
+          and(
+            eq(m.role, 'screen-recording'),
+            isNull(m.deletedAt),
+            isNull(m.deletingAt),
+            q.uploaderId ? eq(m.uploaderId, q.uploaderId) : undefined,
+            notExists(anyRow(vm, live)),
+          ),
+        )
+        .orderBy(asc(m.createdAt), asc(m.id))
+        .limit(q.limit)) as MediaRow[]
+      if (!rows.length) return []
+      const used = new Set(
+        (
+          await db
+            .selectDistinct({ mediaId: vm.mediaId })
+            .from(vm)
+            .where(
+              inArray(
+                vm.mediaId,
+                rows.map((r) => r.id),
+              ),
+            )
+        ).map((r) => r.mediaId),
+      )
+      return rows.map((row) => ({ row, everUsed: used.has(row.id) }))
+    },
+    screenRecordingBytes: async (uploaderId) => {
+      const m = t.media
+      const rows = await db
+        .select({ total: sql<string | number>`coalesce(sum(${m.bytes}), 0)::bigint` })
+        .from(m)
+        .where(
+          and(
+            eq(m.uploaderId, uploaderId),
+            eq(m.role, 'screen-recording'),
+            sql`${m.status} <> 'rejected'`,
+            isNull(m.deletingAt),
+            isNull(m.deletedAt),
+          ),
+        )
+      const u = t.mediaUploads
+      const open = await db
+        .select({ total: sql<string | number>`coalesce(sum(${u.size}), 0)::bigint` })
+        .from(u)
+        .where(and(eq(u.uploaderId, uploaderId), eq(u.status, 'open'), eq(u.role, 'screen-recording')))
+      return Number(rows[0]?.total ?? 0) + Number(open[0]?.total ?? 0)
+    },
     recentTraceWrites: async (uploaderId, since) => {
       const rows = await db
         .select({ writes: t.media.traceWrites })

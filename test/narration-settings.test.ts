@@ -21,6 +21,7 @@ describe.each([
       remixEnabled: true,
       youtubeEnabled: false,
       youtubeConfigured: false,
+      recordingQuotaBytes: 2 * 1024 ** 3,
     })
     const off = await h.call('PATCH', base, {
       as: h.admin,
@@ -34,8 +35,12 @@ describe.each([
       remixEnabled: true,
       youtubeEnabled: false,
       youtubeConfigured: false,
+      recordingQuotaBytes: 2 * 1024 ** 3,
     })
-    await h.call('PATCH', base, { as: h.admin, body: { takeQuotaBytes: 512 * 1024 ** 2 } })
+    await h.call('PATCH', base, {
+      as: h.admin,
+      body: { takeQuotaBytes: 512 * 1024 ** 2, recordingQuotaBytes: 3 * 1024 ** 3 },
+    })
     expect(await h.json(await h.call('GET', base, { as: h.admin }))).toEqual({
       narrationEnabled: false,
       transcriptionProvider: 'elevenlabs',
@@ -43,6 +48,7 @@ describe.each([
       remixEnabled: true,
       youtubeEnabled: false,
       youtubeConfigured: false,
+      recordingQuotaBytes: 3 * 1024 ** 3,
     })
     expect(h.deps.logs.some((l) => l.includes('"settings.updated"'))).toBe(true)
   })

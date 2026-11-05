@@ -15,7 +15,7 @@ import { mediaDto, mergeMediaMeta, readMediaMeta, storeMedia } from './media.js'
 import { assertNarrationEnabled, narrationSettings } from './narration-settings.js'
 import { assertCan, type Principal } from './policy.js'
 import { NO_PROVENANCE, type MediaRole, type MediaRow, type MediaUploadRow } from './types.js'
-import { budgetRoles, ROLES, UPLOAD_ROLES } from './media-roles.js'
+import { budgetRoles, RECORDING_QUOTA_DEFAULT, ROLES, UPLOAD_ROLES } from './media-roles.js'
 import type { Repo } from '../store/types.js'
 import { takeSamples } from './take-extras.js'
 import { loadJob } from './videos.js'
@@ -79,6 +79,30 @@ export async function quotaForTakes(
   return { ...quota, remainingBytes: takeQuotaBytes - bytes - incomingBytes }
 }
 
+/**
+ * The person's storage for screen recordings once `incomingBytes` more are added (the recordingQuotaBytes setting,
+ * 2 GiB by default; ready, being checked and in-flight recordings count). 413 quota_exceeded with what's left.
+ */
+export async function quotaForRecordings(
+  deps: Pick<Deps, 'store' | 'log'>,
+  userId: string,
+  incomingBytes: number,
+  repo: Repo = deps.store,
+) {
+  const quotaBytes = (await repo.getSettings())?.recordingQuotaBytes ?? RECORDING_QUOTA_DEFAULT
+  const usedBytes = await repo.screenRecordingBytes(userId)
+  const remainingBytes = Math.max(0, quotaBytes - usedBytes)
+  if (usedBytes + incomingBytes > quotaBytes) {
+    deps.log.warn('media.recording_quota_exceeded', { userId, incomingBytes, quotaBytes, usedBytes })
+    throw new ApiError(
+      'quota_exceeded',
+      `Your screen recordings have ${sizeLabel(remainingBytes)} of ${sizeLabel(quotaBytes)} left, not enough for this one (${sizeLabel(incomingBytes)}). Delete unused recordings on the Media page, or ask an admin for more space.`,
+      { quotaBytes, usedBytes, remainingBytes, incomingBytes },
+    )
+  }
+  return { quotaBytes, usedBytes, remainingBytes: quotaBytes - usedBytes - incomingBytes }
+}
+
 /** At most the role's `perHour` uploads per person in any hour, counted over the roles that share its budget. */
 async function assertRoleRate(
   deps: Pick<Deps, 'store' | 'log' | 'clock'>,
@@ -110,8 +134,7 @@ const quotaForRole = (
     case 'takeQuotaBytes':
       return quotaForTakes(deps, userId, incomingBytes, repo)
     case 'recordingQuotaBytes':
-      // Enforced with the recordingQuotaBytes setting (va-rsk5.2.6); screen recordings can't be uploaded before it.
-      return null
+      return quotaForRecordings(deps, userId, incomingBytes, repo)
   }
 }
 

@@ -82,7 +82,7 @@ import {
   updateMedia,
   uploadMedia,
 } from './domain/media.js'
-import { deleteUnusedRecordings } from './domain/takes.js'
+import { deleteUnusedRecordings } from './domain/recording-retention.js'
 import { discardEdit, editPreviewLink, getEdit, openEdit, renderEdit, saveEdit } from './domain/edits.js'
 import {
   acquireNarrationLock,

@@ -9,6 +9,9 @@ export const TAKE_ROLES = ['narration-take', 'narration-upload'] as const satisf
 export const isTakeRole = (role: string | null | undefined): role is (typeof TAKE_ROLES)[number] =>
   role === 'narration-take' || role === 'narration-upload'
 
+/** Stored bytes each person's screen recordings may use when the setting is missing. */
+export const RECORDING_QUOTA_DEFAULT = 2 * 1024 ** 3
+
 /** Take uploads each person may start in an hour (voice-over plan §8). */
 export const TAKE_UPLOADS_PER_HOUR = 30
 

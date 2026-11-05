@@ -1542,7 +1542,11 @@ export const AdminSettingsSchema = z
     takeQuotaBytes: z
       .number()
       .int()
-      .describe("Stored bytes each person's recordings may use (default 2 GiB)."),
+      .describe("Stored bytes each person's voice recordings (narration takes) may use (default 2 GiB)."),
+    recordingQuotaBytes: z
+      .number()
+      .int()
+      .describe("Stored bytes each person's screen recordings may use (default 2 GiB)."),
     remixEnabled: z
       .boolean()
       .describe(
@@ -1559,6 +1563,13 @@ export const UpdateAdminSettingsSchema = z
     narrationEnabled: z.boolean().optional(),
     transcriptionProvider: TranscriptionProviderSchema.optional(),
     takeQuotaBytes: z
+      .number()
+      .int()
+      .min(1024 * 1024)
+      .max(1024 ** 4)
+      .optional()
+      .describe('1 MiB to 1 TiB.'),
+    recordingQuotaBytes: z
       .number()
       .int()
       .min(1024 * 1024)
