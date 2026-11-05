@@ -305,6 +305,68 @@ describe('screenshots from the workspace and max-versions', () => {
   })
 })
 
+describe('the gate’s remaining paths', () => {
+  it('timeout → Still making it → /video status completes it and removes the leftover screenshots', async () => {
+    const env = await setup()
+    events.labeled(env.gh, 123)
+    env.images.files.set('https://img.example.com/one.png', { bytes: PNG, type: 'image/png' })
+    const pr = env.gh.state.pulls.get(123)
+    if (pr) pr.body = '![shot](https://img.example.com/one.png)'
+    env.outcome(outcomes.stillRunning())
+    const first = await runAction(env, {
+      event: events.labeled(env.gh, 123),
+      inputs: { 'timeout-minutes': '5' },
+    })
+    expect(first.status).toBe('still-making')
+    // The upload waits in the marker's pending list.
+    const ours = () => env.gh.state.comments.find((c) => c.user.login === 'github-actions[bot]')?.body ?? ''
+    expect(ours()).toMatch(/"pending":\["med_/)
+    expect(await library(env)).toHaveLength(1)
+    // The run finishes; /video status shows it and cleans up.
+    env.outcome(outcomes.ready())
+    const run = [...env.h.deps.runner.runs.values()][0]
+    if (run) run.script = { ...env.h.deps.runner.defaultScript(run.req) }
+    await env.h.drive(6)
+    const status = await runAction(env, { event: events.comment(env.gh, 123, '/video status'), runId: '2' })
+    expect(status.status).toBe('ready')
+    expect(await library(env)).toHaveLength(0)
+    expect(ours()).not.toContain('"pending"')
+    expect(ours()).toContain('**Ready:**')
+  })
+
+  it('a revision after cleanup still has the screenshots (the version keeps its own copy)', async () => {
+    const env = await setup()
+    events.labeled(env.gh, 123)
+    env.images.files.set('https://img.example.com/one.png', { bytes: PNG, type: 'image/png' })
+    const pr = env.gh.state.pulls.get(123)
+    if (pr) pr.body = '![shot](https://img.example.com/one.png)'
+    const first = await runAction(env, { event: events.labeled(env.gh, 123) })
+    expect(await library(env)).toHaveLength(0)
+    await runAction(env, { event: events.comment(env.gh, 123, '/video revise brighter'), runId: '2' })
+    const id = first.outputs['video-id'] ?? ''
+    const media = async (n: number) =>
+      (
+        await env.h.json(
+          await env.h.call('GET', `/api/v1/videos/${id}/versions/${n}/media`, { key: env.key }),
+        )
+      ).items as unknown[]
+    expect(await media(1)).toHaveLength(1)
+    expect(await media(2)).toHaveLength(1)
+  })
+
+  it('refuses a screenshot over 4 MB without reading past the cap', async () => {
+    const env = await setup()
+    const big = new Uint8Array(4 * 1024 * 1024 + 10)
+    big.set(PNG.slice(0, 8))
+    env.images.files.set('https://img.example.com/big.png', { bytes: big, type: 'image/png' })
+    const pr = env.gh.state.pulls.get(123)
+    if (pr) pr.body = '![big](https://img.example.com/big.png)'
+    const r = await runAction(env, { event: events.labeled(env.gh, 123) })
+    expect(r.status).toBe('ready')
+    expectLog(r.logs, { screenshot: 'skipped', reason: 'too-big' })
+  })
+})
+
 describe('releases', () => {
   it('a published release gets one video and a section in its notes; a re-run replaces it', async () => {
     const env = await makeEnv()
