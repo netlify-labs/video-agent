@@ -7,21 +7,25 @@
 //   mockLooksDisabled=a,b     looks an admin turned off
 //   mockNoLooks=1             the deployment has no looks feature (the pickers hide)
 //   mockLookUpdated=<id>      that look changed since the mock's versions were made (a newer catalog hash)
-import cleanMp4 from '../../../looks/clean/preview.mp4?url'
-import cleanPoster from '../../../looks/clean/poster.webp?url'
-import kineticMp4 from '../../../looks/kinetic/preview.mp4?url'
-import kineticPoster from '../../../looks/kinetic/poster.webp?url'
-import terminalMp4 from '../../../looks/terminal/preview.mp4?url'
-import terminalPoster from '../../../looks/terminal/poster.webp?url'
 import { looksCatalog } from '../../../src/generated/looks'
 import type { Look } from '../lib/looks'
 import { videos } from './data'
 
-const PREVIEWS: Record<string, Look['preview']> = {
-  clean: { mp4: cleanMp4, poster: cleanPoster },
-  kinetic: { mp4: kineticMp4, poster: kineticPoster },
-  terminal: { mp4: terminalMp4, poster: terminalPoster },
-}
+// Every look's real clip and poster, bundled into mock builds only (this module is loaded only there).
+const files = import.meta.glob<string>('../../../looks/*/{preview.mp4,poster.webp}', {
+  query: '?url',
+  import: 'default',
+  eager: true,
+})
+const PREVIEWS: Record<string, Look['preview']> = Object.fromEntries(
+  looksCatalog.map((l) => [
+    l.id,
+    {
+      mp4: files[`../../../looks/${l.id}/preview.mp4`] ?? null,
+      poster: files[`../../../looks/${l.id}/poster.webp`] ?? null,
+    },
+  ]),
+)
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })

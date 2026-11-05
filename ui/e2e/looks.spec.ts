@@ -1,6 +1,10 @@
 // Looks in the web app (plan 2026-11-04-looks §6, beads va-nifa.4.1 and 4.2): the mock's looks routes and the New video
 // picker. Previews cost bandwidth, so the picker loads posters only until a card is hovered or focused.
 import { expect, test, type Locator, type Page } from '@playwright/test'
+import { looksCatalog } from '../../src/generated/looks.js'
+
+/** The catalog the mock serves (every look in looks/). */
+const IDS = looksCatalog.map((l) => l.id)
 
 /** Sets a mock API switch in localStorage before the app loads. */
 const mock = (page: Page, key: string, value = '1') =>
@@ -46,7 +50,7 @@ test('the mock answers GET /api/v1/looks and lists looks in the config', async (
       config: (await config.json()) as { features: string[] },
     }
   })
-  expect(body.looks.looks.map((l) => l.id)).toEqual(['clean', 'kinetic', 'terminal'])
+  expect(body.looks.looks.map((l) => l.id)).toEqual(IDS)
   expect(body.looks.default).toBeNull()
   expect(body.config.features).toContain('looks')
 })
@@ -58,8 +62,8 @@ test('the picker shows posters only until a card is hovered or focused', async (
   const open = page.getByRole('button', { name: 'Look: None' })
   await (isMobile ? open.tap() : open.click())
   const dialog = page.getByRole('dialog', { name: 'Pick a look' })
-  await expect(dialog.locator('.va-look-pick')).toHaveCount(4)
-  await expect(dialog.locator('img')).toHaveCount(3)
+  await expect(dialog.locator('.va-look-pick')).toHaveCount(IDS.length + 1)
+  await expect(dialog.locator('img')).toHaveCount(IDS.length)
   await expect(dialog.locator('video')).toHaveCount(0)
   expect(urls).toEqual([])
 
@@ -96,15 +100,16 @@ test('picks with the keyboard, and the create request carries the look', async (
   await page.goto('/new')
   await page.getByRole('button', { name: 'Look: None' }).click()
   await card(page, 'none').focus()
+  const [first, second] = looksCatalog
   await page.keyboard.press('ArrowRight')
-  await expect(card(page, 'clean')).toBeFocused()
+  await expect(card(page, first!.id)).toBeFocused()
   await page.keyboard.press('ArrowRight')
-  await expect(card(page, 'kinetic')).toBeFocused()
+  await expect(card(page, second!.id)).toBeFocused()
   await page.keyboard.press('ArrowLeft')
   await page.keyboard.press('Enter')
   await expect(page.getByRole('dialog', { name: 'Pick a look' })).toBeHidden()
-  await expect(page.getByRole('button', { name: 'Look: Clean product' })).toBeVisible()
-  expect((await createNow(page)).look).toBe('clean')
+  await expect(page.getByRole('button', { name: `Look: ${first!.name}` })).toBeVisible()
+  expect((await createNow(page)).look).toBe(first!.id)
 })
 
 test('Escape closes the picker without a change; untouched leaves look out', async ({ page }) => {
@@ -305,8 +310,8 @@ test('/docs/looks renders every catalog look and is in the docs nav', async ({ p
   await page.goto('/docs/looks')
   await expect(page.getByRole('heading', { level: 1, name: 'Looks' })).toBeVisible()
   const catalog = page.getByTestId('looks-catalog')
-  await expect(catalog.locator('[data-look]')).toHaveCount(3)
-  for (const name of ['Clean product', 'Kinetic type', 'Terminal'])
+  await expect(catalog.locator('[data-look]')).toHaveCount(IDS.length)
+  for (const name of looksCatalog.map((l) => l.name))
     await expect(catalog.getByText(name, { exact: false }).first()).toBeVisible()
   await expect(page.getByRole('link', { name: 'Looks', exact: true }).first()).toHaveAttribute(
     'href',
