@@ -17,7 +17,7 @@ const hyperframes: V['editing'] = {
     voiceover: true,
     revoice: true,
     recordedNarration: true,
-    scopedRevision: false,
+    scopedRevision: true,
     recording: false,
   },
 }
@@ -514,6 +514,75 @@ export const videos: Video[] = [
     },
   ]),
 ]
+
+// Redo a scene (localStorage.mockRedo=1): the teaser gets v3, which redid its demo and ends on a held frame under
+// recorded narration, and v4, a scoped run of v3 that was refused for touching a frozen scene.
+const redoOn = (() => {
+  try {
+    return typeof localStorage !== 'undefined' && localStorage.getItem('mockRedo') === '1'
+  } catch {
+    return false
+  }
+})()
+if (redoOn) {
+  const teaser = videos.find((v) => v.id === 'vid_teaser') as Video
+  const v3 = ready('vid_teaser', 3, 'Make the demo scene show the deploy preview URL.', {
+    at: 30,
+    took: 2.2,
+    credits: 58,
+    sec: 9,
+    w: 1920,
+    h: 1080,
+    bytes: 190112,
+    title: 'Ship faster with preview deploys',
+    author: people.sam.id,
+    parent: 2,
+    editable: true,
+    narrated: true,
+    beats: [
+      { id: 'hook', label: 'Hook', start: 0, duration: 2 },
+      { id: 'problem', label: 'Problem', start: 2, duration: 2 },
+      { id: 'demo', label: 'Demo', start: 4, duration: 2.5 },
+      { id: 'end', label: 'End card', start: 6.5, duration: 1.5 },
+      { id: 'va-hold', label: null, start: 8, duration: 1 },
+    ],
+    scope: { beats: [{ id: 'demo', label: 'Demo' }] },
+    summary: 'The demo scene now shows the preview URL; everything else is v2 as it was.',
+  })
+  const v4: V = {
+    ...ready('vid_teaser', 4, 'Make the problem scene darker.', {
+      at: 10,
+      took: 1.4,
+      credits: 31,
+      sec: 9,
+      w: 1920,
+      h: 1080,
+      bytes: 0,
+      title: 'Ship faster with preview deploys',
+      author: people.sam.id,
+      parent: 3,
+      summary: '',
+    }),
+    status: 'failed',
+    stage: 'failed',
+    latestStep: 'Checked the scenes it was asked to leave alone',
+    scope: { beats: [{ id: 'problem', label: 'Problem' }] },
+    output: null,
+    files: null,
+    error: {
+      category: 'invalid_output',
+      message:
+        'This run changed parts of the video outside the scenes it was asked to redo: the hook title. Try again, or revise the whole video.',
+    },
+  }
+  teaser.versions.unshift(v4, v3)
+  Object.assign(teaser, {
+    status: 'failed',
+    latestVersion: 4,
+    etag: '"vid_teaser-4"',
+    updatedAt: v4.createdAt,
+  })
+}
 
 // A remix (docs/plans/2026-11-03-remix.md): the docs video was remixed from the webhooks launch.
 Object.assign(videos.find((v) => v.id === 'vid_docs') as Video, {

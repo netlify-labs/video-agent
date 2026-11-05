@@ -1232,6 +1232,9 @@ export function installMock() {
       if (!vid) return fail(404, 'not_found', 'Video not found.')
       // Redo a scene: the same first checks the server makes (src/domain/videos.ts checkScopedRevise, scopeRules).
       const scope = (b as { scope?: { beats?: string[] }; fromVersion?: number }).scope
+      // localStorage.mockScopeError=<message>: the server refuses the scope with a 400 (the page shows it as written).
+      const scopeError = localStorage.getItem('mockScopeError')
+      if (scope && scopeError) return fail(400, 'invalid_request', scopeError)
       if (scope) {
         const from = (b as { fromVersion?: number }).fromVersion
         if (from === undefined)

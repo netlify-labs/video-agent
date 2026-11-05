@@ -25,6 +25,7 @@ import { RemixDialog, useCanRemix } from '../components/RemixDialog'
 import { useMediaKeys } from '../lib/media-keys'
 import { MediaChips, type Media } from '../components/MediaPicker'
 import { PlanPanel } from '../components/PlanPanel'
+import { ScenePicker } from '../components/ScenePicker'
 import { PosterMenu } from '../components/PosterMenu'
 import { PublishButton } from '../components/PublishDialog'
 import { PublishToMenu, PublishedTo, destinationsActive } from '../components/Destinations'
@@ -65,6 +66,7 @@ import {
   unwatchRun,
   watchRun,
 } from '../lib/run-notify'
+import { isScopeRefusal, redidLabel } from '../lib/scenes'
 import {
   $api,
   errorMessage,
@@ -371,6 +373,11 @@ function Filmstrip({
                     </Text>
                     <Status status={x.status} size="xs" />
                   </Group>
+                  {x.scope ? (
+                    <Text size="xs" fw={500} c="var(--va-accent)" data-testid="version-scope">
+                      {redidLabel(x.scope)}
+                    </Text>
+                  ) : null}
                   <Text size="sm" c="var(--va-muted)" lineClamp={2}>
                     {x.prompt}
                   </Text>
@@ -540,6 +547,7 @@ export function VideoPage() {
   const canCreate = me.data?.role === 'admin' || me.data?.role === 'creator'
   const config = $api.useQuery('get', '/api/v1/config')
   const canPlan = canCreate && config.data?.planningAvailable === true
+  const canRedoScenes = config.data?.features.includes('scoped_revision') === true
   const [planningRevision, setPlanningRevision] = useState(false)
   // The version whose full details are open (How vN was made), if any.
   const [detailsN, setDetailsN] = useState<number | null>(null)
@@ -564,6 +572,10 @@ export function VideoPage() {
   // null keeps the voice-over of the version being revised.
   const [revVoice, setRevVoice] = useState<VoiceState | null>(null)
   const [revKey, setRevKey] = useState(newIdempotencyKey)
+  // Redo a scene: whole video (the default) or some scenes of the shown version, and which.
+  const [revScenes, setRevScenes] = useState(false)
+  const [revBeats, setRevBeats] = useState<string[]>([])
+  const revBox = useRef<HTMLTextAreaElement>(null)
   const revMediaBody = revMedia.length ? { mediaIds: revMedia.map((m) => m.id) } : {}
   // Files dropped on the revision box upload to the library and are attached when ready (set below, once the
   // version's sound is known).
@@ -580,6 +592,7 @@ export function VideoPage() {
     setSelected(n)
     setRevSound(null)
     setRevVoice(null)
+    setRevBeats([])
     setPicking(false)
     setPending(null)
   }
@@ -590,6 +603,8 @@ export function VideoPage() {
       setRevMedia([])
       setRevSound(null)
       setRevVoice(null)
+      setRevScenes(false)
+      setRevBeats([])
       setRevKey(newIdempotencyKey())
       setSelected(null)
       void qc.invalidateQueries()
@@ -728,7 +743,22 @@ export function VideoPage() {
   }
   const voice = revVoice ?? voiceStateFrom(v.voiceover)
   const voiceChanged = revVoice !== null && !sameVoice(revVoice, voiceStateFrom(v.voiceover))
+  // Why this version's scenes can't be redone one by one, if they can't.
+  const scenesBlocked = !v.editable
+    ? "This version doesn't keep the editing contract, so it can only be revised whole."
+    : v.editing.capabilities.scopedRevision
+      ? null
+      : "This version's engine can't redo single scenes, so it can only be revised whole."
+  const scoped = canRedoScenes && revScenes && scenesBlocked === null
   const makeRevision = (planId?: string | null) => {
+    if (scoped) {
+      // Length, sound, voice-over and plan stay the parent's: the server refuses them with a scope.
+      revise.mutate({
+        params: { path: { id }, header: { 'idempotency-key': revKey } },
+        body: { prompt: revision, fromVersion: v.n, scope: { beats: revBeats }, ...revMediaBody },
+      })
+      return
+    }
     revise.mutate({
       params: { path: { id }, header: { 'idempotency-key': revKey } },
       body: {
@@ -1078,6 +1108,22 @@ export function VideoPage() {
                       >
                         Try again
                       </Button>
+                      {v.scope && v.parentN !== null && isScopeRefusal(v.error?.message) ? (
+                        // Retrying carries the refusal into the next run; a whole revision may be what's needed.
+                        <Button
+                          variant="default"
+                          disabled={busy}
+                          onClick={() => {
+                            select(v.parentN ?? 1)
+                            setRevScenes(false)
+                            setRevision(v.prompt)
+                            revBox.current?.scrollIntoView({ block: 'center' })
+                            revBox.current?.focus()
+                          }}
+                        >
+                          Revise the whole video
+                        </Button>
+                      ) : null}
                     </Group>
                   ) : null}
                 </Stack>
@@ -1103,7 +1149,7 @@ export function VideoPage() {
               <form
                 onSubmit={(e) => {
                   e.preventDefault()
-                  if (canPlan) {
+                  if (canPlan && !scoped) {
                     setPlanningRevision(true)
                     return
                   }
@@ -1128,11 +1174,49 @@ export function VideoPage() {
                           : 'Pick a ready version'}
                     </Text>
                   </Group>
+                  {canRedoScenes && v.status === 'ready' ? (
+                    <Stack gap={6} data-testid="revise-scope">
+                      <SegmentedControl
+                        size="xs"
+                        w="fit-content"
+                        value={scoped ? 'scenes' : 'whole'}
+                        disabled={busy || planningRevision}
+                        onChange={(x) => {
+                          setRevScenes(x === 'scenes')
+                        }}
+                        data={[
+                          { value: 'whole', label: 'Whole video' },
+                          { value: 'scenes', label: 'Some scenes', disabled: scenesBlocked !== null },
+                        ]}
+                      />
+                      {scenesBlocked ? (
+                        <Text size="sm" c="var(--va-faint)">
+                          {scenesBlocked}
+                        </Text>
+                      ) : scoped ? (
+                        <>
+                          <ScenePicker
+                            key={`${id}-${v.n}`}
+                            videoId={id}
+                            v={v}
+                            value={revBeats}
+                            onChange={setRevBeats}
+                            disabled={busy}
+                          />
+                          <Text size="sm" c="var(--va-faint)">
+                            Length, sound and voice stay as they are. Say in the request if a scene should run
+                            longer.
+                          </Text>
+                        </>
+                      ) : null}
+                    </Stack>
+                  ) : null}
                   <DropTarget
                     onFiles={(fs) => void revUploads.add(fs)}
                     disabled={busy || v.status !== 'ready' || planningRevision}
                   >
                     <Textarea
+                      ref={revBox}
                       aria-label="What should change?"
                       autosize
                       minRows={3}
@@ -1151,31 +1235,39 @@ export function VideoPage() {
                     disabled={busy || v.status !== 'ready' || planningRevision}
                     button={false}
                   />
-                  <SoundControl
-                    value={sound}
-                    media={revMedia}
-                    disabled={busy || v.status !== 'ready' || planningRevision}
-                    onChange={(s) => {
-                      setRevSound(s === v.sound ? null : s)
-                    }}
-                  />
-                  <VoiceoverControl
-                    value={voice}
-                    disabled={busy || v.status !== 'ready' || planningRevision}
-                    planning={canPlan}
-                    onChange={setRevVoice}
-                  />
-                  <Group gap={0} className={canPlan ? 'va-split-button' : undefined}>
+                  {scoped ? null : (
+                    <>
+                      <SoundControl
+                        value={sound}
+                        media={revMedia}
+                        disabled={busy || v.status !== 'ready' || planningRevision}
+                        onChange={(s) => {
+                          setRevSound(s === v.sound ? null : s)
+                        }}
+                      />
+                      <VoiceoverControl
+                        value={voice}
+                        disabled={busy || v.status !== 'ready' || planningRevision}
+                        planning={canPlan}
+                        onChange={setRevVoice}
+                      />
+                    </>
+                  )}
+                  <Group gap={0} className={canPlan && !scoped ? 'va-split-button' : undefined}>
                     <Button
                       type="submit"
                       disabled={
-                        busy || v.status !== 'ready' || revision.trim().length < 3 || planningRevision
+                        busy ||
+                        v.status !== 'ready' ||
+                        revision.trim().length < 3 ||
+                        planningRevision ||
+                        (scoped && revBeats.length === 0)
                       }
-                      loading={revise.isPending && !canPlan}
+                      loading={revise.isPending && (!canPlan || scoped)}
                     >
-                      {canPlan ? 'Plan it first' : `Make v${data.versions.length + 1}`}
+                      {canPlan && !scoped ? 'Plan it first' : `Make v${data.versions.length + 1}`}
                     </Button>
-                    {canPlan ? (
+                    {canPlan && !scoped ? (
                       <Button
                         variant="default"
                         disabled={busy || v.status !== 'ready' || revision.trim().length < 3}
