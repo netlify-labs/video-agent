@@ -581,6 +581,26 @@
             "type": "boolean",
             "description": "Ready and keeps editing contract v1, so it can be edited in the browser."
           },
+          "editing": {
+            "type": "object",
+            "properties": {
+              "engine": {
+                "type": "string",
+                "enum": [
+                  "hyperframes",
+                  "remotion"
+                ]
+              },
+              "capabilities": {
+                "$ref": "#/components/schemas/EngineCapabilities"
+              }
+            },
+            "required": [
+              "engine",
+              "capabilities"
+            ],
+            "description": "The render engine that made this version (a video keeps one) and what the editor may offer on it. editable still decides whether the editor opens."
+          },
           "mode": {
             "type": "string",
             "enum": [
@@ -953,6 +973,7 @@
           "incorporates",
           "feedback",
           "editable",
+          "editing",
           "mode",
           "editedFromN",
           "n",
@@ -1083,6 +1104,75 @@
           "approved",
           "changes_requested",
           null
+        ]
+      },
+      "EngineCapabilities": {
+        "type": "object",
+        "properties": {
+          "editOps": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "text",
+                "retime",
+                "reorder",
+                "delete",
+                "color",
+                "media",
+                "audio",
+                "voice",
+                "span",
+                "camera",
+                "cursor",
+                "redact"
+              ]
+            },
+            "description": "The edit operations the browser editor may offer on this engine."
+          },
+          "liveDraftPreview": {
+            "type": "boolean",
+            "description": "The editor plays drafts live; otherwise it shows the last render."
+          },
+          "sound": {
+            "type": "string",
+            "enum": [
+              "none",
+              "music",
+              "all"
+            ],
+            "description": "What Sound may be: music is a bed only, all allows effects too."
+          },
+          "voiceover": {
+            "type": "boolean",
+            "description": "A generated voice-over is possible."
+          },
+          "revoice": {
+            "type": "boolean",
+            "description": "A voiced line can be changed in the editor."
+          },
+          "recordedNarration": {
+            "type": "boolean",
+            "description": "Recorded narration (Edit → Narration) is possible."
+          },
+          "scopedRevision": {
+            "type": "boolean",
+            "description": "One or more scenes can be redone on their own."
+          },
+          "recording": {
+            "type": "boolean",
+            "description": "Screen-recording demos are possible."
+          }
+        },
+        "required": [
+          "editOps",
+          "liveDraftPreview",
+          "sound",
+          "voiceover",
+          "revoice",
+          "recordedNarration",
+          "scopedRevision",
+          "recording"
         ]
       },
       "Sound": {
