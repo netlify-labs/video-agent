@@ -1,1 +1,2 @@
+/* global window */
 window.__vaRedact=[{"id":"t1","origin":"trace","start":0,"end":12,"reason":"api key","boxes":[[0,0.3,0.52,0.4,0.04],[9.1,0.3,0.12,0.4,0.04]]},{"id":"s1","origin":"setup","start":0,"end":12,"reason":"email","boxes":[[0,0.1,0.1,0.1,0.1],[5,0,0,0,0]]}];

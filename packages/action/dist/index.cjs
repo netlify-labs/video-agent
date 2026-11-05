@@ -1429,7 +1429,9 @@ function resources(t) {
             "externalRef",
             "externalUrl",
             "private",
-            "context"
+            "context",
+            "recording",
+            "agent"
           ],
           features: [
             ...input.planId !== void 0 ? ["planning"] : [],
@@ -1437,7 +1439,9 @@ function resources(t) {
             ...input.externalRef !== void 0 ? ["external_ref"] : [],
             ...input.externalUrl !== void 0 ? ["external_ref"] : [],
             ...input.private !== void 0 ? ["external_ref"] : [],
-            ...input.context !== void 0 ? ["context"] : []
+            ...input.context !== void 0 ? ["context"] : [],
+            ...input.recording !== void 0 ? ["screen_recording"] : [],
+            ...input.agent !== void 0 ? ["screen_recording"] : []
           ],
           operationId: "createVideo"
         },
@@ -1524,7 +1528,8 @@ function resources(t) {
             "externalRef",
             "externalUrl",
             "private",
-            "context"
+            "context",
+            "recording"
           ],
           features: [
             ...["remix"],
@@ -1533,7 +1538,8 @@ function resources(t) {
             ...input.externalRef !== void 0 ? ["external_ref"] : [],
             ...input.externalUrl !== void 0 ? ["external_ref"] : [],
             ...input.private !== void 0 ? ["external_ref"] : [],
-            ...input.context !== void 0 ? ["context"] : []
+            ...input.context !== void 0 ? ["context"] : [],
+            ...input.recording !== void 0 ? ["screen_recording"] : []
           ],
           operationId: "remixVideo"
         },

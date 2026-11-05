@@ -999,6 +999,8 @@ export function resources(t: Transport) {
               'externalUrl',
               'private',
               'context',
+              'recording',
+              'agent',
             ],
             features: [
               ...(input.planId !== undefined ? ['planning'] : []),
@@ -1007,6 +1009,8 @@ export function resources(t: Transport) {
               ...(input.externalUrl !== undefined ? ['external_ref'] : []),
               ...(input.private !== undefined ? ['external_ref'] : []),
               ...(input.context !== undefined ? ['context'] : []),
+              ...(input.recording !== undefined ? ['screen_recording'] : []),
+              ...(input.agent !== undefined ? ['screen_recording'] : []),
             ],
             operationId: 'createVideo',
           },
@@ -1110,6 +1114,7 @@ export function resources(t: Transport) {
               'externalUrl',
               'private',
               'context',
+              'recording',
             ],
             features: [
               ...['remix'],
@@ -1119,6 +1124,7 @@ export function resources(t: Transport) {
               ...(input.externalUrl !== undefined ? ['external_ref'] : []),
               ...(input.private !== undefined ? ['external_ref'] : []),
               ...(input.context !== undefined ? ['context'] : []),
+              ...(input.recording !== undefined ? ['screen_recording'] : []),
             ],
             operationId: 'remixVideo',
           },

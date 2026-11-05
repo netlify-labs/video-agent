@@ -2051,6 +2051,34 @@ export interface components {
                 name: string;
                 hash: string;
             } | null;
+            /** @description A demo made from a screen recording; null (or absent) for any other video. */
+            recording?: {
+                mediaId: string;
+                /** @description The recording came with a pointer trace (exact clicks and cursor). */
+                trace: boolean;
+                /** @description Made with no agent authoring (a Quick demo). */
+                compose: boolean;
+                /** @description What the run made of the recording; null until it is ready. */
+                summary: {
+                    sourceSec: number;
+                    steps: number;
+                    cutSec: number;
+                    spedUpSec: number;
+                    redactionsAdded: number;
+                } | null;
+                /** @description Every hidden area, per scene, with who checked it. Hiding is cosmetic: see the README. */
+                hidden: {
+                    id: string;
+                    /** @enum {string} */
+                    source: "trace" | "setup" | "agent" | "editor";
+                    beat: string;
+                    start: number;
+                    end: number;
+                    reason: string;
+                    checkedBy: string | null;
+                    checkedAt: string | null;
+                }[];
+            } | null;
             /** @description The render engine that made this version (a video keeps one) and what the editor may offer on it. editable still decides whether the editor opens. */
             editing: {
                 /** @enum {string} */
@@ -2397,6 +2425,9 @@ export interface components {
             /** @description Make the video private (you and admins only) from the start. Needs permission to make videos private. */
             private?: boolean;
             context?: components["schemas"]["Context"] & unknown;
+            recording?: components["schemas"]["RecordingInput"];
+            /** @description false: a Quick demo, made from the recording with no agent authoring (a stock intro and outro, a scene per step, callouts from what was clicked); costs about as much as an edit. Needs recording; no voiceover. */
+            agent?: boolean;
         };
         /** @description A spoken narration with captions from its words. Omit for the plan's choice, else none. */
         VoiceoverInput: {
@@ -2407,6 +2438,28 @@ export interface components {
             speed?: number;
             /** @description The narration, one line per beat in order, spoken word for word. Omit to let the plan's narration or the agent write it. */
             script?: string[];
+        };
+        /** @description Make a demo from a screen recording (feature screen_recording): the agent turns its steps into scenes with auto zoom, a cursor and hidden areas. HyperFrames only (409 engine_unsupported). durationSec defaults to about 0.4 of the recording, 20 to 90 seconds. */
+        RecordingInput: {
+            /** @description A screen recording from the library (GET /api/v1/media). */
+            mediaId: string;
+            /** @description Seconds of the recording to use, [in, out]: in before out, at least 2 seconds, inside the file. */
+            trim?: [
+                number,
+                number
+            ];
+            /** @description Areas to hide from the start (seconds of the recording). A demo with any starts private. */
+            redact?: {
+                start: number;
+                end: number;
+                /** @description [x, y, width, height] as fractions of the frame. */
+                box: [
+                    number,
+                    number,
+                    number,
+                    number
+                ];
+            }[];
         };
         VideoList: {
             items: components["schemas"]["Video"][];
@@ -2477,6 +2530,7 @@ export interface components {
             /** @description Make the remix private (you and admins only) from the start. A private video's remix is private either way. */
             private?: boolean;
             context?: components["schemas"]["Context"] & unknown;
+            recording?: components["schemas"]["RecordingInput"] & unknown;
         };
         Media: {
             id: string;
@@ -3095,6 +3149,37 @@ export interface components {
                 op: "voice";
                 beat: string;
                 text: string;
+            } | {
+                /** @enum {string} */
+                op: "span";
+                beat: string;
+                in: number;
+                out: number;
+            } | {
+                /** @enum {string} */
+                op: "camera";
+                beat: string;
+                keys: (number | string)[][];
+            } | {
+                /** @enum {string} */
+                op: "cursor";
+                beat: string;
+                /** @enum {string} */
+                style: "smooth" | "highlight" | "none";
+                size: number;
+            } | {
+                /** @enum {string} */
+                op: "redact";
+                beat: string;
+                entries: {
+                    id?: string;
+                    /** @enum {string} */
+                    origin?: "agent" | "editor";
+                    start: number;
+                    end: number;
+                    reason?: string;
+                    boxes: number[][];
+                }[];
             } | components["schemas"]["NarrationOp"])[];
             composition: components["schemas"]["Composition"];
             base: components["schemas"]["Composition"];
@@ -3287,6 +3372,37 @@ export interface components {
                 op: "voice";
                 beat: string;
                 text: string;
+            } | {
+                /** @enum {string} */
+                op: "span";
+                beat: string;
+                in: number;
+                out: number;
+            } | {
+                /** @enum {string} */
+                op: "camera";
+                beat: string;
+                keys: (number | string)[][];
+            } | {
+                /** @enum {string} */
+                op: "cursor";
+                beat: string;
+                /** @enum {string} */
+                style: "smooth" | "highlight" | "none";
+                size: number;
+            } | {
+                /** @enum {string} */
+                op: "redact";
+                beat: string;
+                entries: {
+                    id?: string;
+                    /** @enum {string} */
+                    origin?: "agent" | "editor";
+                    start: number;
+                    end: number;
+                    reason?: string;
+                    boxes: number[][];
+                }[];
             } | components["schemas"]["NarrationOp"])[];
             rev: number;
         };

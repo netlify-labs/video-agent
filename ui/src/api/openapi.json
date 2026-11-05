@@ -668,6 +668,119 @@
             ],
             "description": "The look this version was made with (its name as it was then), and the version of it: hash differs from GET /api/v1/looks' when the look has changed since."
           },
+          "recording": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "mediaId": {
+                "type": "string"
+              },
+              "trace": {
+                "type": "boolean",
+                "description": "The recording came with a pointer trace (exact clicks and cursor)."
+              },
+              "compose": {
+                "type": "boolean",
+                "description": "Made with no agent authoring (a Quick demo)."
+              },
+              "summary": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "sourceSec": {
+                    "type": "number"
+                  },
+                  "steps": {
+                    "type": "number"
+                  },
+                  "cutSec": {
+                    "type": "number"
+                  },
+                  "spedUpSec": {
+                    "type": "number"
+                  },
+                  "redactionsAdded": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "sourceSec",
+                  "steps",
+                  "cutSec",
+                  "spedUpSec",
+                  "redactionsAdded"
+                ],
+                "description": "What the run made of the recording; null until it is ready."
+              },
+              "hidden": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "trace",
+                        "setup",
+                        "agent",
+                        "editor"
+                      ]
+                    },
+                    "beat": {
+                      "type": "string"
+                    },
+                    "start": {
+                      "type": "number"
+                    },
+                    "end": {
+                      "type": "number"
+                    },
+                    "reason": {
+                      "type": "string"
+                    },
+                    "checkedBy": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "checkedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "source",
+                    "beat",
+                    "start",
+                    "end",
+                    "reason",
+                    "checkedBy",
+                    "checkedAt"
+                  ]
+                },
+                "description": "Every hidden area, per scene, with who checked it. Hiding is cosmetic: see the README."
+              }
+            },
+            "required": [
+              "mediaId",
+              "trace",
+              "compose",
+              "summary",
+              "hidden"
+            ],
+            "description": "A demo made from a screen recording; null (or absent) for any other video."
+          },
           "editing": {
             "type": "object",
             "properties": {
@@ -2008,6 +2121,13 @@
                 "description": "Background for the run (a PR, release notes) outside the prompt, read as data."
               }
             ]
+          },
+          "recording": {
+            "$ref": "#/components/schemas/RecordingInput"
+          },
+          "agent": {
+            "type": "boolean",
+            "description": "false: a Quick demo, made from the recording with no agent authoring (a stock intro and outro, a scene per step, callouts from what was clicked); costs about as much as an edit. Needs recording; no voiceover."
           }
         },
         "required": [
@@ -2046,6 +2166,84 @@
           "enabled"
         ],
         "description": "A spoken narration with captions from its words. Omit for the plan's choice, else none."
+      },
+      "RecordingInput": {
+        "type": "object",
+        "properties": {
+          "mediaId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "description": "A screen recording from the library (GET /api/v1/media)."
+          },
+          "trim": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "number",
+                "minimum": 0
+              },
+              {
+                "type": "number",
+                "exclusiveMinimum": 0
+              }
+            ],
+            "description": "Seconds of the recording to use, [in, out]: in before out, at least 2 seconds, inside the file."
+          },
+          "redact": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "start": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "end": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "box": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    }
+                  ],
+                  "description": "[x, y, width, height] as fractions of the frame."
+                }
+              },
+              "required": [
+                "start",
+                "end",
+                "box"
+              ]
+            },
+            "maxItems": 50,
+            "description": "Areas to hide from the start (seconds of the recording). A demo with any starts private."
+          }
+        },
+        "required": [
+          "mediaId"
+        ],
+        "description": "Make a demo from a screen recording (feature screen_recording): the agent turns its steps into scenes with auto zoom, a cursor and hidden areas. HyperFrames only (409 engine_unsupported). durationSec defaults to about 0.4 of the recording, 20 to 90 seconds."
       },
       "VideoList": {
         "type": "object",
@@ -2294,6 +2492,16 @@
               },
               {
                 "description": "Background for the run (a PR, release notes) outside the prompt, read as data."
+              }
+            ]
+          },
+          "recording": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RecordingInput"
+              },
+              {
+                "description": "Remix a demo with a new screen recording: the request, look and settings carry over, the steps are planned fresh. Omit to keep the source's recording."
               }
             ]
           }
@@ -4863,6 +5071,178 @@
                   "description": "Change a voiced beat's narration line (plain text). The draft preview keeps the old audio; the render re-voices the line, lengthening the beat only if the new line no longer fits"
                 },
                 {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "enum": [
+                        "span"
+                      ]
+                    },
+                    "beat": {
+                      "type": "string",
+                      "maxLength": 80
+                    },
+                    "in": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "out": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "beat",
+                    "in",
+                    "out"
+                  ],
+                  "description": "Trim a recording scene: which seconds of the recording it shows (0.5x to 4x its length)."
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "enum": [
+                        "camera"
+                      ]
+                    },
+                    "beat": {
+                      "type": "string",
+                      "maxLength": 80
+                    },
+                    "keys": {
+                      "type": "array",
+                      "items": {
+                        "type": "array",
+                        "items": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      },
+                      "maxItems": 64
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "beat",
+                    "keys"
+                  ],
+                  "description": "A recording scene's camera keys: [seconds, x, y, zoom 1-4, ease?], in time order."
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "enum": [
+                        "cursor"
+                      ]
+                    },
+                    "beat": {
+                      "type": "string",
+                      "maxLength": 80
+                    },
+                    "style": {
+                      "type": "string",
+                      "enum": [
+                        "smooth",
+                        "highlight",
+                        "none"
+                      ]
+                    },
+                    "size": {
+                      "type": "number",
+                      "minimum": 0.5,
+                      "maximum": 2
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "beat",
+                    "style",
+                    "size"
+                  ],
+                  "description": "How a recording scene's cursor looks (never its path); smooth needs a pointer trace."
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "enum": [
+                        "redact"
+                      ]
+                    },
+                    "beat": {
+                      "type": "string",
+                      "maxLength": 80
+                    },
+                    "entries": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "maxLength": 24
+                          },
+                          "origin": {
+                            "type": "string",
+                            "enum": [
+                              "agent",
+                              "editor"
+                            ]
+                          },
+                          "start": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "end": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "reason": {
+                            "type": "string",
+                            "maxLength": 60
+                          },
+                          "boxes": {
+                            "type": "array",
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              }
+                            },
+                            "minItems": 1,
+                            "maxItems": 600
+                          }
+                        },
+                        "required": [
+                          "start",
+                          "end",
+                          "boxes"
+                        ]
+                      },
+                      "maxItems": 200
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "beat",
+                    "entries"
+                  ],
+                  "description": "A recording scene's own hidden areas (keyframed boxes). Areas from the pointer trace or the demo's setup can't be removed or changed."
+                },
+                {
                   "$ref": "#/components/schemas/NarrationOp"
                 }
               ]
@@ -5708,6 +6088,178 @@
                     "text"
                   ],
                   "description": "Change a voiced beat's narration line (plain text). The draft preview keeps the old audio; the render re-voices the line, lengthening the beat only if the new line no longer fits"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "enum": [
+                        "span"
+                      ]
+                    },
+                    "beat": {
+                      "type": "string",
+                      "maxLength": 80
+                    },
+                    "in": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "out": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "beat",
+                    "in",
+                    "out"
+                  ],
+                  "description": "Trim a recording scene: which seconds of the recording it shows (0.5x to 4x its length)."
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "enum": [
+                        "camera"
+                      ]
+                    },
+                    "beat": {
+                      "type": "string",
+                      "maxLength": 80
+                    },
+                    "keys": {
+                      "type": "array",
+                      "items": {
+                        "type": "array",
+                        "items": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      },
+                      "maxItems": 64
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "beat",
+                    "keys"
+                  ],
+                  "description": "A recording scene's camera keys: [seconds, x, y, zoom 1-4, ease?], in time order."
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "enum": [
+                        "cursor"
+                      ]
+                    },
+                    "beat": {
+                      "type": "string",
+                      "maxLength": 80
+                    },
+                    "style": {
+                      "type": "string",
+                      "enum": [
+                        "smooth",
+                        "highlight",
+                        "none"
+                      ]
+                    },
+                    "size": {
+                      "type": "number",
+                      "minimum": 0.5,
+                      "maximum": 2
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "beat",
+                    "style",
+                    "size"
+                  ],
+                  "description": "How a recording scene's cursor looks (never its path); smooth needs a pointer trace."
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "enum": [
+                        "redact"
+                      ]
+                    },
+                    "beat": {
+                      "type": "string",
+                      "maxLength": 80
+                    },
+                    "entries": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "maxLength": 24
+                          },
+                          "origin": {
+                            "type": "string",
+                            "enum": [
+                              "agent",
+                              "editor"
+                            ]
+                          },
+                          "start": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "end": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "reason": {
+                            "type": "string",
+                            "maxLength": 60
+                          },
+                          "boxes": {
+                            "type": "array",
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              }
+                            },
+                            "minItems": 1,
+                            "maxItems": 600
+                          }
+                        },
+                        "required": [
+                          "start",
+                          "end",
+                          "boxes"
+                        ]
+                      },
+                      "maxItems": 200
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "beat",
+                    "entries"
+                  ],
+                  "description": "A recording scene's own hidden areas (keyframed boxes). Areas from the pointer trace or the demo's setup can't be removed or changed."
                 },
                 {
                   "$ref": "#/components/schemas/NarrationOp"
@@ -7177,7 +7729,9 @@
             "externalRef": "external_ref",
             "externalUrl": "external_ref",
             "private": "external_ref",
-            "context": "context"
+            "context": "context",
+            "recording": "screen_recording",
+            "agent": "screen_recording"
           }
         },
         "summary": "Create a video",
@@ -8060,7 +8614,8 @@
             "externalRef": "external_ref",
             "externalUrl": "external_ref",
             "private": "external_ref",
-            "context": "context"
+            "context": "context",
+            "recording": "screen_recording"
           }
         },
         "summary": "Remix a video",

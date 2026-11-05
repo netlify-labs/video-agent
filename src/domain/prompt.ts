@@ -13,7 +13,7 @@ import {
 } from './types.js'
 import { scrubName } from '../lib/recording-trace.js'
 
-export const PROMPT_TEMPLATE_VERSION = 19
+export const PROMPT_TEMPLATE_VERSION = 20
 
 export interface PromptInput {
   jobId: string

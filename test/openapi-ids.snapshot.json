@@ -21,7 +21,9 @@
         "externalRef": "external_ref",
         "externalUrl": "external_ref",
         "private": "external_ref",
-        "context": "context"
+        "context": "context",
+        "recording": "screen_recording",
+        "agent": "screen_recording"
       }
     }
   },
@@ -95,7 +97,8 @@
         "externalRef": "external_ref",
         "externalUrl": "external_ref",
         "private": "external_ref",
-        "context": "context"
+        "context": "context",
+        "recording": "screen_recording"
       }
     }
   },
