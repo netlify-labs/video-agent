@@ -601,3 +601,35 @@ So: keep automation at ≤ 400 points and treat > 512 as an error ourselves (Hyp
 re-mux. Hold the final frame as an appended beat, and compare frames before encoding in the guard. A 10-minute
 narration fits the 22-minute run: render ~7 min, cleanup ~2 s, STT ~36 s. Runs must reap Chrome processes after
 rendering.
+
+## Publish destination spikes (docs/plans/2026-11-04-publish-destinations.md §8)
+
+### P1: writing a large file into another site's Blobs from outside Netlify (2026-11-05, netliclaw)
+
+A 40 MB file went into a scratch site's `site-files` store from outside Netlify with a token (the Netlify CLI's
+`blobs:set`, same API as `@netlify/blobs`): 111 s over a home connection; from a Lambda in us-east-1 it will be far
+faster. site-vendor's copy streams the source to `/tmp` while hashing and uploads from a file-backed `Blob`
+(`fs.openAsBlob`), so memory stays flat and a retry starts again from the file. The per-object limit is 5 GB; our cap is
+500 MB. Conditional writes (`onlyIfNew`, `onlyIfMatch`) back site.json's compare-and-swap.
+
+### P2: per-site repos (2026-11-05, decision)
+
+Not needed in v1. Every video site is linked to `netlify-labs/video-site-template` (private) at a pinned commit; its
+content lives in Blobs, so sites never rebuild after the first build. An agent run lands by `publish` (its deploy
+becomes production) rather than committing, so it needs no repo of its own. A later re-link to a new template commit
+would replace agent-made design changes, so the template commit only moves on purpose. Per-site repos can come later
+if people want agent edits in git.
+
+### P3: the template's edge function on a real vended site (2026-11-05, netliclaw, site deleted after)
+
+`/site.json` 200; the page rendered; `/v/<pub>/<sha>.mp4` HEAD 200 with `accept-ranges: bytes`; `Range: bytes=0-1023`
+→ 206 with the right bytes; a range 41 MB in → 206 with the right bytes in about 2 s (Blobs have no ranged read, so the
+function skips the prefix); past the end → 416. With the site password on, `/`, `/site.json` and `/v/*` all answer 401,
+Range requests too. Every file in `netlify/edge-functions` is bundled as a function, so helpers live in `lib/`.
+
+### P4, P5 (YouTube): deferred by the owner (2026-11-05) until a Google Cloud project and OAuth client exist.
+
+### P6: the agent run on a vended site
+
+Waits for site-vendor's deploy (it runs with the tenant's token there). The code lands by `publish`, checks that
+production still serves the video, and rolls back to the previous deploy if not.

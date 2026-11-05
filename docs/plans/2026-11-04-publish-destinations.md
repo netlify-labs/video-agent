@@ -1,6 +1,7 @@
 # Publish destinations: the share page, YouTube, and your own sites — plan
 
-- **Status:** draft 3 (2026-11-04). Not started. No beads yet. The owner accepted draft 3's proposed defaults
+- **Status:** built (2026-11-05): phases 1, 2 and 4 live in this repo; phase 3 in revenue-engine PR #404 and
+  netlify-labs/video-site-template. Was: draft 3 (2026-11-04). No beads yet. The owner accepted draft 3's proposed defaults
   (§9, decisions 7-11).
   - Draft 1: written against the code.
   - Draft 2: the owner's answers to draft 1's open questions; targets made fully generic at the owner's request.
@@ -943,6 +944,15 @@ and more types can come later.
 - **When a publisher leaves or disconnects:** do their external publications stay as they are, move to someone else,
   or need removing by hand? (If a connection is revoked, removing from YouTube can't happen automatically.)
 - **"Ask the agent again"** on a published site: later (planned), or v1?
+
+**Owner (2026-11-05)**
+
+- **D1:** the receiver lives in site-vendor itself (new routes next to its APIs).
+- **D2:** repos in netlify-labs; agent runs bill to netliclaw with a 300-credit ceiling and a 20-minute timeout; the
+  publisher's instructions authorize edits to their own site. (Spike P2 then found v1 needs no per-site repos: sites
+  link to the shared template at a pinned commit, and agent runs land by publish.)
+- **D3:** external publications stay where they are when a publisher leaves or disconnects.
+- **YouTube:** built but off until the owner sets up a Google Cloud project (P4, P5 and the real-channel gate wait).
 
 ## 10. Not in v1
 
