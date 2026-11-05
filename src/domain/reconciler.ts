@@ -193,6 +193,8 @@ async function startRequest(
       attemptId: a.id,
       versionN: a.versionN,
       ...m,
+      // Named only for other engines, so HyperFrames manifests (and the hash the prompt pins) keep their bytes.
+      ...(version.engine && version.engine !== 'hyperframes' ? { engine: { id: version.engine } } : {}),
     })
     await deps.blobs.set('sources', runManifestKey(a.jobId, a.id), manifest, {
       contentType: 'application/json',

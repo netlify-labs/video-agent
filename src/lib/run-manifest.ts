@@ -2,6 +2,7 @@
 // the sources store and pins its sha256 in the prompt, so scripts/prepare-run.ts only ever follows keys the server
 // chose: nothing the model writes (or a request smuggles in) can point it somewhere else.
 import { createHash } from 'node:crypto'
+import { isEngineId, type EngineId } from '../domain/engines.js'
 import { isBundleReference, type BundleReference } from './bundle-references.js'
 import { isLanguage, type Language } from './language.js'
 import { MEDIA_KINDS, type MediaKind } from './media/classify.js'
@@ -38,7 +39,12 @@ export interface RunManifest {
    * video/ by key from the videos store (src/lib/bundle-references.ts).
    */
   /** parentN is null for a remix: its source is the copy of another video's composition (remix spec §3.2). */
-  source: { key: string; sha256: string; parentN: number | null; references?: BundleReference[] | undefined } | null
+  source: {
+    key: string
+    sha256: string
+    parentN: number | null
+    references?: BundleReference[] | undefined
+  } | null
   /**
    * A version-owned frozen bundle (render-unchanged and author-from-frozen runs): archive hash plus the canonical file
    * manifest hash. With
@@ -61,7 +67,22 @@ export interface RunManifest {
     video: { key: string; sha256: string }
     pins: FeedbackPin[]
   } | null
+  /**
+   * The render engine (render-engines plan §4.2). Absent means HyperFrames, so the server writes it only for other
+   * engines and every HyperFrames manifest keeps its bytes. `tier` and `development` are Remotion's alone: the license
+   * tier picks the key the render reports with, and `development` marks a test deployment's renders.
+   */
+  engine?: RunEngine | undefined
 }
+
+export interface RunEngine {
+  id: EngineId
+  tier?: 'free' | 'company' | undefined
+  development?: true | undefined
+}
+
+/** The engine a manifest names: HyperFrames when it names none. */
+export const runEngineId = (m: Pick<RunManifest, 'engine'>): EngineId => m.engine?.id ?? 'hyperframes'
 
 /** The most bytes the takes one render freezes may add up to (plan 2026-11-02 §6.1); at most MAX_NARRATION_TAKES. */
 export const MAX_FROZEN_TAKE_BYTES = 400 * 1024 * 1024
@@ -204,6 +225,16 @@ export function serializeRunManifest(m: RunManifest): string {
       video: { key: m.feedback.video.key, sha256: m.feedback.video.sha256 },
       pins: m.feedback.pins.map((p) => ({ commentId: p.commentId, timeSec: p.timeSec, x: p.x, y: p.y })),
     },
+    // Only when set, so every HyperFrames manifest keeps its bytes.
+    ...(m.engine
+      ? {
+          engine: {
+            id: m.engine.id,
+            ...(m.engine.tier ? { tier: m.engine.tier } : {}),
+            ...(m.engine.development ? { development: true } : {}),
+          },
+        }
+      : {}),
   })
 }
 
@@ -362,6 +393,18 @@ export function verifyRunManifest(raw: string, expected: { attemptId: string; sh
         !unit(p.y)
       )
         throw new Error('The run manifest has a bad feedback pin.')
+  }
+  if (m.engine !== undefined) {
+    // Parsed JSON: check the shape rather than trust the type.
+    const raw: unknown = m.engine
+    const e = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+    if (!isEngineId(e.id)) throw new Error('The run manifest names an unknown engine.')
+    if (e.tier !== undefined && (e.id !== 'remotion' || (e.tier !== 'free' && e.tier !== 'company')))
+      throw new Error('The run manifest has a bad engine tier: only a Remotion run has one, free or company.')
+    if (e.development !== undefined && (e.id !== 'remotion' || e.development !== true))
+      throw new Error(
+        'The run manifest has a bad engine development flag: only a Remotion run has one, true.',
+      )
   }
   if (m.kind === 'revision' && !m.source) throw new Error('A revision run needs a source.')
   if (m.kind === 'render_unchanged' && !m.bundle) throw new Error('A render-unchanged run needs a bundle.')

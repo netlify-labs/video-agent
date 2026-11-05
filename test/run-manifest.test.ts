@@ -12,6 +12,7 @@ import { isReference, REFERENCE_FILES, type BundleReference } from '../src/lib/b
 import { NARRATION_SRC } from '../src/lib/contract.js'
 import {
   RUN_MANIFEST_VERSION,
+  runEngineId,
   runManifestKey,
   serializeRunManifest,
   sha256Hex,
@@ -127,6 +128,38 @@ describe('run manifest', () => {
       [{ ...ref, bytes: -1 }],
     ])
       expect(() => verify({ ...base, source: { ...base.source!, references } })).toThrow(/bad reference/)
+  })
+
+  it('names an engine only when one is set, and checks it (render-engines §4.2)', () => {
+    // The bytes from before engines existed: a HyperFrames manifest hashes exactly as it did.
+    expect(serializeRunManifest(base)).toBe(
+      `{"v":1,"jobId":"vid_1","attemptId":"att_1","versionN":2,"kind":"revision","source":{"key":"vid_1/v1/source.tar.gz","sha256":"${H('a')}","parentN":1},"bundle":null,"media":null,"feedback":null}`,
+    )
+    expect(runEngineId(verify(base))).toBe('hyperframes')
+    const remotion = verify({ ...base, engine: { id: 'remotion', tier: 'free' } })
+    expect(remotion.engine).toEqual({ id: 'remotion', tier: 'free' })
+    expect(runEngineId(remotion)).toBe('remotion')
+    expect(
+      verify({ ...base, engine: { id: 'remotion', tier: 'company', development: true } }).engine,
+    ).toEqual({
+      id: 'remotion',
+      tier: 'company',
+      development: true,
+    })
+    expect(verify({ ...base, engine: { id: 'hyperframes' } }).engine).toEqual({ id: 'hyperframes' })
+    const raw = (engine: unknown) => JSON.stringify({ ...JSON.parse(serializeRunManifest(base)), engine })
+    const check = (engine: unknown) => {
+      const r = raw(engine)
+      return () => verifyRunManifest(r, { attemptId: 'att_1', sha256: sha256Hex(r) })
+    }
+    expect(check({ id: 'lottie' })).toThrow(/unknown engine/)
+    expect(check({ id: 'Remotion' })).toThrow(/unknown engine/)
+    expect(check(null)).toThrow(/unknown engine/)
+    expect(check('remotion')).toThrow(/unknown engine/)
+    expect(check({ id: 'hyperframes', tier: 'free' })).toThrow(/bad engine tier/)
+    expect(check({ id: 'remotion', tier: 'enterprise' })).toThrow(/bad engine tier/)
+    expect(check({ id: 'hyperframes', development: true })).toThrow(/bad engine development/)
+    expect(check({ id: 'remotion', development: false })).toThrow(/bad engine development/)
   })
 
   it('serializes the same inputs to the same bytes', () => {
@@ -441,5 +474,30 @@ describe('server side', () => {
     const parsed = verifyRunManifest(text, { attemptId, sha256: m?.[3] ?? '' })
     expect(parsed).toMatchObject({ kind: 'revision', versionN: 2, source: { parentN: 1 } })
     expect(parsed.source?.key.startsWith(`${v.id}/`)).toBe(true)
+    // HyperFrames: no engine field, so the manifest (and the hash in the prompt) is what it was before engines.
+    expect(text).not.toContain('engine')
+  })
+
+  it("the reconciler names a non-HyperFrames version's engine in its manifest", async () => {
+    // One run at a time, so the revision waits in the queue while its engine is set by hand (only a Remotion
+    // deployment, Phase 2, makes such a version).
+    const h = harness({ MAX_ACTIVE_RUNS: '1' })
+    const create = async (prompt: string) =>
+      (await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt } }))).id as string
+    const id = await create('A short launch video for org webhooks, with three beats and an end card.')
+    await h.drive(4)
+    await create('A short launch video for org secrets, with three beats and an end card.')
+    await h.call('POST', `/api/v1/videos/${id}/versions`, {
+      as: h.member,
+      body: { prompt: 'Warmer colours.' },
+    })
+    expect(h.deps.runner.starts).toHaveLength(2)
+    await h.deps.store.updateVersion(id, 2, { engine: 'remotion' })
+    await h.drive(8)
+    const req = h.deps.runner.starts[2]
+    const attemptId = req?.requestId ?? ''
+    const raw = await h.deps.blobs.get('sources', runManifestKey(id, attemptId))
+    const text = new TextDecoder().decode(raw ?? new Uint8Array())
+    expect(verifyRunManifest(text, { attemptId, sha256: sha256Hex(text) }).engine).toEqual({ id: 'remotion' })
   })
 })
