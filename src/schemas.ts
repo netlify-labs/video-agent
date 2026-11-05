@@ -748,6 +748,10 @@ export const CreateVideoSchema = z
       description:
         'Make a demo from a screen recording (feature screen_recording): the agent turns its steps into scenes with auto zoom, a cursor and hidden areas. HyperFrames only (409 engine_unsupported). durationSec defaults to about 0.4 of the recording, 20 to 90 seconds.',
     }),
+    agent: z.boolean().optional().openapi({
+      description:
+        'false: a Quick demo, made from the recording with no agent authoring (a stock intro and outro, a scene per step, callouts from what was clicked); costs about as much as an edit. Needs recording; no voiceover.',
+    }),
   })
   .openapi('CreateVideo')
 

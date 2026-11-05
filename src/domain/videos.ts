@@ -108,6 +108,8 @@ export interface CreateVideoInput {
   context?: VersionContext | undefined
   /** A demo made from a screen recording (screen-recording plan §6.1). */
   recording?: RecordingRequest | undefined
+  /** false: a Quick demo, composed with no agent authoring (needs recording). */
+  agent?: boolean | undefined
 }
 
 export interface ReviseInput {
@@ -386,6 +388,15 @@ export async function createVideo(
     enabled: (await enabledEngines(deps)).map((e) => e.id),
   })
   // A demo (screen-recording plan §6.1): HyperFrames only, and an ordinary clip must already meet the recording rules.
+  if (input.agent === false) {
+    if (!input.recording)
+      throw new ApiError('invalid_request', 'agent: false makes a Quick demo, so it needs a recording.')
+    if (input.voiceover)
+      throw new ApiError(
+        'invalid_request',
+        "A Quick demo has no voice-over; leave voiceover out, or don't set agent: false.",
+      )
+  }
   if (input.recording) {
     if (engine !== 'hyperframes')
       throw new ApiError('engine_unsupported', 'Screen-recording demos are made with HyperFrames only.')
@@ -451,7 +462,7 @@ export async function createVideo(
         engine,
         look,
         context: input.context ?? null,
-        ...(demo ? { recording: demo.recording } : {}),
+        ...(demo ? { recording: { ...demo.recording, compose: input.agent === false } } : {}),
       })
       if (look) await adoptLookSnapshot(repo, deps, jobId, look, now)
       await repo.insertAttempt(newAttempt(deps, jobId, 1, now))

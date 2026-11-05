@@ -387,6 +387,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
           private: 'external_ref',
           context: 'context',
           recording: 'screen_recording',
+          agent: 'screen_recording',
         },
       },
       summary: 'Create a video',

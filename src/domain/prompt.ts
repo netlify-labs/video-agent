@@ -513,6 +513,49 @@ function voiceLines(voice: Voiceover | null): string[] {
  * The prompt for a render-unchanged run (plan v2 §8): someone edited the composition in the browser; the run
  * restores that exact bundle, checks it and renders it. No authoring: if the check fails, it stops.
  */
+/**
+ * A Quick demo (screen-recording plan §5.2 compose, §14 Q11; va-rsk5.3.17): a fixed script with no authoring, like a
+ * render-unchanged run's. recording.ts compose writes the whole composition from the plan.
+ */
+export function buildQuickDemoPrompt(p: {
+  jobId: string
+  attemptId: string
+  versionN: number
+  mediaId: string
+  aspect: Aspect
+  targetDurationSec: number | null
+  title: string
+  runManifestSha256: string
+  callbackUrl: string
+  checkpointUrl: string
+  callbackToken: string
+  upload: { mode: 'blobs' } | { mode: 'signed'; url: string }
+}): string {
+  const uploadArg = p.upload.mode === 'blobs' ? '--upload blobs' : `--upload ${p.upload.url}`
+  const render = `npx tsx scripts/render-job.ts --job ${p.jobId} --attempt ${p.attemptId} --callback ${p.callbackUrl} --token ${p.callbackToken} ${uploadArg}`
+  const id = p.mediaId
+  const target = p.targetDurationSec === null ? '' : ` --target ${String(p.targetDurationSec)}`
+  return [
+    `You are making version ${String(p.versionN)} of video ${p.jobId} (attempt ${p.attemptId}): a Quick demo from a screen recording, with no authoring.`,
+    "Run these steps exactly, from the repo root. Don't write or change any file yourself: the scripts make the whole video.",
+    '',
+    `1. Run: npx tsx scripts/prepare-run.ts --job ${p.jobId} --attempt ${p.attemptId} --manifest ${p.runManifestSha256}`,
+    '   If it fails, stop and report the error.',
+    `2. Run: npx tsx scripts/recording.ts analyze --media ${id}`,
+    `3. Run: npx tsx scripts/recording.ts plan --media ${id}${target} --aspect ${p.aspect}`,
+    `4. Run: npx tsx scripts/recording.ts compose --plan .va-run/recording/${id}/plan.json --title ${JSON.stringify(sanitizeBrief(p.title).slice(0, 80))}`,
+    '5. Run: npx tsx scripts/check-contract.ts, then `npx hyperframes check` in video/. If either reports an error, stop and end your answer with it.',
+    `6. Run: ${render}`,
+    '   If it fails, stop and report the error; never edit files to make it pass.',
+    '7. End your answer with the fenced ```json block render-job.ts prints.',
+    `   Once it has succeeded, never run render-job.ts again: if its json block is out of view, print it with cat .render/${p.attemptId}/manifest.json.`,
+    '',
+    `Progress (optional, best effort): after each step run: npx tsx scripts/checkpoint.ts --attempt ${p.attemptId} --url ${p.checkpointUrl} --token ${p.callbackToken} --message "<the step, in a few words>". It never fails the run; don't retry it or wait for it.`,
+    '',
+    'Never print environment variables. Never commit, push or open a pull request.',
+  ].join('\n')
+}
+
 export function buildRenderUnchangedPrompt(p: {
   jobId: string
   attemptId: string

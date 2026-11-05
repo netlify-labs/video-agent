@@ -20,6 +20,7 @@ import {
   PROMPT_TEMPLATE_VERSION,
   buildFitPrompt,
   buildPrompt,
+  buildQuickDemoPrompt,
   buildRenderUnchangedPrompt,
   type RecordingPrompt,
 } from './prompt.js'
@@ -367,6 +368,24 @@ async function startRequest(
       ...runLook,
     })
   }
+  // A Quick demo (screen-recording plan §14 Q11): a fixed script, no authoring.
+  if (recording?.compose && runManifestSha256)
+    return result(
+      buildQuickDemoPrompt({
+        jobId: a.jobId,
+        attemptId: a.id,
+        versionN: a.versionN,
+        mediaId: recording.mediaId,
+        aspect: job.aspect,
+        targetDurationSec: version.targetDurationSec,
+        title: job.title,
+        runManifestSha256,
+        ...runUrls,
+        callbackToken,
+        upload: { mode: 'blobs' },
+      }),
+      revision?.sourceSha256 ?? null,
+    )
   const recordingPrompt = recording ? await recordingPromptFor(deps, recording) : null
   const prompt = buildPrompt({
     ...(recordingPrompt ? { recording: recordingPrompt } : {}),
