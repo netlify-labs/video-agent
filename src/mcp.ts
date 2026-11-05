@@ -1055,7 +1055,7 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "version": 2}`,
     'list_media',
     {
       title: 'List the media library',
-      description: `The team's uploaded media: logos, screenshots, clips, fonts, audio (music) and PDFs, newest first. Pass media ids to create_video or revise_video (media_ids) so the agent uses them. An item's title is its name in the library; its notes (caption) say what it is.
+      description: `The team's uploaded media: logos, screenshots, clips, fonts, audio (music) and PDFs, newest first. Pass media ids to create_video or revise_video (media_ids) so the agent uses them. An item's title is its name in the library; its notes (caption) say what it is. Screen recordings (role screen-recording) are private to their uploader until a video uses them; has_trace says whether one has a pointer trace.
 
 Example: {"query": "launch logo", "kind": "image"}`,
       inputSchema: {
@@ -1066,6 +1066,10 @@ Example: {"query": "launch logo", "kind": "image"}`,
           .optional()
           .describe('Words to find in the title, file name or notes, e.g. "Q3 launch".'),
         cursor: z.string().optional().describe('next_cursor from the previous page.'),
+        role: z
+          .enum(['screen-recording'])
+          .optional()
+          .describe('Only items with this role, e.g. "screen-recording" for raw screen recordings.'),
       },
       annotations: { title: 'List media', readOnlyHint: true, openWorldHint: false },
     },
@@ -1074,7 +1078,8 @@ Example: {"query": "launch logo", "kind": "image"}`,
         const page = await listMedia(deps, principal, { kind: args.kind, q: args.query, cursor: args.cursor })
         return {
           media: page.items
-            .filter((m) => m.status === 'ready')
+            // The role filter applies within the page (next_cursor still walks the whole library).
+            .filter((m) => m.status === 'ready' && (!args.role || m.role === args.role))
             .map((m) => ({
               id: m.id,
               kind: m.kind,
@@ -1084,6 +1089,8 @@ Example: {"query": "launch logo", "kind": "image"}`,
               width: m.width,
               height: m.height,
               duration_sec: m.durationSec,
+              role: m.role,
+              has_trace: m.hasTrace,
             })),
           next_cursor: page.nextCursor,
         }

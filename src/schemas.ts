@@ -872,6 +872,11 @@ export const MediaSchema = z
     source: MediaSourceSchema.nullable().openapi({
       description: 'Where an imported item came from (Openverse), with its licence; null for uploads',
     }),
+    role: z.enum(MEDIA_ROLES).nullable().openapi({
+      description:
+        'What the item is for: a voice-over take, uploaded narration, or a raw screen recording (private to its uploader until a video uses it); null for library items',
+    }),
+    hasTrace: z.boolean().openapi({ description: 'A screen recording with a pointer trace (PUT …/trace)' }),
     recording: RecordingSchema.nullable().openapi({
       description:
         'For a voice-over recording: its video, where it is used and how long it is kept; null otherwise',

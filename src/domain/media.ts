@@ -250,6 +250,8 @@ export async function mediaDto(deps: Deps, p: Principal, m: MediaRow, usage?: Re
       : null,
     canDelete: m.uploaderId === p.userId || p.role === 'admin',
     source: sourceDto(m),
+    role: m.role,
+    hasTrace: Boolean(m.traceKey),
     // `recording` here is a narration take's details; screen recordings are not takes.
     recording: isTake(m) ? await recordingDto(deps.store, p, m) : null,
   }
