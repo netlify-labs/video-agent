@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
 import { EXAMPLES, PIN } from '../src/examples.js'
-import { INPUTS, OUTPUT_STATUSES, OUTPUTS } from '../src/spec.js'
+import { COMMANDS, INPUTS, OUTPUT_STATUSES, OUTPUTS } from '../src/spec.js'
 
 const root = new URL('../../../', import.meta.url)
 const INPUT_NAMES = new Set<string>(INPUTS.map((i) => i.name))
@@ -58,6 +58,62 @@ describe('outputs', () => {
     expect(listed.sort()).toEqual([...OUTPUT_STATUSES].sort())
     const yml = readFileSync(new URL('packages/action/action.yml', root), 'utf8')
     expect(yml).toContain(status)
+  })
+})
+
+describe('README', () => {
+  const readme = () => readFileSync(new URL('packages/action/README.md', root), 'utf8')
+  /** A table cell back to plain text: GitHub needs \| and &lt; &gt; inside cells. */
+  const plain = (s: string) => s.replace(/\\\|/g, '|').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+  const cells = (line: string) =>
+    line
+      .split(/(?<!\\)\|/)
+      .slice(1, -1)
+      .map((c) => plain(c.trim()))
+  /** The rows of the table whose header cells are `header` (Prettier pads tables, so cells are compared trimmed). */
+  const rows = (md: string, header: string[]) => {
+    const lines = md.split('\n')
+    const start = lines.findIndex((l) => l.startsWith('|') && cells(l).join('|') === header.join('|'))
+    expect(start, header.join(' | ')).toBeGreaterThan(-1)
+    const out = new Map<string, string[]>()
+    for (const line of lines.slice(start + 2)) {
+      if (!line.startsWith('| `')) break
+      const [name, ...rest] = cells(line)
+      out.set(name?.replace(/`/g, '') ?? '', rest)
+    }
+    return out
+  }
+
+  it('carries every example workflow as it is', () => {
+    for (const e of EXAMPLES) expect(readme(), e.id).toContain('```yaml\n' + e.yaml + '```')
+  })
+
+  it('every action line pins the full SHA with the tag', () => {
+    const lines = readme()
+      .split('\n')
+      .filter((l) => l.includes('netlify-labs/video-agent/packages/action@'))
+    expect(lines.length).toBeGreaterThan(EXAMPLES.length)
+    for (const l of lines) expect(l).toMatch(/packages\/action@[0-9a-f]{40} # action-v\d+\.\d+\.\d+$/)
+  })
+
+  it('its input and output tables match spec.ts', () => {
+    const md = readme()
+    const inputs = rows(md, ['Input', 'What it does', 'Default'])
+    expect([...inputs.keys()]).toEqual(INPUTS.map((i) => i.name))
+    for (const i of INPUTS as readonly { name: string; description: string; default?: string }[]) {
+      const [description, def] = inputs.get(i.name) ?? []
+      expect(description, i.name).toBe(i.description)
+      expect(def, i.name).toBe(i.default ? `\`${i.default}\`` : '')
+    }
+    const outputs = rows(md, ['Output', 'What it is'])
+    expect([...outputs.keys()]).toEqual(OUTPUTS.map((o) => o.name))
+    for (const o of OUTPUTS) expect(outputs.get(o.name)?.[0], o.name).toBe(o.description)
+  })
+
+  it('lists every status value and every command', () => {
+    const md = readme()
+    for (const s of OUTPUT_STATUSES) expect(md, s).toContain(`\`${s}\``)
+    for (const c of COMMANDS) expect(md, c).toContain(`\`${c}\``)
   })
 })
 
