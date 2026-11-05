@@ -17,6 +17,7 @@ import {
 import { SPEED_RANGE, VOICE_ID } from './lib/voice.js'
 import { MEDIA_KINDS } from './lib/media/classify.js'
 import { FEATURES } from './domain/features.js'
+import { EDIT_OP_NAMES, ENGINE_IDS, type EditOpName } from './domain/engines.js'
 
 export const ErrorSchema = z
   .object({
@@ -276,6 +277,25 @@ export const VersionCaptionsSchema = z
   })
   .openapi('VersionCaptions')
 
+export const EngineCapabilitiesSchema = z
+  .object({
+    editOps: z
+      .array(z.enum(EDIT_OP_NAMES as unknown as [EditOpName, ...EditOpName[]]))
+      .describe('The edit operations the browser editor may offer on this engine.'),
+    liveDraftPreview: z
+      .boolean()
+      .describe('The editor plays drafts live; otherwise it shows the last render.'),
+    sound: z
+      .enum(['none', 'music', 'all'])
+      .describe('What Sound may be: music is a bed only, all allows effects too.'),
+    voiceover: z.boolean().describe('A generated voice-over is possible.'),
+    revoice: z.boolean().describe('A voiced line can be changed in the editor.'),
+    recordedNarration: z.boolean().describe('Recorded narration (Edit → Narration) is possible.'),
+    scopedRevision: z.boolean().describe('One or more scenes can be redone on their own.'),
+    recording: z.boolean().describe('Screen-recording demos are possible.'),
+  })
+  .openapi('EngineCapabilities')
+
 export const VersionPosterSchema = z
   .object({
     source: z.enum(['frame', 'upload']).describe('A frame picked from the video, or an uploaded image.'),
@@ -366,6 +386,14 @@ export const VersionSchema = z
     editable: z
       .boolean()
       .describe('Ready and keeps editing contract v1, so it can be edited in the browser.'),
+    editing: z
+      .object({
+        engine: z.enum(ENGINE_IDS),
+        capabilities: EngineCapabilitiesSchema,
+      })
+      .describe(
+        'The render engine that made this version (a video keeps one) and what the editor may offer on it. editable still decides whether the editor opens.',
+      ),
     mode: z
       .enum(['author', 'render_unchanged'])
       .describe(

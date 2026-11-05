@@ -7,6 +7,20 @@ const ago = (min: number) => new Date(now - min * 60_000).toISOString()
 const SITE = window.location.origin
 
 type V = Video['versions'][number]
+/** What a HyperFrames version's editor may offer (src/domain/engines.ts). */
+const hyperframes: V['editing'] = {
+  engine: 'hyperframes',
+  capabilities: {
+    editOps: ['text', 'retime', 'reorder', 'delete', 'color', 'media', 'audio', 'voice'],
+    liveDraftPreview: true,
+    sound: 'all',
+    voiceover: true,
+    revoice: true,
+    recordedNarration: true,
+    scopedRevision: false,
+    recording: false,
+  },
+}
 const files = (id: string, n: number): V['links'] => ({
   video: `/api/v1/videos/${id}/versions/${n}/video`,
   poster: `/api/v1/videos/${id}/versions/${n}/poster`,
@@ -89,6 +103,7 @@ function ready(
     incorporates: o.feedback?.length ?? 0,
     feedback: o.feedback ?? [],
     editable: o.editable ?? false,
+    editing: hyperframes,
     mode: 'author',
     editedFromN: null,
 
@@ -242,6 +257,7 @@ export const videos: Video[] = [
       incorporates: 0,
       feedback: [],
       editable: false,
+      editing: hyperframes,
       mode: 'author',
       editedFromN: null,
 
@@ -281,6 +297,7 @@ export const videos: Video[] = [
       incorporates: 0,
       feedback: [],
       editable: false,
+      editing: hyperframes,
       mode: 'author',
       editedFromN: null,
 
@@ -450,6 +467,7 @@ export const videos: Video[] = [
       incorporates: 0,
       feedback: [],
       editable: false,
+      editing: hyperframes,
       mode: 'author',
       editedFromN: null,
 

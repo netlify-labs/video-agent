@@ -18,6 +18,7 @@ import { writeAccessMirror } from './files.js'
 import { mediaDto, snapshotMedia } from './media.js'
 import { isTake } from './takes.js'
 import { assertCan, type Principal } from './policy.js'
+import { assertSameEngine, engineOf } from './engines.js'
 import { assertRemixEnabled } from './remix-settings.js'
 import type { Aspect, JobRow, OutputRow, VersionRemix, VersionRow, VideoSound } from './types.js'
 import {
@@ -235,7 +236,7 @@ export async function remixVideo(
       const kept = finalIds ? inherited.filter((m) => finalIds.includes(m.mediaId)) : inherited
       const picks = [...(planned?.mediaIds ?? []), ...(finalIds ?? [])]
       const media = await snapshotMedia(repo, newJobId, 1, picks, kept)
-      await repo.insertVersion({
+      const row: VersionRow = {
         jobId: newJobId,
         n: 1,
         prompt: input.prompt,
@@ -251,7 +252,11 @@ export async function remixVideo(
         plan: planned?.frozen ?? null,
         ...versionAudio(input, planned, version, media, inherited),
         remix,
-      })
+        // The source's engine: a remix is made the way its source was (render-engines §4.2).
+        engine: engineOf(version),
+      }
+      assertSameEngine(deps, version, row)
+      await repo.insertVersion(row)
       await repo.insertVersionMedia(media)
       await repo.insertAttempt(newAttempt(deps, newJobId, 1, now))
       // Adopt the copy: the reservation row is done, so the sweep never deletes it.

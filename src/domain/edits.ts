@@ -51,6 +51,7 @@ import {
   type BundleIndex,
 } from './bundles.js'
 import { assertCan, type Principal } from './policy.js'
+import { assertSameEngine, engineOf } from './engines.js'
 import { snapshotMedia } from './media.js'
 import { addAttemptRefs, canReadTake, isTake, releaseOwnerRefs, replaceDraftRefs } from './takes.js'
 import { getSettings } from './settings.js'
@@ -58,7 +59,7 @@ import { narrationEnabled, narrationSettings } from './narration-settings.js'
 import { assertNarrationLock } from './narration-lock.js'
 import { canonical, narrationChangedSince } from './narration-stale.js'
 import type { Repo } from '../store/types.js'
-import { type EditRow, type MediaRow, type TranscriptionProvider } from './types.js'
+import { type EditRow, type MediaRow, type TranscriptionProvider, type VersionRow } from './types.js'
 import { hasUnfinished, loadJob, newAttempt, videoDto, withIdempotency } from './videos.js'
 
 export const EDIT_TTL_MS = 7 * 24 * 3600_000
@@ -753,7 +754,7 @@ export async function renderEdit(
       await deps.blobs.set('sources', key, archive, { contentType: 'application/gzip' })
       const now = deps.clock.now().toISOString()
       const base = await repo.getVersion(e.jobId, e.baseN)
-      await repo.insertVersion({
+      const row: VersionRow = {
         jobId: e.jobId,
         n,
         prompt: fit
@@ -790,7 +791,11 @@ export async function renderEdit(
         // The composition (and any audio in it) is the base's, so its sound and voice-over are too.
         sound: base?.sound ?? 'silent',
         voiceover: base?.voiceover ?? null,
-      })
+        // The base's engine: an edit renders the base's composition (render-engines §4.2).
+        engine: engineOf(base),
+      }
+      if (base) assertSameEngine(deps, base, row)
+      await repo.insertVersion(row)
       await repo.insertVersionMedia(
         await snapshotMedia(repo, e.jobId, n, r.picks, await repo.listVersionMedia(e.jobId, e.baseN)),
       )

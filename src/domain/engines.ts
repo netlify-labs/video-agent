@@ -4,10 +4,11 @@
 // Remotion entry exists so its capabilities are fixed in one place, and Phase 2 adds ENGINES and the admin setting.
 import type { Deps } from '../deps.js'
 import type { EditOp } from '../lib/contract.js'
+import { ApiError } from '../lib/errors.js'
 
 export type EngineId = 'hyperframes' | 'remotion'
 
-export const ENGINE_IDS: readonly EngineId[] = ['hyperframes', 'remotion']
+export const ENGINE_IDS = ['hyperframes', 'remotion'] as const satisfies readonly EngineId[]
 
 export function isEngineId(x: unknown): x is EngineId {
   return typeof x === 'string' && (ENGINE_IDS as readonly string[]).includes(x)
@@ -65,6 +66,15 @@ const CONTRACT_OPS: Record<EditOp['op'], true> = {
   audio: true,
   voice: true,
 }
+
+/** Every op name an engine may list, for the API schema: the contract's eight, then the screen-recording plan's. */
+export const EDIT_OP_NAMES = [
+  ...(Object.keys(CONTRACT_OPS) as EditOp['op'][]),
+  'span',
+  'camera',
+  'cursor',
+  'redact',
+] as const satisfies readonly EditOpName[]
 
 const scopeChecks = new Map<EngineId, ScopeCheck>()
 
@@ -129,3 +139,31 @@ export function engineInfo(id: EngineId): EngineInfo {
  * admin's Remotion acknowledgment (§7); it's async now so callers don't change then.
  */
 export const enabledEngines: (deps: Deps) => Promise<EngineInfo[]> = async () => [engineInfo('hyperframes')]
+
+/** A version's engine; a row written before engines existed is HyperFrames. */
+export const engineOf = (v: { engine?: EngineId | undefined } | null | undefined): EngineId =>
+  v?.engine ?? 'hyperframes'
+
+/**
+ * A video's engine never changes (render-engines plan §4.2): revisions, remixes, edit renders and incorporated
+ * feedback take their parent's. Only a bug can get here, so it's logged as an error and refused.
+ */
+export function assertSameEngine(
+  deps: Pick<Deps, 'log'>,
+  parent: { jobId: string; n: number; engine?: EngineId | undefined },
+  child: { jobId: string; n: number; engine?: EngineId | undefined },
+): void {
+  const [want, got] = [engineOf(parent), engineOf(child)]
+  if (want === got) return
+  deps.log.error('engine.mismatch', {
+    jobId: child.jobId,
+    n: child.n,
+    parentN: parent.n,
+    parentEngine: want,
+    engine: got,
+  })
+  throw new ApiError(
+    'engine_mismatch',
+    `Version ${child.n} would be made with ${engineInfo(got).name}, but it comes from a ${engineInfo(want).name} version. A video keeps one engine.`,
+  )
+}

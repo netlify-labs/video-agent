@@ -8,6 +8,7 @@ export type ErrorCode =
   | 'take_deleted'
   | 'narration_disabled'
   | 'remix_disabled'
+  | 'engine_mismatch'
   | 'narration_locked'
   | 'gone'
   | 'quota_exceeded'
@@ -27,6 +28,7 @@ const STATUS: Record<ErrorCode, number> = {
   take_deleted: 409,
   narration_disabled: 409,
   remix_disabled: 409,
+  engine_mismatch: 409,
   narration_locked: 409,
   gone: 410,
   quota_exceeded: 413,

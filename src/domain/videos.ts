@@ -60,6 +60,7 @@ import {
   sharePageEntry,
 } from './destinations/dto.js'
 import { removeAllForJob } from './destinations/remove.js'
+import { assertSameEngine, engineInfo, engineOf } from './engines.js'
 import type { DestinationPublicationRow } from './types.js'
 
 const IDEMPOTENCY_TTL_MS = 24 * 3600_000
@@ -373,6 +374,8 @@ export async function createVideo(
         plan: planned?.frozen ?? null,
         // A picked audio item means music unless the person chose otherwise.
         ...versionAudio(input, planned, null, media),
+        // HyperFrames until the looks plan's engine choice rule lands (render-engines §4.2).
+        engine: 'hyperframes',
       })
       await repo.insertAttempt(newAttempt(deps, jobId, 1, now))
       return { status: 202, body: await videoDto(repo, deps, jobId, principal) }
@@ -459,7 +462,7 @@ export async function reviseVideo(
         [...(planned?.mediaIds ?? []), ...(input.mediaIds ?? []), ...feedbackMediaIds(feedback)],
         inherited,
       )
-      await repo.insertVersion({
+      const row: VersionRow = {
         jobId,
         n,
         prompt: input.prompt,
@@ -479,7 +482,11 @@ export async function reviseVideo(
         // Sound and voice-over are inherited unless changed; a plan without a voice-over choice keeps the parent's
         // (turning it off is an explicit enabled: false).
         ...versionAudio(input, planned, parent, media, inherited),
-      })
+        // The parent's engine: a video keeps one (render-engines §4.2).
+        engine: engineOf(parent),
+      }
+      assertSameEngine(deps, parent, row)
+      await repo.insertVersion(row)
       await repo.insertVersionComments(feedback)
       await repo.insertVersionMedia(media)
       await repo.insertAttempt(newAttempt(deps, jobId, n, now))
@@ -925,6 +932,8 @@ function versionDto(
       spot: c.x !== null && c.y !== null,
     })),
     editable: v.status === 'ready' && v.contract === 1,
+    // What the editor may offer on this version's engine (render-engines §4.2); editable still decides whether it opens.
+    editing: { engine: engineOf(v), capabilities: engineInfo(engineOf(v)).capabilities },
     mode: v.mode ?? 'author',
     editedFromN: v.editedFromN ?? null,
     n: v.n,
