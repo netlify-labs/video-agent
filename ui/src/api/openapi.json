@@ -419,6 +419,20 @@
             "type": "boolean",
             "description": "You starred this video (only you see your favorites)"
           },
+          "externalRef": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "What the video is for outside the app (set at creation), or null"
+          },
+          "externalUrl": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A link to it, or null"
+          },
           "links": {
             "type": "object",
             "properties": {
@@ -450,6 +464,8 @@
           "isRemix",
           "remixOf",
           "favorite",
+          "externalRef",
+          "externalUrl",
           "links"
         ]
       },
@@ -581,6 +597,9 @@
               ]
             },
             "description": "The comments this version was asked to incorporate, as they were sent, in order."
+          },
+          "context": {
+            "$ref": "#/components/schemas/Context"
           },
           "editable": {
             "type": "boolean",
@@ -1040,6 +1059,7 @@
           "verdicts",
           "incorporates",
           "feedback",
+          "context",
           "editable",
           "beats",
           "scope",
@@ -1176,6 +1196,45 @@
           "changes_requested",
           null
         ]
+      },
+      "Context": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "github_pr",
+              "github_release",
+              "changelog",
+              "text"
+            ]
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "example": "GitHub PR #123"
+          },
+          "url": {
+            "type": "string",
+            "maxLength": 500,
+            "format": "uri"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 16000
+          }
+        },
+        "required": [
+          "source",
+          "label",
+          "text"
+        ],
+        "description": "Background this version was made with, if any."
       },
       "BeatInfo": {
         "type": "object",
@@ -1922,6 +1981,33 @@
             ],
             "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
             "description": "A look id (GET /api/v1/looks). Omit for the plan's look, else the admin's default (none unless set); null for no look. Errors: 400 unknown_look, 409 look_disabled."
+          },
+          "externalRef": {
+            "type": "string",
+            "maxLength": 200,
+            "pattern": "^[a-z]+:[^\\s]+$",
+            "example": "github:acme/web#pr-123",
+            "description": "What the video is for outside the app. Set once; find the video again with GET /api/v1/videos?externalRef=. Not unique."
+          },
+          "externalUrl": {
+            "type": "string",
+            "maxLength": 500,
+            "format": "uri",
+            "description": "A link to that thing (https), shown on the video page."
+          },
+          "private": {
+            "type": "boolean",
+            "description": "Make the video private (you and admins only) from the start. Needs permission to make videos private."
+          },
+          "context": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Context"
+              },
+              {
+                "description": "Background for the run (a PR, release notes) outside the prompt, read as data."
+              }
+            ]
           }
         },
         "required": [
@@ -2083,6 +2169,16 @@
             ],
             "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
             "description": "Omit to keep the revised version's look; null for no look. A different look (or a newer version of the same one) is a restyle: a full run that keeps the story and rebuilds how it looks. Errors: 400 unknown_look, 409 look_disabled, 409 look_not_allowed (a version with recorded narration)."
+          },
+          "context": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Context"
+              },
+              {
+                "description": "Background for this version's run, read as data. Not inherited: a revision without one has none."
+              }
+            ]
           }
         },
         "required": [
@@ -2173,6 +2269,33 @@
             ],
             "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
             "description": "Omit to keep the source version's look; null for no look. Another look restyles the remix (a full run, as any remix). Errors: 400 unknown_look, 409 look_disabled."
+          },
+          "externalRef": {
+            "type": "string",
+            "maxLength": 200,
+            "pattern": "^[a-z]+:[^\\s]+$",
+            "example": "github:acme/web#pr-123",
+            "description": "What the video is for outside the app. Set once; find the video again with GET /api/v1/videos?externalRef=. Not unique."
+          },
+          "externalUrl": {
+            "type": "string",
+            "maxLength": 500,
+            "format": "uri",
+            "description": "A link to that thing (https), shown on the video page."
+          },
+          "private": {
+            "type": "boolean",
+            "description": "Make the remix private (you and admins only) from the start. A private video's remix is private either way."
+          },
+          "context": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Context"
+              },
+              {
+                "description": "Background for the run (a PR, release notes) outside the prompt, read as data."
+              }
+            ]
           }
         },
         "required": [
@@ -7050,7 +7173,11 @@
           "method": "create",
           "fieldFeatures": {
             "planId": "planning",
-            "look": "looks"
+            "look": "looks",
+            "externalRef": "external_ref",
+            "externalUrl": "external_ref",
+            "private": "external_ref",
+            "context": "context"
           }
         },
         "summary": "Create a video",
@@ -7164,7 +7291,10 @@
         "operationId": "listVideos",
         "x-sdk": {
           "resource": "videos",
-          "method": "list"
+          "method": "list",
+          "fieldFeatures": {
+            "externalRef": "external_ref"
+          }
         },
         "summary": "List videos",
         "description": "Lists videos, newest first.",
@@ -7233,6 +7363,19 @@
             },
             "required": false,
             "name": "q",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 200,
+              "pattern": "^[a-z]+:[^\\s]+$",
+              "example": "github:acme/web#pr-123",
+              "description": "Only videos made with this externalRef (exact match), newest first"
+            },
+            "required": false,
+            "description": "Only videos made with this externalRef (exact match), newest first",
+            "name": "externalRef",
             "in": "query"
           },
           {
@@ -7784,7 +7927,8 @@
           "fieldFeatures": {
             "planId": "planning",
             "scope": "scoped_revision",
-            "look": "looks"
+            "look": "looks",
+            "context": "context"
           }
         },
         "summary": "Revise a video",
@@ -7912,7 +8056,11 @@
           "feature": "remix",
           "fieldFeatures": {
             "planId": "planning",
-            "look": "looks"
+            "look": "looks",
+            "externalRef": "external_ref",
+            "externalUrl": "external_ref",
+            "private": "external_ref",
+            "context": "context"
           }
         },
         "summary": "Remix a video",

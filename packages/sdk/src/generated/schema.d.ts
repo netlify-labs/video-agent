@@ -1996,6 +1996,10 @@ export interface components {
             } | null;
             /** @description You starred this video (only you see your favorites) */
             favorite: boolean;
+            /** @description What the video is for outside the app (set at creation), or null */
+            externalRef: string | null;
+            /** @description A link to it, or null */
+            externalUrl: string | null;
             links: {
                 self: string;
             };
@@ -2029,6 +2033,7 @@ export interface components {
                 /** @description The comment marked a spot on the frame */
                 spot: boolean;
             }[];
+            context: components["schemas"]["Context"];
             /** @description Ready and keeps editing contract v1, so it can be edited in the browser. */
             editable: boolean;
             /** @description This version's scenes, when known. Null: not known yet (ask GET …/versions/{n}/beats) or not a version that can be redone scene by scene. */
@@ -2163,6 +2168,16 @@ export interface components {
         };
         /** @enum {string|null} */
         Verdict: "approved" | "changes_requested" | null;
+        /** @description Background this version was made with, if any. */
+        Context: {
+            /** @enum {string} */
+            source: "github_pr" | "github_release" | "changelog" | "text";
+            /** @example GitHub PR #123 */
+            label: string;
+            /** Format: uri */
+            url?: string;
+            text: string;
+        } | null;
         BeatInfo: {
             /** @description The beat id: what scope.beats and the CLI's --scene take. */
             id: string;
@@ -2369,6 +2384,19 @@ export interface components {
             voiceover?: components["schemas"]["VoiceoverInput"];
             /** @description A look id (GET /api/v1/looks). Omit for the plan's look, else the admin's default (none unless set); null for no look. Errors: 400 unknown_look, 409 look_disabled. */
             look?: string | null;
+            /**
+             * @description What the video is for outside the app. Set once; find the video again with GET /api/v1/videos?externalRef=. Not unique.
+             * @example github:acme/web#pr-123
+             */
+            externalRef?: string;
+            /**
+             * Format: uri
+             * @description A link to that thing (https), shown on the video page.
+             */
+            externalUrl?: string;
+            /** @description Make the video private (you and admins only) from the start. Needs permission to make videos private. */
+            private?: boolean;
+            context?: components["schemas"]["Context"] & unknown;
         };
         /** @description A spoken narration with captions from its words. Omit for the plan's choice, else none. */
         VoiceoverInput: {
@@ -2409,6 +2437,7 @@ export interface components {
             };
             /** @description Omit to keep the revised version's look; null for no look. A different look (or a newer version of the same one) is a restyle: a full run that keeps the story and rebuilds how it looks. Errors: 400 unknown_look, 409 look_disabled, 409 look_not_allowed (a version with recorded narration). */
             look?: string | null;
+            context?: components["schemas"]["Context"] & unknown;
         };
         Remix: {
             /**
@@ -2435,6 +2464,19 @@ export interface components {
             webhookUrl?: string;
             /** @description Omit to keep the source version's look; null for no look. Another look restyles the remix (a full run, as any remix). Errors: 400 unknown_look, 409 look_disabled. */
             look?: string | null;
+            /**
+             * @description What the video is for outside the app. Set once; find the video again with GET /api/v1/videos?externalRef=. Not unique.
+             * @example github:acme/web#pr-123
+             */
+            externalRef?: string;
+            /**
+             * Format: uri
+             * @description A link to that thing (https), shown on the video page.
+             */
+            externalUrl?: string;
+            /** @description Make the remix private (you and admins only) from the start. A private video's remix is private either way. */
+            private?: boolean;
+            context?: components["schemas"]["Context"] & unknown;
         };
         Media: {
             id: string;
@@ -3646,6 +3688,8 @@ export interface operations {
                 /** @description true: only videos you starred */
                 favorite?: "true" | "false";
                 q?: string;
+                /** @description Only videos made with this externalRef (exact match), newest first */
+                externalRef?: string;
                 cursor?: string;
                 limit?: number;
             };
