@@ -31,6 +31,7 @@ const RELIED_ON = [
   'versions.unpublish',
   'versions.setVerdict',
   'versions.captions',
+  'versions.beats',
   'files.url',
   'files.download',
   'plans.create',
