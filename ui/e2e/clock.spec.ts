@@ -7,13 +7,25 @@ async function startTake(page: Page) {
   await page.getByRole('button', { name: 'Start', exact: true }).click()
   await expect(page.getByTestId('clock-state')).toHaveText('running')
   // About a second of frames.
-  await expect.poll(async () => Number(await page.getByTestId('clock-anchors').textContent()), { timeout: 10_000 }).toBeGreaterThan(25)
+  await expect
+    .poll(async () => Number(await page.getByTestId('clock-anchors').textContent()), { timeout: 10_000 })
+    .toBeGreaterThan(25)
 }
 
 test('clock: anchors from the muted picture fit as one clean segment, with a placement', async ({ page }) => {
   await startTake(page)
   await expect(page.getByTestId('clock-offset')).toHaveText(/ms$/)
   await expect(page.getByTestId('clock-fit')).not.toHaveAttribute('data-segments', '0')
+  // Wait for the half second of clean audio asserted below, not for a frame count: on a slow machine 25 frames can
+  // arrive with a little less clean audio than that (CI saw 23,792 samples).
+  await expect
+    .poll(
+      async () =>
+        (JSON.parse((await page.getByTestId('clock-fit').textContent()) ?? '{}') as { cleanSamples?: number })
+          .cleanSamples ?? 0,
+      { timeout: 10_000 },
+    )
+    .toBeGreaterThan(24_000)
   await page.getByRole('button', { name: 'Stop' }).click()
   await expect(page.getByTestId('clock-stop')).toHaveAttribute('data-kind', 'user')
   const fit = JSON.parse((await page.getByTestId('clock-fit').textContent()) ?? '{}') as {
@@ -37,7 +49,9 @@ test('clock: hiding the tab stops the take with its reason', async ({ page }) =>
   await expect(page.getByTestId('clock-stop')).toHaveAttribute('data-kind', 'hidden')
   await expect(page.getByTestId('clock-stop')).toContainText('Keep this tab in front')
   await expect(page.getByTestId('clock-state')).toHaveText('stopped')
-  const fit = JSON.parse((await page.getByTestId('clock-fit').textContent()) ?? '{}') as { cleanSamples: number }
+  const fit = JSON.parse((await page.getByTestId('clock-fit').textContent()) ?? '{}') as {
+    cleanSamples: number
+  }
   expect(fit.cleanSamples).toBeGreaterThan(0)
 })
 
