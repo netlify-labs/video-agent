@@ -133,6 +133,18 @@ export interface SettingsRow {
   disabledLooks?: string[]
   /** video-agent login's browser approval on (the default) or off (cli-and-sdk plan §5.2). Missing: the default. */
   cliLoginEnabled?: boolean
+  /** The admin's Remotion switch (render-engines plan §7). Missing: off. */
+  remotionEnabled?: boolean
+  /** Who chose the Remotion license tier, when, and which. No key or secret is ever stored. */
+  remotionLicenseAck?: RemotionLicenseAck | null
+}
+
+export interface RemotionLicenseAck {
+  by: string
+  email: string
+  at: string
+  tier: 'free' | 'company'
+  note: string | null
 }
 
 export type TranscriptionProvider = 'local' | 'elevenlabs' | 'off'
@@ -535,6 +547,8 @@ export interface AttemptRow {
   /** The agent's final answer, truncated. */
   resultText?: string | null
   usage: Usage | null
+  /** Remotion's render count for the run, from render-job's manifest; null or missing for HyperFrames. */
+  engineRenders?: { video: number; stills: number; audio: number } | null
   errorCategory: FailureCategory | null
   errorMessage: string | null
   queuedAt: string

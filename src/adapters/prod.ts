@@ -27,6 +27,7 @@ export function prodDeps(): Deps {
   const log = createLogger({ service: 'video-agent' }, undefined, { verbose: verboseFromEnv() })
   const env = process.env
   const config = readConfig(env)
+  for (const id of config.enginesIgnored) log.warn('config.engines_unknown', { id })
   const store = createDrizzleStore(drizzle({ schema }))
   const token = env.RUNNER_API_TOKEN ?? null
   const partial = { store, ids, clock: { now: () => new Date() }, blobs: netlifyBlobs }

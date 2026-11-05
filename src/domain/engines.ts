@@ -135,11 +135,22 @@ export function engineInfo(id: EngineId): EngineInfo {
   }
 }
 
+/** Whether this deployment lists Remotion in ENGINES: the only thing that makes any Remotion UI appear (§7). */
+export const remotionConfigured = (deps: Pick<Deps, 'config'>) => deps.config.engines.includes('remotion')
+
 /**
- * Engines enabled for new videos on this deployment. Phase 1: HyperFrames only. Phase 2 adds ENGINES and the
- * admin's Remotion acknowledgment (§7); it's async now so callers don't change then.
+ * Engines enabled for new videos (§7): HyperFrames always; Remotion only when ENGINES lists it, an admin switched it
+ * on and recorded a license tier, and a Company License has its key set.
  */
-export const enabledEngines: (deps: Deps) => Promise<EngineInfo[]> = async () => [engineInfo('hyperframes')]
+export async function enabledEngines(deps: Pick<Deps, 'config' | 'store'>): Promise<EngineInfo[]> {
+  const out = [engineInfo('hyperframes')]
+  if (!remotionConfigured(deps)) return out
+  const s = await deps.store.getSettings()
+  const ack = s?.remotionLicenseAck ?? null
+  if (s?.remotionEnabled && ack && (ack.tier === 'free' || deps.config.remotionKeySet))
+    out.push(engineInfo('remotion'))
+  return out
+}
 
 /** A version's engine; a row written before engines existed is HyperFrames. */
 export const engineOf = (v: { engine?: EngineId | undefined } | null | undefined): EngineId =>

@@ -34,6 +34,9 @@ export const settings = pgTable('settings', {
   recordingQuotaBytes: bigint('recording_quota_bytes', { mode: 'number' }).notNull().default(2147483648),
   // Remixing (docs/plans/2026-11-03-remix.md §4): admins can turn it off without a redeploy.
   remixEnabled: boolean('remix_enabled').notNull().default(true),
+  // The Remotion engine (render-engines plan §7): an admin's switch, and the license choice recorded with it.
+  remotionEnabled: boolean('remotion_enabled').notNull().default(false),
+  remotionLicenseAck: jsonb('remotion_license_ack'),
   // Publish destinations (docs/plans/2026-11-04-publish-destinations.md §4): YouTube is offered only when the Google
   // OAuth env is set and an admin turns it on.
   youtubeEnabled: boolean('youtube_enabled').notNull().default(false),
@@ -184,6 +187,8 @@ export const attempts = pgTable(
     // The agent's final answer (truncated): why a run ended without a video, when it did.
     resultText: text('result_text'),
     usage: jsonb('usage'),
+    // Remotion's render count for the run ({ video, stills, audio }); null for HyperFrames.
+    engineRenders: jsonb('engine_renders'),
     errorCategory: text('error_category'),
     errorMessage: text('error_message'),
     queuedAt: ts('queued_at').notNull(),

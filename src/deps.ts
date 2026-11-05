@@ -6,6 +6,7 @@ import type { Store } from './store/types.js'
 import type { Usage } from './domain/types.js'
 import type { UpstreamIdentity } from './auth/upstream.js'
 import type { LookCatalogEntry } from './lib/looks.js'
+import { isEngineId, type EngineId } from './domain/engines.js'
 
 export interface Config {
   allowedEmailDomains: string[] | 'invite-only' | null
@@ -37,6 +38,17 @@ export interface Config {
   netlifyRequiredTeams: string[]
   /** A registered Openverse app (higher rate limits); null for anonymous access. */
   openverse: { clientId: string; clientSecret: string } | null
+  /**
+   * Render engines this deployment may offer (ENGINES; render-engines plan §7). HyperFrames is always in it. Remotion
+   * listed here still needs an admin's switch and license choice before anyone can use it.
+   */
+  engines: EngineId[]
+  /** ENGINES entries that aren't engines: logged once at startup, otherwise ignored. */
+  enginesIgnored: string[]
+  /** Whether VIDEO_AGENT_REMOTION_KEY is set (its value is only ever read inside a run). */
+  remotionKeySet: boolean
+  /** VIDEO_AGENT_REMOTION_DEVELOPMENT=1: a scratch or test deployment whose Remotion renders are development ones. */
+  remotionDevelopmentRenders: boolean
 }
 
 export interface McpOAuthConfig {
@@ -123,6 +135,13 @@ export function readConfig(env: Record<string, string | undefined>): Config {
       env.OPENVERSE_CLIENT_ID?.trim() && env.OPENVERSE_CLIENT_SECRET?.trim()
         ? { clientId: env.OPENVERSE_CLIENT_ID.trim(), clientSecret: env.OPENVERSE_CLIENT_SECRET.trim() }
         : null,
+    engines: [
+      'hyperframes',
+      ...list(env.ENGINES).filter((e): e is EngineId => isEngineId(e) && e !== 'hyperframes'),
+    ],
+    enginesIgnored: list(env.ENGINES).filter((e) => !isEngineId(e)),
+    remotionKeySet: Boolean(env.VIDEO_AGENT_REMOTION_KEY?.trim()),
+    remotionDevelopmentRenders: env.VIDEO_AGENT_REMOTION_DEVELOPMENT === '1',
   }
 }
 

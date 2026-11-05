@@ -12,7 +12,11 @@ import {
   type ScopeCheck,
   scopeCheckFor,
 } from '../src/domain/engines.js'
+import { readConfig } from '../src/deps.js'
+import { getSettings } from '../src/domain/settings.js'
+import { remotionConfigured } from '../src/domain/engines.js'
 import { makeDeps } from './fakes.js'
+import { harness, pgStore } from './helpers.js'
 
 afterEach(() => resetScopeChecks())
 
@@ -100,5 +104,100 @@ describe('engines', () => {
   it('EditOpName admits the screen-recording ops', () => {
     expectTypeOf<'span' | 'camera' | 'cursor' | 'redact' | 'text'>().toExtend<EditOpName>()
     expectTypeOf<'fly'>().not.toExtend<EditOpName>()
+  })
+})
+
+describe('which engines a deployment offers (render-engines §7)', () => {
+  const ack = (tier: 'free' | 'company') => ({
+    by: 'u_admin',
+    email: 'a@acme.com',
+    at: '2026-11-05T00:00:00Z',
+    tier,
+    note: null,
+  })
+  async function offered(
+    env: Record<string, string>,
+    settings: { remotionEnabled?: boolean; remotionLicenseAck?: ReturnType<typeof ack> | null },
+  ) {
+    const deps = makeDeps(env)
+    await getSettings(deps)
+    await deps.store.updateSettings(settings)
+    return (await enabledEngines(deps)).map((e) => e.id)
+  }
+
+  it.each([
+    ['ENGINES unset', {}, { remotionEnabled: true, remotionLicenseAck: ack('free') }, ['hyperframes']],
+    [
+      'listed, switched off',
+      { ENGINES: 'hyperframes,remotion' },
+      { remotionEnabled: false, remotionLicenseAck: ack('free') },
+      ['hyperframes'],
+    ],
+    [
+      'listed, on, no license choice',
+      { ENGINES: 'remotion' },
+      { remotionEnabled: true, remotionLicenseAck: null },
+      ['hyperframes'],
+    ],
+    [
+      'listed, on, Free License',
+      { ENGINES: 'remotion' },
+      { remotionEnabled: true, remotionLicenseAck: ack('free') },
+      ['hyperframes', 'remotion'],
+    ],
+    [
+      'listed, on, Company License with its key',
+      { ENGINES: 'remotion', VIDEO_AGENT_REMOTION_KEY: 'rm_sec_x' },
+      { remotionEnabled: true, remotionLicenseAck: ack('company') },
+      ['hyperframes', 'remotion'],
+    ],
+    [
+      'listed, on, Company License without its key',
+      { ENGINES: 'remotion' },
+      { remotionEnabled: true, remotionLicenseAck: ack('company') },
+      ['hyperframes'],
+    ],
+    [
+      'not listed, key set, on',
+      { VIDEO_AGENT_REMOTION_KEY: 'rm_sec_x' },
+      { remotionEnabled: true, remotionLicenseAck: ack('company') },
+      ['hyperframes'],
+    ],
+    ['listed, never configured', { ENGINES: 'remotion' }, {}, ['hyperframes']],
+  ])('%s', async (_name, env, settings, want) => {
+    expect(await offered(env, settings)).toEqual(want)
+  })
+
+  it('reads ENGINES leniently: spaces and case, HyperFrames always first, unknown ids set aside', () => {
+    expect(readConfig({ ENGINES: ' Remotion , hyperframes ,lottie' })).toMatchObject({
+      engines: ['hyperframes', 'remotion'],
+      enginesIgnored: ['lottie'],
+    })
+    expect(readConfig({}).engines).toEqual(['hyperframes'])
+    expect(readConfig({ VIDEO_AGENT_REMOTION_KEY: '  ' }).remotionKeySet).toBe(false)
+    expect(readConfig({ VIDEO_AGENT_REMOTION_DEVELOPMENT: '1' }).remotionDevelopmentRenders).toBe(true)
+    expect(remotionConfigured({ config: readConfig({ ENGINES: 'remotion' }) })).toBe(true)
+    expect(remotionConfigured({ config: readConfig({}) })).toBe(false)
+  })
+
+  it('with ENGINES unset, /api/v1/config is what it was', async () => {
+    const plain = harness()
+    const named = harness({ ENGINES: 'hyperframes' })
+    const body = async (h: ReturnType<typeof harness>) =>
+      (await h.call('GET', '/api/v1/config', { as: h.member })).text()
+    const [a, b] = [await body(plain), await body(named)]
+    expect(a).toBe(b)
+    expect(a).not.toContain('remotion')
+  })
+
+  it('the settings columns default off and round-trip on Postgres', async () => {
+    const deps = makeDeps({}, await pgStore())
+    await getSettings(deps)
+    expect(await deps.store.getSettings()).toMatchObject({ remotionEnabled: false, remotionLicenseAck: null })
+    await deps.store.updateSettings({ remotionEnabled: true, remotionLicenseAck: ack('company') })
+    expect(await deps.store.getSettings()).toMatchObject({
+      remotionEnabled: true,
+      remotionLicenseAck: ack('company'),
+    })
   })
 })
