@@ -850,4 +850,177 @@ describe('contract: recording scenes', () => {
     )
     expect(missingLocalFiles(files(plain))).toEqual(['assets/recording/add-site.hold.jpg'])
   })
+
+  // va-rsk5.3.10: span, camera, cursor and redact; the media op refused on a recording slot.
+  describe('recording ops', () => {
+    const apply = (ops: Parameters<typeof applyEdits>[2], opts: Parameters<typeof applyEdits>[3] = {}) =>
+      applyEdits(rec, recSummary, ops, opts)
+    const attrOf = (h: string, name: string) =>
+      [...walk(load(h).root)]
+        .map((e) => e.attrs.find((a) => a.name === name)?.value)
+        .find((v) => v !== undefined)
+    const refused = (name: string, ops: Parameters<typeof applyEdits>[2], msg: RegExp) => {
+      let error = ''
+      try {
+        apply(ops)
+      } catch (e) {
+        error = e instanceof Error ? e.message : String(e)
+      }
+      logCase('op', { name, ok: false, error })
+      expect(error, name).toMatch(msg)
+    }
+
+    it('span trims the step: media start and rate follow; keys and clicks outside go', () => {
+      const r = apply([{ op: 'span', beat: 'add-site', in: 3, out: 11 }])
+      logCase('op', { name: 'span', ok: true })
+      expect(slotOf(r.html)).toEqual({ duration: 7.5, rate: 1.0667, mediaStart: 3, hold: null })
+      expect(JSON.parse(attrOf(r.html, 'data-va-camera') ?? '[]')).toEqual([
+        [3.4, 0.6, 0.31, 1.9, 'power2.inOut'],
+        [10.9, 0.6, 0.31, 1.9],
+      ])
+      expect(validate(r.html, r.summary)).toEqual([])
+    })
+
+    it('span widening reports where there is no cursor data; past 4x is refused', () => {
+      const cursorGaps: Record<string, [number, number][]> = {}
+      apply([{ op: 'span', beat: 'add-site', in: 1, out: 12.5 }], { cursorGaps })
+      expect(cursorGaps).toEqual({
+        'add-site': [
+          [1, 2],
+          [12, 12.5],
+        ],
+      })
+      refused('span past 4x', [{ op: 'span', beat: 'add-site', in: 0, out: 40 }], /at most 4× faster/)
+      refused('span reversed', [{ op: 'span', beat: 'add-site', in: 5, out: 4 }], /in first/)
+      refused(
+        'span on a plain scene',
+        [{ op: 'span', beat: 'intro', in: 0, out: 1 }],
+        /isn't a recording scene/,
+      )
+    })
+
+    it('camera replaces the keys; bad keys are refused', () => {
+      const keys = [
+        [2, 0.5, 0.5, 1],
+        [6, 0.3, 0.4, 2, 'sine.inOut'],
+        [12, 0.5, 0.5, 1, 'power2.out'],
+      ]
+      const r = apply([{ op: 'camera', beat: 'add-site', keys }])
+      expect(JSON.parse(attrOf(r.html, 'data-va-camera') ?? '[]')).toEqual(keys)
+      refused(
+        'unsorted',
+        [
+          {
+            op: 'camera',
+            beat: 'add-site',
+            keys: [
+              [6, 0.5, 0.5, 1],
+              [3, 0.5, 0.5, 1],
+            ],
+          },
+        ],
+        /time order/,
+      )
+      refused(
+        'outside the frame',
+        [{ op: 'camera', beat: 'add-site', keys: [[3, 1.2, 0.5, 1]] }],
+        /inside the frame/,
+      )
+      refused('zoom 5', [{ op: 'camera', beat: 'add-site', keys: [[3, 0.5, 0.5, 5]] }], /zoom 1-4/)
+      refused('bad ease', [{ op: 'camera', beat: 'add-site', keys: [[3, 0.5, 0.5, 1, 'elastic']] }], /ease/)
+      refused(
+        'outside the scene',
+        [{ op: 'camera', beat: 'add-site', keys: [[13, 0.5, 0.5, 1]] }],
+        /inside the scene/,
+      )
+      refused(
+        '65 keys',
+        [
+          {
+            op: 'camera',
+            beat: 'add-site',
+            keys: Array.from({ length: 65 }, (_, i) => [2 + i / 10, 0.5, 0.5, 1]),
+          },
+        ],
+        /1 to 64/,
+      )
+    })
+
+    it('cursor sets style and size, never the path; smooth needs cursor data from the recorder', () => {
+      const r = apply([{ op: 'cursor', beat: 'add-site', style: 'highlight', size: 1.5 }])
+      expect([
+        attrOf(r.html, 'data-va-cursor'),
+        attrOf(r.html, 'data-va-cursor-size'),
+        attrOf(r.html, 'data-va-path'),
+      ]).toEqual(['highlight', '1.5', 'add-site'])
+      refused(
+        'smooth without trace data',
+        [{ op: 'cursor', beat: 'add-site', style: 'smooth', size: 1 }],
+        /needs cursor data/,
+      )
+      const traced = rec.replace(
+        'data-va-path="add-site"',
+        'data-va-path="add-site" data-va-cursor-from="trace"',
+      )
+      expect(
+        attrOf(
+          applyEdits(traced, recSummary, [{ op: 'cursor', beat: 'add-site', style: 'smooth', size: 1 }]).html,
+          'data-va-cursor',
+        ),
+      ).toBe('smooth')
+      refused('size 3', [{ op: 'cursor', beat: 'add-site', style: 'none', size: 3 }], /0.5 to 2/)
+      expect(
+        attrOf(apply([{ op: 'cursor', beat: 'add-site', style: 'none', size: 1 }]).html, 'data-va-cursor'),
+      ).toBe('none')
+    })
+
+    it('redact replaces the scene entries; locked ones can never be touched', () => {
+      const box = { start: 3, end: 6, reason: 'card number', boxes: [[3, 0.2, 0.2, 0.1, 0.05]] }
+      const r = apply([
+        { op: 'redact', beat: 'add-site', entries: [box, { ...box, id: 'a1', origin: 'agent' }] },
+      ])
+      expect(JSON.parse(attrOf(r.html, 'data-va-redact') ?? '[]')).toEqual([
+        { id: 'e1', origin: 'editor', ...box },
+        { id: 'a1', origin: 'agent', ...box },
+      ])
+      refused(
+        'a locked id',
+        [{ op: 'redact', beat: 'add-site', entries: [{ ...box, id: 't1' }] }],
+        /can't be removed/,
+      )
+      refused(
+        'a trace origin',
+        [{ op: 'redact', beat: 'add-site', entries: [{ ...box, origin: 'trace' }] }],
+        /can't be removed/,
+      )
+      refused(
+        'a box outside the frame',
+        [{ op: 'redact', beat: 'add-site', entries: [{ ...box, boxes: [[3, 0.95, 0.2, 0.1, 0.05]] }] }],
+        /inside the frame/,
+      )
+      // Nothing can drop the locked file: a scene without its redact.js script doesn't validate.
+      const noScript = rec.replace('<script src="assets/recording/redact.js"></script>', '')
+      expect(validate(noScript, recSummary).join(' ')).toMatch(/must load assets\/recording\/redact.js/)
+    })
+
+    it('the media op is refused on a recording slot and still works on an ordinary video slot', () => {
+      refused(
+        'media on the recording',
+        [
+          {
+            op: 'media',
+            slot: 'add-site-screen',
+            src: 'assets/media/other.mp4',
+            kind: 'video',
+            fit: 'cover',
+          },
+        ],
+        /Swap the recording from the demo's setup/,
+      )
+      const ok = applyEdits(html, summary, [
+        { op: 'media', slot: 'hero-clip', src: 'assets/media/other.mp4', kind: 'video', fit: 'cover' },
+      ])
+      expect(ok.html).toContain('src="assets/media/other.mp4"')
+    })
+  })
 })

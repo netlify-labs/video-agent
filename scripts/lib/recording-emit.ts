@@ -185,7 +185,7 @@ export function emitStep(o: EmitOptions) {
     `    <div class="va-stage" data-va-camera='${jsonAttr(camera.length ? camera : [[inS, 0.5, 0.5, 1]])}'>`,
     `      <video id="rec-${id}" data-va-media="${id}-screen" data-va-kind="video" data-va-label="Screen" src="assets/media/${media ?? `${o.plan.mediaId}.mp4`}" data-va-in="${fmt(inS)}" data-va-out="${fmt(outS)}" data-media-start="${fmt(inS)}" data-playback-rate="${String(rate)}" muted data-start="0" data-duration="${fmt(slotDur)}"${hold ? ' data-va-rec-hold="end"' : ''}></video>`,
     ...(hold ? [`      <img class="va-rec-hold" src="${recHoldSrc(id)}" alt="">`] : []),
-    `      <div class="va-cursor" data-va-cursor="${style}"${path.length ? ` data-va-path="${id}"` : ''}></div>`,
+    `      <div class="va-cursor" data-va-cursor="${style}"${path.length ? ` data-va-path="${id}" data-va-cursor-from="${o.trace ? 'trace' : 'inferred'}"` : ''}></div>`,
     `      <div class="va-clicks" data-va-clicks='${jsonAttr(clicks)}'></div>`,
     `      <div class="va-redact" data-va-redact='${jsonAttr(redact)}' data-va-locked="${LOCKED_SRC}"></div>`,
     `    </div>`,

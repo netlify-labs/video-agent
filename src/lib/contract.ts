@@ -73,7 +73,7 @@ import {
   syncCaptionsFor,
   voiceFits,
 } from './contract-core.js'
-import { RATE_RANGE, rateInRange, rateOf } from './recording.js'
+import { CAMERA_MAX_KEYS, RATE_RANGE, rateInRange, rateOf } from './recording.js'
 
 type Node = DefaultTreeAdapterMap['node']
 type Element = DefaultTreeAdapterMap['element']
@@ -1159,6 +1159,8 @@ function recordingProblems(root: Element, beats: Element[]): string[] {
       if (images.length !== 1 || attr(images[0] as Element, 'src') !== want)
         v.push(`${name} is held, so beat "${id}" needs one <img class="${REC_HOLD_CLASS}" src="${want}">.`)
     }
+    if (!kids(b).some((e) => e.tagName === 'script' && attr(e, 'src') === REC_LOCKED_SRC))
+      v.push(`Beat "${id}" must load ${REC_LOCKED_SRC} (the hidden areas from cursor data and setup).`)
     for (const e of walk(b)) {
       const locked = attr(e, 'data-va-locked')
       if (locked !== null && locked !== REC_LOCKED_SRC) v.push(`data-va-locked must name ${REC_LOCKED_SRC}.`)
@@ -1212,6 +1214,162 @@ function fitRecordingSlot(beat: Element, slot: Element, duration: number) {
   }
 }
 
+const CAMERA_EASES = new Set([
+  'none',
+  'sine.inOut',
+  ...['power1', 'power2', 'power3', 'power4'].flatMap((p) => [`${p}.inOut`, `${p}.in`, `${p}.out`]),
+])
+/** The most a camera key may zoom in (va-recording.js accepts up to 8; a Look's zoomMax is at most this). */
+export const CAMERA_ZOOM_MAX = 4
+const r4 = (n: number) => Math.round(n * 1e4) / 1e4
+const isNum = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n)
+const isFrac = (n: unknown): n is number => isNum(n) && n >= 0 && n <= 1
+const recJson = (v: unknown) => JSON.stringify(v, (_k, x: unknown) => (typeof x === 'number' ? r4(x) + 0 : x))
+
+/** The recording parts of a beat, or a ContractError naming it. */
+function recordingParts(b: Element) {
+  const id = attr(b, 'data-va-beat') ?? ''
+  const slot = recSlotsOf(b)[0]
+  if (!slot) throw new ContractError([`Scene "${id}" isn't a recording scene.`])
+  const find = (name: string) => [...walk(b)].find((e) => attr(e, name) !== null)
+  return {
+    id,
+    slot,
+    camera: find('data-va-camera'),
+    clicks: find('data-va-clicks'),
+    cursor: find('data-va-cursor'),
+    redact: find('data-va-redact'),
+  }
+}
+
+/** Camera keys as the editor sends them: [t, x, y, zoom, ease?], inside in..out and the frame, sorted, at most 64. */
+function checkCamera(keys: unknown[], inS: number, outS: number): unknown[] {
+  if (!Array.isArray(keys) || !keys.length || keys.length > CAMERA_MAX_KEYS)
+    throw new ContractError([`A scene has 1 to ${String(CAMERA_MAX_KEYS)} camera keys.`])
+  let last = -Infinity
+  for (const k of keys) {
+    const ok =
+      Array.isArray(k) &&
+      (k.length === 4 || (k.length === 5 && typeof k[4] === 'string' && CAMERA_EASES.has(k[4]))) &&
+      isNum(k[0]) &&
+      isFrac(k[1]) &&
+      isFrac(k[2]) &&
+      isNum(k[3]) &&
+      k[3] >= 1 &&
+      k[3] <= CAMERA_ZOOM_MAX
+    if (!ok)
+      throw new ContractError([
+        `Each camera key is [seconds, x, y, zoom 1-${String(CAMERA_ZOOM_MAX)}, ease?] with x and y inside the frame.`,
+      ])
+    const t = k[0] as number
+    if (t < inS - 1e-3 || t > outS + 1e-3) throw new ContractError(['Camera keys must be inside the scene.'])
+    if (t < last) throw new ContractError(['Camera keys must be in time order.'])
+    last = t
+  }
+  return keys
+}
+
+/** A scene's own hidden areas: keyframed boxes inside the frame, unique ids, never a locked one (t…, s…). */
+function checkSceneRedact(entries: unknown[]): unknown[] {
+  if (!Array.isArray(entries) || entries.length > 200)
+    throw new ContractError(['A scene has at most 200 hidden areas.'])
+  const ids = new Set<string>()
+  let editorN = 0
+  return entries.map((raw) => {
+    const e = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+    let id = typeof e.id === 'string' ? e.id : ''
+    const origin = e.origin ?? 'editor'
+    if ((origin !== 'agent' && origin !== 'editor') || /^[ts]\d+$/.test(id))
+      throw new ContractError(["Hidden areas from your cursor data or setup can't be removed."])
+    if (!id) {
+      do id = `e${String(++editorN)}`
+      while (ids.has(id) || entries.some((x) => (x as { id?: unknown } | null)?.id === id))
+    }
+    if (!/^[a-z][a-z0-9-]{0,20}$/.test(id) || ids.has(id))
+      throw new ContractError([`Hidden area id "${id}" is used twice or isn't valid.`])
+    ids.add(id)
+    const boxes = e.boxes
+    if (
+      !isNum(e.start) ||
+      !isNum(e.end) ||
+      e.end < e.start ||
+      !Array.isArray(boxes) ||
+      !boxes.length ||
+      boxes.length > 600
+    )
+      throw new ContractError(['A hidden area needs a start, an end and 1 to 600 boxes.'])
+    let last = -Infinity
+    for (const k of boxes as unknown[]) {
+      if (!Array.isArray(k) || k.length !== 5 || !isNum(k[0]) || !k.slice(1).every(isFrac))
+        throw new ContractError(['Each hidden-area key is [seconds, x, y, width, height] inside the frame.'])
+      const [t, x, y, w, h] = k as number[]
+      if ((x ?? 0) + (w ?? 0) > 1 + 1e-9 || (y ?? 0) + (h ?? 0) > 1 + 1e-9 || (t ?? 0) < last)
+        throw new ContractError(['Each hidden-area key is [seconds, x, y, width, height] inside the frame.'])
+      last = t ?? 0
+    }
+    const reason = typeof e.reason === 'string' ? e.reason.replace(/\s+/g, ' ').trim().slice(0, 60) : ''
+    return { id, origin, start: e.start, end: e.end, reason, boxes }
+  })
+}
+
+/** span, camera, cursor and redact on a recording scene. relayout then fits the slot (rate, holds, the 4x limit). */
+function applyRecordingOp(b: Element, op: RecordingOp, gaps: Record<string, [number, number][]> | undefined) {
+  const p = recordingParts(b)
+  const inS = num(attr(p.slot, REC_IN))
+  const outS = num(attr(p.slot, REC_OUT))
+  switch (op.op) {
+    case 'span': {
+      if (!(isNum(op.in) && isNum(op.out) && op.in >= 0 && op.out > op.in))
+        throw new ContractError(['A scene shows the recording from in to out, in seconds, in first.'])
+      setAttr(p.slot, REC_IN, fmt(op.in))
+      setAttr(p.slot, REC_OUT, fmt(op.out))
+      // Keys and clicks outside the new span go; a camera with none left holds the whole frame.
+      const inside = (k: unknown) =>
+        Array.isArray(k) && isNum(k[0]) && k[0] >= op.in - 1e-3 && k[0] <= op.out + 1e-3
+      if (p.camera) {
+        const keys = jsonArray(attr(p.camera, 'data-va-camera')).filter(inside)
+        setAttr(p.camera, 'data-va-camera', recJson(keys.length ? keys : [[op.in, 0.5, 0.5, 1]]))
+      }
+      if (p.clicks)
+        setAttr(
+          p.clicks,
+          'data-va-clicks',
+          recJson(jsonArray(attr(p.clicks, 'data-va-clicks')).filter(inside)),
+        )
+      // The cursor path was made for the planned part only.
+      const g: [number, number][] = []
+      if (op.in < inS) g.push([op.in, Math.min(inS, op.out)])
+      if (op.out > outS) g.push([Math.max(outS, op.in), op.out])
+      if (gaps && g.length) gaps[p.id] = g
+      return
+    }
+    case 'camera':
+      if (!p.camera) throw new ContractError([`Scene "${p.id}" has no camera.`])
+      setAttr(p.camera, 'data-va-camera', recJson(checkCamera(op.keys, inS, outS)))
+      return
+    case 'cursor': {
+      if (!p.cursor) throw new ContractError([`Scene "${p.id}" has no cursor.`])
+      if (!['smooth', 'highlight', 'none'].includes(op.style))
+        throw new ContractError(['The cursor is smooth, highlight or none.'])
+      if (!(isNum(op.size) && op.size >= 0.5 && op.size <= 2))
+        throw new ContractError(['The cursor size is 0.5 to 2.'])
+      if (op.style === 'smooth' && attr(p.cursor, 'data-va-cursor-from') !== 'trace')
+        throw new ContractError([
+          'A smooth cursor needs cursor data from the recorder; this scene can show the highlight ring.',
+        ])
+      if (op.style !== 'none' && attr(p.cursor, 'data-va-path') === null)
+        throw new ContractError(['This scene has no cursor path to show.'])
+      setAttr(p.cursor, 'data-va-cursor', op.style)
+      setAttr(p.cursor, 'data-va-cursor-size', String(r4(op.size)))
+      return
+    }
+    case 'redact':
+      if (!p.redact) throw new ContractError([`Scene "${p.id}" has no hidden areas.`])
+      setAttr(p.redact, 'data-va-redact', recJson(checkSceneRedact(op.entries)))
+      return
+  }
+}
+
 /**
  * The hold stills a composition names but may not have yet: one per held recording slot. The bundle check accepts
  * exactly these as pending (render-unchanged runs make them with recording.ts emit --holds-only).
@@ -1246,7 +1404,19 @@ export type EditOp =
     }
   | { op: 'voice'; beat: string; text: string }
 
+/**
+ * Edits of a recording scene (screen-recording plan §5.3): times in source seconds, positions in frame fractions.
+ * The patcher applies them like any EditOp; the API's draft schema takes them with the demo API (va-rsk5.3.16).
+ */
+export type RecordingOp =
+  | { op: 'span'; beat: string; in: number; out: number }
+  | { op: 'camera'; beat: string; keys: unknown[] }
+  | { op: 'cursor'; beat: string; style: 'smooth' | 'highlight' | 'none'; size: number }
+  | { op: 'redact'; beat: string; entries: unknown[] }
+
 export interface EditOptions {
+  /** Filled by span ops: per beat, the stretches of the recording a widened span shows with no cursor data. */
+  cursorGaps?: Record<string, [number, number][]>
   /** Colours a role may take (the brand palette). Empty: any #rgb/#rrggbb. */
   palette?: string[]
   /** Each voiced beat's line as it was spoken (from the voice script); voice ops need it. */
@@ -1328,7 +1498,12 @@ const syncCaptions = (d: Doc, summary: Summary): Summary => syncCaptionsFor(read
  * Applies edits in order and returns the new composition and summary. Validates before and after: a composition
  * that doesn't conform isn't edited, and an edit that would break it is refused.
  */
-export function applyEdits(html: string, summary: Summary, ops: EditOp[], opts: EditOptions = {}) {
+export function applyEdits(
+  html: string,
+  summary: Summary,
+  ops: (EditOp | RecordingOp)[],
+  opts: EditOptions = {},
+) {
   assertValid(html, summary)
   const d = load(html)
   // The lines after the edits: voice ops replace them, and the caller writes them back to the voice script.
@@ -1341,7 +1516,12 @@ export function applyEdits(html: string, summary: Summary, ops: EditOp[], opts: 
   return { html: out, summary: nextSummary, composition: read(load(out), narration), narration }
 }
 
-function applyOne(d: Doc, op: EditOp, opts: EditOptions, narration: Record<string, string> | undefined) {
+function applyOne(
+  d: Doc,
+  op: EditOp | RecordingOp,
+  opts: EditOptions,
+  narration: Record<string, string> | undefined,
+) {
   const beats = beatsOf(d.root)
   const beat = (id: string) => {
     const b = beats.find((x) => attr(x, 'data-va-beat') === id)
@@ -1399,6 +1579,8 @@ function applyOne(d: Doc, op: EditOp, opts: EditOptions, narration: Record<strin
     case 'media': {
       const el = [...walk(d.root)].find((e) => attr(e, 'data-va-media') === op.slot)
       if (!el) throw new ContractError([`There's no media slot "${op.slot}".`])
+      if (attr(el, REC_IN) !== null)
+        throw new ContractError(["Swap the recording from the demo's setup, or remix with a new recording."])
       if (attr(el, 'data-va-kind') !== op.kind)
         throw new ContractError([
           `Slot "${op.slot}" takes ${attr(el, 'data-va-kind') ?? 'other'} media, not ${op.kind}.`,
@@ -1418,6 +1600,12 @@ function applyOne(d: Doc, op: EditOp, opts: EditOptions, narration: Record<strin
       }
       return
     }
+    case 'span':
+    case 'camera':
+    case 'cursor':
+    case 'redact':
+      applyRecordingOp(beat(op.beat), op, opts.cursorGaps)
+      return
     case 'audio': {
       const el = [...walk(d.root)].find((e) => e.tagName === 'audio' && attr(e, 'id') === op.id)
       if (!el) throw new ContractError([`There's no audio "${op.id}".`])
