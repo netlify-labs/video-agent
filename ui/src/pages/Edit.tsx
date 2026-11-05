@@ -37,6 +37,7 @@ import {
   IconMovie,
   IconMusic,
   IconPhoto,
+  IconRefresh,
   IconTrash,
   IconVolume,
   IconVolumeOff,
@@ -64,7 +65,9 @@ import {
   useNarrationLock,
 } from '../components/narration'
 import { RenderPictureFirst } from '../components/RenderPictureFirst'
+import { RedoScenesModal, useCanRedoScenes, useScenes } from '../components/ScenePicker'
 import { humanize, labelFor } from '../lib/labels'
+import { pickable } from '../lib/scenes'
 import { narrationOf, narrationToSave, sameOps, withNarration } from '../lib/narration-panel'
 import { timingChanged } from '../../../src/lib/stale-picture'
 import { secondsToSamples, type NarrationOp } from '../../../src/lib/timeline'
@@ -524,6 +527,12 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
   }, [])
   const me = $api.useQuery('get', '/api/v1/me')
   const [renderDialog, setRenderDialog] = useState(false)
+  // Redo a scene from the editor: the version as rendered (never the draft), and the scene being redone.
+  const rendered = video.data?.versions.find((x) => x.n === versionN)
+  const canRedo =
+    useCanRedoScenes(rendered) && me.data !== undefined && !['viewer', 'reviewer'].includes(me.data.role)
+  const renderedScenes = useScenes(id, rendered, canRedo).beats
+  const [redoing, setRedoing] = useState<string | null>(null)
 
   useEffect(() => {
     void (async () => {
@@ -780,6 +789,15 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
   // The preview stays put on the left with the actions above it; the controls scroll on their own on the right.
   const aspect = video.data.dimensions.width / video.data.dimensions.height
   const baseVersion = video.data.versions.find((x) => x.n === draft.baseN)
+  // A scene of the rendered version that can be redone on its own (never the held one, never a draft-only scene).
+  const redoable = (beatId: string) =>
+    canRedo &&
+    renderedScenes !== null &&
+    pickable(renderedScenes, []).some((c) => c.beat.id === beatId && c.disabled === null)
+  const redoNote =
+    dirty || draft.ops.length > 0
+      ? `This starts from v${versionN} as rendered; your draft's changes aren't included. Render your draft first, or redo from v${versionN}.`
+      : null
   return (
     <div className="va-editor">
       <div
@@ -960,6 +978,7 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
             readOnly={lockedOut}
             canRecord={lock.canEdit}
             onSaveDraft={saveNarration}
+            sceneMenu={{ label: 'Redo this scene…', offers: redoable, onPick: setRedoing }}
             recorder={(api) => (
               <NarrationRecorder
                 api={api}
@@ -1096,6 +1115,20 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
                     </Text>
                   </Group>
                   <Group gap={4} wrap="nowrap">
+                    {redoable(b.id) ? (
+                      <Tooltip label="Redo this scene with the agent, keeping the rest" openDelay={300}>
+                        <ActionIcon
+                          variant="subtle"
+                          color="gray"
+                          aria-label={`Redo ${labelFor(b.label, b.id)}…`}
+                          onClick={() => {
+                            setRedoing(b.id)
+                          }}
+                        >
+                          <IconRefresh size={14} />
+                        </ActionIcon>
+                      </Tooltip>
+                    ) : null}
                     <NumberInput
                       aria-label={`Length of ${labelFor(b.label, b.id)}`}
                       size="xs"
@@ -1424,6 +1457,20 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
             const file = `${m.id}.${m.filename.split('.').pop() ?? ''}`
             setPicked((p) => ({ ...p, [file]: m }))
             setSlot(replacing.slot, { src: `assets/media/${file}` })
+          }}
+        />
+      ) : null}
+      {redoing && rendered ? (
+        <RedoScenesModal
+          video={video.data}
+          v={rendered}
+          beats={[redoing]}
+          warning={redoNote}
+          onClose={() => {
+            setRedoing(null)
+          }}
+          onDone={() => {
+            void navigate(`/videos/${id}`)
           }}
         />
       ) : null}

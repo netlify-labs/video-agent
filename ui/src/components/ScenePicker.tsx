@@ -2,7 +2,19 @@
 // redoes some of them (Redo this part on a pinned comment). The version's beats come with it, or from GET …/beats for
 // a version made before they were stored. The chips follow the server's rules (lib/scenes.ts pickable), each disabled
 // one saying why.
-import { Button, Checkbox, Chip, Group, Loader, Modal, Stack, Text, Textarea, Tooltip } from '@mantine/core'
+import {
+  Alert,
+  Button,
+  Checkbox,
+  Chip,
+  Group,
+  Loader,
+  Modal,
+  Stack,
+  Text,
+  Textarea,
+  Tooltip,
+} from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
 import { useRef, useState } from 'react'
@@ -11,10 +23,11 @@ import { pickable, sceneChipLabel, type Beat } from '../lib/scenes'
 import { clockTime, showError } from './bits'
 
 /** Whether this deployment and this version let some of its scenes be redone on their own. */
-export function useCanRedoScenes(v: Version): boolean {
+export function useCanRedoScenes(v: Version | undefined): boolean {
   const config = $api.useQuery('get', '/api/v1/config')
   return (
     config.data?.features.includes('scoped_revision') === true &&
+    v !== undefined &&
     v.status === 'ready' &&
     v.editable &&
     v.editing.capabilities.scopedRevision
@@ -22,15 +35,15 @@ export function useCanRedoScenes(v: Version): boolean {
 }
 
 /** The version's scenes: from the DTO, else asked for once (when `enabled`). Null while loading or when it has none. */
-export function useScenes(videoId: string, v: Version, enabled = true) {
+export function useScenes(videoId: string, v: Version | undefined, enabled = true) {
   const fill = $api.useQuery(
     'get',
     '/api/v1/videos/{id}/versions/{n}/beats',
-    { params: { path: { id: videoId, n: v.n } } },
-    { enabled: enabled && v.beats === null && v.status === 'ready' && v.editable },
+    { params: { path: { id: videoId, n: v?.n ?? 0 } } },
+    { enabled: enabled && v !== undefined && v.beats === null && v.status === 'ready' && v.editable },
   )
   return {
-    beats: v.beats ?? fill.data?.beats ?? null,
+    beats: v?.beats ?? fill.data?.beats ?? null,
     loading: fill.isLoading,
     error: fill.error ? errorMessage(fill.error) : null,
   }
@@ -115,14 +128,20 @@ export function RedoScenesModal({
   v,
   beats,
   comment,
+  warning,
   onClose,
+  onDone,
 }: {
   video: Video
   v: Version
   /** The scenes picked to start with. */
   beats: string[]
   comment?: { id: string; body: string; timeSec: number | null }
+  /** A warning above the picker (the editor's: a draft's changes aren't included). */
+  warning?: string | null
   onClose: () => void
+  /** After the revision is queued (default: just close). */
+  onDone?: () => void
 }) {
   const qc = useQueryClient()
   const [picked, setPicked] = useState(beats)
@@ -135,6 +154,7 @@ export function RedoScenesModal({
       onClose()
       void qc.invalidateQueries()
       notifications.show({ color: 'teal', message: `Making v${next}: redoing the scenes you picked.` })
+      onDone?.()
     },
     onError: showError,
   })
@@ -142,6 +162,11 @@ export function RedoScenesModal({
   return (
     <Modal opened onClose={onClose} size="lg" title={`Redo part of v${v.n}`}>
       <Stack gap="sm">
+        {warning ? (
+          <Alert color="yellow" variant="light" data-testid="redo-warning">
+            {warning}
+          </Alert>
+        ) : null}
         <ScenePicker videoId={video.id} v={v} value={picked} onChange={setPicked} />
         {comment ? (
           <Checkbox

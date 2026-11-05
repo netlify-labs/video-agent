@@ -83,6 +83,8 @@ export interface TimelineProps {
    * edge; Alt / Option turns it off). Without it the lane takes no drops.
    */
   onDropFiles?: (files: File[], sample: number) => void
+  /** A menu on each scene block whose scene it offers (redo a scene: Redo this scene…). */
+  sceneMenu?: { label: string; offers: (beatId: string) => boolean; onPick: (beatId: string) => void }
   /** Initial zoom in px per second; the timeline fits the composition when it's left out. */
   initialPxPerSec?: number
   /** Called with the zoom whenever it changes. */

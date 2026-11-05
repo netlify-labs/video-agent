@@ -153,6 +153,12 @@
   border-left: 1px solid var(--va-rule);
   border-right: 1px solid var(--va-rule);
 }
+/* A scene block's menu (Redo this scene…), at its top right. */
+.va-tl-scene-menu {
+  position: absolute;
+  top: 1px;
+  right: 2px;
+}
 .va-tl-clip {
   color: var(--va-muted);
   background: color-mix(in srgb, currentColor 14%, transparent);

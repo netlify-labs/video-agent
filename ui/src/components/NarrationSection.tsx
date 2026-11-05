@@ -69,6 +69,7 @@ import {
   ClipMenu,
   EditorAnnouncer,
   Timeline,
+  type TimelineProps,
   type TrackPatch,
 } from './timeline'
 
@@ -149,6 +150,8 @@ export interface NarrationSectionProps {
   banner?: ReactNode
   /** Saves the draft with this narration op now (a recorded take's clip); throws when the save fails. */
   onSaveDraft?: (op: NarrationOp) => Promise<void>
+  /** The timeline's scene menu (redo a scene), passed through. */
+  sceneMenu?: TimelineProps['sceneMenu']
   /** The recorder (NarrationRecorder), given the track to place its takes on. */
   recorder?: (api: NarrationTrackApi) => ReactNode
   /** Shown in the recorder's place while timingPending: Render picture first (RenderPictureFirst). */
@@ -506,6 +509,7 @@ export function NarrationSection(props: NarrationSectionProps) {
           onRangeSelect={setRange}
           onClipCommand={editor.onClipCommand}
           onDropFiles={(files, at) => void addFiles(files, at)}
+          {...(props.sceneMenu ? { sceneMenu: props.sceneMenu } : {})}
         />
         <ClipMenu editor={editor} />
         <EditorAnnouncer editor={editor} />

@@ -3,8 +3,8 @@
 // the op, playhead, selection and range come in as props and changes go out as callbacks; the timeline keeps only
 // its zoom and scroll. Only clips inside the render window (about a viewport either side, in tiles) are in the DOM,
 // and each waveform canvas covers only its visible part, so a ten-minute narration of 200 clips stays smooth.
-import { ActionIcon, Text, Tooltip } from '@mantine/core'
-import { IconArrowsHorizontal, IconZoomIn, IconZoomOut } from '@tabler/icons-react'
+import { ActionIcon, Menu, Text, Tooltip } from '@mantine/core'
+import { IconArrowsHorizontal, IconDots, IconZoomIn, IconZoomOut } from '@tabler/icons-react'
 import {
   useCallback,
   useEffect,
@@ -486,6 +486,33 @@ export function Timeline(props: TimelineProps) {
                   style={{ left: sampleToX(s, pps), width: sampleToX(e - s, pps) }}
                 >
                   <span className="va-tl-clip-label">{name}</span>
+                  {props.sceneMenu?.offers(b.id) ? (
+                    <Menu position="bottom-end" withinPortal>
+                      <Menu.Target>
+                        <ActionIcon
+                          className="va-tl-scene-menu"
+                          variant="subtle"
+                          color="gray"
+                          size="xs"
+                          aria-label={`${name} actions`}
+                          onPointerDown={(e) => {
+                            e.stopPropagation()
+                          }}
+                        >
+                          <IconDots size={12} />
+                        </ActionIcon>
+                      </Menu.Target>
+                      <Menu.Dropdown>
+                        <Menu.Item
+                          onClick={() => {
+                            props.sceneMenu?.onPick(b.id)
+                          }}
+                        >
+                          {props.sceneMenu.label}
+                        </Menu.Item>
+                      </Menu.Dropdown>
+                    </Menu>
+                  ) : null}
                 </div>
               )
             })}

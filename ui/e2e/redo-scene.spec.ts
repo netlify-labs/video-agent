@@ -218,13 +218,15 @@ test('Incorporate with the switch off is an ordinary revision; pins on every sce
 
 // After the gate: hovering a scene chip seeks the player (va-8cy4.5.9); switching to a scoped version starts at the
 // scene it redid (va-8cy4.5.10).
-const currentTime = (page: Page) =>
-  page.locator('.va-review-frame video').evaluate((v: HTMLVideoElement) => v.currentTime)
+/** The player's state (the specs aren't typechecked against the DOM library). */
+type Player = { currentTime: number; readyState: number }
+const player = (page: Page) => page.locator('.va-review-frame video')
+const currentTime = (page: Page) => player(page).evaluate((v) => (v as unknown as Player).currentTime)
 
 test('hovering a scene chip seeks the player to that scene', async ({ page }) => {
   await page.goto('/videos/vid_teaser')
   await expect
-    .poll(() => page.locator('.va-review-frame video').evaluate((v: HTMLVideoElement) => v.readyState))
+    .poll(() => player(page).evaluate((v) => (v as unknown as Player).readyState))
     .toBeGreaterThan(0)
   await scope(page).getByText('Some scenes').click()
   await pick(page, /Demo/).hover()
