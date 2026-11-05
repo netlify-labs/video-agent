@@ -80,6 +80,16 @@ describe('scoped beat scripts', () => {
       problems('const parentCard = el.firstElementChild; const topBar = parentCard; tl.to(topBar, { x: 1 })'),
     ).toEqual([])
     expect(problems('// the parent frame cuts here\ntl.set(el, { opacity: 1 })')).toEqual([])
+    // New nodes for el, the way the skill says since `document.` is refused (docs/spikes.md K1).
+    expect(
+      problems(
+        "const s = el.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'svg'); el.append(s, el.ownerDocument.createTextNode('x'), el.ownerDocument.createElement('span'))",
+      ),
+    ).toEqual([])
+    // Anything else through ownerDocument still reaches outside.
+    expect(problems("el.ownerDocument.createElement('i'); el.ownerDocument.body.remove()")).toEqual([
+      `Scene "Features"'s script uses ownerDocument: it may only reach inside its own element (el).`,
+    ])
     expect(scopedScriptProblems(beatIn(fixture, 'demo'), 'demo')).toEqual([])
   })
 

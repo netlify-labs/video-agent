@@ -26,6 +26,12 @@ const ESCAPES: [RegExp, string][] = [
   [/\bFunction\s*\(/, 'Function(…)'],
 ]
 const GSAP_METHODS = 'from|to|fromTo|set|timeline'
+/**
+ * The one honest use of ownerDocument: making new nodes to put inside el (the contract refuses `document.`, so the
+ * skill says `el.ownerDocument.createElement`). Those calls are taken out before the escape check.
+ */
+const MAKE_NODES =
+  /\bownerDocument\s*\.\s*(?:createElement|createElementNS|createTextNode|createDocumentFragment)\s*\(/g
 
 /** Every way a scoped beat's scripts could reach outside it, in plain words; empty when they're fine. */
 export function scopedScriptProblems(beat: Element, beatId: string): string[] {
@@ -42,8 +48,10 @@ export function scopedScriptProblems(beat: Element, beatId: string): string[] {
     const code = e.childNodes.map((n) => (n.nodeName === '#text' && 'value' in n ? n.value : '')).join('')
     if (attr(e, 'src') !== null)
       add(`${scene} loads a script file; write its code in the scene's vaBeat script.`)
+    const checked = code.replace(MAKE_NODES, 'makeNode(')
     for (const [re, what] of ESCAPES)
-      if (re.test(code)) add(`${scene}'s script uses ${what}: it may only reach inside its own element (el).`)
+      if (re.test(checked))
+        add(`${scene}'s script uses ${what}: it may only reach inside its own element (el).`)
     // The timeline is vaBeat's first callback parameter, whatever the agent named it.
     const tl = /vaBeat\(\s*['"][^'"]*['"]\s*,\s*(?:async\s*)?(?:function\s*)?\(?\s*([A-Za-z_$][\w$]*)/.exec(
       code,
