@@ -39,6 +39,7 @@
   "2.5b": "va-rsk5.3.15",
   "2.6": "va-rsk5.3.16",
   "2.7": "va-rsk5.3.17",
+  "2.8": "va-rsk5.3.20",
   "2.G": "va-rsk5.3.18",
   "LT-1": "va-rsk5.3.19",
   "P3": "va-rsk5.4",
@@ -94,5 +95,5 @@
   "3.3": "va-rsk5.4.4",
   "4.1": "va-rsk5.5.1",
   "4.2": "va-rsk5.5.3",
-  "_notes": "Aliases: '0'-'5' are phase epics; 'n.m' without a letter points at that plan task's main bead (1.2->1.2b classify limits, 1.3->1.3a visibility, 1.4->1.4b trace routes+migration, 1.5->1.5c SDK rows, 2.1->2.1a analyze core, 2.2->2.2a plan, 2.3->2.3a va-recording.js, 2.4->2.4b prompt (template bump), 2.5->2.5a finalize guards, 3.1->3.1a upload, 3.3->3.3a camera panel, 4.1->4.1a record, 4.2->4.2a upload/demo). Migration bead is 1.4b. LT-1..LT-3 are live tests; D1-D6 spikes; n.G gates; 5.x deferred."
+  "_notes": "Aliases: '0'-'5' are phase epics; 'n.m' without a letter points at that plan task's main bead (1.2->1.2b classify limits, 1.3->1.3a visibility, 1.4->1.4b trace routes+migration, 1.5->1.5c SDK rows, 2.1->2.1a analyze core, 2.2->2.2a plan, 2.3->2.3a va-recording.js, 2.4->2.4b prompt (template bump), 2.5->2.5a finalize guards, 3.1->3.1a upload, 3.3->3.3a camera panel, 4.1->4.1a record, 4.2->4.2a upload/demo). Migration bead is 1.4b. LT-1..LT-3 are live tests; D1-D6 spikes; n.G gates; 5.x deferred. 2.8 (scoped revisions: recording derived files for redo-a-scene) was added in the polish round."
 }

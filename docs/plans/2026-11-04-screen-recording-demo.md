@@ -813,7 +813,7 @@ credits). It makes gate 2's "no credits" true. It may later become a product opt
 - `data-va-path` names an existing `assets/recording/<step>.cursor.js`, and that file is **exactly** the one-statement
   form `emit` writes, where `<JSON>` parses as an array of `[t, x, y]` finite numbers, sorted by `t`, inside
   `in`/`out`, at most 4 decimals, at most 6,000 points. Anything else is refused. Finalize checks the same grammar;
-- a hold (`data-va-hold`) appears only on a scene with a voice line or a retime, with its still present, and with the
+- a hold (`data-va-rec-hold`) appears only on a scene with a voice line or a retime, with its still present, and with the
   camera's last key at or before `out`.
 
 `check-contract.ts` calls it, including under `--fix`, whenever the composition has recording scenes. The engine
@@ -897,12 +897,12 @@ stays at version `1`, because everything is additive and old compositions are un
 - `data-va-in` and `data-va-out` are in source seconds.
 - `data-media-start` equals `in`.
 - `data-playback-rate` equals `(out − in)` divided by **the slot's** `data-duration`, rounded to 4 places. The slot's
-  duration equals the scene's unless `data-va-hold` is set (below).
+  duration equals the scene's unless `data-va-rec-hold` is set (below).
 - `data-hf-media-start-basis` is whatever spike D1 shows makes the offset absolute (probably `global`).
 - Camera, clicks and redact are JSON in source seconds. The cursor path is a script file named by `data-va-path`.
 
 **Holds.** When a scene must last longer than its step can stretch at 0.5×:
-- The slot gets `data-va-hold="end"`. Its `data-duration` is `(out − in) / 0.5` and its rate is 0.5, so it plays the
+- The slot gets `data-va-rec-hold="end"` (not `data-va-hold`, which already belongs to the fit-to-narration held frame and which `validate` refuses anywhere else). Its `data-duration` is `(out − in) / 0.5` and its rate is 0.5, so it plays the
   whole step slowly.
 - A hold layer, `<img class="va-hold" src="assets/recording/<step>.hold.jpg">` inside the stage, is shown from the end
   of the slot to the end of the scene. It's the frame at `out`, so the picture stays still and the camera, cursor and
