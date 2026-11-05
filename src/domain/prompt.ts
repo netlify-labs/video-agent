@@ -12,6 +12,13 @@ import {
   type Voiceover,
 } from './types.js'
 import { scrubName } from '../lib/recording-trace.js'
+import {
+  REMOTION_MEDIA_LINE,
+  remotionAuthorSteps,
+  remotionSoundLines,
+  usesEnginePrompt,
+} from './engine-prompt.js'
+import type { EngineId } from './engines.js'
 
 export const PROMPT_TEMPLATE_VERSION = 20
 
@@ -72,6 +79,8 @@ export interface PromptInput {
   restyle?: boolean
   /** A demo made from a screen recording (screen-recording plan §5.4); none when missing. */
   recording?: RecordingPrompt | null
+  /** The version's engine; missing is HyperFrames, and the prompt is then exactly as before engines existed. */
+  engine?: EngineId
 }
 
 export interface RecordingPrompt {
@@ -224,6 +233,7 @@ const RESTYLE_LINE =
 
 export function buildPrompt(p: PromptInput): string {
   const { width, height } = ASPECTS[p.aspect]
+  const other = usesEnginePrompt(p.engine)
   const uploadArg = p.upload.mode === 'blobs' ? '--upload blobs' : `--upload ${p.upload.url}`
   const renderCmd = `npx tsx scripts/render-job.ts --job ${p.jobId} --attempt ${p.attemptId} --callback ${p.callbackUrl} --token ${p.callbackToken} ${uploadArg}`
   const locked = p.narration ?? null
@@ -302,7 +312,9 @@ export function buildPrompt(p: PromptInput): string {
     // Captions are the uploader's words: data in their own fence (§14 rule 3).
     lines.push(
       '',
-      'Media from the team library, already in video/ at these paths (prepare-run puts them there). Use them where they fit the request; a caption says what an item is. Put images and clips in media slots (data-va-media, see video/AGENTS.md); load fonts with @font-face from their path. Never download other media.',
+      other
+        ? REMOTION_MEDIA_LINE
+        : 'Media from the team library, already in video/ at these paths (prepare-run puts them there). Use them where they fit the request; a caption says what an item is. Put images and clips in media slots (data-va-media, see video/AGENTS.md); load fonts with @font-face from their path. Never download other media.',
       FENCE_OPEN,
       sanitizeBrief(JSON.stringify(visual)),
       FENCE_CLOSE,
@@ -365,16 +377,26 @@ export function buildPrompt(p: PromptInput): string {
     sound === 'silent' && !voice
       ? `Format: ${width}x${height}, 30 fps, silent. ${lengthLine}`
       : `Format: ${width}x${height}, 30 fps, with sound (${soundName(sound, voice !== null)}). ${lengthLine}`,
-    ...soundLines(sound, tracks, p.brandMusic ?? null, voice !== null),
+    ...(other
+      ? remotionSoundLines(sound, tracks, p.brandMusic ?? null, (json) => [
+          FENCE_OPEN,
+          sanitizeBrief(JSON.stringify(json)),
+          FENCE_CLOSE,
+        ])
+      : soundLines(sound, tracks, p.brandMusic ?? null, voice !== null)),
     ...voiceLines(voice),
     ...(locked ? lockedNarrationLines('revision') : []),
     'Never ask questions or request authorization. If something is unclear, make a reasonable choice and say so in your summary.',
     '',
-    '1. Read the hyperframes skill and follow its work loop. The project is video/.',
-    `2. Write video/index.html (and any files it needs inside video/). Set the composition to ${width}x${height}.`,
-    '   Load GSAP from video/vendor/gsap.min.js (<script src="vendor/gsap.min.js">). Never load scripts, styles or fonts from a CDN or any other URL.',
-    '   Follow the editing contract in video/AGENTS.md ("Editing contract v1"): beats as data-va-beat sections animated with vaBeat, data-va-text ids, --va-color-<role> colours, media slots. People edit the finished video in the browser. Check it with: npx tsx scripts/check-contract.ts',
-    '3. Run `npx hyperframes check` in video/ until it reports 0 errors.',
+    ...(other
+      ? remotionAuthorSteps({ width, height })
+      : [
+          '1. Read the hyperframes skill and follow its work loop. The project is video/.',
+          `2. Write video/index.html (and any files it needs inside video/). Set the composition to ${width}x${height}.`,
+          '   Load GSAP from video/vendor/gsap.min.js (<script src="vendor/gsap.min.js">). Never load scripts, styles or fonts from a CDN or any other URL.',
+          '   Follow the editing contract in video/AGENTS.md ("Editing contract v1"): beats as data-va-beat sections animated with vaBeat, data-va-text ids, --va-color-<role> colours, media slots. People edit the finished video in the browser. Check it with: npx tsx scripts/check-contract.ts',
+          '3. Run `npx hyperframes check` in video/ until it reports 0 errors.',
+        ]),
     sound === 'music_sfx'
       ? '4. Write video/summary.json: { "title", "summary", "captions": [{ "start", "end", "text", "beat", "textId", "beatStart", "beatEnd" }], "credits": ["…"] }'
       : '4. Write video/summary.json: { "title", "summary", "captions": [{ "start", "end", "text", "beat", "textId", "beatStart", "beatEnd" }] }',
@@ -386,7 +408,7 @@ export function buildPrompt(p: PromptInput): string {
     '6. End your answer with the fenced ```json block render-job.ts prints.',
     `   Once it has succeeded, never run render-job.ts again: if its json block is out of view, print it with cat .render/${p.attemptId}/manifest.json.`,
     '',
-    `Progress (optional, best effort): at milestones (after reading context/, after each scene, before each check round) run: npx tsx scripts/checkpoint.ts --attempt ${p.attemptId} --url ${p.checkpointUrl} --token ${p.callbackToken} --message "<what you are doing, in a few words>". Add --bundle once video/index.html exists, so people can watch it take shape. It never fails the run; don't retry it or wait for it.`,
+    `Progress (optional, best effort): at milestones (after reading context/, after each scene, before each check round) run: npx tsx scripts/checkpoint.ts --attempt ${p.attemptId} --url ${p.checkpointUrl} --token ${p.callbackToken} --message "<what you are doing, in a few words>".${other ? '' : ' Add --bundle once video/index.html exists, so people can watch it take shape.'} It never fails the run; don't retry it or wait for it.`,
     '',
     'Never print environment variables. Never commit, push or open a pull request.',
   )

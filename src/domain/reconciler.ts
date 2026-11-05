@@ -418,6 +418,8 @@ async function startRequest(
       })),
     ),
     plan: version.plan ? { brief: version.plan.brief, qa: version.plan.qa } : null,
+    // Named only for other engines, so a HyperFrames prompt is byte-identical to before engines.
+    ...(version.engine && version.engine !== 'hyperframes' ? { engine: version.engine } : {}),
     sound: version.sound ?? 'silent',
     voiceover: version.voiceover ?? null,
     brandMusic: contextMeta.music,
