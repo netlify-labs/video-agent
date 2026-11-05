@@ -636,6 +636,23 @@ production still serves the video, and rolls back to the previous deploy if not.
 
 ## Redo-a-scene spikes (docs/plans/2026-11-04-regenerate-beat.md §7)
 
+### B1: a prelude-less `@scope` styles its own scene only (2026-11-05, `npx tsx spikes/b1/b1.ts`, no credits)
+
+The fixture (`test/fixtures/scope/at-scope`) has a white `.card` in three scenes and in a root layer. Scene 2 holds
+`<style>@scope { .card { background: red } }</style>`; scene 3 holds the fallback form
+`@scope ([data-va-beat="three"]) { .card { background: blue } }`. HyperFrames' own `snapshot` (the CLI render-job and
+`hold-still.ts` use; HeadlessChrome 152 locally) captured each scene, and one pixel of each card was sampled.
+
+| Scene                                       | Card in the scene | Card in the root layer |
+| ------------------------------------------- | ----------------- | ---------------------- |
+| 1 (no style)                                | white             | white                  |
+| 2 (`@scope { … }`)                          | red               | white                  |
+| 3 (`@scope ([data-va-beat="three"]) { … }`) | blue              | white                  |
+
+Both forms scope to their scene: scene 2's rules reach neither scene 1 nor the root layer. **The prelude-less form
+stays the accepted one** (`scopedStyleProblems`, va-8cy4.2.2); the prelude form is kept only behind `allowPrelude` as
+a fallback. B2's redone scene also used a prelude-less `@scope` and rendered as intended.
+
 ### B2: do frozen scenes render the same after a scoped change? (2026-11-05, `spikes/b2`, `npx tsx spikes/b2/b2.ts [--leak]`, no credits)
 
 A contract-v1 composition with music and four scenes: intro 3 s, features 3.85 s (115.5 frames, authored and never

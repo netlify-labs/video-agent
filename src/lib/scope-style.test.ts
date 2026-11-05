@@ -35,6 +35,14 @@ describe('scoped beat styles', () => {
     expect(validate(fixture)).toEqual([])
   })
 
+  it('the B1 render fixture keeps contract v1 and passes the check (spikes/b1/b1.ts renders it)', () => {
+    const b1 = readFileSync(new URL('../../test/fixtures/scope/at-scope/index.html', import.meta.url), 'utf8')
+    expect(validate(b1)).toEqual([])
+    expect(scopedStyleProblems(beatIn(b1, 'two'), 'two')).toEqual([])
+    expect(scopedStyleProblems(beatIn(b1, 'three'), 'three')).toHaveLength(1)
+    expect(scopedStyleProblems(beatIn(b1, 'three'), 'three', { allowPrelude: true })).toEqual([])
+  })
+
   it('accepts a prelude-less @scope with allowed at-rules, assets urls and colour roles', () => {
     expect(
       styled(`@scope {
