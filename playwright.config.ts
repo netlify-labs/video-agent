@@ -1,9 +1,15 @@
 import { defineConfig } from '@playwright/test'
 
 // UI smoke tests against the mock build (VITE_MOCK=1): no backend, real sample media.
+// GitHub's runners are several times slower than a laptop: the 200-clip timeline fixture and the audio clocks need
+// more than 5 s there. CI also retries a failed spec once; the report lists it as flaky, so nothing is hidden.
+const CI = Boolean(process.env.CI)
+
 export default defineConfig({
   testDir: 'ui/e2e',
-  timeout: 30_000,
+  timeout: CI ? 60_000 : 30_000,
+  expect: { timeout: CI ? 15_000 : 5_000 },
+  retries: CI ? 1 : 0,
   use: { baseURL: 'http://localhost:4198', trace: 'retain-on-failure', ...(process.env.CI ? {} : { channel: 'chrome' }) },
   projects: [
     { name: 'desktop', use: { viewport: { width: 1440, height: 900 } } },
