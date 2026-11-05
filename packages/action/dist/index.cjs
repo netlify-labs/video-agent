@@ -1424,19 +1424,9 @@ function resources(t) {
             "webhookUrl",
             "mediaIds",
             "sound",
-            "voiceover",
-            "externalRef",
-            "externalUrl",
-            "private",
-            "context"
+            "voiceover"
           ],
-          features: [
-            ...input.planId !== void 0 ? ["planning"] : [],
-            ...input.externalRef !== void 0 ? ["external_ref"] : [],
-            ...input.externalUrl !== void 0 ? ["external_ref"] : [],
-            ...input.private !== void 0 ? ["external_ref"] : [],
-            ...input.context !== void 0 ? ["context"] : []
-          ],
+          features: [...input.planId !== void 0 ? ["planning"] : []],
           operationId: "createVideo"
         },
         opts
@@ -1481,9 +1471,9 @@ function resources(t) {
           path: "/api/v1/videos",
           pathParams: {},
           input,
-          query: ["status", "owner", "published", "favorite", "q", "externalRef", "cursor", "limit"],
+          query: ["status", "owner", "published", "favorite", "q", "cursor", "limit"],
           body: null,
-          features: [...input?.externalRef !== void 0 ? ["external_ref"] : []],
+          features: [],
           operationId: "listVideos"
         },
         opts
@@ -1517,20 +1507,9 @@ function resources(t) {
             "voiceover",
             "mediaIds",
             "planId",
-            "webhookUrl",
-            "externalRef",
-            "externalUrl",
-            "private",
-            "context"
+            "webhookUrl"
           ],
-          features: [
-            ...["remix"],
-            ...input.planId !== void 0 ? ["planning"] : [],
-            ...input.externalRef !== void 0 ? ["external_ref"] : [],
-            ...input.externalUrl !== void 0 ? ["external_ref"] : [],
-            ...input.private !== void 0 ? ["external_ref"] : [],
-            ...input.context !== void 0 ? ["context"] : []
-          ],
+          features: [...["remix"], ...input.planId !== void 0 ? ["planning"] : []],
           operationId: "remixVideo"
         },
         opts
@@ -1553,13 +1532,11 @@ function resources(t) {
             "sound",
             "voiceover",
             "commentIds",
-            "scope",
-            "context"
+            "scope"
           ],
           features: [
             ...input.planId !== void 0 ? ["planning"] : [],
-            ...input.scope !== void 0 ? ["scoped_revision"] : [],
-            ...input.context !== void 0 ? ["context"] : []
+            ...input.scope !== void 0 ? ["scoped_revision"] : []
           ],
           operationId: "reviseVideo"
         },
