@@ -200,6 +200,7 @@ async function startRequest(
     await deps.blobs.set('sources', runManifestKey(a.jobId, a.id), manifest, {
       contentType: 'application/json',
     })
+    deps.log.info('run.manifest', { attemptId: a.id, kind: m.kind, look: m.look?.id ?? null })
     return sha256Hex(manifest)
   }
   const runUrls = {
@@ -229,6 +230,15 @@ async function startRequest(
     })
     return result(prompt, null)
   }
+  // The version's look (looks plan §4.6): its snapshot must still be there before a run starts, or every retry would
+  // spend credits failing inside the runner. A render of the edited composition reads no look, so it's checked here.
+  const look = version.look ?? null
+  if (look && !(await deps.blobs.list('sources', look.key)).includes(look.key)) {
+    deps.log.warn('look.preflight_failed', { jobId: a.jobId, key: look.key })
+    throw new SourceUnavailable("This video's look snapshot is missing; restyle it to pick the look again.")
+  }
+  const runLook = look ? { look: { id: look.id, key: look.key, sha256: look.sha256, hash: look.hash } } : {}
+  const promptLook = look && { id: look.id, name: look.name }
   // Fit the video to my narration (plan 2026-11-02 §6.4): an authoring run that starts from the frozen edited draft,
   // never the parent's archive, with the narration it mixes and must not change. Every retry restores the same inputs.
   if (version.frozen?.narration) {
@@ -238,6 +248,7 @@ async function startRequest(
       bundle: frozenBundle(version.frozen),
       media,
       feedback: null,
+      ...runLook,
     })
     const prompt = buildFitPrompt({
       jobId: a.jobId,
@@ -253,6 +264,7 @@ async function startRequest(
       ...runUrls,
       callbackToken,
       upload: { mode: 'blobs' },
+      look: promptLook,
     })
     return result(prompt, null)
   }
@@ -321,7 +333,7 @@ async function startRequest(
     }
   })
   let runManifestSha256: string | null = null
-  if (revision || media) {
+  if (revision || media || look) {
     runManifestSha256 = await putManifest({
       kind: revision ? 'revision' : 'author',
       source: revision && {
@@ -337,6 +349,7 @@ async function startRequest(
         pins: pins.map((c) => ({ commentId: c.commentId, timeSec: c.timeSec ?? 0, x: c.x, y: c.y })),
       },
       ...(scope ? { scope: { beats: scope.beats.map((b) => b.id), stills: scope.stills } } : {}),
+      ...runLook,
     })
   }
   const prompt = buildPrompt({
@@ -381,6 +394,8 @@ async function startRequest(
           },
         }
       : {}),
+    look: promptLook,
+    restyle: look?.restyle ?? false,
   })
   return result(prompt, revision?.sourceSha256 ?? null)
 }
