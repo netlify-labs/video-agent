@@ -62,6 +62,7 @@ import { canonical, narrationChangedSince } from './narration-stale.js'
 import type { Repo } from '../store/types.js'
 import { type EditRow, type MediaRow, type TranscriptionProvider, type VersionRow } from './types.js'
 import { hasUnfinished, loadJob, newAttempt, videoDto, withIdempotency } from './videos.js'
+import { inheritRecording } from './demo-recording.js'
 
 export const EDIT_TTL_MS = 7 * 24 * 3600_000
 const MAX_OPS = 500
@@ -360,7 +361,14 @@ async function computeRev(
     const fits = kind === 'image' ? m?.kind === 'image' || m?.kind === 'svg' : m?.kind === kind
     // A narration take isn't a library item: it's placed with the narration op, never as a media or audio pick.
     // Takes go in through narration and screen recordings through the recording, not as a pick into a slot.
-    if (!m || m.deletedAt || m.status !== 'ready' || !isLibraryPick(m) || `${m.id}.${m.ext}` !== file || !fits)
+    if (
+      !m ||
+      m.deletedAt ||
+      m.status !== 'ready' ||
+      !isLibraryPick(m) ||
+      `${m.id}.${m.ext}` !== file ||
+      !fits
+    )
       throw new ApiError(
         'invalid_request',
         `That edit can't be made: ${file} isn't a ready ${kind} in the library.`,
@@ -800,6 +808,8 @@ export async function renderEdit(
         engine: engineOf(base),
         // The base's look: shown on a render as is, and the fit's run reads it (never a restyle).
         look: base?.look ? { ...base.look, restyle: false } : null,
+        // A demo's recording inputs carry on (screen-recording plan §5.5).
+        ...(base?.recording ? { recording: inheritRecording(base.recording) } : {}),
       }
       if (base) assertSameEngine(deps, base, row)
       await repo.insertVersion(row)

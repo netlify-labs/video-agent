@@ -48,8 +48,10 @@ import {
   type FrozenNarration,
   type RunLook,
   type RunManifest,
+  type RunRecording,
   type ScopeStill,
 } from '../src/lib/run-manifest.js'
+import { RECORDING_LIMITS } from '../src/lib/media/classify.js'
 import { MAX_OUTPUT_SAMPLES, SAMPLE_RATE } from '../src/lib/timeline.js'
 import { runEngineFor } from './lib/engines/index.js'
 import type { RunEngine } from './lib/engines/types.js'
@@ -136,6 +138,33 @@ export function feedbackStills(
   return index
 }
 
+/**
+ * A demo's recording inputs (screen-recording plan §5.5), outside video/ so they never reach the archive: the frozen
+ * pointer trace (hash checked) at .va-run/recording/<id>/trace.json, and the person's boxes and trim in input.json.
+ */
+export async function hydrateRecording(root: string, r: RunRecording, fetch: Fetch) {
+  const dir = join(root, '.va-run', 'recording', r.mediaId)
+  mkdirSync(dir, { recursive: true })
+  if (r.trace) {
+    const to = join(dir, 'trace.json')
+    await fetch(r.trace.key, to, 'media')
+    if (sha256File(to) !== r.trace.sha256) {
+      rmSync(to, { force: true })
+      throw new StepError("The pointer trace doesn't match its hash. Stop and report this.")
+    }
+  }
+  writeFileSync(
+    join(dir, 'input.json'),
+    `${JSON.stringify({ boxes: r.boxes, ...(r.trim ? { trim: r.trim } : {}) }, null, 2)}\n`,
+  )
+  log('recording', {
+    mediaId: r.mediaId,
+    trace: Boolean(r.trace),
+    boxes: r.boxes.length,
+    trim: r.trim ?? null,
+  })
+}
+
 /** Unpacks a verified archive over <root>/video (the archive holds video/…). */
 function restoreArchive(root: string, archive: string, sha256: string, what: string) {
   const actual = sha256File(archive)
@@ -203,8 +232,11 @@ async function restoreReferences(
   if (refs?.length) log('references', { what, files: refs.map((r) => r.path) })
 }
 
-/** A second check of a clip with ffprobe (the upload was checked without it): H.264, AAC or no audio, ≤ 2 min. */
-export function probeClip(path: string, name: string) {
+/**
+ * A second check of a clip with ffprobe (the upload was checked without it): H.264, AAC or no audio, ≤ 2 min; a screen
+ * recording (the manifest's recording) may run 5 minutes (RECORDING_LIMITS, screen-recording plan gotcha 2).
+ */
+export function probeClip(path: string, name: string, opts: { role?: 'screen-recording' } = {}) {
   let info: { streams?: { codec_type?: string; codec_name?: string }[]; format?: { duration?: string } }
   try {
     info = JSON.parse(
@@ -225,8 +257,10 @@ export function probeClip(path: string, name: string) {
   if (video?.codec_name !== 'h264') throw new StepError(`Clip ${name} isn't H.264. Stop and report this.`)
   if (audio.some((s) => s.codec_name !== 'aac'))
     throw new StepError(`Clip ${name} has non-AAC audio. Stop and report this.`)
-  if (!(duration > 0) || duration > 120.5)
-    throw new StepError(`Clip ${name} is longer than 2 minutes. Stop and report this.`)
+  const recording = opts.role === 'screen-recording'
+  const max = recording ? RECORDING_LIMITS.seconds : 120
+  if (!(duration > 0) || duration > max + 0.5)
+    throw new StepError(`Clip ${name} is longer than ${recording ? '5' : '2'} minutes. Stop and report this.`)
 }
 
 interface ProbedStreams {
@@ -530,7 +564,12 @@ export async function prepare(
         throw new StepError(
           `Media ${item.filename} doesn't match its hash (got ${actual}). Stop and report this.`,
         )
-      if (item.kind === 'video') probeClip(to, item.filename)
+      if (item.kind === 'video')
+        probeClip(
+          to,
+          item.filename,
+          m.recording?.filename === item.filename ? { role: 'screen-recording' } : {},
+        )
       if (item.kind === 'audio') probeAudio(to, item.filename)
     }
     log('media', { count: m.media.length, files: m.media.map((x) => x.filename) })
@@ -539,8 +578,10 @@ export async function prepare(
   // 3. The look (looks plan §4.6): its snapshot into context/look/, outside the composition, so it's never archived.
   if (m.look) await restoreLook(root, m.look, tmp, fetch)
   stepDone('look', !m.look)
-  // 4. Recording files (the screen-recording plan adds them here), then scope files: the scoped beats and the
-  // parent's layout, read from the frozen copy (what check-contract --fix and render-job splice against).
+  // 4. Recording files, then scope files: the scoped beats and the parent's layout, read from the frozen copy (what
+  // check-contract --fix and render-job splice against).
+  if (m.recording) await hydrateRecording(root, m.recording, fetch)
+  stepDone('recording', !m.recording)
   if (m.scope) {
     const html = readFileSync(join(root, FROZEN_DIR, 'index.html'), 'utf8')
     let layout: ScopeLayout['layout']

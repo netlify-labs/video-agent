@@ -18,6 +18,7 @@ import { PROMPT_TEMPLATE_VERSION, buildFitPrompt, buildPrompt, buildRenderUnchan
 import { NARRATION_SRC } from '../lib/contract.js'
 import { isScopeRefusal, scopeStills } from '../lib/scope.js'
 import { setStage } from './videos.js'
+import { manifestRecording } from './demo-recording.js'
 import { readReferences } from './bundles.js'
 import type { BundleReference } from '../lib/bundle-references.js'
 import { MUSIC_POLL_MS, advanceMusicPick, attachTrack, needsMusicPick, newMusicPick } from './music-pick.js'
@@ -164,6 +165,9 @@ async function startRequest(
   const media = versionMedia.length
     ? versionMedia.map((m) => ({ key: m.key, sha256: m.sha256, filename: m.filename, kind: m.kind }))
     : null
+  const recording = manifestRecording(version.recording, media)
+  if (version.recording && !recording)
+    deps.log.warn('recording.manifest_missing_media', { jobId: a.jobId, versionN: a.versionN })
   const result = (prompt: string, parentSha: string | null) => ({
     req: {
       requestId: a.id,
@@ -194,6 +198,8 @@ async function startRequest(
       attemptId: a.id,
       versionN: a.versionN,
       ...m,
+      // A demo's recording inputs (screen-recording plan §5.5); absent otherwise, so other manifests keep their bytes.
+      ...(recording ? { recording } : {}),
       // Named only for other engines, so HyperFrames manifests (and the hash the prompt pins) keep their bytes.
       ...(version.engine && version.engine !== 'hyperframes' ? { engine: { id: version.engine } } : {}),
     })

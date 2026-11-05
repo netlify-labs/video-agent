@@ -77,6 +77,7 @@ import {
   resolveLook,
 } from './looks.js'
 import type { DestinationPublicationRow, VersionContext } from './types.js'
+import { inheritRecording } from './demo-recording.js'
 
 const IDEMPOTENCY_TTL_MS = 24 * 3600_000
 
@@ -572,6 +573,8 @@ export async function reviseVideo(
         look,
         // Background describes this change only, so a revision never inherits its parent's.
         context: input.context ?? null,
+        // A demo's recording inputs carry on (screen-recording plan §5.5).
+        ...(parent.recording ? { recording: inheritRecording(parent.recording) } : {}),
       }
       assertSameEngine(deps, parent, row)
       // A restyle keeps the video's engine, so the new look must support it (§4.14).
