@@ -44,6 +44,40 @@ export const looksCatalog: LookCatalogEntry[] = [
     }
   },
   {
+    "id": "data-story",
+    "name": "Data story",
+    "description": "Numbers first: counters that run up, charts that build bar by bar, and one annotation that says why it matters.",
+    "tags": [
+      "data",
+      "charts",
+      "numbers"
+    ],
+    "bestFor": [
+      "sales",
+      "launch",
+      "changelog"
+    ],
+    "aspects": [
+      "16:9",
+      "9:16",
+      "1:1",
+      "4:5"
+    ],
+    "engines": [
+      "hyperframes"
+    ],
+    "recording": null,
+    "musicMood": "steady minimal electronic, 100 to 110 bpm",
+    "hash": "fcd942c96446c1572cec72e9df83c8f8b6d481dcd6f52504453d7fb870a2ce7c",
+    "sha256": "08f3ffb1fd36ee03af4a69e5c645c2347282338e3152d8cdc6f60e13b59c7f54",
+    "bytes": 4619,
+    "source": "builtin",
+    "preview": {
+      "mp4": "/assets/looks/data-story.67672d2cadce.mp4",
+      "poster": "/assets/looks/data-story.4be15bc651d3.webp"
+    }
+  },
+  {
     "id": "editorial",
     "name": "Editorial",
     "description": "A magazine spread that moves: a big serif headline, thin rules, captions and slow pans. For considered stories.",

@@ -1,0 +1,9 @@
+{
+  "title": "Orbit",
+  "summary": "A data story example for the fictional product Orbit, with made-up numbers.",
+  "captions": [
+    { "start": 1, "end": 3, "text": "Teams read more than they write. 4,812 pages searched every day", "beat": "hook", "textId": "hook-title", "beatStart": 1, "beatEnd": 3 },
+    { "start": 3.4, "end": 8.5, "text": "Searches per team, 2026. Up 4.6× since January, the month search went live.", "beat": "chart", "textId": "chart-title", "beatStart": 0.4, "beatEnd": 5.5 },
+    { "start": 9.2, "end": 11, "text": "Orbit. See your team's numbers at orbit.example", "beat": "end", "textId": "end-title", "beatStart": 0.7, "beatEnd": 2.5 }
+  ]
+}
