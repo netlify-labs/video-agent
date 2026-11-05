@@ -17,6 +17,7 @@ export default tseslint.config(
       'netlify/edge-functions',
       'spikes',
       'ui/src/api/schema.d.ts',
+      'packages/sdk/src/generated/schema.d.ts',
       '**/*.cjs',
       'packages/*/dist',
     ],

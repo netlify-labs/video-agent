@@ -7,6 +7,7 @@ package-lock.json
 ui/dist
 video
 ui/src/api/schema.d.ts
+packages/sdk/src/generated/schema.d.ts
 ui/dist-mock
 .taste-skill
 test/fixtures
