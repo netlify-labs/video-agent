@@ -92,6 +92,8 @@
       win.appendChild(stage)
     }
 
+    // The zoomed stage overflows its window on purpose (the window clips it).
+    stage.setAttribute('data-layout-allow-overflow', '')
     // Camera: x, y (the frame point at the window's centre) and zoom, as percent translate and scale.
     var keys = parse(stage.getAttribute('data-va-camera'), beat, 'camera').filter(function (k, i) {
       var ok =

@@ -1,0 +1,97 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`recording.ts compose > composes the golden plan into a valid demo: intro, a scene per step, outro, captions 1`] = `
+{
+  "beats": [
+    {
+      "duration": 3,
+      "id": "intro",
+      "label": "Intro",
+      "recording": null,
+      "start": 0,
+      "texts": [
+        "Acme",
+        "Deploy a site",
+      ],
+    },
+    {
+      "duration": 10,
+      "id": "step-1",
+      "label": "Step 1",
+      "recording": {
+        "in": 0,
+        "out": 10,
+        "rate": 1,
+      },
+      "start": 3,
+      "texts": [
+        "Click Import a repo",
+      ],
+    },
+    {
+      "duration": 10,
+      "id": "step-2",
+      "label": "Step 2",
+      "recording": {
+        "in": 10,
+        "out": 20,
+        "rate": 1,
+      },
+      "start": 13,
+      "texts": [
+        "Click Deploy",
+      ],
+    },
+    {
+      "duration": 3,
+      "id": "outro",
+      "label": "Outro",
+      "recording": null,
+      "start": 23,
+      "texts": [
+        "Try it yourself",
+        "Acme",
+      ],
+    },
+  ],
+  "captions": [
+    {
+      "beat": "intro",
+      "beatEnd": 3,
+      "beatStart": 0,
+      "end": 3,
+      "start": 0,
+      "text": "Deploy a site",
+      "textId": "intro-title",
+    },
+    {
+      "beat": "step-1",
+      "beatEnd": 10,
+      "beatStart": 0.6,
+      "end": 13,
+      "start": 3.6,
+      "text": "Click Import a repo",
+      "textId": "step-1-callout",
+    },
+    {
+      "beat": "step-2",
+      "beatEnd": 10,
+      "beatStart": 0.6,
+      "end": 23,
+      "start": 13.6,
+      "text": "Click Deploy",
+      "textId": "step-2-callout",
+    },
+    {
+      "beat": "outro",
+      "beatEnd": 3,
+      "beatStart": 0.2,
+      "end": 26,
+      "start": 23.2,
+      "text": "Try it yourself",
+      "textId": "outro-cta",
+    },
+  ],
+  "duration": 26,
+}
+`;

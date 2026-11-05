@@ -28,12 +28,17 @@
 // (cursor path, locked hidden areas, the hold still when --duration is past 0.5x) under video/assets/recording/.
 // --holds-only writes only the missing stills index.html's held scenes name. --video, --plan, --analysis and --trace
 // override the paths.
+//
+//   npx tsx scripts/recording.ts compose --plan <full plan.json> [--look <id|none>] [--title <text>]
+//
+// compose: a whole demo with no agent (scripts/lib/recording-compose.ts): intro, a scene per step, outro, captions.
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { basename, dirname, extname, join } from 'node:path'
 import { parseTrace } from '../src/lib/recording-trace.js'
 import { analyzeRecording } from './lib/recording-analyze.js'
-import { ASPECTS, keptPlan, type Aspect } from '../src/lib/recording.js'
+import { ASPECTS, keptPlan, type Aspect, type PlanV1 } from '../src/lib/recording.js'
 import type { Analysis } from './lib/recording-analyze.js'
+import { composeDemo } from './lib/recording-compose.js'
 import { emitStep, holdsOnly, readKeptPlan } from './lib/recording-emit.js'
 import { cachedAnalysis, makeFocusCrops, makeSheets, transcribeRecording } from './lib/recording-extras.js'
 import {
@@ -205,7 +210,49 @@ function emit() {
   }
 }
 
-const commands: Record<string, () => unknown> = { analyze, plan, emit }
+function compose() {
+  const videoDir = args.video ?? join(repoRoot, 'video')
+  const planPath = args.plan
+  if (!planPath)
+    throw new StepError('compose needs --plan <plan.json> (the full plan, from .va-run/recording/<id>/).')
+  const full = readJson(planPath) as PlanV1
+  const analysisPath = args.analysis ?? join(videoDir, 'assets', 'recording', 'analysis.json')
+  if (!existsSync(analysisPath))
+    throw new StepError(`No analysis at ${analysisPath}: run recording.ts analyze first.`)
+  const tracePath = args.trace ?? join(repoRoot, '.va-run', 'recording', full.mediaId, 'trace.json')
+  // --look none, a look id (looks/<id>/look.json), or the run's look (context/look/look.json) by default.
+  const lookArg = args.look
+  const lookPath =
+    lookArg === 'none'
+      ? null
+      : lookArg
+        ? join(repoRoot, 'looks', lookArg, 'look.json')
+        : join(repoRoot, 'context', 'look', 'look.json')
+  if (lookArg && lookArg !== 'none' && !existsSync(lookPath ?? ''))
+    throw new StepError(`No look "${lookArg}".`)
+  const look = lookPath ? (readIf(lookPath) as { recording?: LookRecording } | null) : null
+  const brand = readIf(args.brand ?? join(repoRoot, 'context', 'brand.json')) as {
+    name?: string
+    primaryColor?: string
+  } | null
+  const r = composeDemo({
+    videoDir,
+    plan: full,
+    analysis: readJson(analysisPath) as Analysis,
+    trace: existsSync(tracePath) ? parseTrace(readFileSync(tracePath, 'utf8')) : null,
+    look: look?.recording ?? null,
+    title: args.title,
+    brand,
+  })
+  return {
+    ok: true,
+    index: join(videoDir, 'index.html'),
+    seconds: r.seconds,
+    beats: r.summary.captions?.length ?? 0,
+  }
+}
+
+const commands: Record<string, () => unknown> = { analyze, plan, emit, compose }
 
 try {
   const run = command ? commands[command] : undefined
