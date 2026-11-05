@@ -1,6 +1,6 @@
 // The template's video/ is self-contained (plan v2 §14 rule 22): the preview CSP and offline renders need every
 // script, style and font to come from the folder itself.
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
@@ -41,5 +41,25 @@ describe('editing contract v1 in the template', () => {
     expect(execFileSync('npx', ['tsx', 'scripts/check-contract.ts'], { encoding: 'utf8' })).toContain(
       'Contract v1: OK',
     )
+  })
+})
+
+describe('AGENTS.md and the scripts it names', () => {
+  const repo = join(root, '..')
+  it('lists scripts/recording.ts and has the Screen recordings section', () => {
+    expect(readFileSync(join(repo, 'AGENTS.md'), 'utf8')).toContain('`scripts/recording.ts`')
+    const video = readFileSync(join(root, 'AGENTS.md'), 'utf8')
+    expect(video).toContain('## Screen recordings (Video Agent)')
+    expect(video).toContain('- **Recordings** (only in a demo)')
+  })
+
+  it('every script either file names exists', () => {
+    for (const file of [join(repo, 'AGENTS.md'), join(root, 'AGENTS.md')]) {
+      const named = [...readFileSync(file, 'utf8').matchAll(/scripts\/([a-z0-9-]+\.ts)/g)].map(
+        (m) => m[1] ?? '',
+      )
+      for (const s of new Set(named))
+        expect(existsSync(join(repo, 'scripts', s)), `${file}: scripts/${s}`).toBe(true)
+    }
   })
 })

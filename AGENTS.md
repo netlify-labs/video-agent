@@ -12,6 +12,8 @@ run, these rules apply on top of your prompt.
 - Keep the editing contract ("Editing contract v1" in `video/AGENTS.md`); check it with `scripts/check-contract.ts`.
 - When your prompt asks for a voice-over, speak it with `scripts/voice.ts` and sync it with `scripts/voice.ts sync`
   ("Voice-over" in `video/AGENTS.md`). Never use another text-to-speech tool.
+- When your prompt has a screen recording, turn it into scenes with `scripts/recording.ts` (`analyze`, `plan`, `emit`,
+  then `check`; `compose` makes a whole demo with no authoring) as "Screen recordings" in `video/AGENTS.md` says.
 - Post milestones with `scripts/checkpoint.ts` as your prompt describes. It's best effort: never retry it or wait for it.
 - Render, upload and report with `scripts/render-job.ts`, exactly as your prompt says. If it fails, fix the composition and run it again.
 - End your answer with the fenced json block that render-job prints.
