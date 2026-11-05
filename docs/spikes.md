@@ -926,3 +926,100 @@ Changes for 4.1a:
 - CFR assembly at 30 fps duplicates the latest frame across gaps; the longest gap seen headed was 50 ms while busy.
   An idle page sends nothing, so gaps can be long.
 - The default viewport stays 1280×800.
+
+### D3: recording analysis time (2026-11-05, `spikes/d3`, `npx tsx spikes/d3/analyze.ts`; local only so far)
+
+The fixture is drawn by ffmpeg to look like a screen recording:
+- 2560×1440 at 30 fps, H.264 with 1 s GOPs, about 3.7 Mbps, 5 minutes, 131 MB.
+- Six 50 s "pages" with different themes and layouts, and a static high-detail texture so the bitrate is realistic.
+- A 24 px cursor that moves for 7 s and then rests for 5 s, a card flash after each move, and a looped speech
+  track (macOS `say` locally; Kokoro on the runner).
+
+Run on a MacBook (14 CPUs), with the machine shared by five other agent sessions (load average 60–150), so timings
+vary from run to run.
+
+| Stage | Time | Notes |
+| --- | --- | --- |
+| ffprobe + sha256 (131 MB) | 0.1 s | |
+| freezedetect `n=-70dB:d=1.2`, 640 wide | 15–31 s | **Calls 276 of 300 s idle**: a moving 24 px cursor is too small for a whole-frame difference |
+| scdet (threshold 10), 640 wide | 14–18 s | Found all 5 page changes, at exact times. Card flashes score about 3, so 10 is safe |
+| Diff pass, 320 wide grey at 10 fps, connected components | 12–32 s | Active 60% (the cursor moves 58% of the time); idle 115 s in 30 runs |
+| **One decode feeding all three** (split → freezedetect + scdet, and the grey frames) | **22 s** | Cheaper than the three separate decodes (40–80 s) |
+| Contact sheets (6 scenes × 12 frames, 4×3 tile) + 12 focus crops | 7.5 s | |
+| Parakeet install (cached) + transcribe of 5 min | 3.9 + 19.5–36.5 s | 0.06–0.12× real time, 558 words |
+| **Pipeline** (probe, sha, one decode, sheets, crops, transcribe) | **55 s** | Pass locally: under 3 min |
+| **From the cache** (sha256, read analysis.json, sheets and crops again) | **6.4–7.6 s** | Pass: under 20 s |
+
+What this means for `recording.ts analyze`:
+- Decode the file **once** (ffmpeg `split`) for freezedetect, scdet and the diff frames.
+- Take **idle from the diff pass**, not from freezedetect, which misses cursor-only motion. freezedetect can stay as a
+  cheap cross-check.
+- scdet threshold 10 holds for this fixture.
+- The runner number (4 CPUs) is still to come, from the same run as D1.
+
+### D4: H.264 in the browser with Mediabunny (2026-11-05, `spikes/d4`, `npx tsx spikes/d4/encode.ts --mediabunny <dist/bundles>`)
+
+Setup:
+- Mediabunny **1.62.1**. Newer releases were under two weeks old, and the supply-chain guard refused them.
+- Playwright 1.64.1 builds of Chromium, WebKit and Firefox, headless, on a page served from `localhost` (WebCodecs
+  needs a secure context).
+- **Live (path B):** an animated 2560×1440 canvas stands in for the display track. It resizes to 2000×1300 halfway
+  through, as a window resize would.
+- **Conversion (path C):** a 2-minute cut of the D3 fixture, as MOV (remux) and as WebM (VP9).
+- Every output gets the §4.2 checks: H.264, longest keyframe gap, one frame duration (CFR), moov before mdat, no moof.
+
+**Live encode, 10–60 s at 3.5 Mbps, `keyFrameInterval: 1`, `frameRate: 30`:**
+
+| Browser | `MediaStreamVideoTrackSource` (canvas step or direct with `sizeChangeBehavior: 'contain'`) | `CanvasSource` fallback (display `<video>` → canvas at the first frame's size → `add(k/30, 1/30)`, `latencyMode: 'quality'`) |
+| --- | --- | --- |
+| Chromium | **0% dropped**, CFR 33.33 ms, 1 s keyframes, passes §4.2. Direct with `contain` keeps 2560×1440 through the resize | 0% dropped, passes |
+| WebKit | **Fails**: `DataCloneError` (the track can't be handed to Mediabunny's worker) | **0% dropped, passes**. 89 of 901 frames were drawn up to one frame late |
+| Firefox | Encodes, but **8–17% dropped** (realtime encoder) and not CFR. Needs the source's `frameRate: 30` (no `MediaStreamTrackProcessor`) | With `latencyMode: 'realtime'`, still 8–9% dropped by the encoder. With `'quality'`: **0% dropped, passes**, 46 of 901 drawn late |
+
+**Conversion, 2 min of 1440p to H.264 MP4 (`fastStart: 'in-memory'`, `keyFrameInterval: 1`, 3.5 Mbps, `frameRate: 30`, audio dropped):**
+
+| Browser | MOV, main thread / Worker | WebM VP9, main thread / Worker | §4.2 |
+| --- | --- | --- | --- |
+| Chromium | 0.17× / 0.18× real time | 0.27× / 0.23× | all pass (3,603 frames, CFR, 1 s keyframes) |
+| WebKit | 0.22× / 0.22× | 0.22× / 0.22× | all pass |
+| Firefox | 0.28× / 0.22× | 0.22× / 0.22× | all pass |
+
+**Pass**, with these changes for path B (4.5) and conversion (4.3):
+- **Path B** uses `MediaStreamVideoTrackSource` with `sizeChangeBehavior: 'contain'` (no canvas step) where it works,
+  which is Chromium. WebKit and Firefox use the `CanvasSource` fallback with `latencyMode: 'quality'`, drawing at the
+  first frame's size. The fallback doesn't need MediaRecorder.
+- **Conversion** runs in a module Worker. Every browser is far under 1.5× real time.
+- Not covered: real Safari (Playwright's WebKit is close but not the same), a real `getDisplayMedia` track, 5-minute
+  live runs, and the "2023 laptop" target. Recheck these at 3.5 (the phase 3 gate's fake display stream).
+- Mediabunny is pinned to a release at least two weeks old.
+
+### D5: upload assembly memory for 150 MB (2026-11-05, `spikes/d5`, `npx tsx spikes/d5/assemble.ts [--gc]`; local only so far)
+
+The test runs the byte path of `assembleUpload` against `@netlify/blobs` 11.1.7's local `BlobsServer`, through the
+production adapter (`src/adapters/blobs.ts`) and the real `classify`:
+- 150 MB H.264 MP4, 38 parts of 4 MB.
+- Each variant runs in a fresh child process, sampled every 20 ms.
+- `--gc` forces collection every 100 ms, to tell live memory from garbage.
+
+| Variant | Peak RSS (no gc / gc) | Peak arrayBuffers |
+| --- | --- | --- |
+| current (concat, `new Uint8Array` copy, adapter slice) | 969 / 963 MB | 752 MB |
+| proto (the bead's plan: hash per part, pass the Buffer through) | 973 / 960 MB | 604 MB |
+| proto + no adapter slice | 803 / 827 MB | 454 MB |
+| one preallocated buffer, parts copied in and dropped | 886 / 901 MB | 604 MB |
+| preallocated + `new Blob([bytes])` body | 859 / 857 MB | 604 MB |
+| **preallocated + a `ReadableStream` of 1 MB views as the body** | **407 / 431 MB** | **183 MB** |
+
+Findings:
+- **Removing the extra copy isn't enough.** Every buffered body (ArrayBuffer or Blob) costs another 300–450 MB in
+  fetch, and forced GC doesn't change that, so these are real copies.
+- **Only a streamed body passes** (under 700 MB). `@netlify/blobs` passes a `ReadableStream` straight to fetch with
+  `duplex: 'half'`.
+
+Changes for 1.2c:
+- Assemble into one `Buffer.allocUnsafe(size)`, hashing per part as it's copied in.
+- Store it as a stream of views. `BlobsPort.set` gets a stream form.
+- `fetchAndRetry` can't replay a consumed stream, so the caller retries with a fresh stream.
+
+Still to prove on Netlify: that the Blobs edge accepts a streamed (chunked) 150 MB PUT from a background function, and
+the peak there (the function already logs `rssMb`).
