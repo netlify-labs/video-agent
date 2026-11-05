@@ -8,7 +8,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } 
 import { join } from 'node:path'
 import type { MasteringReport, NarrationOutput, NarrationReport } from '../src/domain/types.js'
 import { bundleManifest, compositionFiles } from '../src/lib/bundle-manifest.js'
-import { NARRATION_SRC, validate, type Summary } from '../src/lib/contract.js'
+import { NARRATION_SRC } from '../src/lib/contract.js'
 import { groupWords, transcriptText } from '../src/lib/narration-captions.js'
 import { checkNarration } from '../src/lib/narration-guard.js'
 import { checkNarrationKept, checkNarrationModified } from '../src/lib/narration-modified.js'
@@ -17,6 +17,7 @@ import type { PreviewFile } from '../src/lib/media/previews.js'
 import type { RunManifest } from '../src/lib/run-manifest.js'
 import type { NarrationOp } from '../src/lib/timeline.js'
 import { postCheckpoint } from './checkpoint.js'
+import { engineReport, runEngineFor, runEngineIdFromManifest } from './lib/engines/index.js'
 import { readNarrationReceipt } from './lib/narration-inputs.js'
 import { toVtt } from './lib/captions.js'
 import {
@@ -39,7 +40,6 @@ import {
   parseArgs,
   repoRoot,
   run,
-  runStreaming,
   sha256File,
   videoTarArgs,
   which,
@@ -68,8 +68,12 @@ async function main() {
       throw new StepError(
         `${tool} is not installed. netlify-agent-kit should have installed it; check the run setup log.`,
       )
-  if (!existsSync(join(videoDir, 'index.html')))
-    throw new StepError('video/index.html does not exist. Write the composition first.')
+  // The engine the run manifest names (render-engines plan §4.3); HyperFrames when it names none.
+  const engine = runEngineFor(runEngineIdFromManifest(repoRoot, attempt))
+  const engineVersion = engine.version(videoDir)
+  log('engine.selected', { id: engine.id, version: engineVersion })
+  const entryProblems = engine.entryProblems(videoDir)
+  if (entryProblems.length) throw new StepError(entryProblems.join('\n'))
 
   const summaryPath = join(videoDir, 'summary.json')
   if (!existsSync(summaryPath))
@@ -83,20 +87,12 @@ async function main() {
     throw new StepError(`video/summary.json is not valid JSON: ${e instanceof Error ? e.message : String(e)}`)
   }
 
-  // Editing contract v1 (plan v2 §8): a composition that declares it must keep it, or the editor can't open it.
+  // The editing contract (plan v2 §8): a composition that declares it must keep it, or the editor can't open it.
+  const contract = engine.contract(videoDir)
+  if (contract?.length) throw new StepError(contract[0] ?? '')
+  if (contract) log('contract.ok')
+  else log('contract.absent', { note: 'This video will not be editable in the browser.' })
   const indexHtml = readFileSync(join(videoDir, 'index.html'), 'utf8')
-  if (/data-va-contract\s*=\s*["']1["']/.test(indexHtml)) {
-    const violations = validate(indexHtml, summary as Summary)
-    if (violations.length)
-      throw new StepError(
-        `The composition breaks the editing contract (see "Editing contract v1" in video/AGENTS.md):\n- ${violations.join('\n- ')}`,
-      )
-    if (/data-va-revoice/.test(indexHtml))
-      throw new StepError(
-        'Some narration lines are still marked for re-voicing (data-va-revoice). Run npx tsx scripts/voice.ts revoice first.',
-      )
-    log('contract.ok')
-  } else log('contract.absent', { note: 'This video will not be editable in the browser.' })
 
   // Render-unchanged runs render exactly the frozen bundle prepare-run restored (plan v2 §14 rule 21).
   const runManifestPath = join(repoRoot, '.render', 'run-manifest.json')
@@ -199,14 +195,9 @@ async function main() {
       if (!r.ok) log('render.progress_skipped', { pct, reason: r.reason })
     })
   })
-  await runStreaming('npx', ['-y', 'hyperframes', 'render', '--quality', QUALITY, '--output', video], {
-    cwd: videoDir,
-    timeoutMs: 20 * 60_000,
-    onOutput: (chunk) => {
-      reporter.line(chunk)
-    },
+  const rendered = await engine.render(videoDir, video, QUALITY, (pct) => {
+    reporter.progress(pct)
   })
-  reporter.end()
   // hyperframes stops its machine lines at 99%: close the render out so the page moves on to "saving".
   void postCheckpoint({
     attempt,
@@ -407,10 +398,10 @@ async function main() {
     width: stream.width,
     height: stream.height,
     tools: {
-      hyperframes:
-        run('npx', ['-y', 'hyperframes', '--version'], { cwd: videoDir }).trim().split('\n').pop() ?? '',
+      ...(engine.id === 'hyperframes' ? { hyperframes: engineVersion } : {}),
       quality: QUALITY,
     },
+    engine: engineReport(engine, engineVersion, rendered),
   }
 
   // Kept on disk too, so the agent can print it again without rendering again (a second render overwrites the uploads).

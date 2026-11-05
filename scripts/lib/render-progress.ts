@@ -32,14 +32,19 @@ export class RenderProgressReporter {
     this.partial = lines.pop() ?? ''
     for (const l of lines) {
       const pct = parseRenderProgress(l)
-      if (pct === null || pct <= this.last) continue
-      const t = this.now()
-      if (pct - this.last < this.minStep && pct < 100) continue
-      if (t - this.lastAt < this.minGapMs && pct < 100) continue
-      this.last = pct
-      this.lastAt = t
-      this.send(pct)
+      if (pct !== null) this.progress(pct)
     }
+  }
+
+  /** A percent an engine already parsed (scripts/lib/engines/), through the same rules. */
+  progress(pct: number) {
+    if (pct <= this.last) return
+    const t = this.now()
+    if (pct - this.last < this.minStep && pct < 100) return
+    if (t - this.lastAt < this.minGapMs && pct < 100) return
+    this.last = pct
+    this.lastAt = t
+    this.send(pct)
   }
 
   /** Flushes a last line that had no newline. */
