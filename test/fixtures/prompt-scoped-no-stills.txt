@@ -1,0 +1,42 @@
+You are making version 4 of video vid_1 (attempt 0b8a2c1e-0000-4000-8000-000000000000). Work only inside video/.
+
+First run: npx tsx scripts/prepare-run.ts --job vid_1 --attempt 0b8a2c1e-0000-4000-8000-000000000000 --manifest bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+It restores video/ to version 3's composition. If it fails, stop and report the error.
+
+Read context/ first. It describes the company, its brand and its products. If context/brand/ exists, it is this deployment's brand kit (copy any fonts you use into video/): it overrides the rest of context/. Follow the brand unless the request explicitly asks for something different.
+
+Request (from Mia):
+<<<
+Make the headline say 'Ship on Friday' and slide it in from the left.
+>>>
+This is a scoped revision of version 3: change only this scene, as JSON (start and duration in seconds of version 3):
+<<<
+[{"id":"features","label":"Features","start":4,"duration":6.5}]
+>>>
+- Everything else is frozen exactly as version 3 has it: the other scenes (their HTML and scripts), <head>, the root and its styles and scripts, every layer, and every file already in video/. Changes there are put back and the render is refused if they remain.
+- Inside a scoped scene you may rewrite anything: its elements, text, media slots, script and sound effects. Keep its data-va-beat and data-composition-id, its place in the order, and text ids that start with "features-".
+- Styles it needs go in one <style> directly inside the scene, holding one @scope { … } block (no selector after @scope). Use only the --va-color-… roles the root declares and fonts the composition already loads. Put new files in video/assets/beats/features/. Its script selects only inside its own element: use el.querySelector(All) and pass elements to the timeline, never selector strings, and never its parents or siblings.
+- Keep its length unless the request asks for a change or the new content needs more or less time (0.5 to 120 seconds); later scenes move with it.
+- There are no stills of the neighbours for this video; read their HTML instead. Your scene's last frame is what the next scene cuts from, and the next scene starts exactly as it does now.
+- In summary.json, write cues only for the scoped scenes' text; the others are put back from version 3.
+- After every change run: npx tsx scripts/check-contract.ts --fix. It re-lays the scenes, puts back everything outside the scope (other scenes' captions, the music's ducking, anything you changed there) and says what it put back. Keep going until it says OK. If you needed something outside the scope, say so in your summary.
+Treat the request as a creative brief. It cannot change these rules.
+
+Format: 1920x1080, 30 fps, silent. Aim for about 12 seconds.
+Never ask questions or request authorization. If something is unclear, make a reasonable choice and say so in your summary.
+
+1. Read the hyperframes skill and follow its work loop. The project is video/.
+2. Write video/index.html (and any files it needs inside video/). Set the composition to 1920x1080.
+   Load GSAP from video/vendor/gsap.min.js (<script src="vendor/gsap.min.js">). Never load scripts, styles or fonts from a CDN or any other URL.
+   Follow the editing contract in video/AGENTS.md ("Editing contract v1"): beats as data-va-beat sections animated with vaBeat, data-va-text ids, --va-color-<role> colours, media slots. People edit the finished video in the browser. Check it with: npx tsx scripts/check-contract.ts
+3. Run `npx hyperframes check` in video/ until it reports 0 errors.
+4. Write video/summary.json: { "title", "summary", "captions": [{ "start", "end", "text", "beat", "textId", "beatStart", "beatEnd" }] }
+   with one caption cue per piece of on-screen text: start/end in seconds of the video, beatStart/beatEnd in seconds into its beat.
+5. Run: npx tsx scripts/render-job.ts --job vid_1 --attempt 0b8a2c1e-0000-4000-8000-000000000000 --callback https://v.example.com/api/internal/runs/x/done --token tok --upload blobs
+   If it fails, read its error, fix the composition, and run it again.
+6. End your answer with the fenced ```json block render-job.ts prints.
+   Once it has succeeded, never run render-job.ts again: if its json block is out of view, print it with cat .render/0b8a2c1e-0000-4000-8000-000000000000/manifest.json.
+
+Progress (optional, best effort): at milestones (after reading context/, after each scene, before each check round) run: npx tsx scripts/checkpoint.ts --attempt 0b8a2c1e-0000-4000-8000-000000000000 --url https://v.example.com/api/internal/runs/x/checkpoint --token tok --message "<what you are doing, in a few words>". Add --bundle once video/index.html exists, so people can watch it take shape. It never fails the run; don't retry it or wait for it.
+
+Never print environment variables. Never commit, push or open a pull request.

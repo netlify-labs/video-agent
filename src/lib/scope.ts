@@ -23,7 +23,7 @@ import {
   type ValidateOptions,
   relayoutScoped,
 } from './contract.js'
-import { fmt, frames, shiftCues, syncCaptionsFor } from './contract-core.js'
+import { FPS, fmt, frames, sec, shiftCues, syncCaptionsFor } from './contract-core.js'
 import { scopedScriptProblems } from './scope-script.js'
 import { scopedStyleProblems } from './scope-style.js'
 import { excluded } from './bundle-manifest.js'
@@ -805,4 +805,37 @@ export function scopeRules(
   if (real.every((b) => unique.includes(b.id)))
     return { refusal: "That's every scene: revise the whole video instead (leave out scope)." }
   return { beats: real.map((b) => b.id).filter((id) => unique.includes(id)) }
+}
+
+/**
+ * Stills of a scoped revision's neighbours, from the parent MP4 (plan §4.3): one per boundary that touches a scoped
+ * scene. Before a scoped scene, the previous scene's last frame; after it, the next scene's first frame (what the
+ * scene has to cut from and into). A boundary between two scoped scenes gives one still, not two. At most 40.
+ * The reconciler and local mode both use this, so they make the same stills.
+ */
+export function scopeStills(
+  beats: readonly { id: string; start: number; duration: number }[],
+  scoped: readonly string[],
+): { atSec: number; path: string; what: 'before' | 'after'; beat: string }[] {
+  const out: { atSec: number; path: string; what: 'before' | 'after'; beat: string }[] = []
+  for (let i = 0; i + 1 < beats.length; i++) {
+    const left = beats[i]
+    const right = beats[i + 1]
+    if (!left || !right) continue
+    if (scoped.includes(left.id))
+      out.push({
+        atSec: sec(right.start),
+        path: `feedback/scope/${left.id}-after.jpg`,
+        what: 'after',
+        beat: left.id,
+      })
+    else if (scoped.includes(right.id))
+      out.push({
+        atSec: sec(Math.max(0, right.start - 1 / FPS)),
+        path: `feedback/scope/${right.id}-before.jpg`,
+        what: 'before',
+        beat: right.id,
+      })
+  }
+  return out.slice(0, 40)
 }

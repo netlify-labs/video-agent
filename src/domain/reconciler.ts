@@ -16,6 +16,7 @@ import { contextMeta } from '../generated/context.js'
 import { clip } from '../lib/log.js'
 import { PROMPT_TEMPLATE_VERSION, buildFitPrompt, buildPrompt, buildRenderUnchangedPrompt } from './prompt.js'
 import { NARRATION_SRC } from '../lib/contract.js'
+import { isScopeRefusal, scopeStills } from '../lib/scope.js'
 import { setStage } from './videos.js'
 import { readReferences } from './bundles.js'
 import type { BundleReference } from '../lib/bundle-references.js'
@@ -302,6 +303,11 @@ async function startRequest(
     const sha = parent?.sha256['video.mp4']
     if (parent && sha) feedbackVideo = { key: parent.videoKey, sha256: sha }
   }
+  // A scoped revision (redo a scene): its scenes from the parent, stills of their neighbours from the parent MP4
+  // (none past 300 MB, the download would cost more than they help), and an earlier refusal to avoid repeating.
+  const scope =
+    version.scope && revision?.parentN ? await scopeFor(deps, a, version.scope.beats, revision.parentN) : null
+  if (scope?.video && !feedbackVideo) feedbackVideo = scope.video
   const feedback = snapshots.map((c) => {
     const i = pins.indexOf(c)
     return {
@@ -330,6 +336,7 @@ async function startRequest(
         video: feedbackVideo,
         pins: pins.map((c) => ({ commentId: c.commentId, timeSec: c.timeSec ?? 0, x: c.x, y: c.y })),
       },
+      ...(scope ? { scope: { beats: scope.beats.map((b) => b.id), stills: scope.stills } } : {}),
     })
   }
   const prompt = buildPrompt({
@@ -362,8 +369,43 @@ async function startRequest(
     voiceover: version.voiceover ?? null,
     brandMusic: contextMeta.music,
     narration: revision?.narrationSamples ? { samples: revision.narrationSamples } : null,
+    ...(scope && revision?.parentN
+      ? {
+          scope: {
+            n: revision.parentN,
+            beats: scope.beats,
+            stills: scope.stills.length > 0,
+            voiced: version.voiceover != null,
+            locked: !!revision.narrationSamples,
+            previousRefusal: scope.previousRefusal,
+          },
+        }
+      : {}),
   })
   return result(prompt, revision?.sourceSha256 ?? null)
+}
+
+/** The parent MP4 size past which a scoped run gets no stills of the neighbours (plan §4.3). */
+const SCOPE_STILLS_MAX_BYTES = 300 * 1024 * 1024
+
+async function scopeFor(deps: Deps, a: AttemptRow, beats: string[], parentN: number) {
+  const parent = await deps.store.getVersion(a.jobId, parentN)
+  const all = parent?.beats ?? []
+  const scoped = all.filter((b) => beats.includes(b.id))
+  const out = await deps.store.getOutput(a.jobId, parentN)
+  const sha = out?.sha256['video.mp4']
+  const video = out && sha && out.bytes <= SCOPE_STILLS_MAX_BYTES ? { key: out.videoKey, sha256: sha } : null
+  // The latest earlier attempt of this version refused for its scope: derived from stored rows only, so every retry
+  // of the same state gets the same prompt.
+  const earlier = (await deps.store.listAttempts(a.jobId))
+    .filter((x) => x.versionN === a.versionN && x.id !== a.id && isScopeRefusal(x.errorMessage))
+    .sort((x, y) => (x.queuedAt < y.queuedAt ? -1 : x.queuedAt > y.queuedAt ? 1 : 0))
+  return {
+    beats: scoped,
+    stills: video ? scopeStills(all, beats) : [],
+    video,
+    previousRefusal: earlier.at(-1)?.errorMessage ?? null,
+  }
 }
 
 async function trackFacts(deps: Deps, mediaId: string) {
