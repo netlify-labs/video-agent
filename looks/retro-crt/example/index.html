@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="vendor/gsap.min.js"></script>
+    <script src="vendor/va-contract.js"></script>
+    <style>
+      /* Retro CRT example: the fictional product Orbit, placeholder words. Runs reuse its tube, scanlines and moves,
+         never its words. Colours are the brand's roles, and derived roles, written as literal colours. */
+      #root {
+        --va-color-bg: #07080a;
+        --va-color-text: #f4f5f7;
+        --va-color-accent: #ffb000;
+        --va-color-glow: #ffd780;
+        --va-color-scan: rgba(0, 0, 0, 0.25);
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1920px; height: 1080px; overflow: hidden; background: #07080a; }
+      #root { width: 100%; height: 100%; position: relative; font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; background: var(--va-color-bg); }
+      .tube { position: absolute; inset: 54px 96px; border-radius: 43px; background: #121008; }
+      .vignette { position: absolute; inset: 54px 96px; border-radius: 43px; box-shadow: inset 0 0 160px 40px #000000; pointer-events: none; }
+      .scan { position: absolute; inset: 54px 96px; border-radius: 43px; background: repeating-linear-gradient(to bottom, var(--va-color-scan) 0, var(--va-color-scan) 2px, transparent 2px, transparent 4px); pointer-events: none; }
+      .beat { position: absolute; inset: 54px 96px; padding: 0 120px; display: flex; flex-direction: column; justify-content: center; }
+      .head { color: var(--va-color-accent); font-size: 88px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; text-shadow: 0 0 12px var(--va-color-glow); }
+      .line { color: var(--va-color-accent); font-size: 38px; font-weight: 500; margin-top: 28px; text-shadow: 0 0 8px var(--va-color-glow); }
+      .hi { color: var(--va-color-text); }
+      .cursor { display: inline-block; width: 0.6em; height: 1em; vertical-align: -0.15em; background: var(--va-color-accent); }
+      .slice { position: absolute; left: 120px; top: 50%; transform: translateY(-50%); }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-va-contract="1" data-start="0" data-duration="8" data-width="1920" data-height="1080">
+      <div class="tube"></div>
+      <section id="boot" class="clip beat" data-va-beat="boot" data-va-label="Boot" data-composition-id="boot" data-start="0" data-duration="2.5" data-va-authored-duration="2.5" data-track-index="0">
+        <p class="line" data-va-text="boot-line" data-va-label="Prompt line">&gt; orbit --search</p>
+        <h1 class="head" data-va-text="boot-title" data-va-label="Headline">Find anything.</h1>
+        <script>
+          vaBeat('boot', (tl, el) => {
+            const flicker = { keyframes: [{ opacity: 1, duration: 0.03 }, { opacity: 0.4, duration: 0.03 }, { opacity: 1, duration: 0.03 }] }
+            tl.fromTo(el.querySelector('[data-va-text="boot-line"]'), { opacity: 0 }, flicker, 0.15)
+              .fromTo(el.querySelector('[data-va-text="boot-title"]'), { opacity: 0 }, flicker, 0.6)
+          })
+        </script>
+      </section>
+      <section id="claim" class="clip beat" data-va-beat="claim" data-va-label="Claim" data-composition-id="claim" data-start="2.5" data-duration="2.5" data-va-authored-duration="2.5" data-track-index="0">
+        <h2 class="head" data-va-text="claim-title" data-va-label="Headline">Every note. <span class="hi">Instantly.</span></h2>
+        <p class="line" data-va-text="claim-line" data-va-label="Line">4,812 pages searched in 38 ms</p>
+        <script>
+          vaBeat('claim', (tl, el) => {
+            const head = el.querySelector('[data-va-text="claim-title"]')
+            // The glitch: fixed offsets, so every frame is the same whenever it's sought.
+            tl.fromTo(head, { x: 0 }, { keyframes: [{ x: 28, duration: 0.04 }, { x: -18, duration: 0.04 }, { x: 12, duration: 0.04 }, { x: -6, duration: 0.04 }, { x: 0, duration: 0.04 }] }, 0)
+              .fromTo(head, { opacity: 0 }, { keyframes: [{ opacity: 1, duration: 0.03 }, { opacity: 0.4, duration: 0.03 }, { opacity: 1, duration: 0.03 }] }, 0)
+              .fromTo(el.querySelector('[data-va-text="claim-line"]'), { opacity: 0 }, { keyframes: [{ opacity: 1, duration: 0.03 }, { opacity: 0.4, duration: 0.03 }, { opacity: 1, duration: 0.03 }] }, 0.6)
+          })
+        </script>
+      </section>
+      <section id="end" class="clip beat" data-va-beat="end" data-va-label="End card" data-composition-id="end" data-start="5" data-duration="3" data-va-authored-duration="3" data-track-index="0">
+        <h2 class="head" data-va-text="end-title" data-va-label="Product name">Orbit</h2>
+        <p class="line"><span data-va-text="end-cta" data-va-label="Call to action">try it free</span> <span class="cursor" aria-hidden="true"></span></p>
+        <script>
+          vaBeat('end', (tl, el) => {
+            tl.fromTo(el.querySelector('[data-va-text="end-title"]'), { opacity: 0 }, { keyframes: [{ opacity: 1, duration: 0.03 }, { opacity: 0.4, duration: 0.03 }, { opacity: 1, duration: 0.03 }] }, 0.1)
+              .fromTo(el.querySelector('[data-va-text="end-cta"]'), { opacity: 0 }, { opacity: 1, duration: 0.05 }, 0.5)
+            // The cursor blinks in steps, 1 s a cycle.
+            for (const t of [0.5, 1.5, 2.5]) tl.set(el.querySelector('.cursor'), { opacity: 1 }, t).set(el.querySelector('.cursor'), { opacity: 0 }, t + 0.5)
+          })
+        </script>
+      </section>
+      <div class="scan"></div>
+      <div class="vignette"></div>
+    </div>
+    <script>
+      window.__timelines['main'] = gsap.timeline({ paused: true })
+    </script>
+  </body>
+</html>

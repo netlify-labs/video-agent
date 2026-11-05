@@ -1,0 +1,16 @@
+{
+  "id": "retro-crt",
+  "name": "Retro CRT",
+  "description": "An old monitor: scanlines, phosphor glow in the brand's accent and a little glitch. For playful launches and teasers.",
+  "tags": ["retro", "glow", "playful"],
+  "bestFor": ["social", "launch", "other"],
+  "aspects": ["16:9", "9:16", "1:1", "4:5"],
+  "engines": ["hyperframes"],
+  "colors": { "roles": ["bg", "text", "accent"], "derived": ["glow", "scan"] },
+  "sound": { "musicMood": "synthwave, 100 to 110 bpm" },
+  "recording": false,
+  "registry": [],
+  "authors": ["Video Agent maintainers"],
+  "license": "MIT",
+  "since": "2026-11-05"
+}

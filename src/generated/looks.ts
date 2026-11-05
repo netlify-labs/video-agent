@@ -178,6 +178,40 @@ export const looksCatalog: LookCatalogEntry[] = [
     }
   },
   {
+    "id": "retro-crt",
+    "name": "Retro CRT",
+    "description": "An old monitor: scanlines, phosphor glow in the brand's accent and a little glitch. For playful launches and teasers.",
+    "tags": [
+      "retro",
+      "glow",
+      "playful"
+    ],
+    "bestFor": [
+      "social",
+      "launch",
+      "other"
+    ],
+    "aspects": [
+      "16:9",
+      "9:16",
+      "1:1",
+      "4:5"
+    ],
+    "engines": [
+      "hyperframes"
+    ],
+    "recording": false,
+    "musicMood": "synthwave, 100 to 110 bpm",
+    "hash": "5f3d0a8964b1b72acab8c4eb036245dace280985776e17ba78c748b5aa91ee71",
+    "sha256": "475e06f5222715555a234b15ad43bdc02d367da2f297588ec6fea51426a6e937",
+    "bytes": 4085,
+    "source": "builtin",
+    "preview": {
+      "mp4": "/assets/looks/retro-crt.3f7c144b3bdd.mp4",
+      "poster": "/assets/looks/retro-crt.a37e10462061.webp"
+    }
+  },
+  {
     "id": "terminal",
     "name": "Terminal",
     "description": "Commands typed live, code diffs, a blinking cursor, monospace everything. For changelogs and dev tools.",
