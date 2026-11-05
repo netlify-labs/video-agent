@@ -87,5 +87,21 @@ refused: offer `revise_video` or `create_video` instead.
 3. Record a verdict with `set_verdict`: "approved" or "changes_requested", with a short `note`. You can't review your
    own version.
 4. To act on the feedback (the video's owner or an admin): `revise_video` with the `comment_ids` to incorporate and a
-   `change` that summarises them. The new version records which comments it addressed (`addressed_in`).
+   `change` that summarises them. The new version records which comments it addressed (`addressed_in`). When the
+   comments are pinned to moments in one or a few scenes, prefer redoing those scenes (see "Redo a scene").
 5. Repeat until it's approved, then `publish_video`.
+
+## Redo a scene
+
+When a change is about one or a few scenes ("the second scene's headline", "the part at 0:12"), redo only those:
+everything else stays exactly as it is, so nothing else drifts, and it costs less than a whole revision.
+
+1. `get_video` with `video_id`. Each ready version lists its scenes in `beats` (`id`, `label`, `start`, `duration`
+   in seconds). Find the scene by its label, or by the moment: the scene whose `start` ≤ t < `start + duration`.
+2. `revise_video` with `video_id`, `from_version` (the version those scenes belong to), `beats` (the scene ids) and
+   `change` (what should change in them). Leave out `plan_id`, `duration_sec`, `sound` and `voiceover`; say in
+   `change` if a scene should run longer or its line should change.
+3. Follow the run with `get_video` (or `show_video`) until it's ready. If it fails because the run changed things
+   outside those scenes, retry it once; if it fails again, revise the whole video instead.
+4. Review only the redone scenes: the rest is unchanged by design. The new version says which it redid
+   (`redid_scenes`).

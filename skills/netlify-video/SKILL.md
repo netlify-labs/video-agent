@@ -45,6 +45,9 @@ only watch. The tool list shows only what your role can do.
    `versions[].destinations`; `unpublish_video` with its `publication` id removes it.
 5. **Change.** `revise_video` with `video_id` and `change` (only what should change). Pass `from_version` to branch
    from an earlier ready version, `comment_ids` to fold in feedback, and `media_ids` to add library items.
+   **Redo a scene:** when the change is about one or a few scenes, pass `beats` (scene ids from `get_video`'s
+   `versions[].beats`) with `from_version`: only those scenes change and everything else stays exactly as it is,
+   faster and cheaper than revising the whole video.
 6. **Remix.** `remix_video` with `video_id` and `change` makes a NEW video (the person's own) that starts from an
    existing one: anything from "the same video with our new product name" to "a video like this one about webhooks".
    Its shape, length, sound, AI voice-over and media come from the source unless you pass them; recorded narration,
@@ -89,5 +92,6 @@ Step-by-step versions are in [references/recipes.md](references/recipes.md):
 - **Long video → 15-second vertical cut.** A new 9:16 video from the long one's summary and media.
 - **Localise** captions and on-screen text into other languages, one revision per language.
 - **Review loop.** Read comments, add your own, approve or request changes, and revise with the feedback.
+- **Redo a scene.** Find the scene by its name or a moment, redo just that one, and review only it.
 
 The MCP server also offers these recipes as prompts (`prompts/list`), so clients without skills get them too.

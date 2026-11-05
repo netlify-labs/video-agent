@@ -107,7 +107,7 @@ describe('netlify-video skill package', () => {
     }
     for (const t of tools) collect(t.inputSchema)
     // Result fields the skill names (from get_video and list_comments results).
-    const resultFields = new Set(['web_url', 'resolved_at', 'addressed_in', 'next_actions'])
+    const resultFields = new Set(['web_url', 'resolved_at', 'addressed_in', 'next_actions', 'redid_scenes'])
 
     const mentioned = new Set<string>()
     for (const [file, text] of sources()) {

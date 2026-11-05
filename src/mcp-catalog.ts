@@ -28,7 +28,7 @@ export const MCP_TOOLS: readonly McpCatalogEntry[] = [
   {
     name: 'get_video',
     summary:
-      'Status, versions, signed download URLs (1 hour) and public links. Can wait up to 8 seconds for a change.',
+      'Status, versions (with their scenes), signed download URLs (1 hour) and public links. Can wait up to 8 seconds for a change.',
     access: 'everyone',
   },
   {
@@ -44,7 +44,8 @@ export const MCP_TOOLS: readonly McpCatalogEntry[] = [
   },
   {
     name: 'revise_video',
-    summary: 'Make the next version, changing only what you describe.',
+    summary:
+      'Make the next version, changing only what you describe. Redo a scene: pass beats and from_version to change only those scenes.',
     access: 'creators',
   },
   {

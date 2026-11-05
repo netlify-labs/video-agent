@@ -14,6 +14,7 @@ import { getEdit, openEdit, renderEdit, saveEdit, takeSummary, type DraftOp } fr
 import { acquireNarrationLock } from './domain/narration-lock.js'
 import { canReadMedia } from './domain/takes.js'
 import { getProgress } from './domain/progress.js'
+import { fillBeats } from './domain/beats.js'
 import { listMedia } from './domain/media.js'
 import { videoCardHtml } from './generated/video-card.js'
 import { libraryMatches } from './domain/music-library.js'
@@ -328,6 +329,9 @@ async function summarize(deps: Deps, v: VideoDto) {
       status: x.status,
       prompt: x.prompt,
       from_version: x.parentN,
+      // Its scenes, to redo some with revise_video's beats; and the scenes it redid itself.
+      ...(x.beats ? { beats: x.beats } : {}),
+      ...(x.scope ? { redid_scenes: x.scope.beats } : {}),
       ...(x.sound !== 'silent' ? { sound: x.sound } : {}),
       ...(x.voiceover ? { voiceover: x.voiceover } : {}),
       ...(x.error ? { error: x.error } : {}),
@@ -550,6 +554,10 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "wait_seconds": 8}`,
       run(async () => {
         const id = normalizeVideoId(args.video_id)
         let v = await load(id)
+        // Scenes of editable versions made before versions recorded them (redo a scene): filled once, then stored.
+        const unknown = v.versions.filter((x) => x.editable && x.beats === null)
+        for (const x of unknown) await fillBeats(deps, principal, id, x.n).catch(() => null)
+        if (unknown.length) v = await load(id)
         const until = Date.now() + Math.min(args.wait_seconds ?? 0, 8) * 1000
         const start = v.etag
         while (Date.now() < until && ['queued', 'running', 'finishing'].includes(v.status)) {
@@ -734,6 +742,7 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Same format, 
 When to use: the user wants a change to an existing video ("make the end card orange", "shorter", "add our URL").
 Don't: describe the whole video again; describe the change. Only one version per video can be in progress.
 Incorporate feedback: pass comment_ids (from list_comments; open comments on from_version) and use change for your note. Only the video's owner or an admin can.
+Redo a scene: pass beats (scene ids from get_video's versions[].beats) and from_version to change only those scenes; everything else stays exactly as it is.
 
 Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Make the end card say \\"Start free today\\""}`,
       inputSchema: {
@@ -769,6 +778,14 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Make the end 
         voiceover: voiceoverArg(
           'Optional. true, false or {voice, speed, script}. Leave out to keep the voice-over of the version it revises; unchanged lines keep their audio.',
         ),
+        beats: z
+          .array(z.string())
+          .min(1)
+          .max(20)
+          .optional()
+          .describe(
+            "Optional. Redo only these scenes (ids from get_video's beats for from_version); everything else stays exactly as it is. Faster and cheaper than revising the whole video. Needs from_version. Can't be combined with plan_id, duration_sec, sound or voiceover.",
+          ),
       },
       _meta: VIDEO_CARD,
       annotations: { title: 'Revise a video', ...STARTS_RUN },
@@ -785,6 +802,7 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Make the end 
           mediaIds: args.media_ids,
           sound: args.sound,
           voiceover: toVoiceover(args.voiceover),
+          scope: args.beats ? { beats: args.beats } : undefined,
         })
         return queued(
           res,

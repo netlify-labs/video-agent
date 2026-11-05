@@ -72,7 +72,10 @@ describe('redo a scene over REST', () => {
 
   it('documents scope behind the SDK field gate', () => {
     const h = harness()
-    const doc = h.app.getOpenAPIDocument({ openapi: '3.0.0', info: { title: 't', version: '0' } }) as {
+    const doc = h.app.getOpenAPIDocument({
+      openapi: '3.0.0',
+      info: { title: 't', version: '0' },
+    }) as unknown as {
       paths: Record<string, Record<string, { 'x-sdk'?: { fieldFeatures?: Record<string, string> } }>>
       components: { schemas: Record<string, { properties?: Record<string, unknown> }> }
     }
