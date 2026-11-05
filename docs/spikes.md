@@ -852,3 +852,77 @@ Three things ride along with the code and need handling when a look vendors or i
 loads three.js `0.170.0` from jsDelivr at render time, a 58 KB WebGL scene that can't be inlined into a contract scene
 and would need the network on every render. The `editorial` look (phase 4.2) gets a hand-written part title instead:
 a rule, a section number and a serif headline in a slow pan; §5's table is updated to match.
+
+## Screen recording demo spikes (docs/plans/2026-11-04-screen-recording-demo.md §10 Phase 0)
+
+### D1: recording clips at an offset and a rate in a later scene (2026-11-05, `spikes/d1`, `npx tsx spikes/d1/render.ts`; local only so far)
+
+The fixture is 2560×1440 H.264 at 30 fps with 1 s GOPs (`-g 30 -sc_threshold 0`). Every frame carries its own number
+as a 4×4 grid of 160 px blocks (11 bits plus 5 check bits), so output frames are read back by sampling block
+centres, with no OCR. The 1920×1080 composition has these scenes:
+- **rec:** an intro 0–4 s, then a recording scene at 4 s. The `<video>` sits in a `.va-stage` that GSAP scales from 1 to
+  1.4, with media 12.4 → 21.8 at `data-playback-rate` 1.25333.
+- **slow:** media 22 → 24 at rate 0.5, with `data-duration` 4 inside a 6 s scene.
+- **eof:** `data-media-start` past the end of the file.
+- **base:** rate 1 with no transform.
+
+Both basis variants were rendered:
+- **local:** the video's `data-start="0"` inside its beat, with the default basis.
+- **global:** `data-start` is the absolute time, plus `data-hf-media-start-basis="global"`.
+
+Run on a MacBook (arm64, 14 CPUs), HyperFrames 0.8.222, `--quality standard`.
+
+| Check | Result |
+| --- | --- |
+| rec (rate 1.25333, zoomed stage, starts at 4 s) | **225/225 frames** show `floor((in + t·rate)·30)`. 2 frames sit within 1e-3 of a frame boundary, and float rounding goes either way there (465.99975 → 466, but 559.9995 → 559) |
+| slow (rate 0.5) | 120/120 exact (660 … 719) |
+| After a clip's `data-duration` (slow, last 2 s) | **Nothing**: the clip disappears and the background shows. There's no native hold mid-file |
+| eof (`data-media-start` ≥ file length) | Holds the file's **last** frame (899) for the whole slot, as the linter's warning says |
+| local vs global basis | **Identical frames.** The basis only changes how the clip's `data-start` is read (local: beat start + `data-start`; global: `data-start` alone). `data-media-start` is always an absolute offset into the file either way |
+| Render speed (local machine) | 21.5 s of output in 21–34 s wall (1.0–1.6 s per output second); peak tree RSS 3.7 GB |
+
+What this means:
+- The contract pins recording clips to `data-start="0"` inside their beat, with **no** basis attribute. That's the
+  default. With global, moving or retiming a beat would break the clip.
+- `data-media-start` is the step's `in` in source seconds. `data-playback-rate` = (out − in) / slot.
+- Snap `in` to frame times (k/30) so planned frames don't sit on a rounding boundary.
+- Holds still need `<step>.hold.jpg` (§5.3), because a clip doesn't hold a mid-file frame past its `data-duration`.
+- The runner render speed (pass: under 4 s per output second) is still to be measured, in the same run as D3.
+
+### D2: CDP screencast frame rate and clock (2026-11-05, `spikes/d2`, `npx tsx spikes/d2/screencast.ts`)
+
+Test page: a 400-row list, every row animating, scrolled by `page.mouse.wheel` while the mouse follows a Lissajous
+path. Capture: `Page.startScreencast` JPEG q90, `maxWidth/Height` 2560×1600, every frame acked and saved. Every click
+paints a corner box in the next colour of a cycle. The first frame showing a click's colour dates that click on the
+frame clock (`metadata.timestamp`), against the page's `performance.timeOrigin + now()`. Run on a MacBook, Playwright
+1.64.1 Chromium, 20 s and 24 clicks per mode.
+
+| Mode | Frame size | fps median / p10 | Non-increasing timestamps | Click → first frame (median, p10–p90) |
+| --- | --- | --- | --- | --- |
+| headed, Playwright `deviceScaleFactor: 2` | **1280×800** | 60 / 60 | 0 | 45.7 ms (43.9–61.6) |
+| headless, `deviceScaleFactor: 2` | 1280×800 | 53 / 51 | 1 | 38.3 ms (26.6–60.5) |
+| **headed, `--force-device-scale-factor=2`** + `viewport: null` + CDP `Emulation.setDeviceMetricsOverride` 1280×800, `deviceScaleFactor: 0` | **2560×1600** (page dpr 2) | **60 / 60** | **0** | **46.4 ms (44.6–63.0)** |
+| headless, same recipe | 2560×1600 | 48.5 / 27.8 | 1 | 44.5 ms (27.8–124.3) |
+
+Findings:
+- **Playwright's `deviceScaleFactor` doesn't give 2× screencast frames.** Frames come at CSS size (metadata
+  `deviceWidth` 1280).
+- `--force-device-scale-factor=2` alone gives 2× pixels, but Playwright's viewport emulation resets the page to dpr
+  1. The recipe in the table row gives both.
+- Headed is the steadiest mode: 60 fps (frames arrive on every change; a static page sends none), and timestamps only
+  go forward.
+- JPEG frames are about 100 KB each at 2560×1600, so about 6 MB/s at 60 fps. The recorder pipes them into ffmpeg
+  rather than writing them to disk.
+- The click → frame offset is paint latency, a steady ~46 ms headed. It's bimodal, one 60 Hz vsync apart (44–46 or
+  61–63 ms). That's more than one 30 fps frame, so the trace needs the offset applied. A calibration at the start of
+  recording (a few flashes before the take begins, using the median) leaves a residual of −2 to +17 ms, under one
+  output frame.
+
+**Pass** (median 60 fps ≥ 15; monotonic headed; under one frame after calibration).
+
+Changes for 4.1a:
+- Launch with `--force-device-scale-factor=2`, `viewport: null` and the metrics override.
+- Add a flash calibration step before the take. Store the measured offset in the trace header; the server subtracts it.
+- CFR assembly at 30 fps duplicates the latest frame across gaps; the longest gap seen headed was 50 ms while busy.
+  An idle page sends nothing, so gaps can be long.
+- The default viewport stays 1280×800.
