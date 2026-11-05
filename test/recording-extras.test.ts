@@ -7,8 +7,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { analyzeRecording, ANALYZER_VERSION } from '../scripts/lib/recording-analyze.js'
+import { cameraAt } from '../src/lib/recording.js'
+import { planRecording } from '../scripts/lib/recording-plan.js'
 import {
   cachedAnalysis,
+  focusBox,
+  makeFocusCrops,
   makeSheets,
   meanVolume,
   SHEETS_MAX,
@@ -190,6 +194,67 @@ describe.runIf(hasFfmpeg)('recording.ts analyze extras', () => {
     expect(second.logs.some((l) => l.step === 'recording.analyze_decode')).toBe(false)
     expect(second.logs.find((l) => l.step === 'recording.sheets' && typeof l.ms === 'number')).toBeTruthy()
     expect(existsSync(join(context, 'sheets', '01.jpg'))).toBe(true)
+  })
+
+  it('makes a focus crop per step at the camera box: it holds the click and the card that changes', async () => {
+    const analysis = await analyzeRecording(file)
+    const { plan } = planRecording({ mediaId: 'med_fixture', analysis })
+    const out = join(dir, 'focus')
+    const started = Date.now()
+    const crops = makeFocusCrops(file, plan, analysis, out)
+    console.log(JSON.stringify({ test: 'focus', crops, ms: Date.now() - started }))
+    expect(crops.map((c) => c.step)).toEqual(plan.steps.map((s) => s.id))
+    expect(JSON.parse(readFileSync(join(out, 'focus.json'), 'utf8'))).toMatchObject({ v: 1, crops })
+    const step = crops.find((c) => Math.abs(c.t - FIXTURE.click.t) <= 0.1)
+    expect(step, 'a crop at the click').toBeTruthy()
+    const [x, y, w, h] = step?.box ?? [0, 0, 0, 0]
+    const inside = (px: number, py: number) => px >= x && px <= x + w && py >= y && py <= y + h
+    expect(inside(FIXTURE.click.x, FIXTURE.click.y)).toBe(true)
+    // The card's top-left corner region (where a label would be) is in the crop.
+    expect(inside(FIXTURE.card.x + 20, FIXTURE.card.y + 20)).toBe(true)
+    // Zoomed at least 1.4: a 13 px label becomes at least 18 px.
+    expect(step?.zoom).toBeGreaterThanOrEqual(1.4)
+    expect(Math.round((1280 / w) * 13)).toBeGreaterThanOrEqual(18)
+    for (const c of crops) {
+      const probe = spawnSync(
+        'ffprobe',
+        ['-v', 'error', '-show_entries', 'stream=width', '-of', 'csv=p=0', join(out, c.file)],
+        {
+          encoding: 'utf8',
+        },
+      )
+      expect(probe.stdout.trim()).toBe('1280')
+    }
+  })
+
+  it('focus box: the camera between keys, and zoom 1.4 around the click when the camera is wide', () => {
+    expect(
+      cameraAt(
+        [
+          [0, 0.5, 0.5, 1],
+          [1, 0.7, 0.5, 2],
+        ],
+        0.5,
+      ),
+    ).toEqual([0.6, 0.5, 1.5])
+    expect(cameraAt([[0, 0.5, 0.5, 1]], 5)).toEqual([0.5, 0.5, 1])
+    const a = { source: { width: 1280, height: 720 }, activity: [] } as unknown as Parameters<
+      typeof focusBox
+    >[1]
+    const step = {
+      id: 's',
+      in: 0,
+      out: 10,
+      camera: [[0, 0.5, 0.5, 1]],
+      clicks: [[2, 0.9, 0.9]],
+      idleSpedUp: [],
+      redact: [],
+    }
+    const f = focusBox(step as never, a)
+    expect(f.zoom).toBe(1.4)
+    // Clamped to the frame: the crop ends at its right and bottom edges.
+    expect(f.box[0] + f.box[2]).toBe(1280)
+    expect(f.box[1] + f.box[3]).toBe(720)
   })
 
   it('never archives context/ in a checkpoint or source archive', () => {

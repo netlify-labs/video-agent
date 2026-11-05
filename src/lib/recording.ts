@@ -73,3 +73,23 @@ export function keptPlan(plan: PlanV1): PlanV1 {
     }),
   }
 }
+
+/**
+ * The camera at source time `t`: [x, y, zoom], linear between keys (a planning approximation of the eased tween),
+ * held before the first key and after the last.
+ */
+export function cameraAt(keys: CameraKey[], t: number): [number, number, number] {
+  const first = keys[0]
+  if (!first) return [0.5, 0.5, 1]
+  if (t <= first[0]) return [first[1], first[2], first[3]]
+  for (let i = 1; i < keys.length; i++) {
+    const a = keys[i - 1] as CameraKey
+    const b = keys[i] as CameraKey
+    if (t <= b[0]) {
+      const k = b[0] > a[0] ? (t - a[0]) / (b[0] - a[0]) : 1
+      return [a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k, a[3] + (b[3] - a[3]) * k]
+    }
+  }
+  const last = keys.at(-1) as CameraKey
+  return [last[1], last[2], last[3]]
+}

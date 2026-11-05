@@ -18,14 +18,15 @@
 // and input.json in .va-run/recording/<id>/, and context/look/look.json's recording block. Writes the full plan to
 // .va-run/recording/<id>/plan.json and the kept plan (no names from the recorded app) to
 // video/assets/recording/plan.json, which the agent edits. Prints the clicked elements per step, fenced, then the JSON
-// summary with checkpointMessage. --analysis, --trace, --input, --look, --out and --full override the paths.
+// summary with checkpointMessage. Then a focus crop per step (at most 12) in context/recording/<id>/focus/.
+// --analysis, --trace, --input, --look, --out, --full, --file and --context override the paths.
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { basename, dirname, extname, join } from 'node:path'
 import { parseTrace } from '../src/lib/recording-trace.js'
 import { analyzeRecording } from './lib/recording-analyze.js'
 import { ASPECTS, keptPlan, type Aspect } from '../src/lib/recording.js'
 import type { Analysis } from './lib/recording-analyze.js'
-import { cachedAnalysis, makeSheets, transcribeRecording } from './lib/recording-extras.js'
+import { cachedAnalysis, makeFocusCrops, makeSheets, transcribeRecording } from './lib/recording-extras.js'
 import {
   checkpointMessage,
   clickedElements,
@@ -134,11 +135,23 @@ function plan() {
     estimate: full.estimate.seconds,
     ms: Date.now() - started,
   })
+  // Focus crops need the recording itself; without it (a plan from files alone) they're skipped.
+  let file: string | null = args.file ?? null
+  if (!file)
+    try {
+      file = mediaFile(id)
+    } catch {
+      file = null
+    }
+  const focusDir = join(args.context ?? join(repoRoot, 'context', 'recording', id), 'focus')
+  const crops = file ? makeFocusCrops(file, full, analysis, focusDir) : []
+  if (!file) log('recording.focus_crop', { skipped: 'no recording file' })
   console.log(clickedElements(full))
   return {
     ok: true,
     out,
     full: fullPath,
+    focus: crops.length ? { dir: focusDir, crops: crops.length } : null,
     ...planSummary(full),
     checkpointMessage: checkpointMessage(full, analysis),
   }
