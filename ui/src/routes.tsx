@@ -27,6 +27,7 @@ export const mediaRoute = route(() => import('./pages/Media'))
 export const keysRoute = route(() => import('./pages/Keys'))
 export const adminRoute = route(() => import('./pages/Admin'))
 export const setupRoute = route(() => import('./pages/Setup'))
+export const cliApproveRoute = route(() => import('./pages/CliApprove'))
 // The REST reference is its own module (Scalar is large); the MCP and skills guides stay light.
 export const docsApiRoute = route(() => import('./pages/docs/ApiReference'))
 export const docsMcpRoute = route(() => import('./pages/docs/McpGuide'))

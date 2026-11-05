@@ -101,6 +101,7 @@ const adminSettings: {
   remixEnabled: boolean
   youtubeEnabled: boolean
   youtubeConfigured: boolean
+  cliLoginEnabled: boolean
 } = {
   narrationEnabled: (() => {
     try {
@@ -123,7 +124,24 @@ const adminSettings: {
   // localStorage.mockYouTube = '1' sets YouTube up and turns it on (with a connected channel unless it's 'unconnected').
   youtubeEnabled: mockYouTube() !== null,
   youtubeConfigured: mockYouTube() !== null,
+  // localStorage.mockCliLoginOff = '1' starts with CLI sign-in turned off.
+  cliLoginEnabled: (() => {
+    try {
+      return localStorage.getItem('mockCliLoginOff') !== '1'
+    } catch {
+      return true
+    }
+  })(),
 }
+// video-agent login's approve page. Fixed codes: BCDF-GHJK waits normally, SCRP-TTAG has an HTML label and a 64-letter
+// host, MNYM-MNYM is over the approvals-per-hour cap. Anything else (an expired code too, as on the server) is wrong,
+// and five wrong codes lock the page.
+const cliLogins: Record<string, { label: string; host: string }> = {
+  BCDFGHJK: { label: 'Video Agent CLI', host: 'mia-mbp' },
+  SCRPTTAG: { label: '<img src=x onerror=alert(1)><b>CLI</b>', host: 'h'.repeat(64) },
+  MNYMMNYM: { label: 'Video Agent CLI', host: 'ci-runner' },
+}
+let cliWrongCodes = 0
 const grants = [
   {
     id: 'grt_claude',
@@ -513,6 +531,7 @@ export function installMock() {
           'planning',
           'destinations',
           ...(adminSettings.youtubeEnabled ? ['youtube'] : []),
+          ...(adminSettings.cliLoginEnabled ? ['cli_login'] : []),
           // Redo a scene; localStorage.mockNoScopedRevision=1 leaves it out, to test the hidden UI.
           ...(localStorage.getItem('mockNoScopedRevision') === '1' ? [] : ['scoped_revision']),
         ],
@@ -539,6 +558,35 @@ export function installMock() {
     }
     if (p === '/api/v1/me') return json(me)
     if (p === '/api/v1/stats') return json(stats)
+    if ((p === '/api/v1/cli/logins/lookup' || p === '/api/v1/cli/logins/approve') && method === 'POST') {
+      if (!adminSettings.cliLoginEnabled)
+        return fail(409, 'cli_login_disabled', 'Browser login for the CLI is turned off.')
+      if (cliWrongCodes >= 5)
+        return fail(429, 'rate_limited', 'Too many wrong codes. Try again in 15 minutes.')
+      const b = (await readBody(init, input)) as { userCode: string; decision?: 'approve' | 'deny' }
+      const userCode = b.userCode.toUpperCase().replace(/[^A-Z]/g, '')
+      const login = cliLogins[userCode]
+      if (!login) {
+        cliWrongCodes++
+        return fail(
+          404,
+          'not_found',
+          'No CLI login is waiting for that code. Check the code in your terminal.',
+        )
+      }
+      if (p.endsWith('/lookup'))
+        return json({
+          loginId: `cli_${userCode.toLowerCase()}`,
+          ...login,
+          clientIp: '203.0.113.7',
+          createdAt: new Date(Date.now() - 2 * 60_000).toISOString(),
+          expiresAt: new Date(Date.now() + 8 * 60_000).toISOString(),
+          role: 'admin',
+        })
+      if (b.decision === 'approve' && userCode === 'MNYMMNYM')
+        return fail(429, 'rate_limited', 'You approved 10 CLI logins in the last hour. Try again later.')
+      return json({ status: b.decision === 'deny' ? 'denied' : 'approved' })
+    }
     if (p === '/api/v1/admin/settings') {
       if (method === 'PATCH') Object.assign(adminSettings, await readBody(init, input))
       return json(adminSettings)

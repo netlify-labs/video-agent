@@ -20,6 +20,7 @@ const MediaPage = routes.lazyPage(routes.mediaRoute, (m) => m.MediaPage)
 const KeysPage = routes.lazyPage(routes.keysRoute, (m) => m.KeysPage)
 const AdminPage = routes.lazyPage(routes.adminRoute, (m) => m.AdminPage)
 const SetupPage = routes.lazyPage(routes.setupRoute, (m) => m.SetupPage)
+const CliApprovePage = routes.lazyPage(routes.cliApproveRoute, (m) => m.CliApprovePage)
 const DocsApiPage = routes.lazyPage(routes.docsApiRoute, (m) => m.default)
 const DocsMcpPage = routes.lazyPage(routes.docsMcpRoute, (m) => m.default)
 const DocsSkillsPage = routes.lazyPage(routes.docsSkillsRoute, (m) => m.default)
@@ -152,6 +153,16 @@ export function App() {
           element={
             <Page>
               <SetupPage />
+            </Page>
+          }
+        />
+        {/* video-agent login's approval. Signed out, the sign-in page shows here and this page follows it; no code
+            is ever carried in the URL. */}
+        <Route
+          path="/cli/approve"
+          element={
+            <Page>
+              <CliApprovePage />
             </Page>
           }
         />

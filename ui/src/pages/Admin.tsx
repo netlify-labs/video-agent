@@ -343,6 +343,7 @@ export function AdminPage() {
           <WebhookCard scope="team" />
           <NarrationSettingsCard />
           <RemixSettingsCard />
+          <CliLoginSettingsCard />
           <DestinationsAdminCard />
           <YouTubeAdminCard />
           <Card>
@@ -413,6 +414,30 @@ function RemixSettingsCard() {
         disabled={!s}
         onChange={(e) => {
           save.mutate({ body: { remixEnabled: e.currentTarget.checked } })
+        }}
+      />
+    </Card>
+  )
+}
+
+/** video-agent login's browser approval (cli-and-sdk plan §5.2): on by default. Keys made by hand still work. */
+function CliLoginSettingsCard() {
+  const afterWrite = useAfterWrite()
+  const settings = $api.useQuery('get', '/api/v1/admin/settings')
+  const save = $api.useMutation('patch', '/api/v1/admin/settings', afterWrite)
+  const s = settings.data
+  return (
+    <Card>
+      <Text fw={600} mb="xs">
+        CLI sign-in
+      </Text>
+      <Switch
+        label="People can sign in from the CLI"
+        description="video-agent login opens this site to approve the terminal, and the terminal gets an API key. Off refuses new CLI sign-ins; API keys, including ones the CLI already has, keep working."
+        checked={s?.cliLoginEnabled ?? false}
+        disabled={!s}
+        onChange={(e) => {
+          save.mutate({ body: { cliLoginEnabled: e.currentTarget.checked } })
         }}
       />
     </Card>
