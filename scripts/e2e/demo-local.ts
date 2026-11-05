@@ -68,7 +68,7 @@ const step = async <T>(
 
 // ───── the app, and the tours ─────
 
-async function serveMock(): Promise<ChildProcess> {
+export async function serveMock(): Promise<ChildProcess> {
   // The mock build: no backend, the sample library.
   process.env.VITE_MOCK = '1'
   const dist = join(out, 'dist-mock')
@@ -275,7 +275,7 @@ async function record(name: 'a' | 'b'): Promise<{ file: string; trace: Trace }> 
 
 // ───── one demo, run-shaped ─────
 
-interface Demo {
+export interface Demo {
   name: string
   mediaId: string
   file: string
@@ -283,7 +283,7 @@ interface Demo {
   boxes: { start: number; end: number; reason: string; boxes: [number, number, number, number, number][] }[]
 }
 
-async function demo(d: Demo) {
+export async function demo(d: Demo) {
   // Not the tour's own folder (out/tour-<x>), which holds the recording.
   const root = join(out, `demo-${d.name}`)
   rmSync(root, { recursive: true, force: true })
@@ -351,9 +351,14 @@ async function demo(d: Demo) {
     return r.lines
   })
   await step('hyperframes_check', { demo: d.name }, () => {
-    const r = sh('npx', ['hyperframes', 'check'], { cwd: video, timeoutMs: 600_000 })
-    if (!/Check passed/.test(r)) throw new StepError(r.slice(-1500))
-    return r.match(/\d+ error\(s\), \d+ warning\(s\)/g)
+    // Once more on a failure without errors: under heavy load the check can stop part-way.
+    for (let attempt = 1; ; attempt++) {
+      const r = spawnSync('npx', ['hyperframes', 'check'], { cwd: video, encoding: 'utf8', timeout: 600_000 })
+      const text = `${r.stdout}${r.stderr}`
+      if (/Check passed/.test(text)) return text.match(/\d+ error\(s\), \d+ warning\(s\)/g)
+      if (attempt >= 2 || /[1-9]\d* error\(s\)/.test(text)) throw new StepError(text.slice(-1500))
+      log('demo_local.hyperframes_check_retry', { demo: d.name })
+    }
   })
   const mp4 = join(out, `render-${d.name}.mp4`)
   await step('render', { demo: d.name }, () =>
@@ -431,9 +436,10 @@ async function main() {
       if (f === 'dist-mock') rmSync(join(out, f), { recursive: true, force: true })
 }
 
-main().catch((e: unknown) => {
-  const message = e instanceof Error ? e.message : String(e)
-  log('demo_local.failed', { message })
-  console.log(JSON.stringify({ ok: false, error: message, out }))
-  process.exit(1)
-})
+if (import.meta.url === `file://${process.argv[1] ?? ''}`)
+  main().catch((e: unknown) => {
+    const message = e instanceof Error ? e.message : String(e)
+    log('demo_local.failed', { message })
+    console.log(JSON.stringify({ ok: false, error: message, out }))
+    process.exit(1)
+  })
