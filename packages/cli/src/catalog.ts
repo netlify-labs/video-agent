@@ -124,10 +124,10 @@ export const COMMANDS: CommandSpec[] = [
       'video-agent login --url https://acme-video.netlify.app',
       'printf %s "$KEY" | video-agent login --key - --no-save',
     ],
-    sdk: ['me.get'],
-    feature: 'cli_login',
+    // No `feature`: login checks cli_login itself, so a server without it gets the --key hint, not "unsupported".
+    sdk: ['me.get', 'config.get', 'cliLogins.create', 'cliLogins.claim'],
     needsHostedApp: true,
-    ready: false,
+    ready: true,
   },
   {
     name: 'logout',
@@ -137,7 +137,7 @@ export const COMMANDS: CommandSpec[] = [
     examples: ['video-agent logout --revoke'],
     sdk: ['keys.revoke'],
     needsHostedApp: true,
-    ready: false,
+    ready: true,
   },
   {
     name: 'whoami',
@@ -147,7 +147,7 @@ export const COMMANDS: CommandSpec[] = [
     examples: ['video-agent whoami'],
     sdk: ['me.get', 'config.get'],
     needsHostedApp: true,
-    ready: false,
+    ready: true,
   },
   {
     name: 'create',
@@ -536,7 +536,7 @@ export const COMMANDS: CommandSpec[] = [
     examples: ['video-agent doctor --json'],
     sdk: ['config.get', 'me.get'],
     local: true,
-    ready: false,
+    ready: true,
   },
   {
     name: 'local',

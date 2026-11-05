@@ -5,6 +5,7 @@ import { parseArgs } from 'node:util'
 import { VideoAgent } from '../../sdk/src/index.js'
 import { COMMANDS, findCommand, GLOBAL_FLAGS, type CommandSpec, type FlagSpec } from './catalog.js'
 import { readConfig, resolveConnection, type CliConfig } from './config.js'
+import { ACCOUNT_COMMANDS } from './commands/account.js'
 import { LIBRARY_COMMANDS } from './commands/library.js'
 import { MAKE_COMMANDS } from './commands/make.js'
 import { READ_COMMANDS } from './commands/read.js'
@@ -32,6 +33,8 @@ export interface Ctx {
 export interface Result {
   json: unknown
   text: string
+  /** Exit code after printing (doctor's failed checks); else 0. */
+  exit?: number
 }
 
 export type Handler = (ctx: Ctx) => Promise<Result>
@@ -59,6 +62,7 @@ export const HANDLERS: Record<string, Handler> = {
   ...REVIEW_COMMANDS,
   ...LIBRARY_COMMANDS,
   ...MAKE_COMMANDS,
+  ...ACCOUNT_COMMANDS,
   help: helpHandler,
   version: async (ctx) => {
     let server: { commit: string | null; promptTemplate: number; release: string | null } | null = null
@@ -251,5 +255,5 @@ export async function main(argv: string[], io: Io): Promise<number> {
 function print(io: Io, json: boolean, r: Result): number {
   if (json) io.stdout(`${JSON.stringify(r.json)}\n`)
   else if (r.text) io.stdout(`${r.text}\n`)
-  return EXIT.ok
+  return r.exit ?? EXIT.ok
 }

@@ -28,6 +28,8 @@ export async function cli(
     stdin?: string
     /** Move the fake run one sweep tick on each poll of a video, so --wait walks the lifecycle. */
     drive?: boolean
+    /** Runs before each request reaches the app (login's tests approve and move the clock here). */
+    before?: (req: Request) => void | Promise<void>
   } = {},
 ) {
   const key = o.key === null ? undefined : (o.key ?? (await apiKey(h, o.as ?? h.member)))
@@ -46,6 +48,7 @@ export async function cli(
         const req = new Request(input, init)
         requests.push(req.clone())
         const url = new URL(req.url)
+        await o.before?.(req.clone())
         if (o.drive && req.method === 'GET' && /^\/api\/v1\/videos\/[^/]+$/.test(url.pathname))
           await h.drive(1)
         if (url.origin === SITE && url.pathname.startsWith('/api/')) return appFetch(h, req)
@@ -60,5 +63,5 @@ export async function cli(
     const code = await main(argv, io)
     return { code, stdout, stderr, json: () => JSON.parse(stdout) }
   }
-  return { run, opened, requests, key }
+  return { run, opened, requests, key, configDir }
 }
