@@ -58,6 +58,13 @@ export function createGitHub(o: GitHubOptions): GitHub {
   const now = o.now ?? Date.now
 
   const urlFor = (route: string, params: RequestParams) => {
+    // A full URL (release asset uploads) is used as is; the route only names the call in the log.
+    if (params.url) {
+      const u = new URL(params.url)
+      for (const [k, v] of Object.entries(params.query ?? {}))
+        if (v !== undefined) u.searchParams.set(k, String(v))
+      return u.toString()
+    }
     const values: Record<string, string | number> = { owner, repo, ...params.path }
     const path = route.replace(/\{([a-z_]+)\}/g, (_, k: string) => {
       const v = values[k]

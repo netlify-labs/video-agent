@@ -8,6 +8,7 @@ export type Parsed = PrAction | { kind: 'unknown'; word: string }
 export const COMMANDS = [
   '/video',
   '/video revise <what to change>',
+  '/video redo <scene> <what to change>',
   '/video status',
   '/video publish',
   '/video retry',
@@ -25,6 +26,14 @@ export function parseCommand(body: string, commentId: number): Parsed {
       return { kind: 'video' }
     case 'revise':
       return { kind: 'revise', change: rest, commentId }
+    case 'redo': {
+      // The scene is one word (an id) or a quoted label: /video redo "Pricing card" make it orange
+      const quoted = /^"([^"]+)"\s*/.exec(rest)
+      const word = /^(\S+)\s*/.exec(rest)
+      const m = quoted ?? word
+      if (!m?.[1]) return { kind: 'redo', scene: '', change: '', commentId }
+      return { kind: 'redo', scene: m[1], change: rest.slice(m[0].length).trim(), commentId }
+    }
     case 'status':
       return { kind: 'status' }
     case 'publish':

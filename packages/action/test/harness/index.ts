@@ -20,9 +20,16 @@ export { BOT, fakeGitHub, type FakeGitHub } from './fake-github.js'
 export const SITE = 'https://video.example.com'
 
 /** The app's fetch, the way the SDK calls it: background work (waitUntil) finishes before the response returns. */
-export function appFetch(h: Harness): typeof fetch {
+export function appFetch(h: Harness, storage?: { headers: Record<string, string> }[]): typeof fetch {
   return async (input: string | URL | Request, init?: RequestInit) => {
     const req = input instanceof Request ? input : new Request(input, init)
+    // Signed file links point at storage (served outside the API in production): a stand-in, like the SDK's tests.
+    if (!new URL(req.url).pathname.startsWith('/api/')) {
+      const headers: Record<string, string> = {}
+      req.headers.forEach((v, k) => (headers[k] = v))
+      storage?.push({ headers })
+      return new Response(`FILE ${new URL(req.url).pathname}`)
+    }
     const pending: Promise<unknown>[] = []
     const res = await h.app.fetch(req, {
       context: { deploy: { published: true }, waitUntil: (p: Promise<unknown>) => void pending.push(p) },
@@ -72,6 +79,8 @@ export interface TestEnv {
   pauses: Map<string, Promise<void>>
   /** Sets every new run's timeline. */
   outcome(timeline: RunnerSnapshot[]): void
+  /** Requests to the storage host (signed file links): never with the key. */
+  storage: { headers: Record<string, string> }[]
 }
 
 export async function makeEnv(
@@ -86,6 +95,7 @@ export async function makeEnv(
     gh,
     images: fakeImageHost(),
     pauses: new Map(),
+    storage: [],
     outcome: (timeline) => {
       const base = h.deps.runner.defaultScript
       h.deps.runner.defaultScript = (req) => ({ ...base(req), timeline })
@@ -269,7 +279,7 @@ export async function runAction(
   const deps: ActionDeps = {
     env: vars,
     core,
-    fetch: appFetch(h),
+    fetch: appFetch(h, env.storage),
     ghFetch: env.gh.fetch,
     imageFetch: env.images.fetch,
     // Test hosts: *.internal and 10.x resolve privately; everything else is public.

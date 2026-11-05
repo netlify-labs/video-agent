@@ -162,6 +162,7 @@ export async function run(deps: ActionDeps = productionDeps()): Promise<RunResul
           name: string | null
           body: string | null
           html_url: string
+          upload_url: string
         }>('GET /repos/{owner}/{repo}/releases/tags/{tag}', { path: { tag: decision.tag } })
         .catch((e: unknown) => {
           if (e instanceof GitHubError && e.status === 404) return null
@@ -177,6 +178,7 @@ export async function run(deps: ActionDeps = productionDeps()): Promise<RunResul
         name: rel.data.name,
         body: rel.data.body ?? '',
         url: rel.data.html_url,
+        uploadUrl: rel.data.upload_url.replace(/\{.*\}$/, ''),
       })
       return done(out.status)
     }

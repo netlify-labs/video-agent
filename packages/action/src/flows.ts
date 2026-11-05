@@ -7,12 +7,16 @@ import {
   prTitle,
   releaseBrief,
   releaseTitle,
+  remixBrief,
   reviseBrief,
   describeRemoved,
   type Brief,
   type Target as RefTarget,
 } from '../../cli/src/brief/index.js'
 import { isVideoAgentError, VideoAgent, type VideoAgentError } from '../../sdk/src/index.js'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { checkBudget, type BudgetResult } from './budget.js'
 import { creditsOf, publication, renderComment, upsertComment, type CommentState } from './comment.js'
 import { follow, type Followed } from './follow.js'
@@ -161,6 +165,8 @@ async function create(
     shots: () => Promise<Shot[]>
     surface: Surface
     marker: (videoId: string, pending: string[]) => Marker
+    /** With base-video: what the remix is for and the changes to show (bead va-mg4i.3.2). */
+    remix?: { label: string; changes: () => string }
   },
 ): Promise<Made | 'stopped' | 'dry-run'> {
   const { run, inputs, va } = ctx
@@ -177,11 +183,14 @@ async function create(
         (s) =>
           `POST /api/v1/media (${s.ext}, ${s.bytes.byteLength} bytes from ${s.source}) unless already in the library`,
       ),
-      `POST /api/v1/videos (prompt ${brief.prompt.length} characters, title "${o.title ?? ''}", ${o.durationSec} s, ${inputs.aspect}, Idempotency-Key ${o.key})`,
+      inputs.baseVideo && o.remix
+        ? `POST /api/v1/videos/${inputs.baseVideo}/remix (Idempotency-Key ${o.key}), then PATCH its title "${o.title ?? ''}"`
+        : `POST /api/v1/videos (prompt ${brief.prompt.length} characters, title "${o.title ?? ''}", ${o.durationSec} s, ${inputs.aspect}, Idempotency-Key ${o.key})`,
       ...(inputs.private ? ['PATCH /api/v1/videos/{id} { private: true }'] : []),
     ])
     return 'dry-run'
   }
+  if (inputs.baseVideo && o.remix) return remixBase(ctx, o, o.remix, shots)
   const prepared: Prepared = shots.length
     ? await prepare(run, va, shots, o.target?.kind === 'pr' ? o.target.number : null)
     : { mediaIds: [], uploaded: [], captions: [] }
@@ -208,6 +217,77 @@ async function create(
     const settled = await settle(ctx, o.target, video, prepared.uploaded)
     if (settled.adopted) return { video: settled.adopted, n: settled.adopted.latestVersion, uploaded: [] }
   }
+  return { video, n: 1, uploaded: prepared.uploaded }
+}
+
+/**
+ * base-video (bead va-mg4i.3.2): a remix of a house-format video instead of a new one. Shape, length, sound and look come
+ * from the base unless the inputs set them; remix has no title, so it's set (with private) right after.
+ */
+async function remixBase(
+  ctx: Ctx,
+  o: Parameters<typeof create>[1],
+  r: { label: string; changes: () => string },
+  shots: Shot[],
+): Promise<Made | 'stopped'> {
+  const { run, inputs, va } = ctx
+  const base = inputs.baseVideo
+  try {
+    await va.videos.get(base)
+  } catch (e) {
+    if (isVideoAgentError(e) && e.status === 404)
+      throw new Error(`base-video ${base} not found or not visible to the CI account`, { cause: e })
+    throw e
+  }
+  const prepared: Prepared = shots.length
+    ? await prepare(run, va, shots, o.target?.kind === 'pr' ? o.target.number : null)
+    : { mediaIds: [], uploaded: [], captions: [] }
+  const brief = remixBrief({
+    target: o.target ?? { kind: 'pr', owner: ctx.gh.owner, repo: ctx.gh.repo, number: 0 },
+    label: r.label,
+    changes: r.changes(),
+    extra: inputs.prompt,
+  })
+  logBrief(run, brief)
+  await run.deps.hook?.('before-create')
+  let made: Video
+  try {
+    made = await va.videos.remix(
+      base,
+      {
+        prompt: brief.prompt,
+        // Only what the workflow set: the base's own shape and length otherwise.
+        ...(inputs.aspect !== '16:9' ? { aspect: inputs.aspect } : {}),
+        ...(inputs.duration ? { durationSec: inputs.duration } : {}),
+        ...(prepared.mediaIds.length ? { mediaIds: prepared.mediaIds.slice(0, 12) } : {}),
+      },
+      { idempotencyKey: o.key },
+    )
+  } catch (e) {
+    if (isVideoAgentError(e) && (e.code === 'remix_disabled' || e.code === 'unsupported_by_server')) {
+      if (prepared.uploaded.length) await cleanup(run, va, prepared.uploaded)
+      run.log.decision('stopped', {
+        reason: 'remixing is off: drop base-video or ask an admin to turn remixing on',
+      })
+      run.log.warn(
+        'remixing is turned off on this server: drop base-video or ask an admin to turn remixing on',
+      )
+      report(ctx, { status: 'skipped' })
+      return 'stopped'
+    }
+    throw e
+  }
+  let video = await va.videos.update(made.id, {
+    ...(o.title ? { title: o.title } : {}),
+    ...(inputs.private ? { private: true } : {}),
+  })
+  run.log.decision('remixed', { video: video.id, base, key: o.key })
+  setOutputs(run, { prompt: brief.prompt, 'video-id': video.id })
+  if (o.target) {
+    const settled = await settle(ctx, o.target, video, prepared.uploaded)
+    if (settled.adopted) return { video: settled.adopted, n: settled.adopted.latestVersion, uploaded: [] }
+  }
+  video = await va.videos.get(video.id)
   return { video, n: 1, uploaded: prepared.uploaded }
 }
 
@@ -255,6 +335,8 @@ async function followAndShow(
     prompt?: string
     marker: (pending: string[]) => Marker
     saveMarker: (m: Marker) => void
+    /** Runs once the version is ready (and published, when asked): release assets. */
+    afterReady?: (video: Video, version: Version) => Promise<void>
   },
 ): Promise<string> {
   const { run, inputs, va } = ctx
@@ -304,6 +386,7 @@ async function followAndShow(
       video = await va.videos.get(video.id)
       version = video.versions.find((x) => x.n === version.n) ?? version
     }
+    await o.afterReady?.(video, version)
     await surface.show({ kind: 'ready', version })
     report(ctx, {
       status: 'ready',
@@ -413,6 +496,7 @@ export type PrAction =
   | { kind: 'publish' }
   | { kind: 'retry' }
   | { kind: 'cancel' }
+  | { kind: 'redo'; scene: string; change: string; commentId: number }
 
 export type Outcome = { status: string; ok: boolean; message?: string }
 
@@ -477,6 +561,19 @@ export async function handlePr(
       shots: () => shotsFor(ctx, pr),
       surface,
       marker: (id, pending) => markerFor(id, pending, 1),
+      remix: {
+        label: `PR #${pr.number}: ${pr.title}`,
+        changes: () =>
+          [
+            pr.title,
+            pr.authorTrusted ? pr.body : '',
+            pr.authorTrusted && pr.commits.length
+              ? `Commits: ${pr.commits.map((c) => c.split('\n')[0]).join('; ')}`
+              : '',
+          ]
+            .filter(Boolean)
+            .join('\n\n'),
+      },
     })
     if (out === 'stopped') return { status: 'skipped', ok: true }
     if (out === 'dry-run') return { status: 'dry-run', ok: true }
@@ -509,15 +606,48 @@ export async function handlePr(
         return { status: 'none', ok: false, message: 'no video for this PR yet: reply /video to make one' }
       return showExisting(video)
     }
+    case 'redo': {
+      if (!video)
+        return { status: 'none', ok: false, message: 'no video for this PR yet: reply /video to make one' }
+      if (!ctx.features.includes('scoped_revision'))
+        return { status: 'none', ok: false, message: 'redoing one scene is not available on this server' }
+      if (!action.change.trim())
+        return {
+          status: 'none',
+          ok: false,
+          message: 'say what to change: /video redo <scene> <what to change>',
+        }
+      return revise(ctx, video, surface, {
+        made,
+        scene: action.scene,
+        prompt: () =>
+          reviseBrief({
+            target,
+            change: action.change,
+            context: { title: pr.title, files: pr.files },
+            authorTrusted: pr.authorTrusted,
+          }),
+        key: keys.command(target, action.commentId),
+        markerFor,
+      })
+    }
     case 'push':
     case 'revise': {
       if (!video) {
         if (action.kind === 'revise')
           return { status: 'none', ok: false, message: 'no video for this PR yet: reply /video to make one' }
-        return createNew(keys.create(target, run.ctx.runId))
+        // The label makes the first video; new commits only update one.
+        run.log.decision('none', { reason: 'no video yet', pr: pr.number })
+        return { status: 'skipped', ok: true }
+      }
+      if (action.kind === 'push' && marker?.headSha === pr.headSha) {
+        run.log.decision('none', { reason: 'no new commits since the last version', pr: pr.number })
+        return showExisting(video)
       }
       if (action.kind === 'revise' && !action.change.trim())
         return { status: 'none', ok: false, message: 'say what to change: /video revise <what to change>' }
+      const since =
+        action.kind === 'push' && marker?.headSha ? await sinceLast(ctx, marker.headSha, pr) : null
       return revise(ctx, video, surface, {
         made,
         prompt: () =>
@@ -531,8 +661,7 @@ export async function handlePr(
             : reviseBrief({
                 target,
                 context: { title: pr.title, files: pr.files },
-                sinceCommits: pr.commits,
-                sinceFiles: pr.files,
+                ...(since ?? { sinceCommits: pr.commits, sinceFiles: pr.files }),
                 authorTrusted: pr.authorTrusted,
               }),
         key:
@@ -606,6 +735,8 @@ async function revise(
     prompt: () => Brief
     key: string
     markerFor: (id: string, pending: string[], made: number) => Marker
+    /** /video redo: only this scene (an id or a unique label of the version it starts from). */
+    scene?: string
   },
 ): Promise<Outcome> {
   const { run, inputs, va } = ctx
@@ -633,6 +764,13 @@ async function revise(
       ok: false,
       message: 'no ready version to revise yet: reply /video retry or /video status',
     }
+  let beats: string[] | undefined
+  if (o.scene !== undefined) {
+    const scene = resolveScene(from, o.scene)
+    if ('error' in scene) return { status: 'none', ok: false, message: scene.error }
+    beats = [scene.id]
+    run.log.decision('redo', { scene: scene.id, version: from.n })
+  }
   const budget = await checkBudget(run, va, inputs, { video: current, newVersion: true })
   if (!budget.ok && !inputs.dryRun) {
     await showCap(ctx, surface, budget)
@@ -641,16 +779,22 @@ async function revise(
   const brief = o.prompt()
   if (inputs.dryRun) {
     dryRun(ctx, brief, [
-      `POST /api/v1/videos/${current.id}/versions (prompt ${brief.prompt.length} characters, fromVersion ${from.n}, Idempotency-Key ${o.key})`,
+      `POST /api/v1/videos/${current.id}/versions (prompt ${brief.prompt.length} characters, fromVersion ${from.n}${beats ? `, scope ${beats.join(',')}` : ''}, Idempotency-Key ${o.key})`,
     ])
     return { status: 'dry-run', ok: true }
   }
   logBrief(run, brief)
-  const res = await va.videos.revise(
-    current.id,
-    { prompt: brief.prompt, fromVersion: from.n },
-    { idempotencyKey: o.key },
-  )
+  const res = beats
+    ? await va.videos.redoScenes(
+        current.id,
+        { beats, prompt: brief.prompt, fromVersion: from.n },
+        { idempotencyKey: o.key },
+      )
+    : await va.videos.revise(
+        current.id,
+        { prompt: brief.prompt, fromVersion: from.n },
+        { idempotencyKey: o.key },
+      )
   const after = await va.videos.get(res.id)
   run.log.decision('revised', { video: after.id, version: after.latestVersion, key: o.key })
   setOutputs(run, { prompt: brief.prompt })
@@ -661,6 +805,41 @@ async function revise(
     saveMarker: (m) => surface.set(m),
   })
   return { status, ok: true }
+}
+
+/**
+ * What changed since the version's head (bead va-mg4i.3.1): the compare API's commits and files from the marker's
+ * headSha to the PR's head; null (use the whole PR) when that isn't a simple fast-forward, e.g. after a force-push.
+ */
+async function sinceLast(ctx: Ctx, from: string, pr: PrInfo) {
+  try {
+    const res = await ctx.gh.request<{
+      status: string
+      commits: { commit: { message: string } }[]
+      files?: { filename: string }[]
+    }>('GET /repos/{owner}/{repo}/compare/{basehead}', { path: { basehead: `${from}...${pr.headSha}` } })
+    if (res.data.status !== 'ahead') return null
+    return {
+      sinceCommits: res.data.commits.map((c) => c.commit.message),
+      sinceFiles: (res.data.files ?? []).map((f) => f.filename),
+    }
+  } catch {
+    return null
+  }
+}
+
+/** A scene of a version by id, or by a label that matches exactly one scene (case-insensitive). */
+export function resolveScene(v: Version, scene: string): { id: string } | { error: string } {
+  const beats = v.beats ?? []
+  const list = beats.map((b) => (b.label ? `${b.id} ("${b.label}")` : b.id)).join(', ')
+  if (!beats.length) return { error: `v${v.n} has no scenes to redo (it isn't an editable composition)` }
+  const byId = beats.find((b) => b.id === scene)
+  if (byId) return { id: byId.id }
+  const byLabel = beats.filter((b) => (b.label ?? '').toLowerCase() === scene.toLowerCase())
+  if (byLabel.length === 1 && byLabel[0]) return { id: byLabel[0].id }
+  return {
+    error: `${byLabel.length > 1 ? `more than one scene is called "${scene}"` : `no scene "${scene}"`} in v${v.n}; scenes: ${list}`,
+  }
 }
 
 async function shotsFor(ctx: Ctx, pr: PrInfo): Promise<Shot[]> {
@@ -682,6 +861,8 @@ interface ReleaseInfo {
   name: string | null
   body: string
   url: string
+  /** Where assets go (the release's upload_url without its {?name,label} template). */
+  uploadUrl: string
 }
 
 export async function handleRelease(ctx: Ctx, release: ReleaseInfo): Promise<Outcome> {
@@ -712,6 +893,9 @@ export async function handleRelease(ctx: Ctx, release: ReleaseInfo): Promise<Out
       ...(marker?.pending?.length ? { pending: marker.pending } : {}),
     }
     const s = stateOf(video, inputs)
+    // A re-run replaces the assets (same names) rather than failing on the clash.
+    if (s.version?.status === 'ready' && inputs.releaseAsset && !inputs.dryRun)
+      await attachAssets(ctx, release, video, s.version)
     await surface.show(s.state)
     run.log.decision('existing', {
       video: video.id,
@@ -738,6 +922,7 @@ export async function handleRelease(ctx: Ctx, release: ReleaseInfo): Promise<Out
     shots: async () => (inputs.screenshots.kind === 'glob' ? fromGlob(run, inputs.screenshots.pattern) : []),
     surface,
     marker: (id, pending) => ({ videoId: id, made: 1, ...(pending.length ? { pending } : {}) }),
+    remix: { label: `release ${release.tag}`, changes: () => release.body || release.tag },
   })
   if (out === 'stopped') return { status: 'skipped', ok: true }
   if (out === 'dry-run') return { status: 'dry-run', ok: true }
@@ -749,8 +934,49 @@ export async function handleRelease(ctx: Ctx, release: ReleaseInfo): Promise<Out
     saveMarker: (m) => {
       marker = m
     },
+    ...(inputs.releaseAsset
+      ? { afterReady: (v: Video, x: Version) => attachAssets(ctx, release, v, x) }
+      : {}),
   })
   return { status, ok: true }
+}
+
+/**
+ * release-asset (bead va-mg4i.3.3): the version's MP4 and captions attached to the release as video-<tag>.mp4 and
+ * video-<tag>.vtt. Downloads follow the file routes' signed redirects without the key. A re-run replaces assets of the
+ * same name instead of failing on the clash.
+ */
+async function attachAssets(ctx: Ctx, release: ReleaseInfo, video: Video, version: Version) {
+  const { run, gh, va } = ctx
+  const dir = await mkdtemp(join(tmpdir(), 'video-agent-assets-'))
+  try {
+    const existing: { id: number; name: string }[] = []
+    for await (const a of gh.paginate<{ id: number; name: string }>(
+      'GET /repos/{owner}/{repo}/releases/{release_id}/assets',
+      { path: { release_id: release.id } },
+    ))
+      existing.push(a)
+    const files = [
+      { file: 'video' as const, name: `video-${release.tag}.mp4`, type: 'video/mp4' },
+      { file: 'captions' as const, name: `video-${release.tag}.vtt`, type: 'text/vtt' },
+    ]
+    for (const f of files) {
+      const to = join(dir, f.name)
+      await va.files.download(video, { file: f.file, version: version.n, to })
+      const bytes = new Uint8Array(await readFile(to))
+      for (const old of existing.filter((a) => a.name === f.name))
+        await gh.request('DELETE /repos/{owner}/{repo}/releases/assets/{asset_id}', {
+          path: { asset_id: old.id },
+        })
+      await gh.request('POST /repos/{owner}/{repo}/releases/{release_id}/assets', {
+        url: `${release.uploadUrl}?name=${encodeURIComponent(f.name)}`,
+        raw: { bytes, contentType: f.type },
+      })
+      run.log.line({ release: 'asset', name: f.name, bytes: bytes.byteLength })
+    }
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
 }
 
 // ───── one-off videos ─────

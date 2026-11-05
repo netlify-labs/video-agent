@@ -34,6 +34,8 @@ export interface FakePull {
   html_url?: string
   /** What GraphQL bodyHTML returns (signed image URLs, spike A4). Default: the body. */
   bodyHTML?: string
+  /** Files the compare API reports up to a head sha (new commits since a version). */
+  filesBySha?: Record<string, string[]>
 }
 
 export interface FakeRelease {
@@ -313,6 +315,26 @@ export function fakeGitHub(o: FakeGitHubOptions = {}) {
         }
         r.assets.push(a)
         return json(201, { id: a.id, name: a.name, size: a.size })
+      },
+    ],
+    [
+      'GET',
+      '/repos/{o}/{r}/compare/{basehead}',
+      (m) => {
+        // A PR's history: base...head is "ahead" when base is one of its commits (or its start), "diverged" otherwise.
+        const [from = '', to = ''] = decodeURIComponent(m[3] ?? '').split('...')
+        for (const p of state.pulls.values()) {
+          if (p.headSha !== to) continue
+          const i = p.commits.findIndex((c) => c.sha === from)
+          if (i < 0) return json(200, { status: 'diverged', commits: [], files: [] })
+          const after = p.commits.slice(i + 1)
+          return json(200, {
+            status: after.length ? 'ahead' : 'identical',
+            commits: after.map((c) => ({ sha: c.sha, commit: { message: c.message } })),
+            files: (p.filesBySha ?? {})[to]?.map((filename) => ({ filename })) ?? [],
+          })
+        }
+        return json(404, { message: 'Not Found' })
       },
     ],
     [
