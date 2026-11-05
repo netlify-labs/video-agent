@@ -1424,9 +1424,13 @@ function resources(t) {
             "webhookUrl",
             "mediaIds",
             "sound",
-            "voiceover"
+            "voiceover",
+            "look"
           ],
-          features: [...input.planId !== void 0 ? ["planning"] : []],
+          features: [
+            ...input.planId !== void 0 ? ["planning"] : [],
+            ...input.look !== void 0 ? ["looks"] : []
+          ],
           operationId: "createVideo"
         },
         opts
@@ -1507,9 +1511,14 @@ function resources(t) {
             "voiceover",
             "mediaIds",
             "planId",
-            "webhookUrl"
+            "webhookUrl",
+            "look"
           ],
-          features: [...["remix"], ...input.planId !== void 0 ? ["planning"] : []],
+          features: [
+            ...["remix"],
+            ...input.planId !== void 0 ? ["planning"] : [],
+            ...input.look !== void 0 ? ["looks"] : []
+          ],
           operationId: "remixVideo"
         },
         opts
@@ -1532,11 +1541,13 @@ function resources(t) {
             "sound",
             "voiceover",
             "commentIds",
-            "scope"
+            "scope",
+            "look"
           ],
           features: [
             ...input.planId !== void 0 ? ["planning"] : [],
-            ...input.scope !== void 0 ? ["scoped_revision"] : []
+            ...input.scope !== void 0 ? ["scoped_revision"] : [],
+            ...input.look !== void 0 ? ["looks"] : []
           ],
           operationId: "reviseVideo"
         },
