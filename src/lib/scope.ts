@@ -239,7 +239,7 @@ export function spliceScoped(i: ScopeInput): Splice {
   const html = save(d)
   const violations = validate(html, summary, i.validateOptions).map((v) => asScenes(v, labels))
   // 9. What the agent changed outside the scope (scopeProblems, va-8cy4.2.5).
-  const putBack = comparePutBack(i, { html, summary })
+  const putBack = scopeProblems(i, { html, summary })
   return { html, summary, putBack, problems: violations, lengthDelta: total - parentTotal }
 }
 
@@ -329,11 +329,246 @@ function spliceSummary(
 const stringsOf = (v: unknown): string[] =>
   Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
 
+// ───── what the agent changed outside the scope ─────
+
+const RAW_TEXT = new Set(['script', 'style', 'pre', 'textarea'])
+const isEl = (n: Node): n is Element => 'tagName' in n
+const kidsOf = (n: Element) => n.childNodes.filter(isEl)
+
 /**
- * Every difference between the agent's file and the splice outside the scope, in plain words. Filled in by
- * va-8cy4.2.5 (scopeProblems, the semantic compare); until then nothing is reported as put back.
+ * A subtree as a canonical string: attributes sorted, whitespace-only text dropped, other text whitespace-collapsed
+ * (trimmed only inside script, style, pre and textarea), comments ignored. `skip` drops derived attributes.
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function comparePutBack(_i: ScopeInput, _splice: { html: string; summary: Summary }): string[] {
-  return []
+function canon(n: Node, skip: (el: Element, attr: string) => boolean, raw = false): string {
+  if (n.nodeName === '#text') {
+    const v = 'value' in n ? n.value : ''
+    const t = raw ? v.trim() : v.replace(/\s+/g, ' ').trim()
+    return t ? JSON.stringify(t) : ''
+  }
+  if (!isEl(n)) return ''
+  const attrs = n.attrs
+    .filter((a) => !skip(n, a.name))
+    .map((a) => `${a.name}=${JSON.stringify(a.value)}`)
+    .sort()
+  const inner = n.tagName === 'template' ? (n as unknown as { content: Element }).content : n
+  const kids = inner.childNodes.map((c) => canon(c, skip, raw || RAW_TEXT.has(n.tagName))).filter(Boolean)
+  return `<${n.tagName} ${attrs.join(' ')}>${kids.join('')}</${n.tagName}>`
+}
+
+/** Values the splice derives, never compared: beat starts, the totals, video slots and the music's ducking lane. */
+function derived(el: Element, name: string): boolean {
+  if (name === 'data-start' && (attr(el, 'data-va-beat') !== null || attr(el, 'data-va-layer') !== null))
+    return true
+  if (
+    name === 'data-duration' &&
+    (attr(el, 'data-va-contract') !== null || attr(el, 'data-va-layer') !== null)
+  )
+    return true
+  if ((name === 'data-duration' || name === 'data-start') && attr(el, 'data-va-kind') === 'video') return true
+  if (name === 'data-automation' && attr(el, 'data-va-duck') !== null) return true
+  return false
+}
+
+const ATTR_WORDS: Record<string, string> = {
+  'data-volume': 'volume',
+  'data-va-volume': 'volume',
+  src: 'file',
+  'data-fade-in': 'fade-in',
+  'data-fade-out': 'fade-out',
+}
+
+/** What changed inside a frozen scene, in a few words: the first text, script or element that differs. */
+function whatChanged(a: Element, b: Element): string {
+  const texts = (e: Element) => [...walk(e)].filter((x) => attr(x, 'data-va-text') !== null)
+  for (const t of texts(a)) {
+    const id = attr(t, 'data-va-text') ?? ''
+    const other = texts(b).find((x) => attr(x, 'data-va-text') === id)
+    if (!other || canon(t, derived) !== canon(other, derived)) {
+      const label = attr(t, 'data-va-label')?.trim()
+      return label ? `its ${label.toLowerCase()} text` : `its "${id}" text`
+    }
+  }
+  const scripts = (e: Element) =>
+    [...walk(e)].filter((x) => x.tagName === 'script').map((x) => canon(x, derived))
+  if (scripts(a).join() !== scripts(b).join()) return 'its script'
+  const styles = (e: Element) =>
+    [...walk(e)].filter((x) => x.tagName === 'style').map((x) => canon(x, derived))
+  if (styles(a).join() !== styles(b).join()) return 'its styles'
+  const own = (e: Element) => canon({ ...e, childNodes: [] }, derived)
+  if (own(a) !== own(b)) return 'its attributes'
+  return 'its contents'
+}
+
+/** Root-level children that aren't beats or layers, by tag and order: "A root-level <script> changed". */
+function plainKids(parent: Element, root: Element | null) {
+  return kidsOf(parent).filter(
+    (e) => e !== root && attr(e, 'data-va-beat') === null && attr(e, 'data-va-layer') === null,
+  )
+}
+
+function compareList(a: Element[], b: Element[], where: string, out: string[]) {
+  const tags = new Set([...a, ...b].map((e) => e.tagName))
+  for (const tag of tags) {
+    const x = a.filter((e) => e.tagName === tag).map((e) => canon(e, derived))
+    const y = b.filter((e) => e.tagName === tag).map((e) => canon(e, derived))
+    if (x.length > y.length) out.push(`A ${where} <${tag}> was added.`)
+    else if (x.length < y.length) out.push(`A ${where} <${tag}> was removed.`)
+    else if (x.some((v, n) => v !== y[n])) out.push(`A ${where} <${tag}> changed.`)
+  }
+}
+
+/**
+ * Every way the agent's composition differs from the splice outside the scope, in plain words, each once. A file that
+ * is only re-indented or has its attributes reordered has none. These are what check-contract --fix puts back, and
+ * the body of render-job's scope_violated and finalize's refusal.
+ */
+export function scopeProblems(i: ScopeInput, splice: { html: string; summary: Summary }): string[] {
+  const out: string[] = []
+  const scoped = new Set(i.beats)
+  let a: Doc
+  try {
+    a = load(i.agent.html)
+  } catch {
+    return ["The composition can't be read."]
+  }
+  const b = load(splice.html)
+  const labels = new Map(read(b).beats.map((x) => [x.id, x.label ?? x.id]))
+  const scene = (id: string) => `Scene "${labels.get(id) ?? id}"`
+  const find = (d: Doc, tag: string) => [...walk(d.doc as unknown as Element)].find((e) => e.tagName === tag)
+
+  // <html> and <head>.
+  const [htmlA, htmlB] = [find(a, 'html'), find(b, 'html')]
+  if (
+    htmlA &&
+    htmlB &&
+    canon({ ...htmlA, childNodes: [] }, derived) !== canon({ ...htmlB, childNodes: [] }, derived)
+  )
+    out.push('The <html> element changed.')
+  const [headA, headB] = [find(a, 'head'), find(b, 'head')]
+  if (headA && headB && canon(headA, derived) !== canon(headB, derived)) {
+    const count = (h: Element, tag: string) => kidsOf(h).filter((e) => e.tagName === tag).length
+    const added = [...new Set(kidsOf(headA).map((e) => e.tagName))].find(
+      (t) => count(headA, t) > count(headB, t),
+    )
+    const removed = [...new Set(kidsOf(headB).map((e) => e.tagName))].find(
+      (t) => count(headB, t) > count(headA, t),
+    )
+    out.push(
+      added
+        ? `<head> changed (a <${added}> was added).`
+        : removed
+          ? `<head> changed (a <${removed}> was removed).`
+          : '<head> changed.',
+    )
+  }
+  // Around the root, inside <body>.
+  const [bodyA, bodyB] = [find(a, 'body'), find(b, 'body')]
+  if (bodyA && bodyB) compareList(plainKids(bodyA, a.root), plainKids(bodyB, b.root), 'page-level', out)
+
+  // The root's own attributes, but its length.
+  const rootAttrs = (e: Element) =>
+    new Map(e.attrs.filter((x) => !derived(e, x.name)).map((x) => [x.name, x.value]))
+  const [ra, rb] = [rootAttrs(a.root), rootAttrs(b.root)]
+  for (const name of [...new Set([...ra.keys(), ...rb.keys()])].sort())
+    if (ra.get(name) !== rb.get(name)) out.push(`Root attribute ${name} changed.`)
+
+  // Frozen scenes.
+  const beatMap = (d: Doc) =>
+    new Map(
+      kidsOf(d.root)
+        .filter((e) => attr(e, 'data-va-beat') !== null)
+        .map((e) => [idOf(e), e]),
+    )
+  const [beatsA, beatsB] = [beatMap(a), beatMap(b)]
+  for (const [id, eb] of beatsB) {
+    if (scoped.has(id)) continue
+    const ea = beatsA.get(id)
+    if (!ea) continue // a removed scene is a splice problem, reported there
+    if (canon(ea, derived) !== canon(eb, derived)) out.push(`${scene(id)} changed (${whatChanged(ea, eb)}).`)
+  }
+  // Layers: the music, backgrounds, logo bugs, recorded narration.
+  const layerMap = (d: Doc) =>
+    new Map(
+      kidsOf(d.root)
+        .filter((e) => attr(e, 'data-va-layer') !== null)
+        .map((e) => [attr(e, 'data-va-layer') ?? '', e]),
+    )
+  const [layersA, layersB] = [layerMap(a), layerMap(b)]
+  for (const name of [...new Set([...layersA.keys(), ...layersB.keys()])].sort()) {
+    const [la, lb] = [layersA.get(name), layersB.get(name)]
+    if (!la) out.push(`The ${name} layer was removed.`)
+    else if (!lb) out.push(`A ${name} layer was added.`)
+    else if (canon(la, derived) !== canon(lb, derived)) {
+      const [xa, xb] = [rootAttrs(la), rootAttrs(lb)]
+      const changed = [...new Set([...xa.keys(), ...xb.keys()])].sort().filter((k) => xa.get(k) !== xb.get(k))
+      out.push(
+        changed.length
+          ? `The ${name} layer's ${[...new Set(changed.map((k) => ATTR_WORDS[k] ?? k))].join(', ')} changed.`
+          : `The ${name} layer changed.`,
+      )
+    }
+  }
+  // Root-level <script>, <style> and anything else that isn't a beat or a layer.
+  compareList(plainKids(a.root, null), plainKids(b.root, null), 'root-level', out)
+
+  out.push(...captionProblems(i, scoped, scene), ...voiceProblems(i, scoped, scene))
+  return [...new Set(out)]
+}
+
+/**
+ * Other scenes' cues the agent wrote that aren't the parent's (by beat, text id, text and beat-relative times, in any
+ * order). Leaving them out is fine: the splice puts them back.
+ */
+function captionProblems(
+  i: ScopeInput,
+  scoped: ReadonlySet<string>,
+  scene: (id: string) => string,
+): string[] {
+  const key = (c: Caption) =>
+    c.beat
+      ? JSON.stringify([c.textId ?? null, c.text, !!c.voice, ms(c.beatStart), ms(c.beatEnd)])
+      : JSON.stringify([c.id ?? null, c.text, ms(c.start), ms(c.end)])
+  const group = (cs: Caption[] | undefined) => {
+    const m = new Map<string, string[]>()
+    for (const c of cs ?? []) {
+      if (c.beat && scoped.has(c.beat)) continue
+      const g = c.beat ?? ''
+      m.set(g, [...(m.get(g) ?? []), key(c)])
+    }
+    return m
+  }
+  const [mine, theirs] = [group(i.agent.summary.captions), group(i.parent.summary.captions)]
+  const out: string[] = []
+  for (const [g, keys] of mine)
+    if ([...keys].sort().join('\n') !== [...(theirs.get(g) ?? [])].sort().join('\n'))
+      out.push(g ? `${scene(g)}'s captions changed.` : "The recorded narration's captions changed.")
+  return out
+}
+const ms = (n: number | undefined) => (n === undefined ? null : Math.round(n * 1000))
+
+/** Other scenes' voice-over (voice.json entries and script.json lines) and the voice itself. */
+function voiceProblems(i: ScopeInput, scoped: ReadonlySet<string>, scene: (id: string) => string): string[] {
+  const out: string[] = []
+  const [pv, av] = [i.parent.voice ?? null, i.agent.voice ?? null]
+  if (pv && av) {
+    for (const f of ['provider', 'voice', 'speed'] as const)
+      if (pv[f] !== av[f]) out.push(`The voice-over's ${f} changed.`)
+  }
+  if (pv) {
+    const theirs = new Map(pv.beats.map((x) => [x.beat, JSON.stringify(x)]))
+    const mine = new Map((av?.beats ?? []).map((x) => [x.beat, JSON.stringify(x)]))
+    for (const id of [...new Set([...theirs.keys(), ...mine.keys()])])
+      if (!scoped.has(id) && theirs.get(id) !== mine.get(id)) out.push(`${scene(id)}'s voice-over changed.`)
+  }
+  const [ps, as] = [i.parent.script ?? null, i.agent.script ?? null]
+  if (ps) {
+    if (as && (ps.voice !== as.voice || ps.speed !== as.speed))
+      out.push("The voice-over script's voice or speed changed.")
+    const theirs = new Map(ps.lines.map((l) => [l.beat, l.text]))
+    const mine = new Map((as?.lines ?? []).map((l) => [l.beat, l.text]))
+    for (const id of [...new Set([...theirs.keys(), ...mine.keys()])])
+      if (!scoped.has(id) && theirs.get(id) !== mine.get(id))
+        out.push(`${scene(id)}'s voice-over line changed.`)
+  }
+  return out
 }

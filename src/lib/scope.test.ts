@@ -20,6 +20,7 @@ import { fmt, frames } from './contract-core.js'
 import {
   isLockedLength,
   isScopeRefusal,
+  scopeProblems,
   SCOPE_REFUSED_PREFIX,
   spliceBytes,
   spliceScoped,
@@ -376,6 +377,156 @@ describe('spliceScoped', () => {
     expect(again.problems).toEqual([])
     expect(spliceBytes(again)).toEqual(bytes)
     expect(() => spliceBytes({ html: null, summary: null })).toThrow()
+  })
+})
+
+describe('scopeProblems (what --fix puts back)', () => {
+  /** The agent redid "demo" (new text) and also did `also` outside the scope. */
+  const redo = (also: (d: Doc) => void) =>
+    edit(music, (d) => {
+      text(d, 'demo-sub', 'Ship on Friday')
+      also(d)
+    })
+  const putBack = (agent: string, extra: Partial<ScopeInput> = {}) => {
+    const s = spliceScoped(input(agent, extra))
+    expect(s.problems).toEqual([])
+    return s.putBack
+  }
+
+  it('finds nothing in a reformatted file: re-indented, attributes reordered, CRLF', () => {
+    const agent = save(load(redo(() => undefined)))
+      .replace('<section id="intro" class="clip beat"', '<section class="clip beat"   id="intro"')
+      .replace('<div class="kicker"', '\n\n            <div   class="kicker"')
+      .replace(/<\/head>/, '  \n  </head>')
+      .replace(/\n/g, '\r\n')
+    expect(putBack(agent)).toEqual([])
+  })
+
+  it('names each change outside the scope once', () => {
+    const el = (d: Doc, f: (e: (typeof d.root.childNodes)[number] & { tagName?: string }) => boolean) =>
+      [...walk(d.doc as never)].find((e) => f(e))!
+    const cases: [string, (d: Doc) => void][] = [
+      [
+        '<head> changed (a <style> was added).',
+        (d) => {
+          const head = el(d, (e) => e.tagName === 'head') as never as { childNodes: unknown[] }
+          head.childNodes.push(
+            load('<div data-composition-id="x"><style>.x{}</style></div>').root.childNodes[0],
+          )
+        },
+      ],
+      ['Scene "Opening" changed (its headline text).', (d) => text(d, 'intro-title', 'Org hooks')],
+      [
+        'Scene "outro" changed (its script).',
+        (d) => {
+          const script = [...walk(beatOf(d, 'outro'))].find((e) => e.tagName === 'script')!
+          editText(script, "vaBeat('outro', (tl, el) => { tl.set(el, { opacity: 1 }) })")
+        },
+      ],
+      ['Scene "outro" changed (its attributes).', (d) => set(d, 'outro', 'data-va-label', 'Ending')],
+      [
+        "The music layer's volume changed.",
+        (d) => {
+          const music = [...walk(d.root)].find((e) => attr(e, 'data-va-layer') === 'music')!
+          music.attrs.find((a) => a.name === 'data-volume')!.value = '0.2'
+        },
+      ],
+      [
+        'Root attribute data-width changed.',
+        (d) => (d.root.attrs.find((a) => a.name === 'data-width')!.value = '1280'),
+      ],
+      [
+        'A root-level <script> was added.',
+        (d) =>
+          d.root.childNodes.push(
+            load('<div data-composition-id="x"><script>1</script></div>').root.childNodes[0]!,
+          ),
+      ],
+      [
+        'A root-level <style> was added.',
+        (d) =>
+          d.root.childNodes.push(
+            load('<div data-composition-id="x"><style>.y{}</style></div>').root.childNodes[0]!,
+          ),
+      ],
+      [
+        'A page-level <script> changed.',
+        (d) => {
+          const script = [...walk(d.doc as never)]
+            .filter((e: { tagName?: string }) => e.tagName === 'script')
+            .at(-1)!
+          editText(script, "window.__timelines['main'] = gsap.timeline({ paused: false })")
+        },
+      ],
+    ]
+    for (const [want, change] of cases) expect(putBack(redo(change))).toEqual([want])
+  })
+
+  it('compares script text trimmed, not collapsed: a changed space in a frozen script counts', () => {
+    const agent = redo((d) => {
+      const script = [...walk(beatOf(d, 'outro'))].find((e) => e.tagName === 'script')!
+      const node = script.childNodes[0] as { value: string }
+      node.value = node.value.replace('duration: 0.6', 'duration:  0.6')
+    })
+    expect(putBack(agent)).toEqual(['Scene "outro" changed (its script).'])
+  })
+
+  it("reports other scenes' captions only when the agent wrote them differently", () => {
+    const agent = redo(() => undefined)
+    const cues = musicSummary.captions!
+    const changed = {
+      ...musicSummary,
+      captions: cues.map((c) => (c.beat === 'outro' ? { ...c, text: 'Read more' } : c)),
+    }
+    expect(putBack(agent, { agent: { html: agent, summary: changed } })).toEqual([
+      'Scene "outro"\'s captions changed.',
+    ])
+    expect(
+      putBack(agent, { agent: { html: agent, summary: { ...musicSummary, captions: [...cues].reverse() } } }),
+    ).toEqual([])
+    expect(putBack(agent, { agent: { html: agent, summary: { captions: [] } } })).toEqual([])
+  })
+
+  it("reports another scene's voice-over and the voice itself", () => {
+    const run = (voice: typeof voiceFile, script = { lines: [{ beat: 'outro', text: 'Read the docs.' }] }) =>
+      spliceScoped({
+        parent: {
+          html: voiced,
+          summary: voicedSummary,
+          voice: voiceFile,
+          script: { lines: [{ beat: 'outro', text: 'Read the docs.' }] },
+        },
+        agent: { html: voiced, summary: voicedSummary, voice, script },
+        beats: ['intro'],
+        lockedLength: false,
+      }).putBack
+    expect(run(voiceFile)).toEqual([])
+    const outro = voiceFile.beats.find((b) => b.beat === 'outro')!
+    expect(
+      run({
+        ...voiceFile,
+        beats: voiceFile.beats.map((b) => (b === outro ? { ...b, text: 'Read on.' } : b)),
+      }),
+    ).toEqual(['Scene "outro"\'s voice-over changed.'])
+    expect(run({ ...voiceFile, provider: 'elevenlabs' })).toEqual(["The voice-over's provider changed."])
+    expect(run(voiceFile, { lines: [{ beat: 'outro', text: 'Read on.' }] })).toEqual([
+      'Scene "outro"\'s voice-over line changed.',
+    ])
+  })
+
+  it('ignores stale derived values: beat starts, totals, video slots and the ducking lane', () => {
+    const agent = redo((d) => {
+      set(d, 'outro', 'data-start', '99')
+      d.root.attrs.find((a) => a.name === 'data-duration')!.value = '1'
+      for (const l of [...walk(d.root)].filter((e) => attr(e, 'data-va-layer') !== null)) {
+        l.attrs.find((a) => a.name === 'data-duration')!.value = '1'
+        l.attrs = l.attrs.filter((a) => a.name !== 'data-automation')
+      }
+    })
+    expect(putBack(agent)).toEqual([])
+    // Called directly, the same.
+    const s = spliceScoped(input(agent))
+    expect(scopeProblems(input(agent), { html: s.html!, summary: s.summary! })).toEqual([])
   })
 })
 
