@@ -315,7 +315,7 @@ async function runBrowser(name: string, inputs: { name: string; file: string; ty
   page.on('console', (m) => m.type() === 'error' && log('console', { browser: name, text: m.text().slice(0, 300) }))
   page.on('pageerror', (e) => log('pageerror', { browser: name, text: e.message.slice(0, 300) }))
   await page.goto('http://localhost:4747/')
-  await page.waitForFunction(() => 'MB' in window, undefined, { timeout: 30_000 })
+  await page.waitForFunction("'MB' in window", undefined, { timeout: 30_000 })
   const result: Record<string, unknown> = { version: browser.version(), support: await page.evaluate('support()') }
   log('support', { browser: name, ...(result.support as object) })
   if (tests.includes('live'))
