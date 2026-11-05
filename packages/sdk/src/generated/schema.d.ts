@@ -131,7 +131,7 @@ export interface paths {
         put?: never;
         /**
          * Revise a video
-         * @description Starts the next version from a ready one.
+         * @description Starts the next version from a ready one. With scope, only those scenes of fromVersion are redone and everything else stays exactly as it is (redo a scene): 409 not_editable when that version can't be redone scene by scene (no editing contract, or its engine can't), 400 for scene ids it doesn't have.
          */
         post: operations["reviseVideo"];
         delete?: never;
@@ -172,6 +172,26 @@ export interface paths {
          * @description The library items a version was made with, in order (items since deleted from the library included). A remix keeps them unless you pass mediaIds.
          */
         get: operations["listVersionMedia"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/videos/{id}/versions/{n}/beats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A version's scenes
+         * @description The scenes (beats) of a ready version, in order, for redoing some of them: pass their ids as scope.beats with this version as fromVersion. Null for a version that can't be edited scene by scene. Versions made before this list existed get it filled on first read. 409 when the version isn't ready.
+         */
+        get: operations["getVersionBeats"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1911,6 +1931,15 @@ export interface components {
             }[];
             /** @description Ready and keeps editing contract v1, so it can be edited in the browser. */
             editable: boolean;
+            /** @description This version's scenes, when known. Null: not known yet (ask GET …/versions/{n}/beats) or not a version that can be redone scene by scene. */
+            beats: components["schemas"]["BeatInfo"][] | null;
+            /** @description A version that redid only some scenes of the version it came from: which ones, with their names. */
+            scope: {
+                beats: {
+                    id: string;
+                    label: string;
+                }[];
+            } | null;
             /** @description The render engine that made this version (a video keeps one) and what the editor may offer on it. editable still decides whether the editor opens. */
             editing: {
                 /** @enum {string} */
@@ -2028,6 +2057,16 @@ export interface components {
         };
         /** @enum {string|null} */
         Verdict: "approved" | "changes_requested" | null;
+        BeatInfo: {
+            /** @description The beat id: what scope.beats and the CLI's --scene take. */
+            id: string;
+            /** @description The scene's name, as the agent wrote it (data-va-label); null if none. */
+            label: string | null;
+            /** @description Seconds from the start of this version. */
+            start: number;
+            /** @description Seconds. */
+            duration: number;
+        };
         EngineCapabilities: {
             /** @description The edit operations the browser editor may offer on this engine. */
             editOps: ("text" | "retime" | "reorder" | "delete" | "color" | "media" | "audio" | "voice" | "span" | "camera" | "cursor" | "redact")[];
@@ -2255,6 +2294,11 @@ export interface components {
             voiceover?: components["schemas"]["VoiceoverInput"] & unknown;
             /** @description Incorporate feedback: open comments on the version being revised (owner or admin). prompt is your note. */
             commentIds?: string[];
+            /** @description Redo only these scenes; everything else stays exactly as it is. Needs fromVersion. Can't be combined with planId, durationSec, sound or voiceover. */
+            scope?: {
+                /** @description Scene ids from fromVersion's beats (GET …/versions/{n}/beats). */
+                beats: string[];
+            };
         };
         Remix: {
             /**
@@ -4048,6 +4092,76 @@ export interface operations {
                 content: {
                     "application/json": {
                         items: components["schemas"]["Media"][];
+                    };
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict or not ready */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getVersionBeats: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                n: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scenes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        beats: components["schemas"]["BeatInfo"][] | null;
                     };
                 };
             };

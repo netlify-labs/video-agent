@@ -729,6 +729,22 @@ export function resources(t: Transport) {
         ),
     },
     versions: {
+      /** A version's scenes (`getVersionBeats`) */
+      beats: (
+        id: string | number,
+        n: string | number,
+        opts?: CallOptions,
+      ): Promise<Ok<'/api/v1/videos/{id}/versions/{n}/beats', 'get'>> =>
+        t.call<Ok<'/api/v1/videos/{id}/versions/{n}/beats', 'get'>>(
+          {
+            method: 'GET',
+            path: '/api/v1/videos/{id}/versions/{n}/beats',
+            pathParams: { id, n },
+            features: [...['scoped_revision']],
+            operationId: 'getVersionBeats',
+          },
+          opts,
+        ),
       /** Cancel a version (`cancelVersion`) */
       cancel: (
         id: string | number,
@@ -1053,8 +1069,12 @@ export function resources(t: Transport) {
               'sound',
               'voiceover',
               'commentIds',
+              'scope',
             ],
-            features: [...(input.planId !== undefined ? ['planning'] : [])],
+            features: [
+              ...(input.planId !== undefined ? ['planning'] : []),
+              ...(input.scope !== undefined ? ['scoped_revision'] : []),
+            ],
             operationId: 'reviseVideo',
           },
           opts,

@@ -581,6 +581,46 @@
             "type": "boolean",
             "description": "Ready and keeps editing contract v1, so it can be edited in the browser."
           },
+          "beats": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/BeatInfo"
+            },
+            "description": "This version's scenes, when known. Null: not known yet (ask GET …/versions/{n}/beats) or not a version that can be redone scene by scene."
+          },
+          "scope": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "beats": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "label"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "beats"
+            ],
+            "description": "A version that redid only some scenes of the version it came from: which ones, with their names."
+          },
           "editing": {
             "type": "object",
             "properties": {
@@ -973,6 +1013,8 @@
           "incorporates",
           "feedback",
           "editable",
+          "beats",
+          "scope",
           "editing",
           "mode",
           "editedFromN",
@@ -1104,6 +1146,36 @@
           "approved",
           "changes_requested",
           null
+        ]
+      },
+      "BeatInfo": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The beat id: what scope.beats and the CLI's --scene take."
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The scene's name, as the agent wrote it (data-va-label); null if none."
+          },
+          "start": {
+            "type": "number",
+            "description": "Seconds from the start of this version."
+          },
+          "duration": {
+            "type": "number",
+            "description": "Seconds."
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "start",
+          "duration"
         ]
       },
       "EngineCapabilities": {
@@ -1947,6 +2019,25 @@
             },
             "maxItems": 50,
             "description": "Incorporate feedback: open comments on the version being revised (owner or admin). prompt is your note."
+          },
+          "scope": {
+            "type": "object",
+            "properties": {
+              "beats": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                },
+                "minItems": 1,
+                "maxItems": 20,
+                "description": "Scene ids from fromVersion's beats (GET …/versions/{n}/beats)."
+              }
+            },
+            "required": [
+              "beats"
+            ],
+            "description": "Redo only these scenes; everything else stays exactly as it is. Needs fromVersion. Can't be combined with planId, durationSec, sound or voiceover."
           }
         },
         "required": [
@@ -7199,11 +7290,12 @@
           "resource": "videos",
           "method": "revise",
           "fieldFeatures": {
-            "planId": "planning"
+            "planId": "planning",
+            "scope": "scoped_revision"
           }
         },
         "summary": "Revise a video",
-        "description": "Starts the next version from a ready one.",
+        "description": "Starts the next version from a ready one. With scope, only those scenes of fromVersion are redone and everything else stays exactly as it is (redo a scene): 409 not_editable when that version can't be redone scene by scene (no editing contract, or its engine can't), 400 for scene ids it doesn't have.",
         "tags": [
           "versions"
         ],
@@ -7501,6 +7593,124 @@
                   },
                   "required": [
                     "items"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/videos/{id}/versions/{n}/beats": {
+      "get": {
+        "operationId": "getVersionBeats",
+        "x-sdk": {
+          "resource": "versions",
+          "method": "beats",
+          "feature": "scoped_revision"
+        },
+        "summary": "A version's scenes",
+        "description": "The scenes (beats) of a ready version, in order, for redoing some of them: pass their ids as scope.beats with this version as fromVersion. Null for a version that can't be edited scene by scene. Versions made before this list existed get it filled on first read. 409 when the version isn't ready.",
+        "tags": [
+          "versions"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "required": true,
+            "name": "n",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Scenes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "beats": {
+                      "type": [
+                        "array",
+                        "null"
+                      ],
+                      "items": {
+                        "$ref": "#/components/schemas/BeatInfo"
+                      }
+                    }
+                  },
+                  "required": [
+                    "beats"
                   ]
                 }
               }

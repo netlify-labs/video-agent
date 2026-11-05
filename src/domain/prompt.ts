@@ -5,7 +5,7 @@ import { SAMPLE_RATE } from '../lib/timeline.js'
 import { ONE_WAY_WORDS } from '../lib/voice.js'
 import { ASPECTS, type Aspect, type VersionRemix, type VideoSound, type Voiceover } from './types.js'
 
-export const PROMPT_TEMPLATE_VERSION = 16
+export const PROMPT_TEMPLATE_VERSION = 17
 
 export interface PromptInput {
   jobId: string
