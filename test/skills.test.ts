@@ -52,6 +52,7 @@ describe('netlify-video skill package', () => {
     const { list, read } = unzipped(packageSkill(skillsDir, 'netlify-video', SITE).zip, 'pkg')
     expect(list).toEqual([
       'netlify-video/SKILL.md',
+      'netlify-video/references/cli.md',
       'netlify-video/references/connect.md',
       'netlify-video/references/narration.md',
       'netlify-video/references/recipes.md',
@@ -66,6 +67,7 @@ describe('netlify-video skill package', () => {
     expect(skill).toContain(`claude mcp add --transport http video-agent ${SITE}/mcp`)
     const connect = read('netlify-video/references/connect.md')
     expect(connect).toContain(`url = "${SITE}/mcp"`)
+    expect(read('netlify-video/references/cli.md')).toContain(`video-agent login --url ${SITE}`)
     for (const path of list) expect(read(path)).not.toContain(SITE_URL_TOKEN)
   })
 

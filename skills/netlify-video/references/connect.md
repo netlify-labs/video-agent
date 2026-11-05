@@ -68,7 +68,14 @@ npx -y mcp-remote {{SITE_URL}}/mcp --header "Authorization: Bearer $VIDEO_AGENT_
 
 The MCP tools read the media library (`list_media`) and import Openverse music (`import_music`, finished by
 `get_music_job` when Openverse is slow), but don't upload
-files. With an API key, upload a file of up to 4 MB through the REST API, then pass the returned `id` in `media_ids`:
+files. With a shell, the CLI uploads any size and waits until each file is ready; pass the ids it prints in
+`media_ids` (see [cli.md](cli.md)):
+
+```sh
+video-agent media upload ./checkout.png --caption "New checkout page" --json
+```
+
+Without the CLI, upload a file of up to 4 MB through the REST API with an API key, then pass the returned `id`:
 
 ```sh
 curl -fsS -X POST "{{SITE_URL}}/api/v1/media?filename=checkout.png&caption=New%20checkout%20page" \

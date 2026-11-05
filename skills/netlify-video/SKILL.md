@@ -20,6 +20,9 @@ You drive it through MCP tools. If the tools below aren't available, connect fir
   **Sign in with Netlify** (OAuth): add the URL alone and the client opens a browser to sign in.
 - Claude Code: `claude mcp add --transport http video-agent {{SITE_URL}}/mcp --header "Authorization: Bearer $VIDEO_AGENT_API_KEY"`
 
+With a shell, the `video-agent` CLI does the same in one command (`video-agent create "…" --wait --out ./video
+--json`): see [references/cli.md](references/cli.md).
+
 Keys act as their owner with their role. Creators can make videos; Reviewers can comment and approve; Viewers can
 only watch. The tool list shows only what your role can do.
 
