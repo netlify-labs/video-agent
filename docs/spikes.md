@@ -739,6 +739,9 @@ candidate paths.
 
 - **Deterministic:** two `npm run build`s of the same commit wrote byte-identical `looks-build/clean.tar.gz`
   (sha256 `23ab4395…7d82`, 4,275 bytes), the sha256 `src/generated/looks.ts` records.
+  That holds per platform only: CI on Linux x64 packed the same files to different gzip bytes (sha256
+  `ca581991…4481`) than macOS arm64, with the same look hash. An archive's sha256 is meaningful only within the
+  build that wrote it, which is how the catalog uses it (each deploy's build rewrites the catalog).
 - **Draft deploy** (`netlify deploy --build`, alias `k3-looks-spike`, deploy `6aec39f8e7372cfb360f3cf6`; branch
   deploys are limited to `main` on this site): `process.cwd()` is `/var/task`, and
   `join(process.cwd(), 'looks-build', 'clean.tar.gz')` exists with the catalog's sha256. Paths relative to the

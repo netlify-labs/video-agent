@@ -109,12 +109,16 @@ describe('looks build', () => {
 })
 
 describe('the committed catalog', () => {
+  // An archive's gzip bytes, so its sha256 and size, differ between CPU architectures (a catalog made on a laptop
+  // differs in CI); the deploy's build rewrites the catalog from its own archives anyway. Everything else, the look
+  // hash included, must match.
+  const portable = (module: string) => module.replace(/^\s*"(sha256|bytes)": .*\n/gm, '')
+
   it('matches looks/ (run npm run looks:gen after changing a look)', () => {
     const fresh = looksModule(
       buildLooks({ repoRoot: repo, hyperframesVersion: VERSION, writeArchives: false }),
     )
-    expect(readFileSync(join(repo, 'src', 'generated', 'looks.ts'), 'utf8'), 'run npm run looks:gen').toBe(
-      fresh,
-    )
+    const committed = readFileSync(join(repo, 'src', 'generated', 'looks.ts'), 'utf8')
+    expect(portable(committed), 'run npm run looks:gen').toBe(portable(fresh))
   })
 })
