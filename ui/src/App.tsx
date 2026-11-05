@@ -26,6 +26,7 @@ const DocsMcpPage = routes.lazyPage(routes.docsMcpRoute, (m) => m.default)
 const DocsSkillsPage = routes.lazyPage(routes.docsSkillsRoute, (m) => m.default)
 const DocsDestinationsPage = routes.lazyPage(routes.docsDestinationsRoute, (m) => m.default)
 const DocsSdkPage = routes.lazyPage(routes.docsSdkRoute, (m) => m.default)
+const DocsLooksPage = routes.lazyPage(routes.docsLooksRoute, (m) => m.default)
 // Mock builds only: the narration timeline on fixture data (/dev/timeline). The import is dropped from real builds.
 const TimelineDemo = import.meta.env.VITE_MOCK ? lazy(() => import('./mock/TimelineDemo')) : null
 // And the narration lock and stale-base banners on a mock draft (/dev/narration).
@@ -204,6 +205,14 @@ export function App() {
           element={
             <Page>
               <DocsSdkPage />
+            </Page>
+          }
+        />
+        <Route
+          path="/docs/looks"
+          element={
+            <Page>
+              <DocsLooksPage />
             </Page>
           }
         />

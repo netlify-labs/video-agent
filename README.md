@@ -122,6 +122,7 @@ Runs can also read the project's Blobs, so they can read uploaded media, includi
 A run renders offline, with one exception: when [Remotion](#experimental-the-remotion-engine-bring-your-own-license) is
 on, each Remotion render reports to remotion.pro which license key was used, the kind of event and whether it was
 production or development.
+Looks are instructions to the agent, like `context/`, so only people who can change the repo add them.
 
 ## Configuration
 
@@ -149,6 +150,18 @@ production or development.
 | `ENGINES`                                                | Optional                                       | `hyperframes`                                  | Engines this deployment may offer. Add `remotion` only with its license ([below](#experimental-the-remotion-engine-bring-your-own-license)).             |
 | `VIDEO_AGENT_REMOTION_KEY`                               | Optional (for a Company License)               | —                                              | Your Remotion key (`rm_sec_…`). Secret; not `REMOTION_`-prefixed, so Remotion never hands it to video code.                                              |
 | `VIDEO_AGENT_REMOTION_DEVELOPMENT`                       | Optional (test deployments only)               | —                                              | `1` marks this deployment's Remotion renders as development ones.                                                                                        |
+
+## Looks
+
+<p>
+  <a href="looks/clean/LOOK.md"><img src="looks/clean/poster.webp" alt="Clean product" width="260"></a>
+  <a href="looks/kinetic/LOOK.md"><img src="looks/kinetic/poster.webp" alt="Kinetic type" width="260"></a>
+  <a href="looks/terminal/LOOK.md"><img src="looks/terminal/poster.webp" alt="Terminal" width="260"></a>
+</p>
+
+A look is a style for a video: its type, colour roles, motion and layout rules. People pick one on New video, restyle
+a video into another, or leave it to the admin default (none unless an admin picks one). Every look in a deployment,
+with its preview, is under **Docs → Looks** (`/docs/looks`). To add one, see [looks/README.md](looks/README.md).
 
 ## Remix a video
 

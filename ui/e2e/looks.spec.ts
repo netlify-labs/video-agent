@@ -298,3 +298,18 @@ test('an admin turns a look off and it leaves the picker; a disabled default is 
   await expect(card(page, 'terminal')).toHaveCount(0)
   await expect(card(page, 'clean')).toBeVisible()
 })
+
+// Docs: /docs/looks lists every catalog look (bead va-nifa.4.8).
+
+test('/docs/looks renders every catalog look and is in the docs nav', async ({ page }) => {
+  await page.goto('/docs/looks')
+  await expect(page.getByRole('heading', { level: 1, name: 'Looks' })).toBeVisible()
+  const catalog = page.getByTestId('looks-catalog')
+  await expect(catalog.locator('[data-look]')).toHaveCount(3)
+  for (const name of ['Clean product', 'Kinetic type', 'Terminal'])
+    await expect(catalog.getByText(name, { exact: false }).first()).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Looks', exact: true }).first()).toHaveAttribute(
+    'href',
+    '/docs/looks',
+  )
+})
