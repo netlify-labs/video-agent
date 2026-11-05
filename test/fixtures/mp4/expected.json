@@ -1,0 +1,9 @@
+{
+  "gop30.mp4": { "fastStart": true, "fragmented": false, "video": { "fps": 30, "cfr": true, "maxKeyframeGapSec": 1, "syncSamples": 3, "sampleCount": 90, "sampleEntries": 1, "sizeChanges": false } },
+  "gop300.mp4": { "fastStart": true, "fragmented": false, "video": { "fps": 30, "cfr": true, "maxKeyframeGapSec": 3, "syncSamples": 1, "sampleCount": 90, "sampleEntries": 1, "sizeChanges": false } },
+  "intra.mp4": { "fastStart": true, "fragmented": false, "video": { "fps": 30, "cfr": true, "maxKeyframeGapSec": 0.0333, "syncSamples": 30, "sampleCount": 30, "sampleEntries": 1, "sizeChanges": false } },
+  "fragmented.mp4": { "fastStart": true, "fragmented": true, "video": { "sampleCount": 0, "sampleEntries": 1, "sizeChanges": false } },
+  "slowstart.mp4": { "fastStart": false, "fragmented": false, "video": { "fps": 30, "cfr": true, "maxKeyframeGapSec": 1, "syncSamples": 2, "sampleCount": 60, "sampleEntries": 1, "sizeChanges": false } },
+  "vfr.mp4": { "fastStart": true, "fragmented": false, "video": { "fps": 22.5, "cfr": false, "maxKeyframeGapSec": 1, "syncSamples": 2, "sampleCount": 45, "sampleEntries": 1, "sizeChanges": false } },
+  "audio.m4a": { "fastStart": true, "fragmented": false, "video": null }
+}
