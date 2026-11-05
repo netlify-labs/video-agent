@@ -30,6 +30,11 @@
 //   hold        at most one last beat data-va-hold="<seconds>" (id va-hold), exactly as applyHoldFrame writes it: no
 //               script, text or media, only an <img> of assets/hold/last.png, the base's last frame, which the run
 //               renders; it holds the final frame while recorded narration runs past the end (docs/spikes.md S12)
+//   recording   a screen-recording scene (screen-recording plan §5.3): at most one recording slot per beat (a video
+//               with data-va-in/data-va-out in source seconds), its only video slot; data-media-start = in; rate =
+//               (out - in) / the slot's duration, to 4 places, within RATE_RANGE; the slot lasts the beat unless
+//               data-va-rec-hold="end", which plays it at 0.5x and shows img.va-rec-hold (assets/recording/<step>.
+//               hold.jpg) for the rest; data-va-locked names assets/recording/redact.js
 //   captions    summary.json captions carry beat, textId, beatStart, beatEnd (beat-relative) plus the absolute
 //               start, end and text render-job reads; the patcher keeps both in step. Voice cues (voice: true) follow
 //               the spoken words instead of a text, and keep their times when a beat is stretched (audio isn't).
@@ -68,6 +73,7 @@ import {
   syncCaptionsFor,
   voiceFits,
 } from './contract-core.js'
+import { RATE_RANGE, rateInRange, rateOf } from './recording.js'
 
 type Node = DefaultTreeAdapterMap['node']
 type Element = DefaultTreeAdapterMap['element']
@@ -114,6 +120,25 @@ export interface Beat {
   media: MediaSlot[]
   /** The beat's voice-over clip, timed in the beat's clock; null when it has none. */
   voice: VoiceClip | null
+  /** The beat's screen recording (screen-recording plan §5.3), only on a recording beat. */
+  recording?: RecordingBeat
+}
+export interface RecordingBeat {
+  slot: string
+  src: string
+  /** Source seconds the scene shows. */
+  in: number
+  out: number
+  rate: number
+  /** Camera keys and clicks in source seconds, as the markup holds them ([] when unreadable). */
+  camera: unknown[]
+  cursor: { style: string; size: number | null; path: string | null }
+  clicks: unknown[]
+  /** The scene's own hidden areas (the agent's and the editor's); the locked ones are in `locked`. */
+  redact: unknown[]
+  locked: string | null
+  /** How long the out frame is held after the slot ends, when the scene is slower than 0.5x. */
+  hold: { seconds: number } | null
 }
 export interface VoiceClip {
   id: string
@@ -252,7 +277,8 @@ export function load(html: string): Doc {
 export const save = (d: Doc) => serialize(d.doc)
 
 const beatsOf = (root: Element) => kids(root).filter((e) => attr(e, 'data-va-beat') !== null)
-const scriptOf = (beat: Element) => kids(beat).find((e) => e.tagName === 'script')
+/** The beat's own (inline) script; a recording scene's data scripts (<script src>) come before it. */
+const scriptOf = (beat: Element) => kids(beat).find((e) => e.tagName === 'script' && attr(e, 'src') === null)
 
 /** Colours declared on the root, from <style> rules like `#root { --va-color-bg: #0b0d10 }`. */
 function readColors(d: Doc): { colors: Record<string, string>; styles: Element[] } {
@@ -303,6 +329,7 @@ export function read(d: Doc, lines?: Record<string, string>): Composition {
         }),
       media: inner.filter((e) => attr(e, 'data-va-media') !== null).map((e) => mediaOf(e, id)),
       voice: voiceOf(b),
+      ...recordingOf(b),
     }
   })
   return {
@@ -449,6 +476,7 @@ export function validate(html: string, summary?: Summary, opts: ValidateOptions 
         v.push(`Beat "${id}" refers to beat "${other}".`)
   })
   v.push(...holdProblems(root, beats))
+  v.push(...recordingProblems(root, beats))
   if (beats.length && Math.abs(t - total) > FRAME_SLACK)
     v.push(`The beats add up to ${fmt(t)}s but the root says ${fmt(total)}s.`)
 
@@ -1007,6 +1035,197 @@ export function applyHoldFrame(d: Doc, holdSeconds: number) {
   relayout(d)
 }
 
+// ───── recording scenes ─────
+const REC_IN = 'data-va-in'
+const REC_OUT = 'data-va-out'
+const REC_HOLD = 'data-va-rec-hold'
+const REC_HOLD_CLASS = 'va-rec-hold'
+export const REC_LOCKED_SRC = 'assets/recording/redact.js'
+export const recHoldSrc = (step: string) => `assets/recording/${step}.hold.jpg`
+
+const classes = (e: Element) => (attr(e, 'class') ?? '').split(/\s+/).filter(Boolean)
+const recSlotsOf = (beat: Element) => [...walk(beat)].filter((e) => attr(e, REC_IN) !== null)
+const holdImagesOf = (beat: Element) =>
+  [...walk(beat)].filter((e) => e.tagName === 'img' && classes(e).includes(REC_HOLD_CLASS))
+
+/** The step a recording slot belongs to: its .va-recording's data-va-recording, else the beat's id. */
+function stepOf(slot: Element, beat: Element): string {
+  for (let p = slot.parentNode as Element | null; p && 'attrs' in p; p = p.parentNode as Element | null) {
+    const step = attr(p, 'data-va-recording')
+    if (step) return step
+    if (p === beat) break
+  }
+  return attr(beat, 'data-va-beat') ?? ''
+}
+
+function jsonArray(raw: string | null): unknown[] {
+  if (raw === null) return []
+  try {
+    const v: unknown = JSON.parse(raw)
+    return Array.isArray(v) ? v : []
+  } catch {
+    return []
+  }
+}
+
+/** read()'s recording field for a beat, as a spread: {} for a beat without a recording slot. */
+function recordingOf(beat: Element): { recording?: RecordingBeat } {
+  const slot = recSlotsOf(beat)[0]
+  if (!slot) return {}
+  const one = (sel: (e: Element) => boolean) => [...walk(beat)].find(sel)
+  const camera = one((e) => attr(e, 'data-va-camera') !== null)
+  const cursor = one((e) => attr(e, 'data-va-cursor') !== null)
+  const clicks = one((e) => attr(e, 'data-va-clicks') !== null)
+  const redact = one((e) => attr(e, 'data-va-redact') !== null)
+  const held = attr(slot, REC_HOLD) === 'end'
+  const size = cursor ? num(attr(cursor, 'data-va-cursor-size')) : NaN
+  return {
+    recording: {
+      slot: attr(slot, 'data-va-media') ?? '',
+      src: attr(slot, 'src') ?? '',
+      in: num(attr(slot, REC_IN)),
+      out: num(attr(slot, REC_OUT)),
+      rate: num(attr(slot, 'data-playback-rate')),
+      camera: jsonArray(camera ? attr(camera, 'data-va-camera') : null),
+      cursor: {
+        style: (cursor && attr(cursor, 'data-va-cursor')) ?? 'none',
+        size: Number.isFinite(size) ? size : null,
+        path: cursor ? attr(cursor, 'data-va-path') : null,
+      },
+      clicks: jsonArray(clicks ? attr(clicks, 'data-va-clicks') : null),
+      redact: jsonArray(redact ? attr(redact, 'data-va-redact') : null),
+      locked: redact ? attr(redact, 'data-va-locked') : null,
+      hold: held
+        ? { seconds: sec(num(attr(beat, 'data-duration')) - num(attr(slot, 'data-duration'))) }
+        : null,
+    },
+  }
+}
+
+/** What's wrong with the composition's recording scenes (validate's part). Compositions without any pass untouched. */
+function recordingProblems(root: Element, beats: Element[]): string[] {
+  const v: string[] = []
+  const checked = new Set<Element>()
+  for (const b of beats) {
+    const id = attr(b, 'data-va-beat') ?? ''
+    const slots = recSlotsOf(b)
+    if (slots.length > 1) v.push(`Beat "${id}" has more than one recording slot.`)
+    const slot = slots[0]
+    const images = holdImagesOf(b)
+    if (!slot) {
+      if (images.length) v.push(`Beat "${id}" has a held recording frame but no recording slot.`)
+      continue
+    }
+    checked.add(slot)
+    const name = `Recording slot "${attr(slot, 'data-va-media') ?? ''}"`
+    const videos = [...walk(b)].filter((e) => attr(e, 'data-va-kind') === 'video')
+    if (videos.length > 1) v.push(`Beat "${id}" has a recording, so it can have no other video slot.`)
+    if (slot.tagName !== 'video' || attr(slot, 'data-va-kind') !== 'video')
+      v.push(`${name} must be a video slot.`)
+    const inS = num(attr(slot, REC_IN))
+    const outS = num(attr(slot, REC_OUT))
+    if (!(inS >= 0) || !(outS > inS)) {
+      v.push(`${name} needs ${REC_IN} and ${REC_OUT} in seconds, with in before out.`)
+      continue
+    }
+    if (Math.abs(num(attr(slot, 'data-media-start')) - inS) > 1e-6)
+      v.push(`${name} needs data-media-start="${fmt(inS)}" (its ${REC_IN}).`)
+    if (num(attr(slot, 'data-start')) !== 0) v.push(`${name} must start with its beat (data-start="0").`)
+    const slotDur = num(attr(slot, 'data-duration'))
+    const beatDur = num(attr(b, 'data-duration'))
+    const rate = num(attr(slot, 'data-playback-rate'))
+    if (!(slotDur > 0)) v.push(`${name} needs a positive data-duration.`)
+    else if (Math.abs(rate - rateOf(inS, outS, slotDur)) > 1e-4)
+      v.push(
+        `${name} needs data-playback-rate="${String(rateOf(inS, outS, slotDur))}" (its span over its duration).`,
+      )
+    if (!rateInRange(rate))
+      v.push(
+        `${name} plays at ${String(rate)}x; it must be between ${String(RATE_RANGE[0])}x and ${String(RATE_RANGE[1])}x.`,
+      )
+    const hold = attr(slot, REC_HOLD)
+    const want = recHoldSrc(stepOf(slot, b))
+    if (hold === null) {
+      if (Math.abs(slotDur - beatDur) > FRAME_SLACK) v.push(`${name} must last its beat (${fmt(beatDur)}s).`)
+      if (images.length) v.push(`Beat "${id}" shows a held recording frame but its slot isn't held.`)
+    } else if (hold !== 'end') v.push(`${name} has ${REC_HOLD}="${hold}"; the only value is "end".`)
+    else {
+      if (!(slotDur < beatDur - FRAME_SLACK)) v.push(`${name} is held, so it must end before its beat does.`)
+      if (Math.abs(rate - RATE_RANGE[0]) > 1e-9)
+        v.push(`${name} is held, so it plays at ${String(RATE_RANGE[0])}x.`)
+      if (images.length !== 1 || attr(images[0] as Element, 'src') !== want)
+        v.push(`${name} is held, so beat "${id}" needs one <img class="${REC_HOLD_CLASS}" src="${want}">.`)
+    }
+    for (const e of walk(b)) {
+      const locked = attr(e, 'data-va-locked')
+      if (locked !== null && locked !== REC_LOCKED_SRC) v.push(`data-va-locked must name ${REC_LOCKED_SRC}.`)
+    }
+  }
+  for (const e of walk(root))
+    if (attr(e, REC_HOLD) !== null && !checked.has(e)) v.push(`Only a recording slot carries ${REC_HOLD}.`)
+  return v
+}
+
+/**
+ * Fits a recording slot to its beat's new duration: it keeps showing in..out, so the rate changes. Faster than 4x is
+ * refused; slower than 0.5x plays the span at 0.5x and holds the out frame (a still) for the rest. A later retime
+ * that no longer needs the hold removes it.
+ */
+function fitRecordingSlot(beat: Element, slot: Element, duration: number) {
+  const inS = num(attr(slot, REC_IN))
+  const outS = num(attr(slot, REC_OUT))
+  const span = outS - inS
+  if (!(span > 0)) return
+  if (span / duration > RATE_RANGE[1] + 1e-9)
+    throw new ContractError([
+      `This scene can be at most ${String(RATE_RANGE[1])}× faster (it shows ${String(Math.round(span * 10) / 10)} s of your recording).`,
+    ])
+  setAttr(slot, 'data-start', '0')
+  setAttr(slot, 'data-media-start', fmt(inS))
+  const images = holdImagesOf(beat)
+  if (span / duration < RATE_RANGE[0] - 1e-9) {
+    const slotDur = span / RATE_RANGE[0]
+    setAttr(slot, 'data-duration', fmt(slotDur))
+    setAttr(slot, 'data-playback-rate', String(RATE_RANGE[0]))
+    setAttr(slot, REC_HOLD, 'end')
+    if (!images.length) {
+      const parent = slot.parentNode as Element
+      const img = defaultTreeAdapter.createElement('img', h5.NS.HTML, [
+        { name: 'class', value: REC_HOLD_CLASS },
+        { name: 'src', value: recHoldSrc(stepOf(slot, beat)) },
+        { name: 'alt', value: '' },
+      ])
+      img.parentNode = parent
+      parent.childNodes.splice(parent.childNodes.indexOf(slot) + 1, 0, img)
+    }
+    return
+  }
+  setAttr(slot, 'data-duration', fmt(duration))
+  setAttr(slot, 'data-playback-rate', String(rateOf(inS, outS, duration)))
+  slot.attrs = slot.attrs.filter((a) => a.name !== REC_HOLD)
+  for (const img of images) {
+    const parent = img.parentNode as Element
+    parent.childNodes = parent.childNodes.filter((n) => n !== img)
+  }
+}
+
+/**
+ * The hold stills a composition names but may not have yet: one per held recording slot. The bundle check accepts
+ * exactly these as pending (render-unchanged runs make them with recording.ts emit --holds-only).
+ */
+export function pendingStills(html: string): string[] {
+  let d: Doc
+  try {
+    d = load(html)
+  } catch {
+    return []
+  }
+  return beatsOf(d.root).flatMap((b) => {
+    const slot = recSlotsOf(b)[0]
+    return slot && attr(slot, REC_HOLD) === 'end' ? [recHoldSrc(stepOf(slot, b))] : []
+  })
+}
+
 // ───── edits ─────
 export type EditOp =
   | { op: 'text'; id: string; text: string }
@@ -1070,6 +1289,10 @@ export function relayoutScoped(d: Doc, scoped: ReadonlySet<string>) {
 
 function fitVideoSlots(beat: Element, duration: number) {
   for (const vid of [...walk(beat)].filter((e) => attr(e, 'data-va-kind') === 'video')) {
+    if (attr(vid, REC_IN) !== null) {
+      fitRecordingSlot(beat, vid, duration)
+      continue
+    }
     setAttr(vid, 'data-start', '0')
     setAttr(vid, 'data-duration', fmt(duration)) // longer clips are trimmed to the beat
   }

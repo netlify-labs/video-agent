@@ -11,7 +11,7 @@ import {
   type BundleReference,
 } from '../lib/bundle-references.js'
 import { sha256Hex } from '../lib/crypto.js'
-import { validate, type Summary } from '../lib/contract.js'
+import { pendingStills, validate, type Summary } from '../lib/contract.js'
 import { readTarGz, TarError } from '../lib/tar.js'
 import { engineInfo, type EngineId } from './engines.js'
 import type { OutputRow } from './types.js'
@@ -75,8 +75,14 @@ export function missingLocalFiles(files: Map<string, Uint8Array>): string[] {
     .filter((r) => r && !/^(?:[a-z][a-z0-9+.-]*:|\/\/|#|_hf\/)/i.test(r))
     .map((r) => r.replace(/^\.\//, '').split(/[?#]/)[0] ?? '')
     .filter((r) => r && !r.startsWith('/'))
+  // A held recording scene's still is made by the render (recording.ts emit --holds-only): pending, not missing, but
+  // only for the stills its held slots name.
+  const html = files.get('index.html')
+  const pending = new Set(html ? pendingStills(new TextDecoder().decode(html)) : [])
   // Library media is downloaded into every run from the version's snapshot, so only agent-made files can be missing.
-  return [...new Set(local)].filter((r) => !isLibraryMedia(r) && !files.has(decodeURI(r))).sort()
+  return [...new Set(local)]
+    .filter((r) => !isLibraryMedia(r) && !pending.has(r) && !files.has(decodeURI(r)))
+    .sort()
 }
 
 /**

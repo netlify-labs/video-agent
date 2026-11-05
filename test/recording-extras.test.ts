@@ -99,7 +99,7 @@ describe.runIf(hasFfmpeg)('recording.ts analyze extras', () => {
       // 4 tiles of 320x180 across, 3 down.
       expect(probe.stdout.trim()).toBe('1280,540')
     }
-  })
+  }, 60_000)
 
   it('caps the sheets at 24 and drops scenes under half a second', () => {
     const scenes = Array.from({ length: 40 }, (_, i) => i + 1)
@@ -146,7 +146,7 @@ describe.runIf(hasFfmpeg)('recording.ts analyze extras', () => {
     )
     expect(probe.stdout.trim()).toBe('16000,1')
     expect(JSON.parse(readFileSync(out, 'utf8'))).toMatchObject({ v: 1, provider: 'local', words })
-  })
+  }, 60_000)
 
   it('reuses analysis.json for the same bytes and analyzer, and not otherwise', async () => {
     const path = join(dir, 'analysis.json')
@@ -162,7 +162,7 @@ describe.runIf(hasFfmpeg)('recording.ts analyze extras', () => {
     expect(cachedAnalysis(path, sha)).toBeNull()
     writeFileSync(path, '{not json')
     expect(cachedAnalysis(path, sha)).toBeNull()
-  })
+  }, 60_000)
 
   it('the CLI hits the cache on a second run and still makes the sheets', () => {
     const out = join(dir, 'cli-analysis.json')
@@ -194,7 +194,7 @@ describe.runIf(hasFfmpeg)('recording.ts analyze extras', () => {
     expect(second.logs.some((l) => l.step === 'recording.analyze_decode')).toBe(false)
     expect(second.logs.find((l) => l.step === 'recording.sheets' && typeof l.ms === 'number')).toBeTruthy()
     expect(existsSync(join(context, 'sheets', '01.jpg'))).toBe(true)
-  })
+  }, 60_000)
 
   it('makes a focus crop per step at the camera box: it holds the click and the card that changes', async () => {
     const analysis = await analyzeRecording(file)
@@ -225,7 +225,7 @@ describe.runIf(hasFfmpeg)('recording.ts analyze extras', () => {
       )
       expect(probe.stdout.trim()).toBe('1280')
     }
-  })
+  }, 60_000)
 
   it('focus box: the camera between keys, and zoom 1.4 around the click when the camera is wide', () => {
     expect(

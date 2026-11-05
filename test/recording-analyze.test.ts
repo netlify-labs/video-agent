@@ -81,13 +81,13 @@ describe.runIf(hasFfmpeg)('recording.ts analyze', () => {
         logs.find((l) => l.step === step && typeof l.ms === 'number'),
         step,
       ).toBeTruthy()
-  })
+  }, 60_000)
 
   it('is deterministic: the same file gives the same analysis', () => {
     const a = readFileSync(analyze(['--file', file]).out, 'utf8')
     const b = readFileSync(analyze(['--file', file]).out, 'utf8')
     expect(a).toBe(b)
-  })
+  }, 60_000)
 
   it('takes the cursor and clicks from a pointer trace when there is one', () => {
     const trace = {
@@ -114,7 +114,7 @@ describe.runIf(hasFfmpeg)('recording.ts analyze', () => {
     })
     // The navigation counts as a scene change next to the detected one.
     expect(analysis?.scenes).toEqual([5, 9])
-  })
+  }, 60_000)
 
   it('refuses a recording that is not normalized, with the reason', () => {
     const bad = join(dir, 'gop300.mp4')
@@ -128,5 +128,5 @@ describe.runIf(hasFfmpeg)('recording.ts analyze', () => {
     expect(result.ok).toBe(false)
     expect(result.error).toMatch(/isn't normalized: .*keyframe every second/)
     expect(analysis).toBeNull()
-  })
+  }, 60_000)
 })

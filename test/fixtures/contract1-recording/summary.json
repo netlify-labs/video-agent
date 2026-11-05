@@ -1,0 +1,9 @@
+{
+  "title": "Deploy in a minute",
+  "summary": "Recording-scene fixture: an intro, one recording scene (source 2-12 s in 7.5 s), an outro.",
+  "captions": [
+    { "start": 0.2, "end": 2.5, "text": "Deploy in a minute", "beat": "intro", "textId": "intro-title", "beatStart": 0.2, "beatEnd": 2.5 },
+    { "start": 3.1, "end": 10, "text": "Click Add new site", "beat": "add-site", "textId": "add-site-callout", "beatStart": 0.6, "beatEnd": 7.5 },
+    { "start": 10.2, "end": 12.5, "text": "Try it free", "beat": "outro", "textId": "outro-cta", "beatStart": 0.2, "beatEnd": 2.5 }
+  ]
+}

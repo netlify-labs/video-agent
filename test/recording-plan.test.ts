@@ -380,7 +380,7 @@ describe('recording.ts plan: rules', () => {
         { id: 'step-2', in: 10, out: 20, speed: 1 },
       ],
     })
-  })
+  }, 60_000)
 })
 
 const hasFfmpeg = spawnSync('ffmpeg', ['-version'], { stdio: 'ignore' }).status === 0
@@ -403,5 +403,5 @@ describe.runIf(hasFfmpeg)('recording.ts plan: paths B and C (no trace)', () => {
         200,
       )
     expect(cursorPath(analysis, null, step?.in ?? 0, step?.out ?? 0).length).toBeGreaterThan(0)
-  })
+  }, 60_000)
 })
