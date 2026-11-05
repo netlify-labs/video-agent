@@ -633,3 +633,49 @@ Range requests too. Every file in `netlify/edge-functions` is bundled as a funct
 
 Waits for site-vendor's deploy (it runs with the tenant's token there). The code lands by `publish`, checks that
 production still serves the video, and rolls back to the previous deploy if not.
+
+## Redo-a-scene spikes (docs/plans/2026-11-04-regenerate-beat.md §7)
+
+### B2: do frozen scenes render the same after a scoped change? (2026-11-05, `spikes/b2`, `npx tsx spikes/b2/b2.ts [--leak]`, no credits)
+
+A contract-v1 composition with music and four scenes: intro 3 s, features 3.85 s (115.5 frames, authored and never
+relaid), proof 3 s, outro 3 s. It was rendered locally (`hyperframes render --quality standard`, HeadlessChrome 152
+on macOS; the runner's may differ), then again with features redone (new text, colours, animation and an `@scope`
+style) and lengthened by 1.37 s, snapped to 5.233 s as the splice does, so proof and outro start 1.383 s later. Frames
+were sampled every 0.5 s at the same moment of each scene (`scripts/e2e/lib/ssim.ts`). Whole-frame SSIM comes from
+ffmpeg's `ssim` filter; "tile" is the lowest SSIM over a 4×4 grid (`tileSsim`). `--leak` also changed one line of the
+outro's text (`docs.netlify.com/webhooks` → `…/hooks`), a small change outside the scope.
+
+| Aspect | Scene | Change | Frame SSIM min / median | Tile SSIM min |
+| --- | --- | --- | --- | --- |
+| 16:9 | intro | none (same start) | 0.9996 / 1.0000 | 0.9935 |
+| 16:9 | features | redone | 0.9059 / 0.9068 | 0.6329 |
+| 16:9 | proof | none (shifted) | 0.9932 / 0.9963 | 0.9800 |
+| 16:9 | outro | none (shifted) | 0.9940 / 0.9964 | 0.9760 |
+| 16:9 | outro | one line of text (`--leak`) | 0.9887 / 0.9893 | 0.9374 |
+| 9:16 | intro | none | 0.9995 / 1.0000 | 0.9917 |
+| 9:16 | features | redone | 0.9073 / 0.9074 | 0.6909 |
+| 9:16 | proof | none (shifted) | 0.9932 / 0.9964 | 0.9815 |
+| 9:16 | outro | none (shifted) | 0.9941 / 0.9965 | 0.9813 |
+| 9:16 | outro | one line of text (`--leak`) | 0.9889 / 0.9894 | 0.9383 |
+| 1:1 | intro | none | 0.9990 / 1.0000 | 0.9858 |
+| 1:1 | features | redone | 0.8336 / 0.8337 | 0.4404 |
+| 1:1 | proof | none (shifted) | 0.9906 / 0.9956 | 0.9684 |
+| 1:1 | outro | none (shifted) | 0.9908 / 0.9952 | 0.9697 |
+
+What it means:
+- **Frozen scenes render the same, give or take the encoder.** Scenes before the change score ≥ 0.999 on whole
+  frames. Shifted scenes score ≥ 0.990: the parent's proof started at 6.85 s, half a frame off the grid (authored, never
+  relaid), so matched moments are up to half a frame apart in a moving animation, plus H.264 at new GOP offsets.
+- **Whole-frame SSIM can't see a small leak.** One changed line of text scores 0.989–0.990, in the same range as an
+  honest shifted scene at 1:1 (0.9906). A whole redone scene is far lower (0.83–0.93).
+- **Tiles can.** The worst 4×4 tile drops to 0.937 for the one-line leak, against ≥ 0.968 for honest frozen scenes and
+  ≤ 0.74 for a redone one.
+
+**Thresholds for the live gate** (`scripts/e2e/regen-beat.ts`, va-8cy4.3.9), per frozen scene over its sampled frames:
+`SSIM_MIN = 0.98` (whole frame, catches drift of a whole scene) and `SSIM_TILE_MIN = 0.955` (worst tile, catches a
+small change), with frames sampled at the same moment of each scene. The gate's caption check (other scenes' cues equal
+the parent's) still catches text changes directly; tiles are for what captions don't cover. These come from one
+synthetic fixture with flat colours and simple motion: video clips, grain or gradients that move will score lower, so
+the gate logs every value and the thresholds get revisited after live gate part 1 (LT-1). Nothing here fell below the
+~0.97 "investigate determinism" line from the plan.
