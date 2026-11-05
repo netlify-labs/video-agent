@@ -1,0 +1,18 @@
+{
+  "id": "whiteboard",
+  "name": "Whiteboard",
+  "description": "A whiteboard explanation: lines that draw themselves, a marker hand, arrows and sticky notes. For tutorials and how-tos.",
+  "tags": ["hand-drawn", "explainer", "friendly"],
+  "bestFor": ["tutorial", "other"],
+  "aspects": ["16:9", "9:16", "1:1", "4:5"],
+  "engines": ["hyperframes"],
+  "colors": { "roles": ["bg", "text", "accent"], "derived": ["note", "ink-2"] },
+  "sound": { "musicMood": "light acoustic, ukulele or guitar, 95 to 105 bpm" },
+  "registry": [],
+  "fonts": [
+    { "role": "hand", "file": "assets/fonts/caveat-semibold.woff2", "license": "OFL-1.1", "useWhen": "the brand has no handwriting font" }
+  ],
+  "authors": ["Video Agent maintainers"],
+  "license": "MIT",
+  "since": "2026-11-05"
+}

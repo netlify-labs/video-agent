@@ -238,6 +238,22 @@ describe('look:check --static', () => {
     ])
   })
 
+  it("refers to the look's own assets as assets/look/, which must exist", () => {
+    const font = (url: string) => (d: string) => {
+      addFont(d)
+      edit(join(d, 'example', 'index.html'), (s) =>
+        s.replace('</style>', `@font-face { font-family: Hand; src: url('${url}'); }</style>`),
+      )
+    }
+    expect(broken(font('assets/look/fonts/marker.woff2'))).toEqual([])
+    expect(broken(font('assets/look/fonts/gone.woff2'))).toEqual([
+      "look:good: example/index.html refers to assets/look/fonts/gone.woff2, which isn't in the look's assets/",
+    ])
+    expect(broken(font('../assets/fonts/marker.woff2'))).toEqual([
+      'look:good: example/index.html refers to a file outside example/ (../)',
+    ])
+  })
+
   it('refuses SVGs with scripts or handlers', () => {
     const svg = (body: string) =>
       broken((d) => {

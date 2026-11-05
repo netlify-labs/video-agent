@@ -159,6 +159,7 @@ Looks are instructions to the agent, like `context/`, so only people who can cha
   <a href="looks/data-story/LOOK.md"><img src="looks/data-story/poster.webp" alt="Data story" width="260"></a>
   <a href="looks/bold-blocks/LOOK.md"><img src="looks/bold-blocks/poster.webp" alt="Bold blocks" width="260"></a>
   <a href="looks/retro-crt/LOOK.md"><img src="looks/retro-crt/poster.webp" alt="Retro CRT" width="260"></a>
+  <a href="looks/whiteboard/LOOK.md"><img src="looks/whiteboard/poster.webp" alt="Whiteboard" width="260"></a>
   <a href="looks/kinetic/LOOK.md"><img src="looks/kinetic/poster.webp" alt="Kinetic type" width="260"></a>
   <a href="looks/terminal/LOOK.md"><img src="looks/terminal/poster.webp" alt="Terminal" width="260"></a>
 </p>

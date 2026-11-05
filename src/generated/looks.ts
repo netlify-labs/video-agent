@@ -243,5 +243,38 @@ export const looksCatalog: LookCatalogEntry[] = [
       "mp4": "/assets/looks/terminal.630349b2698e.mp4",
       "poster": "/assets/looks/terminal.592e4a3c5cb0.webp"
     }
+  },
+  {
+    "id": "whiteboard",
+    "name": "Whiteboard",
+    "description": "A whiteboard explanation: lines that draw themselves, a marker hand, arrows and sticky notes. For tutorials and how-tos.",
+    "tags": [
+      "hand-drawn",
+      "explainer",
+      "friendly"
+    ],
+    "bestFor": [
+      "tutorial",
+      "other"
+    ],
+    "aspects": [
+      "16:9",
+      "9:16",
+      "1:1",
+      "4:5"
+    ],
+    "engines": [
+      "hyperframes"
+    ],
+    "recording": null,
+    "musicMood": "light acoustic, ukulele or guitar, 95 to 105 bpm",
+    "hash": "1133c1e6e366c6a26c8bcbd3e2c2ae296244f32a928e9bf956f002b654e573e0",
+    "sha256": "1f9379be7d9dfa7a54093239a1b51e56a5cc19487c4a3d97c3578be421ef716d",
+    "bytes": 57464,
+    "source": "builtin",
+    "preview": {
+      "mp4": "/assets/looks/whiteboard.d33491335c76.mp4",
+      "poster": "/assets/looks/whiteboard.401a7de5e4ce.webp"
+    }
   }
 ]

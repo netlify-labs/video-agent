@@ -114,6 +114,10 @@ text has a `data-va-text`, colours are `--va-color-<role>` literals on `#root`, 
 It loads `vendor/gsap.min.js` and `vendor/va-contract.js` (look:check supplies them) and nothing from any other URL;
 no `Date.now()` or `Math.random()`.
 
+The example refers to the look's own assets where a run puts them: `assets/look/<path>` is the look's
+`assets/<path>` (for a font, `url('assets/look/fonts/<name>.woff2')`). look:check stages them there and checks that
+each one exists.
+
 ## Building blocks: HyperFrames registry items
 
 List items in `look.json` `registry`, **components first** (they merge into a scene by design). Blocks are separate

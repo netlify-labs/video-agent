@@ -172,6 +172,10 @@ function exampleProblems(dir: string, look: LookJson | null, files: string[]): s
     if (url) p.push(`${f} links outside the look (${url[0]}); use files inside example/`)
     if (/(?:src|href)\s*=\s*["']?\s*\.\.\//i.test(text) || /url\(\s*["']?\.\.\//i.test(text))
       p.push(`${f} refers to a file outside example/ (../)`)
+    // The look's own assets, where a run puts them: video/assets/look/<path> is the look's assets/<path>.
+    for (const m of text.matchAll(/assets\/look\/([\w/-]+\.[a-z0-9]+)/g))
+      if (!files.includes(`assets/${m[1]}`))
+        p.push(`${f} refers to assets/look/${m[1]}, which isn't in the look's assets/`)
     if (/\bDate\.now\s*\(/.test(text)) p.push(`${f} uses Date.now(); renders must be deterministic`)
     if (/\bMath\.random\s*\(/.test(text)) p.push(`${f} uses Math.random(); renders must be deterministic`)
   }
