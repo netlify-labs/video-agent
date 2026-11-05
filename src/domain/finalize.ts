@@ -48,6 +48,7 @@ import {
   type VersionNarration,
   type VersionRow,
 } from './types.js'
+import { finalizeRecording } from './finalize-recording.js'
 
 const MIN = 60_000
 const FINALIZE_LEASE_MS = 12 * MIN
@@ -216,6 +217,21 @@ export async function finalizeAttempt(deps: Deps, attemptId: string): Promise<Fi
     }
     // A scoped revision (redo a scene): the saved composition must be exactly the splice of the parent.
     if (version.scope) await checkScope(deps, a, version, engine, source.files, info.durationSec)
+    // A demo (screen-recording plan §5.2 check): the same recording check the run did, against the locked inputs.
+    let recording: VersionRow['recording'] = null
+    if (version.recording && source.files) {
+      const r = await finalizeRecording(deps, a.jobId, a.versionN, version, source.files)
+      if (r && !r.ok) {
+        log.warn('finalize.recording_invalid', {
+          jobId: a.jobId,
+          n: a.versionN,
+          code: r.code,
+          scene: r.scene,
+        })
+        throw new Invalid('invalid_output', r.message)
+      }
+      recording = r?.recording ?? null
+    }
 
     const prefix = `${a.jobId}/v${a.versionN}`
     const keys = {
@@ -316,7 +332,7 @@ export async function finalizeAttempt(deps: Deps, attemptId: string): Promise<Fi
         runCredits,
         notices: notices.length ? notices : null,
       },
-      { ...recorded, contract: contract?.version ?? null, beats },
+      { ...recorded, contract: contract?.version ?? null, beats, ...(recording ? { recording } : {}) },
     )
     // The preview bundle (plan v2 §7). Best effort: a version without one is still ready and is extracted later.
     if (result === 'ready') {
@@ -610,7 +626,7 @@ async function finish(
   outcome: 'ready' | 'failed' | 'cancelled',
   error: { category: FailureCategory; message: string } | null,
   output: Parameters<Deps['store']['upsertOutput']>[0] | null,
-  recorded: Pick<VersionRow, 'narration' | 'captions' | 'contract' | 'beats'> | null = null,
+  recorded: Pick<VersionRow, 'narration' | 'captions' | 'contract' | 'beats' | 'recording'> | null = null,
 ): Promise<FinalizeResult> {
   const now = deps.clock.now().toISOString()
   return deps.store.tx(async (repo) => {

@@ -14,7 +14,8 @@ import { parseTrace } from '../src/lib/recording-trace.js'
 import type { Analysis } from '../scripts/lib/recording-analyze.js'
 import { composeDemo } from '../scripts/lib/recording-compose.js'
 import { planRecording, type PlanInput } from '../scripts/lib/recording-plan.js'
-import { harness } from './helpers.js'
+import { harness, png, PROMPT, upload } from './helpers.js'
+import { tarGz } from './tarball.js'
 
 const tmp = mkdtempSync(join(tmpdir(), 'va-fin-'))
 afterAll(() => rmSync(tmp, { recursive: true, force: true }))
@@ -192,5 +193,93 @@ describe('finalize: recording', () => {
       checkedBy: 'u_editor',
     })
     expect(r.recording.hidden.find((x) => x.id === 't1' && x.beat === 'step-1')).toMatchObject(checked)
+  })
+})
+
+// Through the harness: a demo created over the API, its run saves the composed demo, finalize checks it.
+describe('finalize: recording, end to end', () => {
+  async function demoVideo(h: ReturnType<typeof harness>) {
+    const m = await h.json<{ id: string }>(await upload(h, h.member, png(300, 100), 'filename=screen.png'))
+    await h.deps.store.updateMedia(m.id, {
+      role: 'screen-recording',
+      kind: 'video',
+      ext: 'mp4',
+      width: 1280,
+      height: 720,
+      durationSec: 20,
+      traceKey: `${m.id}/trace.json`,
+      traceSha256: sha(traceText),
+    })
+    await h.deps.blobs.set('media', `${m.id}/trace.json`, traceText)
+    const v = await h.json<{ id: string }>(
+      await h.call('POST', '/api/v1/videos', {
+        as: h.member,
+        body: {
+          prompt: PROMPT,
+          recording: { mediaId: m.id, redact: [{ start: 0, end: 20, box: [0.8, 0.02, 0.15, 0.04] }] },
+        },
+      }),
+    )
+    return { videoId: v.id, mediaId: m.id }
+  }
+  /** The composed demo as the run would save it, for this media id. */
+  function saved(mediaId: string, mutate?: (files: Map<string, Uint8Array>) => void) {
+    const files = new Map<string, Uint8Array>()
+    for (const [p, b] of demoFiles())
+      files.set(
+        p,
+        p === 'index.html'
+          ? new TextEncoder().encode(new TextDecoder().decode(b).replaceAll(ID, mediaId))
+          : b,
+      )
+    mutate?.(files)
+    return tarGz([...files].map(([p, body]) => ({ name: `video/${p}`, body })))
+  }
+
+  it('a good demo becomes ready with its Hidden list and summary', async () => {
+    const h = harness()
+    const { videoId, mediaId } = await demoVideo(h)
+    h.deps.nextSource = saved(mediaId)
+    await h.drive(4)
+    const v = await h.deps.store.getVersion(videoId, 1)
+    console.log(
+      JSON.stringify({
+        test: 'finalize-recording',
+        case: 'e2e-good',
+        status: v?.status,
+        hidden: v?.recording?.hidden.length,
+      }),
+    )
+    expect(v?.status).toBe('ready')
+    expect(v?.recording?.summary).toMatchObject({ steps: 2, redactionsAdded: 1 })
+    expect(new Set(v?.recording?.hidden.map((x) => x.source))).toEqual(new Set(['trace', 'setup', 'agent']))
+  })
+
+  it('a demo that lost a hidden area never becomes ready', async () => {
+    const h = harness()
+    const { videoId, mediaId } = await demoVideo(h)
+    h.deps.nextSource = saved(mediaId, (files) => {
+      const js = new TextDecoder().decode(files.get('assets/recording/redact.js'))
+      const entries = JSON.parse(js.slice('window.__vaRedact='.length, -1)) as { id: string }[]
+      files.set(
+        'assets/recording/redact.js',
+        new TextEncoder().encode(
+          `window.__vaRedact=${JSON.stringify(entries.filter((e) => e.id !== 't1'))};`,
+        ),
+      )
+    })
+    await h.drive(4)
+    const a = (await h.deps.store.listAttempts(videoId)).at(-1)
+    console.log(
+      JSON.stringify({
+        test: 'finalize-recording',
+        case: 'e2e-removed',
+        stage: a?.stage,
+        error: a?.errorMessage,
+      }),
+    )
+    expect(a?.stage).toBe('failed')
+    expect(a?.errorCategory).toBe('invalid_output')
+    expect(a?.errorMessage).toMatch(/^redaction_removed: /)
   })
 })
