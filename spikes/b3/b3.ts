@@ -57,8 +57,12 @@ const k = key
 const sources = (blobKey: string) => {
   const dir = mkdtempSync(join(tmpdir(), 'va-b3-'))
   const out = join(dir, 'source.tar.gz')
-  const r = spawnSync('netlify', ['blobs:get', 'sources', blobKey, '--output', out, '--site', site], {
+  // Outside the repo: its npm workspaces make the CLI ask which project to use. The site comes from NETLIFY_SITE_ID.
+  const r = spawnSync('netlify', ['blobs:get', 'sources', blobKey, '--output', out], {
+    cwd: dir,
     encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: { ...process.env, NETLIFY_SITE_ID: site },
   })
   if (r.status !== 0) throw new Error(`netlify blobs:get sources ${blobKey} failed: ${r.stderr.slice(-300)}`)
   return readTarGz(readFileSync(out), {

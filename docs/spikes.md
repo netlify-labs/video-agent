@@ -698,6 +698,37 @@ synthetic fixture with flat colours and simple motion: video clips, grain or gra
 the gate logs every value and the thresholds get revisited after live gate part 1 (LT-1). Nothing here fell below the
 ~0.97 "investigate determinism" line from the plan.
 
+### B3: one hand-made scoped run on a real video (2026-11-05, `spikes/b3/b3.ts`, owner-approved, 57.6 credits)
+
+The source was "Openverse music test 3" (`vid_01m6d7shks0mpejbagqc7xft2f` v1): a contract-v1 test video with three
+scenes (intro 3.85 s, race 4.68 s, end 3.47 s) and music. Production doesn't accept `scope` yet, so this was an
+ordinary revision whose request was the draft scoped prompt (§4.8, scene `race`: "Make the headline say 'Ship on
+Friday' and slide it in from the left."). The run's manifest had no scope, so `check-contract --fix` didn't splice
+and nothing put anything back: the agent had only the prompt. Afterwards both saved archives went through
+`hyperframesScopeCheck` offline.
+
+| Measure                     | Result                                                                                                |
+| --------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Credits                     | 57.6 (`usage.totalCreditsCost` of v2)                                                                 |
+| Wall time, request to ready | 2.2 min                                                                                               |
+| In scope                    | Yes: no problems, nothing to put back                                                                 |
+| Frozen scenes               | intro and end byte-identical to v1                                                                    |
+| The redone scene            | new headline, its own prelude-less `@scope` style, as asked                                           |
+| Files                       | none added or removed                                                                                 |
+| Length                      | the splice would snap `race` from 4.68 s to 4.667 s (−0.013 s): the scoped scene goes to whole frames |
+| `--fix` rounds              | not measurable here (no scope in the manifest); the live gate records them                            |
+
+What it changes:
+
+- **Cost:** 57.6 credits is about half of a revision-kind run (about 120, §1) and inside the plan's 40–100 guess, from
+  one run. The live gate's 60%-of-a-full-revision bar looks reachable; the UI still says only "usually less than a full
+  revision" until the gate measures more.
+- **Prompt:** the draft wording (§4.8) kept the agent in scope with no checks behind it, so it goes into the scoped
+  prompt section as written (va-8cy4.3.6). With the splice and `--fix` behind it in real scoped runs, out-of-scope
+  edits get put back anyway.
+- **Snapping:** an authored scene that isn't whole frames is snapped when redone, as designed; frozen scenes keep their
+  lengths.
+
 ## Looks spikes (docs/plans/2026-11-04-looks.md §10)
 
 ### K3: the API function reads the build's look archives (2026-11-05, a draft deploy and `netlify functions:serve`, no credits)
