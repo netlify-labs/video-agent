@@ -7,8 +7,16 @@ import { hyperframesEngine } from './hyperframes.js'
 import { remotionEngine } from './remotion.js'
 import type { RenderReport, RunEngine } from './types.js'
 
+const RUN_ENGINES: Record<EngineId, () => RunEngine> = {
+  hyperframes: () => hyperframesEngine(),
+  remotion: () => remotionEngine(),
+}
+
 export function runEngineFor(id: EngineId): RunEngine {
-  return id === 'hyperframes' ? hyperframesEngine() : remotionEngine()
+  // An id from a manifest this code doesn't know never falls back to another engine's install.
+  const make = (RUN_ENGINES as Partial<Record<string, () => RunEngine>>)[id]
+  if (!make) throw new StepError(`The run manifest names an unknown engine (${id}). Stop and report this.`)
+  return make()
 }
 
 /** The engine for this attempt from .render/run-manifest.json; HyperFrames without one, or one for another attempt. */

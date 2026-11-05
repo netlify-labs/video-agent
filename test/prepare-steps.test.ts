@@ -122,11 +122,11 @@ describe('prepare-run steps', () => {
     expect(steps(spy).at(-6)).toEqual(['source', true])
   })
 
-  it('stops on an engine this run has no code for', async () => {
+  it('stops on an engine the manifest names that this repo has no code for', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     const { target, fetch } = setup()
     await expect(
-      prepare({ ...base, engine: { id: 'remotion' } }, { tmp: target, root: target, fetch }),
-    ).rejects.toThrow(/can't render Remotion videos yet/)
+      prepare({ ...base, engine: { id: 'lottie' } as never }, { tmp: target, root: target, fetch }),
+    ).rejects.toThrow(/unknown engine/)
   })
 })
