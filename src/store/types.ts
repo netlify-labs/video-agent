@@ -474,6 +474,10 @@ export interface Repo {
   failuresSince(since: string): Promise<{ category: string; count: number }[]>
   /** Remotion render counts of attempts that ended at or after `since` (render-engines §7), failed ones included. */
   engineRendersSince(since: string): Promise<{ video: number; stills: number; audio: number }[]>
+  /** The newest ended attempt of a version made with this engine (the /setup Engines row, render-engines §7). */
+  latestEngineAttempt(
+    engine: 'hyperframes' | 'remotion',
+  ): Promise<{ stage: string; errorCategory: string | null; endedAt: string } | null>
 
   // narration take budgets (voice-over plan §8)
   /**

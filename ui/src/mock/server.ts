@@ -159,6 +159,30 @@ const cliLogins: Record<string, { label: string; host: string }> = {
   MNYMMNYM: { label: 'Video Agent CLI', host: 'ci-runner' },
 }
 let cliWrongCodes = 0
+/** /setup's Engines row, as src/domain/setup.ts words it; none unless ENGINES lists Remotion. */
+function mockEngineCheck() {
+  const r = adminSettings.remotion
+  if (!r) return []
+  const base = { id: 'engines', label: 'Render engines' }
+  if (!r.license)
+    return [
+      {
+        ...base,
+        status: 'warn',
+        detail: 'HyperFrames ✓; Remotion: in ENGINES but not set up: see Admin.',
+        fix: 'Open /admin, turn Remotion on and record which Remotion license your organisation has.',
+      },
+    ]
+  if (!r.enabled) return [{ ...base, status: 'ok', detail: 'HyperFrames ✓; Remotion: off.' }]
+  const tier = r.license.tier === 'free' ? 'Free License' : 'Company License'
+  return [
+    {
+      ...base,
+      status: 'ok',
+      detail: `HyperFrames ✓; Remotion: on, ${tier} recorded on ${r.license.at.slice(0, 10)}; renders are reported to remotion.pro.`,
+    },
+  ]
+}
 const grants = [
   {
     id: 'grt_claude',
@@ -506,6 +530,7 @@ export function installMock() {
             status: 'ok',
             detail: 'Served over HTTPS, so people can record their own voice-over.',
           },
+          ...mockEngineCheck(),
         ],
       })
     }

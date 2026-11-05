@@ -1719,6 +1719,25 @@ function repoFor(db: Db): Repo {
           .from(t.attempts)
           .where(and(gte(t.attempts.endedAt, since), isNotNull(t.attempts.engineRenders)))
       ).map((r) => r.renders as { video: number; stills: number; audio: number }),
+    latestEngineAttempt: async (engine) => {
+      const [row] = await db
+        .select({
+          stage: t.attempts.stage,
+          errorCategory: t.attempts.errorCategory,
+          endedAt: t.attempts.endedAt,
+        })
+        .from(t.attempts)
+        .innerJoin(
+          t.versions,
+          and(eq(t.versions.jobId, t.attempts.jobId), eq(t.versions.n, t.attempts.versionN)),
+        )
+        .where(and(eq(t.versions.engine, engine), isNotNull(t.attempts.endedAt)))
+        .orderBy(desc(t.attempts.endedAt))
+        .limit(1)
+      return row?.endedAt
+        ? { stage: row.stage, errorCategory: row.errorCategory, endedAt: row.endedAt }
+        : null
+    },
     usageSince: async (since) => {
       const rows = await db
         .select({

@@ -55,3 +55,25 @@ test('the monthly Remotion render count shows only when ENGINES lists Remotion',
   )
   await expect(page.getByTestId('remotion-renders')).toContainText('Reconcile with remotion.pro')
 })
+
+test('/setup has an Engines row only with ENGINES, and it follows the Admin dialog', async ({ page }) => {
+  await page.goto('/setup')
+  await expect(page.getByText('Run token (RUNNER_API_TOKEN)')).toBeVisible()
+  await expect(page.getByText('Render engines')).toHaveCount(0)
+  await mock(page, 'mockEngines', 'remotion')
+  await page.goto('/setup')
+  await expect(page.getByText('HyperFrames ✓; Remotion: in ENGINES but not set up: see Admin.')).toBeVisible()
+  await page.goto('/admin')
+  await page.getByRole('switch', { name: /Use Remotion \(a license is required/ }).click({ force: true })
+  const dialog = page.getByRole('dialog', { name: 'Use Remotion' })
+  await dialog.getByLabel(/qualifies for the Free License/).check()
+  await dialog.getByRole('button', { name: 'Turn Remotion on' }).click()
+  await expect(dialog).toBeHidden()
+  // In-app (no reload), so the mock keeps what was just saved; the nav link is in a menu on phones.
+  await page.evaluate(`history.pushState({}, '', '/setup'); dispatchEvent(new PopStateEvent('popstate'))`)
+  await expect(
+    page.getByText(
+      /HyperFrames ✓; Remotion: on, Free License recorded on \d{4}-\d{2}-\d{2}; renders are reported/,
+    ),
+  ).toBeVisible()
+})

@@ -993,6 +993,16 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
           .filter((a) => a.endedAt !== null && a.endedAt >= since && a.engineRenders)
           .map((a) => a.engineRenders as { video: number; stills: number; audio: number }),
       ),
+    latestEngineAttempt: async (engine) => {
+      let latest: AttemptRow | null = null
+      for (const a of state.attempts.values()) {
+        if (a.endedAt === null || (latest?.endedAt ?? '') > a.endedAt) continue
+        if ((state.versions.get(vkey(a.jobId, a.versionN))?.engine ?? 'hyperframes') === engine) latest = a
+      }
+      return latest?.endedAt
+        ? { stage: latest.stage, errorCategory: latest.errorCategory, endedAt: latest.endedAt }
+        : null
+    },
     usageSince: async (since) => {
       const out = new Map<string, UsageRow>()
       for (const a of state.attempts.values()) {
