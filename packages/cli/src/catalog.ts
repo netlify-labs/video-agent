@@ -539,6 +539,66 @@ export const COMMANDS: CommandSpec[] = [
     ready: true,
   },
   {
+    name: 'brief pr',
+    summary: "Print the GitHub Action's brief for a pull request (pipe it into create --prompt-file -).",
+    args: [{ name: 'pr', type: 'string', required: true, description: 'The pull request URL.' }],
+    flags: {
+      prompt: { type: 'string', description: 'Your own words, added to the brief ("for sales engineers").' },
+      context: {
+        type: 'boolean',
+        description: "Put the PR's text in a context block (servers that list context).",
+      },
+      untrusted: { type: 'boolean', description: "Use only the title and files, not the author's words." },
+    },
+    examples: [
+      'video-agent brief pr https://github.com/acme/web/pull/123',
+      'video-agent brief pr https://github.com/acme/web/pull/123 | video-agent create --prompt-file - --wait',
+    ],
+    sdk: [],
+    local: true,
+    ready: true,
+  },
+  {
+    name: 'brief release',
+    summary: 'Print a changelog brief for a release, from its notes on GitHub or a file.',
+    args: [{ name: 'tag', type: 'string', required: true, description: 'The release tag.' }],
+    flags: {
+      repo: { type: 'string', description: 'owner/name (default: GITHUB_REPOSITORY).' },
+      'notes-file': {
+        type: 'string',
+        description: 'Read the notes from a file (or - for stdin) instead of GitHub.',
+      },
+      prompt: { type: 'string', description: 'Your own words, added to the brief.' },
+      url: { type: 'string', description: 'Where the video should end (the product or the release page).' },
+      context: {
+        type: 'boolean',
+        description: 'Put the notes in a context block (servers that list context).',
+      },
+    },
+    examples: [
+      'video-agent brief release v2.4.0 --repo acme/web',
+      'video-agent brief release "$CI_COMMIT_TAG" --repo acme/web --notes-file CHANGELOG.md',
+    ],
+    sdk: [],
+    local: true,
+    ready: true,
+  },
+  {
+    name: 'brief changelog',
+    summary: 'Print a changelog brief from the pull requests merged since a date.',
+    args: [],
+    flags: {
+      since: { type: 'string', description: 'YYYY-MM-DD.' },
+      repo: { type: 'string', description: 'owner/name (default: GITHUB_REPOSITORY).' },
+      prompt: { type: 'string', description: 'Your own words, added to the brief.' },
+      url: { type: 'string', description: 'Where the video should end.' },
+    },
+    examples: ['video-agent brief changelog --since 2026-11-01 --repo acme/web'],
+    sdk: [],
+    local: true,
+    ready: true,
+  },
+  {
     name: 'local',
     summary: 'Make a video on this machine with your own coding agent.',
     args: [{ name: 'prompt', type: 'string', required: true, description: 'What the video is about.' }],
