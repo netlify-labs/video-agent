@@ -97,6 +97,7 @@ const adminSettings: {
   narrationEnabled: boolean
   transcriptionProvider: 'local' | 'elevenlabs' | 'off'
   takeQuotaBytes: number
+  recordingQuotaBytes: number
   remixEnabled: boolean
   youtubeEnabled: boolean
   youtubeConfigured: boolean
@@ -110,6 +111,7 @@ const adminSettings: {
   })(),
   transcriptionProvider: 'local',
   takeQuotaBytes: 2 * 1024 ** 3,
+  recordingQuotaBytes: 2 * 1024 ** 3,
   // localStorage.mockRemixOff = '1' starts with remixing turned off.
   remixEnabled: (() => {
     try {
@@ -1872,6 +1874,8 @@ function mockItem(filename: string, kind: MockKind, bytes: number): MockMedia {
     },
     canDelete: true,
     source: null,
+    role: null,
+    hasTrace: false,
     recording: null,
   }
 }
