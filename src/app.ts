@@ -44,7 +44,6 @@ import { listDestinationTargets, revealDestinationSecret } from './domain/destin
 import { destinationFiles, receiveDestinationCallback } from './domain/destinations/callbacks.js'
 import { deleteConnection, listConnections } from './domain/destinations/connections.js'
 import { googleRoutes } from './auth/google.js'
-import { youtubeAvailable } from './domain/destinations/registry.js'
 import {
   listGrants,
   oauthEnabled,
@@ -55,8 +54,10 @@ import {
 import { oauthRoutes } from './auth/routes.js'
 import { webAuthRoutes, webSignInEnabled } from './auth/web.js'
 import * as hooks from './domain/webhook-settings.js'
-import { getAdminSettings, narrationEnabled, updateAdminSettings } from './domain/narration-settings.js'
-import { remixEnabled } from './domain/remix-settings.js'
+import { getAdminSettings, updateAdminSettings } from './domain/narration-settings.js'
+import { enabledFeatures } from './domain/features.js'
+import { PROMPT_TEMPLATE_VERSION } from './domain/prompt.js'
+import { buildInfo } from './generated/build-info.js'
 import { remixVideo, versionMediaItems } from './domain/remix.js'
 import { listNotifications, markNotificationsRead } from './domain/notifications.js'
 import { getProgress } from './domain/progress.js'
@@ -192,12 +193,21 @@ export function createApp(deps: Deps, opts: AppOptions) {
     return value
   }
 
+  // Netlify's request id ties a client's error (the SDK's requestId, the CLI's message) to these log lines.
   app.onError((e, c) => {
+    const requestId = c.req.header('x-nf-request-id') ?? null
     if (e instanceof ApiError) {
       if (e.code === 'rate_limited') c.header('Retry-After', '60')
+      deps.log.info('api.error', {
+        path: c.req.path,
+        method: c.req.method,
+        status: e.status,
+        code: e.code,
+        requestId,
+      })
       return c.json(errorBody(e.code, e.message, e.details), e.status as 400)
     }
-    deps.log.error('api.unhandled', { path: c.req.path, method: c.req.method, error: e })
+    deps.log.error('api.unhandled', { path: c.req.path, method: c.req.method, requestId, error: e })
     return c.json(errorBody('internal', 'Something went wrong.'), 500)
   })
   app.notFound((c) => c.json(errorBody('not_found', `No route for ${c.req.method} ${c.req.path}.`), 404))
@@ -239,7 +249,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       return c.body(null, 204, {
         'access-control-allow-origin': origin,
         'access-control-allow-methods': 'GET,POST,PUT,PATCH,DELETE',
-        'access-control-allow-headers': 'authorization,content-type,idempotency-key,if-match',
+        'access-control-allow-headers': 'authorization,content-type,idempotency-key,if-match,if-none-match',
         'access-control-max-age': '600',
         vary: 'origin',
       })
@@ -247,6 +257,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     await next()
     if (allowed && c.req.header('authorization')) {
       c.header('access-control-allow-origin', origin)
+      // The SDK reads these: request ids in errors, ETags for waiting, Retry-After, and a new video's Location.
+      c.header('access-control-expose-headers', 'x-nf-request-id,etag,retry-after,location')
       c.header('vary', 'origin')
     }
   })
@@ -297,6 +309,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/health',
+      operationId: 'getHealth',
+      'x-sdk': false,
       summary: 'Check health',
       description: 'Liveness and setup readiness. Never returns secrets.',
       tags: ['system'],
@@ -312,24 +326,28 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/config',
+      operationId: 'getConfig',
+      'x-sdk': { resource: 'config', method: 'get' },
       summary: 'Get public config',
       description: 'Public configuration for the sign-in screen.',
       tags: ['system'],
       responses: { 200: json(s.PublicConfigSchema, 'Config') },
     }),
-    async (c) =>
-      c.json(
+    async (c) => {
+      const features = await enabledFeatures(deps)
+      return c.json(
         {
+          version: { ...buildInfo, promptTemplate: PROMPT_TEMPLATE_VERSION },
+          features,
           admission: deps.config.allowedEmailDomains,
           siteUrl: deps.config.siteUrl,
           planningAvailable: deps.gateway.available(),
           mcpOAuth: oauthEnabled(deps),
           authProvider: deps.config.authProvider,
           requiredTeams: deps.config.netlifyRequiredTeams,
-          // Before the database is set up this reads as the default (on).
-          narrationEnabled: await narrationEnabled(deps).catch(() => true),
-          remixEnabled: await remixEnabled(deps).catch(() => true),
-          youtubeAvailable: await youtubeAvailable(deps, deps.store).catch(() => false),
+          narrationEnabled: features.includes('narration'),
+          remixEnabled: features.includes('remix'),
+          youtubeAvailable: features.includes('youtube'),
           // The deploy form lets these be skipped; say which are still needed (names only, never values).
           missingSettings: [
             ...(deps.config.runnerTokenPresent ? [] : (['RUNNER_API_TOKEN'] as const)),
@@ -338,7 +356,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
           ],
         },
         200,
-      ),
+      )
+    },
   )
 
   // ───── videos ─────
@@ -346,6 +365,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/videos',
+      operationId: 'createVideo',
+      'x-sdk': { resource: 'videos', method: 'create', fieldFeatures: { planId: 'planning' } },
       summary: 'Create a video',
       description: 'Creates a video from a prompt and queues its first version.',
       tags: ['videos'],
@@ -370,6 +391,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/videos',
+      operationId: 'listVideos',
+      'x-sdk': { resource: 'videos', method: 'list' },
       summary: 'List videos',
       description: 'Lists videos, newest first.',
       tags: ['videos'],
@@ -405,6 +428,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
       createRoute({
         method,
         path: '/api/v1/videos/{id}/favorite',
+        operationId: method === 'put' ? 'favoriteVideo' : 'unfavoriteVideo',
+        'x-sdk': { resource: 'videos', method: method === 'put' ? 'favorite' : 'unfavorite' },
         summary: method === 'put' ? 'Star a video' : 'Unstar a video',
         description:
           method === 'put'
@@ -424,6 +449,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/videos/{id}',
+      operationId: 'getVideo',
+      'x-sdk': { resource: 'videos', method: 'get' },
       summary: 'Get a video',
       description: 'One video with its versions.',
       tags: ['videos'],
@@ -448,6 +475,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'patch',
       path: '/api/v1/videos/{id}',
+      operationId: 'updateVideo',
+      'x-sdk': { resource: 'videos', method: 'update' },
       summary: 'Update a video',
       description:
         'Renames a video, makes it private, or sets the language spoken in it (for narration captions).',
@@ -466,6 +495,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'delete',
       path: '/api/v1/videos/{id}',
+      operationId: 'deleteVideo',
+      'x-sdk': { resource: 'videos', method: 'delete' },
       summary: 'Delete a video',
       description: 'Deletes a video, its versions, files and public links.',
       tags: ['videos'],
@@ -482,6 +513,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/videos/{id}/versions',
+      operationId: 'reviseVideo',
+      'x-sdk': { resource: 'videos', method: 'revise', fieldFeatures: { planId: 'planning' } },
       summary: 'Revise a video',
       description: 'Starts the next version from a ready one.',
       tags: ['versions'],
@@ -508,6 +541,13 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/videos/{id}/remix',
+      operationId: 'remixVideo',
+      'x-sdk': {
+        resource: 'videos',
+        method: 'remix',
+        feature: 'remix',
+        fieldFeatures: { planId: 'planning' },
+      },
       summary: 'Remix a video',
       description:
         "Makes a NEW video, owned by you, that starts from this video's finished composition (a ready version) and changes it as the prompt says: anything from swapping a name to the same format on a new topic. Its shape, length, sound, AI voice-over and library media come from the source unless you set them; recorded narration, comments and publications don't carry over. A private video's remix is private. Returns the new video.",
@@ -540,6 +580,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/videos/{id}/versions/{n}/media',
+      operationId: 'listVersionMedia',
+      'x-sdk': { resource: 'versions', method: 'media' },
       summary: "A version's library media",
       description:
         'The library items a version was made with, in order (items since deleted from the library included). A remix keeps them unless you pass mediaIds.',
@@ -557,6 +599,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/videos/{id}/versions/{n}/retry',
+      operationId: 'retryVersion',
+      'x-sdk': { resource: 'versions', method: 'retry' },
       summary: 'Retry a version',
       description: 'Tries a failed, cancelled or timed-out version again.',
       tags: ['versions'],
@@ -575,6 +619,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/videos/{id}/versions/{n}/cancel',
+      operationId: 'cancelVersion',
+      'x-sdk': { resource: 'versions', method: 'cancel' },
       summary: 'Cancel a version',
       description: 'Stops a version in progress.',
       tags: ['versions'],
@@ -593,6 +639,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/videos/{id}/versions/{n}/publish',
+      operationId: 'publishVersion',
+      'x-sdk': { resource: 'versions', method: 'publish' },
       summary: 'Publish a version',
       description:
         "Publishes a version to a public share page and links. With showTranscript, the share page offers the narration's transcript.",
@@ -617,6 +665,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'delete',
       path: '/api/v1/videos/{id}/versions/{n}/publish',
+      operationId: 'unpublishVersion',
+      'x-sdk': { resource: 'versions', method: 'unpublish' },
       summary: 'Unpublish a version',
       description: "Takes a version's public links down; they stop working on the next request.",
       tags: ['publishing'],
@@ -636,6 +686,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       method: 'get',
       path: '/api/v1/destinations',
       operationId: 'listDestinations',
+      'x-sdk': { resource: 'destinations', method: 'list', feature: 'destinations' },
       summary: 'List destinations',
       description:
         'Where a ready version can be published: the share page, YouTube (when set up) and HTTP destinations, each with whether it is ready for you and, if not, why.',
@@ -651,6 +702,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       method: 'post',
       path: '/api/v1/videos/{id}/versions/{n}/destinations',
       operationId: 'publishToDestination',
+      'x-sdk': { resource: 'destinations', method: 'publish', feature: 'destinations' },
       summary: 'Publish a version to a destination',
       description:
         "Publishes a ready version to a destination. The share page publishes at once; others publish in the background: watch the version's destinations list.",
@@ -681,6 +733,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       method: 'delete',
       path: '/api/v1/destination-publications/{id}',
       operationId: 'unpublishFromDestination',
+      'x-sdk': { resource: 'destinations', method: 'unpublish', feature: 'destinations' },
       summary: 'Remove a version from a destination',
       description: 'Removes a destination publication, from any state. Removal runs in the background.',
       tags: ['publishing'],
@@ -711,6 +764,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       method: 'post',
       path: '/api/v1/destination-publications/{id}/retry',
       operationId: 'retryDestinationPublication',
+      'x-sdk': { resource: 'destinations', method: 'retry', feature: 'destinations' },
       summary: 'Try a failed destination publication again',
       description:
         'Starts a new attempt on the same publication, so the destination can find what an earlier one made.',
@@ -727,6 +781,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       method: 'get',
       path: '/api/v1/destinations/{id}/targets',
       operationId: 'listDestinationTargets',
+      'x-sdk': { resource: 'destinations', method: 'targets', feature: 'destinations' },
       summary: "A destination's targets for a video",
       description:
         'Things the destination already holds for you (its own sites, playlists or pages), to add the video to instead of making something new. Empty when it has none or did not answer in time.',
@@ -762,6 +817,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       method: 'post',
       path: '/api/v1/destination-publications/{id}/secret',
       operationId: 'revealDestinationSecret',
+      'x-sdk': { resource: 'destinations', method: 'revealSecret', feature: 'destinations' },
       summary: 'Reveal a one-time secret',
       description:
         'Returns a secret the destination handed back (such as a site password), once, to the publisher only.',
@@ -808,7 +864,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
     method: 'get' | 'post' | 'patch' | 'delete',
     operationId: string,
     summary: string,
-  ) => ({ method, path, operationId, summary, tags: ['admin'], security })
+  ) => ({ method, path, operationId, 'x-sdk': false as const, summary, tags: ['admin'], security })
   app.openapi(
     createRoute({
       ...adminDest('/api/v1/admin/destinations', 'get', 'listAdminDestinations', 'List HTTP destinations'),
@@ -931,6 +987,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       method: 'get',
       path: '/api/v1/me/connections',
       operationId: 'listConnections',
+      'x-sdk': { resource: 'connections', method: 'list', feature: 'youtube' },
       summary: 'Your connected accounts',
       description:
         'Accounts you connected for publishing (your YouTube channel), and whether YouTube is set up here.',
@@ -963,6 +1020,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       method: 'delete',
       path: '/api/v1/me/connections/{id}',
       operationId: 'deleteConnection',
+      'x-sdk': { resource: 'connections', method: 'delete', feature: 'youtube' },
       summary: 'Disconnect an account',
       description: 'Revokes the grant and forgets it. What was already published stays where it is.',
       tags: ['publishing'],
@@ -990,7 +1048,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/destination-callbacks/{id}',
-      operationId: 'destinationCallback',
+      operationId: 'receiveDestinationCallback',
+      'x-sdk': false,
       summary: 'Receiver callback',
       description:
         "An HTTP destination reports how a publish or removal it answered 202 to ended. Authorization: Bearer <the request's callback token>.",
@@ -1007,7 +1066,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/destination-callbacks/{id}/files',
-      operationId: 'destinationFiles',
+      operationId: 'refreshDestinationFiles',
+      'x-sdk': false,
       summary: 'Fresh file links',
       description:
         "New signed links to a publication's files, for a receiver that needs more time to copy them.",
@@ -1025,6 +1085,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'put',
       path: '/api/v1/videos/{id}/versions/{n}/verdict',
+      operationId: 'setVerdict',
+      'x-sdk': { resource: 'versions', method: 'setVerdict' },
       summary: 'Set your verdict',
       description:
         'Approve a version or request changes; null clears your verdict. Not allowed on your own version.',
@@ -1045,6 +1107,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/videos/{id}/versions/{n}/captions',
+      operationId: 'correctCaptions',
+      'x-sdk': { resource: 'versions', method: 'captions' },
       summary: 'Correct the captions',
       description:
         "Corrects recorded narration's caption text without a render: every cue, in order, with its id and timing unchanged. The captions and transcript get new revision files; the share page follows. Owner or admin. 409 when expectedRev isn't the current revision or the captions are burned in.",
@@ -1066,6 +1130,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'put',
       path: '/api/v1/videos/{id}/versions/{n}/poster',
+      operationId: 'setPoster',
+      'x-sdk': { resource: 'versions', method: 'setPoster' },
       summary: 'Set the poster',
       description:
         "Sets a ready version's poster to a frame or an uploaded image, without a render. Send a JPEG with the video's shape, and WebPs 480 and 960 px wide when you can. The share page follows. Owner or admin.",
@@ -1087,6 +1153,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'delete',
       path: '/api/v1/videos/{id}/versions/{n}/poster',
+      operationId: 'resetPoster',
+      'x-sdk': { resource: 'versions', method: 'resetPoster' },
       summary: 'Reset the poster',
       description: "Goes back to the render's own poster. Owner or admin.",
       tags: ['versions'],
@@ -1105,6 +1173,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/videos/{id}/versions/{n}/preview',
+      operationId: 'getVersionPreview',
+      'x-sdk': { resource: 'versions', method: 'preview' },
       summary: 'Get a preview link',
       description:
         "A short-lived link to play a ready version's composition in the sandboxed preview. With live=1, a running version's latest snapshot.",
@@ -1125,6 +1195,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/videos/{id}/versions/{n}/{file}',
+      operationId: 'getVersionFile',
+      'x-sdk': false,
       summary: 'Download a file',
       description: 'Redirects to a signed URL valid for 5 to 10 minutes.',
       tags: ['versions'],
@@ -1158,6 +1230,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'put',
       path: '/api/v1/videos/{id}/versions/{n}/previews/{name}',
+      operationId: 'addPreviewVariant',
+      'x-sdk': false,
       summary: 'Add a preview variant',
       description:
         "Admins only. Adds a preview variant (or the placeholder, name lqip) to a ready version that doesn't have it yet.",
@@ -1186,6 +1260,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/keys',
+      operationId: 'listKeys',
+      'x-sdk': { resource: 'keys', method: 'list' },
       summary: 'List API keys',
       description: 'Your API keys.',
       tags: ['keys'],
@@ -1198,6 +1274,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/keys',
+      operationId: 'createKey',
+      'x-sdk': false,
       summary: 'Create an API key',
       description: 'Creates an API key. Its secret is shown once.',
       tags: ['keys'],
@@ -1211,6 +1289,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'delete',
       path: '/api/v1/keys/{id}',
+      operationId: 'revokeKey',
+      'x-sdk': { resource: 'keys', method: 'revoke' },
       summary: 'Revoke an API key',
       description: 'Revokes an API key; requests with it stop working.',
       tags: ['keys'],
@@ -1227,6 +1307,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/oauth/grants',
+      operationId: 'listGrants',
+      'x-sdk': { resource: 'grants', method: 'list' },
       summary: 'List connected apps',
       description: 'Your connected OAuth apps. 404 when MCP OAuth is off.',
       tags: ['keys'],
@@ -1239,6 +1321,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'delete',
       path: '/api/v1/oauth/grants/{id}',
+      operationId: 'revokeGrant',
+      'x-sdk': { resource: 'grants', method: 'revoke' },
       summary: 'Disconnect an app',
       description: 'Disconnects an OAuth app; its tokens stop working.',
       tags: ['keys'],
@@ -1255,6 +1339,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/me',
+      operationId: 'getMe',
+      'x-sdk': { resource: 'me', method: 'get' },
       summary: 'Get your account',
       description: 'Who you are: your account and role.',
       tags: ['me'],
@@ -1279,6 +1365,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/users',
+      operationId: 'listUsers',
+      'x-sdk': false,
       summary: 'List users',
       description: 'Everyone who has signed in, with their roles. Admins only.',
       tags: ['admin'],
@@ -1291,6 +1379,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'patch',
       path: '/api/v1/users/{id}',
+      operationId: 'updateUser',
+      'x-sdk': false,
       summary: 'Update a user',
       description: 'Changes a role, or disables or enables a user. Admins only.',
       tags: ['admin'],
@@ -1308,6 +1398,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/me/webhook',
+      operationId: 'getWebhook',
+      'x-sdk': { resource: 'webhooks', method: 'get' },
       summary: 'Get your webhook',
       description: 'Your webhook, for events on videos you own.',
       tags: ['keys'],
@@ -1320,6 +1412,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'put',
       path: '/api/v1/me/webhook',
+      operationId: 'setWebhook',
+      'x-sdk': { resource: 'webhooks', method: 'set' },
       summary: 'Set your webhook',
       description: 'Sets your webhook URL. A signing secret is returned once, on create or rotate.',
       tags: ['keys'],
@@ -1333,6 +1427,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'delete',
       path: '/api/v1/me/webhook',
+      operationId: 'deleteWebhook',
+      'x-sdk': { resource: 'webhooks', method: 'delete' },
       summary: 'Remove your webhook',
       description: 'Removes your webhook; pending deliveries to it are dropped.',
       tags: ['keys'],
@@ -1348,6 +1444,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/me/webhook/test',
+      operationId: 'testWebhook',
+      'x-sdk': { resource: 'webhooks', method: 'test' },
       summary: 'Test your webhook',
       description: 'Sends a signed webhook.test event to your webhook now.',
       tags: ['keys'],
@@ -1360,6 +1458,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/admin/team-webhook',
+      operationId: 'getTeamWebhook',
+      'x-sdk': false,
       summary: 'Get the team webhook',
       description: 'The team webhook, for events on every video. Admins only.',
       tags: ['admin'],
@@ -1372,6 +1472,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'put',
       path: '/api/v1/admin/team-webhook',
+      operationId: 'setTeamWebhook',
+      'x-sdk': false,
       summary: 'Set the team webhook',
       description:
         'Sets the team webhook URL. A signing secret is returned once, on create or rotate. Admins only.',
@@ -1386,6 +1488,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'delete',
       path: '/api/v1/admin/team-webhook',
+      operationId: 'deleteTeamWebhook',
+      'x-sdk': false,
       summary: 'Remove the team webhook',
       description: 'Removes the team webhook; pending deliveries to it are dropped. Admins only.',
       tags: ['admin'],
@@ -1401,6 +1505,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/admin/team-webhook/test',
+      operationId: 'testTeamWebhook',
+      'x-sdk': false,
       summary: 'Test the team webhook',
       description: 'Sends a signed webhook.test event to the team webhook now. Admins only.',
       tags: ['admin'],
@@ -1413,6 +1519,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/admin/settings',
+      operationId: 'getSettings',
+      'x-sdk': false,
       summary: 'Get settings',
       description: 'Settings an admin can change without a redeploy: recorded voice-over. Admins only.',
       tags: ['admin'],
@@ -1425,6 +1533,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'patch',
       path: '/api/v1/admin/settings',
+      operationId: 'updateSettings',
+      'x-sdk': false,
       summary: 'Update settings',
       description:
         'Changes the settings given; leave a field out to keep it. Takes effect at once. Admins only.',
@@ -1441,6 +1551,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/plans',
+      operationId: 'createPlan',
+      'x-sdk': { resource: 'plans', method: 'create', feature: 'planning' },
       summary: 'Start a plan',
       description: 'Starts planning a video: a fast router decides whether a few questions would help.',
       tags: ['planning'],
@@ -1454,6 +1566,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/plans/{id}',
+      operationId: 'getPlan',
+      'x-sdk': { resource: 'plans', method: 'get', feature: 'planning' },
       summary: 'Get a plan',
       description: 'One of your plans.',
       tags: ['planning'],
@@ -1467,6 +1581,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/plans/{id}/questions',
+      operationId: 'askPlanQuestions',
+      'x-sdk': { resource: 'plans', method: 'questions', feature: 'planning' },
       summary: 'Ask questions',
       description: 'Zero to six multiple-choice questions about the video; empty when the prompt covers it.',
       tags: ['planning'],
@@ -1481,6 +1597,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/plans/{id}/brief',
+      operationId: 'writePlanBrief',
+      'x-sdk': { resource: 'plans', method: 'brief', feature: 'planning' },
       summary: 'Write the brief',
       description: 'Turns the answers into an editable brief.',
       tags: ['planning'],
@@ -1506,6 +1624,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'patch',
       path: '/api/v1/plans/{id}',
+      operationId: 'updatePlan',
+      'x-sdk': { resource: 'plans', method: 'update', feature: 'planning' },
       summary: 'Edit the brief',
       description: 'Saves your edits to the brief. Send the briefRev you loaded.',
       tags: ['planning'],
@@ -1538,6 +1658,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/me/usage',
+      operationId: 'getUsage',
+      'x-sdk': { resource: 'me', method: 'usage' },
       summary: 'Get your usage',
       description: 'Your credits this month: agent runs and planning (estimates).',
       tags: ['usage'],
@@ -1550,6 +1672,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/notifications',
+      operationId: 'listNotifications',
+      'x-sdk': { resource: 'notifications', method: 'list' },
       summary: 'List notifications',
       description: 'Comments and approvals on your videos, newest first, with an unread count.',
       tags: ['notifications'],
@@ -1568,6 +1692,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/notifications/read',
+      operationId: 'markNotificationsRead',
+      'x-sdk': { resource: 'notifications', method: 'markRead' },
       summary: 'Mark notifications read',
       description: 'Marks notifications read: all, or up to a time.',
       tags: ['notifications'],
@@ -1590,6 +1716,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/videos/{id}/progress',
+      operationId: 'getVideoProgress',
+      'x-sdk': { resource: 'videos', method: 'progress' },
       summary: 'Get progress',
       description: "Live progress of the latest version's run: the agent's step, steps and credits so far.",
       tags: ['videos'],
@@ -1603,6 +1731,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/videos/{id}/versions/{n}/edits',
+      operationId: 'createEdit',
+      'x-sdk': false,
       summary: 'Open an edit draft',
       description: 'Opens your edit draft of a finished, editable version, creating it if you have none.',
       tags: ['editor'],
@@ -1625,6 +1755,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/edits/{id}',
+      operationId: 'getEdit',
+      'x-sdk': false,
       summary: 'Get an edit draft',
       description: 'One of your edit drafts.',
       tags: ['editor'],
@@ -1638,6 +1770,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'put',
       path: '/api/v1/edits/{id}',
+      operationId: 'saveEdit',
+      'x-sdk': false,
       summary: 'Save edits',
       description:
         'Saves the full list of edits as the next rev. rev must match the draft, for multi-tab safety.',
@@ -1656,6 +1790,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'delete',
       path: '/api/v1/edits/{id}',
+      operationId: 'discardEdit',
+      'x-sdk': false,
       summary: 'Discard a draft',
       description: 'Discards one of your edit drafts.',
       tags: ['editor'],
@@ -1672,6 +1808,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/edits/{id}/render',
+      operationId: 'renderEdit',
+      'x-sdk': false,
       summary: 'Render a draft',
       description:
         'Renders your draft as the next version, unchanged: the run checks and renders and never redesigns. Recorded narration is mixed over the kept visuals.',
@@ -1702,6 +1840,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/edits/{id}/rebase-narration',
+      operationId: 'rebaseEditNarration',
+      'x-sdk': false,
       summary: "Rebase a draft's narration",
       description:
         "Moves your draft's narration onto your draft of version toN (opened, or created), saved and checked like any save: the narration lock, the recordings you may use and the limits against that version. Your other draft is kept.",
@@ -1726,6 +1866,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/edits/{id}/preview',
+      operationId: 'getEditPreview',
+      'x-sdk': false,
       summary: 'Get a draft preview link',
       description: "A short-lived link to play the draft's current rev in the sandboxed preview.",
       tags: ['editor'],
@@ -1745,6 +1887,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: lockPath,
+      operationId: 'getNarrationLock',
+      'x-sdk': false,
       summary: 'Get the narration lock',
       description: "Who is editing this video's narration, if anyone.",
       tags: ['editor'],
@@ -1758,6 +1902,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: lockPath,
+      operationId: 'takeNarrationLock',
+      'x-sdk': false,
       summary: 'Acquire the narration lock',
       description:
         "Takes the video's narration lock for your draft, or heartbeats it (every 30 s; it lapses after 2 min without one). Only the holder saves narration ops.",
@@ -1779,6 +1925,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'delete',
       path: lockPath,
+      operationId: 'releaseNarrationLock',
+      'x-sdk': false,
       summary: 'Release the narration lock',
       description: "Releases your narration lock; someone else's is left alone.",
       tags: ['editor'],
@@ -1795,6 +1943,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: `${lockPath}/take-over`,
+      operationId: 'takeOverNarrationLock',
+      'x-sdk': false,
       summary: 'Take over the narration lock',
       description:
         'Moves the narration lock to you, whoever holds it. Their draft is kept; their next heartbeat or narration save is refused and says you took over.',
@@ -1820,6 +1970,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/media',
+      operationId: 'uploadMedia',
+      'x-sdk': false,
       summary: 'Upload a file',
       description:
         'Uploads one file up to 4 MB as the request body: images, SVG, fonts, short clips. Bigger files use upload sessions.',
@@ -1856,6 +2008,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/media',
+      operationId: 'listMedia',
+      'x-sdk': { resource: 'media', method: 'list' },
       summary: 'List media',
       description: "The team's media library, newest first, plus your own uploads still being checked.",
       tags: ['media'],
@@ -1883,6 +2037,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/media/check',
+      operationId: 'checkMedia',
+      'x-sdk': { resource: 'media', method: 'check' },
       summary: 'Check for duplicates',
       description:
         'Before uploading, finds what the library already has for each file: the same file (by sha256) or a different file with the same name.',
@@ -1897,6 +2053,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/videos/{id}/recordings',
+      operationId: 'listRecordings',
+      'x-sdk': { resource: 'media', method: 'recordings' },
       summary: "List a video's recordings",
       description:
         "The voice-over recordings made for this video or used on it that you can read: your own, and the ones its versions (or their uploader's drafts) use. Newest first, with where each is used and how long it's kept, so a recording whose draft expired can be placed again.",
@@ -1911,6 +2069,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/media/recordings/delete-unused',
+      operationId: 'deleteUnusedRecordings',
+      'x-sdk': { resource: 'media', method: 'deleteUnusedRecordings' },
       summary: 'Delete unused recordings',
       description:
         "Deletes your voice-over recordings that no draft or version uses, at once (they're otherwise kept 30 days after their last use). Recordings in use are kept.",
@@ -1924,6 +2084,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/media/uploads',
+      operationId: 'createUpload',
+      'x-sdk': { resource: 'uploads', method: 'create' },
       summary: 'Start an upload',
       description:
         "Starts an upload session for a file over 4 MB, or for any voice-over recording. Declare its size and sha256 (a recorder may send the hash it computed while recording; the server checks every part and the whole file); quota is reserved. A recording names its role and the video it's for (scopeJobId), which you must be able to see.",
@@ -1968,6 +2130,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/media/uploads/{id}',
+      operationId: 'getUpload',
+      'x-sdk': { resource: 'uploads', method: 'get' },
       summary: 'Get an upload',
       description: 'An upload session: which parts arrived (to resume) and its status.',
       tags: ['media'],
@@ -1981,6 +2145,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'put',
       path: '/api/v1/media/uploads/{id}/parts/{index}',
+      operationId: 'uploadPart',
+      'x-sdk': false,
       summary: 'Upload a part',
       description:
         'Sends one part (at most 4 MB) as the request body; x-part-sha256 guards against corruption.',
@@ -2017,6 +2183,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/media/uploads/{id}/complete',
+      operationId: 'completeUpload',
+      'x-sdk': { resource: 'uploads', method: 'complete' },
       summary: 'Finish an upload',
       description:
         "The file is assembled and checked in the background; poll the session or the item. A recording's whole-file sha256 is checked first: a mismatch is a 400 and the session fails.",
@@ -2054,6 +2222,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'delete',
       path: '/api/v1/media/uploads/{id}',
+      operationId: 'abortUpload',
+      'x-sdk': { resource: 'uploads', method: 'abort' },
       summary: 'Cancel an upload',
       description: 'Cancels an unfinished upload session and frees its parts and quota.',
       tags: ['media'],
@@ -2071,6 +2241,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/media/openverse/search',
+      operationId: 'searchMusic',
+      'x-sdk': { resource: 'music', method: 'search' },
       summary: 'Search Openverse',
       description:
         'Searches Openverse for CC0 or CC BY audio (music by default); NC, ND and SA licences are never returned. Creators and admins. When Openverse is slow, answers 202 with a job to poll.',
@@ -2113,6 +2285,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/media/openverse/library',
+      operationId: 'searchLibraryMusic',
+      'x-sdk': { resource: 'music', method: 'library' },
       summary: 'Search library music',
       description:
         'Audio already in the team library that matches music search words (title, caption, filename, creator or source), answered at once without asking Openverse.',
@@ -2128,6 +2302,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/media/openverse/common',
+      operationId: 'listCommonMusic',
+      'x-sdk': { resource: 'music', method: 'common' },
       summary: 'List quick music picks',
       description: 'Common music searches, kept warm every day: quick picks that answer at once.',
       tags: ['media'],
@@ -2140,6 +2316,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/media/openverse/import',
+      operationId: 'importMusic',
+      'x-sdk': { resource: 'music', method: 'import' },
       summary: 'Import from Openverse',
       description:
         'Imports an Openverse track into the library by its id: re-read from Openverse, licence checked, file downloaded and verified as audio. Importing it again returns the same item. When Openverse is slow, answers 202 with a job to poll.',
@@ -2177,6 +2355,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/media/openverse/jobs/{id}',
+      operationId: 'getMusicJob',
+      'x-sdk': { resource: 'music', method: 'job' },
       summary: 'Get an Openverse job',
       description:
         'An Openverse search or import running in the background: its status, then the tracks or the library item. Only for the person who started it.',
@@ -2192,6 +2372,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/media/{id}',
+      operationId: 'getMedia',
+      'x-sdk': { resource: 'media', method: 'get' },
       summary: 'Get a media item',
       description: 'One media item.',
       tags: ['media'],
@@ -2205,6 +2387,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'patch',
       path: '/api/v1/media/{id}',
+      operationId: 'updateMedia',
+      'x-sdk': { resource: 'media', method: 'update' },
       summary: 'Rename or annotate an item',
       description:
         'Changes the title (the name shown in the library) or the caption (notes the planner and agent read). Uploader or admin. Leave a field out to keep it; null clears it.',
@@ -2233,6 +2417,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'delete',
       path: '/api/v1/media/{id}',
+      operationId: 'deleteMedia',
+      'x-sdk': { resource: 'media', method: 'delete' },
       summary: 'Remove a media item',
       description: 'Removes it from the library (uploader or admin); versions that used it keep it.',
       tags: ['media'],
@@ -2251,6 +2437,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'put',
       path: '/api/v1/media/{id}/peaks',
+      operationId: 'setMediaPeaks',
+      'x-sdk': false,
       summary: "Store a recording's peaks",
       description: `Stores a recording's waveform peaks (peaks.bin, the VAPK format, at most ${PEAKS_MAX_BYTES / 1024} KB) as the request body. Only the uploader, before or after the recording is ready; sending again replaces them.`,
       tags: ['media'],
@@ -2275,6 +2463,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/media/{id}/peaks',
+      operationId: 'getMediaPeaks',
+      'x-sdk': false,
       summary: "Get a recording's peaks",
       description: "A recording's waveform peaks (peaks.bin), for anyone who can read the recording.",
       tags: ['media'],
@@ -2301,6 +2491,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'put',
       path: '/api/v1/media/{id}/speech',
+      operationId: 'setMediaSpeech',
+      'x-sdk': false,
       summary: "Store a recording's speech spans",
       description:
         'Stores where the voice is in a recording, as [start, end) spans in source samples. Only the uploader, before or after the recording is ready; sending again replaces them.',
@@ -2322,6 +2514,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/media/{id}/speech',
+      operationId: 'getMediaSpeech',
+      'x-sdk': false,
       summary: "Get a recording's speech spans",
       description: 'Where the voice is in a recording, for anyone who can read the recording.',
       tags: ['media'],
@@ -2336,6 +2530,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/videos/{id}/comments',
+      operationId: 'listComments',
+      'x-sdk': { resource: 'comments', method: 'list' },
       summary: 'List comments',
       description: 'Comments on a video (optionally one version), oldest first, with your unread count.',
       tags: ['review'],
@@ -2366,6 +2562,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/videos/{id}/comments',
+      operationId: 'addComment',
+      'x-sdk': { resource: 'comments', method: 'add' },
       summary: 'Add a comment',
       description: 'Comments on a version, optionally pinned to a moment (timeSec) and a spot (x, y).',
       tags: ['review'],
@@ -2383,6 +2581,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/videos/{id}/comments/batch',
+      operationId: 'addComments',
+      'x-sdk': { resource: 'comments', method: 'addBatch' },
       summary: 'Post several notes as one block',
       description:
         'Posts notes from one pass through the video (each optionally at a moment and a spot) as one review block: one comment per note, sharing a groupId. The owner gets one notification.',
@@ -2401,6 +2601,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/videos/{id}/comments/read',
+      operationId: 'markCommentsRead',
+      'x-sdk': { resource: 'comments', method: 'markRead' },
       summary: 'Mark comments read',
       description: "Marks this video's comments read: all, or up to a time.",
       tags: ['review'],
@@ -2424,6 +2626,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'patch',
       path: '/api/v1/comments/{id}',
+      operationId: 'updateComment',
+      'x-sdk': { resource: 'comments', method: 'update' },
       summary: 'Update a comment',
       description: 'Edit your comment, or resolve or reopen one (video owner or admin).',
       tags: ['review'],
@@ -2444,6 +2648,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'delete',
       path: '/api/v1/comments/{id}',
+      operationId: 'deleteComment',
+      'x-sdk': { resource: 'comments', method: 'delete' },
       summary: 'Delete a comment',
       description: 'Deletes your comment, or any comment on your video (owner or admin).',
       tags: ['review'],
@@ -2460,6 +2666,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/transfers',
+      operationId: 'transferVideos',
+      'x-sdk': false,
       summary: 'Transfer videos',
       description:
         "Transfers videos to another Creator or Admin: some videos, or all of a person's. Admins only.",
@@ -2484,6 +2692,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'get',
       path: '/api/v1/stats',
+      operationId: 'getStats',
+      'x-sdk': false,
       summary: 'Get stats',
       description: 'Runs, queue, failures and credits. Admins only.',
       tags: ['admin'],
@@ -2570,6 +2780,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/admin/attempts/{id}/resolve',
+      operationId: 'resolveAttempt',
+      'x-sdk': false,
       summary: 'Resolve a stuck start',
       description: 'Marks an unresolved start as failed and frees its slot. Admins only.',
       tags: ['admin'],
@@ -2588,6 +2800,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/admin/queue/resume',
+      operationId: 'resumeQueue',
+      'x-sdk': false,
       summary: 'Resume the queue',
       description: 'Resumes a queue paused because AI credits were unavailable. Admins only.',
       tags: ['admin'],
@@ -2664,6 +2878,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/internal/runs/{id}/done',
+      operationId: 'reportRunDone',
+      'x-sdk': false,
       hide: true,
       request: { params: IdParam },
       responses: {
@@ -2692,6 +2908,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/internal/runs/{id}/checkpoint',
+      operationId: 'reportRunCheckpoint',
+      'x-sdk': false,
       hide: true,
       request: {
         params: IdParam,

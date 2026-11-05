@@ -16,6 +16,7 @@ import {
 } from './lib/timeline.js'
 import { SPEED_RANGE, VOICE_ID } from './lib/voice.js'
 import { MEDIA_KINDS } from './lib/media/classify.js'
+import { FEATURES } from './domain/features.js'
 
 export const ErrorSchema = z
   .object({
@@ -1596,6 +1597,18 @@ export const HealthSchema = z
 
 export const PublicConfigSchema = z
   .object({
+    version: z
+      .object({
+        commit: z.string().nullable().describe("The deployed commit (Netlify's COMMIT_REF), or null."),
+        promptTemplate: z.number().int().describe('The run prompt template version.'),
+        release: z.string().nullable().describe('The template release tag this build is, or null.'),
+      })
+      .describe('Which build this deployment runs.'),
+    features: z
+      .array(z.enum(FEATURES))
+      .describe(
+        "Features this deployment has and has switched on. Clients hide what isn't listed. See src/domain/features.ts.",
+      ),
     admission: z.union([z.literal('invite-only'), z.array(z.string()), z.null()]),
     siteUrl: z.string(),
     planningAvailable: z.boolean().describe('AI Gateway is available, so Plan it first is offered.'),

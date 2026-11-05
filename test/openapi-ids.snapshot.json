@@ -1,0 +1,669 @@
+{
+  "GET /api/health": {
+    "operationId": "getHealth",
+    "sdk": false
+  },
+  "GET /api/v1/config": {
+    "operationId": "getConfig",
+    "sdk": {
+      "resource": "config",
+      "method": "get"
+    }
+  },
+  "POST /api/v1/videos": {
+    "operationId": "createVideo",
+    "sdk": {
+      "resource": "videos",
+      "method": "create",
+      "fieldFeatures": {
+        "planId": "planning"
+      }
+    }
+  },
+  "GET /api/v1/videos": {
+    "operationId": "listVideos",
+    "sdk": {
+      "resource": "videos",
+      "method": "list"
+    }
+  },
+  "PUT /api/v1/videos/{id}/favorite": {
+    "operationId": "favoriteVideo",
+    "sdk": {
+      "resource": "videos",
+      "method": "favorite"
+    }
+  },
+  "DELETE /api/v1/videos/{id}/favorite": {
+    "operationId": "unfavoriteVideo",
+    "sdk": {
+      "resource": "videos",
+      "method": "unfavorite"
+    }
+  },
+  "GET /api/v1/videos/{id}": {
+    "operationId": "getVideo",
+    "sdk": {
+      "resource": "videos",
+      "method": "get"
+    }
+  },
+  "PATCH /api/v1/videos/{id}": {
+    "operationId": "updateVideo",
+    "sdk": {
+      "resource": "videos",
+      "method": "update"
+    }
+  },
+  "DELETE /api/v1/videos/{id}": {
+    "operationId": "deleteVideo",
+    "sdk": {
+      "resource": "videos",
+      "method": "delete"
+    }
+  },
+  "POST /api/v1/videos/{id}/versions": {
+    "operationId": "reviseVideo",
+    "sdk": {
+      "resource": "videos",
+      "method": "revise",
+      "fieldFeatures": {
+        "planId": "planning"
+      }
+    }
+  },
+  "POST /api/v1/videos/{id}/remix": {
+    "operationId": "remixVideo",
+    "sdk": {
+      "resource": "videos",
+      "method": "remix",
+      "feature": "remix",
+      "fieldFeatures": {
+        "planId": "planning"
+      }
+    }
+  },
+  "GET /api/v1/videos/{id}/versions/{n}/media": {
+    "operationId": "listVersionMedia",
+    "sdk": {
+      "resource": "versions",
+      "method": "media"
+    }
+  },
+  "POST /api/v1/videos/{id}/versions/{n}/retry": {
+    "operationId": "retryVersion",
+    "sdk": {
+      "resource": "versions",
+      "method": "retry"
+    }
+  },
+  "POST /api/v1/videos/{id}/versions/{n}/cancel": {
+    "operationId": "cancelVersion",
+    "sdk": {
+      "resource": "versions",
+      "method": "cancel"
+    }
+  },
+  "POST /api/v1/videos/{id}/versions/{n}/publish": {
+    "operationId": "publishVersion",
+    "sdk": {
+      "resource": "versions",
+      "method": "publish"
+    }
+  },
+  "DELETE /api/v1/videos/{id}/versions/{n}/publish": {
+    "operationId": "unpublishVersion",
+    "sdk": {
+      "resource": "versions",
+      "method": "unpublish"
+    }
+  },
+  "GET /api/v1/destinations": {
+    "operationId": "listDestinations",
+    "sdk": {
+      "resource": "destinations",
+      "method": "list",
+      "feature": "destinations"
+    }
+  },
+  "POST /api/v1/videos/{id}/versions/{n}/destinations": {
+    "operationId": "publishToDestination",
+    "sdk": {
+      "resource": "destinations",
+      "method": "publish",
+      "feature": "destinations"
+    }
+  },
+  "DELETE /api/v1/destination-publications/{id}": {
+    "operationId": "unpublishFromDestination",
+    "sdk": {
+      "resource": "destinations",
+      "method": "unpublish",
+      "feature": "destinations"
+    }
+  },
+  "POST /api/v1/destination-publications/{id}/retry": {
+    "operationId": "retryDestinationPublication",
+    "sdk": {
+      "resource": "destinations",
+      "method": "retry",
+      "feature": "destinations"
+    }
+  },
+  "GET /api/v1/destinations/{id}/targets": {
+    "operationId": "listDestinationTargets",
+    "sdk": {
+      "resource": "destinations",
+      "method": "targets",
+      "feature": "destinations"
+    }
+  },
+  "POST /api/v1/destination-publications/{id}/secret": {
+    "operationId": "revealDestinationSecret",
+    "sdk": {
+      "resource": "destinations",
+      "method": "revealSecret",
+      "feature": "destinations"
+    }
+  },
+  "GET /api/v1/admin/destinations": {
+    "operationId": "listAdminDestinations",
+    "sdk": false
+  },
+  "POST /api/v1/admin/destinations": {
+    "operationId": "createDestination",
+    "sdk": false
+  },
+  "PATCH /api/v1/admin/destinations/{id}": {
+    "operationId": "updateDestination",
+    "sdk": false
+  },
+  "DELETE /api/v1/admin/destinations/{id}": {
+    "operationId": "deleteDestination",
+    "sdk": false
+  },
+  "POST /api/v1/admin/destinations/{id}/rotate": {
+    "operationId": "rotateDestinationSecret",
+    "sdk": false
+  },
+  "POST /api/v1/admin/destinations/{id}/test": {
+    "operationId": "testDestination",
+    "sdk": false
+  },
+  "POST /api/v1/admin/destinations/{id}/remove-all": {
+    "operationId": "removeDestinationEverywhere",
+    "sdk": false
+  },
+  "GET /api/v1/me/connections": {
+    "operationId": "listConnections",
+    "sdk": {
+      "resource": "connections",
+      "method": "list",
+      "feature": "youtube"
+    }
+  },
+  "DELETE /api/v1/me/connections/{id}": {
+    "operationId": "deleteConnection",
+    "sdk": {
+      "resource": "connections",
+      "method": "delete",
+      "feature": "youtube"
+    }
+  },
+  "POST /api/v1/destination-callbacks/{id}": {
+    "operationId": "receiveDestinationCallback",
+    "sdk": false
+  },
+  "POST /api/v1/destination-callbacks/{id}/files": {
+    "operationId": "refreshDestinationFiles",
+    "sdk": false
+  },
+  "PUT /api/v1/videos/{id}/versions/{n}/verdict": {
+    "operationId": "setVerdict",
+    "sdk": {
+      "resource": "versions",
+      "method": "setVerdict"
+    }
+  },
+  "POST /api/v1/videos/{id}/versions/{n}/captions": {
+    "operationId": "correctCaptions",
+    "sdk": {
+      "resource": "versions",
+      "method": "captions"
+    }
+  },
+  "PUT /api/v1/videos/{id}/versions/{n}/poster": {
+    "operationId": "setPoster",
+    "sdk": {
+      "resource": "versions",
+      "method": "setPoster"
+    }
+  },
+  "DELETE /api/v1/videos/{id}/versions/{n}/poster": {
+    "operationId": "resetPoster",
+    "sdk": {
+      "resource": "versions",
+      "method": "resetPoster"
+    }
+  },
+  "GET /api/v1/videos/{id}/versions/{n}/preview": {
+    "operationId": "getVersionPreview",
+    "sdk": {
+      "resource": "versions",
+      "method": "preview"
+    }
+  },
+  "GET /api/v1/videos/{id}/versions/{n}/{file}": {
+    "operationId": "getVersionFile",
+    "sdk": false
+  },
+  "PUT /api/v1/videos/{id}/versions/{n}/previews/{name}": {
+    "operationId": "addPreviewVariant",
+    "sdk": false
+  },
+  "GET /api/v1/keys": {
+    "operationId": "listKeys",
+    "sdk": {
+      "resource": "keys",
+      "method": "list"
+    }
+  },
+  "POST /api/v1/keys": {
+    "operationId": "createKey",
+    "sdk": false
+  },
+  "DELETE /api/v1/keys/{id}": {
+    "operationId": "revokeKey",
+    "sdk": {
+      "resource": "keys",
+      "method": "revoke"
+    }
+  },
+  "GET /api/v1/oauth/grants": {
+    "operationId": "listGrants",
+    "sdk": {
+      "resource": "grants",
+      "method": "list"
+    }
+  },
+  "DELETE /api/v1/oauth/grants/{id}": {
+    "operationId": "revokeGrant",
+    "sdk": {
+      "resource": "grants",
+      "method": "revoke"
+    }
+  },
+  "GET /api/v1/me": {
+    "operationId": "getMe",
+    "sdk": {
+      "resource": "me",
+      "method": "get"
+    }
+  },
+  "GET /api/v1/users": {
+    "operationId": "listUsers",
+    "sdk": false
+  },
+  "PATCH /api/v1/users/{id}": {
+    "operationId": "updateUser",
+    "sdk": false
+  },
+  "GET /api/v1/me/webhook": {
+    "operationId": "getWebhook",
+    "sdk": {
+      "resource": "webhooks",
+      "method": "get"
+    }
+  },
+  "PUT /api/v1/me/webhook": {
+    "operationId": "setWebhook",
+    "sdk": {
+      "resource": "webhooks",
+      "method": "set"
+    }
+  },
+  "DELETE /api/v1/me/webhook": {
+    "operationId": "deleteWebhook",
+    "sdk": {
+      "resource": "webhooks",
+      "method": "delete"
+    }
+  },
+  "POST /api/v1/me/webhook/test": {
+    "operationId": "testWebhook",
+    "sdk": {
+      "resource": "webhooks",
+      "method": "test"
+    }
+  },
+  "GET /api/v1/admin/team-webhook": {
+    "operationId": "getTeamWebhook",
+    "sdk": false
+  },
+  "PUT /api/v1/admin/team-webhook": {
+    "operationId": "setTeamWebhook",
+    "sdk": false
+  },
+  "DELETE /api/v1/admin/team-webhook": {
+    "operationId": "deleteTeamWebhook",
+    "sdk": false
+  },
+  "POST /api/v1/admin/team-webhook/test": {
+    "operationId": "testTeamWebhook",
+    "sdk": false
+  },
+  "GET /api/v1/admin/settings": {
+    "operationId": "getSettings",
+    "sdk": false
+  },
+  "PATCH /api/v1/admin/settings": {
+    "operationId": "updateSettings",
+    "sdk": false
+  },
+  "POST /api/v1/plans": {
+    "operationId": "createPlan",
+    "sdk": {
+      "resource": "plans",
+      "method": "create",
+      "feature": "planning"
+    }
+  },
+  "GET /api/v1/plans/{id}": {
+    "operationId": "getPlan",
+    "sdk": {
+      "resource": "plans",
+      "method": "get",
+      "feature": "planning"
+    }
+  },
+  "PATCH /api/v1/plans/{id}": {
+    "operationId": "updatePlan",
+    "sdk": {
+      "resource": "plans",
+      "method": "update",
+      "feature": "planning"
+    }
+  },
+  "POST /api/v1/plans/{id}/questions": {
+    "operationId": "askPlanQuestions",
+    "sdk": {
+      "resource": "plans",
+      "method": "questions",
+      "feature": "planning"
+    }
+  },
+  "POST /api/v1/plans/{id}/brief": {
+    "operationId": "writePlanBrief",
+    "sdk": {
+      "resource": "plans",
+      "method": "brief",
+      "feature": "planning"
+    }
+  },
+  "GET /api/v1/me/usage": {
+    "operationId": "getUsage",
+    "sdk": {
+      "resource": "me",
+      "method": "usage"
+    }
+  },
+  "GET /api/v1/notifications": {
+    "operationId": "listNotifications",
+    "sdk": {
+      "resource": "notifications",
+      "method": "list"
+    }
+  },
+  "POST /api/v1/notifications/read": {
+    "operationId": "markNotificationsRead",
+    "sdk": {
+      "resource": "notifications",
+      "method": "markRead"
+    }
+  },
+  "GET /api/v1/videos/{id}/progress": {
+    "operationId": "getVideoProgress",
+    "sdk": {
+      "resource": "videos",
+      "method": "progress"
+    }
+  },
+  "POST /api/v1/videos/{id}/versions/{n}/edits": {
+    "operationId": "createEdit",
+    "sdk": false
+  },
+  "GET /api/v1/edits/{id}": {
+    "operationId": "getEdit",
+    "sdk": false
+  },
+  "PUT /api/v1/edits/{id}": {
+    "operationId": "saveEdit",
+    "sdk": false
+  },
+  "DELETE /api/v1/edits/{id}": {
+    "operationId": "discardEdit",
+    "sdk": false
+  },
+  "POST /api/v1/edits/{id}/render": {
+    "operationId": "renderEdit",
+    "sdk": false
+  },
+  "POST /api/v1/edits/{id}/rebase-narration": {
+    "operationId": "rebaseEditNarration",
+    "sdk": false
+  },
+  "GET /api/v1/edits/{id}/preview": {
+    "operationId": "getEditPreview",
+    "sdk": false
+  },
+  "GET /api/v1/videos/{id}/narration-lock": {
+    "operationId": "getNarrationLock",
+    "sdk": false
+  },
+  "POST /api/v1/videos/{id}/narration-lock": {
+    "operationId": "takeNarrationLock",
+    "sdk": false
+  },
+  "DELETE /api/v1/videos/{id}/narration-lock": {
+    "operationId": "releaseNarrationLock",
+    "sdk": false
+  },
+  "POST /api/v1/videos/{id}/narration-lock/take-over": {
+    "operationId": "takeOverNarrationLock",
+    "sdk": false
+  },
+  "POST /api/v1/media": {
+    "operationId": "uploadMedia",
+    "sdk": false
+  },
+  "GET /api/v1/media": {
+    "operationId": "listMedia",
+    "sdk": {
+      "resource": "media",
+      "method": "list"
+    }
+  },
+  "POST /api/v1/media/check": {
+    "operationId": "checkMedia",
+    "sdk": {
+      "resource": "media",
+      "method": "check"
+    }
+  },
+  "GET /api/v1/videos/{id}/recordings": {
+    "operationId": "listRecordings",
+    "sdk": {
+      "resource": "media",
+      "method": "recordings"
+    }
+  },
+  "POST /api/v1/media/recordings/delete-unused": {
+    "operationId": "deleteUnusedRecordings",
+    "sdk": {
+      "resource": "media",
+      "method": "deleteUnusedRecordings"
+    }
+  },
+  "POST /api/v1/media/uploads": {
+    "operationId": "createUpload",
+    "sdk": {
+      "resource": "uploads",
+      "method": "create"
+    }
+  },
+  "GET /api/v1/media/uploads/{id}": {
+    "operationId": "getUpload",
+    "sdk": {
+      "resource": "uploads",
+      "method": "get"
+    }
+  },
+  "DELETE /api/v1/media/uploads/{id}": {
+    "operationId": "abortUpload",
+    "sdk": {
+      "resource": "uploads",
+      "method": "abort"
+    }
+  },
+  "PUT /api/v1/media/uploads/{id}/parts/{index}": {
+    "operationId": "uploadPart",
+    "sdk": false
+  },
+  "POST /api/v1/media/uploads/{id}/complete": {
+    "operationId": "completeUpload",
+    "sdk": {
+      "resource": "uploads",
+      "method": "complete"
+    }
+  },
+  "GET /api/v1/media/openverse/search": {
+    "operationId": "searchMusic",
+    "sdk": {
+      "resource": "music",
+      "method": "search"
+    }
+  },
+  "GET /api/v1/media/openverse/library": {
+    "operationId": "searchLibraryMusic",
+    "sdk": {
+      "resource": "music",
+      "method": "library"
+    }
+  },
+  "GET /api/v1/media/openverse/common": {
+    "operationId": "listCommonMusic",
+    "sdk": {
+      "resource": "music",
+      "method": "common"
+    }
+  },
+  "POST /api/v1/media/openverse/import": {
+    "operationId": "importMusic",
+    "sdk": {
+      "resource": "music",
+      "method": "import"
+    }
+  },
+  "GET /api/v1/media/openverse/jobs/{id}": {
+    "operationId": "getMusicJob",
+    "sdk": {
+      "resource": "music",
+      "method": "job"
+    }
+  },
+  "GET /api/v1/media/{id}": {
+    "operationId": "getMedia",
+    "sdk": {
+      "resource": "media",
+      "method": "get"
+    }
+  },
+  "PATCH /api/v1/media/{id}": {
+    "operationId": "updateMedia",
+    "sdk": {
+      "resource": "media",
+      "method": "update"
+    }
+  },
+  "DELETE /api/v1/media/{id}": {
+    "operationId": "deleteMedia",
+    "sdk": {
+      "resource": "media",
+      "method": "delete"
+    }
+  },
+  "PUT /api/v1/media/{id}/peaks": {
+    "operationId": "setMediaPeaks",
+    "sdk": false
+  },
+  "GET /api/v1/media/{id}/peaks": {
+    "operationId": "getMediaPeaks",
+    "sdk": false
+  },
+  "PUT /api/v1/media/{id}/speech": {
+    "operationId": "setMediaSpeech",
+    "sdk": false
+  },
+  "GET /api/v1/media/{id}/speech": {
+    "operationId": "getMediaSpeech",
+    "sdk": false
+  },
+  "GET /api/v1/videos/{id}/comments": {
+    "operationId": "listComments",
+    "sdk": {
+      "resource": "comments",
+      "method": "list"
+    }
+  },
+  "POST /api/v1/videos/{id}/comments": {
+    "operationId": "addComment",
+    "sdk": {
+      "resource": "comments",
+      "method": "add"
+    }
+  },
+  "POST /api/v1/videos/{id}/comments/batch": {
+    "operationId": "addComments",
+    "sdk": {
+      "resource": "comments",
+      "method": "addBatch"
+    }
+  },
+  "POST /api/v1/videos/{id}/comments/read": {
+    "operationId": "markCommentsRead",
+    "sdk": {
+      "resource": "comments",
+      "method": "markRead"
+    }
+  },
+  "PATCH /api/v1/comments/{id}": {
+    "operationId": "updateComment",
+    "sdk": {
+      "resource": "comments",
+      "method": "update"
+    }
+  },
+  "DELETE /api/v1/comments/{id}": {
+    "operationId": "deleteComment",
+    "sdk": {
+      "resource": "comments",
+      "method": "delete"
+    }
+  },
+  "POST /api/v1/transfers": {
+    "operationId": "transferVideos",
+    "sdk": false
+  },
+  "GET /api/v1/stats": {
+    "operationId": "getStats",
+    "sdk": false
+  },
+  "POST /api/v1/admin/attempts/{id}/resolve": {
+    "operationId": "resolveAttempt",
+    "sdk": false
+  },
+  "POST /api/v1/admin/queue/resume": {
+    "operationId": "resumeQueue",
+    "sdk": false
+  }
+}

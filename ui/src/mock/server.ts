@@ -472,6 +472,14 @@ export function installMock() {
     if (p === '/api/v1/notifications') return json({ items: [], unreadCount: 0, nextCursor: null })
     if (p === '/api/v1/config')
       return json({
+        version: { commit: null, promptTemplate: 16, release: null },
+        features: [
+          ...(adminSettings.remixEnabled ? ['remix'] : []),
+          ...(adminSettings.narrationEnabled ? ['narration'] : []),
+          'planning',
+          'destinations',
+          ...(adminSettings.youtubeEnabled ? ['youtube'] : []),
+        ],
         admission: ['acme.com'],
         siteUrl: window.location.origin,
         planningAvailable: true,
