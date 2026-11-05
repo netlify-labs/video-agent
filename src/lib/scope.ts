@@ -4,6 +4,7 @@
 // lengths verbatim), later captions shifted, the music's ducking rewritten. The render uses the splice's bytes, so what
 // people get is what was checked; check-contract --fix, render-job and finalize all call this, in the same style as
 // src/lib/revoice.ts. Pure: the callers log.
+import { createHash } from 'node:crypto'
 import type { DefaultTreeAdapterMap } from 'parse5'
 import {
   attr,
@@ -39,6 +40,7 @@ import {
 } from './voice.js'
 
 type Node = DefaultTreeAdapterMap['node']
+const sha256 = (b: Uint8Array) => createHash('sha256').update(b).digest('hex')
 type Element = DefaultTreeAdapterMap['element']
 
 /** render-job's StepError prefix for a refused scoped render. */
@@ -681,4 +683,75 @@ export function scopedVoiceProblems(
       out.push(`${b.file} isn't the ${b.duration}s ${VOICE_JSON} says; run npx tsx scripts/voice.ts again.`)
   }
   return out
+}
+
+// ───── the HyperFrames scope check (render engines' ScopeCheck) ─────
+
+/**
+ * Redo a scene for HyperFrames, over two sets of files (the parent's, the agent's): the splice and every check.
+ * `problems` is everything that keeps the render from going ahead (what was put back included); `putBack` is the part
+ * the splice fixes by itself; `files` is index.html and summary.json as the splice writes them, whenever it could be
+ * built, so check-contract --fix can write them even while other problems remain. render-job and finalize refuse any
+ * problem. Matches src/domain/engines.ts ScopeCheck (render-engines plan), with putBack and lengthDelta added.
+ */
+export function hyperframesScopeCheck(
+  parent: ReadonlyMap<string, Uint8Array>,
+  agent: ReadonlyMap<string, Uint8Array>,
+  beats: string[],
+): { problems: string[]; putBack: string[]; files: Map<string, Uint8Array> | null; lengthDelta: number } {
+  const dec = (m: ReadonlyMap<string, Uint8Array>, p: string) => {
+    const b = m.get(p)
+    return b ? new TextDecoder().decode(b) : null
+  }
+  const json = (m: ReadonlyMap<string, Uint8Array>, p: string, who: string, out: string[]): unknown => {
+    const s = dec(m, p)
+    if (s === null) return null
+    try {
+      return JSON.parse(s)
+    } catch {
+      out.push(`${who} ${p} isn't valid JSON.`)
+      return null
+    }
+  }
+  const unreadable: string[] = []
+  const parentHtml = dec(parent, 'index.html')
+  const agentHtml = dec(agent, 'index.html')
+  if (parentHtml === null)
+    return { problems: ['internal: the parent has no index.html.'], putBack: [], files: null, lengthDelta: 0 }
+  if (agentHtml === null)
+    return { problems: ['index.html is missing.'], putBack: [], files: null, lengthDelta: 0 }
+  const side = (m: ReadonlyMap<string, Uint8Array>, html: string, who: string): ScopeSide => ({
+    html,
+    summary: (json(m, 'summary.json', who, unreadable) ?? {}) as Summary,
+    voice: json(m, VOICE_JSON, who, unreadable) as VoiceFile | null,
+    script: json(m, VOICE_SCRIPT, who, unreadable) as VoiceScript | null,
+  })
+  const i: ScopeInput = {
+    parent: side(parent, parentHtml, 'The parent’s'),
+    agent: side(agent, agentHtml, 'The composition’s'),
+    beats,
+    lockedLength: isLockedLength(parentHtml),
+  }
+  if (unreadable.length) return { problems: unreadable, putBack: [], files: null, lengthDelta: 0 }
+  const splice = spliceScoped(i)
+  const hashes = (m: ReadonlyMap<string, Uint8Array>) => new Map([...m].map(([p, b]) => [p, sha256(b)]))
+  const comp = ((): Composition | null => {
+    try {
+      return read(load(parentHtml))
+    } catch {
+      return null
+    }
+  })()
+  const problems = [
+    ...splice.problems,
+    ...splice.putBack,
+    ...scopeFileProblems(hashes(parent), hashes(agent), derivedFiles(beats, comp)),
+    ...creditsAppendOnly(dec(parent, CREDITS_FILE), dec(agent, CREDITS_FILE)),
+    ...scopedVoiceProblems(i, (p) => agent.get(p)?.byteLength ?? null),
+  ]
+  const files =
+    splice.html === null
+      ? null
+      : new Map(Object.entries(spliceBytes(splice)).map(([p, s]) => [p, new TextEncoder().encode(s)]))
+  return { problems, putBack: splice.putBack, files, lengthDelta: splice.lengthDelta }
 }

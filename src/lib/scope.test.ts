@@ -21,6 +21,7 @@ import {
   creditsAppendOnly,
   DERIVED_FILES,
   derivedFiles,
+  hyperframesScopeCheck,
   isLockedLength,
   isScopeRefusal,
   registerDerivedFiles,
@@ -656,5 +657,60 @@ describe('scopeFileProblems, credits and the scoped voice', () => {
         () => null,
       ),
     ).toEqual([])
+  })
+})
+
+describe('hyperframesScopeCheck', () => {
+  const enc = (s: string) => new TextEncoder().encode(s)
+  const dec = (b: Uint8Array | undefined) => new TextDecoder().decode(b)
+  const files = (html: string, summary: Summary, extra: Record<string, string> = {}) =>
+    new Map<string, Uint8Array>([
+      ['index.html', enc(html)],
+      ['summary.json', enc(JSON.stringify(summary))],
+      ['assets/logo.svg', enc('<svg/>')],
+      ...Object.entries(extra).map(([p, s]) => [p, enc(s)] as const),
+    ])
+  const parent = files(music, musicSummary)
+
+  it('gives the splice bytes and no problems for an honest redo', () => {
+    const agent = edit(music, (d) => text(d, 'demo-sub', 'Ship on Friday'))
+    const r = hyperframesScopeCheck(
+      parent,
+      files(agent, musicSummary, { 'assets/beats/demo/x.svg': '<svg/>' }),
+      ['demo'],
+    )
+    expect(r.problems).toEqual([])
+    const want = spliceBytes(spliceScoped(input(agent)))
+    expect(dec(r.files?.get('index.html'))).toBe(want['index.html'])
+    expect(dec(r.files?.get('summary.json'))).toBe(want['summary.json'])
+    expect([...(r.files?.keys() ?? [])].sort()).toEqual(['index.html', 'summary.json'])
+  })
+
+  it("still gives the splice while reporting what it put back and what it can't fix", () => {
+    const agent = edit(music, (d) => {
+      text(d, 'demo-sub', 'Ship on Friday')
+      text(d, 'intro-title', 'Org hooks')
+    })
+    const extra = new Map(files(agent, musicSummary))
+    extra.delete('assets/logo.svg')
+    const r = hyperframesScopeCheck(parent, extra, ['demo'])
+    expect(r.putBack).toEqual(['Scene "Opening" changed (its headline text).'])
+    expect(r.problems).toEqual([
+      'Scene "Opening" changed (its headline text).',
+      'assets/logo.svg was deleted; files the other scenes use must stay.',
+    ])
+    expect(dec(r.files?.get('index.html'))).toContain('Org webhooks')
+  })
+
+  it('refuses unreadable JSON and a missing composition without a splice', () => {
+    const bad = new Map(parent)
+    bad.set('summary.json', enc('{nope'))
+    expect(hyperframesScopeCheck(parent, bad, ['demo'])).toMatchObject({
+      problems: ["The composition’s summary.json isn't valid JSON."],
+      files: null,
+    })
+    const none = new Map(parent)
+    none.delete('index.html')
+    expect(hyperframesScopeCheck(parent, none, ['demo']).problems).toEqual(['index.html is missing.'])
   })
 })
