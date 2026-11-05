@@ -10,11 +10,20 @@ import {
   runManifestKey,
   serializeRunManifest,
   type RunManifest,
+  type RunRecording,
 } from '../lib/run-manifest.js'
 import { getSettings } from './settings.js'
 import { contextMeta } from '../generated/context.js'
 import { clip } from '../lib/log.js'
-import { PROMPT_TEMPLATE_VERSION, buildFitPrompt, buildPrompt, buildRenderUnchangedPrompt } from './prompt.js'
+import {
+  MAX_PROMPT_CLICKS,
+  PROMPT_TEMPLATE_VERSION,
+  buildFitPrompt,
+  buildPrompt,
+  buildRenderUnchangedPrompt,
+  type RecordingPrompt,
+} from './prompt.js'
+import { parseTrace } from '../lib/recording-trace.js'
 import { NARRATION_SRC } from '../lib/contract.js'
 import { isScopeRefusal, scopeStills } from '../lib/scope.js'
 import { setStage } from './videos.js'
@@ -358,7 +367,9 @@ async function startRequest(
       ...runLook,
     })
   }
+  const recordingPrompt = recording ? await recordingPromptFor(deps, recording) : null
   const prompt = buildPrompt({
+    ...(recordingPrompt ? { recording: recordingPrompt } : {}),
     jobId: a.jobId,
     attemptId: a.id,
     versionN: a.versionN,
@@ -427,6 +438,36 @@ async function scopeFor(deps: Deps, a: AttemptRow, beats: string[], parentN: num
     stills: video ? scopeStills(all, beats) : [],
     video,
     previousRefusal: earlier.at(-1)?.errorMessage ?? null,
+  }
+}
+
+/**
+ * The prompt's Screen recording facts: its length, and the clicked elements from the frozen trace (scrubbed when it
+ * was stored; a trace that can't be read gives none, and the run's check still has prepare-run's verified copy).
+ */
+async function recordingPromptFor(deps: Deps, r: RunRecording): Promise<RecordingPrompt> {
+  const m = await deps.store.getMedia(r.mediaId)
+  let clicks: RecordingPrompt['clicks'] = []
+  if (r.trace) {
+    try {
+      const bytes = await deps.blobs.get('media', r.trace.key)
+      const trace = bytes ? parseTrace(new TextDecoder().decode(bytes)) : null
+      clicks = (trace?.events ?? [])
+        .flatMap((e) =>
+          e.kind === 'click' && e.target ? [{ t: e.t, role: e.target.role, name: e.target.name }] : [],
+        )
+        .slice(0, MAX_PROMPT_CLICKS)
+    } catch (e) {
+      deps.log.warn('recording.prompt_trace_unreadable', { mediaId: r.mediaId, error: e })
+    }
+  }
+  return {
+    mediaId: r.mediaId,
+    file: `assets/media/${r.filename}`,
+    seconds: m?.durationSec ?? null,
+    trace: Boolean(r.trace),
+    clicks,
+    deadlineMin: deps.config.authoringDeadlineMin,
   }
 }
 

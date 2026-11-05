@@ -265,6 +265,26 @@ describe('reconciler: recording', () => {
       },
     ])
     await h.deps.store.updateVersion(v.id, 1, { recording: rec })
+    // The frozen trace in the media store: its click targets become the prompt's clicked elements.
+    const trace = {
+      v: 1,
+      source: { kind: 'cli', tool: 't', startedAt: '2026-11-05T10:00:00.000Z' },
+      frame: { width: 1280, height: 720, fps: 30, duration: 10 },
+      viewport: { width: 1280, height: 720, dpr: 1 },
+      moves: [],
+      events: [
+        {
+          kind: 'click',
+          t: 4,
+          x: 0.5,
+          y: 0.5,
+          button: 0,
+          target: { role: 'button', name: 'Deploy site', box: [0.4, 0.4, 0.2, 0.1] },
+        },
+      ],
+      redact: [],
+    }
+    await h.deps.blobs.set('media', `${ID}/trace.json`, JSON.stringify(trace))
     const revised = await h.call('POST', `/api/v1/videos/${v.id}/versions`, {
       as: h.member,
       body: { prompt: 'Make it faster' },
@@ -275,6 +295,11 @@ describe('reconciler: recording', () => {
     const m = await manifestOf(h, h.deps.runner.starts.length - 1)
     expect(m.kind).toBe('revision')
     expect(m.recording).toEqual(recording)
+    const prompt = h.deps.runner.starts.at(-1)?.prompt ?? ''
+    expect(prompt).toContain(
+      'Screen recording: this video is a demo made from assets/media/med_rec0000001.mp4',
+    )
+    expect(prompt).toContain('0:04 button "Deploy site"')
   })
 
   it('a revision of a video without a recording has no block (its manifest keeps its bytes)', async () => {
