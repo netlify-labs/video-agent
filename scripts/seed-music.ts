@@ -8,7 +8,8 @@
 // your Netlify CLI login (`npx netlify login`); an https URL is used as is. Never prints the key.
 import { cliToken, getSite } from './lib/netlify-setup.js'
 import { parseArgs } from './lib/run-tools.js'
-import { seedMusic, summary, type Call } from './lib/seed-music.js'
+import { VideoAgent } from '../packages/sdk/src/index.js'
+import { sdkCall, seedMusic, summary } from './lib/seed-music.js'
 
 async function main() {
   const args = parseArgs(process.argv.slice(2))
@@ -27,25 +28,8 @@ async function main() {
     `Seeding ${count} ${licences === 'cc0' ? 'CC0' : 'CC0 and CC BY'} tracks into the library of ${base}…`,
   )
 
-  const call: Call = async (method, path, body) => {
-    const res = await fetch(`${base}${path}`, {
-      method,
-      headers: {
-        authorization: `Bearer ${key}`,
-        accept: 'application/json',
-        ...(body ? { 'content-type': 'application/json' } : {}),
-      },
-      ...(body ? { body: JSON.stringify(body) } : {}),
-    })
-    const text = await res.text()
-    let json: unknown
-    try {
-      json = text ? JSON.parse(text) : {}
-    } catch {
-      json = { error: { message: `not JSON (HTTP ${res.status})` } }
-    }
-    return { status: res.status, json, retryAfterSec: Number(res.headers.get('retry-after')) || null }
-  }
+  // seedMusic waits out 429s and 5xx itself, so the client doesn't retry on top.
+  const call = sdkCall(new VideoAgent({ url: base, apiKey: key, retries: 0, userAgent: 'seed-music' }))
   const who = await call('GET', '/api/v1/me')
   if (who.status === 401) throw new Error('VIDEO_AGENT_KEY was refused by this site.')
 

@@ -5,15 +5,9 @@
 // preview must send microphone=(). With a key, the share page and a preview link come from the newest published
 // video; without one (or with nothing published) those checks are skipped and say why. Logs JSON lines; exits
 // non-zero if any check fails.
-import { api, base, fail, key, log } from './lib.js'
+import { base, fail, key, log, sdk } from './lib.js'
 
 if (!base) throw new Error('Set VIDEO_AGENT_URL (and VIDEO_AGENT_KEY for the share-page and preview checks).')
-
-interface Video {
-  id: string
-  versions: { n: number; status: string }[]
-  publications: { versionN: number; unpublishedAt: string | null; urls: { page: string } }[]
-}
 
 const failures: string[] = []
 const skipped: string[] = []
@@ -46,29 +40,36 @@ await check('app route', `${base}/videos`, 'microphone=(self)')
 await check('public not-found', `${base}/v/zzzzzzzz`, 'microphone=()')
 
 // A published video's share page (also its embed player) and a preview link for one of its versions.
+const va = key ? sdk() : null
+type Video = Awaited<ReturnType<NonNullable<typeof va>['videos']['get']>>
 let video: Video | undefined
-if (key && (!process.env.PUBLIC_URL || !process.env.VIDEO_ID)) {
-  const list = await api<{ items: Video[] }>('GET', '/api/v1/videos?published=true&owner=all&limit=1')
-  if (list.status !== 200) fail('list published videos', { status: list.status, body: list.json })
-  video = list.json.items[0]
+if (va && (!process.env.PUBLIC_URL || !process.env.VIDEO_ID)) {
+  const list = await va.videos
+    .list({ published: 'true', owner: 'all', limit: 1 })
+    .catch((e: unknown) => fail('list published videos', { error: String(e) }))
+  video = list.items[0]
   log('published video', { id: video?.id ?? null })
 }
 
-const page = process.env.PUBLIC_URL ?? video?.publications.find((p) => p.unpublishedAt === null)?.urls.page
+// Publications are per version (the hand-typed Video here before the SDK had them on the video, so this never found one).
+const page =
+  process.env.PUBLIC_URL ??
+  video?.versions.flatMap((v) => v.publications).find((p) => p.unpublishedAt === null)?.urls?.page
 if (page) await check('public page', page, 'microphone=()')
 else skip('public page', key ? 'no published video; set PUBLIC_URL' : 'set VIDEO_AGENT_KEY or PUBLIC_URL')
 
 const id = process.env.VIDEO_ID ?? video?.id
-if (!key) skip('preview', 'set VIDEO_AGENT_KEY (and VIDEO_ID) to mint a preview link')
+if (!va) skip('preview', 'set VIDEO_AGENT_KEY (and VIDEO_ID) to mint a preview link')
 else if (!id) skip('preview', 'no published video; set VIDEO_ID')
 else {
-  const v = video?.id === id ? video : (await api<Video>('GET', `/api/v1/videos/${id}`)).json
+  const v = video?.id === id ? video : await va.videos.get(id)
   const n = v.versions.find((x) => x.status === 'ready')?.n
   if (!n) skip('preview', `no ready version on ${id}`)
   else {
-    const link = await api<{ url: string }>('GET', `/api/v1/videos/${id}/versions/${n}/preview`)
-    if (link.status !== 200) fail('preview link', { id, n, status: link.status, body: link.json })
-    await check('preview', link.json.url, 'microphone=()')
+    const link = await va.versions
+      .preview(id, n)
+      .catch((e: unknown) => fail('preview link', { id, n, error: String(e) }))
+    await check('preview', link.url, 'microphone=()')
   }
 }
 

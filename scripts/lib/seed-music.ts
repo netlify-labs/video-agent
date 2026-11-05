@@ -1,5 +1,6 @@
 // The logic of npm run seed:music (scripts/seed-music.ts): which tracks to import and how to wait for a slow Openverse,
-// with the API calls and the clock passed in so tests can fake both.
+// with the API calls and the clock passed in so tests can fake both. The real calls go through the SDK (sdkCall).
+import { isVideoAgentError, type VideoAgent } from '../../packages/sdk/src/index.js'
 
 /** A track from the site's Openverse search (the fields the seed uses). */
 export interface SeedTrack {
@@ -107,6 +108,39 @@ export type Call = (
   path: string,
   body?: unknown,
 ) => Promise<{ status: number; json: unknown; retryAfterSec?: number | null }>
+
+/**
+ * A Call through the SDK: its auth, User-Agent and error mapping, answering errors as statuses the way seedMusic
+ * expects. seedMusic waits out 429s and 5xx itself, so give the client retries: 0.
+ */
+export function sdkCall(va: Pick<VideoAgent, 'send'>): Call {
+  return async (method, path, body) => {
+    try {
+      const res = await va.send({
+        method,
+        url: path,
+        ...(body !== undefined
+          ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }
+          : {}),
+      })
+      const text = await res.text()
+      let json: unknown
+      try {
+        json = text ? JSON.parse(text) : {}
+      } catch {
+        json = { error: { message: `not JSON (HTTP ${res.status})` } }
+      }
+      return { status: res.status, json, retryAfterSec: Number(res.headers.get('retry-after')) || null }
+    } catch (e) {
+      if (!isVideoAgentError(e) || e.status === 0) throw e
+      return {
+        status: e.status,
+        json: { error: { code: e.code, message: e.message } },
+        retryAfterSec: e.retryAfterSec ?? null,
+      }
+    }
+  }
+}
 
 export interface Patience {
   sleep: (ms: number) => Promise<void>

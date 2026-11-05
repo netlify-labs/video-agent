@@ -1,11 +1,13 @@
 // npm run seed:music: which tracks it imports (CC0, 30 s to 4 min, importable, no vocals, nothing twice or already in
 // the library) and how it waits for a slow Openverse. The site's API is a fake.
 import { describe, expect, it } from 'vitest'
+import { VideoAgent } from '../../packages/sdk/src/index.js'
 import {
   chooseSeedTracks,
   patient,
   quotas,
   seedCaption,
+  sdkCall,
   seedMusic,
   summary,
   type Call,
@@ -158,7 +160,8 @@ describe('waiting for Openverse', () => {
 })
 
 describe('seeding', () => {
-  it('with --cc0-only: searches each mood, imports new CC0 tracks with mood captions, reports duplicates and failures', async () => {
+  /** The site's API, faked: two moods' searches (one slow, as a job), the library, imports (one refused). */
+  const fakeSite = () => {
     const imports: { id: string; caption: string }[] = []
     const byQuery: Record<string, SeedTrack[]> = {
       'upbeat electronic': [track(1), track(2, { license: 'by' }), track(3)],
@@ -190,7 +193,12 @@ describe('seeding', () => {
       }
       return { status: 404, json: {} }
     }
-    const rows = await seedMusic(call, 4, quiet(), 'cc0')
+    return { imports, call }
+  }
+  const expectSeeded = (
+    rows: Awaited<ReturnType<typeof seedMusic>>,
+    imports: { id: string; caption: string }[],
+  ) => {
     expect(imports).toEqual([{ id: 'ov-3', caption: 'Track 3 by Artist 3 (upbeat, electronic)' }])
     expect(rows.map((r) => [r.mood, r.title, r.outcome])).toEqual([
       ['upbeat', 'Track 1', 'in_library'],
@@ -202,5 +210,57 @@ describe('seeding', () => {
     expect(text).toContain('Imported 1, already in the library 2, failed 1.')
     expect(text).toContain('"Track 3" by Artist 3, CC0, 1:30')
     expect(text).toContain('No usable file.')
+  }
+
+  it('with --cc0-only: searches each mood, imports new CC0 tracks with mood captions, reports duplicates and failures', async () => {
+    const { imports, call } = fakeSite()
+    expectSeeded(await seedMusic(call, 4, quiet(), 'cc0'), imports)
+  })
+
+  it('the same run through the SDK (sdkCall) gives the same result, with the key and errors as statuses', async () => {
+    const { imports, call } = fakeSite()
+    const auth: (string | null)[] = []
+    const va = new VideoAgent({
+      url: 'https://site.example',
+      apiKey: 'nva_seed',
+      retries: 0,
+      fetch: async (input: string | URL | Request, init?: RequestInit) => {
+        const req = new Request(input, init)
+        auth.push(req.headers.get('authorization'))
+        const u = new URL(req.url)
+        const text = req.method === 'POST' ? await req.text() : ''
+        const r = await call(req.method, `${u.pathname}${u.search}`, text ? JSON.parse(text) : undefined)
+        return Response.json(r.json, { status: r.status })
+      },
+    })
+    expectSeeded(await seedMusic(sdkCall(va), 4, quiet(), 'cc0'), imports)
+    expect(new Set(auth)).toEqual(new Set(['Bearer nva_seed']))
+  })
+
+  it('sdkCall answers a 429 with its Retry-After, and rethrows network failures', async () => {
+    const va = new VideoAgent({
+      url: 'https://site.example',
+      apiKey: 'nva_seed',
+      retries: 0,
+      fetch: async () =>
+        Response.json(
+          { error: { code: 'rate_limited', message: 'Slow down' } },
+          { status: 429, headers: { 'retry-after': '30' } },
+        ),
+    })
+    expect(await sdkCall(va)('GET', '/api/v1/media')).toEqual({
+      status: 429,
+      json: { error: { code: 'rate_limited', message: 'Slow down' } },
+      retryAfterSec: 30,
+    })
+    const down = new VideoAgent({
+      url: 'https://site.example',
+      apiKey: 'nva_seed',
+      retries: 0,
+      fetch: async () => {
+        throw new TypeError('fetch failed')
+      },
+    })
+    await expect(sdkCall(down)('GET', '/api/v1/media')).rejects.toMatchObject({ code: 'network' })
   })
 })

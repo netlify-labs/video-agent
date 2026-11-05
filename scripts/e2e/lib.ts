@@ -1,4 +1,6 @@
-// Shared by the live checks in this folder: the site and key from the environment, JSON-line logging and a JSON call.
+// Shared by the live checks in this folder: the site and key from the environment, JSON-line logging, a JSON call and
+// the SDK (cli-and-sdk plan §9: our own scripts are its first users; move a script to sdk() when you touch it).
+import { VideoAgent } from '../../packages/sdk/src/index.js'
 export const base = (process.env.VIDEO_AGENT_URL ?? '').replace(/\/$/, '')
 export const key = process.env.VIDEO_AGENT_KEY ?? ''
 export const started = Date.now()
@@ -36,3 +38,7 @@ export async function api<T = unknown>(
   const text = await res.text()
   return { status: res.status, json: (text ? JSON.parse(text) : {}) as T }
 }
+
+/** A client for VIDEO_AGENT_URL / VIDEO_AGENT_KEY whose request events print as the scripts' JSON lines. */
+export const sdk = () =>
+  new VideoAgent({ url: base, apiKey: key, userAgent: 'video-agent-e2e', logger: (_e, f) => log('api', f) })
