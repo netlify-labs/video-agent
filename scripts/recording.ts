@@ -11,11 +11,30 @@
 // analysis.json for the same bytes and analyzer version is reused. Contact sheets per scene and, when the recording
 // has speech, an on-device transcript go to context/recording/<id>/ (or --context): for the agent to read, never
 // archived (scripts/lib/recording-extras.ts).
+//
+//   npx tsx scripts/recording.ts plan --media <id> [--target <s>] [--aspect 16:9|9:16|1:1|4:5]
+//
+// plan: the steps, trims, speeds, camera, hidden areas (scripts/lib/recording-plan.ts) from analysis.json, the trace
+// and input.json in .va-run/recording/<id>/, and context/look/look.json's recording block. Writes the full plan to
+// .va-run/recording/<id>/plan.json and the kept plan (no names from the recorded app) to
+// video/assets/recording/plan.json, which the agent edits. Prints the clicked elements per step, fenced, then the JSON
+// summary with checkpointMessage. --analysis, --trace, --input, --look, --out and --full override the paths.
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { basename, dirname, extname, join } from 'node:path'
 import { parseTrace } from '../src/lib/recording-trace.js'
 import { analyzeRecording } from './lib/recording-analyze.js'
+import { ASPECTS, keptPlan, type Aspect } from '../src/lib/recording.js'
+import type { Analysis } from './lib/recording-analyze.js'
 import { cachedAnalysis, makeSheets, transcribeRecording } from './lib/recording-extras.js'
+import {
+  checkpointMessage,
+  clickedElements,
+  planRecording,
+  planSummary,
+  stableJson,
+  type LookRecording,
+  type PlanInput,
+} from './lib/recording-plan.js'
 import { log, parseArgs, repoRoot, sha256File, StepError } from './lib/run-tools.js'
 import { parakeet } from './lib/stt/parakeet.js'
 
@@ -70,7 +89,62 @@ async function analyze() {
   }
 }
 
-const commands: Record<string, () => Promise<unknown>> = { analyze }
+const readJson = (path: string): unknown => JSON.parse(readFileSync(path, 'utf8'))
+const readIf = (path: string): unknown => (existsSync(path) ? readJson(path) : null)
+
+function plan() {
+  const id = args.media
+  if (!id) throw new StepError('plan needs --media <id>.')
+  const aspect = (args.aspect ?? '16:9') as Aspect
+  if (!ASPECTS.includes(aspect)) throw new StepError(`--aspect must be one of ${ASPECTS.join(', ')}.`)
+  const target = args.target ? Number(args.target) : undefined
+  if (target !== undefined && !(target > 0)) throw new StepError('--target must be a number of seconds.')
+  const run = join(repoRoot, '.va-run', 'recording', id)
+  const analysisPath = args.analysis ?? join(repoRoot, 'video', 'assets', 'recording', 'analysis.json')
+  if (!existsSync(analysisPath))
+    throw new StepError(`No analysis at ${analysisPath}: run recording.ts analyze first.`)
+  const tracePath = args.trace ?? join(run, 'trace.json')
+  const look = readIf(args.look ?? join(repoRoot, 'context', 'look', 'look.json')) as {
+    recording?: LookRecording
+  } | null
+  const analysis = readJson(analysisPath) as Analysis
+  const started = Date.now()
+  const { plan: full, decisions } = planRecording({
+    mediaId: id,
+    analysis,
+    trace: existsSync(tracePath) ? parseTrace(readFileSync(tracePath, 'utf8')) : null,
+    input: readIf(args.input ?? join(run, 'input.json')) as PlanInput | null,
+    look: look?.recording,
+    target,
+    aspect,
+  })
+  // `step` is the log line's own key: the plan's step goes in `planStep`.
+  for (const { step, ...d } of decisions) log('recording.plan_rule', { ...d, planStep: step })
+  const fullPath = args.full ?? join(run, 'plan.json')
+  const out = args.out ?? join(repoRoot, 'video', 'assets', 'recording', 'plan.json')
+  for (const [path, value] of [
+    [fullPath, full],
+    [out, keptPlan(full)],
+  ] as const) {
+    mkdirSync(dirname(path), { recursive: true })
+    writeFileSync(path, stableJson(value))
+  }
+  log('recording.plan', {
+    steps: full.steps.length,
+    estimate: full.estimate.seconds,
+    ms: Date.now() - started,
+  })
+  console.log(clickedElements(full))
+  return {
+    ok: true,
+    out,
+    full: fullPath,
+    ...planSummary(full),
+    checkpointMessage: checkpointMessage(full, analysis),
+  }
+}
+
+const commands: Record<string, () => unknown> = { analyze, plan }
 
 try {
   const run = command ? commands[command] : undefined

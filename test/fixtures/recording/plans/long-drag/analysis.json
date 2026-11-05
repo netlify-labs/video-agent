@@ -1,0 +1,24 @@
+{
+ "v": 1,
+ "sha256": "golden-long-drag",
+ "analyzer": "analyze-1",
+ "source": {
+  "width": 1280,
+  "height": 720,
+  "fps": 30,
+  "duration": 14
+ },
+ "cursorSource": "trace",
+ "idle": [],
+ "scenes": [],
+ "activity": [],
+ "cursor": [],
+ "clicks": [
+  {
+   "t": 4.9,
+   "x": 256,
+   "y": 216,
+   "source": "trace"
+  }
+ ]
+}
