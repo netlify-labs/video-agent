@@ -1125,3 +1125,44 @@ unchanged (listing and mtimes before/after).
 
 **Not covered: Linux (Ubuntu).** The Docker daemon wasn't running on the test machine, and starting Docker Desktop
 was out of scope for an agent session. Run `spikes/c1/c1.ts` in an Ubuntu container (or a Linux CI job) before 4.2.
+
+### C3: Kokoro voice-over from a private venv (2026-11-05, `spikes/c3`, `npx tsx spikes/c3/c3.ts [--cache <dir>] [--python <python3.x>]`, no credits)
+
+**Question.** Can local mode speak a line with Kokoro from its own venv, without `pip install --user` or
+`--break-system-packages`? Which hosts does a first run contact (C2's network allowlist)?
+
+**Setup.** `python3.x -m venv <cache>/kokoro-venv`, then `pip install kokoro-onnx soundfile` into it, with
+`PIP_CONFIG_FILE` set to the null device, so the person's pip config (indexes, credentials) never applies. Then
+`hyperframes tts` with `HYPERFRAMES_PYTHON=<venv python>` (hyperframes reads it; it's the `VA_PYTHON` the plan
+prototyped) and `HOME` redirected, so the model goes into our cache.
+
+**Results** (macOS, Apple silicon, Homebrew Python):
+
+| | Python 3.13.12 | Python 3.14.2 |
+| --- | --- | --- |
+| venv | 3.1 s | 1.4 s |
+| install | 8.7 s, 16 packages, `kokoro-onnx` 0.6.1 | 6.5 s, 34 packages, **`kokoro-onnx` 0.4.7** |
+| first line (with model download, ~330 MB into `<home>/.cache/hyperframes/tts/`) | 7.9 s, 3.9 s of speech | **fails** |
+| second line (cached) | 1.5 s, 2.3 s of speech | — |
+| the user's site-packages and `pip list --user` | unchanged | unchanged |
+
+**Python 3.14 fails.** `kokoro-onnx` 0.6.x doesn't support 3.14 yet, so pip quietly resolves 0.4.7. That version's
+`espeakng-loader` (0.2.4) wheel on macOS looks for `espeak-ng-data/phontab` under the build machine's path
+(`/Users/runner/work/espeakng-loader/…`), even with `ESPEAK_DATA_PATH` set. The failure is inside `kokoro_onnx`
+itself, not in hyperframes.
+
+**Hosts a first run contacts:**
+- `pypi.org` (index) and `files.pythonhosted.org` (wheels);
+- `github.com` and `release-assets.githubusercontent.com` (the two model files, through a redirect).
+
+**What changes for the plan:**
+1. Local mode creates the venv from the newest of `python3.13` … `python3.10` it finds, not plain `python3`. It
+   installs `kokoro-onnx>=0.6` so an unsupported Python fails at install with a clear message, not at the first line.
+   `doctor` reports the interpreter. On a machine with only 3.14, local voice-over is unsupported until upstream
+   catches up (ElevenLabs still works).
+2. `HYPERFRAMES_PYTHON` is the hook. No change is needed in hyperframes, and `voice-providers.ts`' `ensureKokoro`
+   gets a venv mode (4.1) instead of `--user`.
+3. C2's allowlist adds the four hosts above for narrated runs.
+
+**Not covered: Ubuntu.** No Docker daemon on the test machine. Run `spikes/c3/c3.ts` in an Ubuntu container before
+4.3, especially with Ubuntu 24.04's Python 3.12 and its externally managed system Python, which this venv sidesteps.
