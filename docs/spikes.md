@@ -700,6 +700,25 @@ the gate logs every value and the thresholds get revisited after live gate part 
 
 ## Looks spikes (docs/plans/2026-11-04-looks.md §10)
 
+### K3: the API function reads the build's look archives (2026-11-05, a draft deploy and `netlify functions:serve`, no credits)
+
+A worktree with the `clean` look, `[functions."api"]` and `[functions."k3-debug"]` `included_files =
+["looks-build/*.tar.gz"]`, and a debug function (never merged) that reads `looks-build/clean.tar.gz` from a few
+candidate paths.
+
+- **Deterministic:** two `npm run build`s of the same commit wrote byte-identical `looks-build/clean.tar.gz`
+  (sha256 `23ab4395…7d82`, 4,275 bytes), the sha256 `src/generated/looks.ts` records.
+- **Draft deploy** (`netlify deploy --build`, alias `k3-looks-spike`, deploy `6aec39f8e7372cfb360f3cf6`; branch
+  deploys are limited to `main` on this site): `process.cwd()` is `/var/task`, and
+  `join(process.cwd(), 'looks-build', 'clean.tar.gz')` exists with the catalog's sha256. Paths relative to the
+  module (`/var/task/netlify/functions/…`) don't.
+- **`netlify functions:serve`** (local): `process.cwd()` is the project root; the same path resolves, same sha256.
+- **Bundle size:** `api` 2,723,960 bytes without the archive (the agent-run preview of the same base) and 2,728,365
+  with it: +4.4 KB for one look, about the archive's size.
+
+So phase 2.2 reads `join(process.cwd(), 'looks-build', '<id>.tar.gz')`, and `included_files` goes on
+`[functions."api"]` only (not `[functions]`, which would add the archives to every function). No Blobs fallback needed.
+
 ### K2: does a LOOK.md change the output, and what does it cost? (2026-11-05, `spikes/k2`, five Agent Runner runs, 1,083 credits)
 
 Draft looks `clean` and `kinetic` (`spikes/k2/looks/`) were committed at `context/look/` on spike branches
