@@ -7,6 +7,7 @@ import type { MediaKind } from '../lib/media/classify.js'
 import type { NarrationCleanup } from '../lib/timeline.js'
 import type { PreviewFile, Previews } from '../lib/media/previews.js'
 import type { RunCredit } from '../lib/openverse-rules.js'
+import type { RedactEntry } from '../lib/recording-trace.js'
 
 export type Role = 'admin' | 'creator' | 'reviewer' | 'viewer'
 export const ASPECT_RATIOS = ['16:9', '9:16', '1:1', '4:5'] as const
@@ -120,6 +121,8 @@ export interface SettingsRow {
   transcriptionProvider?: TranscriptionProvider
   /** Stored bytes each person's narration takes may use. Missing: the default. */
   takeQuotaBytes?: number
+  /** Stored bytes each person's screen recordings may use. Missing: the default (2 GiB). */
+  recordingQuotaBytes?: number
   /** Remixing on (the default) or off, without a redeploy (remix spec §4). Missing: the default. */
   remixEnabled?: boolean
   /** YouTube offered as a publish destination (needs the Google OAuth env too). Missing: off. */
@@ -300,6 +303,8 @@ export interface VersionRow {
   poster?: VersionPoster | null
   /** A remix's v1: everything its runs need, snapshotted at creation so nothing is re-read from the source. */
   remix?: VersionRemix | null
+  /** A demo made from a screen recording: its inputs (frozen trace, trim, boxes) and results (summary, hidden areas). */
+  recording?: VersionRecording | null
 }
 
 /**
@@ -661,6 +666,43 @@ export interface MediaRow extends MediaProvenance {
   retainUntil: string | null
   /** Set by GC's first phase (no references left): the bytes are being deleted and nothing may reference it. */
   deletingAt: string | null
+  /** A screen recording's pointer trace in the media store (`<id>/trace.json`) and its sha256; null without one. */
+  traceKey?: string | null
+  traceSha256?: string | null
+  /** When this hour's trace writes happened (the rate limit), newest last, at most 10. */
+  traceWrites?: string[] | null
+}
+
+/** Something hidden in a demo, and who checked it (screen-recording plan §5.3, §9). */
+export interface HiddenArea {
+  id: string
+  source: 'trace' | 'setup' | 'agent' | 'editor'
+  beat: string
+  start: number
+  end: number
+  reason: string
+  checkedBy: string | null
+  checkedAt: string | null
+}
+
+/** versions.recording: a demo's inputs and what the run made of them (screen-recording plan §5.1). */
+export interface VersionRecording {
+  mediaId: string
+  /** The trace, frozen when the version was created; null when the recording has none. */
+  trace: { key: string; sha256: string } | null
+  trim: [number, number] | null
+  /** The person's setup boxes, one key each. */
+  boxes: RedactEntry[]
+  /** Made by recording.ts compose, with no agent. */
+  compose: boolean
+  summary: {
+    sourceSec: number
+    steps: number
+    cutSec: number
+    spedUpSec: number
+    redactionsAdded: number
+  } | null
+  hidden: HiddenArea[]
 }
 
 /** Where an imported item came from, with its licence and credit; all null for uploads. */

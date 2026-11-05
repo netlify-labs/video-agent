@@ -1,6 +1,6 @@
 // The Hono app behind /api/*. createApp(deps) is used by the Netlify Function, tests and spec generation.
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
-import type { Context, MiddlewareHandler } from 'hono'
+import type { Context, MiddlewareHandler, Next } from 'hono'
 import type { Deps } from './deps.js'
 import { assertSameOrigin, principalFromRequest } from './domain/auth.js'
 import { receiveCallback } from './domain/callback.js'
@@ -63,6 +63,8 @@ import { listNotifications, markNotificationsRead } from './domain/notifications
 import { getProgress } from './domain/progress.js'
 import { previewLink } from './domain/preview.js'
 import { cancelUpload, completeUpload, createUpload, getUpload, putPart } from './domain/media-uploads.js'
+import { getMediaTrace, setMediaTrace } from './domain/media-trace.js'
+import { TRACE_MAX_BYTES } from './lib/recording-trace.js'
 import {
   getTakePeaks,
   getTakeSpeech,
@@ -2430,6 +2432,56 @@ export function createApp(deps: Deps, opts: AppOptions) {
       await deleteMedia(deps, c.get('principal'), c.req.valid('param').id)
       return c.body(null, 204)
     },
+  )
+  // A screen recording's pointer trace (screen-recording plan §4.7): set or replaced by its uploader until a version
+  // uses the recording, then frozen; read back (normalized) by its uploader and admins only.
+  app.openapi(
+    createRoute({
+      method: 'put',
+      path: '/api/v1/media/{id}/trace',
+      operationId: 'setMediaTrace',
+      'x-sdk': { resource: 'media', method: 'setTrace', feature: 'screen_recording' },
+      summary: "Set a screen recording's pointer trace",
+      description: `Stores the pointer trace (the cursor and click log, schema v1, at most ${TRACE_MAX_BYTES / 1024 / 1024} MB) for a ready screen recording: its uploader or an admin. Text from the recorded page is scrubbed. Sending again replaces it until a video uses the recording, then 409 trace_frozen. Shares the 10-an-hour budget with recording uploads.`,
+      tags: ['media'],
+      security,
+      // Before the body is read: a trace over the cap is refused on its declared length.
+      middleware: [
+        async (c: Context<Env>, next: Next) => {
+          if (Number(c.req.header('content-length') ?? 0) > TRACE_MAX_BYTES)
+            throw new ApiError(
+              'quota_exceeded',
+              `A pointer trace must be ${TRACE_MAX_BYTES / 1024 / 1024} MB or smaller.`,
+            )
+          await next()
+        },
+      ] as const,
+      request: {
+        params: MediaParam,
+        body: { content: { 'application/json': { schema: s.TraceBodySchema } }, required: true },
+      },
+      responses: { 200: json(s.MediaSchema, 'The recording, with its trace'), ...errors },
+    }),
+    async (c) =>
+      c.json(
+        await setMediaTrace(deps, c.get('principal'), c.req.valid('param').id, c.req.valid('json')),
+        200,
+      ),
+  )
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/v1/media/{id}/trace',
+      operationId: 'getMediaTrace',
+      'x-sdk': { resource: 'media', method: 'getTrace', feature: 'screen_recording' },
+      summary: "Get a screen recording's pointer trace",
+      description: "The stored (normalized) pointer trace, for the recording's uploader and admins only.",
+      tags: ['media'],
+      security,
+      request: { params: MediaParam },
+      responses: { 200: json(s.TraceBodySchema, 'The trace'), ...errors },
+    }),
+    async (c) => c.json(await getMediaTrace(deps, c.get('principal'), c.req.valid('param').id), 200),
   )
   // A recording's waveform peaks and speech spans (voice-over plan §5.1, §6.1): the uploader sends them; readers of
   // the take get them.

@@ -30,6 +30,8 @@ export const settings = pgTable('settings', {
   narrationEnabled: boolean('narration_enabled').notNull().default(true),
   transcriptionProvider: text('transcription_provider').notNull().default('local'),
   takeQuotaBytes: bigint('take_quota_bytes', { mode: 'number' }).notNull().default(2147483648),
+  // Stored bytes each person's screen recordings may use (screen-recording plan §4.2).
+  recordingQuotaBytes: bigint('recording_quota_bytes', { mode: 'number' }).notNull().default(2147483648),
   // Remixing (docs/plans/2026-11-03-remix.md §4): admins can turn it off without a redeploy.
   remixEnabled: boolean('remix_enabled').notNull().default(true),
   // Publish destinations (docs/plans/2026-11-04-publish-destinations.md §4): YouTube is offered only when the Google
@@ -128,6 +130,8 @@ export const versions = pgTable(
     poster: jsonb('poster'),
     // A remix's v1: its copied source and the snapshot its runs use (src/domain/types.ts VersionRemix).
     remix: jsonb('remix'),
+    // A demo made from a screen recording: its inputs and results (src/domain/types.ts VersionRecording).
+    recording: jsonb('recording'),
   },
   (t) => [primaryKey({ columns: [t.jobId, t.n] })],
 )
@@ -371,6 +375,11 @@ export const media = pgTable(
     scopeJobId: text('scope_job_id'),
     retainUntil: ts('retain_until'),
     deletingAt: ts('deleting_at'),
+    // A screen recording's pointer trace (screen-recording plan §4.7): the normalized JSON at `<id>/trace.json` in the
+    // media store and its sha256, frozen once a version uses the recording; and this hour's trace writes (rate limit).
+    traceKey: text('trace_key'),
+    traceSha256: text('trace_sha256'),
+    traceWrites: jsonb('trace_writes'),
   },
   (t) => [
     index('media_created_idx').on(t.createdAt),

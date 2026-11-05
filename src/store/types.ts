@@ -274,6 +274,8 @@ export interface Repo {
   deleteStaleNarrationLocks(before: string): Promise<number>
   /** Per media id, the distinct videos (job ids) whose versions use it. */
   mediaUsage(mediaIds: string[]): Promise<Record<string, string[]>>
+  /** Trace writes (media.trace_writes) at or after `since` over the person's own items (the trace rate limit). */
+  recentTraceWrites(uploaderId: string, since: string): Promise<string[]>
   /** The versions of undeleted videos whose version_media lists this item (who may see a screen recording). */
   jobsUsingMedia(mediaId: string): Promise<{ jobId: string; versionN: number }[]>
   /** Undeleted items imported from `source` with one of these ids there, newest first. */

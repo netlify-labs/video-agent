@@ -6,6 +6,7 @@ export type ErrorCode =
   | 'not_ready'
   | 'conflict'
   | 'take_deleted'
+  | 'trace_frozen'
   | 'narration_disabled'
   | 'remix_disabled'
   | 'engine_mismatch'
@@ -26,6 +27,7 @@ const STATUS: Record<ErrorCode, number> = {
   not_ready: 409,
   conflict: 409,
   take_deleted: 409,
+  trace_frozen: 409,
   narration_disabled: 409,
   remix_disabled: 409,
   engine_mismatch: 409,

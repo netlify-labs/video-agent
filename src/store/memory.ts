@@ -680,6 +680,12 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
           out[r.mediaId]?.push(r.jobId)
       return out
     },
+    recentTraceWrites: async (uploaderId, since) =>
+      [...state.media.values()]
+        .filter((m) => m.uploaderId === uploaderId)
+        .flatMap((m) => m.traceWrites ?? [])
+        .filter((t) => t >= since)
+        .sort(),
     jobsUsingMedia: async (mediaId) =>
       state.versionMedia
         .filter((r) => r.mediaId === mediaId && state.jobs.get(r.jobId)?.deletedAt === null)

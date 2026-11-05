@@ -926,6 +926,16 @@ function repoFor(db: Db): Repo {
       for (const r of rows) (out[r.mediaId] ??= []).push(r.jobId)
       return out
     },
+    recentTraceWrites: async (uploaderId, since) => {
+      const rows = await db
+        .select({ writes: t.media.traceWrites })
+        .from(t.media)
+        .where(and(eq(t.media.uploaderId, uploaderId), isNotNull(t.media.traceWrites)))
+      return rows
+        .flatMap((r) => (r.writes as string[] | null) ?? [])
+        .filter((w) => w >= since)
+        .sort()
+    },
     jobsUsingMedia: async (mediaId) => {
       const vm = t.versionMedia
       return db

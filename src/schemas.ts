@@ -1667,3 +1667,12 @@ export const PublicConfigSchema = z
       ),
   })
   .openapi('PublicConfig')
+
+/**
+ * A pointer trace as sent and stored (schema v1, src/lib/recording-trace.ts): checked and scrubbed by the domain, so
+ * the request schema only says it's an object.
+ */
+export const TraceBodySchema = z.record(z.string(), z.unknown()).openapi('PointerTrace', {
+  description:
+    'Pointer trace v1: { v: 1, source, frame, viewport, moves: [t, x, y][], events, redact }. Positions are 0-1 fractions of the frame, times seconds into the recording. See /docs/cli#record.',
+})

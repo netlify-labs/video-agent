@@ -592,6 +592,22 @@
       "method": "delete"
     }
   },
+  "PUT /api/v1/media/{id}/trace": {
+    "operationId": "setMediaTrace",
+    "sdk": {
+      "resource": "media",
+      "method": "setTrace",
+      "feature": "screen_recording"
+    }
+  },
+  "GET /api/v1/media/{id}/trace": {
+    "operationId": "getMediaTrace",
+    "sdk": {
+      "resource": "media",
+      "method": "getTrace",
+      "feature": "screen_recording"
+    }
+  },
   "PUT /api/v1/media/{id}/peaks": {
     "operationId": "setMediaPeaks",
     "sdk": false
