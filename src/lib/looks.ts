@@ -189,3 +189,58 @@ export function buildLookArchive(files: Map<string, Uint8Array>): LookArchive {
   const bytes = writeTarGz(files, { prefix: `${LOOK_ARCHIVE_ROOT}/` })
   return { bytes, sha256: sha256(bytes), hash: lookHash(files), bytesLength: bytes.byteLength }
 }
+
+const sha256Hex = z.string().regex(/^[0-9a-f]{64}$/)
+const relPath = z
+  .string()
+  .min(1)
+  .max(200)
+  .refine(
+    (p) => !p.startsWith('/') && !p.includes('\\') && p.split('/').every((s) => s && s !== '.' && s !== '..'),
+    {
+      message: 'a relative path inside the folder',
+    },
+  )
+
+/** registry/registry.lock.json, written by look:vendor: what each vendored HyperFrames item is and where it came from.
+ * File paths are relative to registry/<name>/. */
+export const RegistryLockSchema = z.strictObject({
+  tag: z.string().regex(/^v\d+\.\d+\.\d+$/),
+  items: z.array(
+    z.strictObject({
+      name: slug,
+      type: z.enum(['component', 'block']),
+      upstream: z.string().min(1).max(300),
+      license: z.string().min(1).max(60),
+      files: z.array(z.strictObject({ path: relPath, sha256: sha256Hex })).min(1),
+    }),
+  ),
+})
+export type RegistryLock = z.infer<typeof RegistryLockSchema>
+
+/** Licences a look's assets may carry (CC BY needs a credit line). */
+export const ASSET_LICENSES = [
+  'CC0-1.0',
+  'CC-BY-3.0',
+  'CC-BY-4.0',
+  'OFL-1.1',
+  'Apache-2.0',
+  'MIT',
+  'own-work',
+] as const
+
+/** assets/credits.json: one entry per file in assets/ (paths relative to assets/). */
+export const CreditsSchema = z.array(
+  z
+    .strictObject({
+      file: relPath,
+      license: z.enum(ASSET_LICENSES),
+      credit: z.string().trim().min(1).max(200).optional(),
+      source: z.string().trim().min(1).max(300).optional(),
+    })
+    .refine((c) => !c.license.startsWith('CC-BY') || c.credit, {
+      message: 'CC BY needs a credit',
+      path: ['credit'],
+    }),
+)
+export type Credits = z.infer<typeof CreditsSchema>

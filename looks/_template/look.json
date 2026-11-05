@@ -1,0 +1,15 @@
+{
+  "id": "my-look",
+  "name": "My look",
+  "description": "One sentence a person picking a look understands: what it feels like and what it suits.",
+  "tags": ["clean"],
+  "bestFor": ["launch"],
+  "aspects": ["16:9", "9:16", "1:1", "4:5"],
+  "engines": ["hyperframes"],
+  "colors": { "roles": ["bg", "text", "accent"], "derived": [] },
+  "sound": { "musicMood": "calm electronic, 100 bpm" },
+  "registry": [],
+  "authors": ["Your name"],
+  "license": "MIT",
+  "since": "2026-11-04"
+}

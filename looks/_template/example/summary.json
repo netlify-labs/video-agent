@@ -1,0 +1,9 @@
+{
+  "title": "Orbit",
+  "summary": "A three-scene example for the fictional product Orbit, in this look.",
+  "captions": [
+    { "start": 0.3, "end": 3, "text": "Meet Orbit", "beat": "intro", "textId": "intro-title", "beatStart": 0.3, "beatEnd": 3 },
+    { "start": 3.3, "end": 7, "text": "Everything in one place", "beat": "feature", "textId": "feature-title", "beatStart": 0.3, "beatEnd": 4 },
+    { "start": 7.3, "end": 10, "text": "Try Orbit today", "beat": "cta", "textId": "cta-title", "beatStart": 0.3, "beatEnd": 3 }
+  ]
+}
