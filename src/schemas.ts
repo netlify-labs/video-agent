@@ -416,6 +416,7 @@ export const VersionSchema = z
       .nullable()
       .describe(
         'A version that redid only some scenes of the version it came from: which ones, with their names.',
+      ),
     look: z
       .object({ id: z.string(), name: z.string(), hash: z.string() })
       .nullable()

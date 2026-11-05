@@ -264,6 +264,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/looks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List looks
+         * @description The visual styles a video can be made in (pass an id as `look` when creating, revising or remixing), each with whether an admin has it on, and the default for creates that omit a look. Every signed-in role can list them; a look's name and description are never private.
+         */
+        get: operations["listLooks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/destinations": {
         parameters: {
             query?: never;
@@ -1940,6 +1960,12 @@ export interface components {
                     label: string;
                 }[];
             } | null;
+            /** @description The look this version was made with (its name as it was then), and the version of it: hash differs from GET /api/v1/looks' when the look has changed since. */
+            look: {
+                id: string;
+                name: string;
+                hash: string;
+            } | null;
             /** @description The render engine that made this version (a video keeps one) and what the editor may offer on it. editable still decides whether the editor opens. */
             editing: {
                 /** @enum {string} */
@@ -2261,6 +2287,8 @@ export interface components {
             mediaIds?: string[];
             sound?: components["schemas"]["Sound"] & unknown;
             voiceover?: components["schemas"]["VoiceoverInput"];
+            /** @description A look id (GET /api/v1/looks). Omit for the plan's look, else the admin's default (none unless set); null for no look. Errors: 400 unknown_look, 409 look_disabled. */
+            look?: string | null;
         };
         /** @description A spoken narration with captions from its words. Omit for the plan's choice, else none. */
         VoiceoverInput: {
@@ -2299,6 +2327,8 @@ export interface components {
                 /** @description Scene ids from fromVersion's beats (GET …/versions/{n}/beats). */
                 beats: string[];
             };
+            /** @description Omit to keep the revised version's look; null for no look. A different look (or a newer version of the same one) is a restyle: a full run that keeps the story and rebuilds how it looks. Errors: 400 unknown_look, 409 look_disabled, 409 look_not_allowed (a version with recorded narration). */
+            look?: string | null;
         };
         Remix: {
             /**
@@ -2323,6 +2353,8 @@ export interface components {
              * @description HTTPS URL for video.ready / video.failed events (API keys only).
              */
             webhookUrl?: string;
+            /** @description Omit to keep the source version's look; null for no look. Another look restyles the remix (a full run, as any remix). Errors: 400 unknown_look, 409 look_disabled. */
+            look?: string | null;
         };
         Media: {
             id: string;
@@ -2415,6 +2447,50 @@ export interface components {
         Publish: {
             /** @description Offer the narration's transcript on the share page. Default off; publishing again changes only this. */
             showTranscript?: boolean;
+        };
+        Looks: {
+            looks: components["schemas"]["Look"][];
+            /** @description The look creates get when they omit one; null: none. */
+            default: string | null;
+        };
+        Look: {
+            id: string;
+            name: string;
+            description: string;
+            tags: string[];
+            /** @description Plan templates the look suits: launch, tutorial, social, changelog, sales, other. */
+            bestFor: string[];
+            /** @description The shapes its rules cover. */
+            aspects: components["schemas"]["Aspect"][];
+            /** @description Engines it supports, preferred first. */
+            engines: ("hyperframes" | "remotion")[];
+            /** @description How screen recordings are framed in this look; false: hidden from the demo picker; null: the default. */
+            recording: false | {
+                /** @enum {string} */
+                frame: "wallpaper" | "browser" | "device" | "none";
+                padding?: number;
+                radius?: number;
+                /** @enum {string} */
+                shadow?: "none" | "sm" | "md" | "lg";
+                wallpaper?: string;
+                cursor?: {
+                    shape?: string;
+                    scale?: number;
+                    color?: string;
+                };
+                ripple?: string;
+                callout?: string;
+                zoomMax?: number;
+            } | null;
+            /** @description This version of the look; a version made with it keeps it. */
+            hash: string;
+            /** @description Pickers hide looks an admin turned off; versions already made with one keep it. */
+            enabled: boolean;
+            preview: {
+                /** @description A short muted loop, under the site root. */
+                mp4: string | null;
+                poster: string | null;
+            };
         };
         Destination: {
             id: string;
@@ -2606,6 +2682,10 @@ export interface components {
             youtubeEnabled: boolean;
             /** @description GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set (read-only). */
             youtubeConfigured: boolean;
+            /** @description The look creates get when they omit one (API, MCP and the GitHub Action too); null: none. */
+            defaultLook: string | null;
+            /** @description Looks turned off: hidden from pickers and refused for new videos; videos made with one keep it. */
+            disabledLooks: string[];
         };
         /**
          * @description How recorded narration is transcribed for captions: local (the default, audio stays in this deployment), elevenlabs (sends the audio to ElevenLabs) or off (no captions from recordings).
@@ -2621,6 +2701,10 @@ export interface components {
             recordingQuotaBytes?: number;
             remixEnabled?: boolean;
             youtubeEnabled?: boolean;
+            /** @description A look id, or null for none. */
+            defaultLook?: string | null;
+            /** @description The full list of looks to turn off. */
+            disabledLooks?: string[];
         };
         Plan: {
             id: string;
@@ -3042,6 +3126,8 @@ export interface components {
             captions?: "sidecar" | "burned";
             /** @description Render picture first: render the draft's other edits without its recorded narration, so you can record against the new picture. The narration stays in the draft; move it onto the new version with rebase-narration */
             excludeNarration?: boolean;
+            /** @description Not accepted (400 look_not_allowed): an edit render keeps the edited version's look. */
+            look?: unknown;
         };
         RebaseNarration: {
             /** @description The version to move your narration onto */
@@ -4447,6 +4533,71 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict or not ready */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listLooks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Looks */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Looks"];
+                };
             };
             /** @description Invalid request */
             400: {

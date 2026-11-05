@@ -16,7 +16,8 @@
       "resource": "videos",
       "method": "create",
       "fieldFeatures": {
-        "planId": "planning"
+        "planId": "planning",
+        "look": "looks"
       }
     }
   },
@@ -69,7 +70,8 @@
       "method": "revise",
       "fieldFeatures": {
         "planId": "planning",
-        "scope": "scoped_revision"
+        "scope": "scoped_revision",
+        "look": "looks"
       }
     }
   },
@@ -80,7 +82,8 @@
       "method": "remix",
       "feature": "remix",
       "fieldFeatures": {
-        "planId": "planning"
+        "planId": "planning",
+        "look": "looks"
       }
     }
   },
@@ -125,6 +128,14 @@
     "sdk": {
       "resource": "versions",
       "method": "unpublish"
+    }
+  },
+  "GET /api/v1/looks": {
+    "operationId": "listLooks",
+    "sdk": {
+      "resource": "looks",
+      "method": "list",
+      "feature": "looks"
     }
   },
   "GET /api/v1/destinations": {

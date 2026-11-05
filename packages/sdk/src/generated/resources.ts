@@ -295,6 +295,20 @@ export function resources(t: Transport) {
           opts,
         ),
     },
+    looks: {
+      /** List looks (`listLooks`) */
+      list: (opts?: CallOptions): Promise<Ok<'/api/v1/looks', 'get'>> =>
+        t.call<Ok<'/api/v1/looks', 'get'>>(
+          {
+            method: 'GET',
+            path: '/api/v1/looks',
+            pathParams: {},
+            features: [...['looks']],
+            operationId: 'listLooks',
+          },
+          opts,
+        ),
+    },
     me: {
       /** Get your account (`getMe`) */
       get: (opts?: CallOptions): Promise<Ok<'/api/v1/me', 'get'>> =>
@@ -941,8 +955,12 @@ export function resources(t: Transport) {
               'mediaIds',
               'sound',
               'voiceover',
+              'look',
             ],
-            features: [...(input.planId !== undefined ? ['planning'] : [])],
+            features: [
+              ...(input.planId !== undefined ? ['planning'] : []),
+              ...(input.look !== undefined ? ['looks'] : []),
+            ],
             operationId: 'createVideo',
           },
           opts,
@@ -1040,8 +1058,13 @@ export function resources(t: Transport) {
               'mediaIds',
               'planId',
               'webhookUrl',
+              'look',
             ],
-            features: [...['remix'], ...(input.planId !== undefined ? ['planning'] : [])],
+            features: [
+              ...['remix'],
+              ...(input.planId !== undefined ? ['planning'] : []),
+              ...(input.look !== undefined ? ['looks'] : []),
+            ],
             operationId: 'remixVideo',
           },
           opts,
@@ -1070,10 +1093,12 @@ export function resources(t: Transport) {
               'voiceover',
               'commentIds',
               'scope',
+              'look',
             ],
             features: [
               ...(input.planId !== undefined ? ['planning'] : []),
               ...(input.scope !== undefined ? ['scoped_revision'] : []),
+              ...(input.look !== undefined ? ['looks'] : []),
             ],
             operationId: 'reviseVideo',
           },

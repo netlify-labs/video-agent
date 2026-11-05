@@ -621,6 +621,29 @@
             ],
             "description": "A version that redid only some scenes of the version it came from: which ones, with their names."
           },
+          "look": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "hash": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "hash"
+            ],
+            "description": "The look this version was made with (its name as it was then), and the version of it: hash differs from GET /api/v1/looks' when the look has changed since."
+          },
           "editing": {
             "type": "object",
             "properties": {
@@ -1015,6 +1038,7 @@
           "editable",
           "beats",
           "scope",
+          "look",
           "editing",
           "mode",
           "editedFromN",
@@ -1885,6 +1909,14 @@
           },
           "voiceover": {
             "$ref": "#/components/schemas/VoiceoverInput"
+          },
+          "look": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+            "description": "A look id (GET /api/v1/looks). Omit for the plan's look, else the admin's default (none unless set); null for no look. Errors: 400 unknown_look, 409 look_disabled."
           }
         },
         "required": [
@@ -2038,6 +2070,14 @@
               "beats"
             ],
             "description": "Redo only these scenes; everything else stays exactly as it is. Needs fromVersion. Can't be combined with planId, durationSec, sound or voiceover."
+          },
+          "look": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+            "description": "Omit to keep the revised version's look; null for no look. A different look (or a newer version of the same one) is a restyle: a full run that keeps the story and rebuilds how it looks. Errors: 400 unknown_look, 409 look_disabled, 409 look_not_allowed (a version with recorded narration)."
           }
         },
         "required": [
@@ -2120,6 +2160,14 @@
             "type": "string",
             "format": "uri",
             "description": "HTTPS URL for video.ready / video.failed events (API keys only)."
+          },
+          "look": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+            "description": "Omit to keep the source version's look; null for no look. Another look restyles the remix (a full run, as any remix). Errors: 400 unknown_look, 409 look_disabled."
           }
         },
         "required": [
@@ -2495,6 +2543,203 @@
             "description": "Offer the narration's transcript on the share page. Default off; publishing again changes only this."
           }
         }
+      },
+      "Looks": {
+        "type": "object",
+        "properties": {
+          "looks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Look"
+            }
+          },
+          "default": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The look creates get when they omit one; null: none."
+          }
+        },
+        "required": [
+          "looks",
+          "default"
+        ]
+      },
+      "Look": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "bestFor": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Plan templates the look suits: launch, tutorial, social, changelog, sales, other."
+          },
+          "aspects": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Aspect"
+            },
+            "description": "The shapes its rules cover."
+          },
+          "engines": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "hyperframes",
+                "remotion"
+              ]
+            },
+            "description": "Engines it supports, preferred first."
+          },
+          "recording": {
+            "anyOf": [
+              {
+                "type": "boolean",
+                "enum": [
+                  false
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "frame": {
+                    "type": "string",
+                    "enum": [
+                      "wallpaper",
+                      "browser",
+                      "device",
+                      "none"
+                    ]
+                  },
+                  "padding": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 0.3
+                  },
+                  "radius": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 120
+                  },
+                  "shadow": {
+                    "type": "string",
+                    "enum": [
+                      "none",
+                      "sm",
+                      "md",
+                      "lg"
+                    ]
+                  },
+                  "wallpaper": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9-]{0,39}$"
+                  },
+                  "cursor": {
+                    "type": "object",
+                    "properties": {
+                      "shape": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9][a-z0-9-]{0,39}$"
+                      },
+                      "scale": {
+                        "type": "number",
+                        "minimum": 0.5,
+                        "maximum": 3
+                      },
+                      "color": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9-]{0,39}$"
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "ripple": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9-]{0,39}$"
+                  },
+                  "callout": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9-]{0,39}$"
+                  },
+                  "zoomMax": {
+                    "type": "number",
+                    "minimum": 1,
+                    "maximum": 4
+                  }
+                },
+                "required": [
+                  "frame"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How screen recordings are framed in this look; false: hidden from the demo picker; null: the default."
+          },
+          "hash": {
+            "type": "string",
+            "description": "This version of the look; a version made with it keeps it."
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Pickers hide looks an admin turned off; versions already made with one keep it."
+          },
+          "preview": {
+            "type": "object",
+            "properties": {
+              "mp4": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "A short muted loop, under the site root."
+              },
+              "poster": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "mp4",
+              "poster"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "tags",
+          "bestFor",
+          "aspects",
+          "engines",
+          "recording",
+          "hash",
+          "enabled",
+          "preview"
+        ]
       },
       "Destination": {
         "type": "object",
@@ -3229,6 +3474,20 @@
           "youtubeConfigured": {
             "type": "boolean",
             "description": "GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set (read-only)."
+          },
+          "defaultLook": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The look creates get when they omit one (API, MCP and the GitHub Action too); null: none."
+          },
+          "disabledLooks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Looks turned off: hidden from pickers and refused for new videos; videos made with one keep it."
           }
         },
         "required": [
@@ -3238,7 +3497,9 @@
           "recordingQuotaBytes",
           "remixEnabled",
           "youtubeEnabled",
-          "youtubeConfigured"
+          "youtubeConfigured",
+          "defaultLook",
+          "disabledLooks"
         ]
       },
       "TranscriptionProvider": {
@@ -3276,6 +3537,23 @@
           },
           "youtubeEnabled": {
             "type": "boolean"
+          },
+          "defaultLook": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+            "description": "A look id, or null for none."
+          },
+          "disabledLooks": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{0,39}$"
+            },
+            "maxItems": 100,
+            "description": "The full list of looks to turn off."
           }
         }
       },
@@ -5141,6 +5419,9 @@
           "excludeNarration": {
             "type": "boolean",
             "description": "Render picture first: render the draft's other edits without its recorded narration, so you can record against the new picture. The narration stays in the draft; move it onto the new version with rebase-narration"
+          },
+          "look": {
+            "description": "Not accepted (400 look_not_allowed): an edit render keeps the edited version's look."
           }
         }
       },
@@ -6558,7 +6839,8 @@
           "resource": "videos",
           "method": "create",
           "fieldFeatures": {
-            "planId": "planning"
+            "planId": "planning",
+            "look": "looks"
           }
         },
         "summary": "Create a video",
@@ -7291,7 +7573,8 @@
           "method": "revise",
           "fieldFeatures": {
             "planId": "planning",
-            "scope": "scoped_revision"
+            "scope": "scoped_revision",
+            "look": "looks"
           }
         },
         "summary": "Revise a video",
@@ -7418,7 +7701,8 @@
           "method": "remix",
           "feature": "remix",
           "fieldFeatures": {
-            "planId": "planning"
+            "planId": "planning",
+            "look": "looks"
           }
         },
         "summary": "Remix a video",
@@ -8138,6 +8422,91 @@
         "responses": {
           "204": {
             "description": "Unpublished"
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/looks": {
+      "get": {
+        "operationId": "listLooks",
+        "x-sdk": {
+          "resource": "looks",
+          "method": "list",
+          "feature": "looks"
+        },
+        "summary": "List looks",
+        "description": "The visual styles a video can be made in (pass an id as `look` when creating, revising or remixing), each with whether an admin has it on, and the default for creates that omit a look. Every signed-in role can list them; a look's name and description are never private.",
+        "tags": [
+          "videos"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Looks",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Looks"
+                }
+              }
+            }
           },
           "400": {
             "description": "Invalid request",

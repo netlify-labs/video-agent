@@ -211,6 +211,10 @@ export declare function resources(t: Transport): {
         /** Revoke an API key (`revokeKey`) */
         revoke: (id: string | number, opts?: CallOptions) => Promise<undefined>;
     };
+    looks: {
+        /** List looks (`listLooks`) */
+        list: (opts?: CallOptions) => Promise<Ok<"/api/v1/looks", "get">>;
+    };
     me: {
         /** Get your account (`getMe`) */
         get: (opts?: CallOptions) => Promise<Ok<"/api/v1/me", "get">>;
