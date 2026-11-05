@@ -9,6 +9,17 @@
 // hydrated into .va-run/narration/ (outside video/: never archived, checkpointed or previewed; scripts/narration.ts
 // mixes them). Never falls back to the template: on any failure it
 // exits non-zero and the agent must stop. Writes the verified manifest to .render/run-manifest.json for render-job.
+//
+// The steps, in the order other plans add to (docs/plans/2026-11-04-render-engines.md §4.3); each is skipped when the
+// manifest doesn't ask for it:
+//   1. Source: the engine's scaffold for author runs, or the restore of a source or bundle (and recorded narration's
+//      takes) and then the engine's hydrate for every other kind. HyperFrames has neither hook.
+//   2. Library media into video/assets/media/ (PDFs into context/media/).
+//   3. The look (looks plan).
+//   4. Recording files (screen-recording plan), then scope files (regenerate-beat plan).
+//   5. Feedback and scope stills, last: feedbackStills empties video/feedback/ first, so nothing else may write into
+//      video/ after it.
+//   6. .render/run-manifest.json for render-job (main()).
 import {
   copyFileSync,
   existsSync,
@@ -31,10 +42,13 @@ import {
   runManifestKey,
   verifyRunManifest,
   type FeedbackPin,
+  runEngineId,
   type FrozenNarration,
   type RunManifest,
 } from '../src/lib/run-manifest.js'
 import { MAX_OUTPUT_SAMPLES, SAMPLE_RATE } from '../src/lib/timeline.js'
+import { runEngineFor } from './lib/engines/index.js'
+import type { RunEngine } from './lib/engines/types.js'
 import { narrationPaths, type HydratedTake, type NarrationInputs } from './lib/narration-inputs.js'
 import {
   StepError,
@@ -372,9 +386,20 @@ export async function hydrateNarration(
   return inputs
 }
 
-/** Restores what the manifest lists. `root` and `fetch` are injectable for tests. */
-export async function prepare(m: RunManifest, opts: { tmp: string; root?: string; fetch?: Fetch }) {
+/** Restores what the manifest lists, in the steps above. `root`, `fetch` and `engine` are injectable for tests. */
+export async function prepare(
+  m: RunManifest,
+  opts: { tmp: string; root?: string; fetch?: Fetch; engine?: Pick<RunEngine, 'scaffold' | 'hydrate'> },
+) {
   const { tmp, root = repoRoot, fetch = download } = opts
+  const engine = opts.engine ?? runEngineFor(runEngineId(m))
+  let t = Date.now()
+  const stepDone = (name: string, skipped: boolean) => {
+    log('prepare.step', { name, ms: Date.now() - t, skipped })
+    t = Date.now()
+  }
+  // 1. Source.
+  if (m.kind === 'author') await engine.scaffold?.(join(root, 'video'))
   if (m.source) {
     const archive = join(tmp, 'source.tar.gz')
     await fetch(m.source.key, archive)
@@ -430,6 +455,9 @@ export async function prepare(m: RunManifest, opts: { tmp: string; root?: string
     if (m.kind === 'author_from_frozen') log('frozen.kept', { kind: m.kind, files: keep.length })
   }
   await hydrateNarration(root, m, m.bundle?.narration, fetch)
+  if (m.kind !== 'author') await engine.hydrate?.(join(root, 'video'))
+  stepDone('source', m.kind === 'author' && !engine.scaffold)
+  // 2. Library media.
   // Library media by reference (plan v2 §9): exactly the snapshotted bytes, each one verified. PDFs are reference
   // reading for the agent, so they go to context/media/, outside the composition and its source archive.
   if (m.media?.length) {
@@ -449,7 +477,9 @@ export async function prepare(m: RunManifest, opts: { tmp: string; root?: string
     }
     log('media', { count: m.media.length, files: m.media.map((x) => x.filename) })
   }
-  // After any restore, so the stills land in the restored video/.
+  stepDone('media', !m.media?.length)
+  // 3. The look, and 4. recording, then scope files: their plans add them here.
+  // 5. Stills, last: after any restore and every other write, so they land in the final video/.
   if (m.feedback) {
     const mp4 = join(tmp, 'parent.mp4')
     await fetch(m.feedback.video.key, mp4, 'videos')
@@ -458,6 +488,7 @@ export async function prepare(m: RunManifest, opts: { tmp: string; root?: string
       throw new StepError(`The parent video doesn't match its hash (got ${actual}). Stop and report this.`)
     feedbackStills(root, mp4, m.feedback.pins)
   }
+  stepDone('stills', !m.feedback)
 }
 
 async function main() {
