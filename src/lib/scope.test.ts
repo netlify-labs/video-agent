@@ -18,8 +18,14 @@ import {
 } from './contract.js'
 import { fmt, frames } from './contract-core.js'
 import {
+  creditsAppendOnly,
+  DERIVED_FILES,
+  derivedFiles,
   isLockedLength,
   isScopeRefusal,
+  registerDerivedFiles,
+  scopeFileProblems,
+  scopedVoiceProblems,
   scopeProblems,
   SCOPE_REFUSED_PREFIX,
   spliceBytes,
@@ -536,5 +542,119 @@ describe('isScopeRefusal', () => {
     expect(isScopeRefusal(`${SCOPE_REFUSED_PREFIX}: the music's volume`)).toBe(true)
     expect(isScopeRefusal('The MP4 is not valid: no moov')).toBe(false)
     expect(isScopeRefusal(null)).toBe(false)
+  })
+})
+
+describe('scopeFileProblems, credits and the scoped voice', () => {
+  const parent = new Map([
+    ['index.html', 'h1'],
+    ['summary.json', 's1'],
+    ['assets/logo.svg', 'l1'],
+    ['assets/hold/last.png', 'p1'],
+    ['assets/narration/bus.wav', 'b1'],
+    ['assets/media/med_abcdefgh.png', 'm1'],
+    ['feedback/01-c.jpg', 'f1'],
+    ['assets/voice/demo.wav', 'v1'],
+  ])
+  const derived = derivedFiles(['demo'])
+
+  it('reports changed and deleted files by path; new files, derived files and run inputs are fine', () => {
+    const agent = new Map(parent)
+    agent.set('index.html', 'h2')
+    agent.set('assets/voice/demo.wav', 'v2')
+    agent.set('assets/beats/demo/badge.svg', 'n1')
+    agent.set('assets/sfx/whoosh.mp3', 'n2')
+    agent.set('assets/narration/bus.wav', 'b2')
+    agent.delete('feedback/01-c.jpg')
+    agent.set('assets/media/med_abcdefgh.png', 'm2')
+    expect(scopeFileProblems(parent, agent, derived)).toEqual([])
+    agent.set('assets/logo.svg', 'l2')
+    agent.set('assets/hold/last.png', 'p2')
+    expect(scopeFileProblems(parent, agent, derived)).toEqual([
+      'assets/hold/last.png changed; files the other scenes use must stay as they are.',
+      'assets/logo.svg changed; files the other scenes use must stay as they are.',
+    ])
+    agent.delete('assets/logo.svg')
+    expect(scopeFileProblems(parent, agent, derived)).toContain(
+      'assets/logo.svg was deleted; files the other scenes use must stay.',
+    )
+  })
+
+  it('lets other features register derived files', () => {
+    const before = DERIVED_FILES.length
+    try {
+      registerDerivedFiles((beats) => beats.map((b) => `assets/recording/${b}.cursor.js`))
+      const parentRec = new Map([['assets/recording/demo.cursor.js', 'c1']])
+      expect(
+        scopeFileProblems(
+          parentRec,
+          new Map([['assets/recording/demo.cursor.js', 'c2']]),
+          derivedFiles(['demo']),
+        ),
+      ).toEqual([])
+    } finally {
+      DERIVED_FILES.length = before
+    }
+    expect(derivedFiles(['demo'])).not.toContain('assets/recording/demo.cursor.js')
+  })
+
+  it('keeps credits.json append-only', () => {
+    const a = { title: 'Theme', creator: 'A' }
+    const b = { title: 'Whoosh', creator: 'B' }
+    const j = (x: unknown) => JSON.stringify(x)
+    expect(creditsAppendOnly(j([a]), j([a, b]))).toEqual([])
+    expect(creditsAppendOnly(null, j([b]))).toEqual([])
+    for (const after of [[{ ...a, creator: 'Z' }], [], [b, a]])
+      expect(creditsAppendOnly(j([a]), j(after))).toEqual([
+        'assets/music/credits.json changed an existing credit; keep its entries and add new ones after them.',
+      ])
+    expect(creditsAppendOnly(j([a]), null)[0]).toMatch(/missing or unreadable/)
+  })
+
+  it("checks a changed scoped voice line's script and WAV length", () => {
+    const intro = voiceFile.beats.find((b) => b.beat === 'intro')!
+    const redone = { ...intro, text: 'Hello there.', duration: 1.5 }
+    const voice = { ...voiceFile, beats: voiceFile.beats.map((b) => (b === intro ? redone : b)) }
+    const bytesFor = (s: number) => 44 + Math.round(s * 24_000) * 2
+    const run = (lines: { beat: string; text: string }[], wav: number | null, v = voice) =>
+      scopedVoiceProblems(
+        {
+          parent: { html: voiced, summary: voicedSummary, voice: voiceFile },
+          agent: { html: voiced, summary: voicedSummary, voice: v, script: { lines } },
+          beats: ['intro'],
+        },
+        () => wav,
+      )
+    expect(run([{ beat: 'intro', text: 'Hello there.' }], bytesFor(1.5))).toEqual([])
+    expect(run([{ beat: 'intro', text: 'Hello there.' }], bytesFor(2.5))).toEqual([
+      "assets/voice/intro.wav isn't the 1.5s assets/voice/voice.json says; run npx tsx scripts/voice.ts again.",
+    ])
+    expect(run([{ beat: 'intro', text: 'Something else.' }], bytesFor(1.5))[0]).toMatch(
+      /doesn't say its line/,
+    )
+    // A scoped scene may gain a line; an unchanged entry isn't checked again.
+    const demo = { ...intro, beat: 'demo', file: 'assets/voice/demo.wav', text: 'New line.', duration: 1 }
+    expect(
+      scopedVoiceProblems(
+        {
+          parent: { html: voiced, summary: voicedSummary, voice: voiceFile },
+          agent: {
+            html: voiced,
+            summary: voicedSummary,
+            voice: { ...voiceFile, beats: [...voiceFile.beats, demo] },
+            script: { lines: [{ beat: 'demo', text: 'New line.' }] },
+          },
+          beats: ['demo'],
+        },
+        () => bytesFor(1),
+      ),
+    ).toEqual([])
+    // No voice in the parent: nothing to check.
+    expect(
+      scopedVoiceProblems(
+        { parent: { html: music, summary: {} }, agent: { html: music, summary: {}, voice }, beats: ['demo'] },
+        () => null,
+      ),
+    ).toEqual([])
   })
 })

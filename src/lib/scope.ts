@@ -25,7 +25,18 @@ import {
 import { fmt, frames, shiftCues, syncCaptionsFor } from './contract-core.js'
 import { scopedScriptProblems } from './scope-script.js'
 import { scopedStyleProblems } from './scope-style.js'
-import { voiceCaptions, type VoiceFile, type VoiceScript } from './voice.js'
+import { excluded } from './bundle-manifest.js'
+import { isReference } from './bundle-references.js'
+import {
+  FPS_TOLERANCE,
+  SAMPLE_RATE,
+  VOICE_DIR,
+  VOICE_JSON,
+  VOICE_SCRIPT,
+  voiceCaptions,
+  type VoiceFile,
+  type VoiceScript,
+} from './voice.js'
 
 type Node = DefaultTreeAdapterMap['node']
 type Element = DefaultTreeAdapterMap['element']
@@ -569,6 +580,105 @@ function voiceProblems(i: ScopeInput, scoped: ReadonlySet<string>, scene: (id: s
     for (const id of [...new Set([...theirs.keys(), ...mine.keys()])])
       if (!scoped.has(id) && theirs.get(id) !== mine.get(id))
         out.push(`${scene(id)}'s voice-over line changed.`)
+  }
+  return out
+}
+
+// ───── files ─────
+
+export const CREDITS_FILE = 'assets/music/credits.json'
+
+/**
+ * Files a scoped run may rewrite, besides the scoped scenes' new files: the composition, its captions, the voice-over
+ * files and the run-fetched credits (append-only, checked by creditsAppendOnly). Other features add theirs with
+ * registerDerivedFiles (the screen-recording plan: its plan.json and the scoped steps' cursor and hold files).
+ */
+export const DERIVED_FILES: ((beats: readonly string[], comp: Composition | null) => string[])[] = [
+  (beats) => [
+    'index.html',
+    'summary.json',
+    VOICE_SCRIPT,
+    VOICE_JSON,
+    CREDITS_FILE,
+    ...beats.map((b) => `${VOICE_DIR}/${b}.wav`),
+  ],
+]
+export const registerDerivedFiles = (
+  fn: (beats: readonly string[], comp: Composition | null) => string[],
+) => {
+  DERIVED_FILES.push(fn)
+}
+export const derivedFiles = (beats: readonly string[], comp: Composition | null = null): string[] => [
+  ...new Set(DERIVED_FILES.flatMap((fn) => fn(beats, comp))),
+]
+
+/**
+ * Every parent file outside the derived set that the agent's set lacks or changed, by path. New files are fine (the
+ * scoped scenes' images and sound effects). Reference files (the narration bus) belong to the narration lock, and
+ * excluded paths (dot folders, feedback/, hydrated library media) never count. The held last frame's still is
+ * compared like any other file: a scoped run has no narration step to rewrite it.
+ */
+export function scopeFileProblems(
+  parent: ReadonlyMap<string, string>,
+  agent: ReadonlyMap<string, string>,
+  derived: readonly string[],
+): string[] {
+  const skip = new Set(derived)
+  const out: string[] = []
+  for (const [path, hash] of [...parent].sort(([x], [y]) => (x < y ? -1 : 1))) {
+    if (skip.has(path) || excluded(path) || isReference(path)) continue
+    const mine = agent.get(path)
+    if (mine === undefined) out.push(`${path} was deleted; files the other scenes use must stay.`)
+    else if (mine !== hash) out.push(`${path} changed; files the other scenes use must stay as they are.`)
+  }
+  return out
+}
+
+/** assets/music/credits.json may only grow: every earlier entry unchanged and in its place. */
+export function creditsAppendOnly(parentJson: string | null, agentJson: string | null): string[] {
+  if (parentJson === null) return []
+  const parse = (s: string | null): unknown[] | null => {
+    try {
+      const v: unknown = s === null ? null : JSON.parse(s)
+      // An array of entries (src/lib/openverse-rules.ts readRunCredits).
+      return Array.isArray(v) ? v : null
+    } catch {
+      return null
+    }
+  }
+  const [before, after] = [parse(parentJson), parse(agentJson)]
+  if (!before) return []
+  if (!after)
+    return [`${CREDITS_FILE} is missing or unreadable; keep its entries and add new ones after them.`]
+  for (const [n, entry] of before.entries())
+    if (JSON.stringify(after[n]) !== JSON.stringify(entry))
+      return [`${CREDITS_FILE} changed an existing credit; keep its entries and add new ones after them.`]
+  return []
+}
+
+/**
+ * The voice-over of the scoped scenes, as the re-voice guard checks it: the voice and its other scenes' entries are
+ * scopeProblems'; here, each scoped entry that changed says its scoped line and its WAV is as long as voice.json
+ * says. `wavBytes` gives a file's size (null when missing). A parent with no voice.json has nothing to check.
+ */
+export function scopedVoiceProblems(
+  i: Pick<ScopeInput, 'parent' | 'agent' | 'beats'>,
+  wavBytes: (path: string) => number | null,
+): string[] {
+  const [was, now] = [i.parent.voice ?? null, i.agent.voice ?? null]
+  if (!was) return []
+  if (!now) return [`${VOICE_JSON} was removed; the other scenes' voice-over needs it.`]
+  const out: string[] = []
+  for (const b of now.beats.filter((x) => i.beats.includes(x.beat))) {
+    const old = was.beats.find((x) => x.beat === b.beat)
+    if (old && JSON.stringify(old) === JSON.stringify(b)) continue
+    const line = i.agent.script?.lines.find((l) => l.beat === b.beat)
+    if (!line || line.text.replace(/\s+/g, ' ').trim() !== b.text)
+      out.push(`Scene "${b.beat}"'s new voice-over doesn't say its line in ${VOICE_SCRIPT}.`)
+    const size = wavBytes(b.file)
+    const seconds = size === null ? NaN : (size - 44) / 2 / SAMPLE_RATE
+    if (!(Math.abs(seconds - b.duration) <= FPS_TOLERANCE))
+      out.push(`${b.file} isn't the ${b.duration}s ${VOICE_JSON} says; run npx tsx scripts/voice.ts again.`)
   }
   return out
 }
