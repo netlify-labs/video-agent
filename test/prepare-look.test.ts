@@ -63,7 +63,7 @@ describe('prepare-run: the look', () => {
     expect(existsSync(join(root, 'video', 'LOOK.md'))).toBe(false)
     expect(
       steps(spy).map((l) => (l.step === 'look.restored' ? 'restored' : `${l.name}:${l.skipped}`)),
-    ).toEqual(['source:true', 'media:true', 'restored', 'look:false', 'scope:true', 'stills:true'])
+    ).toEqual(['source:true', 'media:true', 'restored', 'look:false', 'recording:true', 'scope:true', 'stills:true'])
   })
 
   it('refuses a hash mismatch, an entry outside look/, and a .. path', async () => {
