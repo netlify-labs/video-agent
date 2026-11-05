@@ -646,24 +646,25 @@ were sampled every 0.5 s at the same moment of each scene (`scripts/e2e/lib/ssim
 ffmpeg's `ssim` filter; "tile" is the lowest SSIM over a 4×4 grid (`tileSsim`). `--leak` also changed one line of the
 outro's text (`docs.netlify.com/webhooks` → `…/hooks`), a small change outside the scope.
 
-| Aspect | Scene | Change | Frame SSIM min / median | Tile SSIM min |
-| --- | --- | --- | --- | --- |
-| 16:9 | intro | none (same start) | 0.9996 / 1.0000 | 0.9935 |
-| 16:9 | features | redone | 0.9059 / 0.9068 | 0.6329 |
-| 16:9 | proof | none (shifted) | 0.9932 / 0.9963 | 0.9800 |
-| 16:9 | outro | none (shifted) | 0.9940 / 0.9964 | 0.9760 |
-| 16:9 | outro | one line of text (`--leak`) | 0.9887 / 0.9893 | 0.9374 |
-| 9:16 | intro | none | 0.9995 / 1.0000 | 0.9917 |
-| 9:16 | features | redone | 0.9073 / 0.9074 | 0.6909 |
-| 9:16 | proof | none (shifted) | 0.9932 / 0.9964 | 0.9815 |
-| 9:16 | outro | none (shifted) | 0.9941 / 0.9965 | 0.9813 |
-| 9:16 | outro | one line of text (`--leak`) | 0.9889 / 0.9894 | 0.9383 |
-| 1:1 | intro | none | 0.9990 / 1.0000 | 0.9858 |
-| 1:1 | features | redone | 0.8336 / 0.8337 | 0.4404 |
-| 1:1 | proof | none (shifted) | 0.9906 / 0.9956 | 0.9684 |
-| 1:1 | outro | none (shifted) | 0.9908 / 0.9952 | 0.9697 |
+| Aspect | Scene    | Change                      | Frame SSIM min / median | Tile SSIM min |
+| ------ | -------- | --------------------------- | ----------------------- | ------------- |
+| 16:9   | intro    | none (same start)           | 0.9996 / 1.0000         | 0.9935        |
+| 16:9   | features | redone                      | 0.9059 / 0.9068         | 0.6329        |
+| 16:9   | proof    | none (shifted)              | 0.9932 / 0.9963         | 0.9800        |
+| 16:9   | outro    | none (shifted)              | 0.9940 / 0.9964         | 0.9760        |
+| 16:9   | outro    | one line of text (`--leak`) | 0.9887 / 0.9893         | 0.9374        |
+| 9:16   | intro    | none                        | 0.9995 / 1.0000         | 0.9917        |
+| 9:16   | features | redone                      | 0.9073 / 0.9074         | 0.6909        |
+| 9:16   | proof    | none (shifted)              | 0.9932 / 0.9964         | 0.9815        |
+| 9:16   | outro    | none (shifted)              | 0.9941 / 0.9965         | 0.9813        |
+| 9:16   | outro    | one line of text (`--leak`) | 0.9889 / 0.9894         | 0.9383        |
+| 1:1    | intro    | none                        | 0.9990 / 1.0000         | 0.9858        |
+| 1:1    | features | redone                      | 0.8336 / 0.8337         | 0.4404        |
+| 1:1    | proof    | none (shifted)              | 0.9906 / 0.9956         | 0.9684        |
+| 1:1    | outro    | none (shifted)              | 0.9908 / 0.9952         | 0.9697        |
 
 What it means:
+
 - **Frozen scenes render the same, give or take the encoder.** Scenes before the change score ≥ 0.999 on whole
   frames. Shifted scenes score ≥ 0.990: the parent's proof started at 6.85 s, half a frame off the grid (authored, never
   relaid), so matched moments are up to half a frame apart in a moving animation, plus H.264 at new GOP offsets.
