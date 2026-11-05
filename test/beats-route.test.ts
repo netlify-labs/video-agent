@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { fillBeats } from '../src/domain/beats.js'
 import type { Principal } from '../src/domain/policy.js'
 import type { Store } from '../src/store/types.js'
-import { harness, pgStore, PROMPT, type Harness } from './helpers.js'
+import { apiKey, harness, person as signIn, pgStore, PROMPT, type Harness } from './helpers.js'
 import { tarGz } from './tarball.js'
 
 const music = readFileSync(new URL('./fixtures/contract1-music/index.html', import.meta.url), 'utf8')
@@ -115,5 +115,39 @@ describe('fillBeats refusals', () => {
     calls.length = 0
     await expect(fillBeats(h.deps, mia, id, 1)).rejects.toMatchObject({ code: 'not_found' })
     expect(calls).toEqual([])
+  })
+})
+
+describe('GET /api/v1/videos/{id}/versions/{n}/beats', () => {
+  const path = (id: string, n = 1) => `/api/v1/videos/${id}/versions/${n}/beats`
+
+  it("returns a version's scenes to anyone who can see the video, keys included", async () => {
+    const h = harness()
+    const id = await prePlan(h)
+    const viewer = await signIn(h, 'u_viewer', 'viewer')
+    const key = await apiKey(h, h.member)
+    for (const who of [{ as: h.member }, { as: viewer }, { key }]) {
+      const res = await h.call('GET', path(id), who)
+      expect(res.status).toBe(200)
+      expect((await h.json(res)).beats.map((b: { id: string }) => b.id)).toEqual(['intro', 'demo', 'outro'])
+    }
+  })
+
+  it('null for a version that cannot be redone scene by scene', async () => {
+    const h = harness()
+    const id = await prePlan(h, '<!doctype html><h1>free-form</h1>')
+    expect(await h.json(await h.call('GET', path(id), { as: h.member }))).toEqual({ beats: null })
+  })
+
+  it('409 before ready, 404 for a version that does not exist or a private video', async () => {
+    const h = harness({ MAX_ACTIVE_RUNS: '0' })
+    const v = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }))
+    const queued = await h.call('GET', path(v.id), { as: h.member })
+    expect(queued.status).toBe(409)
+    expect((await h.json(queued)).error.code).toBe('not_ready')
+    expect((await h.call('GET', path(v.id, 7), { as: h.member })).status).toBe(404)
+    await h.call('PATCH', `/api/v1/videos/${v.id}`, { as: h.member, body: { private: true } })
+    const viewer = await signIn(h, 'u_viewer', 'viewer')
+    expect((await h.call('GET', path(v.id), { as: viewer })).status).toBe(404)
   })
 })

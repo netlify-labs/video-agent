@@ -300,6 +300,18 @@ export const EngineCapabilitiesSchema = z
   })
   .openapi('EngineCapabilities')
 
+export const BeatInfoSchema = z
+  .object({
+    id: z.string().describe("The beat id: what scope.beats and the CLI's --scene take."),
+    label: z
+      .string()
+      .nullable()
+      .describe("The scene's name, as the agent wrote it (data-va-label); null if none."),
+    start: z.number().describe('Seconds from the start of this version.'),
+    duration: z.number().describe('Seconds.'),
+  })
+  .openapi('BeatInfo')
+
 export const VersionPosterSchema = z
   .object({
     source: z.enum(['frame', 'upload']).describe('A frame picked from the video, or an uploaded image.'),

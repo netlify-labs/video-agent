@@ -62,6 +62,7 @@ import { remixVideo, versionMediaItems } from './domain/remix.js'
 import { listNotifications, markNotificationsRead } from './domain/notifications.js'
 import { getProgress } from './domain/progress.js'
 import { previewLink } from './domain/preview.js'
+import { fillBeats } from './domain/beats.js'
 import { cancelUpload, completeUpload, createUpload, getUpload, putPart } from './domain/media-uploads.js'
 import { getMediaTrace, setMediaTrace } from './domain/media-trace.js'
 import { TRACE_MAX_BYTES } from './lib/recording-trace.js'
@@ -595,6 +596,28 @@ export function createApp(deps: Deps, opts: AppOptions) {
     async (c) => {
       const p = c.req.valid('param')
       return c.json(await versionMediaItems(deps, c.get('principal'), p.id, p.n), 200)
+    },
+  )
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/v1/videos/{id}/versions/{n}/beats',
+      operationId: 'getVersionBeats',
+      'x-sdk': { resource: 'versions', method: 'beats', feature: 'scoped_revision' },
+      summary: "A version's scenes",
+      description:
+        "The scenes (beats) of a ready version, in order, for redoing some of them: pass their ids as scope.beats with this version as fromVersion. Null for a version that can't be edited scene by scene. Versions made before this list existed get it filled on first read. 409 when the version isn't ready.",
+      tags: ['versions'],
+      security,
+      request: { params: VersionParam },
+      responses: {
+        200: json(z.object({ beats: z.array(s.BeatInfoSchema).nullable() }), 'Scenes'),
+        ...errors,
+      },
+    }),
+    async (c) => {
+      const p = c.req.valid('param')
+      return c.json({ beats: await fillBeats(deps, c.get('principal'), p.id, p.n) }, 200)
     },
   )
   app.openapi(

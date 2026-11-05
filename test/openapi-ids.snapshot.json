@@ -90,6 +90,14 @@
       "method": "media"
     }
   },
+  "GET /api/v1/videos/{id}/versions/{n}/beats": {
+    "operationId": "getVersionBeats",
+    "sdk": {
+      "resource": "versions",
+      "method": "beats",
+      "feature": "scoped_revision"
+    }
+  },
   "POST /api/v1/videos/{id}/versions/{n}/retry": {
     "operationId": "retryVersion",
     "sdk": {
