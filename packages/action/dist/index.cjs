@@ -937,6 +937,17 @@ function resources(t) {
         },
         opts
       ),
+      /** Get a screen recording's pointer trace (`getMediaTrace`) */
+      getTrace: (id, opts) => t.call(
+        {
+          method: "GET",
+          path: "/api/v1/media/{id}/trace",
+          pathParams: { id },
+          features: [...["screen_recording"]],
+          operationId: "getMediaTrace"
+        },
+        opts
+      ),
       /** List media (`listMedia`) */
       list: (input, opts) => t.call(
         {
@@ -959,6 +970,20 @@ function resources(t) {
           pathParams: { id },
           features: [],
           operationId: "listRecordings"
+        },
+        opts
+      ),
+      /** Set a screen recording's pointer trace (`setMediaTrace`) */
+      setTrace: (id, input, opts) => t.call(
+        {
+          method: "PUT",
+          path: "/api/v1/media/{id}/trace",
+          pathParams: { id },
+          input,
+          query: [],
+          body: ["v", "source", "frame", "viewport", "moves", "events", "redact"],
+          features: [...["screen_recording"]],
+          operationId: "setMediaTrace"
         },
         opts
       ),
@@ -1201,6 +1226,17 @@ function resources(t) {
       )
     },
     versions: {
+      /** A version's scenes (`getVersionBeats`) */
+      beats: (id, n, opts) => t.call(
+        {
+          method: "GET",
+          path: "/api/v1/videos/{id}/versions/{n}/beats",
+          pathParams: { id, n },
+          features: [...["scoped_revision"]],
+          operationId: "getVersionBeats"
+        },
+        opts
+      ),
       /** Cancel a version (`cancelVersion`) */
       cancel: (id, n, opts) => t.call(
         {
@@ -1452,9 +1488,13 @@ function resources(t) {
             "mediaIds",
             "sound",
             "voiceover",
-            "commentIds"
+            "commentIds",
+            "scope"
           ],
-          features: [...input.planId !== void 0 ? ["planning"] : []],
+          features: [
+            ...input.planId !== void 0 ? ["planning"] : [],
+            ...input.scope !== void 0 ? ["scoped_revision"] : []
+          ],
           operationId: "reviseVideo"
         },
         opts
@@ -1748,6 +1788,22 @@ async function resolveVideo(fetchImpl, ref) {
     code: "invalid_ref",
     message: `${s} isn't a video id (vid_\u2026), a video's web address or a share link.`
   });
+}
+async function redoScenes(d, id, input, opts) {
+  const { beats, fromVersion, ...rest } = input;
+  let from = fromVersion;
+  if (from === void 0) {
+    const video = await d.get(id);
+    from = video.versions.find((v) => v.status === "ready")?.n;
+    if (from === void 0)
+      throw new VideoAgentError({
+        status: 0,
+        code: "not_ready",
+        message: `Video ${id} has no ready version to redo scenes of.`,
+        details: { videoId: id }
+      });
+  }
+  return d.revise(id, { ...rest, fromVersion: from, scope: { beats } }, opts);
 }
 
 // packages/sdk/src/helpers/files.ts
@@ -2057,7 +2113,8 @@ var VideoAgent = class {
       ...generated.videos,
       wait: (id, o2) => waitForVideo({ send: (x) => this.send(x), progress: (v) => generated.videos.progress(v) }, id, o2),
       listAll: (input, opts) => listAll(generated.videos.list, input, opts),
-      resolve: (ref) => resolveVideo(f, ref)
+      resolve: (ref) => resolveVideo(f, ref),
+      redoScenes: (id, input, opts) => redoScenes({ get: (v) => generated.videos.get(v), revise: generated.videos.revise }, id, input, opts)
     };
     const fileDeps = {
       baseUrl: url,
@@ -2072,7 +2129,16 @@ var VideoAgent = class {
     const mediaDeps = { send: (x) => this.send(x), retries: o.retries ?? 3, log: o.logger };
     const media = {
       ...generated.media,
-      upload: (file, uo) => uploadMedia(mediaDeps, file, uo)
+      upload: async (file, uo) => {
+        if (uo?.role === "screen-recording") await this.requireFeatures(["screen_recording"]);
+        return uploadMedia(mediaDeps, file, uo);
+      },
+      uploadRecording: async (file, ro = {}) => {
+        await this.requireFeatures(["screen_recording"]);
+        const { trace, ...uo } = ro;
+        const item = await uploadMedia(mediaDeps, file, { ...uo, role: "screen-recording", dedupe: false });
+        return trace ? generated.media.setTrace(item.id, trace) : item;
+      }
     };
     const music = {
       ...generated.music,
