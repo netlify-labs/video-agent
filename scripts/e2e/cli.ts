@@ -16,7 +16,7 @@
 //      already published, so a real publication is never taken down.
 //   5. With CREATE_OK=1: create (10 s, silent, an idempotency key) --wait --out <tmp>/created, ffprobe; the video is
 //      deleted in a finally.
-//   6. logout (never --revoke: the key is yours). No output of any step may contain "nva_".
+//   6. logout, after the cleanup (never --revoke: the key is yours). No output of any step may contain "nva_".
 // Exits non-zero on the first failed check, after cleanup. Work files go to a temp dir, kept on failure.
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdtempSync, readdirSync, rmSync, statSync } from 'node:fs'
@@ -204,8 +204,6 @@ try {
     log('created_ready', { id, credits: rv?.usage?.totalCreditsCost ?? null, files })
   }
 
-  const out = vaCli(['logout'])
-  check(out.code === 0, 'logout', { code: out.code })
   ok = true
 } catch (e) {
   log('FAIL', {
@@ -222,6 +220,14 @@ try {
         log('cleanup_failed', { error: e instanceof Error ? e.message : String(e) })
       },
     )
+  // Last, after cleanup: unpublish and delete run with the saved key.
+  try {
+    const out = vaCli(['logout'])
+    check(out.code === 0, 'logout', { code: out.code })
+  } catch (e) {
+    ok = false
+    log('logout_failed', { error: e instanceof Error ? e.message : String(e) })
+  }
   // The saved config holds the key: always removed, even when other work files are kept.
   rmSync(configHome, { recursive: true, force: true })
   if (ok) rmSync(work, { recursive: true, force: true })
