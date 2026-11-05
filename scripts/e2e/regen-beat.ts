@@ -304,20 +304,27 @@ const middleOf = (beats: Version['beats'], what: string) => {
   return must(real[Math.floor((real.length - 1) / 2)], `${what} has no scenes`).id
 }
 
-let failure: Error | null = null
-try {
-  const versions = await videoOf(sourceId)
-  const parent = versions.find((v) => v.status === 'ready')
-  // A version made before finalize stored scenes has beats null until something asks for them (as the app does).
-  if (parent?.editable && parent.beats === null) {
+/**
+ * A video's latest ready version. One made before finalize stored scenes has beats null until something asks for
+ * them, so this asks, as the app does.
+ */
+async function latestReady(id: string) {
+  const v = (await videoOf(id)).find((x) => x.status === 'ready')
+  if (v?.editable && v.beats === null) {
     const r = await call<{ beats: Version['beats'] }>(
       key,
       'GET',
-      `/api/v1/videos/${sourceId}/versions/${parent.n}/beats`,
+      `/api/v1/videos/${id}/versions/${v.n}/beats`,
     )
-    log('beats_filled', { n: parent.n, status: r.status, count: r.json.beats?.length ?? null })
-    if (r.status === 200) parent.beats = r.json.beats
+    log('beats_filled', { videoId: id, n: v.n, status: r.status, count: r.json.beats?.length ?? null })
+    if (r.status === 200) v.beats = r.json.beats
   }
+  return v
+}
+
+let failure: Error | null = null
+try {
+  const parent = await latestReady(sourceId)
   check(
     !!parent?.editable && !!parent.beats && parent.beats.length >= 3,
     'SOURCE_ID has an editable ready version with 3+ scenes',
@@ -415,10 +422,7 @@ try {
     ok('step 4', { delta })
   }
   if (steps.has(5) && voicedId) {
-    const vp = must(
-      (await videoOf(voicedId)).find((v) => v.status === 'ready'),
-      'VOICED_ID has a ready version',
-    )
+    const vp = must(await latestReady(voicedId), 'VOICED_ID has a ready version')
     const scene = middleOf(vp.beats, 'VOICED_ID')
     const v = await revise(
       5,
@@ -441,10 +445,7 @@ try {
     ok('step 5')
   }
   if (steps.has(6) && narratedId) {
-    const np = must(
-      (await videoOf(narratedId)).find((v) => v.status === 'ready'),
-      'NARRATED_ID has a ready version',
-    )
+    const np = must(await latestReady(narratedId), 'NARRATED_ID has a ready version')
     const scene = middleOf(np.beats, 'NARRATED_ID')
     const v = await revise(6, narratedId, np.n, 'Make the headline in this scene bigger and bolder.', [scene])
     const [pf, cf] = [files(narratedId, np.n), files(narratedId, v.n)]
