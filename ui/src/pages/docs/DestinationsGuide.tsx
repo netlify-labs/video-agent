@@ -4,14 +4,9 @@
 import { Card, Code, Stack, Table, Text } from '@mantine/core'
 import receiverSource from '../../../../examples/destination-receiver/receiver.ts?raw'
 import { CopyField, PageHeader } from '../../components/bits'
+import { CodeBlock } from '../../components/CodeBlock'
 import { DESTINATION_VECTORS } from '../../lib/destination-vectors'
 import { DocSections } from './DocsLayout'
-
-const pre = (s: string) => (
-  <Code block style={{ whiteSpace: 'pre', overflowX: 'auto' }}>
-    {s}
-  </Code>
-)
 
 const PUBLISH = `{
   "contract": 1, "event": "publish", "sentAt": "2026-11-05T06:00:00.000Z",
@@ -124,11 +119,11 @@ export default function DestinationsGuidePage() {
                 <Text fw={600} size="sm">
                   publish
                 </Text>
-                {pre(PUBLISH)}
+                <CodeBlock code={PUBLISH} lang="json" />
                 <Text fw={600} size="sm">
                   remove
                 </Text>
-                {pre(REMOVE)}
+                <CodeBlock code={REMOVE} lang="json" />
                 <Text size="sm">
                   <Code>targets</Code> sends the envelope plus <Code>video: {'{ id, title }'}</Code>;{' '}
                   <Code>ping</Code> sends the envelope only (publisher null). File links are signed for 10
@@ -147,7 +142,7 @@ export default function DestinationsGuidePage() {
                   the exact bytes you received, compare in constant time, and refuse{' '}
                   <Code>|now − t| &gt; 300</Code>.
                 </Text>
-                {pre(VERIFY)}
+                <CodeBlock code={VERIFY} lang="js" />
                 <Text fw={600} size="sm">
                   Test vector
                 </Text>
@@ -193,7 +188,7 @@ export default function DestinationsGuidePage() {
             title: 'Callbacks',
             children: (
               <Stack gap="sm">
-                {pre(CALLBACK)}
+                <CodeBlock code={CALLBACK} lang="http" />
                 <Text size="sm">
                   Statuses: for a publish operation <Code>working</Code>, <Code>live</Code>,{' '}
                   <Code>failed</Code>; for a remove operation <Code>working</Code>, <Code>removed</Code>,{' '}
@@ -286,7 +281,7 @@ export default function DestinationsGuidePage() {
             id: 'example',
             title: 'Example receiver',
             description: 'Complete and dependency-free; Video Agent’s own tests run it against the app.',
-            children: pre(receiverSource),
+            children: <CodeBlock code={receiverSource} lang="ts" />,
           },
         ]}
       />

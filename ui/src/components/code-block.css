@@ -1,0 +1,63 @@
+/* Syntax colours for CodeBlock. Light values are tuned for --va-raised (#f2f3f5), dark for #2a2a2a. */
+.va-code {
+  --hl-key: #0550ae;
+  --hl-string: #116329;
+  --hl-number: #953800;
+  --hl-keyword: #cf222e;
+  --hl-comment: #6e7781;
+  --hl-function: #8250df;
+  --hl-type: #953800;
+  --hl-definition: #0550ae;
+  --hl-property: #0550ae;
+  --hl-url: #0a3069;
+  --hl-punctuation: #57606a;
+}
+
+[data-mantine-color-scheme='dark'] .va-code {
+  --hl-key: #79c0ff;
+  --hl-string: #7ee787;
+  --hl-number: #ffa657;
+  --hl-keyword: #ff7b72;
+  --hl-comment: #8b949e;
+  --hl-function: #d2a8ff;
+  --hl-type: #ffa657;
+  --hl-definition: #79c0ff;
+  --hl-property: #79c0ff;
+  --hl-url: #a5d6ff;
+  --hl-punctuation: #9da5ae;
+}
+
+.va-code .hl-key {
+  color: var(--hl-key);
+}
+.va-code .hl-string {
+  color: var(--hl-string);
+}
+.va-code .hl-number {
+  color: var(--hl-number);
+}
+.va-code .hl-keyword {
+  color: var(--hl-keyword);
+}
+.va-code .hl-comment {
+  color: var(--hl-comment);
+  font-style: italic;
+}
+.va-code .hl-function {
+  color: var(--hl-function);
+}
+.va-code .hl-type {
+  color: var(--hl-type);
+}
+.va-code .hl-definition {
+  color: var(--hl-definition);
+}
+.va-code .hl-property {
+  color: var(--hl-property);
+}
+.va-code .hl-url {
+  color: var(--hl-url);
+}
+.va-code .hl-punctuation {
+  color: var(--hl-punctuation);
+}
