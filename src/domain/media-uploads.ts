@@ -353,17 +353,38 @@ export async function assembleUpload(deps: Deps, id: string) {
     deps.log.warn('media.assembly_rejected', { uploadId: id, reason })
     return 'rejected' as const
   }
+  // Memory (spike D5): one buffer of the declared size, each part hashed and copied in, then dropped. Every other
+  // copy of a 150 MB file costs another 150 MB of a 1024 MB function; the store streams it out (adapters/blobs.ts).
+  const memory = (stage: 'parts' | 'classified' | 'stored') => {
+    const m = process.memoryUsage()
+    const mb = (n: number) => Math.round(n / 1048576)
+    deps.log.info('media.assembly_memory', {
+      uploadId: id,
+      stage,
+      rssMb: mb(m.rss),
+      heapUsedMb: mb(m.heapUsed),
+      externalMb: mb(m.external),
+    })
+  }
   const parts = await deps.store.listUploadParts(id)
-  const chunks: Uint8Array[] = []
+  const bytes = Buffer.allocUnsafe(u.size)
+  const whole = createHash('sha256')
+  let filled = 0
   for (const part of parts) {
     const b = await deps.blobs.get('media', partKey(id, part.idx))
     if (!b || sha256Hex(b) !== part.sha256)
       return fail(`Part ${part.idx} is missing or damaged. Upload the file again.`)
-    chunks.push(b)
+    if (filled + b.byteLength > u.size) {
+      filled += b.byteLength
+      break
+    }
+    bytes.set(b, filled)
+    whole.update(b)
+    filled += b.byteLength
   }
-  const bytes = new Uint8Array(Buffer.concat(chunks))
-  if (bytes.byteLength !== u.size || sha256Hex(bytes) !== u.sha256)
+  if (filled !== u.size || whole.digest('hex') !== u.sha256)
     return fail("The assembled file doesn't match the size and sha256 declared when the upload started.")
+  memory('parts')
   let c
   try {
     c = classify(bytes)
@@ -371,6 +392,7 @@ export async function assembleUpload(deps: Deps, id: string) {
     if (!(e instanceof MediaError)) deps.log.error('media.classify_failed', { uploadId: id, error: e })
     return fail(e instanceof MediaError ? e.message : "The file couldn't be read.")
   }
+  memory('classified')
   const policy = u.role ? ROLES[u.role] : null
   if (policy?.audioOnly && c.kind !== 'audio') return fail('A recording must be an audio file.')
   const poster = await deps.blobs.get('media', posterKey(id))
@@ -381,6 +403,7 @@ export async function assembleUpload(deps: Deps, id: string) {
     poster,
     deferMeta: true,
   })
+  memory('stored')
   const mediaId = u.mediaId
   const samples = policy?.samples ? takeSamples(bytes, c) : null
   await deps.store.tx(async (repo) => {

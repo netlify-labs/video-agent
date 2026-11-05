@@ -3,17 +3,48 @@ import type { BlobStoreName, BlobsPort } from '../deps.js'
 
 const store = (name: BlobStoreName) => getStore({ name, consistency: 'strong' })
 
+/** Bodies above this go out as a stream of views: fetch copies a buffered body whole (spike D5), a stream it doesn't. */
+export const STREAM_ABOVE = 8 * 1024 * 1024
+const STREAM_CHUNK = 1024 * 1024
+const STREAM_ATTEMPTS = 3
+
+/** The bytes as a stream of 1 MB views (no copy). A stream is read once, so each attempt makes a new one. */
+export function viewStream(data: Uint8Array): ReadableStream<Uint8Array> {
+  let off = 0
+  return new ReadableStream<Uint8Array>({
+    pull(ctl) {
+      if (off >= data.byteLength) return ctl.close()
+      ctl.enqueue(data.subarray(off, Math.min(data.byteLength, off + STREAM_CHUNK)))
+      off += STREAM_CHUNK
+    },
+  })
+}
+
 export const netlifyBlobs: BlobsPort = {
   async get(name, key) {
     const v = (await store(name).get(key, { type: 'arrayBuffer' })) as ArrayBuffer | null
     return v ? new Uint8Array(v) : null
   },
   async set(name, key, data, metadata) {
+    const opts = metadata ? { metadata } : {}
+    if (typeof data !== 'string' && data.byteLength > STREAM_ABOVE) {
+      // The SDK passes a ReadableStream body to fetch (duplex: 'half') though its types don't list it. Its own retry
+      // would resend the spent stream, so retries happen here with a fresh one.
+      for (let attempt = 1; ; attempt++) {
+        try {
+          await store(name).set(key, viewStream(data) as unknown as Blob, opts)
+          return
+        } catch (e) {
+          if (attempt >= STREAM_ATTEMPTS) throw e
+          await new Promise((r) => setTimeout(r, 500 * attempt))
+        }
+      }
+    }
     const body =
       typeof data === 'string'
         ? data
         : (data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer)
-    await store(name).set(key, body, metadata ? { metadata } : {})
+    await store(name).set(key, body, opts)
   },
   async delete(name, key) {
     await store(name).delete(key)
