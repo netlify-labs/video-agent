@@ -12,6 +12,38 @@ export const ZOOM_MIN = 1.4
 export const CAMERA_MAX_KEYS = 64
 export const ASPECTS = ['16:9', '9:16', '1:1', '4:5'] as const
 export type Aspect = (typeof ASPECTS)[number]
+/** The composition's size per shape (recording.ts compose and the stage maths below). */
+export const OUTPUT_SIZES: Record<Aspect, readonly [number, number]> = {
+  '16:9': [1920, 1080],
+  '9:16': [1080, 1920],
+  '1:1': [1080, 1080],
+  '4:5': [1080, 1350],
+}
+/** The most output pixels one source pixel may cover when zoomed in: past this the picture looks blocky. */
+export const SHARP_SCALE = 1.5
+/** The wallpaper frame's window is inset 6% on every side (va-recording.js .va-window). */
+const WALLPAPER_WINDOW = 0.88
+
+/** Output pixels per source pixel at zoom 1: the recording fitted (contain) into the window. */
+export function sourceScale(
+  source: { width: number; height: number },
+  aspect: Aspect,
+  frameStyle: 'wallpaper' | 'none',
+) {
+  const [ow, oh] = OUTPUT_SIZES[aspect]
+  const k = frameStyle === 'wallpaper' ? WALLPAPER_WINDOW : 1
+  return Math.min((ow * k) / source.width, (oh * k) / source.height)
+}
+
+/**
+ * The most the camera may zoom and stay sharp (SHARP_SCALE output px per source px), at least 1. A 1280x720 recording
+ * in a 1920x1080 wallpaper frame is drawn 1.32x already, so it may zoom only to 1.14; a 2560x1440 one, to 2.27.
+ */
+export const sharpZoomMax = (
+  source: { width: number; height: number },
+  aspect: Aspect,
+  frameStyle: 'wallpaper' | 'none',
+) => Math.max(1, Math.round((SHARP_SCALE / sourceScale(source, aspect, frameStyle)) * 1e4) / 1e4)
 
 /** [t, x, y, zoom, ease?]: source seconds, the frame point at the centre (0-1), zoom (1 = the whole recording). */
 export type CameraKey = [number, number, number, number] | [number, number, number, number, string]

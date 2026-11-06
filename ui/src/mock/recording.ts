@@ -74,6 +74,9 @@ const recordings: MockRecording[] =
         item('med_screen_plain', 'settings-tour.mp4', { durationSec: 95, title: 'Settings tour' }),
         item('med_screen_trace', 'add-webhook.mp4', {
           durationSec: 75,
+          // Recorded with video-agent record at 2x: big enough to zoom sharply (no low-resolution note).
+          width: 2560,
+          height: 1440,
           hasTrace: true,
           title: 'Add a webhook',
         }),

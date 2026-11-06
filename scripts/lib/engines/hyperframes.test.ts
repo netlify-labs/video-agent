@@ -56,6 +56,16 @@ describe('HyperFrames run engine', () => {
     expect(new Set(sent).size).toBe(sent.length)
   })
 
+  it("extracts a screen recording's frames as PNG (JPEG rings around text that zooms magnify)", async () => {
+    const { exec, calls } = stubExec(renderOutput)
+    const dir = videoDir({ 'index.html': '<div class="va-recording" data-va-step="step-1"></div>' })
+    await hyperframesEngine(exec).render(dir, '/out/video.mp4', 'standard', () => {})
+    expect(calls[0]?.args).toEqual([
+      ...['-y', 'hyperframes', 'render', '--quality', 'standard'],
+      ...['--video-frame-format', 'png', '--output', '/out/video.mp4'],
+    ])
+  })
+
   it('reads its version from the last line npx prints', () => {
     const { exec, calls } = stubExec('', '0.8.222')
     const dir = videoDir()

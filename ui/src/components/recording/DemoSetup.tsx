@@ -23,6 +23,7 @@ import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { useNavigate } from 'react-router'
 import { $api, errorMessage, newIdempotencyKey } from '../../api/client'
 import type { paths } from '../../api/schema'
+import { sharpZoomMax, ZOOM_MIN } from '../../../../src/lib/recording'
 import { defaultLength, fitBox, MIN_TRIM, recordingInput, type SetupBox } from '../../lib/demo-setup'
 import { LookControl } from '../LookPicker'
 import { SoundControl, type Sound } from '../SoundControl'
@@ -194,6 +195,11 @@ export function DemoSetup(props: { media: Media; onBack: () => void }) {
   const seek = (t: number) => {
     if (video.current) video.current.currentTime = t
   }
+  // Too small to zoom in sharply in this shape (the planner holds the camera back; src/lib/recording.ts).
+  const small =
+    media.width !== null &&
+    media.height !== null &&
+    sharpZoomMax({ width: media.width, height: media.height }, shape, 'wallpaper') < ZOOM_MIN
   const valid = prompt.trim().length >= 10 && Number(length) >= 3
   const submit = () => {
     const recording = recordingInput({ mediaId: media.id, duration, trim, boxes })
@@ -306,6 +312,15 @@ export function DemoSetup(props: { media: Media; onBack: () => void }) {
                 </Group>
               ))}
             </Stack>
+          ) : null}
+          {small ? (
+            <Alert variant="light" color="yellow" data-testid="low-res-note">
+              <Text size="sm">
+                This recording is {String(media.width)}×{String(media.height)}, small for a {shape} video, so
+                Video Agent will zoom in only a little to keep it sharp. For sharp zooms, record at 2x or in a
+                larger window.
+              </Text>
+            </Alert>
           ) : null}
           <Alert variant="light" color="gray" icon={<IconInfoCircle size={16} />} data-testid="setup-notes">
             <Stack gap={4}>

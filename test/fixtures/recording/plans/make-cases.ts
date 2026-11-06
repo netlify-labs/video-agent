@@ -6,8 +6,9 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const W = 1280
-const H = 720
+// A 1280x720 window at 2x (the CLI's default), so the camera can zoom sharply (sharpZoomMax 2.27 in 16:9).
+const W = 2560
+const H = 1440
 
 type Ev = Record<string, unknown> & { kind: string; t: number }
 

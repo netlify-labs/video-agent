@@ -3,8 +3,8 @@
  "sha256": "golden-scroll",
  "analyzer": "analyze-1",
  "source": {
-  "width": 1280,
-  "height": 720,
+  "width": 2560,
+  "height": 1440,
   "fps": 30,
   "duration": 14
  },
@@ -16,14 +16,14 @@
  "clicks": [
   {
    "t": 3,
-   "x": 640,
-   "y": 144,
+   "x": 1280,
+   "y": 288,
    "source": "trace"
   },
   {
    "t": 10,
-   "x": 576,
-   "y": 504,
+   "x": 1152,
+   "y": 1008,
    "source": "trace"
   }
  ]

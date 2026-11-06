@@ -3,8 +3,8 @@
  "sha256": "golden-vertical",
  "analyzer": "analyze-1",
  "source": {
-  "width": 1280,
-  "height": 720,
+  "width": 2560,
+  "height": 1440,
   "fps": 30,
   "duration": 20
  },
@@ -25,8 +25,8 @@
  "clicks": [
   {
    "t": 6,
-   "x": 794,
-   "y": 216,
+   "x": 1587,
+   "y": 432,
    "source": "trace"
   }
  ]

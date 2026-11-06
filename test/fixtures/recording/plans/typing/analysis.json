@@ -3,8 +3,8 @@
  "sha256": "golden-typing",
  "analyzer": "analyze-1",
  "source": {
-  "width": 1280,
-  "height": 720,
+  "width": 2560,
+  "height": 1440,
   "fps": 30,
   "duration": 14
  },
@@ -16,14 +16,14 @@
  "clicks": [
   {
    "t": 3,
-   "x": 640,
-   "y": 302,
+   "x": 1280,
+   "y": 605,
    "source": "trace"
   },
   {
    "t": 10,
-   "x": 640,
-   "y": 432,
+   "x": 1280,
+   "y": 864,
    "source": "trace"
   }
  ]

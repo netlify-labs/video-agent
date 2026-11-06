@@ -80,7 +80,8 @@ async function recordings(): Promise<{ a: { file: string; trace: Trace }; b: { f
       const r = await runRecord({
         url: `http://localhost:${env.PORT ?? '4398'}/`,
         viewport: { width: 1280, height: 720 },
-        dpr: 1,
+        // Like the CLI's default: 2560x1440, so the camera can zoom and stay sharp (sharpZoomMax).
+        dpr: 2,
         fps: 30,
         out: join(work, name),
         script,

@@ -85,7 +85,8 @@ export function RecordScreen(props: { onRecorded: (f: File) => void; onCancel: (
     <Stack gap="sm" data-testid="record-screen">
       <Text size="sm" c="var(--va-muted)">
         Recordings made here don't include cursor data, so Video Agent will look for your cursor in the
-        picture. Up to {String(MAX_SECONDS / 60)} minutes; keep this tab open until it's uploaded.
+        picture. Share a large window or a whole screen for sharp zooms. Up to {String(MAX_SECONDS / 60)}{' '}
+        minutes; keep this tab open until it's uploaded.
       </Text>
       {error ? (
         <Alert color="red" role="alert">

@@ -14,10 +14,12 @@ describe('capture', () => {
     expect(captureMode({ displayMedia: false, avc: true, trackProcessor: true })).toBe('unsupported')
   })
 
-  it('the §4.3 bitrate and size: about 3.9 Mbps at 1440p, at most 2560 wide, even sides', () => {
+  it('the §4.3 bitrate and size: about 3.9 Mbps at 1440p, 2 to 4 Mbps, at most 2560 wide, even sides', () => {
     expect(bitrateFor(2560, 1440)).toBe(3_870_720)
-    expect(bitrateFor(320, 180)).toBe(1_000_000)
-    expect(bitrateFor(5120, 2880)).toBe(8_000_000)
+    expect(bitrateFor(320, 180)).toBe(2_000_000)
+    expect(bitrateFor(2560, 1600)).toBe(4_000_000)
+    // Five minutes at the ceiling fit the 150 MB recording limit.
+    expect((4e6 / 8) * 300).toBeLessThan(150 * 1024 * 1024)
     expect(encodedSize(3840, 2160)).toEqual({ width: 2560, height: 1440 })
     expect(encodedSize(1281, 721)).toEqual({ width: 1280, height: 720 })
   })

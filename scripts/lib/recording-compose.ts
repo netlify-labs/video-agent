@@ -11,7 +11,7 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { validate, type Summary } from '../../src/lib/contract.js'
 import { fmt } from '../../src/lib/contract-core.js'
-import { keptPlan, type PlanV1 } from '../../src/lib/recording.js'
+import { keptPlan, OUTPUT_SIZES, type PlanV1 } from '../../src/lib/recording.js'
 import type { Trace } from '../../src/lib/recording-trace.js'
 import type { Analysis } from './recording-analyze.js'
 import { emitStep } from './recording-emit.js'
@@ -20,12 +20,7 @@ import { stableJson } from './recording-plan.js'
 import { log, StepError } from './run-tools.js'
 
 const CARD_S = 3
-const SIZES = {
-  '16:9': [1920, 1080],
-  '9:16': [1080, 1920],
-  '1:1': [1080, 1080],
-  '4:5': [1080, 1350],
-} as const
+const SIZES = OUTPUT_SIZES
 
 export interface ComposeOptions {
   videoDir: string

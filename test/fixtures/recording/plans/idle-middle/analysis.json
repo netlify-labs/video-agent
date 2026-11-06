@@ -3,8 +3,8 @@
  "sha256": "golden-idle-middle",
  "analyzer": "analyze-1",
  "source": {
-  "width": 1280,
-  "height": 720,
+  "width": 2560,
+  "height": 1440,
   "fps": 30,
   "duration": 30
  },
@@ -25,20 +25,20 @@
  "clicks": [
   {
    "t": 3,
-   "x": 512,
-   "y": 288,
+   "x": 1024,
+   "y": 576,
    "source": "trace"
   },
   {
    "t": 20,
-   "x": 768,
-   "y": 216,
+   "x": 1536,
+   "y": 432,
    "source": "trace"
   },
   {
    "t": 26,
-   "x": 768,
-   "y": 432,
+   "x": 1536,
+   "y": 864,
    "source": "trace"
   }
  ]

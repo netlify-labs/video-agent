@@ -28,6 +28,8 @@ test('pick a recording, hide something, trim, and make the demo', async ({ page 
   await expect(setup.getByText('can also watch the full recording')).toBeVisible()
   await expect(setup.getByText("Video Agent's AI looks at frames from your recording.")).toBeVisible()
   await expect(page.getByTestId('private-hint')).toHaveCount(0)
+  // 1280x720 is small for a 1920x1080 demo: the camera holds back, and setup says how to get sharp zooms.
+  await expect(page.getByTestId('low-res-note')).toContainText('record at 2x or in a larger window')
 
   // Draw two boxes, move the first, delete the second.
   const canvas = page.getByTestId('box-canvas')
@@ -76,9 +78,13 @@ test('pick a recording, hide something, trim, and make the demo', async ({ page 
   expect(box?.box[1]).toBeCloseTo(0.2, 1)
 })
 
-test('a recording with cursor data says so in setup', async ({ page }) => {
+test('a recording with cursor data says so in setup; a 2x one has no low-resolution note', async ({
+  page,
+}) => {
   await page.goto('/new/demo?media=med_screen_trace')
   await expect(page.getByTestId('cursor-note')).toHaveText('Smooth cursor from your cursor data.')
+  // 2560x1440 zooms sharply: no low-resolution note.
+  await expect(page.getByTestId('low-res-note')).toHaveCount(0)
 })
 
 test('upload a normalized MP4 with its trace.json: no conversion, the trace is sent, then setup', async ({

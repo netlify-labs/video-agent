@@ -8,8 +8,9 @@
 //   3 Target: over it, drop the least active middle steps only while speeding everything up wouldn't be enough, then
 //     raise the least active steps' speed (2x; typing 3x) as far as needed. Under it, keep 1x.
 //   4 Camera: cluster actions within 1.5 s and near on screen, zoom so a cluster fills ~45% of the width (1.4 to
-//     zoomMax), arrive 0.5 s early, hold 0.6 s after, pan between clusters under 1.2 s apart, zoom out otherwise and at
-//     the step's end; never past the recording's edge; at most 1.2 zoom a second; at most 64 keys.
+//     zoomMax, never past sharpZoomMax: one source px drawn over at most 1.5 output px, so a small recording zooms
+//     less or not at all), arrive 0.5 s early, hold 0.6 s after, pan between clusters under 1.2 s apart, zoom out
+//     otherwise and at the step's end; never past the recording's edge; at most 1.2 zoom a second; at most 64 keys.
 //   5 Cursor: a centripetal Catmull-Rom spline through the trace's moves at 30 Hz (jitter under 3 px in 80 ms removed),
 //     or analysis' inferred path (the highlight ring), or none. Not stored in the plan: emit writes it per step.
 //   6 Redactions: every trace entry and setup box, whole, in `locked`; steps hold none.
@@ -18,6 +19,7 @@ import {
   CAMERA_MAX_KEYS,
   RATE_RANGE,
   round4,
+  sharpZoomMax,
   ZOOM_DEFAULT_MAX,
   ZOOM_MIN,
   type Aspect,
@@ -387,7 +389,24 @@ export function planRecording(o: PlanOptions) {
 
   const look = o.look === false ? undefined : o.look
   const frameStyle = look?.frame === 'none' ? 'none' : 'wallpaper'
-  const zoomMax = Math.max(ZOOM_MIN, look?.zoomMax ?? ZOOM_DEFAULT_MAX)
+  const lookMax = Math.max(ZOOM_MIN, look?.zoomMax ?? ZOOM_DEFAULT_MAX)
+  // Rule 4: no closer than stays sharp; a small recording zooms less, or not at all.
+  const sharp = sharpZoomMax(a.source, aspect, frameStyle)
+  const zoomMax = Math.min(lookMax, sharp)
+  if (sharp < lookMax)
+    decide(
+      4,
+      null,
+      sharp < ZOOM_MIN
+        ? 'zoom held back: the recording is too small to zoom sharply'
+        : 'zoom capped to stay sharp',
+      {
+        source: [W, H],
+        aspect,
+        sharpZoomMax: sharp,
+        lookZoomMax: lookMax,
+      },
+    )
   if (look?.frame === 'browser') decide(4, null, 'browser frame treated as wallpaper until phase 5', {})
 
   // Rule 2 (first part): the person's trim.

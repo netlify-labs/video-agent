@@ -27,9 +27,13 @@ export function captureMode(s: CaptureSupport): CaptureMode {
   return s.trackProcessor ? 'track' : 'canvas'
 }
 
-/** The §4.3 bitrate: about 0.035 bits per pixel per frame (3.9 Mbps at 1440p), 1 to 8 Mbps. */
+/**
+ * The §4.3 bitrate: about 0.035 bits per pixel per frame (3.9 Mbps at 1440p), 2 to 4 Mbps. The floor keeps small
+ * recordings' text crisp when zoomed (1 Mbps lost about 8 dB PSNR against 2 on a UI tour); the ceiling keeps 5 minutes
+ * under the 150 MB recording limit.
+ */
 export function bitrateFor(width: number, height: number): number {
-  return Math.round(Math.min(8e6, Math.max(1e6, width * height * FPS * 0.035)))
+  return Math.round(Math.min(4e6, Math.max(2e6, width * height * FPS * 0.035)))
 }
 
 /** The encoded size for a first frame: at most 2560 wide, even sides. */

@@ -3,8 +3,8 @@
  "sha256": "golden-click-burst",
  "analyzer": "analyze-1",
  "source": {
-  "width": 1280,
-  "height": 720,
+  "width": 2560,
+  "height": 1440,
   "fps": 30,
   "duration": 16
  },
@@ -21,32 +21,32 @@
  "clicks": [
   {
    "t": 4,
-   "x": 384,
-   "y": 288,
+   "x": 768,
+   "y": 576,
    "source": "trace"
   },
   {
    "t": 4.4,
-   "x": 422,
-   "y": 288,
+   "x": 845,
+   "y": 576,
    "source": "trace"
   },
   {
    "t": 4.9,
-   "x": 461,
-   "y": 288,
+   "x": 922,
+   "y": 576,
    "source": "trace"
   },
   {
    "t": 5.5,
-   "x": 499,
-   "y": 295,
+   "x": 998,
+   "y": 590,
    "source": "trace"
   },
   {
    "t": 11,
-   "x": 1024,
-   "y": 576,
+   "x": 2048,
+   "y": 1152,
    "source": "trace"
   }
  ]

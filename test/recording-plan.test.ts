@@ -14,6 +14,7 @@ import {
   RATE_RANGE,
   rateInRange,
   rateOf,
+  sharpZoomMax,
   type Aspect,
   type PlanV1,
 } from '../src/lib/recording.js'
@@ -174,12 +175,43 @@ describe('recording.ts plan: golden cases', () => {
 
   it('9:16 never zooms out below the zoom that fills the height', () => {
     const { plan } = planCase('vertical')
-    const fill = (16 / 9) * (1280 / 720)
+    const fill = (16 / 9) * (2560 / 1440)
     expect(plan.steps[0]?.camera.every((k) => k[3] >= fill - 1e-3)).toBe(true)
   })
 })
 
 describe('recording.ts plan: rules', () => {
+  it('zooms no closer than stays sharp: a source px drawn over at most 1.5 output px', () => {
+    // 1280x720 in a 1920x1080 wallpaper frame is drawn 1.32x already; at 2x it may zoom to 2.27; full bleed 1080p, 1.5.
+    expect(sharpZoomMax({ width: 1280, height: 720 }, '16:9', 'wallpaper')).toBe(1.1364)
+    expect(sharpZoomMax({ width: 2560, height: 1440 }, '16:9', 'wallpaper')).toBe(2.2727)
+    expect(sharpZoomMax({ width: 1920, height: 1080 }, '16:9', 'none')).toBe(1.5)
+    expect(sharpZoomMax({ width: 960, height: 540 }, '16:9', 'wallpaper')).toBe(1)
+    const small = (width: number, height: number) => {
+      const c = load('one-click')
+      const scale = width / c.analysis.source.width
+      const analysis = {
+        ...c.analysis,
+        source: { ...c.analysis.source, width, height },
+        // The analysis is in source px: shrink its boxes with the frame.
+        clicks: c.analysis.clicks.map((k) => ({ ...k, x: k.x * scale, y: k.y * scale })),
+      } as Analysis
+      return planRecording({ mediaId: 'med_small', analysis, trace: c.trace })
+    }
+    // The golden one-click zooms to 2.2 at 2x; at 1x it zooms to the cap; at half size, not at all.
+    const at1x = small(1280, 720)
+    expect(at1x.plan.zoomMax).toBe(1.1364)
+    expect(at1x.plan.steps[0]?.camera.map((k) => k[3])).toEqual([1, 1, 1.1364, 1.1364, 1, 1])
+    expect(at1x.decisions.find((d) => d.rule === 4 && d.step === null)?.decision).toBe(
+      'zoom held back: the recording is too small to zoom sharply',
+    )
+    const half = small(960, 540)
+    expect(half.plan.zoomMax).toBe(1)
+    expect(half.plan.steps.every((st) => st.camera.every((k) => k[3] === 1))).toBe(true)
+    // A big recording keeps the Look's cap.
+    expect(planCase('one-click').decisions.some((d) => d.decision.startsWith('zoom'))).toBe(false)
+  })
+
   it('RATE_RANGE is [0.5, 4]; rates clamp, check and convert', () => {
     expect(RATE_RANGE).toEqual([0.5, 4])
     expect(clampRate(9)).toBe(4)
@@ -386,7 +418,7 @@ describe('recording.ts plan: rules', () => {
 const hasFfmpeg = spawnSync('ffmpeg', ['-version'], { stdio: 'ignore' }).status === 0
 
 describe.runIf(hasFfmpeg)('recording.ts plan: paths B and C (no trace)', () => {
-  it('plans the analyzed synthetic recording: zooms to the click, cursor is the highlight ring', async () => {
+  it('plans the analyzed synthetic recording: zooms to the click (only as far as stays sharp), cursor is the highlight ring', async () => {
     const analysis = await analyzeRecording(makeFixture(join(dir, 'fixture.mp4')))
     const { plan } = planRecording({ mediaId: 'med_fixture', analysis })
     console.log(
@@ -395,8 +427,11 @@ describe.runIf(hasFfmpeg)('recording.ts plan: paths B and C (no trace)', () => {
     const step = plan.steps.find((s) => s.in <= FIXTURE.click.t && s.out >= FIXTURE.click.t)
     expect(step).toBeTruthy()
     expect(step?.focus).toBeUndefined()
+    // 1280x720 in a 1920x1080 wallpaper frame is already drawn 1.32x: the camera zooms only as far as stays sharp.
+    expect(plan.zoomMax).toBe(1.1364)
+    expect(Math.max(...plan.steps.flatMap((s) => s.camera.map((k) => k[3])))).toBeLessThanOrEqual(1.1364)
     // A zoomed key near the click.
-    const near = step?.camera.filter((k) => k[3] > 1.2 && Math.abs(k[0] - FIXTURE.click.t) < 1.5) ?? []
+    const near = step?.camera.filter((k) => k[3] > 1.05 && Math.abs(k[0] - FIXTURE.click.t) < 1.5) ?? []
     expect(near.length).toBeGreaterThan(0)
     for (const [, x, y] of near)
       expect(Math.hypot((x - FIXTURE.click.x / 1280) * 1280, (y - FIXTURE.click.y / 720) * 720)).toBeLessThan(
