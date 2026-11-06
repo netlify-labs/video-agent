@@ -78,6 +78,8 @@ const recordings: MockRecording[] =
           title: 'Add a webhook',
         }),
       ]
+/** Marks this route's own config request, so it passes through. */
+const SKIP = 'x-mock-recording-pass'
 const sessions = new Map<string, { id: string; filename: string; size: number; parts: Set<number> }>()
 
 declare global {
@@ -111,6 +113,13 @@ export async function recordingRoute(
   if (!p.startsWith('/api/')) return null
   const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase()
 
+  const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined))
+  if (p === '/api/v1/config' && !headers.has(SKIP)) {
+    // Through the other routes (looks adds its feature too), then screen_recording.
+    const res = await window.fetch(url.pathname + url.search, { headers: { [SKIP]: '1' } })
+    const body = (await res.json()) as { features: string[] }
+    return json({ ...body, features: [...body.features, 'screen_recording'] }, res.status)
+  }
   if (p === '/api/v1/media/uploads' && method === 'POST') {
     const b = await readJson(init, input)
     if (b.role !== 'screen-recording') return null

@@ -7,11 +7,13 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 const MP4 = fileURLToPath(new URL('../../test/fixtures/mp4/gop30.mp4', import.meta.url))
-const creates = (page: Page) =>
-  page.evaluate(() => (window as unknown as { __mockDemoCreates?: unknown[] }).__mockDemoCreates ?? [])
+// Browser-side code goes in as strings: the e2e files are typechecked without the DOM.
+const creates = (page: Page) => page.evaluate<unknown[]>('window.__mockDemoCreates ?? []')
 
 test('pick a recording, hide something, trim, and make the demo', async ({ page }) => {
-  await page.goto('/new/demo')
+  await page.goto('/new')
+  await page.getByRole('link', { name: 'From a screen recording' }).click()
+  await expect(page).toHaveURL(/\/new\/demo$/)
   const picks = page.getByRole('button', { name: /^Use / })
   await expect(picks).toHaveCount(2)
   // Cursor data first, with its badge.
@@ -98,9 +100,7 @@ test('upload a normalized MP4 with its trace.json: no conversion, the trace is s
   ])
   await expect(page).toHaveURL(/\?media=med_screen_up/, { timeout: 30_000 })
   await expect(page.getByTestId('cursor-note')).toHaveText('Smooth cursor from your cursor data.')
-  const sent = await page.evaluate(
-    () => (window as unknown as { __mockTraces?: Record<string, unknown> }).__mockTraces ?? {},
-  )
+  const sent = await page.evaluate<Record<string, unknown>>('window.__mockTraces ?? {}')
   expect(Object.values(sent)).toEqual([trace])
 })
 
@@ -108,15 +108,15 @@ test('record the screen in the app: a shared canvas becomes a recording and open
   page,
 }) => {
   // A canvas stands in for the shared screen: an animated picture at 1280x720 from captureStream(30).
-  await page.addInitScript(() => {
-    navigator.mediaDevices.getDisplayMedia = () => {
+  await page.addInitScript({
+    content: `navigator.mediaDevices.getDisplayMedia = () => {
       const c = document.createElement('canvas')
       c.width = 1280
       c.height = 720
-      const cx = c.getContext('2d') as CanvasRenderingContext2D
+      const cx = c.getContext('2d')
       let n = 0
       const draw = () => {
-        cx.fillStyle = `hsl(${String(n++ % 360)} 60% 50%)`
+        cx.fillStyle = 'hsl(' + (n++ % 360) + ' 60% 50%)'
         cx.fillRect(0, 0, c.width, c.height)
         cx.fillStyle = '#fff'
         cx.fillRect((n * 7) % c.width, 300, 80, 80)
@@ -124,7 +124,7 @@ test('record the screen in the app: a shared canvas becomes a recording and open
       }
       draw()
       return Promise.resolve(c.captureStream(30))
-    }
+    }`,
   })
   await page.goto('/new/demo')
   await page.getByRole('button', { name: 'Record your screen' }).click()
@@ -139,8 +139,8 @@ test('record the screen in the app: a shared canvas becomes a recording and open
 })
 
 test("without screen sharing, Record says this browser can't", async ({ page }) => {
-  await page.addInitScript(() => {
-    Object.defineProperty(navigator.mediaDevices, 'getDisplayMedia', { value: undefined })
+  await page.addInitScript({
+    content: "Object.defineProperty(navigator.mediaDevices, 'getDisplayMedia', { value: undefined })",
   })
   await page.goto('/new/demo')
   await page.getByRole('button', { name: 'Record your screen' }).click()

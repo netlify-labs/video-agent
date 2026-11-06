@@ -333,6 +333,14 @@ export function NewVideoPage() {
                 </Anchor>
               </>
             ) : null}
+            {config.data?.features.includes('screen_recording') ? (
+              <>
+                {' '}
+                <Anchor component={Link} to="/new/demo" inherit>
+                  From a screen recording
+                </Anchor>
+              </>
+            ) : null}
           </>
         }
       />

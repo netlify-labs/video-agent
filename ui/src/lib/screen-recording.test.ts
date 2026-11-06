@@ -2,7 +2,6 @@
 // records (D4), the encoder settings, which files need converting, and the setup's request (the server's length
 // formula, boxes and trim that the server accepts).
 import { describe, expect, it } from 'vitest'
-import { demoDuration } from '../../../src/domain/demo-recording'
 import { defaultLength, recordingInput } from './demo-setup'
 import { convertSettings, needsConversion, type VideoFacts } from './recording-convert'
 import { bitrateFor, captureMode, encodedSize } from './screen-capture'
@@ -57,7 +56,17 @@ describe('conversion', () => {
 
 describe('setup', () => {
   it('pre-fills the length with the server’s formula', () => {
-    for (const s of [5, 49, 50, 100, 224, 226, 600]) expect(defaultLength(s), String(s)).toBe(demoDuration(s))
+    // src/domain/demo-recording.ts demoDuration (not imported: it pulls the server into the UI's typecheck).
+    const cases: [number, number][] = [
+      [5, 20],
+      [49, 20],
+      [50, 20],
+      [100, 40],
+      [224, 90],
+      [226, 90],
+      [600, 90],
+    ]
+    for (const [used, want] of cases) expect(defaultLength(used), String(used)).toBe(want)
   })
 
   it('sends the trim only when it cuts, and boxes inside the frame', () => {
