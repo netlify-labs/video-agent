@@ -122,7 +122,14 @@ async function localPipeline(rec: Awaited<ReturnType<typeof recordings>>) {
       `Recording A is ${String(seconds)} s but its trace says ${String(rec.a.trace.frame.duration)} s: the server would refuse the trace.`,
     )
   const { demo } = await import('./demo-local.js')
-  await demo({ name: 'lt1-a', mediaId: 'med_lt1recaaaa', file: rec.a.file, trace: rec.a.trace, boxes: [] })
+  // A's setup box, as the live demo gets it: blurred, over the whole recording.
+  const box = {
+    start: 0,
+    end: rec.a.trace.frame.duration,
+    reason: 'Hidden by you',
+    boxes: [[0, ...BOX]] as [number, number, number, number, number][],
+  }
+  await demo({ name: 'lt1-a', mediaId: 'med_lt1recaaaa', file: rec.a.file, trace: rec.a.trace, boxes: [box] })
   await demo({ name: 'lt1-b', mediaId: 'med_lt1recbbbb', file: rec.b.file, trace: null, boxes: [] })
   log('local_pipeline', { ok: true })
 }

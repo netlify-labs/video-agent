@@ -23,6 +23,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { chromium, type Page } from '@playwright/test'
 import { load, read } from '../../src/lib/contract.js'
+import { LOCKED_SRC, parseRedactScript } from '../../src/lib/recording.js'
 import { parseTrace, type Trace } from '../../src/lib/recording-trace.js'
 import { makeFixture } from '../../test/fixtures/recording/make-fixture.js'
 import { checkContract } from '../lib/check-contract.js'
@@ -283,6 +284,63 @@ export interface Demo {
   boxes: { start: number; end: number; reason: string; boxes: [number, number, number, number, number][] }[]
 }
 
+/**
+ * A hidden area shows only while its recording scene is on screen and inside its own span. With the locked areas, the
+ * render is compared with one made without them, a frame either side of every scene boundary: wherever no area's span
+ * covers the source second on screen (an intro, an outro, a step past every box's end), the two frames are the same.
+ */
+function hideBoundaries(video: string, html: string, mp4: string) {
+  const lockedFile = join(video, LOCKED_SRC)
+  const text = readFileSync(lockedFile, 'utf8')
+  const parsed = parseRedactScript(text)
+  if (!parsed.ok || !parsed.entries.length) return { skipped: 'no hidden areas' }
+  const ref = mp4.replace(/\.mp4$/, '-unhidden.mp4')
+  writeFileSync(lockedFile, 'window.__vaRedact=[];')
+  try {
+    sh('npx', ['hyperframes', 'render', '-q', 'draft', '-o', ref], { cwd: video, timeoutMs: 900_000 })
+  } finally {
+    writeFileSync(lockedFile, text)
+  }
+  const beats = read(load(html)).beats
+  // The source second a recording scene shows at output time t (a held end shows its out frame), else null.
+  const sourceAt = (t: number) => {
+    const b = beats.find((x) => t >= x.start && t < x.start + x.duration)
+    const r = b?.recording
+    if (!b || !r) return null
+    const slot = r.hold ? b.duration - r.hold.seconds : b.duration
+    return Math.min(r.out, r.in + ((t - b.start) / slot) * (r.out - r.in))
+  }
+  const frame = (file: string, t: number) =>
+    spawnSync('ffmpeg', [
+      ...['-loglevel', 'error', '-ss', t.toFixed(3), '-i', file, '-frames:v', '1'],
+      ...['-vf', 'scale=480:270', '-f', 'rawvideo', '-pix_fmt', 'gray', '-'],
+    ]).stdout as Buffer
+  const samples = []
+  for (const b of beats)
+    for (const edge of [b.start, b.start + b.duration])
+      for (const t of [edge - 0.05, edge + 0.05]) {
+        if (t <= 0) continue
+        const s = sourceAt(t)
+        const covered = s !== null && parsed.entries.some((e) => s >= e.start - 0.05 && s < e.end + 0.05)
+        if (covered) continue
+        const [a, c] = [frame(mp4, t), frame(ref, t)]
+        if (!a.length || !c.length) continue
+        let changed = 0
+        for (let i = 0; i < Math.min(a.length, c.length); i++)
+          if (Math.abs((a[i] ?? 0) - (c[i] ?? 0)) > 12) changed++
+        samples.push({
+          t: Math.round(t * 1000) / 1000,
+          scene: beats.find((x) => t >= x.start && t < x.start + x.duration)?.id ?? null,
+          changed,
+        })
+        if (changed > 0)
+          throw new StepError(
+            `A hidden area shows at ${t.toFixed(2)} s, where no area's span covers the picture (${String(changed)} px differ).`,
+          )
+      }
+  return { samples: samples.length, checked: samples }
+}
+
 export async function demo(d: Demo) {
   // Not the tour's own folder (out/tour-<x>), which holds the recording.
   const root = join(out, `demo-${d.name}`)
@@ -364,8 +422,9 @@ export async function demo(d: Demo) {
   await step('render', { demo: d.name }, () =>
     sh('npx', ['hyperframes', 'render', '-q', 'draft', '-o', mp4], { cwd: video, timeoutMs: 900_000 }),
   )
-  // Stills at each click, in output time: a recording scene shows in..out over its slot.
   const html = readFileSync(join(video, 'index.html'), 'utf8')
+  await step('hide_boundaries', { demo: d.name }, () => hideBoundaries(video, html, mp4))
+  // Stills at each click, in output time: a recording scene shows in..out over its slot.
   const beats = read(load(html)).beats.filter((b) => b.recording)
   const stills: string[] = []
   for (const b of beats) {

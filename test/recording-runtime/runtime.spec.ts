@@ -159,6 +159,35 @@ test('hidden areas blur the picture by default, solid when asked, with no label'
   expect(looks.every((l) => l.text === '')).toBe(true)
 })
 
+test('a hidden area never outlives its scene: hidden when the scene is, and outside its own span', async ({
+  page,
+}) => {
+  // A box over source 3-5 s only, in a 2-12 s slot over 7.5 s.
+  await open(page, { redact: [{ id: 'a1', start: 3, end: 5, boxes: [[3, 0.1, 0.1, 0.2, 0.1]] }] })
+  const real = (s: number) => ((s - 2) / 10) * 7.5
+  const shown = (t: number) =>
+    seek(page, 'add-site', real(t)).then(() => opacity(page, '.va-hide:last-of-type'))
+  const cases: [string, number, boolean][] = [
+    ['before its span', 2.9, false],
+    ['in its span', 4, true],
+    ['after its span', 5.1, false],
+  ]
+  for (const [name, t, want] of cases) {
+    const got = (await shown(t)) > 0
+    logCase('scene-bound', { case: name, t, expected: want, actual: got })
+    expect(got, name).toBe(want)
+  }
+  // The scene cut away (HyperFrames hides the beat): its boxes go with it, whatever their own state.
+  await seek(page, 'add-site', real(4))
+  await page.evaluate(`document.querySelector('[data-va-beat="add-site"]').style.visibility = 'hidden'`)
+  const after = await js<string[]>(
+    page,
+    `[...document.querySelectorAll('.va-hide')].map((e) => getComputedStyle(e).visibility)`,
+  )
+  logCase('scene-cut', { expected: 'all hidden', actual: after })
+  expect(after.every((v) => v === 'hidden')).toBe(true)
+})
+
 test('malformed camera, clicks and redact entries are skipped and logged, never thrown', async ({ page }) => {
   const errors: string[] = []
   page.on('pageerror', (e) => errors.push(e.message))
