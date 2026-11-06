@@ -1,7 +1,7 @@
 // Record in the app (screen-recording plan §4.5, path B; va-rsk5.4.7): share a tab, window or screen and record it,
 // encoded live (lib/screen-capture), so the file is ready to upload the moment it stops. Stops by itself when sharing
 // ends in the browser or at the 5-minute limit.
-import { Alert, Button, Group, Stack, Text } from '@mantine/core'
+import { Alert, Button, Group, Loader, Stack, Text } from '@mantine/core'
 import { IconPlayerRecordFilled, IconPlayerStopFilled } from '@tabler/icons-react'
 import { useEffect, useRef, useState } from 'react'
 import {
@@ -75,6 +75,8 @@ export function RecordScreen(props: { onRecorded: (f: File) => void; onCancel: (
     }
   }
 
+  // Nothing to offer until the browser has said whether it can record (else the copy flashes, then turns into a no).
+  if (mode === null) return <Loader size="sm" aria-label="Checking this browser" />
   if (mode === 'unsupported')
     return (
       <Alert color="yellow" title="This browser can't record the screen here">
@@ -112,7 +114,6 @@ export function RecordScreen(props: { onRecorded: (f: File) => void; onCancel: (
           <Button
             leftSection={<IconPlayerRecordFilled size={14} />}
             color="red"
-            disabled={!mode}
             loading={state === 'starting'}
             onClick={() => void start()}
           >

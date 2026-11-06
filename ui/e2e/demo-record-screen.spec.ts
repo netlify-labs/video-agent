@@ -1,7 +1,7 @@
 // Record in the app (screen-recording plan §4.5, path B; va-rsk5.4.7) on the mock build: a canvas stands in for the
 // shared screen, encoded live with Mediabunny, uploaded, and setup opens. In Chrome: Playwright's own Chromium has no
-// H.264 encoder for WebCodecs (Chrome on GitHub's runners does); where a Chrome has none either, the test skips and
-// says so.
+// H.264 encoder for WebCodecs. Neither has Chrome on GitHub's Linux runners, so there it skips with a log line (the
+// unsupported message is covered in demo-recording.spec.ts); it runs where Chrome can encode, as on macOS.
 import { expect, test } from '@playwright/test'
 
 test.use({ channel: 'chrome' })
