@@ -3,7 +3,8 @@
 // workspace's pinned hyperframes, outside the sandbox, so the agent's shell never needs the loopback. The page it renders
 // goes through the render guard (render-guard.ts): no requests to this machine or its network but the render's own.
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { REQUEST, RESULT, PROGRESS, writeJson } from '../../../../scripts/lib/render-broker.js'
 import { RenderProgressReporter } from '../../../../scripts/lib/render-progress.js'
@@ -97,13 +98,16 @@ async function guarded(
   const wrapper = join(o.ws, '.va', 'chrome-guarded')
   writeChromeWrapper(wrapper, chrome, guard.port)
   let tail = ''
+  // A short temp dir on the host: Chrome's profile goes under TMPDIR, and on Linux its singleton socket path must fit
+  // the 108-byte limit, which the workspace's own .tmp is too deep for.
+  const tmp = mkdtempSync(join(tmpdir(), 'va-render-'))
   // Its own process group: the guard allows only the loopback ports this group listens on (the asset server).
   const child = spawn(
     'npx',
     ['hyperframes', 'render', '--quality', quality, '--output', join(o.renderDir, 'video.mp4')],
     {
       cwd: join(o.ws, 'video'),
-      env: { ...agentEnv(o.env), HYPERFRAMES_BROWSER_PATH: wrapper },
+      env: { ...agentEnv(o.env), TMPDIR: tmp, HYPERFRAMES_BROWSER_PATH: wrapper },
       stdio: ['ignore', 'pipe', 'pipe'],
       detached: true,
     },
@@ -130,6 +134,7 @@ async function guarded(
   o.signal.removeEventListener('abort', stop)
   progress.end()
   await guard.close()
+  rmSync(tmp, { recursive: true, force: true })
   const ok = code === 0 && existsSync(join(o.renderDir, 'video.mp4'))
   const error = ok ? undefined : tail.trim().slice(-1500)
   writeJson(join(o.renderDir, RESULT), ok ? { ok } : { ok, error })
