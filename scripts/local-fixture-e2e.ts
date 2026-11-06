@@ -65,11 +65,14 @@ const cli = (args: string[], extra: NodeJS.ProcessEnv = {}) => {
     maxBuffer: 64 * 1024 * 1024,
   })
   log('cli', { args: args.slice(0, 2), code: r.status, ms: Date.now() - t })
-  if (r.status !== 0)
+  if (r.status !== 0) {
+    const agentLog = /Its log: (\S+agent\.log)/.exec(r.stdout)?.[1]
     fail(`video-agent ${args[0]} exited ${r.status}`, {
       stdout: r.stdout.slice(-2000),
       stderr: r.stderr.slice(-6000),
+      ...(agentLog && existsSync(agentLog) ? { agentLog: readFileSync(agentLog, 'utf8').slice(-6000) } : {}),
     })
+  }
   return JSON.parse(r.stdout.trim().split('\n').at(-1) ?? '{}') as {
     dir: string
     version: number
