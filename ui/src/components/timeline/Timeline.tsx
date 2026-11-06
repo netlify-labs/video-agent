@@ -55,6 +55,8 @@ import './timeline.css'
 /** Room after the last clip or the video's end, so the end can be dragged past. */
 const TAIL_SAMPLES = 2 * SAMPLE_RATE
 const BUTTON_ZOOM = 1.5
+/** Scene blocks cycle through this many tints (timeline.css), so neighbours never share one. */
+const SCENE_HUES = 6
 
 const db = (v: number) => `${v > 0 ? '+' : ''}${Math.round(v * 10) / 10} dB`
 const percent = (v: number) => `${Math.round(v * 100)}%`
@@ -473,7 +475,7 @@ export function Timeline(props: TimelineProps) {
           />
 
           <Lane lane="scenes" name="Scenes" onPointerDown={seekFromLane}>
-            {composition.beats.map((b) => {
+            {composition.beats.map((b, i) => {
               const s = secondsToSamples(b.start)
               const e = secondsToSamples(b.start + b.duration)
               if (!overlaps(s, e, win)) return null
@@ -482,6 +484,7 @@ export function Timeline(props: TimelineProps) {
                 <div
                   key={b.id}
                   className="va-tl-scene"
+                  data-hue={i % SCENE_HUES}
                   title={name}
                   style={{ left: sampleToX(s, pps), width: sampleToX(e - s, pps) }}
                 >
