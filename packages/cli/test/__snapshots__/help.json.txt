@@ -1342,7 +1342,7 @@
         },
         "keep": {
           "type": "boolean",
-          "description": "Keep the workspace (for debugging)."
+          "description": "Keep the workspace (for debugging). A failed run's is always kept."
         },
         "timeout": {
           "type": "string",
@@ -1423,7 +1423,7 @@
         },
         "keep": {
           "type": "boolean",
-          "description": "Keep the workspace (for debugging)."
+          "description": "Keep the workspace (for debugging). A failed run's is always kept."
         },
         "timeout": {
           "type": "string",
@@ -1472,7 +1472,7 @@
         },
         "keep": {
           "type": "boolean",
-          "description": "Keep the workspace (for debugging)."
+          "description": "Keep the workspace (for debugging). A failed run's is always kept."
         },
         "timeout": {
           "type": "string",

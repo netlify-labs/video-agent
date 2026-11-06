@@ -90,6 +90,8 @@ export async function runLocal(o: LocalOptions): Promise<LocalResult> {
   const runId = `loc_${randomBytes(6).toString('hex')}`
   const ws = buildWorkspace({ runtime, cache: o.cache, runId, env: o.env, log: o.log, context: o.context })
   if (voice?.python) ws.env.VA_PYTHON = voice.python
+  // A failed run keeps its workspace: the error points at the agent's log in it.
+  let ok = false
   try {
     o.progress('Setting up the tools (first run: a few minutes)…')
     installAgentKit({ ws, runtime, log: o.log, ...(o.run ? { run: o.run } : {}) })
@@ -133,10 +135,19 @@ export async function runLocal(o: LocalOptions): Promise<LocalResult> {
           ? 'The agent ran out of time before the video was rendered.'
           : `The agent finished without rendering the video (exit ${agent.code}). Its log: ${agent.logFile}`,
       )
-    return { ...copyOut(o, run, done), workspace: o.keep ? ws.dir : null }
+    const result = { ...copyOut(o, run, done), workspace: o.keep ? ws.dir : null }
+    ok = true
+    return result
   } finally {
     rmSync(geminiHome(ws.dir), { recursive: true, force: true })
-    if (!o.keep) rmSync(ws.dir, { recursive: true, force: true })
+    // Best effort: a straggling process can still be writing, and that mustn't hide the run's own result.
+    if (ok && !o.keep) {
+      try {
+        rmSync(ws.dir, { recursive: true, force: true, maxRetries: 3 })
+      } catch (e) {
+        o.log('local.workspace_left', { dir: ws.dir, error: e instanceof Error ? e.message : String(e) })
+      }
+    }
   }
 }
 

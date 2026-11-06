@@ -716,7 +716,10 @@ export const COMMANDS: CommandSpec[] = [
           "A Look: an id bundled with the CLI (video-agent looks lists a server's), or a look folder.",
       },
       out: { type: 'string', description: 'Where the video goes (default ./videos/<slug>).' },
-      keep: { type: 'boolean', description: 'Keep the workspace (for debugging).' },
+      keep: {
+        type: 'boolean',
+        description: "Keep the workspace (for debugging). A failed run's is always kept.",
+      },
       timeout: { type: 'string', description: 'Give up after this long: 30m, 1h (default 40m).' },
     },
     examples: [
@@ -762,7 +765,10 @@ export const COMMANDS: CommandSpec[] = [
       look: { type: 'string', description: 'A Look bundled with the CLI, or a look folder.' },
       context: { type: 'string', description: 'Your brand folder (default ./context, else a neutral one).' },
       out: { type: 'string', description: 'Where the video goes (default ./videos/<slug>).' },
-      keep: { type: 'boolean', description: 'Keep the workspace (for debugging).' },
+      keep: {
+        type: 'boolean',
+        description: "Keep the workspace (for debugging). A failed run's is always kept.",
+      },
       timeout: { type: 'string', description: 'Give up after this long: 30m, 1h (default 40m).' },
     },
     examples: [
@@ -788,7 +794,10 @@ export const COMMANDS: CommandSpec[] = [
         multiple: true,
         description: 'Only redo these scenes (id or label; repeatable). The rest stay as they are.',
       },
-      keep: { type: 'boolean', description: 'Keep the workspace (for debugging).' },
+      keep: {
+        type: 'boolean',
+        description: "Keep the workspace (for debugging). A failed run's is always kept.",
+      },
       timeout: { type: 'string', description: 'Give up after this long: 30m, 1h (default 40m).' },
     },
     examples: [
