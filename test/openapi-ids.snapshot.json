@@ -431,7 +431,10 @@
     "sdk": {
       "resource": "plans",
       "method": "create",
-      "feature": "planning"
+      "feature": "planning",
+      "fieldFeatures": {
+        "look": "looks"
+      }
     }
   },
   "GET /api/v1/plans/{id}": {

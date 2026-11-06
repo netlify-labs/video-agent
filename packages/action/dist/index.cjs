@@ -1185,9 +1185,10 @@ function resources(t) {
             "remixOf",
             "mediaIds",
             "sound",
-            "voiceover"
+            "voiceover",
+            "look"
           ],
-          features: [...["planning"]],
+          features: [...["planning"], ...input.look !== void 0 ? ["looks"] : []],
           operationId: "createPlan"
         },
         opts
