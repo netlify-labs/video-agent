@@ -9,6 +9,36 @@ no account needed) in a
 in plain words, publish it to a public link with a share page, or drive everything from scripts with an
 API key.
 
+## Try it on your laptop
+
+No deployment needed: the `video-agent` CLI makes a video on your own machine with your own coding agent
+([Claude Code](https://claude.com/claude-code), signed in), inside its sandbox. Node 22 or later.
+
+```sh
+npm install -g netlify-video-agent
+video-agent doctor                     # checks the agent, the sandbox and Python (for voice-overs)
+video-agent local "A 20-second launch video for our webhooks feature" --aspect 16:9
+video-agent local revise ./videos/webhooks-launch "Make the end card orange"
+```
+
+The first run sets up its tools in `~/.cache/video-agent` (a few minutes, once). Each version lands in
+`./videos/<name>/vN/`, and `./context/`, if you have one, is your brand. The agent's shell can't read your
+credentials, write outside its own folder or reach services on your machine. Nothing goes to Netlify, and it uses
+your agent subscription, not credits. The app's **API docs → CLI** page (`/docs/cli`) has the details.
+
+|         | `video-agent local`      | A deployment                              |
+| ------- | ------------------------ | ----------------------------------------- |
+| Runs on | Your machine, your agent | Netlify Agent Runners                     |
+| Costs   | Your agent subscription  | Netlify AI credits                        |
+| Sharing | The MP4 file             | Share pages, embeds, publish destinations |
+| Review  | You                      | Comments and approvals for the team       |
+
+## Bring it to your team
+
+Deploy your own Video Agent with the button above ([before you deploy](#before-you-deploy), [deploy](#deploy)). Your
+team signs in to the web app, and scripts, CI and AI tools use the same videos through the CLI, the SDK, the
+[GitHub Action](#videos-from-ci) and [MCP](#use-it-from-ai-tools-mcp).
+
 ## What you get
 
 - **A web app** for your team: write a prompt, pick a shape (16:9, 9:16, 1:1, 4:5), watch it being made, play and download the result (MP4, poster, GIF preview, captions).
@@ -445,15 +475,27 @@ keep playing. Without `remotion` in `ENGINES`, their new runs fail with `engine_
 
 ## The API
 
-Reference: the app's **API docs → REST API** page (`/docs/api`), built from the OpenAPI spec at `/api/openapi.json` (committed as
-[`ui/src/api/openapi.json`](ui/src/api/openapi.json)). A standalone copy is at `/api/docs`.
+From scripts, use the CLI or the TypeScript SDK. Both are on the app's **API docs** pages (`/docs/cli`, `/docs/sdk`)
+with your site's URL filled in.
 
 ```sh
-KEY=nva_...   # create one on the API keys page
+video-agent login --url https://<site>     # approve it in the browser; or VIDEO_AGENT_URL and VIDEO_AGENT_KEY in CI
+video-agent create "A 20-second launch video for our new webhooks feature" --aspect 16:9 --wait --out ./webhooks
+```
+
+```ts
+import { VideoAgent } from 'netlify-video-agent-sdk'
+const va = new VideoAgent({ url: 'https://<site>', apiKey: process.env.VIDEO_AGENT_KEY })
+const video = await va.videos.create({ prompt: 'A 20-second launch video for webhooks', aspect: '16:9' })
+await va.files.download(await va.videos.wait(video.id), { file: 'video', to: './webhooks.mp4' })
+```
+
+Reference: the app's **API docs → REST API** page (`/docs/api`), built from the OpenAPI spec at `/api/openapi.json` (committed as
+[`ui/src/api/openapi.json`](ui/src/api/openapi.json)). A standalone copy is at `/api/docs`. With plain HTTP:
+
+```sh
 curl -X POST https://<site>/api/v1/videos -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
-  -d '{"prompt":"A 20-second launch video for our new webhooks feature","aspect":"16:9","webhookUrl":"https://example.com/hook"}'
-curl -H "Authorization: Bearer $KEY" https://<site>/api/v1/videos/<id>                       # poll until "ready"
-curl -L -H "Authorization: Bearer $KEY" https://<site>/api/v1/videos/<id>/versions/1/video -o video.mp4
+  -d '{"prompt":"A 20-second launch video for our new webhooks feature","aspect":"16:9"}'
 ```
 
 Webhooks (`video.ready`, `video.failed`) are signed: `X-Video-Agent-Signature: t=<unix>,v1=<hex>` where the hex
@@ -480,6 +522,9 @@ which features your deployment offers the action. Other CI systems get the same 
 `npx -y netlify-video-agent brief pr <url> | npx -y netlify-video-agent create --prompt-file - --wait`.
 
 ## Use it from AI tools (MCP)
+
+Agents with a shell (Claude Code, Codex) can also use the CLI: one `video-agent create … --wait --json` instead of a
+polling loop. The `netlify-video` skill's `references/cli.md` tells them how.
 
 The same video tasks are MCP tools, so people can ask Claude, Cursor or any MCP client for a video:
 `create_video`, `get_video`, `show_video`, `list_videos`, `revise_video`, `remix_video`, `publish_video`, `unpublish_video`, `cancel_video`,
