@@ -561,6 +561,47 @@ export const videos: Video[] = [
   ]),
 ]
 
+// Remotion (localStorage.mockEngines starts with 'remotion', render-engines plan §7): a ready Remotion video, made with
+// music and not editable, so the tag, the not-editable message and the limited revise form can be seen.
+const remotionEditing: V['editing'] = {
+  engine: 'remotion',
+  capabilities: {
+    editOps: [],
+    liveDraftPreview: false,
+    sound: 'music',
+    voiceover: false,
+    revoice: false,
+    recordedNarration: false,
+    scopedRevision: false,
+    recording: false,
+  },
+}
+export const mockRemotion = (() => {
+  try {
+    return (
+      typeof localStorage !== 'undefined' &&
+      localStorage.getItem('mockEngines')?.startsWith('remotion') === true
+    )
+  } catch {
+    return false
+  }
+})()
+if (mockRemotion) {
+  const copy = structuredClone(videos.find((v) => v.id === 'vid_docs') as Video)
+  copy.id = 'vid_remotion'
+  copy.title = 'Org webhooks in 20 seconds (Remotion)'
+  copy.versions = copy.versions.map((v) => ({
+    ...v,
+    editable: false,
+    sound: 'music',
+    voiceover: null,
+    beats: null,
+    editing: remotionEditing,
+    links: files('vid_remotion', v.n),
+  }))
+  videos.push(copy)
+}
+
 // Redo a scene (localStorage.mockRedo=1): the teaser gets v3, which redid its demo and ends on a held frame under
 // recorded narration, and v4, a scoped run of v3 that was refused for touching a frozen scene. The webhooks launch
 // (Ada's) gets its scenes too; the mock API adds pinned comments on all three (server.ts).

@@ -32,6 +32,7 @@ import { PublishButton } from '../components/PublishDialog'
 import { PublishToMenu, PublishedTo, destinationsActive } from '../components/Destinations'
 import { TranscriptEditor } from '../components/TranscriptEditor'
 import { SoundControl, soundAfterPick, type Sound } from '../components/SoundControl'
+import { engineName, soundsFor } from '../lib/engines'
 import {
   VoiceoverControl,
   sameVoice,
@@ -665,7 +666,14 @@ export function VideoPage() {
   const healN =
     data?.versions.find((x) => x.n === selected) ?? data?.versions.find((x) => x.status === 'ready')
   const heal =
-    healN && healN.status === 'ready' && !healN.editable && healN.mode === 'author' ? healN.n : null
+    healN &&
+    healN.status === 'ready' &&
+    !healN.editable &&
+    healN.mode === 'author' &&
+    // Only HyperFrames versions have an editing record to repair; another engine's isn't editable at all.
+    healN.editing.engine === 'hyperframes'
+      ? healN.n
+      : null
   useEffect(() => {
     if (heal === null || !data) return
     const key = `${data.id}/${heal}`
@@ -878,7 +886,11 @@ export function VideoPage() {
           ) : null}
           {v.status === 'ready' && canCreate ? (
             <Tooltip
-              label="This version can't be edited in the browser. Ask for a revision instead."
+              label={
+                v.editing.capabilities.editOps.length === 0
+                  ? `Editing isn't available for ${engineName(v.editing.engine)} videos yet. Ask for a revision instead.`
+                  : "This version can't be edited in the browser. Ask for a revision instead."
+              }
               disabled={v.editable}
             >
               <Button
@@ -1331,16 +1343,20 @@ export function VideoPage() {
                         value={sound}
                         media={revMedia}
                         disabled={busy || v.status !== 'ready' || planningRevision}
+                        allowed={soundsFor(v.editing.capabilities)}
                         onChange={(s) => {
                           setRevSound(s === v.sound ? null : s)
                         }}
                       />
-                      <VoiceoverControl
-                        value={voice}
-                        disabled={busy || v.status !== 'ready' || planningRevision}
-                        planning={canPlan}
-                        onChange={setRevVoice}
-                      />
+                      {/* An engine without voice-over (Remotion today) never offers it (render-engines §4.1). */}
+                      {v.editing.capabilities.voiceover ? (
+                        <VoiceoverControl
+                          value={voice}
+                          disabled={busy || v.status !== 'ready' || planningRevision}
+                          planning={canPlan}
+                          onChange={setRevVoice}
+                        />
+                      ) : null}
                     </>
                   )}
                   <Group gap={0} className={canPlan && !scoped ? 'va-split-button' : undefined}>

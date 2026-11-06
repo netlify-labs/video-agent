@@ -17,6 +17,7 @@ import { IconCheck, IconCopy, IconExternalLink, IconInfoCircle, IconMapPin } fro
 import type { ReactNode } from 'react'
 import { $api, type Version, type Video } from '../api/client'
 import { clockTime, credits, duration } from './bits'
+import { engineName } from '../lib/engines'
 import { languageName } from './LanguageSelect'
 import { voiceLabel } from './VoiceoverControl'
 
@@ -226,6 +227,11 @@ function Everything({
           </Fact>
           <Fact label="Language">{languageName(video.language)}</Fact>
           <Fact label="Sound">{soundWords(v)}</Fact>
+          {v.editing.engine !== 'hyperframes' ? (
+            <Fact label="Engine">
+              <span data-testid="engine-tag">{engineName(v.editing.engine)}</span>
+            </Fact>
+          ) : null}
           {v.look ? <Fact label="Look">{v.look.name}</Fact> : null}
           {v.music ? <Fact label="Music">{musicWords(v.music)}</Fact> : null}
           {v.music?.query ? <Fact label="Music search">{v.music.query}</Fact> : null}
@@ -417,6 +423,11 @@ export function DetailsCard({ video, v, onOpen }: { video: Video; v: Version; on
       <div className="va-facts">
         <Fact label="Length">{lengthWords(v)}</Fact>
         <Fact label="Sound">{soundWords(v)}</Fact>
+        {v.editing.engine !== 'hyperframes' ? (
+          <Fact label="Engine">
+            <span data-testid="engine-tag">{engineName(v.editing.engine)}</span>
+          </Fact>
+        ) : null}
         {v.look ? <Fact label="Look">{v.look.name}</Fact> : null}
         {v.music ? <Fact label="Music">{musicWords(v.music)}</Fact> : null}
         {v.context ? <Fact label="Context">{v.context.label}</Fact> : null}

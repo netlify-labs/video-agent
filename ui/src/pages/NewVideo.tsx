@@ -7,6 +7,7 @@ import {
   Modal,
   NumberInput,
   SegmentedControl,
+  Select,
   Stack,
   Text,
   TextInput,
@@ -24,7 +25,15 @@ import { Link, useNavigate } from 'react-router'
 import { $api, errorMessage, newIdempotencyKey, useCanCreate, type Version, type Video } from '../api/client'
 import { PageHeader, Status, VersionImage, relativeTime } from '../components/bits'
 import { MediaChips, type Media } from '../components/MediaPicker'
-import { LookControl } from '../components/LookPicker'
+import { LookControl, shownLook, useLooks } from '../components/LookPicker'
+import {
+  capabilitiesOf,
+  engineName,
+  resolveEngine,
+  soundsFor,
+  useEngines,
+  type EngineId,
+} from '../lib/engines'
 import { PlanPanel } from '../components/PlanPanel'
 import { RemixForm, RemixSourcePicker, latestReady, useCanRemix } from '../components/RemixDialog'
 import { SoundControl, soundAfterPick, type Sound } from '../components/SoundControl'
@@ -202,9 +211,23 @@ export function NewVideoPage() {
   const [remixFrom, setRemixFrom] = useState<{ video: Video; version: Version } | null>(null)
   const valid =
     prompt.trim().length >= 10 && prompt.length <= 4000 && (lengthMode === 'auto' || Number(seconds) >= 3)
+  // The engine (render-engines plan §4.2): the look's choice unless the person picks another. With only HyperFrames on
+  // here, none of this shows and no engines request is made.
+  const { engines, enabled } = useEngines()
+  const shownLookEntry = shownLook(useLooks(), look)
+  const [engineAsked, setEngineAsked] = useState<EngineId | null>(null)
+  const engine = resolveEngine(shownLookEntry, enabled, engineAsked)
+  const engineChoices = (shownLookEntry?.engines ?? enabled).filter((e) => enabled.includes(e))
+  const caps = capabilitiesOf(engines, engine)
+  const sounds = soundsFor(caps)
+  const voiceAllowed = caps?.voiceover ?? true
+  const extraCredits = engines?.find((e) => e.id === engine)?.extraCredits ?? null
+  // What's sent: a sound or voice-over the engine can't make is never asked for.
+  const sentSound: Sound = sounds.includes(sound) ? sound : 'music'
+  const sentVoice = voiceAllowed && voice.enabled
 
   // A Sound the person set (or that picking an audio file set): otherwise a plan takes it from the request.
-  const chosenSound = soundTouched || sound !== 'silent' ? sound : undefined
+  const chosenSound = soundTouched || sound !== 'silent' ? sentSound : undefined
 
   const submit = (planId: string | null = null) => {
     create.mutate({
@@ -216,10 +239,12 @@ export function NewVideoPage() {
         ...(planId ? { planId } : {}),
         ...(media.length ? { mediaIds: media.map((m) => m.id) } : {}),
         // With a plan, an untouched Sound is the plan's (from the request); without one there's nothing else to go on.
-        ...(planId && !chosenSound ? {} : { sound }),
+        ...(planId && !chosenSound ? {} : { sound: sentSound }),
         // A plan carries the voice-over (with its narration), so only a direct create sends it.
-        ...(voice.enabled && !planId ? { voiceover: voiceInput(voice) } : {}),
+        ...(sentVoice && !planId ? { voiceover: voiceInput(voice) } : {}),
         ...(look !== undefined ? { look } : {}),
+        // Only a choice the person made; a plan already carries its own.
+        ...(engineAsked === engine && !planId ? { engine } : {}),
       },
       params: { header: { 'idempotency-key': key } },
     })
@@ -429,16 +454,38 @@ export function NewVideoPage() {
                 ) : null}
               </Group>
               <SoundControl
-                value={sound}
+                value={sentSound}
                 media={media}
                 disabled={planning}
+                allowed={sounds}
                 onChange={(s) => {
                   setSound(s)
                   setSoundTouched(true)
                 }}
               />
-              <VoiceoverControl value={voice} onChange={setVoice} disabled={planning} planning={canPlan} />
+              {voiceAllowed ? (
+                <VoiceoverControl value={voice} onChange={setVoice} disabled={planning} planning={canPlan} />
+              ) : null}
               <LookControl value={look} onChange={setLook} disabled={planning} />
+              {engineChoices.length > 1 ? (
+                <Select
+                  label="Engine"
+                  description="What renders the video. The look picks one; change it only if you need to."
+                  data={engineChoices.map((e) => ({ value: e, label: engineName(e) }))}
+                  value={engine}
+                  allowDeselect={false}
+                  disabled={planning}
+                  onChange={(v) => {
+                    setEngineAsked(v)
+                  }}
+                  data-testid="engine-select"
+                />
+              ) : null}
+              {extraCredits !== null && engine !== 'hyperframes' ? (
+                <Text size="xs" c="var(--va-faint)" data-testid="engine-credits">
+                  {engineName(engine)} videos take about {extraCredits} more credits.
+                </Text>
+              ) : null}
               <TextInput
                 label="Title"
                 description="Optional. The agent names it otherwise."
@@ -530,9 +577,11 @@ export function NewVideoPage() {
             durationSec={lengthMode === 'set' ? Number(seconds) : undefined}
             mediaIds={media.map((m) => m.id)}
             sound={chosenSound}
-            voiceover={voice.enabled ? voiceInput(voice) : undefined}
+            voiceover={sentVoice ? voiceInput(voice) : undefined}
             look={look}
             onLookChange={setLook}
+            engine={engineAsked === engine ? engine : undefined}
+            limits={{ sounds, voiceover: voiceAllowed }}
             creating={create.isPending}
             onSuggestAspect={(a) => {
               setShape(a)

@@ -24,8 +24,10 @@ import { IconPlus, IconX } from '@tabler/icons-react'
 import { useEffect, useRef, useState } from 'react'
 import { $api, errorMessage } from '../api/client'
 import type { paths } from '../api/schema'
+import type { EngineId } from '../lib/engines'
 import { isTyping } from '../lib/media-keys'
 import { LookControl } from './LookPicker'
+import type { Sound } from './SoundControl'
 import type { VoiceoverInput } from './VoiceoverControl'
 
 type Plan = paths['/api/v1/plans/{id}']['get']['responses'][200]['content']['application/json']
@@ -51,6 +53,10 @@ export interface PlanPanelProps {
   look?: string | null | undefined
   /** With it, the brief shows the plan's look as a chip that can be changed before creating. */
   onLookChange?: (id: string | null) => void
+  /** The engine picked next to the prompt (render-engines plan §4.2); left out, the look's choice. */
+  engine?: EngineId | undefined
+  /** What that engine can make: the brief's Sound and voice-over follow it (all of them when left out). */
+  limits?: { sounds: Sound[]; voiceover: boolean } | undefined
   /** Called with the plan id to create with it, or null to create without a plan. */
   onCreate: (planId: string | null) => void
   onSuggestAspect?: (aspect: Aspect) => void
@@ -217,11 +223,13 @@ function BriefEditor({
   brief,
   voiceover,
   edit,
+  limits,
 }: {
   brief: Brief
   /** The person turned the voice-over on before planning. */
   voiceover: boolean
   edit: (patch: Partial<Brief>) => void
+  limits?: { sounds: Sound[]; voiceover: boolean } | undefined
 }) {
   const spoken = voiceover || brief.voiceover === true
   const decided = brief.sound !== undefined || brief.voiceover !== undefined
@@ -292,14 +300,16 @@ function BriefEditor({
                     aria-label="Sound"
                     value={brief.sound}
                     onChange={(v) => edit({ sound: v })}
-                    data={[
-                      { value: 'silent', label: 'Silent' },
-                      { value: 'music', label: 'Music' },
-                      { value: 'music_sfx', label: 'Music + effects' },
-                    ]}
+                    data={(
+                      [
+                        { value: 'silent', label: 'Silent' },
+                        { value: 'music', label: 'Music' },
+                        { value: 'music_sfx', label: 'Music + effects' },
+                      ] as const
+                    ).filter((o) => !limits || limits.sounds.includes(o.value))}
                   />
                 ) : null}
-                {brief.voiceover !== undefined ? (
+                {brief.voiceover !== undefined && (limits?.voiceover ?? true) ? (
                   <Switch
                     label="Voice-over"
                     checked={brief.voiceover}
@@ -486,6 +496,7 @@ export function PlanPanel(props: PlanPanelProps) {
         ...(props.sound ? { sound: props.sound } : {}),
         ...(props.voiceover ? { voiceover: props.voiceover } : {}),
         ...(props.look !== undefined ? { look: props.look } : {}),
+        ...(props.engine ? { engine: props.engine } : {}),
       },
     })
     // Start once per panel; the prompt is fixed while planning.
@@ -629,7 +640,12 @@ export function PlanPanel(props: PlanPanelProps) {
           ) : brief ? (
             <>
               <PlanLookChip plan={plan} value={props.look} onChange={props.onLookChange} />
-              <BriefEditor brief={brief} voiceover={!!plan?.voiceover} edit={editBrief} />
+              <BriefEditor
+                brief={brief}
+                voiceover={!!plan?.voiceover}
+                edit={editBrief}
+                limits={props.limits}
+              />
             </>
           ) : null)}
         <Group justify="space-between" gap="sm" className="va-plan-footer">
@@ -707,7 +723,7 @@ export function PlanPanel(props: PlanPanelProps) {
         {brief ? (
           <>
             <PlanLookChip plan={plan} value={props.look} onChange={props.onLookChange} />
-            <BriefEditor brief={brief} voiceover={!!plan?.voiceover} edit={editBrief} />
+            <BriefEditor brief={brief} voiceover={!!plan?.voiceover} edit={editBrief} limits={props.limits} />
           </>
         ) : null}
 

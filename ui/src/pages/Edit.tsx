@@ -57,6 +57,7 @@ import { MediaLibraryModal, type Media } from '../components/MediaPicker'
 import { NarrationRenderDialog, type RenderChoice } from '../components/NarrationRenderDialog'
 import { NarrationRecorder } from '../components/NarrationRecorder'
 import { NarrationSection, type NarrationControl } from '../components/NarrationSection'
+import { engineName } from '../lib/engines'
 import { PosterMenu } from '../components/PosterMenu'
 import {
   keepMineWarning,
@@ -751,6 +752,19 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
     else showError(error)
   }
 
+  // An engine with no edit ops (Remotion today, render-engines plan §4.1): say so instead of opening the editor.
+  if (rendered && rendered.editing.capabilities.editOps.length === 0)
+    return (
+      <Alert color="gray" variant="light" title="Can't edit this version">
+        <Text size="sm">
+          Editing isn't available for {engineName(rendered.editing.engine)} videos yet. Ask for a revision
+          instead.
+        </Text>
+        <Anchor component={Link} to={`/videos/${id}`} size="sm">
+          Back to the video
+        </Anchor>
+      </Alert>
+    )
   if (problem && !draft)
     return (
       <Alert color="red" variant="light" title="Can't edit this version">

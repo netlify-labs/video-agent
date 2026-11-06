@@ -3,6 +3,7 @@ import spec from '../api/openapi.json'
 import type { paths } from '../api/schema'
 import { applyEdits, applyNarration, type EditOp } from '../../../src/lib/contract'
 import { isLanguage } from '../../../src/lib/language'
+import { REMOTION_LICENSE_NOTICE } from '../../../src/lib/remotion-notice'
 import type { NarrationOp, Span } from '../../../src/lib/timeline'
 import plainHtml from '../../../test/fixtures/contract1/index.html?raw'
 import musicHtml from '../../../test/fixtures/contract1-music/index.html?raw'
@@ -137,7 +138,8 @@ const adminSettings: {
       return true
     }
   })(),
-  // localStorage.mockEngines = 'remotion' lists Remotion in ENGINES; 'remotion-key' also sets its key.
+  // localStorage.mockEngines = 'remotion' lists Remotion in ENGINES; 'remotion-key' also sets its key; 'remotion-on'
+  // starts with it turned on under a Free License (and a Remotion video in the list, data.ts).
   ...(() => {
     let engines: string | null
     try {
@@ -145,6 +147,20 @@ const adminSettings: {
     } catch {
       engines = null
     }
+    if (engines === 'remotion-on')
+      return {
+        remotion: {
+          enabled: true,
+          license: {
+            by: 'u_sam',
+            email: 'sam@acme.com',
+            at: '2026-11-05T09:30:00.000Z',
+            tier: 'free' as const,
+            note: null,
+          },
+          keySet: false,
+        },
+      }
     return engines?.startsWith('remotion')
       ? { remotion: { enabled: false, license: null, keySet: engines === 'remotion-key' } }
       : {}
@@ -159,6 +175,51 @@ const cliLogins: Record<string, { label: string; host: string }> = {
   MNYMMNYM: { label: 'Video Agent CLI', host: 'ci-runner' },
 }
 let cliWrongCodes = 0
+/** GET /api/v1/engines as src/domain/engines.ts lists them: HyperFrames always, Remotion when ENGINES lists it. */
+function mockEngineListing() {
+  const hyperframes = {
+    id: 'hyperframes' as const,
+    name: 'HyperFrames',
+    license: { kind: 'open' as const, spdx: 'Apache-2.0' as const },
+    capabilities: {
+      editOps: ['text', 'retime', 'reorder', 'delete', 'color', 'media', 'audio', 'voice'] as const,
+      liveDraftPreview: true,
+      sound: 'all' as const,
+      voiceover: true,
+      revoice: true,
+      recordedNarration: true,
+      scopedRevision: true,
+      recording: false,
+    },
+    enabled: true,
+    notice: null,
+    extraCredits: null,
+  }
+  const r = adminSettings.remotion
+  if (!r) return [hyperframes]
+  return [
+    hyperframes,
+    {
+      id: 'remotion' as const,
+      name: 'Remotion',
+      license: { kind: 'remotion' as const, url: 'https://www.remotion.dev/docs/license' },
+      capabilities: {
+        editOps: [],
+        liveDraftPreview: false,
+        sound: 'music' as const,
+        voiceover: false,
+        revoice: false,
+        recordedNarration: false,
+        scopedRevision: false,
+        recording: false,
+      },
+      enabled: r.enabled && r.license !== null,
+      notice: REMOTION_LICENSE_NOTICE,
+      extraCredits: null,
+    },
+  ]
+}
+
 /** /setup's Engines row, as src/domain/setup.ts words it; none unless ENGINES lists Remotion. */
 function mockEngineCheck() {
   const r = adminSettings.remotion
@@ -571,6 +632,12 @@ export function installMock() {
         planning: { credits: 6.4, calls: 9, unknown: 0 },
       })
     if (p === '/api/v1/notifications') return json({ items: [], unreadCount: 0, nextCursor: null })
+    if (p === '/api/v1/engines') {
+      // Counted, so a test can check nothing asks while only HyperFrames is on.
+      const g = globalThis as unknown as { __enginesRequests?: number }
+      g.__enginesRequests = (g.__enginesRequests ?? 0) + 1
+      return json({ items: mockEngineListing() })
+    }
     if (p === '/api/v1/config')
       return json({
         version: { commit: null, promptTemplate: 16, release: null },
@@ -581,6 +648,8 @@ export function installMock() {
           'destinations',
           ...(adminSettings.youtubeEnabled ? ['youtube'] : []),
           ...(adminSettings.cliLoginEnabled ? ['cli_login'] : []),
+          // Only once Remotion is actually on (render-engines plan §7).
+          ...(adminSettings.remotion?.enabled ? ['engines'] : []),
           // Redo a scene; localStorage.mockNoScopedRevision=1 leaves it out, to test the hidden UI.
           ...(localStorage.getItem('mockNoScopedRevision') === '1' ? [] : ['scoped_revision']),
         ],
