@@ -10,6 +10,7 @@
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import {
+  chmodSync,
   cpSync,
   existsSync,
   mkdirSync,
@@ -63,7 +64,8 @@ export function npmEnv(cache: string, offline = false): NodeJS.ProcessEnv {
 
 /**
  * The installed runtime for this CLI version, installing it on first use. A later run with the same lockfile reuses
- * it without touching the network; a changed lockfile (a rebuilt CLI of the same version) reinstalls.
+ * the packages without touching the network (the scripts and template are refreshed from the CLI each time); a changed
+ * lockfile reinstalls.
  */
 export function ensureRuntime(o: {
   source: string
@@ -79,6 +81,8 @@ export function ensureRuntime(o: {
   const stamp = join(dir, '.installed')
   const want = lockHash(o.source)
   if (existsSync(stamp) && readFileSync(stamp, 'utf8') === want) {
+    // The installed packages are current; the scripts and template always come from this CLI.
+    cpSync(o.source, dir, { recursive: true, force: true })
     o.log('local.runtime', { dir, cached: true, ms: Date.now() - t })
     return dir
   }
@@ -105,6 +109,29 @@ export interface Workspace {
   kitHome: string
 }
 
+/**
+ * <ws>/node_modules: a link to each runtime package, and a .bin of links except tsx. The tsx CLI listens on a unix
+ * socket in the temp folder, which agent sandboxes refuse (docs/spikes.md C2), so `npx tsx` gets a wrapper that runs
+ * node with tsx's loader instead: same TypeScript, no socket.
+ */
+function linkNodeModules(runtime: string, ws: string) {
+  const from = join(runtime, 'node_modules')
+  const to = join(ws, 'node_modules')
+  mkdirSync(join(to, '.bin'), { recursive: true })
+  for (const name of readdirSync(from))
+    if (name !== '.bin' && !name.startsWith('.package-lock')) symlinkSync(join(from, name), join(to, name))
+  const bin = join(from, '.bin')
+  if (existsSync(bin))
+    for (const name of readdirSync(bin))
+      if (name !== 'tsx') symlinkSync(join(bin, name), join(to, '.bin', name))
+  const tsx = join(to, '.bin', 'tsx')
+  writeFileSync(
+    tsx,
+    `#!/bin/sh\nexec node --import ${JSON.stringify(join(from, 'tsx', 'dist', 'loader.mjs'))} "$@"\n`,
+  )
+  chmodSync(tsx, 0o755)
+}
+
 /** A fresh workspace for one run, from the runtime's template. */
 export function buildWorkspace(o: {
   runtime: string
@@ -125,25 +152,39 @@ export function buildWorkspace(o: {
     cpSync(o.context, join(dir, 'context'), { recursive: true })
   }
   mkdirSync(join(dir, 'scripts'), { recursive: true })
+  mkdirSync(join(dir, '.tmp'), { recursive: true })
   const scripts = readdirSync(o.runtime)
-    .filter((f) => f.endsWith('.mjs'))
+    // The fixture agent isn't a run script.
+    .filter((f) => f.endsWith('.mjs') && f !== 'fixture-agent.mjs')
     .map((f) => f.slice(0, -4))
     .sort()
   for (const s of scripts)
     writeFileSync(join(dir, 'scripts', `${s}.ts`), `import ${JSON.stringify(join(o.runtime, `${s}.mjs`))}\n`)
-  symlinkSync(join(o.runtime, 'node_modules'), join(dir, 'node_modules'))
-  symlinkSync(join(o.runtime, 'node_modules'), join(dir, 'video', 'node_modules'))
+  linkNodeModules(o.runtime, dir)
+  symlinkSync(join(dir, 'node_modules'), join(dir, 'video', 'node_modules'))
   const kitHome = join(o.cache, 'agent-kit-home')
   mkdirSync(kitHome, { recursive: true })
   const env: NodeJS.ProcessEnv = {
     ...o.env,
     ...npmEnv(o.cache, o.offline),
     // Pinned tools first: the runtime's bins (hyperframes, tsx), then agent-kit's ffmpeg and ffprobe.
-    PATH: [join(o.runtime, 'node_modules', '.bin'), join(kitHome, '.local', 'bin'), o.env.PATH ?? ''].join(
+    PATH: [join(dir, 'node_modules', '.bin'), join(kitHome, '.local', 'bin'), o.env.PATH ?? ''].join(
       delimiter,
     ),
     VA_REPO_ROOT: dir,
+    VA_RUNTIME: o.runtime,
     VA_NETLIFY_CLI: 'off',
+    // render-job asks the CLI to render, outside the agent's sandbox (scripts/lib/render-broker.ts).
+    VA_RENDER_BROKER: 'file',
+    // Sandboxes route the shell's network through a proxy (HTTPS_PROXY); Node's fetch (Openverse) honours it only
+    // with this (docs/spikes.md C2).
+    NODE_USE_ENV_PROXY: '1',
+    // prepare-run reads inputs from here; the prompt's command is the runner's, with no --inputs.
+    VA_INPUTS_DIR: join(dir, '.va-inputs'),
+    // Temp files stay in the workspace, which is all the sandboxed shell may write.
+    TMPDIR: join(dir, '.tmp'),
+    // hyperframes caches fonts under ~/.cache, which the sandboxed shell can't write.
+    HYPERFRAMES_FONT_CACHE_DIR: join(dir, '.tmp', 'fonts'),
   }
   o.log('local.workspace', {
     dir,
@@ -173,4 +214,46 @@ export function installAgentKit(o: { ws: Workspace; runtime: string; log: Log; r
   const skills = existsSync(skillsDir) ? readdirSync(skillsDir).sort() : []
   o.log('local.agent_kit', { ok: true, skills, ms: Date.now() - t })
   return skills
+}
+
+/**
+ * Kokoro's venv for voice-overs (docs/spikes.md C3): <cache>/kokoro-venv from the newest python3.13 … 3.10, with
+ * kokoro-onnx>=0.6 installed and the person's pip config ignored. Returns the venv's python (VA_PYTHON), or null with
+ * the reason when there's no usable Python (local voice-over is then unavailable; ElevenLabs still works).
+ */
+export function ensureVoiceVenv(o: {
+  cache: string
+  env: NodeJS.ProcessEnv
+  log: Log
+  run?: Runner
+}): { python: string } | { python: null; reason: string } {
+  const t = Date.now()
+  const run = o.run ?? spawnRunner
+  const venv = join(o.cache, 'kokoro-venv')
+  const python = join(venv, 'bin', 'python')
+  const env = { ...o.env, PIP_CONFIG_FILE: '/dev/null', PIP_USER: '0', PIP_DISABLE_PIP_VERSION_CHECK: '1' }
+  if (
+    existsSync(python) &&
+    run(python, ['-c', 'import kokoro_onnx, soundfile'], { cwd: o.cache, env }).status === 0
+  ) {
+    o.log('local.voice_venv', { python, cached: true, ms: Date.now() - t })
+    return { python }
+  }
+  const base = ['python3.13', 'python3.12', 'python3.11', 'python3.10'].find(
+    (p) => run(p, ['--version'], { cwd: o.cache, env }).status === 0,
+  )
+  if (!base) return { python: null, reason: 'No Python 3.10 to 3.13 found (Kokoro needs one).' }
+  mkdirSync(o.cache, { recursive: true })
+  for (const [cmd, args] of [
+    [base, ['-m', 'venv', venv]],
+    [python, ['-m', 'pip', 'install', '--quiet', 'kokoro-onnx>=0.6', 'soundfile']],
+  ] as const) {
+    const r = run(cmd, [...args], { cwd: o.cache, env })
+    if (r.status !== 0) {
+      o.log('local.voice_venv', { ok: false, step: args[1], ms: Date.now() - t })
+      return { python: null, reason: `${cmd} ${args.join(' ')} failed:\n${r.output.slice(-800)}` }
+    }
+  }
+  o.log('local.voice_venv', { python, cached: false, base, ms: Date.now() - t })
+  return { python }
 }

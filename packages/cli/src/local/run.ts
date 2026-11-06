@@ -29,11 +29,17 @@ export interface LocalRunInput {
   requesterName?: string
   /** Files to put in the video, with an optional caption each. */
   media?: { path: string; caption: string | null }[]
+  /**
+   * A revision (local revise, bead va-p1th.5.12): the video's job id and the version it changes, whose source.tar.gz
+   * is restored by prepare-run exactly as on the runner. The prompt is then the change.
+   */
+  revision?: { jobId: string; parentN: number; versionN?: number; source: string }
 }
 
 export interface LocalRun {
   jobId: string
   attemptId: string
+  versionN: number
   /** <ws>/.render/<attempt>/: checkpoint/ and done.json land here. */
   renderDir: string
   manifestSha256: string
@@ -46,9 +52,18 @@ export interface LocalRun {
  */
 export function prepareLocalRun(ws: string, input: LocalRunInput, log: Log): LocalRun {
   const t = Date.now()
-  const jobId = newId('loc')
+  const jobId = input.revision?.jobId ?? newId('loc')
   const attemptId = newId('loc')
+  const versionN = input.revision ? (input.revision.versionN ?? input.revision.parentN + 1) : 1
   const inputs = join(ws, INPUTS_DIR)
+  let source: RunManifest['source'] = null
+  if (input.revision) {
+    const bytes = new Uint8Array(readFileSync(input.revision.source))
+    const key = `${jobId}/v${input.revision.parentN}/source.tar.gz`
+    mkdirSync(join(inputs, 'sources', jobId, `v${input.revision.parentN}`), { recursive: true })
+    writeFileSync(join(inputs, 'sources', key), bytes)
+    source = { key, sha256: sha256Hex(bytes), parentN: input.revision.parentN }
+  }
   const media = (input.media ?? []).map((m) => {
     const bytes = new Uint8Array(readFileSync(m.path))
     const c = classify(bytes)
@@ -71,9 +86,9 @@ export function prepareLocalRun(ws: string, input: LocalRunInput, log: Log): Loc
     v: RUN_MANIFEST_VERSION,
     jobId,
     attemptId,
-    versionN: 1,
-    kind: 'author',
-    source: null,
+    versionN,
+    kind: input.revision ? 'revision' : 'author',
+    source,
     bundle: null,
     media: media.length ? media.map((m) => m.run) : null,
     feedback: null,
@@ -86,7 +101,7 @@ export function prepareLocalRun(ws: string, input: LocalRunInput, log: Log): Loc
   const prompt = buildPrompt({
     jobId,
     attemptId,
-    versionN: 1,
+    versionN,
     requesterName: input.requesterName ?? 'you',
     userPrompt: input.prompt,
     aspect: input.aspect,
@@ -96,7 +111,7 @@ export function prepareLocalRun(ws: string, input: LocalRunInput, log: Log): Loc
     // render-job and checkpoint ignore it for file: URLs; random so a prompt never carries a guessable value.
     callbackToken: randomBytes(16).toString('hex'),
     upload: { mode: 'local' },
-    revision: null,
+    revision: input.revision ? { parentN: input.revision.parentN } : null,
     runManifestSha256: sha256Hex(raw),
     media: media.map((m) => m.prompt),
     ...(input.sound ? { sound: input.sound } : {}),
@@ -104,7 +119,7 @@ export function prepareLocalRun(ws: string, input: LocalRunInput, log: Log): Loc
   })
   writeFileSync(join(ws, 'prompt.txt'), prompt)
   log('local.prepared', { jobId, attemptId, media: media.length, ms: Date.now() - t })
-  return { jobId, attemptId, renderDir, manifestSha256: sha256Hex(raw), prompt }
+  return { jobId, attemptId, versionN, renderDir, manifestSha256: sha256Hex(raw), prompt }
 }
 
 export interface Checkpoint {

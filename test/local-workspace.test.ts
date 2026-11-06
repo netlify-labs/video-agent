@@ -26,8 +26,12 @@ function stubs() {
   const calls: { cmd: string; args: string[]; cwd: string; env: NodeJS.ProcessEnv }[] = []
   const run: Runner = (cmd, args, o) => {
     calls.push({ cmd, args, ...o })
-    if (cmd === 'npm') mkdirSync(join(o.cwd, 'node_modules', '.bin'), { recursive: true })
-    else mkdirSync(join(o.cwd, '.claude', 'skills', 'hyperframes'), { recursive: true })
+    if (cmd === 'npm') {
+      mkdirSync(join(o.cwd, 'node_modules', '.bin'), { recursive: true })
+      mkdirSync(join(o.cwd, 'node_modules', 'hyperframes'), { recursive: true })
+      writeFileSync(join(o.cwd, 'node_modules', '.bin', 'hyperframes'), '')
+      writeFileSync(join(o.cwd, 'node_modules', '.bin', 'tsx'), '')
+    } else mkdirSync(join(o.cwd, '.claude', 'skills', 'hyperframes'), { recursive: true })
     return { status: 0, output: '' }
   }
   return { calls, run }
@@ -86,13 +90,17 @@ describe('local workspace', () => {
       expect(readFileSync(join(ws.dir, 'scripts', `${s}.ts`), 'utf8')).toBe(
         `import ${JSON.stringify(join(runtime, `${s}.mjs`))}\n`,
       )
-    expect(readlinkSync(join(ws.dir, 'node_modules'))).toBe(join(runtime, 'node_modules'))
-    expect(readlinkSync(join(ws.dir, 'video', 'node_modules'))).toBe(join(runtime, 'node_modules'))
+    // A real node_modules of links into the runtime, with its own tsx (no IPC socket; docs/spikes.md C2).
+    expect(readlinkSync(join(ws.dir, 'video', 'node_modules'))).toBe(join(ws.dir, 'node_modules'))
+    expect(readFileSync(join(ws.dir, 'node_modules', '.bin', 'tsx'), 'utf8')).toContain(
+      `node --import ${JSON.stringify(join(runtime, 'node_modules', 'tsx', 'dist', 'loader.mjs'))}`,
+    )
+    expect(ws.env).toMatchObject({ VA_INPUTS_DIR: join(ws.dir, '.va-inputs'), TMPDIR: join(ws.dir, '.tmp') })
     for (const f of ['video/index.html', 'context/BRAND.md', 'AGENTS.md'])
       expect(existsSync(join(ws.dir, f)), f).toBe(true)
     expect(JSON.parse(readFileSync(join(ws.dir, 'package.json'), 'utf8'))).toHaveProperty('netlifyAgent')
     expect(ws.env.PATH?.split(delimiter)).toEqual([
-      join(runtime, 'node_modules', '.bin'),
+      join(ws.dir, 'node_modules', '.bin'),
       join(cache, 'agent-kit-home', '.local', 'bin'),
       '/usr/bin',
     ])

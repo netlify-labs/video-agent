@@ -20,6 +20,7 @@ import type { PreviewFile } from '../src/lib/media/previews.js'
 import type { RunManifest } from '../src/lib/run-manifest.js'
 import type { NarrationOp } from '../src/lib/timeline.js'
 import { localFolder, postCheckpoint, writeAtomic } from './checkpoint.js'
+import { brokeredRender } from './lib/render-broker.js'
 import {
   checkBeforeRender,
   engineReport,
@@ -245,9 +246,18 @@ async function main() {
       if (!r.ok) log('render.progress_skipped', { pct, reason: r.reason })
     })
   })
-  const rendered = await engine.render(videoDir, video, QUALITY, (pct) => {
-    reporter.progress(pct)
-  })
+  // Local mode renders on the host, outside the agent's sandbox (scripts/lib/render-broker.ts).
+  const brokered = process.env.VA_RENDER_BROKER === 'file'
+  if (brokered && engine.id !== 'hyperframes')
+    throw new StepError(`Local mode renders HyperFrames only, not ${engine.id}.`)
+  const rendered = brokered
+    ? await brokeredRender(out, QUALITY, (pct) => {
+        reporter.progress(pct)
+      }).then(() => ({}))
+    : await engine.render(videoDir, video, QUALITY, (pct) => {
+        reporter.progress(pct)
+      })
+  if (brokered) log('render.brokered', { ms: Date.now() - started })
   // hyperframes stops its machine lines at 99%: close the render out so the page moves on to "saving".
   void postCheckpoint({
     attempt,
