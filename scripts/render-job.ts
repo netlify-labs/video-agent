@@ -4,8 +4,10 @@
 // variants: small WebP/AVIF posters, a placeholder and a hover clip), uploads everything to the uploads store under the attempt id, and notifies the service.
 // Reference files (the narration bus) stay out of source.tar.gz and are uploaded on their own (scripts/lib/references.ts).
 // Prints the manifest as a fenced json block on stdout. Logs JSON lines on stderr.
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+// Local mode (cli-and-sdk plan §7): --upload local keeps the outputs in .render/<attempt>/ and uploads nothing, and a
+// file: --callback (file://<ws>/.render/<attempt>/done) writes the manifest to done.json there instead of POSTing it.
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import type { MasteringReport, NarrationOutput, NarrationReport } from '../src/domain/types.js'
 import { bundleManifest, compositionFiles, manifestHash } from '../src/lib/bundle-manifest.js'
 import { NARRATION_SRC } from '../src/lib/contract.js'
@@ -17,7 +19,7 @@ import { sniff } from '../src/lib/media/mp4.js'
 import type { PreviewFile } from '../src/lib/media/previews.js'
 import type { RunManifest } from '../src/lib/run-manifest.js'
 import type { NarrationOp } from '../src/lib/timeline.js'
-import { postCheckpoint } from './checkpoint.js'
+import { localFolder, postCheckpoint, writeAtomic } from './checkpoint.js'
 import {
   checkBeforeRender,
   engineReport,
@@ -60,15 +62,24 @@ const MAX_BYTES = 2 * 1024 * 1024 * 1024
 
 async function main() {
   const args = parseArgs(process.argv.slice(2))
-  const { job, attempt, callback, token } = args
-  if (!job || !attempt || !callback || !token)
+  const { job, attempt, callback, token = '' } = args
+  const uploadMode = args.upload ?? 'blobs'
+  // A file: callback (local mode) needs no token.
+  if (!job || !attempt || !callback || (!token && !callback.startsWith('file:')))
     throw new StepError(
-      'Usage: render-job.ts --job <id> --attempt <id> --callback <url> --token <token> --upload blobs',
+      'Usage: render-job.ts --job <id> --attempt <id> --callback <url> --token <token> --upload blobs|local',
     )
+  // Checked before rendering, so a bad path fails in seconds, not after the render.
+  const doneFile = localFolder(callback)
+  if (callback.startsWith('file:') && uploadMode !== 'local')
+    throw new StepError('A file: callback goes with --upload local.')
   const started = Date.now()
   const videoDir = join(repoRoot, 'video')
   const out = join(repoRoot, '.render', attempt)
-  rmSync(out, { recursive: true, force: true })
+  // A fresh output folder, except a local run's checkpoint/ (file: checkpoints), which the CLI may still be reading.
+  if (existsSync(out))
+    for (const name of readdirSync(out))
+      if (name !== 'checkpoint') rmSync(join(out, name), { recursive: true, force: true })
   mkdirSync(out, { recursive: true })
 
   for (const tool of ['ffmpeg', 'ffprobe'])
@@ -385,15 +396,20 @@ async function main() {
   > &
     Partial<Record<PreviewFile | NarrationOutput, { sha256: string; bytes: number }>>
 
-  const [bin, ...pre] = netlifyCli() as [string, ...string[]]
-  const upload = (name: string, tries: number, timeoutMs: number) =>
-    withRetries(`upload ${name}`, tries, () =>
+  const local = uploadMode === 'local'
+  const blobs = local ? null : (netlifyCli() as [string, ...string[]])
+  const upload = async (name: string, tries: number, timeoutMs: number) => {
+    if (!blobs) return
+    const [bin, ...pre] = blobs
+    await withRetries(`upload ${name}`, tries, () =>
       run(
         bin,
         [...pre, 'blobs:set', 'uploads', `${attempt}/${name}`, '--input', join(out, name), '--force'],
         { timeoutMs },
       ),
     )
+  }
+  if (local) log('render.upload_skipped', { attempt, mode: 'local', out })
   for (const name of OUTPUTS) await upload(name, 4, 5 * 60_000)
   for (const name of narrationOutputs) {
     await upload(name, 4, 5 * 60_000)
@@ -409,7 +425,7 @@ async function main() {
       previews.skipped.push({ name, reason: `upload failed: ${error}` })
     }
   }
-  const references = await uploadReferences(attempt, videoDir)
+  const references = local ? [] : await uploadReferences(attempt, videoDir)
   log('upload.done', { ms: Date.now() - started })
   // What finalize records on the version (versions.narration and versions.captions): the receipt, summed up.
   const narrationReport = narrationOp ? narrationReportOf(readNarrationReceipt(repoRoot)) : undefined
@@ -446,6 +462,14 @@ async function main() {
   // Kept on disk too, so the agent can print it again without rendering again (a second render overwrites the uploads).
   writeFileSync(join(out, 'manifest.json'), JSON.stringify(manifest, null, 2))
 
+  if (doneFile) {
+    const t = Date.now()
+    mkdirSync(dirname(doneFile), { recursive: true })
+    writeAtomic(`${doneFile}.json`, JSON.stringify(manifest))
+    log('callback.file_written', { attempt, file: `${doneFile}.json`, ms: Date.now() - t })
+    console.log(`\`\`\`json\n${JSON.stringify(manifest, null, 2)}\n\`\`\``)
+    return
+  }
   const status = await withRetries('callback', 5, async () => {
     const res = await fetch(callback, {
       method: 'POST',

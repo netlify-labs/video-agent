@@ -22,6 +22,14 @@ import type { EngineId } from './engines.js'
 
 export const PROMPT_TEMPLATE_VERSION = 22
 
+/**
+ * Where render-job puts a run's outputs: Blobs (the service's runs), a signed URL, or local, where a laptop run keeps
+ * them on disk and reports through a file: callback (cli-and-sdk plan §7). Every builder writes the argument here.
+ */
+export type PromptUpload = { mode: 'blobs' } | { mode: 'local' } | { mode: 'signed'; url: string }
+export const uploadArg = (u: PromptUpload) =>
+  u.mode === 'signed' ? `--upload ${u.url}` : `--upload ${u.mode}`
+
 export interface PromptInput {
   jobId: string
   attemptId: string
@@ -34,7 +42,7 @@ export interface PromptInput {
   /** Where scripts/checkpoint.ts posts milestones (plan v2 §6 A2). */
   checkpointUrl: string
   callbackToken: string
-  upload: { mode: 'blobs' } | { mode: 'signed'; url: string }
+  upload: PromptUpload
   /** A revision restores its parent; a remix (parentN null) restores the copy of the video it remixes. */
   revision: { parentN: number | null } | null
   /** A remix's v1 (docs/plans/2026-11-03-remix.md §3.5): the snapshot its prompt is built from. */
@@ -234,8 +242,8 @@ const RESTYLE_LINE =
 export function buildPrompt(p: PromptInput): string {
   const { width, height } = ASPECTS[p.aspect]
   const other = usesEnginePrompt(p.engine)
-  const uploadArg = p.upload.mode === 'blobs' ? '--upload blobs' : `--upload ${p.upload.url}`
-  const renderCmd = `npx tsx scripts/render-job.ts --job ${p.jobId} --attempt ${p.attemptId} --callback ${p.callbackUrl} --token ${p.callbackToken} ${uploadArg}`
+  const upload = uploadArg(p.upload)
+  const renderCmd = `npx tsx scripts/render-job.ts --job ${p.jobId} --attempt ${p.attemptId} --callback ${p.callbackUrl} --token ${p.callbackToken} ${upload}`
   const locked = p.narration ?? null
   const lengthLine = locked
     ? `Keep it exactly ${lengthOf(locked.samples)}: the recorded narration is that long.`
@@ -551,10 +559,10 @@ export function buildQuickDemoPrompt(p: {
   callbackUrl: string
   checkpointUrl: string
   callbackToken: string
-  upload: { mode: 'blobs' } | { mode: 'signed'; url: string }
+  upload: PromptUpload
 }): string {
-  const uploadArg = p.upload.mode === 'blobs' ? '--upload blobs' : `--upload ${p.upload.url}`
-  const render = `npx tsx scripts/render-job.ts --job ${p.jobId} --attempt ${p.attemptId} --callback ${p.callbackUrl} --token ${p.callbackToken} ${uploadArg}`
+  const upload = uploadArg(p.upload)
+  const render = `npx tsx scripts/render-job.ts --job ${p.jobId} --attempt ${p.attemptId} --callback ${p.callbackUrl} --token ${p.callbackToken} ${upload}`
   const id = p.mediaId
   const target = p.targetDurationSec === null ? '' : ` --target ${String(p.targetDurationSec)}`
   return [
@@ -593,11 +601,11 @@ export function buildRenderUnchangedPrompt(p: {
   callbackUrl: string
   checkpointUrl: string
   callbackToken: string
-  upload: { mode: 'blobs' } | { mode: 'signed'; url: string }
+  upload: PromptUpload
 }): string {
-  const uploadArg = p.upload.mode === 'blobs' ? '--upload blobs' : `--upload ${p.upload.url}`
+  const upload = uploadArg(p.upload)
   const revoice = p.revoice ?? []
-  const render = `npx tsx scripts/render-job.ts --job ${p.jobId} --attempt ${p.attemptId} --callback ${p.callbackUrl} --token ${p.callbackToken} ${uploadArg}`
+  const render = `npx tsx scripts/render-job.ts --job ${p.jobId} --attempt ${p.attemptId} --callback ${p.callbackUrl} --token ${p.callbackToken} ${upload}`
   if (!revoice.length && !p.narration)
     return [
       `You are rendering version ${p.versionN} of video ${p.jobId} (attempt ${p.attemptId}) exactly as someone edited it in the browser from version ${p.editedFromN}.`,
@@ -809,13 +817,13 @@ export function buildFitPrompt(p: {
   callbackUrl: string
   checkpointUrl: string
   callbackToken: string
-  upload: { mode: 'blobs' } | { mode: 'signed'; url: string }
+  upload: PromptUpload
   /** The version's look: the fit gets the look lines, never the restyle lines. */
   look?: { id: string; name: string } | null
 }): string {
   const { width, height } = ASPECTS[p.aspect]
-  const uploadArg = p.upload.mode === 'blobs' ? '--upload blobs' : `--upload ${p.upload.url}`
-  const render = `npx tsx scripts/render-job.ts --job ${p.jobId} --attempt ${p.attemptId} --callback ${p.callbackUrl} --token ${p.callbackToken} ${uploadArg}`
+  const upload = uploadArg(p.upload)
+  const render = `npx tsx scripts/render-job.ts --job ${p.jobId} --attempt ${p.attemptId} --callback ${p.callbackUrl} --token ${p.callbackToken} ${upload}`
   const revoice = p.revoice ?? []
   const target = lengthOf(p.targetSamples)
   const music = (p.sound ?? 'silent') !== 'silent'
