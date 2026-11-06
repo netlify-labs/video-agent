@@ -1126,6 +1126,34 @@ prealloc-stream,prealloc-file`, 150 MB): 486 MB peak RSS, against 460 MB streame
 | prealloc + stream (for comparison, same run) | 460 MB | 183 MB |
 | **prealloc + file-backed Blob** | **486 MB** | **303 MB** |
 
+### D6: does the auto zoom look good? (2026-11-06, `scripts/e2e/d6-local.ts --out <dir>`, local, no credits)
+
+Five tours of the app's mock build were recorded with `video-agent record`'s capture and pointer trace (search, nav,
+newvideo, scroll, idle). Each was made into a demo twice: once with its trace, and once from its pixels only, as an
+upload would be. Both went through `recording.ts` analyze, plan and compose, then a local render. The owner judged ten
+side-by-side MP4s, the raw recording on the left and the demo on the right.
+
+| Demo | Steps | Camera keys | Time (analyze to render) |
+| --- | --- | --- | --- |
+| 01 search, trace | 2 | 8 | 15.7 s |
+| 02 search, pixels | 2 | 10 | 13.8 s |
+| 03 nav, trace | 3 | 12 | 15.6 s |
+| 04 nav, pixels | 2 | 14 | 14.6 s |
+| 05 newvideo, trace | 1 | 8 | 15.3 s |
+| 06 newvideo, pixels | 1 | 10 | 15.6 s |
+| 07 scroll, trace | 2 | 6 | 17.2 s |
+| 08 scroll, pixels | 2 | 8 | 15.2 s |
+| 09 idle, trace | 1 | 4 | 13.1 s |
+| 10 idle, pixels | 1 | 3 | 12.4 s |
+
+**Verdict: passed by the owner, all ten good without edits** (the bar was 8 of 10): "holy shirt! that review folder is
+amazing… the live UI stuff is so cool."
+
+Results:
+- The planner constants stay as they are.
+- Quick demo can be offered in the app (§14 Q11).
+- The phase 3 gate is no longer blocked by D6.
+
 ## CLI spikes (docs/plans/2026-11-04-cli-and-sdk.md §11 Phase 0)
 
 ### C1: the run scripts from a bundled copy, with pinned tools, in a workspace outside the repo (2026-11-05, `spikes/c1`, `npx tsx spikes/c1/c1.ts [--cache <dir>] [--offline]`, no credits)
