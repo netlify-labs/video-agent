@@ -11,7 +11,7 @@ import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { repoRoot } from './lib/run-tools.js'
 
 export interface PublicPackage {
@@ -61,7 +61,8 @@ function main() {
   const flag = (n: string) => (args.includes(`--${n}`) ? args[args.indexOf(`--${n}`) + 1] : undefined)
   const packages = publicPackages()
   if (cmd === 'pack') {
-    const out = flag('out') ?? join(tmpdir(), 'video-agent-release')
+    // Absolute: npm pack runs in each package's folder.
+    const out = resolve(flag('out') ?? join(tmpdir(), 'video-agent-release'))
     mkdirSync(out, { recursive: true })
     const commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repoRoot, encoding: 'utf8' }).trim()
     const tarballs = packages.map((p) => {
