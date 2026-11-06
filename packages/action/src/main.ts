@@ -130,7 +130,6 @@ export async function run(deps: ActionDeps = productionDeps()): Promise<RunResul
   })
   let va: VideoAgent | undefined
   try {
-    if (inputs.baseVideo) log.warn('base-video is not supported by this action version yet; ignored')
     const repoInfo = obj(ctx.event.repository)
     const repoPrivate =
       typeof repoInfo.private === 'boolean'

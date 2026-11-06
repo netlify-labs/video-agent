@@ -6,7 +6,10 @@
 //   npx tsx scripts/e2e/github-action.ts --selftest           # the same scenarios in-process (no network, no credits)
 //   VIDEO_AGENT_URL=https://<site> VIDEO_AGENT_KEY=nva_… SANDBOX_REPO=netlify-labs/video-agent-action-sandbox \
 //     GH_TOKEN=<a PAT that can push, label, comment and release there> [ACTION_REF=<sha>] [CREDIT_CEILING=600] \
-//     npx tsx scripts/e2e/github-action.ts [--keep]
+//     npx tsx scripts/e2e/github-action.ts [--keep] [--only <scenario>[,<scenario>]]
+//
+// --only reruns some of a phase's scenarios (one that failed, without paying for the others again). The sandbox
+// workflows cap the CI account at MAX_RUNS_PER_DAY (default 20) runs a day: the account's other use counts too.
 //
 // GH_TOKEN must not be a GITHUB_TOKEN: events made with one never start workflows. ACTION_REF (default HEAD) must be
 // pushed to origin with a fresh packages/action/dist (npm run action:check). While netlify-labs/video-agent is private,
@@ -48,7 +51,11 @@ const THIS_REPO = 'netlify-labs/video-agent'
 
 const git = (...args: string[]) => spawnSync('git', args, { encoding: 'utf8' })
 const actionRef = env.ACTION_REF ?? git('rev-parse', 'HEAD').stdout.trim()
-const scenarios = phase === 1 ? PHASE1 : phase === 2 ? PHASE2 : phase === 3 ? PHASE3 : []
+const only = /--only[= ]([\w,-]+)/.exec(process.argv.join(' '))?.[1]?.split(',')
+const maxRunsPerDay = env.MAX_RUNS_PER_DAY ?? '20'
+const scenarios = (phase === 1 ? PHASE1 : phase === 2 ? PHASE2 : phase === 3 ? PHASE3 : []).filter(
+  (s) => !only || only.includes(s.name),
+)
 
 if (process.argv.includes('--selftest')) {
   const r = spawnSync('npx', ['vitest', 'run', 'scripts/e2e/github-action.test.ts'], { stdio: 'inherit' })
@@ -61,7 +68,9 @@ if (dry) {
   if (!tool('gh')) problems.push('the gh CLI is needed')
   if (phase < 1 || phase > 3)
     problems.push(`there are no phase ${phase} scenarios (4's live test uses only the README)`)
-  if (phase === 2 && !baseVideo)
+  if (only && scenarios.length !== only.length)
+    problems.push(`--only names a scenario phase ${phase} doesn't have`)
+  if (phase === 2 && !baseVideo && scenarios.some((s) => s.name === 'base-video-release'))
     problems.push('phase 2 needs BASE_VIDEO: a ready video the CI account can see')
   if (sandbox && !/^[\w.-]+\/[\w.-]+$/.test(sandbox)) problems.push('SANDBOX_REPO must be owner/name')
   dryRun({
@@ -77,6 +86,8 @@ if (dry) {
       ACTION_REF: actionRef,
       CREDIT_CEILING: String(ceiling),
       PER_RUN: String(perRun),
+      MAX_RUNS_PER_DAY: maxRunsPerDay,
+      ...(only ? { only: only.join(',') } : {}),
       ...(phase === 2 ? { BASE_VIDEO: baseVideo || undefined } : {}),
     },
     steps: [
@@ -138,7 +149,7 @@ jobs:
         with:
           url: \${{ vars.VIDEO_AGENT_URL }}
           api-key: \${{ secrets.VIDEO_AGENT_KEY }}
-          max-runs-per-day: '20'
+          max-runs-per-day: '${maxRunsPerDay}'
           on-push: revise
 `,
   'pr-video-commands.yml': `name: PR video commands (e2e)
@@ -158,7 +169,7 @@ jobs:
         with:
           url: \${{ vars.VIDEO_AGENT_URL }}
           api-key: \${{ secrets.VIDEO_AGENT_KEY }}
-          max-runs-per-day: '20'
+          max-runs-per-day: '${maxRunsPerDay}'
 `,
   'release-video.yml': `name: Release video (e2e)
 on:
@@ -187,7 +198,7 @@ jobs:
           base-video: \${{ inputs.base_video }}
           publish: \${{ inputs.publish }}
           release-asset: \${{ inputs.release_asset }}
-          max-runs-per-day: '20'
+          max-runs-per-day: '${maxRunsPerDay}'
 `,
 }
 
@@ -201,8 +212,10 @@ interface WfRun {
 }
 
 /** Waits for the workflow's first run created after `since` to complete; fails with its URL unless it succeeded. */
-async function waitRun(workflow: string, since: string): Promise<WfRun> {
+/** The first run of `workflow` created since `since`, once it's done. `appearMs`: give up sooner if none starts. */
+async function waitRun(workflow: string, since: string, appearMs?: number): Promise<WfRun> {
   const deadline = Date.now() + runTimeoutMin * 60_000
+  const appearBy = appearMs === undefined ? deadline : Date.now() + appearMs
   for (;;) {
     const runs = ghJson<WfRun[]>([
       'run',
@@ -225,6 +238,7 @@ async function waitRun(workflow: string, since: string): Promise<WfRun> {
       log('workflow_run', { workflow, id: run.databaseId, url: run.url, outcome: run.conclusion })
       return run
     }
+    if (!run && Date.now() > appearBy) throw new ScenarioError(`no ${workflow} run started`)
     if (Date.now() > deadline)
       throw new ScenarioError(`${workflow} didn't finish in ${runTimeoutMin} minutes`, { url: run?.url })
     await sleep(15_000)
@@ -332,9 +346,12 @@ const live: Driver = {
         if (g('push', 'origin', branch).status !== 0) throw new ScenarioError('push failed')
       }
       await waitRun('pr-video.yml', since)
-      // The last push's run, if it was queued behind the first.
+      // The last push's run, if it was queued behind the first. GitHub often folds quick pushes into one run, so a
+      // second run that hasn't started within a minute and a half isn't coming.
       await sleep(20_000)
-      await waitRun('pr-video.yml', new Date(Date.now() - 60_000).toISOString()).catch(() => undefined)
+      await waitRun('pr-video.yml', new Date(Date.now() - 60_000).toISOString(), 90_000).catch(
+        () => undefined,
+      )
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }

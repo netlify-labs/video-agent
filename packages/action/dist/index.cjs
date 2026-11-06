@@ -4724,7 +4724,6 @@ async function run(deps = productionDeps()) {
   });
   let va;
   try {
-    if (inputs.baseVideo) log.warn("base-video is not supported by this action version yet; ignored");
     const repoInfo = obj2(ctx.event.repository);
     const repoPrivate = typeof repoInfo.private === "boolean" ? repoInfo.private : (await gh.request("GET /repos/{owner}/{repo}")).data.private;
     checkVisibility(inputs, repoPrivate);
