@@ -1,6 +1,12 @@
 // Monitor scheduling (monitor-schedule.ts): start from the median of ~10 anchors, then resync on drift or period.
 import { describe, expect, it } from 'vitest'
-import { MonitorSync, monitorError, pictureOffsetFrom, planMonitorStart, type OutputMap } from './monitor-schedule'
+import {
+  MonitorSync,
+  monitorError,
+  pictureOffsetFrom,
+  planMonitorStart,
+  type OutputMap,
+} from './monitor-schedule'
 import type { Anchor } from './picture'
 
 const FRAME_MS = 1000 / 30
@@ -42,7 +48,12 @@ describe('monitor schedule', () => {
     let late = false
     for (let k = 10; k < 30 * 600; k++) {
       const e = 1000 + k * FRAME_MS
-      const a: Anchor = { mediaTime: k / 30, expectedDisplayTime: e + (k === 40 ? 30 : 0), now: e, presentedFrames: k }
+      const a: Anchor = {
+        mediaTime: k / 30,
+        expectedDisplayTime: e + (k === 40 ? 30 : 0),
+        now: e,
+        presentedFrames: k,
+      }
       const c = sync.observe(a, o)!
       if (k === 40) late = c.resync
       if (c.resync && c.why === 'drift') {

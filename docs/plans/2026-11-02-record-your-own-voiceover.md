@@ -78,7 +78,12 @@ Non-goals for v1:
 5. **Stopping:**
    - **Space** stops and keeps the take; **Esc** discards it.
    - Seeking, a playback stall, the tab going hidden, a device change (`devicechange`, mic track `ended`), a context interruption, or sync residual beyond the limit (§5.3) **stops the take and keeps what was captured** up to that point, with a message saying why.
-6. The take appears as a clip on the **Narration** track, with its waveform, at the video time it was recorded against.
+6. **Review** (owner, 2026-11-06): the take doesn't go straight on the track. It waits in the Record a take panel, under the prompter, with play/pause and a scrubber that play it against the picture as Add would leave it. A punch-in plays with its pre-roll, the old narration replaced in its range. The panel shows the take's length, where it lands (0:00.0 to 0:08.7), and, if it stopped early, why.
+   - **Add to timeline** (Enter): the take appears as a clip on the **Narration** track, with its waveform, at the video time it was recorded against.
+   - **Record again:** drops this take and records the same take again.
+   - **Keep recording from here:** shown when it stopped before the end. Adds this take and punches in from where it stopped to the end, then reviews the joined result.
+   - **Discard** (Esc).
+   - The take uploads while it's reviewed, so it's never lost (a reload offers it again); only the insert waits for the decision.
 7. **Audition the mix** right away in the browser (§5.4).
    - The narration plays raw by default.
    - An **A/B Cleanup** toggle applies a browser approximation of the _Light_ chain (high-pass, compressor, gentle spectral gate), labelled _approximate: the render's cleanup is the real one_.
@@ -828,3 +833,12 @@ These are the decisions the spikes and the build settled; `docs/spikes.md` S10-S
   - Per-video transcription language shipped (`jobs.language`; Parakeet covers 25 European languages).
 - **Live gates:** scripts are `scripts/e2e/narration-privacy.ts` (phase 1) and `scripts/e2e/narration.ts` (phase 2;
   `--dry`, `--selftest`); they need Creator and Reviewer API keys and haven't run yet.
+- **Take review and the sync limit (owner, 2026-11-06):** a stopped take is reviewed before it goes on the track (§2.1
+  step 6; `ui/src/recorder/flow.ts` review phase, `TakeReview.tsx`, `review.ts`). The owner's first take stopped at
+  8.69 s of a 12.97 s video on a `residual` stop. S10's 10 ms residual limit was the headless pipeline's own error with
+  room to spare, and real screens present a frame on a vsync, so an anchor can sit up to one display interval (16.7 ms
+  at 60 Hz) off the line. The limit is now 20 ms: still under a frame at 30 fps (frame steps stay steps) and well
+  inside lip-sync tolerance (EBU R37, +40/−60 ms). A steady offset that isn't a whole frame (up to 100 ms, or beyond
+  8 ms inside the limit) now re-anchors, starting a new fit segment instead of stopping. Only a run that scatters
+  still stops the take. Every early stop is logged (`record.stop_early`, with its kind and the clock's detail). S10b's
+  real-hardware run, if it happens, replaces this reasoning with measured residuals.

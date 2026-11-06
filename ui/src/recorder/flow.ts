@@ -7,8 +7,14 @@
 // and the manual Sync offset become the clips' placement (the countdown's pre-roll trimmed off), written to the take's
 // recovery record, and the uploader takes it from there (take-upload.ts).
 //
-//   idle -> setup -> countdown -> recording -> stopping -> uploading -> saved
-//             ^  \______ Esc / failure ____/        \__________________ failed (retry) ___/
+//   idle -> setup -> countdown -> recording -> stopping -> review -> adding -> saved
+//             ^  \______ Esc / failure ____/                  |  \___ failed (retry) ___/
+//             \____________ Discard / Record again ____________/
+//
+// Review (owner, 2026-11-06): a stopped take waits in the panel to be heard against the picture before it goes on the
+// timeline. Its upload runs as before (so it's never lost); only the insert waits for the decision: Add (Enter) puts it
+// on the track, Discard (Esc) drops it, Record again drops it and records the same take again, and Keep recording from
+// here adds it and punches in from where it stopped to the end, then reviews the joined result.
 //
 // Framework-free: the editor (NarrationRecorder.tsx) supplies the parts (recorder, picture clock, monitor, uploader);
 // the tests supply fakes.
@@ -23,7 +29,32 @@ import type { TakeRecord } from './store'
 import type { TakeUploadState } from './take-upload'
 
 export type FlowPhase =
-  'idle' | 'setup' | 'countdown' | 'recording' | 'stopping' | 'uploading' | 'saved' | 'failed'
+  | 'idle'
+  | 'setup'
+  | 'countdown'
+  | 'recording'
+  | 'stopping'
+  | 'review'
+  | 'adding'
+  | 'uploading'
+  | 'saved'
+  | 'failed'
+
+/** A stopped take waiting for Add, Discard, Record again or Keep recording. */
+export interface Review {
+  recordingId: string
+  /** Its clips as Add would put them on the track. */
+  pieces: RecordedPlacement[]
+  punch: Punch | null
+  /** It stopped on its own (seek, stall, sync...), not on Space or at the end. */
+  early: boolean
+  /** Composition sample the review plays from: the picture's start (a punch's pre-roll), or 0 for a joined take. */
+  from: number
+  /** A Keep recording from here: the take before it is already on the track, and the review plays both. */
+  joined: boolean
+}
+
+export type ReviewDecision = 'add' | 'discard'
 
 export interface FlowSnapshot {
   phase: FlowPhase
@@ -39,6 +70,8 @@ export interface FlowSnapshot {
   recordingId: string | null
   /** The punch-in being recorded (or last recorded); null for a whole take. */
   punch: Punch | null
+  /** The take being reviewed (phase review, adding), else null. */
+  review: Review | null
 }
 
 export const COUNTDOWN = 3
@@ -119,8 +152,11 @@ export interface RecordFlow {
   get(): FlowSnapshot
   open(): void
   close(): void
-  /** The Record click; with `punch`, a punch-in over that range after `preRollSec` of pre-roll. */
-  record(punch?: Punch | null, preRollSec?: number): Promise<void>
+  /**
+   * The Record click; with `punch`, a punch-in over that range after `preRollSec` of pre-roll. `joined`: a Keep
+   * recording from here, whose review plays from 0 with the take before it.
+   */
+  record(punch?: Punch | null, preRollSec?: number, opts?: { joined?: boolean }): Promise<void>
   /** Space: stops and keeps (during the countdown nothing was recorded against the picture, so nothing is kept). */
   stop(kind?: StopKind, detail?: string, notice?: string): void
   /** The picture clock stopped the take (its onStop listener). */
@@ -129,8 +165,18 @@ export interface RecordFlow {
   discard(notice?: string | null): Promise<void>
   /** Called while recording (every couple of seconds): the placement so far, for a reload mid-take. */
   checkpoint(): Promise<void>
-  /** The uploader's state (useTakeUpload). */
-  uploadChanged(state: TakeUploadState, error: string | null): void
+  /** The uploader's state (useTakeUpload), for the take `recordingId` when known. */
+  uploadChanged(state: TakeUploadState, error: string | null, recordingId?: string | null): void
+  /** What to do with a stopped take once it's uploaded: waits for Add or Discard (a take never reviewed is added). */
+  decide(recordingId: string): Promise<ReviewDecision>
+  /** Review: Add to timeline (Enter). */
+  add(): void
+  /** Review: Discard (Esc). The upload finishes; the take just doesn't go on the track. */
+  reject(notice?: string): void
+  /** Review: drops this take and records it again (the same punch). Call it in the click. */
+  recordAgain(preRollSec?: number): void
+  /** Review: adds this take and punches in from where it ended to the end. Call it in the click. */
+  keepRecording(preRollSec?: number): void
   /** A stopped take's clips, for onTakeReady. */
   placementsFor(recordingId: string): RecordedPlacement[] | null
   /** The punch-in a stopped take was recorded for (null for a whole take). */
@@ -206,8 +252,13 @@ export function placementsFromRecord(record: TakeRecord | null | undefined): Rec
   return pieces?.length ? pieces.map((p) => ({ ...p })) : null
 }
 
-/** What a key does while a take runs: Space keeps, Esc discards. */
-export function flowKey(phase: FlowPhase, key: string): 'stop' | 'discard' | null {
+/** What a key does: while a take runs, Space keeps and Esc discards; in review, Enter adds and Esc discards. */
+export function flowKey(phase: FlowPhase, key: string): 'stop' | 'discard' | 'add' | null {
+  if (phase === 'review') {
+    if (key === 'Enter') return 'add'
+    if (key === 'Escape' || key === 'Esc') return 'discard'
+    return null
+  }
   if (phase !== 'countdown' && phase !== 'recording') return null
   if (key === ' ' || key === 'Spacebar') return 'stop'
   if (key === 'Escape' || key === 'Esc') return 'discard'
@@ -239,6 +290,12 @@ const IDLE: FlowSnapshot = {
   error: null,
   recordingId: null,
   punch: null,
+  review: null,
+}
+
+/** Where a take's clips end on the composition (samples): what Keep recording from here punches in from. */
+export function takeEnd(pieces: readonly RecordedPlacement[]): number {
+  return Math.max(0, ...pieces.map((p) => placeTake(p.fit, p.offsetSamples, p.srcEnd)))
 }
 
 export function createRecordFlow<C, R extends FlowRecorder>(
@@ -247,12 +304,55 @@ export function createRecordFlow<C, R extends FlowRecorder>(
 ): RecordFlow {
   let snap = IDLE
   // The take being recorded: its context and recorder, whether the picture has started, and its punch range.
-  let cur: { ctx: C; rec: R; rolling: boolean; keeping: boolean; punch: Punch | null } | null = null
+  let cur: {
+    ctx: C
+    rec: R
+    rolling: boolean
+    keeping: boolean
+    punch: Punch | null
+    from: number
+    joined: boolean
+  } | null = null
   // Each Record click gets a generation; a discard makes the old one's later steps no-ops.
   let gen = 0
   const placed = new Map<string, RecordedPlacement[]>()
   const punches = new Map<string, Punch>()
   const log = parts.log ?? (() => undefined)
+  // Each reviewed take's decision, awaited by the uploader's onTakeReady (decide) and given by the review's buttons.
+  interface Pending {
+    promise: Promise<ReviewDecision>
+    resolve: (d: ReviewDecision) => void
+    value: ReviewDecision | null
+  }
+  const decisions = new Map<string, Pending>()
+  const decision = (id: string) => {
+    let d = decisions.get(id)
+    if (!d) {
+      let settle: (v: ReviewDecision) => void = () => undefined
+      const promise = new Promise<ReviewDecision>((r) => (settle = r))
+      const entry: Pending = {
+        promise,
+        value: null,
+        // The first decision wins (Keep recording's add, then a stray Enter, decide nothing more).
+        resolve: (v: ReviewDecision) => {
+          if (entry.value) return
+          entry.value = v
+          settle(v)
+        },
+      }
+      d = entry
+      decisions.set(id, d)
+    }
+    return d
+  }
+  // The reviewed take is stopped and uploading: a new take may start now (its upload settles on its own and releases
+  // the old context).
+  const letGo = (recordingId: string) => {
+    if (cur?.rec.recordingId === recordingId) cur = null
+  }
+  // Takes discarded in review: their upload still finishes, and says nothing.
+  const discarded = new Set<string>()
+  let lastUpload: { state: TakeUploadState; error: string | null } = { state: 'idle', error: null }
 
   const set = (patch: Partial<FlowSnapshot>) => {
     snap = { ...snap, ...patch }
@@ -289,11 +389,23 @@ export function createRecordFlow<C, R extends FlowRecorder>(
     log('record.stop', {
       recordingId: take.rec.recordingId,
       kind: reason.kind,
+      early,
       atSample: reason.atSample,
       pieces: pieces.length,
       start: pieces[0]?.start ?? null,
       ...(take.punch ? { punch: [take.punch.from, take.punch.to] } : {}),
     })
+    // Every early stop, with its kind and the clock's detail, so a take that stops short can be explained.
+    if (early)
+      log('record.stop_early', {
+        recordingId: take.rec.recordingId,
+        kind: reason.kind,
+        detail: reason.detail ?? null,
+        atSample: reason.atSample,
+        keptSec: pieces.length
+          ? Math.round(((takeEnd(pieces) - (pieces[0]?.start ?? 0)) / SAMPLE_RATE) * 10) / 10
+          : 0,
+      })
     if (take.punch && !pieces.length) {
       // Stopped in the pre-roll: nothing landed in the range, so there's no clip to keep.
       if (cur === take) cur = null
@@ -305,7 +417,25 @@ export function createRecordFlow<C, R extends FlowRecorder>(
     }
     placed.set(take.rec.recordingId, pieces)
     if (take.punch) punches.set(take.rec.recordingId, take.punch)
+    decision(take.rec.recordingId)
     await parts.remember(take.rec.recordingId, { pieces, stop: reason.kind }).catch(() => undefined)
+    if (cur === take && !discarded.has(take.rec.recordingId)) {
+      const review: Review = {
+        recordingId: take.rec.recordingId,
+        pieces,
+        punch: take.punch,
+        early,
+        from: take.joined ? 0 : take.from,
+        joined: take.joined,
+      }
+      set({ phase: 'review', review })
+      log('record.review', {
+        recordingId: review.recordingId,
+        from: review.from,
+        end: takeEnd(pieces),
+        early,
+      })
+    }
     try {
       await parts.upload.finish(take.rec)
     } finally {
@@ -321,12 +451,13 @@ export function createRecordFlow<C, R extends FlowRecorder>(
       set({ open: true, ...(snap.phase === 'idle' ? { phase: 'setup' as const } : {}) })
     },
     close() {
-      if (isRunning(snap.phase)) return
+      if (isRunning(snap.phase) || snap.phase === 'review' || snap.phase === 'adding') return
       const settled = snap.phase === 'setup' || snap.phase === 'saved' || snap.phase === 'failed'
       set({ open: false, ...(settled ? { phase: 'idle' as const, notice: null, error: null } : {}) })
     },
-    async record(punch = null, preRollSec = PRE_ROLL_SEC) {
+    async record(punch = null, preRollSec = PRE_ROLL_SEC, opts = {}) {
       if (!canRecord(snap.phase) || cur) return
+      const joined = opts.joined === true
       const my = ++gen
       const live = () => my === gen
       const start = takeStart(punch, preRollSec)
@@ -338,17 +469,19 @@ export function createRecordFlow<C, R extends FlowRecorder>(
         error: null,
         recordingId: null,
         punch,
+        review: null,
       })
       const t0 = Date.now()
       let ctx: C | null = null
       try {
         ctx = await parts.openContext()
         const rec = await parts.createRecorder(ctx)
+        const from = start.pictureFrom
         if (!live()) {
-          await drop({ ctx, rec, rolling: false, keeping: false, punch })
+          await drop({ ctx, rec, rolling: false, keeping: false, punch, from, joined })
           return
         }
-        const take = { ctx, rec, rolling: false, keeping: false, punch }
+        const take = { ctx, rec, rolling: false, keeping: false, punch, from, joined }
         cur = take
         // The mic captures from here, through the countdown.
         rec.start()
@@ -438,15 +571,69 @@ export function createRecordFlow<C, R extends FlowRecorder>(
       if (pieces.length)
         await parts.remember(take.rec.recordingId, { pieces, stop: null }).catch(() => undefined)
     },
-    uploadChanged(state, error) {
+    uploadChanged(state, error, recordingId) {
+      if (recordingId && discarded.has(recordingId)) return
+      lastUpload = { state, error }
       const p = snap.phase
       // A take being recorded owns the phase; the uploader only speaks once it has the take.
       if (p === 'countdown' || p === 'recording') return
+      // In review the take uploads quietly; a failure shows (with Retry) but the review stays.
+      if (p === 'review') {
+        if (state === 'failed') set({ error })
+        else if (snap.error && state !== 'idle') set({ error: null })
+        return
+      }
+      if (p === 'adding') {
+        if (state === 'saved') set({ phase: 'saved', error: null, review: null })
+        else if (state === 'failed') set({ phase: 'failed', error })
+        return
+      }
       if (state === 'finalizing') set({ phase: 'stopping' })
       else if (state === 'uploading' || state === 'processing' || state === 'saving')
         set({ phase: 'uploading', error: null })
       else if (state === 'saved') set({ phase: 'saved', error: null })
       else if (state === 'failed') set({ phase: 'failed', error })
+    },
+    decide(recordingId) {
+      // A take that was never reviewed (a recovered one) goes on the track as before.
+      if (!placed.has(recordingId) && !decisions.has(recordingId)) return Promise.resolve('add')
+      return decision(recordingId).promise
+    },
+    add() {
+      const r = snap.review
+      if (snap.phase !== 'review' || !r) return
+      decision(r.recordingId).resolve('add')
+      log('record.review_add', { recordingId: r.recordingId })
+      if (lastUpload.state === 'failed') set({ phase: 'failed', error: lastUpload.error })
+      else set({ phase: 'adding', notice: null })
+    },
+    reject(notice = DISCARDED) {
+      const r = snap.review
+      if (snap.phase !== 'review' || !r) return
+      discarded.add(r.recordingId)
+      decision(r.recordingId).resolve('discard')
+      log('record.review_discard', { recordingId: r.recordingId })
+      rest({ stop: null, notice, error: null, review: null })
+    },
+    recordAgain(preRollSec = PRE_ROLL_SEC) {
+      const r = snap.review
+      if (snap.phase !== 'review' || !r) return
+      discarded.add(r.recordingId)
+      decision(r.recordingId).resolve('discard')
+      log('record.review_again', { recordingId: r.recordingId })
+      letGo(r.recordingId)
+      rest({ stop: null, notice: null, error: null, review: null })
+      void flow.record(r.punch, preRollSec, { joined: r.joined })
+    },
+    keepRecording(preRollSec = PRE_ROLL_SEC) {
+      const r = snap.review
+      if (snap.phase !== 'review' || !r) return
+      decision(r.recordingId).resolve('add')
+      const from = takeEnd(r.pieces)
+      log('record.review_continue', { recordingId: r.recordingId, from })
+      letGo(r.recordingId)
+      rest({ stop: null, notice: null, error: null, review: null })
+      void flow.record({ from, to: null }, preRollSec, { joined: true })
     },
     placementsFor: (id) => placed.get(id) ?? null,
     punchFor: (id) => punches.get(id) ?? null,

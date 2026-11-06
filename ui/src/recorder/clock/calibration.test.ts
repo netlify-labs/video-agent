@@ -87,7 +87,10 @@ describe('CalibrationStore', () => {
     const s = new CalibrationStore(memoryStorage())
     expect(s.noteRoute(route)).toEqual({ changed: false, previous: null })
     expect(s.noteRoute(route).changed).toBe(false)
-    expect(s.noteRoute({ ...route, inputDeviceId: 'mic-2' })).toEqual({ changed: true, previous: routeKey(route) })
+    expect(s.noteRoute({ ...route, inputDeviceId: 'mic-2' })).toEqual({
+      changed: true,
+      previous: routeKey(route),
+    })
   })
 
   it('invalidates one route and keeps the others', () => {
@@ -133,7 +136,17 @@ describe('CalibrationStore', () => {
     expect(s.offsetsFor(route, -10).manualOffsetSamples).toBe(-240)
     expect(JSON.parse(storage.m.get(CALIBRATION_STORAGE_KEY)!).routes[routeKey(route)].manualMs).toBe(5)
     const [clip] = placeRecordedTake(
-      [{ fromSample: 0, toSample: SAMPLE_RATE, a: 1, b: 1 / SAMPLE_RATE, residualRms: 0, residualMax: 0, n: 30 }],
+      [
+        {
+          fromSample: 0,
+          toSample: SAMPLE_RATE,
+          a: 1,
+          b: 1 / SAMPLE_RATE,
+          residualRms: 0,
+          residualMax: 0,
+          n: 30,
+        },
+      ],
       o.calibrationOffsetSamples,
       o.manualOffsetSamples,
     )
@@ -159,7 +172,10 @@ describe('clap-on-flash and loopback maths', () => {
 
   it('takes the median after dropping MAD outliers', () => {
     const lat = [41, 44, 290, 43, 39, 46, -180, 42]
-    const out = clapCalibration(flashes, flashes.map((f, i) => f + (lat[i] ?? 0)))
+    const out = clapCalibration(
+      flashes,
+      flashes.map((f, i) => f + (lat[i] ?? 0)),
+    )
     expect(out.ok).toBe(true)
     if (!out.ok) return
     expect(out.result.dropped.sort((p, q) => p - q)).toEqual([-180, 290])
@@ -169,7 +185,10 @@ describe('clap-on-flash and loopback maths', () => {
   })
 
   it('fails with too few claps (missed or out of window), so the manual offset is the fallback', () => {
-    const out = clapCalibration(flashes, flashes.slice(0, 4).map((f) => f + 40))
+    const out = clapCalibration(
+      flashes,
+      flashes.slice(0, 4).map((f) => f + 40),
+    )
     expect(out).toEqual({ ok: false, reason: 'too-few', matched: 4, of: 8 })
   })
 
@@ -182,7 +201,10 @@ describe('clap-on-flash and loopback maths', () => {
 
   it('loopback uses a tight window and floor', () => {
     const clicks = Array.from({ length: 8 }, (_, k) => 1000 + k * 600)
-    const out = loopbackCalibration(clicks, clicks.map((c, i) => c + 12 + (i % 2) * 0.5))
+    const out = loopbackCalibration(
+      clicks,
+      clicks.map((c, i) => c + 12 + (i % 2) * 0.5),
+    )
     expect(out.ok && out.result.method).toBe('loopback')
     expect(out.ok && out.result.latencyMs).toBe(12.25)
   })

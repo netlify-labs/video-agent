@@ -16,6 +16,7 @@ import {
   placementsFromRecord,
   punchAt,
   sliceToRange,
+  takeEnd,
   takeStart,
   TOO_EARLY,
   trimPreRoll,
@@ -49,6 +50,8 @@ function harness(o: { failMic?: string; failUpload?: string; segments?: FitSegme
   const calls: string[] = []
   const remembered: RememberedTake[] = []
   const starts: TakeStart[] = []
+  const logs: { event: string; fields: Record<string, unknown> }[] = []
+  let takes = 0
   let stopListener: ((r: StopReason) => void) | null = null
   let gate: (() => void) | null = null
   const rec: FlowRecorder & { started: boolean; cancelled: boolean } = {
@@ -66,7 +69,7 @@ function harness(o: { failMic?: string; failUpload?: string; segments?: FitSegme
   }
   let picture: StopReason | null = null
   const ctx: Ctx = { closed: false }
-  let uploadState: (s: TakeUploadState, e?: string) => void = () => undefined
+  let uploadState: (s: TakeUploadState, e?: string, id?: string) => void = () => undefined
   const parts: RecordFlowParts<Ctx, typeof rec> = {
     openContext: async () => {
       calls.push('context')
@@ -75,6 +78,9 @@ function harness(o: { failMic?: string; failUpload?: string; segments?: FitSegme
     createRecorder: async () => {
       if (o.failMic) throw new Error(o.failMic)
       calls.push('recorder')
+      // Each take is a new recording (Record again, Keep recording from here).
+      rec.recordingId = `rec_${++takes}`
+      picture = null
       return rec
     },
     prepare: async (_ctx, start) => {
@@ -106,14 +112,21 @@ function harness(o: { failMic?: string; failUpload?: string; segments?: FitSegme
     },
     upload: {
       recording: (id) => calls.push(`upload.recording:${id}`),
-      finish: async () => {
-        calls.push('upload.finish')
-        uploadState('finalizing')
-        uploadState('uploading')
-        uploadState('processing')
-        uploadState('saving')
-        if (o.failUpload) uploadState('failed', o.failUpload)
-        else uploadState('saved')
+      // Like the real uploader: it uploads at once, and its onTakeReady (the insert) waits for the review's decision.
+      finish: async (r) => {
+        const id = r.recordingId
+        calls.push(`upload.finish:${id}`)
+        uploadState('finalizing', undefined, id)
+        uploadState('uploading', undefined, id)
+        if (o.failUpload) {
+          uploadState('failed', o.failUpload, id)
+          return
+        }
+        uploadState('processing', undefined, id)
+        uploadState('saving', undefined, id)
+        const d = await flow.decide(id)
+        calls.push(`decided:${id}:${d}`)
+        uploadState('saved', undefined, id)
       },
       reset: () => calls.push('upload.reset'),
     },
@@ -121,11 +134,12 @@ function harness(o: { failMic?: string; failUpload?: string; segments?: FitSegme
       c.closed = true
       calls.push('release')
     },
+    log: (event, fields) => logs.push({ event, fields }),
   }
   const flow = createRecordFlow(parts, (s) => {
     if (phases.at(-1) !== s.phase) phases.push(s.phase)
   })
-  uploadState = (s, e) => flow.uploadChanged(s, e ?? null)
+  uploadState = (s, e, id) => flow.uploadChanged(s, e ?? null, id ?? null)
   stopListener = (r) => flow.stopped(r)
   const flush = () => new Promise((r) => setTimeout(r, 0))
   const tick = async () => {
@@ -153,11 +167,31 @@ function harness(o: { failMic?: string; failUpload?: string; segments?: FitSegme
     for (let i = 0; i < 3; i++) await tick()
     await p
   }
-  return { flow, phases, calls, rec, ctx, remembered, starts, tick, rolling, punching, pictureStops, flush }
+  /** Through a countdown that's already started (Record again, Keep recording from here). */
+  const countdown = async () => {
+    for (let i = 0; i < 3; i++) await tick()
+    await flush()
+  }
+  return {
+    flow,
+    phases,
+    calls,
+    rec,
+    ctx,
+    remembered,
+    starts,
+    logs,
+    tick,
+    rolling,
+    punching,
+    pictureStops,
+    flush,
+    countdown,
+  }
 }
 
 describe('the record flow', () => {
-  it('goes idle -> setup -> countdown -> recording -> stopping -> uploading -> saved on Space', async () => {
+  it('goes idle -> setup -> countdown -> recording -> stopping -> review, then Add -> adding -> saved', async () => {
     const h = harness()
     h.flow.open()
     expect(h.flow.get()).toMatchObject({ phase: 'setup', open: true })
@@ -178,8 +212,21 @@ describe('the record flow', () => {
 
     h.flow.stop()
     await h.flush()
-    expect(h.phases).toEqual(['setup', 'countdown', 'recording', 'stopping', 'uploading', 'saved'])
-    expect(h.flow.get()).toMatchObject({ phase: 'saved', notice: null, stop: { kind: 'user' } })
+    // The take waits in review: it uploads meanwhile, but nothing goes on the track until Add.
+    expect(h.phases).toEqual(['setup', 'countdown', 'recording', 'stopping', 'review'])
+    expect(h.flow.get()).toMatchObject({
+      phase: 'review',
+      notice: null,
+      stop: { kind: 'user' },
+      review: { recordingId: 'rec_1', early: false, joined: false, from: 0, punch: null },
+    })
+    expect(h.calls).toContain('upload.finish:rec_1')
+    expect(h.calls.some((c) => c.startsWith('decided'))).toBe(false)
+    h.flow.add()
+    await h.flush()
+    expect(h.phases.slice(-3)).toEqual(['review', 'adding', 'saved'])
+    expect(h.calls).toContain('decided:rec_1:add')
+    expect(h.flow.get()).toMatchObject({ phase: 'saved', review: null })
     expect(h.calls.filter((c) => c.startsWith('halt'))).toEqual(['halt:user', 'halt:user'])
     expect(h.calls.at(-1)).toBe('release')
     expect(h.ctx.closed).toBe(true)
@@ -218,9 +265,19 @@ describe('the record flow', () => {
     await h.rolling()
     h.pictureStops(kind)
     await h.flush()
-    expect(h.flow.get()).toMatchObject({ phase: 'saved', notice: STOP_MESSAGES[kind], stop: { kind } })
-    expect(h.calls).toContain('upload.finish')
+    expect(h.flow.get()).toMatchObject({
+      phase: 'review',
+      notice: STOP_MESSAGES[kind],
+      stop: { kind },
+      review: { early: true },
+    })
+    expect(h.calls).toContain('upload.finish:rec_1')
     expect(h.rec.cancelled).toBe(false)
+    // Every early stop is logged with its kind.
+    expect(h.logs.find((l) => l.event === 'record.stop_early')?.fields).toMatchObject({
+      kind,
+      recordingId: 'rec_1',
+    })
   })
 
   it('the video ending keeps the take without a warning', async () => {
@@ -228,7 +285,8 @@ describe('the record flow', () => {
     await h.rolling()
     h.pictureStops('ended')
     await h.flush()
-    expect(h.flow.get()).toMatchObject({ phase: 'saved', notice: null })
+    expect(h.flow.get()).toMatchObject({ phase: 'review', notice: null, review: { early: false } })
+    expect(h.logs.some((l) => l.event === 'record.stop_early')).toBe(false)
   })
 
   it('Esc discards: the take is cancelled, nothing uploads, and Record is back', async () => {
@@ -269,12 +327,14 @@ describe('the record flow', () => {
     expect(h.ctx.closed).toBe(true)
   })
 
-  it('an upload or save failure ends in failed with the uploader error', async () => {
-    const h = harness({ failUpload: "The draft couldn't be saved." })
+  it('an upload failure shows in review, and Add then ends in failed with the uploader error', async () => {
+    const h = harness({ failUpload: "The take couldn't be uploaded." })
     await h.rolling()
     h.flow.stop()
     await h.flush()
-    expect(h.flow.get()).toMatchObject({ phase: 'failed', error: "The draft couldn't be saved." })
+    expect(h.flow.get()).toMatchObject({ phase: 'review', error: "The take couldn't be uploaded." })
+    h.flow.add()
+    expect(h.flow.get()).toMatchObject({ phase: 'failed', error: "The take couldn't be uploaded." })
   })
 
   it('checkpoints the placement while recording (for a reload mid-take), not before the picture rolls', async () => {
@@ -332,10 +392,14 @@ describe('punch-in', () => {
     expect(h.flow.placementsFor('rec_1')).toEqual([
       expect.objectContaining({ start: S, srcStart: 4 * S - OFFSET, srcEnd: 5 * S - OFFSET }),
     ])
-    expect(h.calls).toContain('upload.finish')
+    expect(h.calls).toContain('upload.finish:rec_1')
     // The monitor's narration comes back once the take stops.
     expect(h.calls.filter((c) => c.startsWith('arm'))).toEqual([`arm:${S}-${2 * S}`, 'arm:off'])
-    expect(h.flow.get()).toMatchObject({ phase: 'saved' })
+    // The review plays the pre-roll (the picture's start), not just the range.
+    expect(h.flow.get()).toMatchObject({
+      phase: 'review',
+      review: { from: 0, punch: { from: S, to: 2 * S } },
+    })
   })
 
   it('with no end, the clip runs from the punch point until stop and the armed range is open-ended', async () => {
@@ -462,5 +526,92 @@ describe('placement helpers', () => {
     expect(flowKey('countdown', 'Escape')).toBe('discard')
     expect(flowKey('setup', ' ')).toBeNull()
     expect(flowKey('recording', 'a')).toBeNull()
+  })
+})
+
+describe('review', () => {
+  const stopped = async (h: ReturnType<typeof harness>) => {
+    await h.rolling()
+    h.flow.stop()
+    await h.flush()
+  }
+
+  it('Discard: the upload finishes, nothing goes on the track, and the panel says nothing more', async () => {
+    const h = harness()
+    await stopped(h)
+    h.flow.reject()
+    await h.flush()
+    expect(h.calls).toContain('decided:rec_1:discard')
+    // The uploader's saved for the discarded take doesn't claim it's on the track.
+    expect(h.flow.get()).toMatchObject({ phase: 'setup', notice: DISCARDED, review: null })
+    expect(h.ctx.closed).toBe(true)
+  })
+
+  it('Record again drops the take and records the same punch again', async () => {
+    const h = harness()
+    await h.punching({ from: S, to: 2 * S })
+    h.flow.stop()
+    await h.flush()
+    h.flow.recordAgain(1)
+    await h.countdown()
+    expect(h.calls).toContain('decided:rec_1:discard')
+    expect(h.flow.get()).toMatchObject({
+      phase: 'recording',
+      recordingId: 'rec_2',
+      punch: { from: S, to: 2 * S },
+    })
+    expect(h.starts.at(-1)).toEqual({ pictureFrom: 0, punch: { from: S, to: 2 * S } })
+    h.flow.stop()
+    await h.flush()
+    expect(h.flow.get()).toMatchObject({ phase: 'review', review: { recordingId: 'rec_2', joined: false } })
+  })
+
+  it('Keep recording from here adds the take, punches in from its end to the end, and reviews the joined take from 0', async () => {
+    // The second take records further than the first (the harness's fit is per take).
+    const segments = [SEGMENT]
+    const h = harness({ segments })
+    await h.rolling()
+    h.pictureStops('residual')
+    await h.flush()
+    const first = h.flow.get().review
+    expect(first?.early).toBe(true)
+    const end = takeEnd(first?.pieces ?? [])
+    expect(end).toBeGreaterThan(0)
+    segments[0] = { ...SEGMENT, toSample: 12 * S }
+    h.flow.keepRecording(2)
+    await h.countdown()
+    expect(h.calls).toContain('decided:rec_1:add')
+    expect(h.flow.get()).toMatchObject({
+      phase: 'recording',
+      recordingId: 'rec_2',
+      punch: { from: end, to: null },
+    })
+    h.flow.stop()
+    await h.flush()
+    expect(h.flow.get()).toMatchObject({
+      phase: 'review',
+      review: { recordingId: 'rec_2', joined: true, from: 0, punch: { from: end, to: null } },
+    })
+  })
+
+  it('Enter adds and Esc discards in review; a take never reviewed (recovered) is added', async () => {
+    expect(flowKey('review', 'Enter')).toBe('add')
+    expect(flowKey('review', 'Escape')).toBe('discard')
+    expect(flowKey('review', ' ')).toBeNull()
+    expect(flowKey('setup', 'Enter')).toBeNull()
+    const h = harness()
+    expect(await h.flow.decide('rec_recovered')).toBe('add')
+    await stopped(h)
+    // The panel can't close with a take waiting.
+    h.flow.close()
+    expect(h.flow.get()).toMatchObject({ open: true, phase: 'review' })
+  })
+
+  it('leaving with a take in review decides nothing (its recovery copy stays and is offered again)', async () => {
+    const h = harness()
+    await stopped(h)
+    h.flow.dispose()
+    await h.flush()
+    expect(h.calls.some((c) => c.startsWith('decided'))).toBe(false)
   })
 })

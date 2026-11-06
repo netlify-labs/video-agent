@@ -57,11 +57,16 @@ export function routeOf(
   ctx: { sampleRate: number; sinkId?: unknown },
 ): AudioRoute {
   const sink = typeof ctx.sinkId === 'string' && ctx.sinkId ? ctx.sinkId : 'default'
-  return { inputDeviceId: track?.getSettings().deviceId ?? 'default', outputDeviceId: sink, sampleRate: ctx.sampleRate }
+  return {
+    inputDeviceId: track?.getSettings().deviceId ?? 'default',
+    outputDeviceId: sink,
+    sampleRate: ctx.sampleRate,
+  }
 }
 
 /** Mic hears later than the picture shows: a measured latency moves the take earlier. */
-export const latencyToOffsetSamples = (latencyMs: number): number => -Math.round((latencyMs * SAMPLE_RATE) / 1000)
+export const latencyToOffsetSamples = (latencyMs: number): number =>
+  -Math.round((latencyMs * SAMPLE_RATE) / 1000)
 /** The manual Sync offset (+ = later), in samples. */
 export const msToOffsetSamples = (ms: number): number => Math.round((ms * SAMPLE_RATE) / 1000)
 
@@ -77,15 +82,18 @@ export interface CalibrationResult {
 }
 
 export type CalibrationOutcome =
-  | { ok: true; result: CalibrationResult }
-  | { ok: false; reason: 'too-few'; matched: number; of: number }
+  { ok: true; result: CalibrationResult } | { ok: false; reason: 'too-few'; matched: number; of: number }
 
 /**
  * Pairs each cue (flash or click, perf ms) with the nearest unused hit (clap or onset, perf ms) within
  * [cue + lo, cue + hi], and returns hit − cue for each pair. Nearest, so a stray late clap from the previous flash
  * doesn't take this flash's.
  */
-export function matchLatencies(cues: readonly number[], hits: readonly number[], [lo, hi]: readonly [number, number]) {
+export function matchLatencies(
+  cues: readonly number[],
+  hits: readonly number[],
+  [lo, hi]: readonly [number, number],
+) {
   const used = new Set<number>()
   const out: number[] = []
   for (const c of [...cues].sort((p, q) => p - q)) {
@@ -113,7 +121,8 @@ function outcome(
   const lat = matchLatencies(cues, hits, window)
   if (lat.length < minMatched) return { ok: false, reason: 'too-few', matched: lat.length, of: cues.length }
   const r = robustMedian(lat, floorMs)
-  if (r.kept.length < minMatched) return { ok: false, reason: 'too-few', matched: r.kept.length, of: cues.length }
+  if (r.kept.length < minMatched)
+    return { ok: false, reason: 'too-few', matched: r.kept.length, of: cues.length }
   return {
     ok: true,
     result: {
@@ -135,7 +144,9 @@ function outcome(
 export function clapCalibration(
   flashes: readonly number[],
   claps: readonly number[],
-  o: Partial<Pick<typeof DEFAULT_CALIBRATION, 'matchWindowMs' | 'madFloorMs' | 'minMatched' | 'intervalMs'>> = {},
+  o: Partial<
+    Pick<typeof DEFAULT_CALIBRATION, 'matchWindowMs' | 'madFloorMs' | 'minMatched' | 'intervalMs'>
+  > = {},
 ): CalibrationOutcome {
   const d = { ...DEFAULT_CALIBRATION, ...o }
   const half = d.intervalMs / 2

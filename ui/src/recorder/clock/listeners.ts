@@ -48,7 +48,8 @@ export async function tapStream(
   const mute = ctx.createGain()
   mute.gain.value = 0
   src.connect(node).connect(mute).connect(ctx.destination)
-  node.port.onmessage = (e: MessageEvent<{ frame: number; block: Float32Array }>) => onBlock(e.data.block, e.data.frame)
+  node.port.onmessage = (e: MessageEvent<{ frame: number; block: Float32Array }>) =>
+    onBlock(e.data.block, e.data.frame)
   return () => {
     node.port.onmessage = null
     src.disconnect()
@@ -61,7 +62,11 @@ export async function tapStream(
  * Hears claps on the armed mic stream. Sample positions come from the first block's frame plus the count since (S10:
  * Chromium's worklet currentFrame glitches by a quantum now and then while the data stays continuous).
  */
-export function micClapListener(o: { ctx: AudioContext; stream: MediaStream; audioClock: AudioClock }): ClapListener {
+export function micClapListener(o: {
+  ctx: AudioContext
+  stream: MediaStream
+  audioClock: AudioClock
+}): ClapListener {
   let untap: (() => void) | null = null
   let first = -1
   const det = new OnsetDetector({ sampleRate: o.ctx.sampleRate, refractoryMs: 250 })
@@ -124,7 +129,12 @@ export async function runLoopback(o: {
  * The mock build's listener: a "clap" `latencyMs` after each flash with deterministic jitter, one far outlier and
  * optional misses, so the panel's whole flow runs without a mic.
  */
-export function syntheticClapListener(o: { latencyMs: number; jitterMs?: number; outlierMs?: number; miss?: number[] }): ClapListener {
+export function syntheticClapListener(o: {
+  latencyMs: number
+  jitterMs?: number
+  outlierMs?: number
+  miss?: number[]
+}): ClapListener {
   let claps: number[] = []
   let k = 0
   return {

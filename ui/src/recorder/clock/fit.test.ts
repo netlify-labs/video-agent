@@ -1,4 +1,5 @@
-// The take's piecewise sync fit (fit.ts) on synthetic anchors: slope, jitter, one-frame steps, residual and slope stops.
+// The take's piecewise sync fit (fit.ts) on synthetic anchors: slope, jitter, one-frame steps, re-anchoring on a steady
+// offset, residual and slope stops.
 import { describe, expect, it } from 'vitest'
 import { SAMPLE_RATE } from '../../../../src/lib/timeline'
 import {
@@ -29,7 +30,13 @@ const FPS = 30
  * `ppm` fast against the audio, `jitterMs` of uniform noise on the display time and the composition shifted by
  * `steps[i].frames` from anchor `steps[i].at` on.
  */
-function take(o: { seconds: number; ppm?: number; jitterMs?: number; t0?: number; steps?: { at: number; frames: number }[] }) {
+function take(o: {
+  seconds: number
+  ppm?: number
+  jitterMs?: number
+  t0?: number
+  steps?: { at: number; frames: number }[]
+}) {
   const r = rng(7)
   const b = (1 + (o.ppm ?? 0) * 1e-6) / SAMPLE_RATE
   const t0 = o.t0 ?? 0.4
@@ -37,7 +44,7 @@ function take(o: { seconds: number; ppm?: number; jitterMs?: number; t0?: number
   for (let k = 0; k < o.seconds * FPS; k++) {
     const shift = (o.steps ?? []).filter((s) => k >= s.at).reduce((n, s) => n + s.frames, 0)
     const time = t0 + k / FPS
-    const x = (k / FPS) / b + r() * ((o.jitterMs ?? 0) / 1000) * SAMPLE_RATE
+    const x = k / FPS / b + r() * ((o.jitterMs ?? 0) / 1000) * SAMPLE_RATE
     pts.push({ sample: x, time: time + shift / FPS })
   }
   return { pts, a: t0, b }
@@ -95,7 +102,15 @@ describe('piecewise fit', () => {
   })
 
   it('splits at each injected one-frame step and fits each piece flat', () => {
-    const { pts } = take({ seconds: 600, ppm: 33, jitterMs: 1, steps: [{ at: 388 * FPS, frames: -1 }, { at: 496 * FPS, frames: -1 }] })
+    const { pts } = take({
+      seconds: 600,
+      ppm: 33,
+      jitterMs: 1,
+      steps: [
+        { at: 388 * FPS, frames: -1 },
+        { at: 496 * FPS, frames: -1 },
+      ],
+    })
     const end = Math.ceil(pts.at(-1)!.sample)
     const f = fitPiecewise(pts, end)
     expect(f.stop).toBeNull()
@@ -110,8 +125,17 @@ describe('piecewise fit', () => {
     // Each step moves the intercept back one frame; a single line across them would have ~9 ms RMS (S10).
     expect((s1.a - s0.a) * 1000).toBeCloseTo(-1000 / FPS, 0)
     expect((s2.a - s1.a) * 1000).toBeCloseTo(-1000 / FPS, 0)
-    const one = fitLine(pts.map((p) => p.sample), pts.map((p) => p.time))!
-    expect(residuals(one, pts.map((p) => p.sample), pts.map((p) => p.time)).rms * 1000).toBeGreaterThan(8)
+    const one = fitLine(
+      pts.map((p) => p.sample),
+      pts.map((p) => p.time),
+    )!
+    expect(
+      residuals(
+        one,
+        pts.map((p) => p.sample),
+        pts.map((p) => p.time),
+      ).rms * 1000,
+    ).toBeGreaterThan(8)
   })
 
   it('a single late frame is an outlier, not a step or a stop, and is left out of the fit', () => {
@@ -124,15 +148,46 @@ describe('piecewise fit', () => {
     expect(f.segments[0]!.residualMax).toBeLessThan(0.01)
   })
 
-  it('stops on residual: a breach that is not a whole-frame step keeps the clean part', () => {
+  it('stops on residual: a breach that scatters (not a frame step, not steady) keeps the clean part', () => {
     const { pts } = take({ seconds: 30 })
-    // From anchor 450 on, the picture wanders 15 ms (half a frame): not a frame step.
-    const bad = pts.map((p, i) => (i >= 450 ? { ...p, time: p.time + 0.015 } : p))
+    // From anchor 450 on, the picture lurches 30-70 ms off, a different amount each frame.
+    const lurch = [0.03, 0.07, 0.045, 0.06]
+    const bad = pts.map((p, i) => (i >= 450 ? { ...p, time: p.time + (lurch[i % 4] ?? 0) } : p))
     const f = fitPiecewise(bad, Math.ceil(bad.at(-1)!.sample))
     expect(f.stop?.kind).toBe('residual')
     expect(f.stop?.atSample).toBeCloseTo(bad[450]!.sample, 6)
     expect(f.cleanSamples).toBe(Math.floor(bad[450]!.sample))
     expect(f.segments.at(-1)!.toSample).toBe(f.cleanSamples)
+  })
+
+  it('a steady offset that is not a whole frame re-anchors instead of stopping', () => {
+    const { pts } = take({ seconds: 30, jitterMs: 1 })
+    // From anchor 450 on, everything sits 25 ms later (a latency change): not a frame (33.3 ms), but steady.
+    const moved = pts.map((p, i) => (i >= 450 ? { ...p, time: p.time + 0.025 } : p))
+    const f = fitPiecewise(moved, Math.ceil(moved.at(-1)!.sample))
+    expect(f.stop).toBeNull()
+    expect(f.reanchors).toHaveLength(1)
+    expect(f.reanchors[0]!.atSample).toBeCloseTo(moved[450]!.sample, 6)
+    expect(f.reanchors[0]!.offsetMs).toBeCloseTo(25, 0)
+    expect(f.segments).toHaveLength(2)
+    expect(f.cleanSamples).toBe(Math.ceil(moved.at(-1)!.sample))
+    for (const seg of f.segments) expect(seg.residualMax).toBeLessThan(2)
+  })
+
+  it('a steady offset beyond the re-anchor limit still stops', () => {
+    const { pts } = take({ seconds: 30 })
+    // 150 ms (4.5 frames): too large to be jitter or a latency change.
+    const far = pts.map((p, i) => (i >= 450 ? { ...p, time: p.time + 0.15 } : p))
+    expect(fitPiecewise(far, Math.ceil(far.at(-1)!.sample)).stop?.kind).toBe('residual')
+  })
+
+  it('jitter of up to one 60 Hz display interval stays in the fit (the 20 ms limit)', () => {
+    const { pts } = take({ seconds: 30, jitterMs: 1 })
+    // Every third frame presented one vsync (16.7 ms) late, as a 60 Hz screen does with a 30 fps video.
+    const vsync = pts.map((p, i) => (i % 3 === 0 && i > 0 ? { ...p, time: p.time - 0.0167 } : p))
+    const f = fitPiecewise(vsync, Math.ceil(vsync.at(-1)!.sample))
+    expect(f.stop).toBeNull()
+    expect(f.cleanSamples).toBe(Math.ceil(vsync.at(-1)!.sample))
   })
 
   it('stops on slope beyond tolerance', () => {
@@ -196,7 +251,8 @@ describe('piecewise fit', () => {
 
   it('after a trimmed warm-up, a real drift still stops and a one-frame step still splits', () => {
     const { pts } = take({ seconds: 30, jitterMs: 1 })
-    const bad = strays(pts).map((p, i) => (i >= 450 ? { ...p, time: p.time + 0.015 } : p))
+    const lurch = [0.03, 0.07, 0.045, 0.06]
+    const bad = strays(pts).map((p, i) => (i >= 450 ? { ...p, time: p.time + (lurch[i % 4] ?? 0) } : p))
     const f = fitPiecewise(bad, Math.ceil(bad.at(-1)!.sample))
     expect(f.stop?.kind).toBe('residual')
     expect(f.stop?.atSample).toBeCloseTo(bad[450]!.sample, 6)

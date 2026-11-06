@@ -206,6 +206,8 @@ export interface TakeFit {
   /** Take samples [0, cleanSamples) are clean: the take keeps them. */
   cleanSamples: number
   steps: { atSample: number; frames: number }[]
+  /** Steady offsets the fit re-anchored on instead of stopping (fit.ts SyncFitter). */
+  reanchors: { atSample: number; offsetMs: number }[]
   outliers: number
   /** Lookahead anchors dropped (Firefox; see PictureClock.observe). */
   lookaheads: number
@@ -334,7 +336,8 @@ export class PictureClock {
     this.held.push(a)
     const events: PictureEvent[] = []
     // release() may stop the take (stopReason is a getter, so this isn't narrowed away).
-    while (this.held.length > LOOKAHEAD_HOLD && !this.stopReason) events.push(...this.release(this.held.shift() as Anchor))
+    while (this.held.length > LOOKAHEAD_HOLD && !this.stopReason)
+      events.push(...this.release(this.held.shift() as Anchor))
     for (const l of this.anchorListeners) l(a, events)
   }
 
@@ -347,11 +350,11 @@ export class PictureClock {
       // The first, then every 100th: under load Firefox gives several a second.
       if (this.lookaheads === 1 || this.lookaheads % 100 === 0)
         this.o.log?.('clock.lookahead', {
-        mediaTime: h.mediaTime,
-        next: mediaTime,
-        presentedFrames: h.presentedFrames,
-        count: this.lookaheads,
-      })
+          mediaTime: h.mediaTime,
+          next: mediaTime,
+          presentedFrames: h.presentedFrames,
+          count: this.lookaheads,
+        })
     }
     this.held = kept
   }
@@ -394,6 +397,8 @@ export class PictureClock {
     if (!this.fitter || x === null || x < 0) return
     const ev: FitEvent = this.fitter.push({ sample: x, time: a.mediaTime })
     if (ev.type === 'step') this.o.log?.('clock.fit-step', { frames: ev.frames, atSample: ev.atSample })
+    else if (ev.type === 'reanchor')
+      this.o.log?.('clock.fit-reanchor', { offsetMs: ev.offsetMs, atSample: ev.atSample })
     else if (ev.type === 'stop') this.stop(ev.kind, ev.detail, ev.atSample)
   }
 
@@ -437,6 +442,7 @@ export class PictureClock {
       stop: this.stopped,
       cleanSamples: 0,
       steps: [],
+      reanchors: [],
       outliers: 0,
       lookaheads: this.lookaheads,
       skippedFrames: this.monitor.skipped,
@@ -461,16 +467,24 @@ export class PictureClock {
       frames: s.frames,
     }))
     const splits = pictureSteps.map((s) => s.atSample)
-    const fit = fitPiecewise(points, Number.isFinite(end) ? end : Math.ceil(last), {
-      ...this.fitOptions,
-      sampleRate: outRate,
-    }, splits)
-    const longest = [...fit.segments].sort((p, q) => q.toSample - q.fromSample - (p.toSample - p.fromSample))[0]
+    const fit = fitPiecewise(
+      points,
+      Number.isFinite(end) ? end : Math.ceil(last),
+      {
+        ...this.fitOptions,
+        sampleRate: outRate,
+      },
+      splits,
+    )
+    const longest = [...fit.segments].sort(
+      (p, q) => q.toSample - q.fromSample - (p.toSample - p.fromSample),
+    )[0]
     return {
       ...empty,
       segments: fit.segments,
       cleanSamples: fit.cleanSamples,
       steps: [...pictureSteps, ...fit.steps].sort((p, q) => p.atSample - q.atSample),
+      reanchors: fit.reanchors,
       outliers: fit.outliers,
       lookaheads: lookahead.size,
       slopePpm: longest ? slopePpm(longest.b, outRate) : null,

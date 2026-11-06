@@ -8,9 +8,18 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { log } from '../../lib/log'
 import type { AudioClock } from './audio-clock'
 import type { StopKind, StopReason } from './fit'
-import { PictureClock, type Anchor, type PictureClockOptions, type TakeClockInput, type TakeFit } from './picture'
+import {
+  PictureClock,
+  type Anchor,
+  type PictureClockOptions,
+  type TakeClockInput,
+  type TakeFit,
+} from './picture'
 
-export interface UsePictureClockOptions extends Omit<PictureClockOptions, 'audioClock' | 'doc' | 'mediaDevices'> {
+export interface UsePictureClockOptions extends Omit<
+  PictureClockOptions,
+  'audioClock' | 'doc' | 'mediaDevices'
+> {
   audioClock?: AudioClock | null
 }
 
@@ -64,7 +73,10 @@ export function usePictureClock(videoEl: HTMLVideoElement | null, options: UsePi
   )
 
   const beginTake = useCallback((input: TakeClockInput) => clock.current?.beginTake(input), [])
-  const stop = useCallback((kind: StopKind = 'user', detail?: string) => clock.current?.stop(kind, detail), [])
+  const stop = useCallback(
+    (kind: StopKind = 'user', detail?: string) => clock.current?.stop(kind, detail),
+    [],
+  )
   const fitFor = useCallback(
     (recording?: TakeClockInput, endSample?: number): TakeFit | null =>
       clock.current ? clock.current.fitFor(recording ?? undefined, endSample) : null,

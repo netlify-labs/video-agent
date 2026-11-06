@@ -156,7 +156,8 @@ export const STOP_MESSAGES: Record<StopKind, string> = {
   ended: 'The video ended.',
   seek: 'The video was moved while recording, so the take stopped there.',
   stall: 'The video stalled while recording, so the take stopped there.',
-  hidden: 'The tab was hidden while recording, so the take stopped there. Keep this tab in front while you record.',
+  hidden:
+    'The tab was hidden while recording, so the take stopped there. Keep this tab in front while you record.',
   devicechange: 'An audio device was connected or removed, so the take stopped there.',
   'track-ended': 'The microphone stopped, so the take stopped there.',
   'context-interrupted': 'The browser interrupted audio (another app or a call), so the take stopped there.',
@@ -166,8 +167,22 @@ export const STOP_MESSAGES: Record<StopKind, string> = {
 
 // ---- piecewise fit
 
-/** Residual above which an anchor breaches, in ms. A constant pending S10b's real-hardware numbers. */
-export const RESIDUAL_LIMIT_MS = 10
+/**
+ * Residual above which an anchor breaches, in ms. S10's 10 ms default was the headless pipeline's own error (0.005 ms)
+ * with room to spare, and it stopped real takes early (a take stopped at 8.7 s of 13 s). On a real screen a frame is
+ * presented on a vsync, so an anchor can sit up to one display interval off the line: 16.7 ms at 60 Hz. 20 ms clears
+ * that, stays under a whole frame at 30 fps (33.3 ms, so frame steps still show as steps) and well inside lip-sync
+ * tolerance (EBU R37: audio within +40/−60 ms of the picture). S10b's real-hardware run never happened; when it does,
+ * its residuals replace this reasoning.
+ */
+export const RESIDUAL_LIMIT_MS = 20
+/** A steady offset larger than this isn't re-anchored: the take stops (something larger than jitter went wrong). */
+export const REANCHOR_MAX_MS = 100
+/**
+ * A steady shift smaller than the residual limit still re-anchors once it's beyond this: left in the segment, a 15 ms
+ * jump would tilt the line until the slope rule stopped the take.
+ */
+export const SHIFT_FROM_MS = 8
 /** Slope tolerance against 1/SAMPLE_RATE, in ppm (S10's default; real clocks measured about 33 ppm apart). */
 export const SLOPE_TOLERANCE_PPM = 1000
 
@@ -181,6 +196,13 @@ export interface FitOptions {
   residualRun: number
   /** A run is a frame step when every residual is within this of the same whole number of frames. */
   stepToleranceMs: number
+  /**
+   * A breaching run that isn't a frame step but holds steady (every residual within `stepToleranceMs` of the run's
+   * mean, and that mean within this many ms) re-anchors: a new segment starts there instead of the take stopping.
+   */
+  reanchorMaxMs: number
+  /** Within the residual limit, a steady run beyond this many ms re-anchors too (see SHIFT_FROM_MS). */
+  shiftFromMs: number
   slopeTolerancePpm: number
   /**
    * Anchors in the first segment before residuals are checked (the fit is still settling). When the warm-up fills,
@@ -199,6 +221,8 @@ export const DEFAULT_FIT_OPTIONS: FitOptions = {
   residualLimitMs: RESIDUAL_LIMIT_MS,
   residualRun: 3,
   stepToleranceMs: 4,
+  reanchorMaxMs: REANCHOR_MAX_MS,
+  shiftFromMs: SHIFT_FROM_MS,
   slopeTolerancePpm: SLOPE_TOLERANCE_PPM,
   residualWarmup: 60,
   slopeWarmup: 300,
@@ -226,13 +250,18 @@ export type FitEvent =
   | { type: 'ok'; residualMs: number | null }
   | { type: 'outlier'; residualMs: number }
   | { type: 'step'; atSample: number; frames: number }
+  | { type: 'reanchor'; atSample: number; offsetMs: number }
   | { type: 'stop'; kind: 'residual' | 'slope'; atSample: number; detail: string }
 
 /**
  * What a breaching run is: a whole-frame step when every residual sits within `toleranceMs` of the same non-zero
  * number of frames, else null.
  */
-export function wholeFrameStep(residualsMs: readonly number[], frameMs: number, toleranceMs: number): number | null {
+export function wholeFrameStep(
+  residualsMs: readonly number[],
+  frameMs: number,
+  toleranceMs: number,
+): number | null {
   if (!residualsMs.length) return null
   const k = Math.round(mean(residualsMs) / frameMs)
   if (k === 0) return null
@@ -257,12 +286,16 @@ export class SyncFitter {
   readonly options: FitOptions
   private readonly pieces: Piece[] = [piece()]
   private run: { x: number; r: number }[] = []
+  /** Consecutive in-limit anchors beyond shiftFromMs, which re-anchor when they hold steady. */
+  private shift: { x: number; r: number }[] = []
   /** Anchors in the breaching run, not yet in a segment. */
   private pending: SyncPoint[] = []
   private stopped: Extract<FitEvent, { type: 'stop' }> | null = null
   private trimmed = false
   readonly outliers: { sample: number; residualMs: number }[] = []
   readonly steps: { atSample: number; frames: number }[] = []
+  /** Steady offsets that started a new segment instead of stopping the take. */
+  readonly reanchors: { atSample: number; offsetMs: number }[] = []
 
   constructor(options: Partial<FitOptions> = {}) {
     this.options = { ...DEFAULT_FIT_OPTIONS, ...options }
@@ -300,7 +333,8 @@ export class SyncFitter {
   push(p: SyncPoint): FitEvent {
     if (this.stopped) return this.stopped
     const o = this.options
-    if (!this.trimmed && this.pieces.length === 1 && this.piece.xs.length >= o.residualWarmup) this.trimWarmup()
+    if (!this.trimmed && this.pieces.length === 1 && this.piece.xs.length >= o.residualWarmup)
+      this.trimWarmup()
     const line = this.currentLine()
     const checking = line && (this.pieces.length > 1 || this.piece.xs.length >= o.residualWarmup)
     if (!line || !checking) {
@@ -311,8 +345,11 @@ export class SyncFitter {
     if (Math.abs(r) <= o.residualLimitMs) {
       this.run = []
       this.add(p)
+      const moved = this.checkShift(p.sample, r)
+      if (moved) return moved
       return this.checkSlope(p) ?? { type: 'ok', residualMs: r }
     }
+    this.shift = []
     // Breaching: held back from the segment until the run says whether it's a step, a stop or a one-off.
     this.run.push({ x: p.sample, r })
     this.pending.push(p)
@@ -327,6 +364,15 @@ export class SyncFitter {
     )
     const from = this.run[0]?.x ?? p.sample
     if (k === null) {
+      // Not a whole frame: recover when the run holds steady (a latency change, a dropped buffer), stop when it scatters.
+      const rs = this.run.map((q) => q.r)
+      const m = mean(rs)
+      if (Math.abs(m) <= o.reanchorMaxMs && rs.every((r) => Math.abs(r - m) <= o.stepToleranceMs)) {
+        this.outliers.splice(this.outliers.length - (this.run.length - 1))
+        this.split(from)
+        this.reanchors.push({ atSample: from, offsetMs: m })
+        return { type: 'reanchor', atSample: from, offsetMs: m }
+      }
       const worst = this.run.reduce((m, q) => (Math.abs(q.r) > Math.abs(m) ? q.r : m), 0)
       this.stopped = {
         type: 'stop',
@@ -401,12 +447,38 @@ export class SyncFitter {
     )
     this.pending = []
     this.run = []
+    this.shift = []
     // Nothing before the split point: the current segment simply carries on with the moved anchors.
     if (cut === 0) this.pieces[this.pieces.length - 1] = next
     else {
       this.pieces[this.pieces.length - 1] = piece(cur.xs.slice(0, cut), cur.ys.slice(0, cut))
       this.pieces.push(next)
     }
+  }
+
+  /** A steady in-limit shift (residualRun anchors beyond shiftFromMs, one side, within stepToleranceMs): re-anchor. */
+  private checkShift(x: number, r: number): FitEvent | null {
+    const o = this.options
+    if (
+      Math.abs(r) <= o.shiftFromMs ||
+      (this.shift.length && Math.sign(this.shift[0]?.r ?? 0) !== Math.sign(r))
+    ) {
+      this.shift = Math.abs(r) > o.shiftFromMs ? [{ x, r }] : []
+      return null
+    }
+    this.shift.push({ x, r })
+    if (this.shift.length < o.residualRun) return null
+    const rs = this.shift.map((q) => q.r)
+    const m = mean(rs)
+    if (!rs.every((v) => Math.abs(v - m) <= o.stepToleranceMs)) {
+      this.shift.shift()
+      return null
+    }
+    const from = this.shift[0]?.x ?? x
+    this.shift = []
+    this.split(from)
+    this.reanchors.push({ atSample: from, offsetMs: m })
+    return { type: 'reanchor', atSample: from, offsetMs: m }
   }
 
   private checkSlope(p: SyncPoint): FitEvent | null {
@@ -460,6 +532,7 @@ export interface PiecewiseFit {
   segments: FitSegment[]
   stop: Extract<FitEvent, { type: 'stop' }> | null
   steps: { atSample: number; frames: number }[]
+  reanchors: { atSample: number; offsetMs: number }[]
   outliers: number
   /** Where the clean part ends: the stop's sample, else `endSample`. */
   cleanSamples: number
@@ -483,6 +556,7 @@ export function fitPiecewise(
     segments: f.segments(cleanSamples),
     stop: f.stop,
     steps: f.steps,
+    reanchors: f.reanchors,
     outliers: f.outliers.length,
     cleanSamples,
   }

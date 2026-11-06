@@ -10,6 +10,9 @@
 // until stop). The picture starts the pre-roll before the punch point (2 s, 0-5 s, remembered in this browser) with
 // the existing narration in the monitor; from the punch point the monitor mutes it inside the range, and only the
 // range's samples land on the track, laid over the older clips (one undo step).
+// Review (owner, 2026-11-06): a stopped take doesn't go straight on the track. The panel plays it against the picture
+// as Add would leave it (TakeReview), and Add (Enter), Record again, Keep recording from here or Discard (Esc) decide;
+// the take uploads meanwhile, so it's never lost, and only the insert waits (onTakeReady awaits the decision).
 import { Alert, Button, Card, Group, NumberInput, Progress, Stack, Text } from '@mantine/core'
 import {
   IconArrowBarToRight,
@@ -50,6 +53,8 @@ import {
 import { draftStemLoader, signedTakeLoader, useStemMonitor } from '../recorder/monitor'
 import { createRecorder, micStream, type RecordedTake, type Recorder } from '../recorder/recorder'
 import { RecoveryPrompt } from '../recorder/RecoveryPrompt'
+import { reviewMediaId, reviewOp } from '../recorder/review'
+import { TakeReview } from '../recorder/TakeReview'
 import { useRecordingRecovery } from '../recorder/recovery'
 import { RecordingSetup } from '../recorder/setup/RecordingSetup'
 import { micProblem, PROBLEM_COPY, browserOf } from '../recorder/setup/mic'
@@ -244,13 +249,20 @@ export function NarrationRecorder({ api, videoId, versionN, draft }: NarrationRe
   const monitorRef = useRef(monitor)
   monitorRef.current = monitor
 
-  // Stopped takes by recording id, for their waveform when they land on the track.
+  // Stopped takes by recording id, for their waveform when they land on the track (and the review's audio).
   const taken = useRef(new Map<string, RecordedTake>())
+  const [finalized, setFinalized] = useState(0)
   const flowRef = useRef<ReturnType<typeof createRecordFlow> | null>(null)
   const upload = useTakeUpload({
     userId,
     scopeJobId: videoId,
     onTakeReady: async (mediaId, samples, speech, ready) => {
+      // A reviewed take goes on the track only on Add; Discard and Record again leave it uploaded but unused.
+      const decided = (await flowRef.current?.decide(ready.recordingId)) ?? 'add'
+      if (decided === 'discard') {
+        log('record.discarded_after_review', { recordingId: ready.recordingId, mediaId })
+        return
+      }
       const a = latest.current.api
       const pieces = flowRef.current?.placementsFor(ready.recordingId) ?? placementsFromRecord(ready.record)
       const punched = !!flowRef.current?.punchFor(ready.recordingId)
@@ -379,6 +391,7 @@ export function NarrationRecorder({ api, videoId, versionN, draft }: NarrationRe
             stop: async () => {
               const t = await rec.stop()
               taken.current.set(t.recordingId, t)
+              setFinalized((n) => n + 1)
               return t
             },
           }),
@@ -408,17 +421,17 @@ export function NarrationRecorder({ api, videoId, versionN, draft }: NarrationRe
   const { onStop } = picture
   useEffect(() => onStop((r) => flow.stopped(r)), [onStop, flow])
   useEffect(() => {
-    flow.uploadChanged(upload.state, upload.error)
-  }, [flow, upload.state, upload.error])
+    flow.uploadChanged(upload.state, upload.error, upload.recordingId)
+  }, [flow, upload.state, upload.error, upload.recordingId])
   useEffect(() => {
     if (phase !== 'recording') return
     const t = setInterval(() => void flow.checkpoint(), CHECKPOINT_MS)
     return () => clearInterval(t)
   }, [flow, phase])
 
-  // Space stops and keeps, Esc discards (not while typing in a field).
+  // Space stops and keeps, Esc discards; in review, Enter adds and Esc discards (not while typing in a field).
   useEffect(() => {
-    if (phase !== 'countdown' && phase !== 'recording') return
+    if (phase !== 'countdown' && phase !== 'recording' && phase !== 'review') return
     const onKey = (e: KeyboardEvent) => {
       if (isTextField(e.target)) return
       const act = flowKey(phase, e.key)
@@ -427,6 +440,8 @@ export function NarrationRecorder({ api, videoId, versionN, draft }: NarrationRe
       e.stopPropagation()
       if (e.type !== 'keydown' || e.repeat) return
       if (act === 'stop') flow.stop()
+      else if (act === 'add') flow.add()
+      else if (phase === 'review') flow.reject()
       else void flow.discard()
     }
     window.addEventListener('keydown', onKey, true)
@@ -488,10 +503,52 @@ export function NarrationRecorder({ api, videoId, versionN, draft }: NarrationRe
   const onOffsets = useCallback((o: CalibrationOffsets) => {
     offsets.current = o
   }, [])
+  const reviewing = useRef(false)
+  reviewing.current = phase === 'review' || phase === 'adding'
   const getTime = useCallback(
-    () => pictureTime(pictureRef.current.anchors, performance.now()) ?? videoRef.current?.currentTime ?? 0,
+    () =>
+      // Reviewing, the picture plays without the clock: the prompter follows it directly.
+      (reviewing.current ? videoRef.current?.currentTime : null) ??
+      pictureTime(pictureRef.current.anchors, performance.now()) ??
+      videoRef.current?.currentTime ??
+      0,
     [],
   )
+
+  // The review's narration: the op with the take inserted as Add would, the take heard from its local WAV.
+  const review = s.review
+  const reviewTake = review ? taken.current.get(review.recordingId) : undefined
+  const reviewTakeSamples = useMemo(
+    () =>
+      review && reviewTake
+        ? new Map([...api.takeSamples, [reviewMediaId(review.recordingId), reviewTake.samples]])
+        : api.takeSamples,
+    [review, reviewTake, api.takeSamples],
+  )
+  const reviewNarration = useMemo(
+    () =>
+      review && reviewTake
+        ? reviewOp(
+            api.op,
+            { mediaId: reviewMediaId(review.recordingId), samples: reviewTake.samples },
+            clampToTake(review.pieces, reviewTake.samples),
+            { fps: FPS, takeSamples: api.takeSamples, keepTakes: !!review.punch && !review.joined },
+          )
+        : null,
+    // finalized: the take's WAV arrived (taken is a ref).
+    [review, reviewTake, api.op, api.takeSamples, finalized],
+  )
+  const loadReviewTake = useCallback(async (mediaId: string) => {
+    for (const [id, t] of taken.current) if (reviewMediaId(id) === mediaId) return t.wav.arrayBuffer()
+    return signedTakeLoader(mediaId)
+  }, [])
+  const uploadNote =
+    upload.state === 'uploading'
+      ? `Uploading it${upload.progress?.total ? ` (${Math.round((upload.progress.sent / upload.progress.total) * 100)}%)` : ''}…`
+      : upload.state === 'finalizing' || upload.state === 'processing'
+        ? 'Uploading it…'
+        : null
+  const pictureEnd = video && Number.isFinite(video.duration) ? video.duration : null
 
   const status = statusText(s, upload.state, upload.progress)
   const recoverable = recovery.takes.filter((t) => t.id !== s.recordingId)
@@ -536,7 +593,7 @@ export function NarrationRecorder({ api, videoId, versionN, draft }: NarrationRe
                 variant="subtle"
                 color="gray"
                 leftSection={<IconX size={12} />}
-                disabled={running}
+                disabled={running || phase === 'review' || phase === 'adding'}
                 onClick={() => flow.close()}
               >
                 Close
@@ -577,81 +634,109 @@ export function NarrationRecorder({ api, videoId, versionN, draft }: NarrationRe
               }
               prompter={<Teleprompter composition={api.html ?? ''} getTime={getTime} />}
             />
-            <Group gap="sm" align="center">
-              {phase === 'countdown' || phase === 'recording' ? (
-                <>
-                  <Button
-                    size="xs"
-                    color="red"
-                    leftSection={<IconPlayerStopFilled size={14} />}
-                    onClick={() => flow.stop()}
-                    data-testid="record-stop"
-                  >
-                    Stop (Space)
-                  </Button>
-                  <Button size="xs" variant="default" onClick={() => void flow.discard()}>
-                    Discard (Esc)
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <Button
-                    size="xs"
-                    color="red"
-                    leftSection={<IconPlayerRecordFilled size={14} />}
-                    disabled={!canStart}
-                    onClick={() => onRecord()}
-                    data-testid="record-start"
-                  >
-                    Record
-                  </Button>
-                  <Button
-                    size="xs"
-                    variant="default"
-                    leftSection={<IconArrowBarToRight size={14} />}
-                    disabled={!canStart}
-                    onClick={() => onRecord(punch)}
-                    data-testid="record-punch"
-                    data-from={punch.from}
-                    data-to={punch.to ?? ''}
-                  >
-                    Punch in {punchText(punch)} (R)
-                  </Button>
-                  <NumberInput
-                    size="xs"
-                    w={110}
-                    label="Pre-roll (s)"
-                    min={0}
-                    max={MAX_PRE_ROLL_SEC}
-                    step={0.5}
-                    decimalScale={1}
-                    clampBehavior="strict"
-                    value={preRoll}
-                    onChange={(v) => {
-                      // A half-typed value ('' or '1.') waits for the next keystroke.
-                      if (typeof v !== 'number') return
-                      const next = clampPreRoll(v)
-                      setPreRoll(next)
-                      storePreRoll(next)
-                    }}
-                    data-testid="punch-preroll"
+            {review && (phase === 'review' || phase === 'adding') ? (
+              <TakeReview
+                review={review}
+                video={video}
+                op={reviewNarration}
+                takeSamples={reviewTakeSamples}
+                takeSpans={api.takeSpans}
+                loadTake={loadReviewTake}
+                stopNotice={review.early ? s.notice : null}
+                uploadNote={uploadNote}
+                canRestart={upload.state === 'saving' && upload.recordingId === review.recordingId}
+                pictureEnd={pictureEnd}
+                adding={phase === 'adding'}
+                onAdd={() => flow.add()}
+                onAgain={() => {
+                  ;(document.activeElement as HTMLElement | null)?.blur()
+                  if (review.punch) setMonitorFrom(Math.max(0, review.punch.from / SAMPLE_RATE - preRoll))
+                  flow.recordAgain(preRoll)
+                }}
+                onContinue={() => {
+                  ;(document.activeElement as HTMLElement | null)?.blur()
+                  setMonitorFrom(0)
+                  flow.keepRecording(preRoll)
+                }}
+                onDiscard={() => flow.reject()}
+              />
+            ) : (
+              <Group gap="sm" align="center">
+                {phase === 'countdown' || phase === 'recording' ? (
+                  <>
+                    <Button
+                      size="xs"
+                      color="red"
+                      leftSection={<IconPlayerStopFilled size={14} />}
+                      onClick={() => flow.stop()}
+                      data-testid="record-stop"
+                    >
+                      Stop (Space)
+                    </Button>
+                    <Button size="xs" variant="default" onClick={() => void flow.discard()}>
+                      Discard (Esc)
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      size="xs"
+                      color="red"
+                      leftSection={<IconPlayerRecordFilled size={14} />}
+                      disabled={!canStart}
+                      onClick={() => onRecord()}
+                      data-testid="record-start"
+                    >
+                      Record
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="default"
+                      leftSection={<IconArrowBarToRight size={14} />}
+                      disabled={!canStart}
+                      onClick={() => onRecord(punch)}
+                      data-testid="record-punch"
+                      data-from={punch.from}
+                      data-to={punch.to ?? ''}
+                    >
+                      Punch in {punchText(punch)} (R)
+                    </Button>
+                    <NumberInput
+                      size="xs"
+                      w={110}
+                      label="Pre-roll (s)"
+                      min={0}
+                      max={MAX_PRE_ROLL_SEC}
+                      step={0.5}
+                      decimalScale={1}
+                      clampBehavior="strict"
+                      value={preRoll}
+                      onChange={(v) => {
+                        // A half-typed value ('' or '1.') waits for the next keystroke.
+                        if (typeof v !== 'number') return
+                        const next = clampPreRoll(v)
+                        setPreRoll(next)
+                        storePreRoll(next)
+                      }}
+                      data-testid="punch-preroll"
+                    />
+                  </>
+                )}
+                {phase === 'recording' ? (
+                  <Progress
+                    w={120}
+                    size="sm"
+                    value={Math.min(100, level * 100)}
+                    color={level >= 0.99 ? 'red' : 'teal'}
+                    aria-label="Input level"
                   />
-                </>
-              )}
-              {phase === 'recording' ? (
-                <Progress
-                  w={120}
-                  size="sm"
-                  value={Math.min(100, level * 100)}
-                  color={level >= 0.99 ? 'red' : 'teal'}
-                  aria-label="Input level"
-                />
-              ) : null}
-            </Group>
+                ) : null}
+              </Group>
+            )}
             <Text size="sm" data-testid="record-status" data-phase={phase} aria-live="polite">
               {status}
             </Text>
-            {s.notice ? (
+            {s.notice && phase !== 'review' && phase !== 'adding' ? (
               <Alert
                 color="yellow"
                 variant="light"
@@ -661,7 +746,7 @@ export function NarrationRecorder({ api, videoId, versionN, draft }: NarrationRe
                 {s.notice}
               </Alert>
             ) : null}
-            {phase === 'failed' && s.error ? (
+            {(phase === 'failed' || phase === 'review') && s.error ? (
               <Group gap="xs">
                 <Text size="sm" c="red" role="alert">
                   {s.error}
@@ -725,6 +810,12 @@ function statusText(
         : 'Recording. Space stops and keeps the take; Esc discards it.'
     case 'stopping':
       return 'Finishing the take…'
+    case 'review':
+      return 'Play the take with the picture, then add it to the timeline, record it again or discard it. Enter adds; Esc discards.'
+    case 'adding':
+      return upload === 'saving'
+        ? 'Adding the take to the Narration track…'
+        : 'Adding the take once it has uploaded…'
     case 'uploading':
       return upload === 'uploading'
         ? `Uploading the take${progress?.total ? ` (${Math.round((progress.sent / progress.total) * 100)}%)` : ''}…`

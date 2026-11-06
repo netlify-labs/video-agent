@@ -408,6 +408,12 @@ offset leave the fit as outliers. The residual limit (10 ms), the step rule and 
 15 ms drift or a 2500 ppm slope still stops a take with lookaheads in it (unit tests). Firefox's `presentedFrames`
 jumps still count as skipped frames, so `skippedFrames` overstates Firefox's real frame loss.
 
+**Later (2026-11-06):** the residual limit is now 20 ms, and a steady offset re-anchors instead of stopping. The 10 ms
+default stopped a real take at 8.69 s of 12.97 s (a `residual` stop), and on real screens a frame can present up to one
+vsync (16.7 ms at 60 Hz) off the line. Re-anchoring catches a steady offset that isn't a whole frame: up to 100 ms
+beyond the limit, or past 8 ms inside it. Only a scattering run still stops (`fit.ts`; reasoning in the voice-over
+plan's As built).
+
 #### Pending: owner hardware matrix (`spikes/s10/CHECKLIST.md`)
 
 The checklist runs Chrome, Safari and Firefox on macOS, about 28 minutes per browser, with built-in, USB and
