@@ -18,6 +18,7 @@ export const DOCS_PAGES: readonly DocsPage[] = [
   { path: '/docs/cli', label: 'CLI', group: 'Build' },
   { path: '/docs/mcp', label: 'MCP for AI tools', group: 'AI tools' },
   { path: '/docs/skills', label: 'Agent skills', group: 'AI tools' },
+  { path: '/docs/webmcp', label: 'WebMCP in the browser', group: 'AI tools' },
   { path: '/docs/destinations', label: 'Publish destinations', group: 'Guides' },
   { path: '/docs/looks', label: 'Looks', group: 'Guides' },
   { path: '/docs/github', label: 'GitHub Action', group: 'Guides' },

@@ -38,6 +38,7 @@ export const docsSdkRoute = route(() => import('./pages/docs/SdkGuide'))
 export const docsCliRoute = route(() => import('./pages/docs/CliGuide'))
 export const docsLooksRoute = route(() => import('./pages/docs/LooksGuide'))
 export const docsGithubRoute = route(() => import('./pages/docs/GithubGuide'))
+export const docsWebMcpRoute = route(() => import('./pages/docs/WebMcpGuide'))
 
 /**
  * A page component from a route module: the module's component when it has loaded, else a React.lazy one that
@@ -70,6 +71,7 @@ const BY_PATH: Record<string, RouteModule<unknown>> = {
   '/docs/cli': docsCliRoute,
   '/docs/looks': docsLooksRoute,
   '/docs/github': docsGithubRoute,
+  '/docs/webmcp': docsWebMcpRoute,
 }
 
 /** Where /docs and the old /docs?tab=mcp|skills links go now. */

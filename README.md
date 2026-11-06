@@ -564,6 +564,23 @@ the build.
 The web app's **API docs → MCP for AI tools** page (`/docs/mcp`) has these instructions with your site's URL filled in,
 and the tool list from [`src/mcp-catalog.ts`](src/mcp-catalog.ts), which a test keeps in step with the server.
 
+### WebMCP: AI agents in the browser
+
+The web app also offers its pages to AI agents running in the browser through
+[WebMCP](https://webmachinelearning.github.io/webmcp/) (`document.modelContext`). Each page registers only its own
+tools while it's open: the library's `list_videos` and `open_video`, New video's `fill_video_form` and `create_video`,
+the video page's `get_video`, `control_player`, `add_comment`, `revise_video`, `restyle_video`, `remix_video`,
+`publish_video` and `unpublish_video`, and the editor's `list_scenes`, `edit_text`, `set_scene_duration`,
+`reorder_scenes`, `delete_scene`, `seek`, `select_clip`, `undo`, `redo` and `render_edit`, plus `get_page` and
+`navigate` everywhere. They work in the person's signed-in tab, through the same controls and requests as their clicks.
+Anything that spends credits, publishes or deletes shows an in-app confirm the person must click (WebMCP has no consent
+step of its own yet). Tools that return people's words are marked `untrustedContentHint`.
+
+To try it: WebMCP is an origin trial from Chrome 149. Open `chrome://flags/#enable-webmcp-testing`, enable it and
+relaunch, then sign in to your site and run `await document.modelContext.getTools()` in the console, or use a browser
+agent that supports WebMCP. **API docs → WebMCP in the browser** (`/docs/webmcp`) lists every tool. An admin can turn
+WebMCP off on the Admin page (on by default); browsers without it see nothing.
+
 ### Agent skills and MCP prompts
 
 Each deployment serves a `netlify-video` [Agent Skill](https://agentskills.io) that teaches coding agents (Claude

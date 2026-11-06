@@ -265,3 +265,32 @@ test('the editor: scenes, words, lengths and order change through the editor, an
   expect(await rendered).toMatchObject({ ok: true, version: 3, status: 'queued' })
   await expect(page).toHaveURL(/\/videos\/vid_teaser$/)
 })
+
+test('every page registers exactly the tools /docs/webmcp lists for it, with the hints its kind implies', async ({
+  page,
+}) => {
+  const { WEBMCP_TOOLS } = await import('../src/webmcp/catalog.js')
+  const pages: [string, string][] = [
+    ['/', 'library'],
+    ['/new', 'new video'],
+    ['/videos/vid_docs', 'video'],
+    ['/videos/vid_teaser/edit/2', 'editor'],
+  ]
+  for (const [path, name] of pages) {
+    const want = WEBMCP_TOOLS.filter((t) => t.page === name || t.page === 'every page')
+    await page.goto(path)
+    await waitForTools(
+      page,
+      want.map((t) => t.name),
+    )
+    expect((await toolNames(page)).sort(), name).toEqual(want.map((t) => t.name).sort())
+    for (const t of want)
+      expect(await annotations(page, t.name), t.name).toMatchObject({
+        readOnlyHint: t.kind === 'read',
+        consequentialHint: t.kind === 'confirm',
+      })
+  }
+  await page.goto('/docs/webmcp')
+  await expect(page.locator('table[aria-label="WebMCP tools"] tbody tr')).toHaveCount(WEBMCP_TOOLS.length)
+  await expect(page.getByText('chrome://flags/#enable-webmcp-testing')).toBeVisible()
+})
