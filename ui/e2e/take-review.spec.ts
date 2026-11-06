@@ -121,7 +121,14 @@ test('Record again drops the take and records a new one, which Add puts on the t
   expect(await page.getByTestId('take-review').getAttribute('data-recording')).not.toBe(first)
   await page.getByTestId('review-add').click()
   await expect(phase(page)).toHaveAttribute('data-phase', 'saved', { timeout: 30_000 })
-  await expect.poll(async () => (await savedClips(page)).length).toBe(1)
+  // One take on the track, the new one: the dropped take (uploaded under its own media id) isn't. Under load the
+  // picture clock can re-anchor, and a re-anchored take goes on as one clip per fit segment, so count takes, not clips.
+  await expect
+    .poll(async () => {
+      const clips = await savedClips(page)
+      return clips.length ? [...new Set(clips.map((c) => c.mediaId))].length : 0
+    })
+    .toBe(1)
 })
 
 test('a take that stopped early offers Keep recording from here: it punches in from the stop and the joined take is added', async ({

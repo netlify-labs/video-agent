@@ -1,9 +1,10 @@
 // The voice-over setup panel on the mock build's /dev/recorder page (plan 2026-11-02 §2.1 step 2, §5.1). The mic and
 // its device list are stand-ins (window.__vaTestMic, __vaTestMicDevices; see recorder.spec.ts for why): an oscillator
-// gated one second on, one off, at a level the test picks, so the analyser meter and the 3 s level check are real.
+// gated one second on, one off, at a level the test picks, so the analyser meter and the 3 s level check are real. With
+// `manual`, the test switches the sound on and off itself (window.__micOn), so nothing waits on the audio clock.
 import { expect, test, type Page } from '@playwright/test'
 
-/** The stand-in mic, as page script. __micCfg: amplitude, and deny (a NotAllowedError until it's cleared). */
+/** The stand-in mic, as page script. __micCfg: amplitude, manual, and deny (a NotAllowedError until it's cleared). */
 const TEST_MIC = `
 window.__micCalls = []
 window.__vaTestMicDevices = () => [
@@ -19,7 +20,11 @@ window.__vaTestMic = (ctx, audio) => {
   const gate = ctx.createGain()
   const t = ctx.currentTime
   const amp = cfg.amplitude ?? 0.5
-  for (let i = 0; i < 240; i++) gate.gain.setValueAtTime(i % 2 === 0 ? amp : 0, t + i)
+  if (cfg.manual) {
+    gate.gain.value = amp
+    window.__micGates = (window.__micGates || []).concat(gate)
+    window.__micOn = (on) => window.__micGates.forEach((g) => { g.gain.value = on ? amp : 0 })
+  } else for (let i = 0; i < 240; i++) gate.gain.setValueAtTime(i % 2 === 0 ? amp : 0, t + i)
   const dest = ctx.createMediaStreamDestination()
   dest.channelCount = 1
   osc.connect(gate).connect(dest)
@@ -27,7 +32,7 @@ window.__vaTestMic = (ctx, audio) => {
   return dest.stream
 }`
 
-const setup = async (page: Page, cfg: { amplitude?: number; deny?: boolean } = {}) => {
+const setup = async (page: Page, cfg: { amplitude?: number; deny?: boolean; manual?: boolean } = {}) => {
   await page.addInitScript({ content: `window.__micCfg = ${JSON.stringify(cfg)}` })
   await page.addInitScript({ content: TEST_MIC })
   await page.goto('/dev/recorder')
@@ -73,11 +78,15 @@ test('setup: lists the mics, remembers the choice and opens it with the take con
 })
 
 test('setup: the meter moves and the level check says OK', async ({ page }) => {
-  await setup(page)
+  await setup(page, { manual: true })
   await page.getByRole('button', { name: 'Check mic' }).click()
-  // The stand-in is on for a second, off for a second: the meter follows both.
-  await expect.poll(() => rmsDb(page), { timeout: 5000 }).toBeGreaterThan(-20)
-  await expect.poll(() => rmsDb(page), { timeout: 5000 }).toBeLessThan(-50)
+  // The meter follows the sound on, then off, then on again (the test switches it, so CI load can't skip a phase).
+  const micOn = (on: boolean) => page.evaluate(`window.__micOn(${on})`)
+  await expect.poll(() => rmsDb(page), { timeout: 10_000 }).toBeGreaterThan(-20)
+  await micOn(false)
+  await expect.poll(() => rmsDb(page), { timeout: 10_000 }).toBeLessThan(-50)
+  await micOn(true)
+  await expect.poll(() => rmsDb(page), { timeout: 10_000 }).toBeGreaterThan(-20)
   await page.getByRole('button', { name: 'Check level' }).click()
   await expect(page.getByTestId('level-verdict')).toHaveAttribute('data-verdict', 'ok', { timeout: 6000 })
   await expect(page.getByTestId('level-verdict')).toContainText('Sounds good')
