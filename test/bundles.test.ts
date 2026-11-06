@@ -13,7 +13,7 @@ import {
 } from '../src/domain/bundles.js'
 import { sha256Hex } from '../src/lib/crypto.js'
 import { readTarGz, TarError } from '../src/lib/tar.js'
-import { harness, PROMPT } from './helpers.js'
+import { harness, PROMPT, readyVideo } from './helpers.js'
 import { tarGz } from './tarball.js'
 
 describe('tar reader', () => {
@@ -73,11 +73,10 @@ describe('tar reader', () => {
 describe('preview bundles', () => {
   it('finalize extracts a manifest of the version composition (no MP4s, no stills)', async () => {
     const h = harness()
-    const v = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }))
-    await h.drive(4)
-    const index = await readBundleIndex(h.deps, v.id, 1)
+    const id = await readyVideo(h)
+    const index = await readBundleIndex(h.deps, id, 1)
     expect(index?.files.map((f) => f.path).sort()).toEqual(['index.html', 'summary.json'])
-    const html = await h.deps.blobs.get('bundles', bundleFileKey(v.id, 1, 'index.html'))
+    const html = await h.deps.blobs.get('bundles', bundleFileKey(id, 1, 'index.html'))
     expect(index?.files.find((f) => f.path === 'index.html')?.sha256).toBe(
       sha256Hex(html ?? new Uint8Array()),
     )
@@ -85,10 +84,9 @@ describe('preview bundles', () => {
 
   it('extracts older versions on demand, keeps agent-made clips, skips stray renders and stills, and is idempotent', async () => {
     const h = harness()
-    const v = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }))
-    await h.drive(4)
+    const id = await readyVideo(h)
     // Replace the saved source with one carrying an MP4 and stills, and drop the bundle, like a pre-F0 version.
-    const out = await h.deps.store.getOutput(v.id, 1)
+    const out = await h.deps.store.getOutput(id, 1)
     const gz = tarGz([
       { name: 'video/index.html', body: '<h1 id="t">v1</h1>' },
       { name: 'video/assets/media/clip.mp4', body: 'mp4' },
@@ -97,51 +95,48 @@ describe('preview bundles', () => {
     ])
     await h.deps.blobs.set('sources', out?.sourceKey ?? '', gz)
     await h.deps.store.upsertOutput({ ...out!, sha256: { ...out!.sha256, 'source.tar.gz': sha256Hex(gz) } })
-    for (const k of await h.deps.blobs.list('bundles', `${v.id}/v1/`)) await h.deps.blobs.delete('bundles', k)
-    const index = await ensureBundle(h.deps, v.id, 1)
+    for (const k of await h.deps.blobs.list('bundles', `${id}/v1/`)) await h.deps.blobs.delete('bundles', k)
+    const index = await ensureBundle(h.deps, id, 1)
     expect(index?.files.map((f) => f.path).sort()).toEqual(['assets/media/clip.mp4', 'index.html'])
-    const again = await ensureBundle(h.deps, v.id, 1)
+    const again = await ensureBundle(h.deps, id, 1)
     expect(again?.createdAt).toBe(index?.createdAt)
   })
 
   it("refuses a source that doesn't match its hash", async () => {
     const h = harness()
-    const v = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }))
-    await h.drive(4)
-    const out = await h.deps.store.getOutput(v.id, 1)
+    const id = await readyVideo(h)
+    const out = await h.deps.store.getOutput(id, 1)
     await h.deps.blobs.set(
       'sources',
       out?.sourceKey ?? '',
       tarGz([{ name: 'video/index.html', body: 'tampered' }]),
     )
-    for (const k of await h.deps.blobs.list('bundles', `${v.id}/v1/`)) await h.deps.blobs.delete('bundles', k)
-    await expect(ensureBundle(h.deps, v.id, 1)).rejects.toThrow(/doesn't match its hash/)
-    expect(await readBundleIndex(h.deps, v.id, 1)).toBeNull()
+    for (const k of await h.deps.blobs.list('bundles', `${id}/v1/`)) await h.deps.blobs.delete('bundles', k)
+    await expect(ensureBundle(h.deps, id, 1)).rejects.toThrow(/doesn't match its hash/)
+    expect(await readBundleIndex(h.deps, id, 1)).toBeNull()
   })
 
   it('a deletion during extraction wins: nothing is left behind', async () => {
     const h = harness()
-    const v = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }))
-    await h.drive(4)
-    for (const k of await h.deps.blobs.list('bundles', `${v.id}/v1/`)) await h.deps.blobs.delete('bundles', k)
+    const id = await readyVideo(h)
+    for (const k of await h.deps.blobs.list('bundles', `${id}/v1/`)) await h.deps.blobs.delete('bundles', k)
     // Delete the video right as the manifest is committed.
     const set = h.deps.blobs.set.bind(h.deps.blobs)
     h.deps.blobs.set = async (store, key, data, meta) => {
       await set(store, key, data, meta)
-      if (store === 'bundles' && key === bundleIndexKey(v.id, 1))
-        await h.deps.store.updateJob(v.id, { deletedAt: h.deps.clock.now().toISOString() })
+      if (store === 'bundles' && key === bundleIndexKey(id, 1))
+        await h.deps.store.updateJob(id, { deletedAt: h.deps.clock.now().toISOString() })
     }
-    expect(await ensureBundle(h.deps, v.id, 1)).toBeNull()
-    expect(await h.deps.blobs.list('bundles', `${v.id}/v1/`)).toEqual([])
+    expect(await ensureBundle(h.deps, id, 1)).toBeNull()
+    expect(await h.deps.blobs.list('bundles', `${id}/v1/`)).toEqual([])
   })
 
   it('deleting a video schedules cleanup of its bundles', async () => {
     const h = harness()
-    const v = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }))
-    await h.drive(4)
-    await h.call('DELETE', `/api/v1/videos/${v.id}`, { as: h.member })
+    const id = await readyVideo(h)
+    await h.call('DELETE', `/api/v1/videos/${id}`, { as: h.member })
     const due = await h.deps.store.listDueCleanup(new Date(Date.now() + 365 * 86400_000).toISOString(), 100)
-    expect(due.some((c) => c.store === 'bundles' && c.prefix === `${v.id}/`)).toBe(true)
+    expect(due.some((c) => c.store === 'bundles' && c.prefix === `${id}/`)).toBe(true)
   })
 
   it('a contract-1 composition that uses files that were never saved is not editable', () => {

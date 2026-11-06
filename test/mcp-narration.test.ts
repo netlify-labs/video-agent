@@ -1,13 +1,8 @@
 // The narration MCP tools (plan 2026-11-02 §7): get_narration, add_narration (media ids only, under the narration
 // lock) and render_with_narration (keep visuals; fit refused for now; a draft without narration refused), and the
 // video's language in get_video.
-import { readFileSync } from 'node:fs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { apiKey, harness, mcpCall, person, PROMPT, upload, type Harness } from './helpers.js'
-import { tarGz } from './tarball.js'
-
-const fx = (f: string) => readFileSync(new URL(`./fixtures/contract1/${f}`, import.meta.url), 'utf8')
-const tone = () => new Uint8Array(readFileSync(new URL('./fixtures/audio/tone.mp3', import.meta.url)))
+import { apiKey, editableVideo, harness, mcpCall, narrationTake, person, type Harness } from './helpers.js'
 
 async function tool(h: Harness, key: string, name: string, args: Record<string, unknown>) {
   const result = (await mcpCall(h, key, 'tools/call', { name, arguments: args })) as {
@@ -20,18 +15,8 @@ async function tool(h: Harness, key: string, name: string, args: Record<string, 
 /** A ready, editable video (9 s, contract v1), a key for its owner and a 2 s take of theirs. */
 async function setup() {
   const h = harness()
-  h.deps.nextSource = tarGz([
-    { name: 'video/index.html', body: fx('index.html') },
-    { name: 'video/summary.json', body: fx('summary.json') },
-  ])
-  const v = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }))
-  await h.drive(4)
-  const id = v.id as string
-  const take = async (as = h.member) => {
-    const m = await h.json<{ id: string }>(await upload(h, as, tone(), 'filename=take.mp3'))
-    await h.deps.store.updateMedia(m.id, { role: 'narration-take', scopeJobId: id, durationSec: 2 })
-    return m.id
-  }
+  const id = await editableVideo(h)
+  const take = (as = h.member) => narrationTake(h, id, as, 2)
   return { h, id, key: await apiKey(h, h.member), take }
 }
 
@@ -93,9 +78,8 @@ describe('MCP narration tools', () => {
   it("can't use media the caller can't read, or URLs", async () => {
     const { h, id, key } = await setup()
     const cora = await person(h, 'u_cora', 'creator')
-    const m = await h.json<{ id: string }>(await upload(h, cora, tone(), 'filename=take.mp3'))
-    await h.deps.store.updateMedia(m.id, { role: 'narration-take', scopeJobId: id, durationSec: 2 })
-    for (const media_id of [m.id, 'med_nothere00', 'https://example.com/take.mp3']) {
+    const coras = await narrationTake(h, id, cora, 2)
+    for (const media_id of [coras, 'med_nothere00', 'https://example.com/take.mp3']) {
       const r = await tool(h, key, 'add_narration', { video_id: id, media_id, start_seconds: 0 })
       expect(r.isError).toBe(true)
       expect(r.data.error.type).toBe('NOT_FOUND')

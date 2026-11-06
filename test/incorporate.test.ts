@@ -4,17 +4,16 @@
 import { describe, expect, it } from 'vitest'
 import { runManifestKey, verifyRunManifest } from '../src/lib/run-manifest.js'
 import { failedSnap, running } from './fakes.js'
-import { apiKey, harness, mcpCall, person, pgStore, PROMPT, type Harness } from './helpers.js'
+import { apiKey, harness, mcpCall, person, pgStore, readyVideo, type Harness } from './helpers.js'
 
 async function setup(h = harness()) {
   const bob = await person(h, 'u_bob')
   const rita = await person(h, 'u_rita', 'reviewer')
-  const v = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }))
-  await h.drive(4)
+  const id = await readyVideo(h)
   const comment = async (as: string, body: object) =>
     (
       await h.json(
-        await h.call('POST', `/api/v1/videos/${v.id}/comments`, { as, body: { versionN: 1, ...body } }),
+        await h.call('POST', `/api/v1/videos/${id}/comments`, { as, body: { versionN: 1, ...body } }),
       )
     ).id as string
   const pinned = await comment(rita, { body: 'The logo is too small', timeSec: 1, x: 0.25, y: 0.5 })
@@ -23,8 +22,8 @@ async function setup(h = harness()) {
   await h.call('PATCH', `/api/v1/comments/${resolved}`, { as: h.member, body: { resolved: true } })
   const other = await comment(rita, { body: 'Not picked' })
   const incorporate = (as: string, commentIds: string[], prompt = 'Incorporate the feedback.') =>
-    h.call('POST', `/api/v1/videos/${v.id}/versions`, { as, body: { prompt, fromVersion: 1, commentIds } })
-  return { h, bob, rita, id: v.id as string, pinned, plain, resolved, other, incorporate }
+    h.call('POST', `/api/v1/videos/${id}/versions`, { as, body: { prompt, fromVersion: 1, commentIds } })
+  return { h, bob, rita, id, pinned, plain, resolved, other, incorporate }
 }
 
 const listed = async (h: Harness, id: string) =>

@@ -1,4 +1,5 @@
 import { readdirSync, readFileSync } from 'node:fs'
+import { afterEach, beforeEach, vi } from 'vitest'
 import { PGlite } from '@electric-sql/pglite'
 import { drizzle } from 'drizzle-orm/pglite'
 import * as schema from '../src/store/schema.js'
@@ -13,8 +14,20 @@ import { NARRATION_SRC } from '../src/lib/contract.js'
 import { sha256Hex } from '../src/lib/crypto.js'
 import type { AttemptRow, Role } from '../src/domain/types.js'
 import { fixtureFiles, makeDeps, uploadAndManifest, type TestDeps } from './fakes.js'
+import { tarGz } from './tarball.js'
 
 export const PROMPT = 'A short launch video for org webhooks, with three beats and an end card.'
+
+/** Around each test: a `Netlify` global with no env, and after it, `reset` once the globals are restored. */
+export function stubNetlify(reset?: () => void) {
+  beforeEach(() => {
+    vi.stubGlobal('Netlify', { env: { get: () => undefined } })
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    reset?.()
+  })
+}
 
 export interface Harness {
   deps: TestDeps
@@ -165,6 +178,20 @@ export async function readyVideo(h: Harness, as = h.member) {
   return v.id as string
 }
 
+const contract1 = (f: string) => readFileSync(new URL(`./fixtures/contract1/${f}`, import.meta.url), 'utf8')
+/** A composition that keeps editing contract v1 (9 s: intro, demo, outro), as the next fake run's source. */
+export const contractSource = () =>
+  tarGz([
+    { name: 'video/index.html', body: contract1('index.html') },
+    { name: 'video/summary.json', body: contract1('summary.json') },
+  ])
+
+/** A ready video whose v1 keeps contract v1 (9 s: intro, demo, outro); returns its id. */
+export async function editableVideo(h: Harness) {
+  h.deps.nextSource = contractSource()
+  return readyVideo(h)
+}
+
 /** Creates an API key for the signed-in person; returns the secret. */
 export const apiKey = async (h: Harness, as: string, name = 'k') =>
   (await h.json(await h.call('POST', '/api/v1/keys', { as, body: { name } }))).key as string
@@ -224,6 +251,14 @@ export const png = (w = 640, h = 360) =>
     0,
   ])
 export const font = () => new Uint8Array([...Buffer.from('wOF2'), 1, 2, 3, 4])
+export const tone = () => new Uint8Array(readFileSync(new URL('./fixtures/audio/tone.mp3', import.meta.url)))
+
+/** A recorded take of `seconds` for the video, uploaded by `as`; returns its media id. */
+export async function narrationTake(h: Harness, jobId: string, as = h.member, seconds = 20) {
+  const m = await h.json<{ id: string }>(await upload(h, as, tone(), 'filename=take.mp3'))
+  await h.deps.store.updateMedia(m.id, { role: 'narration-take', scopeJobId: jobId, durationSec: seconds })
+  return m.id
+}
 
 /** A Drizzle store on PGlite with every committed migration applied. */
 export async function pgStore() {

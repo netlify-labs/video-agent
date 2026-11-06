@@ -4,7 +4,7 @@ import { embedHtml } from '../src/lib/credit-html.js'
 import { pubKey } from '../src/domain/videos.js'
 import { loadEdge } from './edge.js'
 import { LQIP, previewFixtures, type TestDeps } from './fakes.js'
-import { harness, PROMPT, readyVideo, type Harness } from './helpers.js'
+import { harness, readyVideo, type Harness } from './helpers.js'
 
 let current: TestDeps | null = null
 vi.mock('@netlify/blobs', async () => (await import('./edge.js')).fakeBlobsModule(() => current?.blobs))
@@ -37,9 +37,8 @@ describe('/v/{slug}.json', () => {
     const h = harness()
     current = h.deps
     h.deps.nextPreviews = { files: previewFixtures(), lqip: LQIP }
-    const v = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }))
-    await h.drive(4)
-    const pub = await publish(h, v.id)
+    const id = await readyVideo(h)
+    const pub = await publish(h, id)
 
     const res = await get(`/v/${pub.slug}.json`)
     expect(res.status).toBe(200)
@@ -60,7 +59,7 @@ describe('/v/{slug}.json', () => {
     expect(body.width).toBeGreaterThan(0)
     expect(body.thumbnail_width).toBe(body.width)
     expect(body.video_agent).toEqual({
-      videoId: v.id,
+      videoId: id,
       versionN: 1,
       page: base,
       mp4: `${base}.mp4`,

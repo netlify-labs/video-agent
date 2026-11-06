@@ -2,34 +2,14 @@
 // its own source bounds and alignment. They are draft-only: the schema bounds them, a save checks each one like a
 // clip's own take (access, source bounds, the 32-take limit), the draft's media_refs hold them (so GC and the 30-day
 // release treat them as the draft's), and a render freezes only the selected take.
-import { readFileSync } from 'node:fs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NarrationOpSchema } from '../src/schemas.js'
 import { MAX_CLIP_ALTERNATIVES, SAMPLE_RATE } from '../src/lib/timeline.js'
-import { harness, person, PROMPT, upload, type Harness } from './helpers.js'
-import { tarGz } from './tarball.js'
+import { editableVideo, harness, narrationTake as take, person, type Harness } from './helpers.js'
+import { narrationTrack as narration } from './narration-render.js'
 
-const fx = (f: string) => readFileSync(new URL(`./fixtures/contract1/${f}`, import.meta.url), 'utf8')
-const tone = () => new Uint8Array(readFileSync(new URL('./fixtures/audio/tone.mp3', import.meta.url)))
 const S = SAMPLE_RATE
 const FIT = { a: 0, b: 1 / S, residualMs: 0 }
-
-/** A ready video whose v1 keeps contract v1 (9 s). */
-async function editableVideo(h: Harness) {
-  h.deps.nextSource = tarGz([
-    { name: 'video/index.html', body: fx('index.html') },
-    { name: 'video/summary.json', body: fx('summary.json') },
-  ])
-  const v = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }))
-  await h.drive(4)
-  return v.id as string
-}
-
-async function take(h: Harness, jobId: string, as = h.member, seconds = 20) {
-  const m = await h.json<{ id: string }>(await upload(h, as, tone(), 'filename=take.mp3'))
-  await h.deps.store.updateMedia(m.id, { role: 'narration-take', scopeJobId: jobId, durationSec: seconds })
-  return m.id
-}
 
 /** Another take of a slot at composition 1 s: source [srcStart, srcEnd) placed there by its offset. */
 const alt = (mediaId: string, srcStart = 0, srcEnd = 2 * S) => ({
@@ -51,19 +31,6 @@ const clip = (mediaId: string, over: Record<string, unknown> = {}) => ({
   fadeInSamples: 0,
   fadeOutSamples: 0,
   ...over,
-})
-const narration = (clips: object[]) => ({
-  op: 'narration',
-  schema: 1,
-  sampleRate: S,
-  clips,
-  tracks: {
-    narration: { volumeDb: 0, muted: false, solo: false },
-    aiVoice: { mode: 'replace', volumeDb: -12 },
-    music: { duck: true, duckDb: -12 },
-    original: { muteAll: false },
-  },
-  cleanup: 'light',
 })
 
 const openDraft = async (h: Harness, id: string, as = h.member) =>

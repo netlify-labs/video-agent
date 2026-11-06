@@ -1,13 +1,13 @@
 // Credits for Openverse music a run fetched itself: the strict reader for video/assets/music/credits.json, finalize
 // storing it on the version from the saved composition, the merge with library credits, and the share page, embed
 // and Video DTO showing them. Revisions keep them because the file travels with the source.
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { versionCredits, type Credit } from '../src/domain/credits.js'
 import { MAX_RUN_CREDITS, readRunCredits, type RunCredit } from '../src/lib/openverse-rules.js'
 import type { VersionProvenanceRow } from '../src/domain/types.js'
 import { loadEdge } from './edge.js'
 import type { TestDeps } from './fakes.js'
-import { harness, PROMPT, type Harness } from './helpers.js'
+import { harness, PROMPT, stubNetlify, type Harness } from './helpers.js'
 import { tarGz } from './tarball.js'
 
 let current: TestDeps | null = null
@@ -140,11 +140,7 @@ describe('versionCredits with run credits', () => {
 })
 
 describe('credits from the run, end to end', () => {
-  beforeEach(() => {
-    vi.stubGlobal('Netlify', { env: { get: () => undefined } })
-  })
-  afterEach(() => {
-    vi.unstubAllGlobals()
+  stubNetlify(() => {
     current = null
   })
 

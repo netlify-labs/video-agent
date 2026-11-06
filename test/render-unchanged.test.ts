@@ -16,21 +16,14 @@ import { SAMPLE_RATE, wav, type VoiceProvider } from '../src/lib/voice.js'
 import { readTarGz } from '../src/lib/tar.js'
 import type { Role } from '../src/domain/types.js'
 import { failedSnap, running, succeeded } from './fakes.js'
-import { harness, PROMPT, upload, type Harness } from './helpers.js'
-import { narrationOp, tone } from './narration-render.js'
+import { editableVideo, harness, narrationTake, readyVideo, type Harness } from './helpers.js'
+import { narrationOp } from './narration-render.js'
 import { tarGz } from './tarball.js'
 
-const fx = (f: string) => readFileSync(new URL(`./fixtures/contract1/${f}`, import.meta.url), 'utf8')
-
 async function draft(h: Harness) {
-  h.deps.nextSource = tarGz([
-    { name: 'video/index.html', body: fx('index.html') },
-    { name: 'video/summary.json', body: fx('summary.json') },
-  ])
-  const v = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }))
-  await h.drive(4)
+  const id = await editableVideo(h)
   const e = await h.json<{ id: string }>(
-    await h.call('POST', `/api/v1/videos/${v.id}/versions/1/edits`, { as: h.member }),
+    await h.call('POST', `/api/v1/videos/${id}/versions/1/edits`, { as: h.member }),
   )
   await h.call('PUT', `/api/v1/edits/${e.id}`, {
     as: h.member,
@@ -42,7 +35,7 @@ async function draft(h: Harness) {
       ],
     },
   })
-  return { id: v.id as string, editId: e.id }
+  return { id, editId: e.id }
 }
 const render = (h: Harness, editId: string, key?: string) =>
   h.call('POST', `/api/v1/edits/${editId}/render`, {
@@ -211,12 +204,11 @@ describe('render unchanged with re-voiced lines', () => {
       { name: 'video/assets/voice/intro.wav', body: silence(2.2) },
       { name: 'video/assets/voice/outro.wav', body: silence(1.5) },
     ])
-    const v = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }))
-    await h.drive(4)
+    const id = await readyVideo(h)
     const e = await h.json<{ id: string; composition: { narration: Line[] } }>(
-      await h.call('POST', `/api/v1/videos/${v.id}/versions/1/edits`, { as: h.member }),
+      await h.call('POST', `/api/v1/videos/${id}/versions/1/edits`, { as: h.member }),
     )
-    return { id: v.id as string, edit: e }
+    return { id, edit: e }
   }
   const longer =
     'Org webhooks send every event you care about. They reach your endpoint in one place. Signed and retried for you.'
@@ -266,10 +258,9 @@ describe('render unchanged with re-voiced lines', () => {
   it('a fit re-voices nothing: its AI voice is muted, so a changed line is never spoken', async () => {
     const h = harness({ MAX_ACTIVE_RUNS: '0' })
     const { id, edit } = await voicedDraft(h)
-    const m = await h.json<{ id: string }>(await upload(h, h.member, tone(), 'filename=take.mp3'))
-    await h.deps.store.updateMedia(m.id, { role: 'narration-take', scopeJobId: id, durationSec: 20 })
+    const take = await narrationTake(h, id)
     await h.call('POST', `/api/v1/videos/${id}/narration-lock`, { as: h.member, body: { draftId: edit.id } })
-    const ops = [{ op: 'voice', beat: 'intro', text: longer }, narrationOp([m.id])]
+    const ops = [{ op: 'voice', beat: 'intro', text: longer }, narrationOp([take])]
     expect(
       (await h.call('PUT', `/api/v1/edits/${edit.id}`, { as: h.member, body: { rev: 0, ops } })).status,
     ).toBe(200)

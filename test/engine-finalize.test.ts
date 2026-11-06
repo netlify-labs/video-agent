@@ -2,13 +2,12 @@
 // composition it saved. Either mismatch fails the attempt with engine_mismatch before anything becomes a version.
 import { describe, expect, it } from 'vitest'
 import { bundleShapeProblems } from '../src/domain/bundles.js'
-import { harness, pgStore, PROMPT, type Harness } from './helpers.js'
+import { harness, pgStore, readyVideo, type Harness } from './helpers.js'
 import { tarGz } from './tarball.js'
 
 const make = async (h: Harness) => {
-  const v = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }))
-  await h.drive(4)
-  return (await h.json(await h.call('GET', `/api/v1/videos/${v.id}`, { as: h.member }))).versions[0] as {
+  const id = await readyVideo(h)
+  return (await h.json(await h.call('GET', `/api/v1/videos/${id}`, { as: h.member }))).versions[0] as {
     status: string
     error: { category: string; message: string } | null
   }

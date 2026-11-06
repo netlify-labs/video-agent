@@ -2,14 +2,14 @@
 // transcript.txt are checked and kept next to the version's other files, hashed among its outputs, delivered through
 // signed private links, and follow the version's publication. The transcript is a separate consent: the share page
 // offers it only when the publisher chose to show it.
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { pubKey } from '../src/domain/videos.js'
 import { transcriptText } from '../src/lib/narration-captions.js'
 import { sha256Hex } from '../src/lib/crypto.js'
 import { loadEdge } from './edge.js'
 import type { TestDeps } from './fakes.js'
-import { harness, pgStore, type Harness } from './helpers.js'
-import { BUS, narratedDraft, render, report, tone } from './narration-render.js'
+import { harness, pgStore, stubNetlify, tone, type Harness } from './helpers.js'
+import { BUS, narratedDraft, render, report } from './narration-render.js'
 
 let current: TestDeps | null = null
 vi.mock('@netlify/blobs', async () => (await import('./edge.js')).fakeBlobsModule(() => current?.blobs))
@@ -43,9 +43,7 @@ async function narratedVersion(h: Harness, files: Record<string, Uint8Array> = {
 }
 
 describe('narration outputs', () => {
-  beforeEach(() => vi.stubGlobal('Netlify', { env: { get: () => undefined } }))
-  afterEach(() => {
-    vi.unstubAllGlobals()
+  stubNetlify(() => {
     current = null
   })
 

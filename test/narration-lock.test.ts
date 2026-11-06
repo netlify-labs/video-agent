@@ -1,43 +1,13 @@
 // The narration soft lock (plan 2026-11-02 §2.7, §6.1 narration_locks): acquire or heartbeat, lapse after 2 min,
 // unconditional take over that tells the previous holder, holder-only release, and the narration op save that needs
 // it. Two Creators race on one video, on both stores.
-import { readFileSync } from 'node:fs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SAMPLE_RATE } from '../src/lib/timeline.js'
 import type { Store } from '../src/store/types.js'
-import { harness, person, pgStore, PROMPT, upload, type Harness } from './helpers.js'
-import { tarGz } from './tarball.js'
+import { editableVideo, harness, narrationTake, person, pgStore, type Harness } from './helpers.js'
+import { narrationAt as narration } from './narration-render.js'
 
-const fx = (f: string) => readFileSync(new URL(`./fixtures/contract1/${f}`, import.meta.url), 'utf8')
-const tone = () => new Uint8Array(readFileSync(new URL('./fixtures/audio/tone.mp3', import.meta.url)))
 const S = SAMPLE_RATE
-
-const narration = (mediaId: string, start = S) => ({
-  op: 'narration',
-  schema: 1,
-  sampleRate: S,
-  clips: [
-    {
-      id: 'c1',
-      mediaId,
-      srcStart: 0,
-      srcEnd: 2 * S,
-      fit: { a: 0, b: 1 / S, residualMs: 0 },
-      offsetSamples: 0,
-      start,
-      gainDb: 0,
-      fadeInSamples: 0,
-      fadeOutSamples: 0,
-    },
-  ],
-  tracks: {
-    narration: { volumeDb: 0, muted: false, solo: false },
-    aiVoice: { mode: 'replace', volumeDb: -12 },
-    music: { duck: true, duckDb: -12 },
-    original: { muteAll: false },
-  },
-  cleanup: 'light',
-})
 
 interface Lock {
   holder: { userId: string; name: string; since: string } | null
@@ -59,13 +29,7 @@ describe('narration lock', () => {
   /** A ready, editable video, a second Creator (Dana, named u_dana), and a draft each. */
   async function setup(store?: Store) {
     const h = harness({}, store ? { store } : {})
-    h.deps.nextSource = tarGz([
-      { name: 'video/index.html', body: fx('index.html') },
-      { name: 'video/summary.json', body: fx('summary.json') },
-    ])
-    const v = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }))
-    await h.drive(4)
-    const id = v.id as string
+    const id = await editableVideo(h)
     const dana = await person(h, 'u_dana', 'creator')
     const draft = async (as: string) =>
       (await h.json<{ id: string }>(await h.call('POST', `/api/v1/videos/${id}/versions/1/edits`, { as }))).id
@@ -166,12 +130,11 @@ describe('narration lock', () => {
     'only the holder releases; a narration save needs the lock (%s)',
     async (_n, make) => {
       const { h, id, dana, mine, danas } = await setup(await make())
-      const m = await h.json<{ id: string }>(await upload(h, h.member, tone(), 'filename=take.mp3'))
-      await h.deps.store.updateMedia(m.id, { role: 'narration-take', scopeJobId: id, durationSec: 20 })
+      const take = await narrationTake(h, id)
       const save = (rev: number, ops: object[]) =>
         h.call('PUT', `/api/v1/edits/${mine}`, { as: h.member, body: { rev, ops } })
       // No lock: refused, with nothing saved.
-      expect(await errorOf(await save(0, [narration(m.id)]))).toMatchObject({
+      expect(await errorOf(await save(0, [narration(take)]))).toMatchObject({
         status: 409,
         code: 'narration_locked',
       })
@@ -179,7 +142,7 @@ describe('narration lock', () => {
       // Other edits don't need it.
       expect((await save(0, [{ op: 'retime', beat: 'intro', duration: 4 }])).status).toBe(200)
       await acquire(h, id, h.member, mine)
-      expect((await save(1, [narration(m.id)])).status).toBe(200)
+      expect((await save(1, [narration(take)])).status).toBe(200)
       // Dana can't release it for me; after Dana takes over, my save is refused and says so.
       expect((await h.call('DELETE', lock(h, id), { as: dana })).status).toBe(204)
       expect(await h.json<Lock>(await h.call('GET', lock(h, id), { as: dana }))).toMatchObject({
@@ -187,10 +150,10 @@ describe('narration lock', () => {
       })
       await h.call('POST', `${lock(h, id)}/take-over`, { as: dana, body: { draftId: danas } })
       // The lock covers narration only: my other edits still save with the track carried unchanged...
-      const carried = [{ op: 'retime', beat: 'intro', duration: 5 }, narration(m.id)]
+      const carried = [{ op: 'retime', beat: 'intro', duration: 5 }, narration(take)]
       expect((await save(2, carried)).status).toBe(200)
       // ...but changing the track is refused, and says who took over.
-      const taken = await errorOf(await save(3, [narration(m.id, 2 * S)]))
+      const taken = await errorOf(await save(3, [narration(take, 2 * S)]))
       expect(taken).toMatchObject({ status: 409, code: 'narration_locked' })
       expect(taken.details).toMatchObject({ takenOverBy: { userId: 'u_dana', name: 'u_dana' } })
       // Dana releases hers; it's free.

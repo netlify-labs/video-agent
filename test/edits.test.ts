@@ -1,17 +1,16 @@
 // Edit drafts (plan v2 §8): per-person drafts of editable versions, re-applied by the server, previewed through a
 // draft-scoped capability, and swept when they expire.
 import { readFileSync } from 'node:fs'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { bundleFileKey } from '../src/domain/bundles.js'
 import { runCleanup } from '../src/domain/cleanup.js'
 import { editRevPrefix } from '../src/domain/edits.js'
 import type { TestDeps } from './fakes.js'
-import { font, harness, person, png, PROMPT, upload, type Harness } from './helpers.js'
+import { font, harness, person, png, readyVideo, stubNetlify, tone, upload, type Harness } from './helpers.js'
 import { loadEdge } from './edge.js'
 import { tarGz } from './tarball.js'
 
 const fx = (f: string) => readFileSync(new URL(`./fixtures/contract1/${f}`, import.meta.url), 'utf8')
-const tone = () => new Uint8Array(readFileSync(new URL('./fixtures/audio/tone.mp3', import.meta.url)))
 
 let current: TestDeps | null = null
 vi.mock('@netlify/blobs', async () => (await import('./edge.js')).fakeBlobsModule(() => current?.blobs))
@@ -29,9 +28,7 @@ async function editableVideo(
     { name: 'video/summary.json', body: fx('summary.json') },
     ...extra,
   ])
-  const v = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }))
-  await h.drive(4)
-  return v.id as string
+  return readyVideo(h)
 }
 
 interface Edit {
@@ -48,11 +45,7 @@ const save = (h: Harness, editId: string, body: object, as = h.member) =>
   h.call('PUT', `/api/v1/edits/${editId}`, { as, body })
 
 describe('edit drafts', () => {
-  beforeEach(() => {
-    vi.stubGlobal('Netlify', { env: { get: () => undefined } })
-  })
-  afterEach(() => {
-    vi.unstubAllGlobals()
+  stubNetlify(() => {
     current = null
   })
 
@@ -96,11 +89,8 @@ describe('edit drafts', () => {
     const id = await editableVideo(h)
     const rita = await person(h, 'u_rita', 'reviewer')
     expect((await open(h, id, rita)).status).toBe(403)
-    const plain = await h.json(
-      await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }),
-    )
-    await h.drive(4)
-    const res = await h.call('POST', `/api/v1/videos/${plain.id}/versions/1/edits`, { as: h.member })
+    const plain = await readyVideo(h)
+    const res = await h.call('POST', `/api/v1/videos/${plain}/versions/1/edits`, { as: h.member })
     expect(res.status).toBe(409)
     expect((await h.json(res)).error.message).toContain('Ask for a revision instead')
   })

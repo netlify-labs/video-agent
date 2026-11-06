@@ -1,10 +1,10 @@
 // The sandboxed preview (plan v2 §7, design from spike S2): minting a capability for a ready version, and the
 // /preview edge function serving only that bundle's manifest files under the path-scoped CSP.
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { TestDeps } from './fakes.js'
 import { injectPreviewScripts, parsePreviewPath, previewCsp, previewContentType } from '../src/lib/preview.js'
 import { running } from './fakes.js'
-import { harness, PROMPT, readyVideo, type Harness } from './helpers.js'
+import { harness, PROMPT, readyVideo, stubNetlify, type Harness } from './helpers.js'
 import { loadEdge } from './edge.js'
 import { tarGz } from './tarball.js'
 
@@ -70,11 +70,7 @@ describe('preview helpers', () => {
 })
 
 describe('preview links and the edge function', () => {
-  beforeEach(() => {
-    vi.stubGlobal('Netlify', { env: { get: () => undefined } })
-  })
-  afterEach(() => {
-    vi.unstubAllGlobals()
+  stubNetlify(() => {
     current = null
   })
 
