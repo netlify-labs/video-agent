@@ -1045,6 +1045,9 @@ export const PlanSchema = z
       description:
         "The plan's look: the person's choice (chosen), else the first enabled look made for the plan's template, else the admin default. id null: none. null: a remix or revision plan that keeps its video's look.",
     }),
+    engine: z.enum(ENGINE_IDS).nullable().openapi({
+      description: "The engine chosen for this new-video plan; null: the look's choice.",
+    }),
     expiresAt: z.string(),
   })
   .openapi('Plan')
@@ -1067,6 +1070,10 @@ export const CreatePlanSchema = z
     look: z.string().nullable().optional().openapi({
       description:
         'A look id from GET /api/v1/looks, or null for none. Left out, a new-video plan picks one from its template.',
+    }),
+    engine: z.enum(ENGINE_IDS).optional().openapi({
+      description:
+        "New-video plans only: the render engine, kept by the video made from the plan. Omit for the look's choice. Errors as on create.",
     }),
   })
   .openapi('CreatePlan')

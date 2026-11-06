@@ -720,6 +720,8 @@ export interface PlanRow {
   remixFromN?: number | null
   /** The plan's look; null for a revision or remix plan with none chosen (it keeps its video's look). */
   look?: PlanLook | null
+  /** The engine chosen for a new-video plan; null or missing: the look's choice (render-engines plan §4.2). */
+  engine?: EngineId | null
 }
 /** A plan's look (looks plan §4.12): the person's choice (chosen), else picked from its template; id null: none. */
 export interface PlanLook {

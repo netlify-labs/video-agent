@@ -305,6 +305,8 @@ export const plans = pgTable(
     remixFromN: integer('remix_from_n'),
     // The plan's look ({ id }, id null for none), chosen or picked from the router's template; null on older plans.
     look: jsonb('look'),
+    // The engine the person chose for a new-video plan (render-engines plan §4.2); null: the look's choice.
+    engine: text('engine'),
   },
   (t) => [index('plans_user_idx').on(t.userId, t.createdAt)],
 )

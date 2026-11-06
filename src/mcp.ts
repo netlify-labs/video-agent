@@ -516,6 +516,14 @@ export function buildMcpServer(
   opts: { engines?: EngineId[] } = {},
 ): McpServer {
   const engines = opts.engines ?? ['hyperframes']
+  // Only where another engine is on (render-engines plan §7): everywhere else the argument doesn't exist.
+  const engineSchema = z
+    .enum(engines as [EngineId, ...EngineId[]])
+    .optional()
+    .describe(
+      "Optional. The render engine; leave out for the look's choice. Some engines can't make sound effects or a voice-over.",
+    )
+  const engineArg: { engine?: typeof engineSchema } = engines.length > 1 ? { engine: engineSchema } : {}
   const server = new McpServer(
     { name: 'video-agent', version: '1.0.0' },
     { instructions: SERVER_INSTRUCTIONS },
@@ -610,17 +618,7 @@ Example: {"prompt": "A 20-second launch video for our new webhooks feature, endi
         ),
         look: lookArg(false),
         ...RECORDING_ARGS,
-        // Only where another engine is on (render-engines plan §7): everywhere else the argument doesn't exist.
-        ...(engines.length > 1
-          ? {
-              engine: z
-                .enum(engines as [EngineId, ...EngineId[]])
-                .optional()
-                .describe(
-                  "Optional. The render engine; leave out for the look's choice. Some engines can't make sound effects or a voice-over.",
-                ),
-            }
-          : {}),
+        ...engineArg,
         idempotency_key: z
           .string()
           .max(200)
@@ -1538,10 +1536,12 @@ Example: {"prompt": "A 30-second launch video for org webhooks, ending on our lo
           .describe(
             'Optional. A look id from list_looks, or null for none; left out, a new video plan picks one that suits it. The video made from the plan uses it.',
           ),
+        ...engineArg,
       },
     },
     async (args) =>
       run(async () => {
+        const engine = (args as { engine?: EngineId }).engine
         const created = await planning.createPlan(deps, principal, {
           prompt: args.prompt,
           aspect: normalizeAspect(args.aspect),
@@ -1552,6 +1552,7 @@ Example: {"prompt": "A 30-second launch video for org webhooks, ending on our lo
           sound: args.sound,
           voiceover: toVoiceover(args.voiceover),
           ...(args.look !== undefined ? { look: args.look } : {}),
+          ...(engine ? { engine } : {}),
         })
         const plan = await planning.generateQuestions(deps, principal, created.id)
         return {

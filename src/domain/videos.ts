@@ -163,11 +163,20 @@ export async function planLookOf(
   principal: Principal,
   planId: string | undefined,
 ): Promise<PlanRow['look'] | undefined> {
+  return (await usablePlan(deps, principal, planId))?.look ?? undefined
+}
+
+/** The plan, if consumePlan would accept it (read-only, before the transaction); undefined otherwise. */
+async function usablePlan(
+  deps: Deps,
+  principal: Principal,
+  planId: string | undefined,
+): Promise<PlanRow | undefined> {
   if (!planId) return undefined
   const plan = await deps.store.getPlan(planId)
   if (!plan || plan.userId !== principal.userId || plan.consumedByJobId) return undefined
   if (plan.expiresAt <= deps.clock.now().toISOString()) return undefined
-  return plan.look ?? undefined
+  return plan
 }
 
 /** Revisions and remixes: a look the person chose in the plan acts as the request's look (picked looks only). */
@@ -422,7 +431,8 @@ export async function createVideo(
   // The look, resolved and copied before the transaction (blob writes can't roll back), under an id minted now. A
   // plan's look comes before the default; a plan with no look (id null) makes one with none.
   const settings = await lookSettings(deps)
-  const fromPlan = input.look === undefined ? await planLookOf(deps, principal, input.planId) : undefined
+  const plan = await usablePlan(deps, principal, input.planId)
+  const fromPlan = input.look === undefined ? (plan?.look ?? undefined) : undefined
   const resolved = resolveLook(deps, fromPlan && fromPlan.id === null ? { look: null } : input, {
     planLook: fromPlan?.id ?? null,
     defaultLook: settings.defaultLook,
@@ -430,7 +440,8 @@ export async function createVideo(
   })
   // The engine first, so a refused one copies nothing (render-engines plan §4.2, looks plan §4.14).
   const engine = chooseEngine({
-    requestEngine: input.engine,
+    // The request's engine, else the one its plan chose (render-engines plan §4.2).
+    requestEngine: input.engine ?? plan?.engine ?? undefined,
     look: resolved.kind === 'pick' ? resolved.entry : null,
     enabled: (await enabledEngines(deps)).map((e) => e.id),
   })

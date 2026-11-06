@@ -14,7 +14,8 @@ import { ONE_WAY_WORDS } from '../lib/voice.js'
 import { planningContext } from '../generated/planning-context.js'
 import { PlanAnswerSchema, planBriefShape } from '../schemas.js'
 import { clampModel, estimateCredits, FAST_MODEL } from './gateway-models.js'
-import { getLook, resolveLook } from './looks.js'
+import { assertCapabilities, enabledEngines, type EngineId } from './engines.js'
+import { chooseEngine, getLook, resolveLook } from './looks.js'
 import { lookSettings } from './look-settings.js'
 import { assertCan, type Principal } from './policy.js'
 import { MEDIA_PER_VERSION } from './media.js'
@@ -245,6 +246,7 @@ export function planDto(plan: PlanRow) {
     sound: plan.sound ?? null,
     voiceover: plan.voiceover ?? null,
     look: plan.look ?? null,
+    engine: plan.engine ?? null,
     expiresAt: plan.expiresAt,
   }
 }
@@ -335,6 +337,8 @@ export async function createPlan(
     voiceover?: VoiceoverInput | undefined
     /** A look id, or null for none; left out, a new-video plan picks one from its template. */
     look?: string | null | undefined
+    /** New-video plans only: the engine the video will be made with (render-engines plan §4.2). */
+    engine?: EngineId | undefined
   },
 ) {
   assertCan(p, 'plan:create')
@@ -417,6 +421,17 @@ export async function createPlan(
   }
 
   const look = await planLook(deps, input.look, route.template, !!(jobId || remixFrom))
+  // An engine, checked as the create will check it, so a planned create can't fail on what the plan accepted.
+  if (input.engine) {
+    if (jobId || remixFrom)
+      throw new ApiError('invalid_request', "A revision or remix keeps its video's engine; leave engine out.")
+    const engine = chooseEngine({
+      requestEngine: input.engine,
+      look: look?.id ? (getLook(deps, look.id) ?? null) : null,
+      enabled: (await enabledEngines(deps)).map((e) => e.id),
+    })
+    assertCapabilities(engine, { sound: input.sound, voiceover: input.voiceover?.enabled })
+  }
   const now = deps.clock.now()
   const voiceover = input.voiceover ? voiceoverFrom(input.voiceover) : null
   const plan: PlanRow = {
@@ -443,6 +458,7 @@ export async function createPlan(
         ...(input.sound ? [input.sound] : []),
         ...(voiceover ? [voiceover] : []),
         ...(input.look !== undefined ? [{ look: input.look }] : []),
+        ...(input.engine ? [{ engine: input.engine }] : []),
       ]),
     ),
     route,
@@ -457,6 +473,7 @@ export async function createPlan(
     remixFromJobId: remixFrom?.jobId ?? null,
     remixFromN: remixFrom?.n ?? null,
     look,
+    engine: input.engine ?? null,
   }
   await deps.store.insertPlan(plan)
   return planDto(plan)

@@ -1720,7 +1720,12 @@ export function createApp(deps: Deps, opts: AppOptions) {
       method: 'post',
       path: '/api/v1/plans',
       operationId: 'createPlan',
-      'x-sdk': { resource: 'plans', method: 'create', feature: 'planning', fieldFeatures: { look: 'looks' } },
+      'x-sdk': {
+        resource: 'plans',
+        method: 'create',
+        feature: 'planning',
+        fieldFeatures: { look: 'looks', engine: 'engines' },
+      },
       summary: 'Start a plan',
       description: 'Starts planning a video: a fast router decides whether a few questions would help.',
       tags: ['planning'],
