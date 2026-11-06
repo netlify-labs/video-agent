@@ -1,7 +1,7 @@
 // WebMCP (va-qago) on the mock build, through a fake document.modelContext: each page registers only its own tools,
 // they drive the same controls and API calls a person's clicks use, and anything consequential waits for the person.
 import { expect, test } from '@playwright/test'
-import { annotations, callTool, installFakeModelContext, toolNames, waitForTools } from './webmcp-fake'
+import { annotations, callTool, installFakeModelContext, toolNames, waitForTools } from './webmcp-fake.js'
 
 test.beforeEach(async ({ page }) => {
   await installFakeModelContext(page)
@@ -35,7 +35,7 @@ test('the library offers its tools and the global ones; list_videos drives the r
   })
   expect(await callTool(page, 'list_videos', { status: 'done' })).toMatchObject({
     ok: false,
-    error: { code: 'invalid_input', message: expect.stringContaining('status must be one of') as string },
+    error: { code: 'invalid_input', message: expect.stringContaining('status must be one of') },
   })
 })
 
@@ -177,4 +177,91 @@ test('the video page: publish and remix wait for the person, and do what the but
   const made = (await remixed) as { ok: boolean; video_id: string }
   expect(made.ok).toBe(true)
   await expect(page).toHaveURL(new RegExp(`/videos/${made.video_id}$`))
+})
+
+test('the editor: scenes, words, lengths and order change through the editor, and render waits for the person', async ({
+  page,
+}) => {
+  await page.goto('/videos/vid_teaser/edit/2')
+  await waitForTools(page, [
+    'list_scenes',
+    'edit_text',
+    'set_scene_duration',
+    'reorder_scenes',
+    'delete_scene',
+    'seek',
+    'select_clip',
+    'undo',
+    'redo',
+    'render_edit',
+  ])
+  expect(await annotations(page, 'list_scenes')).toMatchObject({
+    readOnlyHint: true,
+    untrustedContentHint: true,
+  })
+  expect(await annotations(page, 'render_edit')).toMatchObject({ consequentialHint: true })
+  expect(await annotations(page, 'delete_scene')).toMatchObject({ consequentialHint: true })
+  const listed = await callTool<{
+    scenes: { id: string; seconds: number; texts: { id: string; text: string }[] }[]
+  }>(page, 'list_scenes')
+  const [first, second] = listed.scenes
+  if (!first || !second) throw new Error('the fixture has at least two scenes')
+  const field = first.texts[0]
+  if (!field) throw new Error('the first scene has a text field')
+
+  // Words: the same field the person types in.
+  expect(await callTool(page, 'edit_text', { text_id: field.id, text: 'Ship faster with WebMCP' })).toEqual({
+    ok: true,
+    text_id: field.id,
+    text: 'Ship faster with WebMCP',
+  })
+  // The person's own field shows it.
+  await expect
+    .poll(() =>
+      page.evaluate(
+        "[...document.querySelectorAll('input, textarea')].some((el) => el.value === 'Ship faster with WebMCP')",
+      ),
+    )
+    .toBe(true)
+  expect(await callTool(page, 'edit_text', { text_id: 'nope', text: 'x' })).toMatchObject({
+    ok: false,
+    error: { code: 'not_found' },
+  })
+
+  // Length and order.
+  await callTool(page, 'set_scene_duration', { scene: first.id, seconds: 3.5 })
+  const order = [second.id, first.id, ...listed.scenes.slice(2).map((b) => b.id)]
+  expect(await callTool(page, 'reorder_scenes', { order: [first.id] })).toMatchObject({
+    ok: false,
+    error: { code: 'invalid_input', message: 'order must list every scene id exactly once.' },
+  })
+  await callTool(page, 'reorder_scenes', { order })
+  const after = await callTool<{ scenes: { id: string; seconds: number; texts: { text: string }[] }[] }>(
+    page,
+    'list_scenes',
+  )
+  expect(after.scenes.map((b) => b.id)).toEqual(order)
+  expect(after.scenes[1]).toMatchObject({ id: first.id, seconds: 3.5 })
+  expect(after.scenes[1]?.texts[0]?.text).toBe('Ship faster with WebMCP')
+
+  // Deleting asks the person.
+  const dialog = page.getByRole('dialog', { name: /An AI agent wants to/ })
+  const deleted = callTool(page, 'delete_scene', { scene: second.id })
+  await dialog.getByRole('button', { name: "Don't allow" }).click()
+  expect(await deleted).toMatchObject({ ok: false, error: { code: 'declined' } })
+
+  // The timeline: nothing to undo yet, and a clip that isn't there.
+  expect(await callTool(page, 'undo')).toMatchObject({ ok: false, error: { code: 'nothing_to_undo' } })
+  expect(await callTool(page, 'select_clip', { clip_id: 'nope' })).toMatchObject({
+    ok: false,
+    error: { code: 'not_found' },
+  })
+  expect(await callTool(page, 'seek', { seconds: 2 })).toMatchObject({ ok: true })
+
+  // Render: the person's click, then the Render button's request.
+  const rendered = callTool(page, 'render_edit')
+  await expect(dialog).toContainText('Render your edits as v3.')
+  await dialog.getByRole('button', { name: 'Render as v3' }).click()
+  expect(await rendered).toMatchObject({ ok: true, version: 3, status: 'queued' })
+  await expect(page).toHaveURL(/\/videos\/vid_teaser$/)
 })

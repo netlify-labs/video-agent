@@ -26,6 +26,7 @@ import { IconChevronDown, IconFileMusic, IconMicrophone, IconPlus, IconUpload } 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { FPS } from '../../../src/lib/contract'
 import {
+  clipLength,
   clipEnd,
   opTakeIds,
   SAMPLE_RATE,
@@ -127,6 +128,13 @@ export interface NarrationControl {
   seekTo: (seconds: number) => void
   /** Where the playhead is, in seconds. */
   time: () => number
+  /** The timeline's clips, in order (WebMCP's list and select, va-qago). */
+  clips: () => { id: string; start: number; seconds: number }[]
+  /** Selects a clip, as clicking it does; false when there's no such clip. */
+  select: (clipId: string | null) => boolean
+  /** The timeline's own undo and redo (its buttons and shortcuts); false when there's nothing to undo or redo. */
+  undo: () => boolean
+  redo: () => boolean
 }
 
 export interface NarrationSectionProps {
@@ -343,6 +351,28 @@ export function NarrationSection(props: NarrationSectionProps) {
         seek(Math.max(0, Math.round(seconds * SAMPLE_RATE)))
       },
       time: () => playheadRef.current / SAMPLE_RATE,
+      clips: () =>
+        editor.op.clips.map((c) => ({
+          id: c.id,
+          start: c.start / SAMPLE_RATE,
+          seconds: clipLength(c) / SAMPLE_RATE,
+        })),
+      select: (clipId) => {
+        if (clipId !== null && !editor.op.clips.some((c) => c.id === clipId)) return false
+        editor.setSelected(clipId)
+        if (clipId) focusClip(clipId)
+        return true
+      },
+      undo: () => {
+        if (!editor.canUndo) return false
+        editor.undo()
+        return true
+      },
+      redo: () => {
+        if (!editor.canRedo) return false
+        editor.redo()
+        return true
+      },
     }
   }, [control, seek, editor])
 

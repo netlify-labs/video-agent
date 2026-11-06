@@ -58,6 +58,7 @@ import { NarrationRenderDialog, type RenderChoice } from '../components/Narratio
 import { NarrationRecorder } from '../components/NarrationRecorder'
 import { NarrationSection, type NarrationControl } from '../components/NarrationSection'
 import { engineName } from '../lib/engines'
+import { useEditTools } from '../webmcp/editTools'
 import { PosterMenu } from '../components/PosterMenu'
 import {
   keepMineWarning,
@@ -751,6 +752,58 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
     if (data) void navigate(`/videos/${id}/edit/${toN}`, { state: { narrationReady: true } })
     else showError(error)
   }
+
+  // WebMCP (va-qago): an agent edits through the same state, saves and render request as the controls on this page.
+  useEditTools({
+    ready: draft !== null && cur !== null,
+    readOnly: lock.state.status === 'locked' || lock.state.status === 'taken_over',
+    versionN,
+    nextN: (video.data?.versions.length ?? 0) + 1,
+    composition: () => curRef.current,
+    setText,
+    setDuration: (sceneId, seconds) => {
+      update((c) => {
+        const x = c.beats.find((y) => y.id === sceneId)
+        if (x) x.duration = fps(seconds)
+        return c
+      })
+    },
+    reorder: (order) => {
+      update((c) => ({
+        ...c,
+        beats: order.map((bid) => c.beats.find((b) => b.id === bid)).filter((b) => b !== undefined),
+      }))
+    },
+    deleteScene: (sceneId) => {
+      update((c) => ({ ...c, beats: c.beats.filter((x) => x.id !== sceneId) }))
+    },
+    seek: (seconds) => {
+      if (narrationControl.current) narrationControl.current.seekTo(seconds)
+      else sendRef.current?.({ type: 'seek', time: seconds })
+    },
+    time: () => narrationControl.current?.time() ?? null,
+    clips: () => narrationControl.current?.clips() ?? [],
+    selectClip: (clipId) => narrationControl.current?.select(clipId) ?? false,
+    undo: () => narrationControl.current?.undo() ?? false,
+    redo: () => narrationControl.current?.redo() ?? false,
+    renderBlocked: () => {
+      if (!draft) return 'The draft is still opening.'
+      if (pictureN !== null) return 'This draft is already rendering.'
+      if (narrationOn && narrationOf(draft.ops))
+        return 'This draft has recorded narration: the person picks how to render it with Render on the page.'
+      if (!draft.rev && !dirty) return 'There are no edits to render yet.'
+      return null
+    },
+    render: async () => {
+      const d = draftRef.current
+      if (!d) throw new Error('The draft is still opening.')
+      if (dirty) await save()
+      const v = await render.mutateAsync({
+        params: { path: { id: d.id }, header: { 'idempotency-key': renderKey } },
+      })
+      return v.latestVersion
+    },
+  })
 
   // An engine with no edit ops (Remotion today, render-engines plan §4.1): say so instead of opening the editor.
   if (rendered && rendered.editing.capabilities.editOps.length === 0)
