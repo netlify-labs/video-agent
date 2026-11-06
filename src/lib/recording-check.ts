@@ -32,6 +32,8 @@ export interface RecordingCheckInput {
   locked: { trace: RedactEntry[]; setup: RedactEntry[] } | null
   /** Hold stills a render-unchanged run makes itself (recording.ts emit --holds-only): present-but-pending. */
   pendingStills?: readonly string[]
+  /** A render-unchanged run: the person set the spans in the editor, so a held end needs no voice line or retime. */
+  edited?: boolean
 }
 
 const TOL = 1e-3
@@ -194,7 +196,7 @@ export function recordingCheck(input: RecordingCheckInput): RecordingProblem[] {
 
     if (r.hold) {
       const retimed = Math.abs(b.duration - b.authoredDuration) > TOL
-      if (!b.voice && !retimed)
+      if (!b.voice && !retimed && !input.edited)
         add(
           scene,
           'hold',

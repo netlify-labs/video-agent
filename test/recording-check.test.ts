@@ -7,6 +7,8 @@ import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSy
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, describe, expect, it, vi } from 'vitest'
+import { applyEdits, type Summary } from '../src/lib/contract.js'
+import { RATE_RANGE } from '../src/lib/recording.js'
 import { parseTrace } from '../src/lib/recording-trace.js'
 import type { Analysis } from '../scripts/lib/recording-analyze.js'
 import { checkContract } from '../scripts/lib/check-contract.js'
@@ -208,6 +210,50 @@ describe('recording.ts check', () => {
     expect(res.code).toBe(0)
   })
 
+  it("an editor render (LT-2's ops: a span under 0.5x, a camera, a drawn area) passes the render-unchanged check", () => {
+    const r = runRoot()
+    writeFileSync(
+      join(r.root, '.render', 'run-manifest.json'),
+      JSON.stringify({ v: 1, kind: 'render_unchanged', recording: { mediaId: ID, filename: `${ID}.mp4` } }),
+    )
+    const summary = JSON.parse(r.read('summary.json')) as Summary
+    const beat = applyEdits(r.read('index.html'), summary, []).composition.beats.find((b) => b.recording)
+    const rec = beat?.recording
+    if (!beat || !rec) throw new Error('no recording scene')
+    const out = Math.round((rec.in + Math.max(0.6, beat.duration * RATE_RANGE[0] * 0.8)) * 1000) / 1000
+    const edited = applyEdits(r.read('index.html'), summary, [
+      { op: 'span', beat: beat.id, in: rec.in, out },
+      {
+        op: 'camera',
+        beat: beat.id,
+        keys: [
+          [rec.in, 0.5, 0.5, 1],
+          [out, 0.4, 0.4, 1.5, 'power2.inOut'],
+        ],
+      },
+      {
+        op: 'redact',
+        beat: beat.id,
+        entries: [
+          ...rec.redact,
+          {
+            id: 'e9',
+            origin: 'editor',
+            start: rec.in,
+            end: out,
+            reason: '',
+            boxes: [[rec.in, 0.05, 0.85, 0.2, 0.08]],
+          },
+        ],
+      },
+    ] as never)
+    expect(edited.html).toMatch(/data-va-rec-hold="end"/)
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const problems = checkRecordingScenes(r.root, edited.html)
+    console.log(JSON.stringify({ test: 'recording-check', case: 'editor render', problems }))
+    expect(problems).toEqual([])
+  })
+
   it('holds: refused without a still or without a voice line or retime; the camera stays inside out', () => {
     const r = runRoot()
     // Turn step-1 (0-10 s in a 10 s scene) into a held slot: 0.5x over 20 s needs a 25 s scene.
@@ -236,8 +282,15 @@ describe('recording.ts check', () => {
       join(r.root, '.render', 'run-manifest.json'),
       JSON.stringify({ v: 1, kind: 'render_unchanged', recording: { mediaId: ID, filename: `${ID}.mp4` } }),
     )
-    expect(problems().join(' ')).not.toMatch(/is missing/)
-    // A retime (data-duration differs from the authored one) is a reason to hold.
+    // ...and the person set the span in the editor, so the hold needs no voice line or retime there.
+    expect(problems()).toEqual([])
+    // In an author run, a retime (data-duration differs from the authored one) is a reason to hold.
+    writeFileSync(
+      join(r.root, '.render', 'run-manifest.json'),
+      JSON.stringify({ v: 1, kind: 'author', recording: { mediaId: ID, filename: `${ID}.mp4` } }),
+    )
+    writeFileSync(join(r.root, 'video', 'assets', 'recording', 'step-1.hold.jpg'), 'jpg')
+    expect(problems().join(' ')).toMatch(/voice line or a retime/)
     html(r, (h) =>
       h.replace(
         'data-duration="25" data-va-authored-duration="25"',

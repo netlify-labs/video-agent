@@ -47,7 +47,8 @@ export function checkRecordingScenes(root: string, html: string): RecordingProbl
     readFile: (p) => readIf(join(video, p)),
     recording: manifest?.recording ? { filename: manifest.recording.filename, durationSec } : null,
     locked,
-    // A render-unchanged run makes missing hold stills itself (emit --holds-only).
+    // A render-unchanged run plays the person's editor spans, and makes missing hold stills itself (emit --holds-only).
+    edited: manifest?.kind === 'render_unchanged',
     pendingStills:
       manifest?.kind === 'render_unchanged'
         ? [...html.matchAll(/assets\/recording\/[a-z0-9-]+\.hold\.jpg/g)].map((m) => m[0])

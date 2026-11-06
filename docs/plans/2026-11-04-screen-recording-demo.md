@@ -811,10 +811,12 @@ credits). It makes gate 2's "no credits" true. It may later become a product opt
 - **every redaction from the trace and from the person's boxes is present with the same keys**, each within 1e-3
   (gotcha 13);
 - `data-va-path` names an existing `assets/recording/<step>.cursor.js`, and that file is **exactly** the one-statement
-  form `emit` writes, where `<JSON>` parses as an array of `[t, x, y]` finite numbers, sorted by `t`, inside
-  `in`/`out`, at most 4 decimals, at most 6,000 points. Anything else is refused. Finalize checks the same grammar;
-- a hold (`data-va-rec-hold`) appears only on a scene with a voice line or a retime, with its still present, and with the
-  camera's last key at or before `out`.
+  form `emit` writes, where `<JSON>` parses as an array of `[t, x, y]` finite numbers, sorted by `t` (points may run
+  past `in`/`out`: the editor's span op narrows the span without rewriting the file, and the runtime plays only the
+  points inside it), at most 4 decimals, at most 6,000 points. Anything else is refused. Finalize checks the same grammar;
+- a hold (`data-va-rec-hold`) appears only on a scene with a voice line or a retime (in a render-unchanged run, also
+  when the person narrowed the span in the editor), with its still present, and with the camera's last key at or before
+  `out`.
 
 `check-contract.ts` calls it, including under `--fix`, whenever the composition has recording scenes. The engine
 dispatch (`engine.ts check`, render-engines plan) runs it for HyperFrames only.
