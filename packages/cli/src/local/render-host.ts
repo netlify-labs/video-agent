@@ -63,14 +63,15 @@ export function serveRenders(o: {
   })
 }
 
-/** The real Chrome hyperframes would use, from its own `browser path`. */
+/**
+ * The Chrome hyperframes renders with: `browser ensure` finds or downloads chrome-headless-shell as its render does
+ * (`browser path` alone would settle for a system Chrome, which on Linux aborts under the workspace's deep TMPDIR, and
+ * the agent's own `hyperframes check` then has no headless shell either).
+ */
 function chromePath(ws: string, env: NodeJS.ProcessEnv): string | null {
-  const r = spawnSync('npx', ['hyperframes', 'browser', 'path'], {
-    cwd: join(ws, 'video'),
-    env: agentEnv(env),
-    encoding: 'utf8',
-    timeout: 5 * 60_000,
-  })
+  const opts = { cwd: join(ws, 'video'), env: agentEnv(env), encoding: 'utf8' as const, timeout: 5 * 60_000 }
+  spawnSync('npx', ['hyperframes', 'browser', 'ensure'], opts)
+  const r = spawnSync('npx', ['hyperframes', 'browser', 'path'], opts)
   const path = r.stdout.trim().split('\n').pop() ?? ''
   return r.status === 0 && path.startsWith('/') && existsSync(path) ? path : null
 }
