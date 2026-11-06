@@ -1531,6 +1531,13 @@ Example: {"prompt": "A 30-second launch video for org webhooks, ending on our lo
         voiceover: voiceoverArg(
           'Optional. true or {voice, speed, script} for a voice-over: the brief then has a narration line per beat, which the video speaks.',
         ),
+        look: z
+          .string()
+          .nullable()
+          .optional()
+          .describe(
+            'Optional. A look id from list_looks, or null for none; left out, a new video plan picks one that suits it. The video made from the plan uses it.',
+          ),
       },
     },
     async (args) =>
@@ -1544,6 +1551,7 @@ Example: {"prompt": "A 30-second launch video for org webhooks, ending on our lo
           mediaIds: args.media_ids,
           sound: args.sound,
           voiceover: toVoiceover(args.voiceover),
+          ...(args.look !== undefined ? { look: args.look } : {}),
         })
         const plan = await planning.generateQuestions(deps, principal, created.id)
         return {

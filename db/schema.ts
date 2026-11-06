@@ -303,6 +303,8 @@ export const plans = pgTable(
     // A plan for a remix of this video and version (job_id is null: it makes a new video).
     remixFromJobId: text('remix_from_job_id'),
     remixFromN: integer('remix_from_n'),
+    // The plan's look ({ id }, id null for none), chosen or picked from the router's template; null on older plans.
+    look: jsonb('look'),
   },
   (t) => [index('plans_user_idx').on(t.userId, t.createdAt)],
 )

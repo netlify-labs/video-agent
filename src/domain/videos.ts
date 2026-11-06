@@ -29,6 +29,7 @@ import { assertCan, type Principal } from './policy.js'
 import type {
   CommentRow,
   FrozenPlan,
+  PlanRow,
   Verdict,
   VerdictRow,
   VersionCommentRow,
@@ -151,6 +152,33 @@ const INCORPORATE_MAX_CHARS = 20_000
  * belong to the caller, be unexpired and unused, have a brief, and (for revisions) be bound to this video. Returns
  * the frozen copy stored on the version and the length the brief implies.
  */
+/**
+ * A plan's look, read before the transaction (looks plan §4.12): the snapshot is copied before createVideo's
+ * transaction, but consumePlan runs inside it. Read-only, with consumePlan's checks; consumePlan re-checks inside, so
+ * a plan consumed meanwhile fails as before and its copy is left unadopted for the sweep. Undefined: no usable plan
+ * look (none on the plan, or a plan that consumePlan will refuse).
+ */
+export async function planLookOf(
+  deps: Deps,
+  principal: Principal,
+  planId: string | undefined,
+): Promise<PlanRow['look'] | undefined> {
+  if (!planId) return undefined
+  const plan = await deps.store.getPlan(planId)
+  if (!plan || plan.userId !== principal.userId || plan.consumedByJobId) return undefined
+  if (plan.expiresAt <= deps.clock.now().toISOString()) return undefined
+  return plan.look ?? undefined
+}
+
+/** Revisions and remixes: a look the person chose in the plan acts as the request's look (picked looks only). */
+export async function withChosenPlanLook<
+  T extends { planId?: string | undefined; look?: string | null | undefined },
+>(deps: Deps, principal: Principal, input: T): Promise<T> {
+  if (input.look !== undefined) return input
+  const look = await planLookOf(deps, principal, input.planId)
+  return look?.chosen ? { ...input, look: look.id } : input
+}
+
 export async function consumePlan(
   repo: Repo,
   deps: Deps,
@@ -202,7 +230,13 @@ export async function consumePlan(
   await repo.updatePlan(plan.id, { consumedByJobId: target.newJobId, consumedByN: target.n })
   const seconds = plan.brief.beats.reduce((t, b) => t + b.seconds, 0)
   return {
-    frozen: { planId: plan.id, brief: plan.brief, qa, contextHash: planningContext.hash },
+    frozen: {
+      planId: plan.id,
+      brief: plan.brief,
+      qa,
+      contextHash: planningContext.hash,
+      ...(plan.look ? { look: plan.look.id } : {}),
+    },
     title: plan.brief.title?.trim().slice(0, 120) || null,
     aspect: (plan.aspect as Aspect | null) ?? plan.route?.suggestedAspect ?? null,
     durationSec: plan.durationSec ?? (seconds > 0 ? Math.round(seconds) : null),
@@ -385,9 +419,12 @@ export async function createVideo(
     look: input.look ?? null,
     engine: input.engine ?? null,
   })
-  // The look, resolved and copied before the transaction (blob writes can't roll back), under an id minted now.
+  // The look, resolved and copied before the transaction (blob writes can't roll back), under an id minted now. A
+  // plan's look comes before the default; a plan with no look (id null) makes one with none.
   const settings = await lookSettings(deps)
-  const resolved = resolveLook(deps, input, {
+  const fromPlan = input.look === undefined ? await planLookOf(deps, principal, input.planId) : undefined
+  const resolved = resolveLook(deps, fromPlan && fromPlan.id === null ? { look: null } : input, {
+    planLook: fromPlan?.id ?? null,
     defaultLook: settings.defaultLook,
     disabled: settings.disabledLooks,
   })
@@ -538,17 +575,19 @@ export async function reviseVideo(
     ...(input.scope ? { scope: input.scope.beats } : {}),
     look: input.look ?? null,
   })
+  // A look chosen in the plan acts as the request's; the request itself (idempotency) stays as sent.
+  const lookInput = await withChosenPlanLook(deps, principal, { planId: input.planId, look: input.look })
   // Redoing a scene keeps the video's look (looks plan §4.3).
-  assertLookAllowed({ look: input.look, scope: input.scope })
+  assertLookAllowed({ look: lookInput.look, scope: input.scope })
   // A scoped revision's checks that may read Blobs (the parent's scenes) run before the transaction.
   if (input.scope) await checkScopedRevise(deps, principal, jobId, input)
   // A picked look is copied before the transaction: the copy depends only on this video and the look's version, so
   // the parent (and whether it's a restyle) is decided inside. Visibility is checked first.
   const settings = await lookSettings(deps)
   let picked: VersionLook | null = null
-  if (typeof input.look === 'string') {
+  if (typeof lookInput.look === 'string') {
     await loadJob(deps.store, principal, jobId)
-    const r = resolveLook(deps, input, { defaultLook: null, disabled: settings.disabledLooks })
+    const r = resolveLook(deps, lookInput, { defaultLook: null, disabled: settings.disabledLooks })
     if (r.kind === 'pick') picked = await snapshotLook(deps, jobId, { from: 'bundle', entry: r.entry }, false)
   }
   return deps.store.tx(async (repo) => {
@@ -574,7 +613,7 @@ export async function reviseVideo(
       const restyle = picked !== null && picked.hash !== parentLook?.hash
       assertRestyleAllowed(restyle, !!parent.narration)
       const look: VersionLook | null =
-        input.look === null
+        lookInput.look === null
           ? null
           : picked
             ? restyle

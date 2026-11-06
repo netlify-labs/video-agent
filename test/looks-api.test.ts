@@ -106,7 +106,7 @@ describe('looks API', () => {
     const ops = Object.values(doc.paths).flatMap((p) => Object.values(p))
     const op = (id: string) => ops.find((o) => o.operationId === id)!['x-sdk']
     expect(op('listLooks')).toMatchObject({ resource: 'looks', method: 'list', feature: 'looks' })
-    for (const id of ['createVideo', 'reviseVideo', 'remixVideo'])
+    for (const id of ['createVideo', 'reviseVideo', 'remixVideo', 'createPlan'])
       expect((op(id).fieldFeatures as Record<string, string>).look).toBe('looks')
   })
 })

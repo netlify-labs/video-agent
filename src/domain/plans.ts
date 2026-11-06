@@ -14,6 +14,8 @@ import { ONE_WAY_WORDS } from '../lib/voice.js'
 import { planningContext } from '../generated/planning-context.js'
 import { PlanAnswerSchema, planBriefShape } from '../schemas.js'
 import { clampModel, estimateCredits, FAST_MODEL } from './gateway-models.js'
+import { getLook, resolveLook } from './looks.js'
+import { lookSettings } from './look-settings.js'
 import { assertCan, type Principal } from './policy.js'
 import { MEDIA_PER_VERSION } from './media.js'
 import { isLibraryPick } from './media-roles.js'
@@ -22,6 +24,7 @@ import type {
   MediaRow,
   PlanAnswer,
   PlanBrief,
+  PlanLook,
   PlanQuestion,
   PlanRoute,
   PlanRow,
@@ -184,6 +187,39 @@ async function remixSourceBlock(deps: Deps, plan: PlanRow): Promise<string> {
 const REMIX_RULE =
   "This is a remix: a new video that starts from an existing one (source_video), changed as the request says. It may be a small swap or a new topic in the same format. Ask only what the request leaves open about the change; keep the source's format, structure and style unless the request changes them."
 
+/**
+ * A plan's look (looks plan §4.12): the person's choice (checked like a create's), else, for a new video, the first
+ * enabled look in catalog order made for the router's template, else the admin default, else none. Deterministic, so
+ * the same plan always gets the same look. Revision and remix plans keep their video's look unless one is chosen.
+ */
+async function planLook(
+  deps: Deps,
+  chosen: string | null | undefined,
+  template: string,
+  kept: boolean,
+): Promise<PlanLook | null> {
+  const settings = await lookSettings(deps)
+  if (chosen !== undefined) {
+    const r = resolveLook(deps, { look: chosen }, { defaultLook: null, disabled: settings.disabledLooks })
+    return { id: r.kind === 'pick' ? r.entry.id : null, chosen: true }
+  }
+  if (kept) return null
+  const enabled = deps.looks.catalog().filter((l) => !settings.disabledLooks.includes(l.id))
+  const fit = enabled.find((l) => (l.bestFor as string[]).includes(template))
+  const fallback = enabled.find((l) => l.id === settings.defaultLook)
+  return { id: fit?.id ?? fallback?.id ?? null, chosen: false }
+}
+
+/** The plan's look for the planner, as data (name and one line), with the rule that goes with it; empty for none. */
+function lookContext(deps: Deps, plan: PlanRow): { block: string; rule: string } {
+  const entry = plan.look?.id ? getLook(deps, plan.look.id) : null
+  if (!entry) return { block: '', rule: '' }
+  return {
+    block: dataBlock('chosen_look', { name: entry.name, style: entry.description }),
+    rule: 'The visual style is settled (chosen_look): never ask about style, colours, fonts or animation, and keep the brief to story and content.',
+  }
+}
+
 async function deepModel(deps: Deps) {
   return clampModel((await deps.store.getSettings())?.planDeepModel)
 }
@@ -208,6 +244,7 @@ export function planDto(plan: PlanRow) {
     mediaIds: plan.mediaIds,
     sound: plan.sound ?? null,
     voiceover: plan.voiceover ?? null,
+    look: plan.look ?? null,
     expiresAt: plan.expiresAt,
   }
 }
@@ -296,6 +333,8 @@ export async function createPlan(
     mediaIds?: string[] | undefined
     sound?: VideoSound | undefined
     voiceover?: VoiceoverInput | undefined
+    /** A look id, or null for none; left out, a new-video plan picks one from its template. */
+    look?: string | null | undefined
   },
 ) {
   assertCan(p, 'plan:create')
@@ -377,6 +416,7 @@ export async function createPlan(
     }
   }
 
+  const look = await planLook(deps, input.look, route.template, !!(jobId || remixFrom))
   const now = deps.clock.now()
   const voiceover = input.voiceover ? voiceoverFrom(input.voiceover) : null
   const plan: PlanRow = {
@@ -402,6 +442,7 @@ export async function createPlan(
         mediaIds,
         ...(input.sound ? [input.sound] : []),
         ...(voiceover ? [voiceover] : []),
+        ...(input.look !== undefined ? [{ look: input.look }] : []),
       ]),
     ),
     route,
@@ -415,6 +456,7 @@ export async function createPlan(
     expiresAt: new Date(now.getTime() + PLAN_TTL_MS).toISOString(),
     remixFromJobId: remixFrom?.jobId ?? null,
     remixFromN: remixFrom?.n ?? null,
+    look,
   }
   await deps.store.insertPlan(plan)
   return planDto(plan)
@@ -506,6 +548,7 @@ export async function generateQuestions(deps: Deps, p: Principal, planId: string
     'Reply with JSON only: {"questions":[{"id":"q1","question":"…","why":"…","options":[{"id":"a","label":"…","description":"…","recommended":true},{"id":"b","label":"…","description":"…"}],"multiSelect":false}]}',
     'Use 0–6 questions and 2–4 short options each. Return {"questions":[]} if nothing is open.',
     'The request wins over the chosen settings: never ask about sound, music or a voice-over the request already asks for or rules out.',
+    lookContext(deps, plan).rule,
     // Seen live: "the chosen_sound data says 'silent, no audio'".
     'Write for the person, never about the data: don\'t name the tags (chosen_sound, request…). Say "the sound you picked" or "your request".',
   ]
@@ -522,6 +565,7 @@ export async function generateQuestions(deps: Deps, p: Principal, planId: string
       ? dataBlock('chosen_sound', soundLabel(plan.sound, plan.voiceover))
       : '',
     media.block,
+    lookContext(deps, plan).block,
     dataBlock('company_context', planningContext.text),
     dataBlock('their_recent_video_titles', history),
   ]
@@ -600,6 +644,7 @@ export async function generateBrief(deps: Deps, p: Principal, planId: string, an
     plan.remixFromJobId ? REMIX_RULE : '',
     plan.mediaIds.length ? `${MEDIA_RULE} Say in the beats where each file appears.` : '',
     plan.voiceover ? NARRATION_RULE : '',
+    lookContext(deps, plan).rule,
     ...audio,
     `Reply with JSON only: {${fields.join(',')}}`,
   ]
@@ -616,6 +661,7 @@ export async function generateBrief(deps: Deps, p: Principal, planId: string, an
       : '',
     plan.voiceover?.script ? dataBlock('person_script', plan.voiceover.script) : '',
     media.block,
+    lookContext(deps, plan).block,
     dataBlock('answers', qa),
     dataBlock('company_context', planningContext.text),
   ]

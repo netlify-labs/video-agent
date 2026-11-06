@@ -3077,6 +3077,11 @@ export interface components {
                 speed: number | null;
                 script: string[] | null;
             } | null;
+            /** @description The plan's look: the person's choice (chosen), else the first enabled look made for the plan's template, else the admin default. id null: none. null: a remix or revision plan that keeps its video's look. */
+            look: {
+                id: string | null;
+                chosen: boolean;
+            } | null;
             expiresAt: string;
         };
         CreatePlan: {
@@ -3097,6 +3102,8 @@ export interface components {
             mediaIds?: string[];
             sound?: components["schemas"]["Sound"];
             voiceover?: components["schemas"]["VoiceoverInput"];
+            /** @description A look id from GET /api/v1/looks, or null for none. Left out, a new-video plan picks one from its template. */
+            look?: string | null;
         };
         PlanAnswers: {
             answers: {

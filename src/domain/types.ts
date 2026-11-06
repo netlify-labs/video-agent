@@ -527,6 +527,8 @@ export interface FrozenPlan {
   brief: PlanBrief
   qa: { question: string; answer: string[] | string }[]
   contextHash: string
+  /** The plan's look id (null: none); missing on plans made before looks, or that keep their video's look. */
+  look?: string | null
 }
 
 export interface AttemptRow {
@@ -716,6 +718,13 @@ export interface PlanRow {
   /** A plan for a remix of this video and version (jobId is then null: it makes a new video). */
   remixFromJobId?: string | null
   remixFromN?: number | null
+  /** The plan's look; null for a revision or remix plan with none chosen (it keeps its video's look). */
+  look?: PlanLook | null
+}
+/** A plan's look (looks plan §4.12): the person's choice (chosen), else picked from its template; id null: none. */
+export interface PlanLook {
+  id: string | null
+  chosen: boolean
 }
 export interface GatewayCallRow {
   id: string

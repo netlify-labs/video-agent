@@ -36,6 +36,7 @@ import type {
 import {
   checkWebhook,
   consumePlan,
+  withChosenPlanLook,
   deriveTitle,
   loadJob,
   newAttempt,
@@ -222,7 +223,9 @@ export async function remixVideo(
         `This video was made with ${engineInfo(engine).name}, which is turned off on this deployment, so it can't be remixed.`,
       )
     }
-    const resolved = resolveLook(deps, input, {
+    // A look chosen in the remix plan acts as the remix's look; a plan with none chosen keeps the source's.
+    const lookInput = await withChosenPlanLook(deps, principal, { planId: input.planId, look: input.look })
+    const resolved = resolveLook(deps, lookInput, {
       inherited: version.look ?? null,
       defaultLook: null,
       disabled: (await lookSettings(deps)).disabledLooks,

@@ -4608,6 +4608,28 @@
             ],
             "description": "The voice-over chosen while planning, if any; the brief then has narration per beat."
           },
+          "look": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "chosen": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "id",
+              "chosen"
+            ],
+            "description": "The plan's look: the person's choice (chosen), else the first enabled look made for the plan's template, else the admin default. id null: none. null: a remix or revision plan that keeps its video's look."
+          },
           "expiresAt": {
             "type": "string"
           }
@@ -4625,6 +4647,7 @@
           "mediaIds",
           "sound",
           "voiceover",
+          "look",
           "expiresAt"
         ]
       },
@@ -4692,6 +4715,13 @@
           },
           "voiceover": {
             "$ref": "#/components/schemas/VoiceoverInput"
+          },
+          "look": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A look id from GET /api/v1/looks, or null for none. Left out, a new-video plan picks one from its template."
           }
         },
         "required": [
@@ -14248,7 +14278,10 @@
         "x-sdk": {
           "resource": "plans",
           "method": "create",
-          "feature": "planning"
+          "feature": "planning",
+          "fieldFeatures": {
+            "look": "looks"
+          }
         },
         "summary": "Start a plan",
         "description": "Starts planning a video: a fast router decides whether a few questions would help.",

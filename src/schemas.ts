@@ -1041,6 +1041,10 @@ export const PlanSchema = z
     voiceover: voiceoverShape.nullable().openapi({
       description: 'The voice-over chosen while planning, if any; the brief then has narration per beat.',
     }),
+    look: z.object({ id: z.string().nullable(), chosen: z.boolean() }).nullable().openapi({
+      description:
+        "The plan's look: the person's choice (chosen), else the first enabled look made for the plan's template, else the admin default. id null: none. null: a remix or revision plan that keeps its video's look.",
+    }),
     expiresAt: z.string(),
   })
   .openapi('Plan')
@@ -1060,6 +1064,10 @@ export const CreatePlanSchema = z
     }),
     sound: SoundSchema.optional(),
     voiceover: VoiceoverInputSchema.optional(),
+    look: z.string().nullable().optional().openapi({
+      description:
+        'A look id from GET /api/v1/looks, or null for none. Left out, a new-video plan picks one from its template.',
+    }),
   })
   .openapi('CreatePlan')
 export const PlanAnswersSchema = z
