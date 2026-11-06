@@ -4,6 +4,7 @@
 //   npx tsx scripts/e2e/demo-cli.ts --dry   # builds the CLI and records the tour with it here (no network to the
 //                                          # deployment, no credits); checks the file and trace; prints the plan
 //   VIDEO_AGENT_URL=https://<site> VIDEO_AGENT_KEY=nva_… npx tsx scripts/e2e/demo-cli.ts [--no-publish]
+//   LT3_VIDEO=vid_… (same env)                    # check and publish a demo it already made; no new credits
 //
 // The tour: the app's mock build, searched for a video and opened, recorded by `video-agent record --script` (the built
 // CLI, dpr 2, a pointer trace). Live, the same command with --make uploads it with its trace and makes the demo; the
@@ -118,8 +119,9 @@ type Version = {
   recording?: { trace: boolean; summary: { steps: number } | null } | null
 }
 if (!dry && (!base || !key)) fail('Set VIDEO_AGENT_URL and VIDEO_AGENT_KEY (or run --dry).')
-if (!dry && perDemo > ceiling) fail('projected credits over CREDIT_CEILING', { perDemo, ceiling })
-const made = await main()
+if (!dry && !env.LT3_VIDEO && perDemo > ceiling) fail('projected credits over CREDIT_CEILING', { perDemo, ceiling })
+// LT3_VIDEO=vid_… checks (and publishes) a demo this script already made, without recording or spending again.
+const made = env.LT3_VIDEO ? { id: env.LT3_VIDEO } : await main()
 log('created', { id: made.id })
 let v: Version | undefined
 for (let i = 0; i < 240; i++) {
@@ -135,8 +137,11 @@ const checks: Record<string, boolean> = {
   steps: (done.recording?.summary?.steps ?? 0) > 0,
 }
 if (done.status === 'ready') {
-  checks.captions =
-    (await api('GET', `/api/v1/videos/${made.id}/versions/${String(done.n)}/captions`)).status === 200
+  // WebVTT, not JSON: fetched directly.
+  const vtt = await fetch(`${base}/api/v1/videos/${made.id}/versions/${String(done.n)}/captions`, {
+    headers: { authorization: `Bearer ${key}` },
+  })
+  checks.captions = vtt.ok && (await vtt.text()).startsWith('WEBVTT')
   const link = (await api('GET', `/api/v1/videos/${made.id}/versions/${String(done.n)}/preview`)).json as {
     url: string
   }
