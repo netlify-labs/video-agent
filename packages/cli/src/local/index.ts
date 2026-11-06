@@ -9,6 +9,7 @@ import { runAgent, type Adapter } from './agent.js'
 import { geminiHome } from './gemini.js'
 import { serveRenders } from './render-host.js'
 import { outputPath, prepareLocalRun, watchRun, type LocalRunInput } from './run.js'
+import { scopeRefusal } from './scope.js'
 import {
   buildWorkspace,
   ensureRuntime,
@@ -152,6 +153,18 @@ function copyOut(
       throw new Error(`The run's ${name} doesn't match what render-job recorded. Not copying it out.`)
   }
   if (!files['video.mp4']) throw new Error('The run made no video.mp4.')
+  // A scoped revision passes finalize's check before anything is copied out (bead va-8cy4.5.14).
+  const scope = o.input.revision?.scope
+  if (scope && o.input.revision) {
+    const refusal = scopeRefusal({
+      parentSource: o.input.revision.source,
+      childSource: outputPath(run.renderDir, 'source.tar.gz'),
+      beats: scope.ids,
+      mp4Seconds: typeof manifest.durationSec === 'number' ? manifest.durationSec : null,
+    })
+    o.log('local.scope_checked', { beats: scope.ids, refused: refusal !== null })
+    if (refusal) throw new Error(refusal)
+  }
   const title = typeof manifest.title === 'string' && manifest.title ? manifest.title : o.input.prompt
   const root = o.videoDir(title)
   const dir = join(root, `v${run.versionN}`)

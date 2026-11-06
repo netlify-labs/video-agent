@@ -12,6 +12,8 @@ import { bundledRuntime, cacheDir } from '../local/workspace.js'
 import { CliError, EXIT, UsageError } from '../exit.js'
 import type { Ctx, Handler } from '../router.js'
 import { VERSION } from '../version.js'
+import { localScope } from '../local/scope.js'
+import { sceneFlags } from './scenes.js'
 import { arg, durationMs } from './shared.js'
 
 /** Agents this version ships (docs/spikes.md C2: each must pass the sandbox spike). Fixture is hidden, for CI. */
@@ -142,9 +144,22 @@ const localRevise: Handler = async (ctx) => {
     throw new UsageError(`${dir}/v${latest + 1} already exists.`)
   const first = video.versions.find((v) => v.n === from)
   const aspect = first?.width && first.height ? aspectOf(first.width, first.height) : '16:9'
+  // --scene: only these scenes (ids or labels), refused before the agent starts as the server would refuse them.
+  const names = sceneFlags(ctx)
+  const scope = names.length ? localScope(source, names, from) : null
   return go(
     ctx,
-    { prompt: change, aspect, revision: { jobId: video.jobId, parentN: from, versionN: latest + 1, source } },
+    {
+      prompt: change,
+      aspect,
+      revision: {
+        jobId: video.jobId,
+        parentN: from,
+        versionN: latest + 1,
+        source,
+        ...(scope ? { scope } : {}),
+      },
+    },
     () => dir,
   )
 }

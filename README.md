@@ -283,6 +283,7 @@ From the CLI, a scene is its id or its label:
 video-agent scenes vid_…                                   # ids, labels and times
 video-agent redo vid_… --scene demo "Show the preview URL" --wait
 video-agent revise vid_… --scene Opening --scene outro "Brighter" --from-version 2
+video-agent local revise ./videos/webhooks-launch --scene demo "Show the preview URL"   # on your machine
 ```
 
 ## Your own voice-over

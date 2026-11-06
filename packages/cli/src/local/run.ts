@@ -33,7 +33,18 @@ export interface LocalRunInput {
    * A revision (local revise, bead va-p1th.5.12): the video's job id and the version it changes, whose source.tar.gz
    * is restored by prepare-run exactly as on the runner. The prompt is then the change.
    */
-  revision?: { jobId: string; parentN: number; versionN?: number; source: string }
+  revision?: {
+    jobId: string
+    parentN: number
+    versionN?: number
+    source: string
+    /** Only these scenes (local revise --scene, bead va-8cy4.5.14): their ids, as the prompt lists them, and voice. */
+    scope?: {
+      ids: string[]
+      beats: { id: string; label: string | null; start: number; duration: number }[]
+      voiced: boolean
+    }
+  }
 }
 
 export interface LocalRun {
@@ -92,6 +103,8 @@ export function prepareLocalRun(ws: string, input: LocalRunInput, log: Log): Loc
     bundle: null,
     media: media.length ? media.map((m) => m.run) : null,
     feedback: null,
+    // No neighbour stills locally: the prompt's no-stills variant says so.
+    ...(input.revision?.scope ? { scope: { beats: input.revision.scope.ids, stills: [] } } : {}),
   }
   const raw = serializeRunManifest(manifest)
   const manifestFile = join(inputs, 'sources', runManifestKey(jobId, attemptId))
@@ -116,6 +129,17 @@ export function prepareLocalRun(ws: string, input: LocalRunInput, log: Log): Loc
     media: media.map((m) => m.prompt),
     ...(input.sound ? { sound: input.sound } : {}),
     ...(input.voiceover ? { voiceover: input.voiceover } : {}),
+    ...(input.revision?.scope
+      ? {
+          scope: {
+            n: input.revision.parentN,
+            beats: input.revision.scope.beats,
+            stills: false,
+            voiced: input.revision.scope.voiced,
+            locked: false,
+          },
+        }
+      : {}),
   })
   writeFileSync(join(ws, 'prompt.txt'), prompt)
   log('local.prepared', { jobId, attemptId, media: media.length, ms: Date.now() - t })

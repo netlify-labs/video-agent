@@ -1202,6 +1202,11 @@
           "type": "number",
           "description": "The version to change (default: the latest)."
         },
+        "scene": {
+          "type": "string",
+          "multiple": true,
+          "description": "Only redo these scenes (id or label; repeatable). The rest stay as they are."
+        },
         "keep": {
           "type": "boolean",
           "description": "Keep the workspace (for debugging)."
@@ -1212,7 +1217,8 @@
         }
       },
       "examples": [
-        "video-agent local revise ./videos/webhooks-launch \"Make the end card orange\""
+        "video-agent local revise ./videos/webhooks-launch \"Make the end card orange\"",
+        "video-agent local revise ./videos/webhooks-launch --scene demo \"Show the preview URL\""
       ],
       "sdk": [],
       "feature": null,

@@ -644,10 +644,18 @@ export const COMMANDS: CommandSpec[] = [
     flags: {
       agent: { type: 'string', description: 'The coding agent: claude.' },
       'from-version': { type: 'number', description: 'The version to change (default: the latest).' },
+      scene: {
+        type: 'string',
+        multiple: true,
+        description: 'Only redo these scenes (id or label; repeatable). The rest stay as they are.',
+      },
       keep: { type: 'boolean', description: 'Keep the workspace (for debugging).' },
       timeout: { type: 'string', description: 'Give up after this long: 30m, 1h (default 40m).' },
     },
-    examples: ['video-agent local revise ./videos/webhooks-launch "Make the end card orange"'],
+    examples: [
+      'video-agent local revise ./videos/webhooks-launch "Make the end card orange"',
+      'video-agent local revise ./videos/webhooks-launch --scene demo "Show the preview URL"',
+    ],
     sdk: [],
     local: true,
     ready: true,
