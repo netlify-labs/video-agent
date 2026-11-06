@@ -259,6 +259,12 @@ function fromApiError(e: ApiError, videoId?: string): ToolError {
 }
 
 const optionalVersion = (description: string) => z.number().int().positive().optional().describe(description)
+/** The video a tool acts on, read with normalizeVideoId. */
+const VideoIdArg = z.string().describe('The video id (vid_…) or its web URL.')
+const mediaIdsArg = (description: string) => z.array(z.string()).max(12).optional().describe(description)
+const soundArg = (description: string) => z.enum(SOUNDS).optional().describe(description)
+const durationArg = (description: string) =>
+  z.union([z.number(), z.string()]).optional().describe(description)
 
 type ToolResult = {
   content: { type: 'text'; text: string }[]
@@ -470,28 +476,20 @@ Example: {"prompt": "A 20-second launch video for our new webhooks feature, endi
           .describe(
             '16:9 (landscape, default), 9:16 (vertical), 1:1 (square) or 4:5 (portrait). Names like "vertical" work.',
           ),
-        duration_sec: z
-          .union([z.number(), z.string()])
-          .optional()
-          .describe('Target length in seconds ("30s", "2 min" work). Leave out to let the agent choose.'),
+        duration_sec: durationArg(
+          'Target length in seconds ("30s", "2 min" work). Leave out to let the agent choose.',
+        ),
         title: z.string().max(120).optional().describe('Optional title. The agent names it otherwise.'),
         plan_id: z
           .string()
           .optional()
           .describe('Optional. A plan from plan_video + plan_brief; its brief is added to the run.'),
-        media_ids: z
-          .array(z.string())
-          .max(12)
-          .optional()
-          .describe(
-            'Optional. Library items (from list_media) to use: logos, screenshots, clips, fonts, music (audio).',
-          ),
-        sound: z
-          .enum(SOUNDS)
-          .optional()
-          .describe(
-            'Optional. "silent" (default), "music" (a music bed: an audio item from media_ids, else the brand\'s music, else none) or "music_sfx" (music plus sound effects on visible actions). Picking an audio item turns music on.',
-          ),
+        media_ids: mediaIdsArg(
+          'Optional. Library items (from list_media) to use: logos, screenshots, clips, fonts, music (audio).',
+        ),
+        sound: soundArg(
+          'Optional. "silent" (default), "music" (a music bed: an audio item from media_ids, else the brand\'s music, else none) or "music_sfx" (music plus sound effects on visible actions). Picking an audio item turns music on.',
+        ),
         voiceover: voiceoverArg(
           'Optional. A spoken narration, with captions from its words: true, or {voice, speed, script}. Works with any sound; music dips under the voice.',
         ),
@@ -536,7 +534,7 @@ wait_seconds (0-8) waits in this call for the status to change, so you can poll 
 
 Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "wait_seconds": 8}`,
       inputSchema: {
-        video_id: z.string().describe('The video id (vid_…) or its web URL.'),
+        video_id: VideoIdArg,
         wait_seconds: z
           .number()
           .min(0)
@@ -603,9 +601,7 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "wait_seconds": 8}`,
 When to use: the user wants to watch or see a video ("show me the video", "play it"). NOT for checking progress over and over: use get_video for that, so the chat doesn't fill with cards.
 
 Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w"}`,
-      inputSchema: {
-        video_id: z.string().describe('The video id (vid_…) or its web URL.'),
-      },
+      inputSchema: { video_id: VideoIdArg },
       _meta: VIDEO_CARD,
       annotations: { title: 'Show a video', readOnlyHint: true, openWorldHint: false },
     },
@@ -682,21 +678,11 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Same format, 
           .describe('What should be different. Be as descriptive as possible.'),
         from_version: optionalVersion('Which ready version to start from (default: the latest ready one).'),
         aspect: z.string().optional().describe("16:9, 9:16, 1:1 or 4:5. Leave out to keep the source's."),
-        duration_sec: z
-          .union([z.number(), z.string()])
-          .optional()
-          .describe("A target length. Leave out to keep the source's."),
-        media_ids: z
-          .array(z.string())
-          .max(12)
-          .optional()
-          .describe(
-            "Optional. The remix's library items (from list_media): replaces the source's. Leave out to keep them.",
-          ),
-        sound: z
-          .enum(SOUNDS)
-          .optional()
-          .describe('Optional. "silent", "music" or "music_sfx". Leave out to keep the source\'s sound.'),
+        duration_sec: durationArg("A target length. Leave out to keep the source's."),
+        media_ids: mediaIdsArg(
+          "Optional. The remix's library items (from list_media): replaces the source's. Leave out to keep them.",
+        ),
+        sound: soundArg('Optional. "silent", "music" or "music_sfx". Leave out to keep the source\'s sound.'),
         voiceover: voiceoverArg(
           "Optional. true, false or {voice, speed, script}. Leave out to keep the source's AI voice-over settings.",
         ),
@@ -737,35 +723,25 @@ Incorporate feedback: pass comment_ids (from list_comments; open comments on fro
 
 Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Make the end card say \\"Start free today\\""}`,
       inputSchema: {
-        video_id: z.string().describe('The video id (vid_…) or its web URL.'),
+        video_id: VideoIdArg,
         change: z.string().min(3).max(4000).describe('What should change. Everything else stays.'),
         plan_id: z
           .string()
           .optional()
           .describe('Optional. A revision plan from plan_video (with video_id) + plan_brief.'),
         from_version: optionalVersion('Which ready version to start from (default: the latest ready one).'),
-        duration_sec: z
-          .union([z.number(), z.string()])
-          .optional()
-          .describe('A new target length, if it should change.'),
+        duration_sec: durationArg('A new target length, if it should change.'),
         comment_ids: z
           .array(z.string())
           .max(50)
           .optional()
           .describe('Optional. Comments to incorporate (owner or admin), from list_comments.'),
-        media_ids: z
-          .array(z.string())
-          .max(12)
-          .optional()
-          .describe(
-            'Optional. More library items (from list_media); the version keeps the media it revises.',
-          ),
-        sound: z
-          .enum(SOUNDS)
-          .optional()
-          .describe(
-            'Optional. "silent", "music" or "music_sfx". Leave out to keep the sound of the version it revises.',
-          ),
+        media_ids: mediaIdsArg(
+          'Optional. More library items (from list_media); the version keeps the media it revises.',
+        ),
+        sound: soundArg(
+          'Optional. "silent", "music" or "music_sfx". Leave out to keep the sound of the version it revises.',
+        ),
         voiceover: voiceoverArg(
           'Optional. true, false or {voice, speed, script}. Leave out to keep the voice-over of the version it revises; unchanged lines keep their audio.',
         ),
@@ -804,7 +780,7 @@ Only the video's owner or an admin can publish. Publishing a version that is alr
 
 Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w"}`,
       inputSchema: {
-        video_id: z.string().describe('The video id (vid_…) or its web URL.'),
+        video_id: VideoIdArg,
         version: optionalVersion('Which version (default: the latest ready one).'),
         destination: z
           .string()
@@ -889,7 +865,7 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w"}`,
 
 Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "version": 2}`,
       inputSchema: {
-        video_id: z.string().describe('The video id (vid_…) or its web URL.'),
+        video_id: VideoIdArg,
         version: optionalVersion('Which version (default: whichever version is public).'),
         publication: z
           .string()
@@ -963,7 +939,7 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "destination": "dst_…"
       description: `Stop the version of a video that is queued or being made. Earlier versions are kept.
 
 Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w"}`,
-      inputSchema: { video_id: z.string().describe('The video id (vid_…) or its web URL.') },
+      inputSchema: { video_id: VideoIdArg },
       annotations: {
         title: 'Cancel a video',
         readOnlyHint: false,
@@ -1301,19 +1277,12 @@ Example: {"prompt": "A 30-second launch video for org webhooks, ending on our lo
           .describe(
             'Plan a remix of this video (a new video from it) instead; not with video_id. Pass plan_id to remix_video.',
           ),
-        media_ids: z
-          .array(z.string())
-          .max(12)
-          .optional()
-          .describe(
-            "Optional. Library items (from list_media) to plan around; the video made from the plan uses them, so don't pass them again.",
-          ),
-        sound: z
-          .enum(SOUNDS)
-          .optional()
-          .describe(
-            'Optional. "silent", "music" or "music_sfx", if the user already chose; the video made from the plan uses it.',
-          ),
+        media_ids: mediaIdsArg(
+          "Optional. Library items (from list_media) to plan around; the video made from the plan uses them, so don't pass them again.",
+        ),
+        sound: soundArg(
+          'Optional. "silent", "music" or "music_sfx", if the user already chose; the video made from the plan uses it.',
+        ),
         voiceover: voiceoverArg(
           'Optional. true or {voice, speed, script} for a voice-over: the brief then has a narration line per beat, which the video speaks.',
         ),
@@ -1426,7 +1395,7 @@ A version narrated with the AI voice (voiceover) has no recorded narration: narr
 
 Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w"}`,
       inputSchema: {
-        video_id: z.string().describe('The video id (vid_…) or its web URL.'),
+        video_id: VideoIdArg,
         version: optionalVersion('Which version (default: the latest ready one, and your draft of it).'),
       },
       annotations: { title: 'Get narration', readOnlyHint: true, openWorldHint: false },
@@ -1478,7 +1447,7 @@ language sets the language spoken in the video, which its narration captions are
 
 Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "media_id": "med_01jc8x2k4m5n6p7q", "start_seconds": 1.5}`,
       inputSchema: {
-        video_id: z.string().describe('The video id (vid_…) or its web URL.'),
+        video_id: VideoIdArg,
         media_id: z
           .string()
           .max(64)
@@ -1582,7 +1551,7 @@ Each render starts a run that costs credits: confirm with your user first, with 
 
 Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "mode": "keep_visuals", "hold_final_frame": true}`,
       inputSchema: {
-        video_id: z.string().describe('The video id (vid_…) or its web URL.'),
+        video_id: VideoIdArg,
         edit_id: z
           .string()
           .max(64)

@@ -143,6 +143,16 @@ const json = <T extends z.ZodType>(schema: T, description: string) => ({
   content: { 'application/json': { schema } },
   description,
 })
+/** A request body of JSON. Optional ones (required false) are validated only when one is sent. */
+const jsonBody = <T extends z.ZodType>(schema: T, required = true) => ({
+  content: { 'application/json': { schema } },
+  required,
+})
+/** A required request body of raw bytes. */
+const binaryBody = () => ({
+  content: { 'application/octet-stream': { schema: z.string().openapi({ format: 'binary' }) } },
+  required: true,
+})
 const err = (desc: string) => json(s.ErrorSchema, desc)
 const errors = {
   400: err('Invalid request'),
@@ -303,6 +313,11 @@ export function createApp(deps: Deps, opts: AppOptions) {
     if (!res.replayed) kick(c)
     return c.json(res.body, res.status as 202)
   }
+  /** A 204 once the work is done (its error, if any, goes to onError like any handler's). */
+  const noContent = async (c: Context<Env>, work: Promise<unknown>) => {
+    await work
+    return c.body(null, 204)
+  }
 
   // ───── public ─────
   app.openapi(
@@ -373,7 +388,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       security,
       request: {
         headers: IdempotencyHeader,
-        body: { content: { 'application/json': { schema: s.CreateVideoSchema } }, required: true },
+        body: jsonBody(s.CreateVideoSchema),
       },
       responses: { 202: json(s.VideoSchema, 'Queued'), ...errors, 503: err('Setup required') },
     }),
@@ -440,10 +455,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
         request: { params: IdParam },
         responses: { 204: { description: method === 'put' ? 'Starred' : 'Unstarred' }, ...errors },
       }),
-      async (c) => {
-        await setFavorite(deps, c.get('principal'), c.req.valid('param').id, method === 'put')
-        return c.body(null, 204)
-      },
+      async (c) =>
+        noContent(c, setFavorite(deps, c.get('principal'), c.req.valid('param').id, method === 'put')),
     )
   app.openapi(
     createRoute({
@@ -482,10 +495,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
         'Renames a video, makes it private, or sets the language spoken in it (for narration captions).',
       tags: ['videos'],
       security,
-      request: {
-        params: IdParam,
-        body: { content: { 'application/json': { schema: s.UpdateVideoSchema } }, required: true },
-      },
+      request: { params: IdParam, body: jsonBody(s.UpdateVideoSchema) },
       responses: { 200: json(s.VideoSchema, 'Updated'), ...errors },
     }),
     async (c) =>
@@ -522,7 +532,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       request: {
         params: IdParam,
         headers: IdempotencyHeader,
-        body: { content: { 'application/json': { schema: s.ReviseSchema } }, required: true },
+        body: jsonBody(s.ReviseSchema),
       },
       responses: { 202: json(s.VideoSchema, 'Queued'), ...errors, 503: err('Setup required') },
     }),
@@ -556,7 +566,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       request: {
         params: IdParam,
         headers: IdempotencyHeader,
-        body: { content: { 'application/json': { schema: s.RemixSchema } }, required: true },
+        body: jsonBody(s.RemixSchema),
       },
       responses: {
         202: json(s.VideoSchema, 'Queued: the new video'),
@@ -646,10 +656,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
         "Publishes a version to a public share page and links. With showTranscript, the share page offers the narration's transcript.",
       tags: ['publishing'],
       security,
-      request: {
-        params: VersionParam,
-        body: { content: { 'application/json': { schema: s.PublishSchema } }, required: false },
-      },
+      request: { params: VersionParam, body: jsonBody(s.PublishSchema, false) },
       responses: { 200: json(s.PublicationSchema, 'Published'), ...errors },
     }),
     async (c) => {
@@ -711,7 +718,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       request: {
         params: VersionParam,
         headers: IdempotencyHeader,
-        body: { content: { 'application/json': { schema: s.PublishToDestinationSchema } }, required: true },
+        body: jsonBody(s.PublishToDestinationSchema),
       },
       responses: { 200: json(s.DestinationPublicationSchema, 'Publishing'), ...errors },
     }),
@@ -740,14 +747,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       security,
       request: {
         params: IdParam,
-        body: {
-          content: {
-            'application/json': {
-              schema: z.object({ options: z.record(z.string(), z.unknown()).optional() }),
-            },
-          },
-          required: false,
-        },
+        body: jsonBody(z.object({ options: z.record(z.string(), z.unknown()).optional() }), false),
       },
       responses: { 200: json(s.DestinationPublicationSchema, 'Removing'), ...errors },
     }),
@@ -880,9 +880,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       ...adminDest('/api/v1/admin/destinations', 'post', 'createDestination', 'Add an HTTP destination'),
       description: 'Adds an HTTP destination. Its signing secret is in this response only.',
-      request: {
-        body: { content: { 'application/json': { schema: DestinationInputSchema } }, required: true },
-      },
+      request: { body: jsonBody(DestinationInputSchema) },
       responses: { 201: json(WithSecret, 'Added'), ...errors },
     }),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- optionsSchema is free-form JSON
@@ -896,10 +894,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
         'updateDestination',
         'Change an HTTP destination',
       ),
-      request: {
-        params: IdParam,
-        body: { content: { 'application/json': { schema: DestinationInputSchema } }, required: true },
-      },
+      request: { params: IdParam, body: jsonBody(DestinationInputSchema) },
       responses: { 200: json(AdminDestinationSchema, 'Changed'), ...errors },
     }),
     async (c) =>
@@ -925,10 +920,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       request: { params: IdParam },
       responses: { 204: { description: 'Deleted' }, ...errors },
     }),
-    async (c) => {
-      await deleteDestination(deps, c.get('principal'), c.req.valid('param').id)
-      return c.body(null, 204)
-    },
+    async (c) => noContent(c, deleteDestination(deps, c.get('principal'), c.req.valid('param').id)),
   )
   app.openapi(
     createRoute({
@@ -1028,10 +1020,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       request: { params: IdParam },
       responses: { 204: { description: 'Disconnected' }, ...errors },
     }),
-    async (c) => {
-      await deleteConnection(deps, c.get('principal'), c.req.valid('param').id)
-      return c.body(null, 204)
-    },
+    async (c) => noContent(c, deleteConnection(deps, c.get('principal'), c.req.valid('param').id)),
   )
   // Receiver callbacks (publish destinations §3.3, §3.5): no session or API key; a per-operation Bearer token.
   const bearer = (c: Context) => /^Bearer\s+(\S+)$/i.exec(c.req.header('authorization') ?? '')?.[1] ?? null
@@ -1057,10 +1046,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
       request: { params: IdParam },
       responses: { 204: { description: 'Applied (or a duplicate)' }, ...errors, 410: err('Removed') },
     }),
-    async (c) => {
-      await receiveDestinationCallback(deps, c.req.valid('param').id, bearer(c), await smallBody(c))
-      return c.body(null, 204)
-    },
+    async (c) =>
+      noContent(c, receiveDestinationCallback(deps, c.req.valid('param').id, bearer(c), await smallBody(c))),
   )
   app.openapi(
     createRoute({
@@ -1092,10 +1079,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
         'Approve a version or request changes; null clears your verdict. Not allowed on your own version.',
       tags: ['review'],
       security,
-      request: {
-        params: VersionParam,
-        body: { content: { 'application/json': { schema: s.SetVerdictSchema } }, required: true },
-      },
+      request: { params: VersionParam, body: jsonBody(s.SetVerdictSchema) },
       responses: { 200: json(s.VideoSchema, 'Updated'), ...errors },
     }),
     async (c) => {
@@ -1114,10 +1098,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
         "Corrects recorded narration's caption text without a render: every cue, in order, with its id and timing unchanged. The captions and transcript get new revision files; the share page follows. Owner or admin. 409 when expectedRev isn't the current revision or the captions are burned in.",
       tags: ['versions'],
       security,
-      request: {
-        params: VersionParam,
-        body: { content: { 'application/json': { schema: s.ReviseCaptionsSchema } }, required: true },
-      },
+      request: { params: VersionParam, body: jsonBody(s.ReviseCaptionsSchema) },
       responses: { 200: json(s.VersionCaptionsSchema, 'Corrected'), ...errors },
     }),
     async (c) => {
@@ -1137,10 +1118,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
         "Sets a ready version's poster to a frame or an uploaded image, without a render. Send a JPEG with the video's shape, and WebPs 480 and 960 px wide when you can. The share page follows. Owner or admin.",
       tags: ['versions'],
       security,
-      request: {
-        params: VersionParam,
-        body: { content: { 'application/json': { schema: s.SetPosterSchema } }, required: true },
-      },
+      request: { params: VersionParam, body: jsonBody(s.SetPosterSchema) },
       responses: { 200: json(s.VersionPosterSchema, 'Set'), ...errors },
     }),
     async (c) => {
@@ -1241,10 +1219,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
         params: VersionParam.extend({
           name: z.enum(['lqip', ...PREVIEW_NAMES]).openapi({ param: { name: 'name', in: 'path' } }),
         }),
-        body: {
-          content: { 'application/octet-stream': { schema: z.string().openapi({ format: 'binary' }) } },
-          required: true,
-        },
+        body: binaryBody(),
       },
       responses: { 201: json(z.object({ name: z.string(), bytes: z.number().int() }), 'Added'), ...errors },
     }),
@@ -1280,7 +1255,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       description: 'Creates an API key. Its secret is shown once.',
       tags: ['keys'],
       security,
-      request: { body: { content: { 'application/json': { schema: s.CreateKeySchema } }, required: true } },
+      request: { body: jsonBody(s.CreateKeySchema) },
       responses: { 201: json(s.NewKeySchema, 'Created'), ...errors },
     }),
     async (c) => c.json(await createKey(deps, c.get('principal'), c.req.valid('json').name), 201),
@@ -1298,10 +1273,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       request: { params: IdParam },
       responses: { 204: { description: 'Revoked' }, ...errors },
     }),
-    async (c) => {
-      await revokeKey(deps, c.get('principal'), c.req.valid('param').id)
-      return c.body(null, 204)
-    },
+    async (c) => noContent(c, revokeKey(deps, c.get('principal'), c.req.valid('param').id)),
   )
   app.openapi(
     createRoute({
@@ -1330,10 +1302,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       request: { params: IdParam },
       responses: { 204: { description: 'Revoked' }, ...errors },
     }),
-    async (c) => {
-      await revokeGrant(deps, c.get('principal'), c.req.valid('param').id)
-      return c.body(null, 204)
-    },
+    async (c) => noContent(c, revokeGrant(deps, c.get('principal'), c.req.valid('param').id)),
   )
   app.openapi(
     createRoute({
@@ -1385,10 +1354,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       description: 'Changes a role, or disables or enables a user. Admins only.',
       tags: ['admin'],
       security,
-      request: {
-        params: IdParam,
-        body: { content: { 'application/json': { schema: s.UpdateUserSchema } }, required: true },
-      },
+      request: { params: IdParam, body: jsonBody(s.UpdateUserSchema) },
       responses: { 200: json(s.UserSchema, 'Updated'), ...errors },
     }),
     async (c) =>
@@ -1418,7 +1384,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       description: 'Sets your webhook URL. A signing secret is returned once, on create or rotate.',
       tags: ['keys'],
       security,
-      request: { body: { content: { 'application/json': { schema: s.PutWebhookSchema } }, required: true } },
+      request: { body: jsonBody(s.PutWebhookSchema) },
       responses: { 200: json(s.WebhookSettingSchema, 'Saved'), ...errors },
     }),
     async (c) => c.json(await hooks.putMyWebhook(deps, c.get('principal'), c.req.valid('json')), 200),
@@ -1435,10 +1401,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       security,
       responses: { 204: { description: 'Removed' }, ...errors },
     }),
-    async (c) => {
-      await hooks.deleteMyWebhook(deps, c.get('principal'))
-      return c.body(null, 204)
-    },
+    async (c) => noContent(c, hooks.deleteMyWebhook(deps, c.get('principal'))),
   )
   app.openapi(
     createRoute({
@@ -1479,7 +1442,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
         'Sets the team webhook URL. A signing secret is returned once, on create or rotate. Admins only.',
       tags: ['admin'],
       security,
-      request: { body: { content: { 'application/json': { schema: s.PutWebhookSchema } }, required: true } },
+      request: { body: jsonBody(s.PutWebhookSchema) },
       responses: { 200: json(s.WebhookSettingSchema, 'Saved'), ...errors },
     }),
     async (c) => c.json(await hooks.putTeamWebhook(deps, c.get('principal'), c.req.valid('json')), 200),
@@ -1496,10 +1459,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       security,
       responses: { 204: { description: 'Removed' }, ...errors },
     }),
-    async (c) => {
-      await hooks.deleteTeamWebhook(deps, c.get('principal'))
-      return c.body(null, 204)
-    },
+    async (c) => noContent(c, hooks.deleteTeamWebhook(deps, c.get('principal'))),
   )
   app.openapi(
     createRoute({
@@ -1540,9 +1500,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
         'Changes the settings given; leave a field out to keep it. Takes effect at once. Admins only.',
       tags: ['admin'],
       security,
-      request: {
-        body: { content: { 'application/json': { schema: s.UpdateAdminSettingsSchema } }, required: true },
-      },
+      request: { body: jsonBody(s.UpdateAdminSettingsSchema) },
       responses: { 200: json(s.AdminSettingsSchema, 'Updated'), ...errors },
     }),
     async (c) => c.json(await updateAdminSettings(deps, c.get('principal'), c.req.valid('json')), 200),
@@ -1557,7 +1515,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       description: 'Starts planning a video: a fast router decides whether a few questions would help.',
       tags: ['planning'],
       security,
-      request: { body: { content: { 'application/json': { schema: s.CreatePlanSchema } }, required: true } },
+      request: { body: jsonBody(s.CreatePlanSchema) },
       responses: { 201: json(s.PlanSchema, 'Plan'), ...errors },
     }),
     async (c) => c.json(await planning.createPlan(deps, c.get('principal'), c.req.valid('json')), 201),
@@ -1603,10 +1561,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       description: 'Turns the answers into an editable brief.',
       tags: ['planning'],
       security,
-      request: {
-        params: IdParam,
-        body: { content: { 'application/json': { schema: s.PlanAnswersSchema } }, required: true },
-      },
+      request: { params: IdParam, body: jsonBody(s.PlanAnswersSchema) },
       responses: { 200: json(s.PlanSchema, 'Plan with a brief'), ...errors },
     }),
     async (c) =>
@@ -1633,7 +1588,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       request: {
         params: IdParam,
         headers: z.object({ 'if-match': z.string().optional() }),
-        body: { content: { 'application/json': { schema: s.PatchPlanSchema } }, required: true },
+        body: jsonBody(s.PatchPlanSchema),
       },
       responses: { 200: json(s.PlanSchema, 'Saved'), ...errors },
     }),
@@ -1698,12 +1653,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       description: 'Marks notifications read: all, or up to a time.',
       tags: ['notifications'],
       security,
-      request: {
-        body: {
-          content: { 'application/json': { schema: z.object({ upTo: z.string().optional() }) } },
-          required: false,
-        },
-      },
+      request: { body: jsonBody(z.object({ upTo: z.string().optional() }), false) },
       responses: { 204: { description: 'Marked read' }, ...errors },
     }),
     async (c) => {
@@ -1722,7 +1672,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       description: "Live progress of the latest version's run: the agent's step, steps and credits so far.",
       tags: ['videos'],
       security,
-      request: { params: z.object({ id: z.string() }) },
+      request: { params: IdParam },
       responses: { 200: json(s.ProgressSchema, 'Progress'), ...errors },
     }),
     async (c) => c.json(await getProgress(deps, c.get('principal'), c.req.valid('param').id), 200),
@@ -1750,7 +1700,6 @@ export function createApp(deps: Deps, opts: AppOptions) {
       return c.json(r.edit, r.created ? 201 : 200)
     },
   )
-  const EditParam = z.object({ id: z.string() })
   app.openapi(
     createRoute({
       method: 'get',
@@ -1761,7 +1710,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       description: 'One of your edit drafts.',
       tags: ['editor'],
       security,
-      request: { params: EditParam },
+      request: { params: IdParam },
       responses: { 200: json(s.EditSchema, 'Draft'), ...errors },
     }),
     async (c) => c.json(await getEdit(deps, c.get('principal'), c.req.valid('param').id), 200),
@@ -1777,10 +1726,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
         'Saves the full list of edits as the next rev. rev must match the draft, for multi-tab safety.',
       tags: ['editor'],
       security,
-      request: {
-        params: EditParam,
-        body: { content: { 'application/json': { schema: s.SaveEditSchema } }, required: true },
-      },
+      request: { params: IdParam, body: jsonBody(s.SaveEditSchema) },
       responses: { 200: json(s.EditSchema, 'Saved'), ...errors },
     }),
     async (c) =>
@@ -1796,13 +1742,10 @@ export function createApp(deps: Deps, opts: AppOptions) {
       description: 'Discards one of your edit drafts.',
       tags: ['editor'],
       security,
-      request: { params: EditParam },
+      request: { params: IdParam },
       responses: { 204: { description: 'Discarded' }, ...errors },
     }),
-    async (c) => {
-      await discardEdit(deps, c.get('principal'), c.req.valid('param').id)
-      return c.body(null, 204)
-    },
+    async (c) => noContent(c, discardEdit(deps, c.get('principal'), c.req.valid('param').id)),
   )
   app.openapi(
     createRoute({
@@ -1816,9 +1759,9 @@ export function createApp(deps: Deps, opts: AppOptions) {
       tags: ['editor'],
       security,
       request: {
-        params: EditParam,
+        params: IdParam,
         headers: IdempotencyHeader,
-        body: { content: { 'application/json': { schema: s.RenderEditSchema } }, required: false },
+        body: jsonBody(s.RenderEditSchema, false),
       },
       responses: { 202: json(s.VideoSchema, 'Queued'), ...errors, 503: err('Setup required') },
     }),
@@ -1847,10 +1790,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
         "Moves your draft's narration onto your draft of version toN (opened, or created), saved and checked like any save: the narration lock, the recordings you may use and the limits against that version. Your other draft is kept.",
       tags: ['editor'],
       security,
-      request: {
-        params: EditParam,
-        body: { content: { 'application/json': { schema: s.RebaseNarrationSchema } }, required: true },
-      },
+      request: { params: IdParam, body: jsonBody(s.RebaseNarrationSchema) },
       responses: {
         200: json(s.EditSchema, 'Your draft of toN, updated'),
         201: json(s.EditSchema, 'A new draft of toN'),
@@ -1872,7 +1812,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       description: "A short-lived link to play the draft's current rev in the sandboxed preview.",
       tags: ['editor'],
       security,
-      request: { params: EditParam },
+      request: { params: IdParam },
       responses: { 200: json(s.PreviewLinkSchema, 'Preview link'), ...errors },
     }),
     async (c) => c.json(await editPreviewLink(deps, c.get('principal'), c.req.valid('param').id), 200),
@@ -1893,7 +1833,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       description: "Who is editing this video's narration, if anyone.",
       tags: ['editor'],
       security,
-      request: { params: EditParam },
+      request: { params: IdParam },
       responses: { 200: json(s.NarrationLockSchema, 'The lock'), ...errors },
     }),
     async (c) => c.json(await getNarrationLock(deps, c.get('principal'), c.req.valid('param').id), 200),
@@ -1909,10 +1849,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
         "Takes the video's narration lock for your draft, or heartbeats it (every 30 s; it lapses after 2 min without one). Only the holder saves narration ops.",
       tags: ['editor'],
       security,
-      request: {
-        params: EditParam,
-        body: { content: { 'application/json': { schema: s.AcquireNarrationLockSchema } }, required: true },
-      },
+      request: { params: IdParam, body: jsonBody(s.AcquireNarrationLockSchema) },
       responses: { 200: json(s.NarrationLockSchema, 'Held'), ...lockErrors },
     }),
     async (c) =>
@@ -1931,13 +1868,10 @@ export function createApp(deps: Deps, opts: AppOptions) {
       description: "Releases your narration lock; someone else's is left alone.",
       tags: ['editor'],
       security,
-      request: { params: EditParam },
+      request: { params: IdParam },
       responses: { 204: { description: 'Released' }, ...errors },
     }),
-    async (c) => {
-      await releaseNarrationLock(deps, c.get('principal'), c.req.valid('param').id)
-      return c.body(null, 204)
-    },
+    async (c) => noContent(c, releaseNarrationLock(deps, c.get('principal'), c.req.valid('param').id)),
   )
   app.openapi(
     createRoute({
@@ -1950,13 +1884,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
         'Moves the narration lock to you, whoever holds it. Their draft is kept; their next heartbeat or narration save is refused and says you took over.',
       tags: ['editor'],
       security,
-      request: {
-        params: EditParam,
-        body: {
-          content: { 'application/json': { schema: s.AcquireNarrationLockSchema.pick({ draftId: true }) } },
-          required: true,
-        },
-      },
+      request: { params: IdParam, body: jsonBody(s.AcquireNarrationLockSchema.pick({ draftId: true })) },
       responses: { 200: json(s.NarrationTakeOverSchema, 'Yours now'), ...errors },
     }),
     async (c) =>
@@ -1982,10 +1910,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
           filename: z.string().max(200).optional(),
           caption: z.string().max(500).optional(),
         }),
-        body: {
-          content: { 'application/octet-stream': { schema: z.string().openapi({ format: 'binary' }) } },
-          required: true,
-        },
+        body: binaryBody(),
       },
       responses: { 201: json(s.MediaSchema, 'Uploaded'), ...errors },
     }),
@@ -2044,7 +1969,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
         'Before uploading, finds what the library already has for each file: the same file (by sha256) or a different file with the same name.',
       tags: ['media'],
       security,
-      request: { body: { content: { 'application/json': { schema: s.MediaCheckSchema } }, required: true } },
+      request: { body: jsonBody(s.MediaCheckSchema) },
       responses: { 200: json(s.MediaCheckResultSchema, 'Matches'), ...errors },
     }),
     async (c) => c.json(await checkMedia(deps, c.get('principal'), c.req.valid('json').files), 200),
@@ -2092,28 +2017,23 @@ export function createApp(deps: Deps, opts: AppOptions) {
       tags: ['media'],
       security,
       request: {
-        body: {
-          content: {
-            'application/json': {
-              schema: z.object({
-                filename: z.string().min(1).max(200),
-                size: z.number().int().positive(),
-                sha256: z.string().regex(/^[0-9a-f]{64}$/),
-                caption: z.string().max(500).optional(),
-                role: z
-                  .enum(MEDIA_ROLES)
-                  .optional()
-                  .openapi({ description: 'A voice-over recording (take) or uploaded narration' }),
-                scopeJobId: z
-                  .string()
-                  .max(64)
-                  .optional()
-                  .openapi({ description: 'The video a recording is for (required with role)' }),
-              }),
-            },
-          },
-          required: true,
-        },
+        body: jsonBody(
+          z.object({
+            filename: z.string().min(1).max(200),
+            size: z.number().int().positive(),
+            sha256: z.string().regex(/^[0-9a-f]{64}$/),
+            caption: z.string().max(500).optional(),
+            role: z
+              .enum(MEDIA_ROLES)
+              .optional()
+              .openapi({ description: 'A voice-over recording (take) or uploaded narration' }),
+            scopeJobId: z
+              .string()
+              .max(64)
+              .optional()
+              .openapi({ description: 'The video a recording is for (required with role)' }),
+          }),
+        ),
       },
       responses: {
         201: json(s.UploadSessionSchema, 'Session'),
@@ -2125,7 +2045,6 @@ export function createApp(deps: Deps, opts: AppOptions) {
     }),
     async (c) => c.json(await createUpload(deps, c.get('principal'), c.req.valid('json')), 201),
   )
-  const UploadParam = z.object({ id: z.string() })
   app.openapi(
     createRoute({
       method: 'get',
@@ -2136,7 +2055,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       description: 'An upload session: which parts arrived (to resume) and its status.',
       tags: ['media'],
       security,
-      request: { params: UploadParam },
+      request: { params: IdParam },
       responses: { 200: json(s.UploadSessionSchema, 'Session'), ...errors },
     }),
     async (c) => c.json(await getUpload(deps, c.get('principal'), c.req.valid('param').id), 200),
@@ -2160,10 +2079,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
             .regex(/^[0-9a-f]{64}$/)
             .optional(),
         }),
-        body: {
-          content: { 'application/octet-stream': { schema: z.string().openapi({ format: 'binary' }) } },
-          required: true,
-        },
+        body: binaryBody(),
       },
       responses: {
         200: json(z.object({ idx: z.number().int(), sha256: z.string(), duplicate: z.boolean() }), 'Stored'),
@@ -2191,21 +2107,17 @@ export function createApp(deps: Deps, opts: AppOptions) {
       tags: ['media'],
       security,
       request: {
-        params: UploadParam,
-        body: {
-          content: {
-            'application/json': {
-              schema: z.object({
-                poster: z
-                  .string()
-                  .max(700_000)
-                  .optional()
-                  .openapi({ description: 'Base64 JPEG poster for a clip' }),
-              }),
-            },
-          },
-          required: false,
-        },
+        params: IdParam,
+        body: jsonBody(
+          z.object({
+            poster: z
+              .string()
+              .max(700_000)
+              .optional()
+              .openapi({ description: 'Base64 JPEG poster for a clip' }),
+          }),
+          false,
+        ),
       },
       responses: {
         202: json(s.UploadSessionSchema, 'Assembling'),
@@ -2228,13 +2140,10 @@ export function createApp(deps: Deps, opts: AppOptions) {
       description: 'Cancels an unfinished upload session and frees its parts and quota.',
       tags: ['media'],
       security,
-      request: { params: UploadParam },
+      request: { params: IdParam },
       responses: { 204: { description: 'Cancelled' }, ...errors },
     }),
-    async (c) => {
-      await cancelUpload(deps, c.get('principal'), c.req.valid('param').id)
-      return c.body(null, 204)
-    },
+    async (c) => noContent(c, cancelUpload(deps, c.get('principal'), c.req.valid('param').id)),
   )
   // ───── Openverse: find openly licensed music and import it (CC0 and CC BY only) ─────
   app.openapi(
@@ -2324,17 +2233,12 @@ export function createApp(deps: Deps, opts: AppOptions) {
       tags: ['media'],
       security,
       request: {
-        body: {
-          content: {
-            'application/json': {
-              schema: z.object({
-                id: z.string().min(1).max(64).openapi({ description: 'The Openverse audio id' }),
-                caption: z.string().max(500).optional(),
-              }),
-            },
-          },
-          required: true,
-        },
+        body: jsonBody(
+          z.object({
+            id: z.string().min(1).max(64).openapi({ description: 'The Openverse audio id' }),
+            caption: z.string().max(500).optional(),
+          }),
+        ),
       },
       responses: {
         200: json(s.MediaSchema, 'Already in the library'),
@@ -2362,12 +2266,11 @@ export function createApp(deps: Deps, opts: AppOptions) {
         'An Openverse search or import running in the background: its status, then the tracks or the library item. Only for the person who started it.',
       tags: ['media'],
       security,
-      request: { params: z.object({ id: z.string() }) },
+      request: { params: IdParam },
       responses: { 200: json(s.OpenverseJobSchema, 'The job'), ...errors },
     }),
     async (c) => c.json(await getOpenverseJob(deps, c.get('principal'), c.req.valid('param').id), 200),
   )
-  const MediaParam = z.object({ id: z.string() })
   app.openapi(
     createRoute({
       method: 'get',
@@ -2378,7 +2281,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       description: 'One media item.',
       tags: ['media'],
       security,
-      request: { params: MediaParam },
+      request: { params: IdParam },
       responses: { 200: json(s.MediaSchema, 'Media'), ...errors },
     }),
     async (c) => c.json(await getMedia(deps, c.get('principal'), c.req.valid('param').id), 200),
@@ -2395,18 +2298,13 @@ export function createApp(deps: Deps, opts: AppOptions) {
       tags: ['media'],
       security,
       request: {
-        params: MediaParam,
-        body: {
-          content: {
-            'application/json': {
-              schema: z.object({
-                title: z.string().max(120).nullable().optional(),
-                caption: z.string().max(500).nullable().optional(),
-              }),
-            },
-          },
-          required: true,
-        },
+        params: IdParam,
+        body: jsonBody(
+          z.object({
+            title: z.string().max(120).nullable().optional(),
+            caption: z.string().max(500).nullable().optional(),
+          }),
+        ),
       },
       responses: { 200: json(s.MediaSchema, 'Updated'), ...errors },
     }),
@@ -2423,13 +2321,10 @@ export function createApp(deps: Deps, opts: AppOptions) {
       description: 'Removes it from the library (uploader or admin); versions that used it keep it.',
       tags: ['media'],
       security,
-      request: { params: MediaParam },
+      request: { params: IdParam },
       responses: { 204: { description: 'Deleted' }, ...errors },
     }),
-    async (c) => {
-      await deleteMedia(deps, c.get('principal'), c.req.valid('param').id)
-      return c.body(null, 204)
-    },
+    async (c) => noContent(c, deleteMedia(deps, c.get('principal'), c.req.valid('param').id)),
   )
   // A recording's waveform peaks and speech spans (voice-over plan §5.1, §6.1): the uploader sends them; readers of
   // the take get them.
@@ -2443,13 +2338,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       description: `Stores a recording's waveform peaks (peaks.bin, the VAPK format, at most ${PEAKS_MAX_BYTES / 1024} KB) as the request body. Only the uploader, before or after the recording is ready; sending again replaces them.`,
       tags: ['media'],
       security,
-      request: {
-        params: MediaParam,
-        body: {
-          content: { 'application/octet-stream': { schema: z.string().openapi({ format: 'binary' }) } },
-          required: true,
-        },
-      },
+      request: { params: IdParam, body: binaryBody() },
       responses: { 200: json(s.TakePeaksStoredSchema, 'Stored'), ...errors },
     }),
     async (c) => {
@@ -2469,7 +2358,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       description: "A recording's waveform peaks (peaks.bin), for anyone who can read the recording.",
       tags: ['media'],
       security,
-      request: { params: MediaParam },
+      request: { params: IdParam },
       responses: {
         200: {
           description: 'peaks.bin',
@@ -2498,10 +2387,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
         'Stores where the voice is in a recording, as [start, end) spans in source samples. Only the uploader, before or after the recording is ready; sending again replaces them.',
       tags: ['media'],
       security,
-      request: {
-        params: MediaParam,
-        body: { content: { 'application/json': { schema: s.SpeechSummarySchema } }, required: true },
-      },
+      request: { params: IdParam, body: jsonBody(s.SpeechSummarySchema) },
       responses: { 200: json(s.SpeechSummarySchema, 'Stored'), ...errors },
     }),
     async (c) =>
@@ -2520,12 +2406,11 @@ export function createApp(deps: Deps, opts: AppOptions) {
       description: 'Where the voice is in a recording, for anyone who can read the recording.',
       tags: ['media'],
       security,
-      request: { params: MediaParam },
+      request: { params: IdParam },
       responses: { 200: json(s.SpeechSummarySchema, 'Speech spans'), ...errors },
     }),
     async (c) => c.json(await getTakeSpeech(deps, c.get('principal'), c.req.valid('param').id), 200),
   )
-  const CommentParam = z.object({ id: z.string() })
   app.openapi(
     createRoute({
       method: 'get',
@@ -2537,7 +2422,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       tags: ['review'],
       security,
       request: {
-        params: z.object({ id: z.string() }),
+        params: IdParam,
         query: z.object({
           version: z.coerce.number().int().positive().optional(),
           cursor: z.string().optional(),
@@ -2568,10 +2453,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       description: 'Comments on a version, optionally pinned to a moment (timeSec) and a spot (x, y).',
       tags: ['review'],
       security,
-      request: {
-        params: z.object({ id: z.string() }),
-        body: { content: { 'application/json': { schema: s.CreateCommentSchema } }, required: true },
-      },
+      request: { params: IdParam, body: jsonBody(s.CreateCommentSchema) },
       responses: { 201: json(s.CommentSchema, 'Created'), ...errors },
     }),
     async (c) =>
@@ -2588,10 +2470,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
         'Posts notes from one pass through the video (each optionally at a moment and a spot) as one review block: one comment per note, sharing a groupId. The owner gets one notification.',
       tags: ['comments'],
       security,
-      request: {
-        params: IdParam,
-        body: { content: { 'application/json': { schema: s.CreateCommentsSchema } }, required: true },
-      },
+      request: { params: IdParam, body: jsonBody(s.CreateCommentsSchema) },
       responses: { 201: json(z.object({ items: z.array(s.CommentSchema) }), 'Created'), ...errors },
     }),
     async (c) =>
@@ -2607,13 +2486,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       description: "Marks this video's comments read: all, or up to a time.",
       tags: ['review'],
       security,
-      request: {
-        params: z.object({ id: z.string() }),
-        body: {
-          content: { 'application/json': { schema: z.object({ upTo: z.string().optional() }) } },
-          required: false,
-        },
-      },
+      request: { params: IdParam, body: jsonBody(z.object({ upTo: z.string().optional() }), false) },
       responses: { 204: { description: 'Marked read' }, ...errors },
     }),
     async (c) => {
@@ -2632,10 +2505,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       description: 'Edit your comment, or resolve or reopen one (video owner or admin).',
       tags: ['review'],
       security,
-      request: {
-        params: CommentParam,
-        body: { content: { 'application/json': { schema: s.PatchCommentSchema } }, required: true },
-      },
+      request: { params: IdParam, body: jsonBody(s.PatchCommentSchema) },
       responses: { 200: json(s.CommentSchema, 'Updated'), ...errors },
     }),
     async (c) =>
@@ -2654,13 +2524,10 @@ export function createApp(deps: Deps, opts: AppOptions) {
       description: 'Deletes your comment, or any comment on your video (owner or admin).',
       tags: ['review'],
       security,
-      request: { params: CommentParam },
+      request: { params: IdParam },
       responses: { 204: { description: 'Deleted' }, ...errors },
     }),
-    async (c) => {
-      await deleteComment(deps, c.get('principal'), c.req.valid('param').id)
-      return c.body(null, 204)
-    },
+    async (c) => noContent(c, deleteComment(deps, c.get('principal'), c.req.valid('param').id)),
   )
   app.openapi(
     createRoute({
@@ -2673,7 +2540,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
         "Transfers videos to another Creator or Admin: some videos, or all of a person's. Admins only.",
       tags: ['admin'],
       security,
-      request: { body: { content: { 'application/json': { schema: s.TransferSchema } }, required: true } },
+      request: { body: jsonBody(s.TransferSchema) },
       responses: { 200: json(s.TransferResultSchema, 'Transferred'), ...errors },
     }),
     async (c) => {
@@ -2891,14 +2758,13 @@ export function createApp(deps: Deps, opts: AppOptions) {
       },
     }),
     async (c) => {
-      const token = /^Bearer\s+(\S+)$/i.exec(c.req.header('authorization') ?? '')?.[1] ?? null
       let body: unknown
       try {
         body = await c.req.json()
       } catch {
         throw new ApiError('invalid_request', 'Body must be JSON.')
       }
-      await receiveCallback(deps, c.req.valid('param').id, token, body)
+      await receiveCallback(deps, c.req.valid('param').id, bearer(c), body)
       kick(c)
       return c.body(null, 202)
     },
@@ -2913,19 +2779,14 @@ export function createApp(deps: Deps, opts: AppOptions) {
       hide: true,
       request: {
         params: IdParam,
-        body: {
-          content: {
-            'application/json': {
-              schema: z.object({
-                seq: z.number().int().min(0),
-                message: z.string().max(2000).optional(),
-                renderPercent: z.number().int().min(0).max(100).optional(),
-                bundle: z.string().max(3_000_000).optional(),
-              }),
-            },
-          },
-          required: true,
-        },
+        body: jsonBody(
+          z.object({
+            seq: z.number().int().min(0),
+            message: z.string().max(2000).optional(),
+            renderPercent: z.number().int().min(0).max(100).optional(),
+            bundle: z.string().max(3_000_000).optional(),
+          }),
+        ),
       },
       responses: {
         200: { description: 'Accepted, or ignored as older than the latest' },
@@ -2935,10 +2796,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
         429: err('Too many'),
       },
     }),
-    async (c) => {
-      const token = /^Bearer\s+(\S+)$/i.exec(c.req.header('authorization') ?? '')?.[1] ?? null
-      return c.json(await receiveCheckpoint(deps, c.req.valid('param').id, token, c.req.valid('json')), 200)
-    },
+    async (c) =>
+      c.json(await receiveCheckpoint(deps, c.req.valid('param').id, bearer(c), c.req.valid('json')), 200),
   )
 
   app.openAPIRegistry.registerComponent('securitySchemes', 'bearerAuth', {
