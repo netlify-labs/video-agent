@@ -495,6 +495,7 @@ async function recordingPromptFor(deps: Deps, r: RunRecording): Promise<Recordin
     file: `assets/media/${r.filename}`,
     seconds: m?.durationSec ?? null,
     trace: Boolean(r.trace),
+    privacy: r.privacy === true,
     clicks,
     deadlineMin: deps.config.authoringDeadlineMin,
   }

@@ -47,6 +47,16 @@ describe('prompt: screen recording', () => {
     expect(p).toContain('0:04 button "Add new site"')
   })
 
+  it('hides private things only in privacy mode (off by default)', () => {
+    const off = buildPrompt({ ...base, recording })
+    expect(off).toContain('Privacy mode is off')
+    expect(off).not.toMatch(/hide each with a box|private-looking/)
+    const on = buildPrompt({ ...base, recording: { ...recording, privacy: true } })
+    expect(on).toContain('Privacy mode is on')
+    expect(on).toContain('reason "Privacy mode: email"')
+    expect(on).not.toContain('Privacy mode is off')
+  })
+
   it('without a trace (no clicked elements), 9:16, no target', () => {
     const p = buildPrompt({
       ...base,

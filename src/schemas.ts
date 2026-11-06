@@ -464,6 +464,7 @@ export const VersionSchema = z
         mediaId: z.string(),
         trace: z.boolean().describe('The recording came with a pointer trace (exact clicks and cursor).'),
         compose: z.boolean().describe('Made with no agent authoring (a Quick demo).'),
+        privacy: z.boolean().describe('Privacy mode: private things on screen are found and hidden too.'),
         summary: z
           .object({
             sourceSec: z.number(),
@@ -483,6 +484,11 @@ export const VersionSchema = z
               start: z.number(),
               end: z.number(),
               reason: z.string(),
+              why: z
+                .string()
+                .describe(
+                  'Why it is hidden, for people: "You drew it", "Password field", "Privacy mode: email", and so on.',
+                ),
               checkedBy: z.string().nullable(),
               checkedAt: z.string().nullable(),
             }),
@@ -723,6 +729,12 @@ export const RecordingInputSchema = z
       .max(50)
       .optional()
       .describe('Areas to hide from the start (seconds of the recording). A demo with any starts private.'),
+    privacy: z
+      .boolean()
+      .optional()
+      .describe(
+        "Privacy mode (default false). Off: only the areas you draw and the trace's (password fields, --hide selectors) are hidden. On: private things on screen (emails, keys, tokens, URLs, personal names) are found and hidden too, each confirmed by the agent, for you to keep or remove.",
+      ),
   })
   .openapi('RecordingInput')
 

@@ -2,6 +2,7 @@
 // an entry says so. The style rides in the trace, the person's setup boxes and redact.js; anything else is refused.
 // Style is how a box looks, not whether it hides: the locked-entry check ignores it (recording-check.test.ts).
 import { describe, expect, it } from 'vitest'
+import { hiddenWhy, inheritRecording, manifestRecording } from '../src/domain/demo-recording.js'
 import { parseRedactScript, redactScript } from '../src/lib/recording.js'
 import { parseTrace } from '../src/lib/recording-trace.js'
 
@@ -31,5 +32,36 @@ describe('hidden area style', () => {
     expect(parsed.ok && parsed.entries[0]?.style).toBe('solid')
     const bad = parseRedactScript(text.replace('"solid"', '"pixelate"'))
     expect(bad.ok).toBe(false)
+  })
+
+  it('the Hidden list says why each area is hidden', () => {
+    const cases: [Parameters<typeof hiddenWhy>[0], string][] = [
+      [{ source: 'setup', reason: 'Hidden by you' }, 'You drew it'],
+      [{ source: 'editor', reason: '' }, 'You drew it in the editor'],
+      [{ source: 'trace', reason: 'password field' }, 'Password field'],
+      [{ source: 'trace', reason: 'hidden field' }, 'Marked hidden when recorded'],
+      [{ source: 'agent', reason: 'Privacy mode: email' }, 'Privacy mode: email'],
+      [{ source: 'agent', reason: 'card number' }, 'Added by the agent: card number'],
+    ]
+    for (const [h, want] of cases) expect(hiddenWhy(h), h.reason).toBe(want)
+  })
+
+  it('privacy mode rides into the run manifest and to the next version; off is absent', () => {
+    const rec = {
+      mediaId: 'med_a',
+      trace: null,
+      trim: null,
+      boxes: [],
+      compose: false,
+      summary: null,
+      hidden: [],
+    }
+    const media = [
+      { kind: 'video', key: 'med_a/original.mp4', sha256: 'a'.repeat(64), filename: 'med_a.mp4' },
+    ] as never
+    expect(manifestRecording({ ...rec, privacy: true }, media)?.privacy).toBe(true)
+    expect(manifestRecording(rec, media)).not.toHaveProperty('privacy')
+    expect(inheritRecording({ ...rec, privacy: true })?.privacy).toBe(true)
+    expect(inheritRecording(rec)).not.toHaveProperty('privacy')
   })
 })

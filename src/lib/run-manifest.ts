@@ -105,6 +105,8 @@ export interface RunRecording {
   trim?: [number, number] | undefined
   /** Made by recording.ts compose, with no agent (the Quick demo). */
   compose?: boolean | undefined
+  /** Privacy mode: find private things and hide them (the agent confirms each). */
+  privacy?: boolean | undefined
 }
 
 export const MAX_SETUP_BOXES = 200
@@ -156,6 +158,7 @@ function isRecording(raw: unknown, media: RunMedia[] | null): boolean {
       return false
   }
   if (r.compose !== undefined && typeof r.compose !== 'boolean') return false
+  if (r.privacy !== undefined && typeof r.privacy !== 'boolean') return false
   return true
 }
 
@@ -374,6 +377,7 @@ export function serializeRunManifest(m: RunManifest): string {
             boxes: m.recording.boxes,
             ...(m.recording.trim ? { trim: [m.recording.trim[0], m.recording.trim[1]] } : {}),
             ...(m.recording.compose ? { compose: true } : {}),
+            ...(m.recording.privacy ? { privacy: true } : {}),
           },
         }
       : {}),

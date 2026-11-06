@@ -886,6 +886,16 @@ reading small UI text and darkened a little, with no label. An entry with `"styl
 they move with the camera, and the blur radius (stage px) grows with the zoom. Each box jumps from key to key with no
 easing (a `set` at each key's time), so it follows a scrolling field without lagging behind it.
 
+**Privacy mode** (2026-11-06, owner): hiding beyond what the person asks for is opt-in, because most demos want URLs
+and names visible. `recording.privacy` (API, setup's "Privacy mode" checkbox, off by default) is stored on the
+version, inherited by its revisions and passed in the run manifest. Off: only the person's setup boxes and the
+trace's entries (password fields, `--hide` selectors) are hidden, and the prompt tells the agent not to add any. On:
+the agent looks for private things (emails, keys, tokens, URLs with ids, personal names) and hides each with an agent
+entry whose reason is "Privacy mode: <what>"; the demo starts private. The automatic detection that proposes
+candidates for it (strings, patterns, DOM text for CLI recordings, OCR) is the next step (va-rsk5 privacy beads). The
+version DTO's Hidden list gives each area a `why`: "You drew it", "Password field", "Marked hidden when recorded",
+"Privacy mode: email", "Added by the agent: …".
+
 Why `backdrop-filter`, not the blurred copy first planned: it blurs what's already drawn under the box, so there's no
 second decode of the clip and nothing to keep in sync. Measured on a D6 demo (1280x720 source, 1080p, `standard`, PNG
 frames): 8.5 s to render with two boxes against 8.3 s with none; the metadata line and URLs under a box are unreadable

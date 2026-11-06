@@ -834,6 +834,9 @@ export interface VersionRecording {
   boxes: RedactEntry[]
   /** Made by recording.ts compose, with no agent. */
   compose: boolean
+  /** Privacy mode: private things are found and hidden for the person to keep or remove. Off (absent): only the
+   * person's boxes and the trace's (password fields, --hide selectors). */
+  privacy?: boolean
   summary: {
     sourceSec: number
     steps: number

@@ -10,7 +10,7 @@ import type { Principal } from './policy.js'
 import { isScreenRecording } from './media-roles.js'
 import type { Repo } from '../store/types.js'
 import { canReadMedia } from './takes.js'
-import type { VersionMediaRow, VersionRecording } from './types.js'
+import type { HiddenArea, VersionMediaRow, VersionRecording } from './types.js'
 
 /** The inputs a new version keeps from its parent's recording; the results (summary, hidden areas) are its run's. */
 export function inheritRecording(parent: VersionRecording | null | undefined): VersionRecording | null {
@@ -21,6 +21,7 @@ export function inheritRecording(parent: VersionRecording | null | undefined): V
     trim: parent.trim,
     boxes: parent.boxes,
     compose: parent.compose,
+    ...(parent.privacy ? { privacy: true } : {}),
     summary: null,
     hidden: [],
   }
@@ -46,6 +47,7 @@ export function manifestRecording(
     boxes: r.boxes,
     ...(r.trim ? { trim: r.trim } : {}),
     ...(r.compose ? { compose: true } : {}),
+    ...(r.privacy ? { privacy: true } : {}),
   }
 }
 
@@ -65,6 +67,8 @@ export interface RecordingRequest {
         style?: 'blur' | 'solid' | undefined
       }[]
     | undefined
+  /** Privacy mode (off by default). */
+  privacy?: boolean | undefined
 }
 
 /**
@@ -89,7 +93,7 @@ export async function checkRecordingBytes(deps: Pick<Deps, 'store' | 'blobs'>, r
 /**
  * The recording a new demo is made from, inside the create transaction: a ready video the caller can read, not being
  * deleted, a trim inside it, boxes inside the frame. Returns the version's recording, its media row and whether the
- * video starts private (anything hidden: setup boxes, or redact entries in its trace).
+ * video starts private (anything hidden: setup boxes, redact entries in its trace, or privacy mode, which hides more).
  */
 export async function demoRecording(
   repo: Repo,
@@ -139,6 +143,7 @@ export async function demoRecording(
     trim: req.trim ? [tin, tout] : null,
     boxes,
     compose: false,
+    ...(req.privacy ? { privacy: true } : {}),
     summary: null,
     hidden: [],
   }
@@ -153,5 +158,28 @@ export async function demoRecording(
     filename: `${m.id}.${m.ext}`,
     caption: null,
   }
-  return { recording, row, private: boxes.length > 0 || traceHides > 0, sourceSec: tout - tin }
+  return {
+    recording,
+    row,
+    private: boxes.length > 0 || traceHides > 0 || req.privacy === true,
+    sourceSec: tout - tin,
+  }
+}
+
+/**
+ * Why an area is hidden, for the Hidden list: drawn by the person (setup or the editor), marked when recorded (a
+ * password field, a --hide selector), or found in privacy mode ("Privacy mode: email").
+ */
+export function hiddenWhy(h: Pick<HiddenArea, 'source' | 'reason'>): string {
+  const reason = h.reason.trim()
+  switch (h.source) {
+    case 'setup':
+      return 'You drew it'
+    case 'editor':
+      return 'You drew it in the editor'
+    case 'trace':
+      return reason === 'password field' ? 'Password field' : 'Marked hidden when recorded'
+    case 'agent':
+      return /^privacy mode/i.test(reason) ? reason : `Added by the agent${reason ? `: ${reason}` : ''}`
+  }
 }

@@ -194,6 +194,7 @@ export function DemoSetup(props: { media: Media; onBack: () => void }) {
   const unusableDefault = !!def && !looksForDemo(looks?.looks ?? []).some((l) => l.id === def.id)
   const chosenLook = look === undefined && unusableDefault ? null : look
   const [quick, setQuick] = useState(false)
+  const [privacy, setPrivacy] = useState(false)
 
   const create = $api.useMutation('post', '/api/v1/videos', {
     onSuccess: (v) => {
@@ -220,7 +221,7 @@ export function DemoSetup(props: { media: Media; onBack: () => void }) {
       aspect: shape,
       durationSec: Number(length),
       sound,
-      recording,
+      recording: privacy ? { ...recording, privacy: true } : recording,
       ...(quick ? { agent: false } : voice.enabled ? { voiceover: voiceInput(voice) } : {}),
       ...(chosenLook !== undefined ? { look: chosenLook } : {}),
     }
@@ -418,7 +419,15 @@ export function DemoSetup(props: { media: Media; onBack: () => void }) {
             setQuick(e.currentTarget.checked)
           }}
         />
-        {boxes.length ? (
+        <Checkbox
+          label="Privacy mode"
+          description="Off: only the areas you draw (and password fields) are hidden; names and URLs stay visible. On: Video Agent also finds emails, keys, tokens, URLs and names on screen and hides them for you to keep or remove."
+          checked={privacy}
+          onChange={(e) => {
+            setPrivacy(e.currentTarget.checked)
+          }}
+        />
+        {boxes.length || privacy ? (
           <Text size="sm" c="var(--va-muted)" data-testid="private-hint">
             <IconEyeOff size={14} style={{ verticalAlign: -2 }} /> This demo starts private (only you and
             admins) because something is hidden. You can share it once you've checked it.

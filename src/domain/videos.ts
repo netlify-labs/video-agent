@@ -91,6 +91,7 @@ import {
   demoRecording,
   inheritRecording,
   type RecordingRequest,
+  hiddenWhy,
 } from './demo-recording.js'
 
 const IDEMPOTENCY_TTL_MS = 24 * 3600_000
@@ -1220,8 +1221,9 @@ function versionDto(
           mediaId: v.recording.mediaId,
           trace: v.recording.trace !== null,
           compose: v.recording.compose,
+          privacy: v.recording.privacy === true,
           summary: v.recording.summary,
-          hidden: v.recording.hidden,
+          hidden: v.recording.hidden.map((h) => ({ ...h, why: hiddenWhy(h) })),
         }
       : null,
     mode: v.mode ?? 'author',

@@ -685,6 +685,10 @@
                 "type": "boolean",
                 "description": "Made with no agent authoring (a Quick demo)."
               },
+              "privacy": {
+                "type": "boolean",
+                "description": "Privacy mode: private things on screen are found and hidden too."
+              },
               "summary": {
                 "type": [
                   "object",
@@ -745,6 +749,10 @@
                     "reason": {
                       "type": "string"
                     },
+                    "why": {
+                      "type": "string",
+                      "description": "Why it is hidden, for people: \"You drew it\", \"Password field\", \"Privacy mode: email\", and so on."
+                    },
                     "checkedBy": {
                       "type": [
                         "string",
@@ -765,6 +773,7 @@
                     "start",
                     "end",
                     "reason",
+                    "why",
                     "checkedBy",
                     "checkedAt"
                   ]
@@ -776,6 +785,7 @@
               "mediaId",
               "trace",
               "compose",
+              "privacy",
               "summary",
               "hidden"
             ],
@@ -2254,6 +2264,10 @@
             },
             "maxItems": 50,
             "description": "Areas to hide from the start (seconds of the recording). A demo with any starts private."
+          },
+          "privacy": {
+            "type": "boolean",
+            "description": "Privacy mode (default false). Off: only the areas you draw and the trace's (password fields, --hide selectors) are hidden. On: private things on screen (emails, keys, tokens, URLs, personal names) are found and hidden too, each confirmed by the agent, for you to keep or remove."
           }
         },
         "required": [

@@ -241,19 +241,23 @@ versions, comments, the editor, publishing and remix all work.
   5 minutes, 150 MB and 4096 pixels on a side. Anything else is refused with what to run instead (an `ffmpeg` command).
 - **Making the demo:** `POST /api/v1/videos` with `{"prompt": "…", "recording": {"mediaId": "med_…"}}` and optionally
   `trim: [in, out]` (seconds) and `redact: [{start, end, box: [x, y, w, h]}]` (fractions of the frame) to hide things
-  from the start. Without `durationSec`, the target is about 0.4 of the recording used, 20 to 90 seconds. Remix takes
+  from the start (blurred; add `"style": "solid"` for a flat box). Without `durationSec`, the target is about 0.4 of the recording used, 20 to 90 seconds. Remix takes
   `recording` too (a new recording, the same request and look); without it, a demo's remix keeps its recording. From
   AI tools, `create_video` and `remix_video` take `recording_media_id`, `trim` and `redact`. Demos are made with
   HyperFrames only (`409 engine_unsupported` otherwise).
 - **Quick demo:** add `"agent": false` and the run composes the demo straight from the plan, with no authoring: a stock
   intro and outro, a scene per step, callouts from what was clicked. It costs about as much as an edit render. It
   needs a recording and takes no voice-over.
-- **Hidden areas are cosmetic.** They're solid boxes drawn over the video in the render; the recording file underneath
-  is unchanged and stays in your library. Boxes from the trace and the ones you add when you create the demo are
-  locked: the agent and the editor can add boxes but never remove or move those, and a render that lost one is refused
-  (`redaction_removed`). The agent also hides anything that looks private and lists it. A demo with any hidden area
-  **starts private**: check its Hidden list (the version's `recording.hidden`, with where each came from) before you
-  make it public.
+- **Hidden areas are cosmetic.** They blur the picture under them in the render (heavily enough that small text such
+  as an email or a key can't be read), or are a solid box if you choose `"style": "solid"` for one; the recording file
+  underneath is unchanged and stays in your library. Boxes from the trace and the ones you add when you create the
+  demo are locked: the agent and the editor can add boxes but never remove or move those, and a render that lost one is
+  refused (`redaction_removed`).
+- **Privacy mode is opt-in** (`"privacy": true` in `recording`, or the setup checkbox). Off, the default: only the
+  areas you draw and the trace's (password fields, `--hide` selectors) are hidden, so URLs and names stay visible. On:
+  Video Agent also finds emails, keys, tokens, URLs and names on screen and hides them. A demo with any hidden area,
+  or with privacy mode on, **starts private**: check its Hidden list (the version's `recording.hidden`, where each
+  entry's `why` says why it's hidden) before you make it public.
 - **Who sees the recording:** like voice recordings, a raw screen recording is readable by the person who uploaded it
   and by admins; once a video uses it, Creators who can see that video can too. Runs read it from Blobs (see the trust
   model above). Retention and the per-person budget are in "Your own voice-over" below.

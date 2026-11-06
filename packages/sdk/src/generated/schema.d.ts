@@ -2078,6 +2078,8 @@ export interface components {
                 trace: boolean;
                 /** @description Made with no agent authoring (a Quick demo). */
                 compose: boolean;
+                /** @description Privacy mode: private things on screen are found and hidden too. */
+                privacy: boolean;
                 /** @description What the run made of the recording; null until it is ready. */
                 summary: {
                     sourceSec: number;
@@ -2095,6 +2097,8 @@ export interface components {
                     start: number;
                     end: number;
                     reason: string;
+                    /** @description Why it is hidden, for people: "You drew it", "Password field", "Privacy mode: email", and so on. */
+                    why: string;
                     checkedBy: string | null;
                     checkedAt: string | null;
                 }[];
@@ -2490,6 +2494,8 @@ export interface components {
                  */
                 style?: "blur" | "solid";
             }[];
+            /** @description Privacy mode (default false). Off: only the areas you draw and the trace's (password fields, --hide selectors) are hidden. On: private things on screen (emails, keys, tokens, URLs, personal names) are found and hidden too, each confirmed by the agent, for you to keep or remove. */
+            privacy?: boolean;
         };
         VideoList: {
             items: components["schemas"]["Video"][];

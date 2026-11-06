@@ -66,6 +66,7 @@ describe('demo API', () => {
       mediaId: id,
       trace: true,
       compose: false,
+      privacy: false,
       summary: null,
       hidden: [],
     })
@@ -75,6 +76,26 @@ describe('demo API', () => {
       body: JSON.parse(trace) as object,
     })
     expect(put.status).toBe(409)
+  })
+
+  it('privacy mode is off unless asked; on, it rides on the version and its DTO', async () => {
+    const h = harness()
+    const id = await recording(h, h.member)
+    const on = await h.json<{ id: string; versions: { recording: { privacy: boolean } }[] }>(
+      await create(h, h.member, { recording: { mediaId: id, privacy: true } }),
+    )
+    expect((await h.deps.store.getVersion(on.id, 1))?.recording?.privacy).toBe(true)
+    expect(on.versions[0]?.recording.privacy).toBe(true)
+    // It will hide things for the person to check: private from the start.
+    expect(
+      (await h.json<{ private: boolean }>(await h.call('GET', `/api/v1/videos/${on.id}`, { as: h.member })))
+        .private,
+    ).toBe(true)
+    const off = await h.json<{ id: string; versions: { recording: { privacy: boolean } }[] }>(
+      await create(h, h.member, { recording: { mediaId: id } }),
+    )
+    expect((await h.deps.store.getVersion(off.id, 1))?.recording?.privacy).toBeUndefined()
+    expect(off.versions[0]?.recording.privacy).toBe(false)
   })
 
   it('setup boxes are blurred unless they say solid', async () => {

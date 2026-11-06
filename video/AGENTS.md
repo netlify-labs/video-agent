@@ -249,7 +249,10 @@ Rules:
 - Never remove, move or shrink a hidden area, and never edit `assets/recording/redact.js` or a `.cursor.js` file: only
   `emit` writes them. `check` and `render-job` refuse a video that lost one.
 - Never write a name, email, URL, key or number you saw on screen into on-screen text or a voice line unless the
-  request gives it. Hide anything private-looking with a box and list it in the summary ("Hidden: … at 0:14").
+  request gives it.
+- Add hidden areas only when your prompt says privacy mode is on: then hide each private thing you see (emails, API
+  keys, tokens, URLs with ids, personal names) with a box, reason "Privacy mode: <what>", and list it in the summary
+  ("Hidden: … at 0:14"). With privacy mode off, names, URLs and the rest of the screen stay visible.
 - A scene can be 0.5× to 4× as fast as the recording. With a voice-over, set each recording scene's length to its
   line: `emit --duration` makes it slower, and past 0.5× it plays the step at 0.5× and holds its last frame
   (`data-va-rec-hold="end"` and an `<img class="va-rec-hold">`; `data-va-hold` stays the held last frame's). Or widen

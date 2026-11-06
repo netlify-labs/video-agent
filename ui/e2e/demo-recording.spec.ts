@@ -62,6 +62,9 @@ test('pick a recording, hide something, trim, and make the demo', async ({ page 
   await page
     .getByLabel('What should the demo show?')
     .fill('A short demo of the settings page for new admins.')
+  // Privacy mode is off unless ticked.
+  await expect(page.getByLabel('Privacy mode')).not.toBeChecked()
+  await page.getByLabel('Privacy mode').check()
   await page.getByRole('button', { name: 'Make it' }).click()
   await expect(page).toHaveURL(/\/videos\//)
   const [body] = (await creates(page)) as {
@@ -71,6 +74,7 @@ test('pick a recording, hide something, trim, and make the demo', async ({ page 
   console.log(JSON.stringify({ test: 'demo-recording', case: 'create', recording: body?.recording }))
   expect(body?.durationSec).toBe(36)
   expect(body?.recording.mediaId).toBe('med_screen_plain')
+  expect((body?.recording as { privacy?: boolean } | undefined)?.privacy).toBe(true)
   expect(body?.recording.trim).toEqual([5, 95])
   expect(body?.recording.redact).toHaveLength(1)
   const box = body?.recording.redact?.[0]
