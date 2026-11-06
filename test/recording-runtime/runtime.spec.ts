@@ -22,6 +22,7 @@ interface Setup {
   camera?: unknown[]
   clicks?: unknown[]
   redact?: unknown[]
+  cursor?: unknown[]
 }
 
 const logCase = (c: string, data: Record<string, unknown>) =>
@@ -50,6 +51,11 @@ async function open(page: Page, s: Setup = {}) {
   await page.route('http://va.test/**', async (route) => {
     const path = new URL(route.request().url()).pathname.slice(1)
     if (path === '' || path === 'index.html') return route.fulfill({ body: html, contentType: 'text/html' })
+    if (s.cursor && path === 'assets/recording/add-site.cursor.js')
+      return route.fulfill({
+        body: `window.__vaCursor=window.__vaCursor||{};window.__vaCursor["add-site"]=${JSON.stringify(s.cursor)};`,
+        contentType: 'text/javascript',
+      })
     const file = path.startsWith('vendor/') ? join(VENDOR, path.slice(7)) : join(FIXTURE, path)
     try {
       return await route.fulfill({
@@ -186,6 +192,26 @@ test('a hidden area never outlives its scene: hidden when the scene is, and outs
   )
   logCase('scene-cut', { expected: 'all hidden', actual: after })
   expect(after.every((v) => v === 'hidden')).toBe(true)
+})
+
+test('cursor points outside the span (left by a span edit) are skipped quietly', async ({ page }) => {
+  const warnings = await open(page, {
+    cursor: [
+      [0.5, 0.1, 0.1],
+      [2, 0.2, 0.2],
+      [4, 0.611, 0.304],
+      [12, 0.4, 0.6],
+      [14, 0.9, 0.9],
+    ],
+  })
+  await seek(page, 'add-site', 3)
+  logCase('cursor past span', { expected: 0, actual: warnings.length })
+  expect(warnings.filter((w) => w.includes('va-recording'))).toEqual([])
+  expect(
+    await page.evaluate(
+      `getComputedStyle(document.querySelector('[data-va-beat="add-site"] .va-cursor')).visibility`,
+    ),
+  ).toBe('visible')
 })
 
 test('malformed camera, clicks and redact entries are skipped and logged, never thrown', async ({ page }) => {

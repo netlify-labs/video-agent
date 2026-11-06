@@ -199,6 +199,15 @@ describe('recording.ts check', () => {
     expect(res.code).toBe(0)
   })
 
+  it('a cursor file may run past in..out (the editor narrows the span without rewriting it)', () => {
+    const r = runRoot()
+    cursor(r, (t) => t.replace(/\]\];$/, '],[10.5,0.5,0.5]];'))
+    expect(r.read('assets/recording/step-1.cursor.js')).toContain('[10.5,0.5,0.5]]')
+    const res = check(r.root)
+    console.log(JSON.stringify({ test: 'recording-check', case: 'cursor past out', lines: res.lines }))
+    expect(res.code).toBe(0)
+  })
+
   it('holds: refused without a still or without a voice line or retime; the camera stays inside out', () => {
     const r = runRoot()
     // Turn step-1 (0-10 s in a 10 s scene) into a held slot: 0.5x over 20 s needs a 25 s scene.

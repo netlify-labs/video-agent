@@ -131,9 +131,10 @@
       var registry = window.__vaCursor || {}
       var points = (style === 'none' ? [] : parse(registry[cursorEl.getAttribute('data-va-path') || step], beat, 'cursor'))
         .filter(function (p, i) {
-          var ok = p && p.length === 3 && finite(p[0]) && frac(p[1]) && frac(p[2]) && inside(p[0])
+          var ok = p && p.length === 3 && finite(p[0]) && frac(p[1]) && frac(p[2])
           if (!ok) warn(beat, 'cursor', i)
-          return ok
+          // Points outside the span are expected after a span edit (the file keeps the whole step): skipped quietly.
+          return ok && inside(p[0])
         })
       if (!points.length) tl.set(cursorEl, { autoAlpha: 0 }, 0)
       else {

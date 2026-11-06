@@ -165,14 +165,15 @@ export function recordingCheck(input: RecordingCheckInput): RecordingProblem[] {
       )
         add(scene, 'clicks', `Click ${String(i + 1)} isn't [t, x, y] inside in..out.`)
 
-    // The cursor file: exactly the one statement emit writes, inside in..out.
+    // The cursor file: exactly the one statement emit writes. Its points may run past in..out: the editor's span op
+    // narrows the span without rewriting the file, and the runtime plays only the points inside it.
     if (r.cursor.style !== 'none' || r.cursor.path) {
       const step = r.cursor.path ?? ''
       const text = step ? input.readFile(cursorSrc(step)) : null
       if (text === null)
         add(scene, 'cursor-file', `data-va-path must name an existing ${cursorSrc(step || r.step)}.`)
       else {
-        const c = parseCursorScript(text, step, { in: r.in, out: r.out })
+        const c = parseCursorScript(text, step)
         if (!c.ok)
           add(scene, 'cursor-file', `${cursorSrc(step)} ${c.reason}; run recording.ts emit to rewrite it.`)
       }
