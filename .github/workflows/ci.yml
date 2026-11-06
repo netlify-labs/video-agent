@@ -8,6 +8,8 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    # Usually 30-35 minutes; a hang fails the run instead of holding a runner for GitHub's 6 hours.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -29,7 +31,9 @@ jobs:
       # Looks: the static checks and each example through hyperframes check (needs the Chromium above). Runs on
       # pull_request only, never pull_request_target, so contributed examples run with no secrets.
       - run: npm run look:check
+      # Usually about 20 minutes (playwright.config.ts also stops the suite at 30 in CI).
       - run: npm run test:ui
+        timeout-minutes: 35
       # Traces and screenshots of failed specs (playwright.config.ts keeps them on failure).
       - if: failure()
         uses: actions/upload-artifact@v4
@@ -42,6 +46,7 @@ jobs:
   # fetch, a webhook signature, and a main entry with no node: imports but the lazy file helpers'.
   sdk-smoke:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       matrix:
         node: [22, 24]
@@ -60,6 +65,7 @@ jobs:
   # changeset with a major SDK bump.
   api-breaking:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
       OASDIFF_VERSION: 1.35.0
       OASDIFF_SHA256: a8023002fcb2eaa7f5758148a9303cb63d33b939886df312268bc0fc7b939140
@@ -93,6 +99,8 @@ jobs:
   spikes-linux:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    # Local renders and a Python venv: longer than the other jobs.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:

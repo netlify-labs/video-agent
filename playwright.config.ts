@@ -8,6 +8,8 @@ const CI = Boolean(process.env.CI)
 export default defineConfig({
   testDir: 'ui/e2e',
   timeout: CI ? 60_000 : 30_000,
+  // A stuck spec fails the suite in CI instead of holding the job (ci.yml also times the step out).
+  ...(CI ? { globalTimeout: 30 * 60_000 } : {}),
   expect: { timeout: CI ? 15_000 : 5_000 },
   retries: CI ? 1 : 0,
   use: {
