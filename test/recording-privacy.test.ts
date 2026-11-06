@@ -16,7 +16,7 @@ import {
 } from '../scripts/lib/recording-privacy.js'
 import type { Analysis } from '../scripts/lib/recording-analyze.js'
 import { planRecording } from '../scripts/lib/recording-plan.js'
-import { SECRETS } from './fixtures/recording/privacy/make-secrets.js'
+import { SECRETS } from './fixtures/recording/privacy/secrets.js'
 
 const hasFfmpeg = spawnSync('ffmpeg', ['-version'], { stdio: 'ignore' }).status === 0
 const FIXTURE = join(import.meta.dirname, 'fixtures', 'recording', 'privacy', 'secrets.mp4')

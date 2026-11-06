@@ -7,13 +7,8 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { chromium } from '@playwright/test'
+import { SECRETS } from './secrets.js'
 
-export const SECRETS = {
-  email: 'ada.okafor@acme-labs.dev',
-  // Put together at run time: deploys scan the repo for secret-looking literals, and this is a fake.
-  key: ['sk', '_live_', '51HxQwErTyUiOpAsDfGhJk'].join(''),
-  name: 'Priya Raman',
-}
 
 const page = (body: string) =>
   `<html><body style="margin:0;font:16px system-ui,sans-serif;background:#fff;color:#111"><div style="padding:48px">${body}</div></body></html>`
