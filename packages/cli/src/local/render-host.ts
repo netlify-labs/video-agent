@@ -131,6 +131,13 @@ async function guarded(
   progress.end()
   await guard.close()
   const ok = code === 0 && existsSync(join(o.renderDir, 'video.mp4'))
-  writeJson(join(o.renderDir, RESULT), ok ? { ok } : { ok, error: tail.trim().slice(-1500) })
-  o.log('local.render_done', { ok, code, blocked: guard.blocked.length, ms: Date.now() - t })
+  const error = ok ? undefined : tail.trim().slice(-1500)
+  writeJson(join(o.renderDir, RESULT), ok ? { ok } : { ok, error })
+  o.log('local.render_done', {
+    ok,
+    code,
+    blocked: guard.blocked.length,
+    ms: Date.now() - t,
+    ...(ok ? {} : { error }),
+  })
 }
