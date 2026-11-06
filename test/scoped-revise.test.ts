@@ -157,6 +157,12 @@ describe('scoped revise refusals', () => {
         /leave out voiceover/,
       ],
       [{ fromVersion: 7, scope: { beats: ['demo'] } }, 'not_found', 'Version 7 not found.'],
+      // A look restyles every scene (looks plan §4.3), so it's never part of a scoped revision.
+      [
+        { fromVersion: 1, scope: { beats: ['demo'] }, look: 'any-look' },
+        'look_not_allowed',
+        "Redoing a scene keeps the video's look; pick a look with a full revision.",
+      ],
     ]
     for (const [input, code, message] of cases) {
       const r = await refusal(revise(h, id, input))

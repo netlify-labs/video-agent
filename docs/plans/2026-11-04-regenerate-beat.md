@@ -1030,7 +1030,11 @@ then revisit the model default.
   - **Step 5:** not run, since production has no voiced video.
 - **The savings bar is missed:** the scoped median is about 60 credits, against 36.2 for the whole revision.
   Following the plan's rule, it ships anyway: the frozen scenes stay unchanged. The README makes no savings claim.
-- **Still to run:** LT-2 step 5 (needs a voiced source), LT-3 and LT-4. Each needs the owner's OK.
+- **Not run:**
+  - LT-2 step 5: production has no voiced video, and making one wasn't approved.
+  - LT-3 and LT-4: skipped by the owner on 2026-11-05.
+- **Beats backfill:** `scripts/backfill-beats.ts` ran on production on 2026-11-06, owner-approved, at 0 credits. It
+  filled 42 versions across 21 videos with none failed; a re-run finds none left.
 - **Credits spent on this plan so far:** 272.9, which is B3's 57.6 plus 117.7 plus 97.6.
 
 **On main:**
@@ -1048,20 +1052,25 @@ then revisit the model default.
   - **Web app:** Some scenes, Redo this part, scoped Incorporate, the history label and the refusal fallback.
   - **SDK and docs:** `va.videos.redoScenes` and the README.
 
-**On `swarm/redo` (not merged; the phase 4 gate waits for LT-2 and the CLI):**
+**Phase 4 (merged @ `08b22fc`):**
+- the CLI's `video-agent scenes`, `revise --scene` and `redo`;
 - `scripts/backfill-beats.ts`;
 - `SCOPED_AGENT_MODEL` and `SCOPED_AGENT_EFFORT`, unset by default;
 - the chip hover seek, and the version switcher opening a scoped version at the scene it redid;
 - the editor's beat-card and timeline "Redo this scene…" entries, with the draft warning;
 - `regen-beat.ts` step 7, the cheaper-model comparison, and its fill of a source version's missing beats.
 
+**Left:** local mode's `video-agent local revise --scene` (va-8cy4.5.14). It waits for the CLI's local mode
+(va-p1th.5.12 and 5.15), and the phase 4 gate stays open for it.
+
 **Deviations from the plan:**
-- **Look refusal:** `look` with a scope isn't refused yet, because `reviseVideo` has no `look` until Looks phase 2
-  adds it. That plan adds the refusal next to `planId`, `durationSec`, `sound` and `voiceover`.
+- **Look refusal:** Looks phase 2 added `look` to `reviseVideo`, and its `assertLookAllowed` refuses a look with a
+  scope (400 `look_not_allowed`). It's not in `checkScopedRevise` beside `planId`, `durationSec`, `sound` and
+  `voiceover`. `test/scoped-revise.test.ts` covers it.
 - **SCOPED_AGENT_MODEL:** owner Q2 recommended leaving it out until a measured comparison. Running that comparison
   (LT-4) needs the knob, so it ships unset; the README carries no advice until LT-4 has run.
-- **CLI:** the CLI commands (`video-agent scenes`, `revise --scene`, `redo`) and local mode's `revise --scene` aren't
-  built. They wait for the CLI plan's remote commands and local mode, and the README leaves out their one-liners.
+- **CLI:** the remote commands (`video-agent scenes`, `revise --scene`, `redo`) shipped in phase 4. Local mode's
+  `revise --scene` isn't built; it waits for the CLI plan's local mode.
 - **Default flip:** Incorporate's scoped switch is on by default under half the scenes (owner Q5), so the existing
   Incorporate smoke test now expects a `scope` when its one pinned comment is in one of four scenes.
 - **Editor scenes:** the editor offers "Redo this scene…" only for scenes that are also in the rendered version's
