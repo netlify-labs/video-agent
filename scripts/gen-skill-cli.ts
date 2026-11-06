@@ -9,22 +9,9 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { format, resolveConfig } from 'prettier'
 import { COMMANDS, GLOBAL_FLAGS, type CommandSpec } from '../packages/cli/src/catalog.js'
-import { EXIT } from '../packages/cli/src/exit.js'
+import { EXIT, EXIT_MEANINGS } from '../packages/cli/src/exit.js'
 
 export const CLI_MD = join(import.meta.dirname, '../skills/netlify-video/references/cli.md')
-
-const EXIT_MEANING: Record<keyof typeof EXIT, string> = {
-  ok: 'Done.',
-  error: 'Something else failed (network, server error); the message says what.',
-  usage: 'The command was called wrong (unknown flag, missing argument, bad value).',
-  auth: 'No key, a revoked key, or a login that was denied or expired.',
-  notFound: 'The video or item is missing, or your role cannot see it.',
-  videoFailed: 'The video failed (`--wait`); `get <id>` shows why.',
-  waitTimeout: '`--wait` gave up (`--timeout`); the video is still being made.',
-  conflict: 'Not now: a run is in progress, a feature is off, or the state changed.',
-  rateLimited: 'Too many requests; retry after a pause.',
-  unsupported: 'This server does not offer that feature yet.',
-}
 
 const usage = (c: CommandSpec) =>
   [
@@ -108,7 +95,7 @@ export async function renderCliMd(): Promise<string> {
     '',
     '| Exit | Meaning |',
     '| --- | --- |',
-    ...Object.entries(EXIT).map(([k, v]) => `| ${v} | ${EXIT_MEANING[k as keyof typeof EXIT]} |`),
+    ...Object.entries(EXIT).map(([k, v]) => `| ${v} | ${EXIT_MEANINGS[k as keyof typeof EXIT]} |`),
     '',
     '## Flags every command takes',
     '',

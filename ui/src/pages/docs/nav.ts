@@ -15,6 +15,7 @@ export const DOCS_GROUPS: readonly DocsGroup[] = ['Build', 'AI tools', 'Guides']
 export const DOCS_PAGES: readonly DocsPage[] = [
   { path: '/docs/api', label: 'REST API', group: 'Build' },
   { path: '/docs/sdk', label: 'TypeScript SDK', group: 'Build' },
+  { path: '/docs/cli', label: 'CLI', group: 'Build' },
   { path: '/docs/mcp', label: 'MCP for AI tools', group: 'AI tools' },
   { path: '/docs/skills', label: 'Agent skills', group: 'AI tools' },
   { path: '/docs/destinations', label: 'Publish destinations', group: 'Guides' },

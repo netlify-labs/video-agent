@@ -11,7 +11,7 @@ test('the docs pages are grouped, and each group links to its pages', async ({ p
   if (await burger.isVisible()) await burger.click()
   const nav = navbar(page)
   const groups = {
-    Build: ['REST API', 'TypeScript SDK'],
+    Build: ['REST API', 'TypeScript SDK', 'CLI'],
     'AI tools': ['MCP for AI tools', 'Agent skills'],
     Guides: ['Publish destinations', 'Looks', 'GitHub Action'],
   }

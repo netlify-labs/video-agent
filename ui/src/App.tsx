@@ -27,6 +27,7 @@ const DocsMcpPage = routes.lazyPage(routes.docsMcpRoute, (m) => m.default)
 const DocsSkillsPage = routes.lazyPage(routes.docsSkillsRoute, (m) => m.default)
 const DocsDestinationsPage = routes.lazyPage(routes.docsDestinationsRoute, (m) => m.default)
 const DocsSdkPage = routes.lazyPage(routes.docsSdkRoute, (m) => m.default)
+const DocsCliPage = routes.lazyPage(routes.docsCliRoute, (m) => m.default)
 const DocsLooksPage = routes.lazyPage(routes.docsLooksRoute, (m) => m.default)
 const DocsGithubPage = routes.lazyPage(routes.docsGithubRoute, (m) => m.default)
 // Mock builds only: the narration timeline on fixture data (/dev/timeline). The import is dropped from real builds.
@@ -215,6 +216,14 @@ export function App() {
           element={
             <Page>
               <DocsSdkPage />
+            </Page>
+          }
+        />
+        <Route
+          path="/docs/cli"
+          element={
+            <Page>
+              <DocsCliPage />
             </Page>
           }
         />

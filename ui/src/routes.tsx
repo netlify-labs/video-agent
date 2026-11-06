@@ -35,6 +35,7 @@ export const docsMcpRoute = route(() => import('./pages/docs/McpGuide'))
 export const docsSkillsRoute = route(() => import('./pages/docs/SkillsGuide'))
 export const docsDestinationsRoute = route(() => import('./pages/docs/DestinationsGuide'))
 export const docsSdkRoute = route(() => import('./pages/docs/SdkGuide'))
+export const docsCliRoute = route(() => import('./pages/docs/CliGuide'))
 export const docsLooksRoute = route(() => import('./pages/docs/LooksGuide'))
 export const docsGithubRoute = route(() => import('./pages/docs/GithubGuide'))
 
@@ -66,6 +67,7 @@ const BY_PATH: Record<string, RouteModule<unknown>> = {
   '/docs/skills': docsSkillsRoute,
   '/docs/destinations': docsDestinationsRoute,
   '/docs/sdk': docsSdkRoute,
+  '/docs/cli': docsCliRoute,
   '/docs/looks': docsLooksRoute,
   '/docs/github': docsGithubRoute,
 }

@@ -15,6 +15,20 @@ export const EXIT = {
   unsupported: 9,
 } as const
 
+/** What each exit code means, for people (the skill's references/cli.md and /docs/cli). */
+export const EXIT_MEANINGS: Record<keyof typeof EXIT, string> = {
+  ok: 'Done.',
+  error: 'Something else failed (network, server error); the message says what.',
+  usage: 'The command was called wrong (unknown flag, missing argument, bad value).',
+  auth: 'No key, a revoked key, or a login that was denied or expired.',
+  notFound: 'The video or item is missing, or your role cannot see it.',
+  videoFailed: 'The video failed (`--wait`); `get <id>` shows why.',
+  waitTimeout: '`--wait` gave up (`--timeout`); the video is still being made.',
+  conflict: 'Not now: a run is in progress, a feature is off, or the state changed.',
+  rateLimited: 'Too many requests; retry after a pause.',
+  unsupported: 'This server does not offer that feature yet.',
+}
+
 /** A mistake in how the command was called: exit 2, with an optional "did you mean". */
 export class UsageError extends Error {
   readonly code = 'usage'
