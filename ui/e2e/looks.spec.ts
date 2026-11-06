@@ -279,7 +279,9 @@ test('an admin turns a look off and it leaves the picker; a disabled default is 
 }) => {
   await page.goto('/admin')
   const looks = page.getByTestId('looks-settings')
-  await looks.getByRole('switch', { name: 'Terminal look' }).click({ force: true })
+  const terminal = looks.getByRole('switch', { name: 'Terminal look' })
+  await terminal.evaluate("(el) => el.scrollIntoView({ block: 'center' })")
+  await terminal.click()
   await expect(looks.getByRole('switch', { name: 'Terminal look' })).not.toBeChecked()
 
   // A default that's turned off is refused, and the card says why.
