@@ -17,6 +17,9 @@
   "bin": {
     "video-agent": "./dist/bin.js"
   },
+  "dependencies": {
+    "css-tree": "3.2.1"
+  },
   "files": [
     "dist"
   ]
