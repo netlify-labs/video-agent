@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="vendor/gsap.min.js"></script>
+    <script src="vendor/va-contract.js"></script>
+    <style>
+      /* Bold blocks example: the fictional product Orbit, placeholder words. Runs reuse its blocks and moves, never its
+         words. Colours are the brand's roles, and the derived field, written as literal colours. */
+      #root {
+        --va-color-bg: #fff7e8;
+        --va-color-text: #111111;
+        --va-color-accent: #ff5a36;
+        --va-color-field: #ffbdaf;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1920px; height: 1080px; overflow: hidden; background: #fff7e8; }
+      #root { width: 100%; height: 100%; position: relative; font-family: system-ui, sans-serif; background: var(--va-color-bg); }
+      .beat { position: absolute; inset: 0; }
+      .block { position: absolute; border: 8px solid var(--va-color-text); box-shadow: 14px 14px 0 #111111; padding: 48px 56px; color: var(--va-color-text); }
+      .accent { background: var(--va-color-accent); }
+      .field { background: var(--va-color-field); }
+      .plain { background: var(--va-color-bg); }
+      .head { font-size: 120px; font-weight: 800; line-height: 1; letter-spacing: -0.02em; }
+      .tag { font-size: 28px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+      .body { font-size: 38px; font-weight: 500; line-height: 1.25; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-va-contract="1" data-start="0" data-duration="7" data-width="1920" data-height="1080">
+      <section id="hook" class="clip beat" data-va-beat="hook" data-va-label="Hook" data-composition-id="hook" data-start="0" data-duration="2.5" data-va-authored-duration="2.5" data-track-index="0">
+        <div class="block field" style="left: 160px; top: 220px; width: 1000px">
+          <p class="tag" data-va-text="hook-tag" data-va-label="Tag">New in Orbit</p>
+        </div>
+        <div class="block accent" style="left: 260px; top: 380px; width: 1300px">
+          <h1 class="head" data-va-text="hook-title" data-va-label="Headline">Find anything in a second</h1>
+        </div>
+        <script>
+          vaBeat('hook', (tl, el) => {
+            const blocks = el.querySelectorAll('.block')
+            tl.fromTo(blocks, { y: -60, scale: 1.04, opacity: 0 }, { y: 0, scale: 1, opacity: 1, duration: 0.28, ease: 'back.out(2)', stagger: 0.1 }, 0.05)
+              .to(blocks[1], { x: 14, y: 14, boxShadow: '0px 0px 0px #111111', duration: 0.12 }, 1.2)
+              .to(blocks[1], { x: 0, y: 0, boxShadow: '14px 14px 0px #111111', duration: 0.2, ease: 'power2.out' }, 1.32)
+          })
+        </script>
+      </section>
+      <section id="how" class="clip beat" data-va-beat="how" data-va-label="How" data-composition-id="how" data-start="2.5" data-duration="2" data-va-authored-duration="2" data-track-index="0">
+        <div class="block plain" style="left: 160px; top: 200px; width: 760px">
+          <p class="tag" data-va-text="how-tag" data-va-label="Tag">One box</p>
+          <p class="body" data-va-text="how-body" data-va-label="Body" style="margin-top: 20px">Every note, doc and comment</p>
+        </div>
+        <div class="block field" style="left: 1000px; top: 420px; width: 760px">
+          <p class="tag" data-va-text="how-tag-2" data-va-label="Tag">Instant</p>
+          <p class="body" data-va-text="how-body-2" data-va-label="Body" style="margin-top: 20px">Results before you finish typing</p>
+        </div>
+        <script>
+          vaBeat('how', (tl, el) => {
+            tl.fromTo(el.querySelectorAll('.block'), { y: -60, scale: 1.04, opacity: 0 }, { y: 0, scale: 1, opacity: 1, duration: 0.28, ease: 'back.out(2)', stagger: 0.15 }, 0.05)
+          })
+        </script>
+      </section>
+      <section id="end" class="clip beat" data-va-beat="end" data-va-label="End card" data-composition-id="end" data-start="4.5" data-duration="2.5" data-va-authored-duration="2.5" data-track-index="0">
+        <div class="block accent" style="left: 560px; top: 300px; width: 800px; text-align: center">
+          <h2 class="head" data-va-text="end-title" data-va-label="Product name">Orbit</h2>
+          <p class="tag" data-va-text="end-cta" data-va-label="Call to action" style="margin-top: 24px">Try it free</p>
+        </div>
+        <script>
+          vaBeat('end', (tl, el) => {
+            tl.fromTo(el.querySelector('.block'), { y: -60, scale: 1.04, opacity: 0 }, { y: 0, scale: 1, opacity: 1, duration: 0.28, ease: 'back.out(2)' }, 0.05)
+          })
+        </script>
+      </section>
+    </div>
+    <script>
+      window.__timelines['main'] = gsap.timeline({ paused: true })
+    </script>
+  </body>
+</html>

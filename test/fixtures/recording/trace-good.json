@@ -1,0 +1,18 @@
+{
+  "v": 1,
+  "source": { "kind": "cli", "tool": "video-agent record 0.1.0", "startedAt": "2026-11-05T10:00:00.000Z" },
+  "frame": { "width": 2560, "height": 1600, "fps": 30, "duration": 12.5 },
+  "viewport": { "width": 1280, "height": 800, "dpr": 2 },
+  "moves": [[0, 0.5, 0.5], [0.4, 0.52, 0.48], [1.2, 0.71, 0.3], [2.0, 0.72, 0.31], [6.5, 0.2, 0.8]],
+  "events": [
+    { "kind": "click", "t": 2.1, "x": 0.72, "y": 0.31, "button": 0, "target": { "role": "button", "name": "Add new site", "box": [0.68, 0.29, 0.1, 0.04] } },
+    { "kind": "focus", "t": 2.2, "box": [0.3, 0.4, 0.4, 0.05], "role": "textbox" },
+    { "kind": "type", "t": 2.4, "end": 4.0, "box": [0.3, 0.4, 0.4, 0.05], "keys": 14 },
+    { "kind": "scroll", "t": 4.5, "end": 5.2, "dy": 640 },
+    { "kind": "drag", "t": 6.0, "end": 6.5, "from": [0.6, 0.6], "to": [0.2, 0.8] },
+    { "kind": "navigate", "t": 7.0, "path": "/sites/my-site/deploys" }
+  ],
+  "redact": [
+    { "start": 1.0, "end": 9.0, "reason": "API key field", "boxes": [[1.0, 0.1, 0.2, 0.3, 0.05], [4.5, 0.1, 0.1, 0.3, 0.05], [8.0, 0, 0, 0, 0]] }
+  ]
+}

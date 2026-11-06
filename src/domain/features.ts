@@ -2,9 +2,13 @@
 // A string is listed only when this deployment has the feature AND it's switched on, so the SDK, CLI, MCP and the
 // GitHub Action can hide what a server doesn't offer. Each plan adds its own string here, in its own PR.
 import type { Deps } from '../deps.js'
+import { enabledEngines } from './engines.js'
 import { narrationEnabled } from './narration-settings.js'
 import { remixEnabled } from './remix-settings.js'
 import { youtubeAvailable } from './destinations/registry.js'
+import { cliLoginEnabled } from './cli-login.js'
+import { webmcpEnabled } from './webmcp-settings.js'
+import { scopeCheckFor } from './engines.js'
 
 export const FEATURES = [
   'remix', // remixing; admin switch remixEnabled
@@ -20,9 +24,16 @@ export const FEATURES = [
   'external_ref', // external references on jobs (github-action plan)
   'destinations', // publish destinations (publish-destinations plan)
   'youtube', // the YouTube destination, when it's set up and on
+  'webmcp', // the web app's WebMCP tools for browser agents; admin switch webmcpEnabled (va-qago)
 ] as const
 
 export type Feature = (typeof FEATURES)[number]
+
+/**
+ * Screen recordings are listed only once the whole API is in: the upload role and trace routes (phase 1) and
+ * `recording` on create and remix (va-rsk5.3.16 sets ready), so clients never see half the feature.
+ */
+export const screenRecordingApi: { ready: boolean } = { ready: true }
 
 /** The features this deployment offers right now. Before the database is set up, switches read as their defaults. */
 export async function enabledFeatures(deps: Deps): Promise<Feature[]> {
@@ -30,7 +41,17 @@ export async function enabledFeatures(deps: Deps): Promise<Feature[]> {
   if (await remixEnabled(deps).catch(() => true)) on.push('remix')
   if (await narrationEnabled(deps).catch(() => true)) on.push('narration')
   if (deps.gateway.available()) on.push('planning')
+  if (screenRecordingApi.ready) on.push('screen_recording')
+  if (deps.looks.catalog().length) on.push('looks')
   on.push('destinations')
+  // The GitHub Action plan's server additions (phase 3): always on once deployed.
+  on.push('context', 'external_ref')
+  // Redo a scene: once HyperFrames' scope check is registered (prodDeps does it at startup).
+  if (scopeCheckFor('hyperframes')) on.push('scoped_revision')
   if (await youtubeAvailable(deps, deps.store).catch(() => false)) on.push('youtube')
+  if (await cliLoginEnabled(deps).catch(() => true)) on.push('cli_login')
+  if (await webmcpEnabled(deps).catch(() => true)) on.push('webmcp')
+  // Only once Remotion is actually on: with HyperFrames alone there's no engine to choose.
+  if ((await enabledEngines(deps).catch(() => [])).length > 1) on.push('engines')
   return on
 }

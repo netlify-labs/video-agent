@@ -50,3 +50,8 @@
   [headers.values]
     Cache-Control = "public, max-age=300, must-revalidate"
     Access-Control-Allow-Origin = "*"
+
+# Looks (docs/plans/2026-11-04-looks.md §4.3, docs/spikes.md K3): the API function carries the look archives the build
+# packed, read at process.cwd()/looks-build/<id>.tar.gz when a version snapshots its look. Only the API needs them.
+[functions."api"]
+  included_files = ["looks-build/*.tar.gz"]

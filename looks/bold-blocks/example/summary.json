@@ -1,0 +1,9 @@
+{
+  "title": "Orbit",
+  "summary": "A bold blocks example for the fictional product Orbit.",
+  "captions": [
+    { "start": 0.3, "end": 2.5, "text": "New in Orbit. Find anything in a second", "beat": "hook", "textId": "hook-title", "beatStart": 0.3, "beatEnd": 2.5 },
+    { "start": 2.8, "end": 4.5, "text": "One box: every note, doc and comment. Instant: results before you finish typing", "beat": "how", "textId": "how-body", "beatStart": 0.3, "beatEnd": 2 },
+    { "start": 4.8, "end": 7, "text": "Orbit. Try it free", "beat": "end", "textId": "end-title", "beatStart": 0.3, "beatEnd": 2.5 }
+  ]
+}

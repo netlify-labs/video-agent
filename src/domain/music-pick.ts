@@ -13,6 +13,7 @@ import type { OpenverseTrack } from '../lib/openverse-rules.js'
 import type { Repo } from '../store/types.js'
 import { can, userPrincipal } from './policy.js'
 import { FAST_MODEL } from './gateway-models.js'
+import { getLook } from './looks.js'
 import { snapshotMedia } from './media.js'
 import { importedTrack, searchRequest, type SearchPage } from './openverse.js'
 import { queueOpenverseJob } from './openverse-jobs.js'
@@ -221,13 +222,18 @@ const requestText = (version: VersionRow) => [version.prompt, version.plan?.brie
  * The searches a pick tries, in order: the first words, the fallback, then the broad searches, those that suit the
  * request's mood (or the first words') first. At most MAX_QUERIES, no repeats.
  */
-export function queryPlan(first: string, fallback: string | null, text: string): string[] {
-  const t = [text, first, fallback ?? ''].join('\n').toLowerCase()
+export function queryPlan(
+  first: string,
+  fallback: string | null,
+  text: string,
+  /** The video's look's music mood (looks plan §4.6 step 6): searched right after the request's own words. */
+  lookMood: string | null = null,
+): string[] {
+  const t = [text, first, fallback ?? '', lookMood ?? ''].join('\n').toLowerCase()
   const suited = MOODS.filter(([re]) => re.test(t)).flatMap(([, , generic]) => generic)
-  return [...new Set([first, fallback ?? '', ...suited, ...GENERIC_QUERIES].filter(Boolean))].slice(
-    0,
-    MAX_QUERIES,
-  )
+  return [
+    ...new Set([first, fallback ?? '', lookMood ?? '', ...suited, ...GENERIC_QUERIES].filter(Boolean)),
+  ].slice(0, MAX_QUERIES)
 }
 
 // Words too common in music searches and titles to say anything about mood.
@@ -235,13 +241,14 @@ const STOP_WORDS = new Set(
   'and the with for music track song background instrumental modern loop version mix by of a'.split(' '),
 )
 
-/** Mood words to match library items against: the searches' words and the mood searches the request suggests. */
-export function moodWords(queries: string[], text: string): string[] {
+/** Mood words to match library items against: the look's mood first, then the searches' words and the mood searches
+ * the request suggests. */
+export function moodWords(queries: string[], text: string, lookMood: string | null = null): string[] {
   const t = text.toLowerCase()
   const fromRequest = MOODS.filter(([re]) => re.test(t)).map(([, q]) => q)
   return [
     ...new Set(
-      [...queries, ...fromRequest]
+      [...(lookMood ? [lookMood] : []), ...queries, ...fromRequest]
         .flatMap((q) => q.toLowerCase().split(/[^a-z0-9]+/))
         .filter((w) => w.length > 2 && !STOP_WORDS.has(w)),
     ),
@@ -348,10 +355,14 @@ export async function advanceMusicPick(deps: Deps, a: AttemptRow): Promise<Music
   if (!version) return skip('The version is gone.')
   const seconds = targetSeconds(version)
   const text = requestText(version)
+  // The look's mood, from the current catalog (a hint, so a newer version of the look is fine); none once it's gone.
+  const lookMood = version.look ? (getLook(deps, version.look.id)?.musicMood ?? null) : null
+  if (lookMood && !pick.tried?.length && pick.status === 'searching' && !pick.query)
+    deps.log.info('music.pick_mood', { attemptId: a.id, look: version.look?.id, words: lookMood })
   // No Openverse track in time: the best audio already in the library, else none.
   const fromLibrary = async (why: string): Promise<MusicPick> => {
     const queries = (pick.tried ?? []).map((t) => t.query)
-    const m = await libraryTrack(deps, version, moodWords(queries, text), seconds)
+    const m = await libraryTrack(deps, version, moodWords(queries, text, lookMood), seconds)
     if (!m) return skip(`${why} The library has no audio to use instead.`)
     deps.log.info('music.from_library', { attemptId: a.id, mediaId: m.id, why })
     const title = m.sourceTitle ?? m.caption ?? m.filename
@@ -369,7 +380,12 @@ export async function advanceMusicPick(deps: Deps, a: AttemptRow): Promise<Music
       if (!pick.query) pick = { ...pick, ...(await musicQuery(deps, version, seconds)) }
       if (!pick.searchJobId) {
         const tried = pick.tried ?? []
-        const plan = queryPlan(tried[0]?.query ?? pick.query ?? DEFAULT_QUERY, pick.fallbackQuery, text)
+        const plan = queryPlan(
+          tried[0]?.query ?? pick.query ?? DEFAULT_QUERY,
+          pick.fallbackQuery,
+          text,
+          lookMood,
+        )
         const q = plan[tried.length]
         if (!q) return fromLibrary('Openverse had no track that fits.')
         if (overBudget()) return fromLibrary('Openverse found no track in time.')

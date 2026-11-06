@@ -1,5 +1,6 @@
 // Mock mode (VITE_MOCK=1): realistic data for screenshots and UI tests, built from videos this
 // agent actually made (posters and the teaser MP4 in ui/mock-assets). Never shipped in production builds.
+import { looksCatalog } from '../../../src/generated/looks'
 import type { Stats, Video } from '../api/client'
 
 const now = Date.now()
@@ -17,10 +18,17 @@ const hyperframes: V['editing'] = {
     voiceover: true,
     revoice: true,
     recordedNarration: true,
-    scopedRevision: false,
+    scopedRevision: true,
     recording: false,
   },
 }
+/** A version's look: the catalog's name and hash (src/generated/looks.ts, built from looks/). */
+const lookRef = (id: string): V['look'] => {
+  const l = looksCatalog.find((x) => x.id === id)
+  if (!l) throw new Error(`no look ${id}`)
+  return { id: l.id, name: l.name, hash: l.hash }
+}
+
 const files = (id: string, n: number): V['links'] => ({
   video: `/api/v1/videos/${id}/versions/${n}/video`,
   poster: `/api/v1/videos/${id}/versions/${n}/poster`,
@@ -81,6 +89,14 @@ function ready(
     feedback?: V['feedback']
     /** The plan accepted before it was made. */
     plan?: V['plan']
+    /** The look it was made with (looks/); none when missing. */
+    look?: string
+    /** Its scenes (redo a scene); null when not known. */
+    beats?: V['beats']
+    /** The scenes it redid of its parent. */
+    scope?: V['scope']
+    /** Background it was made with (a pull request, release notes). */
+    context?: V['context']
   },
 ): V {
   const startedAt = ago(o.at)
@@ -102,8 +118,12 @@ function ready(
     verdicts: { approved: 0, changesRequested: 0, mine: null },
     incorporates: o.feedback?.length ?? 0,
     feedback: o.feedback ?? [],
+    context: o.context ?? null,
     editable: o.editable ?? false,
     editing: hyperframes,
+    look: o.look ? lookRef(o.look) : null,
+    beats: o.beats ?? null,
+    scope: o.scope ?? null,
     mode: 'author',
     editedFromN: null,
 
@@ -153,6 +173,7 @@ function ready(
             },
             showTranscript: false,
             embed: embed(o.pub, o.w, o.h, o.music ?? []),
+            player: player(o.pub),
           },
         ]
       : [],
@@ -163,6 +184,9 @@ function ready(
 /** What the mock API serves as a narrated version's transcript.txt: a paragraph per caption cue. */
 export const MOCK_TRANSCRIPT =
   'Every pull request gets its own URL.\n\nReview the real site, not a screenshot.\n\nMerge with confidence. Book a demo.\n'
+
+export const player = (slug: string) =>
+  `<script type="module" src="${SITE}/player.js"></script><video-agent-player src="${SITE}/v/${slug}"></video-agent-player>`
 
 export function embed(slug: string, w: number, h: number, credits: V['credits']) {
   const v = `<video controls playsinline preload="metadata" width="${w}" height="${h}" style="max-width:100%;height:auto" poster="${SITE}/v/${slug}.jpg"><source src="${SITE}/v/${slug}.mp4" type="video/mp4"><track kind="captions" src="${SITE}/v/${slug}.vtt" srclang="en" label="Captions"></video>`
@@ -198,6 +222,7 @@ function video(
   aspect: Video['aspect'],
   owner: { id: string; name: string; email: string },
   versions: V[],
+  extra: Partial<Video> = {},
 ): Video {
   const dims = {
     '16:9': { width: 1920, height: 1080 },
@@ -225,7 +250,10 @@ function video(
     isRemix: false,
     remixOf: null,
     favorite: false,
+    externalRef: null,
+    externalUrl: null,
     links: { self: `/api/v1/videos/${id}` },
+    ...extra,
   }
 }
 
@@ -256,8 +284,12 @@ export const videos: Video[] = [
       verdicts: { approved: 0, changesRequested: 0, mine: null },
       incorporates: 0,
       feedback: [],
+      context: null,
       editable: false,
       editing: hyperframes,
+      look: null,
+      beats: null,
+      scope: null,
       mode: 'author',
       editedFromN: null,
 
@@ -296,8 +328,12 @@ export const videos: Video[] = [
       verdicts: { approved: 0, changesRequested: 0, mine: null },
       incorporates: 0,
       feedback: [],
+      context: null,
       editable: false,
       editing: hyperframes,
+      look: null,
+      beats: null,
+      scope: null,
       mode: 'author',
       editedFromN: null,
 
@@ -331,7 +367,15 @@ export const videos: Video[] = [
       parent: 1,
       target: 8,
       pub: 'q4czcinsu9',
+      context: null,
       editable: true,
+      // Its scenes (redo a scene): an 8 s teaser in four.
+      beats: [
+        { id: 'hook', label: 'Hook', start: 0, duration: 2 },
+        { id: 'problem', label: 'Problem', start: 2, duration: 2 },
+        { id: 'demo', label: 'Demo', start: 4, duration: 2.5 },
+        { id: 'end', label: 'End card', start: 6.5, duration: 1.5 },
+      ],
       previews: true,
       feedback: [
         {
@@ -383,50 +427,71 @@ export const videos: Video[] = [
       },
     ),
   ]),
-  video('vid_webhooks', 'Org webhooks launch', '16:9', people.ada, [
-    ready(
-      'vid_webhooks',
-      1,
-      'A launch video announcing Org webhooks: teams can now subscribe to events across every project in their organization from one place.',
-      {
-        at: 190,
-        took: 7.4,
-        credits: 206,
-        sec: 22.5,
-        w: 1920,
-        h: 1080,
-        bytes: 1424311,
-        title: 'Org webhooks',
-        author: people.ada.id,
-        pub: 'h7m2q9xwka',
-        music: [mockCredit],
-        summary:
-          'A 22.5-second before-and-after story: twelve project tiles collapse into one organization webhook, then events from nine projects arrive at one endpoint. Ends on an end card pointing to Organization settings → Webhooks.',
-      },
-    ),
-  ]),
-  video('vid_sales', 'Deploy previews for every pull request', '9:16', people.priya, [
-    ready(
-      'vid_sales',
-      1,
-      'A vertical social clip for the sales team: "Deploy previews for every pull request". Three short beats and an end card with "Book a demo".',
-      {
-        at: 300,
-        took: 3.2,
-        credits: 92,
-        sec: 15,
-        w: 1080,
-        h: 1920,
-        bytes: 1017831,
-        title: 'Deploy previews for every pull request',
-        author: people.priya.id,
-        target: 15,
-        narrated: true,
-        summary:
-          'A 15-second vertical clip in three beats: every pull request gets its own URL, review the real site, merge with confidence. Ends on "Book a demo".',
-      },
-    ),
-  ]),
+  video(
+    'vid_webhooks',
+    'Org webhooks launch',
+    '16:9',
+    people.ada,
+    [
+      ready(
+        'vid_webhooks',
+        1,
+        'A launch video announcing Org webhooks: teams can now subscribe to events across every project in their organization from one place.',
+        {
+          at: 190,
+          took: 7.4,
+          credits: 206,
+          sec: 22.5,
+          w: 1920,
+          h: 1080,
+          bytes: 1424311,
+          title: 'Org webhooks',
+          author: people.ada.id,
+          pub: 'h7m2q9xwka',
+          context: {
+            source: 'github_pr',
+            label: 'GitHub PR #123',
+            url: 'https://github.com/acme/web/pull/123',
+            text: 'Title: Org webhooks\nDescription:\nTeams can subscribe to events across every project in their organization from one place.',
+          },
+          music: [mockCredit],
+          look: 'kinetic',
+          summary:
+            'A 22.5-second before-and-after story: twelve project tiles collapse into one organization webhook, then events from nine projects arrive at one endpoint. Ends on an end card pointing to Organization settings → Webhooks.',
+        },
+      ),
+    ],
+    { externalRef: 'github:acme/web#pr-123', externalUrl: 'https://github.com/acme/web/pull/123' },
+  ),
+  video(
+    'vid_sales',
+    'Deploy previews for every pull request',
+    '9:16',
+    people.priya,
+    [
+      ready(
+        'vid_sales',
+        1,
+        'A vertical social clip for the sales team: "Deploy previews for every pull request". Three short beats and an end card with "Book a demo".',
+        {
+          at: 300,
+          took: 3.2,
+          credits: 92,
+          sec: 15,
+          w: 1080,
+          h: 1920,
+          bytes: 1017831,
+          title: 'Deploy previews for every pull request',
+          author: people.priya.id,
+          target: 15,
+          narrated: true,
+          summary:
+            'A 15-second vertical clip in three beats: every pull request gets its own URL, review the real site, merge with confidence. Ends on "Book a demo".',
+        },
+      ),
+    ],
+    { externalRef: 'github:acme/web@v2.4.0' },
+  ),
   video('vid_docs', 'Add an environment variable, then redeploy', '1:1', people.marco, [
     ready(
       'vid_docs',
@@ -466,8 +531,12 @@ export const videos: Video[] = [
       verdicts: { approved: 0, changesRequested: 0, mine: null },
       incorporates: 0,
       feedback: [],
+      context: null,
       editable: false,
       editing: hyperframes,
+      look: null,
+      beats: null,
+      scope: null,
       mode: 'author',
       editedFromN: null,
 
@@ -491,6 +560,127 @@ export const videos: Video[] = [
     },
   ]),
 ]
+
+// Remotion (localStorage.mockEngines starts with 'remotion', render-engines plan §7): a ready Remotion video, made with
+// music and not editable, so the tag, the not-editable message and the limited revise form can be seen.
+const remotionEditing: V['editing'] = {
+  engine: 'remotion',
+  capabilities: {
+    editOps: [],
+    liveDraftPreview: false,
+    sound: 'music',
+    voiceover: false,
+    revoice: false,
+    recordedNarration: false,
+    scopedRevision: false,
+    recording: false,
+  },
+}
+export const mockRemotion = (() => {
+  try {
+    return (
+      typeof localStorage !== 'undefined' &&
+      localStorage.getItem('mockEngines')?.startsWith('remotion') === true
+    )
+  } catch {
+    return false
+  }
+})()
+if (mockRemotion) {
+  const copy = structuredClone(videos.find((v) => v.id === 'vid_docs') as Video)
+  copy.id = 'vid_remotion'
+  copy.title = 'Org webhooks in 20 seconds (Remotion)'
+  copy.versions = copy.versions.map((v) => ({
+    ...v,
+    editable: false,
+    sound: 'music',
+    voiceover: null,
+    beats: null,
+    editing: remotionEditing,
+    links: files('vid_remotion', v.n),
+  }))
+  videos.push(copy)
+}
+
+// Redo a scene (localStorage.mockRedo=1): the teaser gets v3, which redid its demo and ends on a held frame under
+// recorded narration, and v4, a scoped run of v3 that was refused for touching a frozen scene. The webhooks launch
+// (Ada's) gets its scenes too; the mock API adds pinned comments on all three (server.ts).
+export const mockRedo = (() => {
+  try {
+    return typeof localStorage !== 'undefined' && localStorage.getItem('mockRedo') === '1'
+  } catch {
+    return false
+  }
+})()
+if (mockRedo) {
+  const teaser = videos.find((v) => v.id === 'vid_teaser') as Video
+  const v3 = ready('vid_teaser', 3, 'Make the demo scene show the deploy preview URL.', {
+    at: 30,
+    took: 2.2,
+    credits: 58,
+    sec: 9,
+    w: 1920,
+    h: 1080,
+    bytes: 190112,
+    title: 'Ship faster with preview deploys',
+    author: people.sam.id,
+    parent: 2,
+    editable: true,
+    narrated: true,
+    beats: [
+      { id: 'hook', label: 'Hook', start: 0, duration: 2 },
+      { id: 'problem', label: 'Problem', start: 2, duration: 2 },
+      { id: 'demo', label: 'Demo', start: 4, duration: 2 },
+      { id: 'proof', label: 'Proof', start: 6, duration: 1.5 },
+      { id: 'end', label: 'End card', start: 7.5, duration: 1 },
+      { id: 'va-hold', label: null, start: 8.5, duration: 1 },
+    ],
+    scope: { beats: [{ id: 'demo', label: 'Demo' }] },
+    summary: 'The demo scene now shows the preview URL; everything else is v2 as it was.',
+  })
+  const v4: V = {
+    ...ready('vid_teaser', 4, 'Make the problem scene darker.', {
+      at: 10,
+      took: 1.4,
+      credits: 31,
+      sec: 9,
+      w: 1920,
+      h: 1080,
+      bytes: 0,
+      title: 'Ship faster with preview deploys',
+      author: people.sam.id,
+      parent: 3,
+      summary: '',
+    }),
+    status: 'failed',
+    stage: 'failed',
+    latestStep: 'Checked the scenes it was asked to leave alone',
+    scope: { beats: [{ id: 'problem', label: 'Problem' }] },
+    output: null,
+    files: null,
+    error: {
+      category: 'invalid_output',
+      message:
+        'This run changed parts of the video outside the scenes it was asked to redo: the hook title. Try again, or revise the whole video.',
+    },
+  }
+  teaser.versions.unshift(v4, v3)
+  Object.assign(teaser, {
+    status: 'failed',
+    latestVersion: 4,
+    etag: '"vid_teaser-4"',
+    updatedAt: v4.createdAt,
+  })
+  const hooks = videos.find((v) => v.id === 'vid_webhooks')?.versions[0] as V
+  Object.assign(hooks, {
+    editable: true,
+    beats: [
+      { id: 'before', label: 'Before', start: 0, duration: 8 },
+      { id: 'after', label: 'After', start: 8, duration: 9 },
+      { id: 'end', label: 'End card', start: 17, duration: 5.5 },
+    ],
+  })
+}
 
 // A remix (docs/plans/2026-11-03-remix.md): the docs video was remixed from the webhooks launch.
 Object.assign(videos.find((v) => v.id === 'vid_docs') as Video, {

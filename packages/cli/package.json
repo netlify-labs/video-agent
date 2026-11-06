@@ -17,11 +17,8 @@
   "bin": {
     "video-agent": "./dist/bin.js"
   },
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    }
+  "dependencies": {
+    "css-tree": "3.2.1"
   },
   "files": [
     "dist"

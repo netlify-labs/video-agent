@@ -1,0 +1,15 @@
+{
+  "id": "bold-blocks",
+  "name": "Bold blocks",
+  "description": "Thick borders, hard offset shadows and flat colour fields, cut fast. Loud, friendly and easy to read on a phone.",
+  "tags": ["bold", "flat", "playful"],
+  "bestFor": ["social", "launch"],
+  "aspects": ["16:9", "9:16", "1:1", "4:5"],
+  "engines": ["hyperframes"],
+  "colors": { "roles": ["bg", "text", "accent"], "derived": ["field"] },
+  "sound": { "musicMood": "upbeat indie pop, 120 to 128 bpm" },
+  "registry": [],
+  "authors": ["Video Agent maintainers"],
+  "license": "MIT",
+  "since": "2026-11-05"
+}

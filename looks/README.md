@@ -24,8 +24,9 @@ So a look never brings its own brand colours or logo:
   text never on accent". It may add roles derived from them, written as **literal colours** the agent computes
   (`--va-color-glow: #ffb38a;`, "the accent mixed 40 % toward white"), never `color-mix(…)` or `var(…)`, so the
   editor's colour picker works on them.
-- **Fonts.** The brand's fonts win. In v1 a look ships no fonts; for a role the brand lacks it names a CSS font stack
-  that starts with a family the renderer has (for monospace: `"JetBrains Mono", ui-monospace, Menlo, monospace`).
+- **Fonts.** The brand's fonts win. For a role the brand lacks, a look names a CSS font stack that starts with a
+  family the renderer has (for monospace: `"JetBrains Mono", ui-monospace, Menlo, monospace`), or ships its own font
+  (`fonts` below): an OFL or Apache WOFF2 under `assets/fonts/`, used only when the brand has none for that role.
 - **Type scale.** The look owns sizes and ratios unless the brand states hard sizes.
 - **Sound.** The look suggests a music mood; it never turns sound on.
 
@@ -78,8 +79,12 @@ Asset licences: `CC0-1.0`, `CC-BY-3.0` or `CC-BY-4.0` (with a `credit`), `OFL-1.
 - `aspects` are the shapes the rules cover. Built-in looks cover all four.
 - `colors` lists the roles the example uses; `derived` the ones the look computes from them.
 - `recording` (optional) frames screen recordings: `{ "frame": "wallpaper" | "browser" | "device" | "none",
-  "padding", "radius", "shadow", "wallpaper", "cursor": { "shape", "scale", "color" }, "ripple", "callout",
-  "zoomMax" }`, or `false` when the look doesn't suit demos.
+"padding", "radius", "shadow", "wallpaper", "cursor": { "shape", "scale", "color" }, "ripple", "callout",
+"zoomMax" }`, or `false` when the look doesn't suit demos.
+- `fonts` (optional, up to 4): `[{ "role": "sans" | "serif" | "mono" | "display" | "hand", "file":
+"assets/fonts/<name>.woff2", "license": "OFL-1.1" | "Apache-2.0", "useWhen": "up to 80 characters" }]`. Each font
+  is also in `assets/credits.json`, counts toward the 1 MB `assets/` cap, and must be a real WOFF2 (`look:check`
+  reads its header). A `.woff2` that `fonts` doesn't list is refused.
 - Unknown keys are refused.
 
 ### LOOK.md
@@ -108,6 +113,10 @@ structure and building blocks, never its words or media. It follows editing cont
 text has a `data-va-text`, colours are `--va-color-<role>` literals on `#root`, scenes animate only inside themselves.
 It loads `vendor/gsap.min.js` and `vendor/va-contract.js` (look:check supplies them) and nothing from any other URL;
 no `Date.now()` or `Math.random()`.
+
+The example refers to the look's own assets where a run puts them: `assets/look/<path>` is the look's
+`assets/<path>` (for a font, `url('assets/look/fonts/<name>.woff2')`). look:check stages them there and checks that
+each one exists.
 
 ## Building blocks: HyperFrames registry items
 
@@ -141,8 +150,8 @@ the registry blocks the built-in looks use, and `docs/spikes/k1/cases/` their co
 4. `npm run look:check -- --static <id>` until it passes; then `npm run look:check <id>` (needs Chrome) to run the
    example through `hyperframes check` too.
 5. Render the preview and poster (the commands are below).
-6. Try it on real prompts: the three in `PROMPTS.md`, on a deployment of your own (or, once the CLI's local mode
-   exists, `video-agent local --look ./looks/<id> "<prompt>"`). Attach a GIF of each to the pull request.
+6. Try it on real prompts: the three in `PROMPTS.md`, with `video-agent local --look ./looks/<id> "<prompt>"` (your own
+   coding agent, no credits) or on a deployment of your own. Attach a GIF of each to the pull request.
 7. Open the pull request.
 
 ### Preview commands

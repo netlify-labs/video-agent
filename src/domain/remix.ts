@@ -18,12 +18,25 @@ import { writeAccessMirror } from './files.js'
 import { mediaDto, snapshotMedia } from './media.js'
 import { isTake } from './takes.js'
 import { assertCan, type Principal } from './policy.js'
-import { assertSameEngine, engineOf } from './engines.js'
+import { assertCapabilities, assertSameEngine, enabledEngines, engineInfo, engineOf } from './engines.js'
+import { adoptLookSnapshot, snapshotLook } from './look-snapshot.js'
+import { lookSettings } from './look-settings.js'
+import { assertLookSupportsEngine, isRestyle, resolveLook } from './looks.js'
 import { assertRemixEnabled } from './remix-settings.js'
-import type { Aspect, JobRow, OutputRow, VersionRemix, VersionRow, VideoSound } from './types.js'
+import type {
+  Aspect,
+  JobRow,
+  OutputRow,
+  VersionContext,
+  VersionLook,
+  VersionRemix,
+  VersionRow,
+  VideoSound,
+} from './types.js'
 import {
   checkWebhook,
   consumePlan,
+  withChosenPlanLook,
   deriveTitle,
   loadJob,
   newAttempt,
@@ -32,6 +45,13 @@ import {
   withIdempotency,
 } from './videos.js'
 import type { VoiceoverInput } from './voiceover.js'
+import {
+  checkRecordingBytes,
+  demoDuration,
+  demoRecording,
+  inheritRecording,
+  type RecordingRequest,
+} from './demo-recording.js'
 
 export interface RemixInput {
   prompt: string
@@ -47,6 +67,17 @@ export interface RemixInput {
   planId?: string | undefined
   /** The remixer's own (API keys only); the source's is never copied. */
   webhookUrl?: string | undefined
+  /** A look id (a restyle into it, as a new video); null: no look; omitted: the source version's look. */
+  look?: string | null | undefined
+  /** What the remix is for outside the app; set once (github-action plan §6.2). */
+  externalRef?: string | undefined
+  externalUrl?: string | undefined
+  /** Private from the start (needs video:private). A private source's remix is private regardless. */
+  private?: boolean | undefined
+  /** Background for the run outside the prompt (github-action plan §6.1). */
+  context?: VersionContext | undefined
+  /** A new recording for a demo (screen-recording plan §6.1); omitted: the source's recording, when it has one. */
+  recording?: RecordingRequest | undefined
 }
 
 /** How much of the source's history the snapshot keeps (§3.3). */
@@ -141,6 +172,7 @@ export async function versionMediaItems(deps: Deps, principal: Principal, jobId:
   const items = []
   for (const r of await deps.store.listVersionMedia(jobId, n)) {
     const m = await deps.store.getMedia(r.mediaId)
+    // Takes are someone's voice and don't carry over into a remix.
     if (!m || isTake(m)) continue
     items.push(await mediaDto(deps, principal, m))
   }
@@ -155,7 +187,9 @@ export async function remixVideo(
   idemKey?: string,
 ) {
   assertCan(principal, 'video:create')
+  if (input.private) assertCan(principal, 'video:private', { ownerId: principal.userId })
   await assertRemixEnabled(deps)
+  if (input.recording) await checkRecordingBytes(deps, input.recording)
   checkWebhook(principal, input.webhookUrl)
   deps.log.debug('video.remix_requested', {
     userId: principal.userId,
@@ -165,6 +199,7 @@ export async function remixVideo(
     change: clip(input.prompt),
     planId: input.planId ?? null,
     mediaIds: input.mediaIds ?? null,
+    look: input.look ?? null,
   })
   const operation = `videos.remix:${sourceId}`
   // Visibility before anything else, a replay included: a key can't replay a remix of a video you can't see now.
@@ -174,10 +209,40 @@ export async function remixVideo(
   // Checked and copied outside the transaction: blob writes can't roll back, so the reservation must be committed.
   let copy: { sha256: string; narrationDropped: boolean } | null = null
   let newJobId = ''
+  // The look, copied under the remix's own prefix next to the source copy: the source's snapshot when omitted (from
+  // its own blob, since the catalog may have moved on), or a newly picked look, which makes the remix a restyle.
+  let look: VersionLook | null = null
   if (!replay) {
     const { version, output } = await sourceVersion(deps.store, source, input.fromVersion)
+    // A remix is a new video made the way its source was: that engine must be on here (render-engines plan §7).
+    const engine = engineOf(version)
+    if (!(await enabledEngines(deps)).some((e) => e.id === engine)) {
+      deps.log.info('video.remix_refused', { sourceId, engine, code: 'engine_disabled' })
+      throw new ApiError(
+        'engine_disabled',
+        `This video was made with ${engineInfo(engine).name}, which is turned off on this deployment, so it can't be remixed.`,
+      )
+    }
+    // A look chosen in the remix plan acts as the remix's look; a plan with none chosen keeps the source's.
+    const lookInput = await withChosenPlanLook(deps, principal, { planId: input.planId, look: input.look })
+    const resolved = resolveLook(deps, lookInput, {
+      inherited: version.look ?? null,
+      defaultLook: null,
+      disabled: (await lookSettings(deps)).disabledLooks,
+    })
     newJobId = deps.ids.videoId()
     copy = await copySource(deps, newJobId, version, output)
+    if (resolved.kind === 'inherit')
+      look = await snapshotLook(deps, newJobId, { from: 'blob', look: resolved.look }, false)
+    if (resolved.kind === 'pick') {
+      assertLookSupportsEngine(resolved.entry, engineOf(version))
+      look = await snapshotLook(
+        deps,
+        newJobId,
+        { from: 'bundle', entry: resolved.entry },
+        isRestyle(version.look ?? null, resolved),
+      )
+    }
   }
   const res = await deps.store.tx(async (repo) => {
     await loadJob(repo, principal, sourceId)
@@ -208,6 +273,12 @@ export async function remixVideo(
         narrationDropped: copy.narrationDropped,
         sourceSound: version.sound ?? 'silent',
       }
+      // A demo: a new recording replaces the source's; without one, the source's carries on.
+      if (input.recording && engineOf(version) !== 'hyperframes')
+        throw new ApiError('engine_unsupported', 'Screen-recording demos are made with HyperFrames only.')
+      const demo = input.recording
+        ? await demoRecording(repo, deps, principal, input.recording, newJobId, 1)
+        : null
       const created: JobRow = {
         id: newJobId,
         title: planned?.title || deriveTitle(input.prompt),
@@ -220,12 +291,15 @@ export async function remixVideo(
         updatedAt: now,
         deletedAt: null,
         version: 1,
-        // A remix of a private video stays private (§5).
-        private: job.private,
+        // A remix of a private video stays private (§5); `private: true` makes any remix private; so does a demo
+        // with anything hidden (screen-recording §9).
+        private: job.private || input.private === true || (demo?.private ?? false),
         accessEpoch: 0,
         language: input.language ?? job.language,
         remixOfJobId: job.id,
         remixOfN: version.n,
+        externalRef: input.externalRef ?? null,
+        externalUrl: input.externalUrl ?? null,
       }
       await repo.insertJob(created)
       if (created.private) await writeAccessMirror(deps, created)
@@ -233,16 +307,22 @@ export async function remixVideo(
       // since); new ones must be live library items. Omitted mediaIds keep the whole set.
       const inherited = await repo.listVersionMedia(job.id, version.n)
       const finalIds = input.mediaIds
-      const kept = finalIds ? inherited.filter((m) => finalIds.includes(m.mediaId)) : inherited
+      const sourceRec = version.recording?.mediaId ?? null
+      const kept = inherited.filter((m) =>
+        m.mediaId === sourceRec ? !demo : !finalIds || finalIds.includes(m.mediaId),
+      )
       const picks = [...(planned?.mediaIds ?? []), ...(finalIds ?? [])]
-      const media = await snapshotMedia(repo, newJobId, 1, picks, kept)
+      const media = await snapshotMedia(repo, newJobId, 1, picks, demo ? [demo.row, ...kept] : kept)
       const row: VersionRow = {
         jobId: newJobId,
         n: 1,
         prompt: input.prompt,
         authorId: principal.userId,
         apiKeyId: principal.apiKeyId,
-        targetDurationSec: input.durationSec ?? planned?.durationSec ?? version.targetDurationSec,
+        targetDurationSec:
+          input.durationSec ??
+          planned?.durationSec ??
+          (demo ? demoDuration(demo.sourceSec) : version.targetDurationSec),
         parentN: null,
         // Always authored by the agent, even when the source was an edit rendered as is.
         mode: 'author',
@@ -254,13 +334,23 @@ export async function remixVideo(
         remix,
         // The source's engine: a remix is made the way its source was (render-engines §4.2).
         engine: engineOf(version),
+        look,
+        context: input.context ?? null,
+        // Analysis and planning run fresh for a new recording; the source's own recording keeps its inputs.
+        ...(demo
+          ? { recording: demo.recording }
+          : version.recording
+            ? { recording: inheritRecording(version.recording) }
+            : {}),
       }
       assertSameEngine(deps, version, row)
+      assertCapabilities(engineOf(row), row)
       await repo.insertVersion(row)
       await repo.insertVersionMedia(media)
       await repo.insertAttempt(newAttempt(deps, newJobId, 1, now))
-      // Adopt the copy: the reservation row is done, so the sweep never deletes it.
+      // Adopt the copies: their reservation rows are done, so the sweep never deletes them.
       await repo.updateCleanup(remixReservationId(newJobId), { doneAt: now })
+      if (look) await adoptLookSnapshot(repo, deps, newJobId, look, now)
       deps.log.info('video.remixed', {
         sourceId: job.id,
         fromN: version.n,
@@ -268,6 +358,8 @@ export async function remixVideo(
         userId: principal.userId,
         narrationDropped: copy.narrationDropped,
         media: media.length,
+        look: look?.id ?? null,
+        restyle: look?.restyle ?? false,
       })
       return { status: 202, body: await videoDto(repo, deps, newJobId, principal) }
     })

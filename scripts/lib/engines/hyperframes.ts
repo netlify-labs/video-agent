@@ -46,13 +46,21 @@ export function hyperframesEngine(exec: Exec = { run, runStreaming }): RunEngine
     async render(videoDir, out, quality, onProgress) {
       // Its machine lines (@hf-progress) carry the percent; render-job decides which ones to report.
       const lines = new RenderProgressReporter(onProgress, Date.now, 0, 1)
-      await exec.runStreaming('npx', ['-y', 'hyperframes', 'render', '--quality', quality, '--output', out], {
-        cwd: videoDir,
-        timeoutMs: 20 * 60_000,
-        onOutput: (chunk) => {
-          lines.line(chunk)
+      // A screen recording's frames are extracted as PNG: the default (JPEG) rings around text, which a zoom magnifies.
+      const index = join(videoDir, 'index.html')
+      const recording = existsSync(index) && /class="[^"]*\bva-recording\b/.test(readFileSync(index, 'utf8'))
+      const frames = recording ? ['--video-frame-format', 'png'] : []
+      await exec.runStreaming(
+        'npx',
+        ['-y', 'hyperframes', 'render', '--quality', quality, ...frames, '--output', out],
+        {
+          cwd: videoDir,
+          timeoutMs: 20 * 60_000,
+          onOutput: (chunk) => {
+            lines.line(chunk)
+          },
         },
-      })
+      )
       lines.end()
       return {}
     },

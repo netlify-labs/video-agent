@@ -4,11 +4,24 @@ export type ErrorCode =
   | 'forbidden'
   | 'not_found'
   | 'not_ready'
+  /** The version can't be changed this way (redo a scene on a version without the editing contract, or its engine). */
+  | 'not_editable'
   | 'conflict'
   | 'take_deleted'
+  | 'trace_frozen'
   | 'narration_disabled'
   | 'remix_disabled'
+  /** video-agent login's browser approval is off (cli-and-sdk plan §5.2). */
+  | 'cli_login_disabled'
   | 'engine_mismatch'
+  | 'unknown_look'
+  | 'look_disabled'
+  | 'engine_unsupported'
+  | 'look_not_allowed'
+  | 'engine_not_supported_by_look'
+  | 'engine_disabled'
+  | 'remotion_key_missing'
+  | 'remotion_license_required'
   | 'narration_locked'
   | 'gone'
   | 'quota_exceeded'
@@ -24,11 +37,24 @@ const STATUS: Record<ErrorCode, number> = {
   forbidden: 403,
   not_found: 404,
   not_ready: 409,
+  not_editable: 409,
   conflict: 409,
   take_deleted: 409,
+  trace_frozen: 409,
   narration_disabled: 409,
   remix_disabled: 409,
+  cli_login_disabled: 409,
   engine_mismatch: 409,
+  unknown_look: 400,
+  look_disabled: 409,
+  engine_unsupported: 409,
+  /** 400 where a look is never accepted (render-unchanged, fit, a scoped revision); 409 for a restyle of a version with
+   * recorded narration, passed as the status override. */
+  look_not_allowed: 400,
+  engine_not_supported_by_look: 400,
+  engine_disabled: 409,
+  remotion_key_missing: 409,
+  remotion_license_required: 400,
   narration_locked: 409,
   gone: 410,
   quota_exceeded: 413,
@@ -45,9 +71,11 @@ export class ApiError extends Error {
     readonly code: ErrorCode,
     message: string,
     readonly details?: unknown,
+    /** A code's status is fixed except where one code means two things (look_not_allowed: 400, or 409). */
+    opts: { status?: number } = {},
   ) {
     super(message)
-    this.status = STATUS[code]
+    this.status = opts.status ?? STATUS[code]
   }
 }
 

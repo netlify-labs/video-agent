@@ -20,6 +20,9 @@ You drive it through MCP tools. If the tools below aren't available, connect fir
   **Sign in with Netlify** (OAuth): add the URL alone and the client opens a browser to sign in.
 - Claude Code: `claude mcp add --transport http video-agent {{SITE_URL}}/mcp --header "Authorization: Bearer $VIDEO_AGENT_API_KEY"`
 
+With a shell, the `video-agent` CLI does the same in one command (`video-agent create "…" --wait --out ./video
+--json`): see [references/cli.md](references/cli.md).
+
 Keys act as their owner with their role. Creators can make videos; Reviewers can comment and approve; Viewers can
 only watch. The tool list shows only what your role can do.
 
@@ -30,8 +33,9 @@ only watch. The tool list shows only what your role can do.
    `answers` (`question_id` plus `choice_ids`, `other` text, or `skipped`). Show the brief. Skip planning when the
    request is already specific.
 2. **Create.** `create_video` with `prompt` (quote exact on-screen text), and optionally `aspect` (16:9, 9:16, 1:1,
-   4:5), `duration_sec`, `title`, `plan_id`, `media_ids` and an `idempotency_key`. It returns at once with status
-   "queued" and a `video_id`.
+   4:5), `duration_sec`, `title`, `plan_id`, `media_ids`, a `look` and an `idempotency_key`. It returns at once with
+   status "queued" and a `video_id`. Unless the person named a style, call `list_looks` first and offer two or three
+   looks that fit (Clean product, Kinetic type, Terminal, …); pass the one they pick as `look`.
 3. **Follow.** `get_video` with `video_id` and `wait_seconds: 8`, again each time it's still in progress, until the
    status is "ready" or "failed", without asking the person whether to keep checking. While it runs, the result carries `progress` (stage and step); tell the person what the agent is doing
    rather than polling silently.
@@ -45,6 +49,9 @@ only watch. The tool list shows only what your role can do.
    `versions[].destinations`; `unpublish_video` with its `publication` id removes it.
 5. **Change.** `revise_video` with `video_id` and `change` (only what should change). Pass `from_version` to branch
    from an earlier ready version, `comment_ids` to fold in feedback, and `media_ids` to add library items.
+   **Redo a scene:** when the change is about one or a few scenes, pass `beats` (scene ids from `get_video`'s
+   `versions[].beats`) with `from_version`: only those scenes change and everything else stays exactly as it is,
+   faster and cheaper than revising the whole video.
 6. **Remix.** `remix_video` with `video_id` and `change` makes a NEW video (the person's own) that starts from an
    existing one: anything from "the same video with our new product name" to "a video like this one about webhooks".
    Its shape, length, sound, AI voice-over and media come from the source unless you pass them; recorded narration,
@@ -64,6 +71,8 @@ commands are in [references/narration.md](references/narration.md).
 
 - **Ask before spending a run.** Each create or revise starts an agent run that costs credits. Confirm the prompt, the
   aspect and the length with the person first, unless they already asked you to go ahead.
+- **Restyling is a full run.** A `look` on `revise_video` or `remix_video` that differs from the video's own rebuilds
+  how the whole video looks and moves. Before restyling a video the person didn't make, say so and ask first.
 - **One at a time.** Only one version of a video can be in progress. Don't call `create_video` again for the same
   request while it runs; poll with `get_video`. Use an `idempotency_key` when a retry might double-submit.
 - **Revise, don't recreate.** Small fixes ("bigger logo", "end card says Start free") are a `revise_video`. A new
@@ -89,5 +98,6 @@ Step-by-step versions are in [references/recipes.md](references/recipes.md):
 - **Long video → 15-second vertical cut.** A new 9:16 video from the long one's summary and media.
 - **Localise** captions and on-screen text into other languages, one revision per language.
 - **Review loop.** Read comments, add your own, approve or request changes, and revise with the feedback.
+- **Redo a scene.** Find the scene by its name or a moment, redo just that one, and review only it.
 
 The MCP server also offers these recipes as prompts (`prompts/list`), so clients without skills get them too.

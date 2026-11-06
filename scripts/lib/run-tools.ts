@@ -8,7 +8,19 @@ import { archiveFiles } from '../../src/lib/bundle-manifest.js'
 import { NARRATION_SRC } from '../../src/lib/contract.js'
 import { NARRATION_RUN_DIR, narrationPaths, readNarrationInputs } from './narration-inputs.js'
 
-export const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
+/** The repo the run works in. Local mode runs the bundled scripts against a workspace elsewhere (VA_REPO_ROOT). */
+export const repoRoot = process.env.VA_REPO_ROOT
+  ? resolve(process.env.VA_REPO_ROOT)
+  : resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
+
+/**
+ * Hides Remotion secret keys in anything a run prints (render-engines plan §5.5): anything shaped like one, and the
+ * configured key's own value. A second guard: the key is never put on a command line or in a log on purpose.
+ */
+export function maskSecrets(text: string, key = process.env.VIDEO_AGENT_REMOTION_KEY): string {
+  const masked = text.replace(/rm_sec_[A-Za-z0-9_-]+/g, 'rm_sec_***')
+  return key && key.length >= 8 ? masked.split(key).join('***') : masked
+}
 
 /** The pinned HyperFrames version: package.json `netlifyAgent.hyperframes.version` (the looks scripts check against it). */
 export const pinnedHyperframesVersion = () =>
@@ -19,7 +31,7 @@ export const pinnedHyperframesVersion = () =>
   ).netlifyAgent.hyperframes.version
 
 export const log = (step: string, fields: Record<string, unknown> = {}) => {
-  console.error(JSON.stringify({ ts: new Date().toISOString(), step, ...fields }))
+  console.error(maskSecrets(JSON.stringify({ ts: new Date().toISOString(), step, ...fields })))
 }
 
 export class StepError extends Error {}
@@ -119,8 +131,16 @@ export function which(cmd: string): string | null {
   return r.status === 0 && out ? out : null
 }
 
-/** The netlify CLI isn't on PATH in non-interactive shells inside runs; look in the usual places. */
+/**
+ * The netlify CLI isn't on PATH in non-interactive shells inside runs; look in the usual places. Local mode sets
+ * VA_NETLIFY_CLI=off (cli-and-sdk plan §7): a laptop run must never reach Blobs, so any step that would is a bug.
+ */
 export function netlifyCli(): string[] {
+  if (process.env.VA_NETLIFY_CLI === 'off')
+    throw new StepError(
+      'This is a local run (VA_NETLIFY_CLI=off), which never calls the Netlify CLI, but a step tried to. ' +
+        'Use --upload local, a file: callback and --inputs. Stop and report this.',
+    )
   const found = which('netlify')
   if (found) return [found]
   for (const p of [
@@ -133,10 +153,15 @@ export function netlifyCli(): string[] {
   return ['npx', '-y', 'netlify-cli']
 }
 
-export function run(cmd: string, args: string[], opts: { cwd?: string; timeoutMs?: number } = {}): string {
+export function run(
+  cmd: string,
+  args: string[],
+  opts: { cwd?: string; timeoutMs?: number; env?: NodeJS.ProcessEnv } = {},
+): string {
   try {
     return execFileSync(cmd, args, {
       cwd: opts.cwd ?? repoRoot,
+      ...(opts.env ? { env: opts.env } : {}),
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
       timeout: opts.timeoutMs ?? 15 * 60_000,
@@ -161,7 +186,7 @@ export function runStreaming(
     let tail = ''
     const keep = (b: Buffer) => {
       const s = b.toString('utf8')
-      tail = (tail + s).slice(-8000)
+      tail = maskSecrets(tail + s).slice(-8000)
       opts.onOutput?.(s)
     }
     child.stdout.on('data', keep)
@@ -177,7 +202,9 @@ export function runStreaming(
       else
         reject(
           new StepError(
-            `${cmd} ${args.slice(0, 3).join(' ')} failed (${signal ?? `exit ${code}`}): ${tail.trim().slice(-2000)}`,
+            maskSecrets(
+              `${cmd} ${args.slice(0, 3).join(' ')} failed (${signal ?? `exit ${code}`}): ${tail.trim().slice(-2000)}`,
+            ),
           ),
         )
     })

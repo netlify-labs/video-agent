@@ -1015,6 +1015,68 @@ then revisit the model default.
 9. **Editor entry points** (beat card, timeline menu): after the gate (recommended), or in v1?
 10. **New fonts in a scoped scene:** not allowed in v1? Recommended: yes; the brand's fonts are already loaded.
 
+## As built (in progress, 2026-11-05)
+
+**Live tests:**
+- **LT-1 (steps 1–2) and LT-2 step 4** ran on production on 2026-11-05, owner-approved, and passed. They cost
+  117.7 credits: 67.2 for redoing a scene at the same length, 50.5 for redoing it at twice the length.
+  - **Frozen-scene drift:** the lowest SSIM was 0.99979 per frame and 0.99802 on the worst tile, against
+    thresholds of 0.98 and 0.955.
+  - **Details:** `docs/spikes.md`, "LT-1 and LT-2 step 4".
+- **LT-2 steps 3 and 6** ran the same day, owner-approved, and passed for 97.6 credits.
+  - **Step 3, the baseline:** a whole-video revision of the same request cost 36.2 credits, and it drifted in a
+    scene it wasn't asked to change (SSIM 0.951 per frame, 0.781 on the worst tile).
+  - **Step 6, narrated:** cost 61.4 credits; the length and the narration are unchanged.
+  - **Step 5:** not run, since production has no voiced video.
+- **The savings bar is missed:** the scoped median is about 60 credits, against 36.2 for the whole revision.
+  Following the plan's rule, it ships anyway: the frozen scenes stay unchanged. The README makes no savings claim.
+- **Not run:**
+  - LT-2 step 5: production has no voiced video, and making one wasn't approved.
+  - LT-3 and LT-4: skipped by the owner on 2026-11-05.
+- **Beats backfill:** `scripts/backfill-beats.ts` ran on production on 2026-11-06, owner-approved, at 0 credits. It
+  filled 42 versions across 21 videos with none failed; a re-run finds none left.
+- **Credits spent on this plan so far:** 272.9, which is B3's 57.6 plus 117.7 plus 97.6.
+
+**On main:**
+- **Spikes (`b448e7f`–`552b289`):** B1 and B2 are free. B3 cost 57.6 credits (`docs/spikes.md`).
+- **Phase 1, the run side (`b9f1a3e`–`8244e21`):**
+  - `spliceScoped`, `scopeProblems` and `hyperframesScopeCheck`;
+  - prepare-run's frozen parent, `scope.json` and stills;
+  - check-contract's put-back and render-job's scope guard.
+- **Phases 2 and 3, the service and the UI (`8bd70cf`–`1069dea`):**
+  - **Data:** migration `20261105205146_redo_version_scope_beats`, and prompt template 17.
+  - **Finalize:** stores `beats` and `contract` with ready, and checks a scoped version against the parent's
+    archive.
+  - **API:** `getVersionBeats`, `scope` on `reviseVideo` (`not_editable`, 409), the scoped manifest and prompt,
+    and MCP `revise_video` `beats`.
+  - **Web app:** Some scenes, Redo this part, scoped Incorporate, the history label and the refusal fallback.
+  - **SDK and docs:** `va.videos.redoScenes` and the README.
+
+**Phase 4 (merged @ `08b22fc`):**
+- the CLI's `video-agent scenes`, `revise --scene` and `redo`;
+- `scripts/backfill-beats.ts`;
+- `SCOPED_AGENT_MODEL` and `SCOPED_AGENT_EFFORT`, unset by default;
+- the chip hover seek, and the version switcher opening a scoped version at the scene it redid;
+- the editor's beat-card and timeline "Redo this scene…" entries, with the draft warning;
+- `regen-beat.ts` step 7, the cheaper-model comparison, and its fill of a source version's missing beats.
+
+**Left:** local mode's `video-agent local revise --scene` (va-8cy4.5.14). It waits for the CLI's local mode
+(va-p1th.5.12 and 5.15), and the phase 4 gate stays open for it.
+
+**Deviations from the plan:**
+- **Look refusal:** Looks phase 2 added `look` to `reviseVideo`, and its `assertLookAllowed` refuses a look with a
+  scope (400 `look_not_allowed`). It's not in `checkScopedRevise` beside `planId`, `durationSec`, `sound` and
+  `voiceover`. `test/scoped-revise.test.ts` covers it.
+- **SCOPED_AGENT_MODEL:** owner Q2 recommended leaving it out until a measured comparison. Running that comparison
+  (LT-4) needs the knob, so it ships unset; the README carries no advice until LT-4 has run.
+- **CLI:** the remote commands (`video-agent scenes`, `revise --scene`, `redo`) shipped in phase 4. Local mode's
+  `revise --scene` isn't built; it waits for the CLI plan's local mode.
+- **Default flip:** Incorporate's scoped switch is on by default under half the scenes (owner Q5), so the existing
+  Incorporate smoke test now expects a `scope` when its one pinned comment is in one of four scenes.
+- **Editor scenes:** the editor offers "Redo this scene…" only for scenes that are also in the rendered version's
+  beats. In a deployment they are the same list. The UI mock's editor composition differs from its version beats,
+  and this keeps the two consistent.
+
 ## Sources
 
 - CSS `@scope` reference (including scoping to the owner `<style>`'s parent without a prelude):

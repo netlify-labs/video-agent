@@ -77,6 +77,8 @@ describe('prepare-run steps', () => {
     expect(steps(spy)).toEqual([
       ['source', false],
       ['media', true],
+      ['look', true],
+      ['recording', true],
       ['scope', true],
       ['stills', true],
     ])
@@ -116,15 +118,15 @@ describe('prepare-run steps', () => {
     const author = setup()
     await prepare(base, { tmp: author.target, root: author.target, fetch: author.fetch })
     expect(readdirSync(join(author.target, 'video'))).toEqual([])
-    // source, media, scope, stills: the author run's source step is the fourth from the end.
-    expect(steps(spy).at(-4)).toEqual(['source', true])
+    // source, media, look, recording, scope, stills: the author run's source step is the sixth from the end.
+    expect(steps(spy).at(-6)).toEqual(['source', true])
   })
 
-  it('stops on an engine this run has no code for', async () => {
+  it('stops on an engine the manifest names that this repo has no code for', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     const { target, fetch } = setup()
     await expect(
-      prepare({ ...base, engine: { id: 'remotion' } }, { tmp: target, root: target, fetch }),
-    ).rejects.toThrow(/can't render Remotion videos yet/)
+      prepare({ ...base, engine: { id: 'lottie' } as never }, { tmp: target, root: target, fetch }),
+    ).rejects.toThrow(/unknown engine/)
   })
 })

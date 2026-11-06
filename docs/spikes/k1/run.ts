@@ -12,8 +12,8 @@ import { join } from 'node:path'
 import { applyEdits, validate, type EditOp, type Summary } from '../../../src/lib/contract.js'
 
 const root = new URL('../../..', import.meta.url).pathname
-const casesDir = join(root, 'spikes', 'k1', 'cases')
-const outDir = join(root, 'spikes', 'out', 'k1')
+const casesDir = join(root, 'docs', 'spikes', 'k1', 'cases')
+const outDir = join(root, 'docs', 'spikes', 'out', 'k1')
 const VERSION = (JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
   netlifyAgent: { hyperframes: { version: string } }
 }).netlifyAgent.hyperframes.version

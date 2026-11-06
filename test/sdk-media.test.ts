@@ -199,7 +199,7 @@ describe('config helpers', () => {
     const h = harness()
     const { va, seen } = await sdk(h)
     expect(await va.config.supports('remix')).toBe(true)
-    expect(await va.config.supports('looks')).toBe(false)
+    expect(await va.config.supports('rest_wait')).toBe(false)
     expect((await va.config.get()).features).toContain('remix')
     expect(seen.filter((s) => s.path === '/api/v1/config')).toHaveLength(1)
   })

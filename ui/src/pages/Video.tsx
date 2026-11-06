@@ -1,3 +1,4 @@
+import { HiddenList } from '../components/recording/HiddenList'
 import {
   ActionIcon,
   Alert,
@@ -22,14 +23,18 @@ import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
 import { FavoriteButton } from '../components/FavoriteButton'
 import { RemixDialog, useCanRemix } from '../components/RemixDialog'
+import { useVideoTools } from '../webmcp/videoTools'
+import { RestyleDialog, canRestyle } from '../components/RestyleDialog'
 import { useMediaKeys } from '../lib/media-keys'
 import { MediaChips, type Media } from '../components/MediaPicker'
 import { PlanPanel } from '../components/PlanPanel'
+import { ScenePicker } from '../components/ScenePicker'
 import { PosterMenu } from '../components/PosterMenu'
 import { PublishButton } from '../components/PublishDialog'
 import { PublishToMenu, PublishedTo, destinationsActive } from '../components/Destinations'
 import { TranscriptEditor } from '../components/TranscriptEditor'
 import { SoundControl, soundAfterPick, type Sound } from '../components/SoundControl'
+import { engineName, soundsFor } from '../lib/engines'
 import {
   VoiceoverControl,
   sameVoice,
@@ -47,6 +52,7 @@ import {
   IconBellRinging,
   IconDots,
   IconArrowsShuffle,
+  IconPalette,
   IconDownload,
   IconExternalLink,
   IconLanguage,
@@ -65,6 +71,7 @@ import {
   unwatchRun,
   watchRun,
 } from '../lib/run-notify'
+import { isScopeRefusal, redidLabel, scopedStart } from '../lib/scenes'
 import {
   $api,
   errorMessage,
@@ -121,6 +128,18 @@ function clock(since: string | null | undefined): string {
 
 /** Whether the person asked for a browser notification when a run ends, and still allows them. */
 const notifyOn = () => readPref() && canNotify()
+
+/**
+ * "From GitHub: acme/web#123" for an externalRef like github:acme/web#pr-123 (github-action plan §6.2); other schemes
+ * show as they are.
+ */
+function externalLabel(ref: string): { from: string; text: string } {
+  const i = ref.indexOf(':')
+  const scheme = ref.slice(0, i)
+  const rest = ref.slice(i + 1)
+  if (scheme === 'github') return { from: 'From GitHub:', text: rest.replace(/#pr-(\d+)$/, '#$1') }
+  return { from: `From ${scheme}:`, text: rest }
+}
 
 function updatedAgo(iso: string): string {
   const s = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000))
@@ -371,6 +390,11 @@ function Filmstrip({
                     </Text>
                     <Status status={x.status} size="xs" />
                   </Group>
+                  {x.scope ? (
+                    <Text size="xs" fw={500} c="var(--va-accent)" data-testid="version-scope">
+                      {redidLabel(x.scope)}
+                    </Text>
+                  ) : null}
                   <Text size="sm" c="var(--va-muted)" lineClamp={2}>
                     {x.prompt}
                   </Text>
@@ -445,6 +469,15 @@ function PublicLink({ video, v, canPublish }: { video: Video; v: Version; canPub
         {live.urls.narration ? <CopyField label="Narration (MP3)" value={live.urls.narration} /> : null}
         {live.urls.transcript ? <CopyField label="Transcript" value={live.urls.transcript} /> : null}
         <CopyField label="Embed" value={live.embed ?? ''} />
+        {live.player ? (
+          <div>
+            <CopyField label="Player" value={live.player} />
+            <Text size="xs" c="var(--va-faint)" mt={4}>
+              The player keeps the credits and captions and sizes itself; it needs its script. The embed above
+              needs none.
+            </Text>
+          </div>
+        ) : null}
         {canPublish ? (
           <Group justify="space-between" mt={4}>
             <Text size="xs" c="var(--va-faint)">
@@ -531,6 +564,7 @@ export function VideoPage() {
   const canCreate = me.data?.role === 'admin' || me.data?.role === 'creator'
   const config = $api.useQuery('get', '/api/v1/config')
   const canPlan = canCreate && config.data?.planningAvailable === true
+  const canRedoScenes = config.data?.features.includes('scoped_revision') === true
   const [planningRevision, setPlanningRevision] = useState(false)
   // The version whose full details are open (How vN was made), if any.
   const [detailsN, setDetailsN] = useState<number | null>(null)
@@ -538,6 +572,8 @@ export function VideoPage() {
   // ?remix=n (the share page's link) opens the Remix dialog for that version.
   const [search, setSearch] = useSearchParams()
   const [remixing, setRemixing] = useState<number | null>(null)
+  const [restyling, setRestyling] = useState<number | null>(null)
+  const looksOn = config.data?.features.includes('looks') === true
   // A watched run (Notify) is polled by RunWatcher on the same query, in the background too; polling here as well
   // would double the requests.
   const watched = useSyncExternalStore(subscribeWatches, () => isWatched(id))
@@ -555,6 +591,10 @@ export function VideoPage() {
   // null keeps the voice-over of the version being revised.
   const [revVoice, setRevVoice] = useState<VoiceState | null>(null)
   const [revKey, setRevKey] = useState(newIdempotencyKey)
+  // Redo a scene: whole video (the default) or some scenes of the shown version, and which.
+  const [revScenes, setRevScenes] = useState(false)
+  const [revBeats, setRevBeats] = useState<string[]>([])
+  const revBox = useRef<HTMLTextAreaElement>(null)
   const revMediaBody = revMedia.length ? { mediaIds: revMedia.map((m) => m.id) } : {}
   // Files dropped on the revision box upload to the library and are attached when ready (set below, once the
   // version's sound is known).
@@ -567,13 +607,34 @@ export function VideoPage() {
   const [picking, setPicking] = useState(false)
   const [pending, setPending] = useState<Pin | null>(null)
   const [view, setView] = useState<'video' | 'composition'>('video')
+  // Switching to a scoped version starts its player at the first scene it redid (once the new element has loaded).
+  const [seekTo, setSeekTo] = useState<number | null>(null)
   const select = (n: number) => {
+    const x = video.data?.versions.find((y) => y.n === n)
+    setSeekTo(x && x.status === 'ready' ? scopedStart(x) : null)
     setSelected(n)
     setRevSound(null)
     setRevVoice(null)
+    setRevBeats([])
     setPicking(false)
     setPending(null)
   }
+  useEffect(() => {
+    const el = player.current
+    if (seekTo === null || !el) return
+    const go = () => {
+      el.currentTime = seekTo
+      setSeekTo(null)
+    }
+    if (el.readyState >= 1) {
+      go()
+      return
+    }
+    el.addEventListener('loadedmetadata', go, { once: true })
+    return () => {
+      el.removeEventListener('loadedmetadata', go)
+    }
+  }, [seekTo, selected])
 
   const revise = $api.useMutation('post', '/api/v1/videos/{id}/versions', {
     onSuccess: () => {
@@ -581,6 +642,8 @@ export function VideoPage() {
       setRevMedia([])
       setRevSound(null)
       setRevVoice(null)
+      setRevScenes(false)
+      setRevBeats([])
       setRevKey(newIdempotencyKey())
       setSelected(null)
       void qc.invalidateQueries()
@@ -605,7 +668,14 @@ export function VideoPage() {
   const healN =
     data?.versions.find((x) => x.n === selected) ?? data?.versions.find((x) => x.status === 'ready')
   const heal =
-    healN && healN.status === 'ready' && !healN.editable && healN.mode === 'author' ? healN.n : null
+    healN &&
+    healN.status === 'ready' &&
+    !healN.editable &&
+    healN.mode === 'author' &&
+    // Only HyperFrames versions have an editing record to repair; another engine's isn't editable at all.
+    healN.editing.engine === 'hyperframes'
+      ? healN.n
+      : null
   useEffect(() => {
     if (heal === null || !data) return
     const key = `${data.id}/${heal}`
@@ -655,6 +725,46 @@ export function VideoPage() {
       notifications.show({ color: data.status === 'ready' ? 'teal' : 'red', message: msg })
     }
   }, [data])
+
+  // WebMCP (va-qago): the same versions, player and requests the page's own controls use.
+  const shownVersion = data
+    ? (data.versions.find((x) => x.n === selected) ??
+      data.versions.find((x) => x.status === 'ready') ??
+      data.versions[0])
+    : undefined
+  const mine = data !== undefined && (me.data?.role === 'admin' || me.data?.id === data.owner.id)
+  useVideoTools({
+    video: data,
+    shown: shownVersion,
+    select,
+    player: () => (view === 'video' ? player.current : null),
+    can: {
+      create: canCreate,
+      review: me.data !== undefined && me.data.role !== 'viewer',
+      publish: mine,
+      remix: canRemix,
+    },
+    revise: async (body) => {
+      await revise.mutateAsync({
+        params: { path: { id }, header: { 'idempotency-key': newIdempotencyKey() } },
+        body,
+      })
+    },
+    publish: async (n, showTranscript) => {
+      await publish.mutateAsync({
+        params: { path: { id, n } },
+        body: showTranscript ? { showTranscript } : {},
+      })
+    },
+    unpublish: async (n) => {
+      const { error } = await fetchClient.DELETE('/api/v1/videos/{id}/versions/{n}/publish', {
+        params: { path: { id, n } },
+      })
+      if (error) throw new Error(errorMessage(error))
+      void qc.invalidateQueries()
+    },
+    refresh: () => void qc.invalidateQueries(),
+  })
 
   if (video.isLoading) {
     return (
@@ -719,7 +829,22 @@ export function VideoPage() {
   }
   const voice = revVoice ?? voiceStateFrom(v.voiceover)
   const voiceChanged = revVoice !== null && !sameVoice(revVoice, voiceStateFrom(v.voiceover))
+  // Why this version's scenes can't be redone one by one, if they can't.
+  const scenesBlocked = !v.editable
+    ? "This version doesn't keep the editing contract, so it can only be revised whole."
+    : v.editing.capabilities.scopedRevision
+      ? null
+      : "This version's engine can't redo single scenes, so it can only be revised whole."
+  const scoped = canRedoScenes && revScenes && scenesBlocked === null
   const makeRevision = (planId?: string | null) => {
+    if (scoped) {
+      // Length, sound, voice-over and plan stay the parent's: the server refuses them with a scope.
+      revise.mutate({
+        params: { path: { id }, header: { 'idempotency-key': revKey } },
+        body: { prompt: revision, fromVersion: v.n, scope: { beats: revBeats }, ...revMediaBody },
+      })
+      return
+    }
     revise.mutate({
       params: { path: { id }, header: { 'idempotency-key': revKey } },
       body: {
@@ -758,6 +883,18 @@ export function VideoPage() {
             </Title>
           )}
           <div className="va-sub num">{sub}</div>
+          {data.externalRef ? (
+            <div className="va-sub" data-testid="external-ref">
+              {externalLabel(data.externalRef).from}{' '}
+              {data.externalUrl ? (
+                <Anchor href={data.externalUrl} target="_blank" rel="noopener noreferrer" inherit>
+                  {externalLabel(data.externalRef).text}
+                </Anchor>
+              ) : (
+                externalLabel(data.externalRef).text
+              )}
+            </div>
+          ) : null}
           {data.remixOf ? (
             <div className="va-sub" data-testid="remix-of">
               Remix of{' '}
@@ -779,9 +916,23 @@ export function VideoPage() {
               }}
             />
           ) : null}
+          {restyling !== null ? (
+            <RestyleDialog
+              video={data}
+              version={data.versions.find((x) => x.n === restyling) as Version}
+              opened
+              onClose={() => {
+                setRestyling(null)
+              }}
+            />
+          ) : null}
           {v.status === 'ready' && canCreate ? (
             <Tooltip
-              label="This version can't be edited in the browser. Ask for a revision instead."
+              label={
+                v.editing.capabilities.editOps.length === 0
+                  ? `Editing isn't available for ${engineName(v.editing.engine)} videos yet. Ask for a revision instead.`
+                  : "This version can't be edited in the browser. Ask for a revision instead."
+              }
               disabled={v.editable}
             >
               <Button
@@ -820,6 +971,17 @@ export function VideoPage() {
                 </ActionIcon>
               </Menu.Target>
               <Menu.Dropdown>
+                {canCreate && canRestyle(v, looksOn) ? (
+                  <Menu.Item
+                    hiddenFrom="sm"
+                    leftSection={<IconPalette size={14} />}
+                    onClick={() => {
+                      setRestyling(v.n)
+                    }}
+                  >
+                    Restyle…
+                  </Menu.Item>
+                ) : null}
                 {v.status === 'ready'
                   ? (
                       [
@@ -955,6 +1117,23 @@ export function VideoPage() {
                   </Button>
                 </Tooltip>
               ) : null}
+              {/* Phones get Restyle in the More actions menu: the row has no room for another icon. */}
+              {canCreate && canRestyle(v, looksOn) ? (
+                <Tooltip label="Restyle: a new version in another look">
+                  <ActionIcon
+                    visibleFrom="sm"
+                    variant="default"
+                    size={36}
+                    radius="md"
+                    aria-label={`Restyle v${v.n}`}
+                    onClick={() => {
+                      setRestyling(v.n)
+                    }}
+                  >
+                    <IconPalette size={18} />
+                  </ActionIcon>
+                </Tooltip>
+              ) : null}
               <FavoriteButton videoId={data.id} favorite={data.favorite} />
               {v.status === 'ready' && canPublish ? (
                 <PosterMenu
@@ -1069,6 +1248,22 @@ export function VideoPage() {
                       >
                         Try again
                       </Button>
+                      {v.scope && v.parentN !== null && isScopeRefusal(v.error?.message) ? (
+                        // Retrying carries the refusal into the next run; a whole revision may be what's needed.
+                        <Button
+                          variant="default"
+                          disabled={busy}
+                          onClick={() => {
+                            select(v.parentN ?? 1)
+                            setRevScenes(false)
+                            setRevision(v.prompt)
+                            revBox.current?.scrollIntoView({ block: 'center' })
+                            revBox.current?.focus()
+                          }}
+                        >
+                          Revise the whole video
+                        </Button>
+                      ) : null}
                     </Group>
                   ) : null}
                 </Stack>
@@ -1094,7 +1289,7 @@ export function VideoPage() {
               <form
                 onSubmit={(e) => {
                   e.preventDefault()
-                  if (canPlan) {
+                  if (canPlan && !scoped) {
                     setPlanningRevision(true)
                     return
                   }
@@ -1119,11 +1314,53 @@ export function VideoPage() {
                           : 'Pick a ready version'}
                     </Text>
                   </Group>
+                  {canRedoScenes && v.status === 'ready' ? (
+                    <Stack gap={6} data-testid="revise-scope">
+                      <SegmentedControl
+                        size="xs"
+                        w="fit-content"
+                        value={scoped ? 'scenes' : 'whole'}
+                        disabled={busy || planningRevision}
+                        onChange={(x) => {
+                          setRevScenes(x === 'scenes')
+                        }}
+                        data={[
+                          { value: 'whole', label: 'Whole video' },
+                          { value: 'scenes', label: 'Some scenes', disabled: scenesBlocked !== null },
+                        ]}
+                      />
+                      {scenesBlocked ? (
+                        <Text size="sm" c="var(--va-faint)">
+                          {scenesBlocked}
+                        </Text>
+                      ) : scoped ? (
+                        <>
+                          <ScenePicker
+                            key={`${id}-${v.n}`}
+                            videoId={id}
+                            v={v}
+                            value={revBeats}
+                            onChange={setRevBeats}
+                            disabled={busy}
+                            onPreview={(b) => {
+                              // Hovering a scene shows where it starts.
+                              if (player.current && view === 'video') player.current.currentTime = b.start
+                            }}
+                          />
+                          <Text size="sm" c="var(--va-faint)">
+                            Length, sound and voice stay as they are. Say in the request if a scene should run
+                            longer.
+                          </Text>
+                        </>
+                      ) : null}
+                    </Stack>
+                  ) : null}
                   <DropTarget
                     onFiles={(fs) => void revUploads.add(fs)}
                     disabled={busy || v.status !== 'ready' || planningRevision}
                   >
                     <Textarea
+                      ref={revBox}
                       aria-label="What should change?"
                       autosize
                       minRows={3}
@@ -1142,31 +1379,43 @@ export function VideoPage() {
                     disabled={busy || v.status !== 'ready' || planningRevision}
                     button={false}
                   />
-                  <SoundControl
-                    value={sound}
-                    media={revMedia}
-                    disabled={busy || v.status !== 'ready' || planningRevision}
-                    onChange={(s) => {
-                      setRevSound(s === v.sound ? null : s)
-                    }}
-                  />
-                  <VoiceoverControl
-                    value={voice}
-                    disabled={busy || v.status !== 'ready' || planningRevision}
-                    planning={canPlan}
-                    onChange={setRevVoice}
-                  />
-                  <Group gap={0} className={canPlan ? 'va-split-button' : undefined}>
+                  {scoped ? null : (
+                    <>
+                      <SoundControl
+                        value={sound}
+                        media={revMedia}
+                        disabled={busy || v.status !== 'ready' || planningRevision}
+                        allowed={soundsFor(v.editing.capabilities)}
+                        onChange={(s) => {
+                          setRevSound(s === v.sound ? null : s)
+                        }}
+                      />
+                      {/* An engine without voice-over (Remotion today) never offers it (render-engines §4.1). */}
+                      {v.editing.capabilities.voiceover ? (
+                        <VoiceoverControl
+                          value={voice}
+                          disabled={busy || v.status !== 'ready' || planningRevision}
+                          planning={canPlan}
+                          onChange={setRevVoice}
+                        />
+                      ) : null}
+                    </>
+                  )}
+                  <Group gap={0} className={canPlan && !scoped ? 'va-split-button' : undefined}>
                     <Button
                       type="submit"
                       disabled={
-                        busy || v.status !== 'ready' || revision.trim().length < 3 || planningRevision
+                        busy ||
+                        v.status !== 'ready' ||
+                        revision.trim().length < 3 ||
+                        planningRevision ||
+                        (scoped && revBeats.length === 0)
                       }
-                      loading={revise.isPending && !canPlan}
+                      loading={revise.isPending && (!canPlan || scoped)}
                     >
-                      {canPlan ? 'Plan it first' : `Make v${data.versions.length + 1}`}
+                      {canPlan && !scoped ? 'Plan it first' : `Make v${data.versions.length + 1}`}
                     </Button>
-                    {canPlan ? (
+                    {canPlan && !scoped ? (
                       <Button
                         variant="default"
                         disabled={busy || v.status !== 'ready' || revision.trim().length < 3}
@@ -1207,6 +1456,7 @@ export function VideoPage() {
           {/* Where this version is published comes first, right under the actions; then the versions. */}
           <PublicLink video={data} v={v} canPublish={canPublish} />
           <PublishedTo v={v} canPublish={canPublish} />
+          {v.recording ? <HiddenList video={data} v={v} canCheck={canPublish} /> : null}
           <Filmstrip video={data} selected={v.n} onSelect={select} onDetails={setDetailsN} />
           {v.status === 'ready' ? <TranscriptEditor videoId={data.id} v={v} canEdit={canPublish} /> : null}
           <DetailsCard video={data} v={v} onOpen={() => setDetailsN(v.n)} />

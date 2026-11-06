@@ -1,0 +1,44 @@
+video-agent 0.0.0: make videos with a Video Agent deployment, or on this machine with your own coding agent.
+
+Commands:
+  help             List the commands, or explain one.
+  version          Print the CLI's version, and the server's when one is configured.
+  login            Get an API key by approving this CLI in the browser, or save a key you paste.
+  logout           Forget the saved key.
+  whoami           Show who the key acts as, and the server.
+  create           Make a video from a prompt.
+  revise           Make the next version of a video.
+  redo             Redo one or more scenes only. (needs a server with scoped_revision)
+  scenes           List a version's scenes.
+  remix            Make a new video from another one. (needs a server with remix)
+  looks            List the Looks. (needs a server with looks)
+  restyle          Restyle a video with another Look. (needs a server with looks)
+  get              Show a video.
+  list             List videos.
+  wait             Follow a run until the video is ready.
+  download         Download a version's files.
+  publish          Publish a version: share link, MP4 link and embed snippet.
+  unpublish        Take a version offline.
+  cancel           Cancel a running version.
+  retry            Try a failed version again.
+  comments list    List a video's comments.
+  comments add     Comment on a version.
+  verdict          Approve a version or ask for changes.
+  media upload     Upload files to the media library; waits until each is ready.
+  media list       List the media library.
+  media get        Show a media item.
+  keys list        List your API keys.
+  keys revoke      Revoke an API key.
+  keys create      Explains where API keys come from (the API keys page, or login).
+  open             Open a video's page in the browser.
+  api              Call any API route, like gh api.
+  doctor           Check Node, the config, the server and (for local mode) the tools.
+  brief pr         Print the GitHub Action's brief for a pull request (pipe it into create --prompt-file -).
+  brief release    Print a changelog brief for a release, from its notes on GitHub or a file.
+  brief changelog  Print a changelog brief from the pull requests merged since a date.
+  record           Record a web app in Chromium with a pointer trace, for a demo (on this machine, no server).
+  local            Make a video on this machine with your own coding agent, inside its sandbox.
+  local demo       Make a demo from a screen recording on this machine (--quick: no agent, no model).
+  local revise     Make the next version of a video you made with local.
+
+Run "video-agent help <command>" for its flags. Add --json for one JSON object on stdout.

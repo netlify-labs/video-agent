@@ -78,7 +78,12 @@ Non-goals for v1:
 5. **Stopping:**
    - **Space** stops and keeps the take; **Esc** discards it.
    - Seeking, a playback stall, the tab going hidden, a device change (`devicechange`, mic track `ended`), a context interruption, or sync residual beyond the limit (§5.3) **stops the take and keeps what was captured** up to that point, with a message saying why.
-6. The take appears as a clip on the **Narration** track, with its waveform, at the video time it was recorded against.
+6. **Review** (owner, 2026-11-06): the take doesn't go straight on the track. It waits in the Record a take panel, under the prompter, with play/pause and a scrubber that play it against the picture as Add would leave it. A punch-in plays with its pre-roll, the old narration replaced in its range. The panel shows the take's length, where it lands (0:00.0 to 0:08.7), and, if it stopped early, why.
+   - **Add to timeline** (Enter): the take appears as a clip on the **Narration** track, with its waveform, at the video time it was recorded against.
+   - **Record again:** drops this take and records the same take again.
+   - **Keep recording from here:** shown when it stopped before the end. Adds this take and punches in from where it stopped to the end, then reviews the joined result.
+   - **Discard** (Esc).
+   - The take uploads while it's reviewed, so it's never lost (a reload offers it again); only the insert waits for the decision.
 7. **Audition the mix** right away in the browser (§5.4).
    - The narration plays raw by default.
    - An **A/B Cleanup** toggle applies a browser approximation of the _Light_ chain (high-pass, compressor, gentle spectral gate), labelled _approximate: the render's cleanup is the real one_.
@@ -105,7 +110,7 @@ Non-goals for v1:
   - **Music:** with a duck toggle and amount.
 - **Snapping:** to beat boundaries, other clip edges and the playhead. Hold ⌥ / Alt to disable it.
 - **Zoom:** ⌘/Ctrl-scroll.
-- **Undo/redo** is a local command stack in the editor. Draft saves keep only the newest revision (`edits.ts:208`), so undo can't come from server revisions.
+- **Undo/redo** is a local command stack in the editor. Draft saves keep only the newest revision, plus each superseded one for a preview link's lifetime (`pruneRevs` in `edits.ts`: a frame still showing it keeps loading its recordings), so undo can't come from server revisions.
 - **Keyboard shortcuts** ignore focus inside text fields and have Ctrl equivalents on non-Mac.
 - **Recordings** are managed with the library's existing conventions: `title` and notes (`db/schema.ts:305-307`), and the table view (`ui/src/pages/Media.tsx`) with a _Recordings_ filter.
 
@@ -181,7 +186,7 @@ Verified at `8649997`. Line numbers are as of that commit.
 | **Audio sniffing.** MP3, PCM WAV, Ogg Vorbis/Opus, M4A/AAC; WebM rejected; 50 MiB / 600 s limits.                                                                                                                                                                                                                                                                                                                                                                    | `classify.ts:34-54,124-166`, `audio.ts:208-214`                                                                                                | Recordings upload as 24 kHz PCM16 WAV. WebM is upload-only (§5.2).                                                                                                    |
 | **Uploads.** Sessions use 4 MiB parts with a 100 MiB ceiling. The uploader hashes the **whole file in memory** (`await f.arrayBuffer()`). Completion can return before the media is ready. The 1 GiB quota counts unfinished uploads only.                                                                                                                                                                                                                           | `upload.ts:93-158`, `media-uploads.ts:14-57`, `store/drizzle.ts:516-523`                                                                       | The worker supplies the hash. Ready-wait before treating a take as saved. Add a stored-bytes quota for takes.                                                         |
 | **Media access.** Snapshots are capped at 12 items / 300 MiB and hydrate by Blobs key + sha256. `loadMedia` lets any signed-in reader load any ready media. `checkMedia` duplicate lookup returns matches across the library. Delete is soft. There is **no media GC**. Usage and credits read `version_media` only, and count audio as audible only via `sound` or `voiceover`.                                                                                     | `media.ts:155-159,252-258,277-286,306-353`, `prepare-run.ts:184-199`, `store/drizzle.ts:440,484-501,704-731`, `credits.ts:76-85`, `cleanup.ts` | Takes need a separate snapshot list, one authorization predicate on every path, a reference index, GC and provenance (§6.1, §8).                                      |
-| **Drafts.** Author-only. Expire after 7 days. Only the newest revision is kept. Save locks the edit row, but media lookup happens outside that transaction.                                                                                                                                                                                                                                                                                                          | `edits.ts:29,160,208,265,282-301`                                                                                                              | Reviewers hear committed versions only. GC needs a lock protocol (§8).                                                                                                |
+| **Drafts.** Author-only. Expire after 7 days. Only the newest revision is kept (a superseded one for a preview link's lifetime). Save locks the edit row, but media lookup happens outside that transaction.                                                                                                                                                                                                                                                         | `edits.ts:29,160,208,265,282-301`                                                                                                              | Reviewers hear committed versions only. GC needs a lock protocol (§8).                                                                                                |
 | **Preview and players.** The preview iframe is `sandbox="allow-scripts"` (opaque origin, its own time origin). The bridge sends `ready`, `time` (when moved > 20 ms), `click`, `error` and `edits-applied`. The Video page plays the mixed MP4 (one AAC track) in a native `<video>`.                                                                                                                                                                                | `CompositionPreview.tsx:235`, `bridge.js`, `Review.tsx:111-123`                                                                                | Record against the MP4 **muted** as a picture reference, and build the monitor mix from separate stems (§5.3).                                                        |
 | **Edits that move time.** A voice-only edit can lengthen beats and shift later visuals.                                                                                                                                                                                                                                                                                                                                                                              | `contract.ts:774`                                                                                                                              | Any pending op that changes timing blocks recording, not just "visual" ops (§5.3).                                                                                    |
 | **STT.** No STT on the AI Gateway. `hyperframes transcribe` fails with `whisper_unavailable` and suggests Parakeet. The transcribe timeout option applies to Whisper only.                                                                                                                                                                                                                                                                                           | `docs/spikes.md:229-249`, HyperFrames transcribe                                                                                               | S11 needs an outer process-tree deadline (§6.6).                                                                                                                      |
@@ -828,3 +833,62 @@ These are the decisions the spikes and the build settled; `docs/spikes.md` S10-S
   - Per-video transcription language shipped (`jobs.language`; Parakeet covers 25 European languages).
 - **Live gates:** scripts are `scripts/e2e/narration-privacy.ts` (phase 1) and `scripts/e2e/narration.ts` (phase 2;
   `--dry`, `--selftest`); they need Creator and Reviewer API keys and haven't run yet.
+- **Take review, and takes that stopped on their own (owner, 2026-11-06):**
+  - **Review:** a stopped take is reviewed before it goes on the track (§2.1 step 6). It's built in
+    `ui/src/recorder/flow.ts` (the review phase), `TakeReview.tsx` and `review.ts`.
+  - **The owner's report:** takes "randomly chopped off" with nothing pressed. One stopped at 8.69 s of 12.97 s.
+  - **The cause:** the stop rules were tuned on headless frames, which have no jitter.
+    - **Strict breach checks:** on a real screen, frames show on a vsync, so anchors jitter by several ms. A breaching run then
+      failed both "a whole frame within 4 ms" and "steady within 4 ms", and the take stopped, even on the one-frame
+      picture step that real playback produces. Main's fit stopped a 60 s take with 60 Hz vsync lateness, ±6 ms
+      jitter and a one-frame step at the step ("3 anchors beyond 10 ms (worst −48 ms)"), and so did a 20 ms limit
+      on its own.
+    - **Over-eager stop rules:** the picture clock also stopped a take on any `waiting` event (a brief buffer) and
+      after 300 ms without a frame (a garbage collection). It stopped on any `devicechange` too, which Chrome fires
+      for unrelated devices.
+  - **What changed:**
+    - **Residual limit:** 20 ms (one 60 Hz vsync is 16.7 ms; it's under a 30 fps frame and inside EBU R37's
+      lip-sync tolerance).
+    - **One-sided runs:** a breaching run that sits on one side is a jump. It becomes a frame step when it's on a
+      whole frame (the tolerance widens with the segment's own jitter), or else a re-anchor (a new fit segment) at
+      its median, up to 2 s.
+    - **In-limit shifts:** a shift inside the limit re-anchors after 10 anchors in a row past 8 ms on one side.
+    - **Scattered runs:** these are dropped as outliers and stop the take only after 30 frames (about 1 s).
+    - **Cap:** after 40 re-anchors the take stops.
+    - **Stalls:** a stall stops the take only after 2 s, whether the video waits for data or shows no new frame.
+    - **Device changes:** a device change stops the take only when the take's own mic went away.
+  - **Messages and logs:** every stop is logged with its numbers (`clock.stop`, `record.stop`, and `record.stop_early`
+    with the fit's segments). The message says why in plain words, with the numbers (`stopMessage`).
+  - **Tests:** unit tests replay real-ish jitter, steps, blocks and stalls. The mock build's
+    `window.__vaTestFrameJitter` drives the same on the page (`ui/e2e/take-review.spec.ts`).
+  - **Teleprompter:** it now shows the take's first line (or the punch point's) from the Record click through the
+    countdown (`prompterTime`). Until then it showed where the last take ended until the picture rolled.
+  - **Pending hardware data:** S10b's real-hardware run, if it happens, replaces this reasoning with measured residuals.
+- **Download a take (owner, 2026-11-06):** the take review row and a selected narration clip have **Download**. It
+  saves the take as stored, named after the video, the version and the take (`lumen-v1-take-3.wav`). A recorded take
+  is a 24 kHz mono 16-bit WAV, about 2.9 MB a minute, not an MP3; an uploaded take keeps its own format. Where the
+  browser can encode AAC (WebCodecs; Chrome, Edge and Safari), the menu also offers a smaller M4A, made in the browser
+  with mediabunny at 96 kbps, about 0.7 MB a minute. There's no server-side transcoding (`ui/src/lib/take-download.ts`,
+  `TakeDownload.tsx`).
+- **Blank recording scenes after adding a take (owner, 2026-11-06):** a draft save kept only the newest rev's bundle,
+  and a narration save doesn't reload the preview frame (the narration is auditioned over it). The frame stayed on the
+  deleted rev, so a screen-recording scene's later range requests got 404 and its `<video>` sat on its first frame (a
+  white page) until a reload. A superseded rev now stays for a preview link's lifetime after it's superseded (a
+  `gone/r{rev}.{seconds}` marker under the draft's bundle prefix; `pruneRevs` in `src/domain/edits.ts`).
+- **Each track's + (owner, 2026-11-06):** every track header has a **+** with what fits it.
+  - **Narration:** Record (opens the recorder), Upload a file, From the library, Recordings for this video.
+  - **Music:** Find music (Openverse CC0 and CC BY), From the library, Upload a file. Each sets or replaces the
+    music bed, with the Music track's level, mute and Duck under narration.
+  - **AI voice:** Generate, which goes to the video's page to ask for a revision with AI voice-over, as before.
+  - **Add audio** under the timeline asks **Add to: Narration / Music** once there's an item. The default is the
+    selected track; music imported from Openverse defaults to Music, and a recording or take is narration only.
+  - A file dropped on the Music lane sets the music bed. One dropped on the Narration lane is a clip, as before.
+  - **Contract:** the editor had only the `audio` op (swap, level or mute an existing `<audio>`), so it couldn't add
+    music to a video without any. The new `music` op (`src`, optional `volume`) sets the root music layer's file, or
+    adds `<audio id="va-music" data-va-layer="music" data-va-audio="music">`. That layer spans the video on the next
+    free track, at half level, with `data-va-duck="0.3"`, so the patcher writes its ducking lane under the AI voice
+    and the recorded narration.
+  - Its file must be a ready library audio item, picked like the `audio` op's and snapshotted into the version on
+    render. The draft renders as `render_unchanged`, with no agent run.
+  - It's an addition to editing contract v1 (every contract-1 composition still conforms), so there's no contract or
+    prompt template bump. The API schema gained the op, and OpenAPI and the SDK were regenerated.

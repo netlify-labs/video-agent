@@ -3,15 +3,18 @@ import spec from '../api/openapi.json'
 import type { paths } from '../api/schema'
 import { applyEdits, applyNarration, type EditOp } from '../../../src/lib/contract'
 import { isLanguage } from '../../../src/lib/language'
+import { REMOTION_LICENSE_NOTICE } from '../../../src/lib/remotion-notice'
 import type { NarrationOp, Span } from '../../../src/lib/timeline'
 import plainHtml from '../../../test/fixtures/contract1/index.html?raw'
 import musicHtml from '../../../test/fixtures/contract1-music/index.html?raw'
 import contractSummary from '../../../test/fixtures/contract1/summary.json'
+import demoHtml from '../../../test/fixtures/contract1-recording/index.html?raw'
+import demoSummary from '../../../test/fixtures/contract1-recording/summary.json'
 import voiceHtml from '../../../test/fixtures/contract1-voice/index.html?raw'
 import voiceSummary from '../../../test/fixtures/contract1-voice/summary.json'
 import voiceFile from '../../../test/fixtures/contract1-voice/assets/voice/voice.json'
 import type { Video } from '../api/client'
-import { MOCK_TRANSCRIPT, embed, people, stats, videos } from './data'
+import { MOCK_TRANSCRIPT, embed, mockRedo, people, player, stats, videos } from './data'
 import { mockFile } from './files'
 import { parseVtt, writeVtt, type VttCue } from '../../../src/lib/vtt'
 
@@ -97,9 +100,17 @@ const adminSettings: {
   narrationEnabled: boolean
   transcriptionProvider: 'local' | 'elevenlabs' | 'off'
   takeQuotaBytes: number
+  recordingQuotaBytes: number
   remixEnabled: boolean
   youtubeEnabled: boolean
   youtubeConfigured: boolean
+  cliLoginEnabled: boolean
+  webmcpEnabled: boolean
+  remotion?: {
+    enabled: boolean
+    license: { by: string; email: string; at: string; tier: 'free' | 'company'; note: string | null } | null
+    keySet: boolean
+  }
 } = {
   narrationEnabled: (() => {
     try {
@@ -110,6 +121,7 @@ const adminSettings: {
   })(),
   transcriptionProvider: 'local',
   takeQuotaBytes: 2 * 1024 ** 3,
+  recordingQuotaBytes: 2 * 1024 ** 3,
   // localStorage.mockRemixOff = '1' starts with remixing turned off.
   remixEnabled: (() => {
     try {
@@ -121,6 +133,127 @@ const adminSettings: {
   // localStorage.mockYouTube = '1' sets YouTube up and turns it on (with a connected channel unless it's 'unconnected').
   youtubeEnabled: mockYouTube() !== null,
   youtubeConfigured: mockYouTube() !== null,
+  // localStorage.mockCliLoginOff = '1' starts with CLI sign-in turned off.
+  cliLoginEnabled: (() => {
+    try {
+      return localStorage.getItem('mockCliLoginOff') !== '1'
+    } catch {
+      return true
+    }
+  })(),
+  // localStorage.mockWebMcpOff = '1' starts with WebMCP turned off.
+  webmcpEnabled: (() => {
+    try {
+      return localStorage.getItem('mockWebMcpOff') !== '1'
+    } catch {
+      return true
+    }
+  })(),
+  // localStorage.mockEngines = 'remotion' lists Remotion in ENGINES; 'remotion-key' also sets its key; 'remotion-on'
+  // starts with it turned on under a Free License (and a Remotion video in the list, data.ts).
+  ...(() => {
+    let engines: string | null
+    try {
+      engines = localStorage.getItem('mockEngines')
+    } catch {
+      engines = null
+    }
+    if (engines === 'remotion-on')
+      return {
+        remotion: {
+          enabled: true,
+          license: {
+            by: 'u_sam',
+            email: 'sam@acme.com',
+            at: '2026-11-05T09:30:00.000Z',
+            tier: 'free' as const,
+            note: null,
+          },
+          keySet: false,
+        },
+      }
+    return engines?.startsWith('remotion')
+      ? { remotion: { enabled: false, license: null, keySet: engines === 'remotion-key' } }
+      : {}
+  })(),
+}
+// video-agent login's approve page. Fixed codes: BCDF-GHJK waits normally, SCRP-TTAG has an HTML label and a 64-letter
+// host, MNYM-MNYM is over the approvals-per-hour cap. Anything else (an expired code too, as on the server) is wrong,
+// and five wrong codes lock the page.
+const cliLogins: Record<string, { label: string; host: string }> = {
+  BCDFGHJK: { label: 'Video Agent CLI', host: 'mia-mbp' },
+  SCRPTTAG: { label: '<img src=x onerror=alert(1)><b>CLI</b>', host: 'h'.repeat(64) },
+  MNYMMNYM: { label: 'Video Agent CLI', host: 'ci-runner' },
+}
+let cliWrongCodes = 0
+/** GET /api/v1/engines as src/domain/engines.ts lists them: HyperFrames always, Remotion when ENGINES lists it. */
+function mockEngineListing() {
+  const hyperframes = {
+    id: 'hyperframes' as const,
+    name: 'HyperFrames',
+    license: { kind: 'open' as const, spdx: 'Apache-2.0' as const },
+    capabilities: {
+      editOps: ['text', 'retime', 'reorder', 'delete', 'color', 'media', 'audio', 'voice'] as const,
+      liveDraftPreview: true,
+      sound: 'all' as const,
+      voiceover: true,
+      revoice: true,
+      recordedNarration: true,
+      scopedRevision: true,
+      recording: false,
+    },
+    enabled: true,
+    notice: null,
+    extraCredits: null,
+  }
+  const r = adminSettings.remotion
+  if (!r) return [hyperframes]
+  return [
+    hyperframes,
+    {
+      id: 'remotion' as const,
+      name: 'Remotion',
+      license: { kind: 'remotion' as const, url: 'https://www.remotion.dev/docs/license' },
+      capabilities: {
+        editOps: [],
+        liveDraftPreview: false,
+        sound: 'music' as const,
+        voiceover: false,
+        revoice: false,
+        recordedNarration: false,
+        scopedRevision: false,
+        recording: false,
+      },
+      enabled: r.enabled && r.license !== null,
+      notice: REMOTION_LICENSE_NOTICE,
+      extraCredits: null,
+    },
+  ]
+}
+
+/** /setup's Engines row, as src/domain/setup.ts words it; none unless ENGINES lists Remotion. */
+function mockEngineCheck() {
+  const r = adminSettings.remotion
+  if (!r) return []
+  const base = { id: 'engines', label: 'Render engines' }
+  if (!r.license)
+    return [
+      {
+        ...base,
+        status: 'warn',
+        detail: 'HyperFrames ✓; Remotion: in ENGINES but not set up: see Admin.',
+        fix: 'Open /admin, turn Remotion on and record which Remotion license your organisation has.',
+      },
+    ]
+  if (!r.enabled) return [{ ...base, status: 'ok', detail: 'HyperFrames ✓; Remotion: off.' }]
+  const tier = r.license.tier === 'free' ? 'Free License' : 'Company License'
+  return [
+    {
+      ...base,
+      status: 'ok',
+      detail: `HyperFrames ✓; Remotion: on, ${tier} recorded on ${r.license.at.slice(0, 10)}; renders are reported to remotion.pro.`,
+    },
+  ]
 }
 const grants = [
   {
@@ -173,6 +306,38 @@ const comments: MockComment[] = [
     unread: true,
   },
 ]
+// Redo a scene (localStorage.mockRedo=1): pinned comments to redo scenes from. On the teaser's v3 (five scenes and a
+// held frame) one per scene but the end card, one at a boundary (0:04, the demo), one in the held frame and one
+// unpinned; on v2 one in each of its four scenes; one on Ada's webhooks launch.
+if (mockRedo) {
+  const pinned = (id: string, videoId: string, versionN: number, timeSec: number | null, body: string) => ({
+    id,
+    videoId,
+    versionN,
+    author: people.ada,
+    body,
+    timeSec,
+    x: null,
+    y: null,
+    createdAt: new Date(Date.now() - 1800_000).toISOString(),
+    editedAt: null,
+    resolvedAt: null,
+    resolvedBy: null,
+    addressedInN: null,
+  })
+  comments.push(
+    pinned('c_r1', 'vid_teaser', 3, 1, 'The hook needs a bigger title.'),
+    pinned('c_r2', 'vid_teaser', 3, 4, 'Start the demo on the dashboard.'),
+    pinned('c_r3', 'vid_teaser', 3, 5, 'The demo cursor moves too fast.'),
+    pinned('c_r4', 'vid_teaser', 3, 6.5, 'Add a customer logo to the proof.'),
+    pinned('c_r5', 'vid_teaser', 3, 9, 'Hold the last frame a bit longer.'),
+    pinned('c_r6', 'vid_teaser', 3, null, 'Overall the pacing is good.'),
+    pinned('c_r7', 'vid_teaser', 2, 3, 'The problem needs a clearer example.'),
+    pinned('c_r8', 'vid_teaser', 2, 5, 'The demo is too dark.'),
+    pinned('c_r9', 'vid_teaser', 2, 7, 'The end card font is too thin.'),
+    pinned('c_r10', 'vid_webhooks', 1, 9, 'Show the endpoint URL here.'),
+  )
+}
 const commentDto = (c: MockComment) => {
   const owner = videos.find((v) => v.id === c.videoId)?.owner.id === me.id
   const mine = c.author.id === me.id
@@ -362,9 +527,16 @@ function mockDestRows(): MockDest[] {
   return [...demo, ...mockAdminDest]
 }
 
+/** Extra mock routes (./looks.ts), tried before the built-in ones; a route returns null to pass. */
+export const mockRoutes: ((
+  input: RequestInfo | URL,
+  init: RequestInit | undefined,
+  next: () => Promise<Response>,
+) => Promise<Response | null>)[] = []
+
 export function installMock() {
   const real = window.fetch.bind(window)
-  window.fetch = async (input, init) => {
+  const handle = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url = new URL(
       typeof input === 'string' ? input : input instanceof URL ? input.href : input.url,
       window.location.origin,
@@ -437,6 +609,7 @@ export function installMock() {
             status: 'ok',
             detail: 'Served over HTTPS, so people can record their own voice-over.',
           },
+          ...mockEngineCheck(),
         ],
       })
     }
@@ -470,6 +643,12 @@ export function installMock() {
         planning: { credits: 6.4, calls: 9, unknown: 0 },
       })
     if (p === '/api/v1/notifications') return json({ items: [], unreadCount: 0, nextCursor: null })
+    if (p === '/api/v1/engines') {
+      // Counted, so a test can check nothing asks while only HyperFrames is on.
+      const g = globalThis as unknown as { __enginesRequests?: number }
+      g.__enginesRequests = (g.__enginesRequests ?? 0) + 1
+      return json({ items: mockEngineListing() })
+    }
     if (p === '/api/v1/config')
       return json({
         version: { commit: null, promptTemplate: 16, release: null },
@@ -479,6 +658,12 @@ export function installMock() {
           'planning',
           'destinations',
           ...(adminSettings.youtubeEnabled ? ['youtube'] : []),
+          ...(adminSettings.cliLoginEnabled ? ['cli_login'] : []),
+          ...(adminSettings.webmcpEnabled ? ['webmcp'] : []),
+          // Only once Remotion is actually on (render-engines plan §7).
+          ...(adminSettings.remotion?.enabled ? ['engines'] : []),
+          // Redo a scene; localStorage.mockNoScopedRevision=1 leaves it out, to test the hidden UI.
+          ...(localStorage.getItem('mockNoScopedRevision') === '1' ? [] : ['scoped_revision']),
         ],
         admission: ['acme.com'],
         siteUrl: window.location.origin,
@@ -502,9 +687,84 @@ export function installMock() {
       return new Response(null, { status: 204 })
     }
     if (p === '/api/v1/me') return json(me)
-    if (p === '/api/v1/stats') return json(stats)
+    if (p === '/api/v1/stats')
+      return json(
+        adminSettings.remotion
+          ? {
+              ...stats,
+              remotionRenders: {
+                since: new Date().toISOString().slice(0, 8) + '01T00:00:00.000Z',
+                total: 27,
+                videos: 3,
+                stills: 24,
+                audio: 0,
+                attempts: 4,
+              },
+            }
+          : stats,
+      )
+    if ((p === '/api/v1/cli/logins/lookup' || p === '/api/v1/cli/logins/approve') && method === 'POST') {
+      if (!adminSettings.cliLoginEnabled)
+        return fail(409, 'cli_login_disabled', 'Browser login for the CLI is turned off.')
+      if (cliWrongCodes >= 5)
+        return fail(429, 'rate_limited', 'Too many wrong codes. Try again in 15 minutes.')
+      const b = (await readBody(init, input)) as { userCode: string; decision?: 'approve' | 'deny' }
+      const userCode = b.userCode.toUpperCase().replace(/[^A-Z]/g, '')
+      const login = cliLogins[userCode]
+      if (!login) {
+        cliWrongCodes++
+        return fail(
+          404,
+          'not_found',
+          'No CLI login is waiting for that code. Check the code in your terminal.',
+        )
+      }
+      if (p.endsWith('/lookup'))
+        return json({
+          loginId: `cli_${userCode.toLowerCase()}`,
+          ...login,
+          clientIp: '203.0.113.7',
+          createdAt: new Date(Date.now() - 2 * 60_000).toISOString(),
+          expiresAt: new Date(Date.now() + 8 * 60_000).toISOString(),
+          role: 'admin',
+        })
+      if (b.decision === 'approve' && userCode === 'MNYMMNYM')
+        return fail(429, 'rate_limited', 'You approved 10 CLI logins in the last hour. Try again later.')
+      return json({ status: b.decision === 'deny' ? 'denied' : 'approved' })
+    }
     if (p === '/api/v1/admin/settings') {
-      if (method === 'PATCH') Object.assign(adminSettings, await readBody(init, input))
+      if (method === 'PATCH') {
+        const { remotionEnabled, remotionLicense, ...rest } = (await readBody(init, input)) as Record<
+          string,
+          unknown
+        > & {
+          remotionEnabled?: boolean
+          remotionLicense?: { tier: 'free' | 'company'; note?: string | null }
+        }
+        const r = adminSettings.remotion
+        if (remotionEnabled !== undefined || remotionLicense !== undefined) {
+          if (!r)
+            return fail(409, 'engine_disabled', "Remotion isn't offered here: add remotion to ENGINES first.")
+          if ((remotionLicense?.tier ?? r.license?.tier) === 'company' && !r.keySet)
+            return fail(
+              409,
+              'remotion_key_missing',
+              "Set VIDEO_AGENT_REMOTION_KEY on the project first; the server only checks that it's set.",
+            )
+          if (remotionLicense)
+            r.license = {
+              by: me.id,
+              email: me.email,
+              at: new Date().toISOString(),
+              tier: remotionLicense.tier,
+              note: remotionLicense.note ?? null,
+            }
+          if (remotionEnabled && !r.license)
+            return fail(400, 'remotion_license_required', 'Choose the license your organisation has first.')
+          if (remotionEnabled !== undefined) r.enabled = remotionEnabled
+        }
+        Object.assign(adminSettings, rest)
+      }
       return json(adminSettings)
     }
     if (p === '/api/v1/users') {
@@ -628,6 +888,14 @@ export function installMock() {
     }
     // Media library (plan v2 §9): in memory. localStorage.mockFailPart=1 fails one part once, to test resume.
     // A version's library media (the Remix dialog's chips): the webhooks launch used the first library item.
+    // A version's scenes (redo a scene): what the mock version carries.
+    const vbeats = /^\/api\/v1\/videos\/([^/]+)\/versions\/(\d+)\/beats$/.exec(p)
+    if (vbeats?.[1] && method === 'GET') {
+      const v = videos.find((x) => x.id === vbeats[1])?.versions.find((x) => x.n === Number(vbeats[2]))
+      if (!v) return fail(404, 'not_found', 'Version not found.')
+      if (v.status !== 'ready') return fail(409, 'not_ready', `Version ${v.n} isn't ready yet.`)
+      return json({ beats: v.beats })
+    }
     const vmedia = /^\/api\/v1\/videos\/([^/]+)\/versions\/\d+\/media$/.exec(p)
     if (vmedia?.[1] && method === 'GET') {
       if (vmedia[1] !== 'vid_webhooks') return json({ items: [] })
@@ -1217,7 +1485,37 @@ export function installMock() {
       const b = await readBody(init, input)
       ;(window as unknown as { __lastRevise?: unknown }).__lastRevise = b
       const vid = videos.find((x) => x.id === rv[1])
-      return vid ? json(withComments(vid), 202) : fail(404, 'not_found', 'Video not found.')
+      if (!vid) return fail(404, 'not_found', 'Video not found.')
+      // Redo a scene: the same first checks the server makes (src/domain/videos.ts checkScopedRevise, scopeRules).
+      const scope = (b as { scope?: { beats?: string[] }; fromVersion?: number }).scope
+      // localStorage.mockScopeError=<message>: the server refuses the scope with a 400 (the page shows it as written).
+      const scopeError = localStorage.getItem('mockScopeError')
+      if (scope && scopeError) return fail(400, 'invalid_request', scopeError)
+      if (scope) {
+        const from = (b as { fromVersion?: number }).fromVersion
+        if (from === undefined)
+          return fail(
+            400,
+            'invalid_request',
+            'Say which version the scenes are from (fromVersion): scene ids belong to one version.',
+          )
+        const parent = vid.versions.find((x) => x.n === from)
+        if (!parent?.editable || !parent.beats)
+          return fail(
+            409,
+            'not_editable',
+            `Version ${from} can't be edited scene by scene (it doesn't keep the editing contract). Revise the whole video instead.`,
+          )
+        const known = parent.beats.map((x) => x.id)
+        const unknown = (scope.beats ?? []).filter((x) => !known.includes(x))
+        if (unknown.length)
+          return fail(
+            400,
+            'invalid_request',
+            `There's no scene ${unknown.map((x) => `"${x}"`).join(', ')}. This video's scenes: ${parent.beats.map((x) => (x.label ? `${x.id} (${x.label})` : x.id)).join(', ')}.`,
+          )
+      }
+      return json(withComments(vid), 202)
     }
     // Narration captions and their corrections (POST: compare-and-swap on the revision, text-only).
     const cp = /^\/api\/v1\/videos\/([^/]+)\/versions\/(\d+)\/captions$/.exec(p)
@@ -1558,6 +1856,7 @@ export function installMock() {
           ...(showTranscript && ver.links.transcript ? { transcript: `${base}.txt` } : {}),
         },
         embed: embed(slug, w, h, ver.credits),
+        player: player(slug),
       }
       ver.publications = [pub, ...ver.publications.filter((x) => x.slug !== slug)]
       return json(pub)
@@ -1588,6 +1887,13 @@ export function installMock() {
       return v ? json(withComments(v)) : fail(404, 'not_found', 'Video not found.')
     }
     return fail(404, 'not_found', `Mock has no ${method} ${p}`)
+  }
+  window.fetch = async (input, init) => {
+    for (const route of mockRoutes) {
+      const res = await route(input, init, () => handle(input, init))
+      if (res) return res
+    }
+    return handle(input, init)
   }
 }
 
@@ -1750,6 +2056,8 @@ let mockEditHtml: string | null = null
  * localStorage.mockVoice=1 the copy that also has a voice-over in two beats.
  */
 function contractHtml() {
+  // localStorage.mockDemo: the version is a demo (an intro, one recording scene, an outro): the recording panels.
+  if (localStorage.getItem('mockDemo')) return demoHtml
   const voice = !!localStorage.getItem('mockVoice')
   // localStorage.mockCode: the opening scene has a syntax-highlighted code block, one field per line.
   if (localStorage.getItem('mockCode'))
@@ -1765,7 +2073,39 @@ function contractHtml() {
     mockMedia.push({ ...mockItem('Upbeat theme.mp3', 'audio', 2_400_000), id: 'med_theme01' })
   return voice ? voiceHtml : musicHtml
 }
-const mockSummary = () => (localStorage.getItem('mockVoice') ? voiceSummary : contractSummary)
+const mockSummary = () =>
+  localStorage.getItem('mockDemo')
+    ? demoSummary
+    : localStorage.getItem('mockVoice')
+      ? voiceSummary
+      : contractSummary
+/** A demo's recording facts, as the server reads them from the bundle (with mockDemo). */
+const mockEditRecording = () =>
+  localStorage.getItem('mockDemo')
+    ? {
+        duration: 20,
+        trace: true,
+        locked: [
+          {
+            id: 's1',
+            origin: 'setup',
+            start: 0,
+            end: 20,
+            reason: 'Hidden by you',
+            boxes: [[0, 0.8, 0, 0.2, 0.08]],
+          },
+        ],
+        camera: {
+          'add-site': [
+            [2, 0.5, 0.5, 1],
+            [3.4, 0.6, 0.31, 1.9, 'power2.inOut'],
+            [10.9, 0.6, 0.31, 1.9],
+            [12, 0.5, 0.5, 1, 'power2.inOut'],
+          ],
+        },
+        zoomMax: 2.2,
+      }
+    : null
 /** The voiced fixture's spoken lines, as the server reads them from voice.json. */
 const mockNarration = () =>
   localStorage.getItem('mockVoice')
@@ -1785,6 +2125,7 @@ function newMockEdit(videoId: string, baseN: number) {
     expiresAt: new Date(Date.now() + 7 * 86400_000).toISOString(),
     renderedN: null as number | null,
     newerVersion: null,
+    recording: mockEditRecording(),
     // localStorage.mockNarrationChanged=1: Ada changed the narration in a newer version 10 minutes ago.
     narrationChanged: localStorage.getItem('mockNarrationChanged')
       ? {
@@ -1872,6 +2213,8 @@ function mockItem(filename: string, kind: MockKind, bytes: number): MockMedia {
     },
     canDelete: true,
     source: null,
+    role: null,
+    hasTrace: false,
     recording: null,
   }
 }

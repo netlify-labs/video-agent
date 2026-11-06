@@ -7,6 +7,7 @@ import type { MediaKind } from '../lib/media/classify.js'
 import type { NarrationCleanup } from '../lib/timeline.js'
 import type { PreviewFile, Previews } from '../lib/media/previews.js'
 import type { RunCredit } from '../lib/openverse-rules.js'
+import type { RedactEntry } from '../lib/recording-trace.js'
 
 export type Role = 'admin' | 'creator' | 'reviewer' | 'viewer'
 export const ASPECT_RATIOS = ['16:9', '9:16', '1:1', '4:5'] as const
@@ -96,6 +97,15 @@ export type FailureCategory =
   /** The run made the wrong kind of project for the version's engine (render-engines §4.2): only a bug or an agent
    * that ignored its prompt gets here. */
   | 'engine_mismatch'
+  /** A run this deployment can't install (ENGINES without it, no license recorded, a Company License without its key):
+   * refused before the runner starts (render-engines §7). */
+  | 'engine_unavailable'
+  /** Run-side engine errors (render-engines §5.1), from the code the agent's answer carries: a restored project that
+   * breaks the template's rules, a failed install, the pinned skills missing, a failed engine check. */
+  | 'engine_tampered'
+  | 'engine_install_failed'
+  | 'engine_skills_unavailable'
+  | 'engine_check_failed'
 
 export interface Usage {
   totalCreditsCost?: number
@@ -120,10 +130,30 @@ export interface SettingsRow {
   transcriptionProvider?: TranscriptionProvider
   /** Stored bytes each person's narration takes may use. Missing: the default. */
   takeQuotaBytes?: number
+  /** Stored bytes each person's screen recordings may use. Missing: the default (2 GiB). */
+  recordingQuotaBytes?: number
   /** Remixing on (the default) or off, without a redeploy (remix spec §4). Missing: the default. */
   remixEnabled?: boolean
   /** YouTube offered as a publish destination (needs the Google OAuth env too). Missing: off. */
   youtubeEnabled?: boolean
+  /** The look creates get when they omit one (looks plan §6). Missing or null: none. */
+  defaultLook?: string | null
+  /** Looks an admin has turned off. Missing: none. */
+  disabledLooks?: string[]
+  /** video-agent login's browser approval on (the default) or off (cli-and-sdk plan §5.2). Missing: the default. */
+  cliLoginEnabled?: boolean
+  /** The admin's Remotion switch (render-engines plan §7). Missing: off. */
+  remotionEnabled?: boolean
+  /** Who chose the Remotion license tier, when, and which. No key or secret is ever stored. */
+  remotionLicenseAck?: RemotionLicenseAck | null
+}
+
+export interface RemotionLicenseAck {
+  by: string
+  email: string
+  at: string
+  tier: 'free' | 'company'
+  note: string | null
 }
 
 export type TranscriptionProvider = 'local' | 'elevenlabs' | 'off'
@@ -160,6 +190,40 @@ export interface OAuthClientRow {
  * One authorization in progress: created at /oauth/authorize (keyed by the hash of the state sent upstream),
  * given a user and a consent secret at the callback, then a code; kept until expiry to detect a reused code.
  */
+export type CliLoginStatus = 'pending' | 'approved' | 'denied' | 'claimed' | 'expired'
+
+/**
+ * A `video-agent login` in progress (cli-and-sdk plan §5.2): the CLI holds the device code (only its sha256 is here),
+ * the person types the user code in the browser. No key is ever stored: the claim mints it.
+ */
+export interface CliLoginRow {
+  id: string
+  deviceCodeHash: string
+  /** 8 letters from BCDFGHJKLMNPQRSTVWXZ, without the dash (shown ABCD-EFGH). */
+  userCode: string
+  label: string
+  host: string
+  clientIp: string
+  status: CliLoginStatus
+  /** Who approved or denied it. */
+  userId: string | null
+  approvedAt: string | null
+  apiKeyId: string | null
+  /** Wrong device codes against this login; 5 expire it. */
+  failedAttempts: number
+  /** The last claim poll, for slow_down. */
+  lastPolledAt: string | null
+  createdAt: string
+  expiresAt: string
+}
+
+/** One wrong typed code from a signed-in person (5 in 15 minutes lock approving). */
+export interface CliLoginFailureRow {
+  id: string
+  userId: string
+  createdAt: string
+}
+
 export interface OAuthRequestRow {
   id: string
   clientId: string
@@ -264,6 +328,32 @@ export interface JobRow {
   /** The video and version this one was remixed from: the immediate source only (remix spec §0, §3.3). */
   remixOfJobId?: string | null
   remixOfN?: number | null
+  /** What the video is for outside the app ("github:acme/web#pr-123"), set by an API client; not unique. */
+  externalRef?: string | null
+  /** A link to that thing (https). */
+  externalUrl?: string | null
+}
+
+/**
+ * The look a version was made with (plan 2026-11-04-looks §4.3): a snapshot of its run files, copied once per video into
+ * the sources store, so retries and revisions get exactly these rules even after the look changes in the repo.
+ */
+export interface VersionLook {
+  id: string
+  /** Kept so the UI can name a look that has since left the catalog. */
+  name: string
+  /** lookHash of the run files (src/lib/looks.ts). */
+  hash: string
+  /** '<jobId>/looks/<hash>.tar.gz' in the sources store. */
+  key: string
+  sha256: string
+  bytes: number
+  source: 'builtin' | 'team'
+  /**
+   * Whether this version restyled its parent or remix source (another look, or the same look at a newer hash), decided
+   * once at creation so every retry builds the same prompt without re-reading a parent that may be gone.
+   */
+  restyle: boolean
 }
 
 export interface VersionRow {
@@ -288,6 +378,8 @@ export interface VersionRow {
   frozen?: FrozenBundle | null
   /** Missing on rows written before sound existed: silent. */
   sound?: VideoSound
+  /** The look snapshot this version was made with (plan 2026-11-04-looks §4.3); null or missing: no look. */
+  look?: VersionLook | null
   /** The render engine (render-engines plan §4.2). Missing on rows written before engines existed: hyperframes. */
   engine?: EngineId
   /** Null (or missing) when the version has no voice-over. */
@@ -300,6 +392,40 @@ export interface VersionRow {
   poster?: VersionPoster | null
   /** A remix's v1: everything its runs need, snapshotted at creation so nothing is re-read from the source. */
   remix?: VersionRemix | null
+  /** A demo made from a screen recording: its inputs (frozen trace, trim, boxes) and results (summary, hidden areas). */
+  recording?: VersionRecording | null
+  /** A scoped revision (redo a scene): the parent's beats it may change. Null (or missing): the whole video. */
+  scope?: VersionScope | null
+  /**
+   * The composition's beats, from its index.html at finalize (contract v1 only), or filled on first read for versions
+   * made before. Labels are agent-written (data-va-label): fence them before they reach a prompt. Null (or missing):
+   * not known yet, or not a contract-v1 composition.
+   */
+  beats?: BeatInfo[] | null
+  /** Background text from elsewhere (a PR, release notes), given to the run in its own fence; null (or missing): none. */
+  context?: VersionContext | null
+}
+
+/** One beat of a finished version, in seconds of that version. */
+export interface BeatInfo {
+  id: string
+  label: string | null
+  start: number
+  duration: number
+}
+
+export interface VersionScope {
+  beats: string[]
+}
+
+/** Someone else's words the run reads as data, never instructions (github-action plan §6.1). */
+export interface VersionContext {
+  source: 'github_pr' | 'github_release' | 'changelog' | 'text'
+  /** What it is, for the fence and the video page: "GitHub PR #123". At most 120 characters. */
+  label: string
+  url?: string | undefined
+  /** At most 16,000 characters. */
+  text: string
 }
 
 /**
@@ -384,6 +510,11 @@ export interface FrozenBundle {
   references?: BundleReference[]
   /** Keep-visuals renders of a draft with recorded narration: what the run mixes over the frozen visuals. */
   narration?: FrozenNarration
+  /**
+   * Hold stills the draft's held recording scenes name and the bundle lacks (screen-recording plan §5.3): the run makes
+   * them with recording.ts emit --holds-only, and render-job accepts exactly these as added (va-rsk5.3.15).
+   */
+  recordingHolds?: string[]
 }
 
 export interface RevoicePlan {
@@ -396,6 +527,8 @@ export interface FrozenPlan {
   brief: PlanBrief
   qa: { question: string; answer: string[] | string }[]
   contextHash: string
+  /** The plan's look id (null: none); missing on plans made before looks, or that keep their video's look. */
+  look?: string | null
 }
 
 export interface AttemptRow {
@@ -425,6 +558,8 @@ export interface AttemptRow {
   /** The agent's final answer, truncated. */
   resultText?: string | null
   usage: Usage | null
+  /** Remotion's render count for the run, from render-job's manifest; null or missing for HyperFrames. */
+  engineRenders?: { video: number; stills: number; audio: number } | null
   errorCategory: FailureCategory | null
   errorMessage: string | null
   queuedAt: string
@@ -583,6 +718,15 @@ export interface PlanRow {
   /** A plan for a remix of this video and version (jobId is then null: it makes a new video). */
   remixFromJobId?: string | null
   remixFromN?: number | null
+  /** The plan's look; null for a revision or remix plan with none chosen (it keeps its video's look). */
+  look?: PlanLook | null
+  /** The engine chosen for a new-video plan; null or missing: the look's choice (render-engines plan §4.2). */
+  engine?: EngineId | null
+}
+/** A plan's look (looks plan §4.12): the person's choice (chosen), else picked from its template; id null: none. */
+export interface PlanLook {
+  id: string | null
+  chosen: boolean
 }
 export interface GatewayCallRow {
   id: string
@@ -624,8 +768,8 @@ export interface CommentRow {
 
 export type MediaStatus = 'uploading' | 'verifying' | 'ready' | 'rejected'
 
-/** Recorded voice-over audio; library items have none. */
-export const MEDIA_ROLES = ['narration-take', 'narration-upload'] as const
+/** Recorded voice-over audio, and raw screen recordings (screen-recording plan §4.2); library items have none. */
+export const MEDIA_ROLES = ['narration-take', 'narration-upload', 'screen-recording'] as const
 export type MediaRole = (typeof MEDIA_ROLES)[number]
 
 export interface MediaRow extends MediaProvenance {
@@ -661,6 +805,48 @@ export interface MediaRow extends MediaProvenance {
   retainUntil: string | null
   /** Set by GC's first phase (no references left): the bytes are being deleted and nothing may reference it. */
   deletingAt: string | null
+  /** A screen recording's pointer trace in the media store (`<id>/trace.json`) and its sha256; null without one. */
+  traceKey?: string | null
+  traceSha256?: string | null
+  /** When this hour's trace writes happened (the rate limit), newest last, at most 10. */
+  traceWrites?: string[] | null
+}
+
+/** Something hidden in a demo, and who checked it (screen-recording plan §5.3, §9). */
+export interface HiddenArea {
+  id: string
+  source: 'trace' | 'setup' | 'agent' | 'editor'
+  beat: string
+  start: number
+  end: number
+  reason: string
+  checkedBy: string | null
+  checkedAt: string | null
+}
+
+/** versions.recording: a demo's inputs and what the run made of them (screen-recording plan §5.1). */
+export interface VersionRecording {
+  mediaId: string
+  /** The trace, frozen when the version was created; null when the recording has none. */
+  trace: { key: string; sha256: string } | null
+  trim: [number, number] | null
+  /** The person's setup boxes, one key each. */
+  boxes: RedactEntry[]
+  /** Made by recording.ts compose, with no agent. */
+  compose: boolean
+  /** Privacy mode: private things are found and hidden for the person to keep or remove. Off (absent): only the
+   * person's boxes and the trace's (password fields, --hide selectors). */
+  privacy?: boolean
+  /** Text to hide wherever it shows on screen (privacy mode or not), found by OCR on the runner. */
+  hideStrings?: string[]
+  summary: {
+    sourceSec: number
+    steps: number
+    cutSec: number
+    spedUpSec: number
+    redactionsAdded: number
+  } | null
+  hidden: HiddenArea[]
 }
 
 /** Where an imported item came from, with its licence and credit; all null for uploads. */

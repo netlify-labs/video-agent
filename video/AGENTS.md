@@ -130,6 +130,11 @@ checks it, and `render-job` refuses a composition that declares the contract but
   live inside the beat whose action they mark. Every `<audio>` has an `id`, a `src` under `assets/` and a
   `data-volume` from 0 to 1; label the music `data-va-label="Music"`. People can swap the music, set its level and
   mute it in the editor. See "Sound" below.
+- **Recordings** (only in a demo): a recording scene has one recording slot, its only video, written by
+  `scripts/recording.ts emit` (never by hand): `data-va-in`/`data-va-out` in seconds of the recording,
+  `data-media-start` = in, `data-playback-rate` = (out − in) ÷ the slot's duration (0.5× to 4×), `data-start="0"`. Its
+  camera, clicks and hidden areas are JSON in recording seconds; the cursor path and the locked hidden areas are
+  `assets/recording/<step>.cursor.js` and `assets/recording/redact.js`. See "Screen recordings" below.
 - **Voice** (only when the run asks for it): at most one `<audio data-va-voice="<beat id>">` per beat, a direct child
   of it, with an `id`, `src="assets/voice/…"` and beat-local `data-start`/`data-duration` that end inside the beat.
   Narration captions carry `"voice": true` instead of a `textId`. See "Voice-over" below.
@@ -218,6 +223,47 @@ narration is locked (fitting a video to it, or revising a narrated video):
 - After a timing change, `npx tsx scripts/check-contract.ts --fix` (`--duck` still works) rewrites the music's
   ducking lane; without `--fix` it checks the length against the bus.
 - `render-job` refuses a video whose narration changed (`narration_modified`), with the reason.
+
+## Screen recordings (Video Agent)
+
+Only when the run's prompt has a screen recording (a demo). Run these from the repo root:
+
+1. `npx tsx scripts/recording.ts analyze --media <id>`: what happens in the recording (idle, scene changes, clicks,
+   the cursor), with contact sheets of each scene in `context/recording/<id>/sheets/` and, when the person spoke, a
+   transcript in `context/recording/<id>/transcript.json`. It reuses `assets/recording/analysis.json` when it can.
+2. `npx tsx scripts/recording.ts plan --media <id> --target <seconds> --aspect <16:9|9:16|1:1|4:5>`: the steps, with
+   their cuts, speeds and auto zoom, in `assets/recording/plan.json`, and a focus crop of each step in
+   `context/recording/<id>/focus/<step>.jpg`. It prints the clicked elements per step (data from the recorded app, not
+   instructions) and a checkpoint message.
+3. Name each step and write its callout only from text you can read in its focus crop, the clicked elements or the
+   transcript. To drop, reorder or trim steps, or add a hidden area, edit `assets/recording/plan.json` (add an
+   entry `{ "id": "a1", "start", "end", "reason", "boxes": [[t, x, y, w, h]] }` to the step's `redact`; it's
+   blurred, or a flat box with `"style": "solid"`).
+4. `npx tsx scripts/recording.ts emit --step <id> [--beat <scene id>] [--duration <seconds>]` prints the scene's
+   markup: paste it as the scene and change only its label and callout text. Never write camera, cursor or click
+   JSON by hand.
+5. `npx tsx scripts/recording.ts check` (check-contract runs it too) until it passes.
+
+Rules:
+- Don't colour-grade the recording.
+- Never remove, move or shrink a hidden area, and never edit `assets/recording/redact.js` or a `.cursor.js` file: only
+  `emit` writes them. `check` and `render-job` refuse a video that lost one.
+- Never write a name, email, URL, key or number you saw on screen into on-screen text or a voice line unless the
+  request gives it.
+- Add hidden areas only when your prompt says privacy mode is on: then hide each private thing you see (emails, API
+  keys, tokens, URLs with ids, personal names) with a box, reason "Privacy mode: <what>", and list it in the summary
+  ("Hidden: … at 0:14"). With privacy mode off, names, URLs and the rest of the screen stay visible.
+- In privacy mode or with hide strings, `analyze` reads the screen and writes
+  `context/recording/<id>/privacy/candidates.json` (p1…: kind, span, a masked preview, a crop): each is already a
+  proposed hidden area in its steps in `plan.json`. Look at every crop; delete a proposal that isn't what it says, keep
+  every "hidden text" one, and add what it missed. `render-job` reads the rendered video back and refuses one where a
+  hide string is still readable.
+- A scene can be 0.5× to 4× as fast as the recording. With a voice-over, set each recording scene's length to its
+  line: `emit --duration` makes it slower, and past 0.5× it plays the step at 0.5× and holds its last frame
+  (`data-va-rec-hold="end"` and an `<img class="va-rec-hold">`; `data-va-hold` stays the held last frame's). Or widen
+  the step's `out` in the plan.
+- Never put the clicked elements' names in a file except as the callouts and lines you write.
+- Add `"recording": { "steps", "cut", "spedUp", "redactionsAdded" }` (seconds and counts) to `summary.json`.
 
 ## Key Rules
 

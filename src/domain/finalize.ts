@@ -23,10 +23,12 @@ import {
   type Previews,
 } from '../lib/media/previews.js'
 import { readRunCredits, RUN_CREDITS_FILE, type RunCredit } from '../lib/openverse-rules.js'
-import { NARRATION_SRC } from '../lib/contract.js'
-import { readTarGz, TarError, type TarLimits } from '../lib/tar.js'
-import { bundleShapeProblems, ensureBundle } from './bundles.js'
-import { engineInfo, engineOf, isEngineId } from './engines.js'
+import { attr, load, NARRATION_SRC } from '../lib/contract.js'
+import { SCOPE_REFUSED_PREFIX } from '../lib/scope.js'
+import { BUNDLE_LIMITS, readTarGz, type TarLimits } from '../lib/tar.js'
+import { beatsOf } from './beats.js'
+import { bundleContract, bundleShapeProblems, ensureBundle, inBundle } from './bundles.js'
+import { engineInfo, engineOf, isEngineId, scopeCheckFor, type EngineId } from './engines.js'
 import { carriedCaptions, narrationOpHash } from './captions.js'
 import { getSettings } from './settings.js'
 import { promoteAttemptRefs } from './takes.js'
@@ -46,6 +48,7 @@ import {
   type VersionNarration,
   type VersionRow,
 } from './types.js'
+import { finalizeRecording } from './finalize-recording.js'
 
 const MIN = 60_000
 const FINALIZE_LEASE_MS = 12 * MIN
@@ -74,6 +77,15 @@ export function manifestFromResult(text: string | null): unknown {
   } catch {
     return null
   }
+}
+
+/** render-job's Remotion render counts, when they're whole numbers of zero or more; null otherwise. */
+function renderCounts(v: unknown): { video: number; stills: number; audio: number } | null {
+  const r = (v ?? {}) as Record<string, unknown>
+  const ok = (n: unknown): n is number => Number.isInteger(n) && (n as number) >= 0 && (n as number) < 1e6
+  return ok(r.video) && ok(r.stills) && ok(r.audio)
+    ? { video: r.video, stills: r.stills, audio: r.audio }
+    : null
 }
 
 export function isManifest(v: unknown, attemptId: string): v is Manifest {
@@ -119,6 +131,28 @@ async function manifestFor(deps: Deps, a: AttemptRow): Promise<Manifest | null> 
   return isManifest(parsed, a.id) ? parsed : null
 }
 
+/** Run-side engine errors and the category each is recorded under; a missing license key means the engine can't run. */
+const ENGINE_FAILURES: Record<string, FailureCategory> = {
+  engine_tampered: 'engine_tampered',
+  engine_install_failed: 'engine_install_failed',
+  engine_skills_unavailable: 'engine_skills_unavailable',
+  engine_check_failed: 'engine_check_failed',
+  engine_license_key_missing: 'engine_unavailable',
+}
+
+/**
+ * The first run-side engine error in the agent's answer (each starts with its code and a colon, render-engines plan
+ * §5.1), as the attempt's failure: the line it came from is the message. Null when there's none.
+ */
+export function engineFailureOf(text: string | null): { category: FailureCategory; message: string } | null {
+  for (const line of (text ?? '').split('\n')) {
+    const code = /\b(engine_[a-z_]+):/.exec(line)?.[1]
+    const category = code ? ENGINE_FAILURES[code] : undefined
+    if (category) return { category, message: line.trim().slice(0, 500) }
+  }
+  return null
+}
+
 export async function finalizeAttempt(deps: Deps, attemptId: string): Promise<FinalizeResult> {
   const log = deps.log.child({ attemptId })
   const a0 = await deps.store.getAttempt(attemptId)
@@ -135,6 +169,17 @@ export async function finalizeAttempt(deps: Deps, attemptId: string): Promise<Fi
 
     const manifest = await manifestFor(deps, a)
     if (!manifest) throw new NotYet('No manifest yet (no callback receipt and none in the final answer).')
+    // Remotion's renders were reported to Remotion whatever happens next, so they're kept before any check can fail.
+    if (manifest.engine?.renders !== undefined) {
+      const renders = renderCounts(manifest.engine.renders)
+      if (renders) {
+        await deps.store.updateAttempt(a.id, { engineRenders: renders }, 'finishing')
+        log.info('finalize.engine_renders', renders)
+      } else
+        log.warn('finalize.engine_renders_invalid', {
+          got: JSON.stringify(manifest.engine.renders).slice(0, 200),
+        })
+    }
 
     const files = {} as Record<OutputFile, Uint8Array>
     for (const name of OUTPUT_FILES) {
@@ -194,17 +239,14 @@ export async function finalizeAttempt(deps: Deps, attemptId: string): Promise<Fi
       throw new Invalid('invalid_output', 'The preview is not a GIF.')
     if (sniff(files['captions.vtt']) !== 'vtt')
       throw new Invalid('invalid_output', 'The captions are not WebVTT.')
+    // The saved composition, read once before anything is stored: its engine's shape, its credits, its beats and
+    // whether it's editable.
+    const source = readSource(deps, a.id, files['source.tar.gz'])
     // The engine twice (render-engines §4.2): the one the run says rendered it, and the shape of what it saved.
     const engine = engineOf(version)
     const got = manifest.engine?.id ?? 'hyperframes'
-    let shape: string[] = []
-    if (got === engine)
-      try {
-        shape = bundleShapeProblems(engine, readTarGz(files['source.tar.gz']))
-      } catch (e) {
-        // A bad archive is ensureBundle's to report (best effort, after ready), as before engines.
-        if (!(e instanceof TarError)) throw e
-      }
+    // A bad archive is ensureBundle's to report (best effort, after ready), as before engines.
+    const shape = got === engine && source.files ? bundleShapeProblems(engine, source.files) : []
     if (got !== engine || shape.length) {
       log.warn('finalize.engine_mismatch', { expected: engine, got, problems: shape })
       const name = isEngineId(got) ? engineInfo(got).name : got
@@ -214,6 +256,23 @@ export async function finalizeAttempt(deps: Deps, attemptId: string): Promise<Fi
           ? `The run produced a ${name} project for a ${engineInfo(engine).name} video.`
           : `The run didn't save a ${engineInfo(engine).name} project: ${shape.join(' ')}`,
       )
+    }
+    // A scoped revision (redo a scene): the saved composition must be exactly the splice of the parent.
+    if (version.scope) await checkScope(deps, a, version, engine, source.files, info.durationSec)
+    // A demo (screen-recording plan §5.2 check): the same recording check the run did, against the locked inputs.
+    let recording: VersionRow['recording'] = null
+    if (version.recording && source.files) {
+      const r = await finalizeRecording(deps, a.jobId, a.versionN, version, source.files)
+      if (r && !r.ok) {
+        log.warn('finalize.recording_invalid', {
+          jobId: a.jobId,
+          n: a.versionN,
+          code: r.code,
+          scene: r.scene,
+        })
+        throw new Invalid('invalid_output', r.message)
+      }
+      recording = r?.recording ?? null
     }
 
     const prefix = `${a.jobId}/v${a.versionN}`
@@ -259,7 +318,24 @@ export async function finalizeAttempt(deps: Deps, attemptId: string): Promise<Fi
       sha256[REFERENCES_FILE] = sha256Hex(list)
     }
     const previews = await storePreviews(deps, a.id, prefix, manifest, sha256)
-    const runCredits = runCreditsOf(deps, a.id, files['source.tar.gz'])
+    const runCredits = runCreditsOf(deps, a.id, source.files)
+    // Editable and its scenes, stored with ready so `editable` never lags (redo a scene, plan §4.2, owner Q8): the same
+    // inputs ensureBundle checks (bundleContract over the bundle's files and the reference files), and only for an
+    // archive the bundle can hold, as before.
+    const contract =
+      source.files && source.bundleable
+        ? bundleContract(
+            engine,
+            new Map([
+              ...[...source.files].filter(([p]) => inBundle(p)),
+              ...references.map((r) => [r.entry.path, r.bytes] as const),
+            ]),
+          )
+        : null
+    const beats = source.files ? beatsOf(source.files) : null
+    if (contract && contract.version === null)
+      log.info('finalize.not_editable', { reasons: contract.violations.slice(0, 5) })
+    if (beats) log.info('finalize.beats', { count: beats.length })
     const narrated = version.frozen?.narration
       ? await storeNarrationOutputs(deps, a.id, prefix, manifest, sha256)
       : new Set<NarrationOutput>()
@@ -298,16 +374,19 @@ export async function finalizeAttempt(deps: Deps, attemptId: string): Promise<Fi
         runCredits,
         notices: notices.length ? notices : null,
       },
-      recorded,
+      { ...recorded, contract: contract?.version ?? null, beats, ...(recording ? { recording } : {}) },
     )
     // The preview bundle (plan v2 §7). Best effort: a version without one is still ready and is extracted later.
     if (result === 'ready') {
       try {
         const bundle = await ensureBundle(deps, a.jobId, a.versionN)
-        // Editable in the browser only when the finished composition keeps the contract (plan v2 §8).
-        await deps.store.updateVersion(a.jobId, a.versionN, { contract: bundle?.contract?.version ?? null })
-        if (bundle?.contract?.version === null)
-          log.info('finalize.not_editable', { reasons: bundle.contract.violations.slice(0, 5) })
+        // Both read the same files the same way; a difference would be a bug.
+        if (bundle && (bundle.contract?.version ?? null) !== (contract?.version ?? null))
+          log.warn('finalize.contract_mismatch', {
+            version: a.versionN,
+            stored: contract?.version ?? null,
+            bundle: bundle.contract?.version ?? null,
+          })
       } catch (e) {
         log.warn('finalize.bundle_failed', { error: e })
       }
@@ -321,22 +400,27 @@ export async function finalizeAttempt(deps: Deps, attemptId: string): Promise<Fi
       // its check, plan v2 §8): say so soon, with the agent's reason, instead of waiting out the deadline.
       const version = await deps.store.getVersion(a.jobId, a.versionN)
       const edited = version?.mode === 'render_unchanged'
-      const deadline = (edited ? 2 : deps.config.finalizeDeadlineMin) * MIN
+      // A run that stopped on an engine error (render-engines plan §5.1) also stopped on purpose, under that code.
+      const engineFailure = engineFailureOf(a.resultText ?? null)
+      const deadline = (edited || engineFailure ? 2 : deps.config.finalizeDeadlineMin) * MIN
       if (deps.clock.now().getTime() - finishingSince > deadline) {
         const reason = summarizeResult(a.resultText ?? null)
+        if (engineFailure) log.warn('finalize.engine_failure', { category: engineFailure.category })
         return finish(
           deps,
           a,
           'failed',
-          edited
-            ? {
-                category: 'check_failed',
-                message: `The edited composition didn't pass its check, so nothing was rendered.${reason ? ` ${reason}` : ''} Edit it again or ask for a revision instead.`,
-              }
-            : {
-                category: 'artifacts_missing',
-                message: reason ? `The run ended without saving a video. ${reason}` : e.message,
-              },
+          engineFailure
+            ? engineFailure
+            : edited
+              ? {
+                  category: 'check_failed',
+                  message: `The edited composition didn't pass its check, so nothing was rendered.${reason ? ` ${reason}` : ''} Edit it again or ask for a revision instead.`,
+                }
+              : {
+                  category: 'artifacts_missing',
+                  message: reason ? `The run ended without saving a video. ${reason}` : e.message,
+                },
           null,
         )
       }
@@ -464,20 +548,118 @@ const SOURCE_READ_LIMITS: TarLimits = {
   maxFileBytes: 60 * 1024 * 1024,
 }
 
+/** How far a scoped version's MP4 may be from its composition's length. */
+const SCOPE_LENGTH_SLACK_SEC = 0.25
+
+/**
+ * A scoped revision's server-side check (redo a scene, docs/plans/2026-11-04-regenerate-beat.md §4.9): the run checked
+ * itself, but it runs this repo's scripts in its own checkout and could have changed them. So the parent's saved
+ * archive is read again here, the engine's scope check runs on it and the upload, and the upload's index.html and
+ * summary.json must be byte for byte the splice; the MP4 must last as long as the splice says. Anything else fails
+ * the attempt before a single file is stored.
+ */
+async function checkScope(
+  deps: Deps,
+  a: AttemptRow,
+  version: VersionRow,
+  engine: EngineId,
+  uploaded: Map<string, Uint8Array> | null,
+  mp4Seconds: number,
+) {
+  const log = deps.log.child({ attemptId: a.id })
+  const started = Date.now()
+  const beats = version.scope?.beats ?? []
+  const parentN = version.parentN
+  const unavailable = () =>
+    new Invalid(
+      'source_unavailable',
+      `Version ${parentN ?? '?'}'s saved composition is missing, so this scoped run can't be checked.`,
+    )
+  const parentOutput = parentN ? await deps.store.getOutput(a.jobId, parentN) : null
+  const want = parentOutput?.sha256['source.tar.gz']
+  const gz = parentOutput && want ? await deps.blobs.get('sources', parentOutput.sourceKey) : null
+  if (!gz || sha256Hex(gz) !== want) throw unavailable()
+  let parent: Map<string, Uint8Array>
+  try {
+    parent = readTarGz(gz, SOURCE_READ_LIMITS)
+  } catch {
+    throw unavailable()
+  }
+  const check = scopeCheckFor(engine)
+  if (!check || !uploaded)
+    throw new Invalid(
+      'invalid_output',
+      `${SCOPE_REFUSED_PREFIX}: ${!check ? `${engineInfo(engine).name} can't redo scenes one by one` : 'the saved composition is unreadable'}.`,
+    )
+  const r = check(parent, uploaded, [...beats])
+  const problems = [...r.problems]
+  if (!problems.length && r.files)
+    for (const [name, bytes] of r.files) {
+      const mine = uploaded.get(name)
+      if (!mine || sha256Hex(mine) !== sha256Hex(bytes))
+        problems.push(
+          `${name} isn't the composition the scope allows (render-job writes it; run it unchanged)`,
+        )
+    }
+  if (problems.length || !r.files) {
+    if (!problems.length) problems.push("the scenes couldn't be put together")
+    log.warn('finalize.scope_violated', { problems: problems.slice(0, 20) })
+    const shown = problems.slice(0, 10).map((p) => p.replace(/\.$/, ''))
+    throw new Invalid(
+      'invalid_output',
+      `${SCOPE_REFUSED_PREFIX}: ${shown.join('; ')}${problems.length > 10 ? ` and ${problems.length - 10} more` : ''}.`,
+    )
+  }
+  const html = r.files.get('index.html')
+  const total = html ? Number(attr(load(new TextDecoder().decode(html)).root, 'data-duration')) : NaN
+  if (!(Math.abs(mp4Seconds - total) <= SCOPE_LENGTH_SLACK_SEC)) {
+    log.warn('finalize.scope_duration_mismatch', { mp4: mp4Seconds, composition: total })
+    throw new Invalid(
+      'invalid_output',
+      `The video is ${mp4Seconds.toFixed(2)} s long but its composition is ${total.toFixed(2)} s; render the composition render-job wrote.`,
+    )
+  }
+  log.info('finalize.scope_ok', {
+    beats,
+    lengthDelta: (r as { lengthDelta?: number }).lengthDelta ?? null,
+    ms: Date.now() - started,
+  })
+}
+
+/**
+ * The uploaded composition's files, read once. `bundleable`: within the preview bundle's limits, which an editable
+ * version has to be (ensureBundle reads it with them). A larger archive is read with SOURCE_READ_LIMITS for its
+ * credits only; an unreadable one gives no files.
+ */
+export function readSource(
+  deps: Pick<Deps, 'log'>,
+  attemptId: string,
+  gz: Uint8Array,
+): { files: Map<string, Uint8Array> | null; bundleable: boolean } {
+  try {
+    return { files: readTarGz(gz, BUNDLE_LIMITS), bundleable: true }
+  } catch {
+    try {
+      return { files: readTarGz(gz, SOURCE_READ_LIMITS), bundleable: false }
+    } catch (e) {
+      deps.log.warn('finalize.source_unreadable', { attemptId, error: e })
+      return { files: null, bundleable: false }
+    }
+  }
+}
+
 /**
  * Credits for the Openverse files the run fetched itself (scripts/openverse.ts records them in
  * video/assets/music/credits.json, saved with the composition). The file is the agent's, so it is checked strictly:
  * entries that fail are dropped and logged, and an unreadable archive or file gives none. Revisions and edits carry
  * the file in their source, so their credits are read the same way.
  */
-export function runCreditsOf(deps: Pick<Deps, 'log'>, attemptId: string, gz: Uint8Array): RunCredit[] | null {
-  let files: Map<string, Uint8Array>
-  try {
-    files = readTarGz(gz, SOURCE_READ_LIMITS)
-  } catch (e) {
-    deps.log.warn('finalize.run_credits_unreadable', { attemptId, error: e })
-    return null
-  }
+export function runCreditsOf(
+  deps: Pick<Deps, 'log'>,
+  attemptId: string,
+  files: Map<string, Uint8Array> | null,
+): RunCredit[] | null {
+  if (!files) return null
   const raw = files.get(RUN_CREDITS_FILE)
   if (!raw) return null
   const { credits, dropped } = readRunCredits(new TextDecoder().decode(raw), files)
@@ -491,7 +673,7 @@ async function finish(
   outcome: 'ready' | 'failed' | 'cancelled',
   error: { category: FailureCategory; message: string } | null,
   output: Parameters<Deps['store']['upsertOutput']>[0] | null,
-  recorded: Pick<VersionRow, 'narration' | 'captions'> | null = null,
+  recorded: Pick<VersionRow, 'narration' | 'captions' | 'contract' | 'beats' | 'recording'> | null = null,
 ): Promise<FinalizeResult> {
   const now = deps.clock.now().toISOString()
   return deps.store.tx(async (repo) => {

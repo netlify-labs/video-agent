@@ -3,9 +3,11 @@
 // chose: nothing the model writes (or a request smuggles in) can point it somewhere else.
 import { createHash } from 'node:crypto'
 import { isEngineId, type EngineId } from '../domain/engines.js'
+import { LOOK_ID } from './looks.js'
 import { isBundleReference, type BundleReference } from './bundle-references.js'
 import { isLanguage, type Language } from './language.js'
 import { MEDIA_KINDS, type MediaKind } from './media/classify.js'
+import type { RedactEntry } from './recording-trace.js'
 import {
   GAIN_DB_RANGE,
   MAX_NARRATION_CLIPS,
@@ -59,6 +61,8 @@ export interface RunManifest {
     references?: BundleReference[] | undefined
     /** Recorded narration to mix (keep-visuals and fit renders): prepare-run hydrates its takes outside video/. */
     narration?: FrozenNarration | undefined
+    /** Hold stills the run adds (recording.ts emit --holds-only); render-job leaves them out of the hash. */
+    recordingHolds?: string[] | undefined
   } | null
   /** Library media to download into video/assets/media/ (plan v2 §9, §14 rule 27). */
   media: RunMedia[] | null
@@ -78,6 +82,104 @@ export interface RunManifest {
    * The stills of their neighbours come from `feedback.video` (with no pins when nothing was commented).
    */
   scope?: RunScope | undefined
+  /**
+   * The video's look (plan 2026-11-04-looks §4.6): its snapshot in the sources store, which prepare-run unpacks into
+   * context/look/ and checks against `hash`. Absent with no look, so every other manifest keeps its bytes.
+   */
+  look?: RunLook | undefined
+  /**
+   * A demo made from a screen recording (screen-recording plan §5.5): the recording is one of `media` (same key,
+   * sha256 and filename); its frozen pointer trace, the person's setup boxes and trim go to .va-run/recording/<id>/.
+   */
+  recording?: RunRecording | undefined
+}
+
+export interface RunRecording {
+  mediaId: string
+  key: string
+  sha256: string
+  filename: string
+  trace?: { key: string; sha256: string } | undefined
+  /** The person's setup boxes: one-key hidden areas. */
+  boxes: RedactEntry[]
+  trim?: [number, number] | undefined
+  /** Made by recording.ts compose, with no agent (the Quick demo). */
+  compose?: boolean | undefined
+  /** Privacy mode: find private things and hide them (the agent confirms each). */
+  privacy?: boolean | undefined
+  /** Text the person asked to hide wherever it shows, privacy mode or not. */
+  hideStrings?: string[] | undefined
+}
+
+export const MAX_SETUP_BOXES = 200
+
+/** Whether a parsed manifest's recording block has the shape the server writes, and names one of its media. */
+function isRecording(raw: unknown, media: RunMedia[] | null): boolean {
+  if (!raw || typeof raw !== 'object') return false
+  const r = raw as Record<string, unknown>
+  const id = r.mediaId
+  if (typeof id !== 'string' || !MEDIA_ID.test(id)) return false
+  const matches = (media ?? []).filter(
+    (x) => x.kind === 'video' && x.key === r.key && x.sha256 === r.sha256 && x.filename === r.filename,
+  )
+  if (matches.length !== 1 || !String(r.key).startsWith(`${id}/`)) return false
+  if (r.trace !== undefined) {
+    const t = r.trace as Record<string, unknown> | null
+    if (!t || t.key !== `${id}/trace.json` || typeof t.sha256 !== 'string' || !HEX.test(t.sha256))
+      return false
+  }
+  if (!Array.isArray(r.boxes) || r.boxes.length > MAX_SETUP_BOXES) return false
+  const frac = (n: unknown) => typeof n === 'number' && Number.isFinite(n) && n >= 0 && n <= 1
+  const secs = (n: unknown) => typeof n === 'number' && Number.isFinite(n) && n >= 0
+  for (const b of r.boxes as unknown[]) {
+    const e = (b && typeof b === 'object' ? b : {}) as Record<string, unknown>
+    const keys = e.boxes
+    if (
+      !secs(e.start) ||
+      !secs(e.end) ||
+      (e.end as number) < (e.start as number) ||
+      typeof e.reason !== 'string' ||
+      !Array.isArray(keys) ||
+      keys.length !== 1
+    )
+      return false
+    const k = keys[0] as unknown
+    if (!Array.isArray(k) || k.length !== 5 || !secs(k[0]) || !k.slice(1).every(frac)) return false
+    if ((k[1] as number) + (k[3] as number) > 1 + 1e-9 || (k[2] as number) + (k[4] as number) > 1 + 1e-9)
+      return false
+  }
+  if (r.trim !== undefined) {
+    const t = r.trim
+    if (
+      !Array.isArray(t) ||
+      t.length !== 2 ||
+      !secs(t[0]) ||
+      !secs(t[1]) ||
+      !((t[0] as number) < (t[1] as number))
+    )
+      return false
+  }
+  if (r.compose !== undefined && typeof r.compose !== 'boolean') return false
+  if (r.privacy !== undefined && typeof r.privacy !== 'boolean') return false
+  if (
+    r.hideStrings !== undefined &&
+    !(
+      Array.isArray(r.hideStrings) &&
+      r.hideStrings.length <= 50 &&
+      r.hideStrings.every((s) => typeof s === 'string' && s.length <= 200)
+    )
+  )
+    return false
+  return true
+}
+
+export interface RunLook {
+  id: string
+  /** '<jobId>/looks/<hash>.tar.gz' in the sources store. */
+  key: string
+  sha256: string
+  /** lookHash of the unpacked files (src/lib/looks.ts). */
+  hash: string
 }
 
 export interface RunScope {
@@ -243,6 +345,7 @@ export function serializeRunManifest(m: RunManifest): string {
         : {}),
       ...refs(m.bundle.references),
       ...(m.bundle.narration ? { narration: narrationOf(m.bundle.narration) } : {}),
+      ...(m.bundle.recordingHolds?.length ? { recordingHolds: [...m.bundle.recordingHolds] } : {}),
     },
     media:
       m.media && m.media.map((x) => ({ key: x.key, sha256: x.sha256, filename: x.filename, kind: x.kind })),
@@ -269,6 +372,27 @@ export function serializeRunManifest(m: RunManifest): string {
           },
         }
       : {}),
+    // Only with a look, so every other manifest keeps its bytes.
+    ...(m.look ? { look: { id: m.look.id, key: m.look.key, sha256: m.look.sha256, hash: m.look.hash } } : {}),
+    // Only for a demo, so every other manifest keeps its bytes.
+    ...(m.recording
+      ? {
+          recording: {
+            mediaId: m.recording.mediaId,
+            key: m.recording.key,
+            sha256: m.recording.sha256,
+            filename: m.recording.filename,
+            ...(m.recording.trace
+              ? { trace: { key: m.recording.trace.key, sha256: m.recording.trace.sha256 } }
+              : {}),
+            boxes: m.recording.boxes,
+            ...(m.recording.trim ? { trim: [m.recording.trim[0], m.recording.trim[1]] } : {}),
+            ...(m.recording.compose ? { compose: true } : {}),
+            ...(m.recording.privacy ? { privacy: true } : {}),
+            ...(m.recording.hideStrings?.length ? { hideStrings: [...m.recording.hideStrings] } : {}),
+          },
+        }
+      : {}),
   })
 }
 
@@ -277,6 +401,7 @@ export const sha256Hex = (s: string | Uint8Array) => createHash('sha256').update
 const HEX = /^[0-9a-f]{64}$/
 const ID = /^[A-Za-z0-9_-]{1,80}$/
 const MEDIA_ID = /^med_[a-z0-9]{8,40}$/
+const HOLD_STILL = /^assets\/recording\/[a-z0-9-]{1,40}\.hold\.jpg$/
 
 /** Parsed JSON: a frozen narration's shape, its takes' keys inside their own media prefix, and its caps. */
 function isFrozenNarration(v: unknown): v is FrozenNarration {
@@ -430,6 +555,16 @@ export function verifyRunManifest(raw: string, expected: { attemptId: string; sh
     throw new Error('The run manifest has a bad re-voice entry.')
   if (m.bundle?.narration !== undefined && !isFrozenNarration(m.bundle.narration))
     throw new Error('The run manifest has a bad narration entry.')
+  if (m.bundle?.recordingHolds !== undefined) {
+    const holds: unknown = m.bundle.recordingHolds
+    if (
+      m.kind !== 'render_unchanged' ||
+      !Array.isArray(holds) ||
+      holds.length > 12 ||
+      !holds.every((p) => typeof p === 'string' && HOLD_STILL.test(p))
+    )
+      throw new Error('The run manifest has a bad recording holds entry.')
+  }
   if (m.media) {
     if (!Array.isArray(m.media) || m.media.length > 50) throw new Error('The run manifest has bad media.')
     for (const x of m.media)
@@ -471,6 +606,25 @@ export function verifyRunManifest(raw: string, expected: { attemptId: string; sh
   }
   if (m.scope !== undefined && !isScope(m.scope, m.kind, m.feedback !== null))
     throw new Error('The run manifest has a bad scope entry.')
+  if (m.look !== undefined) {
+    // Parsed JSON: check the shape rather than trust the type.
+    const raw: unknown = m.look
+    const l = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+    if (
+      typeof l.id !== 'string' ||
+      !LOOK_ID.test(l.id) ||
+      typeof l.hash !== 'string' ||
+      !HEX.test(l.hash) ||
+      typeof l.sha256 !== 'string' ||
+      !HEX.test(l.sha256) ||
+      l.key !== `${m.jobId}/looks/${l.hash}.tar.gz`
+    )
+      throw new Error('The run manifest has a bad look entry.')
+    // A render of the edited composition reads no look (§4.6).
+    if (m.kind === 'render_unchanged') throw new Error('A render-unchanged run has no look.')
+  }
+  if (m.recording !== undefined && !isRecording(m.recording, m.media))
+    throw new Error('The run manifest has a bad recording entry.')
   if (m.kind === 'revision' && !m.source) throw new Error('A revision run needs a source.')
   if (m.kind === 'render_unchanged' && !m.bundle) throw new Error('A render-unchanged run needs a bundle.')
   // A fit starts from the frozen draft alone, and exists for its narration (the guard and the bus target need it).

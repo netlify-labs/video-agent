@@ -4,6 +4,7 @@ import {
   asc,
   desc,
   eq,
+  gt,
   gte,
   ilike,
   inArray,
@@ -22,11 +23,12 @@ import {
 import type { PgTable } from 'drizzle-orm/pg-core'
 import type { PgAsyncDatabase } from 'drizzle-orm/pg-core/async/db'
 import * as t from './schema.js'
-import { MEDIA_ROLES, SLOT_STAGES, TERMINAL_STAGES } from '../domain/types.js'
+import { SLOT_STAGES, TERMINAL_STAGES } from '../domain/types.js'
 import type {
   ApiKeyRow,
   AttemptRow,
   CleanupRow,
+  CliLoginRow,
   IdempotencyRow,
   JobRow,
   OutputRow,
@@ -69,6 +71,7 @@ import { addUsage, byVersion, withoutJob, type UsageRow } from './memory.js'
 import type { Repo, Store } from './types.js'
 import { searchWords } from '../lib/search.js'
 import { ApiError } from '../lib/errors.js'
+import { TAKE_ROLES } from '../domain/media-roles.js'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- driver-agnostic (netlify-db, pglite)
 type Db = PgAsyncDatabase<any, any, any>
@@ -117,7 +120,7 @@ async function narrationProvenance(db: Db, jobIds: string[]) {
     .select({ jobId: r.jobId, ownerId: r.ownerId, mediaId: m.id, kind: m.kind, ...MEDIA_PROVENANCE })
     .from(r)
     .innerJoin(m, eq(m.id, r.mediaId))
-    .where(and(inArray(r.jobId, jobIds), eq(r.ownerKind, 'version'), isNull(m.role), isNotNull(m.source)))
+    .where(and(inArray(r.jobId, jobIds), eq(r.ownerKind, 'version'), notTakeCol(m.role), isNotNull(m.source)))
     .orderBy(asc(r.ownerId), asc(r.mediaId))
   return rows.map(({ ownerId, ...row }) => ({
     ...row,
@@ -127,11 +130,15 @@ async function narrationProvenance(db: Db, jobIds: string[]) {
   })) as (VersionProvenanceRow & { jobId: string })[]
 }
 
+/** A narration take (recorded or uploaded voice-over); other roles are library items like any other. */
+const isTakeCol = (role: typeof t.media.role | typeof t.mediaUploads.role) => inArray(role, [...TAKE_ROLES])
+const notTakeCol = (role: typeof t.media.role) => or(isNull(role), notInArray(role, [...TAKE_ROLES]))
+
 /** Library queries leave narration takes out, except `takesOf`'s own that GC isn't deleting. */
 const takeVisible = (takesOf: string | undefined) =>
   takesOf
-    ? or(isNull(t.media.role), and(eq(t.media.uploaderId, takesOf), isNull(t.media.deletingAt)))
-    : isNull(t.media.role)
+    ? or(notTakeCol(t.media.role), and(eq(t.media.uploaderId, takesOf), isNull(t.media.deletingAt)))
+    : notTakeCol(t.media.role)
 
 function repoFor(db: Db): Repo {
   /** `select 1 from table where …`, for exists() and notExists(). */
@@ -190,6 +197,7 @@ function repoFor(db: Db): Repo {
         if (visible) conds.push(visible)
       }
       if (q.status) conds.push(eq(t.jobs.status, q.status))
+      if (q.externalRef !== undefined) conds.push(eq(t.jobs.externalRef, q.externalRef))
       const livePub = anyRow(
         t.publications,
         and(eq(t.publications.jobId, t.jobs.id), isNull(t.publications.unpublishedAt)),
@@ -515,9 +523,9 @@ function repoFor(db: Db): Repo {
             visible,
             takeVisible(q.takesOf),
             q.recordings === 'only'
-              ? isNotNull(m.role)
+              ? isTakeCol(m.role)
               : q.recordings === 'exclude'
-                ? isNull(m.role)
+                ? notTakeCol(m.role)
                 : undefined,
             q.kind ? eq(m.kind, q.kind) : undefined,
             ...searchWords(q.search).map((w) => {
@@ -583,6 +591,14 @@ function repoFor(db: Db): Repo {
         .from(u)
         .where(and(eq(u.uploaderId, uploaderId), inArray(u.status, ['open', 'assembling'])))
       return Number(rows[0]?.total ?? 0)
+    },
+    countOpenUploads: async (uploaderId) => {
+      const u = t.mediaUploads
+      const rows = await db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(u)
+        .where(and(eq(u.uploaderId, uploaderId), inArray(u.status, ['open', 'assembling'])))
+      return rows[0]?.n ?? 0
     },
     listStaleUploads: async (now, limit) => {
       const u = t.mediaUploads
@@ -807,7 +823,7 @@ function repoFor(db: Db): Repo {
         .from(m)
         .where(
           and(
-            isNotNull(m.role),
+            isTakeCol(m.role),
             isNull(m.deletedAt),
             isNull(m.deletingAt),
             or(eq(m.scopeJobId, jobId), exists(anyRow(r, and(eq(r.mediaId, m.id), eq(r.jobId, jobId))))),
@@ -823,7 +839,7 @@ function repoFor(db: Db): Repo {
         .from(m)
         .where(
           and(
-            isNotNull(m.role),
+            isTakeCol(m.role),
             isNull(m.deletingAt),
             notExists(anyRow(t.mediaRefs, eq(t.mediaRefs.mediaId, m.id))),
             q.uploaderId ? eq(m.uploaderId, q.uploaderId) : undefined,
@@ -912,6 +928,83 @@ function repoFor(db: Db): Repo {
       const out: Record<string, string[]> = {}
       for (const r of rows) (out[r.mediaId] ??= []).push(r.jobId)
       return out
+    },
+    listUnusedRecordings: async (q) => {
+      const m = t.media
+      const vm = t.versionMedia
+      const live = and(
+        eq(vm.mediaId, m.id),
+        notExists(anyRow(t.jobs, and(eq(t.jobs.id, vm.jobId), isNotNull(t.jobs.deletedAt)))),
+      )
+      const rows = (await db
+        .select()
+        .from(m)
+        .where(
+          and(
+            eq(m.role, 'screen-recording'),
+            isNull(m.deletedAt),
+            isNull(m.deletingAt),
+            q.uploaderId ? eq(m.uploaderId, q.uploaderId) : undefined,
+            notExists(anyRow(vm, live)),
+          ),
+        )
+        .orderBy(asc(m.createdAt), asc(m.id))
+        .limit(q.limit)) as MediaRow[]
+      if (!rows.length) return []
+      const used = new Set(
+        (
+          await db
+            .selectDistinct({ mediaId: vm.mediaId })
+            .from(vm)
+            .where(
+              inArray(
+                vm.mediaId,
+                rows.map((r) => r.id),
+              ),
+            )
+        ).map((r) => r.mediaId),
+      )
+      return rows.map((row) => ({ row, everUsed: used.has(row.id) }))
+    },
+    screenRecordingBytes: async (uploaderId) => {
+      const m = t.media
+      const rows = await db
+        .select({ total: sql<string | number>`coalesce(sum(${m.bytes}), 0)::bigint` })
+        .from(m)
+        .where(
+          and(
+            eq(m.uploaderId, uploaderId),
+            eq(m.role, 'screen-recording'),
+            sql`${m.status} <> 'rejected'`,
+            isNull(m.deletingAt),
+            isNull(m.deletedAt),
+          ),
+        )
+      const u = t.mediaUploads
+      const open = await db
+        .select({ total: sql<string | number>`coalesce(sum(${u.size}), 0)::bigint` })
+        .from(u)
+        .where(and(eq(u.uploaderId, uploaderId), eq(u.status, 'open'), eq(u.role, 'screen-recording')))
+      return Number(rows[0]?.total ?? 0) + Number(open[0]?.total ?? 0)
+    },
+    recentTraceWrites: async (uploaderId, since) => {
+      const rows = await db
+        .select({ writes: t.media.traceWrites })
+        .from(t.media)
+        .where(and(eq(t.media.uploaderId, uploaderId), isNotNull(t.media.traceWrites)))
+      return rows
+        .flatMap((r) => (r.writes as string[] | null) ?? [])
+        .filter((w) => w >= since)
+        .sort()
+    },
+    jobsUsingMedia: async (mediaId) => {
+      const vm = t.versionMedia
+      return db
+        .select({ jobId: vm.jobId, versionN: vm.versionN })
+        .from(vm)
+        .innerJoin(t.jobs, eq(t.jobs.id, vm.jobId))
+        .where(and(eq(vm.mediaId, mediaId), isNull(t.jobs.deletedAt)))
+        .orderBy(asc(vm.jobId), asc(vm.versionN))
     },
     mediaBySource: async (source, ids) => {
       if (!ids.length) return []
@@ -1352,6 +1445,73 @@ function repoFor(db: Db): Repo {
       await db.update(t.cleanup).set(patch).where(eq(t.cleanup.id, id))
     },
 
+    insertCliLogin: async (row) => {
+      await db.insert(t.cliLogins).values(row)
+    },
+    getCliLogin: async (id, opts) =>
+      one<CliLoginRow>(await lockIf(db.select().from(t.cliLogins).where(eq(t.cliLogins.id, id)), opts)),
+    findPendingCliLogin: async (userCode, now) =>
+      one<CliLoginRow>(
+        await db
+          .select()
+          .from(t.cliLogins)
+          .where(
+            and(
+              eq(t.cliLogins.userCode, userCode),
+              eq(t.cliLogins.status, 'pending'),
+              gt(t.cliLogins.expiresAt, now),
+            ),
+          ),
+      ),
+    updateCliLogin: async (id, patch) => {
+      await db.update(t.cliLogins).set(patch).where(eq(t.cliLogins.id, id))
+    },
+    countPendingCliLogins: async (now, clientIp) => {
+      const [r] = await db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(t.cliLogins)
+        .where(
+          and(
+            eq(t.cliLogins.status, 'pending'),
+            gt(t.cliLogins.expiresAt, now),
+            clientIp === undefined ? undefined : eq(t.cliLogins.clientIp, clientIp),
+          ),
+        )
+      return r?.n ?? 0
+    },
+    countCliLoginApprovals: async (userId, since) => {
+      const [r] = await db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(t.cliLogins)
+        .where(and(eq(t.cliLogins.userId, userId), gte(t.cliLogins.approvedAt, since)))
+      return r?.n ?? 0
+    },
+    insertCliLoginFailure: async (row) => {
+      await db.insert(t.cliLoginFailures).values(row)
+    },
+    countCliLoginFailures: async (userId, since) => {
+      const [r] = await db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(t.cliLoginFailures)
+        .where(and(eq(t.cliLoginFailures.userId, userId), gte(t.cliLoginFailures.createdAt, since)))
+      return r?.n ?? 0
+    },
+    sweepCliLogins: async (now, deleteBefore, failuresBefore) => {
+      const marked = await db
+        .update(t.cliLogins)
+        .set({ status: 'expired' })
+        .where(and(eq(t.cliLogins.status, 'pending'), lte(t.cliLogins.expiresAt, now)))
+        .returning({ id: t.cliLogins.id })
+      const gone = await db
+        .delete(t.cliLogins)
+        .where(lt(t.cliLogins.expiresAt, deleteBefore))
+        .returning({ id: t.cliLogins.id })
+      const failures = await db
+        .delete(t.cliLoginFailures)
+        .where(lt(t.cliLoginFailures.createdAt, failuresBefore))
+        .returning({ id: t.cliLoginFailures.id })
+      return marked.length + gone.length + failures.length
+    },
     insertOAuthClient: async (row) => {
       await db.insert(t.oauthClients).values(row)
     },
@@ -1552,6 +1712,32 @@ function repoFor(db: Db): Repo {
       await db.delete(t.users).where(eq(t.users.id, from))
     },
 
+    engineRendersSince: async (since) =>
+      (
+        await db
+          .select({ renders: t.attempts.engineRenders })
+          .from(t.attempts)
+          .where(and(gte(t.attempts.endedAt, since), isNotNull(t.attempts.engineRenders)))
+      ).map((r) => r.renders as { video: number; stills: number; audio: number }),
+    latestEngineAttempt: async (engine) => {
+      const [row] = await db
+        .select({
+          stage: t.attempts.stage,
+          errorCategory: t.attempts.errorCategory,
+          endedAt: t.attempts.endedAt,
+        })
+        .from(t.attempts)
+        .innerJoin(
+          t.versions,
+          and(eq(t.versions.jobId, t.attempts.jobId), eq(t.versions.n, t.attempts.versionN)),
+        )
+        .where(and(eq(t.versions.engine, engine), isNotNull(t.attempts.endedAt)))
+        .orderBy(desc(t.attempts.endedAt))
+        .limit(1)
+      return row?.endedAt
+        ? { stage: row.stage, errorCategory: row.errorCategory, endedAt: row.endedAt }
+        : null
+    },
     usageSince: async (since) => {
       const rows = await db
         .select({
@@ -1591,7 +1777,7 @@ function repoFor(db: Db): Repo {
         .where(
           and(
             eq(m.uploaderId, uploaderId),
-            inArray(m.role, MEDIA_ROLES),
+            isTakeCol(m.role),
             sql`${m.status} <> 'rejected'`,
             isNull(m.deletingAt),
           ),
@@ -1601,21 +1787,27 @@ function repoFor(db: Db): Repo {
       const open = await db
         .select({ total: sql<string | number>`coalesce(sum(${u.size}), 0)::bigint` })
         .from(u)
-        .where(and(eq(u.uploaderId, uploaderId), eq(u.status, 'open'), isNotNull(u.role)))
+        .where(and(eq(u.uploaderId, uploaderId), eq(u.status, 'open'), isTakeCol(u.role)))
       return Number(rows[0]?.total ?? 0) + Number(open[0]?.total ?? 0)
     },
-    countNarrationTakes: async (uploaderId, since) => {
+    countRoleUploads: async (uploaderId, roles, since) => {
+      if (!roles.length) return 0
       const m = t.media
       const rows = await db
         .select({ n: sql<number>`count(*)::int` })
         .from(m)
-        .where(and(eq(m.uploaderId, uploaderId), inArray(m.role, MEDIA_ROLES), gte(m.createdAt, since)))
+        .where(and(eq(m.uploaderId, uploaderId), inArray(m.role, [...roles]), gte(m.createdAt, since)))
       const u = t.mediaUploads
       const open = await db
         .select({ n: sql<number>`count(*)::int` })
         .from(u)
         .where(
-          and(eq(u.uploaderId, uploaderId), eq(u.status, 'open'), isNotNull(u.role), gte(u.createdAt, since)),
+          and(
+            eq(u.uploaderId, uploaderId),
+            eq(u.status, 'open'),
+            inArray(u.role, [...roles]),
+            gte(u.createdAt, since),
+          ),
         )
       return (rows[0]?.n ?? 0) + (open[0]?.n ?? 0)
     },

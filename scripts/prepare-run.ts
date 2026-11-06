@@ -1,6 +1,8 @@
 // Run first when the prompt says so: sets video/ up from the run manifest the server wrote for this attempt.
 //   npx tsx scripts/prepare-run.ts --job <jobId> --attempt <id> --manifest <sha256>
 // The manifest lives in the sources store at <jobId>/runs/<attempt>.json and must match the hash in the prompt.
+// Local mode adds --inputs <dir> (or VA_INPUTS_DIR): every key is read from <dir>/<store>/<key> instead of Blobs, with
+// the same store names and keys, and everything after the fetch is the same (cli-and-sdk plan §7; va-p1th.5.2).
 // Only keys inside it are followed. Revisions restore the parent's source archive; render-unchanged runs restore
 // a frozen bundle and verify its canonical file manifest (keeping copies of the files a re-voice may rewrite), and
 // fit-to-narration runs (author_from_frozen) restore the frozen edited draft the same way, keeping all of it, each
@@ -25,16 +27,18 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  realpathSync,
   renameSync,
   rmSync,
   statSync,
   writeFileSync,
 } from 'node:fs'
-import { dirname, join, relative } from 'node:path'
+import { dirname, isAbsolute, join, relative, sep } from 'node:path'
 import { archiveFiles, bundleManifest } from '../src/lib/bundle-manifest.js'
 import type { BundleReference } from '../src/lib/bundle-references.js'
 import { NARRATION_SRC, load, read } from '../src/lib/contract.js'
 import { frozenFilesFor, optionalFrozenFilesFor } from '../src/lib/narration-run.js'
+import { LOOK_ARCHIVE_ROOT, lookFiles, lookHash } from '../src/lib/looks.js'
 import { FROZEN_DIR, keptHash } from '../src/lib/revoice.js'
 import { SCOPE_LAYOUT_FILE, type ScopeLayout } from '../src/lib/scope.js'
 import { readPcm16 } from '../src/lib/narration-cleanup.js'
@@ -45,9 +49,12 @@ import {
   type FeedbackPin,
   runEngineId,
   type FrozenNarration,
+  type RunLook,
   type RunManifest,
+  type RunRecording,
   type ScopeStill,
 } from '../src/lib/run-manifest.js'
+import { RECORDING_LIMITS } from '../src/lib/media/classify.js'
 import { MAX_OUTPUT_SAMPLES, SAMPLE_RATE } from '../src/lib/timeline.js'
 import { runEngineFor } from './lib/engines/index.js'
 import type { RunEngine } from './lib/engines/types.js'
@@ -67,10 +74,36 @@ import {
 type Fetch = (key: string, to: string, store?: 'sources' | 'videos' | 'media') => Promise<void>
 
 const download: Fetch = async (key, to, store = 'sources') => {
+  const t = Date.now()
   const [bin, ...pre] = netlifyCli() as [string, ...string[]]
   await withRetries(`download ${key}`, 4, () =>
     run(bin, [...pre, 'blobs:get', store, key, '--output', to], { timeoutMs: 5 * 60_000 }),
   )
+  log('prepare.fetch', { store, key, bytes: statSync(to).size, ms: Date.now() - t, mode: 'blobs' })
+}
+
+/**
+ * Local mode's fetch: <dir>/<store>/<key>, the layout the CLI writes with the server's own key builders. A key that
+ * would leave the folder (.., an absolute path, a symlink that resolves outside) is refused, never followed.
+ */
+export function fromInputs(dir: string): Fetch {
+  const top = realpathSync(dir)
+  return async (key, to, store = 'sources') => {
+    const t = Date.now()
+    const outside = () =>
+      new StepError(`The input ${store}/${key} is outside the inputs folder. Stop and report this.`)
+    if (!key || isAbsolute(key) || key.includes('\\') || key.split('/').includes('..')) throw outside()
+    const file = join(top, store, key)
+    if (!existsSync(file))
+      throw new StepError(
+        `download ${key} failed: ${store}/${key} is not in the inputs folder. Stop and report this.`,
+      )
+    const real = realpathSync(file)
+    if (!real.startsWith(`${top}${sep}`)) throw outside()
+    mkdirSync(dirname(to), { recursive: true })
+    copyFileSync(real, to)
+    log('prepare.fetch', { store, key, bytes: statSync(to).size, ms: Date.now() - t, mode: 'inputs' })
+  }
 }
 
 export { SCOPE_LAYOUT_FILE, type ScopeLayout } from '../src/lib/scope.js'
@@ -135,6 +168,45 @@ export function feedbackStills(
   return index
 }
 
+/**
+ * A demo's recording inputs (screen-recording plan §5.5), outside video/ so they never reach the archive: the frozen
+ * pointer trace (hash checked) at .va-run/recording/<id>/trace.json, and the person's boxes, trim, privacy mode and
+ * hide strings in input.json (recording.ts analyze scans for those; plan and check read the rest).
+ */
+export async function hydrateRecording(root: string, r: RunRecording, fetch: Fetch) {
+  const dir = join(root, '.va-run', 'recording', r.mediaId)
+  mkdirSync(dir, { recursive: true })
+  if (r.trace) {
+    const to = join(dir, 'trace.json')
+    await fetch(r.trace.key, to, 'media')
+    if (sha256File(to) !== r.trace.sha256) {
+      rmSync(to, { force: true })
+      throw new StepError("The pointer trace doesn't match its hash. Stop and report this.")
+    }
+  }
+  writeFileSync(
+    join(dir, 'input.json'),
+    `${JSON.stringify(
+      {
+        boxes: r.boxes,
+        ...(r.trim ? { trim: r.trim } : {}),
+        ...(r.privacy ? { privacy: true } : {}),
+        ...(r.hideStrings?.length ? { hideStrings: r.hideStrings } : {}),
+      },
+      null,
+      2,
+    )}\n`,
+  )
+  log('recording', {
+    mediaId: r.mediaId,
+    trace: Boolean(r.trace),
+    boxes: r.boxes.length,
+    trim: r.trim ?? null,
+    privacy: r.privacy === true,
+    hideStrings: r.hideStrings?.length ?? 0,
+  })
+}
+
 /** Unpacks a verified archive over <root>/video (the archive holds video/…). */
 function restoreArchive(root: string, archive: string, sha256: string, what: string) {
   const actual = sha256File(archive)
@@ -146,6 +218,38 @@ function restoreArchive(root: string, archive: string, sha256: string, what: str
       throw new StepError(`The saved ${what} has an unexpected entry (${entry}). Stop and report this.`)
   rmSync(join(root, 'video'), { recursive: true, force: true })
   run('tar', ['-xzf', archive, '-C', root])
+}
+
+/**
+ * Unpacks the version's look snapshot into <root>/context/look/ and checks it: the archive's sha256, entries only under
+ * look/, and the unpacked files' look hash (the same lookHash the build recorded), so the run reads exactly the rules
+ * the version was made with.
+ */
+async function restoreLook(root: string, look: RunLook, tmp: string, fetch: Fetch) {
+  const archive = join(tmp, 'look.tar.gz')
+  await fetch(look.key, archive)
+  const actual = sha256File(archive)
+  if (actual !== look.sha256)
+    throw new StepError(`The saved look doesn't match its hash (got ${actual}). Stop and report this.`)
+  const listing = run('tar', ['-tzf', archive]) // validates the archive before touching context/look/
+  for (const entry of listing.split('\n').filter(Boolean))
+    if (!entry.startsWith(`${LOOK_ARCHIVE_ROOT}/`) || entry.split('/').includes('..'))
+      throw new StepError(`The saved look has an unexpected entry (${entry}). Stop and report this.`)
+  const unpacked = join(tmp, 'look-unpacked')
+  rmSync(unpacked, { recursive: true, force: true })
+  mkdirSync(unpacked, { recursive: true })
+  run('tar', ['-xzf', archive, '-C', unpacked])
+  const dir = join(root, 'context', 'look')
+  rmSync(dir, { recursive: true, force: true })
+  mkdirSync(dirname(dir), { recursive: true })
+  renameSync(join(unpacked, LOOK_ARCHIVE_ROOT), dir)
+  const files = new Map(lookFiles(dir).map((p) => [p, new Uint8Array(readFileSync(join(dir, p)))]))
+  const hash = lookHash(files)
+  if (hash !== look.hash) {
+    rmSync(dir, { recursive: true, force: true })
+    throw new StepError(`The restored look's files don't match its hash (got ${hash}). Stop and report this.`)
+  }
+  log('look.restored', { id: look.id, hash, files: files.size })
 }
 
 /** Fetches an archive's reference files into <root>/video by key, each checked against its entry. */
@@ -183,8 +287,11 @@ function ffprobeJson(path: string, entries: string, what: string): unknown {
   }
 }
 
-/** A second check of a clip with ffprobe (the upload was checked without it): H.264, AAC or no audio, ≤ 2 min. */
-export function probeClip(path: string, name: string) {
+/**
+ * A second check of a clip with ffprobe (the upload was checked without it): H.264, AAC or no audio, ≤ 2 min; a screen
+ * recording (the manifest's recording) may run 5 minutes (RECORDING_LIMITS, screen-recording plan gotcha 2).
+ */
+export function probeClip(path: string, name: string, opts: { role?: 'screen-recording' } = {}) {
   const info = ffprobeJson(path, 'stream=codec_type,codec_name:format=duration', `Clip ${name}`) as {
     streams?: { codec_type?: string; codec_name?: string }[]
     format?: { duration?: string }
@@ -195,8 +302,10 @@ export function probeClip(path: string, name: string) {
   if (video?.codec_name !== 'h264') throw new StepError(`Clip ${name} isn't H.264. Stop and report this.`)
   if (audio.some((s) => s.codec_name !== 'aac'))
     throw new StepError(`Clip ${name} has non-AAC audio. Stop and report this.`)
-  if (!(duration > 0) || duration > 120.5)
-    throw new StepError(`Clip ${name} is longer than 2 minutes. Stop and report this.`)
+  const recording = opts.role === 'screen-recording'
+  const max = recording ? RECORDING_LIMITS.seconds : 120
+  if (!(duration > 0) || duration > max + 0.5)
+    throw new StepError(`Clip ${name} is longer than ${recording ? '5' : '2'} minutes. Stop and report this.`)
 }
 
 interface ProbedStreams {
@@ -466,15 +575,24 @@ export async function prepare(
         throw new StepError(
           `Media ${item.filename} doesn't match its hash (got ${actual}). Stop and report this.`,
         )
-      if (item.kind === 'video') probeClip(to, item.filename)
+      if (item.kind === 'video')
+        probeClip(
+          to,
+          item.filename,
+          m.recording?.filename === item.filename ? { role: 'screen-recording' } : {},
+        )
       if (item.kind === 'audio') probeAudio(to, item.filename)
     }
     log('media', { count: m.media.length, files: m.media.map((x) => x.filename) })
   }
   stepDone('media', !m.media?.length)
-  // 3. The look: the looks plan adds it here.
-  // 4. Recording files (the screen-recording plan adds them here), then scope files: the scoped beats and the
-  // parent's layout, read from the frozen copy (what check-contract --fix and render-job splice against).
+  // 3. The look (looks plan §4.6): its snapshot into context/look/, outside the composition, so it's never archived.
+  if (m.look) await restoreLook(root, m.look, tmp, fetch)
+  stepDone('look', !m.look)
+  // 4. Recording files, then scope files: the scoped beats and the parent's layout, read from the frozen copy (what
+  // check-contract --fix and render-job splice against).
+  if (m.recording) await hydrateRecording(root, m.recording, fetch)
+  stepDone('recording', !m.recording)
   if (m.scope) {
     const html = readFileSync(join(root, FROZEN_DIR, 'index.html'), 'utf8')
     let layout: ScopeLayout['layout']
@@ -511,14 +629,17 @@ export async function prepare(
 }
 
 async function main() {
-  const { job, attempt, manifest: sha } = parseArgs(process.argv.slice(2))
+  const { job, attempt, manifest: sha, inputs = process.env.VA_INPUTS_DIR } = parseArgs(process.argv.slice(2))
   if (!job || !attempt || !sha || !/^[0-9a-f]{64}$/.test(sha))
-    throw new StepError('Usage: prepare-run.ts --job <jobId> --attempt <id> --manifest <sha256>')
+    throw new StepError(
+      'Usage: prepare-run.ts --job <jobId> --attempt <id> --manifest <sha256> [--inputs <dir>]',
+    )
+  const fetch = inputs ? fromInputs(inputs) : download
   const tmp = join(repoRoot, '.render', `${attempt}-prepare`)
   rmSync(tmp, { recursive: true, force: true })
   mkdirSync(tmp, { recursive: true })
   const local = join(tmp, 'run.json')
-  await download(runManifestKey(job, attempt), local)
+  await fetch(runManifestKey(job, attempt), local)
   let m: RunManifest
   try {
     m = verifyRunManifest(readFileSync(local, 'utf8'), { attemptId: attempt, sha256: sha })
@@ -532,7 +653,7 @@ async function main() {
     bundle: Boolean(m.bundle),
     pins: m.feedback?.pins.length ?? 0,
   })
-  await prepare(m, { tmp })
+  await prepare(m, { tmp, fetch })
   writeFileSync(join(repoRoot, '.render', 'run-manifest.json'), JSON.stringify(m))
   console.log(
     m.kind === 'revision'

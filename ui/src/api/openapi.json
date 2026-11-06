@@ -57,6 +57,11 @@
       "x-displayName": "Keys and webhooks"
     },
     {
+      "name": "cli",
+      "description": "video-agent login: the CLI starts a login, you approve it in the browser, it gets a key.",
+      "x-displayName": "CLI login"
+    },
+    {
       "name": "me",
       "description": "Who you are.",
       "x-displayName": "Account"
@@ -194,7 +199,8 @@
                 "context",
                 "external_ref",
                 "destinations",
-                "youtube"
+                "youtube",
+                "webmcp"
               ]
             },
             "description": "Features this deployment has and has switched on. Clients hide what isn't listed. See src/domain/features.ts."
@@ -414,6 +420,20 @@
             "type": "boolean",
             "description": "You starred this video (only you see your favorites)"
           },
+          "externalRef": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "What the video is for outside the app (set at creation), or null"
+          },
+          "externalUrl": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A link to it, or null"
+          },
           "links": {
             "type": "object",
             "properties": {
@@ -445,6 +465,8 @@
           "isRemix",
           "remixOf",
           "favorite",
+          "externalRef",
+          "externalUrl",
           "links"
         ]
       },
@@ -577,9 +599,198 @@
             },
             "description": "The comments this version was asked to incorporate, as they were sent, in order."
           },
+          "context": {
+            "$ref": "#/components/schemas/Context"
+          },
           "editable": {
             "type": "boolean",
             "description": "Ready and keeps editing contract v1, so it can be edited in the browser."
+          },
+          "beats": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/BeatInfo"
+            },
+            "description": "This version's scenes, when known. Null: not known yet (ask GET …/versions/{n}/beats) or not a version that can be redone scene by scene."
+          },
+          "scope": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "beats": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "label"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "beats"
+            ],
+            "description": "A version that redid only some scenes of the version it came from: which ones, with their names."
+          },
+          "look": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "hash": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "hash"
+            ],
+            "description": "The look this version was made with (its name as it was then), and the version of it: hash differs from GET /api/v1/looks' when the look has changed since."
+          },
+          "recording": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "mediaId": {
+                "type": "string"
+              },
+              "trace": {
+                "type": "boolean",
+                "description": "The recording came with a pointer trace (exact clicks and cursor)."
+              },
+              "compose": {
+                "type": "boolean",
+                "description": "Made with no agent authoring (a Quick demo)."
+              },
+              "privacy": {
+                "type": "boolean",
+                "description": "Privacy mode: private things on screen are found and hidden too."
+              },
+              "summary": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "sourceSec": {
+                    "type": "number"
+                  },
+                  "steps": {
+                    "type": "number"
+                  },
+                  "cutSec": {
+                    "type": "number"
+                  },
+                  "spedUpSec": {
+                    "type": "number"
+                  },
+                  "redactionsAdded": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "sourceSec",
+                  "steps",
+                  "cutSec",
+                  "spedUpSec",
+                  "redactionsAdded"
+                ],
+                "description": "What the run made of the recording; null until it is ready."
+              },
+              "hidden": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "trace",
+                        "setup",
+                        "agent",
+                        "editor"
+                      ]
+                    },
+                    "beat": {
+                      "type": "string"
+                    },
+                    "start": {
+                      "type": "number"
+                    },
+                    "end": {
+                      "type": "number"
+                    },
+                    "reason": {
+                      "type": "string"
+                    },
+                    "why": {
+                      "type": "string",
+                      "description": "Why it is hidden, for people: \"You drew it\", \"Password field\", \"Privacy mode: email\", and so on."
+                    },
+                    "checkedBy": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "checkedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "source",
+                    "beat",
+                    "start",
+                    "end",
+                    "reason",
+                    "why",
+                    "checkedBy",
+                    "checkedAt"
+                  ]
+                },
+                "description": "Every hidden area, per scene, with who checked it. Hiding is cosmetic: see the README."
+              }
+            },
+            "required": [
+              "mediaId",
+              "trace",
+              "compose",
+              "privacy",
+              "summary",
+              "hidden"
+            ],
+            "description": "A demo made from a screen recording; null (or absent) for any other video."
           },
           "editing": {
             "type": "object",
@@ -972,7 +1183,11 @@
           "verdicts",
           "incorporates",
           "feedback",
+          "context",
           "editable",
+          "beats",
+          "scope",
+          "look",
           "editing",
           "mode",
           "editedFromN",
@@ -1106,6 +1321,75 @@
           null
         ]
       },
+      "Context": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "github_pr",
+              "github_release",
+              "changelog",
+              "text"
+            ]
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "example": "GitHub PR #123"
+          },
+          "url": {
+            "type": "string",
+            "maxLength": 500,
+            "format": "uri"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 16000
+          }
+        },
+        "required": [
+          "source",
+          "label",
+          "text"
+        ],
+        "description": "Background this version was made with, if any."
+      },
+      "BeatInfo": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The beat id: what scope.beats and the CLI's --scene take."
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The scene's name, as the agent wrote it (data-va-label); null if none."
+          },
+          "start": {
+            "type": "number",
+            "description": "Seconds from the start of this version."
+          },
+          "duration": {
+            "type": "number",
+            "description": "Seconds."
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "start",
+          "duration"
+        ]
+      },
       "EngineCapabilities": {
         "type": "object",
         "properties": {
@@ -1121,6 +1405,7 @@
                 "color",
                 "media",
                 "audio",
+                "music",
                 "voice",
                 "span",
                 "camera",
@@ -1534,6 +1819,13 @@
               "null"
             ],
             "description": "HTML to embed the video; with CC BY media it includes the credit line as a caption"
+          },
+          "player": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The <video-agent-player> snippet: sized before it loads, captions on, credits always shown. Needs its script; the plain embed needs none."
           }
         },
         "required": [
@@ -1543,7 +1835,8 @@
           "unpublishedAt",
           "urls",
           "showTranscript",
-          "embed"
+          "embed",
+          "player"
         ]
       },
       "DestinationPublication": {
@@ -1805,6 +2098,56 @@
           },
           "voiceover": {
             "$ref": "#/components/schemas/VoiceoverInput"
+          },
+          "look": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+            "description": "A look id (GET /api/v1/looks). Omit for the plan's look, else the admin's default (none unless set); null for no look. Errors: 400 unknown_look, 409 look_disabled."
+          },
+          "externalRef": {
+            "type": "string",
+            "maxLength": 200,
+            "pattern": "^[a-z]+:[^\\s]+$",
+            "example": "github:acme/web#pr-123",
+            "description": "What the video is for outside the app. Set once; find the video again with GET /api/v1/videos?externalRef=. Not unique."
+          },
+          "externalUrl": {
+            "type": "string",
+            "maxLength": 500,
+            "format": "uri",
+            "description": "A link to that thing (https), shown on the video page."
+          },
+          "private": {
+            "type": "boolean",
+            "description": "Make the video private (you and admins only) from the start. Needs permission to make videos private."
+          },
+          "context": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Context"
+              },
+              {
+                "description": "Background for the run (a PR, release notes) outside the prompt, read as data."
+              }
+            ]
+          },
+          "recording": {
+            "$ref": "#/components/schemas/RecordingInput"
+          },
+          "agent": {
+            "type": "boolean",
+            "description": "false: a Quick demo, made from the recording with no agent authoring (a stock intro and outro, a scene per step, callouts from what was clicked); costs about as much as an edit. Needs recording; no voiceover."
+          },
+          "engine": {
+            "type": "string",
+            "enum": [
+              "hyperframes",
+              "remotion"
+            ],
+            "description": "The render engine (GET /api/v1/engines). Omit for the look's choice, else hyperframes. Errors: 409 engine_disabled when it isn't on here, 400 engine_not_supported_by_look, 409 engine_unsupported for sound effects or a voice-over it can't make."
           }
         },
         "required": [
@@ -1843,6 +2186,106 @@
           "enabled"
         ],
         "description": "A spoken narration with captions from its words. Omit for the plan's choice, else none."
+      },
+      "RecordingInput": {
+        "type": "object",
+        "properties": {
+          "mediaId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "description": "A screen recording from the library (GET /api/v1/media)."
+          },
+          "trim": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "number",
+                "minimum": 0
+              },
+              {
+                "type": "number",
+                "exclusiveMinimum": 0
+              }
+            ],
+            "description": "Seconds of the recording to use, [in, out]: in before out, at least 2 seconds, inside the file."
+          },
+          "redact": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "start": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "end": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "box": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    }
+                  ],
+                  "description": "[x, y, width, height] as fractions of the frame."
+                },
+                "style": {
+                  "type": "string",
+                  "enum": [
+                    "blur",
+                    "solid"
+                  ],
+                  "description": "blur (the default): a heavy blur of the picture under the box; solid: a flat box."
+                }
+              },
+              "required": [
+                "start",
+                "end",
+                "box"
+              ]
+            },
+            "maxItems": 50,
+            "description": "Areas to hide from the start (seconds of the recording). A demo with any starts private."
+          },
+          "hideStrings": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 200
+            },
+            "maxItems": 50,
+            "description": "Text to hide wherever it shows on screen (a customer name, a project id), privacy mode or not: found by OCR of the recording and hidden for you to keep or remove. A demo with any starts private."
+          },
+          "privacy": {
+            "type": "boolean",
+            "description": "Privacy mode (default false). Off: only the areas you draw and the trace's (password fields, --hide selectors) are hidden. On: private things on screen (emails, keys, tokens, URLs, personal names) are found and hidden too, each confirmed by the agent, for you to keep or remove."
+          }
+        },
+        "required": [
+          "mediaId"
+        ],
+        "description": "Make a demo from a screen recording (feature screen_recording): the agent turns its steps into scenes with auto zoom, a cursor and hidden areas. HyperFrames only (409 engine_unsupported). durationSec defaults to about 0.4 of the recording, 20 to 90 seconds."
       },
       "VideoList": {
         "type": "object",
@@ -1939,6 +2382,43 @@
             },
             "maxItems": 50,
             "description": "Incorporate feedback: open comments on the version being revised (owner or admin). prompt is your note."
+          },
+          "scope": {
+            "type": "object",
+            "properties": {
+              "beats": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                },
+                "minItems": 1,
+                "maxItems": 20,
+                "description": "Scene ids from fromVersion's beats (GET …/versions/{n}/beats)."
+              }
+            },
+            "required": [
+              "beats"
+            ],
+            "description": "Redo only these scenes; everything else stays exactly as it is. Needs fromVersion. Can't be combined with planId, durationSec, sound or voiceover."
+          },
+          "look": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+            "description": "Omit to keep the revised version's look; null for no look. A different look (or a newer version of the same one) is a restyle: a full run that keeps the story and rebuilds how it looks. Errors: 400 unknown_look, 409 look_disabled, 409 look_not_allowed (a version with recorded narration)."
+          },
+          "context": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Context"
+              },
+              {
+                "description": "Background for this version's run, read as data. Not inherited: a revision without one has none."
+              }
+            ]
           }
         },
         "required": [
@@ -2021,6 +2501,51 @@
             "type": "string",
             "format": "uri",
             "description": "HTTPS URL for video.ready / video.failed events (API keys only)."
+          },
+          "look": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+            "description": "Omit to keep the source version's look; null for no look. Another look restyles the remix (a full run, as any remix). Errors: 400 unknown_look, 409 look_disabled."
+          },
+          "externalRef": {
+            "type": "string",
+            "maxLength": 200,
+            "pattern": "^[a-z]+:[^\\s]+$",
+            "example": "github:acme/web#pr-123",
+            "description": "What the video is for outside the app. Set once; find the video again with GET /api/v1/videos?externalRef=. Not unique."
+          },
+          "externalUrl": {
+            "type": "string",
+            "maxLength": 500,
+            "format": "uri",
+            "description": "A link to that thing (https), shown on the video page."
+          },
+          "private": {
+            "type": "boolean",
+            "description": "Make the remix private (you and admins only) from the start. A private video's remix is private either way."
+          },
+          "context": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Context"
+              },
+              {
+                "description": "Background for the run (a PR, release notes) outside the prompt, read as data."
+              }
+            ]
+          },
+          "recording": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RecordingInput"
+              },
+              {
+                "description": "Remix a demo with a new screen recording: the request, look and settings carry over, the steps are planned fresh. Omit to keep the source's recording."
+              }
+            ]
           }
         },
         "required": [
@@ -2164,6 +2689,23 @@
           "source": {
             "$ref": "#/components/schemas/MediaSource"
           },
+          "role": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "narration-take",
+              "narration-upload",
+              "screen-recording",
+              null
+            ],
+            "description": "What the item is for: a voice-over take, uploaded narration, or a raw screen recording (private to its uploader until a video uses it); null for library items"
+          },
+          "hasTrace": {
+            "type": "boolean",
+            "description": "A screen recording with a pointer trace (PUT …/trace)"
+          },
           "recording": {
             "$ref": "#/components/schemas/Recording"
           }
@@ -2187,6 +2729,8 @@
           "urls",
           "canDelete",
           "source",
+          "role",
+          "hasTrace",
           "recording"
         ]
       },
@@ -2289,7 +2833,8 @@
             "type": "string",
             "enum": [
               "narration-take",
-              "narration-upload"
+              "narration-upload",
+              "screen-recording"
             ],
             "description": "A voice-over recording (take) or uploaded narration"
           },
@@ -2376,6 +2921,203 @@
             "description": "Offer the narration's transcript on the share page. Default off; publishing again changes only this."
           }
         }
+      },
+      "Looks": {
+        "type": "object",
+        "properties": {
+          "looks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Look"
+            }
+          },
+          "default": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The look creates get when they omit one; null: none."
+          }
+        },
+        "required": [
+          "looks",
+          "default"
+        ]
+      },
+      "Look": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "bestFor": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Plan templates the look suits: launch, tutorial, social, changelog, sales, other."
+          },
+          "aspects": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Aspect"
+            },
+            "description": "The shapes its rules cover."
+          },
+          "engines": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "hyperframes",
+                "remotion"
+              ]
+            },
+            "description": "Engines it supports, preferred first."
+          },
+          "recording": {
+            "anyOf": [
+              {
+                "type": "boolean",
+                "enum": [
+                  false
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "frame": {
+                    "type": "string",
+                    "enum": [
+                      "wallpaper",
+                      "browser",
+                      "device",
+                      "none"
+                    ]
+                  },
+                  "padding": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 0.3
+                  },
+                  "radius": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 120
+                  },
+                  "shadow": {
+                    "type": "string",
+                    "enum": [
+                      "none",
+                      "sm",
+                      "md",
+                      "lg"
+                    ]
+                  },
+                  "wallpaper": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9-]{0,39}$"
+                  },
+                  "cursor": {
+                    "type": "object",
+                    "properties": {
+                      "shape": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9][a-z0-9-]{0,39}$"
+                      },
+                      "scale": {
+                        "type": "number",
+                        "minimum": 0.5,
+                        "maximum": 3
+                      },
+                      "color": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9-]{0,39}$"
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "ripple": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9-]{0,39}$"
+                  },
+                  "callout": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9-]{0,39}$"
+                  },
+                  "zoomMax": {
+                    "type": "number",
+                    "minimum": 1,
+                    "maximum": 4
+                  }
+                },
+                "required": [
+                  "frame"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How screen recordings are framed in this look; false: hidden from the demo picker; null: the default."
+          },
+          "hash": {
+            "type": "string",
+            "description": "This version of the look; a version made with it keeps it."
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Pickers hide looks an admin turned off; versions already made with one keep it."
+          },
+          "preview": {
+            "type": "object",
+            "properties": {
+              "mp4": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "A short muted loop, under the site root."
+              },
+              "poster": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "mp4",
+              "poster"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "tags",
+          "bestFor",
+          "aspects",
+          "engines",
+          "recording",
+          "hash",
+          "enabled",
+          "preview"
+        ]
       },
       "Destination": {
         "type": "object",
@@ -2685,6 +3427,25 @@
           }
         }
       },
+      "ConfirmHidden": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 24
+            },
+            "minItems": 1,
+            "maxItems": 500,
+            "description": "The hidden areas' ids (from the version's recording.hidden) that look right"
+          }
+        },
+        "required": [
+          "ids"
+        ]
+      },
       "SetVerdict": {
         "type": "object",
         "properties": {
@@ -2885,6 +3646,212 @@
           "name"
         ]
       },
+      "CliLogin": {
+        "type": "object",
+        "properties": {
+          "loginId": {
+            "type": "string"
+          },
+          "deviceCode": {
+            "type": "string",
+            "description": "Secret: only this CLI claims the key with it."
+          },
+          "userCode": {
+            "type": "string",
+            "example": "BCDF-GHJK",
+            "description": "The person types this on the approve page."
+          },
+          "verificationUrl": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string"
+          },
+          "intervalSec": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "loginId",
+          "deviceCode",
+          "userCode",
+          "verificationUrl",
+          "expiresAt",
+          "intervalSec"
+        ]
+      },
+      "CreateCliLogin": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[\\x20-\\x7e]+$"
+          },
+          "host": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[\\x20-\\x7e]+$"
+          }
+        },
+        "required": [
+          "label",
+          "host"
+        ]
+      },
+      "CliLoginClaim": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "slow_down",
+              "denied",
+              "expired",
+              "claimed"
+            ]
+          },
+          "apiKey": {
+            "type": "string",
+            "description": "With claimed: the new key, shown once."
+          },
+          "keyId": {
+            "type": "string"
+          },
+          "webhookSecret": {
+            "type": "string"
+          },
+          "user": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "email": {
+                "type": "string"
+              },
+              "role": {
+                "$ref": "#/components/schemas/Role"
+              }
+            },
+            "required": [
+              "id",
+              "email",
+              "role"
+            ]
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "Role": {
+        "type": "string",
+        "enum": [
+          "admin",
+          "creator",
+          "reviewer",
+          "viewer"
+        ]
+      },
+      "ClaimCliLogin": {
+        "type": "object",
+        "properties": {
+          "deviceCode": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          }
+        },
+        "required": [
+          "deviceCode"
+        ]
+      },
+      "CliLoginRequest": {
+        "type": "object",
+        "properties": {
+          "loginId": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "host": {
+            "type": "string"
+          },
+          "clientIp": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          }
+        },
+        "required": [
+          "loginId",
+          "label",
+          "host",
+          "clientIp",
+          "createdAt",
+          "expiresAt",
+          "role"
+        ]
+      },
+      "LookupCliLogin": {
+        "type": "object",
+        "properties": {
+          "userCode": {
+            "type": "string",
+            "pattern": "^[A-Za-z]{4}[- ]?[A-Za-z]{4}$"
+          }
+        },
+        "required": [
+          "userCode"
+        ]
+      },
+      "CliLoginDecision": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "approved",
+              "denied"
+            ]
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "DecideCliLogin": {
+        "type": "object",
+        "properties": {
+          "userCode": {
+            "type": "string",
+            "pattern": "^[A-Za-z]{4}[- ]?[A-Za-z]{4}$"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "approve",
+              "deny"
+            ]
+          }
+        },
+        "required": [
+          "userCode",
+          "decision"
+        ]
+      },
       "OAuthGrant": {
         "type": "object",
         "properties": {
@@ -2913,6 +3880,94 @@
           "clientName",
           "createdAt",
           "lastUsedAt"
+        ]
+      },
+      "Engine": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": [
+              "hyperframes",
+              "remotion"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "license": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "open"
+                    ]
+                  },
+                  "spdx": {
+                    "type": "string",
+                    "enum": [
+                      "Apache-2.0"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind",
+                  "spdx"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "remotion"
+                    ]
+                  },
+                  "url": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "url"
+                ]
+              }
+            ]
+          },
+          "capabilities": {
+            "$ref": "#/components/schemas/EngineCapabilities"
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Offered for new videos here right now."
+          },
+          "notice": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "What anyone choosing it is told: Remotion's license notice."
+          },
+          "extraCredits": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Credits a video costs over a HyperFrames one, once measured; null when unknown or none."
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "license",
+          "capabilities",
+          "enabled",
+          "notice",
+          "extraCredits"
         ]
       },
       "Me": {
@@ -2947,15 +4002,6 @@
           "name",
           "role",
           "via"
-        ]
-      },
-      "Role": {
-        "type": "string",
-        "enum": [
-          "admin",
-          "creator",
-          "reviewer",
-          "viewer"
         ]
       },
       "User": {
@@ -3093,11 +4139,19 @@
           },
           "takeQuotaBytes": {
             "type": "integer",
-            "description": "Stored bytes each person's recordings may use (default 2 GiB)."
+            "description": "Stored bytes each person's voice recordings (narration takes) may use (default 2 GiB)."
+          },
+          "recordingQuotaBytes": {
+            "type": "integer",
+            "description": "Stored bytes each person's screen recordings may use (default 2 GiB)."
           },
           "remixEnabled": {
             "type": "boolean",
             "description": "Remixing is on (the default). Off hides every Remix button and refuses new remixes; queued ones still run."
+          },
+          "webmcpEnabled": {
+            "type": "boolean",
+            "description": "WebMCP is on (the default): in browsers that support it, the web app offers its tools to AI agents. Off: no tools are registered."
           },
           "youtubeEnabled": {
             "type": "boolean",
@@ -3106,15 +4160,95 @@
           "youtubeConfigured": {
             "type": "boolean",
             "description": "GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set (read-only)."
+          },
+          "defaultLook": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The look creates get when they omit one (API, MCP and the GitHub Action too); null: none."
+          },
+          "disabledLooks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Looks turned off: hidden from pickers and refused for new videos; videos made with one keep it."
+          },
+          "cliLoginEnabled": {
+            "type": "boolean",
+            "description": "video-agent login can get a key by approving the CLI in the browser (the default). Off: paste a key."
+          },
+          "remotion": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean",
+                "description": "Remotion is offered for new videos (with a recorded license choice)."
+              },
+              "license": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "by": {
+                    "type": "string"
+                  },
+                  "email": {
+                    "type": "string"
+                  },
+                  "at": {
+                    "type": "string"
+                  },
+                  "tier": {
+                    "type": "string",
+                    "enum": [
+                      "free",
+                      "company"
+                    ]
+                  },
+                  "note": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "by",
+                  "email",
+                  "at",
+                  "tier",
+                  "note"
+                ],
+                "description": "Who recorded the license choice, when, and which; null until someone does."
+              },
+              "keySet": {
+                "type": "boolean",
+                "description": "VIDEO_AGENT_REMOTION_KEY is set (its value is never read by the server)."
+              }
+            },
+            "required": [
+              "enabled",
+              "license",
+              "keySet"
+            ],
+            "description": "The Remotion engine (bring your own license); present only when ENGINES lists remotion."
           }
         },
         "required": [
           "narrationEnabled",
           "transcriptionProvider",
           "takeQuotaBytes",
+          "recordingQuotaBytes",
           "remixEnabled",
+          "webmcpEnabled",
           "youtubeEnabled",
-          "youtubeConfigured"
+          "youtubeConfigured",
+          "defaultLook",
+          "disabledLooks",
+          "cliLoginEnabled"
         ]
       },
       "TranscriptionProvider": {
@@ -3141,11 +4275,68 @@
             "maximum": 1099511627776,
             "description": "1 MiB to 1 TiB."
           },
+          "recordingQuotaBytes": {
+            "type": "integer",
+            "minimum": 1048576,
+            "maximum": 1099511627776,
+            "description": "1 MiB to 1 TiB."
+          },
           "remixEnabled": {
+            "type": "boolean"
+          },
+          "webmcpEnabled": {
             "type": "boolean"
           },
           "youtubeEnabled": {
             "type": "boolean"
+          },
+          "defaultLook": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+            "description": "A look id, or null for none."
+          },
+          "disabledLooks": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{0,39}$"
+            },
+            "maxItems": 100,
+            "description": "The full list of looks to turn off."
+          },
+          "cliLoginEnabled": {
+            "type": "boolean"
+          },
+          "remotionEnabled": {
+            "type": "boolean",
+            "description": "Turn Remotion on or off for new videos. Needs remotion in ENGINES and a license choice."
+          },
+          "remotionLicense": {
+            "type": "object",
+            "properties": {
+              "tier": {
+                "type": "string",
+                "enum": [
+                  "free",
+                  "company"
+                ]
+              },
+              "note": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 500,
+                "description": "A license reference or who approved it."
+              }
+            },
+            "required": [
+              "tier"
+            ],
+            "description": "The license your organisation has. company needs VIDEO_AGENT_REMOTION_KEY set on the project."
           }
         }
       },
@@ -3478,6 +4669,40 @@
             ],
             "description": "The voice-over chosen while planning, if any; the brief then has narration per beat."
           },
+          "look": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "chosen": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "id",
+              "chosen"
+            ],
+            "description": "The plan's look: the person's choice (chosen), else the first enabled look made for the plan's template, else the admin default. id null: none. null: a remix or revision plan that keeps its video's look."
+          },
+          "engine": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "hyperframes",
+              "remotion",
+              null
+            ],
+            "description": "The engine chosen for this new-video plan; null: the look's choice."
+          },
           "expiresAt": {
             "type": "string"
           }
@@ -3495,6 +4720,8 @@
           "mediaIds",
           "sound",
           "voiceover",
+          "look",
+          "engine",
           "expiresAt"
         ]
       },
@@ -3562,6 +4789,21 @@
           },
           "voiceover": {
             "$ref": "#/components/schemas/VoiceoverInput"
+          },
+          "look": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A look id from GET /api/v1/looks, or null for none. Left out, a new-video plan picks one from its template."
+          },
+          "engine": {
+            "type": "string",
+            "enum": [
+              "hyperframes",
+              "remotion"
+            ],
+            "description": "New-video plans only: the render engine, kept by the video made from the plan. Omit for the look's choice. Errors as on create."
           }
         },
         "required": [
@@ -4101,6 +5343,32 @@
                     "op": {
                       "type": "string",
                       "enum": [
+                        "music"
+                      ]
+                    },
+                    "src": {
+                      "type": "string",
+                      "maxLength": 200,
+                      "description": "A ready audio item from the library, as assets/media/<media id>.<ext>"
+                    },
+                    "volume": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 4
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "src"
+                  ],
+                  "description": "Set the music bed: replaces the music layer's file, or adds a music layer (id va-music) that spans the video and dips under the voice-over"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "enum": [
                         "voice"
                       ]
                     },
@@ -4120,6 +5388,185 @@
                     "text"
                   ],
                   "description": "Change a voiced beat's narration line (plain text). The draft preview keeps the old audio; the render re-voices the line, lengthening the beat only if the new line no longer fits"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "enum": [
+                        "span"
+                      ]
+                    },
+                    "beat": {
+                      "type": "string",
+                      "maxLength": 80
+                    },
+                    "in": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "out": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "beat",
+                    "in",
+                    "out"
+                  ],
+                  "description": "Trim a recording scene: which seconds of the recording it shows (0.5x to 4x its length)."
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "enum": [
+                        "camera"
+                      ]
+                    },
+                    "beat": {
+                      "type": "string",
+                      "maxLength": 80
+                    },
+                    "keys": {
+                      "type": "array",
+                      "items": {
+                        "type": "array",
+                        "items": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      },
+                      "maxItems": 64
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "beat",
+                    "keys"
+                  ],
+                  "description": "A recording scene's camera keys: [seconds, x, y, zoom 1-4, ease?], in time order."
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "enum": [
+                        "cursor"
+                      ]
+                    },
+                    "beat": {
+                      "type": "string",
+                      "maxLength": 80
+                    },
+                    "style": {
+                      "type": "string",
+                      "enum": [
+                        "smooth",
+                        "highlight",
+                        "none"
+                      ]
+                    },
+                    "size": {
+                      "type": "number",
+                      "minimum": 0.5,
+                      "maximum": 2
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "beat",
+                    "style",
+                    "size"
+                  ],
+                  "description": "How a recording scene's cursor looks (never its path); smooth needs a pointer trace."
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "enum": [
+                        "redact"
+                      ]
+                    },
+                    "beat": {
+                      "type": "string",
+                      "maxLength": 80
+                    },
+                    "entries": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "maxLength": 24
+                          },
+                          "origin": {
+                            "type": "string",
+                            "enum": [
+                              "agent",
+                              "editor"
+                            ]
+                          },
+                          "start": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "end": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "reason": {
+                            "type": "string",
+                            "maxLength": 60
+                          },
+                          "style": {
+                            "type": "string",
+                            "enum": [
+                              "blur",
+                              "solid"
+                            ]
+                          },
+                          "boxes": {
+                            "type": "array",
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              }
+                            },
+                            "minItems": 1,
+                            "maxItems": 600
+                          }
+                        },
+                        "required": [
+                          "start",
+                          "end",
+                          "boxes"
+                        ]
+                      },
+                      "maxItems": 200
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "beat",
+                    "entries"
+                  ],
+                  "description": "A recording scene's own hidden areas (keyframed boxes). Areas from the pointer trace or the demo's setup can't be removed or changed."
                 },
                 {
                   "$ref": "#/components/schemas/NarrationOp"
@@ -4154,6 +5601,50 @@
               "null"
             ],
             "description": "A newer version exists: start from it, or render this draft as the next version"
+          },
+          "recording": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "duration": {
+                "type": "number",
+                "description": "The recording's length in seconds"
+              },
+              "trace": {
+                "type": "boolean",
+                "description": "Made with a pointer trace: the smooth cursor is available"
+              },
+              "locked": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": {}
+                },
+                "description": "Hidden areas from the pointer trace and the demo's setup: shown, never removable"
+              },
+              "camera": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "array",
+                  "items": {}
+                },
+                "description": "The planner's camera per step ([t, x, y, zoom, ease?] keys), for Auto"
+              },
+              "zoomMax": {
+                "type": "number",
+                "description": "The most the camera may zoom and stay sharp"
+              }
+            },
+            "required": [
+              "duration",
+              "trace",
+              "locked",
+              "camera",
+              "zoomMax"
+            ],
+            "description": "A demo: the recording facts the editor needs; null for any other video"
           },
           "narrationChanged": {
             "type": [
@@ -4641,6 +6132,107 @@
                     "duration"
                   ],
                   "description": "The beat's AI voice-over clip, in seconds into the beat; null when it has none. A changed line may lengthen its beat when re-voiced"
+                },
+                "recording": {
+                  "type": "object",
+                  "properties": {
+                    "step": {
+                      "type": "string"
+                    },
+                    "slot": {
+                      "type": "string"
+                    },
+                    "src": {
+                      "type": "string"
+                    },
+                    "in": {
+                      "type": "number",
+                      "description": "Source seconds the scene shows from"
+                    },
+                    "out": {
+                      "type": "number",
+                      "description": "Source seconds the scene shows to"
+                    },
+                    "rate": {
+                      "type": "number",
+                      "description": "Playback speed (1 = real time)"
+                    },
+                    "camera": {
+                      "type": "array",
+                      "items": {},
+                      "description": "[t, x, y, zoom, ease?] keys, in source seconds"
+                    },
+                    "cursor": {
+                      "type": "object",
+                      "properties": {
+                        "style": {
+                          "type": "string"
+                        },
+                        "size": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "path": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "style",
+                        "size",
+                        "path"
+                      ]
+                    },
+                    "clicks": {
+                      "type": "array",
+                      "items": {},
+                      "description": "[t, x, y] clicks, in source seconds"
+                    },
+                    "redact": {
+                      "type": "array",
+                      "items": {},
+                      "description": "The scene's own hidden areas (the agent's and the editor's); the locked ones are on the Edit"
+                    },
+                    "locked": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "hold": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "seconds": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "seconds"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "step",
+                    "slot",
+                    "src",
+                    "in",
+                    "out",
+                    "rate",
+                    "camera",
+                    "cursor",
+                    "clicks",
+                    "redact",
+                    "locked",
+                    "hold"
+                  ],
+                  "description": "A recording scene (a demo): what it shows of the recording and how"
                 }
               },
               "required": [
@@ -4948,6 +6540,32 @@
                     "op": {
                       "type": "string",
                       "enum": [
+                        "music"
+                      ]
+                    },
+                    "src": {
+                      "type": "string",
+                      "maxLength": 200,
+                      "description": "A ready audio item from the library, as assets/media/<media id>.<ext>"
+                    },
+                    "volume": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 4
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "src"
+                  ],
+                  "description": "Set the music bed: replaces the music layer's file, or adds a music layer (id va-music) that spans the video and dips under the voice-over"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "enum": [
                         "voice"
                       ]
                     },
@@ -4967,6 +6585,185 @@
                     "text"
                   ],
                   "description": "Change a voiced beat's narration line (plain text). The draft preview keeps the old audio; the render re-voices the line, lengthening the beat only if the new line no longer fits"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "enum": [
+                        "span"
+                      ]
+                    },
+                    "beat": {
+                      "type": "string",
+                      "maxLength": 80
+                    },
+                    "in": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "out": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "beat",
+                    "in",
+                    "out"
+                  ],
+                  "description": "Trim a recording scene: which seconds of the recording it shows (0.5x to 4x its length)."
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "enum": [
+                        "camera"
+                      ]
+                    },
+                    "beat": {
+                      "type": "string",
+                      "maxLength": 80
+                    },
+                    "keys": {
+                      "type": "array",
+                      "items": {
+                        "type": "array",
+                        "items": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      },
+                      "maxItems": 64
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "beat",
+                    "keys"
+                  ],
+                  "description": "A recording scene's camera keys: [seconds, x, y, zoom 1-4, ease?], in time order."
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "enum": [
+                        "cursor"
+                      ]
+                    },
+                    "beat": {
+                      "type": "string",
+                      "maxLength": 80
+                    },
+                    "style": {
+                      "type": "string",
+                      "enum": [
+                        "smooth",
+                        "highlight",
+                        "none"
+                      ]
+                    },
+                    "size": {
+                      "type": "number",
+                      "minimum": 0.5,
+                      "maximum": 2
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "beat",
+                    "style",
+                    "size"
+                  ],
+                  "description": "How a recording scene's cursor looks (never its path); smooth needs a pointer trace."
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "enum": [
+                        "redact"
+                      ]
+                    },
+                    "beat": {
+                      "type": "string",
+                      "maxLength": 80
+                    },
+                    "entries": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "maxLength": 24
+                          },
+                          "origin": {
+                            "type": "string",
+                            "enum": [
+                              "agent",
+                              "editor"
+                            ]
+                          },
+                          "start": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "end": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "reason": {
+                            "type": "string",
+                            "maxLength": 60
+                          },
+                          "style": {
+                            "type": "string",
+                            "enum": [
+                              "blur",
+                              "solid"
+                            ]
+                          },
+                          "boxes": {
+                            "type": "array",
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              }
+                            },
+                            "minItems": 1,
+                            "maxItems": 600
+                          }
+                        },
+                        "required": [
+                          "start",
+                          "end",
+                          "boxes"
+                        ]
+                      },
+                      "maxItems": 200
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "beat",
+                    "entries"
+                  ],
+                  "description": "A recording scene's own hidden areas (keyframed boxes). Areas from the pointer trace or the demo's setup can't be removed or changed."
                 },
                 {
                   "$ref": "#/components/schemas/NarrationOp"
@@ -5011,6 +6808,9 @@
           "excludeNarration": {
             "type": "boolean",
             "description": "Render picture first: render the draft's other edits without its recorded narration, so you can record against the new picture. The narration stays in the draft; move it onto the new version with rebase-narration"
+          },
+          "look": {
+            "description": "Not accepted (400 look_not_allowed): an edit render keeps the edited version's look."
           }
         }
       },
@@ -5316,6 +7116,7 @@
             "enum": [
               "narration-take",
               "narration-upload",
+              "screen-recording",
               null
             ],
             "description": "A voice-over recording (take) or uploaded narration; null for library uploads"
@@ -5643,6 +7444,68 @@
         "required": [
           "queries"
         ]
+      },
+      "PointerTrace": {
+        "type": "object",
+        "properties": {
+          "v": {
+            "type": "number",
+            "enum": [
+              1
+            ]
+          },
+          "source": {
+            "type": "object",
+            "additionalProperties": {},
+            "description": "{ kind: 'cli' | 'upload' | 'browser' | 'script', tool, startedAt }"
+          },
+          "frame": {
+            "type": "object",
+            "additionalProperties": {},
+            "description": "{ width, height, fps, duration }: must match the recording"
+          },
+          "viewport": {
+            "type": "object",
+            "additionalProperties": {},
+            "description": "{ width, height, dpr }"
+          },
+          "moves": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            },
+            "description": "[t, x, y] with x, y as 0-1 fractions of the frame, at most 30,000"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": {}
+            },
+            "description": "click, type, scroll, focus, drag and navigate events, each with `kind` and `t`; at most 5,000"
+          },
+          "redact": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": {}
+            },
+            "description": "{ start, end, reason, boxes: [t, x, y, w, h][] } areas to hide, keyframed; at most 200"
+          }
+        },
+        "required": [
+          "v",
+          "source",
+          "frame",
+          "viewport",
+          "moves",
+          "events",
+          "redact"
+        ],
+        "description": "Pointer trace v1. Positions are 0-1 fractions of the frame, times seconds into the recording. See /docs/cli#record."
       },
       "TakePeaksStored": {
         "type": "object",
@@ -6279,6 +8142,38 @@
               "string",
               "null"
             ]
+          },
+          "remotionRenders": {
+            "type": "object",
+            "properties": {
+              "since": {
+                "type": "string"
+              },
+              "total": {
+                "type": "integer"
+              },
+              "videos": {
+                "type": "integer"
+              },
+              "stills": {
+                "type": "integer"
+              },
+              "audio": {
+                "type": "integer"
+              },
+              "attempts": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "since",
+              "total",
+              "videos",
+              "stills",
+              "audio",
+              "attempts"
+            ],
+            "description": "This month's Remotion renders (UTC), failed runs included; only when ENGINES lists remotion. Reconcile with remotion.pro."
           }
         },
         "required": [
@@ -6365,7 +8260,15 @@
           "resource": "videos",
           "method": "create",
           "fieldFeatures": {
-            "planId": "planning"
+            "planId": "planning",
+            "look": "looks",
+            "externalRef": "external_ref",
+            "externalUrl": "external_ref",
+            "private": "external_ref",
+            "context": "context",
+            "recording": "screen_recording",
+            "agent": "screen_recording",
+            "engine": "engines"
           }
         },
         "summary": "Create a video",
@@ -6479,7 +8382,10 @@
         "operationId": "listVideos",
         "x-sdk": {
           "resource": "videos",
-          "method": "list"
+          "method": "list",
+          "fieldFeatures": {
+            "externalRef": "external_ref"
+          }
         },
         "summary": "List videos",
         "description": "Lists videos, newest first.",
@@ -6548,6 +8454,19 @@
             },
             "required": false,
             "name": "q",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 200,
+              "pattern": "^[a-z]+:[^\\s]+$",
+              "example": "github:acme/web#pr-123",
+              "description": "Only videos made with this externalRef (exact match), newest first"
+            },
+            "required": false,
+            "description": "Only videos made with this externalRef (exact match), newest first",
+            "name": "externalRef",
             "in": "query"
           },
           {
@@ -7097,11 +9016,14 @@
           "resource": "videos",
           "method": "revise",
           "fieldFeatures": {
-            "planId": "planning"
+            "planId": "planning",
+            "scope": "scoped_revision",
+            "look": "looks",
+            "context": "context"
           }
         },
         "summary": "Revise a video",
-        "description": "Starts the next version from a ready one.",
+        "description": "Starts the next version from a ready one. With scope, only those scenes of fromVersion are redone and everything else stays exactly as it is (redo a scene): 409 not_editable when that version can't be redone scene by scene (no editing contract, or its engine can't), 400 for scene ids it doesn't have.",
         "tags": [
           "versions"
         ],
@@ -7224,7 +9146,13 @@
           "method": "remix",
           "feature": "remix",
           "fieldFeatures": {
-            "planId": "planning"
+            "planId": "planning",
+            "look": "looks",
+            "externalRef": "external_ref",
+            "externalUrl": "external_ref",
+            "private": "external_ref",
+            "context": "context",
+            "recording": "screen_recording"
           }
         },
         "summary": "Remix a video",
@@ -7399,6 +9327,124 @@
                   },
                   "required": [
                     "items"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/videos/{id}/versions/{n}/beats": {
+      "get": {
+        "operationId": "getVersionBeats",
+        "x-sdk": {
+          "resource": "versions",
+          "method": "beats",
+          "feature": "scoped_revision"
+        },
+        "summary": "A version's scenes",
+        "description": "The scenes (beats) of a ready version, in order, for redoing some of them: pass their ids as scope.beats with this version as fromVersion. Null for a version that can't be edited scene by scene. Versions made before this list existed get it filled on first read. 409 when the version isn't ready.",
+        "tags": [
+          "versions"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "required": true,
+            "name": "n",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Scenes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "beats": {
+                      "type": [
+                        "array",
+                        "null"
+                      ],
+                      "items": {
+                        "$ref": "#/components/schemas/BeatInfo"
+                      }
+                    }
+                  },
+                  "required": [
+                    "beats"
                   ]
                 }
               }
@@ -7826,6 +9872,91 @@
         "responses": {
           "204": {
             "description": "Unpublished"
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/looks": {
+      "get": {
+        "operationId": "listLooks",
+        "x-sdk": {
+          "resource": "looks",
+          "method": "list",
+          "feature": "looks"
+        },
+        "summary": "List looks",
+        "description": "The visual styles a video can be made in (pass an id as `look` when creating, revising or remixing), each with whether an admin has it on, and the default for creates that omit a look. Every signed-in role can list them; a look's name and description are never private.",
+        "tags": [
+          "videos"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Looks",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Looks"
+                }
+              }
+            }
           },
           "400": {
             "description": "Invalid request",
@@ -9633,6 +11764,120 @@
         }
       }
     },
+    "/api/v1/videos/{id}/versions/{n}/hidden/confirm": {
+      "post": {
+        "operationId": "markHiddenAreasChecked",
+        "x-sdk": {
+          "resource": "videos",
+          "method": "confirmHidden",
+          "feature": "screen_recording"
+        },
+        "summary": "Mark hidden areas checked",
+        "description": "A demo's Looks right: marks these hidden areas (ids from the version's recording.hidden) as checked by you, with the time. Owner or admin. 400 for an id the version doesn't have; 404 when the version has no recording.",
+        "tags": [
+          "versions"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "required": true,
+            "name": "n",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmHidden"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Video"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/videos/{id}/versions/{n}/verdict": {
       "put": {
         "operationId": "setVerdict",
@@ -10616,6 +12861,370 @@
         }
       }
     },
+    "/api/v1/cli/logins": {
+      "post": {
+        "operationId": "createCliLogin",
+        "x-sdk": {
+          "resource": "cliLogins",
+          "method": "create"
+        },
+        "summary": "Start a CLI login",
+        "description": "Starts video-agent login. No credentials: returns a device code for the CLI and a user code the person types on the approve page.",
+        "tags": [
+          "cli"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCliLogin"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Started",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CliLogin"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Browser login is off",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cli/logins/{id}/token": {
+      "post": {
+        "operationId": "claimCliLogin",
+        "x-sdk": {
+          "resource": "cliLogins",
+          "method": "claim"
+        },
+        "summary": "Claim a CLI login",
+        "description": "The CLI's poll. Pending until the person approves; then claimed once, with a new API key. Poll no faster than intervalSec.",
+        "tags": [
+          "cli"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimCliLogin"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CliLoginClaim"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Browser login is off",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cli/logins/lookup": {
+      "post": {
+        "operationId": "lookupCliLogin",
+        "x-sdk": false,
+        "summary": "Look up a CLI login by its code",
+        "description": "For the approve page: the login waiting for the code you typed. Signed-in browser sessions only.",
+        "tags": [
+          "cli"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LookupCliLogin"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CliLoginRequest"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Browser login is off",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cli/logins/approve": {
+      "post": {
+        "operationId": "decideCliLogin",
+        "x-sdk": false,
+        "summary": "Approve or deny a CLI login",
+        "description": "Approves or denies the login waiting for the code you typed. Signed-in browser sessions only.",
+        "tags": [
+          "cli"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecideCliLogin"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Decided",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CliLoginDecision"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Browser login is off",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/keys/{id}": {
       "delete": {
         "operationId": "revokeKey",
@@ -10823,6 +13432,102 @@
         "responses": {
           "204": {
             "description": "Revoked"
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/engines": {
+      "get": {
+        "operationId": "listEngines",
+        "x-sdk": {
+          "resource": "engines",
+          "method": "list",
+          "feature": "engines"
+        },
+        "summary": "List render engines",
+        "description": "The engines a video can be made with here: HyperFrames always, and Remotion when this deployment offers it (bring your own license), with its license notice.",
+        "tags": [
+          "videos"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Engines",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Engine"
+                      }
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ]
+                }
+              }
+            }
           },
           "400": {
             "description": "Invalid request",
@@ -11980,7 +14685,11 @@
         "x-sdk": {
           "resource": "plans",
           "method": "create",
-          "feature": "planning"
+          "feature": "planning",
+          "fieldFeatures": {
+            "look": "looks",
+            "engine": "engines"
+          }
         },
         "summary": "Start a plan",
         "description": "Starts planning a video: a fast router decides whether a few questions would help.",
@@ -14487,7 +17196,7 @@
           "method": "create"
         },
         "summary": "Start an upload",
-        "description": "Starts an upload session for a file over 4 MB, or for any voice-over recording. Declare its size and sha256 (a recorder may send the hash it computed while recording; the server checks every part and the whole file); quota is reserved. A recording names its role and the video it's for (scopeJobId), which you must be able to see.",
+        "description": "Starts an upload session for a file over 4 MB, or for any voice-over recording. Declare its size and sha256 (a recorder may send the hash it computed while recording; the server checks every part and the whole file); quota is reserved. A voice-over recording names its role and the video it's for (scopeJobId), which you must be able to see. A screen recording (role screen-recording, needs the screen_recording feature) names no video and is held to its own limits: H.264 MP4, 150 MB, 5 minutes, a constant 24-30 fps, a keyframe at least every 2 s, fast start.",
         "tags": [
           "media"
         ],
@@ -14527,7 +17236,8 @@
                     "type": "string",
                     "enum": [
                       "narration-take",
-                      "narration-upload"
+                      "narration-upload",
+                      "screen-recording"
                     ],
                     "description": "A voice-over recording (take) or uploaded narration"
                   },
@@ -15900,6 +18610,204 @@
         "responses": {
           "204": {
             "description": "Deleted"
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/media/{id}/trace": {
+      "put": {
+        "operationId": "setMediaTrace",
+        "x-sdk": {
+          "resource": "media",
+          "method": "setTrace",
+          "feature": "screen_recording"
+        },
+        "summary": "Set a screen recording's pointer trace",
+        "description": "Stores the pointer trace (the cursor and click log, schema v1, at most 4 MB) for a ready screen recording: its uploader or an admin. Text from the recorded page is scrubbed. Sending again replaces it until a video uses the recording, then 409 trace_frozen. Shares the 10-an-hour budget with recording uploads.",
+        "tags": [
+          "media"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PointerTrace"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The recording, with its trace",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Media"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "getMediaTrace",
+        "x-sdk": {
+          "resource": "media",
+          "method": "getTrace",
+          "feature": "screen_recording"
+        },
+        "summary": "Get a screen recording's pointer trace",
+        "description": "The stored (normalized) pointer trace, for the recording's uploader and admins only.",
+        "tags": [
+          "media"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The trace",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PointerTrace"
+                }
+              }
+            }
           },
           "400": {
             "description": "Invalid request",

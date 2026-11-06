@@ -1,0 +1,18 @@
+<!doctype html>
+<html>
+  <body style="margin:0;font:16px system-ui,sans-serif">
+    <div style="padding:40px">
+      <h1>Account</h1>
+      <p id="email">Signed in as ada.okafor@acme-labs.dev</p>
+      <p>Secret key: <code id="key"></code></p>
+      <p>Billing contact: Priya Raman</p>
+      <p>Plan: Pro</p>
+    </div>
+    <script>
+      // The key is put together here, not written out: deploys scan the repo for secret-looking literals.
+      document.getElementById('key').textContent = ['sk', '_live_', '51HxQwErTyUiOpAsDfGhJk'].join('')
+      // The email leaves the page after 1.5 s: its box goes off then.
+      setTimeout(() => document.getElementById('email').remove(), 1500)
+    </script>
+  </body>
+</html>

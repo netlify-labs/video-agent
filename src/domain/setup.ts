@@ -1,5 +1,6 @@
 // Setup readiness: everything a stranger's deployment needs, with one actionable message per item.
 import type { Deps } from '../deps.js'
+import { remotionConfigured } from './engines.js'
 import { openverseStatus } from './openverse.js'
 import { getSettings, syncEdgeConfig } from './settings.js'
 
@@ -149,10 +150,48 @@ export async function setupChecks(
     fix: 'Run npm run setup:openverse -- --site <your site> --deploy, then click the link Openverse emails you.',
   })
 
+  // Only where ENGINES lists Remotion (render-engines plan §7): everywhere else the row doesn't exist.
+  if (remotionConfigured(deps)) add(await engineCheck(deps))
+
   const ready =
     checks.every((c) => c.status !== 'fail') &&
     !checks.some((c) => ['runner-token', 'identity'].includes(c.id) && c.status === 'unknown')
   return { ready, checks }
+}
+
+const INSTALL_FAILURES = ['engine_install_failed', 'engine_skills_unavailable']
+
+/**
+ * The Engines row (render-engines plan §7): whether Remotion is on and under which recorded license, and whether its
+ * latest run failed to install it (the code only: nothing else keeps install failures).
+ */
+async function engineCheck(deps: Deps): Promise<Check> {
+  const row = await deps.store.getSettings()
+  const ack = row?.remotionLicenseAck ?? null
+  const base = { id: 'engines', label: 'Render engines' }
+  if (!ack)
+    return {
+      ...base,
+      status: 'warn',
+      detail: 'HyperFrames ✓; Remotion: in ENGINES but not set up: see Admin.',
+      fix: 'Open /admin, turn Remotion on and record which Remotion license your organisation has.',
+    }
+  if (!row?.remotionEnabled) return { ...base, status: 'ok', detail: 'HyperFrames ✓; Remotion: off.' }
+  const latest = await deps.store.latestEngineAttempt('remotion')
+  if (latest?.errorCategory && INSTALL_FAILURES.includes(latest.errorCategory))
+    return {
+      ...base,
+      status: 'warn',
+      detail: `HyperFrames ✓; Remotion: last Remotion install failed: ${latest.errorCategory}.`,
+      fix: 'Retry the video. If it fails again, check ENGINES and the Remotion template, then redeploy.',
+    }
+  const tier = ack.tier === 'free' ? 'Free License' : 'Company License'
+  return {
+    ...base,
+    status: 'ok',
+    // /api/health is public: the date only, never who recorded it (Admin shows that).
+    detail: `HyperFrames ✓; Remotion: on, ${tier} recorded on ${ack.at.slice(0, 10)}; renders are reported to remotion.pro.`,
+  }
 }
 
 /** What browsers treat as a secure context: an https origin, or a loopback one (local development). */

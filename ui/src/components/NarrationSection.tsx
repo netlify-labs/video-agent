@@ -1,12 +1,15 @@
 // The editor's Narration section (docs/plans/2026-11-02-record-your-own-voiceover.md §2.3-§2.5, §5.4, §5.5): the
 // composition preview with the narration auditioned over it, and under it the timeline (Scenes, Narration, AI voice,
-// Music), the clip tools, the track's settings and Add audio (upload, drop, the library, this video's recordings).
+// Music), the clip tools, the track's settings and Add audio (upload, drop, the library, this video's recordings, Find
+// music). Each track's + adds to that track, and the Add audio button asks which track; a music file sets the music bed
+// (owner, 2026-11-06).
 // The op it edits goes up through onChange and is saved with the draft's other ops (one whole-track snapshot); clip
 // edits are undoable here, track settings apply as they're set. Slots take the recorder (NarrationRecorder) and the
 // narration banners.
 // While timing changes are pending, Render picture first takes the recorder's place (§2.1, §5.3); while someone else
 // holds the narration lock (§2.7) the track is read-only: it plays and selects, but nothing changes.
 import {
+  ActionIcon,
   Badge,
   Button,
   Card,
@@ -22,10 +25,20 @@ import {
   Tooltip,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
-import { IconChevronDown, IconFileMusic, IconMicrophone, IconPlus, IconUpload } from '@tabler/icons-react'
+import {
+  IconChevronDown,
+  IconFileMusic,
+  IconMicrophone,
+  IconPlus,
+  IconSearch,
+  IconSparkles,
+  IconUpload,
+} from '@tabler/icons-react'
+import { useNavigate } from 'react-router'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { FPS } from '../../../src/lib/contract'
 import {
+  clipLength,
   clipEnd,
   opTakeIds,
   SAMPLE_RATE,
@@ -62,13 +75,19 @@ import { useNarrationTakes, type TakeInfo } from '../lib/use-narration-takes'
 import { CompositionPreview, type PreviewCommand } from './CompositionPreview'
 import { AlignToVoice } from './AlignToVoice'
 import { showError } from './bits'
-import { MediaLibraryModal } from './MediaPicker'
+import { FindMusicModal } from './FindMusic'
+import { MediaLibraryModal, type Media } from './MediaPicker'
+import { defaultTarget, type AddTarget } from '../lib/add-target'
+import { uploadFile } from '../lib/upload'
+import { ClipTakeDownload } from './TakeDownload'
+import { takeNumber } from '../lib/take-download'
 import {
   applyTrackPatch,
   ClipInspector,
   ClipMenu,
   EditorAnnouncer,
   Timeline,
+  type TimelineProps,
   type TrackPatch,
 } from './timeline'
 
@@ -116,6 +135,8 @@ export interface NarrationTrackApi {
   timingPending: boolean
   /** You hold the narration lock (§2.7): Record is off without it. */
   canRecord: boolean
+  /** Bumped by the Narration track's + > Record: the recorder opens its panel. */
+  openRequest: number
 }
 
 /** What the page can do to the section from outside (the render dialog's Trim). */
@@ -126,6 +147,13 @@ export interface NarrationControl {
   seekTo: (seconds: number) => void
   /** Where the playhead is, in seconds. */
   time: () => number
+  /** The timeline's clips, in order (WebMCP's list and select, va-qago). */
+  clips: () => { id: string; start: number; seconds: number }[]
+  /** Selects a clip, as clicking it does; false when there's no such clip. */
+  select: (clipId: string | null) => boolean
+  /** The timeline's own undo and redo (its buttons and shortcuts); false when there's nothing to undo or redo. */
+  undo: () => boolean
+  redo: () => boolean
 }
 
 export interface NarrationSectionProps {
@@ -141,6 +169,8 @@ export interface NarrationSectionProps {
   onChange: (op: NarrationOp) => void
   /** The music layer's own level and mute (an audio op on the page). */
   onMusicChange: (audioId: string, patch: { volume?: number; muted?: boolean }) => void
+  /** Sets the music bed to a ready library item (a music op on the page); without it the Music track takes nothing. */
+  onSetMusic?: (m: Media) => void
   onPreviewReady?: (send: (c: PreviewCommand) => void) => void
   onPreviewClick?: (c: { textId: string | null; x: number; y: number }) => void
   timingPending: boolean
@@ -149,6 +179,8 @@ export interface NarrationSectionProps {
   banner?: ReactNode
   /** Saves the draft with this narration op now (a recorded take's clip); throws when the save fails. */
   onSaveDraft?: (op: NarrationOp) => Promise<void>
+  /** The timeline's scene menu (redo a scene), passed through. */
+  sceneMenu?: TimelineProps['sceneMenu']
   /** The recorder (NarrationRecorder), given the track to place its takes on. */
   recorder?: (api: NarrationTrackApi) => ReactNode
   /** Shown in the recorder's place while timingPending: Render picture first (RenderPictureFirst). */
@@ -174,6 +206,19 @@ const MODE_NOTES: Record<AiVoiceMode, string> = {
 }
 
 const LOCKED_MESSAGE = 'Someone else is editing the narration. Take over to change it.'
+
+/** Waits for an upload to be ready in the library (the music bed takes ready items only). */
+async function readyMedia(id: string, timeoutMs = 120_000): Promise<Media> {
+  const until = Date.now() + timeoutMs
+  for (;;) {
+    const { data } = await fetchClient.GET('/api/v1/media/{id}', { params: { path: { id } } })
+    if (data?.status === 'ready') return data
+    if (data?.status === 'rejected') throw new Error(`${data.filename} couldn't be used.`)
+    if (Date.now() > until)
+      throw new Error('The file is still being checked. Pick it from the library in a moment.')
+    await new Promise((r) => setTimeout(r, 1000))
+  }
+}
 
 interface Importing {
   name: string
@@ -340,6 +385,28 @@ export function NarrationSection(props: NarrationSectionProps) {
         seek(Math.max(0, Math.round(seconds * SAMPLE_RATE)))
       },
       time: () => playheadRef.current / SAMPLE_RATE,
+      clips: () =>
+        editor.op.clips.map((c) => ({
+          id: c.id,
+          start: c.start / SAMPLE_RATE,
+          seconds: clipLength(c) / SAMPLE_RATE,
+        })),
+      select: (clipId) => {
+        if (clipId !== null && !editor.op.clips.some((c) => c.id === clipId)) return false
+        editor.setSelected(clipId)
+        if (clipId) focusClip(clipId)
+        return true
+      },
+      undo: () => {
+        if (!editor.canUndo) return false
+        editor.undo()
+        return true
+      },
+      redo: () => {
+        if (!editor.canRedo) return false
+        editor.redo()
+        return true
+      },
     }
   }, [control, seek, editor])
 
@@ -392,13 +459,91 @@ export function NarrationSection(props: NarrationSectionProps) {
       showError(e)
     }
   }
-  const [picking, setPicking] = useState<'library' | 'recordings' | null>(null)
+  // What's being picked from, and for which track (null: Add audio, which asks which track once there's an item).
+  const [picking, setPicking] = useState<{
+    from: 'library' | 'recordings' | 'find'
+    to: AddTarget | null
+  } | null>(null)
   const recordings = $api.useQuery(
     'get',
     '/api/v1/videos/{id}/recordings',
     { params: { path: { id: videoId } } },
-    { enabled: picking === 'recordings' },
+    { enabled: picking?.from === 'recordings' },
   )
+  // The selected track: the last one added to, or the narration when a clip is selected. Add audio defaults to it.
+  const [selectedTrack, setSelectedTrack] = useState<AddTarget>('narration')
+  useEffect(() => {
+    if (editor.selected) setSelectedTrack('narration')
+  }, [editor.selected])
+  const canMusic = !!props.onSetMusic && !readOnly
+  const setMusic = (m: Media) => {
+    if (!props.onSetMusic) return
+    if (readOnly) {
+      notifications.show({ color: 'yellow', message: LOCKED_MESSAGE })
+      return
+    }
+    props.onSetMusic(m)
+    setSelectedTrack('music')
+    notifications.show({ message: `${m.source?.title ?? m.filename} is the music now.` })
+  }
+  const uploadMusic = async (files: File[]) => {
+    const f = files.find(isNarrationFile)
+    if (!f) {
+      notifications.show({ color: 'red', message: "That isn't an MP3, M4A, WAV, Ogg or WebM file." })
+      return
+    }
+    if (files.length > 1) notifications.show({ message: `The music is one file: using ${f.name}.` })
+    setImporting({ name: f.name, percent: 0, phase: 'Uploading' })
+    try {
+      const id = await uploadFile(f, {
+        onProgress: (p) => {
+          setImporting({
+            name: f.name,
+            percent: p.total ? Math.round((p.sent / p.total) * 100) : 0,
+            phase: p.phase === 'checking' ? 'Checking' : 'Uploading',
+          })
+        },
+      })
+      setImporting({ name: f.name, percent: 100, phase: 'Checking' })
+      setMusic(await readyMedia(id))
+    } catch (e) {
+      showError(e)
+    }
+    setImporting(null)
+  }
+  // Add audio asks which track an item goes to.
+  const [asking, setAsking] = useState<{
+    what: string
+    to: AddTarget
+    music: boolean
+    add: (to: AddTarget) => void
+  } | null>(null)
+  const addMedia = (m: Media, to: AddTarget | null, prefer?: AddTarget) => {
+    const go = (t: AddTarget) => (t === 'music' ? setMusic(m) : void pick(m.id))
+    // A take or a recording made for this video is narration, never the music bed.
+    const music = canMusic && !m.role
+    if (to) go(to)
+    else
+      setAsking({
+        what: m.source?.title ?? m.filename,
+        to: music ? (prefer ?? defaultTarget(m, selectedTrack)) : 'narration',
+        music,
+        add: go,
+      })
+  }
+  const askFiles = (files: File[]) => {
+    if (!files.length) return
+    setAsking({
+      what: files.length === 1 ? (files[0]?.name ?? 'the file') : `${files.length} files`,
+      to: canMusic ? selectedTrack : 'narration',
+      music: canMusic,
+      add: (t) => (t === 'music' ? void uploadMusic(files) : void addFiles(files, playhead)),
+    })
+  }
+  const musicUpload = useRef<HTMLButtonElement | null>(null)
+  const askUpload = useRef<HTMLButtonElement | null>(null)
+  const [openRequest, setOpenRequest] = useState(0)
+  const navigate = useNavigate()
 
   const onTrackChange = (patch: TrackPatch) => {
     if (readOnly) return
@@ -409,10 +554,9 @@ export function NarrationSection(props: NarrationSectionProps) {
   const overrun =
     baseSamples > 0 ? Math.max(0, op.clips.reduce((m, c) => Math.max(m, clipEnd(c)), 0) - baseSamples) : 0
 
-  // One Add audio menu in the row under the timeline (the timeline sits right under the picture): upload a file,
-  // pick from the library, or reuse a recording made for this video. The file picker is a hidden button it presses.
-  const addAudio = (
-    <Group gap={6} wrap="nowrap">
+  // Hidden file pickers the menus press: narration (at the playhead), the music bed, and Add audio's (which asks).
+  const filePickers = (
+    <>
       <FileButton accept={NARRATION_ACCEPT} multiple onChange={(fs) => void addFiles(fs, playhead)}>
         {(p) => (
           <button {...p} ref={uploadButton} type="button" hidden tabIndex={-1} aria-hidden>
@@ -420,6 +564,28 @@ export function NarrationSection(props: NarrationSectionProps) {
           </button>
         )}
       </FileButton>
+      <FileButton accept={NARRATION_ACCEPT} onChange={(f) => f && void uploadMusic([f])}>
+        {(p) => (
+          <button {...p} ref={musicUpload} type="button" hidden tabIndex={-1} aria-hidden>
+            Upload music
+          </button>
+        )}
+      </FileButton>
+      <FileButton accept={NARRATION_ACCEPT} multiple onChange={askFiles}>
+        {(p) => (
+          <button {...p} ref={askUpload} type="button" hidden tabIndex={-1} aria-hidden>
+            Upload audio
+          </button>
+        )}
+      </FileButton>
+    </>
+  )
+
+  // One Add audio menu in the row under the timeline (the timeline sits right under the picture): upload a file,
+  // pick from the library, find music, or reuse a recording made for this video; it then asks which track.
+  const addAudio = (
+    <Group gap={6} wrap="nowrap">
+      {filePickers}
       <Menu position="bottom-start">
         <Menu.Target>
           <Button
@@ -435,13 +601,27 @@ export function NarrationSection(props: NarrationSectionProps) {
           </Button>
         </Menu.Target>
         <Menu.Dropdown>
-          <Menu.Item leftSection={<IconUpload size={14} />} onClick={openUpload}>
+          <Menu.Item leftSection={<IconUpload size={14} />} onClick={() => askUpload.current?.click()}>
             Upload a file
           </Menu.Item>
-          <Menu.Item leftSection={<IconFileMusic size={14} />} onClick={() => setPicking('library')}>
+          <Menu.Item
+            leftSection={<IconFileMusic size={14} />}
+            onClick={() => setPicking({ from: 'library', to: null })}
+          >
             From the library
           </Menu.Item>
-          <Menu.Item leftSection={<IconMicrophone size={14} />} onClick={() => setPicking('recordings')}>
+          {canMusic ? (
+            <Menu.Item
+              leftSection={<IconSearch size={14} />}
+              onClick={() => setPicking({ from: 'find', to: null })}
+            >
+              Find music
+            </Menu.Item>
+          ) : null}
+          <Menu.Item
+            leftSection={<IconMicrophone size={14} />}
+            onClick={() => setPicking({ from: 'recordings', to: null })}
+          >
             Recordings for this video
           </Menu.Item>
         </Menu.Dropdown>
@@ -455,6 +635,88 @@ export function NarrationSection(props: NarrationSectionProps) {
       ) : null}
     </Group>
   )
+
+  // Each track's +, with what fits that track.
+  const plus = (name: string, items: ReactNode, disabled = false) => (
+    <Menu position="bottom-start" withinPortal>
+      <Menu.Target>
+        <ActionIcon
+          size="sm"
+          variant="subtle"
+          color="gray"
+          aria-label={`Add to ${name}`}
+          data-testid={`track-add-${name.toLowerCase().replace(/\s+/g, '-')}`}
+          disabled={disabled}
+        >
+          <IconPlus size={14} />
+        </ActionIcon>
+      </Menu.Target>
+      <Menu.Dropdown aria-label={`Add to ${name}`}>{items}</Menu.Dropdown>
+    </Menu>
+  )
+  const recordable = !!props.recorder && props.canRecord !== false && !readOnly && !props.timingPending
+  const addMenus: TimelineProps['addMenus'] = {
+    narration: plus(
+      'Narration',
+      <>
+        <Menu.Item
+          leftSection={<IconMicrophone size={14} />}
+          disabled={!recordable}
+          onClick={() => {
+            setSelectedTrack('narration')
+            setOpenRequest((n) => n + 1)
+          }}
+        >
+          Record
+        </Menu.Item>
+        <Menu.Item leftSection={<IconUpload size={14} />} onClick={openUpload}>
+          Upload a file
+        </Menu.Item>
+        <Menu.Item
+          leftSection={<IconFileMusic size={14} />}
+          onClick={() => setPicking({ from: 'library', to: 'narration' })}
+        >
+          From the library
+        </Menu.Item>
+        <Menu.Item
+          leftSection={<IconMicrophone size={14} />}
+          onClick={() => setPicking({ from: 'recordings', to: 'narration' })}
+        >
+          Recordings for this video
+        </Menu.Item>
+      </>,
+      !!importing || readOnly,
+    ),
+    music: canMusic
+      ? plus(
+          'Music',
+          <>
+            <Menu.Item
+              leftSection={<IconSearch size={14} />}
+              onClick={() => setPicking({ from: 'find', to: 'music' })}
+            >
+              Find music
+            </Menu.Item>
+            <Menu.Item
+              leftSection={<IconFileMusic size={14} />}
+              onClick={() => setPicking({ from: 'library', to: 'music' })}
+            >
+              From the library
+            </Menu.Item>
+            <Menu.Item leftSection={<IconUpload size={14} />} onClick={() => musicUpload.current?.click()}>
+              Upload a file
+            </Menu.Item>
+          </>,
+          !!importing,
+        )
+      : null,
+    aiVoice: plus(
+      'AI voice',
+      <Menu.Item leftSection={<IconSparkles size={14} />} onClick={() => void navigate(`/videos/${videoId}`)}>
+        Generate (ask for a revision with AI voice-over)
+      </Menu.Item>,
+    ),
+  }
 
   return (
     <>
@@ -506,11 +768,28 @@ export function NarrationSection(props: NarrationSectionProps) {
           onRangeSelect={setRange}
           onClipCommand={editor.onClipCommand}
           onDropFiles={(files, at) => void addFiles(files, at)}
+          {...(canMusic ? { onDropMusic: (files: File[]) => void uploadMusic(files) } : {})}
+          addMenus={addMenus}
+          {...(props.sceneMenu ? { sceneMenu: props.sceneMenu } : {})}
         />
         <ClipMenu editor={editor} />
         <EditorAnnouncer editor={editor} />
         <Stack gap="sm" mt="sm">
-          <ClipInspector editor={editor} start={addAudio} />
+          <ClipInspector
+            editor={editor}
+            start={addAudio}
+            end={(clip) => (
+              <ClipTakeDownload
+                videoId={videoId}
+                versionN={props.versionN}
+                mediaId={clip.mediaId}
+                take={takeNumber(
+                  editor.op.clips.map((c) => c.mediaId),
+                  clip.mediaId,
+                )}
+              />
+            )}
+          />
           <Group gap="lg" align="end" wrap="wrap">
             <Stack gap={4}>
               <Text size="xs" c="var(--va-muted)">
@@ -591,23 +870,80 @@ export function NarrationSection(props: NarrationSectionProps) {
                 takeSpans: takes.takeSpans,
                 timingPending: props.timingPending,
                 canRecord: props.canRecord !== false && !readOnly,
+                openRequest,
               })}
         </Stack>
       </Card>
-      {picking === 'library' ? (
+      {picking?.from === 'library' ? (
         <MediaLibraryModal
           opened
-          title="Add audio to the narration"
+          title={
+            picking.to === 'music'
+              ? 'Set the music'
+              : picking.to === 'narration'
+                ? 'Add audio to the narration'
+                : 'Add audio'
+          }
           kinds={['audio']}
           onClose={() => setPicking(null)}
           onPick={([m]) => {
+            const to = picking.to
             setPicking(null)
-            if (m) void pick(m.id)
+            if (m) addMedia(m, to)
           }}
         />
       ) : null}
+      {canMusic ? (
+        <FindMusicModal
+          opened={picking?.from === 'find'}
+          onClose={() => setPicking(null)}
+          onImported={(m) => {
+            // Find music's results are music: Add audio still asks, with Music chosen.
+            const to = picking?.to ?? null
+            setPicking(null)
+            if (to) setMusic(m)
+            else addMedia(m, null, 'music')
+          }}
+        />
+      ) : null}
+      <Modal opened={!!asking} onClose={() => setAsking(null)} title={`Add ${asking?.what ?? ''}`} size="sm">
+        {asking ? (
+          <Stack gap="sm" data-testid="add-to">
+            <Text size="sm">Add to:</Text>
+            <SegmentedControl
+              aria-label="Add to"
+              value={asking.to}
+              onChange={(v) => setAsking({ ...asking, to: v })}
+              data={[
+                { value: 'narration', label: 'Narration' },
+                { value: 'music', label: 'Music', disabled: !asking.music },
+              ]}
+            />
+            <Text size="xs" c="var(--va-faint)">
+              {asking.to === 'music'
+                ? 'It becomes the music bed for the whole video, and dips under the voice-over.'
+                : 'It goes on the Narration track at the playhead.'}
+            </Text>
+            <Group justify="flex-end" gap="xs">
+              <Button size="xs" variant="default" onClick={() => setAsking(null)}>
+                Cancel
+              </Button>
+              <Button
+                size="xs"
+                data-testid="add-to-confirm"
+                onClick={() => {
+                  setAsking(null)
+                  asking.add(asking.to)
+                }}
+              >
+                Add
+              </Button>
+            </Group>
+          </Stack>
+        ) : null}
+      </Modal>
       <Modal
-        opened={picking === 'recordings'}
+        opened={picking?.from === 'recordings'}
         onClose={() => setPicking(null)}
         title="Recordings for this video"
       >
@@ -638,8 +974,17 @@ export function NarrationSection(props: NarrationSectionProps) {
                     variant="default"
                     aria-label={`Add ${m.title ?? m.filename}`}
                     onClick={() => {
+                      const to = picking?.to
                       setPicking(null)
-                      void pick(m.id)
+                      // A recording made for this video is narration: Add audio still asks, with Music off.
+                      if (to) void pick(m.id)
+                      else
+                        setAsking({
+                          what: m.title ?? m.filename,
+                          to: 'narration',
+                          music: false,
+                          add: () => void pick(m.id),
+                        })
                     }}
                   >
                     Add

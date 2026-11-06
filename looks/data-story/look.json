@@ -1,0 +1,15 @@
+{
+  "id": "data-story",
+  "name": "Data story",
+  "description": "Numbers first: counters that run up, charts that build bar by bar, and one annotation that says why it matters.",
+  "tags": ["data", "charts", "numbers"],
+  "bestFor": ["sales", "launch", "changelog"],
+  "aspects": ["16:9", "9:16", "1:1", "4:5"],
+  "engines": ["hyperframes"],
+  "colors": { "roles": ["bg", "text", "muted", "accent"], "derived": ["chart-2", "grid"] },
+  "sound": { "musicMood": "steady minimal electronic, 100 to 110 bpm" },
+  "registry": [],
+  "authors": ["Video Agent maintainers"],
+  "license": "MIT",
+  "since": "2026-11-05"
+}

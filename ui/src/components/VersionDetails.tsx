@@ -14,9 +14,10 @@ import {
   Tooltip,
 } from '@mantine/core'
 import { IconCheck, IconCopy, IconExternalLink, IconInfoCircle, IconMapPin } from '@tabler/icons-react'
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { $api, type Version, type Video } from '../api/client'
 import { clockTime, credits, duration } from './bits'
+import { engineName } from '../lib/engines'
 import { languageName } from './LanguageSelect'
 import { voiceLabel } from './VoiceoverControl'
 
@@ -101,6 +102,32 @@ const listOf = (items: string[]) => (
   </ul>
 )
 
+/** Long context (a whole PR description) starts clamped; "Show all" opens the rest. */
+const CONTEXT_LINES = 12
+
+function ContextText({ text }: { text: string }) {
+  const [open, setOpen] = useState(false)
+  const lines = text.split('\n').length
+  const long = lines > CONTEXT_LINES || text.length > 1200
+  return (
+    <>
+      <Text
+        size="sm"
+        className="va-details-prompt"
+        data-testid="version-context"
+        {...(long && !open ? { lineClamp: CONTEXT_LINES } : {})}
+      >
+        {text}
+      </Text>
+      {long ? (
+        <Button size="xs" variant="subtle" color="gray" mt={4} onClick={() => setOpen((o) => !o)}>
+          {open ? 'Show less' : `Show all (${lines} lines)`}
+        </Button>
+      ) : null}
+    </>
+  )
+}
+
 export function VersionDetailsModal({
   video,
   v,
@@ -174,6 +201,39 @@ function Everything({
         </Text>
       </Part>
 
+      {v.context ? (
+        // Background from elsewhere (github-action plan §6.1): read-only, the run read it as data.
+        <Part
+          title={`Context from ${v.context.label}`}
+          aside={
+            <Group gap="xs" wrap="nowrap">
+              <CopyButton value={v.context.text}>
+                {({ copied, copy }) => (
+                  <Button
+                    size="xs"
+                    variant="subtle"
+                    color="gray"
+                    leftSection={copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
+                    onClick={copy}
+                  >
+                    {copied ? 'Copied' : 'Copy'}
+                  </Button>
+                )}
+              </CopyButton>
+              {v.context.url ? (
+                <Anchor href={v.context.url} target="_blank" rel="noopener noreferrer" size="xs">
+                  <Group gap={4} wrap="nowrap">
+                    Open <IconExternalLink size={12} />
+                  </Group>
+                </Anchor>
+              ) : null}
+            </Group>
+          }
+        >
+          <ContextText text={v.context.text} />
+        </Part>
+      ) : null}
+
       {v.feedback.length ? (
         <Part title={`Feedback it was asked to incorporate (${v.feedback.length})`}>
           <Stack gap={6}>
@@ -206,6 +266,12 @@ function Everything({
           </Fact>
           <Fact label="Language">{languageName(video.language)}</Fact>
           <Fact label="Sound">{soundWords(v)}</Fact>
+          {v.editing.engine !== 'hyperframes' ? (
+            <Fact label="Engine">
+              <span data-testid="engine-tag">{engineName(v.editing.engine)}</span>
+            </Fact>
+          ) : null}
+          {v.look ? <Fact label="Look">{v.look.name}</Fact> : null}
           {v.music ? <Fact label="Music">{musicWords(v.music)}</Fact> : null}
           {v.music?.query ? <Fact label="Music search">{v.music.query}</Fact> : null}
           {v.voiceover ? (
@@ -396,7 +462,14 @@ export function DetailsCard({ video, v, onOpen }: { video: Video; v: Version; on
       <div className="va-facts">
         <Fact label="Length">{lengthWords(v)}</Fact>
         <Fact label="Sound">{soundWords(v)}</Fact>
+        {v.editing.engine !== 'hyperframes' ? (
+          <Fact label="Engine">
+            <span data-testid="engine-tag">{engineName(v.editing.engine)}</span>
+          </Fact>
+        ) : null}
+        {v.look ? <Fact label="Look">{v.look.name}</Fact> : null}
         {v.music ? <Fact label="Music">{musicWords(v.music)}</Fact> : null}
+        {v.context ? <Fact label="Context">{v.context.label}</Fact> : null}
         <Fact label="Credits">{credits(v.usage?.totalCreditsCost)}</Fact>
         <Fact label="Took">{took(v) ?? '—'}</Fact>
       </div>

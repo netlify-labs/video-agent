@@ -17,6 +17,7 @@ import { createPlatform } from './platform.js'
 import { createRunner } from './runner.js'
 
 let deps: Deps | null = null
+import { builtinLooks } from './looks.js'
 
 export function prodDeps(): Deps {
   if (deps) return deps
@@ -26,6 +27,7 @@ export function prodDeps(): Deps {
   const log = createLogger({ service: 'video-agent' }, undefined, { verbose: verboseFromEnv() })
   const env = process.env
   const config = readConfig(env)
+  for (const id of config.enginesIgnored) log.warn('config.engines_unknown', { id })
   const store = createDrizzleStore(drizzle({ schema }))
   const token = env.RUNNER_API_TOKEN ?? null
   const partial = { store, ids, clock: { now: () => new Date() }, blobs: netlifyBlobs }
@@ -65,6 +67,7 @@ export function prodDeps(): Deps {
           }
         : null,
     log,
+    looks: builtinLooks,
   }
   return deps
 }

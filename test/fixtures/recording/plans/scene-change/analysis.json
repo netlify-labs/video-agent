@@ -1,0 +1,32 @@
+{
+ "v": 1,
+ "sha256": "golden-scene-change",
+ "analyzer": "analyze-1",
+ "source": {
+  "width": 2560,
+  "height": 1440,
+  "fps": 30,
+  "duration": 20
+ },
+ "cursorSource": "trace",
+ "idle": [],
+ "scenes": [
+  10
+ ],
+ "activity": [],
+ "cursor": [],
+ "clicks": [
+  {
+   "t": 4,
+   "x": 768,
+   "y": 432,
+   "source": "trace"
+  },
+  {
+   "t": 14,
+   "x": 1792,
+   "y": 720,
+   "source": "trace"
+  }
+ ]
+}

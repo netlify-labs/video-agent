@@ -108,6 +108,19 @@ async function child(variant: string, port: number, parts: number, size: number,
       },
     })
     await getStore({ name: 'media', consistency: 'strong' }).set('media/d5/original.mp4', body as unknown as Blob)
+  } else if (variant === 'prealloc-file') {
+    // A file-backed Blob (fs.openAsBlob): a known length (a plain Content-Length PUT, no chunked encoding) and no
+    // copy in memory; fetch reads it from disk.
+    const { openAsBlob } = await import('node:fs')
+    const { writeFileSync: write, rmSync: rm } = await import('node:fs')
+    const path = join(tmpdir(), `va-d5-${String(process.pid)}.mp4`)
+    write(path, bytes)
+    mark('written')
+    try {
+      await getStore({ name: 'media', consistency: 'strong' }).set('media/d5/original.mp4', await openAsBlob(path))
+    } finally {
+      rm(path, { force: true })
+    }
   } else if (variant === 'prealloc-blob')
     await getStore({ name: 'media', consistency: 'strong' }).set('media/d5/original.mp4', new Blob([bytes as Uint8Array<ArrayBuffer>]))
   else if (variant === 'proto-noslice' && bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength)

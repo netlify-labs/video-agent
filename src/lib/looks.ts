@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto'
 import { lstatSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { z } from 'zod'
+import { ENGINE_IDS } from '../domain/engines.js'
 import { ASPECT_RATIOS } from '../domain/types.js'
 import { manifestHash } from './bundle-manifest.js'
 import { writeTarGz } from './tar.js'
@@ -15,8 +16,8 @@ export const LOOK_ID = /^[a-z0-9][a-z0-9-]{0,39}$/
 /** Plan templates a look can be best for: the planner router's templates (src/domain/plans.ts CHECKLISTS keys). */
 export const LOOK_TEMPLATES = ['launch', 'tutorial', 'social', 'changelog', 'sales', 'other'] as const
 
-/** Engines a look can list. The render-engines plan widens this (va-ed2s); built-ins write ['hyperframes']. */
-export const LOOK_ENGINES = ['hyperframes'] as const
+/** Engines a look can list (the render-engines plan's ids); built-ins write ['hyperframes']. */
+export const LOOK_ENGINES = ENGINE_IDS
 
 /** The archive prefix: a look archive's entries are look/<path>, and prepare-run unpacks them to context/look/. */
 export const LOOK_ARCHIVE_ROOT = 'look'
@@ -33,7 +34,7 @@ export const LOOK_LIMITS = {
   posterBytes: 60 * 1024,
 } as const
 
-/** File types a look may contain (.woff2 returns with fonts in looks, phase 4.3). */
+/** File types a look may contain (.woff2 only as a font look.json lists, under assets/fonts/). */
 export const LOOK_EXTENSIONS = [
   '.md',
   '.json',
@@ -47,7 +48,14 @@ export const LOOK_EXTENSIONS = [
   '.wav',
   '.mp3',
   '.ogg',
+  '.woff2',
 ] as const
+
+/** Roles a look's own font may fill when the brand has none for it (§4.4, phase 4.3). */
+export const LOOK_FONT_ROLES = ['sans', 'serif', 'mono', 'display', 'hand'] as const
+/** Font licences a look may ship: both allow embedding in a rendered video. */
+export const LOOK_FONT_LICENSES = ['OFL-1.1', 'Apache-2.0'] as const
+export const LOOK_FONT_FILE = /^assets\/fonts\/[a-z0-9][a-z0-9-]{0,60}\.woff2$/
 
 /** The LOOK.md headings look:check requires (§4.4), in order. */
 export const REQUIRED_LOOK_SECTIONS = [
@@ -102,6 +110,18 @@ export const LookJsonSchema = z.strictObject({
   sound: z.strictObject({ musicMood: z.string().trim().min(1).max(120).optional() }).optional(),
   recording: z.union([z.literal(false), LookRecordingSchema]).optional(),
   registry: z.array(slug).max(20),
+  /** Fonts it ships for roles the brand may lack; the brand's own font for a role always wins. */
+  fonts: z
+    .array(
+      z.strictObject({
+        role: z.enum(LOOK_FONT_ROLES),
+        file: z.string().regex(LOOK_FONT_FILE, 'assets/fonts/<name>.woff2'),
+        license: z.enum(LOOK_FONT_LICENSES),
+        useWhen: z.string().trim().min(1).max(80),
+      }),
+    )
+    .max(4)
+    .optional(),
   authors: z.array(z.string().trim().min(1).max(80)).min(1).max(10),
   license: z.string().trim().min(1).max(40),
   since: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'a date, YYYY-MM-DD'),

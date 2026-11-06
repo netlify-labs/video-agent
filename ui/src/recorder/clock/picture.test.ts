@@ -8,7 +8,10 @@ const FPS = 30
 const FRAME_MS = 1000 / FPS
 
 /** A context whose currentTime is perf − 500 ms, in 128-frame quanta at 48 kHz. */
-function fakeContext(clock: { now: number }, withOutput = true): ClockContext & EventTarget & { state: string } {
+function fakeContext(
+  clock: { now: number },
+  withOutput = true,
+): ClockContext & EventTarget & { state: string } {
   const t = new EventTarget() as EventTarget & ClockContext & { state: string }
   Object.assign(t, {
     sampleRate: 48_000,
@@ -70,7 +73,7 @@ function rig() {
   const play = (
     from: number,
     n: number,
-    o: { stepAt?: number; shift?: number; wobbleFrom?: number; firefox?: boolean } = {},
+    o: { stepAt?: number; shift?: number; wobbleFrom?: number; lurchFrom?: number; firefox?: boolean } = {},
   ) => {
     for (let k = from; k < from + n; k++) {
       const e = 1000 + k * FRAME_MS
@@ -78,11 +81,15 @@ function rig() {
       audio.sample()
       const shift = o.stepAt !== undefined && k >= o.stepAt ? (o.shift ?? -1) / FPS : 0
       const wobble = o.wobbleFrom !== undefined && k >= o.wobbleFrom ? 0.015 : 0
+      // Frames shown 30-70 ms off either way, each one (display time; the frames themselves stay in order, so none looks
+      // like a lookahead): no steady offset to re-anchor on.
+      const lurch =
+        o.lurchFrom !== undefined && k >= o.lurchFrom ? ([0.03, -0.07, 0.045, -0.06][k % 4] ?? 0) : 0
       const ahead = o.firefox && (k % 5 === 3 || k % 25 === 4) ? 8 + (k % 4) : 0
       jumped += ahead
       video.cb?.(e, {
         mediaTime: (k + ahead) / FPS + shift + wobble,
-        expectedDisplayTime: e,
+        expectedDisplayTime: e + lurch * 1000,
         presentedFrames: k + 1 + jumped,
         presentationTime: e,
         width: 0,
@@ -156,7 +163,15 @@ describe('PictureClock', () => {
 
   const events: [StopKind, (r: ReturnType<typeof rig>) => void][] = [
     ['seek', (r) => r.video.dispatchEvent(new Event('seeking'))],
-    ['stall', (r) => r.video.dispatchEvent(new Event('waiting'))],
+    [
+      'stall',
+      (r) => {
+        // Waiting for data stops only once it has lasted stallMs (2 s).
+        r.video.dispatchEvent(new Event('waiting'))
+        r.time.now += 2100
+        r.clock.tick()
+      },
+    ],
     ['ended', (r) => r.video.dispatchEvent(new Event('ended'))],
     [
       'hidden',
@@ -165,7 +180,14 @@ describe('PictureClock', () => {
         r.doc.dispatchEvent(new Event('visibilitychange'))
       },
     ],
-    ['devicechange', (r) => r.mediaDevices.dispatchEvent(new Event('devicechange'))],
+    [
+      'track-ended',
+      (r) => {
+        // A device change that took the take's own mic away.
+        Object.assign(r.track, { readyState: 'ended' })
+        r.mediaDevices.dispatchEvent(new Event('devicechange'))
+      },
+    ],
     ['track-ended', (r) => r.track.dispatchEvent(new Event('ended'))],
     [
       'context-interrupted',
@@ -177,7 +199,7 @@ describe('PictureClock', () => {
     [
       'stall',
       (r) => {
-        r.time.now += 400
+        r.time.now += 2100
         r.clock.tick()
       },
     ],
@@ -202,6 +224,21 @@ describe('PictureClock', () => {
     })
   }
 
+  it('does not stop on a short wait for data, a short frame gap, or a device change that leaves the mic alone', () => {
+    const r = rig()
+    r.play(0, 90)
+    r.video.dispatchEvent(new Event('waiting'))
+    r.time.now += 600
+    r.clock.tick()
+    r.video.dispatchEvent(new Event('playing'))
+    r.time.now += 1000
+    r.clock.tick()
+    r.mediaDevices.dispatchEvent(new Event('devicechange'))
+    expect(r.clock.stopReason).toBeNull()
+    expect(r.log).toHaveBeenCalledWith('clock.resumed', expect.objectContaining({ waitedMs: 600 }))
+    expect(r.log).toHaveBeenCalledWith('clock.devicechange', { trackState: null })
+  })
+
   it('does not stop on a context that was never running going to suspended', () => {
     const r = rig()
     r.ctx.state = 'suspended'
@@ -210,11 +247,22 @@ describe('PictureClock', () => {
     expect(c.stopReason).toBeNull()
   })
 
-  it('stops on a residual breach that is not a frame step, at the first breaching anchor', () => {
+  it('a steady 15 ms shift re-anchors the fit instead of stopping the take', () => {
     const r = rig()
     r.play(0, 400, { wobbleFrom: 300 })
+    expect(r.clock.stopReason).toBeNull()
+    r.clock.stop('user')
+    const fit = r.clock.fitFor()
+    expect(fit.reanchors).toHaveLength(1)
+    expect(Math.abs(fit.reanchors[0]!.offsetMs - 15)).toBeLessThan(2)
+    for (const s of fit.segments) expect(s.residualMax).toBeLessThan(1)
+  })
+
+  it('stops on a residual breach that is not a frame step, at the first breaching anchor', () => {
+    const r = rig()
+    r.play(0, 400, { lurchFrom: 300 })
     expect(r.clock.stopReason?.kind).toBe('residual')
-    expect(Math.abs(r.clock.stopReason!.atSample! - 300 * FRAME_MS * 24)).toBeLessThan(48)
+    expect(Math.abs(r.clock.stopReason!.atSample! - 300 * FRAME_MS * 24)).toBeLessThan(0.1 * 24_000) // at the first breaching frame, within its own scatter
     // The final refit (final clock maps) finds the same breach, to within a few samples.
     const clean = r.clock.fitFor().cleanSamples
     expect(Number.isInteger(clean)).toBe(true)
@@ -227,7 +275,12 @@ describe('PictureClock', () => {
     for (let k = 0; k < 400; k++) {
       const e = 1000 + k * FRAME_MS
       r.time.now = e
-      r.clock.observe({ mediaTime: (k / FPS) * 1.002, expectedDisplayTime: e, now: e, presentedFrames: k + 1 })
+      r.clock.observe({
+        mediaTime: (k / FPS) * 1.002,
+        expectedDisplayTime: e,
+        now: e,
+        presentedFrames: k + 1,
+      })
     }
     expect(r.clock.stopReason?.kind).toBe('slope')
   })
@@ -269,9 +322,9 @@ describe('PictureClock', () => {
 
     it('a real drift still stops the take at its first anchor', () => {
       const r = rig()
-      r.play(0, 400, { firefox: true, wobbleFrom: 302 })
+      r.play(0, 400, { firefox: true, lurchFrom: 302 })
       expect(r.clock.stopReason?.kind).toBe('residual')
-      expect(Math.abs(r.clock.stopReason!.atSample! - 302 * FRAME_MS * 24)).toBeLessThan(48)
+      expect(Math.abs(r.clock.stopReason!.atSample! - 302 * FRAME_MS * 24)).toBeLessThan(0.1 * 24_000) // at the first breaching frame, within its own scatter
     })
 
     it('a one-frame picture step still splits the fit instead of stopping', () => {
@@ -286,7 +339,8 @@ describe('PictureClock', () => {
     })
 
     it('lookaheadAnchors finds one and two in a row, and nothing on a steady picture', () => {
-      const at = (ms: number[]) => ms.map((m, k) => ({ mediaTime: m / 1000, expectedDisplayTime: k, now: k, presentedFrames: k }))
+      const at = (ms: number[]) =>
+        ms.map((m, k) => ({ mediaTime: m / 1000, expectedDisplayTime: k, now: k, presentedFrames: k }))
       expect([...lookaheadAnchors(at([0, 33, 333, 67, 100, 433, 467, 133, 167]))]).toEqual([2, 5, 6])
       expect(lookaheadAnchors(at([0, 33, 67, 67, 100])).size).toBe(0)
     })

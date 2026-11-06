@@ -811,10 +811,12 @@ credits). It makes gate 2's "no credits" true. It may later become a product opt
 - **every redaction from the trace and from the person's boxes is present with the same keys**, each within 1e-3
   (gotcha 13);
 - `data-va-path` names an existing `assets/recording/<step>.cursor.js`, and that file is **exactly** the one-statement
-  form `emit` writes, where `<JSON>` parses as an array of `[t, x, y]` finite numbers, sorted by `t`, inside
-  `in`/`out`, at most 4 decimals, at most 6,000 points. Anything else is refused. Finalize checks the same grammar;
-- a hold (`data-va-rec-hold`) appears only on a scene with a voice line or a retime, with its still present, and with the
-  camera's last key at or before `out`.
+  form `emit` writes, where `<JSON>` parses as an array of `[t, x, y]` finite numbers, sorted by `t` (points may run
+  past `in`/`out`: the editor's span op narrows the span without rewriting the file, and the runtime plays only the
+  points inside it), at most 4 decimals, at most 6,000 points. Anything else is refused. Finalize checks the same grammar;
+- a hold (`data-va-rec-hold`) appears only on a scene with a voice line or a retime (in a render-unchanged run, also
+  when the person narrowed the span in the editor), with its still present, and with the camera's last key at or before
+  `out`.
 
 `check-contract.ts` calls it, including under `--fix`, whenever the composition has recording scenes. The engine
 dispatch (`engine.ts check`, render-engines plan) runs it for HyperFrames only.
@@ -879,14 +881,36 @@ in `.va-run`.
 
    Everything is a GSAP tween on the scene's own timeline, so it's seek-safe and deterministic.
 
-**Hidden areas** are solid boxes in `--va-color-muted` with a small "Hidden" label, positioned in stage coordinates so
-they move with the camera. Each box jumps from key to key with no easing (a `set` at each key's time), so it follows a
-scrolling field without lagging behind it. Why solid and not blur:
-- a blur on the whole clip can't isolate a region (`media-treatments.md:17-21`);
-- a blurred copy clipped to the box would need a second decode of the same clip;
-- a light blur can leave text readable.
+**Hidden areas** are blurred by default (changed 2026-11-06 at the owner's request): each box is a
+`backdrop-filter: blur(16px) brightness(.82)` over the picture under it, so the frame's own pixels are blurred past
+reading small UI text and darkened a little, with no label. An entry with `"style": "solid"` is a flat box in
+`--va-color-muted` instead (a per-box choice in setup and the editor). Boxes are positioned in stage coordinates, so
+they move with the camera, and the blur radius (stage px) grows with the zoom. Each box jumps from key to key with no
+easing (a `set` at each key's time), so it follows a scrolling field without lagging behind it.
 
-A blurred-copy option is in §13.
+**Privacy mode** (2026-11-06, owner): hiding beyond what the person asks for is opt-in, because most demos want URLs
+and names visible. `recording.privacy` (API, setup's "Privacy mode" checkbox, off by default) is stored on the
+version, inherited by its revisions and passed in the run manifest. Off: only the person's setup boxes and the
+trace's entries (password fields, `--hide` selectors) are hidden, and the prompt tells the agent not to add any. On:
+the agent looks for private things (emails, keys, tokens, URLs with ids, personal names) and hides each with an agent
+entry whose reason is "Privacy mode: <what>"; the demo starts private.
+
+The automatic detection (2026-11-06): `src/lib/privacy-patterns.ts` holds the recommended patterns (emails, provider
+keys, JWTs and long tokens, URLs with a query or an id, Luhn-checked cards, phone numbers) and the person's hide
+strings (`recording.hideStrings`, at most 50, matched in any case, privacy mode or not). In the run, `analyze` OCRs
+sampled frames with tesseract.js and its bundled English data (scene starts, every 1.5 s, an idle stretch once, at most
+60 frames, a 90 s budget; about 1 s a 720p frame) and writes candidates with keyframed boxes, spans out to the frames
+either side where the text wasn't read, masked previews and crops; `plan` proposes each in the steps it overlaps (not
+locked), and the agent confirms each from its crop. After the render, `render-job` OCRs the output (a frame a second):
+a hide string still readable fails the render with the times, a pattern match is reported. Still to come: DOM matching
+during `video-agent record` (exact boxes into the trace) and the Hide panel's keep or remove. The
+version DTO's Hidden list gives each area a `why`: "You drew it", "Password field", "Marked hidden when recorded",
+"Privacy mode: email", "Added by the agent: …".
+
+Why `backdrop-filter`, not the blurred copy first planned: it blurs what's already drawn under the box, so there's no
+second decode of the clip and nothing to keep in sync. Measured on a D6 demo (1280x720 source, 1080p, `standard`, PNG
+frames): 8.5 s to render with two boxes against 8.3 s with none; the metadata line and URLs under a box are unreadable
+at zoom 1, where the blur is weakest. Either style is cosmetic: the recording file underneath is unchanged (§9).
 
 **Callouts** are ordinary `data-va-text` fields, so the editor and captions already handle them. Callouts that move
 with the camera (`data-va-anchor`) are in §13.
@@ -1529,7 +1553,7 @@ Everything in §13.
 - **Browser extension** (path D): the same trace from any tab, without the CLI.
 - **Desktop traces:** native macOS and Windows cursor logs. That's out of scope for a web template. A `trace.json`
   written by any tool that follows our schema already works.
-- **Blurred-copy hiding, face tracking, OCR of every frame, a webcam bubble.**
+- **Face tracking, OCR of every frame, a webcam bubble.** (Blurred hiding shipped 2026-11-06, §5.3.)
 - **Splitting a scene in the editor** without the agent.
 - **Streaming assembly**, if spike D5 fails.
 
@@ -1549,7 +1573,8 @@ follows:
 2. **Limits:** 5 minutes and 150 MB per recording, and 2 GiB stored per person? *Recommended:* yes, revisited after
    spike D5.
 3. **Visibility:** recordings private to their uploader until a video uses them? *Recommended:* yes.
-4. **Hiding style:** solid boxes by default? *Recommended:* yes; a blurred copy later as an option.
+4. **Hiding style:** solid boxes by default? *Recommended:* yes; a blurred copy later as an option. *Decided
+   2026-11-06 (owner):* blurred by default, solid as a per-box choice (§5.3).
 5. **Hiding is cosmetic in v1.** People who can open the video can watch the full recording. Is that acceptable with the
    setup note, plus **demos with anything hidden starting private** (with the note shown again on Make public and on
    Publish), or must "burn in my hidden areas" (§13) ship in v1? *Recommended:* the note and private-by-default in v1,

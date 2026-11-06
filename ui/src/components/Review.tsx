@@ -13,6 +13,7 @@ import {
   Menu,
   Modal,
   Stack,
+  Switch,
   Text,
   Textarea,
   Tooltip,
@@ -24,8 +25,10 @@ import { IconCheck, IconDots, IconMapPin, IconPaperclip, IconSparkles, IconX } f
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import { $api, commentsInit, newIdempotencyKey, useCanCreate, type Version, type Video } from '../api/client'
 import { isTyping } from '../lib/media-keys'
+import { pinnedScenes, sceneList, type Beat } from '../lib/scenes'
 import { AttachButton, DropTarget, PendingUploads, useAttachUploads } from './AttachFiles'
 import { MediaChips, type Media } from './MediaPicker'
+import { RedoScenesModal, useCanRedoScenes, useScenes } from './ScenePicker'
 import type { paths } from '../api/schema'
 import { captionsUrl, clockTime, fileUrl, imageUrl, relativeTime, showError, useAfterWrite } from './bits'
 
@@ -276,17 +279,30 @@ function IncorporateModal({
   v,
   open,
   comments,
+  beats,
   onClose,
 }: {
   video: Video
   v: Version
   open: Comment[]
   comments: boolean
+  /** The version's scenes when some can be redone on their own (redo a scene), else null. */
+  beats: Beat[] | null
   onClose: () => void
 }) {
   const qc = useQueryClient()
   const [picked, setPicked] = useState<string[]>(() => open.map((c) => c.id))
   const [note, setNote] = useState('')
+  // Only the scenes the pinned comments point at (plan §4.12): offered when every pick is pinned; null follows the
+  // default until the switch is touched.
+  const pins = beats
+    ? pinnedScenes(
+        beats,
+        open.filter((c) => picked.includes(c.id)).map((c) => c.timeSec),
+      )
+    : null
+  const [scopeOn, setScopeOn] = useState<boolean | null>(null)
+  const scoped = pins !== null && (scopeOn ?? pins.byDefault)
   const [key] = useState(newIdempotencyKey)
   const revise = $api.useMutation('post', '/api/v1/videos/{id}/versions', {
     onSuccess: () => {
@@ -356,6 +372,20 @@ function IncorporateModal({
             The agent starts from v{v.n} and works through the comments you leave checked. Pinned comments
             come with a still of that moment.
           </Text>
+          {pins ? (
+            <Switch
+              checked={scoped}
+              onChange={(e) => {
+                setScopeOn(e.currentTarget.checked)
+              }}
+              label="Only change the scenes these comments point at"
+              description={
+                scoped
+                  ? `Redoes ${sceneList(pins.beats)}. Everything else, and length, sound and voice, stay as they are.`
+                  : `Off: the whole video can change.`
+              }
+            />
+          ) : null}
           <Textarea
             label="Anything else the agent should know? (optional)"
             placeholder='For example: "ignore the colour comments", or the context behind the feedback'
@@ -383,6 +413,7 @@ function IncorporateModal({
                     prompt: note.trim().length >= 3 ? note.trim() : 'Incorporate the feedback below.',
                     fromVersion: v.n,
                     commentIds: picked,
+                    ...(scoped ? { scope: { beats: pins.beats.map((b) => b.id) } } : {}),
                   },
                 })
               }}
@@ -436,6 +467,10 @@ export function CommentsCard({
   setPending: (p: Pin | null) => void
 }) {
   const [incorporating, setIncorporating] = useState(false)
+  // Redo a scene: the pinned comment whose scene is being redone, and the version's scenes for owners and admins.
+  const [redoing, setRedoing] = useState<{ comment: Comment; beat: string } | null>(null)
+  const canRedo = useCanRedoScenes(v) && canIncorporate
+  const scenes = useScenes(video.id, v, canRedo).beats
   const qc = useQueryClient()
   const comments = useComments(video.id)
   const [body, setBody] = useState('')
@@ -588,6 +623,29 @@ export function CommentsCard({
     </button>
   )
 
+  /** Redo this part: an open pinned comment's scene, when it can be redone on its own (never the held one). */
+  const redoScene = (c: Comment) => {
+    const beat =
+      canRedo && scenes && c.timeSec !== null && !c.resolvedAt
+        ? pinnedScenes(scenes, [c.timeSec])?.beats[0]
+        : undefined
+    if (!beat) return null
+    return (
+      <Tooltip label={`Redo ${beat.label ?? beat.id} with this comment`}>
+        <Button
+          size="compact-xs"
+          variant="subtle"
+          disabled={busy}
+          onClick={() => {
+            setRedoing({ comment: c, beat: beat.id })
+          }}
+        >
+          Redo this part
+        </Button>
+      </Tooltip>
+    )
+  }
+
   /** One comment's line: its moment, badges, text (or editor) and actions. A timed one seeks when clicked. */
   const note = (c: Comment, head: boolean) => (
     <div
@@ -698,6 +756,7 @@ export function CommentsCard({
             </Group>
           ) : null}
         </div>
+        {redoScene(c)}
         {c.can.edit || c.can.delete || c.can.resolve ? (
           <Menu position="bottom-end">
             <Menu.Target>
@@ -903,8 +962,20 @@ export function CommentsCard({
           v={v}
           open={open}
           comments={incorporating}
+          beats={canRedo ? scenes : null}
           onClose={() => {
             setIncorporating(false)
+          }}
+        />
+      ) : null}
+      {redoing ? (
+        <RedoScenesModal
+          video={video}
+          v={v}
+          beats={[redoing.beat]}
+          comment={redoing.comment}
+          onClose={() => {
+            setRedoing(null)
           }}
         />
       ) : null}

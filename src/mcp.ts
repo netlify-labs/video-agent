@@ -12,8 +12,9 @@ import { PRIVATE_URL_TTL_SEC, signedFilePath } from './domain/files.js'
 import { addComment, listComments } from './domain/comments.js'
 import { getEdit, openEdit, renderEdit, saveEdit, takeSummary, type DraftOp } from './domain/edits.js'
 import { acquireNarrationLock } from './domain/narration-lock.js'
-import { canReadTake } from './domain/takes.js'
+import { canReadMedia } from './domain/takes.js'
 import { getProgress } from './domain/progress.js'
+import { fillBeats } from './domain/beats.js'
 import { listMedia } from './domain/media.js'
 import { videoCardHtml } from './generated/video-card.js'
 import { libraryMatches } from './domain/music-library.js'
@@ -60,6 +61,8 @@ import { clip } from './lib/log.js'
 import { ONE_WAY_WORDS, SPEED_RANGE, VOICE_ID } from './lib/voice.js'
 import { MEDIA_KINDS } from './lib/media/classify.js'
 import { registerPrompts } from './mcp-prompts.js'
+import { enabledEngines, type EngineId } from './domain/engines.js'
+import { listLooks } from './domain/looks.js'
 import { remixVideo } from './domain/remix.js'
 import { listDestinations } from './domain/destinations/list.js'
 import { publishToDestination } from './domain/destinations/publish.js'
@@ -149,6 +152,17 @@ const ASPECT_ALIASES: Record<string, Aspect> = {
   instagram: '4:5',
   linkedin: '4:5',
 }
+
+const lookArg = (restyle: boolean) =>
+  z
+    .string()
+    .nullable()
+    .optional()
+    .describe(
+      restyle
+        ? 'Optional. A look id from list_looks; leave out to keep the current look, null for none. A different look is a restyle, a full run.'
+        : 'Optional. A look id from list_looks (a named visual style); leave out for the default, null for none.',
+    )
 
 export function normalizeAspect(v: string | undefined): Aspect | undefined {
   if (v === undefined || v.trim() === '') return undefined
@@ -310,6 +324,64 @@ async function runTool(
 const KEEP_CHECKING = (id: string) =>
   `Keep checking without asking your user: call get_video with video_id "${id}" and wait_seconds 8, and call it again each time it's still in progress, until status is "ready" or "failed". Then tell your user it's done, with web_url.`
 
+/** A demo's recording (screen-recording plan §6.2), on create_video and remix_video. */
+const RECORDING_ARGS = {
+  recording_media_id: z
+    .string()
+    .max(80)
+    .optional()
+    .describe(
+      "Optional. Make a demo from a screen recording in the library (role screen-recording, from list_media): the agent turns its steps into scenes with auto zoom, a cursor and hidden areas. Check the version's Hidden list in get_video before publishing.",
+    ),
+  trim: z
+    .array(z.number())
+    .length(2)
+    .optional()
+    .describe('Optional, with recording_media_id. Seconds of the recording to use: [in, out].'),
+  redact: z
+    .array(
+      z.object({
+        start: z.number().min(0),
+        end: z.number().positive(),
+        box: z
+          .array(z.number().min(0).max(1))
+          .length(4)
+          .describe('[x, y, width, height], fractions of the frame.'),
+      }),
+    )
+    .max(50)
+    .optional()
+    .describe(
+      'Optional, with recording_media_id. Areas to hide from the start; the video then starts private.',
+    ),
+}
+
+function toRecording(args: {
+  recording_media_id?: string | undefined
+  trim?: number[] | undefined
+  redact?: { start: number; end: number; box: number[] }[] | undefined
+}) {
+  if (!args.recording_media_id) return undefined
+  return {
+    mediaId: args.recording_media_id,
+    ...(args.trim ? { trim: [args.trim[0] ?? 0, args.trim[1] ?? 0] as [number, number] } : {}),
+    ...(args.redact
+      ? {
+          redact: args.redact.map((r) => ({
+            start: r.start,
+            end: r.end,
+            box: [r.box[0] ?? 0, r.box[1] ?? 0, r.box[2] ?? 0, r.box[3] ?? 0] as [
+              number,
+              number,
+              number,
+              number,
+            ],
+          })),
+        }
+      : {}),
+  }
+}
+
 const VIDEO_CARD_URI = 'ui://video-agent/video-card.html'
 /** Tool metadata that shows the video card (both keys: older MCP Apps hosts read the flat one). */
 const VIDEO_CARD = { ui: { resourceUri: VIDEO_CARD_URI }, 'ui/resourceUri': VIDEO_CARD_URI }
@@ -334,6 +406,9 @@ async function summarize(deps: Deps, v: VideoDto) {
       status: x.status,
       prompt: x.prompt,
       from_version: x.parentN,
+      // Its scenes, to redo some with revise_video's beats; and the scenes it redid itself.
+      ...(x.beats ? { beats: x.beats } : {}),
+      ...(x.scope ? { redid_scenes: x.scope.beats } : {}),
       ...(x.sound !== 'silent' ? { sound: x.sound } : {}),
       ...(x.voiceover ? { voiceover: x.voiceover } : {}),
       ...(x.error ? { error: x.error } : {}),
@@ -439,7 +514,22 @@ function narrationSummary(op: NarrationOp | null) {
 
 // ───────────── server ─────────────
 
-export function buildMcpServer(deps: Deps, principal: Principal, kick: () => void): McpServer {
+export function buildMcpServer(
+  deps: Deps,
+  principal: Principal,
+  kick: () => void,
+  /** Engines on here right now: create_video offers an engine only when there's more than HyperFrames. */
+  opts: { engines?: EngineId[] } = {},
+): McpServer {
+  const engines = opts.engines ?? ['hyperframes']
+  // Only where another engine is on (render-engines plan §7): everywhere else the argument doesn't exist.
+  const engineSchema = z
+    .enum(engines as [EngineId, ...EngineId[]])
+    .optional()
+    .describe(
+      "Optional. The render engine; leave out for the look's choice. Some engines can't make sound effects or a voice-over.",
+    )
+  const engineArg: { engine?: typeof engineSchema } = engines.length > 1 ? { engine: engineSchema } : {}
   const server = new McpServer(
     { name: 'video-agent', version: '1.0.0' },
     { instructions: SERVER_INSTRUCTIONS },
@@ -450,6 +540,37 @@ export function buildMcpServer(deps: Deps, principal: Principal, kick: () => voi
   const queued = async (res: { replayed: boolean; body: VideoDto }, next: string) => {
     if (!res.replayed) kick()
     return { ...(await summarize(deps, res.body)), next_actions: [next] }
+  }
+
+  const contextArg = z
+    .object({
+      source: z.enum(['github_pr', 'github_release', 'changelog', 'text']),
+      label: z.string().min(1).max(120).describe('What it is, like "GitHub PR #123".'),
+      url: z
+        .url()
+        .max(500)
+        .refine((u) => u.startsWith('https://'), 'url must be https')
+        .optional(),
+      text: z.string().min(1).max(16000),
+    })
+    .optional()
+    .describe(
+      "Optional. Background the agent reads as data, outside the prompt: a pull request's description, release notes. Up to 16,000 characters.",
+    )
+
+  const externalArgs = {
+    external_ref: z
+      .string()
+      .max(200)
+      .regex(/^[a-z]+:[^\s]+$/)
+      .optional()
+      .describe(
+        'Optional. What the video is for outside the app, like "github:acme/web#pr-123". Find it again with list_videos.',
+      ),
+    private: z
+      .boolean()
+      .optional()
+      .describe('Optional. true: only you and admins can see it, from the start.'),
   }
 
   const createTool = server.registerTool(
@@ -493,11 +614,16 @@ Example: {"prompt": "A 20-second launch video for our new webhooks feature, endi
         voiceover: voiceoverArg(
           'Optional. A spoken narration, with captions from its words: true, or {voice, speed, script}. Works with any sound; music dips under the voice.',
         ),
+        look: lookArg(false),
+        ...RECORDING_ARGS,
+        ...engineArg,
         idempotency_key: z
           .string()
           .max(200)
           .optional()
           .describe('Optional. Reusing the same key returns the same video instead of a duplicate.'),
+        ...externalArgs,
+        context: contextArg,
       },
       _meta: VIDEO_CARD,
       annotations: { title: 'Create a video', ...STARTS_RUN },
@@ -516,6 +642,12 @@ Example: {"prompt": "A 20-second launch video for our new webhooks feature, endi
             mediaIds: args.media_ids,
             sound: args.sound,
             voiceover: toVoiceover(args.voiceover),
+            look: args.look,
+            externalRef: args.external_ref,
+            private: args.private,
+            context: args.context,
+            recording: toRecording(args),
+            engine: (args as { engine?: EngineId }).engine,
           },
           args.idempotency_key,
         )
@@ -548,6 +680,10 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "wait_seconds": 8}`,
       run(async () => {
         const id = normalizeVideoId(args.video_id)
         let v = await load(id)
+        // Scenes of editable versions made before versions recorded them (redo a scene): filled once, then stored.
+        const unknown = v.versions.filter((x) => x.editable && x.beats === null)
+        for (const x of unknown) await fillBeats(deps, principal, id, x.n).catch(() => null)
+        if (unknown.length) v = await load(id)
         const until = Date.now() + Math.min(args.wait_seconds ?? 0, 8) * 1000
         const start = v.etag
         while (Date.now() < until && ['queued', 'running', 'finishing'].includes(v.status)) {
@@ -621,6 +757,11 @@ Example: {"query": "webhooks", "mine": true, "limit": 10}`,
         query: z.string().max(200).optional().describe('Words to search for in prompts and titles.'),
         mine: z.boolean().optional().describe('Only videos made with your account.'),
         favorites: z.boolean().optional().describe('Only videos you starred in the web app.'),
+        external_ref: z
+          .string()
+          .max(200)
+          .optional()
+          .describe('Only videos made with this external_ref (exact match), like "github:acme/web#pr-123".'),
         status: z
           .enum(['queued', 'running', 'finishing', 'ready', 'failed', 'cancelled', 'timed_out'])
           .optional(),
@@ -635,6 +776,7 @@ Example: {"query": "webhooks", "mine": true, "limit": 10}`,
           ...(args.query ? { q: args.query } : {}),
           ...(args.status ? { status: args.status } : {}),
           ...(args.favorites ? { favorite: true } : {}),
+          ...(args.external_ref ? { externalRef: args.external_ref } : {}),
           limit: args.limit ?? 10,
         })
         return {
@@ -651,6 +793,7 @@ Example: {"query": "webhooks", "mine": true, "limit": 10}`,
             favorite: v.favorite,
             is_remix: v.isRemix,
             remix_of: v.remixOf ? { video_id: v.remixOf.id, version: v.remixOf.n } : null,
+            ...(v.externalRef ? { external_ref: v.externalRef } : {}),
             web_url: `${deps.config.siteUrl}/videos/${v.id}`,
           })),
           more: res.nextCursor !== null,
@@ -690,6 +833,10 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Same format, 
           .string()
           .optional()
           .describe('Optional. A plan from plan_video with remix_of this same video.'),
+        look: lookArg(true),
+        ...externalArgs,
+        context: contextArg,
+        ...RECORDING_ARGS,
       },
       _meta: VIDEO_CARD,
       annotations: { title: 'Remix a video', ...STARTS_RUN },
@@ -706,6 +853,11 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Same format, 
           sound: args.sound,
           voiceover: toVoiceover(args.voiceover),
           planId: args.plan_id,
+          look: args.look,
+          externalRef: args.external_ref,
+          private: args.private,
+          context: args.context,
+          recording: toRecording(args),
         })
         return queued(res, `The remix usually takes 3 to 8 minutes. ${KEEP_CHECKING(res.body.id)}`)
       }, args.video_id),
@@ -720,6 +872,7 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Same format, 
 When to use: the user wants a change to an existing video ("make the end card orange", "shorter", "add our URL").
 Don't: describe the whole video again; describe the change. Only one version per video can be in progress.
 Incorporate feedback: pass comment_ids (from list_comments; open comments on from_version) and use change for your note. Only the video's owner or an admin can.
+Redo a scene: pass beats (scene ids from get_video's versions[].beats) and from_version to change only those scenes; everything else stays exactly as it is.
 
 Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Make the end card say \\"Start free today\\""}`,
       inputSchema: {
@@ -745,6 +898,16 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Make the end 
         voiceover: voiceoverArg(
           'Optional. true, false or {voice, speed, script}. Leave out to keep the voice-over of the version it revises; unchanged lines keep their audio.',
         ),
+        beats: z
+          .array(z.string())
+          .min(1)
+          .max(20)
+          .optional()
+          .describe(
+            "Optional. Redo only these scenes (ids from get_video's beats for from_version); everything else stays exactly as it is. Faster and cheaper than revising the whole video. Needs from_version. Can't be combined with plan_id, duration_sec, sound or voiceover.",
+          ),
+        look: lookArg(true),
+        context: contextArg,
       },
       _meta: VIDEO_CARD,
       annotations: { title: 'Revise a video', ...STARTS_RUN },
@@ -761,6 +924,9 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "change": "Make the end 
           mediaIds: args.media_ids,
           sound: args.sound,
           voiceover: toVoiceover(args.voiceover),
+          scope: args.beats ? { beats: args.beats } : undefined,
+          look: args.look,
+          context: args.context,
         })
         return queued(
           res,
@@ -897,6 +1063,45 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "version": 2}`,
       }, args.video_id),
   )
 
+  server.registerTool(
+    'list_looks',
+    {
+      title: 'List looks',
+      description: `The named visual styles a video can be made in (Clean product, Kinetic type, Terminal, …), with what each suits and a preview clip. Pass an id as look to create_video, revise_video or remix_video.
+
+When to use: before creating a video, unless the person already named a style: offer two or three that fit.`,
+      inputSchema: {},
+      annotations: {
+        title: 'List looks',
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    () =>
+      run(async () => {
+        const { looks, default: defaultLook } = await listLooks(deps)
+        return {
+          // Looks an admin turned off are left out: they can't be picked.
+          looks: looks
+            .filter((l) => l.enabled)
+            .map((l) => ({
+              id: l.id,
+              name: l.name,
+              description: l.description,
+              tags: l.tags,
+              best_for: l.bestFor,
+              preview: {
+                mp4: l.preview.mp4 && `${deps.config.siteUrl}${l.preview.mp4}`,
+                poster: l.preview.poster && `${deps.config.siteUrl}${l.preview.poster}`,
+              },
+            })),
+          default: defaultLook,
+        }
+      }),
+  )
+
   const listDestinationsTool = server.registerTool(
     'list_destinations',
     {
@@ -1031,7 +1236,7 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "version": 2}`,
     'list_media',
     {
       title: 'List the media library',
-      description: `The team's uploaded media: logos, screenshots, clips, fonts, audio (music) and PDFs, newest first. Pass media ids to create_video or revise_video (media_ids) so the agent uses them. An item's title is its name in the library; its notes (caption) say what it is.
+      description: `The team's uploaded media: logos, screenshots, clips, fonts, audio (music) and PDFs, newest first. Pass media ids to create_video or revise_video (media_ids) so the agent uses them. An item's title is its name in the library; its notes (caption) say what it is. Screen recordings (role screen-recording) are private to their uploader until a video uses them; has_trace says whether one has a pointer trace.
 
 Example: {"query": "launch logo", "kind": "image"}`,
       inputSchema: {
@@ -1042,6 +1247,10 @@ Example: {"query": "launch logo", "kind": "image"}`,
           .optional()
           .describe('Words to find in the title, file name or notes, e.g. "Q3 launch".'),
         cursor: z.string().optional().describe('next_cursor from the previous page.'),
+        role: z
+          .enum(['screen-recording'])
+          .optional()
+          .describe('Only items with this role, e.g. "screen-recording" for raw screen recordings.'),
       },
       annotations: { title: 'List media', readOnlyHint: true, openWorldHint: false },
     },
@@ -1050,7 +1259,8 @@ Example: {"query": "launch logo", "kind": "image"}`,
         const page = await listMedia(deps, principal, { kind: args.kind, q: args.query, cursor: args.cursor })
         return {
           media: page.items
-            .filter((m) => m.status === 'ready')
+            // The role filter applies within the page (next_cursor still walks the whole library).
+            .filter((m) => m.status === 'ready' && (!args.role || m.role === args.role))
             .map((m) => ({
               id: m.id,
               kind: m.kind,
@@ -1060,6 +1270,8 @@ Example: {"query": "launch logo", "kind": "image"}`,
               width: m.width,
               height: m.height,
               duration_sec: m.durationSec,
+              role: m.role,
+              has_trace: m.hasTrace,
             })),
           next_cursor: page.nextCursor,
         }
@@ -1286,10 +1498,19 @@ Example: {"prompt": "A 30-second launch video for org webhooks, ending on our lo
         voiceover: voiceoverArg(
           'Optional. true or {voice, speed, script} for a voice-over: the brief then has a narration line per beat, which the video speaks.',
         ),
+        look: z
+          .string()
+          .nullable()
+          .optional()
+          .describe(
+            'Optional. A look id from list_looks, or null for none; left out, a new video plan picks one that suits it. The video made from the plan uses it.',
+          ),
+        ...engineArg,
       },
     },
     async (args) =>
       run(async () => {
+        const engine = (args as { engine?: EngineId }).engine
         const created = await planning.createPlan(deps, principal, {
           prompt: args.prompt,
           aspect: normalizeAspect(args.aspect),
@@ -1299,6 +1520,8 @@ Example: {"prompt": "A 30-second launch video for org webhooks, ending on our lo
           mediaIds: args.media_ids,
           sound: args.sound,
           voiceover: toVoiceover(args.voiceover),
+          ...(args.look !== undefined ? { look: args.look } : {}),
+          ...(engine ? { engine } : {}),
         })
         const plan = await planning.generateQuestions(deps, principal, created.id)
         return {
@@ -1489,7 +1712,7 @@ Example: {"video_id": "vid_01jc8x2k4m5n6p7q8r9s0t1v2w", "media_id": "med_01jc8x2
           m.status === 'ready' &&
           !m.deletedAt &&
           !m.deletingAt &&
-          (await canReadTake(deps.store, principal, m))
+          (await canReadMedia(deps.store, principal, m))
         if (!m || !readable)
           throw new ToolError('NOT_FOUND', `No audio recording ${args.media_id} that you can use.`, {
             fix_hint: 'Upload the recording first, or pick an audio item from list_media.',
@@ -1641,7 +1864,8 @@ export async function handleMcp(
   req: Request,
   kick: () => void,
 ): Promise<Response> {
-  const server = buildMcpServer(deps, principal, kick)
+  const engines = (await enabledEngines(deps)).map((e) => e.id)
+  const server = buildMcpServer(deps, principal, kick, { engines })
   const transport = new WebStandardStreamableHTTPServerTransport({ enableJsonResponse: true }) // no sessionIdGenerator: stateless
   await server.connect(transport)
   // Kept to explain a refused request (and, verbose, to log the call); the transport reads the original.

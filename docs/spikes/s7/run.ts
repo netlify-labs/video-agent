@@ -15,7 +15,7 @@ import { chromium, webkit, type Browser } from '@playwright/test'
 const base = (process.env.VIDEO_AGENT_URL ?? '').replace(/\/$/, '')
 const key = process.env.VIDEO_AGENT_KEY ?? ''
 if (!base || !key) throw new Error('Set VIDEO_AGENT_URL and VIDEO_AGENT_KEY.')
-const out = join('spikes', 'out', 's7')
+const out = join('docs', 'spikes', 'out', 's7')
 mkdirSync(out, { recursive: true })
 const log = (step: string, f: Record<string, unknown> = {}) => {
   console.log(JSON.stringify({ ts: new Date().toISOString(), step, ...f }))

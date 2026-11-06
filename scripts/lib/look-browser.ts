@@ -2,7 +2,7 @@
 // video/'s vendor files and config, through the pinned `hyperframes check` (lint, runtime, layout, motion, contrast).
 // CI only: the Netlify build has no browser, so it runs `look:check --static`.
 import { spawnSync } from 'node:child_process'
-import { cpSync, mkdtempSync, rmSync } from 'node:fs'
+import { cpSync, existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -53,6 +53,9 @@ export function checkLookBrowser(dir: string, opts: BrowserCheckOptions): string
   const project = mkdtempSync(join(tmpdir(), 'look-hf-'))
   try {
     cpSync(join(dir, 'example'), project, { recursive: true })
+    // A run copies the look's assets it uses into video/assets/look/, so the example refers to them there too.
+    if (existsSync(join(dir, 'assets')))
+      cpSync(join(dir, 'assets'), join(project, 'assets', 'look'), { recursive: true })
     for (const f of ['vendor', 'hyperframes.json', 'package.json'])
       cpSync(join(opts.repoRoot, 'video', f), join(project, f), { recursive: true })
     const report = (opts.run ?? ((p) => runHyperframes(opts.hyperframesVersion, p)))(project)

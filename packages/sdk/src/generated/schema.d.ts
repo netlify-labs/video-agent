@@ -131,7 +131,7 @@ export interface paths {
         put?: never;
         /**
          * Revise a video
-         * @description Starts the next version from a ready one.
+         * @description Starts the next version from a ready one. With scope, only those scenes of fromVersion are redone and everything else stays exactly as it is (redo a scene): 409 not_editable when that version can't be redone scene by scene (no editing contract, or its engine can't), 400 for scene ids it doesn't have.
          */
         post: operations["reviseVideo"];
         delete?: never;
@@ -172,6 +172,26 @@ export interface paths {
          * @description The library items a version was made with, in order (items since deleted from the library included). A remix keeps them unless you pass mediaIds.
          */
         get: operations["listVersionMedia"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/videos/{id}/versions/{n}/beats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A version's scenes
+         * @description The scenes (beats) of a ready version, in order, for redoing some of them: pass their ids as scope.beats with this version as fromVersion. Null for a version that can't be edited scene by scene. Versions made before this list existed get it filled on first read. 409 when the version isn't ready.
+         */
+        get: operations["getVersionBeats"];
         put?: never;
         post?: never;
         delete?: never;
@@ -239,6 +259,26 @@ export interface paths {
          * @description Takes a version's public links down; they stop working on the next request.
          */
         delete: operations["unpublishVersion"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/looks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List looks
+         * @description The visual styles a video can be made in (pass an id as `look` when creating, revising or remixing), each with whether an admin has it on, and the default for creates that omit a look. Every signed-in role can list them; a look's name and description are never private.
+         */
+        get: operations["listLooks"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -543,6 +583,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/videos/{id}/versions/{n}/hidden/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark hidden areas checked
+         * @description A demo's Looks right: marks these hidden areas (ids from the version's recording.hidden) as checked by you, with the time. Owner or admin. 400 for an id the version doesn't have; 404 when the version has no recording.
+         */
+        post: operations["markHiddenAreasChecked"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/videos/{id}/versions/{n}/verdict": {
         parameters: {
             query?: never;
@@ -691,6 +751,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/cli/logins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start a CLI login
+         * @description Starts video-agent login. No credentials: returns a device code for the CLI and a user code the person types on the approve page.
+         */
+        post: operations["createCliLogin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cli/logins/{id}/token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Claim a CLI login
+         * @description The CLI's poll. Pending until the person approves; then claimed once, with a new API key. Poll no faster than intervalSec.
+         */
+        post: operations["claimCliLogin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cli/logins/lookup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Look up a CLI login by its code
+         * @description For the approve page: the login waiting for the code you typed. Signed-in browser sessions only.
+         */
+        post: operations["lookupCliLogin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cli/logins/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve or deny a CLI login
+         * @description Approves or denies the login waiting for the code you typed. Signed-in browser sessions only.
+         */
+        post: operations["decideCliLogin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/keys/{id}": {
         parameters: {
             query?: never;
@@ -746,6 +886,26 @@ export interface paths {
          * @description Disconnects an OAuth app; its tokens stop working.
          */
         delete: operations["revokeGrant"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/engines": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List render engines
+         * @description The engines a video can be made with here: HyperFrames always, and Remotion when this deployment offers it (bring your own license), with its license notice.
+         */
+        get: operations["listEngines"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1346,7 +1506,7 @@ export interface paths {
         put?: never;
         /**
          * Start an upload
-         * @description Starts an upload session for a file over 4 MB, or for any voice-over recording. Declare its size and sha256 (a recorder may send the hash it computed while recording; the server checks every part and the whole file); quota is reserved. A recording names its role and the video it's for (scopeJobId), which you must be able to see.
+         * @description Starts an upload session for a file over 4 MB, or for any voice-over recording. Declare its size and sha256 (a recorder may send the hash it computed while recording; the server checks every part and the whole file); quota is reserved. A voice-over recording names its role and the video it's for (scopeJobId), which you must be able to see. A screen recording (role screen-recording, needs the screen_recording feature) names no video and is held to its own limits: H.264 MP4, 150 MB, 5 minutes, a constant 24-30 fps, a keyframe at least every 2 s, fast start.
          */
         post: operations["createUpload"];
         delete?: never;
@@ -1545,6 +1705,30 @@ export interface paths {
          * @description Changes the title (the name shown in the library) or the caption (notes the planner and agent read). Uploader or admin. Leave a field out to keep it; null clears it.
          */
         patch: operations["updateMedia"];
+        trace?: never;
+    };
+    "/api/v1/media/{id}/trace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a screen recording's pointer trace
+         * @description The stored (normalized) pointer trace, for the recording's uploader and admins only.
+         */
+        get: operations["getMediaTrace"];
+        /**
+         * Set a screen recording's pointer trace
+         * @description Stores the pointer trace (the cursor and click log, schema v1, at most 4 MB) for a ready screen recording: its uploader or an admin. Text from the recorded page is scrubbed. Sending again replaces it until a video uses the recording, then 409 trace_frozen. Shares the 10-an-hour budget with recording uploads.
+         */
+        put: operations["setMediaTrace"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/media/{id}/peaks": {
@@ -1791,7 +1975,7 @@ export interface components {
                 release: string | null;
             };
             /** @description Features this deployment has and has switched on. Clients hide what isn't listed. See src/domain/features.ts. */
-            features: ("remix" | "narration" | "planning" | "rest_wait" | "cli_login" | "looks" | "engines" | "scoped_revision" | "screen_recording" | "context" | "external_ref" | "destinations" | "youtube")[];
+            features: ("remix" | "narration" | "planning" | "rest_wait" | "cli_login" | "looks" | "engines" | "scoped_revision" | "screen_recording" | "context" | "external_ref" | "destinations" | "youtube" | "webmcp")[];
             admission: "invite-only" | string[] | null;
             siteUrl: string;
             /** @description AI Gateway is available, so Plan it first is offered. */
@@ -1852,6 +2036,10 @@ export interface components {
             } | null;
             /** @description You starred this video (only you see your favorites) */
             favorite: boolean;
+            /** @description What the video is for outside the app (set at creation), or null */
+            externalRef: string | null;
+            /** @description A link to it, or null */
+            externalUrl: string | null;
             links: {
                 self: string;
             };
@@ -1885,8 +2073,56 @@ export interface components {
                 /** @description The comment marked a spot on the frame */
                 spot: boolean;
             }[];
+            context: components["schemas"]["Context"];
             /** @description Ready and keeps editing contract v1, so it can be edited in the browser. */
             editable: boolean;
+            /** @description This version's scenes, when known. Null: not known yet (ask GET …/versions/{n}/beats) or not a version that can be redone scene by scene. */
+            beats: components["schemas"]["BeatInfo"][] | null;
+            /** @description A version that redid only some scenes of the version it came from: which ones, with their names. */
+            scope: {
+                beats: {
+                    id: string;
+                    label: string;
+                }[];
+            } | null;
+            /** @description The look this version was made with (its name as it was then), and the version of it: hash differs from GET /api/v1/looks' when the look has changed since. */
+            look: {
+                id: string;
+                name: string;
+                hash: string;
+            } | null;
+            /** @description A demo made from a screen recording; null (or absent) for any other video. */
+            recording?: {
+                mediaId: string;
+                /** @description The recording came with a pointer trace (exact clicks and cursor). */
+                trace: boolean;
+                /** @description Made with no agent authoring (a Quick demo). */
+                compose: boolean;
+                /** @description Privacy mode: private things on screen are found and hidden too. */
+                privacy: boolean;
+                /** @description What the run made of the recording; null until it is ready. */
+                summary: {
+                    sourceSec: number;
+                    steps: number;
+                    cutSec: number;
+                    spedUpSec: number;
+                    redactionsAdded: number;
+                } | null;
+                /** @description Every hidden area, per scene, with who checked it. Hiding is cosmetic: see the README. */
+                hidden: {
+                    id: string;
+                    /** @enum {string} */
+                    source: "trace" | "setup" | "agent" | "editor";
+                    beat: string;
+                    start: number;
+                    end: number;
+                    reason: string;
+                    /** @description Why it is hidden, for people: "You drew it", "Password field", "Privacy mode: email", and so on. */
+                    why: string;
+                    checkedBy: string | null;
+                    checkedAt: string | null;
+                }[];
+            } | null;
             /** @description The render engine that made this version (a video keeps one) and what the editor may offer on it. editable still decides whether the editor opens. */
             editing: {
                 /** @enum {string} */
@@ -2004,9 +2240,29 @@ export interface components {
         };
         /** @enum {string|null} */
         Verdict: "approved" | "changes_requested" | null;
+        /** @description Background this version was made with, if any. */
+        Context: {
+            /** @enum {string} */
+            source: "github_pr" | "github_release" | "changelog" | "text";
+            /** @example GitHub PR #123 */
+            label: string;
+            /** Format: uri */
+            url?: string;
+            text: string;
+        } | null;
+        BeatInfo: {
+            /** @description The beat id: what scope.beats and the CLI's --scene take. */
+            id: string;
+            /** @description The scene's name, as the agent wrote it (data-va-label); null if none. */
+            label: string | null;
+            /** @description Seconds from the start of this version. */
+            start: number;
+            /** @description Seconds. */
+            duration: number;
+        };
         EngineCapabilities: {
             /** @description The edit operations the browser editor may offer on this engine. */
-            editOps: ("text" | "retime" | "reorder" | "delete" | "color" | "media" | "audio" | "voice" | "span" | "camera" | "cursor" | "redact")[];
+            editOps: ("text" | "retime" | "reorder" | "delete" | "color" | "media" | "audio" | "music" | "voice" | "span" | "camera" | "cursor" | "redact")[];
             /** @description The editor plays drafts live; otherwise it shows the last render. */
             liveDraftPreview: boolean;
             /**
@@ -2133,6 +2389,8 @@ export interface components {
             showTranscript: boolean;
             /** @description HTML to embed the video; with CC BY media it includes the credit line as a caption */
             embed: string | null;
+            /** @description The <video-agent-player> snippet: sized before it loads, captions on, credits always shown. Needs its script; the plain embed needs none. */
+            player: string | null;
         };
         DestinationPublication: {
             id: string;
@@ -2196,6 +2454,29 @@ export interface components {
             mediaIds?: string[];
             sound?: components["schemas"]["Sound"] & unknown;
             voiceover?: components["schemas"]["VoiceoverInput"];
+            /** @description A look id (GET /api/v1/looks). Omit for the plan's look, else the admin's default (none unless set); null for no look. Errors: 400 unknown_look, 409 look_disabled. */
+            look?: string | null;
+            /**
+             * @description What the video is for outside the app. Set once; find the video again with GET /api/v1/videos?externalRef=. Not unique.
+             * @example github:acme/web#pr-123
+             */
+            externalRef?: string;
+            /**
+             * Format: uri
+             * @description A link to that thing (https), shown on the video page.
+             */
+            externalUrl?: string;
+            /** @description Make the video private (you and admins only) from the start. Needs permission to make videos private. */
+            private?: boolean;
+            context?: components["schemas"]["Context"] & unknown;
+            recording?: components["schemas"]["RecordingInput"];
+            /** @description false: a Quick demo, made from the recording with no agent authoring (a stock intro and outro, a scene per step, callouts from what was clicked); costs about as much as an edit. Needs recording; no voiceover. */
+            agent?: boolean;
+            /**
+             * @description The render engine (GET /api/v1/engines). Omit for the look's choice, else hyperframes. Errors: 409 engine_disabled when it isn't on here, 400 engine_not_supported_by_look, 409 engine_unsupported for sound effects or a voice-over it can't make.
+             * @enum {string}
+             */
+            engine?: "hyperframes" | "remotion";
         };
         /** @description A spoken narration with captions from its words. Omit for the plan's choice, else none. */
         VoiceoverInput: {
@@ -2206,6 +2487,37 @@ export interface components {
             speed?: number;
             /** @description The narration, one line per beat in order, spoken word for word. Omit to let the plan's narration or the agent write it. */
             script?: string[];
+        };
+        /** @description Make a demo from a screen recording (feature screen_recording): the agent turns its steps into scenes with auto zoom, a cursor and hidden areas. HyperFrames only (409 engine_unsupported). durationSec defaults to about 0.4 of the recording, 20 to 90 seconds. */
+        RecordingInput: {
+            /** @description A screen recording from the library (GET /api/v1/media). */
+            mediaId: string;
+            /** @description Seconds of the recording to use, [in, out]: in before out, at least 2 seconds, inside the file. */
+            trim?: [
+                number,
+                number
+            ];
+            /** @description Areas to hide from the start (seconds of the recording). A demo with any starts private. */
+            redact?: {
+                start: number;
+                end: number;
+                /** @description [x, y, width, height] as fractions of the frame. */
+                box: [
+                    number,
+                    number,
+                    number,
+                    number
+                ];
+                /**
+                 * @description blur (the default): a heavy blur of the picture under the box; solid: a flat box.
+                 * @enum {string}
+                 */
+                style?: "blur" | "solid";
+            }[];
+            /** @description Text to hide wherever it shows on screen (a customer name, a project id), privacy mode or not: found by OCR of the recording and hidden for you to keep or remove. A demo with any starts private. */
+            hideStrings?: string[];
+            /** @description Privacy mode (default false). Off: only the areas you draw and the trace's (password fields, --hide selectors) are hidden. On: private things on screen (emails, keys, tokens, URLs, personal names) are found and hidden too, each confirmed by the agent, for you to keep or remove. */
+            privacy?: boolean;
         };
         VideoList: {
             items: components["schemas"]["Video"][];
@@ -2229,6 +2541,14 @@ export interface components {
             voiceover?: components["schemas"]["VoiceoverInput"] & unknown;
             /** @description Incorporate feedback: open comments on the version being revised (owner or admin). prompt is your note. */
             commentIds?: string[];
+            /** @description Redo only these scenes; everything else stays exactly as it is. Needs fromVersion. Can't be combined with planId, durationSec, sound or voiceover. */
+            scope?: {
+                /** @description Scene ids from fromVersion's beats (GET …/versions/{n}/beats). */
+                beats: string[];
+            };
+            /** @description Omit to keep the revised version's look; null for no look. A different look (or a newer version of the same one) is a restyle: a full run that keeps the story and rebuilds how it looks. Errors: 400 unknown_look, 409 look_disabled, 409 look_not_allowed (a version with recorded narration). */
+            look?: string | null;
+            context?: components["schemas"]["Context"] & unknown;
         };
         Remix: {
             /**
@@ -2253,6 +2573,22 @@ export interface components {
              * @description HTTPS URL for video.ready / video.failed events (API keys only).
              */
             webhookUrl?: string;
+            /** @description Omit to keep the source version's look; null for no look. Another look restyles the remix (a full run, as any remix). Errors: 400 unknown_look, 409 look_disabled. */
+            look?: string | null;
+            /**
+             * @description What the video is for outside the app. Set once; find the video again with GET /api/v1/videos?externalRef=. Not unique.
+             * @example github:acme/web#pr-123
+             */
+            externalRef?: string;
+            /**
+             * Format: uri
+             * @description A link to that thing (https), shown on the video page.
+             */
+            externalUrl?: string;
+            /** @description Make the remix private (you and admins only) from the start. A private video's remix is private either way. */
+            private?: boolean;
+            context?: components["schemas"]["Context"] & unknown;
+            recording?: components["schemas"]["RecordingInput"] & unknown;
         };
         Media: {
             id: string;
@@ -2287,6 +2623,13 @@ export interface components {
             } | null;
             canDelete: boolean;
             source: components["schemas"]["MediaSource"];
+            /**
+             * @description What the item is for: a voice-over take, uploaded narration, or a raw screen recording (private to its uploader until a video uses it); null for library items
+             * @enum {string|null}
+             */
+            role: "narration-take" | "narration-upload" | "screen-recording" | null;
+            /** @description A screen recording with a pointer trace (PUT …/trace) */
+            hasTrace: boolean;
             recording: components["schemas"]["Recording"];
         };
         /** @description Where an imported item came from (Openverse), with its licence; null for uploads */
@@ -2317,7 +2660,7 @@ export interface components {
              * @description A voice-over recording (take) or uploaded narration
              * @enum {string}
              */
-            role: "narration-take" | "narration-upload";
+            role: "narration-take" | "narration-upload" | "screen-recording";
             /** @description The video it was made for; null if you can no longer see it */
             videoId: string | null;
             /** @description Versions of videos you can see, and your own drafts, that use it */
@@ -2338,6 +2681,50 @@ export interface components {
         Publish: {
             /** @description Offer the narration's transcript on the share page. Default off; publishing again changes only this. */
             showTranscript?: boolean;
+        };
+        Looks: {
+            looks: components["schemas"]["Look"][];
+            /** @description The look creates get when they omit one; null: none. */
+            default: string | null;
+        };
+        Look: {
+            id: string;
+            name: string;
+            description: string;
+            tags: string[];
+            /** @description Plan templates the look suits: launch, tutorial, social, changelog, sales, other. */
+            bestFor: string[];
+            /** @description The shapes its rules cover. */
+            aspects: components["schemas"]["Aspect"][];
+            /** @description Engines it supports, preferred first. */
+            engines: ("hyperframes" | "remotion")[];
+            /** @description How screen recordings are framed in this look; false: hidden from the demo picker; null: the default. */
+            recording: false | {
+                /** @enum {string} */
+                frame: "wallpaper" | "browser" | "device" | "none";
+                padding?: number;
+                radius?: number;
+                /** @enum {string} */
+                shadow?: "none" | "sm" | "md" | "lg";
+                wallpaper?: string;
+                cursor?: {
+                    shape?: string;
+                    scale?: number;
+                    color?: string;
+                };
+                ripple?: string;
+                callout?: string;
+                zoomMax?: number;
+            } | null;
+            /** @description This version of the look; a version made with it keeps it. */
+            hash: string;
+            /** @description Pickers hide looks an admin turned off; versions already made with one keep it. */
+            enabled: boolean;
+            preview: {
+                /** @description A short muted loop, under the site root. */
+                mp4: string | null;
+                poster: string | null;
+            };
         };
         Destination: {
             id: string;
@@ -2412,6 +2799,10 @@ export interface components {
             optionsSchema?: unknown;
             sharePublisherContact?: boolean;
         };
+        ConfirmHidden: {
+            /** @description The hidden areas' ids (from the version's recording.hidden) that look right */
+            ids: string[];
+        };
         SetVerdict: {
             verdict: components["schemas"]["Verdict"];
             note?: string;
@@ -2465,12 +2856,90 @@ export interface components {
         CreateApiKey: {
             name: string;
         };
+        CliLogin: {
+            loginId: string;
+            /** @description Secret: only this CLI claims the key with it. */
+            deviceCode: string;
+            /**
+             * @description The person types this on the approve page.
+             * @example BCDF-GHJK
+             */
+            userCode: string;
+            verificationUrl: string;
+            expiresAt: string;
+            intervalSec: number;
+        };
+        CreateCliLogin: {
+            label: string;
+            host: string;
+        };
+        CliLoginClaim: {
+            /** @enum {string} */
+            status: "pending" | "slow_down" | "denied" | "expired" | "claimed";
+            /** @description With claimed: the new key, shown once. */
+            apiKey?: string;
+            keyId?: string;
+            webhookSecret?: string;
+            user?: {
+                id: string;
+                email: string;
+                role: components["schemas"]["Role"];
+            };
+        };
+        /** @enum {string} */
+        Role: "admin" | "creator" | "reviewer" | "viewer";
+        ClaimCliLogin: {
+            deviceCode: string;
+        };
+        CliLoginRequest: {
+            loginId: string;
+            label: string;
+            host: string;
+            clientIp: string;
+            createdAt: string;
+            expiresAt: string;
+            role: components["schemas"]["Role"];
+        };
+        LookupCliLogin: {
+            userCode: string;
+        };
+        CliLoginDecision: {
+            /** @enum {string} */
+            status: "approved" | "denied";
+        };
+        DecideCliLogin: {
+            userCode: string;
+            /** @enum {string} */
+            decision: "approve" | "deny";
+        };
         OAuthGrant: {
             id: string;
             clientId: string;
             clientName: string;
             createdAt: string;
             lastUsedAt: string | null;
+        };
+        Engine: {
+            /** @enum {string} */
+            id: "hyperframes" | "remotion";
+            name: string;
+            license: {
+                /** @enum {string} */
+                kind: "open";
+                /** @enum {string} */
+                spdx: "Apache-2.0";
+            } | {
+                /** @enum {string} */
+                kind: "remotion";
+                url: string;
+            };
+            capabilities: components["schemas"]["EngineCapabilities"];
+            /** @description Offered for new videos here right now. */
+            enabled: boolean;
+            /** @description What anyone choosing it is told: Remotion's license notice. */
+            notice: string | null;
+            /** @description Credits a video costs over a HyperFrames one, once measured; null when unknown or none. */
+            extraCredits: number | null;
         };
         Me: {
             id: string;
@@ -2480,8 +2949,6 @@ export interface components {
             /** @enum {string} */
             via: "session" | "apiKey";
         };
-        /** @enum {string} */
-        Role: "admin" | "creator" | "reviewer" | "viewer";
         User: {
             id: string;
             email: string;
@@ -2519,14 +2986,40 @@ export interface components {
             /** @description Recorded voice-over is on (the default). Off hides recording and refuses narration changes; versions that already have narration keep playing. */
             narrationEnabled: boolean;
             transcriptionProvider: components["schemas"]["TranscriptionProvider"];
-            /** @description Stored bytes each person's recordings may use (default 2 GiB). */
+            /** @description Stored bytes each person's voice recordings (narration takes) may use (default 2 GiB). */
             takeQuotaBytes: number;
+            /** @description Stored bytes each person's screen recordings may use (default 2 GiB). */
+            recordingQuotaBytes: number;
             /** @description Remixing is on (the default). Off hides every Remix button and refuses new remixes; queued ones still run. */
             remixEnabled: boolean;
+            /** @description WebMCP is on (the default): in browsers that support it, the web app offers its tools to AI agents. Off: no tools are registered. */
+            webmcpEnabled: boolean;
             /** @description YouTube is offered as a publish destination (needs youtubeConfigured). */
             youtubeEnabled: boolean;
             /** @description GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set (read-only). */
             youtubeConfigured: boolean;
+            /** @description The look creates get when they omit one (API, MCP and the GitHub Action too); null: none. */
+            defaultLook: string | null;
+            /** @description Looks turned off: hidden from pickers and refused for new videos; videos made with one keep it. */
+            disabledLooks: string[];
+            /** @description video-agent login can get a key by approving the CLI in the browser (the default). Off: paste a key. */
+            cliLoginEnabled: boolean;
+            /** @description The Remotion engine (bring your own license); present only when ENGINES lists remotion. */
+            remotion?: {
+                /** @description Remotion is offered for new videos (with a recorded license choice). */
+                enabled: boolean;
+                /** @description Who recorded the license choice, when, and which; null until someone does. */
+                license: {
+                    by: string;
+                    email: string;
+                    at: string;
+                    /** @enum {string} */
+                    tier: "free" | "company";
+                    note: string | null;
+                } | null;
+                /** @description VIDEO_AGENT_REMOTION_KEY is set (its value is never read by the server). */
+                keySet: boolean;
+            };
         };
         /**
          * @description How recorded narration is transcribed for captions: local (the default, audio stays in this deployment), elevenlabs (sends the audio to ElevenLabs) or off (no captions from recordings).
@@ -2538,8 +3031,25 @@ export interface components {
             transcriptionProvider?: components["schemas"]["TranscriptionProvider"];
             /** @description 1 MiB to 1 TiB. */
             takeQuotaBytes?: number;
+            /** @description 1 MiB to 1 TiB. */
+            recordingQuotaBytes?: number;
             remixEnabled?: boolean;
+            webmcpEnabled?: boolean;
             youtubeEnabled?: boolean;
+            /** @description A look id, or null for none. */
+            defaultLook?: string | null;
+            /** @description The full list of looks to turn off. */
+            disabledLooks?: string[];
+            cliLoginEnabled?: boolean;
+            /** @description Turn Remotion on or off for new videos. Needs remotion in ENGINES and a license choice. */
+            remotionEnabled?: boolean;
+            /** @description The license your organisation has. company needs VIDEO_AGENT_REMOTION_KEY set on the project. */
+            remotionLicense?: {
+                /** @enum {string} */
+                tier: "free" | "company";
+                /** @description A license reference or who approved it. */
+                note?: string | null;
+            };
         };
         Plan: {
             id: string;
@@ -2607,6 +3117,16 @@ export interface components {
                 speed: number | null;
                 script: string[] | null;
             } | null;
+            /** @description The plan's look: the person's choice (chosen), else the first enabled look made for the plan's template, else the admin default. id null: none. null: a remix or revision plan that keeps its video's look. */
+            look: {
+                id: string | null;
+                chosen: boolean;
+            } | null;
+            /**
+             * @description The engine chosen for this new-video plan; null: the look's choice.
+             * @enum {string|null}
+             */
+            engine: "hyperframes" | "remotion" | null;
             expiresAt: string;
         };
         CreatePlan: {
@@ -2627,6 +3147,13 @@ export interface components {
             mediaIds?: string[];
             sound?: components["schemas"]["Sound"];
             voiceover?: components["schemas"]["VoiceoverInput"];
+            /** @description A look id from GET /api/v1/looks, or null for none. Left out, a new-video plan picks one from its template. */
+            look?: string | null;
+            /**
+             * @description New-video plans only: the render engine, kept by the video made from the plan. Omit for the look's choice. Errors as on create.
+             * @enum {string}
+             */
+            engine?: "hyperframes" | "remotion";
         };
         PlanAnswers: {
             answers: {
@@ -2748,9 +3275,48 @@ export interface components {
                 muted?: boolean;
             } | {
                 /** @enum {string} */
+                op: "music";
+                /** @description A ready audio item from the library, as assets/media/<media id>.<ext> */
+                src: string;
+                volume?: number;
+            } | {
+                /** @enum {string} */
                 op: "voice";
                 beat: string;
                 text: string;
+            } | {
+                /** @enum {string} */
+                op: "span";
+                beat: string;
+                in: number;
+                out: number;
+            } | {
+                /** @enum {string} */
+                op: "camera";
+                beat: string;
+                keys: (number | string)[][];
+            } | {
+                /** @enum {string} */
+                op: "cursor";
+                beat: string;
+                /** @enum {string} */
+                style: "smooth" | "highlight" | "none";
+                size: number;
+            } | {
+                /** @enum {string} */
+                op: "redact";
+                beat: string;
+                entries: {
+                    id?: string;
+                    /** @enum {string} */
+                    origin?: "agent" | "editor";
+                    start: number;
+                    end: number;
+                    reason?: string;
+                    /** @enum {string} */
+                    style?: "blur" | "solid";
+                    boxes: number[][];
+                }[];
             } | components["schemas"]["NarrationOp"])[];
             composition: components["schemas"]["Composition"];
             base: components["schemas"]["Composition"];
@@ -2759,6 +3325,23 @@ export interface components {
             renderedN: number | null;
             /** @description A newer version exists: start from it, or render this draft as the next version */
             newerVersion: number | null;
+            /** @description A demo: the recording facts the editor needs; null for any other video */
+            recording?: {
+                /** @description The recording's length in seconds */
+                duration: number;
+                /** @description Made with a pointer trace: the smooth cursor is available */
+                trace: boolean;
+                /** @description Hidden areas from the pointer trace and the demo's setup: shown, never removable */
+                locked: {
+                    [key: string]: unknown;
+                }[];
+                /** @description The planner's camera per step ([t, x, y, zoom, ease?] keys), for Auto */
+                camera: {
+                    [key: string]: unknown[];
+                };
+                /** @description The most the camera may zoom and stay sharp */
+                zoomMax: number;
+            } | null;
             /** @description The newest ready version's narration differs from this draft's base: rebase onto it (rebase-narration), or keep yours */
             narrationChanged: {
                 inVersion: number;
@@ -2875,6 +3458,33 @@ export interface components {
                     start: number;
                     duration: number;
                 } | null;
+                /** @description A recording scene (a demo): what it shows of the recording and how */
+                recording?: {
+                    step: string;
+                    slot: string;
+                    src: string;
+                    /** @description Source seconds the scene shows from */
+                    in: number;
+                    /** @description Source seconds the scene shows to */
+                    out: number;
+                    /** @description Playback speed (1 = real time) */
+                    rate: number;
+                    /** @description [t, x, y, zoom, ease?] keys, in source seconds */
+                    camera: unknown[];
+                    cursor: {
+                        style: string;
+                        size: number | null;
+                        path: string | null;
+                    };
+                    /** @description [t, x, y] clicks, in source seconds */
+                    clicks: unknown[];
+                    /** @description The scene's own hidden areas (the agent's and the editor's); the locked ones are on the Edit */
+                    redact: unknown[];
+                    locked: string | null;
+                    hold: {
+                        seconds: number;
+                    } | null;
+                };
             }[];
             layers: string[];
             audio: {
@@ -2940,9 +3550,48 @@ export interface components {
                 muted?: boolean;
             } | {
                 /** @enum {string} */
+                op: "music";
+                /** @description A ready audio item from the library, as assets/media/<media id>.<ext> */
+                src: string;
+                volume?: number;
+            } | {
+                /** @enum {string} */
                 op: "voice";
                 beat: string;
                 text: string;
+            } | {
+                /** @enum {string} */
+                op: "span";
+                beat: string;
+                in: number;
+                out: number;
+            } | {
+                /** @enum {string} */
+                op: "camera";
+                beat: string;
+                keys: (number | string)[][];
+            } | {
+                /** @enum {string} */
+                op: "cursor";
+                beat: string;
+                /** @enum {string} */
+                style: "smooth" | "highlight" | "none";
+                size: number;
+            } | {
+                /** @enum {string} */
+                op: "redact";
+                beat: string;
+                entries: {
+                    id?: string;
+                    /** @enum {string} */
+                    origin?: "agent" | "editor";
+                    start: number;
+                    end: number;
+                    reason?: string;
+                    /** @enum {string} */
+                    style?: "blur" | "solid";
+                    boxes: number[][];
+                }[];
             } | components["schemas"]["NarrationOp"])[];
             rev: number;
         };
@@ -2961,6 +3610,8 @@ export interface components {
             captions?: "sidecar" | "burned";
             /** @description Render picture first: render the draft's other edits without its recorded narration, so you can record against the new picture. The narration stays in the draft; move it onto the new version with rebase-narration */
             excludeNarration?: boolean;
+            /** @description Not accepted (400 look_not_allowed): an edit render keeps the edited version's look. */
+            look?: unknown;
         };
         RebaseNarration: {
             /** @description The version to move your narration onto */
@@ -3036,7 +3687,7 @@ export interface components {
              * @description A voice-over recording (take) or uploaded narration; null for library uploads
              * @enum {string|null}
              */
-            role: "narration-take" | "narration-upload" | null;
+            role: "narration-take" | "narration-upload" | "screen-recording" | null;
             /** @description The video a recording is for */
             scopeJobId: string | null;
         };
@@ -3112,6 +3763,33 @@ export interface components {
              *     ]
              */
             queries: string[];
+        };
+        /** @description Pointer trace v1. Positions are 0-1 fractions of the frame, times seconds into the recording. See /docs/cli#record. */
+        PointerTrace: {
+            /** @enum {number} */
+            v: 1;
+            /** @description { kind: 'cli' | 'upload' | 'browser' | 'script', tool, startedAt } */
+            source: {
+                [key: string]: unknown;
+            };
+            /** @description { width, height, fps, duration }: must match the recording */
+            frame: {
+                [key: string]: unknown;
+            };
+            /** @description { width, height, dpr } */
+            viewport: {
+                [key: string]: unknown;
+            };
+            /** @description [t, x, y] with x, y as 0-1 fractions of the frame, at most 30,000 */
+            moves: number[][];
+            /** @description click, type, scroll, focus, drag and navigate events, each with `kind` and `t`; at most 5,000 */
+            events: {
+                [key: string]: unknown;
+            }[];
+            /** @description { start, end, reason, boxes: [t, x, y, w, h][] } areas to hide, keyframed; at most 200 */
+            redact: {
+                [key: string]: unknown;
+            }[];
         };
         TakePeaksStored: {
             mediaId: string;
@@ -3254,6 +3932,15 @@ export interface components {
             }[];
             maxActiveRuns: number;
             queuePausedReason: string | null;
+            /** @description This month's Remotion renders (UTC), failed runs included; only when ENGINES lists remotion. Reconcile with remotion.pro. */
+            remotionRenders?: {
+                since: string;
+                total: number;
+                videos: number;
+                stills: number;
+                audio: number;
+                attempts: number;
+            };
         };
     };
     responses: never;
@@ -3315,6 +4002,8 @@ export interface operations {
                 /** @description true: only videos you starred */
                 favorite?: "true" | "false";
                 q?: string;
+                /** @description Only videos made with this externalRef (exact match), newest first */
+                externalRef?: string;
                 cursor?: string;
                 limit?: number;
             };
@@ -4034,6 +4723,76 @@ export interface operations {
             };
         };
     };
+    getVersionBeats: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                n: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scenes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        beats: components["schemas"]["BeatInfo"][] | null;
+                    };
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict or not ready */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     retryVersion: {
         parameters: {
             query?: never;
@@ -4269,6 +5028,71 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict or not ready */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listLooks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Looks */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Looks"];
+                };
             };
             /** @description Invalid request */
             400: {
@@ -5517,6 +6341,78 @@ export interface operations {
             };
         };
     };
+    markHiddenAreasChecked: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                n: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmHidden"];
+            };
+        };
+        responses: {
+            /** @description Updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Video"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict or not ready */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     setVerdict: {
         parameters: {
             query?: never;
@@ -6148,6 +7044,284 @@ export interface operations {
             };
         };
     };
+    createCliLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCliLogin"];
+            };
+        };
+        responses: {
+            /** @description Started */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CliLogin"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Browser login is off */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too many */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    claimCliLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClaimCliLogin"];
+            };
+        };
+        responses: {
+            /** @description Status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CliLoginClaim"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Browser login is off */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too many */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    lookupCliLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LookupCliLogin"];
+            };
+        };
+        responses: {
+            /** @description Login */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CliLoginRequest"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Browser login is off */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too many */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    decideCliLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecideCliLogin"];
+            };
+        };
+        responses: {
+            /** @description Decided */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CliLoginDecision"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Browser login is off */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too many */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     revokeKey: {
         parameters: {
             query?: never;
@@ -6295,6 +7469,73 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict or not ready */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listEngines: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Engines */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["Engine"][];
+                    };
+                };
             };
             /** @description Invalid request */
             400: {
@@ -8970,7 +10211,7 @@ export interface operations {
                      * @description A voice-over recording (take) or uploaded narration
                      * @enum {string}
                      */
-                    role?: "narration-take" | "narration-upload";
+                    role?: "narration-take" | "narration-upload" | "screen-recording";
                     /** @description The video a recording is for (required with role) */
                     scopeJobId?: string;
                 };
@@ -9902,6 +11143,144 @@ export interface operations {
         };
         responses: {
             /** @description Updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Media"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict or not ready */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getMediaTrace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The trace */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PointerTrace"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict or not ready */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    setMediaTrace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PointerTrace"];
+            };
+        };
+        responses: {
+            /** @description The recording, with its trace */
             200: {
                 headers: {
                     [name: string]: unknown;

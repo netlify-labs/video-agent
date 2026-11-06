@@ -18,11 +18,39 @@ export function sampleFrame(mp4: string, atSec: number, out: string) {
   ])
 }
 
-/** The SSIM ("All", 0–1) of two images; `b` is scaled to `a`'s size first, so different sizes still compare. */
+/** An image's width and height, from ffprobe (a missing or unreadable file fails like the comparison would). */
+function sizeOf(image: string): { w: number; h: number } {
+  const r = spawnSync(
+    'ffprobe',
+    [
+      '-v',
+      'error',
+      '-select_streams',
+      'v:0',
+      '-show_entries',
+      'stream=width,height',
+      '-of',
+      'csv=p=0',
+      image,
+    ],
+    { encoding: 'utf8' },
+  )
+  const [w, h] = r.stdout.trim().split(',').map(Number)
+  if (r.status !== 0 || !w || !h)
+    throw new Error(`ffmpeg ssim failed: no picture size for ${image}: ${r.stderr.slice(-400)}`)
+  return { w, h }
+}
+
+/**
+ * The SSIM ("All", 0–1) of two images; `b` is scaled to `a`'s size first, so different sizes still compare. A plain
+ * scale to `a`'s probed size, not scale2ref: FFmpeg 7.0's scale2ref encodes nothing for two still images (the static
+ * build CI and runs use).
+ */
 export function ssim(a: string, b: string): number {
+  const { w, h } = sizeOf(a)
   const r = spawnSync(
     'ffmpeg',
-    ['-hide_banner', '-i', a, '-i', b, '-lavfi', '[1:v][0:v]scale2ref[b][a];[a][b]ssim', '-f', 'null', '-'],
+    ['-hide_banner', '-i', a, '-i', b, '-lavfi', `[1:v]scale=${w}:${h}[b];[0:v][b]ssim`, '-f', 'null', '-'],
     { encoding: 'utf8' },
   )
   const m = /SSIM .*All:([0-9.]+)/.exec(r.stderr)
@@ -36,6 +64,7 @@ export function ssim(a: string, b: string): number {
  */
 export function tileSsim(a: string, b: string, n = 4): number {
   let min = 1
+  const { w, h } = sizeOf(a)
   for (let y = 0; y < n; y++)
     for (let x = 0; x < n; x++) {
       const crop = `crop=iw/${n}:ih/${n}:iw*${x}/${n}:ih*${y}/${n}`
@@ -48,7 +77,7 @@ export function tileSsim(a: string, b: string, n = 4): number {
           '-i',
           b,
           '-lavfi',
-          `[1:v][0:v]scale2ref[b][a];[a]${crop}[ta];[b]${crop}[tb];[ta][tb]ssim`,
+          `[1:v]scale=${w}:${h}[b];[0:v]${crop}[ta];[b]${crop}[tb];[ta][tb]ssim`,
           '-f',
           'null',
           '-',

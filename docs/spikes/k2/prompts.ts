@@ -11,7 +11,7 @@ import { join } from 'node:path'
 import { buildPrompt } from '../../../src/domain/prompt.js'
 
 const root = new URL('../../..', import.meta.url).pathname
-const outDir = join(root, 'spikes', 'out', 'k2', 'prompts')
+const outDir = join(root, 'docs', 'spikes', 'out', 'k2', 'prompts')
 
 export const LOOKS = { clean: 'Clean product', kinetic: 'Kinetic type' } as const
 export const PROMPTS = {

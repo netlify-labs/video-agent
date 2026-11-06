@@ -4,6 +4,8 @@
 // the draft saved (by the caller, in onTakeReady). The recovery copy is cleared only after that save succeeds: a take
 // is durable once its media is ready and a saved draft references it.
 //
+// onTakeReady may wait: the record flow's review holds the insert until Add or Discard (the upload doesn't wait).
+//
 //   idle -> recording -> finalizing -> uploading -> processing -> saving -> saved
 //                                   \______________ failed (retry() resumes at the step that failed) ____/
 //
@@ -155,15 +157,16 @@ export function createTakeUpload(
         firstSampleContextTime: t.firstSampleContextTime,
         record,
       })
-      if (!live()) return
-      set({ state: 'saved' })
-      // Saved: the draft references ready media, so the local copy can go.
+      // Saved (or, reviewed, discarded on purpose): the local copy can go. Even when a newer take has started meanwhile
+      // (Keep recording from here starts one while this one is added), since this one is settled.
       if (t.persisted)
         try {
           await (await deps.store()).deleteTake(t.recordingId)
         } catch {
           // swept after 7 days anyway
         }
+      if (!live()) return
+      set({ state: 'saved' })
     } catch (e) {
       if (!live()) return
       set({ state: 'failed', error: reason(e), failedAt: step, progress: null })

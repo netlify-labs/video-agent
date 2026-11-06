@@ -2,12 +2,14 @@
   "name": "spike-e3-remotion-contract",
   "private": true,
   "type": "module",
-  "description": "Local evaluation spike E3 (render-engines plan §11). Remotion is installed here only, never in the root workspace.",
+  "description": "Local evaluation spikes E3-E5 (render-engines plan \u00a711). Remotion is installed here only, never in the root workspace; docs/spikes/e4 and docs/spikes/e5 link this node_modules.",
   "scripts": {
     "spike": "tsx run.ts"
   },
   "dependencies": {
     "@remotion/bundler": "4.0.540",
+    "@remotion/cli": "4.0.540",
+    "@remotion/fonts": "4.0.540",
     "@remotion/renderer": "4.0.540",
     "react": "19.2.0",
     "react-dom": "19.2.0",

@@ -6,8 +6,12 @@ on:
   # Run it on any branch by hand: gh workflow run ci.yml --ref <branch>
   workflow_dispatch:
 jobs:
+  # Side by side (in a row they took 60+ minutes on 35c7eca, mostly in apt): `verify` is the static checks and the unit
+  # and integration tests; `ui` is the app build, the looks check and Playwright.
   verify:
     runs-on: ubuntu-latest
+    # Usually under 20 minutes; a hang fails the run instead of holding a runner for GitHub's 6 hours.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -17,23 +21,47 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint
-      # The feedback-still tests run ffmpeg/ffprobe, as prepare-run does inside runs.
-      - run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends ffmpeg
+      # The feedback-still tests run ffmpeg/ffprobe, as prepare-run does inside runs. Pinned static builds, no apt.
+      - uses: ./.github/actions/ffmpeg
       - run: npm run build:packages
       - run: npm test
       - run: npm run openapi:check
+      - run: npm run action:check
       - run: npm run db:check
-      - run: npm run build:ui
-      - run: npx playwright install --with-deps chromium
+
+  # Playwright in two shards on two runners (the suite alone was about 25 minutes); the app build and the looks check
+  # run once, on the first.
+  ui:
+    runs-on: ubuntu-latest
+    # Usually about 15 minutes.
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - if: matrix.shard == 1
+        run: npm run build:ui
+      # Cached Chromium, no apt unless it fails to launch.
+      - uses: ./.github/actions/playwright
       # Looks: the static checks and each example through hyperframes check (needs the Chromium above). Runs on
       # pull_request only, never pull_request_target, so contributed examples run with no secrets.
-      - run: npm run look:check
-      - run: npm run test:ui
+      - if: matrix.shard == 1
+        run: npm run look:check
+      # playwright.config.ts also stops a shard at 30 minutes in CI.
+      - run: npm run test:ui -- --shard=${{ matrix.shard }}/2
+        timeout-minutes: 35
       # Traces and screenshots of failed specs (playwright.config.ts keeps them on failure).
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-results
+          name: playwright-results-${{ matrix.shard }}
           path: test-results/
           retention-days: 7
 
@@ -41,6 +69,7 @@ jobs:
   # fetch, a webhook signature, and a main entry with no node: imports but the lazy file helpers'.
   sdk-smoke:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       matrix:
         node: [22, 24]
@@ -59,6 +88,7 @@ jobs:
   # changeset with a major SDK bump.
   api-breaking:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
       OASDIFF_VERSION: 1.35.0
       OASDIFF_SHA256: a8023002fcb2eaa7f5758148a9303cb63d33b939886df312268bc0fc7b939140
@@ -86,3 +116,55 @@ jobs:
             ./oasdiff breaking base.json ui/src/api/openapi.json || true
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # Local mode end to end on the packed CLI with the fixture agent (cli-and-sdk plan §7; beads va-p1th.5.15, 5.17):
+  # npm pack, install the tarball, `video-agent local --agent fixture` then `local revise` (offline). The real runtime
+  # install, agent-kit, render broker and done.json handoff run; only the agent is a fixture. Guards against the
+  # bundled runtime drifting from the repo's scripts.
+  local-mode:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - uses: ./.github/actions/ffmpeg
+      - run: npm ci --ignore-scripts
+      - run: npx tsx scripts/local-fixture-e2e.ts
+
+  # Phase 0 spikes C1 and C3 on Linux (cli-and-sdk plan §11), run by hand only:
+  # gh workflow run ci.yml --ref <branch>. Local renders and a Python venv; no credits.
+  spikes-linux:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    # Local renders and a Python venv: longer than the other jobs.
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - uses: ./.github/actions/ffmpeg
+      # python3-venv is part of the runner image's Python; apt only if venv is missing.
+      - run: python3 -m venv "$RUNNER_TEMP/venv-check" || (sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends python3-venv)
+      - run: npm ci --ignore-scripts
+      - name: C1 online, then offline
+        run: |
+          npx tsx docs/spikes/c1/c1.ts --cache "$RUNNER_TEMP/c1" | tee c1-online.jsonl
+          npx tsx docs/spikes/c1/c1.ts --cache "$RUNNER_TEMP/c1" --offline | tee c1-offline.jsonl
+      - name: C3
+        if: matrix.node == 24
+        run: npx tsx docs/spikes/c3/c3.ts --cache "$RUNNER_TEMP/c3" | tee c3.jsonl
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spikes-linux-node${{ matrix.node }}
+          path: '*.jsonl'
+          retention-days: 7

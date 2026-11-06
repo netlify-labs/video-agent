@@ -29,9 +29,11 @@ import { assertCan, type Principal } from './policy.js'
 import type {
   CommentRow,
   FrozenPlan,
+  PlanRow,
   Verdict,
   VerdictRow,
   VersionCommentRow,
+  VersionLook,
   VersionProvenanceRow,
 } from './types.js'
 import { planningContext } from '../generated/planning-context.js'
@@ -60,8 +62,37 @@ import {
   sharePageEntry,
 } from './destinations/dto.js'
 import { removeAllForJob } from './destinations/remove.js'
-import { assertSameEngine, engineInfo, engineOf } from './engines.js'
-import type { DestinationPublicationRow } from './types.js'
+import {
+  assertCapabilities,
+  assertSameEngine,
+  enabledEngines,
+  engineInfo,
+  engineOf,
+  type EngineId,
+} from './engines.js'
+import { fillBeats } from './beats.js'
+import { enabledFeatures } from './features.js'
+import { scopeRules } from '../lib/scope.js'
+import { adoptLookSnapshot, snapshotLook } from './look-snapshot.js'
+import { lookSettings } from './look-settings.js'
+import {
+  assertLookAllowed,
+  aspectNotice,
+  assertLookSupportsEngine,
+  assertRestyleAllowed,
+  chooseEngine,
+  getLook,
+  resolveLook,
+} from './looks.js'
+import type { DestinationPublicationRow, VersionContext } from './types.js'
+import {
+  checkRecordingBytes,
+  demoDuration,
+  demoRecording,
+  inheritRecording,
+  type RecordingRequest,
+  hiddenWhy,
+} from './demo-recording.js'
 
 const IDEMPOTENCY_TTL_MS = 24 * 3600_000
 
@@ -75,6 +106,21 @@ export interface CreateVideoInput {
   mediaIds?: string[] | undefined
   sound?: VideoSound | undefined
   voiceover?: VoiceoverInput | undefined
+  /** A look id (looks plan §4.3); null: no look; omitted: the plan's look, else the admin default, else none. */
+  look?: string | null | undefined
+  /** What the video is for outside the app; set once (github-action plan §6.2). */
+  externalRef?: string | undefined
+  externalUrl?: string | undefined
+  /** Private from the start (needs video:private). */
+  private?: boolean | undefined
+  /** Background for the run outside the prompt (github-action plan §6.1). */
+  context?: VersionContext | undefined
+  /** A demo made from a screen recording (screen-recording plan §6.1). */
+  recording?: RecordingRequest | undefined
+  /** false: a Quick demo, composed with no agent authoring (needs recording). */
+  agent?: boolean | undefined
+  /** The render engine (render-engines plan §4.2): must be enabled and listed by the look; omitted: the look's choice. */
+  engine?: EngineId | undefined
 }
 
 export interface ReviseInput {
@@ -91,6 +137,12 @@ export interface ReviseInput {
   sound?: VideoSound | undefined
   /** Omitted: the plan's voice-over, else the parent's. */
   voiceover?: VoiceoverInput | undefined
+  /** Redo only these scenes (beat ids of fromVersion); everything else stays exactly as it is (redo a scene, §4.1). */
+  scope?: { beats: string[] } | undefined
+  /** A look id: a restyle unless it's the parent's own look at the same version; null: no look; omitted: the parent's. */
+  look?: string | null | undefined
+  /** Background for this version's run; never inherited from the parent. */
+  context?: VersionContext | undefined
 }
 
 export const INCORPORATE_MAX_COMMENTS = 50
@@ -101,6 +153,42 @@ const INCORPORATE_MAX_CHARS = 20_000
  * belong to the caller, be unexpired and unused, have a brief, and (for revisions) be bound to this video. Returns
  * the frozen copy stored on the version and the length the brief implies.
  */
+/**
+ * A plan's look, read before the transaction (looks plan §4.12): the snapshot is copied before createVideo's
+ * transaction, but consumePlan runs inside it. Read-only, with consumePlan's checks; consumePlan re-checks inside, so
+ * a plan consumed meanwhile fails as before and its copy is left unadopted for the sweep. Undefined: no usable plan
+ * look (none on the plan, or a plan that consumePlan will refuse).
+ */
+export async function planLookOf(
+  deps: Deps,
+  principal: Principal,
+  planId: string | undefined,
+): Promise<PlanRow['look'] | undefined> {
+  return (await usablePlan(deps, principal, planId))?.look ?? undefined
+}
+
+/** The plan, if consumePlan would accept it (read-only, before the transaction); undefined otherwise. */
+async function usablePlan(
+  deps: Deps,
+  principal: Principal,
+  planId: string | undefined,
+): Promise<PlanRow | undefined> {
+  if (!planId) return undefined
+  const plan = await deps.store.getPlan(planId)
+  if (!plan || plan.userId !== principal.userId || plan.consumedByJobId) return undefined
+  if (plan.expiresAt <= deps.clock.now().toISOString()) return undefined
+  return plan
+}
+
+/** Revisions and remixes: a look the person chose in the plan acts as the request's look (picked looks only). */
+export async function withChosenPlanLook<
+  T extends { planId?: string | undefined; look?: string | null | undefined },
+>(deps: Deps, principal: Principal, input: T): Promise<T> {
+  if (input.look !== undefined) return input
+  const look = await planLookOf(deps, principal, input.planId)
+  return look?.chosen ? { ...input, look: look.id } : input
+}
+
 export async function consumePlan(
   repo: Repo,
   deps: Deps,
@@ -152,7 +240,13 @@ export async function consumePlan(
   await repo.updatePlan(plan.id, { consumedByJobId: target.newJobId, consumedByN: target.n })
   const seconds = plan.brief.beats.reduce((t, b) => t + b.seconds, 0)
   return {
-    frozen: { planId: plan.id, brief: plan.brief, qa, contextHash: planningContext.hash },
+    frozen: {
+      planId: plan.id,
+      brief: plan.brief,
+      qa,
+      contextHash: planningContext.hash,
+      ...(plan.look ? { look: plan.look.id } : {}),
+    },
     title: plan.brief.title?.trim().slice(0, 120) || null,
     aspect: (plan.aspect as Aspect | null) ?? plan.route?.suggestedAspect ?? null,
     durationSec: plan.durationSec ?? (seconds > 0 ? Math.round(seconds) : null),
@@ -209,7 +303,10 @@ export function newAttempt(
   jobId: string,
   versionN: number,
   now: string,
+  /** A scoped revision (redo a scene): SCOPED_AGENT_MODEL / SCOPED_AGENT_EFFORT, when set, pick its model. */
+  o: { scoped?: boolean } = {},
 ): AttemptRow {
+  const c = deps.config
   return {
     id: deps.ids.uuid(),
     jobId,
@@ -218,9 +315,9 @@ export function newAttempt(
     nextActionAt: now,
     leaseUntil: null,
     deployId: null,
-    agent: deps.config.agent,
-    model: deps.config.agentModel,
-    effort: deps.config.agentEffort,
+    agent: c.agent,
+    model: (o.scoped ? c.scopedAgentModel : null) ?? c.agentModel,
+    effort: (o.scoped ? c.scopedAgentEffort : null) ?? c.agentEffort,
     promptTemplateVersion: 0,
     toolVersions: null,
     parentSourceSha256: null,
@@ -314,6 +411,7 @@ export async function createVideo(
   idemKey?: string,
 ) {
   assertCan(principal, 'video:create')
+  if (input.private) assertCan(principal, 'video:private', { ownerId: principal.userId })
   checkWebhook(principal, input.webhookUrl)
   deps.log.debug('video.create_requested', {
     userId: principal.userId,
@@ -326,11 +424,56 @@ export async function createVideo(
     mediaIds: input.mediaIds ?? [],
     sound: input.sound ?? null,
     voiceover: input.voiceover ?? null,
+    externalRef: input.externalRef ?? null,
+    private: input.private ?? false,
+    look: input.look ?? null,
+    engine: input.engine ?? null,
   })
+  // The look, resolved and copied before the transaction (blob writes can't roll back), under an id minted now. A
+  // plan's look comes before the default; a plan with no look (id null) makes one with none.
+  const settings = await lookSettings(deps)
+  const plan = await usablePlan(deps, principal, input.planId)
+  const fromPlan = input.look === undefined ? (plan?.look ?? undefined) : undefined
+  const resolved = resolveLook(deps, fromPlan && fromPlan.id === null ? { look: null } : input, {
+    planLook: fromPlan?.id ?? null,
+    defaultLook: settings.defaultLook,
+    disabled: settings.disabledLooks,
+  })
+  // The engine first, so a refused one copies nothing (render-engines plan §4.2, looks plan §4.14).
+  const engine = chooseEngine({
+    // The request's engine, else the one its plan chose (render-engines plan §4.2).
+    requestEngine: input.engine ?? plan?.engine ?? undefined,
+    look: resolved.kind === 'pick' ? resolved.entry : null,
+    enabled: (await enabledEngines(deps)).map((e) => e.id),
+  })
+  assertCapabilities(engine, { sound: input.sound, voiceover: input.voiceover?.enabled })
+  const presetJobId = resolved.kind === 'pick' ? deps.ids.videoId() : null
+  const look =
+    resolved.kind === 'pick' && presetJobId
+      ? await snapshotLook(deps, presetJobId, { from: 'bundle', entry: resolved.entry }, false)
+      : null
+  // A demo (screen-recording plan §6.1): HyperFrames only, and an ordinary clip must already meet the recording rules.
+  if (input.agent === false) {
+    if (!input.recording)
+      throw new ApiError('invalid_request', 'agent: false makes a Quick demo, so it needs a recording.')
+    if (input.voiceover)
+      throw new ApiError(
+        'invalid_request',
+        "A Quick demo has no voice-over; leave voiceover out, or don't set agent: false.",
+      )
+  }
+  if (input.recording) {
+    if (engine !== 'hyperframes')
+      throw new ApiError('engine_unsupported', 'Screen-recording demos are made with HyperFrames only.')
+    await checkRecordingBytes(deps, input.recording)
+  }
   return deps.store.tx((repo) =>
     withIdempotency(repo, deps, principal, 'videos.create', idemKey, input, async () => {
       const now = deps.clock.now().toISOString()
-      const jobId = deps.ids.videoId()
+      const jobId = presetJobId ?? deps.ids.videoId()
+      const demo = input.recording
+        ? await demoRecording(repo, deps, principal, input.recording, jobId, 1)
+        : null
       const planned = input.planId
         ? await consumePlan(repo, deps, principal, input.planId, { jobId: null, n: 1, newJobId: jobId })
         : null
@@ -346,37 +489,50 @@ export async function createVideo(
         updatedAt: now,
         deletedAt: null,
         version: 1,
-        private: false,
+        // Private on request; a demo with anything hidden starts private too (screen-recording §9): hiding is
+        // cosmetic, so someone checks it first.
+        private: (input.private ?? false) || (demo?.private ?? false),
         accessEpoch: 0,
         language: DEFAULT_LANGUAGE,
+        externalRef: input.externalRef ?? null,
+        externalUrl: input.externalUrl ?? null,
       }
       await repo.insertJob(job)
-      // Media attached while planning comes first, then any picked when creating.
+      if (job.private) await writeAccessMirror(deps, job)
+      // A demo's recording first, then media attached while planning, then any picked when creating.
       const media = await snapshotMedia(
         repo,
         jobId,
         1,
         [...(planned?.mediaIds ?? []), ...(input.mediaIds ?? [])],
-        [],
+        demo ? [demo.row] : [],
       )
       await repo.insertVersionMedia(media)
+      // Again with the plan's choices and a picked audio item folded in: what the version would actually get.
+      const audio = versionAudio(input, planned, null, media)
+      assertCapabilities(engine, audio)
       await repo.insertVersion({
         jobId,
         n: 1,
         prompt: input.prompt,
         authorId: principal.userId,
         apiKeyId: principal.apiKeyId,
-        targetDurationSec: input.durationSec ?? planned?.durationSec ?? null,
+        targetDurationSec:
+          input.durationSec ?? planned?.durationSec ?? (demo ? demoDuration(demo.sourceSec) : null),
         parentN: null,
         webhookUrl: input.webhookUrl ?? null,
         status: 'queued',
         createdAt: now,
         plan: planned?.frozen ?? null,
         // A picked audio item means music unless the person chose otherwise.
-        ...versionAudio(input, planned, null, media),
-        // HyperFrames until the looks plan's engine choice rule lands (render-engines §4.2).
-        engine: 'hyperframes',
+        ...audio,
+        // The requested engine, else the look's first enabled one, else HyperFrames (looks plan §4.14).
+        engine,
+        look,
+        context: input.context ?? null,
+        ...(demo ? { recording: { ...demo.recording, compose: input.agent === false } } : {}),
       })
+      if (look) await adoptLookSnapshot(repo, deps, jobId, look, now)
       await repo.insertAttempt(newAttempt(deps, jobId, 1, now))
       return { status: 202, body: await videoDto(repo, deps, jobId, principal) }
     }),
@@ -428,7 +584,24 @@ export async function reviseVideo(
     mediaIds: input.mediaIds ?? [],
     sound: input.sound ?? null,
     voiceover: input.voiceover ?? null,
+    ...(input.scope ? { scope: input.scope.beats } : {}),
+    look: input.look ?? null,
   })
+  // A look chosen in the plan acts as the request's; the request itself (idempotency) stays as sent.
+  const lookInput = await withChosenPlanLook(deps, principal, { planId: input.planId, look: input.look })
+  // Redoing a scene keeps the video's look (looks plan §4.3).
+  assertLookAllowed({ look: lookInput.look, scope: input.scope })
+  // A scoped revision's checks that may read Blobs (the parent's scenes) run before the transaction.
+  if (input.scope) await checkScopedRevise(deps, principal, jobId, input)
+  // A picked look is copied before the transaction: the copy depends only on this video and the look's version, so
+  // the parent (and whether it's a restyle) is decided inside. Visibility is checked first.
+  const settings = await lookSettings(deps)
+  let picked: VersionLook | null = null
+  if (typeof lookInput.look === 'string') {
+    await loadJob(deps.store, principal, jobId)
+    const r = resolveLook(deps, lookInput, { defaultLook: null, disabled: settings.disabledLooks })
+    if (r.kind === 'pick') picked = await snapshotLook(deps, jobId, { from: 'bundle', entry: r.entry }, false)
+  }
   return deps.store.tx(async (repo) => {
     // Visibility first: a replay must not return a saved response for a video that has since gone private.
     await loadJob(repo, principal, jobId)
@@ -444,8 +617,22 @@ export async function reviseVideo(
       if (!parent) throw new ApiError('conflict', 'There is no ready version to revise from.')
       if (parent.status !== 'ready')
         throw new ApiError('conflict', `Version ${parent.n} isn't ready, so it can't be revised.`)
+      const scope = input.scope ? scopeOf(parent, input.scope.beats) : null
       const now = deps.clock.now().toISOString()
       const n = job.nextVersionN
+      // The look: the parent's snapshot unless the request picks one (null: none); a different snapshot is a restyle.
+      const parentLook = parent.look ?? null
+      const restyle = picked !== null && picked.hash !== parentLook?.hash
+      assertRestyleAllowed(restyle, !!parent.narration)
+      const look: VersionLook | null =
+        lookInput.look === null
+          ? null
+          : picked
+            ? restyle
+              ? { ...picked, restyle: true }
+              : { ...(parentLook ?? picked), restyle: false }
+            : parentLook && { ...parentLook, restyle: false }
+      deps.log.debug('video.revise_look', { jobId, n, look: look?.id ?? null, restyle })
       const feedback = input.commentIds?.length
         ? await snapshotFeedback(repo, principal, job, parent.n, n, input.commentIds)
         : []
@@ -484,12 +671,24 @@ export async function reviseVideo(
         ...versionAudio(input, planned, parent, media, inherited),
         // The parent's engine: a video keeps one (render-engines §4.2).
         engine: engineOf(parent),
+        ...(scope ? { scope } : {}),
+        look,
+        // Background describes this change only, so a revision never inherits its parent's.
+        context: input.context ?? null,
+        // A demo's recording inputs carry on (screen-recording plan §5.5).
+        ...(parent.recording ? { recording: inheritRecording(parent.recording) } : {}),
       }
       assertSameEngine(deps, parent, row)
+      // Turning an engine off never refuses work on its videos (§7), but what it can't make is refused.
+      assertCapabilities(engineOf(row), row)
+      // A restyle keeps the video's engine, so the new look must support it (§4.14).
+      const entry = look && restyle ? getLook(deps, look.id) : null
+      if (entry) assertLookSupportsEngine(entry, engineOf(row))
       await repo.insertVersion(row)
+      if (look && restyle) await adoptLookSnapshot(repo, deps, jobId, look, now)
       await repo.insertVersionComments(feedback)
       await repo.insertVersionMedia(media)
-      await repo.insertAttempt(newAttempt(deps, jobId, n, now))
+      await repo.insertAttempt(newAttempt(deps, jobId, n, now, { scoped: !!scope }))
       await repo.updateJob(jobId, {
         latestVersion: n,
         nextVersionN: n + 1,
@@ -500,6 +699,66 @@ export async function reviseVideo(
       return { status: 202, body: await videoDto(repo, deps, jobId, principal) }
     })
   })
+}
+
+/**
+ * A scoped revision's checks outside the transaction (redo a scene, docs/plans/2026-11-04-regenerate-beat.md §4.1):
+ * the server offers it, the request is one it can be, and the parent can be redone scene by scene. A parent made
+ * before versions recorded their scenes gets them now (fillBeats checks visibility first and unpacks the archive),
+ * so nothing reads Blobs while the job row is locked; the transaction then reads the stored scenes.
+ */
+async function checkScopedRevise(deps: Deps, principal: Principal, jobId: string, input: ReviseInput) {
+  if (!(await enabledFeatures(deps)).includes('scoped_revision'))
+    throw new ApiError('invalid_request', "This server can't redo single scenes yet.")
+  const refused: [unknown, string][] = [
+    [input.planId, 'A plan describes the whole video, so it can’t be used to redo scenes; leave out planId.'],
+    [
+      input.durationSec,
+      'Redoing scenes keeps the video’s length setting; leave out durationSec and say in the request if a scene should run longer.',
+    ],
+    [input.sound, 'Redoing scenes keeps the video’s sound; leave out sound.'],
+    [
+      input.voiceover,
+      'Redoing scenes keeps the video’s voice-over; leave out voiceover and say in the request how a scene’s line should change.',
+    ],
+  ]
+  for (const [value, message] of refused)
+    if (value !== undefined) throw new ApiError('invalid_request', message)
+  if (input.fromVersion === undefined)
+    throw new ApiError(
+      'invalid_request',
+      'Say which version the scenes are from (fromVersion): scene ids belong to one version.',
+    )
+  await loadJob(deps.store, principal, jobId)
+  const parent = await deps.store.getVersion(jobId, input.fromVersion)
+  if (!parent) throw new ApiError('not_found', `Version ${input.fromVersion} not found.`)
+  assertScopable(parent)
+  if (!parent.beats) await fillBeats(deps, principal, jobId, parent.n)
+}
+
+/** The parent can be redone scene by scene: ready, keeping the editing contract, made by an engine that can. */
+function assertScopable(parent: VersionRow) {
+  const engine = engineOf(parent)
+  if (!engineInfo(engine).capabilities.scopedRevision)
+    throw new ApiError(
+      'not_editable',
+      `Version ${parent.n} was made with ${engineInfo(engine).name}, which can't redo scenes one by one yet. Revise the whole video instead.`,
+    )
+  if (parent.status !== 'ready' || parent.contract !== 1)
+    throw new ApiError(
+      'not_editable',
+      `Version ${parent.n} can't be edited scene by scene (${parent.status !== 'ready' ? "it isn't ready" : "it doesn't keep the editing contract"}). Revise the whole video instead.`,
+    )
+}
+
+/** The stored scope for a revision of `parent`: the beat rules on its scenes (src/lib/scope.ts scopeRules). */
+function scopeOf(parent: VersionRow, beats: string[]): { beats: string[] } {
+  assertScopable(parent)
+  if (!parent.beats)
+    throw new ApiError('conflict', `Version ${parent.n}'s scenes aren't known yet. Try again.`)
+  const r = scopeRules(parent.beats, beats)
+  if ('refusal' in r) throw new ApiError('invalid_request', r.refusal)
+  return { beats: r.beats }
 }
 
 /**
@@ -580,7 +839,7 @@ export async function retryVersion(deps: Deps, principal: Principal, jobId: stri
     if (await hasUnfinished(repo, jobId))
       throw new ApiError('conflict', 'Another version of this video is still in progress.')
     const now = deps.clock.now().toISOString()
-    const attempt = newAttempt(deps, jobId, n, now)
+    const attempt = newAttempt(deps, jobId, n, now, { scoped: !!version.scope })
     await repo.insertAttempt(attempt)
     // A frozen narration's takes move to the new attempt (re-locked and re-checked), so a failed one holds nothing.
     const takes = version.frozen?.narration?.takes.map((t) => t.mediaId) ?? []
@@ -865,6 +1124,10 @@ function livePubTag(pubs: PublicationRow[]): string {
   return live.length ? `-p${sha256Hex(live.join(',')).slice(0, 8)}` : ''
 }
 
+/** The <video-agent-player> snippet for a share page: this deployment's /player.js, then the element. */
+export const playerSnippet = (siteUrl: string, sharePage: string) =>
+  `<script type="module" src="${siteUrl}/player.js"></script><video-agent-player src="${sharePage}"></video-agent-player>`
+
 export function publicationDto(
   deps: Pick<Deps, 'config'>,
   p: PublicationRow,
@@ -896,11 +1159,12 @@ export function publicationDto(
           ...(showTranscript && o?.sha256['transcript.txt'] ? { transcript: `${base}.txt` } : {}),
         },
     embed: p.unpublishedAt ? null : embedHtml(base, webp, o, credits),
+    player: p.unpublishedAt ? null : playerSnippet(deps.config.siteUrl, base),
   }
 }
 
 function versionDto(
-  deps: Pick<Deps, 'config' | 'runner'>,
+  deps: Pick<Deps, 'config' | 'runner'> & Partial<Pick<Deps, 'looks'>>,
   jobId: string,
   v: VersionRow,
   a: AttemptRow | null,
@@ -913,8 +1177,13 @@ function versionDto(
   signing: { secret: string; job: JobRow; exp: number } | null = null,
   credits: Credit[] = [],
   dests: { rows: DestinationPublicationRow[]; names: Map<string, string>; now: string } | null = null,
+  parent: VersionRow | null = null,
+  aspect: Aspect | null = null,
 ) {
   const mineV = verdicts.find((x) => x.versionN === v.n && x.userId === viewerId)
+  // The look's name and version (looks plan §4.9), and a note when its current version wasn't made for this shape.
+  const lookEntry = v.look && deps.looks ? getLook({ looks: deps.looks }, v.look.id) : null
+  const lookNotice = lookEntry && aspect ? aspectNotice(lookEntry, aspect) : null
   const fileBase = `${deps.config.siteUrl}/api/v1/videos/${jobId}/versions/${v.n}`
   return {
     verdicts: {
@@ -931,9 +1200,32 @@ function versionDto(
       timeSec: c.timeSec,
       spot: c.x !== null && c.y !== null,
     })),
+    context: v.context ?? null,
     editable: v.status === 'ready' && v.contract === 1,
     // What the editor may offer on this version's engine (render-engines §4.2); editable still decides whether it opens.
     editing: { engine: engineOf(v), capabilities: engineInfo(engineOf(v)).capabilities },
+    beats: v.beats ?? null,
+    // The redone scenes, named from the version they came from ("Redid Features"); an id is its own fallback.
+    scope: v.scope
+      ? {
+          beats: v.scope.beats.map((id) => ({
+            id,
+            label: parent?.beats?.find((b) => b.id === id)?.label ?? id,
+          })),
+        }
+      : null,
+    look: v.look ? { id: v.look.id, name: v.look.name, hash: v.look.hash } : null,
+    // A demo's recording (screen-recording plan §6.1): the inputs' shape and what the run made of them.
+    recording: v.recording
+      ? {
+          mediaId: v.recording.mediaId,
+          trace: v.recording.trace !== null,
+          compose: v.recording.compose,
+          privacy: v.recording.privacy === true,
+          summary: v.recording.summary,
+          hidden: v.recording.hidden.map((h) => ({ ...h, why: hiddenWhy(h) })),
+        }
+      : null,
     mode: v.mode ?? 'author',
     editedFromN: v.editedFromN ?? null,
     n: v.n,
@@ -971,7 +1263,7 @@ function versionDto(
           bytes: o.bytes,
           title: o.title,
           summary: o.agentSummary,
-          notices: o.notices ?? [],
+          notices: [...(o.notices ?? []), ...(lookNotice ? [lookNotice] : [])],
         }
       : null,
     captions: v.captions
@@ -1090,7 +1382,7 @@ export async function videoDto(
   return buildVideoDto(repo, deps, jobId, viewer, prefetched)
 }
 
-type DtoDeps = Pick<Deps, 'config' | 'runner' | 'store' | 'ids' | 'clock' | 'blobs'>
+type DtoDeps = Pick<Deps, 'config' | 'runner' | 'store' | 'ids' | 'clock' | 'blobs' | 'looks'>
 type VideoDtoShape = Awaited<ReturnType<typeof buildVideoDto>>
 /** What a list page already loaded for all its videos, so each DTO doesn't query it again. */
 interface DtoPrefetched {
@@ -1154,6 +1446,8 @@ async function buildVideoDto(
         signing,
         versionCredits(provenance, v, output?.runCredits),
         dests,
+        v.parentN !== null ? (versions.find((x) => x.n === v.parentN) ?? null) : null,
+        job.aspect,
       )
     }),
   )
@@ -1196,6 +1490,8 @@ async function buildVideoDto(
     isRemix: !!job.remixOfJobId,
     remixOf,
     favorite,
+    externalRef: job.externalRef ?? null,
+    externalUrl: job.externalUrl ?? null,
     links: { self: `${deps.config.siteUrl}/api/v1/videos/${job.id}` },
   }
 }
@@ -1265,6 +1561,7 @@ export async function listVideos(
     published?: boolean | undefined
     favorite?: boolean | undefined
     q?: string | undefined
+    externalRef?: string | undefined
     cursor?: string | undefined
     limit?: number | undefined
   },
@@ -1278,6 +1575,7 @@ export async function listVideos(
     ...(q.published !== undefined ? { published: q.published } : {}),
     ...(q.favorite ? { favoriteOf: principal.userId } : {}),
     ...(q.q ? { q: q.q } : {}),
+    ...(q.externalRef ? { externalRef: q.externalRef } : {}),
     ...(cursor ? { cursor } : {}),
     visibleTo: { userId: principal.userId, all: principal.role === 'admin' },
     limit: limit + 1,
@@ -1307,6 +1605,41 @@ export async function setFavorite(deps: Deps, principal: Principal, jobId: strin
   assertCan(principal, 'video:read')
   await loadJob(deps.store, principal, jobId)
   await deps.store.setFavorite(principal.userId, jobId, on, deps.clock.now().toISOString())
+}
+
+/**
+ * Looks right (screen-recording plan §8.1; va-rsk5.4.3): the owner or an admin marks a demo's hidden areas checked,
+ * by id (every scene an area spans). Unknown ids are refused; the video DTO comes back with checkedBy and checkedAt set.
+ */
+export async function confirmHiddenAreas(
+  deps: Deps,
+  principal: Principal,
+  jobId: string,
+  n: number,
+  input: { ids: string[] },
+) {
+  return deps.store.tx(async (repo) => {
+    const job = await loadJob(repo, principal, jobId)
+    assertCan(principal, 'video:publish', { ownerId: job.ownerId })
+    const v = await repo.getVersion(jobId, n)
+    if (!v?.recording) throw new ApiError('not_found', 'This version has no recording.')
+    const known = new Set(v.recording.hidden.map((h) => h.id))
+    const unknown = input.ids.filter((id) => !known.has(id))
+    if (unknown.length)
+      throw new ApiError('invalid_request', `No hidden area ${unknown.join(', ')} in version ${String(n)}.`)
+    const now = deps.clock.now().toISOString()
+    const ids = new Set(input.ids)
+    await repo.updateVersion(jobId, n, {
+      recording: {
+        ...v.recording,
+        hidden: v.recording.hidden.map((h) =>
+          ids.has(h.id) ? { ...h, checkedBy: principal.userId, checkedAt: now } : h,
+        ),
+      },
+    })
+    deps.log.info('recording.hidden_confirmed', { jobId, versionN: n, ids: input.ids })
+    return videoDto(repo, deps, jobId, principal)
+  })
 }
 
 /** Approved / Changes requested on a ready version (plan v2 §3, §14 rule 8). Never on your own version. */

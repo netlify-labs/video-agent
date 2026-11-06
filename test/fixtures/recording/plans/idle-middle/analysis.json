@@ -1,0 +1,45 @@
+{
+ "v": 1,
+ "sha256": "golden-idle-middle",
+ "analyzer": "analyze-1",
+ "source": {
+  "width": 2560,
+  "height": 1440,
+  "fps": 30,
+  "duration": 30
+ },
+ "cursorSource": "trace",
+ "idle": [
+  {
+   "start": 5,
+   "end": 18
+  },
+  {
+   "start": 21,
+   "end": 23.5
+  }
+ ],
+ "scenes": [],
+ "activity": [],
+ "cursor": [],
+ "clicks": [
+  {
+   "t": 3,
+   "x": 1024,
+   "y": 576,
+   "source": "trace"
+  },
+  {
+   "t": 20,
+   "x": 1536,
+   "y": 432,
+   "source": "trace"
+  },
+  {
+   "t": 26,
+   "x": 1536,
+   "y": 864,
+   "source": "trace"
+  }
+ ]
+}

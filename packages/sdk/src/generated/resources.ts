@@ -4,6 +4,45 @@ import type { CallOptions, Input, Ok, Transport } from '../transport.js'
 /** The generated resource methods: one namespace per x-sdk resource. */
 export function resources(t: Transport) {
   return {
+    cliLogins: {
+      /** Claim a CLI login (`claimCliLogin`) */
+      claim: (
+        id: string | number,
+        input: Input<'/api/v1/cli/logins/{id}/token', 'post'>,
+        opts?: CallOptions,
+      ): Promise<Ok<'/api/v1/cli/logins/{id}/token', 'post'>> =>
+        t.call<Ok<'/api/v1/cli/logins/{id}/token', 'post'>>(
+          {
+            method: 'POST',
+            path: '/api/v1/cli/logins/{id}/token',
+            pathParams: { id },
+            input,
+            query: [],
+            body: ['deviceCode'],
+            features: [],
+            operationId: 'claimCliLogin',
+          },
+          opts,
+        ),
+      /** Start a CLI login (`createCliLogin`) */
+      create: (
+        input: Input<'/api/v1/cli/logins', 'post'>,
+        opts?: CallOptions,
+      ): Promise<Ok<'/api/v1/cli/logins', 'post'>> =>
+        t.call<Ok<'/api/v1/cli/logins', 'post'>>(
+          {
+            method: 'POST',
+            path: '/api/v1/cli/logins',
+            pathParams: {},
+            input,
+            query: [],
+            body: ['label', 'host'],
+            features: [],
+            operationId: 'createCliLogin',
+          },
+          opts,
+        ),
+    },
     comments: {
       /** Add a comment (`addComment`) */
       add: (
@@ -249,6 +288,20 @@ export function resources(t: Transport) {
           opts,
         ),
     },
+    engines: {
+      /** List render engines (`listEngines`) */
+      list: (opts?: CallOptions): Promise<Ok<'/api/v1/engines', 'get'>> =>
+        t.call<Ok<'/api/v1/engines', 'get'>>(
+          {
+            method: 'GET',
+            path: '/api/v1/engines',
+            pathParams: {},
+            features: [...['engines']],
+            operationId: 'listEngines',
+          },
+          opts,
+        ),
+    },
     grants: {
       /** List connected apps (`listGrants`) */
       list: (opts?: CallOptions): Promise<Ok<'/api/v1/oauth/grants', 'get'>> =>
@@ -291,6 +344,20 @@ export function resources(t: Transport) {
             pathParams: { id },
             features: [],
             operationId: 'revokeKey',
+          },
+          opts,
+        ),
+    },
+    looks: {
+      /** List looks (`listLooks`) */
+      list: (opts?: CallOptions): Promise<Ok<'/api/v1/looks', 'get'>> =>
+        t.call<Ok<'/api/v1/looks', 'get'>>(
+          {
+            method: 'GET',
+            path: '/api/v1/looks',
+            pathParams: {},
+            features: [...['looks']],
+            operationId: 'listLooks',
           },
           opts,
         ),
@@ -366,6 +433,18 @@ export function resources(t: Transport) {
           },
           opts,
         ),
+      /** Get a screen recording's pointer trace (`getMediaTrace`) */
+      getTrace: (id: string | number, opts?: CallOptions): Promise<Ok<'/api/v1/media/{id}/trace', 'get'>> =>
+        t.call<Ok<'/api/v1/media/{id}/trace', 'get'>>(
+          {
+            method: 'GET',
+            path: '/api/v1/media/{id}/trace',
+            pathParams: { id },
+            features: [...['screen_recording']],
+            operationId: 'getMediaTrace',
+          },
+          opts,
+        ),
       /** List media (`listMedia`) */
       list: (
         input?: Input<'/api/v1/media', 'get'>,
@@ -396,6 +475,25 @@ export function resources(t: Transport) {
             pathParams: { id },
             features: [],
             operationId: 'listRecordings',
+          },
+          opts,
+        ),
+      /** Set a screen recording's pointer trace (`setMediaTrace`) */
+      setTrace: (
+        id: string | number,
+        input: Input<'/api/v1/media/{id}/trace', 'put'>,
+        opts?: CallOptions,
+      ): Promise<Ok<'/api/v1/media/{id}/trace', 'put'>> =>
+        t.call<Ok<'/api/v1/media/{id}/trace', 'put'>>(
+          {
+            method: 'PUT',
+            path: '/api/v1/media/{id}/trace',
+            pathParams: { id },
+            input,
+            query: [],
+            body: ['v', 'source', 'frame', 'viewport', 'moves', 'events', 'redact'],
+            features: [...['screen_recording']],
+            operationId: 'setMediaTrace',
           },
           opts,
         ),
@@ -581,8 +679,14 @@ export function resources(t: Transport) {
               'mediaIds',
               'sound',
               'voiceover',
+              'look',
+              'engine',
             ],
-            features: [...['planning']],
+            features: [
+              ...['planning'],
+              ...(input.look !== undefined ? ['looks'] : []),
+              ...(input.engine !== undefined ? ['engines'] : []),
+            ],
             operationId: 'createPlan',
           },
           opts,
@@ -698,6 +802,22 @@ export function resources(t: Transport) {
         ),
     },
     versions: {
+      /** A version's scenes (`getVersionBeats`) */
+      beats: (
+        id: string | number,
+        n: string | number,
+        opts?: CallOptions,
+      ): Promise<Ok<'/api/v1/videos/{id}/versions/{n}/beats', 'get'>> =>
+        t.call<Ok<'/api/v1/videos/{id}/versions/{n}/beats', 'get'>>(
+          {
+            method: 'GET',
+            path: '/api/v1/videos/{id}/versions/{n}/beats',
+            pathParams: { id, n },
+            features: [...['scoped_revision']],
+            operationId: 'getVersionBeats',
+          },
+          opts,
+        ),
       /** Cancel a version (`cancelVersion`) */
       cancel: (
         id: string | number,
@@ -872,6 +992,26 @@ export function resources(t: Transport) {
         ),
     },
     videos: {
+      /** Mark hidden areas checked (`markHiddenAreasChecked`) */
+      confirmHidden: (
+        id: string | number,
+        n: string | number,
+        input: Input<'/api/v1/videos/{id}/versions/{n}/hidden/confirm', 'post'>,
+        opts?: CallOptions,
+      ): Promise<Ok<'/api/v1/videos/{id}/versions/{n}/hidden/confirm', 'post'>> =>
+        t.call<Ok<'/api/v1/videos/{id}/versions/{n}/hidden/confirm', 'post'>>(
+          {
+            method: 'POST',
+            path: '/api/v1/videos/{id}/versions/{n}/hidden/confirm',
+            pathParams: { id, n },
+            input,
+            query: [],
+            body: ['ids'],
+            features: [...['screen_recording']],
+            operationId: 'markHiddenAreasChecked',
+          },
+          opts,
+        ),
       /** Create a video (`createVideo`) */
       create: (
         input: Input<'/api/v1/videos', 'post'>,
@@ -894,8 +1034,26 @@ export function resources(t: Transport) {
               'mediaIds',
               'sound',
               'voiceover',
+              'look',
+              'externalRef',
+              'externalUrl',
+              'private',
+              'context',
+              'recording',
+              'agent',
+              'engine',
             ],
-            features: [...(input.planId !== undefined ? ['planning'] : [])],
+            features: [
+              ...(input.planId !== undefined ? ['planning'] : []),
+              ...(input.look !== undefined ? ['looks'] : []),
+              ...(input.externalRef !== undefined ? ['external_ref'] : []),
+              ...(input.externalUrl !== undefined ? ['external_ref'] : []),
+              ...(input.private !== undefined ? ['external_ref'] : []),
+              ...(input.context !== undefined ? ['context'] : []),
+              ...(input.recording !== undefined ? ['screen_recording'] : []),
+              ...(input.agent !== undefined ? ['screen_recording'] : []),
+              ...(input.engine !== undefined ? ['engines'] : []),
+            ],
             operationId: 'createVideo',
           },
           opts,
@@ -947,9 +1105,9 @@ export function resources(t: Transport) {
             path: '/api/v1/videos',
             pathParams: {},
             input,
-            query: ['status', 'owner', 'published', 'favorite', 'q', 'cursor', 'limit'],
+            query: ['status', 'owner', 'published', 'favorite', 'q', 'externalRef', 'cursor', 'limit'],
             body: null,
-            features: [],
+            features: [...(input?.externalRef !== undefined ? ['external_ref'] : [])],
             operationId: 'listVideos',
           },
           opts,
@@ -993,8 +1151,23 @@ export function resources(t: Transport) {
               'mediaIds',
               'planId',
               'webhookUrl',
+              'look',
+              'externalRef',
+              'externalUrl',
+              'private',
+              'context',
+              'recording',
             ],
-            features: [...['remix'], ...(input.planId !== undefined ? ['planning'] : [])],
+            features: [
+              ...['remix'],
+              ...(input.planId !== undefined ? ['planning'] : []),
+              ...(input.look !== undefined ? ['looks'] : []),
+              ...(input.externalRef !== undefined ? ['external_ref'] : []),
+              ...(input.externalUrl !== undefined ? ['external_ref'] : []),
+              ...(input.private !== undefined ? ['external_ref'] : []),
+              ...(input.context !== undefined ? ['context'] : []),
+              ...(input.recording !== undefined ? ['screen_recording'] : []),
+            ],
             operationId: 'remixVideo',
           },
           opts,
@@ -1022,8 +1195,16 @@ export function resources(t: Transport) {
               'sound',
               'voiceover',
               'commentIds',
+              'scope',
+              'look',
+              'context',
             ],
-            features: [...(input.planId !== undefined ? ['planning'] : [])],
+            features: [
+              ...(input.planId !== undefined ? ['planning'] : []),
+              ...(input.scope !== undefined ? ['scoped_revision'] : []),
+              ...(input.look !== undefined ? ['looks'] : []),
+              ...(input.context !== undefined ? ['context'] : []),
+            ],
             operationId: 'reviseVideo',
           },
           opts,

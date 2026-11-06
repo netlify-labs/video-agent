@@ -1,0 +1,91 @@
+{
+ "aspect": "9:16",
+ "dropped": [
+  {
+   "end": 3,
+   "start": 0,
+   "why": "idle lead-in 3.5 s"
+  },
+  {
+   "end": 20,
+   "start": 9.5,
+   "why": "idle tail 11 s"
+  }
+ ],
+ "estimate": {
+  "seconds": 6.5,
+  "steps": {
+   "step-1": 6.5
+  }
+ },
+ "frame": {
+  "height": 1440,
+  "width": 2560
+ },
+ "frameStyle": "wallpaper",
+ "locked": [],
+ "mediaId": "med_vertical",
+ "sha256": "golden-vertical",
+ "steps": [
+  {
+   "camera": [
+    [
+     3,
+     0.5,
+     0.5,
+     3.1605
+    ],
+    [
+     4.7,
+     0.5,
+     0.5,
+     3.1605
+    ],
+    [
+     5.5,
+     0.62,
+     0.5,
+     3.1605,
+     "power2.inOut"
+    ],
+    [
+     6.6,
+     0.62,
+     0.5,
+     3.1605
+    ],
+    [
+     7.4,
+     0.5,
+     0.5,
+     3.1605,
+     "power2.inOut"
+    ],
+    [
+     9.5,
+     0.5,
+     0.5,
+     3.1605
+    ]
+   ],
+   "clicks": [
+    [
+     6,
+     0.62,
+     0.3
+    ]
+   ],
+   "focus": {
+    "name": "Add new site",
+    "role": "button"
+   },
+   "id": "step-1",
+   "idleSpedUp": [],
+   "in": 3,
+   "out": 9.5,
+   "redact": []
+  }
+ ],
+ "v": 1,
+ "zoomMax": 2.2
+}

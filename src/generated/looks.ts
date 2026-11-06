@@ -42,5 +42,239 @@ export const looksCatalog: LookCatalogEntry[] = [
       "mp4": "/assets/looks/clean.6aa9fa8b5e71.mp4",
       "poster": "/assets/looks/clean.35ac46d44472.webp"
     }
+  },
+  {
+    "id": "bold-blocks",
+    "name": "Bold blocks",
+    "description": "Thick borders, hard offset shadows and flat colour fields, cut fast. Loud, friendly and easy to read on a phone.",
+    "tags": [
+      "bold",
+      "flat",
+      "playful"
+    ],
+    "bestFor": [
+      "social",
+      "launch"
+    ],
+    "aspects": [
+      "16:9",
+      "9:16",
+      "1:1",
+      "4:5"
+    ],
+    "engines": [
+      "hyperframes"
+    ],
+    "recording": null,
+    "musicMood": "upbeat indie pop, 120 to 128 bpm",
+    "hash": "51a972db0ff70b4f2de778db5d06272f59cb3c1cebf4821268be396b4285ca14",
+    "sha256": "ea8427922200be21edc078c63069705fe8214e94d4686367a40714348e8925da",
+    "bytes": 3704,
+    "source": "builtin",
+    "preview": {
+      "mp4": "/assets/looks/bold-blocks.7d1f53082f4a.mp4",
+      "poster": "/assets/looks/bold-blocks.09f64a9fdf2c.webp"
+    }
+  },
+  {
+    "id": "data-story",
+    "name": "Data story",
+    "description": "Numbers first: counters that run up, charts that build bar by bar, and one annotation that says why it matters.",
+    "tags": [
+      "data",
+      "charts",
+      "numbers"
+    ],
+    "bestFor": [
+      "sales",
+      "launch",
+      "changelog"
+    ],
+    "aspects": [
+      "16:9",
+      "9:16",
+      "1:1",
+      "4:5"
+    ],
+    "engines": [
+      "hyperframes"
+    ],
+    "recording": null,
+    "musicMood": "steady minimal electronic, 100 to 110 bpm",
+    "hash": "fcd942c96446c1572cec72e9df83c8f8b6d481dcd6f52504453d7fb870a2ce7c",
+    "sha256": "08f3ffb1fd36ee03af4a69e5c645c2347282338e3152d8cdc6f60e13b59c7f54",
+    "bytes": 4619,
+    "source": "builtin",
+    "preview": {
+      "mp4": "/assets/looks/data-story.67672d2cadce.mp4",
+      "poster": "/assets/looks/data-story.4be15bc651d3.webp"
+    }
+  },
+  {
+    "id": "editorial",
+    "name": "Editorial",
+    "description": "A magazine spread that moves: a big serif headline, thin rules, captions and slow pans. For considered stories.",
+    "tags": [
+      "serif",
+      "magazine",
+      "calm"
+    ],
+    "bestFor": [
+      "sales",
+      "other",
+      "launch"
+    ],
+    "aspects": [
+      "16:9",
+      "9:16",
+      "1:1",
+      "4:5"
+    ],
+    "engines": [
+      "hyperframes"
+    ],
+    "recording": null,
+    "musicMood": "warm piano and strings, 80 to 90 bpm",
+    "hash": "ec00d04022fe14745d961aa6316ecb822d94e2cef65c8e1b207c7d3004274339",
+    "sha256": "f9c3cfacef9843e8614cde9c15258bf82d2fb3db82697b1609981250c96783d7",
+    "bytes": 4199,
+    "source": "builtin",
+    "preview": {
+      "mp4": "/assets/looks/editorial.7b2ef2f7648f.mp4",
+      "poster": "/assets/looks/editorial.50e48aeef954.webp"
+    }
+  },
+  {
+    "id": "kinetic",
+    "name": "Kinetic type",
+    "description": "Big words that move with the beat. Type is the picture.",
+    "tags": [
+      "type",
+      "social",
+      "energetic"
+    ],
+    "bestFor": [
+      "social",
+      "launch"
+    ],
+    "aspects": [
+      "16:9",
+      "9:16",
+      "1:1",
+      "4:5"
+    ],
+    "engines": [
+      "hyperframes"
+    ],
+    "recording": null,
+    "musicMood": "punchy electronic, 120 bpm",
+    "hash": "17ddedc2edaa0eda388c5cd5f0f8266cb8288d5b8af21c590767f6538b9e0aa6",
+    "sha256": "69b5de0be7f14d525fe35ecabe3a3cb2bdad96147eee1f70daea0b8759956412",
+    "bytes": 3832,
+    "source": "builtin",
+    "preview": {
+      "mp4": "/assets/looks/kinetic.1d7e4a535c13.mp4",
+      "poster": "/assets/looks/kinetic.968438493f84.webp"
+    }
+  },
+  {
+    "id": "retro-crt",
+    "name": "Retro CRT",
+    "description": "An old monitor: scanlines, phosphor glow in the brand's accent and a little glitch. For playful launches and teasers.",
+    "tags": [
+      "retro",
+      "glow",
+      "playful"
+    ],
+    "bestFor": [
+      "social",
+      "launch",
+      "other"
+    ],
+    "aspects": [
+      "16:9",
+      "9:16",
+      "1:1",
+      "4:5"
+    ],
+    "engines": [
+      "hyperframes"
+    ],
+    "recording": false,
+    "musicMood": "synthwave, 100 to 110 bpm",
+    "hash": "5f3d0a8964b1b72acab8c4eb036245dace280985776e17ba78c748b5aa91ee71",
+    "sha256": "475e06f5222715555a234b15ad43bdc02d367da2f297588ec6fea51426a6e937",
+    "bytes": 4085,
+    "source": "builtin",
+    "preview": {
+      "mp4": "/assets/looks/retro-crt.3f7c144b3bdd.mp4",
+      "poster": "/assets/looks/retro-crt.a37e10462061.webp"
+    }
+  },
+  {
+    "id": "terminal",
+    "name": "Terminal",
+    "description": "Commands typed live, code diffs, a blinking cursor, monospace everything. For changelogs and dev tools.",
+    "tags": [
+      "code",
+      "developer",
+      "changelog"
+    ],
+    "bestFor": [
+      "changelog",
+      "tutorial"
+    ],
+    "aspects": [
+      "16:9",
+      "9:16",
+      "1:1",
+      "4:5"
+    ],
+    "engines": [
+      "hyperframes"
+    ],
+    "recording": null,
+    "musicMood": "minimal electronic, steady 110 bpm",
+    "hash": "3cdf421a143ea1531eb05bdb79e5f782b3386662a457ee909d486cdb4365bd4f",
+    "sha256": "29f09dbc530e6c022aac55163a53c086fa224a1ca2ec4925e031d2b4e5633d4d",
+    "bytes": 5155,
+    "source": "builtin",
+    "preview": {
+      "mp4": "/assets/looks/terminal.630349b2698e.mp4",
+      "poster": "/assets/looks/terminal.592e4a3c5cb0.webp"
+    }
+  },
+  {
+    "id": "whiteboard",
+    "name": "Whiteboard",
+    "description": "A whiteboard explanation: lines that draw themselves, a marker hand, arrows and sticky notes. For tutorials and how-tos.",
+    "tags": [
+      "hand-drawn",
+      "explainer",
+      "friendly"
+    ],
+    "bestFor": [
+      "tutorial",
+      "other"
+    ],
+    "aspects": [
+      "16:9",
+      "9:16",
+      "1:1",
+      "4:5"
+    ],
+    "engines": [
+      "hyperframes"
+    ],
+    "recording": null,
+    "musicMood": "light acoustic, ukulele or guitar, 95 to 105 bpm",
+    "hash": "1133c1e6e366c6a26c8bcbd3e2c2ae296244f32a928e9bf956f002b654e573e0",
+    "sha256": "1f9379be7d9dfa7a54093239a1b51e56a5cc19487c4a3d97c3578be421ef716d",
+    "bytes": 57464,
+    "source": "builtin",
+    "preview": {
+      "mp4": "/assets/looks/whiteboard.d33491335c76.mp4",
+      "poster": "/assets/looks/whiteboard.401a7de5e4ce.webp"
+    }
   }
 ]

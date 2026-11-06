@@ -37,6 +37,7 @@ import {
   IconMovie,
   IconMusic,
   IconPhoto,
+  IconRefresh,
   IconTrash,
   IconVolume,
   IconVolumeOff,
@@ -56,6 +57,8 @@ import { MediaLibraryModal, type Media } from '../components/MediaPicker'
 import { NarrationRenderDialog, type RenderChoice } from '../components/NarrationRenderDialog'
 import { NarrationRecorder } from '../components/NarrationRecorder'
 import { NarrationSection, type NarrationControl } from '../components/NarrationSection'
+import { engineName } from '../lib/engines'
+import { useEditTools } from '../webmcp/editTools'
 import { PosterMenu } from '../components/PosterMenu'
 import {
   keepMineWarning,
@@ -64,8 +67,13 @@ import {
   useNarrationLock,
 } from '../components/narration'
 import { RenderPictureFirst } from '../components/RenderPictureFirst'
+import { RedoScenesModal, useCanRedoScenes, useScenes } from '../components/ScenePicker'
 import { humanize, labelFor } from '../lib/labels'
+import { pickable } from '../lib/scenes'
 import { narrationOf, narrationToSave, sameOps, withNarration } from '../lib/narration-panel'
+import { MUSIC_ID } from '../../../src/lib/contract'
+import { RecordingPanel } from '../components/recording/RecordingPanel'
+import { recordingOps } from '../lib/recording-edit'
 import { timingChanged } from '../../../src/lib/stale-picture'
 import { secondsToSamples, type NarrationOp } from '../../../src/lib/timeline'
 
@@ -88,7 +96,7 @@ const relined = (base: Composition, line: Line) => {
 
 /**
  * The ops that turn `base` into `cur`, in the order the patcher needs: deletes, order, timing, text, colour, media,
- * audio, narration.
+ * audio, narration, then the recording scenes'.
  */
 export function diffOps(base: Composition, cur: Composition): Op[] {
   const ops: Op[] = []
@@ -116,7 +124,14 @@ export function diffOps(base: Composition, cur: Composition): Op[] {
   const baseAudio = new Map(base.audio.map((a) => [a.id, a] as const))
   for (const a of cur.audio) {
     const was = baseAudio.get(a.id)
-    if (!was) continue
+    // A music bed added in the editor (the Music track's +): the music op makes the layer, then mutes it if asked.
+    if (!was) {
+      if (a.role === 'music') {
+        ops.push({ op: 'music', src: a.src, volume: a.volume })
+        if (a.muted) ops.push({ op: 'audio', id: a.id, muted: true })
+      }
+      continue
+    }
     const change = {
       ...(was.src !== a.src ? { src: a.src } : {}),
       ...(!sameNumber(was.volume, a.volume) ? { volume: a.volume } : {}),
@@ -127,6 +142,8 @@ export function diffOps(base: Composition, cur: Composition): Op[] {
   for (const l of cur.narration)
     if (curIds.includes(l.beat) && spoken(l.text) && relined(base, l))
       ops.push({ op: 'voice', beat: l.beat, text: l.text })
+  // A demo's recording scenes: span, camera, cursor and hidden areas (the recording panel's changes).
+  ops.push(...recordingOps(base, cur))
   return ops
 }
 
@@ -491,6 +508,13 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
   const video = $api.useQuery('get', '/api/v1/videos/{id}', { params: { path: { id } } })
   const [draft, setDraft] = useState<Edit | null>(null)
   const [cur, setCur] = useState<Composition | null>(null)
+  // A demo's recording file, through the version's preview link (the recording panel shows its frames).
+  const recordingLink = $api.useQuery(
+    'get',
+    '/api/v1/videos/{id}/versions/{n}/preview',
+    { params: { path: { id, n: draft?.baseN ?? 1 } } },
+    { enabled: Boolean(draft?.recording), staleTime: 5 * 60_000 },
+  )
   const [problem, setProblem] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [renderKey] = useState(newIdempotencyKey)
@@ -524,6 +548,12 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
   }, [])
   const me = $api.useQuery('get', '/api/v1/me')
   const [renderDialog, setRenderDialog] = useState(false)
+  // Redo a scene from the editor: the version as rendered (never the draft), and the scene being redone.
+  const rendered = video.data?.versions.find((x) => x.n === versionN)
+  const canRedo =
+    useCanRedoScenes(rendered) && me.data !== undefined && !['viewer', 'reviewer'].includes(me.data.role)
+  const renderedScenes = useScenes(id, rendered, canRedo).beats
+  const [redoing, setRedoing] = useState<string | null>(null)
 
   useEffect(() => {
     void (async () => {
@@ -673,6 +703,26 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
       return c
     })
   }
+  /** Sets the music bed (the Music track's +): the music layer's file, or a new layer at half level when there's none. */
+  const setMusicBed = (m: Media) => {
+    const file = `${m.id}.${m.filename.split('.').pop() ?? ''}`
+    setPicked((p) => ({ ...p, [file]: m }))
+    update((c) => {
+      const bed = c.audio.find((a) => a.role === 'music')
+      if (bed) bed.src = `assets/media/${file}`
+      else
+        c.audio.push({
+          id: MUSIC_ID,
+          role: 'music',
+          label: null,
+          src: `assets/media/${file}`,
+          volume: 0.5,
+          muted: false,
+          beat: null,
+        })
+      return c
+    })
+  }
   const setLine = (beat: string, text: string) => {
     update((c) => {
       for (const l of c.narration) if (l.beat === beat) l.text = text
@@ -742,6 +792,71 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
     else showError(error)
   }
 
+  // WebMCP (va-qago): an agent edits through the same state, saves and render request as the controls on this page.
+  useEditTools({
+    ready: draft !== null && cur !== null,
+    readOnly: lock.state.status === 'locked' || lock.state.status === 'taken_over',
+    versionN,
+    nextN: (video.data?.versions.length ?? 0) + 1,
+    composition: () => curRef.current,
+    setText,
+    setDuration: (sceneId, seconds) => {
+      update((c) => {
+        const x = c.beats.find((y) => y.id === sceneId)
+        if (x) x.duration = fps(seconds)
+        return c
+      })
+    },
+    reorder: (order) => {
+      update((c) => ({
+        ...c,
+        beats: order.map((bid) => c.beats.find((b) => b.id === bid)).filter((b) => b !== undefined),
+      }))
+    },
+    deleteScene: (sceneId) => {
+      update((c) => ({ ...c, beats: c.beats.filter((x) => x.id !== sceneId) }))
+    },
+    seek: (seconds) => {
+      if (narrationControl.current) narrationControl.current.seekTo(seconds)
+      else sendRef.current?.({ type: 'seek', time: seconds })
+    },
+    time: () => narrationControl.current?.time() ?? null,
+    clips: () => narrationControl.current?.clips() ?? [],
+    selectClip: (clipId) => narrationControl.current?.select(clipId) ?? false,
+    undo: () => narrationControl.current?.undo() ?? false,
+    redo: () => narrationControl.current?.redo() ?? false,
+    renderBlocked: () => {
+      if (!draft) return 'The draft is still opening.'
+      if (pictureN !== null) return 'This draft is already rendering.'
+      if (narrationOn && narrationOf(draft.ops))
+        return 'This draft has recorded narration: the person picks how to render it with Render on the page.'
+      if (!draft.rev && !dirty) return 'There are no edits to render yet.'
+      return null
+    },
+    render: async () => {
+      const d = draftRef.current
+      if (!d) throw new Error('The draft is still opening.')
+      if (dirty) await save()
+      const v = await render.mutateAsync({
+        params: { path: { id: d.id }, header: { 'idempotency-key': renderKey } },
+      })
+      return v.latestVersion
+    },
+  })
+
+  // An engine with no edit ops (Remotion today, render-engines plan §4.1): say so instead of opening the editor.
+  if (rendered && rendered.editing.capabilities.editOps.length === 0)
+    return (
+      <Alert color="gray" variant="light" title="Can't edit this version">
+        <Text size="sm">
+          Editing isn't available for {engineName(rendered.editing.engine)} videos yet. Ask for a revision
+          instead.
+        </Text>
+        <Anchor component={Link} to={`/videos/${id}`} size="sm">
+          Back to the video
+        </Anchor>
+      </Alert>
+    )
   if (problem && !draft)
     return (
       <Alert color="red" variant="light" title="Can't edit this version">
@@ -780,6 +895,15 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
   // The preview stays put on the left with the actions above it; the controls scroll on their own on the right.
   const aspect = video.data.dimensions.width / video.data.dimensions.height
   const baseVersion = video.data.versions.find((x) => x.n === draft.baseN)
+  // A scene of the rendered version that can be redone on its own (never the held one, never a draft-only scene).
+  const redoable = (beatId: string) =>
+    canRedo &&
+    renderedScenes !== null &&
+    pickable(renderedScenes, []).some((c) => c.beat.id === beatId && c.disabled === null)
+  const redoNote =
+    dirty || draft.ops.length > 0
+      ? `This starts from v${versionN} as rendered; your draft's changes aren't included. Render your draft first, or redo from v${versionN}.`
+      : null
   return (
     <div className="va-editor">
       <div
@@ -953,6 +1077,7 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
             initialOp={narrationStart.op}
             onChange={setNarration}
             onMusicChange={setTrack}
+            onSetMusic={setMusicBed}
             onPreviewReady={onReady}
             onPreviewClick={onPreviewClick}
             timingPending={timingPending}
@@ -960,6 +1085,7 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
             readOnly={lockedOut}
             canRecord={lock.canEdit}
             onSaveDraft={saveNarration}
+            sceneMenu={{ label: 'Redo this scene…', offers: redoable, onPick: setRedoing }}
             recorder={(api) => (
               <NarrationRecorder
                 api={api}
@@ -1096,6 +1222,20 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
                     </Text>
                   </Group>
                   <Group gap={4} wrap="nowrap">
+                    {redoable(b.id) ? (
+                      <Tooltip label="Redo this scene with the agent, keeping the rest" openDelay={300}>
+                        <ActionIcon
+                          variant="subtle"
+                          color="gray"
+                          aria-label={`Redo ${labelFor(b.label, b.id)}…`}
+                          onClick={() => {
+                            setRedoing(b.id)
+                          }}
+                        >
+                          <IconRefresh size={14} />
+                        </ActionIcon>
+                      </Tooltip>
+                    ) : null}
                     <NumberInput
                       aria-label={`Length of ${labelFor(b.label, b.id)}`}
                       size="xs"
@@ -1153,6 +1293,27 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
                     </Tooltip>
                   </Group>
                 </Group>
+                {b.recording && draft.recording ? (
+                  <div className="va-recording-panel" style={{ marginTop: 8 }}>
+                    <RecordingPanel
+                      beatId={b.id}
+                      sceneSec={b.duration}
+                      rec={b.recording}
+                      info={draft.recording}
+                      src={
+                        recordingLink.data ? new URL(b.recording.src, recordingLink.data.url).href : undefined
+                      }
+                      aspect={aspect}
+                      readOnly={lockedOut}
+                      onChange={(r) => {
+                        update((c) => ({
+                          ...c,
+                          beats: c.beats.map((x) => (x.id === b.id ? { ...x, recording: r } : x)),
+                        }))
+                      }}
+                    />
+                  </div>
+                ) : null}
                 <Stack gap={6} mt={6}>
                   {(() => {
                     const was = baseBeat.get(b.id)
@@ -1424,6 +1585,20 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
             const file = `${m.id}.${m.filename.split('.').pop() ?? ''}`
             setPicked((p) => ({ ...p, [file]: m }))
             setSlot(replacing.slot, { src: `assets/media/${file}` })
+          }}
+        />
+      ) : null}
+      {redoing && rendered ? (
+        <RedoScenesModal
+          video={video.data}
+          v={rendered}
+          beats={[redoing]}
+          warning={redoNote}
+          onClose={() => {
+            setRedoing(null)
+          }}
+          onDone={() => {
+            void navigate(`/videos/${id}`)
           }}
         />
       ) : null}

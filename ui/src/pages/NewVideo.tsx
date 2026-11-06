@@ -7,6 +7,7 @@ import {
   Modal,
   NumberInput,
   SegmentedControl,
+  Select,
   Stack,
   Text,
   TextInput,
@@ -24,6 +25,17 @@ import { Link, useNavigate } from 'react-router'
 import { $api, errorMessage, newIdempotencyKey, useCanCreate, type Version, type Video } from '../api/client'
 import { PageHeader, Status, VersionImage, relativeTime } from '../components/bits'
 import { MediaChips, type Media } from '../components/MediaPicker'
+import { LookControl, shownLook, useLooks } from '../components/LookPicker'
+import { pickable } from '../lib/looks'
+import { useNewVideoTools } from '../webmcp/newVideoTools'
+import {
+  capabilitiesOf,
+  engineName,
+  resolveEngine,
+  soundsFor,
+  useEngines,
+  type EngineId,
+} from '../lib/engines'
 import { PlanPanel } from '../components/PlanPanel'
 import { RemixForm, RemixSourcePicker, latestReady, useCanRemix } from '../components/RemixDialog'
 import { SoundControl, soundAfterPick, type Sound } from '../components/SoundControl'
@@ -185,6 +197,8 @@ export function NewVideoPage() {
   const [sound, setSound] = useState<Sound>('silent')
   const [soundTouched, setSoundTouched] = useState(false)
   const [voice, setVoice] = useState<VoiceState>(VOICE_OFF)
+  // Undefined until the person picks: the request then leaves look out and the admin default applies.
+  const [look, setLook] = useState<string | null | undefined>(undefined)
   const { create, key } = useCreate()
   const config = $api.useQuery('get', '/api/v1/config')
   const canPlan = useCanCreate() && config.data?.planningAvailable === true
@@ -199,9 +213,23 @@ export function NewVideoPage() {
   const [remixFrom, setRemixFrom] = useState<{ video: Video; version: Version } | null>(null)
   const valid =
     prompt.trim().length >= 10 && prompt.length <= 4000 && (lengthMode === 'auto' || Number(seconds) >= 3)
+  // The engine (render-engines plan §4.2): the look's choice unless the person picks another. With only HyperFrames on
+  // here, none of this shows and no engines request is made.
+  const { engines, enabled } = useEngines()
+  const shownLookEntry = shownLook(useLooks(), look)
+  const [engineAsked, setEngineAsked] = useState<EngineId | null>(null)
+  const engine = resolveEngine(shownLookEntry, enabled, engineAsked)
+  const engineChoices = (shownLookEntry?.engines ?? enabled).filter((e) => enabled.includes(e))
+  const caps = capabilitiesOf(engines, engine)
+  const sounds = soundsFor(caps)
+  const voiceAllowed = caps?.voiceover ?? true
+  const extraCredits = engines?.find((e) => e.id === engine)?.extraCredits ?? null
+  // What's sent: a sound or voice-over the engine can't make is never asked for.
+  const sentSound: Sound = sounds.includes(sound) ? sound : 'music'
+  const sentVoice = voiceAllowed && voice.enabled
 
   // A Sound the person set (or that picking an audio file set): otherwise a plan takes it from the request.
-  const chosenSound = soundTouched || sound !== 'silent' ? sound : undefined
+  const chosenSound = soundTouched || sound !== 'silent' ? sentSound : undefined
 
   const submit = (planId: string | null = null) => {
     create.mutate({
@@ -213,13 +241,64 @@ export function NewVideoPage() {
         ...(planId ? { planId } : {}),
         ...(media.length ? { mediaIds: media.map((m) => m.id) } : {}),
         // With a plan, an untouched Sound is the plan's (from the request); without one there's nothing else to go on.
-        ...(planId && !chosenSound ? {} : { sound }),
+        ...(planId && !chosenSound ? {} : { sound: sentSound }),
         // A plan carries the voice-over (with its narration), so only a direct create sends it.
-        ...(voice.enabled && !planId ? { voiceover: voiceInput(voice) } : {}),
+        ...(sentVoice && !planId ? { voiceover: voiceInput(voice) } : {}),
+        ...(look !== undefined ? { look } : {}),
+        // Only a choice the person made; a plan already carries its own.
+        ...(engineAsked === engine && !planId ? { engine } : {}),
       },
       params: { header: { 'idempotency-key': key } },
     })
   }
+
+  // WebMCP (va-qago): an agent fills the same form, and creates through the same request as Create it now.
+  const lookIds = pickable(useLooks()?.looks ?? []).map((l) => l.id)
+  useNewVideoTools({
+    canCreate: useCanCreate(),
+    looks: lookIds,
+    fill: (f) => {
+      setPrompt(f.prompt)
+      if (f.aspect) {
+        setShape(f.aspect)
+        setShapeTouched(true)
+      }
+      setLengthMode(f.duration_sec ? 'set' : 'auto')
+      if (f.duration_sec) setSeconds(f.duration_sec)
+      setTitle(f.title ?? '')
+      if (f.look !== undefined) setLook(f.look)
+      setSound(f.sound ?? 'silent')
+      setSoundTouched(f.sound !== undefined)
+      setVoice(
+        f.voiceover ? { enabled: true, voice: f.voice ?? '', speed: 1, script: f.script ?? [] } : VOICE_OFF,
+      )
+    },
+    create: async (f) => {
+      const v = await create.mutateAsync({
+        body: {
+          prompt: f.prompt,
+          aspect: f.aspect ?? '16:9',
+          ...(f.duration_sec ? { durationSec: f.duration_sec } : {}),
+          ...(f.title?.trim() ? { title: f.title.trim() } : {}),
+          ...(media.length ? { mediaIds: media.map((m) => m.id) } : {}),
+          sound: f.sound ?? 'silent',
+          ...(f.voiceover
+            ? {
+                voiceover: voiceInput({
+                  enabled: true,
+                  voice: f.voice ?? '',
+                  speed: 1,
+                  script: f.script ?? [],
+                }),
+              }
+            : {}),
+          ...(f.look !== undefined ? { look: f.look } : {}),
+        },
+        params: { header: { 'idempotency-key': key } },
+      })
+      return v.id
+    },
+  })
 
   const picker = (
     <RemixSourcePicker
@@ -301,6 +380,14 @@ export function NewVideoPage() {
                   }}
                 >
                   Start from an existing video
+                </Anchor>
+              </>
+            ) : null}
+            {config.data?.features.includes('screen_recording') ? (
+              <>
+                {' '}
+                <Anchor component={Link} to="/new/demo" inherit>
+                  From a screen recording
                 </Anchor>
               </>
             ) : null}
@@ -425,15 +512,38 @@ export function NewVideoPage() {
                 ) : null}
               </Group>
               <SoundControl
-                value={sound}
+                value={sentSound}
                 media={media}
                 disabled={planning}
+                allowed={sounds}
                 onChange={(s) => {
                   setSound(s)
                   setSoundTouched(true)
                 }}
               />
-              <VoiceoverControl value={voice} onChange={setVoice} disabled={planning} planning={canPlan} />
+              {voiceAllowed ? (
+                <VoiceoverControl value={voice} onChange={setVoice} disabled={planning} planning={canPlan} />
+              ) : null}
+              <LookControl value={look} onChange={setLook} disabled={planning} />
+              {engineChoices.length > 1 ? (
+                <Select
+                  label="Engine"
+                  description="What renders the video. The look picks one; change it only if you need to."
+                  data={engineChoices.map((e) => ({ value: e, label: engineName(e) }))}
+                  value={engine}
+                  allowDeselect={false}
+                  disabled={planning}
+                  onChange={(v) => {
+                    setEngineAsked(v)
+                  }}
+                  data-testid="engine-select"
+                />
+              ) : null}
+              {extraCredits !== null && engine !== 'hyperframes' ? (
+                <Text size="xs" c="var(--va-faint)" data-testid="engine-credits">
+                  {engineName(engine)} videos take about {extraCredits} more credits.
+                </Text>
+              ) : null}
               <TextInput
                 label="Title"
                 description="Optional. The agent names it otherwise."
@@ -525,7 +635,11 @@ export function NewVideoPage() {
             durationSec={lengthMode === 'set' ? Number(seconds) : undefined}
             mediaIds={media.map((m) => m.id)}
             sound={chosenSound}
-            voiceover={voice.enabled ? voiceInput(voice) : undefined}
+            voiceover={sentVoice ? voiceInput(voice) : undefined}
+            look={look}
+            onLookChange={setLook}
+            engine={engineAsked === engine ? engine : undefined}
+            limits={{ sounds, voiceover: voiceAllowed }}
             creating={create.isPending}
             onSuggestAspect={(a) => {
               setShape(a)

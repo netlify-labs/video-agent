@@ -62,10 +62,29 @@ describe('look.json schema', () => {
 
   it('refuses unknown keys, including the fields draft 3 dropped', () => {
     expect(ok({ ...valid(), pace: 'fast' })).toBe(false)
-    expect(ok({ ...valid(), fonts: [] })).toBe(false)
+    expect(
+      ok({
+        ...valid(),
+        fonts: [
+          { role: 'hand', file: 'assets/fonts/m.woff2', license: 'OFL-1.1', useWhen: 'x', weight: 400 },
+        ],
+      }),
+    ).toBe(false)
     expect(ok({ ...valid(), sound: { musicMood: 'x', sfx: 'whoosh' } })).toBe(false)
     expect(ok({ ...valid(), recording: { ...valid().recording, extra: 1 } })).toBe(false)
     expect(ok({ ...valid(), colors: { roles: ['bg'], derived: [], hex: '#fff' } })).toBe(false)
+  })
+
+  it('takes fonts for a role, as a WOFF2 under assets/fonts/ with an embeddable licence', () => {
+    const font = { role: 'hand', file: 'assets/fonts/marker.woff2', license: 'OFL-1.1', useWhen: 'notes' }
+    expect(ok({ ...valid(), fonts: [font] })).toBe(true)
+    expect(ok({ ...valid(), fonts: [{ ...font, license: 'Apache-2.0', role: 'mono' }] })).toBe(true)
+    expect(ok({ ...valid(), fonts: [{ ...font, file: 'assets/marker.woff2' }] })).toBe(false)
+    expect(ok({ ...valid(), fonts: [{ ...font, file: 'assets/fonts/marker.ttf' }] })).toBe(false)
+    expect(ok({ ...valid(), fonts: [{ ...font, license: 'MIT' }] })).toBe(false)
+    expect(ok({ ...valid(), fonts: [{ ...font, role: 'emoji' }] })).toBe(false)
+    expect(ok({ ...valid(), fonts: [{ ...font, useWhen: 'x'.repeat(81) }] })).toBe(false)
+    expect(ok({ ...valid(), fonts: Array(5).fill(font) })).toBe(false)
   })
 
   it('bounds the id', () => {
@@ -102,7 +121,8 @@ describe('look.json schema', () => {
     expect(ok({ ...valid(), aspects: [] })).toBe(false)
     expect(ok({ ...valid(), aspects: ['21:9'] })).toBe(false)
     expect(ok({ ...valid(), engines: [] })).toBe(false)
-    expect(ok({ ...valid(), engines: ['remotion'] })).toBe(false)
+    expect(ok({ ...valid(), engines: ['remotion', 'hyperframes'] })).toBe(true)
+    expect(ok({ ...valid(), engines: ['blender'] })).toBe(false)
   })
 
   it('takes colour role names, not values', () => {

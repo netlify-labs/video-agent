@@ -24,6 +24,8 @@ export function SoundControl(props: {
   onChange: (s: Sound) => void
   media: Media[]
   disabled?: boolean
+  /** What the engine can make (render-engines plan §4.1); all three when omitted. */
+  allowed?: Sound[]
 }) {
   const track = props.media.find((m) => m.kind === 'audio')
   const hint =
@@ -46,7 +48,7 @@ export function SoundControl(props: {
         onChange={(v) => {
           props.onChange(v)
         }}
-        data={OPTIONS}
+        data={props.allowed ? OPTIONS.filter((o) => props.allowed?.includes(o.value)) : OPTIONS}
         data-testid="sound-control"
       />
       <Text size="xs" c="var(--va-faint)" mt={6}>

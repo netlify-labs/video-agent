@@ -148,10 +148,33 @@
   overflow: hidden;
   box-sizing: border-box;
 }
+/* Each scene gets its own tint (data-hue cycles 0-5), so the blocks read as separate clips in both themes. */
 .va-tl-scene {
-  background: var(--va-raised);
-  border-left: 1px solid var(--va-rule);
-  border-right: 1px solid var(--va-rule);
+  --scene-ink: var(--va-accent);
+  background: color-mix(in srgb, var(--scene-ink) 24%, var(--va-raised));
+  border-left: 3px solid var(--scene-ink);
+  border-right: 2px solid var(--va-surface);
+}
+.va-tl-scene[data-hue='1'] {
+  --scene-ink: #8b5cf6;
+}
+.va-tl-scene[data-hue='2'] {
+  --scene-ink: #f59e0b;
+}
+.va-tl-scene[data-hue='3'] {
+  --scene-ink: #ec4899;
+}
+.va-tl-scene[data-hue='4'] {
+  --scene-ink: #3b82f6;
+}
+.va-tl-scene[data-hue='5'] {
+  --scene-ink: #84cc16;
+}
+/* A scene block's menu (Redo this scene…), at its top right. */
+.va-tl-scene-menu {
+  position: absolute;
+  top: 1px;
+  right: 2px;
 }
 .va-tl-clip {
   color: var(--va-muted);

@@ -47,6 +47,19 @@ describe('hyperframes check report', () => {
     })
     expect(seen).toHaveLength(5)
   })
+
+  it("stages the look's assets at assets/look/, where a run puts them", () => {
+    let staged = false
+    checkLookBrowser(join(repoRoot, 'looks', 'whiteboard'), {
+      repoRoot,
+      hyperframesVersion,
+      run: (dir) => {
+        staged = readFileSync(join(dir, 'assets', 'look', 'fonts', 'caveat-semibold.woff2')).byteLength > 0
+        return {}
+      },
+    })
+    expect(staged).toBe(true)
+  })
 })
 
 /** The real check, or null (and a log line) where there's no browser. */

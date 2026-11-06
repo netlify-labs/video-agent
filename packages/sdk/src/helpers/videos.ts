@@ -4,6 +4,7 @@ import { VideoAgentError } from '../errors.js'
 import type { components } from '../generated/schema.js'
 import type { Exchange } from '../http.js'
 import { sleep } from '../http.js'
+import type { CallOptions } from '../transport.js'
 
 type Video = components['schemas']['Video']
 type Progress = components['schemas']['Progress']
@@ -170,4 +171,45 @@ export async function resolveVideo(fetchImpl: typeof fetch, ref: string): Promis
     code: 'invalid_ref',
     message: `${s} isn't a video id (vid_…), a video's web address or a share link.`,
   })
+}
+
+type ReviseInput = components['schemas']['Revise']
+
+export interface RedoScenesInput extends Omit<ReviseInput, 'scope' | 'fromVersion'> {
+  /** Scene ids from the version's beats (`versions.beats`, or the version's `beats`). */
+  beats: string[]
+  /** The version the scenes are from. Default: the latest ready version. */
+  fromVersion?: number
+}
+
+export interface RedoScenesDeps {
+  get: (id: string) => Promise<Video>
+  revise: (id: string, input: ReviseInput, opts?: CallOptions) => Promise<Video>
+}
+
+/**
+ * Redo some scenes of a version (regenerate-beat plan §4.13): a revision with a scope. Fills fromVersion from the
+ * latest ready version when it's left out. The generated revise checks the server lists scoped_revision (else
+ * unsupported_by_server) and sends an Idempotency-Key.
+ */
+export async function redoScenes(
+  d: RedoScenesDeps,
+  id: string,
+  input: RedoScenesInput,
+  opts?: CallOptions,
+): Promise<Video> {
+  const { beats, fromVersion, ...rest } = input
+  let from = fromVersion
+  if (from === undefined) {
+    const video = await d.get(id)
+    from = video.versions.find((v) => v.status === 'ready')?.n
+    if (from === undefined)
+      throw new VideoAgentError({
+        status: 0,
+        code: 'not_ready',
+        message: `Video ${id} has no ready version to redo scenes of.`,
+        details: { videoId: id },
+      })
+  }
+  return d.revise(id, { ...rest, fromVersion: from, scope: { beats } }, opts)
 }

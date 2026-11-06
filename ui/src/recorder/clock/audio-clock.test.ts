@@ -12,7 +12,8 @@ function ctx(time: { now: number }, output: boolean): ClockContext {
     },
   }
   // Heard 30 ms after rendered.
-  if (output) c.getOutputTimestamp = () => ({ contextTime: (time.now - 530) / 1000, performanceTime: time.now })
+  if (output)
+    c.getOutputTimestamp = () => ({ contextTime: (time.now - 530) / 1000, performanceTime: time.now })
   return c
 }
 

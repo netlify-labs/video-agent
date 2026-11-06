@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="vendor/gsap.min.js"></script>
+    <script src="vendor/va-contract.js"></script>
+    <style>
+      /* Whiteboard example: the fictional product Orbit, placeholder words. Runs reuse its strokes, writing and notes,
+         never its words. Colours are the brand's roles, and derived roles, written as literal colours. The hand font
+         is the look's own (a run copies it to video/assets/look/fonts/). */
+      @font-face { font-family: 'Look Hand'; src: url('assets/look/fonts/caveat-semibold.woff2') format('woff2'); font-weight: 600; }
+      #root {
+        --va-color-bg: #fbfbf8;
+        --va-color-text: #1d2433;
+        --va-color-accent: #e5484d;
+        --va-color-note: #f9c6c7;
+        --va-color-ink-2: #8d919a;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1920px; height: 1080px; overflow: hidden; background: #fbfbf8; }
+      #root { width: 100%; height: 100%; position: relative; font-family: 'Look Hand', cursive; font-weight: 600; background: var(--va-color-bg); }
+      .beat { position: absolute; inset: 0; }
+      .hand { position: absolute; color: var(--va-color-text); font-size: 100px; line-height: 1.05; padding-right: 0.3em; }
+      .label { position: absolute; color: var(--va-color-text); font-size: 52px; padding-right: 0.3em; }
+      svg { position: absolute; inset: 0; width: 1920px; height: 1080px; }
+      .stroke { opacity: 0; fill: none; stroke: var(--va-color-text); stroke-width: 8; stroke-linecap: round; stroke-linejoin: round; }
+      .stroke.hot { stroke: var(--va-color-accent); }
+      .stroke.soft { stroke: var(--va-color-ink-2); }
+      .note { position: absolute; width: 420px; height: 380px; background: var(--va-color-note); box-shadow: 0 14px 24px rgba(0, 0, 0, 0.12); padding: 44px; color: var(--va-color-text); font-size: 58px; line-height: 1.1; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-va-contract="1" data-start="0" data-duration="12" data-width="1920" data-height="1080">
+      <section id="problem" class="clip beat" data-va-beat="problem" data-va-label="Problem" data-composition-id="problem" data-start="0" data-duration="4" data-va-authored-duration="4" data-track-index="0">
+        <h1 class="hand" style="left: 140px; top: 150px" data-va-text="problem-title" data-va-label="Headline">Where did we write that?</h1>
+        <svg viewBox="0 0 1920 1080">
+          <path class="stroke soft" d="M180 520 h300 v220 h-300 z" />
+          <path class="stroke soft" d="M820 520 h300 v220 h-300 z" />
+          <path class="stroke soft" d="M1460 520 h300 v220 h-300 z" />
+          <path class="stroke hot" d="M150 300 C 600 330, 1100 290, 1400 305" />
+        </svg>
+        <p class="label" style="left: 250px; top: 600px" data-va-text="problem-l1" data-va-label="Label">Notes</p>
+        <p class="label" style="left: 905px; top: 600px" data-va-text="problem-l2" data-va-label="Label">Docs</p>
+        <p class="label" style="left: 1520px; top: 600px" data-va-text="problem-l3" data-va-label="Label">Chats</p>
+        <script>
+          vaBeat('problem', (tl, el) => {
+            tl.fromTo(el.querySelector('[data-va-text="problem-title"]'), { clipPath: 'inset(0 100% 0 0)' }, { clipPath: 'inset(0 0% 0 0)', duration: 0.7, ease: 'none' }, 0.1)
+            el.querySelectorAll('.stroke').forEach((p, i) => {
+              const len = p.getTotalLength()
+              tl.set(p, { opacity: 1 }, 0.9 + i * 0.4).fromTo(p, { strokeDasharray: len, strokeDashoffset: len }, { strokeDashoffset: 0, duration: 0.6, ease: 'power1.inOut' }, 0.9 + i * 0.4)
+            })
+            el.querySelectorAll('.label').forEach((l, i) => {
+              tl.fromTo(l, { clipPath: 'inset(0 100% 0 0)' }, { clipPath: 'inset(0 0% 0 0)', duration: 0.4, ease: 'none' }, 1.3 + i * 0.4)
+            })
+          })
+        </script>
+      </section>
+      <section id="answer" class="clip beat" data-va-beat="answer" data-va-label="Answer" data-composition-id="answer" data-start="4" data-duration="5" data-va-authored-duration="5" data-track-index="0">
+        <h2 class="hand" style="left: 140px; top: 150px" data-va-text="answer-title" data-va-label="Headline">One search box</h2>
+        <svg viewBox="0 0 1920 1080">
+          <path class="stroke" d="M160 520 h640 v130 h-640 z" />
+          <path class="stroke hot" d="M840 585 C 960 585, 1020 585, 1120 585 M1080 550 L1125 585 L1080 620" />
+        </svg>
+        <p class="label" style="left: 200px; top: 548px" data-va-text="answer-query" data-va-label="Search text">launch plan</p>
+        <div class="note" style="left: 1200px; top: 380px; transform: rotate(-3deg)">
+          <p data-va-text="answer-note" data-va-label="Sticky note">Every note, doc and chat. Instantly.</p>
+        </div>
+        <script>
+          vaBeat('answer', (tl, el) => {
+            tl.fromTo(el.querySelector('[data-va-text="answer-title"]'), { clipPath: 'inset(0 100% 0 0)' }, { clipPath: 'inset(0 0% 0 0)', duration: 0.6, ease: 'none' }, 0.1)
+            el.querySelectorAll('.stroke').forEach((p, i) => {
+              const len = p.getTotalLength()
+              tl.set(p, { opacity: 1 }, 0.8 + i * 0.9).fromTo(p, { strokeDasharray: len, strokeDashoffset: len }, { strokeDashoffset: 0, duration: 0.7, ease: 'power1.inOut' }, 0.8 + i * 0.9)
+            })
+            tl.fromTo(el.querySelector('[data-va-text="answer-query"]'), { clipPath: 'inset(0 100% 0 0)' }, { clipPath: 'inset(0 0% 0 0)', duration: 0.5, ease: 'none' }, 1.4)
+              .fromTo(el.querySelector('.note'), { y: -44, rotation: -6, opacity: 0 }, { y: 0, rotation: -3, opacity: 1, duration: 0.35, ease: 'back.out(1.4)' }, 2.6)
+          })
+        </script>
+      </section>
+      <section id="end" class="clip beat" data-va-beat="end" data-va-label="End card" data-composition-id="end" data-start="9" data-duration="3" data-va-authored-duration="3" data-track-index="0">
+        <h2 class="hand" style="left: 760px; top: 380px; font-size: 160px" data-va-text="end-title" data-va-label="Product name">Orbit</h2>
+        <p class="label" style="left: 760px; top: 600px" data-va-text="end-cta" data-va-label="Call to action">try it free</p>
+        <svg viewBox="0 0 1920 1080">
+          <path class="stroke hot" d="M740 570 C 900 590, 1050 575, 1170 560" />
+        </svg>
+        <script>
+          vaBeat('end', (tl, el) => {
+            tl.fromTo(el.querySelector('[data-va-text="end-title"]'), { clipPath: 'inset(0 100% 0 0)' }, { clipPath: 'inset(0 0% 0 0)', duration: 0.6, ease: 'none' }, 0.1)
+            const p = el.querySelector('.stroke')
+            const len = p.getTotalLength()
+            tl.set(p, { opacity: 1 }, 0.8)
+              .fromTo(p, { strokeDasharray: len, strokeDashoffset: len }, { strokeDashoffset: 0, duration: 0.5, ease: 'power1.inOut' }, 0.8)
+              .fromTo(el.querySelector('[data-va-text="end-cta"]'), { clipPath: 'inset(0 100% 0 0)' }, { clipPath: 'inset(0 0% 0 0)', duration: 0.4, ease: 'none' }, 1.3)
+          })
+        </script>
+      </section>
+    </div>
+    <script>
+      window.__timelines['main'] = gsap.timeline({ paused: true })
+    </script>
+  </body>
+</html>

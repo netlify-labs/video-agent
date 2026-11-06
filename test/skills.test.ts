@@ -52,6 +52,7 @@ describe('netlify-video skill package', () => {
     const { list, read } = unzipped(packageSkill(skillsDir, 'netlify-video', SITE).zip, 'pkg')
     expect(list).toEqual([
       'netlify-video/SKILL.md',
+      'netlify-video/references/cli.md',
       'netlify-video/references/connect.md',
       'netlify-video/references/narration.md',
       'netlify-video/references/recipes.md',
@@ -66,6 +67,7 @@ describe('netlify-video skill package', () => {
     expect(skill).toContain(`claude mcp add --transport http video-agent ${SITE}/mcp`)
     const connect = read('netlify-video/references/connect.md')
     expect(connect).toContain(`url = "${SITE}/mcp"`)
+    expect(read('netlify-video/references/cli.md')).toContain(`video-agent login --url ${SITE}`)
     for (const path of list) expect(read(path)).not.toContain(SITE_URL_TOKEN)
   })
 
@@ -107,7 +109,7 @@ describe('netlify-video skill package', () => {
     }
     for (const t of tools) collect(t.inputSchema)
     // Result fields the skill names (from get_video and list_comments results).
-    const resultFields = new Set(['web_url', 'resolved_at', 'addressed_in', 'next_actions'])
+    const resultFields = new Set(['web_url', 'resolved_at', 'addressed_in', 'next_actions', 'redid_scenes'])
 
     const mentioned = new Set<string>()
     for (const [file, text] of sources()) {
@@ -124,5 +126,14 @@ describe('netlify-video skill package', () => {
     }
     // The skill covers every tool.
     for (const name of toolNames) expect(mentioned, `the skill never mentions ${name}`).toContain(name)
+  })
+
+  it('never tells agents to use the PR URL as a long-lived idempotency key', () => {
+    // A key is body-bound for 24 hours, so one video per PR comes from a list_videos lookup instead.
+    for (const [file, text] of sources()) {
+      expect(text.replace(/\s+/g, ' '), file).not.toMatch(/Use the PR URL as the `?idempotency_key/i)
+    }
+    const recipes = sources().find(([file]) => file.endsWith('recipes.md'))?.[1] ?? ''
+    expect(recipes).toContain("Look for the PR's video first")
   })
 })

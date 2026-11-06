@@ -51,8 +51,9 @@ export function registerPrompts(server: McpServer, access: PromptAccess) {
           '1. Read the PR: title, description, linked issues, the diff and any screenshots (for example `gh pr view` and `gh pr diff`). Work out what users can do now that they could not before, and the one or two screens that show it. Leave out refactors, tests and internals.',
           '2. Check list_media for the logo and product shots. If the PR has screenshots and you have an API key, upload them to the media library (POST /api/v1/media, see the REST API docs at /docs/api) with a caption each, and keep their ids for media_ids.',
           `3. Write a prompt: who it is for, the one message, three or four beats, exact on-screen text in quotes, and an end card.${plan(access)}`,
-          `4. ${CONFIRM} Call create_video with the prompt, aspect ${a.aspect ?? '16:9'}, duration_sec 20 to 45, media_ids, and the PR URL as idempotency_key.`,
+          `4. Call list_videos with the PR URL as query and mine: true. If a video for this PR exists, revise it with what changed rather than making a second one. ${CONFIRM} Then call revise_video on that video, or create_video with the prompt (ending with the line "Pull request: ${a.pr_url}", so list_videos finds it next time), aspect ${a.aspect ?? '16:9'}, duration_sec 20 to 45, and media_ids. If you pass an idempotency_key, make it new for each attempt (the PR URL plus the time), never the PR URL alone: a key is tied to its exact request for 24 hours.`,
           `5. ${FOLLOW} Offer publish_video for a share page or GIF to paste into the PR.`,
+          'To do this on every labelled PR, use the GitHub Action (see /docs/github).',
         ].join('\n'),
       ),
   )
@@ -79,6 +80,7 @@ export function registerPrompts(server: McpServer, access: PromptAccess) {
           `2. Write a prompt: an opening title, one beat per change, ending on the product URL or a call to action, 30 to 60 seconds.${plan(access)}`,
           `3. ${CONFIRM} Call create_video with the prompt, a title, media_ids and aspect ${a.aspect ?? '16:9'}.`,
           `4. ${FOLLOW} When I approve it, publish_video for a share page or embed for the release notes.`,
+          'To do this on every release, use the GitHub Action (see /docs/github).',
         ].join('\n'),
       ),
   )

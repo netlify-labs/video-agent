@@ -1,0 +1,9 @@
+{
+  "title": "Orbit CLI",
+  "summary": "A terminal-look example for the fictional product Orbit: a typed command, a code diff and an end card.",
+  "captions": [
+    { "start": 1.6, "end": 4, "text": "orbit deploy --preview", "beat": "command", "textId": "command-text", "beatStart": 1.6, "beatEnd": 4 },
+    { "start": 4.6, "end": 9.5, "text": "sync.js", "beat": "diff", "textId": "diff-filename", "beatStart": 0.6, "beatEnd": 5.5 },
+    { "start": 9.8, "end": 12.5, "text": "Orbit", "beat": "end", "textId": "end-title", "beatStart": 0.3, "beatEnd": 3 }
+  ]
+}

@@ -30,6 +30,11 @@
 //   hold        at most one last beat data-va-hold="<seconds>" (id va-hold), exactly as applyHoldFrame writes it: no
 //               script, text or media, only an <img> of assets/hold/last.png, the base's last frame, which the run
 //               renders; it holds the final frame while recorded narration runs past the end (docs/spikes.md S12)
+//   recording   a screen-recording scene (screen-recording plan §5.3): at most one recording slot per beat (a video
+//               with data-va-in/data-va-out in source seconds), its only video slot; data-media-start = in; rate =
+//               (out - in) / the slot's duration, to 4 places, within RATE_RANGE; the slot lasts the beat unless
+//               data-va-rec-hold="end", which plays it at 0.5x and shows img.va-rec-hold (assets/recording/<step>.
+//               hold.jpg) for the rest; data-va-locked names assets/recording/redact.js
 //   captions    summary.json captions carry beat, textId, beatStart, beatEnd (beat-relative) plus the absolute
 //               start, end and text render-job reads; the patcher keeps both in step. Voice cues (voice: true) follow
 //               the spoken words instead of a text, and keep their times when a beat is stretched (audio isn't).
@@ -68,6 +73,7 @@ import {
   syncCaptionsFor,
   voiceFits,
 } from './contract-core.js'
+import { CAMERA_MAX_KEYS, RATE_RANGE, rateInRange, rateOf } from './recording.js'
 
 type Node = DefaultTreeAdapterMap['node']
 type Element = DefaultTreeAdapterMap['element']
@@ -114,6 +120,27 @@ export interface Beat {
   media: MediaSlot[]
   /** The beat's voice-over clip, timed in the beat's clock; null when it has none. */
   voice: VoiceClip | null
+  /** The beat's screen recording (screen-recording plan §5.3), only on a recording beat. */
+  recording?: RecordingBeat
+}
+export interface RecordingBeat {
+  /** The plan step it shows (its .va-recording's data-va-recording). */
+  step: string
+  slot: string
+  src: string
+  /** Source seconds the scene shows. */
+  in: number
+  out: number
+  rate: number
+  /** Camera keys and clicks in source seconds, as the markup holds them ([] when unreadable). */
+  camera: unknown[]
+  cursor: { style: string; size: number | null; path: string | null }
+  clicks: unknown[]
+  /** The scene's own hidden areas (the agent's and the editor's); the locked ones are in `locked`. */
+  redact: unknown[]
+  locked: string | null
+  /** How long the out frame is held after the slot ends, when the scene is slower than 0.5x. */
+  hold: { seconds: number } | null
 }
 export interface VoiceClip {
   id: string
@@ -252,7 +279,8 @@ export function load(html: string): Doc {
 export const save = (d: Doc) => serialize(d.doc)
 
 const beatsOf = (root: Element) => kids(root).filter((e) => attr(e, 'data-va-beat') !== null)
-const scriptOf = (beat: Element) => kids(beat).find((e) => e.tagName === 'script')
+/** The beat's own (inline) script; a recording scene's data scripts (<script src>) come before it. */
+const scriptOf = (beat: Element) => kids(beat).find((e) => e.tagName === 'script' && attr(e, 'src') === null)
 
 /** Colours declared on the root, from <style> rules like `#root { --va-color-bg: #0b0d10 }`. */
 function readColors(d: Doc): { colors: Record<string, string>; styles: Element[] } {
@@ -303,6 +331,7 @@ export function read(d: Doc, lines?: Record<string, string>): Composition {
         }),
       media: inner.filter((e) => attr(e, 'data-va-media') !== null).map((e) => mediaOf(e, id)),
       voice: voiceOf(b),
+      ...recordingOf(b),
     }
   })
   return {
@@ -449,6 +478,7 @@ export function validate(html: string, summary?: Summary, opts: ValidateOptions 
         v.push(`Beat "${id}" refers to beat "${other}".`)
   })
   v.push(...holdProblems(root, beats))
+  v.push(...recordingProblems(root, beats))
   if (beats.length && Math.abs(t - total) > FRAME_SLACK)
     v.push(`The beats add up to ${fmt(t)}s but the root says ${fmt(total)}s.`)
 
@@ -1007,7 +1037,370 @@ export function applyHoldFrame(d: Doc, holdSeconds: number) {
   relayout(d)
 }
 
+// ───── recording scenes ─────
+const REC_IN = 'data-va-in'
+const REC_OUT = 'data-va-out'
+const REC_HOLD = 'data-va-rec-hold'
+const REC_HOLD_CLASS = 'va-rec-hold'
+export const REC_LOCKED_SRC = 'assets/recording/redact.js'
+export const recHoldSrc = (step: string) => `assets/recording/${step}.hold.jpg`
+
+const classes = (e: Element) => (attr(e, 'class') ?? '').split(/\s+/).filter(Boolean)
+const recSlotsOf = (beat: Element) => [...walk(beat)].filter((e) => attr(e, REC_IN) !== null)
+const holdImagesOf = (beat: Element) =>
+  [...walk(beat)].filter((e) => e.tagName === 'img' && classes(e).includes(REC_HOLD_CLASS))
+
+/** The step a recording slot belongs to: its .va-recording's data-va-recording, else the beat's id. */
+function stepOf(slot: Element, beat: Element): string {
+  for (let p = slot.parentNode as Element | null; p && 'attrs' in p; p = p.parentNode as Element | null) {
+    const step = attr(p, 'data-va-recording')
+    if (step) return step
+    if (p === beat) break
+  }
+  return attr(beat, 'data-va-beat') ?? ''
+}
+
+function jsonArray(raw: string | null): unknown[] {
+  if (raw === null) return []
+  try {
+    const v: unknown = JSON.parse(raw)
+    return Array.isArray(v) ? v : []
+  } catch {
+    return []
+  }
+}
+
+/** read()'s recording field for a beat, as a spread: {} for a beat without a recording slot. */
+function recordingOf(beat: Element): { recording?: RecordingBeat } {
+  const slot = recSlotsOf(beat)[0]
+  if (!slot) return {}
+  const one = (sel: (e: Element) => boolean) => [...walk(beat)].find(sel)
+  const camera = one((e) => attr(e, 'data-va-camera') !== null)
+  const cursor = one((e) => attr(e, 'data-va-cursor') !== null)
+  const clicks = one((e) => attr(e, 'data-va-clicks') !== null)
+  const redact = one((e) => attr(e, 'data-va-redact') !== null)
+  const held = attr(slot, REC_HOLD) === 'end'
+  const size = cursor ? num(attr(cursor, 'data-va-cursor-size')) : NaN
+  return {
+    recording: {
+      step: stepOf(slot, beat),
+      slot: attr(slot, 'data-va-media') ?? '',
+      src: attr(slot, 'src') ?? '',
+      in: num(attr(slot, REC_IN)),
+      out: num(attr(slot, REC_OUT)),
+      rate: num(attr(slot, 'data-playback-rate')),
+      camera: jsonArray(camera ? attr(camera, 'data-va-camera') : null),
+      cursor: {
+        style: (cursor && attr(cursor, 'data-va-cursor')) ?? 'none',
+        size: Number.isFinite(size) ? size : null,
+        path: cursor ? attr(cursor, 'data-va-path') : null,
+      },
+      clicks: jsonArray(clicks ? attr(clicks, 'data-va-clicks') : null),
+      redact: jsonArray(redact ? attr(redact, 'data-va-redact') : null),
+      locked: redact ? attr(redact, 'data-va-locked') : null,
+      hold: held
+        ? { seconds: sec(num(attr(beat, 'data-duration')) - num(attr(slot, 'data-duration'))) }
+        : null,
+    },
+  }
+}
+
+/** What's wrong with the composition's recording scenes (validate's part). Compositions without any pass untouched. */
+function recordingProblems(root: Element, beats: Element[]): string[] {
+  const v: string[] = []
+  const checked = new Set<Element>()
+  for (const b of beats) {
+    const id = attr(b, 'data-va-beat') ?? ''
+    const slots = recSlotsOf(b)
+    if (slots.length > 1) v.push(`Beat "${id}" has more than one recording slot.`)
+    const slot = slots[0]
+    const images = holdImagesOf(b)
+    if (!slot) {
+      if (images.length) v.push(`Beat "${id}" has a held recording frame but no recording slot.`)
+      continue
+    }
+    checked.add(slot)
+    const name = `Recording slot "${attr(slot, 'data-va-media') ?? ''}"`
+    const videos = [...walk(b)].filter((e) => attr(e, 'data-va-kind') === 'video')
+    if (videos.length > 1) v.push(`Beat "${id}" has a recording, so it can have no other video slot.`)
+    if (slot.tagName !== 'video' || attr(slot, 'data-va-kind') !== 'video')
+      v.push(`${name} must be a video slot.`)
+    const inS = num(attr(slot, REC_IN))
+    const outS = num(attr(slot, REC_OUT))
+    if (!(inS >= 0) || !(outS > inS)) {
+      v.push(`${name} needs ${REC_IN} and ${REC_OUT} in seconds, with in before out.`)
+      continue
+    }
+    if (Math.abs(num(attr(slot, 'data-media-start')) - inS) > 1e-6)
+      v.push(`${name} needs data-media-start="${fmt(inS)}" (its ${REC_IN}).`)
+    if (num(attr(slot, 'data-start')) !== 0) v.push(`${name} must start with its beat (data-start="0").`)
+    const slotDur = num(attr(slot, 'data-duration'))
+    const beatDur = num(attr(b, 'data-duration'))
+    const rate = num(attr(slot, 'data-playback-rate'))
+    if (!(slotDur > 0)) v.push(`${name} needs a positive data-duration.`)
+    else if (Math.abs(rate - rateOf(inS, outS, slotDur)) > 1e-4)
+      v.push(
+        `${name} needs data-playback-rate="${String(rateOf(inS, outS, slotDur))}" (its span over its duration).`,
+      )
+    if (!rateInRange(rate))
+      v.push(
+        `${name} plays at ${String(rate)}x; it must be between ${String(RATE_RANGE[0])}x and ${String(RATE_RANGE[1])}x.`,
+      )
+    const hold = attr(slot, REC_HOLD)
+    const want = recHoldSrc(stepOf(slot, b))
+    if (hold === null) {
+      if (Math.abs(slotDur - beatDur) > FRAME_SLACK) v.push(`${name} must last its beat (${fmt(beatDur)}s).`)
+      if (images.length) v.push(`Beat "${id}" shows a held recording frame but its slot isn't held.`)
+    } else if (hold !== 'end') v.push(`${name} has ${REC_HOLD}="${hold}"; the only value is "end".`)
+    else {
+      if (!(slotDur < beatDur - FRAME_SLACK)) v.push(`${name} is held, so it must end before its beat does.`)
+      if (Math.abs(rate - RATE_RANGE[0]) > 1e-9)
+        v.push(`${name} is held, so it plays at ${String(RATE_RANGE[0])}x.`)
+      if (images.length !== 1 || attr(images[0] as Element, 'src') !== want)
+        v.push(`${name} is held, so beat "${id}" needs one <img class="${REC_HOLD_CLASS}" src="${want}">.`)
+    }
+    if (!kids(b).some((e) => e.tagName === 'script' && attr(e, 'src') === REC_LOCKED_SRC))
+      v.push(`Beat "${id}" must load ${REC_LOCKED_SRC} (the hidden areas from cursor data and setup).`)
+    for (const e of walk(b)) {
+      const locked = attr(e, 'data-va-locked')
+      if (locked !== null && locked !== REC_LOCKED_SRC) v.push(`data-va-locked must name ${REC_LOCKED_SRC}.`)
+    }
+  }
+  for (const e of walk(root))
+    if (attr(e, REC_HOLD) !== null && !checked.has(e)) v.push(`Only a recording slot carries ${REC_HOLD}.`)
+  return v
+}
+
+/**
+ * Fits a recording slot to its beat's new duration: it keeps showing in..out, so the rate changes. Faster than 4x is
+ * refused; slower than 0.5x plays the span at 0.5x and holds the out frame (a still) for the rest. A later retime
+ * that no longer needs the hold removes it.
+ */
+function fitRecordingSlot(beat: Element, slot: Element, duration: number) {
+  const inS = num(attr(slot, REC_IN))
+  const outS = num(attr(slot, REC_OUT))
+  const span = outS - inS
+  if (!(span > 0)) return
+  if (span / duration > RATE_RANGE[1] + 1e-9)
+    throw new ContractError([
+      `This scene can be at most ${String(RATE_RANGE[1])}× faster (it shows ${String(Math.round(span * 10) / 10)} s of your recording).`,
+    ])
+  setAttr(slot, 'data-start', '0')
+  setAttr(slot, 'data-media-start', fmt(inS))
+  const images = holdImagesOf(beat)
+  if (span / duration < RATE_RANGE[0] - 1e-9) {
+    const slotDur = span / RATE_RANGE[0]
+    setAttr(slot, 'data-duration', fmt(slotDur))
+    setAttr(slot, 'data-playback-rate', String(RATE_RANGE[0]))
+    setAttr(slot, REC_HOLD, 'end')
+    if (!images.length) {
+      const parent = slot.parentNode as Element
+      const img = defaultTreeAdapter.createElement('img', h5.NS.HTML, [
+        { name: 'class', value: REC_HOLD_CLASS },
+        { name: 'src', value: recHoldSrc(stepOf(slot, beat)) },
+        { name: 'alt', value: '' },
+      ])
+      img.parentNode = parent
+      parent.childNodes.splice(parent.childNodes.indexOf(slot) + 1, 0, img)
+    }
+    return
+  }
+  setAttr(slot, 'data-duration', fmt(duration))
+  setAttr(slot, 'data-playback-rate', String(rateOf(inS, outS, duration)))
+  slot.attrs = slot.attrs.filter((a) => a.name !== REC_HOLD)
+  for (const img of images) {
+    const parent = img.parentNode as Element
+    parent.childNodes = parent.childNodes.filter((n) => n !== img)
+  }
+}
+
+const CAMERA_EASES = new Set([
+  'none',
+  'sine.inOut',
+  ...['power1', 'power2', 'power3', 'power4'].flatMap((p) => [`${p}.inOut`, `${p}.in`, `${p}.out`]),
+])
+/** The most a camera key may zoom in (va-recording.js accepts up to 8; a Look's zoomMax is at most this). */
+export const CAMERA_ZOOM_MAX = 4
+const r4 = (n: number) => Math.round(n * 1e4) / 1e4
+const isNum = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n)
+const isFrac = (n: unknown): n is number => isNum(n) && n >= 0 && n <= 1
+const recJson = (v: unknown) => JSON.stringify(v, (_k, x: unknown) => (typeof x === 'number' ? r4(x) + 0 : x))
+
+/** The recording parts of a beat, or a ContractError naming it. */
+function recordingParts(b: Element) {
+  const id = attr(b, 'data-va-beat') ?? ''
+  const slot = recSlotsOf(b)[0]
+  if (!slot) throw new ContractError([`Scene "${id}" isn't a recording scene.`])
+  const find = (name: string) => [...walk(b)].find((e) => attr(e, name) !== null)
+  return {
+    id,
+    slot,
+    camera: find('data-va-camera'),
+    clicks: find('data-va-clicks'),
+    cursor: find('data-va-cursor'),
+    redact: find('data-va-redact'),
+  }
+}
+
+/** Camera keys as the editor sends them: [t, x, y, zoom, ease?], inside in..out and the frame, sorted, at most 64. */
+function checkCamera(keys: unknown[], inS: number, outS: number): unknown[] {
+  if (!Array.isArray(keys) || !keys.length || keys.length > CAMERA_MAX_KEYS)
+    throw new ContractError([`A scene has 1 to ${String(CAMERA_MAX_KEYS)} camera keys.`])
+  let last = -Infinity
+  for (const k of keys) {
+    const ok =
+      Array.isArray(k) &&
+      (k.length === 4 || (k.length === 5 && typeof k[4] === 'string' && CAMERA_EASES.has(k[4]))) &&
+      isNum(k[0]) &&
+      isFrac(k[1]) &&
+      isFrac(k[2]) &&
+      isNum(k[3]) &&
+      k[3] >= 1 &&
+      k[3] <= CAMERA_ZOOM_MAX
+    if (!ok)
+      throw new ContractError([
+        `Each camera key is [seconds, x, y, zoom 1-${String(CAMERA_ZOOM_MAX)}, ease?] with x and y inside the frame.`,
+      ])
+    const t = k[0] as number
+    if (t < inS - 1e-3 || t > outS + 1e-3) throw new ContractError(['Camera keys must be inside the scene.'])
+    if (t < last) throw new ContractError(['Camera keys must be in time order.'])
+    last = t
+  }
+  return keys
+}
+
+/** A scene's own hidden areas: keyframed boxes inside the frame, unique ids, never a locked one (t…, s…). */
+function checkSceneRedact(entries: unknown[]): unknown[] {
+  if (!Array.isArray(entries) || entries.length > 200)
+    throw new ContractError(['A scene has at most 200 hidden areas.'])
+  const ids = new Set<string>()
+  let editorN = 0
+  return entries.map((raw) => {
+    const e = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+    let id = typeof e.id === 'string' ? e.id : ''
+    const origin = e.origin ?? 'editor'
+    if ((origin !== 'agent' && origin !== 'editor') || /^[ts]\d+$/.test(id))
+      throw new ContractError(["Hidden areas from your cursor data or setup can't be removed."])
+    if (!id) {
+      do id = `e${String(++editorN)}`
+      while (ids.has(id) || entries.some((x) => (x as { id?: unknown } | null)?.id === id))
+    }
+    if (!/^[a-z][a-z0-9-]{0,20}$/.test(id) || ids.has(id))
+      throw new ContractError([`Hidden area id "${id}" is used twice or isn't valid.`])
+    ids.add(id)
+    const boxes = e.boxes
+    if (
+      !isNum(e.start) ||
+      !isNum(e.end) ||
+      e.end < e.start ||
+      !Array.isArray(boxes) ||
+      !boxes.length ||
+      boxes.length > 600
+    )
+      throw new ContractError(['A hidden area needs a start, an end and 1 to 600 boxes.'])
+    let last = -Infinity
+    for (const k of boxes as unknown[]) {
+      if (!Array.isArray(k) || k.length !== 5 || !isNum(k[0]) || !k.slice(1).every(isFrac))
+        throw new ContractError(['Each hidden-area key is [seconds, x, y, width, height] inside the frame.'])
+      const [t, x, y, w, h] = k as number[]
+      if ((x ?? 0) + (w ?? 0) > 1 + 1e-9 || (y ?? 0) + (h ?? 0) > 1 + 1e-9 || (t ?? 0) < last)
+        throw new ContractError(['Each hidden-area key is [seconds, x, y, width, height] inside the frame.'])
+      last = t ?? 0
+    }
+    const reason = typeof e.reason === 'string' ? e.reason.replace(/\s+/g, ' ').trim().slice(0, 60) : ''
+    if (e.style !== undefined && e.style !== 'blur' && e.style !== 'solid')
+      throw new ContractError(['A hidden area is blurred or solid.'])
+    return {
+      id,
+      origin,
+      start: e.start,
+      end: e.end,
+      reason,
+      ...(e.style === 'solid' ? { style: 'solid' } : {}),
+      boxes,
+    }
+  })
+}
+
+/** span, camera, cursor and redact on a recording scene. relayout then fits the slot (rate, holds, the 4x limit). */
+function applyRecordingOp(b: Element, op: RecordingOp, gaps: Record<string, [number, number][]> | undefined) {
+  const p = recordingParts(b)
+  const inS = num(attr(p.slot, REC_IN))
+  const outS = num(attr(p.slot, REC_OUT))
+  switch (op.op) {
+    case 'span': {
+      if (!(isNum(op.in) && isNum(op.out) && op.in >= 0 && op.out > op.in))
+        throw new ContractError(['A scene shows the recording from in to out, in seconds, in first.'])
+      setAttr(p.slot, REC_IN, fmt(op.in))
+      setAttr(p.slot, REC_OUT, fmt(op.out))
+      // Keys and clicks outside the new span go; a camera with none left holds the whole frame.
+      const inside = (k: unknown) =>
+        Array.isArray(k) && isNum(k[0]) && k[0] >= op.in - 1e-3 && k[0] <= op.out + 1e-3
+      if (p.camera) {
+        const keys = jsonArray(attr(p.camera, 'data-va-camera')).filter(inside)
+        setAttr(p.camera, 'data-va-camera', recJson(keys.length ? keys : [[op.in, 0.5, 0.5, 1]]))
+      }
+      if (p.clicks)
+        setAttr(
+          p.clicks,
+          'data-va-clicks',
+          recJson(jsonArray(attr(p.clicks, 'data-va-clicks')).filter(inside)),
+        )
+      // The cursor path was made for the planned part only.
+      const g: [number, number][] = []
+      if (op.in < inS) g.push([op.in, Math.min(inS, op.out)])
+      if (op.out > outS) g.push([Math.max(outS, op.in), op.out])
+      if (gaps && g.length) gaps[p.id] = g
+      return
+    }
+    case 'camera':
+      if (!p.camera) throw new ContractError([`Scene "${p.id}" has no camera.`])
+      setAttr(p.camera, 'data-va-camera', recJson(checkCamera(op.keys, inS, outS)))
+      return
+    case 'cursor': {
+      if (!p.cursor) throw new ContractError([`Scene "${p.id}" has no cursor.`])
+      if (!['smooth', 'highlight', 'none'].includes(op.style))
+        throw new ContractError(['The cursor is smooth, highlight or none.'])
+      if (!(isNum(op.size) && op.size >= 0.5 && op.size <= 2))
+        throw new ContractError(['The cursor size is 0.5 to 2.'])
+      if (op.style === 'smooth' && attr(p.cursor, 'data-va-cursor-from') !== 'trace')
+        throw new ContractError([
+          'A smooth cursor needs cursor data from the recorder; this scene can show the highlight ring.',
+        ])
+      if (op.style !== 'none' && attr(p.cursor, 'data-va-path') === null)
+        throw new ContractError(['This scene has no cursor path to show.'])
+      setAttr(p.cursor, 'data-va-cursor', op.style)
+      setAttr(p.cursor, 'data-va-cursor-size', String(r4(op.size)))
+      return
+    }
+    case 'redact':
+      if (!p.redact) throw new ContractError([`Scene "${p.id}" has no hidden areas.`])
+      setAttr(p.redact, 'data-va-redact', recJson(checkSceneRedact(op.entries)))
+      return
+  }
+}
+
+/**
+ * The hold stills a composition names but may not have yet: one per held recording slot. The bundle check accepts
+ * exactly these as pending (render-unchanged runs make them with recording.ts emit --holds-only).
+ */
+export function pendingStills(html: string): string[] {
+  let d: Doc
+  try {
+    d = load(html)
+  } catch {
+    return []
+  }
+  return beatsOf(d.root).flatMap((b) => {
+    const slot = recSlotsOf(b)[0]
+    return slot && attr(slot, REC_HOLD) === 'end' ? [recHoldSrc(stepOf(slot, b))] : []
+  })
+}
+
 // ───── edits ─────
+/** The music bed the editor adds to a video that has none, and how far it dips under the voice-over. */
+export const MUSIC_ID = 'va-music'
+const NEW_BED_DUCK = 0.3
 export type EditOp =
   | { op: 'text'; id: string; text: string }
   | { op: 'retime'; beat: string; duration: number }
@@ -1022,9 +1415,35 @@ export type EditOp =
       volume?: number | undefined
       muted?: boolean | undefined
     }
+  /** Sets the music bed: the root music layer's file, or a new layer when there's none (the editor's Music +). */
+  | { op: 'music'; src: string; volume?: number | undefined }
   | { op: 'voice'; beat: string; text: string }
 
+/**
+ * Edits of a recording scene (screen-recording plan §5.3): times in source seconds, positions in frame fractions.
+ * The patcher applies them like any EditOp; the API's draft schema takes them with the demo API (va-rsk5.3.16).
+ */
+export type RecordingOp =
+  | { op: 'span'; beat: string; in: number; out: number }
+  | { op: 'camera'; beat: string; keys: (number | string)[][] }
+  | { op: 'cursor'; beat: string; style: 'smooth' | 'highlight' | 'none'; size: number }
+  | { op: 'redact'; beat: string; entries: RecordingRedactEntry[] }
+
+/** A scene's own hidden area as the editor sends it (ids and origin are filled in when missing). */
+export interface RecordingRedactEntry {
+  id?: string | undefined
+  origin?: 'agent' | 'editor' | undefined
+  start: number
+  end: number
+  reason?: string | undefined
+  /** blur (the default) or solid. */
+  style?: 'blur' | 'solid' | undefined
+  boxes: number[][]
+}
+
 export interface EditOptions {
+  /** Filled by span ops: per beat, the stretches of the recording a widened span shows with no cursor data. */
+  cursorGaps?: Record<string, [number, number][]>
   /** Colours a role may take (the brand palette). Empty: any #rgb/#rrggbb. */
   palette?: string[]
   /** Each voiced beat's line as it was spoken (from the voice script); voice ops need it. */
@@ -1070,6 +1489,10 @@ export function relayoutScoped(d: Doc, scoped: ReadonlySet<string>) {
 
 function fitVideoSlots(beat: Element, duration: number) {
   for (const vid of [...walk(beat)].filter((e) => attr(e, 'data-va-kind') === 'video')) {
+    if (attr(vid, REC_IN) !== null) {
+      fitRecordingSlot(beat, vid, duration)
+      continue
+    }
     setAttr(vid, 'data-start', '0')
     setAttr(vid, 'data-duration', fmt(duration)) // longer clips are trimmed to the beat
   }
@@ -1102,7 +1525,12 @@ const syncCaptions = (d: Doc, summary: Summary): Summary => syncCaptionsFor(read
  * Applies edits in order and returns the new composition and summary. Validates before and after: a composition
  * that doesn't conform isn't edited, and an edit that would break it is refused.
  */
-export function applyEdits(html: string, summary: Summary, ops: EditOp[], opts: EditOptions = {}) {
+export function applyEdits(
+  html: string,
+  summary: Summary,
+  ops: (EditOp | RecordingOp)[],
+  opts: EditOptions = {},
+) {
   assertValid(html, summary)
   const d = load(html)
   // The lines after the edits: voice ops replace them, and the caller writes them back to the voice script.
@@ -1115,7 +1543,12 @@ export function applyEdits(html: string, summary: Summary, ops: EditOp[], opts: 
   return { html: out, summary: nextSummary, composition: read(load(out), narration), narration }
 }
 
-function applyOne(d: Doc, op: EditOp, opts: EditOptions, narration: Record<string, string> | undefined) {
+function applyOne(
+  d: Doc,
+  op: EditOp | RecordingOp,
+  opts: EditOptions,
+  narration: Record<string, string> | undefined,
+) {
   const beats = beatsOf(d.root)
   const beat = (id: string) => {
     const b = beats.find((x) => attr(x, 'data-va-beat') === id)
@@ -1173,6 +1606,8 @@ function applyOne(d: Doc, op: EditOp, opts: EditOptions, narration: Record<strin
     case 'media': {
       const el = [...walk(d.root)].find((e) => attr(e, 'data-va-media') === op.slot)
       if (!el) throw new ContractError([`There's no media slot "${op.slot}".`])
+      if (attr(el, REC_IN) !== null)
+        throw new ContractError(["Swap the recording from the demo's setup, or remix with a new recording."])
       if (attr(el, 'data-va-kind') !== op.kind)
         throw new ContractError([
           `Slot "${op.slot}" takes ${attr(el, 'data-va-kind') ?? 'other'} media, not ${op.kind}.`,
@@ -1192,6 +1627,12 @@ function applyOne(d: Doc, op: EditOp, opts: EditOptions, narration: Record<strin
       }
       return
     }
+    case 'span':
+    case 'camera':
+    case 'cursor':
+    case 'redact':
+      applyRecordingOp(beat(op.beat), op, opts.cursorGaps)
+      return
     case 'audio': {
       const el = [...walk(d.root)].find((e) => e.tagName === 'audio' && attr(e, 'id') === op.id)
       if (!el) throw new ContractError([`There's no audio "${op.id}".`])
@@ -1217,6 +1658,49 @@ function applyOne(d: Doc, op: EditOp, opts: EditOptions, narration: Record<strin
         setAttr(el, 'data-va-volume', level)
         setAttr(el, 'data-va-muted', '')
       } else setAttr(el, 'data-volume', level)
+      return
+    }
+    case 'music': {
+      if (!/^assets\/media\/[A-Za-z0-9_.-]+$/.test(op.src))
+        throw new ContractError(['Music comes from assets/media/.'])
+      const volume = op.volume ?? 1
+      if (!(volume >= 0 && volume <= MAX_VOLUME))
+        throw new ContractError([`Volume goes from 0 to ${MAX_VOLUME}.`])
+      const layer = kids(d.root).find((e) => attr(e, 'data-va-layer') === 'music')
+      if (layer) {
+        // Like the audio op: a new file loses the old one's trim point, and a muted bed stays muted.
+        if (op.src !== attr(layer, 'src')) {
+          setAttr(layer, 'src', op.src)
+          layer.attrs = layer.attrs.filter((a) => a.name !== 'data-media-start')
+        }
+        if (op.volume !== undefined) {
+          const level = fmt(Math.round(volume * 100) / 100)
+          if (attr(layer, 'data-va-muted') !== null) setAttr(layer, 'data-va-volume', level)
+          else setAttr(layer, 'data-volume', level)
+        }
+        return
+      }
+      // A new bed spans the video on its own track and ducks under the voice-over (relayout writes its lane).
+      const track = Math.max(
+        0,
+        ...kids(d.root)
+          .map((e) => num(attr(e, 'data-track-index')))
+          .filter(Number.isFinite),
+      )
+      const el = defaultTreeAdapter.createElement('audio', h5.NS.HTML, [
+        { name: 'id', value: MUSIC_ID },
+        { name: 'data-va-layer', value: 'music' },
+        { name: 'data-va-audio', value: 'music' },
+        { name: 'src', value: op.src },
+        { name: 'data-start', value: '0' },
+        { name: 'data-duration', value: attr(d.root, 'data-duration') ?? '0' },
+        { name: 'data-track-index', value: String(track + 1) },
+        { name: 'data-volume', value: fmt(Math.round(volume * 100) / 100) },
+        { name: 'data-va-duck', value: String(NEW_BED_DUCK) },
+      ])
+      el.parentNode = d.root
+      const scripts = d.root.childNodes.findIndex((n) => isEl(n) && n.tagName === 'script')
+      d.root.childNodes.splice(scripts < 0 ? d.root.childNodes.length : scripts, 0, el)
       return
     }
     case 'voice': {

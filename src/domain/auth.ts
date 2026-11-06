@@ -107,6 +107,17 @@ async function keyOwnerRow(deps: Deps, ownerId: string): Promise<UserRow> {
 }
 
 /**
+ * Whether a key acting as this person may work now: their account exists (Identity: still there and confirmed), isn't
+ * disabled, and is still admitted. Throws otherwise. Checked on every key use, and before a CLI login mints one.
+ */
+export async function keyOwner(deps: Deps, ownerId: string): Promise<UserRow> {
+  if (deps.config.authProvider === 'netlify') return keyOwnerRow(deps, ownerId)
+  const live = await liveIdentityUser(deps, ownerId)
+  if (!live?.confirmed) throw new ApiError('unauthorized', "This key's owner no longer has an account.")
+  return ensureUserRow(deps, live)
+}
+
+/**
  * API keys are checked first. `otherBearer` (the MCP when OAuth is on) resolves bearer tokens that aren't API keys.
  * `setCookie` receives a rotated Sign in with Netlify session cookie for the response.
  */
@@ -129,13 +140,7 @@ export async function principalFromRequest(
     if (!key || key.revokedAt || !safeEqual(key.secretHash, sha256Hex(parsed.secret))) {
       throw new ApiError('unauthorized', 'Invalid API key.')
     }
-    let row: UserRow
-    if (deps.config.authProvider === 'netlify') row = await keyOwnerRow(deps, key.ownerId)
-    else {
-      const live = await liveIdentityUser(deps, key.ownerId)
-      if (!live?.confirmed) throw new ApiError('unauthorized', "This key's owner no longer has an account.")
-      row = await ensureUserRow(deps, live)
-    }
+    const row = await keyOwner(deps, key.ownerId)
     const now = deps.clock.now().toISOString()
     if (!key.lastUsedAt || now.slice(0, 15) !== key.lastUsedAt.slice(0, 15))
       await deps.store.updateKey(key.id, { lastUsedAt: now })

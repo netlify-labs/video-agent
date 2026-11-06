@@ -19,8 +19,13 @@ describe.each([
     expect(await h.json(await h.call('GET', base, { as: h.admin }))).toEqual({
       ...NARRATION_SETTING_DEFAULTS,
       remixEnabled: true,
+      webmcpEnabled: true,
       youtubeEnabled: false,
       youtubeConfigured: false,
+      recordingQuotaBytes: 2 * 1024 ** 3,
+      defaultLook: null,
+      disabledLooks: [],
+      cliLoginEnabled: true,
     })
     const off = await h.call('PATCH', base, {
       as: h.admin,
@@ -32,17 +37,30 @@ describe.each([
       transcriptionProvider: 'elevenlabs',
       takeQuotaBytes: NARRATION_SETTING_DEFAULTS.takeQuotaBytes,
       remixEnabled: true,
+      webmcpEnabled: true,
       youtubeEnabled: false,
       youtubeConfigured: false,
+      recordingQuotaBytes: 2 * 1024 ** 3,
+      defaultLook: null,
+      disabledLooks: [],
+      cliLoginEnabled: true,
     })
-    await h.call('PATCH', base, { as: h.admin, body: { takeQuotaBytes: 512 * 1024 ** 2 } })
+    await h.call('PATCH', base, {
+      as: h.admin,
+      body: { takeQuotaBytes: 512 * 1024 ** 2, recordingQuotaBytes: 3 * 1024 ** 3 },
+    })
     expect(await h.json(await h.call('GET', base, { as: h.admin }))).toEqual({
       narrationEnabled: false,
       transcriptionProvider: 'elevenlabs',
       takeQuotaBytes: 512 * 1024 ** 2,
       remixEnabled: true,
+      webmcpEnabled: true,
       youtubeEnabled: false,
       youtubeConfigured: false,
+      recordingQuotaBytes: 3 * 1024 ** 3,
+      defaultLook: null,
+      disabledLooks: [],
+      cliLoginEnabled: true,
     })
     expect(h.deps.logs.some((l) => l.includes('"settings.updated"'))).toBe(true)
   })

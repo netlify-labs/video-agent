@@ -1,12 +1,32 @@
-import { Alert, Anchor, Button, Card, Group, NumberInput, Select, Stack, Switch, Text } from '@mantine/core'
+import {
+  Alert,
+  Anchor,
+  Button,
+  Card,
+  Group,
+  Modal,
+  NumberInput,
+  Radio,
+  Select,
+  Stack,
+  Switch,
+  Text,
+  TextInput,
+} from '@mantine/core'
 import { modals } from '@mantine/modals'
 import { WebhookCard } from '../components/WebhookCard'
+import { LooksSettingsCard } from '../components/LooksAdmin'
 import { DestinationsAdminCard, YouTubeAdminCard } from '../components/DestinationsAdmin'
 import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { Link, Navigate } from 'react-router'
 import { $api } from '../api/client'
+import {
+  REMOTION_LICENSE_NOTICE,
+  REMOTION_LICENSE_TIERS,
+  REMOTION_SWITCH_LABEL,
+} from '../../../src/lib/remotion-notice'
 import { PageHeader, relativeTime, showError, useAfterWrite } from '../components/bits'
 
 const STAGE: Record<string, string> = {
@@ -27,6 +47,11 @@ const FAILURE: Record<string, string> = {
   runner_failed: 'Agent run failed',
   queue_timeout: 'Waited too long in the queue',
   engine_mismatch: 'Wrong engine for this video',
+  engine_unavailable: 'Engine not installed here',
+  engine_tampered: 'Engine project changed',
+  engine_install_failed: 'Engine install failed',
+  engine_skills_unavailable: 'Engine skills missing',
+  engine_check_failed: 'Engine check failed',
 }
 
 export function AdminPage() {
@@ -343,6 +368,10 @@ export function AdminPage() {
           <WebhookCard scope="team" />
           <NarrationSettingsCard />
           <RemixSettingsCard />
+          <WebMcpSettingsCard />
+          <LooksSettingsCard />
+          <CliLoginSettingsCard />
+          <RemotionSettingsCard />
           <DestinationsAdminCard />
           <YouTubeAdminCard />
           <Card>
@@ -386,6 +415,16 @@ export function AdminPage() {
                 </tbody>
               </table>
             )}
+            {s?.remotionRenders ? (
+              <Text size="sm" mt="sm" data-testid="remotion-renders">
+                Remotion renders this month: {s.remotionRenders.total} ({s.remotionRenders.videos}{' '}
+                {s.remotionRenders.videos === 1 ? 'video' : 'videos'}, {s.remotionRenders.stills}{' '}
+                {s.remotionRenders.stills === 1 ? 'still' : 'stills'}).{' '}
+                <Text span size="xs" c="var(--va-faint)">
+                  Reconcile with remotion.pro; Video Agent doesn't know how Remotion bills them.
+                </Text>
+              </Text>
+            ) : null}
           </Card>
         </div>
       </Stack>
@@ -419,6 +458,147 @@ function RemixSettingsCard() {
   )
 }
 
+/** WebMCP (va-qago): in browsers that support it, AI agents can drive this app's pages through its tools. */
+function WebMcpSettingsCard() {
+  const afterWrite = useAfterWrite()
+  const settings = $api.useQuery('get', '/api/v1/admin/settings')
+  const save = $api.useMutation('patch', '/api/v1/admin/settings', afterWrite)
+  const s = settings.data
+  return (
+    <Card>
+      <Text fw={600} mb="xs">
+        WebMCP
+      </Text>
+      <Switch
+        label="AI agents in the browser can use this app"
+        description="In browsers with WebMCP, an agent can search, fill forms, edit and play videos for the person using it. Anything that spends credits, publishes or deletes still needs that person's click. Off registers no tools."
+        checked={s?.webmcpEnabled ?? false}
+        disabled={!s}
+        onChange={(e) => {
+          save.mutate({ body: { webmcpEnabled: e.currentTarget.checked } })
+        }}
+      />
+    </Card>
+  )
+}
+
+/** video-agent login's browser approval (cli-and-sdk plan §5.2): on by default. Keys made by hand still work. */
+function CliLoginSettingsCard() {
+  const afterWrite = useAfterWrite()
+  const settings = $api.useQuery('get', '/api/v1/admin/settings')
+  const save = $api.useMutation('patch', '/api/v1/admin/settings', afterWrite)
+  const s = settings.data
+  return (
+    <Card>
+      <Text fw={600} mb="xs">
+        CLI sign-in
+      </Text>
+      <Switch
+        label="People can sign in from the CLI"
+        description="video-agent login opens this site to approve the terminal, and the terminal gets an API key. Off refuses new CLI sign-ins; API keys, including ones the CLI already has, keep working."
+        checked={s?.cliLoginEnabled ?? false}
+        disabled={!s}
+        onChange={(e) => {
+          save.mutate({ body: { cliLoginEnabled: e.currentTarget.checked } })
+        }}
+      />
+    </Card>
+  )
+}
+
+/**
+ * The Remotion engine (render-engines plan §7): shown only when ENGINES lists it. Turning it on asks which license the
+ * organisation has, after the notice everyone sees word for word; the server records who chose and when.
+ */
+function RemotionSettingsCard() {
+  const afterWrite = useAfterWrite()
+  const settings = $api.useQuery('get', '/api/v1/admin/settings')
+  const [asking, setAsking] = useState(false)
+  const [tier, setTier] = useState<'free' | 'company' | null>(null)
+  const [note, setNote] = useState('')
+  const save = $api.useMutation('patch', '/api/v1/admin/settings', {
+    onSuccess: () => {
+      setAsking(false)
+      afterWrite.onSuccess()
+    },
+    onError: afterWrite.onError,
+  })
+  const r = settings.data?.remotion
+  if (!r) return null
+  const license = r.license
+  return (
+    <Card>
+      <Text fw={600} mb="xs">
+        Render engines
+      </Text>
+      <Stack gap="xs">
+        <Switch
+          label={REMOTION_SWITCH_LABEL}
+          description="HyperFrames stays the default. Remotion videos can't be edited in the browser yet."
+          checked={r.enabled}
+          onChange={(e) => {
+            if (e.currentTarget.checked) {
+              setTier(license?.tier ?? null)
+              setNote(license?.note ?? '')
+              setAsking(true)
+            } else save.mutate({ body: { remotionEnabled: false } })
+          }}
+        />
+        {license ? (
+          <Text size="xs" c="var(--va-faint)">
+            {license.tier === 'free' ? 'Free License' : 'Company License'}, recorded by {license.email}{' '}
+            {relativeTime(license.at)}
+            {license.note ? ` (${license.note})` : ''}
+          </Text>
+        ) : null}
+      </Stack>
+      <Modal opened={asking} onClose={() => setAsking(false)} title="Use Remotion" size="lg">
+        <Stack gap="sm">
+          <Text size="sm">{REMOTION_LICENSE_NOTICE}</Text>
+          <Radio.Group
+            value={tier ?? ''}
+            onChange={(v) => setTier(v === 'free' || v === 'company' ? v : null)}
+          >
+            <Stack gap="xs">
+              <Radio value="free" label={REMOTION_LICENSE_TIERS.free} />
+              <Radio value="company" label={REMOTION_LICENSE_TIERS.company} />
+            </Stack>
+          </Radio.Group>
+          {tier === 'company' && !r.keySet ? (
+            <Alert color="orange" title="VIDEO_AGENT_REMOTION_KEY isn't set">
+              Set VIDEO_AGENT_REMOTION_KEY on the project first; the server only checks that it's set.
+            </Alert>
+          ) : null}
+          <TextInput
+            label="License reference or who approved it"
+            size="sm"
+            value={note}
+            maxLength={500}
+            onChange={(e) => setNote(e.currentTarget.value)}
+          />
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setAsking(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!tier}
+              loading={save.isPending}
+              onClick={() => {
+                if (tier)
+                  save.mutate({
+                    body: { remotionEnabled: true, remotionLicense: { tier, note: note.trim() || null } },
+                  })
+              }}
+            >
+              Turn Remotion on
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+    </Card>
+  )
+}
+
 /** Recorded voice-over: on or off, how takes are transcribed, and each person's storage for recordings. */
 function NarrationSettingsCard() {
   const afterWrite = useAfterWrite()
@@ -426,13 +606,22 @@ function NarrationSettingsCard() {
   const save = $api.useMutation('patch', '/api/v1/admin/settings', afterWrite)
   const s = settings.data
   const [quota, setQuota] = useState<number | string>('')
+  const [screenQuota, setScreenQuota] = useState<number | string>('')
   useEffect(() => {
-    if (s) setQuota(s.takeQuotaBytes / GIB)
+    if (s) {
+      setQuota(s.takeQuotaBytes / GIB)
+      setScreenQuota(s.recordingQuotaBytes / GIB)
+    }
   }, [s])
   const saveQuota = () => {
     const gib = Number(quota)
     if (s && Number.isFinite(gib) && gib > 0 && Math.round(gib * GIB) !== s.takeQuotaBytes)
       save.mutate({ body: { takeQuotaBytes: Math.round(gib * GIB) } })
+  }
+  const saveScreenQuota = () => {
+    const gib = Number(screenQuota)
+    if (s && Number.isFinite(gib) && gib > 0 && Math.round(gib * GIB) !== s.recordingQuotaBytes)
+      save.mutate({ body: { recordingQuotaBytes: Math.round(gib * GIB) } })
   }
   return (
     <Card>
@@ -466,7 +655,7 @@ function NarrationSettingsCard() {
           }}
         />
         <NumberInput
-          label="Storage for each person's recordings"
+          label="Voice recordings per person"
           size="sm"
           suffix=" GiB"
           min={0.01}
@@ -478,6 +667,22 @@ function NarrationSettingsCard() {
           onBlur={saveQuota}
           onKeyDown={(e) => {
             if (e.key === 'Enter') saveQuota()
+          }}
+        />
+        <NumberInput
+          label="Screen recordings per person"
+          description="Raw recordings for demos. Unused ones are deleted 30 days after their last use."
+          size="sm"
+          suffix=" GiB"
+          min={0.01}
+          max={1024}
+          decimalScale={2}
+          value={screenQuota}
+          disabled={!s}
+          onChange={setScreenQuota}
+          onBlur={saveScreenQuota}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') saveScreenQuota()
           }}
         />
       </Stack>

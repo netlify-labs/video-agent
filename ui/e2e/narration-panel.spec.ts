@@ -124,11 +124,15 @@ test('a chosen file (decoded by the browser) and a recording of this video land 
   await page.goto('/videos/vid_teaser/edit/2')
   const section = page.getByTestId('narration-section')
   // A 16 kHz WAV isn't the track's rate, so it goes through decodeAudioData (resampled to 24 kHz).
-  await section.locator('input[type="file"]').setInputFiles({
-    name: 'phone-memo.wav',
-    mimeType: 'audio/wav',
-    buffer: Buffer.from(speechWav(1, 16_000)),
-  })
+  // The first file input is the Narration track's (the others are the music bed's and Add audio's, which asks).
+  await section
+    .locator('input[type="file"]')
+    .first()
+    .setInputFiles({
+      name: 'phone-memo.wav',
+      mimeType: 'audio/wav',
+      buffer: Buffer.from(speechWav(1, 16_000)),
+    })
   await expect(page.locator('.va-tl-clip[data-clip-id="nar_1"]')).toBeVisible({ timeout: 15_000 })
   await expect.poll(() => span(page)).toEqual(['nar_1', 0, 1])
 
@@ -138,6 +142,11 @@ test('a chosen file (decoded by the browser) and a recording of this video land 
     .getByRole('dialog', { name: 'Recordings for this video' })
     .getByRole('button', { name: 'Add Warm-up' })
     .click()
+  // Add audio asks which track: a recording of this video is narration (Music is off for it).
+  const ask = page.getByTestId('add-to')
+  await expect(ask.getByRole('radio', { name: 'Narration' })).toBeChecked()
+  await expect(ask.getByRole('radio', { name: 'Music' })).toBeDisabled()
+  await page.getByTestId('add-to-confirm').click()
   const warm = page.locator('.va-tl-clip[data-clip-id="nar_2"]')
   await expect(warm).toContainText('Warm-up')
   // The recording's stored length (24 s), laid on top at the playhead (0), so it covers the first clip.
@@ -148,7 +157,7 @@ test('a chosen file (decoded by the browser) and a recording of this video land 
     .toMatchObject({ clips: [{ id: 'nar_2', mediaId: 'med_take0003', start: 0, srcEnd: 24 * RATE }] })
 })
 
-test('library audio picked from the Narration section lands at the playhead, its full length', async ({
+test('library audio added to the Narration track lands at the playhead, its full length', async ({
   page,
 }) => {
   await mock(page, 'mockLibraryMusic')
@@ -156,10 +165,12 @@ test('library audio picked from the Narration section lands at the playhead, its
   const section = page.getByTestId('narration-section')
   await section.getByRole('button', { name: 'Add audio' }).click()
   await page.getByRole('menuitem', { name: 'From the library' }).click()
-  await page
-    .getByRole('dialog', { name: 'Add audio to the narration' })
-    .getByTestId('pick-med_libpiano')
-    .click()
+  await page.getByRole('dialog', { name: 'Add audio' }).getByTestId('pick-med_libpiano').click()
+  // Add audio asks which track: music imported from Openverse is offered to Music first; this one goes to Narration.
+  const ask = page.getByTestId('add-to')
+  await expect(ask.getByRole('radio', { name: 'Music' })).toBeChecked()
+  await ask.getByText('Narration', { exact: true }).click()
+  await page.getByTestId('add-to-confirm').click()
   const clip = page.locator('.va-tl-clip[data-clip-id="nar_1"]')
   await expect(clip).toContainText('Quiet Piano Morning')
   // No stored waveform or spans: its length is the file's (95 s in the mock), as the server checks it.

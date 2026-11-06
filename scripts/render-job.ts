@@ -4,20 +4,31 @@
 // variants: small WebP/AVIF posters, a placeholder and a hover clip), uploads everything to the uploads store under the attempt id, and notifies the service.
 // Reference files (the narration bus) stay out of source.tar.gz and are uploaded on their own (scripts/lib/references.ts).
 // Prints the manifest as a fenced json block on stdout. Logs JSON lines on stderr.
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+// Local mode (cli-and-sdk plan §7): --upload local keeps the outputs in .render/<attempt>/ and uploads nothing, and a
+// file: --callback (file://<ws>/.render/<attempt>/done) writes the manifest to done.json there instead of POSTing it.
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import type { MasteringReport, NarrationOutput, NarrationReport } from '../src/domain/types.js'
-import { bundleManifest, compositionFiles } from '../src/lib/bundle-manifest.js'
+import { bundleManifest, compositionFiles, manifestHash } from '../src/lib/bundle-manifest.js'
 import { NARRATION_SRC } from '../src/lib/contract.js'
 import { groupWords, transcriptText } from '../src/lib/narration-captions.js'
 import { checkNarration } from '../src/lib/narration-guard.js'
 import { checkNarrationKept, checkNarrationModified } from '../src/lib/narration-modified.js'
 import { checkRevoiced, FROZEN_DIR } from '../src/lib/revoice.js'
+import { sniff } from '../src/lib/media/mp4.js'
 import type { PreviewFile } from '../src/lib/media/previews.js'
 import type { RunManifest } from '../src/lib/run-manifest.js'
+import { checkOutputPrivacy } from './lib/recording-privacy.js'
 import type { NarrationOp } from '../src/lib/timeline.js'
-import { postCheckpoint } from './checkpoint.js'
-import { engineReport, runEngineFor, runEngineIdFromManifest } from './lib/engines/index.js'
+import { localFolder, postCheckpoint, writeAtomic } from './checkpoint.js'
+import { brokeredRender } from './lib/render-broker.js'
+import {
+  checkBeforeRender,
+  engineReport,
+  runEngineFor,
+  runEngineIdFromManifest,
+} from './lib/engines/index.js'
+import { holdStillTo } from './lib/recording-emit.js'
 import { scopeGuard } from './lib/scope-guard.js'
 import { readNarrationReceipt } from './lib/narration-inputs.js'
 import { toVtt } from './lib/captions.js'
@@ -53,15 +64,24 @@ const MAX_BYTES = 2 * 1024 * 1024 * 1024
 
 async function main() {
   const args = parseArgs(process.argv.slice(2))
-  const { job, attempt, callback, token } = args
-  if (!job || !attempt || !callback || !token)
+  const { job, attempt, callback, token = '' } = args
+  const uploadMode = args.upload ?? 'blobs'
+  // A file: callback (local mode) needs no token.
+  if (!job || !attempt || !callback || (!token && !callback.startsWith('file:')))
     throw new StepError(
-      'Usage: render-job.ts --job <id> --attempt <id> --callback <url> --token <token> --upload blobs',
+      'Usage: render-job.ts --job <id> --attempt <id> --callback <url> --token <token> --upload blobs|local',
     )
+  // Checked before rendering, so a bad path fails in seconds, not after the render.
+  const doneFile = localFolder(callback)
+  if (callback.startsWith('file:') && uploadMode !== 'local')
+    throw new StepError('A file: callback goes with --upload local.')
   const started = Date.now()
   const videoDir = join(repoRoot, 'video')
   const out = join(repoRoot, '.render', attempt)
-  rmSync(out, { recursive: true, force: true })
+  // A fresh output folder, except a local run's checkpoint/ (file: checkpoints), which the CLI may still be reading.
+  if (existsSync(out))
+    for (const name of readdirSync(out))
+      if (name !== 'checkpoint') rmSync(join(out, name), { recursive: true, force: true })
   mkdirSync(out, { recursive: true })
 
   for (const tool of ['ffmpeg', 'ffprobe'])
@@ -95,15 +115,22 @@ async function main() {
   if (contract?.length) throw new StepError(contract[0] ?? '')
   if (contract) log('contract.ok')
   else log('contract.absent', { note: 'This video will not be editable in the browser.' })
-  const indexHtml = readFileSync(join(videoDir, 'index.html'), 'utf8')
+  await checkBeforeRender(engine, videoDir)
+  // HyperFrames' entry file: what the lane cap, the audio check and narration read. Other engines have none.
+  const html = engine.id === 'hyperframes'
+  const indexHtml = html ? readFileSync(join(videoDir, 'index.html'), 'utf8') : ''
 
   // Render-unchanged runs render exactly the frozen bundle prepare-run restored (plan v2 §14 rule 21).
   const runManifestPath = join(repoRoot, '.render', 'run-manifest.json')
   // The frozen narration op: captions.vtt captions only what its tracks leave audible.
   let narrationOp: NarrationOp | undefined
+  // A demo in privacy mode or with hide strings: the rendered video is read back for them.
+  let privacyCheck: { patterns: boolean; strings: string[] } | null = null
   if (existsSync(runManifestPath)) {
     const m = JSON.parse(readFileSync(runManifestPath, 'utf8')) as RunManifest
     if (m.attemptId === attempt) narrationOp = m.bundle?.narration?.op
+    if (m.attemptId === attempt && (m.recording?.privacy || m.recording?.hideStrings?.length))
+      privacyCheck = { patterns: m.recording.privacy === true, strings: m.recording.hideStrings ?? [] }
     if (m.attemptId === attempt && m.kind === 'render_unchanged' && m.bundle?.narration) {
       // Recorded narration (after any re-voice): only the files narration-run.ts's steps write may differ, each
       // exactly as those steps write it from the frozen files and the receipt (src/lib/narration-guard.ts).
@@ -163,6 +190,34 @@ async function main() {
           `video/ changed in ways re-voicing doesn't explain. Render-unchanged runs must not edit files. Stop and report this.\n- ${problems.join('\n- ')}`,
         )
       log('bundle.verified', { revoiced: m.bundle.revoice.beats })
+    } else if (m.attemptId === attempt && m.kind === 'render_unchanged' && m.bundle?.recordingHolds?.length) {
+      // Held recording scenes (screen-recording plan §5.3): the run added exactly their stills (emit --holds-only).
+      // Everything else must be as frozen; each still must be what a fresh extraction makes, byte for byte.
+      const holds = m.bundle.recordingHolds
+      const bm = bundleManifest(videoDir)
+      const actual = manifestHash(
+        bm.files.filter((f) => !holds.includes(f.path)),
+        bm.media,
+      )
+      if (actual !== m.bundle.manifestHash)
+        throw new StepError(
+          `video/ changed since prepare-run restored it (got ${actual}). Render-unchanged runs must not edit files. Stop and report this.`,
+        )
+      const fresh = join(repoRoot, '.render', `${attempt}-holds`)
+      mkdirSync(fresh, { recursive: true })
+      for (const rel of holds) {
+        const still = join(videoDir, rel)
+        if (!existsSync(still))
+          throw new StepError(`${rel} is missing: run npx tsx scripts/recording.ts emit --holds-only first.`)
+        const bytes = readFileSync(still)
+        if (sniff(new Uint8Array(bytes)) !== 'jpeg')
+          throw new StepError(`${rel} isn't a JPEG. Stop and report this.`)
+        const check = join(fresh, rel.split('/').at(-1) ?? 'hold.jpg')
+        holdStillTo(videoDir, readFileSync(join(videoDir, 'index.html'), 'utf8'), rel, check)
+        if (!bytes.equals(readFileSync(check)))
+          throw new StepError(`${rel} isn't the still of its scene's last frame. Stop and report this.`)
+      }
+      log('bundle.verified', { manifestHash: actual, recordingHolds: holds })
     } else if (m.attemptId === attempt && m.kind === 'render_unchanged' && m.bundle) {
       const actual = bundleManifest(videoDir).hash
       if (actual !== m.bundle.manifestHash)
@@ -177,10 +232,8 @@ async function main() {
   assertNoTakesInVideo()
   // HyperFrames keeps only the first 512 points of a lane and says nothing (docs/spikes.md S12): refuse lanes it would
   // cut. Narrated renders keep their own, stricter cap (the duck lane under narration stays at MAX_AUTOMATION_POINTS).
-  const cap = narrationOf(readFileSync(join(videoDir, 'index.html'), 'utf8')).narrated
-    ? MAX_AUTOMATION_POINTS
-    : HYPERFRAMES_AUTOMATION_POINTS
-  const longLanes = compositionFiles(videoDir)
+  const cap = narrationOf(indexHtml).narrated ? MAX_AUTOMATION_POINTS : HYPERFRAMES_AUTOMATION_POINTS
+  const longLanes = (html ? compositionFiles(videoDir) : [])
     .filter((f) => f.endsWith('.html'))
     .flatMap((f) =>
       automationOverCap(readFileSync(join(videoDir, f), 'utf8'), cap).map((l) => ({ file: f, ...l })),
@@ -198,9 +251,18 @@ async function main() {
       if (!r.ok) log('render.progress_skipped', { pct, reason: r.reason })
     })
   })
-  const rendered = await engine.render(videoDir, video, QUALITY, (pct) => {
-    reporter.progress(pct)
-  })
+  // Local mode renders on the host, outside the agent's sandbox (scripts/lib/render-broker.ts).
+  const brokered = process.env.VA_RENDER_BROKER === 'file'
+  if (brokered && engine.id !== 'hyperframes')
+    throw new StepError(`Local mode renders HyperFrames only, not ${engine.id}.`)
+  const rendered = brokered
+    ? await brokeredRender(out, QUALITY, (pct) => {
+        reporter.progress(pct)
+      }).then(() => ({}))
+    : await engine.render(videoDir, video, QUALITY, (pct) => {
+        reporter.progress(pct)
+      })
+  if (brokered) log('render.brokered', { ms: Date.now() - started })
   // hyperframes stops its machine lines at 99%: close the render out so the page moves on to "saving".
   void postCheckpoint({
     attempt,
@@ -235,6 +297,25 @@ async function main() {
     )
   if (statSync(video).size > MAX_BYTES)
     throw new StepError('The rendered MP4 is larger than 2 GB. Make the video shorter.')
+  if (privacyCheck) {
+    const r = await checkOutputPrivacy(
+      video,
+      { width: stream.width, height: stream.height, duration: durationSec },
+      { ...privacyCheck, workDir: join(repoRoot, '.render', 'privacy-check') },
+    )
+    if (r.readable.length) {
+      const at = [
+        ...new Set(
+          r.readable.map(
+            (x) => `${String(Math.floor(x.t / 60))}:${String(Math.floor(x.t % 60)).padStart(2, '0')}`,
+          ),
+        ),
+      ]
+      throw new StepError(
+        `Text the person asked to hide is still readable in the video at ${at.join(', ')}. Add or widen a hidden area over it there (in plan.json), emit that scene again and render again.`,
+      )
+    }
+  }
   // The MP4 keeps its sound; only the previews below drop it. A composition with <audio> and no track is logged.
   const audioCodecs = run('ffprobe', [
     '-v',
@@ -349,15 +430,20 @@ async function main() {
   > &
     Partial<Record<PreviewFile | NarrationOutput, { sha256: string; bytes: number }>>
 
-  const [bin, ...pre] = netlifyCli() as [string, ...string[]]
-  const upload = (name: string, tries: number, timeoutMs: number) =>
-    withRetries(`upload ${name}`, tries, () =>
+  const local = uploadMode === 'local'
+  const blobs = local ? null : (netlifyCli() as [string, ...string[]])
+  const upload = async (name: string, tries: number, timeoutMs: number) => {
+    if (!blobs) return
+    const [bin, ...pre] = blobs
+    await withRetries(`upload ${name}`, tries, () =>
       run(
         bin,
         [...pre, 'blobs:set', 'uploads', `${attempt}/${name}`, '--input', join(out, name), '--force'],
         { timeoutMs },
       ),
     )
+  }
+  if (local) log('render.upload_skipped', { attempt, mode: 'local', out })
   for (const name of OUTPUTS) await upload(name, 4, 5 * 60_000)
   for (const name of narrationOutputs) {
     await upload(name, 4, 5 * 60_000)
@@ -373,7 +459,7 @@ async function main() {
       previews.skipped.push({ name, reason: `upload failed: ${error}` })
     }
   }
-  const references = await uploadReferences(attempt, videoDir)
+  const references = local ? [] : await uploadReferences(attempt, videoDir)
   log('upload.done', { ms: Date.now() - started })
   // What finalize records on the version (versions.narration and versions.captions): the receipt, summed up.
   const narrationReport = narrationOp ? narrationReportOf(readNarrationReceipt(repoRoot)) : undefined
@@ -410,6 +496,14 @@ async function main() {
   // Kept on disk too, so the agent can print it again without rendering again (a second render overwrites the uploads).
   writeFileSync(join(out, 'manifest.json'), JSON.stringify(manifest, null, 2))
 
+  if (doneFile) {
+    const t = Date.now()
+    mkdirSync(dirname(doneFile), { recursive: true })
+    writeAtomic(`${doneFile}.json`, JSON.stringify(manifest))
+    log('callback.file_written', { attempt, file: `${doneFile}.json`, ms: Date.now() - t })
+    console.log(`\`\`\`json\n${JSON.stringify(manifest, null, 2)}\n\`\`\``)
+    return
+  }
   const status = await withRetries('callback', 5, async () => {
     const res = await fetch(callback, {
       method: 'POST',

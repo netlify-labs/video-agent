@@ -173,7 +173,8 @@ describe('remix prompt', () => {
 
   it('says it is a remix, fences the source, explains how much to change, brand and dropped narration', () => {
     const p = buildPrompt({ ...base, revision: { parentN: null }, remix })
-    expect(PROMPT_TEMPLATE_VERSION).toBe(16)
+    // Not a literal: each PR that changes the template bumps it (roadmap shared rule 3).
+    expect(PROMPT_TEMPLATE_VERSION).toBeGreaterThanOrEqual(16)
     expect(p).toContain("restores video/ to the finished composition of the video you're remixing")
     expect(p).toContain('This is a remix')
     expect(p).toContain('How much to change')

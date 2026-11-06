@@ -10,8 +10,10 @@ import {
   ContractError,
   FPS,
   load,
+  pendingStills,
   read as readComposition,
   type EditOp,
+  type RecordingOp,
   type Summary,
 } from '../lib/contract.js'
 import type { Language } from '../lib/language.js'
@@ -53,7 +55,8 @@ import {
 import { assertCan, type Principal } from './policy.js'
 import { assertSameEngine, engineOf } from './engines.js'
 import { snapshotMedia } from './media.js'
-import { addAttemptRefs, canReadTake, isTake, releaseOwnerRefs, replaceDraftRefs } from './takes.js'
+import { addAttemptRefs, canReadMedia, releaseOwnerRefs, replaceDraftRefs } from './takes.js'
+import { isLibraryPick } from './media-roles.js'
 import { getSettings } from './settings.js'
 import { narrationEnabled, narrationSettings } from './narration-settings.js'
 import { assertNarrationLock } from './narration-lock.js'
@@ -61,13 +64,15 @@ import { canonical, narrationChangedSince } from './narration-stale.js'
 import type { Repo } from '../store/types.js'
 import { type EditRow, type MediaRow, type TranscriptionProvider, type VersionRow } from './types.js'
 import { hasUnfinished, loadJob, newAttempt, videoDto, withIdempotency } from './videos.js'
+import { LOCKED_SRC, parseRedactScript } from '../lib/recording.js'
+import { inheritRecording } from './demo-recording.js'
 
 export const EDIT_TTL_MS = 7 * 24 * 3600_000
 const MAX_OPS = 500
 const AUDIO_FILE = /\.(mp3|m4a|aac|wav|ogg|opus|webm)$/i
 
 /** A draft's ops: the contract's edits, plus at most one whole-track narration op (plan 2026-11-02 §6.1). */
-export type DraftOp = EditOp | NarrationOp
+export type DraftOp = EditOp | RecordingOp | NarrationOp
 
 export const editPrefix = (jobId: string, n: number, editId: string) =>
   `${bundlePrefix(jobId, n)}e/${editId}/`
@@ -154,7 +159,7 @@ async function checkTakeAccess(
     const ok =
       m?.kind === 'audio' &&
       !m.deletingAt &&
-      (inherited.has(id) || (m.status === 'ready' && !m.deletedAt && (await canReadTake(repo, p, m))))
+      (inherited.has(id) || (m.status === 'ready' && !m.deletedAt && (await canReadMedia(repo, p, m))))
     if (!ok)
       throw new ApiError('invalid_request', `That edit can't be made: recording ${id} isn't available.`, {
         mediaId: id,
@@ -239,6 +244,16 @@ async function narrationTakes(deps: Deps, repo: Repo, op: NarrationOp, baseSampl
 /** Colours a role may take: the ones the composition already uses, plus the brand's primary colour. */
 export function paletteOf(colors: Record<string, string>) {
   return [...new Set([...Object.values(colors), contextMeta.primaryColor].map((c) => c.trim().toLowerCase()))]
+}
+
+/** What the editor's recording panels need about a demo (read from the version's bundle). */
+interface EditRecording {
+  duration: number
+  trace: boolean
+  locked: Record<string, unknown>[]
+  camera: Record<string, (number | string)[][]>
+  /** The most the camera may zoom and stay sharp (the plan's, after sharpZoomMax). */
+  zoomMax: number
 }
 
 /**
@@ -345,7 +360,7 @@ async function computeRev(
   // served from the library.
   const picks: string[] = []
   for (const op of ops) {
-    if ((op.op !== 'media' && op.op !== 'audio') || !op.src) continue
+    if ((op.op !== 'media' && op.op !== 'audio' && op.op !== 'music') || !op.src) continue
     const src = op.src
     const kind = op.op === 'media' ? op.kind : 'audio'
     if (entries.has(src)) {
@@ -358,7 +373,15 @@ async function computeRev(
     const m = await repo.getMedia(file.split('.')[0] ?? '')
     const fits = kind === 'image' ? m?.kind === 'image' || m?.kind === 'svg' : m?.kind === kind
     // A narration take isn't a library item: it's placed with the narration op, never as a media or audio pick.
-    if (!m || m.deletedAt || m.status !== 'ready' || isTake(m) || `${m.id}.${m.ext}` !== file || !fits)
+    // Takes go in through narration and screen recordings through the recording, not as a pick into a slot.
+    if (
+      !m ||
+      m.deletedAt ||
+      m.status !== 'ready' ||
+      !isLibraryPick(m) ||
+      `${m.id}.${m.ext}` !== file ||
+      !fits
+    )
       throw new ApiError(
         'invalid_request',
         `That edit can't be made: ${file} isn't a ready ${kind} in the library.`,
@@ -372,7 +395,28 @@ async function computeRev(
     picks.push(m.id)
   }
   const list = [...entries.values()]
+  // A demo: the recording's facts for the editor's panels, from the bundle's own files.
+  let recording: EditRecording | null = null
+  if (/class="[^"]*\bva-recording\b/.test(html)) {
+    const analysis = JSON.parse((await read('assets/recording/analysis.json')) || '{}') as {
+      source?: { duration?: number }
+      cursorSource?: string
+    }
+    const plan = JSON.parse((await read('assets/recording/plan.json')) || '{}') as {
+      zoomMax?: number
+      steps?: { id: string; camera: (number | string)[][] }[]
+    }
+    const locked = parseRedactScript(await read(LOCKED_SRC))
+    recording = {
+      duration: analysis.source?.duration ?? 0,
+      trace: analysis.cursorSource === 'trace',
+      locked: locked.ok ? (locked.entries) : [],
+      camera: Object.fromEntries((plan.steps ?? []).map((st) => [st.id, st.camera])),
+      zoomMax: plan.zoomMax ?? 2.2,
+    }
+  }
   return {
+    recording,
     changed,
     list,
     picks,
@@ -413,10 +457,40 @@ async function buildRev(
   await deps.blobs.set('bundles', `${prefix}manifest.json`, JSON.stringify(index), {
     contentType: 'application/json',
   })
-  // Only the newest rev is kept.
-  for (const k of await deps.blobs.list('bundles', editPrefix(e.jobId, e.baseN, e.id)))
-    if (!k.startsWith(prefix)) await deps.blobs.delete('bundles', k)
+  await pruneRevs(deps, e, rev)
   return r
+}
+
+/**
+ * The newest rev is kept, and each one it superseded for a preview link's lifetime after that: a save the preview
+ * shows live (a narration take) doesn't reload the frame, which keeps loading its rev's media by range (a recording
+ * scene's video), so deleting that rev at once left those scenes on their first frame (owner, 2026-11-06). A rev's
+ * `gone/r{rev}.{seconds}` marker says when it was superseded; the key itself is the time, so a list is enough.
+ */
+async function pruneRevs(deps: Deps, e: Pick<EditRow, 'id' | 'jobId' | 'baseN'>, newest: number) {
+  const base = editPrefix(e.jobId, e.baseN, e.id)
+  const now = Math.floor(deps.clock.now().getTime() / 1000)
+  const keys = await deps.blobs.list('bundles', base)
+  const gone = new Map<number, number>()
+  const revs = new Map<number, string[]>()
+  for (const k of keys) {
+    const rest = k.slice(base.length)
+    const g = /^gone\/r(\d+)\.(\d+)$/.exec(rest)
+    if (g) gone.set(Number(g[1]), Number(g[2]))
+    const r = /^r(\d+)\//.exec(rest)
+    if (r && Number(r[1]) !== newest) revs.set(Number(r[1]), [...(revs.get(Number(r[1])) ?? []), k])
+  }
+  for (const [rev, files] of revs) {
+    const at = gone.get(rev)
+    if (at === undefined) await deps.blobs.set('bundles', `${base}gone/r${rev}.${now}`, '')
+    else if (now - at > PREVIEW_TTL_SEC + 60) {
+      for (const k of files) await deps.blobs.delete('bundles', k)
+      await deps.blobs.delete('bundles', `${base}gone/r${rev}.${at}`)
+    }
+  }
+  // A marker whose rev is gone (or is the newest again) goes too.
+  for (const [rev, at] of gone)
+    if (!revs.has(rev)) await deps.blobs.delete('bundles', `${base}gone/r${rev}.${at}`)
 }
 
 async function editDto(deps: Deps, e: EditRow, built?: Rev, repo: Repo = deps.store) {
@@ -437,6 +511,7 @@ async function editDto(deps: Deps, e: EditRow, built?: Rev, repo: Repo = deps.st
     renderedN: e.renderedN,
     // Someone else rendered (or revised) since this draft started: "start from vN, or render yours as vN+1".
     newerVersion: job && job.latestVersion > e.baseN ? job.latestVersion : null,
+    recording: b.recording,
     // A newer version changed the narration since this draft's base: Rebase onto it, or Keep mine.
     narrationChanged: await narrationChangedSince(repo, e),
   }
@@ -675,9 +750,12 @@ export async function renderEdit(
   p: Principal,
   id: string,
   idemKey?: string,
-  input: { [K in keyof RenderSettings]?: RenderSettings[K] | undefined } = {},
+  input: { [K in keyof RenderSettings]?: RenderSettings[K] | undefined } & { look?: unknown } = {},
 ) {
   assertCan(p, 'edit:create')
+  // An edit render and a fit keep the edited version's look (looks plan §4.3): a look in the request is refused.
+  if (input.look !== undefined)
+    throw new ApiError('look_not_allowed', "An edit render keeps the edited version's look.")
   const settings: RenderSettings = {
     mode: input.mode ?? 'keep_visuals',
     holdFinalFrame: input.holdFinalFrame ?? false,
@@ -750,6 +828,11 @@ export async function renderEdit(
       for (const f of r.list)
         if (!files.has(f.path) && frozenFile(f.path)) files.set(f.path, await readEntry(deps, f))
       const archive = writeTarGz(files)
+      // Held recording scenes whose stills the bundle doesn't have yet: the render makes them (emit --holds-only).
+      const index = files.get('index.html')
+      const recordingHolds = index
+        ? pendingStills(new TextDecoder().decode(index)).filter((p) => !files.has(p))
+        : []
       const key = `${e.jobId}/v${n}/frozen.tar.gz`
       await deps.blobs.set('sources', key, archive, { contentType: 'application/gzip' })
       const now = deps.clock.now().toISOString()
@@ -787,12 +870,17 @@ export async function renderEdit(
           editId: e.id,
           ...(revoice ? { revoice } : {}),
           ...(narration ? { narration } : {}),
+          ...(recordingHolds.length ? { recordingHolds } : {}),
         },
         // The composition (and any audio in it) is the base's, so its sound and voice-over are too.
         sound: base?.sound ?? 'silent',
         voiceover: base?.voiceover ?? null,
         // The base's engine: an edit renders the base's composition (render-engines §4.2).
         engine: engineOf(base),
+        // The base's look: shown on a render as is, and the fit's run reads it (never a restyle).
+        look: base?.look ? { ...base.look, restyle: false } : null,
+        // A demo's recording inputs carry on (screen-recording plan §5.5).
+        ...(base?.recording ? { recording: inheritRecording(base.recording) } : {}),
       }
       if (base) assertSameEngine(deps, base, row)
       await repo.insertVersion(row)

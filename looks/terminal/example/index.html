@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="vendor/gsap.min.js"></script>
+    <script src="vendor/va-contract.js"></script>
+    <style>
+      /* Terminal example: the fictional product Orbit, placeholder commands and code. Runs reuse its structure and
+         building blocks, never its words. Colours are the brand's roles plus derived ones, as literal colours. */
+      #root {
+        --va-color-bg: #0b0d10;
+        --va-color-text: #f4f5f7;
+        --va-color-muted: #9aa3ad;
+        --va-color-accent: #14b8a6;
+        --va-color-surface: #181b1f;
+        --va-color-added: #3fb950;
+        --va-color-removed: #f85149;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1920px; height: 1080px; overflow: hidden; background: #0b0d10; }
+      #root { width: 100%; height: 100%; position: relative; background: var(--va-color-bg); color: var(--va-color-text); font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-variant-ligatures: none; }
+      .beat { position: absolute; inset: 0; }
+      .window { position: absolute; left: 270px; top: 140px; width: 1380px; height: 800px; background: var(--va-color-surface); border-radius: 16px; box-shadow: 0 40px 120px rgba(0, 0, 0, 0.55); overflow: hidden; }
+      .titlebar { height: 64px; display: flex; align-items: center; gap: 16px; padding: 0 22px; border-bottom: 1px solid rgba(154, 163, 173, 0.18); }
+      .dots { display: flex; gap: 10px; }
+      .dot { width: 14px; height: 14px; border-radius: 50%; background: var(--va-color-muted); opacity: 0.6; }
+      .name { font-size: 28px; color: var(--va-color-muted); }
+      .body { padding: 38px 44px; font-size: 30px; line-height: 46px; }
+      [data-va-beat="command"] .prompt { font-size: 34px; font-weight: 600; }
+      /* Prompt and diff signs are decoration, not text a person edits: CSS content. */
+      [data-va-beat="command"] .dollar::before { content: '$ '; white-space: pre; color: var(--va-color-muted); }
+      [data-va-beat="command"] .verb { color: var(--va-color-accent); }
+      [data-va-beat="command"] .cursor { display: inline-block; width: 0.6em; height: 1.1em; vertical-align: -0.2em; background: var(--va-color-accent); }
+      [data-va-beat="command"] .out { color: var(--va-color-muted); }
+      [data-va-beat="command"] .ok { color: var(--va-color-added); }
+      [data-va-beat="diff"] .diff-line { display: block; height: 46px; white-space: pre; overflow: hidden; padding-left: 14px; }
+      [data-va-beat="diff"] .sign { display: inline-block; width: 44px; color: var(--va-color-muted); }
+      [data-va-beat="diff"] .del { background: rgba(248, 81, 73, 0.12); box-shadow: inset 3px 0 var(--va-color-removed); }
+      [data-va-beat="diff"] .add { background: rgba(63, 185, 80, 0.12); box-shadow: inset 3px 0 var(--va-color-added); }
+      [data-va-beat="diff"] .del .sign::before { content: '-'; color: var(--va-color-removed); }
+      [data-va-beat="diff"] .add .sign::before { content: '+'; color: var(--va-color-added); }
+      [data-va-beat="diff"] .t-kw { color: var(--va-color-accent); }
+      [data-va-beat="diff"] .t-str { color: var(--va-color-added); }
+      [data-va-beat="diff"] .t-cmt { color: var(--va-color-muted); }
+      [data-va-beat="end"] { display: grid; place-items: center; text-align: center; }
+      [data-va-beat="end"] .title { font-size: 96px; font-weight: 700; }
+      [data-va-beat="end"] .cmd { font-size: 34px; color: var(--va-color-accent); margin-top: 24px; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-va-contract="1" data-start="0" data-duration="12.5" data-width="1920" data-height="1080">
+      <section id="command" class="clip beat" data-va-beat="command" data-va-label="Command" data-composition-id="command" data-start="0" data-duration="4" data-va-authored-duration="4" data-track-index="0">
+        <div class="window">
+          <div class="titlebar">
+            <div class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+            <span class="name" data-va-text="command-session" data-va-label="Session name">orbit — zsh</span>
+          </div>
+          <div class="body">
+            <div class="prompt"><span class="dollar"></span><span class="verb" data-va-text="command-text" data-va-label="Command">orbit deploy --preview</span><span class="cursor"></span></div>
+            <div class="out" data-va-text="command-out-1" data-va-label="Output 1">Building 12 files…</div>
+            <div class="ok" data-va-text="command-out-2" data-va-label="Output 2">Preview ready in 4.2 s</div>
+          </div>
+        </div>
+        <script>
+          vaBeat('command', (tl, el) => {
+            const cmd = el.querySelector('[data-va-text="command-text"]')
+            const chars = Array.from(cmd.textContent).map((c) => {
+              const s = el.ownerDocument.createElement('span')
+              s.textContent = c
+              return s
+            })
+            cmd.replaceChildren(...chars)
+            tl.fromTo(el.querySelector('.window'), { opacity: 0, scale: 0.985 }, { opacity: 1, scale: 1, duration: 0.5, ease: 'power2.out' }, 0)
+              .fromTo(chars, { opacity: 0 }, { opacity: 1, duration: 0.01, stagger: 0.035 }, 0.6)
+              .fromTo(el.querySelectorAll('.out, .ok'), { opacity: 0 }, { opacity: 1, duration: 0.01, stagger: 0.4 }, 2)
+              .fromTo(el.querySelector('.cursor'), { opacity: 1 }, { opacity: 0, duration: 0.01, repeat: 3, yoyo: true, repeatDelay: 0.49 }, 1.8)
+          })
+        </script>
+      </section>
+      <section id="diff" class="clip beat" data-va-beat="diff" data-va-label="Code change" data-composition-id="diff" data-start="4" data-duration="5.5" data-va-authored-duration="5.5" data-track-index="0">
+        <div class="window">
+          <div class="titlebar">
+            <div class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+            <span class="name" data-va-text="diff-filename" data-va-label="File name">sync.js</span>
+          </div>
+          <div class="body">
+            <div class="diff-line"><span class="sign"></span><span data-va-text="diff-line-1" data-va-label="Line 1"><span class="t-cmt">// Keep a folder in step with Orbit</span></span></div>
+            <div class="diff-line del"><span class="sign"></span><span data-va-text="diff-line-2" data-va-label="Line 2 (removed)"><span class="t-kw">export function</span> sync(folder) {</span></div>
+            <div class="diff-line add"><span class="sign"></span><span data-va-text="diff-line-3" data-va-label="Line 3 (added)"><span class="t-kw">export function</span> sync(folder, target) {</span></div>
+            <div class="diff-line"><span class="sign"></span><span data-va-text="diff-line-4" data-va-label="Line 4">  <span class="t-kw">const</span> files = list(folder)</span></div>
+            <div class="diff-line del"><span class="sign"></span><span data-va-text="diff-line-5" data-va-label="Line 5 (removed)">  <span class="t-kw">return</span> upload(files, <span class="t-str">'main'</span>)</span></div>
+            <div class="diff-line add"><span class="sign"></span><span data-va-text="diff-line-6" data-va-label="Line 6 (added)">  <span class="t-kw">return</span> upload(files, target)</span></div>
+            <div class="diff-line"><span class="sign"></span><span data-va-text="diff-line-7" data-va-label="Line 7">}</span></div>
+          </div>
+        </div>
+        <script>
+          vaBeat('diff', (tl, el) => {
+            tl.fromTo(el.querySelector('.window'), { opacity: 0, scale: 0.985 }, { opacity: 1, scale: 1, duration: 0.5, ease: 'power2.out' }, 0)
+            el.querySelectorAll('.del').forEach((line, k) => {
+              tl.fromTo(line, { height: 46, opacity: 1 }, { height: 0, opacity: 0, duration: 0.55, ease: 'power2.inOut' }, 1.4 + k * 0.08)
+            })
+            el.querySelectorAll('.add').forEach((line, k) => {
+              tl.fromTo(line, { height: 0, opacity: 0 }, { height: 46, opacity: 1, duration: 0.6, ease: 'power2.out' }, 2.1 + k * 0.12)
+            })
+          })
+        </script>
+      </section>
+      <section id="end" class="clip beat" data-va-beat="end" data-va-label="End card" data-composition-id="end" data-start="9.5" data-duration="3" data-va-authored-duration="3" data-track-index="0">
+        <div>
+          <h2 class="title" data-va-text="end-title" data-va-label="Product name">Orbit</h2>
+          <p class="cmd" data-va-text="end-cmd" data-va-label="Call to action">npm i -g orbit</p>
+        </div>
+        <script>
+          vaBeat('end', (tl, el) => {
+            tl.fromTo(el.querySelector('[data-va-text="end-title"]'), { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.5, ease: 'power3.out' }, 0.1)
+              .fromTo(el.querySelector('[data-va-text="end-cmd"]'), { opacity: 0 }, { opacity: 1, duration: 0.4 }, 0.5)
+          })
+        </script>
+      </section>
+    </div>
+    <script>
+      window.__timelines['main'] = gsap.timeline({ paused: true })
+    </script>
+  </body>
+</html>

@@ -1,5 +1,6 @@
 // Request and response schemas: one definition drives validation, types, the OpenAPI spec and the
 // web app's generated client.
+import { LookRecordingSchema } from './lib/looks.js'
 import { z } from '@hono/zod-openapi'
 import { ASPECT_RATIOS, MEDIA_ROLES, SOUNDS, VERDICTS } from './domain/types.js'
 import { MAX_NARRATION } from './lib/contract.js'
@@ -30,6 +31,8 @@ export const ErrorSchema = z
   .openapi('Error')
 
 export const AspectSchema = z.enum(ASPECT_RATIOS).openapi('Aspect')
+/** A look id from GET /api/v1/looks (looks plan §4.9). */
+const LookIdSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,39}$/)
 export const SoundSchema = z.enum(SOUNDS).openapi('Sound', {
   description:
     'silent: no audio (the default). music: a music bed (a picked audio item, else the brand music in context/, else none). music_sfx: music plus sound effects on visible actions.',
@@ -228,6 +231,10 @@ export const PublicationSchema = z
     embed: z.string().nullable().openapi({
       description: 'HTML to embed the video; with CC BY media it includes the credit line as a caption',
     }),
+    player: z.string().nullable().openapi({
+      description:
+        'The <video-agent-player> snippet: sized before it loads, captions on, credits always shown. Needs its script; the plain embed needs none.',
+    }),
   })
   .openapi('Publication')
 
@@ -296,6 +303,36 @@ export const EngineCapabilitiesSchema = z
   })
   .openapi('EngineCapabilities')
 
+export const BeatInfoSchema = z
+  .object({
+    id: z.string().describe("The beat id: what scope.beats and the CLI's --scene take."),
+    label: z
+      .string()
+      .nullable()
+      .describe("The scene's name, as the agent wrote it (data-va-label); null if none."),
+    start: z.number().describe('Seconds from the start of this version.'),
+    duration: z.number().describe('Seconds.'),
+  })
+  .openapi('BeatInfo')
+
+export const EngineSchema = z
+  .object({
+    id: z.enum(ENGINE_IDS),
+    name: z.string(),
+    license: z.union([
+      z.object({ kind: z.literal('open'), spdx: z.literal('Apache-2.0') }),
+      z.object({ kind: z.literal('remotion'), url: z.string() }),
+    ]),
+    capabilities: EngineCapabilitiesSchema,
+    enabled: z.boolean().describe('Offered for new videos here right now.'),
+    notice: z.string().nullable().describe("What anyone choosing it is told: Remotion's license notice."),
+    extraCredits: z
+      .number()
+      .nullable()
+      .describe('Credits a video costs over a HyperFrames one, once measured; null when unknown or none.'),
+  })
+  .openapi('Engine')
+
 export const VersionPosterSchema = z
   .object({
     source: z.enum(['frame', 'upload']).describe('A frame picked from the video, or an uploaded image.'),
@@ -355,6 +392,23 @@ export const planBriefShape = z.object({
 // Registered for non-null uses; nullable spots use the plain shape (openapi-typescript can't express a nullable $ref).
 export const PlanBriefSchema = planBriefShape.openapi('PlanBrief')
 
+/** Someone else's words the run reads as background, outside the 4,000-character prompt (github-action plan §6.1). */
+export const ContextSchema = z
+  .object({
+    source: z.enum(['github_pr', 'github_release', 'changelog', 'text']),
+    label: z.string().min(1).max(120).openapi({ example: 'GitHub PR #123' }),
+    url: z
+      .url()
+      .max(500)
+      .refine((u) => u.startsWith('https://'), 'url must be an https URL.')
+      .optional(),
+    text: z.string().min(1).max(16000),
+  })
+  .openapi('Context', {
+    description:
+      'Background for the run (a pull request, release notes), given to it in its own fence as data, never instructions.',
+  })
+
 export const VersionSchema = z
   .object({
     plan: z
@@ -383,9 +437,67 @@ export const VersionSchema = z
         }),
       )
       .describe('The comments this version was asked to incorporate, as they were sent, in order.'),
+    context: ContextSchema.nullable().describe('Background this version was made with, if any.'),
     editable: z
       .boolean()
       .describe('Ready and keeps editing contract v1, so it can be edited in the browser.'),
+    beats: z
+      .array(BeatInfoSchema)
+      .nullable()
+      .describe(
+        "This version's scenes, when known. Null: not known yet (ask GET …/versions/{n}/beats) or not a version that can be redone scene by scene.",
+      ),
+    scope: z
+      .object({ beats: z.array(z.object({ id: z.string(), label: z.string() })) })
+      .nullable()
+      .describe(
+        'A version that redid only some scenes of the version it came from: which ones, with their names.',
+      ),
+    look: z
+      .object({ id: z.string(), name: z.string(), hash: z.string() })
+      .nullable()
+      .describe(
+        "The look this version was made with (its name as it was then), and the version of it: hash differs from GET /api/v1/looks' when the look has changed since.",
+      ),
+    recording: z
+      .object({
+        mediaId: z.string(),
+        trace: z.boolean().describe('The recording came with a pointer trace (exact clicks and cursor).'),
+        compose: z.boolean().describe('Made with no agent authoring (a Quick demo).'),
+        privacy: z.boolean().describe('Privacy mode: private things on screen are found and hidden too.'),
+        summary: z
+          .object({
+            sourceSec: z.number(),
+            steps: z.number(),
+            cutSec: z.number(),
+            spedUpSec: z.number(),
+            redactionsAdded: z.number(),
+          })
+          .nullable()
+          .describe('What the run made of the recording; null until it is ready.'),
+        hidden: z
+          .array(
+            z.object({
+              id: z.string(),
+              source: z.enum(['trace', 'setup', 'agent', 'editor']),
+              beat: z.string(),
+              start: z.number(),
+              end: z.number(),
+              reason: z.string(),
+              why: z
+                .string()
+                .describe(
+                  'Why it is hidden, for people: "You drew it", "Password field", "Privacy mode: email", and so on.',
+                ),
+              checkedBy: z.string().nullable(),
+              checkedAt: z.string().nullable(),
+            }),
+          )
+          .describe('Every hidden area, per scene, with who checked it. Hiding is cosmetic: see the README.'),
+      })
+      .nullable()
+      .optional()
+      .describe('A demo made from a screen recording; null (or absent) for any other video.'),
     editing: z
       .object({
         engine: z.enum(ENGINE_IDS),
@@ -522,6 +634,30 @@ export const LanguageSchema = z.enum(LANGUAGES).openapi('Language', {
   example: 'en',
 })
 
+/** "github:acme/web#pr-123": a scheme, a colon, no spaces. */
+export const ExternalRefSchema = z
+  .string()
+  .max(200)
+  .regex(/^[a-z]+:[^\s]+$/, 'Use scheme:reference, for example github:acme/web#pr-123.')
+  .openapi({ example: 'github:acme/web#pr-123' })
+
+const ExternalFields = {
+  externalRef: ExternalRefSchema.optional().openapi({
+    description:
+      'What the video is for outside the app. Set once; find the video again with GET /api/v1/videos?externalRef=. Not unique.',
+  }),
+  externalUrl: z
+    .url()
+    .max(500)
+    .refine((u) => u.startsWith('https://'), 'externalUrl must be an https URL.')
+    .optional()
+    .openapi({ description: 'A link to that thing (https), shown on the video page.' }),
+  private: z.boolean().optional().openapi({
+    description:
+      'Make the video private (you and admins only) from the start. Needs permission to make videos private.',
+  }),
+}
+
 export const VideoSchema = z
   .object({
     id: z.string().openapi({ example: 'vid_01jc8k0000000000000000000' }),
@@ -548,6 +684,11 @@ export const VideoSchema = z
       .nullable()
       .openapi({ description: 'The video (and version) this one was remixed from, when you can see it' }),
     favorite: z.boolean().openapi({ description: 'You starred this video (only you see your favorites)' }),
+    externalRef: z
+      .string()
+      .nullable()
+      .openapi({ description: 'What the video is for outside the app (set at creation), or null' }),
+    externalUrl: z.string().nullable().openapi({ description: 'A link to it, or null' }),
     links: z.object({ self: z.string() }),
   })
   .openapi('Video')
@@ -555,6 +696,54 @@ export const VideoSchema = z
 export const VideoListSchema = z
   .object({ items: z.array(VideoSchema), nextCursor: z.string().nullable() })
   .openapi('VideoList')
+
+/** A demo's recording (screen-recording plan §6.1): the library item, its ends, and boxes to hide from the start. */
+export const RecordingInputSchema = z
+  .object({
+    mediaId: z.string().min(1).max(80).describe('A screen recording from the library (GET /api/v1/media).'),
+    trim: z
+      .tuple([z.number().min(0), z.number().positive()])
+      .optional()
+      .describe(
+        'Seconds of the recording to use, [in, out]: in before out, at least 2 seconds, inside the file.',
+      ),
+    redact: z
+      .array(
+        z.object({
+          start: z.number().min(0),
+          end: z.number().positive(),
+          box: z
+            .tuple([
+              z.number().min(0).max(1),
+              z.number().min(0).max(1),
+              z.number().min(0).max(1),
+              z.number().min(0).max(1),
+            ])
+            .describe('[x, y, width, height] as fractions of the frame.'),
+          style: z
+            .enum(['blur', 'solid'])
+            .optional()
+            .describe('blur (the default): a heavy blur of the picture under the box; solid: a flat box.'),
+        }),
+      )
+      .max(50)
+      .optional()
+      .describe('Areas to hide from the start (seconds of the recording). A demo with any starts private.'),
+    hideStrings: z
+      .array(z.string().min(2).max(200))
+      .max(50)
+      .optional()
+      .describe(
+        'Text to hide wherever it shows on screen (a customer name, a project id), privacy mode or not: found by OCR of the recording and hidden for you to keep or remove. A demo with any starts private.',
+      ),
+    privacy: z
+      .boolean()
+      .optional()
+      .describe(
+        "Privacy mode (default false). Off: only the areas you draw and the trace's (password fields, --hide selectors) are hidden. On: private things on screen (emails, keys, tokens, URLs, personal names) are found and hidden too, each confirmed by the agent, for you to keep or remove.",
+      ),
+  })
+  .openapi('RecordingInput')
 
 export const CreateVideoSchema = z
   .object({
@@ -588,6 +777,26 @@ export const CreateVideoSchema = z
     voiceover: VoiceoverInputSchema.optional().openapi({
       description: "A spoken narration with captions from its words. Omit for the plan's choice, else none.",
     }),
+    look: LookIdSchema.nullable().optional().openapi({
+      description:
+        "A look id (GET /api/v1/looks). Omit for the plan's look, else the admin's default (none unless set); null for no look. Errors: 400 unknown_look, 409 look_disabled.",
+    }),
+    ...ExternalFields,
+    context: ContextSchema.optional().openapi({
+      description: 'Background for the run (a PR, release notes) outside the prompt, read as data.',
+    }),
+    recording: RecordingInputSchema.optional().openapi({
+      description:
+        'Make a demo from a screen recording (feature screen_recording): the agent turns its steps into scenes with auto zoom, a cursor and hidden areas. HyperFrames only (409 engine_unsupported). durationSec defaults to about 0.4 of the recording, 20 to 90 seconds.',
+    }),
+    agent: z.boolean().optional().openapi({
+      description:
+        'false: a Quick demo, made from the recording with no agent authoring (a stock intro and outro, a scene per step, callouts from what was clicked); costs about as much as an edit. Needs recording; no voiceover.',
+    }),
+    engine: z.enum(ENGINE_IDS).optional().openapi({
+      description:
+        "The render engine (GET /api/v1/engines). Omit for the look's choice, else hyperframes. Errors: 409 engine_disabled when it isn't on here, 400 engine_not_supported_by_look, 409 engine_unsupported for sound effects or a voice-over it can't make.",
+    }),
   })
   .openapi('CreateVideo')
 
@@ -613,6 +822,35 @@ export const ReviseSchema = z
       description:
         'Incorporate feedback: open comments on the version being revised (owner or admin). prompt is your note.',
     }),
+    scope: z
+      .object({
+        beats: z
+          .array(z.string().regex(/^[a-z0-9][a-z0-9-]{0,40}$/))
+          .min(1)
+          .max(20)
+          .describe("Scene ids from fromVersion's beats (GET …/versions/{n}/beats)."),
+      })
+      .optional()
+      .openapi({
+        description:
+          "Redo only these scenes; everything else stays exactly as it is. Needs fromVersion. Can't be combined with planId, durationSec, sound or voiceover.",
+      }),
+    look: LookIdSchema.nullable().optional().openapi({
+      description:
+        "Omit to keep the revised version's look; null for no look. A different look (or a newer version of the same one) is a restyle: a full run that keeps the story and rebuilds how it looks. Errors: 400 unknown_look, 409 look_disabled, 409 look_not_allowed (a version with recorded narration).",
+    }),
+    context: ContextSchema.optional().openapi({
+      description:
+        "Background for this version's run, read as data. Not inherited: a revision without one has none.",
+    }),
+  })
+  .superRefine((v, ctx) => {
+    if (v.scope && v.fromVersion === undefined)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['fromVersion'],
+        message: 'Say which version the scenes are from (fromVersion): scene ids belong to one version.',
+      })
   })
   .openapi('Revise')
 
@@ -652,6 +890,22 @@ export const RemixSchema = z
       .url()
       .optional()
       .openapi({ description: 'HTTPS URL for video.ready / video.failed events (API keys only).' }),
+    look: LookIdSchema.nullable().optional().openapi({
+      description:
+        "Omit to keep the source version's look; null for no look. Another look restyles the remix (a full run, as any remix). Errors: 400 unknown_look, 409 look_disabled.",
+    }),
+    ...ExternalFields,
+    private: ExternalFields.private.openapi({
+      description:
+        "Make the remix private (you and admins only) from the start. A private video's remix is private either way.",
+    }),
+    context: ContextSchema.optional().openapi({
+      description: 'Background for the run (a PR, release notes) outside the prompt, read as data.',
+    }),
+    recording: RecordingInputSchema.optional().openapi({
+      description:
+        "Remix a demo with a new screen recording: the request, look and settings carry over, the steps are planned fresh. Omit to keep the source's recording.",
+    }),
   })
   .openapi('Remix')
 
@@ -693,6 +947,59 @@ export const OAuthGrantSchema = z
 export const CreateKeySchema = z.object({ name: z.string().min(1).max(80) }).openapi('CreateApiKey')
 
 export const RoleSchema = z.enum(['admin', 'creator', 'reviewer', 'viewer']).openapi('Role')
+
+// video-agent login (cli-and-sdk plan §5.2). Label and host are shown on the approve page: capped, printable ASCII.
+const Printable = z
+  .string()
+  .min(1)
+  .max(64)
+  .regex(/^[\x20-\x7e]+$/, 'Printable ASCII only.')
+const UserCode = z
+  .string()
+  .regex(/^[A-Za-z]{4}[- ]?[A-Za-z]{4}$/, 'The 8-letter code from your terminal, like BCDF-GHJK.')
+export const CreateCliLoginSchema = z.object({ label: Printable, host: Printable }).openapi('CreateCliLogin')
+export const CliLoginSchema = z
+  .object({
+    loginId: z.string(),
+    deviceCode: z.string().openapi({ description: 'Secret: only this CLI claims the key with it.' }),
+    userCode: z
+      .string()
+      .openapi({ example: 'BCDF-GHJK', description: 'The person types this on the approve page.' }),
+    verificationUrl: z.string(),
+    expiresAt: z.string(),
+    intervalSec: z.number().int(),
+  })
+  .openapi('CliLogin')
+export const ClaimCliLoginSchema = z
+  .object({ deviceCode: z.string().min(1).max(64) })
+  .openapi('ClaimCliLogin')
+export const CliLoginClaimSchema = z
+  .object({
+    status: z.enum(['pending', 'slow_down', 'denied', 'expired', 'claimed']),
+    apiKey: z.string().optional().openapi({ description: 'With claimed: the new key, shown once.' }),
+    keyId: z.string().optional(),
+    webhookSecret: z.string().optional(),
+    user: z.object({ id: z.string(), email: z.string(), role: RoleSchema }).optional(),
+  })
+  .openapi('CliLoginClaim')
+export const LookupCliLoginSchema = z.object({ userCode: UserCode }).openapi('LookupCliLogin')
+export const CliLoginRequestSchema = z
+  .object({
+    loginId: z.string(),
+    label: z.string(),
+    host: z.string(),
+    clientIp: z.string(),
+    createdAt: z.string(),
+    expiresAt: z.string(),
+    role: RoleSchema,
+  })
+  .openapi('CliLoginRequest')
+export const DecideCliLoginSchema = z
+  .object({ userCode: UserCode, decision: z.enum(['approve', 'deny']) })
+  .openapi('DecideCliLogin')
+export const CliLoginDecisionSchema = z
+  .object({ status: z.enum(['approved', 'denied']) })
+  .openapi('CliLoginDecision')
 export const UserSchema = z
   .object({
     id: z.string(),
@@ -757,6 +1064,13 @@ export const PlanSchema = z
     voiceover: voiceoverShape.nullable().openapi({
       description: 'The voice-over chosen while planning, if any; the brief then has narration per beat.',
     }),
+    look: z.object({ id: z.string().nullable(), chosen: z.boolean() }).nullable().openapi({
+      description:
+        "The plan's look: the person's choice (chosen), else the first enabled look made for the plan's template, else the admin default. id null: none. null: a remix or revision plan that keeps its video's look.",
+    }),
+    engine: z.enum(ENGINE_IDS).nullable().openapi({
+      description: "The engine chosen for this new-video plan; null: the look's choice.",
+    }),
     expiresAt: z.string(),
   })
   .openapi('Plan')
@@ -776,6 +1090,14 @@ export const CreatePlanSchema = z
     }),
     sound: SoundSchema.optional(),
     voiceover: VoiceoverInputSchema.optional(),
+    look: z.string().nullable().optional().openapi({
+      description:
+        'A look id from GET /api/v1/looks, or null for none. Left out, a new-video plan picks one from its template.',
+    }),
+    engine: z.enum(ENGINE_IDS).optional().openapi({
+      description:
+        "New-video plans only: the render engine, kept by the video made from the plan. Omit for the look's choice. Errors as on create.",
+    }),
   })
   .openapi('CreatePlan')
 export const PlanAnswersSchema = z
@@ -872,6 +1194,11 @@ export const MediaSchema = z
     source: MediaSourceSchema.nullable().openapi({
       description: 'Where an imported item came from (Openverse), with its licence; null for uploads',
     }),
+    role: z.enum(MEDIA_ROLES).nullable().openapi({
+      description:
+        'What the item is for: a voice-over take, uploaded narration, or a raw screen recording (private to its uploader until a video uses it); null for library items',
+    }),
+    hasTrace: z.boolean().openapi({ description: 'A screen recording with a pointer trace (PUT …/trace)' }),
     recording: RecordingSchema.nullable().openapi({
       description:
         'For a voice-over recording: its video, where it is used and how long it is kept; null otherwise',
@@ -1142,6 +1469,19 @@ const EditOpSchema = z.discriminatedUnion('op', [
     .openapi({ description: "Swap an audio track's file, set its level or mute it, by its id" }),
   z
     .object({
+      op: z.literal('music'),
+      src: z
+        .string()
+        .max(200)
+        .openapi({ description: 'A ready audio item from the library, as assets/media/<media id>.<ext>' }),
+      volume: z.number().min(0).max(4).optional(),
+    })
+    .openapi({
+      description:
+        "Set the music bed: replaces the music layer's file, or adds a music layer (id va-music) that spans the video and dips under the voice-over",
+    }),
+  z
+    .object({
       op: z.literal('voice'),
       beat: z.string().max(80),
       text: z.string().min(1).max(MAX_NARRATION),
@@ -1149,6 +1489,58 @@ const EditOpSchema = z.discriminatedUnion('op', [
     .openapi({
       description:
         "Change a voiced beat's narration line (plain text). The draft preview keeps the old audio; the render re-voices the line, lengthening the beat only if the new line no longer fits",
+    }),
+  // Recording scenes (screen-recording plan §5.3): times in seconds of the recording, positions as fractions.
+  z
+    .object({
+      op: z.literal('span'),
+      beat: z.string().max(80),
+      in: z.number().min(0),
+      out: z.number().positive(),
+    })
+    .openapi({
+      description: 'Trim a recording scene: which seconds of the recording it shows (0.5x to 4x its length).',
+    }),
+  z
+    .object({
+      op: z.literal('camera'),
+      beat: z.string().max(80),
+      keys: z.array(z.array(z.union([z.number(), z.string()]))).max(64),
+    })
+    .openapi({
+      description: "A recording scene's camera keys: [seconds, x, y, zoom 1-4, ease?], in time order.",
+    }),
+  z
+    .object({
+      op: z.literal('cursor'),
+      beat: z.string().max(80),
+      style: z.enum(['smooth', 'highlight', 'none']),
+      size: z.number().min(0.5).max(2),
+    })
+    .openapi({
+      description: "How a recording scene's cursor looks (never its path); smooth needs a pointer trace.",
+    }),
+  z
+    .object({
+      op: z.literal('redact'),
+      beat: z.string().max(80),
+      entries: z
+        .array(
+          z.object({
+            id: z.string().max(24).optional(),
+            origin: z.enum(['agent', 'editor']).optional(),
+            start: z.number().min(0),
+            end: z.number().min(0),
+            reason: z.string().max(60).optional(),
+            style: z.enum(['blur', 'solid']).optional(),
+            boxes: z.array(z.array(z.number()).length(5)).min(1).max(600),
+          }),
+        )
+        .max(200),
+    })
+    .openapi({
+      description:
+        "A recording scene's own hidden areas (keyframed boxes). Areas from the pointer trace or the demo's setup can't be removed or changed.",
     }),
   NarrationOpSchema,
 ])
@@ -1191,6 +1583,27 @@ const CompositionSchema = z
             description:
               "The beat's AI voice-over clip, in seconds into the beat; null when it has none. A changed line may lengthen its beat when re-voiced",
           }),
+        recording: z
+          .object({
+            step: z.string(),
+            slot: z.string(),
+            src: z.string(),
+            in: z.number().describe('Source seconds the scene shows from'),
+            out: z.number().describe('Source seconds the scene shows to'),
+            rate: z.number().describe('Playback speed (1 = real time)'),
+            camera: z.array(z.unknown()).describe('[t, x, y, zoom, ease?] keys, in source seconds'),
+            cursor: z.object({ style: z.string(), size: z.number().nullable(), path: z.string().nullable() }),
+            clicks: z.array(z.unknown()).describe('[t, x, y] clicks, in source seconds'),
+            redact: z
+              .array(z.unknown())
+              .describe(
+                "The scene's own hidden areas (the agent's and the editor's); the locked ones are on the Edit",
+              ),
+            locked: z.string().nullable(),
+            hold: z.object({ seconds: z.number() }).nullable(),
+          })
+          .optional()
+          .openapi({ description: 'A recording scene (a demo): what it shows of the recording and how' }),
       }),
     ),
     layers: z.array(z.string()),
@@ -1239,6 +1652,21 @@ export const EditSchema = z
     newerVersion: z.number().int().nullable().openapi({
       description: 'A newer version exists: start from it, or render this draft as the next version',
     }),
+    recording: z
+      .object({
+        duration: z.number().describe("The recording's length in seconds"),
+        trace: z.boolean().describe('Made with a pointer trace: the smooth cursor is available'),
+        locked: z
+          .array(z.record(z.string(), z.unknown()))
+          .describe("Hidden areas from the pointer trace and the demo's setup: shown, never removable"),
+        camera: z
+          .record(z.string(), z.array(z.unknown()))
+          .describe("The planner's camera per step ([t, x, y, zoom, ease?] keys), for Auto"),
+        zoomMax: z.number().describe('The most the camera may zoom and stay sharp'),
+      })
+      .nullable()
+      .optional()
+      .openapi({ description: 'A demo: the recording facts the editor needs; null for any other video' }),
     narrationChanged: z
       .object({
         inVersion: z.number().int(),
@@ -1256,6 +1684,17 @@ export const EditSchema = z
       }),
   })
   .openapi('Edit')
+export const ConfirmHiddenSchema = z
+  .object({
+    ids: z
+      .array(z.string().min(1).max(24))
+      .min(1)
+      .max(500)
+      .openapi({
+        description: "The hidden areas' ids (from the version's recording.hidden) that look right",
+      }),
+  })
+  .openapi('ConfirmHidden')
 export const RebaseNarrationSchema = z
   .object({
     toN: z.number().int().min(1).openapi({ description: 'The version to move your narration onto' }),
@@ -1281,6 +1720,9 @@ export const RenderEditSchema = z
     excludeNarration: z.boolean().optional().openapi({
       description:
         "Render picture first: render the draft's other edits without its recorded narration, so you can record against the new picture. The narration stays in the draft; move it onto the new version with rebase-narration",
+    }),
+    look: z.unknown().optional().openapi({
+      description: "Not accepted (400 look_not_allowed): an edit render keeps the edited version's look.",
     }),
   })
   .openapi('RenderEdit')
@@ -1537,16 +1979,58 @@ export const AdminSettingsSchema = z
     takeQuotaBytes: z
       .number()
       .int()
-      .describe("Stored bytes each person's recordings may use (default 2 GiB)."),
+      .describe("Stored bytes each person's voice recordings (narration takes) may use (default 2 GiB)."),
+    recordingQuotaBytes: z
+      .number()
+      .int()
+      .describe("Stored bytes each person's screen recordings may use (default 2 GiB)."),
     remixEnabled: z
       .boolean()
       .describe(
         'Remixing is on (the default). Off hides every Remix button and refuses new remixes; queued ones still run.',
       ),
+    webmcpEnabled: z
+      .boolean()
+      .describe(
+        'WebMCP is on (the default): in browsers that support it, the web app offers its tools to AI agents. Off: no tools are registered.',
+      ),
     youtubeEnabled: z
       .boolean()
       .describe('YouTube is offered as a publish destination (needs youtubeConfigured).'),
     youtubeConfigured: z.boolean().describe('GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set (read-only).'),
+    defaultLook: z
+      .string()
+      .nullable()
+      .describe('The look creates get when they omit one (API, MCP and the GitHub Action too); null: none.'),
+    disabledLooks: z
+      .array(z.string())
+      .describe(
+        'Looks turned off: hidden from pickers and refused for new videos; videos made with one keep it.',
+      ),
+    cliLoginEnabled: z
+      .boolean()
+      .describe(
+        'video-agent login can get a key by approving the CLI in the browser (the default). Off: paste a key.',
+      ),
+    remotion: z
+      .object({
+        enabled: z.boolean().describe('Remotion is offered for new videos (with a recorded license choice).'),
+        license: z
+          .object({
+            by: z.string(),
+            email: z.string(),
+            at: z.string(),
+            tier: z.enum(['free', 'company']),
+            note: z.string().nullable(),
+          })
+          .nullable()
+          .describe('Who recorded the license choice, when, and which; null until someone does.'),
+        keySet: z
+          .boolean()
+          .describe('VIDEO_AGENT_REMOTION_KEY is set (its value is never read by the server).'),
+      })
+      .optional()
+      .describe('The Remotion engine (bring your own license); present only when ENGINES lists remotion.'),
   })
   .openapi('AdminSettings')
 export const UpdateAdminSettingsSchema = z
@@ -1560,8 +2044,32 @@ export const UpdateAdminSettingsSchema = z
       .max(1024 ** 4)
       .optional()
       .describe('1 MiB to 1 TiB.'),
+    recordingQuotaBytes: z
+      .number()
+      .int()
+      .min(1024 * 1024)
+      .max(1024 ** 4)
+      .optional()
+      .describe('1 MiB to 1 TiB.'),
     remixEnabled: z.boolean().optional(),
+    webmcpEnabled: z.boolean().optional(),
     youtubeEnabled: z.boolean().optional(),
+    defaultLook: LookIdSchema.nullable().optional().describe('A look id, or null for none.'),
+    disabledLooks: z.array(LookIdSchema).max(100).optional().describe('The full list of looks to turn off.'),
+    cliLoginEnabled: z.boolean().optional(),
+    remotionEnabled: z
+      .boolean()
+      .optional()
+      .describe('Turn Remotion on or off for new videos. Needs remotion in ENGINES and a license choice.'),
+    remotionLicense: z
+      .object({
+        tier: z.enum(['free', 'company']),
+        note: z.string().max(500).nullable().optional().describe('A license reference or who approved it.'),
+      })
+      .optional()
+      .describe(
+        'The license your organisation has. company needs VIDEO_AGENT_REMOTION_KEY set on the project.',
+      ),
   })
   .openapi('UpdateAdminSettings')
 
@@ -1607,6 +2115,19 @@ export const StatsSchema = z
     ),
     maxActiveRuns: z.number().int(),
     queuePausedReason: z.string().nullable(),
+    remotionRenders: z
+      .object({
+        since: z.string(),
+        total: z.number().int(),
+        videos: z.number().int(),
+        stills: z.number().int(),
+        audio: z.number().int(),
+        attempts: z.number().int(),
+      })
+      .optional()
+      .describe(
+        "This month's Remotion renders (UTC), failed runs included; only when ENGINES lists remotion. Reconcile with remotion.pro.",
+      ),
   })
   .openapi('Stats')
 
@@ -1667,3 +2188,68 @@ export const PublicConfigSchema = z
       ),
   })
   .openapi('PublicConfig')
+
+/**
+ * A pointer trace as sent and stored (schema v1, src/lib/recording-trace.ts). The top level is declared so clients
+ * know its fields; the domain checks the rest (caps, ranges, order) and scrubs page text.
+ */
+export const TraceBodySchema = z
+  .object({
+    v: z.literal(1),
+    source: z
+      .record(z.string(), z.unknown())
+      .openapi({ description: "{ kind: 'cli' | 'upload' | 'browser' | 'script', tool, startedAt }" }),
+    frame: z
+      .record(z.string(), z.unknown())
+      .openapi({ description: '{ width, height, fps, duration }: must match the recording' }),
+    viewport: z.record(z.string(), z.unknown()).openapi({ description: '{ width, height, dpr }' }),
+    moves: z
+      .array(z.array(z.number()))
+      .openapi({ description: '[t, x, y] with x, y as 0-1 fractions of the frame, at most 30,000' }),
+    events: z.array(z.record(z.string(), z.unknown())).openapi({
+      description:
+        'click, type, scroll, focus, drag and navigate events, each with `kind` and `t`; at most 5,000',
+    }),
+    redact: z.array(z.record(z.string(), z.unknown())).openapi({
+      description: '{ start, end, reason, boxes: [t, x, y, w, h][] } areas to hide, keyframed; at most 200',
+    }),
+  })
+  .openapi('PointerTrace', {
+    description:
+      'Pointer trace v1. Positions are 0-1 fractions of the frame, times seconds into the recording. See /docs/cli#record.',
+  })
+// Looks (docs/plans/2026-11-04-looks.md §4.9).
+export const LookSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    description: z.string(),
+    tags: z.array(z.string()),
+    bestFor: z
+      .array(z.string())
+      .describe('Plan templates the look suits: launch, tutorial, social, changelog, sales, other.'),
+    aspects: z.array(AspectSchema).describe('The shapes its rules cover.'),
+    engines: z.array(z.enum(ENGINE_IDS)).describe('Engines it supports, preferred first.'),
+    recording: z
+      .union([z.literal(false), LookRecordingSchema])
+      .nullable()
+      .describe(
+        'How screen recordings are framed in this look; false: hidden from the demo picker; null: the default.',
+      ),
+    hash: z.string().describe('This version of the look; a version made with it keeps it.'),
+    enabled: z
+      .boolean()
+      .describe('Pickers hide looks an admin turned off; versions already made with one keep it.'),
+    preview: z.object({
+      mp4: z.string().nullable().describe('A short muted loop, under the site root.'),
+      poster: z.string().nullable(),
+    }),
+  })
+  .openapi('Look')
+
+export const LooksSchema = z
+  .object({
+    looks: z.array(LookSchema),
+    default: z.string().nullable().describe('The look creates get when they omit one; null: none.'),
+  })
+  .openapi('Looks')

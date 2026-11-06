@@ -30,11 +30,24 @@ export const settings = pgTable('settings', {
   narrationEnabled: boolean('narration_enabled').notNull().default(true),
   transcriptionProvider: text('transcription_provider').notNull().default('local'),
   takeQuotaBytes: bigint('take_quota_bytes', { mode: 'number' }).notNull().default(2147483648),
+  // Stored bytes each person's screen recordings may use (screen-recording plan §4.2).
+  recordingQuotaBytes: bigint('recording_quota_bytes', { mode: 'number' }).notNull().default(2147483648),
   // Remixing (docs/plans/2026-11-03-remix.md §4): admins can turn it off without a redeploy.
   remixEnabled: boolean('remix_enabled').notNull().default(true),
+  // WebMCP: the web app's tools for browser agents (va-qago). On by default; an admin can turn it off.
+  webmcpEnabled: boolean('webmcp_enabled').notNull().default(true),
+  // The Remotion engine (render-engines plan §7): an admin's switch, and the license choice recorded with it.
+  remotionEnabled: boolean('remotion_enabled').notNull().default(false),
+  remotionLicenseAck: jsonb('remotion_license_ack'),
   // Publish destinations (docs/plans/2026-11-04-publish-destinations.md §4): YouTube is offered only when the Google
   // OAuth env is set and an admin turns it on.
   youtubeEnabled: boolean('youtube_enabled').notNull().default(false),
+  // Looks (docs/plans/2026-11-04-looks.md §6): the default for creates that omit a look (null: none, the owner's
+  // choice after spike K2), and the looks an admin has turned off.
+  defaultLook: text('default_look'),
+  disabledLooks: jsonb('disabled_looks').$type<string[]>().notNull().default([]),
+  // video-agent login's browser approval (docs/plans/2026-11-04-cli-and-sdk.md §5.2): on unless an admin turns it off.
+  cliLoginEnabled: boolean('cli_login_enabled').notNull().default(true),
 })
 
 export const users = pgTable('users', {
@@ -84,10 +97,15 @@ export const jobs = pgTable(
     // The video and version this one was remixed from (immediate source only); null for other videos.
     remixOfJobId: text('remix_of_job_id'),
     remixOfN: integer('remix_of_n'),
+    // What the video is for outside the app ("github:acme/web#pr-123") and its link; set by API clients such as the
+    // GitHub Action, which look the video up by it (github-action plan §6.2). Not unique.
+    externalRef: text('external_ref'),
+    externalUrl: text('external_url'),
   },
   (t) => [
     index('jobs_created_idx').on(t.createdAt, t.id),
     index('jobs_owner_idx').on(t.ownerId, t.createdAt),
+    index('jobs_owner_external_ref_idx').on(t.ownerId, t.externalRef),
   ],
 )
 
@@ -128,6 +146,17 @@ export const versions = pgTable(
     poster: jsonb('poster'),
     // A remix's v1: its copied source and the snapshot its runs use (src/domain/types.ts VersionRemix).
     remix: jsonb('remix'),
+    // A demo made from a screen recording: its inputs and results (src/domain/types.ts VersionRecording).
+    recording: jsonb('recording'),
+    // A scoped revision ("redo a scene"): { beats: string[] }, the parent's beats it may change; null: the whole video.
+    scope: jsonb('scope'),
+    // The composition's beats [{ id, label, start, duration }], set at finalize for contract-v1 versions (or filled
+    // on first read for older ones); null: not known yet, or not a contract-v1 composition.
+    beats: jsonb('beats'),
+    // The look snapshot the version was made with (src/domain/types.ts VersionLook); null: no look.
+    look: jsonb('look'),
+    // Background for the run outside the 4,000-character prompt (src/domain/types.ts VersionContext); null: none.
+    context: jsonb('context'),
   },
   (t) => [primaryKey({ columns: [t.jobId, t.n] })],
 )
@@ -160,6 +189,8 @@ export const attempts = pgTable(
     // The agent's final answer (truncated): why a run ended without a video, when it did.
     resultText: text('result_text'),
     usage: jsonb('usage'),
+    // Remotion's render count for the run ({ video, stills, audio }); null for HyperFrames.
+    engineRenders: jsonb('engine_renders'),
     errorCategory: text('error_category'),
     errorMessage: text('error_message'),
     queuedAt: ts('queued_at').notNull(),
@@ -274,6 +305,10 @@ export const plans = pgTable(
     // A plan for a remix of this video and version (job_id is null: it makes a new video).
     remixFromJobId: text('remix_from_job_id'),
     remixFromN: integer('remix_from_n'),
+    // The plan's look ({ id }, id null for none), chosen or picked from the router's template; null on older plans.
+    look: jsonb('look'),
+    // The engine the person chose for a new-video plan (render-engines plan §4.2); null: the look's choice.
+    engine: text('engine'),
   },
   (t) => [index('plans_user_idx').on(t.userId, t.createdAt)],
 )
@@ -371,6 +406,11 @@ export const media = pgTable(
     scopeJobId: text('scope_job_id'),
     retainUntil: ts('retain_until'),
     deletingAt: ts('deleting_at'),
+    // A screen recording's pointer trace (screen-recording plan §4.7): the normalized JSON at `<id>/trace.json` in the
+    // media store and its sha256, frozen once a version uses the recording; and this hour's trace writes (rate limit).
+    traceKey: text('trace_key'),
+    traceSha256: text('trace_sha256'),
+    traceWrites: jsonb('trace_writes'),
   },
   (t) => [
     index('media_created_idx').on(t.createdAt),
@@ -705,6 +745,43 @@ export const oauthClients = pgTable('oauth_clients', {
   redirectUris: jsonb('redirect_uris').$type<string[]>().notNull(),
   createdAt: ts('created_at').notNull(),
 })
+
+// video-agent login (cli-and-sdk plan §5.2): a device-style approval that ends in an ordinary API key. Only the device
+// code's hash is stored, never a key.
+export const cliLogins = pgTable(
+  'cli_logins',
+  {
+    id: text('id').primaryKey(),
+    deviceCodeHash: text('device_code_hash').notNull(),
+    userCode: text('user_code').notNull(),
+    label: text('label').notNull(),
+    host: text('host').notNull(),
+    clientIp: text('client_ip').notNull(),
+    status: text('status').notNull(),
+    userId: text('user_id'),
+    approvedAt: ts('approved_at'),
+    apiKeyId: text('api_key_id'),
+    failedAttempts: integer('failed_attempts').notNull().default(0),
+    lastPolledAt: ts('last_polled_at'),
+    createdAt: ts('created_at').notNull(),
+    expiresAt: ts('expires_at').notNull(),
+  },
+  (t) => [
+    index('cli_logins_user_code_idx').on(t.userCode),
+    index('cli_logins_status_ip_idx').on(t.status, t.clientIp),
+    index('cli_logins_expires_idx').on(t.expiresAt),
+  ],
+)
+
+export const cliLoginFailures = pgTable(
+  'cli_login_failures',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull(),
+    createdAt: ts('created_at').notNull(),
+  },
+  (t) => [index('cli_login_failures_user_idx').on(t.userId, t.createdAt)],
+)
 
 export const oauthRequests = pgTable(
   'oauth_requests',

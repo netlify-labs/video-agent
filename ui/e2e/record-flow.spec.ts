@@ -1,7 +1,8 @@
 // Recording a take in the editor (plan 2026-11-02 §2.1, §5.1, §5.3) on the mock build: Record voice-over opens the
 // setup and the picture with the teleprompter; Record counts 3-2-1 with the mic already capturing, plays the muted MP4
 // and records against its frames; Space keeps the take, which uploads and lands on the Narration lane at composition
-// 0 (the countdown trimmed off) and is saved with the draft. Esc discards; hiding the tab stops and keeps the part; a
+// 0 (the countdown trimmed off) and is saved with the draft once it's reviewed and added (Enter; take-review.spec.ts
+// has the review itself). Esc discards; hiding the tab stops and keeps the part; a
 // reload mid-take offers the take again; someone else's lock and pending timing changes keep Record away. The mic is
 // the stand-in (window.__vaTestMic, see recorder.spec.ts for why).
 import { expect, test, type Page } from '@playwright/test'
@@ -67,7 +68,7 @@ async function startTake(page: Page) {
 
 const phase = (page: Page) => page.getByTestId('record-status')
 
-test('record a take: setup, countdown, picture, Space keeps it, and it lands at the picture time and saves', async ({
+test('record a take: setup, countdown, picture, Space keeps it for review, Enter lands it at the picture time and saves', async ({
   page,
 }) => {
   test.setTimeout(90_000)
@@ -84,6 +85,13 @@ test('record a take: setup, countdown, picture, Space keeps it, and it lands at 
   await startTake(page)
   await page.waitForTimeout(3_000)
   await page.keyboard.press('Space')
+  // Review first: nothing goes on the track until it's added.
+  await expect(phase(page)).toHaveAttribute('data-phase', 'review', { timeout: 30_000 })
+  await expect(page.getByTestId('take-review')).toBeVisible()
+  await expect(page.getByTestId('review-stop')).toHaveCount(0)
+  await expect(page.locator('.va-tl-clip')).toHaveCount(0)
+  await expect(page.getByTestId('review-again')).toBeEnabled({ timeout: 30_000 })
+  await page.keyboard.press('Enter')
   await expect(phase(page)).toHaveAttribute('data-phase', 'saved', { timeout: 30_000 })
   await expect(page.getByTestId('record-notice')).toHaveCount(0)
 
@@ -131,9 +139,13 @@ test('hiding the tab stops the take, says why, and keeps the part before it', as
   await page.evaluate(
     "Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true }); document.dispatchEvent(new Event('visibilitychange'))",
   )
-  const notice = page.getByTestId('record-notice')
-  await expect(notice).toHaveAttribute('data-kind', 'hidden')
+  // It stopped early: the review says why and offers to carry on from there.
+  await expect(phase(page)).toHaveAttribute('data-phase', 'review', { timeout: 30_000 })
+  const notice = page.getByTestId('review-stop')
+  await expect(notice).toHaveAttribute('data-early', 'true')
   await expect(notice).toContainText('Keep this tab in front')
+  await expect(page.getByTestId('review-continue')).toBeVisible()
+  await page.getByTestId('review-add').click()
   await expect(phase(page)).toHaveAttribute('data-phase', 'saved', { timeout: 30_000 })
   await expect(page.locator('.va-tl-clip[data-clip-id="nar_1"]')).toBeVisible()
   const [c] = await savedClips(page)

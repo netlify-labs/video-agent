@@ -1,7 +1,4 @@
 #!/usr/bin/env node
-import { main } from './index.js'
+import { main, nodeIo } from './index.js'
 
-process.exitCode = await main(process.argv.slice(2), {
-  stdout: (t) => process.stdout.write(t),
-  stderr: (t) => process.stderr.write(t),
-})
+process.exitCode = await main(process.argv.slice(2), nodeIo())

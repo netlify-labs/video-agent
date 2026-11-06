@@ -1,17 +1,21 @@
 // Editing contract v1 (plan v2 §8, §14 rules 18-20): the validator and the patcher on the spike S8 fixture.
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
+import { missingLocalFiles } from '../domain/bundles.js'
 import {
   applyEdits,
+  applyHoldFrame,
   applyRevoice,
   changed,
   ContractError,
+  MUSIC_ID,
   editText,
   save,
   walk,
   load,
   read,
   validate,
+  pendingStills,
   type EditOp,
   type Summary,
 } from './contract.js'
@@ -363,7 +367,7 @@ describe('contract audio', () => {
     '<div class="kicker" data-va-text="intro-kicker">',
     `${sfx}<div class="kicker" data-va-text="intro-kicker">`,
   )
-  const music = (h: string) => read(load(h)).audio.find((a) => a.id === 'music')
+  const music = (h: string, id = 'music') => read(load(h)).audio.find((a) => a.id === id)
 
   it('reads the music layer and effects as audio tracks', () => {
     expect(validate(withSfx, summary)).toEqual([])
@@ -459,6 +463,41 @@ describe('contract audio', () => {
     expect(() => applyEdits(musicHtml, summary, [{ op: 'audio', id: 'nope', volume: 0.5 }])).toThrow(
       /no audio "nope"/,
     )
+  })
+
+  it('sets a music bed on a video without music: a layer spanning it that ducks under the voice-over', () => {
+    expect(read(load(html)).audio.filter((a) => a.role === 'music')).toEqual([])
+    const out = applyEdits(html, summary, [{ op: 'music', src: 'assets/media/med_song01.mp3', volume: 0.6 }])
+    expect(music(out.html, MUSIC_ID)).toMatchObject({
+      src: 'assets/media/med_song01.mp3',
+      volume: 0.6,
+      muted: false,
+    })
+    const root = read(load(out.html))
+    expect(out.html).toMatch(
+      new RegExp(
+        `<audio id="${MUSIC_ID}" data-va-layer="music" data-va-audio="music" src="assets/media/med_song01.mp3" data-start="0" data-duration="${root.duration}"`,
+      ),
+    )
+    // The duck level gets its volume lane from the patcher, so the result validates (applyEdits checks it).
+    expect(out.html).toMatch(/data-va-duck="0.3"[^>]*data-automation=/)
+    expect(validate(out.html, out.summary)).toEqual([])
+    // A second bed replaces the first: still one music layer.
+    const again = applyEdits(out.html, out.summary, [{ op: 'music', src: 'assets/media/med_song02.mp3' }])
+    expect(read(load(again.html)).audio.filter((a) => a.role === 'music')).toHaveLength(1)
+    expect(music(again.html, MUSIC_ID)).toMatchObject({ src: 'assets/media/med_song02.mp3', volume: 0.6 })
+    expect(() => applyEdits(html, summary, [{ op: 'music', src: 'assets/voice/x.mp3' }])).toThrow(
+      /assets\/media/,
+    )
+  })
+
+  it("sets the music bed on a video's own music layer: its file and level, its fades and span kept", () => {
+    const out = applyEdits(musicHtml, summary, [
+      { op: 'music', src: 'assets/media/med_other02.m4a', volume: 0.5 },
+    ])
+    expect(music(out.html)).toMatchObject({ src: 'assets/media/med_other02.m4a', volume: 0.5 })
+    expect(out.html).toMatch(/<audio id="music"[^>]*data-fade-in="1" data-fade-out="1.5"/)
+    expect(out.html).not.toContain(MUSIC_ID)
   })
 
   it('sets the volume as data-volume, which HyperFrames applies in preview and render', () => {
@@ -613,5 +652,433 @@ describe('narration lines and re-voicing', () => {
     expect(out.lengthened).toEqual([])
     expect(read(load(out.html)).duration).toBe(9)
     expect(() => applyRevoice(vHtml, vSummary, [line])).toThrow(/isn't marked/)
+  })
+})
+
+// Recording scenes (screen-recording plan §5.3; va-rsk5.3.9): the slot shows source seconds in..out, so a retime changes
+// its rate; past 4x is refused, under 0.5x holds the out frame on a still.
+describe('contract: recording scenes', () => {
+  const rfx = (f: string) =>
+    readFileSync(new URL(`../../test/fixtures/contract1-recording/${f}`, import.meta.url), 'utf8')
+  const rec = rfx('index.html')
+  const recSummary = JSON.parse(rfx('summary.json')) as Summary
+  const logCase = (name: string, data: Record<string, unknown>) =>
+    console.log(JSON.stringify({ test: 'contract-recording', case: name, ...data }))
+  const slotOf = (h: string) => {
+    const el = [...walk(load(h).root)].find((e) => e.attrs.some((a) => a.name === 'data-va-in'))
+    const get = (n: string) => el?.attrs.find((a) => a.name === n)?.value ?? null
+    return {
+      duration: Number(get('data-duration')),
+      rate: Number(get('data-playback-rate')),
+      mediaStart: Number(get('data-media-start')),
+      hold: get('data-va-rec-hold'),
+    }
+  }
+  const retime = (h: string, duration: number, sum = recSummary) =>
+    applyEdits(h, sum, [{ op: 'retime', beat: 'add-site', duration }])
+  /** The fixture with the slot showing `inS`..`outS` (the rate follows its current duration). */
+  const withSpan = (h: string, inS: number, outS: number) => {
+    const dur = slotOf(h).duration
+    return h
+      .replace(/data-va-in="[^"]*"/, `data-va-in="${inS}"`)
+      .replace(/data-va-out="[^"]*"/, `data-va-out="${outS}"`)
+      .replace(/data-media-start="[^"]*"/, `data-media-start="${inS}"`)
+      .replace(
+        /data-playback-rate="[^"]*"/,
+        `data-playback-rate="${Math.round(((outS - inS) / dur) * 1e4) / 1e4}"`,
+      )
+  }
+
+  it('accepts the fixture and reads the recording beat', () => {
+    expect(validate(rec, recSummary)).toEqual([])
+    const c = read(load(rec))
+    expect(c.beats.map((b) => b.recording ?? null)).toEqual([
+      null,
+      {
+        step: 'add-site',
+        slot: 'add-site-screen',
+        src: 'assets/media/med_rec.mp4',
+        in: 2,
+        out: 12,
+        rate: 1.3333,
+        camera: [
+          [2, 0.5, 0.5, 1],
+          [3.4, 0.6, 0.31, 1.9, 'power2.inOut'],
+          [10.9, 0.6, 0.31, 1.9],
+          [12, 0.5, 0.5, 1, 'power2.inOut'],
+        ],
+        cursor: { style: 'smooth', size: null, path: 'add-site' },
+        clicks: [[4, 0.611, 0.304]],
+        redact: [],
+        locked: 'assets/recording/redact.js',
+        hold: null,
+      },
+      null,
+    ])
+    // Beats without a recording have no recording key at all (the API shape is unchanged for them).
+    expect('recording' in (c.beats[0] ?? {})).toBe(false)
+  })
+
+  it('retimes keep the source seconds: faster, slower, exactly 4x and 0.5x', () => {
+    for (const [duration, rate] of [
+      [5, 2],
+      [15, 0.6667],
+      [2.5, 4],
+      [20, 0.5],
+    ] as const) {
+      const r = retime(rec, duration)
+      const slot = slotOf(r.html)
+      logCase('retime', { duration, slot })
+      expect(slot).toEqual({ duration, rate, mediaStart: 2, hold: null })
+      expect(r.composition.beats[1]?.recording?.hold).toBeNull()
+    }
+  })
+
+  it('refuses past 4x with the reason', () => {
+    expect(() => retime(rec, 2)).toThrow(
+      'This scene can be at most 4× faster (it shows 10 s of your recording).',
+    )
+  })
+
+  it('holds under 0.5x and removes the hold when a later retime no longer needs it', () => {
+    // The spec's case: a 2 s step retimed to 6 s plays 4 s at 0.5x, then holds for 2 s.
+    const short = withSpan(retime(rec, 2.5).html, 4, 6)
+    expect(validate(short, retime(rec, 2.5).summary)).toEqual([])
+    const sum = retime(rec, 2.5).summary
+    const held = retime(short, 6, sum)
+    const slot = slotOf(held.html)
+    logCase('hold', { slot })
+    expect(slot).toEqual({ duration: 4, rate: 0.5, mediaStart: 4, hold: 'end' })
+    expect(held.html).toContain('<img class="va-rec-hold" src="assets/recording/add-site.hold.jpg" alt="">')
+    expect(held.composition.beats[1]?.recording?.hold).toEqual({ seconds: 2 })
+    expect(pendingStills(held.html)).toEqual(['assets/recording/add-site.hold.jpg'])
+    const back = retime(held.html, 2, held.summary)
+    expect(slotOf(back.html)).toEqual({ duration: 2, rate: 1, mediaStart: 4, hold: null })
+    expect(back.html).not.toContain('va-rec-hold')
+    expect(pendingStills(back.html)).toEqual([])
+    // The fixture's own round trip: held, then back to its length, is byte-identical.
+    const there = retime(rec, 25)
+    expect(slotOf(there.html)).toMatchObject({ duration: 20, hold: 'end' })
+    expect(retime(there.html, 7.5, there.summary).html).toBe(applyEdits(rec, recSummary, []).html)
+  })
+
+  it('reorder and delete keep the recording slot consistent', () => {
+    const moved = applyEdits(rec, recSummary, [{ op: 'reorder', order: ['add-site', 'intro', 'outro'] }])
+    expect(slotOf(moved.html)).toEqual(slotOf(rec))
+    expect(validate(moved.html, moved.summary)).toEqual([])
+    const gone = applyEdits(rec, recSummary, [{ op: 'delete', beat: 'add-site' }])
+    expect(gone.html).not.toContain('data-va-in')
+    expect(validate(gone.html, gone.summary)).toEqual([])
+  })
+
+  it('validate refuses each broken recording rule', () => {
+    const cases: [string, (h: string) => string, RegExp][] = [
+      [
+        'media start',
+        (h) => h.replace('data-media-start="2"', 'data-media-start="0"'),
+        /data-media-start="2"/,
+      ],
+      [
+        'rate',
+        (h) => h.replace('data-playback-rate="1.3333"', 'data-playback-rate="1"'),
+        /data-playback-rate="1.3333"/,
+      ],
+      ['in after out', (h) => h.replace('data-va-in="2"', 'data-va-in="13"'), /in before out/],
+      [
+        'too fast',
+        (h) => h.replace('data-va-out="12"', 'data-va-out="40"').replace('1.3333', '5.0667'),
+        /between 0.5x and 4x/,
+      ],
+      [
+        'second recording slot',
+        (h) =>
+          h.replace(
+            '<div class="va-cursor"',
+            '<video id="r2" data-va-media="r2" data-va-kind="video" src="assets/media/b.mp4" data-va-in="0" data-va-out="1" data-start="0" data-duration="7.5"></video><div class="va-cursor"',
+          ),
+        /more than one recording slot/,
+      ],
+      [
+        'other video slot',
+        (h) =>
+          h.replace(
+            '<div class="va-cursor"',
+            '<video id="v2" data-va-media="v2" data-va-kind="video" src="assets/media/b.mp4" data-start="0" data-duration="7.5"></video><div class="va-cursor"',
+          ),
+        /no other video slot/,
+      ],
+      [
+        'slot shorter than beat',
+        (h) => h.replace('data-duration="7.5"></video>', 'data-duration="5"></video>').replace('1.3333', '2'),
+        /must last its beat/,
+      ],
+      [
+        'bad hold value',
+        (h) => h.replace('muted data-start="0"', 'data-va-rec-hold="start" muted data-start="0"'),
+        /the only value is "end"/,
+      ],
+      [
+        'hold without a still',
+        (h) =>
+          h
+            .replace('data-duration="7.5"></video>', 'data-duration="5"></video>')
+            .replace('1.3333', '2')
+            .replace('data-va-out="12"', 'data-va-out="4.5"')
+            .replace('data-playback-rate="2"', 'data-playback-rate="0.5"')
+            .replace('muted data-start="0"', 'data-va-rec-hold="end" muted data-start="0"'),
+        /needs one <img class="va-rec-hold" src="assets\/recording\/add-site.hold.jpg">/,
+      ],
+      [
+        'rec hold off a recording slot',
+        (h) => h.replace('<h2 class="title"', '<h2 data-va-rec-hold="end" class="title"'),
+        /Only a recording slot carries data-va-rec-hold/,
+      ],
+      [
+        'still without a hold',
+        (h) =>
+          h.replace(
+            '<div class="va-cursor"',
+            '<img class="va-rec-hold" src="assets/recording/add-site.hold.jpg" alt=""><div class="va-cursor"',
+          ),
+        /isn't held/,
+      ],
+      [
+        'locked file',
+        (h) => h.replace('data-va-locked="assets/recording/redact.js"', 'data-va-locked="x.js"'),
+        /data-va-locked must name/,
+      ],
+      [
+        'fit-to-narration hold on a slot',
+        (h) => h.replace('muted data-start="0"', 'data-va-hold="2" muted data-start="0"'),
+        /Only the held-frame beat carries data-va-hold/,
+      ],
+    ]
+    for (const [name, mutate, want] of cases) {
+      const broken = mutate(rec)
+      expect(broken, name).not.toBe(rec)
+      const v = validate(broken, recSummary)
+      logCase('refused', { name, violations: v })
+      expect(v.join(' '), name).toMatch(want)
+    }
+  })
+
+  it('leaves compositions without recordings byte-identical, and the held last frame still validates', () => {
+    expect(applyEdits(html, summary, []).html).toBe(save(load(html)))
+    expect(pendingStills(html)).toEqual([])
+    const d = load(rec)
+    applyHoldFrame(d, 1)
+    expect(validate(save(d), recSummary)).toEqual([])
+  })
+
+  it('the bundle check accepts a pending still only when a held slot names it', () => {
+    const enc = (t: string) => new TextEncoder().encode(t)
+    const held = retime(rec, 25).html
+    const files = (h: string) =>
+      new Map<string, Uint8Array>([
+        ['index.html', enc(h)],
+        ['assets/recording/redact.js', enc('window.__vaRedact=[];')],
+      ])
+    expect(missingLocalFiles(files(held))).toEqual([])
+    // The same still named by a plain <img> (no held slot) is missing.
+    const plain = rec.replace(
+      '<h2 class="title"',
+      '<img src="assets/recording/add-site.hold.jpg" alt=""><h2 class="title"',
+    )
+    expect(missingLocalFiles(files(plain))).toEqual(['assets/recording/add-site.hold.jpg'])
+  })
+
+  // va-rsk5.3.10: span, camera, cursor and redact; the media op refused on a recording slot.
+  describe('recording ops', () => {
+    const apply = (ops: Parameters<typeof applyEdits>[2], opts: Parameters<typeof applyEdits>[3] = {}) =>
+      applyEdits(rec, recSummary, ops, opts)
+    const attrOf = (h: string, name: string) =>
+      [...walk(load(h).root)]
+        .map((e) => e.attrs.find((a) => a.name === name)?.value)
+        .find((v) => v !== undefined)
+    const refused = (name: string, ops: Parameters<typeof applyEdits>[2], msg: RegExp) => {
+      let error = ''
+      try {
+        apply(ops)
+      } catch (e) {
+        error = e instanceof Error ? e.message : String(e)
+      }
+      logCase('op', { name, ok: false, error })
+      expect(error, name).toMatch(msg)
+    }
+
+    it('span trims the step: media start and rate follow; keys and clicks outside go', () => {
+      const r = apply([{ op: 'span', beat: 'add-site', in: 3, out: 11 }])
+      logCase('op', { name: 'span', ok: true })
+      expect(slotOf(r.html)).toEqual({ duration: 7.5, rate: 1.0667, mediaStart: 3, hold: null })
+      expect(JSON.parse(attrOf(r.html, 'data-va-camera') ?? '[]')).toEqual([
+        [3.4, 0.6, 0.31, 1.9, 'power2.inOut'],
+        [10.9, 0.6, 0.31, 1.9],
+      ])
+      expect(validate(r.html, r.summary)).toEqual([])
+    })
+
+    it('span widening reports where there is no cursor data; past 4x is refused', () => {
+      const cursorGaps: Record<string, [number, number][]> = {}
+      apply([{ op: 'span', beat: 'add-site', in: 1, out: 12.5 }], { cursorGaps })
+      expect(cursorGaps).toEqual({
+        'add-site': [
+          [1, 2],
+          [12, 12.5],
+        ],
+      })
+      refused('span past 4x', [{ op: 'span', beat: 'add-site', in: 0, out: 40 }], /at most 4× faster/)
+      refused('span reversed', [{ op: 'span', beat: 'add-site', in: 5, out: 4 }], /in first/)
+      refused(
+        'span on a plain scene',
+        [{ op: 'span', beat: 'intro', in: 0, out: 1 }],
+        /isn't a recording scene/,
+      )
+    })
+
+    it('camera replaces the keys; bad keys are refused', () => {
+      const keys = [
+        [2, 0.5, 0.5, 1],
+        [6, 0.3, 0.4, 2, 'sine.inOut'],
+        [12, 0.5, 0.5, 1, 'power2.out'],
+      ]
+      const r = apply([{ op: 'camera', beat: 'add-site', keys }])
+      expect(JSON.parse(attrOf(r.html, 'data-va-camera') ?? '[]')).toEqual(keys)
+      refused(
+        'unsorted',
+        [
+          {
+            op: 'camera',
+            beat: 'add-site',
+            keys: [
+              [6, 0.5, 0.5, 1],
+              [3, 0.5, 0.5, 1],
+            ],
+          },
+        ],
+        /time order/,
+      )
+      refused(
+        'outside the frame',
+        [{ op: 'camera', beat: 'add-site', keys: [[3, 1.2, 0.5, 1]] }],
+        /inside the frame/,
+      )
+      refused('zoom 5', [{ op: 'camera', beat: 'add-site', keys: [[3, 0.5, 0.5, 5]] }], /zoom 1-4/)
+      refused('bad ease', [{ op: 'camera', beat: 'add-site', keys: [[3, 0.5, 0.5, 1, 'elastic']] }], /ease/)
+      refused(
+        'outside the scene',
+        [{ op: 'camera', beat: 'add-site', keys: [[13, 0.5, 0.5, 1]] }],
+        /inside the scene/,
+      )
+      refused(
+        '65 keys',
+        [
+          {
+            op: 'camera',
+            beat: 'add-site',
+            keys: Array.from({ length: 65 }, (_, i) => [2 + i / 10, 0.5, 0.5, 1]),
+          },
+        ],
+        /1 to 64/,
+      )
+    })
+
+    it('cursor sets style and size, never the path; smooth needs cursor data from the recorder', () => {
+      const r = apply([{ op: 'cursor', beat: 'add-site', style: 'highlight', size: 1.5 }])
+      expect([
+        attrOf(r.html, 'data-va-cursor'),
+        attrOf(r.html, 'data-va-cursor-size'),
+        attrOf(r.html, 'data-va-path'),
+      ]).toEqual(['highlight', '1.5', 'add-site'])
+      refused(
+        'smooth without trace data',
+        [{ op: 'cursor', beat: 'add-site', style: 'smooth', size: 1 }],
+        /needs cursor data/,
+      )
+      const traced = rec.replace(
+        'data-va-path="add-site"',
+        'data-va-path="add-site" data-va-cursor-from="trace"',
+      )
+      expect(
+        attrOf(
+          applyEdits(traced, recSummary, [{ op: 'cursor', beat: 'add-site', style: 'smooth', size: 1 }]).html,
+          'data-va-cursor',
+        ),
+      ).toBe('smooth')
+      refused('size 3', [{ op: 'cursor', beat: 'add-site', style: 'none', size: 3 }], /0.5 to 2/)
+      expect(
+        attrOf(apply([{ op: 'cursor', beat: 'add-site', style: 'none', size: 1 }]).html, 'data-va-cursor'),
+      ).toBe('none')
+    })
+
+    it('redact replaces the scene entries; locked ones can never be touched', () => {
+      const box = { start: 3, end: 6, reason: 'card number', boxes: [[3, 0.2, 0.2, 0.1, 0.05]] }
+      const r = apply([
+        { op: 'redact', beat: 'add-site', entries: [box, { ...box, id: 'a1', origin: 'agent' }] },
+      ])
+      expect(JSON.parse(attrOf(r.html, 'data-va-redact') ?? '[]')).toEqual([
+        { id: 'e1', origin: 'editor', ...box },
+        { id: 'a1', origin: 'agent', ...box },
+      ])
+      refused(
+        'a locked id',
+        [{ op: 'redact', beat: 'add-site', entries: [{ ...box, id: 't1' }] }],
+        /can't be removed/,
+      )
+      refused(
+        'a trace origin',
+        // A forged origin (the API's schema refuses it too).
+        [{ op: 'redact', beat: 'add-site', entries: [{ ...box, origin: 'trace' as 'agent' }] }],
+        /can't be removed/,
+      )
+      refused(
+        'a box outside the frame',
+        [{ op: 'redact', beat: 'add-site', entries: [{ ...box, boxes: [[3, 0.95, 0.2, 0.1, 0.05]] }] }],
+        /inside the frame/,
+      )
+      // Blurred unless the entry says solid (blur, the default, isn't written).
+      const styled = apply([
+        {
+          op: 'redact',
+          beat: 'add-site',
+          entries: [
+            { ...box, style: 'solid' },
+            { ...box, id: 'a2', style: 'blur' },
+          ],
+        },
+      ])
+      expect(
+        (JSON.parse(attrOf(styled.html, 'data-va-redact') ?? '[]') as { style?: string }[]).map(
+          (e) => e.style,
+        ),
+      ).toEqual(['solid', undefined])
+      refused(
+        'an unknown style',
+        [{ op: 'redact', beat: 'add-site', entries: [{ ...box, style: 'pixelate' as 'solid' }] }],
+        /blurred or solid/,
+      )
+      // Nothing can drop the locked file: a scene without its redact.js script doesn't validate.
+      const noScript = rec.replace('<script src="assets/recording/redact.js"></script>', '')
+      expect(validate(noScript, recSummary).join(' ')).toMatch(/must load assets\/recording\/redact.js/)
+    })
+
+    it('the media op is refused on a recording slot and still works on an ordinary video slot', () => {
+      refused(
+        'media on the recording',
+        [
+          {
+            op: 'media',
+            slot: 'add-site-screen',
+            src: 'assets/media/other.mp4',
+            kind: 'video',
+            fit: 'cover',
+          },
+        ],
+        /Swap the recording from the demo's setup/,
+      )
+      const ok = applyEdits(html, summary, [
+        { op: 'media', slot: 'hero-clip', src: 'assets/media/other.mp4', kind: 'video', fit: 'cover' },
+      ])
+      expect(ok.html).toContain('src="assets/media/other.mp4"')
+    })
   })
 })

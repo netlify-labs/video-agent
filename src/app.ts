@@ -1,9 +1,11 @@
 // The Hono app behind /api/*. createApp(deps) is used by the Netlify Function, tests and spec generation.
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
-import type { Context, MiddlewareHandler } from 'hono'
+import type { Context, MiddlewareHandler, Next } from 'hono'
 import type { Deps } from './deps.js'
+import { listEngines, remotionConfigured } from './domain/engines.js'
 import { assertSameOrigin, principalFromRequest } from './domain/auth.js'
 import { receiveCallback } from './domain/callback.js'
+import { claimLogin, createLogin, decideLogin, lookupLogin } from './domain/cli-login.js'
 import { createKey, listKeys, revokeKey } from './domain/keys.js'
 import { assertCan, type Principal } from './domain/policy.js'
 import { resolveUnresolved, tick } from './domain/reconciler.js'
@@ -18,6 +20,7 @@ import {
   publishVersion,
   updateVideo,
   setVerdict,
+  confirmHiddenAreas,
   transferVideos,
   loadJob,
   retryVersion,
@@ -58,11 +61,15 @@ import { getAdminSettings, updateAdminSettings } from './domain/narration-settin
 import { enabledFeatures } from './domain/features.js'
 import { PROMPT_TEMPLATE_VERSION } from './domain/prompt.js'
 import { buildInfo } from './generated/build-info.js'
+import { listLooks } from './domain/looks.js'
 import { remixVideo, versionMediaItems } from './domain/remix.js'
 import { listNotifications, markNotificationsRead } from './domain/notifications.js'
 import { getProgress } from './domain/progress.js'
 import { previewLink } from './domain/preview.js'
+import { fillBeats } from './domain/beats.js'
 import { cancelUpload, completeUpload, createUpload, getUpload, putPart } from './domain/media-uploads.js'
+import { getMediaTrace, setMediaTrace } from './domain/media-trace.js'
+import { TRACE_MAX_BYTES } from './lib/recording-trace.js'
 import {
   getTakePeaks,
   getTakeSpeech,
@@ -80,7 +87,7 @@ import {
   updateMedia,
   uploadMedia,
 } from './domain/media.js'
-import { deleteUnusedRecordings } from './domain/takes.js'
+import { deleteUnusedRecordings } from './domain/recording-retention.js'
 import { discardEdit, editPreviewLink, getEdit, openEdit, renderEdit, saveEdit } from './domain/edits.js'
 import {
   acquireNarrationLock,
@@ -100,7 +107,7 @@ import {
 } from './domain/comments.js'
 import * as planning from './domain/plans.js'
 import { addPreview } from './domain/previews.js'
-import { myUsage, planningByUserWeek } from './domain/usage.js'
+import { myUsage, planningByUserWeek, remotionRendersThisMonth } from './domain/usage.js'
 import { ApiError, errorBody } from './lib/errors.js'
 import { MEDIA_KINDS } from './lib/media/classify.js'
 import { MEDIA_ROLES } from './domain/types.js'
@@ -162,6 +169,9 @@ const errors = {
   409: err('Conflict or not ready'),
 }
 const security = [{ cookieAuth: [] }, { bearerAuth: [] }]
+/** The only paths besides /api/v1/config that skip requireAuth, and only for POST. */
+const CLI_LOGIN_OPEN = [/^\/api\/v1\/cli\/logins$/, /^\/api\/v1\/cli\/logins\/cli_[\w-]+\/token$/]
+const clientIp = (c: Context<Env>) => c.req.header('x-nf-client-connection-ip') ?? 'unknown'
 
 const IdParam = z.object({ id: z.string().openapi({ param: { name: 'id', in: 'path' } }) })
 const IdempotencyHeader = z.object({ 'idempotency-key': z.string().max(200).optional() })
@@ -275,6 +285,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
 
   const requireAuth: MiddlewareHandler<Env> = async (c, next) => {
     if (c.req.path === '/api/v1/config' || c.req.method === 'OPTIONS') return next()
+    // video-agent login: the CLI has no credentials yet; it starts a login and claims it with its device code.
+    if (c.req.method === 'POST' && CLI_LOGIN_OPEN.some((r) => r.test(c.req.path))) return next()
     // Receiver callbacks authenticate with their own per-operation token (publish destinations §3.3).
     if (c.req.path.startsWith('/api/v1/destination-callbacks/')) return next()
     const rotated: { cookie?: string } = {}
@@ -381,7 +393,21 @@ export function createApp(deps: Deps, opts: AppOptions) {
       method: 'post',
       path: '/api/v1/videos',
       operationId: 'createVideo',
-      'x-sdk': { resource: 'videos', method: 'create', fieldFeatures: { planId: 'planning' } },
+      'x-sdk': {
+        resource: 'videos',
+        method: 'create',
+        fieldFeatures: {
+          planId: 'planning',
+          look: 'looks',
+          externalRef: 'external_ref',
+          externalUrl: 'external_ref',
+          private: 'external_ref',
+          context: 'context',
+          recording: 'screen_recording',
+          agent: 'screen_recording',
+          engine: 'engines',
+        },
+      },
       summary: 'Create a video',
       description: 'Creates a video from a prompt and queues its first version.',
       tags: ['videos'],
@@ -407,7 +433,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       method: 'get',
       path: '/api/v1/videos',
       operationId: 'listVideos',
-      'x-sdk': { resource: 'videos', method: 'list' },
+      'x-sdk': { resource: 'videos', method: 'list', fieldFeatures: { externalRef: 'external_ref' } },
       summary: 'List videos',
       description: 'Lists videos, newest first.',
       tags: ['videos'],
@@ -422,6 +448,9 @@ export function createApp(deps: Deps, opts: AppOptions) {
             .optional()
             .openapi({ description: 'true: only videos you starred' }),
           q: z.string().max(200).optional(),
+          externalRef: s.ExternalRefSchema.optional().openapi({
+            description: 'Only videos made with this externalRef (exact match), newest first',
+          }),
           cursor: z.string().max(500).optional(),
           limit: z.coerce.number().int().min(1).max(50).optional(),
         }),
@@ -524,9 +553,14 @@ export function createApp(deps: Deps, opts: AppOptions) {
       method: 'post',
       path: '/api/v1/videos/{id}/versions',
       operationId: 'reviseVideo',
-      'x-sdk': { resource: 'videos', method: 'revise', fieldFeatures: { planId: 'planning' } },
+      'x-sdk': {
+        resource: 'videos',
+        method: 'revise',
+        fieldFeatures: { planId: 'planning', scope: 'scoped_revision', look: 'looks', context: 'context' },
+      },
       summary: 'Revise a video',
-      description: 'Starts the next version from a ready one.',
+      description:
+        "Starts the next version from a ready one. With scope, only those scenes of fromVersion are redone and everything else stays exactly as it is (redo a scene): 409 not_editable when that version can't be redone scene by scene (no editing contract, or its engine can't), 400 for scene ids it doesn't have.",
       tags: ['versions'],
       security,
       request: {
@@ -556,7 +590,15 @@ export function createApp(deps: Deps, opts: AppOptions) {
         resource: 'videos',
         method: 'remix',
         feature: 'remix',
-        fieldFeatures: { planId: 'planning' },
+        fieldFeatures: {
+          planId: 'planning',
+          look: 'looks',
+          externalRef: 'external_ref',
+          externalUrl: 'external_ref',
+          private: 'external_ref',
+          context: 'context',
+          recording: 'screen_recording',
+        },
       },
       summary: 'Remix a video',
       description:
@@ -603,6 +645,28 @@ export function createApp(deps: Deps, opts: AppOptions) {
     async (c) => {
       const p = c.req.valid('param')
       return c.json(await versionMediaItems(deps, c.get('principal'), p.id, p.n), 200)
+    },
+  )
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/v1/videos/{id}/versions/{n}/beats',
+      operationId: 'getVersionBeats',
+      'x-sdk': { resource: 'versions', method: 'beats', feature: 'scoped_revision' },
+      summary: "A version's scenes",
+      description:
+        "The scenes (beats) of a ready version, in order, for redoing some of them: pass their ids as scope.beats with this version as fromVersion. Null for a version that can't be edited scene by scene. Versions made before this list existed get it filled on first read. 409 when the version isn't ready.",
+      tags: ['versions'],
+      security,
+      request: { params: VersionParam },
+      responses: {
+        200: json(z.object({ beats: z.array(s.BeatInfoSchema).nullable() }), 'Scenes'),
+        ...errors,
+      },
+    }),
+    async (c) => {
+      const p = c.req.valid('param')
+      return c.json({ beats: await fillBeats(deps, c.get('principal'), p.id, p.n) }, 200)
     },
   )
   app.openapi(
@@ -688,6 +752,21 @@ export function createApp(deps: Deps, opts: AppOptions) {
     },
   )
   // Publish destinations (docs/plans/2026-11-04-publish-destinations.md §6.1).
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/v1/looks',
+      operationId: 'listLooks',
+      'x-sdk': { resource: 'looks', method: 'list', feature: 'looks' },
+      summary: 'List looks',
+      description:
+        "The visual styles a video can be made in (pass an id as `look` when creating, revising or remixing), each with whether an admin has it on, and the default for creates that omit a look. Every signed-in role can list them; a look's name and description are never private.",
+      tags: ['videos'],
+      security,
+      responses: { 200: json(s.LooksSchema, 'Looks'), ...errors },
+    }),
+    async (c) => c.json(await listLooks(deps), 200),
+  )
   app.openapi(
     createRoute({
       method: 'get',
@@ -1070,6 +1149,28 @@ export function createApp(deps: Deps, opts: AppOptions) {
   )
   app.openapi(
     createRoute({
+      method: 'post',
+      path: '/api/v1/videos/{id}/versions/{n}/hidden/confirm',
+      operationId: 'markHiddenAreasChecked',
+      'x-sdk': { resource: 'videos', method: 'confirmHidden', feature: 'screen_recording' },
+      summary: 'Mark hidden areas checked',
+      description:
+        "A demo's Looks right: marks these hidden areas (ids from the version's recording.hidden) as checked by you, with the time. Owner or admin. 400 for an id the version doesn't have; 404 when the version has no recording.",
+      tags: ['versions'],
+      security,
+      request: {
+        params: VersionParam,
+        body: jsonBody(s.ConfirmHiddenSchema),
+      },
+      responses: { 200: json(s.VideoSchema, 'Updated'), ...errors },
+    }),
+    async (c) => {
+      const p = c.req.valid('param')
+      return c.json(await confirmHiddenAreas(deps, c.get('principal'), p.id, p.n, c.req.valid('json')), 200)
+    },
+  )
+  app.openapi(
+    createRoute({
       method: 'put',
       path: '/api/v1/videos/{id}/versions/{n}/verdict',
       operationId: 'setVerdict',
@@ -1260,6 +1361,81 @@ export function createApp(deps: Deps, opts: AppOptions) {
     }),
     async (c) => c.json(await createKey(deps, c.get('principal'), c.req.valid('json').name), 201),
   )
+  const cliErrors = { 404: err('Not found'), 409: err('Browser login is off'), 429: err('Too many') }
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/v1/cli/logins',
+      operationId: 'createCliLogin',
+      'x-sdk': { resource: 'cliLogins', method: 'create' },
+      summary: 'Start a CLI login',
+      description:
+        'Starts video-agent login. No credentials: returns a device code for the CLI and a user code the person types on the approve page.',
+      tags: ['cli'],
+      request: {
+        body: jsonBody(s.CreateCliLoginSchema),
+      },
+      responses: { 201: json(s.CliLoginSchema, 'Started'), 400: err('Invalid request'), ...cliErrors },
+    }),
+    async (c) => c.json(await createLogin(deps, { ...c.req.valid('json'), clientIp: clientIp(c) }), 201),
+  )
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/v1/cli/logins/{id}/token',
+      operationId: 'claimCliLogin',
+      'x-sdk': { resource: 'cliLogins', method: 'claim' },
+      summary: 'Claim a CLI login',
+      description:
+        "The CLI's poll. Pending until the person approves; then claimed once, with a new API key. Poll no faster than intervalSec.",
+      tags: ['cli'],
+      request: {
+        params: IdParam,
+        body: jsonBody(s.ClaimCliLoginSchema),
+      },
+      responses: { 200: json(s.CliLoginClaimSchema, 'Status'), 400: err('Invalid request'), ...cliErrors },
+    }),
+    async (c) => c.json(await claimLogin(deps, c.req.valid('param').id, c.req.valid('json').deviceCode), 200),
+  )
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/v1/cli/logins/lookup',
+      operationId: 'lookupCliLogin',
+      'x-sdk': false,
+      summary: 'Look up a CLI login by its code',
+      description:
+        'For the approve page: the login waiting for the code you typed. Signed-in browser sessions only.',
+      tags: ['cli'],
+      security,
+      request: {
+        body: jsonBody(s.LookupCliLoginSchema),
+      },
+      responses: { 200: json(s.CliLoginRequestSchema, 'Login'), ...errors, ...cliErrors },
+    }),
+    async (c) => c.json(await lookupLogin(deps, c.get('principal'), c.req.valid('json').userCode), 200),
+  )
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/v1/cli/logins/approve',
+      operationId: 'decideCliLogin',
+      'x-sdk': false,
+      summary: 'Approve or deny a CLI login',
+      description:
+        'Approves or denies the login waiting for the code you typed. Signed-in browser sessions only.',
+      tags: ['cli'],
+      security,
+      request: {
+        body: jsonBody(s.DecideCliLoginSchema),
+      },
+      responses: { 200: json(s.CliLoginDecisionSchema, 'Decided'), ...errors, ...cliErrors },
+    }),
+    async (c) => {
+      const { userCode, decision } = c.req.valid('json')
+      return c.json(await decideLogin(deps, c.get('principal'), userCode, decision), 200)
+    },
+  )
   app.openapi(
     createRoute({
       method: 'delete',
@@ -1303,6 +1479,21 @@ export function createApp(deps: Deps, opts: AppOptions) {
       responses: { 204: { description: 'Revoked' }, ...errors },
     }),
     async (c) => noContent(c, revokeGrant(deps, c.get('principal'), c.req.valid('param').id)),
+  )
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/v1/engines',
+      operationId: 'listEngines',
+      'x-sdk': { resource: 'engines', method: 'list', feature: 'engines' },
+      summary: 'List render engines',
+      description:
+        'The engines a video can be made with here: HyperFrames always, and Remotion when this deployment offers it (bring your own license), with its license notice.',
+      tags: ['videos'],
+      security,
+      responses: { 200: json(z.object({ items: z.array(s.EngineSchema) }), 'Engines'), ...errors },
+    }),
+    async (c) => c.json({ items: await listEngines(deps) }, 200),
   )
   app.openapi(
     createRoute({
@@ -1510,7 +1701,12 @@ export function createApp(deps: Deps, opts: AppOptions) {
       method: 'post',
       path: '/api/v1/plans',
       operationId: 'createPlan',
-      'x-sdk': { resource: 'plans', method: 'create', feature: 'planning' },
+      'x-sdk': {
+        resource: 'plans',
+        method: 'create',
+        feature: 'planning',
+        fieldFeatures: { look: 'looks', engine: 'engines' },
+      },
       summary: 'Start a plan',
       description: 'Starts planning a video: a fast router decides whether a few questions would help.',
       tags: ['planning'],
@@ -2013,7 +2209,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       'x-sdk': { resource: 'uploads', method: 'create' },
       summary: 'Start an upload',
       description:
-        "Starts an upload session for a file over 4 MB, or for any voice-over recording. Declare its size and sha256 (a recorder may send the hash it computed while recording; the server checks every part and the whole file); quota is reserved. A recording names its role and the video it's for (scopeJobId), which you must be able to see.",
+        "Starts an upload session for a file over 4 MB, or for any voice-over recording. Declare its size and sha256 (a recorder may send the hash it computed while recording; the server checks every part and the whole file); quota is reserved. A voice-over recording names its role and the video it's for (scopeJobId), which you must be able to see. A screen recording (role screen-recording, needs the screen_recording feature) names no video and is held to its own limits: H.264 MP4, 150 MB, 5 minutes, a constant 24-30 fps, a keyframe at least every 2 s, fast start.",
       tags: ['media'],
       security,
       request: {
@@ -2325,6 +2521,60 @@ export function createApp(deps: Deps, opts: AppOptions) {
       responses: { 204: { description: 'Deleted' }, ...errors },
     }),
     async (c) => noContent(c, deleteMedia(deps, c.get('principal'), c.req.valid('param').id)),
+  )
+  // A screen recording's pointer trace (screen-recording plan §4.7): set or replaced by its uploader until a version
+  // uses the recording, then frozen; read back (normalized) by its uploader and admins only.
+  app.openapi(
+    createRoute({
+      method: 'put',
+      path: '/api/v1/media/{id}/trace',
+      operationId: 'setMediaTrace',
+      'x-sdk': { resource: 'media', method: 'setTrace', feature: 'screen_recording' },
+      summary: "Set a screen recording's pointer trace",
+      description: `Stores the pointer trace (the cursor and click log, schema v1, at most ${TRACE_MAX_BYTES / 1024 / 1024} MB) for a ready screen recording: its uploader or an admin. Text from the recorded page is scrubbed. Sending again replaces it until a video uses the recording, then 409 trace_frozen. Shares the 10-an-hour budget with recording uploads.`,
+      tags: ['media'],
+      security,
+      // Before the body is read: a trace over the cap is refused on its declared length.
+      middleware: [
+        async (c: Context<Env>, next: Next) => {
+          if (Number(c.req.header('content-length') ?? 0) > TRACE_MAX_BYTES)
+            throw new ApiError(
+              'quota_exceeded',
+              `A pointer trace must be ${TRACE_MAX_BYTES / 1024 / 1024} MB or smaller.`,
+            )
+          await next()
+        },
+      ] as const,
+      request: {
+        params: IdParam,
+        body: jsonBody(s.TraceBodySchema),
+      },
+      responses: { 200: json(s.MediaSchema, 'The recording, with its trace'), ...errors },
+    }),
+    async (c) =>
+      c.json(
+        await setMediaTrace(deps, c.get('principal'), c.req.valid('param').id, c.req.valid('json')),
+        200,
+      ),
+  )
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/v1/media/{id}/trace',
+      operationId: 'getMediaTrace',
+      'x-sdk': { resource: 'media', method: 'getTrace', feature: 'screen_recording' },
+      summary: "Get a screen recording's pointer trace",
+      description: "The stored (normalized) pointer trace, for the recording's uploader and admins only.",
+      tags: ['media'],
+      security,
+      request: { params: IdParam },
+      responses: { 200: json(s.TraceBodySchema, 'The trace'), ...errors },
+    }),
+    async (c) => {
+      const trace = await getMediaTrace(deps, c.get('principal'), c.req.valid('param').id)
+      // The stored trace passed the domain's full schema; the API schema only declares its top level.
+      return c.json(trace as unknown as z.infer<typeof s.TraceBodySchema>, 200)
+    },
   )
   // A recording's waveform peaks and speech spans (voice-over plan §5.1, §6.1): the uploader sends them; readers of
   // the take get them.
@@ -2638,6 +2888,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
           ],
           maxActiveRuns: deps.config.maxActiveRuns,
           queuePausedReason: settings?.queuePausedReason ?? null,
+          ...(remotionConfigured(deps) ? { remotionRenders: await remotionRendersThisMonth(deps) } : {}),
         },
         200,
       )
@@ -2861,6 +3112,11 @@ export function createApp(deps: Deps, opts: AppOptions) {
         tag('media', 'Media', "The team's media library: uploads, music from Openverse and captions."),
         tag('notifications', 'Notifications', 'Comments and approvals on your videos.'),
         tag('keys', 'Keys and webhooks', 'API keys, connected OAuth apps and your webhook.'),
+        tag(
+          'cli',
+          'CLI login',
+          'video-agent login: the CLI starts a login, you approve it in the browser, it gets a key.',
+        ),
         tag('me', 'Account', 'Who you are.'),
         tag('usage', 'Usage', 'Your AI credits this month.'),
         tag(

@@ -6,6 +6,8 @@ import type {
   ApiKeyRow,
   AttemptRow,
   CleanupRow,
+  CliLoginFailureRow,
+  CliLoginRow,
   IdempotencyRow,
   JobRow,
   OutputRow,
@@ -48,6 +50,7 @@ import type {
 } from '../domain/types.js'
 import type { JobQuery, Repo, Store } from './types.js'
 import { searchWords } from '../lib/search.js'
+import { isTakeRole } from '../domain/media-roles.js'
 import { ApiError } from '../lib/errors.js'
 
 interface State {
@@ -89,6 +92,8 @@ interface State {
   cleanup: Map<string, CleanupRow>
   oauthClients: Map<string, OAuthClientRow>
   oauthRequests: Map<string, OAuthRequestRow>
+  cliLogins: Map<string, CliLoginRow>
+  cliLoginFailures: Map<string, CliLoginFailureRow>
   oauthGrants: Map<string, OAuthGrantRow>
   oauthTokens: Map<string, OAuthTokenRow>
   identities: Map<string, UserIdentityRow>
@@ -136,6 +141,8 @@ const empty = (): State => ({
   cleanup: new Map(),
   oauthClients: new Map(),
   oauthRequests: new Map(),
+  cliLogins: new Map(),
+  cliLoginFailures: new Map(),
   oauthGrants: new Map(),
   oauthTokens: new Map(),
   identities: new Map(),
@@ -167,7 +174,8 @@ const libraryVisible = (
 ) =>
   !m.deletedAt &&
   (m.status === 'ready' || m.uploaderId === q.includePendingOf) &&
-  (m.role === null || (m.uploaderId === q.takesOf && m.deletingAt === null))
+  // Narration takes are the uploader's own; other roles are library items like any other.
+  (!isTakeRole(m.role) || (m.uploaderId === q.takesOf && m.deletingAt === null))
 const ikey = (provider: string, subject: string) => `${provider}\n${subject}`
 const live = (leaseUntil: string | null, now: string) => leaseUntil !== null && leaseUntil > now
 const activeDpub = (
@@ -210,7 +218,7 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
   // Take upload sessions not yet completed: they hold quota and count toward the rate limit until their media row does.
   const openTakeSessions = (uploaderId: string) =>
     [...state.uploads.values()].filter(
-      (u) => u.uploaderId === uploaderId && u.status === 'open' && u.role !== null,
+      (u) => u.uploaderId === uploaderId && u.status === 'open' && isTakeRole(u.role),
     )
 
   const repo: Repo = {
@@ -262,6 +270,7 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
       const vis = q.visibleTo
       if (vis && !vis.all) rows = rows.filter((j) => !j.private || j.ownerId === vis.userId)
       if (q.status) rows = rows.filter((j) => j.status === q.status)
+      if (q.externalRef !== undefined) rows = rows.filter((j) => j.externalRef === q.externalRef)
       if (q.published !== undefined) rows = rows.filter((j) => published.has(j.id) === q.published)
       const fav = q.favoriteOf
       if (fav) rows = rows.filter((j) => state.favorites.has(`${fav}/${j.id}`))
@@ -455,7 +464,9 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
           .filter(
             (m) =>
               libraryVisible(m, q) &&
-              (q.recordings === 'only' ? m.role !== null : q.recordings !== 'exclude' || m.role === null) &&
+              (q.recordings === 'only'
+                ? isTakeRole(m.role)
+                : q.recordings !== 'exclude' || !isTakeRole(m.role)) &&
               (!q.kind || m.kind === q.kind) &&
               searchWords(q.search).every((w) =>
                 [m.title, m.filename, m.caption, m.sourceTitle, m.creator].some((f) =>
@@ -487,6 +498,10 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
       [...state.uploads.values()]
         .filter((u) => u.uploaderId === uploaderId && (u.status === 'open' || u.status === 'assembling'))
         .reduce((s, u) => s + u.size, 0),
+    countOpenUploads: async (uploaderId) =>
+      [...state.uploads.values()].filter(
+        (u) => u.uploaderId === uploaderId && (u.status === 'open' || u.status === 'assembling'),
+      ).length,
     listStaleUploads: async (now, limit) =>
       clone(
         [...state.uploads.values()]
@@ -617,7 +632,7 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
         [...state.media.values()]
           .filter(
             (m) =>
-              m.role !== null &&
+              isTakeRole(m.role) &&
               !m.deletedAt &&
               m.deletingAt === null &&
               (m.scopeJobId === jobId || used.has(m.id)),
@@ -632,7 +647,7 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
         [...state.media.values()]
           .filter(
             (m) =>
-              m.role !== null &&
+              isTakeRole(m.role) &&
               m.deletingAt === null &&
               !held.has(m.id) &&
               (!q.uploaderId || m.uploaderId === q.uploaderId) &&
@@ -672,6 +687,46 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
           out[r.mediaId]?.push(r.jobId)
       return out
     },
+    listUnusedRecordings: async (q) =>
+      [...state.media.values()]
+        .filter(
+          (m) =>
+            m.role === 'screen-recording' &&
+            !m.deletedAt &&
+            !m.deletingAt &&
+            (!q.uploaderId || m.uploaderId === q.uploaderId) &&
+            !state.versionMedia.some(
+              (r) => r.mediaId === m.id && state.jobs.get(r.jobId)?.deletedAt === null,
+            ),
+        )
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
+        .slice(0, q.limit)
+        .map((m) => ({ row: clone(m), everUsed: state.versionMedia.some((r) => r.mediaId === m.id) })),
+    screenRecordingBytes: async (uploaderId) =>
+      [...state.media.values()]
+        .filter(
+          (m) =>
+            m.uploaderId === uploaderId &&
+            m.role === 'screen-recording' &&
+            m.status !== 'rejected' &&
+            !m.deletingAt &&
+            !m.deletedAt,
+        )
+        .reduce((n, m) => n + m.bytes, 0) +
+      [...state.uploads.values()]
+        .filter((u) => u.uploaderId === uploaderId && u.status === 'open' && u.role === 'screen-recording')
+        .reduce((n, u) => n + u.size, 0),
+    recentTraceWrites: async (uploaderId, since) =>
+      [...state.media.values()]
+        .filter((m) => m.uploaderId === uploaderId)
+        .flatMap((m) => m.traceWrites ?? [])
+        .filter((t) => t >= since)
+        .sort(),
+    jobsUsingMedia: async (mediaId) =>
+      state.versionMedia
+        .filter((r) => r.mediaId === mediaId && state.jobs.get(r.jobId)?.deletedAt === null)
+        .map((r) => ({ jobId: r.jobId, versionN: r.versionN }))
+        .sort((a, b) => a.jobId.localeCompare(b.jobId) || a.versionN - b.versionN),
     mediaBySource: async (source, ids) =>
       clone(
         [...state.media.values()]
@@ -932,6 +987,22 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
       ),
     updateCleanup: async (id, patch) => patchRow(state.cleanup, id, patch),
 
+    engineRendersSince: async (since) =>
+      clone(
+        [...state.attempts.values()]
+          .filter((a) => a.endedAt !== null && a.endedAt >= since && a.engineRenders)
+          .map((a) => a.engineRenders as { video: number; stills: number; audio: number }),
+      ),
+    latestEngineAttempt: async (engine) => {
+      let latest: AttemptRow | null = null
+      for (const a of state.attempts.values()) {
+        if (a.endedAt === null || (latest?.endedAt ?? '') > a.endedAt) continue
+        if ((state.versions.get(vkey(a.jobId, a.versionN))?.engine ?? 'hyperframes') === engine) latest = a
+      }
+      return latest?.endedAt
+        ? { stage: latest.stage, errorCategory: latest.errorCategory, endedAt: latest.endedAt }
+        : null
+    },
     usageSince: async (since) => {
       const out = new Map<string, UsageRow>()
       for (const a of state.attempts.values()) {
@@ -940,6 +1011,41 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
         if (v) addUsage(out, v.authorId, a.queuedAt, a.stage, a.usage?.totalCreditsCost)
       }
       return [...out.values()]
+    },
+    insertCliLogin: async (row) => {
+      state.cliLogins.set(row.id, clone(row))
+    },
+    getCliLogin: async (id) => clone(state.cliLogins.get(id) ?? null),
+    findPendingCliLogin: async (userCode, now) =>
+      clone(
+        [...state.cliLogins.values()].find(
+          (l) => l.userCode === userCode && l.status === 'pending' && l.expiresAt > now,
+        ) ?? null,
+      ),
+    updateCliLogin: async (id, patch) => patchRow(state.cliLogins, id, patch),
+    countPendingCliLogins: async (now, clientIp) =>
+      [...state.cliLogins.values()].filter(
+        (l) =>
+          l.status === 'pending' && l.expiresAt > now && (clientIp === undefined || l.clientIp === clientIp),
+      ).length,
+    countCliLoginApprovals: async (userId, since) =>
+      [...state.cliLogins.values()].filter(
+        (l) => l.userId === userId && l.approvedAt !== null && l.approvedAt >= since,
+      ).length,
+    insertCliLoginFailure: async (row) => {
+      state.cliLoginFailures.set(row.id, clone(row))
+    },
+    countCliLoginFailures: async (userId, since) =>
+      [...state.cliLoginFailures.values()].filter((f) => f.userId === userId && f.createdAt >= since).length,
+    sweepCliLogins: async (now, deleteBefore, failuresBefore) => {
+      let n = 0
+      for (const l of state.cliLogins.values())
+        if (l.status === 'pending' && l.expiresAt <= now) {
+          l.status = 'expired'
+          n++
+        }
+      n += deleteWhere(state.cliLogins, (l) => l.expiresAt < deleteBefore)
+      return n + deleteWhere(state.cliLoginFailures, (f) => f.createdAt < failuresBefore)
     },
     insertOAuthClient: async (row) => {
       state.oauthClients.set(row.id, clone(row))
@@ -1090,12 +1196,24 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
 
     narrationTakeBytes: async (uploaderId) =>
       [...state.media.values()]
-        .filter((m) => m.uploaderId === uploaderId && isTake(m) && m.status !== 'rejected' && !m.deletingAt)
+        .filter(
+          (m) =>
+            m.uploaderId === uploaderId && isTakeRole(m.role) && m.status !== 'rejected' && !m.deletingAt,
+        )
         .reduce((n, m) => n + m.bytes, 0) + openTakeSessions(uploaderId).reduce((n, u) => n + u.size, 0),
-    countNarrationTakes: async (uploaderId, since) =>
+    countRoleUploads: async (uploaderId, roles, since) =>
       [...state.media.values()].filter(
-        (m) => m.uploaderId === uploaderId && isTake(m) && m.createdAt >= since,
-      ).length + openTakeSessions(uploaderId).filter((u) => u.createdAt >= since).length,
+        (m) =>
+          m.uploaderId === uploaderId && m.role !== null && roles.includes(m.role) && m.createdAt >= since,
+      ).length +
+      [...state.uploads.values()].filter(
+        (u) =>
+          u.uploaderId === uploaderId &&
+          u.status === 'open' &&
+          u.role !== null &&
+          roles.includes(u.role) &&
+          u.createdAt >= since,
+      ).length,
   }
 
   const store = {
@@ -1173,7 +1291,7 @@ function provenanceOf(state: State, has: (jobId: string) => boolean) {
     .sort((a, b) => a.ownerId.localeCompare(b.ownerId) || a.mediaId.localeCompare(b.mediaId))
     .flatMap((r) => {
       const m = state.media.get(r.mediaId)
-      if (!m?.source || m.role !== null) return []
+      if (!m?.source || isTakeRole(m.role)) return []
       const versionN = Number(r.ownerId.slice(r.ownerId.lastIndexOf('#') + 1))
       return [
         {
@@ -1218,5 +1336,3 @@ function pickProvenance(
     attribution: m.attribution,
   }
 }
-
-const isTake = (m: MediaRow) => m.role === 'narration-take' || m.role === 'narration-upload'

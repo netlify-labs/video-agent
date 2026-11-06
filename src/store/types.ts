@@ -23,6 +23,7 @@ import type {
   VersionCommentRow,
   CheckpointRow,
   EditRow,
+  MediaRole,
   MediaRow,
   MediaUploadRow,
   MediaUploadPartRow,
@@ -40,6 +41,8 @@ import type {
   UserWebhookRow,
   OAuthClientRow,
   OAuthRequestRow,
+  CliLoginRow,
+  CliLoginFailureRow,
   OAuthGrantRow,
   OAuthTokenRow,
   SessionRow,
@@ -56,6 +59,8 @@ export interface JobQuery {
   /** Only videos this person starred. */
   favoriteOf?: string
   q?: string
+  /** Exact match on the video's externalRef. */
+  externalRef?: string
   cursor?: { createdAt: string; id: string }
   /** Private videos are returned only to their owner, unless `all` (admins). */
   visibleTo?: { userId: string; all: boolean }
@@ -189,6 +194,8 @@ export interface Repo {
   deleteUpload(id: string): Promise<void>
   /** Bytes reserved by the person's open and assembling sessions. */
   reservedUploadBytes(uploaderId: string): Promise<number>
+  /** The person's upload sessions still open or assembling (named when the in-flight reservation is full). */
+  countOpenUploads(uploaderId: string): Promise<number>
   listStaleUploads(now: string, limit: number): Promise<MediaUploadRow[]>
   getUploadPart(uploadId: string, idx: number): Promise<MediaUploadPartRow | null>
   insertUploadPart(row: MediaUploadPartRow): Promise<void>
@@ -271,6 +278,20 @@ export interface Repo {
   deleteStaleNarrationLocks(before: string): Promise<number>
   /** Per media id, the distinct videos (job ids) whose versions use it. */
   mediaUsage(mediaIds: string[]): Promise<Record<string, string[]>>
+  /**
+   * Screen recordings no undeleted video uses, oldest first, that GC isn't deleting: each with `everUsed` (a version
+   * of a since-deleted video listed it), so retention can start when the last using video went.
+   */
+  listUnusedRecordings(q: {
+    uploaderId?: string
+    limit: number
+  }): Promise<{ row: MediaRow; everUsed: boolean }[]>
+  /** The person's screen recordings' stored bytes (not rejected, not being deleted) plus open recording sessions. */
+  screenRecordingBytes(uploaderId: string): Promise<number>
+  /** Trace writes (media.trace_writes) at or after `since` over the person's own items (the trace rate limit). */
+  recentTraceWrites(uploaderId: string, since: string): Promise<string[]>
+  /** The versions of undeleted videos whose version_media lists this item (who may see a screen recording). */
+  jobsUsingMedia(mediaId: string): Promise<{ jobId: string; versionN: number }[]>
   /** Undeleted items imported from `source` with one of these ids there, newest first. */
   mediaBySource(source: string, sourceIds: string[]): Promise<MediaRow[]>
   /** Every version's imported media (the item's provenance with the version and kind), in version order. */
@@ -385,6 +406,21 @@ export interface Repo {
   listDueCleanup(now: string, limit: number): Promise<CleanupRow[]>
   updateCleanup(id: string, patch: Partial<CleanupRow>): Promise<void>
 
+  // video-agent login (cli-and-sdk plan §5.2)
+  insertCliLogin(row: CliLoginRow): Promise<void>
+  getCliLogin(id: string, opts?: { lock?: boolean }): Promise<CliLoginRow | null>
+  /** The pending, unexpired login with this user code, if any. */
+  findPendingCliLogin(userCode: string, now: string): Promise<CliLoginRow | null>
+  updateCliLogin(id: string, patch: Partial<CliLoginRow>): Promise<void>
+  /** Pending, unexpired logins, overall or from one client IP. */
+  countPendingCliLogins(now: string, clientIp?: string): Promise<number>
+  /** Logins this person approved since `since`. */
+  countCliLoginApprovals(userId: string, since: string): Promise<number>
+  insertCliLoginFailure(row: CliLoginFailureRow): Promise<void>
+  countCliLoginFailures(userId: string, since: string): Promise<number>
+  /** Marks pending logins past expiry expired; deletes logins expired before `deleteBefore` and older failures. */
+  sweepCliLogins(now: string, deleteBefore: string, failuresBefore: string): Promise<number>
+
   // MCP OAuth (used only when it's enabled)
   insertOAuthClient(row: OAuthClientRow): Promise<void>
   getOAuthClient(id: string): Promise<OAuthClientRow | null>
@@ -436,6 +472,12 @@ export interface Repo {
     since: string,
   ): Promise<{ userId: string; week: string; credits: number | null; videos: number }[]>
   failuresSince(since: string): Promise<{ category: string; count: number }[]>
+  /** Remotion render counts of attempts that ended at or after `since` (render-engines §7), failed ones included. */
+  engineRendersSince(since: string): Promise<{ video: number; stills: number; audio: number }[]>
+  /** The newest ended attempt of a version made with this engine (the /setup Engines row, render-engines §7). */
+  latestEngineAttempt(
+    engine: 'hyperframes' | 'remotion',
+  ): Promise<{ stage: string; errorCategory: string | null; endedAt: string } | null>
 
   // narration take budgets (voice-over plan §8)
   /**
@@ -445,10 +487,10 @@ export interface Repo {
    */
   narrationTakeBytes(uploaderId: string): Promise<number>
   /**
-   * The person's narration takes created at or after `since` (for the take upload rate limit): media rows, plus open
-   * take upload sessions (a completed session is counted by its media row).
+   * The person's media of these roles created at or after `since` (for a role's upload rate limit): media rows, plus
+   * open upload sessions of those roles (a completed session is counted by its media row).
    */
-  countNarrationTakes(uploaderId: string, since: string): Promise<number>
+  countRoleUploads(uploaderId: string, roles: readonly MediaRole[], since: string): Promise<number>
 }
 
 /** The fenced write a destination worker or callback makes (publish destinations §2.4). */

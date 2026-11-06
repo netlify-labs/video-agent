@@ -22,16 +22,23 @@ function route<M>(importer: () => Promise<M>): RouteModule<M> {
 
 export const videoRoute = route(() => import('./pages/Video'))
 export const newVideoRoute = route(() => import('./pages/NewVideo'))
+export const newDemoRoute = route(() => import('./pages/NewDemo'))
 export const editRoute = route(() => import('./pages/Edit'))
 export const mediaRoute = route(() => import('./pages/Media'))
 export const keysRoute = route(() => import('./pages/Keys'))
 export const adminRoute = route(() => import('./pages/Admin'))
 export const setupRoute = route(() => import('./pages/Setup'))
+export const cliApproveRoute = route(() => import('./pages/CliApprove'))
 // The REST reference is its own module (Scalar is large); the MCP and skills guides stay light.
 export const docsApiRoute = route(() => import('./pages/docs/ApiReference'))
 export const docsMcpRoute = route(() => import('./pages/docs/McpGuide'))
 export const docsSkillsRoute = route(() => import('./pages/docs/SkillsGuide'))
 export const docsDestinationsRoute = route(() => import('./pages/docs/DestinationsGuide'))
+export const docsSdkRoute = route(() => import('./pages/docs/SdkGuide'))
+export const docsCliRoute = route(() => import('./pages/docs/CliGuide'))
+export const docsLooksRoute = route(() => import('./pages/docs/LooksGuide'))
+export const docsGithubRoute = route(() => import('./pages/docs/GithubGuide'))
+export const docsWebMcpRoute = route(() => import('./pages/docs/WebMcpGuide'))
 
 /**
  * A page component from a route module: the module's component when it has loaded, else a React.lazy one that
@@ -51,6 +58,7 @@ export function lazyPage<M, P extends object>(r: RouteModule<M>, pick: (m: M) =>
 
 const BY_PATH: Record<string, RouteModule<unknown>> = {
   '/new': newVideoRoute,
+  '/new/demo': newDemoRoute,
   '/media': mediaRoute,
   '/keys': keysRoute,
   '/admin': adminRoute,
@@ -59,6 +67,11 @@ const BY_PATH: Record<string, RouteModule<unknown>> = {
   '/docs/mcp': docsMcpRoute,
   '/docs/skills': docsSkillsRoute,
   '/docs/destinations': docsDestinationsRoute,
+  '/docs/sdk': docsSdkRoute,
+  '/docs/cli': docsCliRoute,
+  '/docs/looks': docsLooksRoute,
+  '/docs/github': docsGithubRoute,
+  '/docs/webmcp': docsWebMcpRoute,
 }
 
 /** Where /docs and the old /docs?tab=mcp|skills links go now. */

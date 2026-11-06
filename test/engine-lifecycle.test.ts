@@ -63,7 +63,19 @@ describe('one engine per video', () => {
   })
 
   it('a remix is made the way its source was', async () => {
-    const h = harness()
+    // A remix is a new video, so Remotion must be on here (render-engines plan §7).
+    const h = harness({ ENGINES: 'remotion' })
+    await getSettings(h.deps)
+    await h.deps.store.updateSettings({
+      remotionEnabled: true,
+      remotionLicenseAck: {
+        by: 'u_admin',
+        email: 'admin@acme.com',
+        at: '2026-11-05T00:00:00Z',
+        tier: 'free',
+        note: null,
+      },
+    })
     const id = await remotionVideo(h)
     const res = await h.call('POST', `/api/v1/videos/${id}/remix`, {
       as: h.member,

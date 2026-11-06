@@ -11,8 +11,9 @@ import {
   type BundleReference,
 } from '../lib/bundle-references.js'
 import { sha256Hex } from '../lib/crypto.js'
-import { validate, type Summary } from '../lib/contract.js'
+import { pendingStills, validate, type Summary } from '../lib/contract.js'
 import { readTarGz, TarError } from '../lib/tar.js'
+import { remotionProjectProblems } from '../lib/remotion-project.js'
 import { engineInfo, type EngineId } from './engines.js'
 import type { OutputRow } from './types.js'
 
@@ -36,6 +37,9 @@ export interface BundleIndex {
   contract?: { version: 1 | null; violations: string[] }
 }
 
+/** Library media larger than this is served from the media store by key, not copied into the bundle. */
+export const BY_KEY_MIN = 8 * 1024 * 1024
+
 export const bundlePrefix = (jobId: string, n: number) => `${jobId}/v${n}/`
 export const bundleIndexKey = (jobId: string, n: number) => `${bundlePrefix(jobId, n)}manifest.json`
 export const bundleFileKey = (jobId: string, n: number, path: string) => `${bundlePrefix(jobId, n)}f/${path}`
@@ -51,7 +55,7 @@ export const liveFileKey = (jobId: string, n: number, seq: number, path: string)
  * The composition's own files: the same set the bundle manifest counts (run inputs and caches stay out), less the
  * reference files, which never come from an archive.
  */
-const keep = (path: string) => !excluded(path) && !isReference(path)
+export const inBundle = (path: string) => !excluded(path) && !isReference(path)
 
 /**
  * Local media files index.html and its stylesheets point at that aren't in the bundle (library media aside).
@@ -72,8 +76,31 @@ export function missingLocalFiles(files: Map<string, Uint8Array>): string[] {
     .filter((r) => r && !/^(?:[a-z][a-z0-9+.-]*:|\/\/|#|_hf\/)/i.test(r))
     .map((r) => r.replace(/^\.\//, '').split(/[?#]/)[0] ?? '')
     .filter((r) => r && !r.startsWith('/'))
+  // A held recording scene's still is made by the render (recording.ts emit --holds-only): pending, not missing, but
+  // only for the stills its held slots name.
+  const html = files.get('index.html')
+  const pending = new Set(html ? pendingStills(new TextDecoder().decode(html)) : [])
   // Library media is downloaded into every run from the version's snapshot, so only agent-made files can be missing.
-  return [...new Set(local)].filter((r) => !isLibraryMedia(r) && !files.has(decodeURI(r))).sort()
+  return [...new Set(local)]
+    .filter((r) => !isLibraryMedia(r) && !pending.has(r) && !files.has(decodeURI(r)))
+    .sort()
+}
+
+/**
+ * Whether a saved composition is editable: its engine's contract holds and it has every file it uses. `all` is the
+ * bundle's files (inBundle) plus its reference files. Finalize and ensureBundle both use it, so they always agree.
+ */
+export function bundleContract(
+  engine: EngineId | undefined,
+  all: Map<string, Uint8Array>,
+): { version: 1 | null; violations: string[] } {
+  const c = contractForEngine(engine, all)
+  // By-key media needs no stand-in here: missingLocalFiles never counts library media as missing.
+  const missing = c.version === 1 ? missingLocalFiles(all) : []
+  // Editing renders the saved composition as is, so it must have every file it uses.
+  return missing.length
+    ? { version: null, violations: [`It uses files that weren't saved: ${missing.slice(0, 5).join(', ')}.`] }
+    : c
 }
 
 /** Whether a composition keeps the editing contract (plan v2 §8): only ones that declare it are checked. */
@@ -112,16 +139,17 @@ export function contractForEngine(
 /**
  * What's wrong with a finished composition's shape for its engine (render-engines §4.2): finalize refuses a run that
  * wrote the wrong kind of project. HyperFrames: index.html at the top. Remotion: props.json and src/Root.tsx and no
- * index.html (its locked files and allowed paths are checked once its engine exists, Phase 2).
+ * index.html, then the template's rules (locked files, allowed paths, props, registry: src/lib/remotion-project.ts).
  */
 export function bundleShapeProblems(engine: EngineId, files: Map<string, Uint8Array>): string[] {
   if (engine === 'hyperframes')
     return files.has('index.html') ? [] : ['There is no index.html at the top of video/.']
-  return [
+  const entry = [
     ...(files.has('props.json') ? [] : ['There is no props.json at the top of video/.']),
     ...(files.has('src/Root.tsx') ? [] : ['There is no src/Root.tsx in video/.']),
     ...(files.has('index.html') ? ['video/index.html belongs to a HyperFrames composition.'] : []),
   ]
+  return entry.length ? entry : remotionProjectProblems(files)
 }
 
 /**
@@ -175,15 +203,24 @@ export async function ensureBundle(
   const gz = await deps.blobs.get('sources', output.sourceKey)
   if (!gz) return null
   if (sha256Hex(gz) !== want) throw new TarError("The saved composition doesn't match its hash.")
-  const files = [...readTarGz(gz)].filter(([path]) => keep(path))
+  const files = [...readTarGz(gz)].filter(([path]) => inBundle(path))
   // Reference files are served from the videos store, checked here first (plan 2026-11-02 §6.2).
   const refs = await readReferences(deps, output)
   const refFiles = await Promise.all(refs.map(async (r) => [r.path, await fetchReference(deps, r)] as const))
-  // Library media is by reference: the preview needs it next to the composition (plan v2 §14 rule 23).
+  // Library media is by reference: the preview needs it next to the composition (plan v2 §14 rule 23). Large items
+  // (a screen recording is up to 150 MB) are served from the media store by key; their keys are per item and never
+  // change after assembly checked the hash, the same trust edit drafts' picks rely on.
+  const byKey: BundleEntry[] = []
   for (const m of await deps.store.listVersionMedia(jobId, n)) {
     if (m.kind === 'pdf') continue
     const path = `assets/media/${m.filename}`
     if (files.some(([p]) => p === path)) continue
+    const size = (await deps.store.getMedia(m.mediaId))?.bytes ?? 0
+    if (size > BY_KEY_MIN) {
+      byKey.push({ path, size, sha256: m.sha256, src: { store: 'media', key: m.key } })
+      deps.log.info('bundle.media', { jobId, n, path, mode: 'by-key', bytes: size })
+      continue
+    }
     const bytes = await deps.blobs.get('media', m.key)
     if (bytes) files.push([path, bytes])
   }
@@ -196,6 +233,7 @@ export async function ensureBundle(
     versionN: n,
     files: [
       ...files.map(([path, bytes]) => ({ path, size: bytes.byteLength, sha256: sha256Hex(bytes) })),
+      ...byKey,
       ...refs.map((r) => ({
         path: r.path,
         size: r.bytes,
@@ -204,18 +242,7 @@ export async function ensureBundle(
       })),
     ],
     createdAt: deps.clock.now().toISOString(),
-    contract: (() => {
-      const all = new Map([...files, ...refFiles])
-      const c = contractForEngine(engine, all)
-      const missing = c.version === 1 ? missingLocalFiles(all) : []
-      // Editing renders the saved composition as is, so it must have every file it uses.
-      return missing.length
-        ? {
-            version: null,
-            violations: [`It uses files that weren't saved: ${missing.slice(0, 5).join(', ')}.`],
-          }
-        : c
-    })(),
+    contract: bundleContract(engine, new Map([...files, ...refFiles])),
   }
   await deps.blobs.set('bundles', bundleIndexKey(jobId, n), JSON.stringify(index), {
     contentType: 'application/json',
@@ -239,7 +266,7 @@ export async function writeLiveSnapshot(
   seq: number,
   files: Map<string, Uint8Array>,
 ) {
-  const kept = [...files].filter(([path]) => keep(path))
+  const kept = [...files].filter(([path]) => inBundle(path))
   for (const [path, bytes] of kept) await deps.blobs.set('bundles', liveFileKey(jobId, n, seq, path), bytes)
   const index: BundleIndex = {
     v: 1,

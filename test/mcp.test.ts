@@ -38,10 +38,10 @@ describe('MCP', () => {
     const { h, key } = await setup()
     const r = await rpc(h, key, 'tools/list', {}, 1, '/mcp')
     expect(r.status).toBe(200)
-    expect((r.body as { result: { tools: unknown[] } }).result.tools).toHaveLength(22)
+    expect((r.body as { result: { tools: unknown[] } }).result.tools).toHaveLength(23)
   })
 
-  it('initializes and lists twenty-two tools with instructions', async () => {
+  it('initializes and lists twenty-three tools with instructions', async () => {
     const { h, key } = await setup()
     const init = await rpc(h, key, 'initialize', {
       protocolVersion: '2025-06-18',
@@ -63,6 +63,7 @@ describe('MCP', () => {
       'import_music',
       'list_comments',
       'list_destinations',
+      'list_looks',
       'list_media',
       'list_videos',
       'plan_brief',
@@ -328,6 +329,11 @@ describe('MCP prompts', () => {
     expect(pr).toContain('create_video')
     expect(pr).toContain('plan_video')
     expect(pr).toContain('wait for my go-ahead')
+    // One video per PR comes from a lookup, not a long-lived key (a key is body-bound for 24 hours).
+    expect(pr).toContain('Call list_videos with the PR URL as query')
+    expect(pr).toContain('revise_video')
+    expect(pr).toContain('Pull request: https://github.com/acme/app/pull/42')
+    expect(pr).not.toMatch(/PR URL as (the )?idempotency_key/)
     mentionsOnly(pr, toolNames)
 
     const loc = await get(key, 'localize_video', {

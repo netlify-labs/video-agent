@@ -1,0 +1,51 @@
+# Releases of the public packages (cli-and-sdk plan §10; beads va-p1th.8.1, 8.2), run by hand:
+#   gh workflow run release.yml -f mode=internal                       tarballs of the SDK, CLI and player, as a
+#                                                                      workflow artifact; nothing goes to npmjs
+#   gh workflow run release.yml -f mode=publish -f confirm=publish     npm publish with provenance (trusted
+#                                                                      publishing), for versions not on npmjs yet
+# Publishing needs the npm names to exist (C4, the owner) and each package's trusted publisher configured on npmjs.com
+# for this repo and this workflow file. Versions are bumped by hand in each package.json (docs/releasing.md).
+name: release
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: internal (tarballs) or publish (npmjs)
+        required: true
+        default: internal
+        type: choice
+        options: [internal, publish]
+      confirm:
+        description: Type "publish" to publish to npmjs
+        required: false
+        default: ''
+permissions:
+  contents: read
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write # npm trusted publishing and provenance
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24 # npm 11.5+ for trusted publishing
+          registry-url: https://registry.npmjs.org
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run build:packages
+      - name: Pack
+        run: npx tsx scripts/release-packages.ts pack --out release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages-${{ github.sha }}
+          path: release/
+          retention-days: 30
+      - name: Publish
+        if: inputs.mode == 'publish'
+        run: |
+          if [ "${{ inputs.confirm }}" != "publish" ]; then echo 'Type "publish" in confirm to publish.'; exit 1; fi
+          npx tsx scripts/release-packages.ts publish --confirm

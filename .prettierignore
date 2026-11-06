@@ -12,3 +12,7 @@ ui/dist-mock
 .taste-skill
 test/fixtures
 docs/spikes/*/fixture
+packages/action/dist
+engines/remotion/template
+src/lib/remotion-locked.json
+src/lib/remotion-props.schema.json

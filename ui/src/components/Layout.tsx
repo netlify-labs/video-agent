@@ -11,7 +11,7 @@ import {
   useMantineColorScheme,
 } from '@mantine/core'
 import { useDisclosure, useHotkeys } from '@mantine/hooks'
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import {
   IconBook,
   IconKey,
@@ -26,11 +26,14 @@ import {
 } from '@tabler/icons-react'
 import { Link, NavLink as RouterLink, Outlet, useLocation, useNavigate } from 'react-router'
 import { $api } from '../api/client'
+import { DOCS_GROUPS, DOCS_PAGES } from '../pages/docs/nav'
 import { useAuth } from '../auth'
 import { brand } from '../theme'
 import { Mark, PoweredBy } from './bits'
 import { MissingSettingsBanner } from './MissingSettings'
 import { NotificationBell } from './NotificationBell'
+import { WebMcpConfirmHost } from '../webmcp/confirm'
+import { WebMcpGlobalTools } from '../webmcp/GlobalTools'
 
 export function Layout() {
   const [opened, { toggle, close }] = useDisclosure()
@@ -55,13 +58,13 @@ export function Layout() {
     if (onDocs) setDocsOpened(true)
   }
 
-  const link = (to: string, label: string, icon?: React.ReactNode) => (
+  const link = (to: string, label: string, icon?: React.ReactNode, className = 'va-navlink') => (
     <NavLink
       component={RouterLink}
       to={to}
       label={label}
       leftSection={icon}
-      className="va-navlink"
+      className={className}
       active={to === '/' ? pathname === '/' || pathname.startsWith('/videos') : pathname.startsWith(to)}
       onClick={close}
     />
@@ -159,18 +162,33 @@ export function Layout() {
           opened={docsOpened}
           onChange={setDocsOpened}
           active={onDocs && !docsOpened}
-          childrenOffset={28}
+          childrenOffset={0}
         >
-          {link('/docs/api', 'REST API')}
-          {link('/docs/mcp', 'MCP for AI tools')}
-          {link('/docs/skills', 'Agent skills')}
-          {link('/docs/destinations', 'Publish destinations')}
+          {/* A quieter, compact list under a guide line, so the docs pages read as part of API docs. */}
+          <div className="va-subnav">
+            {DOCS_GROUPS.map((group) => {
+              const pages = DOCS_PAGES.filter((p) => p.group === group)
+              return pages.length ? (
+                <div key={group} role="group" aria-label={group}>
+                  <div className="va-subnav-group" aria-hidden>
+                    {group}
+                  </div>
+                  {pages.map((p) => (
+                    <Fragment key={p.path}>{link(p.path, p.label, undefined, 'va-subnav-link')}</Fragment>
+                  ))}
+                </div>
+              ) : null
+            })}
+          </div>
         </NavLink>
         <PoweredBy inSidebar />
       </AppShell.Navbar>
       <AppShell.Main>
         <MissingSettingsBanner admin={isAdmin} />
         <Outlet />
+        {/* WebMCP (va-qago): the tools every page offers, and the person's yes for an agent's consequential action. */}
+        <WebMcpGlobalTools />
+        <WebMcpConfirmHost />
       </AppShell.Main>
     </AppShell>
   )

@@ -1,0 +1,41 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`comment > renders every state with the marker first 1`] = `
+[
+  "<!-- video-agent:v1 {"videoId":"vid_1"} -->
+🎬 **Making a demo video of this PR** · about 3 to 8 minutes · [Open in Video Agent](https://v.acme.com/videos/vid_1)",
+  "<!-- video-agent:v1 {"videoId":"vid_1"} -->
+🎬 **Making v3 of the demo video** · about 3 to 8 minutes · [Open in Video Agent](https://v.acme.com/videos/vid_1)",
+  "<!-- video-agent:v1 {"videoId":"vid_1"} -->
+🎬 **Making a demo video of this PR** · about 3 to 8 minutes · running since 14:02 UTC · [Open in Video Agent](https://v.acme.com/videos/vid_1)",
+  "<!-- video-agent:v1 {"videoId":"vid_1"} -->
+**Ready:** [Open in Video Agent](https://v.acme.com/videos/vid_1) (sign in to watch) · 0:32 · v2 · 168 credits
+
+Revise: reply \`/video revise <what to change>\`.
+Reply \`/video publish\` to show the preview here.",
+  "<!-- video-agent:v1 {"videoId":"vid_1"} -->
+[![Demo video](https://v/v/s.gif)](https://v/v/s)
+
+**[Watch](https://v/v/s)** · [MP4](https://v/v/s.mp4) · 0:32 · v2 · 168 credits
+
+Music: [Calm Piano](https://jamendo.com/t/1) by Ada, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
+
+Revise: reply \`/video revise <what to change>\`.",
+  "<!-- video-agent:v1 {"videoId":"vid_1"} -->
+**The video couldn't be made** (v2 failed): terminal: The agent crashed. · v2 · at least 5 credits · [Open in Video Agent](https://v.acme.com/videos/vid_1)
+
+Reply \`/video retry\` to try again.",
+  "<!-- video-agent:v1 {"videoId":"vid_1"} -->
+**The video couldn't be made** (v2 timed out): v2 timed out · v2 · at least 168 credits · [Open in Video Agent](https://v.acme.com/videos/vid_1)
+
+No retries left for this version.",
+  "<!-- video-agent:v1 {"videoId":"vid_1"} -->
+⏳ **Still making it** after 45 minutes · [Open in Video Agent](https://v.acme.com/videos/vid_1)
+
+Reply \`/video status\` to check.",
+  "<!-- video-agent:v1 {"videoId":"vid_1"} -->
+This PR already has 5 versions (the workflow's limit). Revise it in Video Agent instead: [Open in Video Agent](https://v.acme.com/videos/vid_1)",
+  "<!-- video-agent:v1 {"videoId":"vid_1"} -->
+**Budget reached:** max-runs-per-day is at 10 of 10, so nothing was started. [Open in Video Agent](https://v.acme.com/videos/vid_1)",
+]
+`;

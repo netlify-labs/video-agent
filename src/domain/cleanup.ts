@@ -1,5 +1,6 @@
 // Bounded cleanup in the sweep: delete every copy of tombstoned videos, reap abandoned uploads and old Openverse jobs,
 // delete unused narration takes (two-phase GC, takes.ts) and retry caption revisions' mirror updates (captions.ts).
+import { sweepRecordings } from './recording-retention.js'
 import { CLIENT_IDLE_MS } from '../auth/oauth.js'
 import type { Deps } from '../deps.js'
 import { runCaptionsSync } from './captions.js'
@@ -45,9 +46,17 @@ export async function runCleanup(
     new Date(now.getTime() - CLIENT_IDLE_MS).toISOString(),
   )
   await deps.store.deleteExpiredSessions(now.toISOString())
+  // CLI logins (cli-and-sdk plan §5.2): pending ones past expiry become expired, deleted an hour later; wrong-code
+  // records go after a day.
+  await deps.store.sweepCliLogins(
+    now.toISOString(),
+    new Date(now.getTime() - 3_600_000).toISOString(),
+    new Date(now.getTime() - 86_400_000).toISOString(),
+  )
   await deleteExpiredEdits(deps)
   await sweepUploads(deps)
   await sweepOpenverseJobs(deps)
   await sweepTakes(deps, budget)
+  await sweepRecordings(deps, budget)
   return done
 }

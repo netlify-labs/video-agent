@@ -7,7 +7,8 @@
 import type { Deps } from '../deps.js'
 import { ApiError } from '../lib/errors.js'
 import type { Repo } from '../store/types.js'
-import { assertCan, creatorOrUp, type Principal } from './policy.js'
+import { isScreenRecording, isTakeRole } from './media-roles.js'
+import { creatorOrUp, type Principal } from './policy.js'
 import type { CleanupRow, MediaRefOwnerKind, MediaRow } from './types.js'
 import { canSee } from './videos.js'
 
@@ -24,7 +25,8 @@ export const takePrefix = (mediaId: string) => `${mediaId}/`
 export const takePeaksKey = (mediaId: string) => `${mediaId}/peaks.bin`
 export const takeTranscriptPrefix = (mediaId: string) => `${mediaId}/transcripts/`
 
-export const isTake = (m: Pick<MediaRow, 'role'>) => m.role !== null
+/** A narration take (recorded or uploaded voice-over). Other roles, such as screen recordings, are not takes. */
+export const isTake = (m: Pick<MediaRow, 'role'>) => isTakeRole(m.role)
 
 /**
  * The one take-read predicate, used on every path that can expose a take: loadMedia and signed links (mediaDto),
@@ -37,6 +39,7 @@ export const isTake = (m: Pick<MediaRow, 'role'>) => m.role !== null
  * version will. "Can see" is the video's own rule, so private videos stay private.
  */
 export async function canReadTake(repo: Repo, p: Principal, m: MediaRow): Promise<boolean> {
+  // Only takes are private to their uploader; every other item reads like the library.
   if (!isTake(m) || m.uploaderId === p.userId || p.role === 'admin') return true
   if (!creatorOrUp(p.role)) return false
   for (const r of await repo.listMediaRefsByMedia([m.id])) {
@@ -49,6 +52,32 @@ export async function canReadTake(repo: Repo, p: Principal, m: MediaRow): Promis
     if (job && !job.deletedAt && canSee(p, job)) return true
   }
   return false
+}
+
+/**
+ * Who may read a raw screen recording (screen-recording plan §9, §14 Q3): its uploader and admins; Reviewers and
+ * Viewers never (they see rendered videos); another Creator once a version of a video they can see lists it in its
+ * version_media. Raw recordings can show more than the video does, so they stay private until used, private videos
+ * keep them private, and deleting the video makes them private again.
+ */
+export async function canReadRecording(repo: Repo, p: Principal, m: MediaRow): Promise<boolean> {
+  if (m.uploaderId === p.userId || p.role === 'admin') return true
+  if (!creatorOrUp(p.role)) return false
+  for (const { jobId } of await repo.jobsUsingMedia(m.id)) {
+    const job = await repo.getJob(jobId)
+    if (job && !job.deletedAt && canSee(p, job)) return true
+  }
+  return false
+}
+
+/**
+ * The one media-read predicate: takes follow canReadTake, screen recordings canReadRecording, and every other item
+ * reads like the library. Callers turn a false into not_found, never forbidden.
+ */
+export async function canReadMedia(repo: Repo, p: Principal, m: MediaRow): Promise<boolean> {
+  if (isTake(m)) return canReadTake(repo, p, m)
+  if (isScreenRecording(m)) return canReadRecording(repo, p, m)
+  return true
 }
 
 /** Where a take is used, as one reader may know it: a version of a video they can see, or a draft of their own. */
@@ -94,9 +123,9 @@ export async function recordingDto(repo: Repo, p: Principal, m: MediaRow) {
   }
 }
 
-/** The rows the principal may read, in order (takes they can't read are dropped). */
+/** The rows the principal may read, in order (takes and screen recordings they can't read are dropped). */
 export async function readableMedia(repo: Repo, p: Principal, rows: MediaRow[]) {
-  const ok = await Promise.all(rows.map((m) => canReadTake(repo, p, m)))
+  const ok = await Promise.all(rows.map((m) => canReadMedia(repo, p, m)))
   return rows.filter((_, i) => ok[i])
 }
 
@@ -121,6 +150,7 @@ async function retainReleased(repo: Repo, deps: Pick<Deps, 'clock'>, locked: Med
   const held = new Set((await repo.listMediaRefsByMedia(locked.map((m) => m.id))).map((r) => r.mediaId))
   const until = new Date(deps.clock.now().getTime() + TAKE_RETAIN_MS).toISOString()
   for (const m of locked)
+    // Take retention only; other roles keep their own rules.
     if (isTake(m) && !held.has(m.id)) await repo.updateMedia(m.id, { retainUntil: until })
 }
 
@@ -220,8 +250,6 @@ const GC_BATCH = 20
 // A failed byte deletion is retried after as long as it has been failing (so the waits double), within these bounds.
 const RETRY_MIN_MS = 60_000
 const RETRY_MAX_MS = 6 * 3600_000
-/** How long "Delete unused recordings" deletes bytes before leaving the rest to the sweep. */
-const DELETE_NOW_MS = 10_000
 
 type GcReason = 'retention' | 'user'
 
@@ -239,6 +267,7 @@ const due = (now: Date) => ({
 async function tombstoneTake(deps: Deps, mediaId: string, reason: GcReason): Promise<CleanupRow | null> {
   return deps.store.tx(async (repo) => {
     const [m] = await repo.lockMedia([mediaId])
+    // Takes GC only removes takes.
     if (!m || !isTake(m) || m.deletingAt) return null
     if ((await repo.listMediaRefsByMedia([m.id])).length) return null
     const now = deps.clock.now()
@@ -308,21 +337,14 @@ export async function sweepTakes(deps: Deps, budget: { deadline: number }, limit
 }
 
 /**
- * "Delete unused recordings": the caller's own takes that nothing references go now, through the same two phases
- * as GC (not by shortening their retention), so they're gone from the list at once. Bytes that can't be deleted
- * within the request are left to the sweep. Anyone may clear their own recordings, whatever their role now.
+ * "Delete unused recordings", takes half: the caller's own takes that nothing references are tombstoned now (GC's
+ * first phase, not a shorter retention), so they're gone from the list at once. Anyone may clear their own.
  */
-export async function deleteUnusedRecordings(deps: Deps, p: Principal) {
-  assertCan(p, 'video:read')
-  const started = Date.now()
+export async function tombstoneUnusedTakes(deps: Deps, uploaderId: string): Promise<CleanupRow[]> {
   const items: CleanupRow[] = []
-  for (const m of await deps.store.listUnreferencedTakes({ uploaderId: p.userId, limit: 500 })) {
+  for (const m of await deps.store.listUnreferencedTakes({ uploaderId, limit: 500 })) {
     const item = await tombstoneTake(deps, m.id, 'user')
     if (item) items.push(item)
   }
-  for (const item of items) {
-    if (Date.now() - started > DELETE_NOW_MS) break
-    await deleteTakeBytes(deps, item)
-  }
-  return { deleted: items.length }
+  return items
 }

@@ -10,17 +10,30 @@ import {
   runManifestKey,
   serializeRunManifest,
   type RunManifest,
+  type RunRecording,
 } from '../lib/run-manifest.js'
 import { getSettings } from './settings.js'
 import { contextMeta } from '../generated/context.js'
 import { clip } from '../lib/log.js'
-import { PROMPT_TEMPLATE_VERSION, buildFitPrompt, buildPrompt, buildRenderUnchangedPrompt } from './prompt.js'
+import {
+  MAX_PROMPT_CLICKS,
+  PROMPT_TEMPLATE_VERSION,
+  buildFitPrompt,
+  buildPrompt,
+  buildQuickDemoPrompt,
+  buildRenderUnchangedPrompt,
+  type RecordingPrompt,
+} from './prompt.js'
+import { parseTrace } from '../lib/recording-trace.js'
 import { NARRATION_SRC } from '../lib/contract.js'
+import { isScopeRefusal, scopeStills } from '../lib/scope.js'
 import { setStage } from './videos.js'
+import { manifestRecording } from './demo-recording.js'
 import { readReferences } from './bundles.js'
 import type { BundleReference } from '../lib/bundle-references.js'
 import { MUSIC_POLL_MS, advanceMusicPick, attachTrack, needsMusicPick, newMusicPick } from './music-pick.js'
 import { emitTerminalEvent } from './webhooks.js'
+import { engineOf, runEngineEntry } from './engines.js'
 import type { AttemptRow, FailureCategory, FrozenBundle } from './types.js'
 
 const MIN = 60_000
@@ -148,6 +161,9 @@ async function startRequest(
   const job = await deps.store.getJob(a.jobId)
   const version = await deps.store.getVersion(a.jobId, a.versionN)
   if (!job || !version) throw new Error('attempt without job/version')
+  // Before anything else: a run this deployment can't install never starts (render-engines plan §7).
+  const runEngine = await runEngineEntry(deps, engineOf(version))
+  if ('unavailable' in runEngine) throw new EngineUnavailable(runEngine.unavailable)
   const author = await deps.store.getUser(version.authorId)
   let revision: {
     /** Null for a remix: it restores the copy of the video it remixes (docs/plans/2026-11-03-remix.md §3.2). */
@@ -163,6 +179,9 @@ async function startRequest(
   const media = versionMedia.length
     ? versionMedia.map((m) => ({ key: m.key, sha256: m.sha256, filename: m.filename, kind: m.kind }))
     : null
+  const recording = manifestRecording(version.recording, media)
+  if (version.recording && !recording)
+    deps.log.warn('recording.manifest_missing_media', { jobId: a.jobId, versionN: a.versionN })
   const result = (prompt: string, parentSha: string | null) => ({
     req: {
       requestId: a.id,
@@ -184,6 +203,8 @@ async function startRequest(
     ...(f.references?.length ? { references: f.references } : {}),
     // Recorded narration: prepare-run hydrates its takes into .va-run/, never video/ (plan 2026-11-02 §6.3).
     ...(f.narration ? { narration: f.narration } : {}),
+    // Held recording scenes' stills the run makes (screen-recording plan §5.3).
+    ...(f.recordingHolds?.length ? { recordingHolds: f.recordingHolds } : {}),
   })
   // Inputs to restore go in a server-written manifest the run verifies by hash (plan v2 §14 rule 21). Returns the hash.
   const putManifest = async (m: Omit<RunManifest, 'v' | 'jobId' | 'attemptId' | 'versionN'>) => {
@@ -193,12 +214,15 @@ async function startRequest(
       attemptId: a.id,
       versionN: a.versionN,
       ...m,
+      // A demo's recording inputs (screen-recording plan §5.5); absent otherwise, so other manifests keep their bytes.
+      ...(recording ? { recording } : {}),
       // Named only for other engines, so HyperFrames manifests (and the hash the prompt pins) keep their bytes.
-      ...(version.engine && version.engine !== 'hyperframes' ? { engine: { id: version.engine } } : {}),
+      ...(runEngine.engine ? { engine: runEngine.engine } : {}),
     })
     await deps.blobs.set('sources', runManifestKey(a.jobId, a.id), manifest, {
       contentType: 'application/json',
     })
+    deps.log.info('run.manifest', { attemptId: a.id, kind: m.kind, look: m.look?.id ?? null })
     return sha256Hex(manifest)
   }
   const runUrls = {
@@ -221,6 +245,7 @@ async function startRequest(
       editedFromN: version.editedFromN ?? version.parentN ?? 0,
       revoice: version.frozen.revoice?.beats ?? [],
       narration: !!version.frozen.narration,
+      recordingHolds: (version.frozen.recordingHolds?.length ?? 0) > 0,
       runManifestSha256,
       ...runUrls,
       callbackToken,
@@ -228,6 +253,15 @@ async function startRequest(
     })
     return result(prompt, null)
   }
+  // The version's look (looks plan §4.6): its snapshot must still be there before a run starts, or every retry would
+  // spend credits failing inside the runner. A render of the edited composition reads no look, so it's checked here.
+  const look = version.look ?? null
+  if (look && !(await deps.blobs.list('sources', look.key)).includes(look.key)) {
+    deps.log.warn('look.preflight_failed', { jobId: a.jobId, key: look.key })
+    throw new SourceUnavailable("This video's look snapshot is missing; restyle it to pick the look again.")
+  }
+  const runLook = look ? { look: { id: look.id, key: look.key, sha256: look.sha256, hash: look.hash } } : {}
+  const promptLook = look && { id: look.id, name: look.name }
   // Fit the video to my narration (plan 2026-11-02 §6.4): an authoring run that starts from the frozen edited draft,
   // never the parent's archive, with the narration it mixes and must not change. Every retry restores the same inputs.
   if (version.frozen?.narration) {
@@ -237,6 +271,7 @@ async function startRequest(
       bundle: frozenBundle(version.frozen),
       media,
       feedback: null,
+      ...runLook,
     })
     const prompt = buildFitPrompt({
       jobId: a.jobId,
@@ -252,6 +287,7 @@ async function startRequest(
       ...runUrls,
       callbackToken,
       upload: { mode: 'blobs' },
+      look: promptLook,
     })
     return result(prompt, null)
   }
@@ -302,6 +338,11 @@ async function startRequest(
     const sha = parent?.sha256['video.mp4']
     if (parent && sha) feedbackVideo = { key: parent.videoKey, sha256: sha }
   }
+  // A scoped revision (redo a scene): its scenes from the parent, stills of their neighbours from the parent MP4
+  // (none past 300 MB, the download would cost more than they help), and an earlier refusal to avoid repeating.
+  const scope =
+    version.scope && revision?.parentN ? await scopeFor(deps, a, version.scope.beats, revision.parentN) : null
+  if (scope?.video && !feedbackVideo) feedbackVideo = scope.video
   const feedback = snapshots.map((c) => {
     const i = pins.indexOf(c)
     return {
@@ -315,7 +356,8 @@ async function startRequest(
     }
   })
   let runManifestSha256: string | null = null
-  if (revision || media) {
+  // Another engine always needs one: prepare-run sets video/ up from it (render-engines plan §5.1).
+  if (revision || media || look || runEngine.engine) {
     runManifestSha256 = await putManifest({
       kind: revision ? 'revision' : 'author',
       source: revision && {
@@ -330,9 +372,31 @@ async function startRequest(
         video: feedbackVideo,
         pins: pins.map((c) => ({ commentId: c.commentId, timeSec: c.timeSec ?? 0, x: c.x, y: c.y })),
       },
+      ...(scope ? { scope: { beats: scope.beats.map((b) => b.id), stills: scope.stills } } : {}),
+      ...runLook,
     })
   }
+  // A Quick demo (screen-recording plan §14 Q11): a fixed script, no authoring.
+  if (recording?.compose && runManifestSha256)
+    return result(
+      buildQuickDemoPrompt({
+        jobId: a.jobId,
+        attemptId: a.id,
+        versionN: a.versionN,
+        mediaId: recording.mediaId,
+        aspect: job.aspect,
+        targetDurationSec: version.targetDurationSec,
+        title: job.title,
+        runManifestSha256,
+        ...runUrls,
+        callbackToken,
+        upload: { mode: 'blobs' },
+      }),
+      revision?.sourceSha256 ?? null,
+    )
+  const recordingPrompt = recording ? await recordingPromptFor(deps, recording) : null
   const prompt = buildPrompt({
+    ...(recordingPrompt ? { recording: recordingPrompt } : {}),
     jobId: a.jobId,
     attemptId: a.id,
     versionN: a.versionN,
@@ -345,6 +409,7 @@ async function startRequest(
     upload: { mode: 'blobs' },
     revision: revision && { parentN: revision.parentN },
     remix: version.remix ?? null,
+    context: version.context ?? null,
     runManifestSha256,
     feedback,
     media: await Promise.all(
@@ -358,12 +423,83 @@ async function startRequest(
       })),
     ),
     plan: version.plan ? { brief: version.plan.brief, qa: version.plan.qa } : null,
+    // Named only for other engines, so a HyperFrames prompt is byte-identical to before engines.
+    ...(version.engine && version.engine !== 'hyperframes' ? { engine: version.engine } : {}),
     sound: version.sound ?? 'silent',
     voiceover: version.voiceover ?? null,
     brandMusic: contextMeta.music,
     narration: revision?.narrationSamples ? { samples: revision.narrationSamples } : null,
+    ...(scope && revision?.parentN
+      ? {
+          scope: {
+            n: revision.parentN,
+            beats: scope.beats,
+            stills: scope.stills.length > 0,
+            voiced: version.voiceover != null,
+            locked: !!revision.narrationSamples,
+            previousRefusal: scope.previousRefusal,
+          },
+        }
+      : {}),
+    look: promptLook,
+    restyle: look?.restyle ?? false,
   })
   return result(prompt, revision?.sourceSha256 ?? null)
+}
+
+/** The parent MP4 size past which a scoped run gets no stills of the neighbours (plan §4.3). */
+const SCOPE_STILLS_MAX_BYTES = 300 * 1024 * 1024
+
+async function scopeFor(deps: Deps, a: AttemptRow, beats: string[], parentN: number) {
+  const parent = await deps.store.getVersion(a.jobId, parentN)
+  const all = parent?.beats ?? []
+  const scoped = all.filter((b) => beats.includes(b.id))
+  const out = await deps.store.getOutput(a.jobId, parentN)
+  const sha = out?.sha256['video.mp4']
+  const video = out && sha && out.bytes <= SCOPE_STILLS_MAX_BYTES ? { key: out.videoKey, sha256: sha } : null
+  // The latest earlier attempt of this version refused for its scope: derived from stored rows only, so every retry
+  // of the same state gets the same prompt.
+  const earlier = (await deps.store.listAttempts(a.jobId))
+    .filter((x) => x.versionN === a.versionN && x.id !== a.id && isScopeRefusal(x.errorMessage))
+    .sort((x, y) => (x.queuedAt < y.queuedAt ? -1 : x.queuedAt > y.queuedAt ? 1 : 0))
+  return {
+    beats: scoped,
+    stills: video ? scopeStills(all, beats) : [],
+    video,
+    previousRefusal: earlier.at(-1)?.errorMessage ?? null,
+  }
+}
+
+/**
+ * The prompt's Screen recording facts: its length, and the clicked elements from the frozen trace (scrubbed when it
+ * was stored; a trace that can't be read gives none, and the run's check still has prepare-run's verified copy).
+ */
+async function recordingPromptFor(deps: Deps, r: RunRecording): Promise<RecordingPrompt> {
+  const m = await deps.store.getMedia(r.mediaId)
+  let clicks: RecordingPrompt['clicks'] = []
+  if (r.trace) {
+    try {
+      const bytes = await deps.blobs.get('media', r.trace.key)
+      const trace = bytes ? parseTrace(new TextDecoder().decode(bytes)) : null
+      clicks = (trace?.events ?? [])
+        .flatMap((e) =>
+          e.kind === 'click' && e.target ? [{ t: e.t, role: e.target.role, name: e.target.name }] : [],
+        )
+        .slice(0, MAX_PROMPT_CLICKS)
+    } catch (e) {
+      deps.log.warn('recording.prompt_trace_unreadable', { mediaId: r.mediaId, error: e })
+    }
+  }
+  return {
+    mediaId: r.mediaId,
+    file: `assets/media/${r.filename}`,
+    seconds: m?.durationSec ?? null,
+    trace: Boolean(r.trace),
+    privacy: r.privacy === true,
+    hideStrings: r.hideStrings?.length ?? 0,
+    clicks,
+    deadlineMin: deps.config.authoringDeadlineMin,
+  }
 }
 
 async function trackFacts(deps: Deps, mediaId: string) {
@@ -373,6 +509,7 @@ async function trackFacts(deps: Deps, mediaId: string) {
 }
 
 class SourceUnavailable extends Error {}
+class EngineUnavailable extends Error {}
 
 async function start(deps: Deps, a: AttemptRow): Promise<void> {
   const now = deps.clock.now()
@@ -439,6 +576,14 @@ async function start(deps: Deps, a: AttemptRow): Promise<void> {
   try {
     ;({ req, parentSha } = await startRequest(deps, { ...a, deployId }, token))
   } catch (e) {
+    if (e instanceof EngineUnavailable) {
+      deps.log.warn('attempt.engine_unavailable', { attemptId: a.id, jobId: a.jobId, reason: e.message })
+      await deps.store.tx(async (repo) => {
+        await setStage(repo, a, 'failed', terminal(now, 'engine_unavailable', e.message), now.toISOString())
+        await emitTerminalEvent(repo, deps, a.id)
+      })
+      return
+    }
     if (!(e instanceof SourceUnavailable)) throw e
     deps.log.warn('attempt.source_unavailable', {
       attemptId: a.id,

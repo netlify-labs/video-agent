@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="vendor/gsap.min.js"></script>
+    <script src="vendor/va-contract.js"></script>
+    <style>
+      /* Data story example: the fictional product Orbit and made-up numbers. Runs reuse its structure and moves, never
+         its words or figures. Colours are the brand's roles, and derived roles, written as literal colours. */
+      #root {
+        --va-color-bg: #0e1116;
+        --va-color-text: #f2f4f7;
+        --va-color-muted: #8a93a3;
+        --va-color-accent: #5b8cff;
+        --va-color-chart-2: #4a4f57;
+        --va-color-grid: #262a31;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1920px; height: 1080px; overflow: hidden; background: #0e1116; }
+      #root { width: 100%; height: 100%; position: relative; font-family: system-ui, sans-serif; background: var(--va-color-bg); }
+      .beat { position: absolute; inset: 0; padding: 0 115px; display: grid; grid-template-columns: repeat(12, 1fr); column-gap: 38px; align-content: center; }
+      .num { grid-column: 1 / span 8; color: var(--va-color-text); font-size: 300px; font-weight: 700; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; line-height: 1; }
+      .unit { color: var(--va-color-muted); font-size: 40px; font-weight: 500; letter-spacing: normal; margin-top: 12px; }
+      .side { grid-column: 9 / span 4; align-self: start; }
+      .head { color: var(--va-color-text); font-size: 64px; font-weight: 600; line-height: 1.1; }
+      .note { color: var(--va-color-text); font-size: 32px; line-height: 1.35; margin-top: 28px; }
+      .chart { grid-column: 1 / span 8; }
+      .plot { position: relative; height: 600px; display: flex; align-items: flex-end; gap: 44px; padding: 0 20px; border-bottom: 2px solid var(--va-color-muted); }
+      .labels { display: flex; gap: 44px; padding: 14px 20px 0; }
+      .labels span { flex: 1; text-align: center; color: var(--va-color-muted); font-size: 28px; font-weight: 500; }
+      .gl { position: absolute; left: 0; right: 0; height: 1px; background: var(--va-color-grid); }
+      .col { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
+      .bar { width: 100%; background: var(--va-color-chart-2); }
+      .bar.hot { background: var(--va-color-accent); }
+      .val { color: var(--va-color-text); font-size: 30px; font-weight: 500; font-variant-numeric: tabular-nums; margin-bottom: 10px; }
+      .leader { height: 2px; width: 120px; background: var(--va-color-accent); margin-bottom: 20px; }
+      [data-va-beat="end"] { justify-items: center; text-align: center; }
+      [data-va-beat="end"] .head { grid-column: 3 / span 8; font-size: 120px; }
+      [data-va-beat="end"] .note { grid-column: 3 / span 8; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-va-contract="1" data-start="0" data-duration="11" data-width="1920" data-height="1080">
+      <section id="hook" class="clip beat" data-va-beat="hook" data-va-label="Big number" data-composition-id="hook" data-start="0" data-duration="3" data-va-authored-duration="3" data-track-index="0">
+        <div class="num" style="grid-column: 1 / span 8">
+          <div data-va-text="hook-number" data-va-label="Number">4,812</div>
+          <p class="unit" data-va-text="hook-unit" data-va-label="Unit">pages searched every day</p>
+        </div>
+        <div class="side">
+          <h1 class="head" data-va-text="hook-title" data-va-label="Headline">Teams read more than they write</h1>
+        </div>
+        <script>
+          vaBeat('hook', (tl, el) => {
+            const n = el.querySelector('[data-va-text="hook-number"]')
+            const target = Number(n.textContent.replace(/[^0-9]/g, ''))
+            const fmt = (v) => String(Math.round(v)).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+            const c = { v: 0 }
+            tl.to(c, { v: target, duration: 1.4, ease: 'power2.out', onUpdate: () => { n.textContent = fmt(c.v) } }, 0.2)
+              .fromTo(el.querySelector('[data-va-text="hook-unit"]'), { opacity: 0 }, { opacity: 1, duration: 0.4 }, 1.2)
+              .fromTo(el.querySelector('[data-va-text="hook-title"]'), { y: 20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6, ease: 'power3.out' }, 0.4)
+          })
+        </script>
+      </section>
+      <section id="chart" class="clip beat" data-va-beat="chart" data-va-label="Chart" data-composition-id="chart" data-start="3" data-duration="5.5" data-va-authored-duration="5.5" data-track-index="0">
+        <div class="chart">
+          <div class="plot">
+            <div class="gl" style="bottom: 25%"></div>
+            <div class="gl" style="bottom: 50%"></div>
+            <div class="gl" style="bottom: 75%"></div>
+            <div class="col"><div class="bar" style="height: 21%"></div></div>
+            <div class="col"><div class="bar" style="height: 32%"></div></div>
+            <div class="col"><div class="bar" style="height: 46%"></div></div>
+            <div class="col"><div class="bar" style="height: 55%"></div></div>
+            <div class="col"><div class="bar" style="height: 75%"></div></div>
+            <div class="col"><span class="val" data-va-text="chart-v6" data-va-label="Value">560</span><div class="bar hot" style="height: 92%"></div></div>
+          </div>
+          <div class="labels">
+            <span data-va-text="chart-l1" data-va-label="Label">Jan</span>
+            <span data-va-text="chart-l2" data-va-label="Label">Feb</span>
+            <span data-va-text="chart-l3" data-va-label="Label">Mar</span>
+            <span data-va-text="chart-l4" data-va-label="Label">Apr</span>
+            <span data-va-text="chart-l5" data-va-label="Label">May</span>
+            <span data-va-text="chart-l6" data-va-label="Label">Jun</span>
+          </div>
+        </div>
+        <div class="side">
+          <h2 class="head" data-va-text="chart-title" data-va-label="Headline">Searches per team, 2026</h2>
+          <div class="leader"></div>
+          <p class="note" data-va-text="chart-note" data-va-label="Annotation">Up 4.6× since January, the month search went live.</p>
+        </div>
+        <script>
+          vaBeat('chart', (tl, el) => {
+            tl.fromTo(el.querySelector('[data-va-text="chart-title"]'), { opacity: 0 }, { opacity: 1, duration: 0.4 }, 0)
+              .fromTo(el.querySelectorAll('.bar'), { scaleY: 0 }, { scaleY: 1, duration: 0.5, ease: 'power3.out', stagger: 0.12, transformOrigin: '50% 100%' }, 0.3)
+              .fromTo(el.querySelector('[data-va-text="chart-v6"]'), { opacity: 0 }, { opacity: 1, duration: 0.3 }, 1.4)
+              .fromTo(el.querySelector('.leader'), { scaleX: 0 }, { scaleX: 1, duration: 0.4, transformOrigin: '0% 50%' }, 1.7)
+              .fromTo(el.querySelector('[data-va-text="chart-note"]'), { opacity: 0 }, { opacity: 1, duration: 0.5 }, 2)
+          })
+        </script>
+      </section>
+      <section id="end" class="clip beat" data-va-beat="end" data-va-label="End card" data-composition-id="end" data-start="8.5" data-duration="2.5" data-va-authored-duration="2.5" data-track-index="0">
+        <h2 class="head" data-va-text="end-title" data-va-label="Product name">Orbit</h2>
+        <p class="note" data-va-text="end-cta" data-va-label="Call to action">See your team's numbers at orbit.example</p>
+        <script>
+          vaBeat('end', (tl, el) => {
+            tl.fromTo(el.querySelector('[data-va-text="end-title"]'), { y: 20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6, ease: 'power3.out' }, 0.1)
+              .fromTo(el.querySelector('[data-va-text="end-cta"]'), { opacity: 0 }, { opacity: 1, duration: 0.5 }, 0.6)
+          })
+        </script>
+      </section>
+    </div>
+    <script>
+      window.__timelines['main'] = gsap.timeline({ paused: true })
+    </script>
+  </body>
+</html>

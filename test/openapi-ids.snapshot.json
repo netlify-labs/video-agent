@@ -16,7 +16,15 @@
       "resource": "videos",
       "method": "create",
       "fieldFeatures": {
-        "planId": "planning"
+        "planId": "planning",
+        "look": "looks",
+        "externalRef": "external_ref",
+        "externalUrl": "external_ref",
+        "private": "external_ref",
+        "context": "context",
+        "recording": "screen_recording",
+        "agent": "screen_recording",
+        "engine": "engines"
       }
     }
   },
@@ -24,7 +32,10 @@
     "operationId": "listVideos",
     "sdk": {
       "resource": "videos",
-      "method": "list"
+      "method": "list",
+      "fieldFeatures": {
+        "externalRef": "external_ref"
+      }
     }
   },
   "PUT /api/v1/videos/{id}/favorite": {
@@ -68,7 +79,10 @@
       "resource": "videos",
       "method": "revise",
       "fieldFeatures": {
-        "planId": "planning"
+        "planId": "planning",
+        "scope": "scoped_revision",
+        "look": "looks",
+        "context": "context"
       }
     }
   },
@@ -79,7 +93,13 @@
       "method": "remix",
       "feature": "remix",
       "fieldFeatures": {
-        "planId": "planning"
+        "planId": "planning",
+        "look": "looks",
+        "externalRef": "external_ref",
+        "externalUrl": "external_ref",
+        "private": "external_ref",
+        "context": "context",
+        "recording": "screen_recording"
       }
     }
   },
@@ -88,6 +108,14 @@
     "sdk": {
       "resource": "versions",
       "method": "media"
+    }
+  },
+  "GET /api/v1/videos/{id}/versions/{n}/beats": {
+    "operationId": "getVersionBeats",
+    "sdk": {
+      "resource": "versions",
+      "method": "beats",
+      "feature": "scoped_revision"
     }
   },
   "POST /api/v1/videos/{id}/versions/{n}/retry": {
@@ -116,6 +144,14 @@
     "sdk": {
       "resource": "versions",
       "method": "unpublish"
+    }
+  },
+  "GET /api/v1/looks": {
+    "operationId": "listLooks",
+    "sdk": {
+      "resource": "looks",
+      "method": "list",
+      "feature": "looks"
     }
   },
   "GET /api/v1/destinations": {
@@ -218,6 +254,14 @@
     "operationId": "refreshDestinationFiles",
     "sdk": false
   },
+  "POST /api/v1/videos/{id}/versions/{n}/hidden/confirm": {
+    "operationId": "markHiddenAreasChecked",
+    "sdk": {
+      "resource": "videos",
+      "method": "confirmHidden",
+      "feature": "screen_recording"
+    }
+  },
   "PUT /api/v1/videos/{id}/versions/{n}/verdict": {
     "operationId": "setVerdict",
     "sdk": {
@@ -272,6 +316,28 @@
     "operationId": "createKey",
     "sdk": false
   },
+  "POST /api/v1/cli/logins": {
+    "operationId": "createCliLogin",
+    "sdk": {
+      "resource": "cliLogins",
+      "method": "create"
+    }
+  },
+  "POST /api/v1/cli/logins/{id}/token": {
+    "operationId": "claimCliLogin",
+    "sdk": {
+      "resource": "cliLogins",
+      "method": "claim"
+    }
+  },
+  "POST /api/v1/cli/logins/lookup": {
+    "operationId": "lookupCliLogin",
+    "sdk": false
+  },
+  "POST /api/v1/cli/logins/approve": {
+    "operationId": "decideCliLogin",
+    "sdk": false
+  },
   "DELETE /api/v1/keys/{id}": {
     "operationId": "revokeKey",
     "sdk": {
@@ -291,6 +357,14 @@
     "sdk": {
       "resource": "grants",
       "method": "revoke"
+    }
+  },
+  "GET /api/v1/engines": {
+    "operationId": "listEngines",
+    "sdk": {
+      "resource": "engines",
+      "method": "list",
+      "feature": "engines"
     }
   },
   "GET /api/v1/me": {
@@ -365,7 +439,11 @@
     "sdk": {
       "resource": "plans",
       "method": "create",
-      "feature": "planning"
+      "feature": "planning",
+      "fieldFeatures": {
+        "look": "looks",
+        "engine": "engines"
+      }
     }
   },
   "GET /api/v1/plans/{id}": {
@@ -590,6 +668,22 @@
     "sdk": {
       "resource": "media",
       "method": "delete"
+    }
+  },
+  "PUT /api/v1/media/{id}/trace": {
+    "operationId": "setMediaTrace",
+    "sdk": {
+      "resource": "media",
+      "method": "setTrace",
+      "feature": "screen_recording"
+    }
+  },
+  "GET /api/v1/media/{id}/trace": {
+    "operationId": "getMediaTrace",
+    "sdk": {
+      "resource": "media",
+      "method": "getTrace",
+      "feature": "screen_recording"
     }
   },
   "PUT /api/v1/media/{id}/peaks": {

@@ -40,9 +40,13 @@ if (previewOnly) {
 
 // The mock API (and the contract code it uses) is loaded only in mock builds, before the app's first request.
 const ready = import.meta.env.VITE_MOCK
-  ? import('./mock/server').then((m) => {
-      m.installMock()
-    })
+  ? Promise.all([import('./mock/server'), import('./mock/looks'), import('./mock/recording')]).then(
+      ([m, looks, recording]) => {
+        // Recordings first: a demo's create goes on, without its recording, through the looks route.
+        m.mockRoutes.push(recording.recordingRoute, looks.looksRoute)
+        m.installMock()
+      },
+    )
   : Promise.resolve()
 
 // The library is the home page: ask for its first page now, alongside the sign-in check, instead of after it. Same key

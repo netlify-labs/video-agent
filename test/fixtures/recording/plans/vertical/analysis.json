@@ -1,0 +1,33 @@
+{
+ "v": 1,
+ "sha256": "golden-vertical",
+ "analyzer": "analyze-1",
+ "source": {
+  "width": 2560,
+  "height": 1440,
+  "fps": 30,
+  "duration": 20
+ },
+ "cursorSource": "trace",
+ "idle": [
+  {
+   "start": 0,
+   "end": 3.5
+  },
+  {
+   "start": 9,
+   "end": 20
+  }
+ ],
+ "scenes": [],
+ "activity": [],
+ "cursor": [],
+ "clicks": [
+  {
+   "t": 6,
+   "x": 1587,
+   "y": 432,
+   "source": "trace"
+  }
+ ]
+}

@@ -75,11 +75,13 @@ async function selectRange(page: Page, from: number, to: number) {
   await page.keyboard.up('Alt')
 }
 
-/** Lets the picture play past composition second `t`, then Space keeps the take and it saves. */
+/** Lets the picture play past composition second `t`, then Space keeps the take, and Add (after review) saves it. */
 async function keepAfter(page: Page, t: number) {
   await expect(phase(page)).toHaveAttribute('data-phase', 'recording', { timeout: 20_000 })
   await expect.poll(() => pictureTime(page), { timeout: 20_000 }).toBeGreaterThan(t)
   await page.keyboard.press('Space')
+  await expect(phase(page)).toHaveAttribute('data-phase', 'review', { timeout: 30_000 })
+  await page.getByTestId('review-add').click()
   await expect(phase(page)).toHaveAttribute('data-phase', 'saved', { timeout: 30_000 })
 }
 

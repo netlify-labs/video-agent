@@ -24,7 +24,9 @@ describe('config version and features', () => {
     const res = await h.call('GET', '/api/v1/config')
     expect(res.status).toBe(200)
     const { features } = await h.json<Config>(res)
-    expect(features).toEqual(expect.arrayContaining(['remix', 'narration', 'destinations']))
+    expect(features).toEqual(
+      expect.arrayContaining(['remix', 'narration', 'destinations', 'context', 'external_ref']),
+    )
     for (const f of features) expect(FEATURES).toContain(f)
     expect(features).not.toContain('rest_wait')
     expect(new Set(features).size).toBe(features.length)

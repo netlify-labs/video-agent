@@ -10,19 +10,19 @@ import { createHash } from 'node:crypto'
 import type { Deps } from '../deps.js'
 import { sha256Hex } from '../lib/crypto.js'
 import { ApiError } from '../lib/errors.js'
-import { classify, LIMITS, MediaError } from '../lib/media/classify.js'
+import { classify, LIMITS, MediaError, RECORDING_LIMITS } from '../lib/media/classify.js'
 import { mediaDto, mergeMediaMeta, readMediaMeta, storeMedia } from './media.js'
 import { assertNarrationEnabled, narrationSettings } from './narration-settings.js'
 import { assertCan, type Principal } from './policy.js'
 import { NO_PROVENANCE, type MediaRole, type MediaRow, type MediaUploadRow } from './types.js'
+import { budgetRoles, RECORDING_QUOTA_DEFAULT, ROLES, UPLOAD_ROLES } from './media-roles.js'
 import type { Repo } from '../store/types.js'
 import { takeSamples } from './take-extras.js'
 import { loadJob } from './videos.js'
 
 export const PART_SIZE = 4 * 1024 * 1024
 export const UPLOAD_QUOTA_BYTES = 1024 * 1024 * 1024
-/** Take uploads each person may start in an hour (voice-over plan §8). */
-export const TAKE_UPLOADS_PER_HOUR = 30
+export { isTakeRole, TAKE_UPLOADS_PER_HOUR } from './media-roles.js'
 const SESSION_TTL_MS = 24 * 3600_000
 const ASSEMBLY_LEASE_MS = 15 * 60_000
 const POSTER_MAX = 512 * 1024
@@ -46,9 +46,6 @@ function sessionDto(u: MediaUploadRow, uploaded: number[]) {
     scopeJobId: u.scopeJobId,
   }
 }
-
-export const isTakeRole = (role: string | null | undefined): role is MediaRole =>
-  role === 'narration-take' || role === 'narration-upload'
 
 const sizeLabel = (n: number) =>
   n >= 1024 ** 3 ? `${(n / 1024 ** 3).toFixed(1)} GB` : `${Math.max(0, Math.round(n / 1024 ** 2))} MB`
@@ -82,16 +79,62 @@ export async function quotaForTakes(
   return { ...quota, remainingBytes: takeQuotaBytes - bytes - incomingBytes }
 }
 
-/** At most TAKE_UPLOADS_PER_HOUR take uploads per person in any hour. */
-async function assertTakeRate(deps: Pick<Deps, 'store' | 'log' | 'clock'>, userId: string, repo: Repo) {
+/**
+ * The person's storage for screen recordings once `incomingBytes` more are added (the recordingQuotaBytes setting,
+ * 2 GiB by default; ready, being checked and in-flight recordings count). 413 quota_exceeded with what's left.
+ */
+export async function quotaForRecordings(
+  deps: Pick<Deps, 'store' | 'log'>,
+  userId: string,
+  incomingBytes: number,
+  repo: Repo = deps.store,
+) {
+  const quotaBytes = (await repo.getSettings())?.recordingQuotaBytes ?? RECORDING_QUOTA_DEFAULT
+  const usedBytes = await repo.screenRecordingBytes(userId)
+  const remainingBytes = Math.max(0, quotaBytes - usedBytes)
+  if (usedBytes + incomingBytes > quotaBytes) {
+    deps.log.warn('media.recording_quota_exceeded', { userId, incomingBytes, quotaBytes, usedBytes })
+    throw new ApiError(
+      'quota_exceeded',
+      `Your screen recordings have ${sizeLabel(remainingBytes)} of ${sizeLabel(quotaBytes)} left, not enough for this one (${sizeLabel(incomingBytes)}). Delete unused recordings on the Media page, or ask an admin for more space.`,
+      { quotaBytes, usedBytes, remainingBytes, incomingBytes },
+    )
+  }
+  return { quotaBytes, usedBytes, remainingBytes: quotaBytes - usedBytes - incomingBytes }
+}
+
+/** At most the role's `perHour` uploads per person in any hour, counted over the roles that share its budget. */
+async function assertRoleRate(
+  deps: Pick<Deps, 'store' | 'log' | 'clock'>,
+  userId: string,
+  role: MediaRole,
+  repo: Repo,
+) {
   const since = new Date(deps.clock.now().getTime() - 3600_000).toISOString()
-  const started = await repo.countNarrationTakes(userId, since)
-  if (started >= TAKE_UPLOADS_PER_HOUR) {
-    deps.log.warn('media.take_rate_limited', { userId, started })
+  const started = await repo.countRoleUploads(userId, budgetRoles(role), since)
+  const { perHour } = ROLES[role]
+  if (started >= perHour) {
+    deps.log.warn('media.take_rate_limited', { userId, role, started })
     throw new ApiError(
       'rate_limited',
-      `You've uploaded ${TAKE_UPLOADS_PER_HOUR} recordings in the last hour. Wait a little, then try again.`,
+      `You've uploaded ${perHour} recordings in the last hour. Wait a little, then try again.`,
     )
+  }
+}
+
+/** The stored-bytes budget named by the role's `quotaSetting`. */
+const quotaForRole = (
+  deps: Pick<Deps, 'store' | 'log'>,
+  role: MediaRole,
+  userId: string,
+  incomingBytes: number,
+  repo: Repo,
+) => {
+  switch (ROLES[role].quotaSetting) {
+    case 'takeQuotaBytes':
+      return quotaForTakes(deps, userId, incomingBytes, repo)
+    case 'recordingQuotaBytes':
+      return quotaForRecordings(deps, userId, incomingBytes, repo)
   }
 }
 
@@ -103,7 +146,10 @@ export async function createUpload(
     size: number
     sha256: string
     caption?: string | undefined
-    /** A narration take, held to the take budgets; it needs the video it's recorded for. */
+    /**
+     * A narration take (held to the take budgets; it needs the video it's recorded for), or a screen recording
+     * (its own limits and budgets; no video yet).
+     */
     role?: MediaRole | null | undefined
     scopeJobId?: string | undefined
   },
@@ -111,31 +157,41 @@ export async function createUpload(
   assertCan(p, 'media:upload')
   if (!Number.isInteger(input.size) || input.size <= 0)
     throw new ApiError('invalid_request', 'size must be positive.')
-  if (input.size > LIMITS.videoBytes)
+  if (input.role === 'screen-recording' && input.size > RECORDING_LIMITS.bytes)
+    throw new ApiError('invalid_request', 'Screen recordings must be 150 MB or smaller.')
+  if (input.role !== 'screen-recording' && input.size > LIMITS.videoBytes)
     throw new ApiError('invalid_request', 'Files must be 100 MB or smaller.')
   if (!/^[0-9a-f]{64}$/.test(input.sha256))
     throw new ApiError('invalid_request', 'sha256 must be 64 hex characters.')
   const role = input.role ?? null
-  if (role && !isTakeRole(role))
-    throw new ApiError('invalid_request', 'role must be narration-take or narration-upload.')
-  if (role && !input.scopeJobId)
+  if (role && !UPLOAD_ROLES.includes(role))
+    throw new ApiError('invalid_request', `role must be ${UPLOAD_ROLES.join(' or ')}.`)
+  const policy = role ? ROLES[role] : null
+  if (policy?.needsScope && !input.scopeJobId)
     throw new ApiError('invalid_request', 'A recording needs scopeJobId: the video it is recorded for.')
-  if (!role && input.scopeJobId)
+  if (policy && !policy.needsScope && input.scopeJobId)
+    throw new ApiError(
+      'invalid_request',
+      "A screen recording doesn't take scopeJobId: it belongs to no video yet.",
+    )
+  if (!policy && input.scopeJobId)
     throw new ApiError('invalid_request', 'scopeJobId is only for recordings (with a role).')
-  if (role) await assertNarrationEnabled(deps)
+  if (policy?.gatedBy === 'narration') await assertNarrationEnabled(deps)
   return deps.store.tx(async (repo) => {
     // The video must be one the caller can see; any other id is not_found, like the video itself.
     if (role && input.scopeJobId) await loadJob(repo, p, input.scopeJobId)
     // Quota is reserved now, so parallel sessions can't overrun it.
     const reserved = await repo.reservedUploadBytes(p.userId)
-    if (reserved + input.size > UPLOAD_QUOTA_BYTES)
+    if (reserved + input.size > UPLOAD_QUOTA_BYTES) {
+      const open = await repo.countOpenUploads(p.userId)
       throw new ApiError(
         'rate_limited',
-        'You have too many uploads in progress. Finish or wait for them first.',
+        `You have ${open} upload${open === 1 ? '' : 's'} in progress. Finish or cancel one to start another.`,
       )
+    }
     if (role) {
-      await assertTakeRate(deps, p.userId, repo)
-      await quotaForTakes(deps, p.userId, input.size, repo)
+      await assertRoleRate(deps, p.userId, role, repo)
+      await quotaForRole(deps, role, p.userId, input.size, repo)
     }
     const now = deps.clock.now()
     const row: MediaUploadRow = {
@@ -240,9 +296,10 @@ export async function completeUpload(
       'conflict',
       `Parts still missing: ${missing.slice(0, 10).join(', ')}${missing.length > 10 ? '…' : ''}.`,
     )
-  // A take's whole-file hash comes from the recorder (hashed as it recorded), so check it now: a mismatch is the
-  // client's bug or a damaged part, and answering at once beats a rejected item later. Assembly checks it again.
-  if (isTakeRole(u0.role)) await checkWholeHash(deps, u0)
+  // A role's whole-file hash comes from its client (a take's from the recorder, hashed as it recorded), so check it
+  // now: a mismatch is the client's bug or a damaged part, and answering at once beats a rejected item later.
+  // Assembly checks it again.
+  if (u0.role) await checkWholeHash(deps, u0)
   if (input.poster) {
     const poster = Buffer.from(input.poster, 'base64')
     if (poster.byteLength > POSTER_MAX)
@@ -255,7 +312,7 @@ export async function completeUpload(
     // Other takes may have finished since this one started; check the quota again. The open session's own bytes
     // are already counted (narrationTakeBytes holds them until its media row does).
     const role = u.role
-    if (isTakeRole(role)) await quotaForTakes(deps, u.uploaderId, 0, repo)
+    if (role) await quotaForRole(deps, role, u.uploaderId, 0, repo)
     const now = deps.clock.now()
     const mediaId = `med_${deps.ids.uuid().replaceAll('-', '').slice(0, 24)}`
     // Visible to the uploader as "being checked" until assembly finishes.
@@ -336,25 +393,48 @@ export async function assembleUpload(deps: Deps, id: string) {
     deps.log.warn('media.assembly_rejected', { uploadId: id, reason })
     return 'rejected' as const
   }
+  // Memory (spike D5): one buffer of the declared size, each part hashed and copied in, then dropped. Every other
+  // copy of a 150 MB file costs another 150 MB of a 1024 MB function; the store streams it out (adapters/blobs.ts).
+  const memory = (stage: 'parts' | 'classified' | 'stored') => {
+    const m = process.memoryUsage()
+    const mb = (n: number) => Math.round(n / 1048576)
+    deps.log.info('media.assembly_memory', {
+      uploadId: id,
+      stage,
+      rssMb: mb(m.rss),
+      heapUsedMb: mb(m.heapUsed),
+      externalMb: mb(m.external),
+    })
+  }
   const parts = await deps.store.listUploadParts(id)
-  const chunks: Uint8Array[] = []
+  const bytes = Buffer.allocUnsafe(u.size)
+  const whole = createHash('sha256')
+  let filled = 0
   for (const part of parts) {
     const b = await deps.blobs.get('media', partKey(id, part.idx))
     if (!b || sha256Hex(b) !== part.sha256)
       return fail(`Part ${part.idx} is missing or damaged. Upload the file again.`)
-    chunks.push(b)
+    if (filled + b.byteLength > u.size) {
+      filled += b.byteLength
+      break
+    }
+    bytes.set(b, filled)
+    whole.update(b)
+    filled += b.byteLength
   }
-  const bytes = new Uint8Array(Buffer.concat(chunks))
-  if (bytes.byteLength !== u.size || sha256Hex(bytes) !== u.sha256)
+  if (filled !== u.size || whole.digest('hex') !== u.sha256)
     return fail("The assembled file doesn't match the size and sha256 declared when the upload started.")
+  memory('parts')
   let c
   try {
-    c = classify(bytes)
+    c = classify(bytes, { role: u.role })
   } catch (e) {
     if (!(e instanceof MediaError)) deps.log.error('media.classify_failed', { uploadId: id, error: e })
     return fail(e instanceof MediaError ? e.message : "The file couldn't be read.")
   }
-  if (isTakeRole(u.role) && c.kind !== 'audio') return fail('A recording must be an audio file.')
+  memory('classified')
+  const policy = u.role ? ROLES[u.role] : null
+  if (policy?.audioOnly && c.kind !== 'audio') return fail('A recording must be an audio file.')
   const poster = await deps.blobs.get('media', posterKey(id))
   const row = await storeMedia(deps, { userId: u.uploaderId }, bytes, c, {
     id: u.mediaId,
@@ -363,8 +443,9 @@ export async function assembleUpload(deps: Deps, id: string) {
     poster,
     deferMeta: true,
   })
+  memory('stored')
   const mediaId = u.mediaId
-  const samples = isTakeRole(u.role) ? takeSamples(bytes, c) : null
+  const samples = policy?.samples ? takeSamples(bytes, c) : null
   await deps.store.tx(async (repo) => {
     // Under the row lock: a take's speech spans (and the client's samples) may already be in meta.json, and must
     // survive this write. A take's length is filled in when the client didn't send it.
@@ -374,6 +455,8 @@ export async function assembleUpload(deps: Deps, id: string) {
       file: row.cleanKey,
       original: row.originalKey,
       poster: row.posterKey,
+      // A video's MP4 timing facts, so a clip can later be judged as a recording without reading it again.
+      ...(c.mp4 ? { mp4: c.mp4 } : {}),
       ...(samples !== null && prior?.samples === undefined ? { samples } : {}),
     })
     // Everything verified about the file; the item keeps its id, uploader and creation time.

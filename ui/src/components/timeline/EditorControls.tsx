@@ -12,6 +12,7 @@ import {
   clipLength,
   SAMPLE_RATE,
   slotTakes,
+  type NarrationClip,
 } from '../../../../src/lib/timeline'
 import { useRef, type ReactNode } from 'react'
 import { canSplitAt, focusClip, type NarrationEditor } from '../../lib/use-narration-editor'
@@ -173,7 +174,16 @@ const seconds = (samples: number) => Math.round((samples / SAMPLE_RATE) * 100) /
  * The selected clip's gain and fades as number fields, with undo/redo buttons. Typing is one gesture per field (a
  * single undo entry, closed when the field loses focus); editing shortcuts stand aside while a field has focus.
  */
-export function ClipInspector({ editor, start }: { editor: NarrationEditor; start?: ReactNode }) {
+export function ClipInspector({
+  editor,
+  start,
+  end,
+}: {
+  editor: NarrationEditor
+  start?: ReactNode
+  /** At the right of the row for the selected clip (its take's Download). */
+  end?: (clip: NarrationClip) => ReactNode
+}) {
   const clip = editor.selected ? editor.op.clips.find((c) => c.id === editor.selected) : undefined
   const max = clip ? seconds(maxFade(clipLength(clip))) : 0
   return (
@@ -244,6 +254,7 @@ export function ClipInspector({ editor, start }: { editor: NarrationEditor; star
           <Text size="xs" c="var(--va-muted)" className="num" data-testid="clip-inspector-span">
             {clip.id}: {seconds(clip.start).toFixed(2)}–{seconds(clipEnd(clip)).toFixed(2)} s
           </Text>
+          {end ? <div style={{ marginLeft: 'auto' }}>{end(clip)}</div> : null}
         </>
       ) : (
         <Text size="xs" c="var(--va-muted)">
