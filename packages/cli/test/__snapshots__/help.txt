@@ -34,5 +34,7 @@ Commands:
   brief pr         Print the GitHub Action's brief for a pull request (pipe it into create --prompt-file -).
   brief release    Print a changelog brief for a release, from its notes on GitHub or a file.
   brief changelog  Print a changelog brief from the pull requests merged since a date.
+  local            Make a video on this machine with your own coding agent, inside its sandbox.
+  local revise     Make the next version of a video you made with local.
 
 Run "video-agent help <command>" for its flags. Add --json for one JSON object on stdout.

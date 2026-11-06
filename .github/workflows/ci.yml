@@ -94,6 +94,22 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+  # Local mode end to end on the packed CLI with the fixture agent (cli-and-sdk plan §7; beads va-p1th.5.15, 5.17):
+  # npm pack, install the tarball, `video-agent local --agent fixture` then `local revise` (offline). The real runtime
+  # install, agent-kit, render broker and done.json handoff run; only the agent is a fixture. Guards against the
+  # bundled runtime drifting from the repo's scripts.
+  local-mode:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends ffmpeg
+      - run: npm ci --ignore-scripts
+      - run: npx tsx scripts/local-fixture-e2e.ts
+
   # Phase 0 spikes C1 and C3 on Linux (cli-and-sdk plan §11), run by hand only:
   # gh workflow run ci.yml --ref <branch>. Local renders and a Python venv; no credits.
   spikes-linux:

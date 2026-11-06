@@ -3,6 +3,8 @@
 import { hostname } from 'node:os'
 import { isVideoAgentError } from '../../../sdk/src/index.js'
 import { readConfig, writeConfig } from '../config.js'
+import { localChecks } from '../local/doctor.js'
+import { VERSION } from '../version.js'
 import { CliError, EXIT, UsageError } from '../exit.js'
 import type { Ctx, Handler } from '../router.js'
 
@@ -206,9 +208,17 @@ const doctor: Handler = async (ctx) => {
     }
   }
   const ok = checks.every((c) => c.ok)
+  // Local mode's needs: shown, never failing (bead 5.13).
+  const local = localChecks(ctx.io.env, VERSION)
+  const line = (c: { ok: boolean; name: string; detail: string }, bad: string) =>
+    `${c.ok ? '✓' : bad} ${c.name}: ${c.detail}`
   return {
-    json: { ok, checks, features },
-    text: checks.map((c) => `${c.ok ? '✓' : '✗'} ${c.name}: ${c.detail}`).join('\n'),
+    json: { ok, checks, features, local },
+    text: [
+      ...checks.map((c) => line(c, '✗')),
+      'Local mode (video-agent local):',
+      ...local.map((c) => `  ${line(c, '·')}`),
+    ].join('\n'),
     exit: ok ? EXIT.ok : EXIT.error,
   }
 }

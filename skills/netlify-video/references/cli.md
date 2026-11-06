@@ -31,6 +31,8 @@ Upload screenshots or logos first with `video-agent media upload <file> --captio
 
 From a pull request: `video-agent brief pr <url> | video-agent create --prompt-file - --wait`.
 
+No deployment? `video-agent local "<prompt>"` makes the video on this machine with your own coding agent.
+
 ## Output and errors
 
 With `--json`, stdout is exactly one JSON object: what the command made or read (a video has `id`,
@@ -459,3 +461,38 @@ video-agent brief changelog --since 2026-11-01 --repo acme/web
 - `--repo <value>`: owner/name (default: GITHUB_REPOSITORY).
 - `--prompt <value>`: Your own words, added to the brief.
 - `--url <value>`: Where the video should end.
+
+### local
+
+Make a video on this machine with your own coding agent, inside its sandbox.
+
+```sh
+video-agent local <prompt>
+video-agent local "A 20-second launch video for our webhooks feature" --aspect 16:9
+video-agent local "A product teaser" --voice --sound music --media ./shot.png:"The new dashboard"
+```
+
+- `--agent <value>`: The coding agent: claude (the one this version supports).
+- `--aspect <value>`: 16:9, 9:16, 1:1 or 4:5.
+- `--duration <n>`: Target length in seconds.
+- `--sound <value>`: silent, music or music_sfx.
+- `--voice`: Add a spoken voice-over (needs Python 3.10 to 3.13).
+- `--media <value>` (repeatable): A file to put in the video (file:"caption" sets its caption). Repeatable, up to 12.
+- `--context <value>`: Your brand folder (default ./context, else a neutral one).
+- `--out <value>`: Where the video goes (default ./videos/<slug>).
+- `--keep`: Keep the workspace (for debugging).
+- `--timeout <value>`: Give up after this long: 30m, 1h (default 40m).
+
+### local revise
+
+Make the next version of a video you made with local.
+
+```sh
+video-agent local revise <dir> <change>
+video-agent local revise ./videos/webhooks-launch "Make the end card orange"
+```
+
+- `--agent <value>`: The coding agent: claude.
+- `--from-version <n>`: The version to change (default: the latest).
+- `--keep`: Keep the workspace (for debugging).
+- `--timeout <value>`: Give up after this long: 30m, 1h (default 40m).

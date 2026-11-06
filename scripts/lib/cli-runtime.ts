@@ -9,6 +9,7 @@
 //   <out>/template/             video/ (the neutral template), context/, the root AGENTS.md and a package.json with
 //                               netlifyAgent (agent-kit's config) for each workspace
 //   <out>/engines/remotion/     the Remotion template's package.json and lockfile only, when the repo has them
+//   <out>/fixture-agent.mjs     the fixture agent and fixture/ (contract1), for --agent fixture
 // Missing optional pieces are skipped, so nothing here waits for the plans that add them.
 import { execFileSync } from 'node:child_process'
 import {
@@ -138,6 +139,24 @@ export async function buildRuntime(o: {
     join(template, 'package.json'),
     `${JSON.stringify({ name: 'video-agent-local-run', private: true, type: 'module', ...(netlifyAgent ? { netlifyAgent } : {}) }, null, 2)}\n`,
   )
+
+  // The fixture agent (hidden --agent fixture) and its known-good composition, for local mode's CI and tests.
+  if (existsSync(join(repo, 'scripts', 'lib', 'fixture-agent.mjs'))) {
+    copyFileSync(join(repo, 'scripts', 'lib', 'fixture-agent.mjs'), join(out, 'fixture-agent.mjs'))
+    mkdirSync(join(out, 'fixture'), { recursive: true })
+    for (const f of ['index.html', 'summary.json'])
+      copyFileSync(join(repo, 'test', 'fixtures', 'contract1', f), join(out, 'fixture', f))
+    // The media contract1 plays (as spike C1 placed them).
+    mkdirSync(join(out, 'fixture', 'assets', 'media'), { recursive: true })
+    copyFileSync(
+      join(repo, 'test', 'fixtures', 'a169.mp4'),
+      join(out, 'fixture', 'assets', 'media', 'med_clip.mp4'),
+    )
+    writeFileSync(
+      join(out, 'fixture', 'assets', 'media', 'med_logo.svg'),
+      '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><circle cx="32" cy="32" r="28" fill="#14b8a6"/></svg>\n',
+    )
+  }
 
   const remotionDir = join(repo, 'engines', 'remotion', 'template')
   const remotion = existsSync(join(remotionDir, 'package-lock.json'))

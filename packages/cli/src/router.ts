@@ -6,6 +6,7 @@ import { VideoAgent } from '../../sdk/src/index.js'
 import { COMMANDS, findCommand, GLOBAL_FLAGS, type CommandSpec, type FlagSpec } from './catalog.js'
 import { readConfig, resolveConnection, type CliConfig } from './config.js'
 import { ACCOUNT_COMMANDS } from './commands/account.js'
+import { LOCAL_COMMANDS } from './commands/local.js'
 import { BRIEF_COMMANDS } from './commands/brief.js'
 import { LIBRARY_COMMANDS } from './commands/library.js'
 import { MAKE_COMMANDS } from './commands/make.js'
@@ -66,6 +67,7 @@ export const HANDLERS: Record<string, Handler> = {
   ...MAKE_COMMANDS,
   ...SCENE_COMMANDS,
   ...ACCOUNT_COMMANDS,
+  ...LOCAL_COMMANDS,
   ...BRIEF_COMMANDS,
   help: helpHandler,
   version: async (ctx) => {
