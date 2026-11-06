@@ -1,0 +1,21 @@
+# Playwright's Chromium, cached by the lockfile (it pins @playwright/test), installed without apt: the runner image
+# already has Chromium's system libraries. `install-deps` (apt) runs only if a launch fails.
+name: playwright
+description: Cached Playwright Chromium; system deps only when a launch fails
+runs:
+  using: composite
+  steps:
+    - uses: actions/cache@v4
+      with:
+        path: ~/.cache/ms-playwright
+        key: ms-playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+    - shell: bash
+      run: npx playwright install chromium
+    - shell: bash
+      run: |
+        if node -e "require('playwright').chromium.launch().then((b) => b.close())"; then
+          echo "Chromium launches without extra system packages."
+        else
+          echo "Chromium didn't launch: installing its system dependencies."
+          npx playwright install-deps chromium
+        fi

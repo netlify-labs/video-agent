@@ -1,0 +1,29 @@
+# ffmpeg and ffprobe without apt (the runners' apt mirror took 28 minutes on 35c7eca): the same pinned static builds
+# netlify-agent-kit installs inside runs (ffmpeg-static 5.3.0, @ffprobe-installer/ffprobe 2.1.2; npm checks their
+# integrity), cached by version, on PATH for the rest of the job.
+name: ffmpeg
+description: Pinned static ffmpeg and ffprobe, cached; no apt
+runs:
+  using: composite
+  steps:
+    - uses: actions/cache@v4
+      id: cache
+      with:
+        path: ${{ runner.temp }}/ffmpeg
+        key: ffmpeg-static-5.3.0-ffprobe-2.1.2-${{ runner.os }}-${{ runner.arch }}
+    - if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        mkdir -p "$RUNNER_TEMP/ffmpeg"
+        cd "$RUNNER_TEMP/ffmpeg"
+        echo '{"private":true}' > package.json
+        npm install --no-audit --no-fund ffmpeg-static@5.3.0 @ffprobe-installer/ffprobe@2.1.2
+    - shell: bash
+      run: |
+        dir="$RUNNER_TEMP/ffmpeg"
+        mkdir -p "$dir/bin"
+        ln -sf "$(cd "$dir" && node -p "require('ffmpeg-static')")" "$dir/bin/ffmpeg"
+        ln -sf "$(cd "$dir" && node -p "require('@ffprobe-installer/ffprobe').path")" "$dir/bin/ffprobe"
+        echo "$dir/bin" >> "$GITHUB_PATH"
+        "$dir/bin/ffmpeg" -hide_banner -version | head -1
+        "$dir/bin/ffprobe" -hide_banner -version | head -1
