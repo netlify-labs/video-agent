@@ -19,6 +19,7 @@ describe.each([
     expect(await h.json(await h.call('GET', base, { as: h.admin }))).toEqual({
       ...NARRATION_SETTING_DEFAULTS,
       remixEnabled: true,
+      webmcpEnabled: true,
       youtubeEnabled: false,
       youtubeConfigured: false,
       recordingQuotaBytes: 2 * 1024 ** 3,
@@ -36,6 +37,7 @@ describe.each([
       transcriptionProvider: 'elevenlabs',
       takeQuotaBytes: NARRATION_SETTING_DEFAULTS.takeQuotaBytes,
       remixEnabled: true,
+      webmcpEnabled: true,
       youtubeEnabled: false,
       youtubeConfigured: false,
       recordingQuotaBytes: 2 * 1024 ** 3,
@@ -52,6 +54,7 @@ describe.each([
       transcriptionProvider: 'elevenlabs',
       takeQuotaBytes: 512 * 1024 ** 2,
       remixEnabled: true,
+      webmcpEnabled: true,
       youtubeEnabled: false,
       youtubeConfigured: false,
       recordingQuotaBytes: 3 * 1024 ** 3,
