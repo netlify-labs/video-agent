@@ -32,7 +32,9 @@ for (const dir of readdirSync(join(repoRoot, 'packages')).sort()) {
   await build({
     ...packageBuildOptions(root, node),
     outdir: join(root, 'dist'),
-    external: Object.keys(pkg.dependencies ?? {}),
+    // ...and Playwright, which video-agent record loads from the person's own install when they record (it says how to
+    // get it otherwise): too big to ship, and esbuild can't bundle it.
+    external: [...Object.keys(pkg.dependencies ?? {}), ...(dir === 'cli' ? ['playwright', 'playwright-core'] : [])],
   })
   // Declarations only for packages that export types (the CLI is a command, not a library).
   if (pkg.exports?.['.']?.types)

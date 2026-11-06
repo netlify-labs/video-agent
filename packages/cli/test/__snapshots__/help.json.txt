@@ -1360,6 +1360,86 @@
       "local": true
     },
     {
+      "name": "local demo",
+      "summary": "Make a demo from a screen recording on this machine (--quick: no agent, no model).",
+      "args": [
+        {
+          "name": "recording",
+          "type": "file",
+          "required": true,
+          "description": "A video-agent record folder (recording.mp4 and trace.json) or an MP4."
+        }
+      ],
+      "flags": {
+        "prompt": {
+          "type": "string",
+          "description": "What the demo should show (default: the steps of the recording)."
+        },
+        "quick": {
+          "type": "boolean",
+          "description": "A Quick demo: composed straight from the plan, no agent."
+        },
+        "agent": {
+          "type": "string",
+          "description": "The coding agent: claude (the one this version supports)."
+        },
+        "aspect": {
+          "type": "string",
+          "description": "16:9, 9:16, 1:1 or 4:5.",
+          "default": "16:9"
+        },
+        "duration": {
+          "type": "number",
+          "description": "Target length in seconds."
+        },
+        "trim": {
+          "type": "string",
+          "description": "The seconds of the recording to use, in,out (like 2,48.5)."
+        },
+        "trace": {
+          "type": "string",
+          "description": "The recording's trace.json (default: the one beside it)."
+        },
+        "privacy": {
+          "type": "boolean",
+          "description": "Privacy mode: find and hide emails, keys, tokens, URLs with ids…"
+        },
+        "hide-text": {
+          "type": "string",
+          "multiple": true,
+          "description": "Text to hide wherever it shows. Repeatable."
+        },
+        "look": {
+          "type": "string",
+          "description": "A Look bundled with the CLI, or a look folder."
+        },
+        "context": {
+          "type": "string",
+          "description": "Your brand folder (default ./context, else a neutral one)."
+        },
+        "out": {
+          "type": "string",
+          "description": "Where the video goes (default ./videos/<slug>)."
+        },
+        "keep": {
+          "type": "boolean",
+          "description": "Keep the workspace (for debugging)."
+        },
+        "timeout": {
+          "type": "string",
+          "description": "Give up after this long: 30m, 1h (default 40m)."
+        }
+      },
+      "examples": [
+        "video-agent local demo ./take1 --quick",
+        "video-agent local demo ./take1 --prompt \"Adding a webhook, for new admins\" --privacy"
+      ],
+      "sdk": [],
+      "feature": null,
+      "needsHostedApp": false,
+      "local": true
+    },
+    {
       "name": "local revise",
       "summary": "Make the next version of a video you made with local.",
       "args": [

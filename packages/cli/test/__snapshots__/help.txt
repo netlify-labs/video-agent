@@ -38,6 +38,7 @@ Commands:
   brief changelog  Print a changelog brief from the pull requests merged since a date.
   record           Record a web app in Chromium with a pointer trace, for a demo (on this machine, no server).
   local            Make a video on this machine with your own coding agent, inside its sandbox.
+  local demo       Make a demo from a screen recording on this machine (--quick: no agent, no model).
   local revise     Make the next version of a video you made with local.
 
 Run "video-agent help <command>" for its flags. Add --json for one JSON object on stdout.

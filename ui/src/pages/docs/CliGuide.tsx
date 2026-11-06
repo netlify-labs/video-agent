@@ -251,10 +251,35 @@ video-agent local revise ./videos/webhooks-launch "Make the end card orange"`}</
             description: 'Record a demo on this machine and turn it into a video.',
             children: (
               <Card>
-                <Text size="sm">
-                  Upload a recording with <Code>video-agent media upload</Code> and pass it to{' '}
-                  <Code>create</Code>, or record one in the app from New video.
-                </Text>
+                <Stack gap="sm">
+                  <Text size="sm">
+                    <Code>video-agent record https://app.example.com --out ./take1</Code> opens Chromium on
+                    the page: press <Code>r</Code> to start, use the app, press <Code>s</Code> to stop. It
+                    writes <Code>recording.mp4</Code> (ready to upload as it is) and <Code>trace.json</Code>,
+                    a pointer trace with the exact clicks and the clicked element's role and name, so the demo
+                    gets a smooth cursor and zooms to the right place. Typing is counted, never recorded. It
+                    records at 2x by default so zooms stay sharp. It needs ffmpeg and Playwright's Chromium (
+                    <Code>npm i -g playwright &amp;&amp; npx playwright install chromium</Code>).
+                  </Text>
+                  <Text size="sm">
+                    Hiding: password fields are always hidden. <Code>--hide &quot;.selector&quot;</Code> hides
+                    elements, <Code>--hide-text &quot;Acme Labs&quot;</Code> hides text wherever it shows, and{' '}
+                    <Code>--privacy</Code> finds emails, keys, tokens, URLs with ids, card and phone numbers
+                    in the page and hides each. The boxes are written into the trace and follow the text as
+                    the page scrolls; the text itself never is. <Code>--script tour.mjs --headless</Code>{' '}
+                    records a scripted tour.
+                  </Text>
+                  <Text size="sm">
+                    Make the demo:{' '}
+                    <Code>video-agent create &quot;Adding a webhook&quot; --recording ./take1</Code> (uploads
+                    the folder with its trace; <Code>--trim</Code>, <Code>--privacy</Code>,{' '}
+                    <Code>--hide-text</Code> and <Code>--quick</Code> as on the API), or in one go:{' '}
+                    <Code>video-agent record &lt;url&gt; --make &quot;Adding a webhook&quot;</Code>. Without a
+                    server: <Code>video-agent local demo ./take1</Code> (with your coding agent) or{' '}
+                    <Code>video-agent local demo ./take1 --quick</Code> (no agent, no model). You can also
+                    record in the app, from New video.
+                  </Text>
+                </Stack>
               </Card>
             ),
           },

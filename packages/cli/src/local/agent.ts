@@ -67,7 +67,7 @@ export interface AgentCommand {
 }
 
 export interface Adapter {
-  id: 'claude' | 'codex' | 'gemini' | 'fixture'
+  id: 'claude' | 'codex' | 'gemini' | 'fixture' | 'quick'
   /** The command for one run of `prompt` in workspace `ws`. */
   command(o: { ws: string; prompt: string; env: NodeJS.ProcessEnv; maxTurns: number }): AgentCommand
 }

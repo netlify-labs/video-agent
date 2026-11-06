@@ -6,7 +6,14 @@ import { randomBytes } from 'node:crypto'
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, watch, writeFileSync } from 'node:fs'
 import { basename, isAbsolute, join, normalize } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { buildPrompt, type PromptInput } from '../../../../src/domain/prompt.js'
+import {
+  buildPrompt,
+  buildQuickDemoPrompt,
+  MAX_PROMPT_CLICKS,
+  type PromptInput,
+  type RecordingPrompt,
+} from '../../../../src/domain/prompt.js'
+import { parseTrace } from '../../../../src/lib/recording-trace.js'
 import { classify } from '../../../../src/lib/media/classify.js'
 import {
   RUN_MANIFEST_VERSION,
@@ -32,6 +39,18 @@ export interface LocalRunInput {
   media?: { path: string; caption: string | null }[]
   /** local --look: the look's archive, restored by prepare-run into context/look/ as on the runner. */
   look?: LocalLook
+  /**
+   * local demo (screen-recording plan §6.3; va-rsk5.5.4): a screen recording (and its pointer trace) the run makes a
+   * demo from, as the server's demo runs do; quick composes it with no authoring (the Quick demo's prompt).
+   */
+  recording?: {
+    path: string
+    trace?: string | null
+    trim?: [number, number]
+    privacy?: boolean
+    hideStrings?: string[]
+    quick?: boolean
+  }
   /**
    * A revision (local revise, bead va-p1th.5.12): the video's job id and the version it changes, whose source.tar.gz
    * is restored by prepare-run exactly as on the runner. The prompt is then the change.
@@ -96,6 +115,52 @@ export function prepareLocalRun(ws: string, input: LocalRunInput, log: Log): Loc
       },
     }
   })
+  // The recording: classified as an upload with the screen-recording role is, its trace beside it in the media store.
+  let recording: RunManifest['recording']
+  let recordingPrompt: RecordingPrompt | null = null
+  if (input.recording) {
+    const bytes = new Uint8Array(readFileSync(input.recording.path))
+    const c = classify(bytes, { role: 'screen-recording' })
+    const id = `med_loc${randomBytes(8).toString('hex')}`
+    const key = `${id}/original.${c.ext}`
+    mkdirSync(join(inputs, 'media', id), { recursive: true })
+    writeFileSync(join(inputs, 'media', key), bytes)
+    const run = { key, sha256: sha256Hex(bytes), filename: `${id}.${c.ext}`, kind: 'video' as const }
+    let trace: { key: string; sha256: string } | undefined
+    let clicks: RecordingPrompt['clicks'] = []
+    if (input.recording.trace) {
+      const text = readFileSync(input.recording.trace, 'utf8')
+      const parsed = parseTrace(text)
+      trace = { key: `${id}/trace.json`, sha256: sha256Hex(text) }
+      writeFileSync(join(inputs, 'media', trace.key), text)
+      clicks = parsed.events
+        .flatMap((e) =>
+          e.kind === 'click' && e.target ? [{ t: e.t, role: e.target.role, name: e.target.name }] : [],
+        )
+        .slice(0, MAX_PROMPT_CLICKS)
+    }
+    media.push({ run, prompt: { file: `assets/media/${run.filename}`, kind: 'video', caption: null } })
+    recording = {
+      mediaId: id,
+      ...run,
+      ...(trace ? { trace } : {}),
+      boxes: [],
+      ...(input.recording.trim ? { trim: input.recording.trim } : {}),
+      ...(input.recording.quick ? { compose: true } : {}),
+      ...(input.recording.privacy ? { privacy: true } : {}),
+      ...(input.recording.hideStrings?.length ? { hideStrings: input.recording.hideStrings } : {}),
+    }
+    recordingPrompt = {
+      mediaId: id,
+      file: `assets/media/${run.filename}`,
+      seconds: c.durationSec ?? null,
+      trace: Boolean(trace),
+      privacy: input.recording.privacy === true,
+      hideStrings: input.recording.hideStrings?.length ?? 0,
+      clicks,
+      deadlineMin: 40,
+    }
+  }
   // The look goes where the server keeps a version's snapshot: <jobId>/looks/<hash>.tar.gz in the sources store.
   let look: RunManifest['look']
   if (input.look) {
@@ -117,43 +182,64 @@ export function prepareLocalRun(ws: string, input: LocalRunInput, log: Log): Loc
     // No neighbour stills locally: the prompt's no-stills variant says so.
     ...(input.revision?.scope ? { scope: { beats: input.revision.scope.ids, stills: [] } } : {}),
     ...(look ? { look } : {}),
+    ...(recording ? { recording } : {}),
   }
   const raw = serializeRunManifest(manifest)
   const manifestFile = join(inputs, 'sources', runManifestKey(jobId, attemptId))
   mkdirSync(join(manifestFile, '..'), { recursive: true })
   writeFileSync(manifestFile, raw)
   const renderDir = join(ws, '.render', attemptId)
-  const prompt = buildPrompt({
-    jobId,
-    attemptId,
-    versionN,
-    requesterName: input.requesterName ?? 'you',
-    userPrompt: input.prompt,
-    aspect: input.aspect,
-    targetDurationSec: input.durationSec ?? null,
-    callbackUrl: pathToFileURL(join(renderDir, 'done')).href,
-    checkpointUrl: pathToFileURL(join(renderDir, 'checkpoint')).href,
-    // render-job and checkpoint ignore it for file: URLs; random so a prompt never carries a guessable value.
-    callbackToken: randomBytes(16).toString('hex'),
-    upload: { mode: 'local' },
-    revision: input.revision ? { parentN: input.revision.parentN } : null,
-    runManifestSha256: sha256Hex(raw),
-    media: media.map((m) => m.prompt),
-    ...(input.sound ? { sound: input.sound } : {}),
-    ...(input.voiceover ? { voiceover: input.voiceover } : {}),
-    ...(input.look ? { look: { id: input.look.id, name: input.look.name } } : {}),
-    ...(input.revision?.scope
-      ? {
-          scope: {
-            n: input.revision.parentN,
-            beats: input.revision.scope.beats,
-            stills: false,
-            voiced: input.revision.scope.voiced,
-            locked: false,
-          },
-        }
-      : {}),
-  })
+  const callbackUrl = pathToFileURL(join(renderDir, 'done')).href
+  const checkpointUrl = pathToFileURL(join(renderDir, 'checkpoint')).href
+  // render-job and checkpoint ignore it for file: URLs; random so a prompt never carries a guessable value.
+  const callbackToken = randomBytes(16).toString('hex')
+  const prompt =
+    input.recording?.quick && recording
+      ? buildQuickDemoPrompt({
+          jobId,
+          attemptId,
+          versionN,
+          mediaId: recording.mediaId,
+          aspect: input.aspect,
+          targetDurationSec: input.durationSec ?? null,
+          title: input.prompt.slice(0, 80),
+          runManifestSha256: sha256Hex(raw),
+          callbackUrl,
+          checkpointUrl,
+          callbackToken,
+          upload: { mode: 'local' },
+        })
+      : buildPrompt({
+          jobId,
+          attemptId,
+          versionN,
+          requesterName: input.requesterName ?? 'you',
+          userPrompt: input.prompt,
+          aspect: input.aspect,
+          targetDurationSec: input.durationSec ?? null,
+          callbackUrl,
+          checkpointUrl,
+          callbackToken,
+          upload: { mode: 'local' },
+          ...(recordingPrompt ? { recording: recordingPrompt } : {}),
+          revision: input.revision ? { parentN: input.revision.parentN } : null,
+          runManifestSha256: sha256Hex(raw),
+          media: media.map((m) => m.prompt),
+          ...(input.sound ? { sound: input.sound } : {}),
+          ...(input.voiceover ? { voiceover: input.voiceover } : {}),
+          ...(input.look ? { look: { id: input.look.id, name: input.look.name } } : {}),
+          ...(input.revision?.scope
+            ? {
+                scope: {
+                  n: input.revision.parentN,
+                  beats: input.revision.scope.beats,
+                  stills: false,
+                  voiced: input.revision.scope.voiced,
+                  locked: false,
+                },
+              }
+            : {}),
+        })
   writeFileSync(join(ws, 'prompt.txt'), prompt)
   log('local.prepared', { jobId, attemptId, media: media.length, look: look?.id ?? null, ms: Date.now() - t })
   return { jobId, attemptId, versionN, renderDir, manifestSha256: sha256Hex(raw), prompt }

@@ -2,6 +2,7 @@
 // Packs netlify-video-agent (with dist/runtime), installs the tarball into a temp prefix, then:
 //   1. video-agent local "<prompt>" --agent fixture --json   → ./videos/<slug>/v1/video.mp4 (ffprobe), video.json
 //   2. video-agent local revise <dir> "<change>" --agent fixture   → v2, with the runtime reused (no npm install)
+//   3. video-agent local demo <recording> --quick   → a Quick demo, no agent and no model (runtime reused)
 // The real runtime install, agent-kit with its redirected HOME, the render broker and the done.json handoff all run;
 // only the agent is the fixture. No model, no network beyond the first runtime and agent-kit install. JSON lines out.
 //   npx tsx scripts/local-fixture-e2e.ts [--keep]
@@ -88,5 +89,16 @@ const v2 = cli(['local', 'revise', join(v1.dir, '..'), 'Make the title bigger', 
 })
 if (v2.version !== 2 || !existsSync(v2.video)) fail('revise made no v2', v2)
 log('v2', { dir: v2.dir, durationSec: probe(v2.video) })
+
+// A Quick demo from a screen recording (va-rsk5.5.4): no agent, no model, the runtime reused.
+const demo = cli(
+  ['local', 'demo', join(repo, 'test', 'fixtures', 'recording', 'privacy', 'secrets.mp4'), '--quick'],
+  {
+    npm_config_offline: 'true',
+  },
+)
+if (!existsSync(demo.video) || !(probe(demo.video) > 3))
+  fail('local demo --quick made no playable video', demo)
+log('demo', { dir: demo.dir, durationSec: probe(demo.video) })
 if (!keep) rmSync(work, { recursive: true, force: true })
 log('PASS', { sec: Math.round((Date.now() - started) / 1000), ...(keep ? { work } : {}) })

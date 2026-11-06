@@ -10,6 +10,7 @@
 //                               netlifyAgent (agent-kit's config) for each workspace
 //   <out>/engines/remotion/     the Remotion template's package.json and lockfile only, when the repo has them
 //   <out>/fixture-agent.mjs     the fixture agent and fixture/ (contract1), for --agent fixture
+//   <out>/quick-agent.mjs       the Quick demo's commands, run without a model (local demo --quick)
 //   <out>/looks/<id>/           each look's run files (no previews), for local --look <id> (looks plan §4.13)
 // Missing optional pieces are skipped, so nothing here waits for the plans that add them.
 import { execFileSync } from 'node:child_process'
@@ -145,6 +146,9 @@ export async function buildRuntime(o: {
   )
 
   // The fixture agent (hidden --agent fixture) and its known-good composition, for local mode's CI and tests.
+  // The Quick demo's model-free agent (local demo --quick).
+  if (existsSync(join(repo, 'scripts', 'lib', 'quick-agent.mjs')))
+    copyFileSync(join(repo, 'scripts', 'lib', 'quick-agent.mjs'), join(out, 'quick-agent.mjs'))
   if (existsSync(join(repo, 'scripts', 'lib', 'fixture-agent.mjs'))) {
     copyFileSync(join(repo, 'scripts', 'lib', 'fixture-agent.mjs'), join(out, 'fixture-agent.mjs'))
     mkdirSync(join(out, 'fixture'), { recursive: true })

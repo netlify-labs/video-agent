@@ -47,7 +47,8 @@ export async function recordingMediaId(ctx: Ctx, ref: string, traceFlag?: string
 /** "in,out" seconds -> [in, out]. */
 export function parseTrim(v: unknown): [number, number] | undefined {
   if (v === undefined) return undefined
-  if (typeof v !== 'string') throw new UsageError('--trim takes in,out seconds of the recording (like 2,48.5).')
+  if (typeof v !== 'string')
+    throw new UsageError('--trim takes in,out seconds of the recording (like 2,48.5).')
   const m = /^\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*$/.exec(v)
   if (!m || !(Number(m[1]) < Number(m[2])))
     throw new UsageError('--trim takes in,out seconds of the recording, in before out (like 2,48.5).')

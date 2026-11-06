@@ -543,6 +543,31 @@ video-agent local --look ./looks/my-look "A 20-second launch video for our webho
 - `--keep`: Keep the workspace (for debugging).
 - `--timeout <value>`: Give up after this long: 30m, 1h (default 40m).
 
+### local demo
+
+Make a demo from a screen recording on this machine (--quick: no agent, no model).
+
+```sh
+video-agent local demo <recording>
+video-agent local demo ./take1 --quick
+video-agent local demo ./take1 --prompt "Adding a webhook, for new admins" --privacy
+```
+
+- `--prompt <value>`: What the demo should show (default: the steps of the recording).
+- `--quick`: A Quick demo: composed straight from the plan, no agent.
+- `--agent <value>`: The coding agent: claude (the one this version supports).
+- `--aspect <value>`: 16:9, 9:16, 1:1 or 4:5.
+- `--duration <n>`: Target length in seconds.
+- `--trim <value>`: The seconds of the recording to use, in,out (like 2,48.5).
+- `--trace <value>`: The recording's trace.json (default: the one beside it).
+- `--privacy`: Privacy mode: find and hide emails, keys, tokens, URLs with ids…
+- `--hide-text <value>` (repeatable): Text to hide wherever it shows. Repeatable.
+- `--look <value>`: A Look bundled with the CLI, or a look folder.
+- `--context <value>`: Your brand folder (default ./context, else a neutral one).
+- `--out <value>`: Where the video goes (default ./videos/<slug>).
+- `--keep`: Keep the workspace (for debugging).
+- `--timeout <value>`: Give up after this long: 30m, 1h (default 40m).
+
 ### local revise
 
 Make the next version of a video you made with local.

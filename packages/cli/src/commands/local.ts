@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path'
 import type { Adapter } from '../local/agent.js'
 import { claude } from '../local/claude.js'
 import { fixture } from '../local/fixture.js'
+import { quick } from '../local/quick.js'
 import { runLocal, slugify, type VideoJson } from '../local/index.js'
 import type { LocalRunInput } from '../local/run.js'
 import { resolveLocalLook } from '../local/look.js'
@@ -15,6 +16,7 @@ import type { Ctx, Handler } from '../router.js'
 import { VERSION } from '../version.js'
 import { localScope } from '../local/scope.js'
 import { sceneFlags } from './scenes.js'
+import { parseTrim, recordingFiles } from './recording.js'
 import { arg, durationMs } from './shared.js'
 
 /** Agents this version ships (docs/spikes.md C2: each must pass the sandbox spike). Fixture is hidden, for CI. */
@@ -64,7 +66,8 @@ function mediaOf(values: string[]): NonNullable<LocalRunInput['media']> {
 async function go(ctx: Ctx, input: LocalRunInput, videoDir: (title: string) => string) {
   const progress = (line: string) => ctx.io.stderr(`${line}\n`)
   const timeout = ctx.flags.timeout as string | undefined
-  const adapter = pickAgent(ctx)
+  // A Quick demo needs no model: its commands are fixed.
+  const adapter = input.recording?.quick ? quick : pickAgent(ctx)
   const ac = new AbortController()
   const onSigint = () => ac.abort()
   process.once('SIGINT', onSigint)
@@ -175,4 +178,55 @@ function aspectOf(w: number, h: number): LocalRunInput['aspect'] {
   return r > 1.5 ? '16:9' : r < 0.7 ? '9:16' : r < 0.9 ? '4:5' : '1:1'
 }
 
-export const LOCAL_COMMANDS: Record<string, Handler> = { local, 'local revise': localRevise }
+/**
+ * local demo <recording> (va-rsk5.5.4): a demo made on this machine from a recording folder (video-agent record's) or an
+ * MP4, the same run the server makes; --quick composes it with no agent and no model.
+ */
+const localDemo: Handler = async (ctx) => {
+  const ref = resolve(arg(ctx, 0, 'recording'))
+  if (!existsSync(ref))
+    throw new UsageError(`${ref} isn't there: give a video-agent record folder or an MP4.`)
+  const { file, trace } = recordingFiles(ref)
+  const aspect = (ctx.flags.aspect as string | undefined) ?? '16:9'
+  if (!['16:9', '9:16', '1:1', '4:5'].includes(aspect))
+    throw new UsageError('--aspect takes 16:9, 9:16, 1:1 or 4:5.')
+  const trim = parseTrim(ctx.flags.trim)
+  const hideStrings =
+    ctx.flags['hide-text'] === undefined
+      ? []
+      : ([] as string[])
+          .concat(ctx.flags['hide-text'] as string | string[])
+          .filter((s) => s.trim().length >= 2)
+  const prompt =
+    (ctx.flags.prompt as string | undefined) ??
+    'A short product demo of what this recording shows, step by step.'
+  const input: LocalRunInput = {
+    prompt,
+    aspect: aspect as LocalRunInput['aspect'],
+    durationSec: (ctx.flags.duration as number | undefined) ?? null,
+    recording: {
+      path: file,
+      trace: (ctx.flags.trace as string | undefined) ?? trace,
+      ...(trim ? { trim } : {}),
+      ...(ctx.flags.privacy ? { privacy: true } : {}),
+      ...(hideStrings.length ? { hideStrings } : {}),
+      ...(ctx.flags.quick ? { quick: true } : {}),
+    },
+  }
+  const look = ctx.flags.look as string | undefined
+  if (look) input.look = resolveLocalLook(look, ctx.io.env.VA_RUNTIME_SOURCE ?? bundledRuntime())
+  const out = ctx.flags.out as string | undefined
+  return go(ctx, input, (title) => {
+    if (out) return resolve(out)
+    const base = resolve('videos', slugify(title))
+    let dir = base
+    for (let i = 2; existsSync(dir); i++) dir = `${base}-${i}`
+    return dir
+  })
+}
+
+export const LOCAL_COMMANDS: Record<string, Handler> = {
+  local,
+  'local revise': localRevise,
+  'local demo': localDemo,
+}
