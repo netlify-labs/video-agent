@@ -387,3 +387,47 @@ Check Node, the config, the server and (for local mode) the tools.
 video-agent doctor
 video-agent doctor --json
 ```
+
+### brief pr
+
+Print the GitHub Action's brief for a pull request (pipe it into create --prompt-file -).
+
+```sh
+video-agent brief pr <pr>
+video-agent brief pr https://github.com/acme/web/pull/123
+video-agent brief pr https://github.com/acme/web/pull/123 | video-agent create --prompt-file - --wait
+```
+
+- `--prompt <value>`: Your own words, added to the brief ("for sales engineers").
+- `--context`: Put the PR's text in a context block (servers that list context).
+- `--untrusted`: Use only the title and files, not the author's words.
+
+### brief release
+
+Print a changelog brief for a release, from its notes on GitHub or a file.
+
+```sh
+video-agent brief release <tag>
+video-agent brief release v2.4.0 --repo acme/web
+video-agent brief release "$CI_COMMIT_TAG" --repo acme/web --notes-file CHANGELOG.md
+```
+
+- `--repo <value>`: owner/name (default: GITHUB_REPOSITORY).
+- `--notes-file <value>`: Read the notes from a file (or - for stdin) instead of GitHub.
+- `--prompt <value>`: Your own words, added to the brief.
+- `--url <value>`: Where the video should end (the product or the release page).
+- `--context`: Put the notes in a context block (servers that list context).
+
+### brief changelog
+
+Print a changelog brief from the pull requests merged since a date.
+
+```sh
+video-agent brief changelog
+video-agent brief changelog --since 2026-11-01 --repo acme/web
+```
+
+- `--since <value>`: YYYY-MM-DD.
+- `--repo <value>`: owner/name (default: GITHUB_REPOSITORY).
+- `--prompt <value>`: Your own words, added to the brief.
+- `--url <value>`: Where the video should end.
