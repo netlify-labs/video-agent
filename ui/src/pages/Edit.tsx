@@ -72,6 +72,8 @@ import { humanize, labelFor } from '../lib/labels'
 import { pickable } from '../lib/scenes'
 import { narrationOf, narrationToSave, sameOps, withNarration } from '../lib/narration-panel'
 import { MUSIC_ID } from '../../../src/lib/contract'
+import { RecordingPanel } from '../components/recording/RecordingPanel'
+import { recordingOps } from '../lib/recording-edit'
 import { timingChanged } from '../../../src/lib/stale-picture'
 import { secondsToSamples, type NarrationOp } from '../../../src/lib/timeline'
 
@@ -94,7 +96,7 @@ const relined = (base: Composition, line: Line) => {
 
 /**
  * The ops that turn `base` into `cur`, in the order the patcher needs: deletes, order, timing, text, colour, media,
- * audio, narration.
+ * audio, narration, then the recording scenes'.
  */
 export function diffOps(base: Composition, cur: Composition): Op[] {
   const ops: Op[] = []
@@ -140,6 +142,8 @@ export function diffOps(base: Composition, cur: Composition): Op[] {
   for (const l of cur.narration)
     if (curIds.includes(l.beat) && spoken(l.text) && relined(base, l))
       ops.push({ op: 'voice', beat: l.beat, text: l.text })
+  // A demo's recording scenes: span, camera, cursor and hidden areas (the recording panel's changes).
+  ops.push(...recordingOps(base, cur))
   return ops
 }
 
@@ -504,6 +508,13 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
   const video = $api.useQuery('get', '/api/v1/videos/{id}', { params: { path: { id } } })
   const [draft, setDraft] = useState<Edit | null>(null)
   const [cur, setCur] = useState<Composition | null>(null)
+  // A demo's recording file, through the version's preview link (the recording panel shows its frames).
+  const recordingLink = $api.useQuery(
+    'get',
+    '/api/v1/videos/{id}/versions/{n}/preview',
+    { params: { path: { id, n: draft?.baseN ?? 1 } } },
+    { enabled: Boolean(draft?.recording), staleTime: 5 * 60_000 },
+  )
   const [problem, setProblem] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [renderKey] = useState(newIdempotencyKey)
@@ -1282,6 +1293,27 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
                     </Tooltip>
                   </Group>
                 </Group>
+                {b.recording && draft.recording ? (
+                  <div className="va-recording-panel" style={{ marginTop: 8 }}>
+                    <RecordingPanel
+                      beatId={b.id}
+                      sceneSec={b.duration}
+                      rec={b.recording}
+                      info={draft.recording}
+                      src={
+                        recordingLink.data ? new URL(b.recording.src, recordingLink.data.url).href : undefined
+                      }
+                      aspect={aspect}
+                      readOnly={lockedOut}
+                      onChange={(r) => {
+                        update((c) => ({
+                          ...c,
+                          beats: c.beats.map((x) => (x.id === b.id ? { ...x, recording: r } : x)),
+                        }))
+                      }}
+                    />
+                  </div>
+                ) : null}
                 <Stack gap={6} mt={6}>
                   {(() => {
                     const was = baseBeat.get(b.id)

@@ -43,14 +43,22 @@ type Shape = (typeof SHAPES)[number]['value']
 const fmt = (s: number) => `${String(Math.floor(s / 60))}:${(s % 60).toFixed(1).padStart(4, '0')}`
 let boxSeq = 0
 
-/** The player and the box tool: draw on the picture to add a box, drag one to move it. */
-function BoxCanvas(props: {
-  media: Media
+/** The player and the box tool: draw on the picture to add a box, drag one to move it (setup and the editor). */
+export function BoxCanvas(props: {
+  media: {
+    width: number | null
+    height: number | null
+    durationSec: number | null
+    src?: string | undefined
+    poster?: string | null
+  }
   boxes: SetupBox[]
   selected: string | null
   onSelect: (id: string | null) => void
   onChange: (boxes: SetupBox[]) => void
   videoRef: React.RefObject<HTMLVideoElement | null>
+  /** The id a newly drawn box gets (the editor's eN); setup numbers its own. */
+  newId?: () => string
 }) {
   const area = useRef<HTMLDivElement>(null)
   const drag = useRef<{ mode: 'draw' | 'move'; id: string; x0: number; y0: number; box: SetupBox } | null>(
@@ -83,7 +91,7 @@ function BoxCanvas(props: {
       }}
       onPointerDown={(e) => {
         const p = at(e)
-        const id = `box${String(++boxSeq)}`
+        const id = props.newId ? props.newId() : `box${String(++boxSeq)}`
         const box: SetupBox = { id, x: p.x, y: p.y, w: 0, h: 0, start: 0, end: duration }
         drag.current = { mode: 'draw', id, x0: p.x, y0: p.y, box }
         props.onChange([...props.boxes, box])
@@ -118,8 +126,8 @@ function BoxCanvas(props: {
     >
       <video
         ref={props.videoRef}
-        src={props.media.urls?.original}
-        poster={props.media.urls?.poster ?? undefined}
+        src={props.media.src}
+        poster={props.media.poster ?? undefined}
         muted
         playsInline
         preload="metadata"
@@ -246,7 +254,7 @@ export function DemoSetup(props: { media: Media; onBack: () => void }) {
       <Card withBorder radius="lg" p="lg">
         <Stack gap="sm">
           <BoxCanvas
-            media={media}
+            media={{ ...media, src: media.urls?.original, poster: media.urls?.poster ?? null }}
             boxes={boxes}
             selected={selected}
             onSelect={setSelected}

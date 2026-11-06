@@ -1,3 +1,4 @@
+import { HiddenList } from '../components/recording/HiddenList'
 import {
   ActionIcon,
   Alert,
@@ -1455,6 +1456,7 @@ export function VideoPage() {
           {/* Where this version is published comes first, right under the actions; then the versions. */}
           <PublicLink video={data} v={v} canPublish={canPublish} />
           <PublishedTo v={v} canPublish={canPublish} />
+          {v.recording ? <HiddenList video={data} v={v} canCheck={canPublish} /> : null}
           <Filmstrip video={data} selected={v.n} onSelect={select} onDetails={setDetailsN} />
           {v.status === 'ready' ? <TranscriptEditor videoId={data.id} v={v} canEdit={canPublish} /> : null}
           <DetailsCard video={data} v={v} onOpen={() => setDetailsN(v.n)} />

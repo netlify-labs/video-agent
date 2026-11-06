@@ -992,6 +992,26 @@ export function resources(t: Transport) {
         ),
     },
     videos: {
+      /** Mark hidden areas checked (`confirmHiddenAreas`) */
+      confirmHidden: (
+        id: string | number,
+        n: string | number,
+        input: Input<'/api/v1/videos/{id}/versions/{n}/hidden/confirm', 'post'>,
+        opts?: CallOptions,
+      ): Promise<Ok<'/api/v1/videos/{id}/versions/{n}/hidden/confirm', 'post'>> =>
+        t.call<Ok<'/api/v1/videos/{id}/versions/{n}/hidden/confirm', 'post'>>(
+          {
+            method: 'POST',
+            path: '/api/v1/videos/{id}/versions/{n}/hidden/confirm',
+            pathParams: { id, n },
+            input,
+            query: [],
+            body: ['ids'],
+            features: [...['screen_recording']],
+            operationId: 'confirmHiddenAreas',
+          },
+          opts,
+        ),
       /** Create a video (`createVideo`) */
       create: (
         input: Input<'/api/v1/videos', 'post'>,

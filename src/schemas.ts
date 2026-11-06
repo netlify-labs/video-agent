@@ -1583,6 +1583,27 @@ const CompositionSchema = z
             description:
               "The beat's AI voice-over clip, in seconds into the beat; null when it has none. A changed line may lengthen its beat when re-voiced",
           }),
+        recording: z
+          .object({
+            step: z.string(),
+            slot: z.string(),
+            src: z.string(),
+            in: z.number().describe('Source seconds the scene shows from'),
+            out: z.number().describe('Source seconds the scene shows to'),
+            rate: z.number().describe('Playback speed (1 = real time)'),
+            camera: z.array(z.unknown()).describe('[t, x, y, zoom, ease?] keys, in source seconds'),
+            cursor: z.object({ style: z.string(), size: z.number().nullable(), path: z.string().nullable() }),
+            clicks: z.array(z.unknown()).describe('[t, x, y] clicks, in source seconds'),
+            redact: z
+              .array(z.unknown())
+              .describe(
+                "The scene's own hidden areas (the agent's and the editor's); the locked ones are on the Edit",
+              ),
+            locked: z.string().nullable(),
+            hold: z.object({ seconds: z.number() }).nullable(),
+          })
+          .optional()
+          .openapi({ description: 'A recording scene (a demo): what it shows of the recording and how' }),
       }),
     ),
     layers: z.array(z.string()),
@@ -1631,6 +1652,21 @@ export const EditSchema = z
     newerVersion: z.number().int().nullable().openapi({
       description: 'A newer version exists: start from it, or render this draft as the next version',
     }),
+    recording: z
+      .object({
+        duration: z.number().describe("The recording's length in seconds"),
+        trace: z.boolean().describe('Made with a pointer trace: the smooth cursor is available'),
+        locked: z
+          .array(z.record(z.string(), z.unknown()))
+          .describe("Hidden areas from the pointer trace and the demo's setup: shown, never removable"),
+        camera: z
+          .record(z.string(), z.array(z.unknown()))
+          .describe("The planner's camera per step ([t, x, y, zoom, ease?] keys), for Auto"),
+        zoomMax: z.number().describe('The most the camera may zoom and stay sharp'),
+      })
+      .nullable()
+      .optional()
+      .openapi({ description: 'A demo: the recording facts the editor needs; null for any other video' }),
     narrationChanged: z
       .object({
         inVersion: z.number().int(),
@@ -1648,6 +1684,17 @@ export const EditSchema = z
       }),
   })
   .openapi('Edit')
+export const ConfirmHiddenSchema = z
+  .object({
+    ids: z
+      .array(z.string().min(1).max(24))
+      .min(1)
+      .max(500)
+      .openapi({
+        description: "The hidden areas' ids (from the version's recording.hidden) that look right",
+      }),
+  })
+  .openapi('ConfirmHidden')
 export const RebaseNarrationSchema = z
   .object({
     toN: z.number().int().min(1).openapi({ description: 'The version to move your narration onto' }),

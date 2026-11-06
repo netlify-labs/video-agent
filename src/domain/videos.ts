@@ -1607,6 +1607,41 @@ export async function setFavorite(deps: Deps, principal: Principal, jobId: strin
   await deps.store.setFavorite(principal.userId, jobId, on, deps.clock.now().toISOString())
 }
 
+/**
+ * Looks right (screen-recording plan §8.1; va-rsk5.4.3): the owner or an admin marks a demo's hidden areas checked,
+ * by id (every scene an area spans). Unknown ids are refused; the video DTO comes back with checkedBy and checkedAt set.
+ */
+export async function confirmHiddenAreas(
+  deps: Deps,
+  principal: Principal,
+  jobId: string,
+  n: number,
+  input: { ids: string[] },
+) {
+  return deps.store.tx(async (repo) => {
+    const job = await loadJob(repo, principal, jobId)
+    assertCan(principal, 'video:publish', { ownerId: job.ownerId })
+    const v = await repo.getVersion(jobId, n)
+    if (!v?.recording) throw new ApiError('not_found', 'This version has no recording.')
+    const known = new Set(v.recording.hidden.map((h) => h.id))
+    const unknown = input.ids.filter((id) => !known.has(id))
+    if (unknown.length)
+      throw new ApiError('invalid_request', `No hidden area ${unknown.join(', ')} in version ${String(n)}.`)
+    const now = deps.clock.now().toISOString()
+    const ids = new Set(input.ids)
+    await repo.updateVersion(jobId, n, {
+      recording: {
+        ...v.recording,
+        hidden: v.recording.hidden.map((h) =>
+          ids.has(h.id) ? { ...h, checkedBy: principal.userId, checkedAt: now } : h,
+        ),
+      },
+    })
+    deps.log.info('recording.hidden_confirmed', { jobId, versionN: n, ids: input.ids })
+    return videoDto(repo, deps, jobId, principal)
+  })
+}
+
 /** Approved / Changes requested on a ready version (plan v2 §3, §14 rule 8). Never on your own version. */
 export async function setVerdict(
   deps: Deps,

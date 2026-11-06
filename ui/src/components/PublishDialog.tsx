@@ -1,6 +1,7 @@
 // Publishing a version. One with a recorded narration's transcript asks first whether the share page shows it
 // (plan 2026-11-02 §6.7, §12.5): a separate consent from publishing the audio, off by default, with a preview of what
 // would be shown, and the choice remembered per person in this browser.
+import { COSMETIC_NOTE, uncheckedAgentAreas } from './recording/HiddenList'
 import { Button, Group, Modal, ScrollArea, Stack, Switch, Text } from '@mantine/core'
 import { useEffect, useState } from 'react'
 import type { Version } from '../api/client'
@@ -37,29 +38,62 @@ export function PublishButton({
 }) {
   const [open, setOpen] = useState(false)
   const transcriptUrl = v.links.transcript
+  // A demo: the dialog says what Video Agent hid that nobody has checked, and that hiding is cosmetic.
+  const demo = v.recording ? { unchecked: uncheckedAgentAreas(v).length } : null
   return (
     <>
       <Button
         loading={loading}
         onClick={() => {
-          if (transcriptUrl) setOpen(true)
+          if (transcriptUrl || demo) setOpen(true)
           else onPublish({})
         }}
       >
         Publish v{v.n}
       </Button>
-      {transcriptUrl ? (
+      {transcriptUrl || demo ? (
         <Modal opened={open} onClose={() => setOpen(false)} title={`Publish v${v.n}`} centered>
-          <PublishForm
-            transcriptUrl={transcriptUrl}
-            userId={userId}
-            onCancel={() => setOpen(false)}
-            onPublish={(show) => {
-              remember(userId, show)
-              setOpen(false)
-              onPublish({ showTranscript: show })
-            }}
-          />
+          <Stack gap="md">
+            {demo ? (
+              <Stack gap={4} data-testid="publish-demo-note">
+                {demo.unchecked ? (
+                  <Text size="sm" fw={500}>
+                    Video Agent hid {demo.unchecked} {demo.unchecked === 1 ? 'thing' : 'things'} it thought
+                    were private. Check them in the Hidden list before you publish.
+                  </Text>
+                ) : null}
+                <Text size="sm" c="var(--va-muted)">
+                  {COSMETIC_NOTE}
+                </Text>
+              </Stack>
+            ) : null}
+            {transcriptUrl ? (
+              <PublishForm
+                transcriptUrl={transcriptUrl}
+                userId={userId}
+                onCancel={() => setOpen(false)}
+                onPublish={(show) => {
+                  remember(userId, show)
+                  setOpen(false)
+                  onPublish({ showTranscript: show })
+                }}
+              />
+            ) : (
+              <Group justify="flex-end">
+                <Button variant="default" onClick={() => setOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => {
+                    setOpen(false)
+                    onPublish({})
+                  }}
+                >
+                  Publish
+                </Button>
+              </Group>
+            )}
+          </Stack>
         </Modal>
       ) : null}
     </>

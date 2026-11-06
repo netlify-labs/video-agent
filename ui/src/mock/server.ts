@@ -8,6 +8,8 @@ import type { NarrationOp, Span } from '../../../src/lib/timeline'
 import plainHtml from '../../../test/fixtures/contract1/index.html?raw'
 import musicHtml from '../../../test/fixtures/contract1-music/index.html?raw'
 import contractSummary from '../../../test/fixtures/contract1/summary.json'
+import demoHtml from '../../../test/fixtures/contract1-recording/index.html?raw'
+import demoSummary from '../../../test/fixtures/contract1-recording/summary.json'
 import voiceHtml from '../../../test/fixtures/contract1-voice/index.html?raw'
 import voiceSummary from '../../../test/fixtures/contract1-voice/summary.json'
 import voiceFile from '../../../test/fixtures/contract1-voice/assets/voice/voice.json'
@@ -2054,6 +2056,8 @@ let mockEditHtml: string | null = null
  * localStorage.mockVoice=1 the copy that also has a voice-over in two beats.
  */
 function contractHtml() {
+  // localStorage.mockDemo: the version is a demo (an intro, one recording scene, an outro): the recording panels.
+  if (localStorage.getItem('mockDemo')) return demoHtml
   const voice = !!localStorage.getItem('mockVoice')
   // localStorage.mockCode: the opening scene has a syntax-highlighted code block, one field per line.
   if (localStorage.getItem('mockCode'))
@@ -2069,7 +2073,39 @@ function contractHtml() {
     mockMedia.push({ ...mockItem('Upbeat theme.mp3', 'audio', 2_400_000), id: 'med_theme01' })
   return voice ? voiceHtml : musicHtml
 }
-const mockSummary = () => (localStorage.getItem('mockVoice') ? voiceSummary : contractSummary)
+const mockSummary = () =>
+  localStorage.getItem('mockDemo')
+    ? demoSummary
+    : localStorage.getItem('mockVoice')
+      ? voiceSummary
+      : contractSummary
+/** A demo's recording facts, as the server reads them from the bundle (with mockDemo). */
+const mockEditRecording = () =>
+  localStorage.getItem('mockDemo')
+    ? {
+        duration: 20,
+        trace: true,
+        locked: [
+          {
+            id: 's1',
+            origin: 'setup',
+            start: 0,
+            end: 20,
+            reason: 'Hidden by you',
+            boxes: [[0, 0.8, 0, 0.2, 0.08]],
+          },
+        ],
+        camera: {
+          'add-site': [
+            [2, 0.5, 0.5, 1],
+            [3.4, 0.6, 0.31, 1.9, 'power2.inOut'],
+            [10.9, 0.6, 0.31, 1.9],
+            [12, 0.5, 0.5, 1, 'power2.inOut'],
+          ],
+        },
+        zoomMax: 2.2,
+      }
+    : null
 /** The voiced fixture's spoken lines, as the server reads them from voice.json. */
 const mockNarration = () =>
   localStorage.getItem('mockVoice')
@@ -2089,6 +2125,7 @@ function newMockEdit(videoId: string, baseN: number) {
     expiresAt: new Date(Date.now() + 7 * 86400_000).toISOString(),
     renderedN: null as number | null,
     newerVersion: null,
+    recording: mockEditRecording(),
     // localStorage.mockNarrationChanged=1: Ada changed the narration in a newer version 10 minutes ago.
     narrationChanged: localStorage.getItem('mockNarrationChanged')
       ? {

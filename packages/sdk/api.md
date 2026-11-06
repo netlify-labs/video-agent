@@ -316,6 +316,8 @@ export declare function resources(t: Transport): {
         unpublish: (id: string | number, n: string | number, opts?: CallOptions) => Promise<undefined>;
     };
     videos: {
+        /** Mark hidden areas checked (`confirmHiddenAreas`) */
+        confirmHidden: (id: string | number, n: string | number, input: Input<"/api/v1/videos/{id}/versions/{n}/hidden/confirm", "post">, opts?: CallOptions) => Promise<Ok<"/api/v1/videos/{id}/versions/{n}/hidden/confirm", "post">>;
         /** Create a video (`createVideo`) */
         create: (input: Input<"/api/v1/videos", "post">, opts?: CallOptions) => Promise<Ok<"/api/v1/videos", "post">>;
         /** Delete a video (`deleteVideo`) */

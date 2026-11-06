@@ -20,6 +20,7 @@ import {
   publishVersion,
   updateVideo,
   setVerdict,
+  confirmHiddenAreas,
   transferVideos,
   loadJob,
   retryVersion,
@@ -1158,6 +1159,28 @@ export function createApp(deps: Deps, opts: AppOptions) {
     }),
     async (c) =>
       c.json(await destinationFiles(deps, c.req.valid('param').id, bearer(c), await smallBody(c)), 200),
+  )
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/v1/videos/{id}/versions/{n}/hidden/confirm',
+      operationId: 'confirmHiddenAreas',
+      'x-sdk': { resource: 'videos', method: 'confirmHidden', feature: 'screen_recording' },
+      summary: 'Mark hidden areas checked',
+      description:
+        "A demo's Looks right: marks these hidden areas (ids from the version's recording.hidden) as checked by you, with the time. Owner or admin. 400 for an id the version doesn't have; 404 when the version has no recording.",
+      tags: ['versions'],
+      security,
+      request: {
+        params: VersionParam,
+        body: { content: { 'application/json': { schema: s.ConfirmHiddenSchema } }, required: true },
+      },
+      responses: { 200: json(s.VideoSchema, 'Updated'), ...errors },
+    }),
+    async (c) => {
+      const p = c.req.valid('param')
+      return c.json(await confirmHiddenAreas(deps, c.get('principal'), p.id, p.n, c.req.valid('json')), 200)
+    },
   )
   app.openapi(
     createRoute({

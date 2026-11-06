@@ -3427,6 +3427,25 @@
           }
         }
       },
+      "ConfirmHidden": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 24
+            },
+            "minItems": 1,
+            "maxItems": 500,
+            "description": "The hidden areas' ids (from the version's recording.hidden) that look right"
+          }
+        },
+        "required": [
+          "ids"
+        ]
+      },
       "SetVerdict": {
         "type": "object",
         "properties": {
@@ -5583,6 +5602,50 @@
             ],
             "description": "A newer version exists: start from it, or render this draft as the next version"
           },
+          "recording": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "duration": {
+                "type": "number",
+                "description": "The recording's length in seconds"
+              },
+              "trace": {
+                "type": "boolean",
+                "description": "Made with a pointer trace: the smooth cursor is available"
+              },
+              "locked": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": {}
+                },
+                "description": "Hidden areas from the pointer trace and the demo's setup: shown, never removable"
+              },
+              "camera": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "array",
+                  "items": {}
+                },
+                "description": "The planner's camera per step ([t, x, y, zoom, ease?] keys), for Auto"
+              },
+              "zoomMax": {
+                "type": "number",
+                "description": "The most the camera may zoom and stay sharp"
+              }
+            },
+            "required": [
+              "duration",
+              "trace",
+              "locked",
+              "camera",
+              "zoomMax"
+            ],
+            "description": "A demo: the recording facts the editor needs; null for any other video"
+          },
           "narrationChanged": {
             "type": [
               "object",
@@ -6069,6 +6132,107 @@
                     "duration"
                   ],
                   "description": "The beat's AI voice-over clip, in seconds into the beat; null when it has none. A changed line may lengthen its beat when re-voiced"
+                },
+                "recording": {
+                  "type": "object",
+                  "properties": {
+                    "step": {
+                      "type": "string"
+                    },
+                    "slot": {
+                      "type": "string"
+                    },
+                    "src": {
+                      "type": "string"
+                    },
+                    "in": {
+                      "type": "number",
+                      "description": "Source seconds the scene shows from"
+                    },
+                    "out": {
+                      "type": "number",
+                      "description": "Source seconds the scene shows to"
+                    },
+                    "rate": {
+                      "type": "number",
+                      "description": "Playback speed (1 = real time)"
+                    },
+                    "camera": {
+                      "type": "array",
+                      "items": {},
+                      "description": "[t, x, y, zoom, ease?] keys, in source seconds"
+                    },
+                    "cursor": {
+                      "type": "object",
+                      "properties": {
+                        "style": {
+                          "type": "string"
+                        },
+                        "size": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "path": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "style",
+                        "size",
+                        "path"
+                      ]
+                    },
+                    "clicks": {
+                      "type": "array",
+                      "items": {},
+                      "description": "[t, x, y] clicks, in source seconds"
+                    },
+                    "redact": {
+                      "type": "array",
+                      "items": {},
+                      "description": "The scene's own hidden areas (the agent's and the editor's); the locked ones are on the Edit"
+                    },
+                    "locked": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "hold": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "seconds": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "seconds"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "step",
+                    "slot",
+                    "src",
+                    "in",
+                    "out",
+                    "rate",
+                    "camera",
+                    "cursor",
+                    "clicks",
+                    "redact",
+                    "locked",
+                    "hold"
+                  ],
+                  "description": "A recording scene (a demo): what it shows of the recording and how"
                 }
               },
               "required": [
@@ -11543,6 +11707,120 @@
                   "required": [
                     "files"
                   ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/videos/{id}/versions/{n}/hidden/confirm": {
+      "post": {
+        "operationId": "confirmHiddenAreas",
+        "x-sdk": {
+          "resource": "videos",
+          "method": "confirmHidden",
+          "feature": "screen_recording"
+        },
+        "summary": "Mark hidden areas checked",
+        "description": "A demo's Looks right: marks these hidden areas (ids from the version's recording.hidden) as checked by you, with the time. Owner or admin. 400 for an id the version doesn't have; 404 when the version has no recording.",
+        "tags": [
+          "versions"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "required": true,
+            "name": "n",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmHidden"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Video"
                 }
               }
             }

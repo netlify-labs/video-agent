@@ -583,6 +583,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/videos/{id}/versions/{n}/hidden/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark hidden areas checked
+         * @description A demo's Looks right: marks these hidden areas (ids from the version's recording.hidden) as checked by you, with the time. Owner or admin. 400 for an id the version doesn't have; 404 when the version has no recording.
+         */
+        post: operations["confirmHiddenAreas"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/videos/{id}/versions/{n}/verdict": {
         parameters: {
             query?: never;
@@ -2779,6 +2799,10 @@ export interface components {
             optionsSchema?: unknown;
             sharePublisherContact?: boolean;
         };
+        ConfirmHidden: {
+            /** @description The hidden areas' ids (from the version's recording.hidden) that look right */
+            ids: string[];
+        };
         SetVerdict: {
             verdict: components["schemas"]["Verdict"];
             note?: string;
@@ -3301,6 +3325,23 @@ export interface components {
             renderedN: number | null;
             /** @description A newer version exists: start from it, or render this draft as the next version */
             newerVersion: number | null;
+            /** @description A demo: the recording facts the editor needs; null for any other video */
+            recording?: {
+                /** @description The recording's length in seconds */
+                duration: number;
+                /** @description Made with a pointer trace: the smooth cursor is available */
+                trace: boolean;
+                /** @description Hidden areas from the pointer trace and the demo's setup: shown, never removable */
+                locked: {
+                    [key: string]: unknown;
+                }[];
+                /** @description The planner's camera per step ([t, x, y, zoom, ease?] keys), for Auto */
+                camera: {
+                    [key: string]: unknown[];
+                };
+                /** @description The most the camera may zoom and stay sharp */
+                zoomMax: number;
+            } | null;
             /** @description The newest ready version's narration differs from this draft's base: rebase onto it (rebase-narration), or keep yours */
             narrationChanged: {
                 inVersion: number;
@@ -3417,6 +3458,33 @@ export interface components {
                     start: number;
                     duration: number;
                 } | null;
+                /** @description A recording scene (a demo): what it shows of the recording and how */
+                recording?: {
+                    step: string;
+                    slot: string;
+                    src: string;
+                    /** @description Source seconds the scene shows from */
+                    in: number;
+                    /** @description Source seconds the scene shows to */
+                    out: number;
+                    /** @description Playback speed (1 = real time) */
+                    rate: number;
+                    /** @description [t, x, y, zoom, ease?] keys, in source seconds */
+                    camera: unknown[];
+                    cursor: {
+                        style: string;
+                        size: number | null;
+                        path: string | null;
+                    };
+                    /** @description [t, x, y] clicks, in source seconds */
+                    clicks: unknown[];
+                    /** @description The scene's own hidden areas (the agent's and the editor's); the locked ones are on the Edit */
+                    redact: unknown[];
+                    locked: string | null;
+                    hold: {
+                        seconds: number;
+                    } | null;
+                };
             }[];
             layers: string[];
             audio: {
@@ -6224,6 +6292,78 @@ export interface operations {
                             [key: string]: unknown;
                         }[];
                     };
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict or not ready */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    confirmHiddenAreas: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                n: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmHidden"];
+            };
+        };
+        responses: {
+            /** @description Updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Video"];
                 };
             };
             /** @description Invalid request */

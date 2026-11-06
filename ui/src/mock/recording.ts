@@ -87,6 +87,7 @@ const sessions = new Map<string, { id: string; filename: string; size: number; p
 
 declare global {
   interface Window {
+    __mockDemoConfirms?: string[][]
     __mockDemoCreates?: unknown[]
     __mockTraces?: Record<string, unknown>
   }
@@ -175,6 +176,20 @@ export async function recordingRoute(
     const body = (await res.json()) as { items: unknown[]; nextCursor: string | null }
     return json({ ...body, items: [...recordings, ...body.items] }, res.status)
   }
+  // mockDemo: a video is a demo, its versions made from a recording with a Hidden list (one area unchecked).
+  // mockDemo=1 makes vid_teaser the demo; mockDemo=<video id> makes that one.
+  const demoId = setting('mockDemo') === '1' ? 'vid_teaser' : setting('mockDemo')
+  if (demoId) {
+    if (p.startsWith(`/api/v1/videos/${demoId}/versions/`) && p.endsWith('/hidden/confirm')) {
+      if (method === 'POST') {
+        const b = (await readJson(init, input)) as { ids?: string[] }
+        for (const id of b.ids ?? []) checked.add(id)
+        window.__mockDemoConfirms = [...(window.__mockDemoConfirms ?? []), b.ids ?? []]
+        return withDemo(await window.fetch(`/api/v1/videos/${demoId}`))
+      }
+    }
+    if (p === `/api/v1/videos/${demoId}` && method === 'GET') return withDemo(await inner())
+  }
   if (p === '/api/v1/videos' && method === 'POST') {
     const b = await readJson(init, input)
     if (!b.recording) return null
@@ -207,4 +222,54 @@ const session = (s: { id: string; filename: string; size: number; parts: Set<num
 function recreate(input: RequestInfo | URL, init: RequestInit | undefined, body: Record<string, unknown>) {
   const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined))
   return window.fetch('/api/v1/videos', { method: 'POST', headers, body: JSON.stringify(body) })
+}
+
+/** Hidden areas checked with Looks right (mockDemo). */
+const checked = new Set<string>()
+const demoHidden = () =>
+  [
+    {
+      id: 's1',
+      source: 'setup',
+      beat: 'add-site',
+      start: 0,
+      end: 20,
+      reason: 'Hidden by you',
+      why: 'You drew it',
+    },
+    {
+      id: 'p1',
+      source: 'agent',
+      beat: 'add-site',
+      start: 3,
+      end: 9,
+      reason: 'Privacy mode: email',
+      why: 'Privacy mode: email',
+    },
+  ].map((h) => ({
+    ...h,
+    checkedBy: checked.has(h.id) ? 'u_sam' : null,
+    checkedAt: checked.has(h.id) ? new Date().toISOString() : null,
+  }))
+
+/** The video as a demo: every version made from a recording, with its summary and Hidden list. */
+async function withDemo(res: Response) {
+  const v = (await res.json()) as { versions: Record<string, unknown>[] }
+  return json(
+    {
+      ...v,
+      versions: v.versions.map((ver) => ({
+        ...ver,
+        recording: {
+          mediaId: 'med_screen_trace',
+          trace: true,
+          compose: false,
+          privacy: true,
+          summary: { sourceSec: 75, steps: 3, cutSec: 31, spedUpSec: 6, redactionsAdded: 1 },
+          hidden: demoHidden(),
+        },
+      })),
+    },
+    res.status,
+  )
 }

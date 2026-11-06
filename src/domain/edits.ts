@@ -64,6 +64,7 @@ import { canonical, narrationChangedSince } from './narration-stale.js'
 import type { Repo } from '../store/types.js'
 import { type EditRow, type MediaRow, type TranscriptionProvider, type VersionRow } from './types.js'
 import { hasUnfinished, loadJob, newAttempt, videoDto, withIdempotency } from './videos.js'
+import { LOCKED_SRC, parseRedactScript } from '../lib/recording.js'
 import { inheritRecording } from './demo-recording.js'
 
 export const EDIT_TTL_MS = 7 * 24 * 3600_000
@@ -245,6 +246,16 @@ export function paletteOf(colors: Record<string, string>) {
   return [...new Set([...Object.values(colors), contextMeta.primaryColor].map((c) => c.trim().toLowerCase()))]
 }
 
+/** What the editor's recording panels need about a demo (read from the version's bundle). */
+interface EditRecording {
+  duration: number
+  trace: boolean
+  locked: Record<string, unknown>[]
+  camera: Record<string, (number | string)[][]>
+  /** The most the camera may zoom and stay sharp (the plan's, after sharpZoomMax). */
+  zoomMax: number
+}
+
 /**
  * Applies the ops to the base (in memory). Throws ApiError (400, with the contract violations) when an edit would
  * break the composition. Inside a transaction, `repo` is its handle.
@@ -384,7 +395,28 @@ async function computeRev(
     picks.push(m.id)
   }
   const list = [...entries.values()]
+  // A demo: the recording's facts for the editor's panels, from the bundle's own files.
+  let recording: EditRecording | null = null
+  if (/class="[^"]*\bva-recording\b/.test(html)) {
+    const analysis = JSON.parse((await read('assets/recording/analysis.json')) || '{}') as {
+      source?: { duration?: number }
+      cursorSource?: string
+    }
+    const plan = JSON.parse((await read('assets/recording/plan.json')) || '{}') as {
+      zoomMax?: number
+      steps?: { id: string; camera: (number | string)[][] }[]
+    }
+    const locked = parseRedactScript(await read(LOCKED_SRC))
+    recording = {
+      duration: analysis.source?.duration ?? 0,
+      trace: analysis.cursorSource === 'trace',
+      locked: locked.ok ? (locked.entries as unknown as Record<string, unknown>[]) : [],
+      camera: Object.fromEntries((plan.steps ?? []).map((st) => [st.id, st.camera])),
+      zoomMax: plan.zoomMax ?? 2.2,
+    }
+  }
   return {
+    recording,
     changed,
     list,
     picks,
@@ -479,6 +511,7 @@ async function editDto(deps: Deps, e: EditRow, built?: Rev, repo: Repo = deps.st
     renderedN: e.renderedN,
     // Someone else rendered (or revised) since this draft started: "start from vN, or render yours as vN+1".
     newerVersion: job && job.latestVersion > e.baseN ? job.latestVersion : null,
+    recording: b.recording,
     // A newer version changed the narration since this draft's base: Rebase onto it, or Keep mine.
     narrationChanged: await narrationChangedSince(repo, e),
   }
