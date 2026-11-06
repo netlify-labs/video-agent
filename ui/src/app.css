@@ -94,6 +94,46 @@ main.va-shell-main {
 .va-navlink[data-active] .mantine-NavLink-label {
   color: var(--va-text);
 }
+/* The API docs pages: indented under a guide line that starts below the book icon, smaller and quieter than the
+   main links, with small group labels. */
+.va-subnav {
+  margin: 2px 0 6px 20px;
+  padding-left: 10px;
+  border-left: 1px solid var(--va-rule);
+}
+.va-subnav-group {
+  padding: 10px 8px 2px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--va-faint);
+}
+.va-subnav > :first-child .va-subnav-group {
+  padding-top: 4px;
+}
+.va-subnav-link {
+  min-height: 30px;
+  padding: 5px 8px;
+  border-radius: var(--mantine-radius-sm);
+  color: var(--va-muted);
+}
+.va-subnav-link .mantine-NavLink-label {
+  font-size: 13px;
+}
+.va-subnav-link:hover {
+  background: var(--va-surface);
+  color: var(--va-text);
+}
+.va-subnav-link[data-active],
+.va-subnav-link[data-active]:hover {
+  background: var(--va-raised);
+  color: var(--va-text);
+}
+.va-subnav-link[data-active] .mantine-NavLink-label {
+  color: var(--va-text);
+  font-weight: 500;
+}
 .va-avatar {
   width: 32px;
   height: 32px;

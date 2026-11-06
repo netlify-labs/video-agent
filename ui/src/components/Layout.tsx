@@ -5,7 +5,6 @@ import {
   Group,
   Menu,
   NavLink,
-  Text,
   Tooltip,
   UnstyledButton,
   useComputedColorScheme,
@@ -59,13 +58,13 @@ export function Layout() {
     if (onDocs) setDocsOpened(true)
   }
 
-  const link = (to: string, label: string, icon?: React.ReactNode) => (
+  const link = (to: string, label: string, icon?: React.ReactNode, className = 'va-navlink') => (
     <NavLink
       component={RouterLink}
       to={to}
       label={label}
       leftSection={icon}
-      className="va-navlink"
+      className={className}
       active={to === '/' ? pathname === '/' || pathname.startsWith('/videos') : pathname.startsWith(to)}
       onClick={close}
     />
@@ -163,21 +162,24 @@ export function Layout() {
           opened={docsOpened}
           onChange={setDocsOpened}
           active={onDocs && !docsOpened}
-          childrenOffset={28}
+          childrenOffset={0}
         >
-          {DOCS_GROUPS.map((group) => {
-            const pages = DOCS_PAGES.filter((p) => p.group === group)
-            return pages.length ? (
-              <div key={group} role="group" aria-label={group}>
-                <Text size="xs" c="dimmed" fw={600} tt="uppercase" px="sm" pt={6} pb={2} aria-hidden>
-                  {group}
-                </Text>
-                {pages.map((p) => (
-                  <Fragment key={p.path}>{link(p.path, p.label)}</Fragment>
-                ))}
-              </div>
-            ) : null
-          })}
+          {/* A quieter, compact list under a guide line, so the docs pages read as part of API docs. */}
+          <div className="va-subnav">
+            {DOCS_GROUPS.map((group) => {
+              const pages = DOCS_PAGES.filter((p) => p.group === group)
+              return pages.length ? (
+                <div key={group} role="group" aria-label={group}>
+                  <div className="va-subnav-group" aria-hidden>
+                    {group}
+                  </div>
+                  {pages.map((p) => (
+                    <Fragment key={p.path}>{link(p.path, p.label, undefined, 'va-subnav-link')}</Fragment>
+                  ))}
+                </div>
+              ) : null
+            })}
+          </div>
         </NavLink>
         <PoweredBy inSidebar />
       </AppShell.Navbar>
