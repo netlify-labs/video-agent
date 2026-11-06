@@ -1,10 +1,12 @@
 // Builds every public workspace package under packages/ (cli-and-sdk plan §3): esbuild bundles src/ to ESM in dist/,
 // then tsc writes the .d.ts files. A CLI's src/bin.ts starts with its shebang, which esbuild keeps. Private packages
-// (the GitHub Action) build themselves.
+// (the GitHub Action) build themselves. The CLI also gets its local-mode runtime in dist/runtime/
+// (scripts/lib/cli-runtime.ts).
 import { execFileSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { build } from 'esbuild'
+import { buildRuntime } from './lib/cli-runtime.js'
 import { packageBuildOptions } from './lib/player-build.js'
 import { repoRoot } from './lib/run-tools.js'
 
@@ -28,5 +30,9 @@ for (const dir of readdirSync(join(repoRoot, 'packages')).sort()) {
   // Declarations only for packages that export types (the CLI is a command, not a library).
   if (pkg.exports?.['.']?.types)
     execFileSync('npx', ['tsc', '-p', join(root, 'tsconfig.build.json')], { stdio: 'inherit' })
+  if (dir === 'cli') {
+    const runtime = await buildRuntime({ repo: repoRoot, out: join(root, 'dist', 'runtime') })
+    log('cli.runtime', { ...runtime, ms: Date.now() - started })
+  }
   log('package', { name: pkg.name, ms: Date.now() - started })
 }
