@@ -3,6 +3,7 @@
 import { creditFor } from './credits.js'
 import type { Deps, RunnerSnapshot, StartRequest } from '../deps.js'
 import { RunnerError } from '../deps.js'
+import { redactSecrets, stepText } from '../lib/run-text.js'
 import { decrypt, encrypt, sha256Hex } from '../lib/crypto.js'
 import {
   RUN_MANIFEST_VERSION,
@@ -736,7 +737,8 @@ async function poll(deps: Deps, a: AttemptRow): Promise<void> {
   const now = deps.clock.now()
   if (snap.kind === 'running') {
     const patch = {
-      latestStep: snap.latestStep,
+      // The agent's last command can carry secrets (render-job's --token): stored as a label or redacted.
+      latestStep: stepText(snap.latestStep),
       usage: snap.usage,
       leaseUntil: null,
       nextActionAt: iso(now.getTime() + MIN),
@@ -833,7 +835,11 @@ async function onTerminal(deps: Deps, a: AttemptRow, snap: Extract<RunnerSnapsho
       stage,
       {
         ...base,
-        ...terminal(now, stage === 'failed' ? 'runner_failed' : null, snap.failure?.message ?? null),
+        ...terminal(
+          now,
+          stage === 'failed' ? 'runner_failed' : null,
+          snap.failure?.message ? redactSecrets(snap.failure.message) : null,
+        ),
       },
       now.toISOString(),
     )

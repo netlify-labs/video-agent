@@ -4,6 +4,7 @@
 // reached, the last known value comes back marked stale.
 import type { Deps } from '../deps.js'
 import { decrypt } from '../lib/crypto.js'
+import { redactSecrets, stepText } from '../lib/run-text.js'
 import { assertCan, type Principal } from './policy.js'
 import { getSettings } from './settings.js'
 import type { AttemptRow, Stage } from './types.js'
@@ -52,7 +53,7 @@ function fromRow(a: AttemptRow, stale: boolean): Progress {
     attemptId: a.id,
     versionN: a.versionN,
     stage: a.stage,
-    step: a.latestStep,
+    step: stepText(a.latestStep),
     steps: a.usage?.stepsCount ?? null,
     credits: a.usage?.totalCreditsCost ?? null,
     music: musicPickDto(a.musicPick),
@@ -67,7 +68,7 @@ function fromCache(a: AttemptRow, c: CacheEntry, stale: boolean): Progress {
     attemptId: a.id,
     versionN: a.versionN,
     stage: a.stage,
-    step: c.step ?? a.latestStep,
+    step: stepText(c.step ?? a.latestStep),
     steps: c.steps ?? a.usage?.stepsCount ?? null,
     credits: c.credits ?? a.usage?.totalCreditsCost ?? null,
     music: musicPickDto(a.musicPick),
@@ -97,7 +98,7 @@ export async function getProgress(deps: Deps, p: Principal, jobId: string): Prom
     checkpoint: c
       ? {
           seq: c.seq,
-          message: c.message,
+          message: c.message === null ? null : redactSecrets(c.message),
           renderPercent: c.renderPercent,
           at: c.createdAt,
           hasBundle: c.bundleKey !== null,
@@ -152,7 +153,7 @@ async function snapshotProgress(deps: Deps, p: Principal, jobId: string): Promis
     const entry: CacheEntry = {
       observedAt: deps.clock.now().getTime(),
       fetchingUntil: 0,
-      step: snap.kind === 'running' ? (snap.latestStep ?? lease.step) : lease.step,
+      step: snap.kind === 'running' ? (stepText(snap.latestStep) ?? lease.step) : lease.step,
       steps: snap.usage?.stepsCount ?? lease.steps,
       credits: snap.usage?.totalCreditsCost ?? lease.credits,
     }

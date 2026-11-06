@@ -1,5 +1,6 @@
 // Creating, revising, retrying, cancelling, renaming, deleting and publishing videos.
 import type { Deps } from '../deps.js'
+import { redactSecrets, stepText } from '../lib/run-text.js'
 import { sha256Hex } from '../lib/crypto.js'
 import { clip } from '../lib/log.js'
 import type { PreviewFile, Previews } from '../lib/media/previews.js'
@@ -1244,9 +1245,12 @@ function versionDto(
     createdAt: v.createdAt,
     attempts: attemptsCount,
     stage: a?.stage ?? null,
-    latestStep: a?.latestStep ?? null,
+    // Redacted here too: rows stored before run text was redacted at the source.
+    latestStep: stepText(a?.latestStep),
     music: musicPickDto(a?.musicPick),
-    error: a?.errorCategory ? { category: a.errorCategory, message: a.errorMessage ?? '' } : null,
+    error: a?.errorCategory
+      ? { category: a.errorCategory, message: redactSecrets(a.errorMessage ?? '') }
+      : null,
     agent: a
       ? {
           agent: a.agent,

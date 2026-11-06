@@ -6,6 +6,7 @@ import type { Deps } from '../deps.js'
 import { safeEqual, sha256Hex } from '../lib/crypto.js'
 import { ApiError } from '../lib/errors.js'
 import { readTarGz } from '../lib/tar.js'
+import { redactSecrets } from '../lib/run-text.js'
 import { writeLiveSnapshot } from './bundles.js'
 import type { CheckpointRow } from './types.js'
 
@@ -41,7 +42,8 @@ export async function receiveCheckpoint(
   if (newest?.id !== a.id || a.stage !== 'running')
     throw new ApiError('gone', "This attempt isn't the video's running attempt. Stop sending checkpoints.")
 
-  const message = input.message?.trim().slice(0, CHECKPOINT_MESSAGE_MAX) || null
+  // The agent writes it; people read it on the video page, so a pasted secret is redacted.
+  const message = redactSecrets(input.message?.trim().slice(0, CHECKPOINT_MESSAGE_MAX) ?? '') || null
   if (!message && input.renderPercent === undefined && !input.bundle)
     throw new ApiError('invalid_request', 'Send a message, renderPercent or a bundle.')
   let bundle: Buffer | null = null
