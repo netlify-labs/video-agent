@@ -22,6 +22,7 @@ import { notifications } from '@mantine/notifications'
 import { useQueryClient } from '@tanstack/react-query'
 import { FavoriteButton } from '../components/FavoriteButton'
 import { RemixDialog, useCanRemix } from '../components/RemixDialog'
+import { useVideoTools } from '../webmcp/videoTools'
 import { RestyleDialog, canRestyle } from '../components/RestyleDialog'
 import { useMediaKeys } from '../lib/media-keys'
 import { MediaChips, type Media } from '../components/MediaPicker'
@@ -723,6 +724,46 @@ export function VideoPage() {
       notifications.show({ color: data.status === 'ready' ? 'teal' : 'red', message: msg })
     }
   }, [data])
+
+  // WebMCP (va-qago): the same versions, player and requests the page's own controls use.
+  const shownVersion = data
+    ? (data.versions.find((x) => x.n === selected) ??
+      data.versions.find((x) => x.status === 'ready') ??
+      data.versions[0])
+    : undefined
+  const mine = data !== undefined && (me.data?.role === 'admin' || me.data?.id === data.owner.id)
+  useVideoTools({
+    video: data,
+    shown: shownVersion,
+    select,
+    player: () => (view === 'video' ? player.current : null),
+    can: {
+      create: canCreate,
+      review: me.data !== undefined && me.data.role !== 'viewer',
+      publish: mine,
+      remix: canRemix,
+    },
+    revise: async (body) => {
+      await revise.mutateAsync({
+        params: { path: { id }, header: { 'idempotency-key': newIdempotencyKey() } },
+        body,
+      })
+    },
+    publish: async (n, showTranscript) => {
+      await publish.mutateAsync({
+        params: { path: { id, n } },
+        body: showTranscript ? { showTranscript } : {},
+      })
+    },
+    unpublish: async (n) => {
+      const { error } = await fetchClient.DELETE('/api/v1/videos/{id}/versions/{n}/publish', {
+        params: { path: { id, n } },
+      })
+      if (error) throw new Error(errorMessage(error))
+      void qc.invalidateQueries()
+    },
+    refresh: () => void qc.invalidateQueries(),
+  })
 
   if (video.isLoading) {
     return (

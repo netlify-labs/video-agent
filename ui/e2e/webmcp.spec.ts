@@ -114,3 +114,67 @@ test('New video: fill_video_form fills what the person sees; create_video waits 
   expect(result).toMatchObject({ ok: true, status: 'queued' })
   await expect(page).toHaveURL(new RegExp(`/videos/${result.video_id}$`))
 })
+
+test('the video page: get_video, comments, versions and the player', async ({ page }) => {
+  await page.goto('/videos/vid_docs')
+  await waitForTools(page, ['get_video', 'list_comments', 'show_version', 'control_player', 'add_comment'])
+  // The library's tools went away with the library.
+  expect(await toolNames(page)).not.toContain('list_videos')
+  const v = await callTool<{
+    ok: boolean
+    video_id: string
+    versions: { version: number; status: string }[]
+  }>(page, 'get_video')
+  expect(v).toMatchObject({ ok: true, video_id: 'vid_docs', on_screen: 1 })
+  expect(v.versions[0]).toMatchObject({ version: 1, status: 'ready' })
+  expect(await callTool(page, 'show_version', { version: 9 })).toMatchObject({
+    ok: false,
+    error: { code: 'not_found', message: 'This video has no version 9.' },
+  })
+  const added = await callTool<{ ok: boolean; comment_id: string }>(page, 'add_comment', {
+    body: 'Slow the second step down a little.',
+    time_sec: 4,
+  })
+  expect(added.ok).toBe(true)
+  await expect(page.getByText('Slow the second step down a little.').first()).toBeVisible()
+  const comments = await callTool<{ comments: { body: string }[] }>(page, 'list_comments')
+  expect(comments.comments.map((c) => c.body)).toContain('Slow the second step down a little.')
+  expect(await callTool(page, 'control_player', { action: 'seek' })).toMatchObject({
+    ok: false,
+    error: { code: 'invalid_input', message: 'seek needs seconds.' },
+  })
+  const seek = await callTool(page, 'control_player', { action: 'seek', seconds: 2 })
+  expect(seek).toMatchObject({ ok: true, playing: false })
+})
+
+test('the video page: publish and remix wait for the person, and do what the buttons do', async ({
+  page,
+}) => {
+  await page.goto('/videos/vid_docs')
+  await waitForTools(page, ['publish_video', 'remix_video', 'revise_video', 'restyle_video'])
+  for (const name of ['publish_video', 'unpublish_video', 'remix_video', 'revise_video', 'restyle_video'])
+    expect(await annotations(page, name)).toMatchObject({ consequentialHint: true })
+  const dialog = page.getByRole('dialog', { name: /An AI agent wants to/ })
+
+  const declined = callTool(page, 'revise_video', { prompt: 'Make the end card orange.' })
+  await expect(dialog).toContainText('Make the next version from v1: "Make the end card orange."')
+  await dialog.getByRole('button', { name: "Don't allow" }).click()
+  expect(await declined).toMatchObject({ ok: false, error: { code: 'declined' } })
+
+  const published = callTool(page, 'publish_video', {})
+  await expect(dialog).toContainText('Publish v1 of "Add an environment variable, then redeploy"')
+  await dialog.getByRole('button', { name: 'Publish' }).click()
+  expect(await published).toMatchObject({ ok: true, version: 1, published: true })
+  await expect
+    .poll(
+      async () =>
+        (await callTool<{ versions: { public: boolean }[] }>(page, 'get_video')).versions[0]?.public,
+    )
+    .toBe(true)
+
+  const remixed = callTool(page, 'remix_video', { prompt: 'The same tutorial for adding a domain.' })
+  await dialog.getByRole('button', { name: 'Remix' }).click()
+  const made = (await remixed) as { ok: boolean; video_id: string }
+  expect(made.ok).toBe(true)
+  await expect(page).toHaveURL(new RegExp(`/videos/${made.video_id}$`))
+})
