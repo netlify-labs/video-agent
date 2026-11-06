@@ -5,7 +5,11 @@ Add the `video` label to a pull request and this action makes a short demo video
 up to date. Reply `/video revise make the end card orange` to change it. On a release, it makes a changelog video
 and adds it to the release notes. It reads the PR through GitHub's API and never runs its code.
 
-<!-- The demo GIF (bead va-mg4i.5.2) goes here once the live demo PR has one. -->
+![The preview GIF the action posted on a pull request that adds "What can I cook?" to a recipe app](demo.gif)
+
+_What the action posted on a real pull request: a recipe app's new "What can I cook?" filter, from the PR's
+description, commits and changed files. The comment shows this GIF, links to the video, and says what it cost
+(190 credits)._
 
 - [Set it up](#set-it-up)
 - [Examples](#examples)
@@ -225,6 +229,10 @@ for (const [i, p] of paths.entries()) {
 }
 await browser.close()
 ```
+
+Images in the PR description work when they were uploaded to GitHub (dragged into the editor) or are on a public
+site. In a private repository, a link to an image in the repository itself can't be read without credentials, and the
+action never sends any to an image host, so it skips those: commit them and pass a glob, as above.
 
 ### Two cuts of one release
 
