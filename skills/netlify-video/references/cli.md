@@ -490,9 +490,11 @@ Make the next version of a video you made with local.
 ```sh
 video-agent local revise <dir> <change>
 video-agent local revise ./videos/webhooks-launch "Make the end card orange"
+video-agent local revise ./videos/webhooks-launch --scene demo "Show the preview URL"
 ```
 
 - `--agent <value>`: The coding agent: claude.
 - `--from-version <n>`: The version to change (default: the latest).
+- `--scene <value>` (repeatable): Only redo these scenes (id or label; repeatable). The rest stay as they are.
 - `--keep`: Keep the workspace (for debugging).
 - `--timeout <value>`: Give up after this long: 30m, 1h (default 40m).
