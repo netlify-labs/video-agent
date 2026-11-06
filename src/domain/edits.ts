@@ -349,7 +349,7 @@ async function computeRev(
   // served from the library.
   const picks: string[] = []
   for (const op of ops) {
-    if ((op.op !== 'media' && op.op !== 'audio') || !op.src) continue
+    if ((op.op !== 'media' && op.op !== 'audio' && op.op !== 'music') || !op.src) continue
     const src = op.src
     const kind = op.op === 'media' ? op.kind : 'audio'
     if (entries.has(src)) {

@@ -1398,6 +1398,9 @@ export function pendingStills(html: string): string[] {
 }
 
 // ───── edits ─────
+/** The music bed the editor adds to a video that has none, and how far it dips under the voice-over. */
+export const MUSIC_ID = 'va-music'
+const NEW_BED_DUCK = 0.3
 export type EditOp =
   | { op: 'text'; id: string; text: string }
   | { op: 'retime'; beat: string; duration: number }
@@ -1412,6 +1415,8 @@ export type EditOp =
       volume?: number | undefined
       muted?: boolean | undefined
     }
+  /** Sets the music bed: the root music layer's file, or a new layer when there's none (the editor's Music +). */
+  | { op: 'music'; src: string; volume?: number | undefined }
   | { op: 'voice'; beat: string; text: string }
 
 /**
@@ -1653,6 +1658,49 @@ function applyOne(
         setAttr(el, 'data-va-volume', level)
         setAttr(el, 'data-va-muted', '')
       } else setAttr(el, 'data-volume', level)
+      return
+    }
+    case 'music': {
+      if (!/^assets\/media\/[A-Za-z0-9_.-]+$/.test(op.src))
+        throw new ContractError(['Music comes from assets/media/.'])
+      const volume = op.volume ?? 1
+      if (!(volume >= 0 && volume <= MAX_VOLUME))
+        throw new ContractError([`Volume goes from 0 to ${MAX_VOLUME}.`])
+      const layer = kids(d.root).find((e) => attr(e, 'data-va-layer') === 'music')
+      if (layer) {
+        // Like the audio op: a new file loses the old one's trim point, and a muted bed stays muted.
+        if (op.src !== attr(layer, 'src')) {
+          setAttr(layer, 'src', op.src)
+          layer.attrs = layer.attrs.filter((a) => a.name !== 'data-media-start')
+        }
+        if (op.volume !== undefined) {
+          const level = fmt(Math.round(volume * 100) / 100)
+          if (attr(layer, 'data-va-muted') !== null) setAttr(layer, 'data-va-volume', level)
+          else setAttr(layer, 'data-volume', level)
+        }
+        return
+      }
+      // A new bed spans the video on its own track and ducks under the voice-over (relayout writes its lane).
+      const track = Math.max(
+        0,
+        ...kids(d.root)
+          .map((e) => num(attr(e, 'data-track-index')))
+          .filter(Number.isFinite),
+      )
+      const el = defaultTreeAdapter.createElement('audio', h5.NS.HTML, [
+        { name: 'id', value: MUSIC_ID },
+        { name: 'data-va-layer', value: 'music' },
+        { name: 'data-va-audio', value: 'music' },
+        { name: 'src', value: op.src },
+        { name: 'data-start', value: '0' },
+        { name: 'data-duration', value: attr(d.root, 'data-duration') ?? '0' },
+        { name: 'data-track-index', value: String(track + 1) },
+        { name: 'data-volume', value: fmt(Math.round(volume * 100) / 100) },
+        { name: 'data-va-duck', value: String(NEW_BED_DUCK) },
+      ])
+      el.parentNode = d.root
+      const scripts = d.root.childNodes.findIndex((n) => isEl(n) && n.tagName === 'script')
+      d.root.childNodes.splice(scripts < 0 ? d.root.childNodes.length : scripts, 0, el)
       return
     }
     case 'voice': {

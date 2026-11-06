@@ -57,7 +57,7 @@ export type ScopeCheck = (
   beats: string[],
 ) => { problems: string[]; files: Map<string, Uint8Array> | null }
 
-// Editing contract v1's eight ops. A Record keyed by every op, so a new EditOp that isn't listed fails the typecheck.
+// Editing contract v1's nine ops. A Record keyed by every op, so a new EditOp that isn't listed fails the typecheck.
 const CONTRACT_OPS: Record<EditOp['op'], true> = {
   text: true,
   retime: true,
@@ -66,10 +66,11 @@ const CONTRACT_OPS: Record<EditOp['op'], true> = {
   color: true,
   media: true,
   audio: true,
+  music: true,
   voice: true,
 }
 
-/** Every op name an engine may list, for the API schema: the contract's eight, then the screen-recording plan's. */
+/** Every op name an engine may list, for the API schema: the contract's nine, then the screen-recording plan's. */
 export const EDIT_OP_NAMES = [
   ...(Object.keys(CONTRACT_OPS) as EditOp['op'][]),
   'span',

@@ -49,7 +49,7 @@ import { Clip } from './Clip'
 import { Playhead } from './Playhead'
 import { Ruler } from './Ruler'
 import { Lane, Track } from './Track'
-import type { ClipPart, TimelineProps } from './types'
+import type { ClipPart, LaneId, TimelineProps } from './types'
 import './timeline.css'
 
 /** Room after the last clip or the video's end, so the end can be dragged past. */
@@ -85,7 +85,7 @@ export function Timeline(props: TimelineProps) {
   const [viewport, setViewport] = useState(0)
   const [win, setWin] = useState<Span>([0, 0])
   const [draft, setDraft] = useState<Span | null>(null)
-  const [dropping, setDropping] = useState(false)
+  const [dropping, setDropping] = useState<LaneId | null>(null)
 
   const clips = useMemo(() => resolve(op.clips).map((clip, index) => ({ clip, index })), [op.clips])
   const videoEnd = secondsToSamples(composition.duration)
@@ -267,30 +267,38 @@ export function Timeline(props: TimelineProps) {
   // ---- files dropped on the Narration lane
 
   const hasFiles = (e: DragEvent) => [...e.dataTransfer.types].includes('Files')
+  const dropOn = (lane: LaneId, onFiles: (files: File[], e: DragEvent<HTMLDivElement>) => void) => ({
+    active: dropping === lane,
+    onDragOver: (e: DragEvent<HTMLDivElement>) => {
+      if (!hasFiles(e)) return
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'copy'
+      setDropping(lane)
+    },
+    onDragLeave: (e: DragEvent<HTMLDivElement>) => {
+      // Leaving for a clip inside the lane isn't leaving the lane.
+      if (!(e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget))) setDropping(null)
+    },
+    onDrop: (e: DragEvent<HTMLDivElement>) => {
+      setDropping(null)
+      const files = [...e.dataTransfer.files]
+      if (!files.length) return
+      e.preventDefault()
+      onFiles(files, e)
+    },
+  })
   const drop = props.onDropFiles
-    ? {
-        active: dropping,
-        onDragOver: (e: DragEvent<HTMLDivElement>) => {
-          if (!hasFiles(e)) return
-          e.preventDefault()
-          e.dataTransfer.dropEffect = 'copy'
-          setDropping(true)
-        },
-        onDragLeave: (e: DragEvent<HTMLDivElement>) => {
-          // Leaving for a clip inside the lane isn't leaving the lane.
-          if (!(e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget)))
-            setDropping(false)
-        },
-        onDrop: (e: DragEvent<HTMLDivElement>) => {
-          setDropping(false)
-          const files = [...e.dataTransfer.files]
-          if (!files.length) return
-          e.preventDefault()
-          const left = contentRef.current?.getBoundingClientRect().left ?? 0
-          const at = dropSample(e.clientX - left, ppsRef.current, targets, { disabled: e.altKey })
-          live.current.onDropFiles?.(files, at)
-        },
-      }
+    ? dropOn('narration', (files, e) => {
+        const left = contentRef.current?.getBoundingClientRect().left ?? 0
+        const at = dropSample(e.clientX - left, ppsRef.current, targets, { disabled: e.altKey })
+        live.current.onDropFiles?.(files, at)
+      })
+    : undefined
+  // Files dropped on the Music lane set the music bed.
+  const musicDrop = props.onDropMusic
+    ? dropOn('music', (files) => {
+        live.current.onDropMusic?.(files)
+      })
     : undefined
 
   // ---- what's in the window
@@ -385,6 +393,7 @@ export function Timeline(props: TimelineProps) {
         <Track
           lane="narration"
           name="Narration"
+          add={props.addMenus?.narration}
           muted={narrationMuted}
           onMute={(muted) => props.onTrackChange({ lane: 'narration', set: { muted } })}
           solo={tracks.narration.solo}
@@ -401,6 +410,7 @@ export function Timeline(props: TimelineProps) {
         <Track
           lane="aiVoice"
           name="AI voice"
+          add={props.addMenus?.aiVoice}
           {...(voices.length ? {} : { note: 'No AI voice' })}
           muted={tracks.aiVoice.mode === 'replace'}
           onMute={(muted) =>
@@ -430,6 +440,7 @@ export function Timeline(props: TimelineProps) {
           <Track
             lane="music"
             name="Music"
+            add={props.addMenus?.music}
             muted={music.muted}
             onMute={(muted) => props.onTrackChange({ lane: 'musicLevel', audioId: music.id, set: { muted } })}
             volume={{
@@ -455,7 +466,7 @@ export function Timeline(props: TimelineProps) {
             }}
           />
         ) : (
-          <Track lane="music" name="Music" note="No music" />
+          <Track lane="music" name="Music" note="No music" add={props.addMenus?.music} />
         )}
       </div>
 
@@ -584,7 +595,18 @@ export function Timeline(props: TimelineProps) {
             )}
           </Lane>
 
-          <Lane lane="music" name="Music" muted={musicMuted} onPointerDown={seekFromLane}>
+          <Lane
+            lane="music"
+            name="Music"
+            muted={musicMuted}
+            onPointerDown={seekFromLane}
+            {...(musicDrop ? { drop: musicDrop } : {})}
+          >
+            {musicDrop && !music ? (
+              <Text size="xs" c="var(--va-faint)" className="va-tl-drop-hint">
+                Drop a music file here
+              </Text>
+            ) : null}
             {music && videoEnd > 0 ? (
               <Clip
                 id={music.id}

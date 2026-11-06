@@ -2,6 +2,7 @@
 // Everything is controlled: the editor owns the narration op, the playhead and the selection; the timeline owns only
 // its zoom and scroll. Narration positions are composition samples; the composition's beats and audio come in its
 // own seconds, as read() gives them.
+import type { ReactNode } from 'react'
 import type { AudioTrack, Beat } from '../../../../src/lib/contract'
 import type { Peaks } from '../../../../src/lib/peaks'
 import type { NarrationOp, NarrationTracks, Span } from '../../../../src/lib/timeline'
@@ -83,6 +84,10 @@ export interface TimelineProps {
    * edge; Alt / Option turns it off). Without it the lane takes no drops.
    */
   onDropFiles?: (files: File[], sample: number) => void
+  /** Audio files dropped on the Music lane: they set the music bed. Without it the lane takes no drops. */
+  onDropMusic?: (files: File[]) => void
+  /** A + menu on a lane's header, to add to that lane (owner, 2026-11-06). */
+  addMenus?: Partial<Record<LaneId, ReactNode>>
   /** A menu on each scene block whose scene it offers (redo a scene: Redo this scene…). */
   sceneMenu?: { label: string; offers: (beatId: string) => boolean; onPick: (beatId: string) => void }
   /** Initial zoom in px per second; the timeline fits the composition when it's left out. */

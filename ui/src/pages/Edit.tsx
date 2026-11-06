@@ -71,6 +71,7 @@ import { RedoScenesModal, useCanRedoScenes, useScenes } from '../components/Scen
 import { humanize, labelFor } from '../lib/labels'
 import { pickable } from '../lib/scenes'
 import { narrationOf, narrationToSave, sameOps, withNarration } from '../lib/narration-panel'
+import { MUSIC_ID } from '../../../src/lib/contract'
 import { timingChanged } from '../../../src/lib/stale-picture'
 import { secondsToSamples, type NarrationOp } from '../../../src/lib/timeline'
 
@@ -121,7 +122,14 @@ export function diffOps(base: Composition, cur: Composition): Op[] {
   const baseAudio = new Map(base.audio.map((a) => [a.id, a] as const))
   for (const a of cur.audio) {
     const was = baseAudio.get(a.id)
-    if (!was) continue
+    // A music bed added in the editor (the Music track's +): the music op makes the layer, then mutes it if asked.
+    if (!was) {
+      if (a.role === 'music') {
+        ops.push({ op: 'music', src: a.src, volume: a.volume })
+        if (a.muted) ops.push({ op: 'audio', id: a.id, muted: true })
+      }
+      continue
+    }
     const change = {
       ...(was.src !== a.src ? { src: a.src } : {}),
       ...(!sameNumber(was.volume, a.volume) ? { volume: a.volume } : {}),
@@ -684,6 +692,26 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
       return c
     })
   }
+  /** Sets the music bed (the Music track's +): the music layer's file, or a new layer at half level when there's none. */
+  const setMusicBed = (m: Media) => {
+    const file = `${m.id}.${m.filename.split('.').pop() ?? ''}`
+    setPicked((p) => ({ ...p, [file]: m }))
+    update((c) => {
+      const bed = c.audio.find((a) => a.role === 'music')
+      if (bed) bed.src = `assets/media/${file}`
+      else
+        c.audio.push({
+          id: MUSIC_ID,
+          role: 'music',
+          label: null,
+          src: `assets/media/${file}`,
+          volume: 0.5,
+          muted: false,
+          beat: null,
+        })
+      return c
+    })
+  }
   const setLine = (beat: string, text: string) => {
     update((c) => {
       for (const l of c.narration) if (l.beat === beat) l.text = text
@@ -1038,6 +1066,7 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
             initialOp={narrationStart.op}
             onChange={setNarration}
             onMusicChange={setTrack}
+            onSetMusic={setMusicBed}
             onPreviewReady={onReady}
             onPreviewClick={onPreviewClick}
             timingPending={timingPending}

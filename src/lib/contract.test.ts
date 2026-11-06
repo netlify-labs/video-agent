@@ -8,6 +8,7 @@ import {
   applyRevoice,
   changed,
   ContractError,
+  MUSIC_ID,
   editText,
   save,
   walk,
@@ -366,7 +367,7 @@ describe('contract audio', () => {
     '<div class="kicker" data-va-text="intro-kicker">',
     `${sfx}<div class="kicker" data-va-text="intro-kicker">`,
   )
-  const music = (h: string) => read(load(h)).audio.find((a) => a.id === 'music')
+  const music = (h: string, id = 'music') => read(load(h)).audio.find((a) => a.id === id)
 
   it('reads the music layer and effects as audio tracks', () => {
     expect(validate(withSfx, summary)).toEqual([])
@@ -462,6 +463,41 @@ describe('contract audio', () => {
     expect(() => applyEdits(musicHtml, summary, [{ op: 'audio', id: 'nope', volume: 0.5 }])).toThrow(
       /no audio "nope"/,
     )
+  })
+
+  it('sets a music bed on a video without music: a layer spanning it that ducks under the voice-over', () => {
+    expect(read(load(html)).audio.filter((a) => a.role === 'music')).toEqual([])
+    const out = applyEdits(html, summary, [{ op: 'music', src: 'assets/media/med_song01.mp3', volume: 0.6 }])
+    expect(music(out.html, MUSIC_ID)).toMatchObject({
+      src: 'assets/media/med_song01.mp3',
+      volume: 0.6,
+      muted: false,
+    })
+    const root = read(load(out.html))
+    expect(out.html).toMatch(
+      new RegExp(
+        `<audio id="${MUSIC_ID}" data-va-layer="music" data-va-audio="music" src="assets/media/med_song01.mp3" data-start="0" data-duration="${root.duration}"`,
+      ),
+    )
+    // The duck level gets its volume lane from the patcher, so the result validates (applyEdits checks it).
+    expect(out.html).toMatch(/data-va-duck="0.3"[^>]*data-automation=/)
+    expect(validate(out.html, out.summary)).toEqual([])
+    // A second bed replaces the first: still one music layer.
+    const again = applyEdits(out.html, out.summary, [{ op: 'music', src: 'assets/media/med_song02.mp3' }])
+    expect(read(load(again.html)).audio.filter((a) => a.role === 'music')).toHaveLength(1)
+    expect(music(again.html, MUSIC_ID)).toMatchObject({ src: 'assets/media/med_song02.mp3', volume: 0.6 })
+    expect(() => applyEdits(html, summary, [{ op: 'music', src: 'assets/voice/x.mp3' }])).toThrow(
+      /assets\/media/,
+    )
+  })
+
+  it("sets the music bed on a video's own music layer: its file and level, its fades and span kept", () => {
+    const out = applyEdits(musicHtml, summary, [
+      { op: 'music', src: 'assets/media/med_other02.m4a', volume: 0.5 },
+    ])
+    expect(music(out.html)).toMatchObject({ src: 'assets/media/med_other02.m4a', volume: 0.5 })
+    expect(out.html).toMatch(/<audio id="music"[^>]*data-fade-in="1" data-fade-out="1.5"/)
+    expect(out.html).not.toContain(MUSIC_ID)
   })
 
   it('sets the volume as data-volume, which HyperFrames applies in preview and render', () => {

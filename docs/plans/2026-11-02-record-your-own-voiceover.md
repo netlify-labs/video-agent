@@ -870,3 +870,25 @@ These are the decisions the spikes and the build settled; `docs/spikes.md` S10-S
   browser can encode AAC (WebCodecs; Chrome, Edge and Safari), the menu also offers a smaller M4A, made in the browser
   with mediabunny at 96 kbps, about 0.7 MB a minute. There's no server-side transcoding (`ui/src/lib/take-download.ts`,
   `TakeDownload.tsx`).
+- **Blank recording scenes after adding a take (owner, 2026-11-06):** a draft save kept only the newest rev's bundle,
+  and a narration save doesn't reload the preview frame (the narration is auditioned over it). The frame stayed on the
+  deleted rev, so a screen-recording scene's later range requests got 404 and its `<video>` sat on its first frame (a
+  white page) until a reload. A superseded rev now stays for a preview link's lifetime after it's superseded (a
+  `gone/r{rev}.{seconds}` marker under the draft's bundle prefix; `pruneRevs` in `src/domain/edits.ts`).
+- **Each track's + (owner, 2026-11-06):** every track header has a **+** with what fits it.
+  - **Narration:** Record (opens the recorder), Upload a file, From the library, Recordings for this video.
+  - **Music:** Find music (Openverse CC0 and CC BY), From the library, Upload a file. Each sets or replaces the
+    music bed, with the Music track's level, mute and Duck under narration.
+  - **AI voice:** Generate, which goes to the video's page to ask for a revision with AI voice-over, as before.
+  - **Add audio** under the timeline asks **Add to: Narration / Music** once there's an item. The default is the
+    selected track; music imported from Openverse defaults to Music, and a recording or take is narration only.
+  - A file dropped on the Music lane sets the music bed. One dropped on the Narration lane is a clip, as before.
+  - **Contract:** the editor had only the `audio` op (swap, level or mute an existing `<audio>`), so it couldn't add
+    music to a video without any. The new `music` op (`src`, optional `volume`) sets the root music layer's file, or
+    adds `<audio id="va-music" data-va-layer="music" data-va-audio="music">`. That layer spans the video on the next
+    free track, at half level, with `data-va-duck="0.3"`, so the patcher writes its ducking lane under the AI voice
+    and the recorded narration.
+  - Its file must be a ready library audio item, picked like the `audio` op's and snapshotted into the version on
+    render. The draft renders as `render_unchanged`, with no agent run.
+  - It's an addition to editing contract v1 (every contract-1 composition still conforms), so there's no contract or
+    prompt template bump. The API schema gained the op, and OpenAPI and the SDK were regenerated.

@@ -2242,7 +2242,7 @@ export interface components {
         };
         EngineCapabilities: {
             /** @description The edit operations the browser editor may offer on this engine. */
-            editOps: ("text" | "retime" | "reorder" | "delete" | "color" | "media" | "audio" | "voice" | "span" | "camera" | "cursor" | "redact")[];
+            editOps: ("text" | "retime" | "reorder" | "delete" | "color" | "media" | "audio" | "music" | "voice" | "span" | "camera" | "cursor" | "redact")[];
             /** @description The editor plays drafts live; otherwise it shows the last render. */
             liveDraftPreview: boolean;
             /**
@@ -3251,6 +3251,12 @@ export interface components {
                 muted?: boolean;
             } | {
                 /** @enum {string} */
+                op: "music";
+                /** @description A ready audio item from the library, as assets/media/<media id>.<ext> */
+                src: string;
+                volume?: number;
+            } | {
+                /** @enum {string} */
                 op: "voice";
                 beat: string;
                 text: string;
@@ -3474,6 +3480,12 @@ export interface components {
                 src?: string;
                 volume?: number;
                 muted?: boolean;
+            } | {
+                /** @enum {string} */
+                op: "music";
+                /** @description A ready audio item from the library, as assets/media/<media id>.<ext> */
+                src: string;
+                volume?: number;
             } | {
                 /** @enum {string} */
                 op: "voice";

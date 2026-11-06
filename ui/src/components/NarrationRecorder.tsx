@@ -484,6 +484,18 @@ export function NarrationRecorder({ api, videoId, versionN, draft }: NarrationRe
   const canStart = canRecord(phase) && api.canRecord && !!userId && !busyUpload
   const punch = punchAt(api.playhead, api.range)
 
+  // The Narration track's + > Record opens the panel (and shows it).
+  const openRequest = useRef(api.openRequest)
+  useEffect(() => {
+    if (api.openRequest === openRequest.current) return
+    openRequest.current = api.openRequest
+    if (!api.canRecord || !userId) return
+    if (!s.open) openPanel()
+    requestAnimationFrame(() => {
+      document.querySelector('[data-testid="record-panel"]')?.scrollIntoView({ block: 'nearest' })
+    })
+  }, [api.openRequest])
+
   // R punches in at the playhead (or over the ruler's range), opening the panel if it's closed; not in text fields.
   const onPunchKey = useRef<() => void>(() => undefined)
   onPunchKey.current = () => {

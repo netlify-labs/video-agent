@@ -1469,6 +1469,19 @@ const EditOpSchema = z.discriminatedUnion('op', [
     .openapi({ description: "Swap an audio track's file, set its level or mute it, by its id" }),
   z
     .object({
+      op: z.literal('music'),
+      src: z
+        .string()
+        .max(200)
+        .openapi({ description: 'A ready audio item from the library, as assets/media/<media id>.<ext>' }),
+      volume: z.number().min(0).max(4).optional(),
+    })
+    .openapi({
+      description:
+        "Set the music bed: replaces the music layer's file, or adds a music layer (id va-music) that spans the video and dips under the voice-over",
+    }),
+  z
+    .object({
       op: z.literal('voice'),
       beat: z.string().max(80),
       text: z.string().min(1).max(MAX_NARRATION),

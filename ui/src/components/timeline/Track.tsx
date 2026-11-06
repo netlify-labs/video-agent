@@ -26,6 +26,8 @@ export interface TrackProps {
   solo?: boolean
   onSolo?: (solo: boolean) => void
   duck?: { on: boolean; onToggle: (on: boolean) => void; amount: VolumeControl }
+  /** The lane's + menu (add to this lane). */
+  add?: ReactNode
 }
 
 function Level(p: { label: string; control: VolumeControl }) {
@@ -54,6 +56,7 @@ export function Track(p: TrackProps) {
         <Text size="xs" fw={600} className="va-tl-head-name" truncate>
           {p.name}
         </Text>
+        {p.add}
         {p.onSolo ? (
           <Tooltip label={p.solo ? 'Stop soloing' : 'Solo: hear only this track'}>
             <ActionIcon

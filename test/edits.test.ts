@@ -323,6 +323,49 @@ describe('edit drafts', () => {
     )
   })
 
+  it('sets a music bed on a video without music from the library: served in the preview, rendered without an agent run', async () => {
+    const h = harness({ MAX_ACTIVE_RUNS: '0' })
+    current = h.deps
+    const id = await editableVideo(h)
+    const toneBytes = tone()
+    const track = await h.json<{ id: string }>(await upload(h, h.member, toneBytes, 'filename=bed.mp3'))
+    const e = await h.json<Edit & { composition: { audio: unknown[] } }>(await open(h, id))
+    expect(e.composition.audio).toEqual([])
+    // Library audio only, as for the audio op.
+    expect(
+      (await save(h, e.id, { rev: 0, ops: [{ op: 'music', src: 'assets/media/med_nope.mp3' }] })).status,
+    ).toBe(400)
+    const saved = await h.json<{ composition: { audio: unknown[] } }>(
+      await save(h, e.id, {
+        rev: 0,
+        ops: [{ op: 'music', src: `assets/media/${track.id}.mp3`, volume: 0.5 }],
+      }),
+    )
+    expect(saved.composition.audio).toEqual([
+      expect.objectContaining({
+        id: 'va-music',
+        role: 'music',
+        src: `assets/media/${track.id}.mp3`,
+        volume: 0.5,
+      }),
+    ])
+    const link = await h.json<{ url: string }>(
+      await h.call('GET', `/api/v1/edits/${e.id}/preview`, { as: h.member }),
+    )
+    expect(await (await edge(link.url)).text()).toMatch(
+      /<audio id="va-music" data-va-layer="music"[^>]*data-va-duck="0.3"/,
+    )
+    const file = await edge(link.url.replace('index.html', `assets/media/${track.id}.mp3`))
+    expect(new Uint8Array(await file.arrayBuffer())).toEqual(toneBytes)
+    // Render renders the draft as it is (no agent run), with the bed snapshotted into the version.
+    expect((await h.call('POST', `/api/v1/edits/${e.id}/render`, { as: h.member })).status).toBe(202)
+    expect((await h.deps.store.listVersionMedia(id, 2)).map((r) => [r.mediaId, r.kind])).toContainEqual([
+      track.id,
+      'audio',
+    ])
+    expect((await h.deps.store.getVersion(id, 2))?.mode).toBe('render_unchanged')
+  })
+
   it('swaps, levels and mutes the music: library audio only, served from the library, snapshotted', async () => {
     const h = harness({ MAX_ACTIVE_RUNS: '0' })
     current = h.deps
