@@ -344,6 +344,24 @@ audio file), re-record any stretch, and render. **Keep my visuals** re-renders t
 render-unchanged run); **Fit the video to my narration** lets the agent retime the scenes to your words (a full
 run, and it always replaces the AI voice-over). Captions come from your recording.
 
+- **Each take is reviewed before it goes on the timeline.** Stopping (Space) leaves the take in the Record panel. It
+  shows its length and where it lands, and you can play and scrub it against the picture. Then you choose:
+  - **Add to timeline** (Enter) puts it on the Narration track.
+  - **Record again** throws it away and records that stretch again.
+  - **Keep recording from here** punches in from where a take stopped early, and you review the joined take.
+  - **Discard** (Esc) drops it.
+  - **Download** saves the take as stored, named like `lumen-v1-take-3.wav`. A recorded take is a 24 kHz mono WAV,
+    about 2.9 MB a minute. Where the browser can encode AAC, there's also a smaller M4A made in the browser (96 kbps,
+    about 0.7 MB a minute). A selected narration clip has Download too.
+- **Each track has its own +.** What it adds depends on the track:
+  - **Narration** takes your voice: Record, Upload a file, From the library, Recordings for this video.
+  - **Music** sets or replaces the video's music bed: Find music (Openverse), From the library, Upload a file. The bed
+    spans the whole video, with the track's level, mute and **Duck** under narration. Even a video made without music
+    gets one, and it renders without an agent run.
+  - **AI voice: Generate** goes to the video's page to ask for a revision with AI voice-over.
+  - **Add audio** under the timeline asks **Add to: Narration / Music**. It defaults to the track you used last;
+    Openverse music defaults to Music, and recordings go to Narration only.
+  - A file dropped on a lane goes to that lane: a clip on Narration, the bed on Music.
 - **Recording needs HTTPS** (browsers only give the microphone to secure pages; the setup page checks it) and the app
   sends `Permissions-Policy: microphone=(self)`. Share, embed and preview pages never get the microphone.
 - **Where recordings live:** in this project's Netlify Blobs (`media` store), like other uploads. A raw recording is
