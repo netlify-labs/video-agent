@@ -195,6 +195,15 @@ export function DemoSetup(props: { media: Media; onBack: () => void }) {
   const chosenLook = look === undefined && unusableDefault ? null : look
   const [quick, setQuick] = useState(false)
   const [privacy, setPrivacy] = useState(false)
+  const [hideText, setHideText] = useState('')
+  const hideStrings = [
+    ...new Set(
+      hideText
+        .split('\n')
+        .map((l) => l.trim())
+        .filter((l) => l.length >= 2),
+    ),
+  ].slice(0, 50)
 
   const create = $api.useMutation('post', '/api/v1/videos', {
     onSuccess: (v) => {
@@ -221,7 +230,11 @@ export function DemoSetup(props: { media: Media; onBack: () => void }) {
       aspect: shape,
       durationSec: Number(length),
       sound,
-      recording: privacy ? { ...recording, privacy: true } : recording,
+      recording: {
+        ...recording,
+        ...(privacy ? { privacy: true } : {}),
+        ...(hideStrings.length ? { hideStrings } : {}),
+      },
       ...(quick ? { agent: false } : voice.enabled ? { voiceover: voiceInput(voice) } : {}),
       ...(chosenLook !== undefined ? { look: chosenLook } : {}),
     }
@@ -427,7 +440,18 @@ export function DemoSetup(props: { media: Media; onBack: () => void }) {
             setPrivacy(e.currentTarget.checked)
           }}
         />
-        {boxes.length || privacy ? (
+        <Textarea
+          label="Hide these words"
+          description="One per line: a customer's name, a project id. Hidden wherever they show, privacy mode or not."
+          autosize
+          minRows={2}
+          maxLength={10_000}
+          value={hideText}
+          onChange={(e) => {
+            setHideText(e.currentTarget.value)
+          }}
+        />
+        {boxes.length || privacy || hideStrings.length ? (
           <Text size="sm" c="var(--va-muted)" data-testid="private-hint">
             <IconEyeOff size={14} style={{ verticalAlign: -2 }} /> This demo starts private (only you and
             admins) because something is hidden. You can share it once you've checked it.

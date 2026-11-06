@@ -837,6 +837,8 @@ export interface VersionRecording {
   /** Privacy mode: private things are found and hidden for the person to keep or remove. Off (absent): only the
    * person's boxes and the trace's (password fields, --hide selectors). */
   privacy?: boolean
+  /** Text to hide wherever it shows on screen (privacy mode or not), found by OCR on the runner. */
+  hideStrings?: string[]
   summary: {
     sourceSec: number
     steps: number

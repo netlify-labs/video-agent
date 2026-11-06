@@ -160,6 +160,21 @@ describe('prepare-run: recording', () => {
     spy.mockRestore()
   })
 
+  it('privacy mode and hide strings reach input.json (for analyze), and only when set', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const dir = join(root, 'h-privacy')
+    await hydrateRecording(
+      dir,
+      { ...bareRecording, privacy: true, hideStrings: ['Acme Labs'] },
+      fakeFetch({}),
+    )
+    expect(JSON.parse(readFileSync(join(dir, '.va-run', 'recording', ID, 'input.json'), 'utf8'))).toEqual({
+      boxes: [box],
+      privacy: true,
+      hideStrings: ['Acme Labs'],
+    })
+  })
+
   it('stops the run on a tampered trace', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     const dir = join(root, 'h3')

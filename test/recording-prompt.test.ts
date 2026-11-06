@@ -55,6 +55,12 @@ describe('prompt: screen recording', () => {
     expect(on).toContain('Privacy mode is on')
     expect(on).toContain('reason "Privacy mode: email"')
     expect(on).not.toContain('Privacy mode is off')
+    // The candidates line: in privacy mode, and with hide strings alone (whose text never reaches the prompt).
+    expect(on).toContain('privacy/candidates.json')
+    expect(off).not.toContain('candidates.json')
+    const strings = buildPrompt({ ...base, recording: { ...recording, hideStrings: 2 } })
+    expect(strings).toContain('the text the person asked to hide')
+    expect(strings).toContain('Privacy mode is off')
   })
 
   it('without a trace (no clicked elements), 9:16, no target', () => {

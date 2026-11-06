@@ -253,6 +253,11 @@ Rules:
 - Add hidden areas only when your prompt says privacy mode is on: then hide each private thing you see (emails, API
   keys, tokens, URLs with ids, personal names) with a box, reason "Privacy mode: <what>", and list it in the summary
   ("Hidden: … at 0:14"). With privacy mode off, names, URLs and the rest of the screen stay visible.
+- In privacy mode or with hide strings, `analyze` reads the screen and writes
+  `context/recording/<id>/privacy/candidates.json` (p1…: kind, span, a masked preview, a crop): each is already a
+  proposed hidden area in its steps in `plan.json`. Look at every crop; delete a proposal that isn't what it says, keep
+  every "hidden text" one, and add what it missed. `render-job` reads the rendered video back and refuses one where a
+  hide string is still readable.
 - A scene can be 0.5× to 4× as fast as the recording. With a voice-over, set each recording scene's length to its
   line: `emit --duration` makes it slower, and past 0.5× it plays the step at 0.5× and holds its last frame
   (`data-va-rec-hold="end"` and an `<img class="va-rec-hold">`; `data-va-hold` stays the held last frame's). Or widen

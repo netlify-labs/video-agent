@@ -891,8 +891,17 @@ and names visible. `recording.privacy` (API, setup's "Privacy mode" checkbox, of
 version, inherited by its revisions and passed in the run manifest. Off: only the person's setup boxes and the
 trace's entries (password fields, `--hide` selectors) are hidden, and the prompt tells the agent not to add any. On:
 the agent looks for private things (emails, keys, tokens, URLs with ids, personal names) and hides each with an agent
-entry whose reason is "Privacy mode: <what>"; the demo starts private. The automatic detection that proposes
-candidates for it (strings, patterns, DOM text for CLI recordings, OCR) is the next step (va-rsk5 privacy beads). The
+entry whose reason is "Privacy mode: <what>"; the demo starts private.
+
+The automatic detection (2026-11-06): `src/lib/privacy-patterns.ts` holds the recommended patterns (emails, provider
+keys, JWTs and long tokens, URLs with a query or an id, Luhn-checked cards, phone numbers) and the person's hide
+strings (`recording.hideStrings`, at most 50, matched in any case, privacy mode or not). In the run, `analyze` OCRs
+sampled frames with tesseract.js and its bundled English data (scene starts, every 1.5 s, an idle stretch once, at most
+60 frames, a 90 s budget; about 1 s a 720p frame) and writes candidates with keyframed boxes, spans out to the frames
+either side where the text wasn't read, masked previews and crops; `plan` proposes each in the steps it overlaps (not
+locked), and the agent confirms each from its crop. After the render, `render-job` OCRs the output (a frame a second):
+a hide string still readable fails the render with the times, a pattern match is reported. Still to come: DOM matching
+during `video-agent record` (exact boxes into the trace) and the Hide panel's keep or remove. The
 version DTO's Hidden list gives each area a `why`: "You drew it", "Password field", "Marked hidden when recorded",
 "Privacy mode: email", "Added by the agent: …".
 

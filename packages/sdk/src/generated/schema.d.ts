@@ -2494,6 +2494,8 @@ export interface components {
                  */
                 style?: "blur" | "solid";
             }[];
+            /** @description Text to hide wherever it shows on screen (a customer name, a project id), privacy mode or not: found by OCR of the recording and hidden for you to keep or remove. A demo with any starts private. */
+            hideStrings?: string[];
             /** @description Privacy mode (default false). Off: only the areas you draw and the trace's (password fields, --hide selectors) are hidden. On: private things on screen (emails, keys, tokens, URLs, personal names) are found and hidden too, each confirmed by the agent, for you to keep or remove. */
             privacy?: boolean;
         };

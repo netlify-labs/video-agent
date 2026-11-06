@@ -496,6 +496,7 @@ async function recordingPromptFor(deps: Deps, r: RunRecording): Promise<Recordin
     seconds: m?.durationSec ?? null,
     trace: Boolean(r.trace),
     privacy: r.privacy === true,
+    hideStrings: r.hideStrings?.length ?? 0,
     clicks,
     deadlineMin: deps.config.authoringDeadlineMin,
   }

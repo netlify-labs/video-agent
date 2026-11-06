@@ -10,6 +10,7 @@ import type { Principal } from './policy.js'
 import { isScreenRecording } from './media-roles.js'
 import type { Repo } from '../store/types.js'
 import { canReadMedia } from './takes.js'
+import { HIDE_STRINGS_MAX, normalizeHideString } from '../lib/privacy-patterns.js'
 import type { HiddenArea, VersionMediaRow, VersionRecording } from './types.js'
 
 /** The inputs a new version keeps from its parent's recording; the results (summary, hidden areas) are its run's. */
@@ -22,6 +23,7 @@ export function inheritRecording(parent: VersionRecording | null | undefined): V
     boxes: parent.boxes,
     compose: parent.compose,
     ...(parent.privacy ? { privacy: true } : {}),
+    ...(parent.hideStrings?.length ? { hideStrings: parent.hideStrings } : {}),
     summary: null,
     hidden: [],
   }
@@ -48,6 +50,7 @@ export function manifestRecording(
     ...(r.trim ? { trim: r.trim } : {}),
     ...(r.compose ? { compose: true } : {}),
     ...(r.privacy ? { privacy: true } : {}),
+    ...(r.hideStrings?.length ? { hideStrings: r.hideStrings } : {}),
   }
 }
 
@@ -69,6 +72,7 @@ export interface RecordingRequest {
     | undefined
   /** Privacy mode (off by default). */
   privacy?: boolean | undefined
+  hideStrings?: string[] | undefined
 }
 
 /**
@@ -137,6 +141,10 @@ export async function demoRecording(
     const bytes = await deps.blobs.get('media', trace.key)
     traceHides = bytes ? parseTrace(new TextDecoder().decode(bytes)).redact.length : 0
   }
+  // Trimmed, inner whitespace collapsed, empty and repeated ones dropped.
+  const hideStrings = [
+    ...new Set((req.hideStrings ?? []).map(normalizeHideString).filter((x) => x.length >= 2)),
+  ].slice(0, HIDE_STRINGS_MAX)
   const recording: VersionRecording = {
     mediaId: m.id,
     trace,
@@ -144,6 +152,7 @@ export async function demoRecording(
     boxes,
     compose: false,
     ...(req.privacy ? { privacy: true } : {}),
+    ...(hideStrings.length ? { hideStrings } : {}),
     summary: null,
     hidden: [],
   }
@@ -161,7 +170,7 @@ export async function demoRecording(
   return {
     recording,
     row,
-    private: boxes.length > 0 || traceHides > 0 || req.privacy === true,
+    private: boxes.length > 0 || traceHides > 0 || req.privacy === true || hideStrings.length > 0,
     sourceSec: tout - tin,
   }
 }

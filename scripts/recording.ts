@@ -41,11 +41,12 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { basename, dirname, extname, join } from 'node:path'
 import { parseTrace } from '../src/lib/recording-trace.js'
 import { analyzeRecording } from './lib/recording-analyze.js'
-import { ASPECTS, keptPlan, type Aspect, type PlanV1 } from '../src/lib/recording.js'
+import { ASPECTS, keptPlan, type Aspect, type PlanRedact, type PlanV1 } from '../src/lib/recording.js'
 import type { Analysis } from './lib/recording-analyze.js'
 import { composeDemo } from './lib/recording-compose.js'
 import { emitStep, holdsOnly, readKeptPlan } from './lib/recording-emit.js'
 import { checkRecordingScenes } from './lib/recording-inputs.js'
+import { scanPrivacy, type PrivacyCandidate } from './lib/recording-privacy.js'
 import { cachedAnalysis, makeFocusCrops, makeSheets, transcribeRecording } from './lib/recording-extras.js'
 import {
   checkpointMessage,
@@ -97,10 +98,26 @@ async function analyze() {
           cwd: join(repoRoot, 'video'),
           deadlineAt: Date.now() + 10 * 60_000,
         })
+  // Privacy mode and hide strings (input.json, or --privacy and --hide-strings a,b): OCR for things to hide.
+  const input = args.media
+    ? (readIf(join(repoRoot, '.va-run', 'recording', args.media, 'input.json')) as {
+        privacy?: boolean
+        hideStrings?: string[]
+      } | null)
+    : null
+  const privacy = 'privacy' in args || input?.privacy === true
+  const strings = args['hide-strings'] ? args['hide-strings'].split(',') : (input?.hideStrings ?? [])
+  const scan =
+    privacy || strings.length
+      ? await scanPrivacy(file, analysis, { patterns: privacy, strings, contextDir: context })
+      : null
   return {
     ok: true,
     out,
     cached: Boolean(cached),
+    privacy: scan
+      ? { candidates: scan.candidates.length, frames: scan.frames, ms: scan.ms, stopped: scan.stopped }
+      : null,
     sheets: sheets.length,
     transcript: existsSync(transcriptPath) ? { path: transcriptPath, words: words?.length ?? null } : null,
     cursorSource: analysis.cursorSource,
@@ -112,6 +129,18 @@ async function analyze() {
 
 const readJson = (path: string): unknown => JSON.parse(readFileSync(path, 'utf8'))
 const readIf = (path: string): unknown => (existsSync(path) ? readJson(path) : null)
+
+/** Privacy mode's candidates (analyze's scan) as the plan's proposed hidden areas; none without a scan. */
+function proposalsFrom(path: string): PlanRedact[] {
+  const scan = readIf(path) as { candidates?: PrivacyCandidate[] } | null
+  return (scan?.candidates ?? []).map((c) => ({
+    id: c.id,
+    start: c.start,
+    end: c.end,
+    reason: c.reason,
+    boxes: c.boxes,
+  }))
+}
 
 function plan() {
   const id = args.media
@@ -138,6 +167,9 @@ function plan() {
     look: look?.recording,
     target,
     aspect,
+    proposals: proposalsFrom(
+      join(args.context ?? join(repoRoot, 'context', 'recording', id), 'privacy', 'candidates.json'),
+    ),
   })
   // `step` is the log line's own key: the plan's step goes in `planStep`.
   for (const { step, ...d } of decisions) log('recording.plan_rule', { ...d, planStep: step })

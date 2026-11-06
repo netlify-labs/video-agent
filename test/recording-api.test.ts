@@ -98,6 +98,30 @@ describe('demo API', () => {
     expect(off.versions[0]?.recording.privacy).toBe(false)
   })
 
+  it('hide strings: trimmed, repeats dropped, kept on the version (never in its DTO), and the demo starts private', async () => {
+    const h = harness()
+    const id = await recording(h, h.member)
+    const v = await h.json<{
+      id: string
+      private: boolean
+      versions: { recording: Record<string, unknown> }[]
+    }>(
+      await create(h, h.member, {
+        recording: { mediaId: id, hideStrings: ['  Acme   Labs ', 'Acme Labs', 'Priya Raman'] },
+      }),
+    )
+    expect((await h.deps.store.getVersion(v.id, 1))?.recording?.hideStrings).toEqual([
+      'Acme Labs',
+      'Priya Raman',
+    ])
+    expect(JSON.stringify(v.versions[0]?.recording)).not.toContain('Priya')
+    expect(v.private).toBe(true)
+    const tooMany = await create(h, h.member, {
+      recording: { mediaId: id, hideStrings: Array.from({ length: 51 }, (_, i) => `word ${String(i)}`) },
+    })
+    expect(tooMany.status).toBe(400)
+  })
+
   it('setup boxes are blurred unless they say solid', async () => {
     const h = harness()
     const id = await recording(h, h.member)

@@ -20,7 +20,7 @@ import {
 } from './engine-prompt.js'
 import type { EngineId } from './engines.js'
 
-export const PROMPT_TEMPLATE_VERSION = 24
+export const PROMPT_TEMPLATE_VERSION = 25
 
 /**
  * Where render-job puts a run's outputs: Blobs (the service's runs), a signed URL, or local, where a laptop run keeps
@@ -99,6 +99,8 @@ export interface RecordingPrompt {
   trace: boolean
   /** Privacy mode: find private things and hide them. Off: hide nothing beyond what's already locked. */
   privacy?: boolean
+  /** How many hide strings the person gave (the strings stay out of the prompt). */
+  hideStrings?: number
   /** Click targets from the pointer trace (already scrubbed when it was stored), at most 60. */
   clicks: { t: number; role: string; name: string }[]
   /** The run's deadline, in minutes. */
@@ -146,6 +148,10 @@ function recordingLines(
       ? '- Privacy mode is on: look at every step\'s frames for private things (emails, API keys, tokens, URLs with ids, personal names) and hide each with a box (an agent entry in the plan, reason "Privacy mode: email", "Privacy mode: key" and so on); list them in the summary as "Hidden: … at 0:14".'
       : "- Privacy mode is off: don't add hidden areas unless the request asks; names, URLs and the rest of the screen stay visible.",
   )
+  if (r.privacy || r.hideStrings)
+    lines.push(
+      `- analyze read the screen for ${r.privacy ? 'private things' : ''}${r.privacy && r.hideStrings ? ' and ' : ''}${r.hideStrings ? 'the text the person asked to hide' : ''}: context/recording/${id}/privacy/candidates.json lists each (p1…: kind, span, a masked preview, a crop to look at), already proposed as hidden areas in its steps in plan.json. Look at every crop: delete a proposal that isn't what it says from the step's redact, keep every "hidden text" one (the person asked for those), and hide anything private it missed.`,
+    )
   if (p.voice)
     lines.push(
       "- Voice-over: one line per step. Set each recording scene's duration to its line and let the speed follow (0.5x to 4x): emit --duration <seconds> makes a hold past 0.5x, or widen the step's out. Then npx tsx scripts/voice.ts sync as usual.",

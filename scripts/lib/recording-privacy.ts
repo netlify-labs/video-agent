@@ -286,3 +286,43 @@ export async function scanPrivacy(
   log('recording.privacy_scan', { ...result, candidates: candidates.length })
   return result
 }
+
+/**
+ * The output check (render-job): OCR of the rendered video, a frame a second (at most MAX_FRAMES, within the budget).
+ * A hide string still readable is a problem the run must fix; a privacy pattern is reported, since the agent may have
+ * judged it not private.
+ */
+export async function checkOutputPrivacy(
+  video: string,
+  info: { width: number; height: number; duration: number },
+  opts: { patterns: boolean; strings: readonly string[]; workDir: string; ocr?: Ocr; budgetMs?: number },
+) {
+  const started = Date.now()
+  mkdirSync(opts.workDir, { recursive: true })
+  const own = opts.ocr ? null : await tesseractOcr()
+  const ocr = opts.ocr ?? (own as { ocr: Ocr }).ocr
+  const step = Math.max(1, info.duration / MAX_FRAMES)
+  const readable: { t: number; kind: PrivacyKind }[] = []
+  const noted: { t: number; kind: PrivacyKind }[] = []
+  let frames = 0
+  let stopped = false
+  try {
+    for (let t = 0.5; t < info.duration; t += step) {
+      if (Date.now() - started > (opts.budgetMs ?? BUDGET_MS)) {
+        stopped = true
+        break
+      }
+      const png = join(opts.workDir, `out-${t.toFixed(2)}.png`)
+      if (!frameAt(video, t, png)) continue
+      frames++
+      for (const d of matchFrame(await ocr(png), { ...opts, width: info.width, height: info.height }))
+        (d.kind === 'string' ? readable : noted).push({ t: r4(t), kind: d.kind })
+    }
+  } finally {
+    await own?.close()
+    rmSync(opts.workDir, { recursive: true, force: true })
+  }
+  const result = { frames, ms: Date.now() - started, stopped, readable, noted }
+  log('render.privacy_check', { ...result, readable: readable.length, noted: noted.length })
+  return result
+}

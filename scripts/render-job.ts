@@ -18,6 +18,7 @@ import { checkRevoiced, FROZEN_DIR } from '../src/lib/revoice.js'
 import { sniff } from '../src/lib/media/mp4.js'
 import type { PreviewFile } from '../src/lib/media/previews.js'
 import type { RunManifest } from '../src/lib/run-manifest.js'
+import { checkOutputPrivacy } from './lib/recording-privacy.js'
 import type { NarrationOp } from '../src/lib/timeline.js'
 import { localFolder, postCheckpoint, writeAtomic } from './checkpoint.js'
 import { brokeredRender } from './lib/render-broker.js'
@@ -123,9 +124,13 @@ async function main() {
   const runManifestPath = join(repoRoot, '.render', 'run-manifest.json')
   // The frozen narration op: captions.vtt captions only what its tracks leave audible.
   let narrationOp: NarrationOp | undefined
+  // A demo in privacy mode or with hide strings: the rendered video is read back for them.
+  let privacyCheck: { patterns: boolean; strings: string[] } | null = null
   if (existsSync(runManifestPath)) {
     const m = JSON.parse(readFileSync(runManifestPath, 'utf8')) as RunManifest
     if (m.attemptId === attempt) narrationOp = m.bundle?.narration?.op
+    if (m.attemptId === attempt && (m.recording?.privacy || m.recording?.hideStrings?.length))
+      privacyCheck = { patterns: m.recording.privacy === true, strings: m.recording.hideStrings ?? [] }
     if (m.attemptId === attempt && m.kind === 'render_unchanged' && m.bundle?.narration) {
       // Recorded narration (after any re-voice): only the files narration-run.ts's steps write may differ, each
       // exactly as those steps write it from the frozen files and the receipt (src/lib/narration-guard.ts).
@@ -292,6 +297,25 @@ async function main() {
     )
   if (statSync(video).size > MAX_BYTES)
     throw new StepError('The rendered MP4 is larger than 2 GB. Make the video shorter.')
+  if (privacyCheck) {
+    const r = await checkOutputPrivacy(
+      video,
+      { width: stream.width, height: stream.height, duration: durationSec },
+      { ...privacyCheck, workDir: join(repoRoot, '.render', 'privacy-check') },
+    )
+    if (r.readable.length) {
+      const at = [
+        ...new Set(
+          r.readable.map(
+            (x) => `${String(Math.floor(x.t / 60))}:${String(Math.floor(x.t % 60)).padStart(2, '0')}`,
+          ),
+        ),
+      ]
+      throw new StepError(
+        `Text the person asked to hide is still readable in the video at ${at.join(', ')}. Add or widen a hidden area over it there (in plan.json), emit that scene again and render again.`,
+      )
+    }
+  }
   // The MP4 keeps its sound; only the previews below drop it. A composition with <audio> and no track is logged.
   const audioCodecs = run('ffprobe', [
     '-v',

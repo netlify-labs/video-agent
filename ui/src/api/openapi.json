@@ -2265,6 +2265,16 @@
             "maxItems": 50,
             "description": "Areas to hide from the start (seconds of the recording). A demo with any starts private."
           },
+          "hideStrings": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 200
+            },
+            "maxItems": 50,
+            "description": "Text to hide wherever it shows on screen (a customer name, a project id), privacy mode or not: found by OCR of the recording and hidden for you to keep or remove. A demo with any starts private."
+          },
           "privacy": {
             "type": "boolean",
             "description": "Privacy mode (default false). Off: only the areas you draw and the trace's (password fields, --hide selectors) are hidden. On: private things on screen (emails, keys, tokens, URLs, personal names) are found and hidden too, each confirmed by the agent, for you to keep or remove."

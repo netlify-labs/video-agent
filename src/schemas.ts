@@ -729,6 +729,13 @@ export const RecordingInputSchema = z
       .max(50)
       .optional()
       .describe('Areas to hide from the start (seconds of the recording). A demo with any starts private.'),
+    hideStrings: z
+      .array(z.string().min(2).max(200))
+      .max(50)
+      .optional()
+      .describe(
+        'Text to hide wherever it shows on screen (a customer name, a project id), privacy mode or not: found by OCR of the recording and hidden for you to keep or remove. A demo with any starts private.',
+      ),
     privacy: z
       .boolean()
       .optional()

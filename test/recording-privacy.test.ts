@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
+  checkOutputPrivacy,
   matchFrame,
   mergeDetections,
   sampleTimes,
@@ -14,6 +15,7 @@ import {
   type Detection,
 } from '../scripts/lib/recording-privacy.js'
 import type { Analysis } from '../scripts/lib/recording-analyze.js'
+import { planRecording } from '../scripts/lib/recording-plan.js'
 import { SECRETS } from './fixtures/recording/privacy/make-secrets.js'
 
 const hasFfmpeg = spawnSync('ffmpeg', ['-version'], { stdio: 'ignore' }).status === 0
@@ -79,6 +81,34 @@ describe('privacy scan', () => {
     expect(c[0]?.preview).toBe('ad… (12 characters)')
   })
 
+  it('the plan proposes each candidate in the steps it overlaps, as a hidden area the agent can drop', () => {
+    const analysis = {
+      v: 1,
+      sha256: 'a'.repeat(64),
+      analyzer: 't',
+      source: { width: 2560, height: 1440, fps: 30, duration: 10 },
+      cursorSource: 'none',
+      idle: [],
+      scenes: [5],
+      activity: [],
+      cursor: [],
+      clicks: [],
+    } as unknown as Analysis
+    const proposal = {
+      id: 'p1',
+      start: 0,
+      end: 4,
+      reason: 'Privacy mode: email',
+      boxes: [[0, 0.1, 0.1, 0.2, 0.05]] as [number, number, number, number, number][],
+    }
+    const { plan, decisions } = planRecording({ mediaId: 'med_a', analysis, proposals: [proposal] })
+    log({ case: 'plan', steps: plan.steps.map((st) => [st.in, st.out, st.redact.map((r) => r.id)]) })
+    expect(plan.steps.map((st) => st.redact.map((r) => r.id))).toEqual([['p1'], []])
+    // Proposals aren't locked: the agent and the editor may remove them.
+    expect(plan.locked).toEqual([])
+    expect(decisions.some((d) => d.decision.includes('proposed by privacy mode'))).toBe(true)
+  })
+
   it.runIf(hasFfmpeg)(
     "finds the fixture recording's email, key and hide string while they show, and nothing after",
     async () => {
@@ -108,6 +138,30 @@ describe('privacy scan', () => {
       for (const s of Object.values(SECRETS)) expect(file).not.toContain(s)
       // Within the budget, with room to spare at this length.
       expect(r.ms).toBeLessThan(60_000)
+    },
+    120_000,
+  )
+
+  it.runIf(hasFfmpeg)(
+    'the output check: a hide string still readable is a problem; a pattern is only noted',
+    async () => {
+      const workDir = mkdtempSync(join(tmpdir(), 'va-privacy-out-'))
+      const r = await checkOutputPrivacy(
+        FIXTURE,
+        { width: 1280, height: 720, duration: 6 },
+        { patterns: true, strings: [SECRETS.name], workDir },
+      )
+      log({
+        case: 'output',
+        ms: r.ms,
+        frames: r.frames,
+        readable: r.readable,
+        noted: r.noted.map((n) => n.kind),
+      })
+      // Shown 0-3 s: read at 0.5, 1.5 and 2.5 s; gone after.
+      expect(r.readable.map((x) => x.t)).toEqual([0.5, 1.5, 2.5])
+      expect(new Set(r.noted.map((n) => n.kind))).toEqual(new Set(['email', 'key']))
+      expect(r.noted.every((n) => n.t < 3)).toBe(true)
     },
     120_000,
   )

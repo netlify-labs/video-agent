@@ -255,9 +255,15 @@ versions, comments, the editor, publishing and remix all work.
   refused (`redaction_removed`).
 - **Privacy mode is opt-in** (`"privacy": true` in `recording`, or the setup checkbox). Off, the default: only the
   areas you draw and the trace's (password fields, `--hide` selectors) are hidden, so URLs and names stay visible. On:
-  Video Agent also finds emails, keys, tokens, URLs and names on screen and hides them. A demo with any hidden area,
-  or with privacy mode on, **starts private**: check its Hidden list (the version's `recording.hidden`, where each
-  entry's `why` says why it's hidden) before you make it public.
+  the run reads the recording (OCR of sampled frames, about a second a frame, at most 90 seconds) for emails, keys and
+  tokens, URLs that carry ids, card and phone numbers, proposes a hidden area over each, and the agent looks at every
+  one, drops what isn't private and hides what the reading missed (names, for instance). **Hide strings**
+  (`"hideStrings": ["Acme Labs", …]`, or "Hide these words" in setup) are hidden wherever they're read, privacy mode or
+  not, and the rendered video is read back: if one is still readable, the run fixes it before it finishes. A demo with
+  any hidden area, privacy mode or hide strings **starts private**: check its Hidden list (the version's
+  `recording.hidden`, where each entry's `why` says why it's hidden) before you make it public. OCR can miss text
+  (small, low contrast, moving): privacy mode lowers the risk of a demo showing something private, it doesn't remove
+  it.
 - **Who sees the recording:** like voice recordings, a raw screen recording is readable by the person who uploaded it
   and by admins; once a video uses it, Creators who can see that video can too. Runs read it from Blobs (see the trust
   model above). Retention and the per-person budget are in "Your own voice-over" below.

@@ -107,6 +107,8 @@ export interface RunRecording {
   compose?: boolean | undefined
   /** Privacy mode: find private things and hide them (the agent confirms each). */
   privacy?: boolean | undefined
+  /** Text the person asked to hide wherever it shows, privacy mode or not. */
+  hideStrings?: string[] | undefined
 }
 
 export const MAX_SETUP_BOXES = 200
@@ -159,6 +161,15 @@ function isRecording(raw: unknown, media: RunMedia[] | null): boolean {
   }
   if (r.compose !== undefined && typeof r.compose !== 'boolean') return false
   if (r.privacy !== undefined && typeof r.privacy !== 'boolean') return false
+  if (
+    r.hideStrings !== undefined &&
+    !(
+      Array.isArray(r.hideStrings) &&
+      r.hideStrings.length <= 50 &&
+      r.hideStrings.every((s) => typeof s === 'string' && s.length <= 200)
+    )
+  )
+    return false
   return true
 }
 
@@ -378,6 +389,7 @@ export function serializeRunManifest(m: RunManifest): string {
             ...(m.recording.trim ? { trim: [m.recording.trim[0], m.recording.trim[1]] } : {}),
             ...(m.recording.compose ? { compose: true } : {}),
             ...(m.recording.privacy ? { privacy: true } : {}),
+            ...(m.recording.hideStrings?.length ? { hideStrings: [...m.recording.hideStrings] } : {}),
           },
         }
       : {}),

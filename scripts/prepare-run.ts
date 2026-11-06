@@ -169,7 +169,8 @@ export function feedbackStills(
 
 /**
  * A demo's recording inputs (screen-recording plan §5.5), outside video/ so they never reach the archive: the frozen
- * pointer trace (hash checked) at .va-run/recording/<id>/trace.json, and the person's boxes and trim in input.json.
+ * pointer trace (hash checked) at .va-run/recording/<id>/trace.json, and the person's boxes, trim, privacy mode and
+ * hide strings in input.json (recording.ts analyze scans for those; plan and check read the rest).
  */
 export async function hydrateRecording(root: string, r: RunRecording, fetch: Fetch) {
   const dir = join(root, '.va-run', 'recording', r.mediaId)
@@ -184,13 +185,24 @@ export async function hydrateRecording(root: string, r: RunRecording, fetch: Fet
   }
   writeFileSync(
     join(dir, 'input.json'),
-    `${JSON.stringify({ boxes: r.boxes, ...(r.trim ? { trim: r.trim } : {}) }, null, 2)}\n`,
+    `${JSON.stringify(
+      {
+        boxes: r.boxes,
+        ...(r.trim ? { trim: r.trim } : {}),
+        ...(r.privacy ? { privacy: true } : {}),
+        ...(r.hideStrings?.length ? { hideStrings: r.hideStrings } : {}),
+      },
+      null,
+      2,
+    )}\n`,
   )
   log('recording', {
     mediaId: r.mediaId,
     trace: Boolean(r.trace),
     boxes: r.boxes.length,
     trim: r.trim ?? null,
+    privacy: r.privacy === true,
+    hideStrings: r.hideStrings?.length ?? 0,
   })
 }
 

@@ -49,6 +49,8 @@ export interface PlanOptions {
   look?: LookRecording
   target?: number | undefined
   aspect?: Aspect
+  /** Privacy mode's candidates (recording-privacy.ts): proposed in each step they overlap, for the agent to confirm. */
+  proposals?: PlanRedact[] | undefined
 }
 
 export interface Decision {
@@ -607,7 +609,7 @@ export function planRecording(o: PlanOptions) {
       clicks,
       ...(focus ? { focus } : {}),
       idleSpedUp: d.sped.map((s) => ({ start: s.start, end: s.end })),
-      redact: [],
+      redact: (o.proposals ?? []).filter((p) => p.start < d.end && p.end > d.start),
     }
   })
 
@@ -620,6 +622,10 @@ export function planRecording(o: PlanOptions) {
     trace: trace?.redact.length ?? 0,
     setup: o.input?.boxes?.length ?? 0,
   })
+  if (o.proposals?.length)
+    decide(6, null, `${String(o.proposals.length)} proposed by privacy mode, for the agent to confirm`, {
+      proposals: o.proposals.map((p) => p.id),
+    })
   decide(7, null, 'no holds (emit --duration makes them)', {})
 
   const estimate = {

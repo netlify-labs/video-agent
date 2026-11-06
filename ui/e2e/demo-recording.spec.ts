@@ -65,6 +65,7 @@ test('pick a recording, hide something, trim, and make the demo', async ({ page 
   // Privacy mode is off unless ticked.
   await expect(page.getByLabel('Privacy mode')).not.toBeChecked()
   await page.getByLabel('Privacy mode').check()
+  await page.getByLabel('Hide these words').fill('Priya Raman\n\n  Acme Labs  \nPriya Raman')
   await page.getByRole('button', { name: 'Make it' }).click()
   await expect(page).toHaveURL(/\/videos\//)
   const [body] = (await creates(page)) as {
@@ -75,6 +76,10 @@ test('pick a recording, hide something, trim, and make the demo', async ({ page 
   expect(body?.durationSec).toBe(36)
   expect(body?.recording.mediaId).toBe('med_screen_plain')
   expect((body?.recording as { privacy?: boolean } | undefined)?.privacy).toBe(true)
+  expect((body?.recording as { hideStrings?: string[] } | undefined)?.hideStrings).toEqual([
+    'Priya Raman',
+    'Acme Labs',
+  ])
   expect(body?.recording.trim).toEqual([5, 95])
   expect(body?.recording.redact).toHaveLength(1)
   const box = body?.recording.redact?.[0]
