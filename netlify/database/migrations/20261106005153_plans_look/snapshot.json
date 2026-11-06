@@ -1,9 +1,9 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "0ca1dbef-993d-4ffc-85f1-81d446d9ef73",
+  "id": "8b43b559-0952-4066-a4cc-4dc01539b025",
   "prevIds": [
-    "f64984e9-45ad-4417-a2bc-cd85bbffd05c"
+    "f54d5dec-b241-45e6-8480-14a20f991c41"
   ],
   "ddl": [
     {
@@ -700,6 +700,19 @@
       "generated": null,
       "identity": null,
       "name": "usage",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attempts"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "engine_renders",
       "entityType": "columns",
       "schema": "public",
       "table": "attempts"
@@ -5731,6 +5744,32 @@
       "generated": null,
       "identity": null,
       "name": "remix_enabled",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "settings"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "false",
+      "generated": null,
+      "identity": null,
+      "name": "remotion_enabled",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "settings"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "remotion_license_ack",
       "entityType": "columns",
       "schema": "public",
       "table": "settings"
