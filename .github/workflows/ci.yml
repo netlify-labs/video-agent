@@ -6,8 +6,8 @@ on:
   # Run it on any branch by hand: gh workflow run ci.yml --ref <branch>
   workflow_dispatch:
 jobs:
-  # Two jobs side by side (they took 60+ minutes in a row on 35c7eca, mostly in apt): `verify` is the static checks and
-  # the unit and integration tests; `ui` is the app build, the looks check and Playwright.
+  # Side by side (in a row they took 60+ minutes on 35c7eca, mostly in apt): `verify` is the static checks and the unit
+  # and integration tests; `ui` is the app build, the looks check and Playwright.
   verify:
     runs-on: ubuntu-latest
     # Usually under 20 minutes; a hang fails the run instead of holding a runner for GitHub's 6 hours.
@@ -29,10 +29,16 @@ jobs:
       - run: npm run action:check
       - run: npm run db:check
 
+  # Playwright in two shards on two runners (the suite alone was about 25 minutes); the app build and the looks check
+  # run once, on the first.
   ui:
     runs-on: ubuntu-latest
-    # Usually about 25 minutes.
+    # Usually about 15 minutes.
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -40,20 +46,22 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - run: npm run build:ui
+      - if: matrix.shard == 1
+        run: npm run build:ui
       # Cached Chromium, no apt unless it fails to launch.
       - uses: ./.github/actions/playwright
       # Looks: the static checks and each example through hyperframes check (needs the Chromium above). Runs on
       # pull_request only, never pull_request_target, so contributed examples run with no secrets.
-      - run: npm run look:check
-      # Usually about 20 minutes (playwright.config.ts also stops the suite at 30 in CI).
-      - run: npm run test:ui
+      - if: matrix.shard == 1
+        run: npm run look:check
+      # playwright.config.ts also stops a shard at 30 minutes in CI.
+      - run: npm run test:ui -- --shard=${{ matrix.shard }}/2
         timeout-minutes: 35
       # Traces and screenshots of failed specs (playwright.config.ts keeps them on failure).
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-results
+          name: playwright-results-${{ matrix.shard }}
           path: test-results/
           retention-days: 7
 
