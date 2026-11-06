@@ -1,5 +1,5 @@
 // Optional MCP OAuth: off by default (nothing changes), and when on, the whole authorize → consent → token → /mcp
-// flow against a fake upstream, with the failure cases the mcp-gateway learned about.
+// flow against a fake upstream, with the failure cases other MCP OAuth servers learned about.
 import { createHash, randomBytes } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import { runCleanup } from '../src/domain/cleanup.js'
@@ -354,8 +354,8 @@ describe('MCP OAuth: authorize, consent and tokens', () => {
   })
 
   it('uses MCP_OAUTH_ALLOWED_EMAIL_DOMAINS over ALLOWED_EMAIL_DOMAINS', async () => {
-    const h = await on({ MCP_OAUTH_ALLOWED_EMAIL_DOMAINS: 'netlify.com' })
-    expect((await connect(h, 'dev@netlify.com')).access).toMatch(/^nvat_/)
+    const h = await on({ MCP_OAUTH_ALLOWED_EMAIL_DOMAINS: 'example.com' })
+    expect((await connect(h, 'dev@example.com')).access).toMatch(/^nvat_/)
     const s = await signIn(h, 'mia@acme.com')
     expect(location(s.cb).searchParams.get('error')).toBe('access_denied')
   })

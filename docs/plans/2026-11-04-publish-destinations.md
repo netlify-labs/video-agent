@@ -1,20 +1,20 @@
 # Publish destinations: the share page, YouTube, and your own sites — plan
 
-- **Status:** built (2026-11-05): phases 1, 2 and 4 live in this repo; phase 3 merged in revenue-engine PR #404
-  (`929471ad`) and netlify-labs/video-site-template (pinned by branch `release/0ea69c6`, since Netlify builds a linked
-  repo from a branch, not a SHA). Was: draft 3 (2026-11-04). The owner accepted draft 3's proposed defaults
+- **Status:** built (2026-11-05): phases 1, 2 and 4 live in this repo; phase 3 merged in an internal monorepo and a
+  private site template repo (pinned by a release branch, since Netlify builds a linked repo from a branch, not a
+  SHA). Was: draft 3 (2026-11-04). The owner accepted draft 3's proposed defaults
   (§9, decisions 7-11).
-  - First real publish (2026-11-05): the "Netlify Artifacts" HTTP destination, registered in Video Agent production
-    against site-vendor **dev** (`/video-agent/revenue-engine`), published "Netlify: Every AI primitive you need" to a
-    new, unprotected site, https://ai-on-netlify.netlify.app/. Checked from outside: page 200, `site.json` lists the
+  - First real publish (2026-11-05): an internal HTTP destination, registered in Video Agent production
+    against the site service's **dev** stage, published "Netlify: Every AI primitive you need" to a new, unprotected
+    test site. Checked from outside: page 200, `site.json` lists the
     video, and the 8.1 MB mp4 answers a Range request with 206 (`bytes 0-1023/8125713`). The dev smoke separately
     passed a password-protected site: 401 without the password, 206 for two ranges and 416 past the end with it.
-  - Still open: the 40 MB copy (gate 3a), site-vendor in production (smart-ci's plan fails on an unrelated ops-stack
-    `SYSTEM_TABLE` check), publishing to an existing site and a real agent run (gate 3b, spike P6), and YouTube
+  - Still open: the 40 MB copy (gate 3a), the site service in production (its deploy pipeline fails on an unrelated
+    check), publishing to an existing site and a real agent run (gate 3b, spike P6), and YouTube
     (P4, P5, 4.G, deferred by the owner).
   - Draft 1: written against the code.
   - Draft 2: the owner's answers to draft 1's open questions; targets made fully generic at the owner's request.
-  - Draft 3: two remote reviews of draft 2 (commit `2e1d06c`) through `nax run agent`, review only:
+  - Draft 3: two remote reviews of draft 2 (commit `2e1d06c`) through an internal agent-run CLI, review only:
     - Claude Fable 5.1, high effort: "sound with changes", 923 credits.
     - Codex `gpt-6.1-sol`, high effort: "needs rework", 226 credits.
 
@@ -24,9 +24,9 @@
   - Publishing today only means the share page on this app. We want **one generic publishing interface** where the
     share page, YouTube and others are channels. YouTube needs the person to connect their account so we can upload
     for them.
-  - A second channel: **build a Netlify site with the video in it**, using the internal site-vendor service
-    (revenue-engine `services/site-vendor`). That one is internal and must not be part of the open-source app, but
-    it has to slot into the same interface. site-vendor gains a way to **upload blobs to a site it created**, and the
+  - A second channel: **build a Netlify site with the video in it**, using an internal site service
+    (in an internal monorepo). That one is internal and must not be part of the open-source app, but
+    it has to slot into the same interface. The site service gains a way to **upload blobs to a site it created**, and the
     video goes there.
   - People can **add a video to a site they already have**. Optionally, an **agent run works it into the site's
     design**, from a default prompt plus where the person wants it.
@@ -76,9 +76,9 @@ now or calls back later.
 A destination may also list **targets**: things it already holds for this person (id, name, description, URL,
 opaque metadata). It may also take free-text **instructions**. The app never knows what a target is.
 
-Netlify's internal "Netlify site" channel is an HTTP destination whose receiver lives in revenue-engine:
+Netlify's internal "Netlify site" channel is an HTTP destination whose receiver lives in the internal monorepo:
 
-- it uses site-vendor, which gains **blob uploads**;
+- it uses the site service, which gains **blob uploads**;
 - the video lives in the vended site's own Netlify Blobs, and an edge function on that site streams it;
 - with instructions, an Agent Runner run works the video into the site's design.
 
@@ -186,7 +186,7 @@ Netlify's internal "Netlify site" channel is an HTTP destination whose receiver 
 - Reads are eventually consistent (up to 60 s) unless `consistency: 'strong'`.
 - The only concurrency control is `onlyIfMatch` (by ETag) and `onlyIfNew`.
 
-**site-vendor** (revenue-engine `b65b0596`, identical to `origin/master`; checked locally, because neither reviewer
+**The site service** (the internal monorepo's main branch; checked locally, because neither reviewer
 received it)
 
 - It is a Hono app on Lambda behind API Gateway HTTP API (`src/app.ts`), with a provider-wide 29 s timeout
@@ -211,7 +211,7 @@ received it)
 | `youtube`    | Built in, not a row. `youtubeEnabled` in `settings`.    | Each publisher's connected Google account | Yes                    |
 | `http`       | A row in `destinations`, as many as an admin adds       | A signing secret (ours)                   | Yes                    |
 
-The internal Netlify-site channel is an `http` row. Nothing about site-vendor, sites or agents appears in the app's
+The internal Netlify-site channel is an `http` row. Nothing about the site service, sites or agents appears in the app's
 code or copy, only in that row's configuration and in the receiver.
 
 ### 2.2 The interface (server side)
@@ -601,13 +601,13 @@ publisher's name and email** (off by default).
 
 ## 5. Internal: the Netlify site destination (not in the public snapshot)
 
-This part lives in revenue-engine. In this repo it's only an HTTP destination an admin adds. When the plans go into
+This part lives in the internal monorepo. In this repo it's only an HTTP destination an admin adds. When the plans go into
 the public snapshot, drop this section (see [going public](2026-11-02-going-public.md), the `docs/plans/` item).
 
-### 5.1 New in site-vendor: blobs on a vended site
+### 5.1 New in the site service: blobs on a vended site
 
 The video goes into the vended site's own Netlify Blobs (a site-wide store, `site-files`), written with the tenant's
-token. site-vendor **pulls** files from signed links, because they can't come through its request bodies.
+token. The site service **pulls** files from signed links, because they can't come through its request bodies.
 
 | Route                                                                                    | What it does                                                                                                                                                                                                 |
 | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -629,13 +629,13 @@ token. site-vendor **pulls** files from signed links, because they can't come th
     then pinned, and port 443.
   - No redirects, no credentials in the URL.
   - A deadline and the byte limit apply while streaming.
-- **Guardrails** (alarms, as elsewhere in site-vendor): per-site and per-tenant bytes, copy failures, queue age.
+- **Guardrails** (alarms, as elsewhere in the site service): per-site and per-tenant bytes, copy failures, queue age.
 - `retract delete` deletes the site and its blobs. `retract lock` leaves them behind the password.
 
 ### 5.2 The site template
 
 A template repo (name to pick). Each site gets **its own repo**, a content clone at a pinned ref, linked through
-site-vendor's git mode. Its own repo gives an agent run (§5.4) a place to commit changes that no other site shares.
+the site service's git mode. Its own repo gives an agent run (§5.4) a place to commit changes that no other site shares.
 Spike P2 settles who clones it, where the repos live, and cleanup. The template holds:
 
 - `index.html` plus a little JS that reads `/site.json` and shows the video(s): `<video>` with a poster, a captions
@@ -672,7 +672,7 @@ Adding, replacing or removing a video never rebuilds the site unless an agent ru
 
 ### 5.3 The receiver
 
-A small service in revenue-engine (or a route in `services/api`; §9 open question). It keeps its own DynamoDB
+A small service in the internal monorepo (or a route in `services/api`; §9 open question). It keeps its own DynamoDB
 records:
 
 - each publication's workflow: operation id, callback token, link expiry, created resources, next action;
@@ -867,8 +867,8 @@ and more types can come later.
    - a private video refused;
    - Playwright from the dialog to `live` and Reveal (mock server).
 
-3. **Internal: Netlify site (revenue-engine).**
-   - **3a, a new site per video:** site-vendor blob routes and `blob-copy`; the template; the receiver for new sites,
+3. **Internal: Netlify site (the internal monorepo).**
+   - **3a, a new site per video:** the site service's blob routes and `blob-copy`; the template; the receiver for new sites,
      removal and passwords.
 
      **Gate:**
@@ -909,7 +909,7 @@ and more types can come later.
   - from `/tmp` and as a stream;
   - with a forced mid-upload failure: does the client retry a stream, or must we re-read the file?
   - memory and time.
-- **P2** Per-site repos: who content-clones the template (the receiver, as RE does today, or site-vendor), which
+- **P2** Per-site repos: who content-clones the template (the receiver, as the internal monorepo does today, or the site service), which
   GitHub org holds them, the GitHub-app link for many repos, and cleanup when a site is retracted.
 - **P3** On a vended site, the edge function streams a blob with range requests (seek in Safari and Chrome).
   - Does site password protection cover `/site.json` and `/v/*`, including HEAD and Range?
@@ -921,7 +921,7 @@ and more types can come later.
 - **P6** An Agent Runner run on a vended site:
   - `merge` or `publish` landing, and proving the commit reached production;
   - how long a "place this video" run takes and what it costs;
-  - whether the `netliclaw` team can run agents.
+  - whether the test team can run agents.
 
 ## 9. Decisions
 
@@ -956,8 +956,8 @@ and more types can come later.
 
 **Owner (2026-11-05)**
 
-- **D1:** the receiver lives in site-vendor itself (new routes next to its APIs).
-- **D2:** repos in netlify-labs; agent runs bill to netliclaw with a 300-credit ceiling and a 20-minute timeout; the
+- **D1:** the receiver lives in the site service itself (new routes next to its APIs).
+- **D2:** repos in netlify-labs; agent runs bill to a test team with a 300-credit ceiling and a 20-minute timeout; the
   publisher's instructions authorize edits to their own site. (Spike P2 then found v1 needs no per-site repos: sites
   link to the shared template at a pinned commit, and agent runs land by publish.)
 - **D3:** external publications stay where they are when a publisher leaves or disconnects.
@@ -981,13 +981,13 @@ and more types can come later.
   and stay visible.
 - **Leaking data.** The manifest is minimal; contact details are opt-in; raw receiver bodies are never stored;
   secrets and tokens are encrypted and tested for absence in DTOs, webhooks and logs.
-- **SSRF.** Every outbound call (admin URLs, the source pulls in site-vendor) uses pinned public addresses, no
+- **SSRF.** Every outbound call (admin URLs, the source pulls in the site service) uses pinned public addresses, no
   redirects and limits.
 - **An agent run breaking someone's site.** It works on the site's own repo, landing is checked against production,
   and a failure falls back to the standard layout or the last good deploy.
 - **Google.** OAuth verification gates more than 100 users; the upload bucket (100 a day) and the 10,000 units are
   per project.
-- **Scope creep in site-vendor.** The blob routes are its first byte-moving work. `blob-copy` stays off the API
+- **Scope creep in the site service.** The blob routes are its first byte-moving work. `blob-copy` stays off the API
   Lambda and its 29 s limit.
 
 ## 12. Sources
@@ -1013,9 +1013,8 @@ and more types can come later.
 
 ## 13. Review log (draft 2 → 3)
 
-Two remote reviews of `2e1d06c`: Fable 5.1 high (runner `6aebb853f00f9747c27c0066`) and Codex `gpt-6.1-sol` high
-(runner `6aebb85398c04d3efd8fe0bb`). Neither received the site-vendor context file (both said so), so every
-site-vendor fact in §1 was re-checked locally against revenue-engine `b65b0596`.
+Two remote reviews of `2e1d06c`: Fable 5.1 high and Codex `gpt-6.1-sol` high, each in its own runner. Neither
+received the site service's context file (both said so), so every site-service fact in §1 was re-checked locally against the internal monorepo's main branch.
 
 **Adopted** (each claim checked first):
 
@@ -1036,7 +1035,7 @@ site-vendor fact in §1 was re-checked locally against revenue-engine `b65b0596`
   ±300 s window, headers, `contract: 1`, every event's body, response limits, 3xx and bad 2xx, `Retry-After`,
   callback answers and order, token lifetime, test vectors.
 - **SSRF:** the webhook port discards bodies and `FetchPort` doesn't pin (Codex 7; checked `http.ts:104-110`). →
-  `postJsonForResponse` with the same protections; site-vendor pulls are pinned and allowlisted (§3.1, §5.1).
+  `postJsonForResponse` with the same protections; the site service's pulls are pinned and allowlisted (§3.1, §5.1).
 - **Callback tokens must be recoverable on retry, and the routes sit behind `requireAuth`** (Codex 8; checked
   `app.ts:237`). → derived tokens, routes before `requireAuth` (§3.3).
 - **`secretOnce` wasn't really once, and raw error bodies could leak** (Codex 9). → issued, expiry and consume times,
@@ -1068,13 +1067,13 @@ site-vendor fact in §1 was re-checked locally against revenue-engine `b65b0596`
   - observability (both);
   - the library badge's real location (Codex);
   - `idempotency-key` (Fable 15).
-- **site-vendor and the receiver:**
+- **The site service and the receiver:**
   - content-addressed keys, a `sha256` required, `409` on a mismatch, `/tmp` staging for retries;
   - greedy key routes;
   - a durable queue in place of "202 then keep going";
   - `site.json` with conditional writes and a per-site lock;
   - strong reads in the edge function;
-  - passwords set **at ensure** (site-vendor's ensure takes `protection`, `types.ts:98`), so a site is never public
+  - passwords set **at ensure** (the site service's ensure takes `protection`, `types.ts:98`), so a site is never public
     first.
 
   (Fable 12-13, Codex 14-15) → §5.1-§5.3.

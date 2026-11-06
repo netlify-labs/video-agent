@@ -25,8 +25,8 @@ gh api -X PUT repos/netlify-labs/video-agent/actions/permissions/access -f acces
 
 ## A3. Token permissions and the permission endpoint: done for a private org member; outside account pending
 
-The PR author, sender and commenter was DavidWells: a `netlify-labs` member whose membership is **private**
-(`/orgs/netlify-labs/members/DavidWells` 204, `/public_members/DavidWells` 404) and admin of the sandbox repo.
+The PR author, sender and commenter was one person: an org member whose membership is **private**
+(`/orgs/{org}/members/{login}` 204, `/public_members/{login}` 404) and admin of the sandbox repo.
 
 | Operation                                                                 | `{}` | `pull-requests: write` | `issues: write` | `contents: write` |
 | ------------------------------------------------------------------------- | ---- | ---------------------- | --------------- | ----------------- |
@@ -49,7 +49,7 @@ The PR author, sender and commenter was DavidWells: a `netlify-labs` member whos
 - Rate limit: this org's `GITHUB_TOKEN` core limit is **15,000/hour** (Enterprise Cloud), not 1,000; the plan's
   1,000 stays the design budget for other orgs.
 
-Outside account (`netliclaw`, a real user with no access to the repo), through `A3_LOGINS` on a `workflow_dispatch`
+Outside account (a real test user with no access to the repo), through `A3_LOGINS` on a `workflow_dispatch`
 run with `permissions: {}`: the endpoint answers **200 with `permission: none`** (and an empty `role_name`), not 404.
 So 1.3's trust check reads the value: only `write`, `maintain` and `admin` are trusted; `none`, `read`, `triage`, a
 404 and any other answer are not.
@@ -61,7 +61,7 @@ after going public.
 ## A4. Private attachments: done
 
 A PNG pasted into PR #1's description (a private repo) became
-`<img src="https://github.com/user-attachments/assets/<uuid>">`. The probe (run 41979953547, `contents: read`,
+`<img src="https://github.com/user-attachments/assets/<uuid>">`. The probe (a `workflow_dispatch` run, `contents: read`,
 `pull-requests: read`):
 
 | Method                                                 | Result                                                                                                                                                     |

@@ -40,7 +40,7 @@ const agent = {
   agent: 'claude',
   model: 'claude-opus-5-5',
   effort: null,
-  deployId: '6ae50f5ea5237aafc3dd8148',
+  deployId: '6ae5000000000000000000a1',
   promptTemplateVersion: 1,
 }
 

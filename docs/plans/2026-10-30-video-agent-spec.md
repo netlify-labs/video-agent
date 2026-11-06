@@ -553,8 +553,8 @@ _Done when_ `curl` with an API key creates a video, gets a signed webhook, downl
 
 1. ~~How does our deployment get the Netlify brand without it living in the public repo?~~ Owner (2026-10-30): inject
    it through netlify-agent-kit. A deployment sets `BRAND_ZIP_URL`; netlify-agent-kit's `files` unpacks the zip into
-   `context/brand/` for runs, and the build reads its `brand.json` for the web app. Ours is the `netlify-brand` pack
-   on the gtm-agent-skills site.
+   `context/brand/` for runs, and the build reads its `brand.json` for the web app. Ours is our company's brand pack,
+   served from an internal site.
 2. ~~Should the README include a public demo deployment?~~ Owner (2026-10-30): no; revisit after launch.
 3. This spec, `docs/spikes.md` and `.beads` stay public, scrubbed of internal names (owner, 2026-10-30).
 

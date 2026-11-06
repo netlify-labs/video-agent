@@ -601,7 +601,7 @@
 <script>
 (() => {
   // Opened from a preview build (?preview=1&app=<the live app>): the app can't run here, so say so, and send every
-  // link and video to the live app, like the employees' copy does at publish time.
+  // link and video to the live app, like a copy published elsewhere does.
   const params = new URLSearchParams(location.search)
   const liveApp = (() => {
     try {
@@ -635,7 +635,7 @@
   const $$ = (s, r = document) => [...r.querySelectorAll(s)]
   const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x))
   const ease = (x) => 1 - Math.pow(1 - clamp(x), 3)
-  // Interactions a click listener can't see go to the employees' copy's tracking (a no-op on the public page).
+  // Interactions a click listener can't see go to the host page's tracking when it has one (a no-op here).
   const report = (label) => { try { window.artifactTrack?.(label) } catch {} }
   const PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg>'
   const PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>'
@@ -862,7 +862,7 @@
   setMode('after')
 
   // A prompt to paste into Claude Code or any agent: connect, install the skill, then make a video with you. The app's
-  // address comes from data-site when this page is served somewhere else (the employees' artifact copy).
+  // address comes from data-site when this page is served somewhere else (a copy published elsewhere).
   const SITE = document.documentElement.dataset.site || location.origin
   const PROMPT = `Set me up to make videos with Netlify Video Agent (${SITE}).
 

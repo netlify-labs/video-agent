@@ -986,7 +986,7 @@ Gate: a repo outside the team uses the action from the README alone and gets a v
 
 ## 13. Not in v1 (designs kept)
 
-- **Marketplace listing.** A public repo `netlify-labs/video-agent-action` with `action.yml` at its root, a built copy
+- **Marketplace listing.** A separate public repo for the action with `action.yml` at its root, a built copy
   of `packages/action` (`action.yml`, `dist/`, `README.md`, `LICENSE`) pushed by `packages/action/scripts/release.ts`,
   its own `v1` tags (the script moves `v1` on each `v1.x.y`), `branding` for the badge, and the name "Video Agent" if
   free. Do it when people ask for it, after going public.

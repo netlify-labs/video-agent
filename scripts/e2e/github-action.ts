@@ -4,7 +4,7 @@
 //
 //   npx tsx scripts/e2e/github-action.ts --dry [--phase 1]    # checks env and tools, prints the plan and credits
 //   npx tsx scripts/e2e/github-action.ts --selftest           # the same scenarios in-process (no network, no credits)
-//   VIDEO_AGENT_URL=https://<site> VIDEO_AGENT_KEY=nva_… SANDBOX_REPO=netlify-labs/video-agent-action-sandbox \
+//   VIDEO_AGENT_URL=https://<site> VIDEO_AGENT_KEY=nva_… SANDBOX_REPO=<org>/<sandbox repo> \
 //     GH_TOKEN=<a PAT that can push, label, comment and release there> [ACTION_REF=<sha>] [CREDIT_CEILING=600] \
 //     npx tsx scripts/e2e/github-action.ts [--keep] [--only <scenario>[,<scenario>]]
 //

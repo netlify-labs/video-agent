@@ -1506,4 +1506,4 @@ shared rules 1–10.
   [renderFrames()](https://remotion.dev/docs/renderer/render-frames), [Color space](https://www.remotion.dev/docs/options/color-space),
   [v4.0.498 release notes](https://github.com/remotion-dev/remotion/releases/tag/v4.0.498)
 - docs/plans/2026-11-04-*.md (sibling plans), `docs/plans/2026-11-04-roadmap.md`, the cross-plan seam review, and the
-  remote round-3 review (`.nax/agent-sessions/6aebad89fdf415daea61c8b7/result.md`)
+  remote round-3 review (its result file)

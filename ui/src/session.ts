@@ -7,7 +7,7 @@
 // - One tab (the leader, chosen with a Web Lock) refreshes; others ask it over a BroadcastChannel, because a
 //   refresh token works only once and two tabs refreshing at the same moment would sign each other out.
 // - The session is dropped only when Identity itself rejects the token, never on a network error.
-// Adapted from revenue-engine's clients/frontend/src/auth/session.ts.
+// Adapted from the session code of an internal Netlify app.
 import {
   getUser,
   handleAuthCallback,

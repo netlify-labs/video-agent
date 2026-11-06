@@ -14,14 +14,14 @@ Status: ideas only (idea-wizard phases 1–3). No beads yet; pick from the top 5
 - The MCP (`/mcp`) authenticates `Authorization: Bearer nva_…` API keys only (src/domain/auth.ts
   `principalFromRequest`), and has no OAuth discovery, so OAuth-only clients (claude.ai web connectors, ChatGPT,
   day.ai) can't connect without someone pasting a key.
-- Prior art for OAuth: gtm-services `services/mcp-gateway` is a full OAuth 2.1 authorization server in front of
+- Prior art for OAuth: an internal MCP gateway of ours is a full OAuth 2.1 authorization server in front of
   Netlify OAuth: RFC 8414/9728 metadata, DCR (`oauth-registration`), CIMD client ids (`cimd.ts`, host allowlist as an
-  SSRF guard), PKCE codes, opaque hashed tokens with 30-day sessions (`token-service.ts`), and a workforce check
-  (`workforce-check.ts`: `@netlify.com` email and an approved account). Lessons it paid for: loopback redirect URIs
-  must match on any port (RFC 8252, #257); non-Claude clients need their own public client records; tokens must be
+  SSRF guard), PKCE codes, opaque hashed tokens with 30-day sessions (`token-service.ts`), and an employee check
+  (a company email and an approved account). Lessons it paid for: loopback redirect URIs
+  must match on any port (RFC 8252); non-Claude clients need their own public client records; tokens must be
   bound to the `resource`.
-- Prior art for serving skills: gtm-services `agent-skills` serves the repo's skills as zips at an unlisted URL with
-  deterministic (UTC-stamped) zip entries (#258, #259).
+- Prior art for serving skills: an internal skills service serves the repo's skills as zips at an unlisted URL with
+  deterministic (UTC-stamped) zip entries.
 
 ## The 30 considered
 
@@ -108,7 +108,7 @@ AI Gateway audio path (spike both before committing).
 (API key or OAuth), the tool flow (plan → questions → brief → create → poll → publish), etiquette (ask before
 spending, use media_ids, share links), and recipes: PR → demo video (read the diff and screenshots), release notes →
 changelog video, long video → 15 s social cut, localise into N languages. Serve it from the site as a deterministic
-zip with install commands on the API docs page (gtm-services agent-skills is the pattern), and expose the recipes as
+zip with install commands on the API docs page (that internal skills service is the pattern), and expose the recipes as
 MCP `prompts` so clients without skills still get them.
 **Why.** The MCP is powerful but blank; skills teach agents the good path and make "make a launch video for this PR"
 a one-liner. Shipping it from the deployment means every fork serves its own, pointing at its own URL.

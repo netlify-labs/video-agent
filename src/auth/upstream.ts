@@ -135,7 +135,7 @@ export function netlifyUpstream(
       )
       if (!user.success) throw new UpstreamError('malformed', 'user')
       // Netlify's user record has no verification flag; a Netlify sign-in is taken as proof of the address,
-      // as in gtm-services' mcp-gateway.
+      // as other Netlify OAuth servers do.
       return {
         subject: user.data.id,
         email: user.data.email.trim().toLowerCase(),

@@ -1,8 +1,8 @@
 // Starts the ONE Remotion proof run (owner's request, 2026-11-05), or with --dry shows exactly what it would do and
 // what it should cost, touching no network and spending nothing.
 //
-//   npx tsx docs/spikes/e3/poc-launch.ts --dry
-//   npx tsx docs/spikes/e3/poc-launch.ts --yes     (only after the owner's OK on the dry run)
+//   SITE_ID=<the deployment's site id> npx tsx docs/spikes/e3/poc-launch.ts --dry
+//   SITE_ID=<the deployment's site id> npx tsx docs/spikes/e3/poc-launch.ts --yes     (only after the owner's OK)
 //
 // The run is a standalone Agent Runner run (docs/spikes/start-run.ts, land "none": nothing committed or deployed) on the
 // internal deployment, from the branch below, like the S1 runs. The app is never involved: no ENGINES, no setting, no
@@ -14,7 +14,8 @@ import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
-const SITE = '3a3f4565-083a-4b98-b01b-9011f70f53df'
+const SITE = process.env.SITE_ID ?? '' // the Netlify site to run on
+if (!SITE) throw new Error('Set SITE_ID to the Netlify site to run on.')
 const BRANCH = 'spike/remotion-poc'
 const PROMPT = 'docs/spikes/prompts/remotion-poc.md'
 const DEADLINE_MIN = 25

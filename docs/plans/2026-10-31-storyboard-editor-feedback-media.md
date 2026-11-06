@@ -33,7 +33,7 @@ Non-goals: audio (va-css.2), templates (va-css.3), spend limits (va-css.4), emai
   `totalCreditsCost`); the reconciler stores `latestStep` every minute. The SDK has no render-only mode.
 - **AI Gateway** injects `ANTHROPIC_*`, `OPENAI_*`, `GEMINI_*`, `OPENROUTER_*` and `TYPESAFE_*` keys and base URLs into
   Functions. TypeSafe's `jev` models are decision models suited to fast routing. Usage is billed at 180 credits per
-  US$. **Our team (`gtm-engineering`) has Gateway access** (owner, 2026-10-31); other deployers may not, so planning
+  US$. **Our team has Gateway access** (owner, 2026-10-31); other deployers may not, so planning
   is optional.
 - **Code constraints:**
   - Status derives from the latest attempt (`src/domain/types.ts:30–48`).
@@ -298,8 +298,8 @@ Existing CI (typecheck, lint, vitest, Playwright, `openapi:check`, migrations in
 
 ## Decision log
 
-**Round-2 review (2026-10-31), draft 4:** Fable 5 high (runner `6ae64145bc2b9a453ff73385`, 787 credits) and Codex
-`gpt-6.1-sol` high (runner `6ae64145e9215f3b1d0eb6f6`, 215 credits). Claims checked against the code: webhooks emit
+**Round-2 review (2026-10-31), draft 4:** Fable 5 high (a runner, 787 credits) and Codex
+`gpt-6.1-sol` high (a runner, 215 credits). Claims checked against the code: webhooks emit
 only with an API key, and `webhook_events.api_key_id` is NOT NULL; the last-admin guard covers only `member`; signup
 inserts `member`; idempotency replays before loading the job; `GET /videos/{id}` has no per-video check; the template
 loads GSAP from a CDN; `targetDurationSec` is an integer.
@@ -344,7 +344,7 @@ loads GSAP from a CDN; `targetDurationSec` is an integer.
 - **Cost:** split runs and planning on the admin usage page, plus "my usage this month".
 - **Order:** R, B, D, A, then the editor, then media.
 
-**Draft 2:** plan with questions replaced Gateway-written storyboards; the gtm-engineering team has Gateway access.
+**Draft 2:** plan with questions replaced Gateway-written storyboards; our team has Gateway access.
 
 **Reviews of draft 1** (Fable 5 high, 844 credits; Codex `gpt-6.1-sol` high, 192 credits). Taken:
 
