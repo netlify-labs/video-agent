@@ -39,7 +39,7 @@ and adds it to the release notes. It reads the PR through GitHub's API and never
 Pin the action to a full commit SHA, with the tag in a comment so you can see which release it is:
 
 ```yaml
-- uses: netlify-labs/video-agent/packages/action@a9cd14b299d4b2a53283980b6913b9ffdf2b453f # action-v1.0.0
+- uses: netlify-labs/video-agent/packages/action@89d737ce734c308660ec7c55aa9f8b8c6d1bef3e # action-v1.0.0
 ```
 
 `@action-v1` (a tag that moves to each 1.x release) works too, but a SHA can't be moved under you.
@@ -71,7 +71,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
-      - uses: netlify-labs/video-agent/packages/action@a9cd14b299d4b2a53283980b6913b9ffdf2b453f # action-v1.0.0
+      - uses: netlify-labs/video-agent/packages/action@89d737ce734c308660ec7c55aa9f8b8c6d1bef3e # action-v1.0.0
         with:
           url: ${{ vars.VIDEO_AGENT_URL }} # an org-level variable
           api-key: ${{ secrets.VIDEO_AGENT_KEY }}
@@ -100,7 +100,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
-      - uses: netlify-labs/video-agent/packages/action@a9cd14b299d4b2a53283980b6913b9ffdf2b453f # action-v1.0.0
+      - uses: netlify-labs/video-agent/packages/action@89d737ce734c308660ec7c55aa9f8b8c6d1bef3e # action-v1.0.0
         with:
           url: ${{ vars.VIDEO_AGENT_URL }} # an org-level variable
           api-key: ${{ secrets.VIDEO_AGENT_KEY }}
@@ -125,7 +125,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
-      - uses: netlify-labs/video-agent/packages/action@a9cd14b299d4b2a53283980b6913b9ffdf2b453f # action-v1.0.0
+      - uses: netlify-labs/video-agent/packages/action@89d737ce734c308660ec7c55aa9f8b8c6d1bef3e # action-v1.0.0
         id: video
         with:
           url: ${{ vars.VIDEO_AGENT_URL }} # an org-level variable
@@ -162,7 +162,7 @@ jobs:
       - uses: googleapis/release-please-action@v4
         id: rp
       - if: steps.rp.outputs.release_created
-        uses: netlify-labs/video-agent/packages/action@a9cd14b299d4b2a53283980b6913b9ffdf2b453f # action-v1.0.0
+        uses: netlify-labs/video-agent/packages/action@89d737ce734c308660ec7c55aa9f8b8c6d1bef3e # action-v1.0.0
         with:
           url: ${{ vars.VIDEO_AGENT_URL }} # an org-level variable
           api-key: ${{ secrets.VIDEO_AGENT_KEY }}
@@ -195,7 +195,7 @@ jobs:
       - run: node .github/scripts/shoot.mjs "$PREVIEW_URL" video-shots/
         env:
           PREVIEW_URL: https://deploy-preview-${{ github.event.pull_request.number }}--acme.netlify.app
-      - uses: netlify-labs/video-agent/packages/action@a9cd14b299d4b2a53283980b6913b9ffdf2b453f # action-v1.0.0
+      - uses: netlify-labs/video-agent/packages/action@89d737ce734c308660ec7c55aa9f8b8c6d1bef3e # action-v1.0.0
         with:
           url: ${{ vars.VIDEO_AGENT_URL }} # an org-level variable
           api-key: ${{ secrets.VIDEO_AGENT_KEY }}
@@ -238,7 +238,7 @@ strategy:
       - { aspect: '16:9', prompt: '' }
       - { aspect: '9:16', prompt: 'A vertical cut for social.' }
 steps:
-  - uses: netlify-labs/video-agent/packages/action@a9cd14b299d4b2a53283980b6913b9ffdf2b453f # action-v1.0.0
+  - uses: netlify-labs/video-agent/packages/action@89d737ce734c308660ec7c55aa9f8b8c6d1bef3e # action-v1.0.0
     with:
       url: ${{ vars.VIDEO_AGENT_URL }}
       api-key: ${{ secrets.VIDEO_AGENT_KEY }}

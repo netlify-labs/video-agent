@@ -1,9 +1,9 @@
 // The example workflows (github-action plan §8), written once: /docs/github shows them and test/docs.test.ts checks
 // that packages/action/README.md carries the same ones. Each pins the action to a full commit SHA with the tag in a
-// comment; the release bead (va-mg4i.5.3) moves PIN to the tagged commit.
+// comment; PIN is the commit action-v1.0.0 tags; move it with each release.
 
 /** The commit the examples pin, and the tag it carries. */
-export const PIN = { sha: 'a9cd14b299d4b2a53283980b6913b9ffdf2b453f', tag: 'action-v1.0.0' }
+export const PIN = { sha: '89d737ce734c308660ec7c55aa9f8b8c6d1bef3e', tag: 'action-v1.0.0' }
 
 export const USES = `netlify-labs/video-agent/packages/action@${PIN.sha} # ${PIN.tag}`
 
