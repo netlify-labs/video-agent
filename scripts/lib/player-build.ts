@@ -11,6 +11,9 @@ export function packageBuildOptions(root: string, node: boolean): BuildOptions {
     format: 'esm',
     platform: node ? 'node' : 'neutral',
     target: node ? 'node22' : 'es2022',
+    // css-tree (the app's scope checks, which local mode runs too) loads its data with createRequire at run time,
+    // which a bundle can't follow; its prebuilt ESM bundle has the data inlined.
+    alias: { 'css-tree': 'css-tree/dist/csstree.esm' },
     logLevel: 'warning',
   }
 }
