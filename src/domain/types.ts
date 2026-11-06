@@ -1,4 +1,4 @@
-// Domain records. These mirror the database tables (db/schema.ts) and the in-memory store.
+// Domain records. These mirror the database tables (src/store/schema.ts) and the in-memory store.
 import type { BundleReference } from '../lib/bundle-references.js'
 import type { EngineId } from './engines.js'
 import type { Language } from '../lib/language.js'
@@ -128,7 +128,7 @@ export interface SettingsRow {
 
 export type TranscriptionProvider = 'local' | 'elevenlabs' | 'off'
 
-/** The voice-over settings' defaults, as the database fills them (db/schema.ts). */
+/** The voice-over settings' defaults, as the database fills them (src/store/schema.ts). */
 export const NARRATION_SETTING_DEFAULTS = {
   narrationEnabled: true,
   transcriptionProvider: 'local',

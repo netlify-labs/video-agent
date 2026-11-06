@@ -16,7 +16,7 @@ export const PARAKEET_MODEL = 'parakeet-tdt-0.6b-v3-int8'
 /**
  * S11 measured Parakeet's phrase starts consistently ~236-240 ms early (reported before the true onset), and its
  * phrase ends 430-485 ms late. So captions add a fixed 240 ms to every word's start and leave its end alone, keeping
- * each word at least WORD_MIN_S long. Median start error after it: 34-48 ms. Re-measure (spikes/s11) when the model
+ * each word at least WORD_MIN_S long. Median start error after it: 34-48 ms. Re-measure (docs/spikes/s11) when the model
  * changes.
  */
 export const PARAKEET_OFFSET_S = 0.24

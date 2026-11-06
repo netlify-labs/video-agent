@@ -427,7 +427,7 @@ npm ci
 npm test             # unit and integration tests (in-memory store and a real Postgres via PGlite)
 npm run typecheck && npm run lint
 npm run openapi:gen  # after changing routes; CI fails if ui/src/api/openapi.json or the UI's types are stale
-npm run db:generate  # after changing db/schema.ts
+npm run db:generate  # after changing src/store/schema.ts
 npx netlify dev      # local app (set ALLOW_NON_PRODUCTION=true to serve the API outside production)
 ```
 
@@ -436,6 +436,23 @@ The code is TypeScript throughout: Hono + zod-openapi API (`src/app.ts`), domain
 in `ui/`. The design and its reasoning are in [`docs/plans/`](docs/plans/), starting with the
 [v1 spec](docs/plans/2026-10-30-video-agent-spec.md); measurements behind the defaults are in
 [`docs/spikes.md`](docs/spikes.md).
+
+### Repository layout
+
+The root keeps only what Netlify, the Deploy button and agent runs look for by path.
+
+| Path                           | What it is                                                                                             |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| `src/`                         | The service: API, MCP server, domain logic, adapters, and the database schema (`src/store/schema.ts`). |
+| `ui/`                          | The React web app, its Playwright specs (`ui/e2e/`) and public static pages (`ui/static/`).            |
+| `netlify/`                     | Functions, edge functions and database migrations (paths Netlify reads).                               |
+| `scripts/`                     | Build, setup and look tooling, and the scripts agent runs call (`prepare-run.ts`, `render-job.ts`, …). |
+| `video/`, `context/`, `looks/` | What a run works with: the HyperFrames project, your brand, and the look catalog.                      |
+| `packages/`                    | The published CLI, SDK and player, and the GitHub Action.                                              |
+| `skills/`                      | The agent skill each deployment serves at `/skills/`.                                                  |
+| `test/`                        | Unit and integration tests for `src/` and `scripts/`.                                                  |
+| `docs/`                        | Plans, spike results (`docs/spikes.md`) and the spike harnesses behind them (`docs/spikes/`).          |
+| `examples/`                    | Standalone examples, such as a publish-destination receiver.                                           |
 
 ### Voice-over live gates
 

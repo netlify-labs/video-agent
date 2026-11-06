@@ -1,7 +1,7 @@
 # Phase 0 spike results
 
-Runs started with `spikes/start-run.ts` against project `our internal deployment` on branch `spike/phase-0`
-(minimal HyperFrames project + `netlify-agent-kit@0.3.1`). Logs are in `spikes/out-*.log` (not committed).
+Runs started with `docs/spikes/start-run.ts` against project `our internal deployment` on branch `spike/phase-0`
+(minimal HyperFrames project + `netlify-agent-kit@0.3.1`). Logs are in `docs/spikes/out-*.log` (not committed).
 
 ## S0. Workbench: done (2026-10-30)
 
@@ -107,7 +107,7 @@ questions. Questions default to **Haiku** (≈7 s); the router's `complex` answe
 the 25 s deadline with room for one validation retry on Haiku; Sonnet questions leave no room for a retry, so a retry
 falls back to Haiku.
 
-### S2: sandboxed composition preview (2026-10-31, `spikes/s2`, `npx playwright test -c spikes/s2`)
+### S2: sandboxed composition preview (2026-10-31, `docs/spikes/s2`, `npx playwright test -c docs/spikes/s2`)
 
 Passes in Chromium and WebKit (8/8): play, pause, seek, click → element id, apply-edits (text only), relative
 subresources through one capability (CSS `url()`, `<img>`, vendored GSAP, a nested scene, the MP4 slot with Range),
@@ -135,7 +135,7 @@ What changed from the plan:
   without the cookie). A separate preview origin would remove even that; not needed for v1.
 - MP4 slots play under the capability (`media-src`, Range), so the poster fallback isn't needed.
 
-### S8: edit round trip on a contract-1 composition (2026-10-31, `spikes/s8`)
+### S8: edit round trip on a contract-1 composition (2026-10-31, `docs/spikes/s8`)
 
 A contract-1 fixture (three beats, a background layer on track 1, text, colour roles, an image slot and a video
 slot) passes `hyperframes check` and renders. Beats are composition siblings (`data-va-beat` = `data-composition-id`)
@@ -194,7 +194,7 @@ The upload check of clips is JavaScript (box parsing: H.264 sample entry, AAC or
 again with ffprobe in `prepare-run`. Posters are captured in the browser at upload (owner decision: a poster
 fallback is fine).
 
-### S7: render in the browser (2026-11-01, `spikes/s7`, research only)
+### S7: render in the browser (2026-11-01, `docs/spikes/s7`, research only)
 
 Three ready videos on production (a 60 s edited version, a 20 s and a 15 s video, all type and motion, no clips),
 five frames each. Each frame is compared with the runner's MP4 frame at the same time (SSIM, 1 = identical):
@@ -264,9 +264,9 @@ hyperframes tts`, free, installed on demand only when a video has a voice-over) 
 
 ## Voice-over spikes
 
-### S10: browser sync and capture harness (2026-11-03, `spikes/s10`, `spikes/s10/make-media.sh && npx playwright test -c spikes/s10`)
+### S10: browser sync and capture harness (2026-11-03, `docs/spikes/s10`, `docs/spikes/s10/make-media.sh && npx playwright test -c docs/spikes/s10`)
 
-One instrumented page (no app integration), served by `spikes/s10/server.ts`. The server type-strips the TypeScript
+One instrumented page (no app integration), served by `docs/spikes/s10/server.ts`. The server type-strips the TypeScript
 with Node's `stripTypeScriptTypes`, so the spike adds no bundler and no dependency. It reuses `src/lib/peaks.ts` and
 `timeline.ts` unchanged.
 
@@ -298,8 +298,8 @@ with Node's `stripTypeScriptTypes`, so the spike adds no bundler and no dependen
 - **Stress:** memory (`measureUserAgentSpecificMemory`, else `performance.memory`); stop → file hash → assemble from
   IndexedDB → POST `/upload`, which re-hashes; recovery after a reload; a 32-take audition under a 200 MB decode
   budget (10 s windows, 30 s ahead and 5 s behind the playhead, LRU).
-- **Reports and checklist:** every report is downloadable and POSTed to `spikes/s10/out/<ts>-<kind>.json`.
-  `analyze.ts` prints the tables (`--markdown` for this file). `spikes/s10/CHECKLIST.md` is the owner run.
+- **Reports and checklist:** every report is downloadable and POSTed to `docs/spikes/s10/out/<ts>-<kind>.json`.
+  `analyze.ts` prints the tables (`--markdown` for this file). `docs/spikes/s10/CHECKLIST.md` is the owner run.
 
 **Automated results** (Playwright 1.64, Chromium 156 Chrome for Testing, headless, macOS, context 48 kHz). The mic
 is **synthetic**. Chromium's `--use-fake-device-for-media-stream` (with `--use-file-for-fake-audio-capture`) never
@@ -408,12 +408,12 @@ offset leave the fit as outliers. The residual limit (10 ms), the step rule and 
 15 ms drift or a 2500 ppm slope still stops a take with lookaheads in it (unit tests). Firefox's `presentedFrames`
 jumps still count as skipped frames, so `skippedFrames` overstates Firefox's real frame loss.
 
-#### Pending: owner hardware matrix (`spikes/s10/CHECKLIST.md`)
+#### Pending: owner hardware matrix (`docs/spikes/s10/CHECKLIST.md`)
 
 The checklist runs Chrome, Safari and Firefox on macOS, about 28 minutes per browser, with built-in, USB and
 Bluetooth inputs on speakers, wired headphones and Bluetooth headphones. It covers calibrations (a) ×3, (b) ×2 and
 (c), a 10-minute loopback take, earcup-on-mic loopback for headphone routes, hidden-tab, reload-recovery and
-unplug stops, and the audition run. Then `npx tsx spikes/s10/analyze.ts --markdown` replaces this list. The run
+unplug stops, and the audition run. Then `npx tsx docs/spikes/s10/analyze.ts --markdown` replaces this list. The run
 settles:
 
 - **The calibration default:** (a) speaker loopback reused for headphones on the same input, (b) clap-on-flash, or
@@ -427,7 +427,7 @@ settles:
   MediaRecorder numbers, and whether any supported browser fails muted-MP4 mode (the only trigger for the iframe
   fallback).
 
-### S13: speech cleanup chain, light and off (2026-11-03, `spikes/s13`, `npx tsx spikes/s13/run.ts [--sweep]`)
+### S13: speech cleanup chain, light and off (2026-11-03, `docs/spikes/s13`, `npx tsx docs/spikes/s13/run.ts [--sweep]`)
 
 Eight synthetic takes in `test/fixtures/narration/` (macOS `say` voices degraded with ffmpeg: quiet laptop, noisy
 room with a 120 Hz fan, hot USB mic, near-clipping, harsh sibilant headset, silence-only, and a quiet/loud punch
@@ -563,10 +563,10 @@ volume=<pre>dB, deesser=..., acompressor=..., volume=<trim>dB                # a
   Heavy gains most where noise isn't steady (noisy room +4.9 dB over light) and stays within 1 dB of light on clean
   takes; the speech band is unchanged (4-9 kHz within 0.2 dB of light).
 - **Model:** `bd` ("voice") measured within 0.7 dB SNR of `sh` on every take (`RNNOISE_ALT=... npx tsx
-spikes/s13/run.ts`). Wall time 0.4-1.3 s per take, about 2-3× light. Not run on ffmpeg 6.0 (no build at hand);
+docs/spikes/s13/run.ts`). Wall time 0.4-1.3 s per take, about 2-3× light. Not run on ffmpeg 6.0 (no build at hand);
   `adeclick` and `arnndn` exist since 4.2 and 4.3. Heavy needs ears on real takes like light does.
 
-### S11: speech-to-text on the runner (2026-11-03, `spikes/s11`, run `6ae99c77bed4b69e1b6179d1`, 48 credits)
+### S11: speech-to-text on the runner (2026-11-03, `docs/spikes/s11`, run `6ae99c77bed4b69e1b6179d1`, 48 credits)
 
 Kokoro-spoken inputs with a known transcript (20 phrases, two voices) were concatenated into 60 s, 90 s and 600 s
 clips; phrase starts are exact, word starts are estimated within a phrase. Runner: Ubuntu, 4 CPUs, 15.3 GB, Node 24,
@@ -586,7 +586,7 @@ fixed 240 ms to Parakeet's word starts (it reports them early) and leave ends al
 tree (setsid plus a recursive kill), not just the group leader. whisper.cpp would need a vendored source tarball;
 it isn't needed for v1. Parakeet's CC-BY-4.0 licence is credited in the README.
 
-### S12: render qualification (2026-11-03, `spikes/s12`, runs `6ae99c7736f6fef837ecc5bb` and `6ae99e7176bcf173e806d8ea`, 65 + 22 + 44 credits)
+### S12: render qualification (2026-11-03, `docs/spikes/s12`, runs `6ae99c7736f6fef837ecc5bb` and `6ae99e7176bcf173e806d8ea`, 65 + 22 + 44 credits)
 
 | Case       | Result                                                                                                                                                                                                                                                 |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -636,7 +636,7 @@ production still serves the video, and rolls back to the previous deploy if not.
 
 ## Redo-a-scene spikes (docs/plans/2026-11-04-regenerate-beat.md §7)
 
-### B1: a prelude-less `@scope` styles its own scene only (2026-11-05, `npx tsx spikes/b1/b1.ts`, no credits)
+### B1: a prelude-less `@scope` styles its own scene only (2026-11-05, `npx tsx docs/spikes/b1/b1.ts`, no credits)
 
 The fixture (`test/fixtures/scope/at-scope`) has a white `.card` in three scenes and in a root layer. Scene 2 holds
 `<style>@scope { .card { background: red } }</style>`; scene 3 holds the fallback form
@@ -653,7 +653,7 @@ Both forms scope to their scene: scene 2's rules reach neither scene 1 nor the r
 stays the accepted one** (`scopedStyleProblems`, va-8cy4.2.2); the prelude form is kept only behind `allowPrelude` as
 a fallback. B2's redone scene also used a prelude-less `@scope` and rendered as intended.
 
-### B2: do frozen scenes render the same after a scoped change? (2026-11-05, `spikes/b2`, `npx tsx spikes/b2/b2.ts [--leak]`, no credits)
+### B2: do frozen scenes render the same after a scoped change? (2026-11-05, `docs/spikes/b2`, `npx tsx docs/spikes/b2/b2.ts [--leak]`, no credits)
 
 A contract-v1 composition with music and four scenes: intro 3 s, features 3.85 s (115.5 frames, authored and never
 relaid), proof 3 s, outro 3 s. It was rendered locally (`hyperframes render --quality standard`, HeadlessChrome 152
@@ -698,7 +698,7 @@ synthetic fixture with flat colours and simple motion: video clips, grain or gra
 the gate logs every value and the thresholds get revisited after live gate part 1 (LT-1). Nothing here fell below the
 ~0.97 "investigate determinism" line from the plan.
 
-### B3: one hand-made scoped run on a real video (2026-11-05, `spikes/b3/b3.ts`, owner-approved, 57.6 credits)
+### B3: one hand-made scoped run on a real video (2026-11-05, `docs/spikes/b3/b3.ts`, owner-approved, 57.6 credits)
 
 The source was "Openverse music test 3" (`vid_01m6d7shks0mpejbagqc7xft2f` v1): a contract-v1 test video with three
 scenes (intro 3.85 s, race 4.68 s, end 3.47 s) and music. Production doesn't accept `scope` yet, so this was an
@@ -753,11 +753,11 @@ candidate paths.
 So phase 2.2 reads `join(process.cwd(), 'looks-build', '<id>.tar.gz')`, and `included_files` goes on
 `[functions."api"]` only (not `[functions]`, which would add the archives to every function). No Blobs fallback needed.
 
-### K2: does a LOOK.md change the output, and what does it cost? (2026-11-05, `spikes/k2`, five Agent Runner runs, 1,083 credits)
+### K2: does a LOOK.md change the output, and what does it cost? (2026-11-05, `docs/spikes/k2`, five Agent Runner runs, 1,083 credits)
 
-Draft looks `clean` and `kinetic` (`spikes/k2/looks/`) were committed at `context/look/` on spike branches
+Draft looks `clean` and `kinetic` (`docs/spikes/k2/looks/`) were committed at `context/look/` on spike branches
 (`spike/k2-none|clean|kinetic`, never merged). Each prompt was the production `buildPrompt` plus the §4.6 look lines,
-rendering locally for the run's preview deploy instead of render-job (`spikes/k2/prompts.ts`). Owner ceiling: 900, then
+rendering locally for the run's preview deploy instead of render-job (`docs/spikes/k2/prompts.ts`). Owner ceiling: 900, then
 "fix the deploy issue first, then rerun the launch brief".
 
 **First pair (729 credits, wasted):** none 374, kinetic 355. Both run deploys failed: root npm `workspaces` (CLI phase
@@ -773,7 +773,7 @@ fighting it. Fixed on main in `20df76a` (no root workspaces). Runs `6aec2348d23c
 | clean | `6aec295db6f2ac7dad417f3d` | 110.0 | 690 K | 3.9 min | ok | 0 errors |
 | kinetic | `6aec295d5f269da95f634157` | 103.1 | 673 K | 3.6 min | ok | 0 errors |
 
-Contact sheet (6 frames each): `spikes/out/k2/contact-sheet.png` (gitignored; videos in `spikes/out/k2/videos/`).
+Contact sheet (6 frames each): `docs/spikes/out/k2/contact-sheet.png` (gitignored; videos in `docs/spikes/out/k2/videos/`).
 
 - **Different?** `kinetic` is unmistakable: huge uppercase words with letter rises, one accent word, an inverted
   accent scene. `clean` is close to no look, as intended ("today's behaviour written down"), but plainer: left text
@@ -785,9 +785,9 @@ Contact sheet (6 frames each): `spikes/out/k2/contact-sheet.png` (gitignored; vi
   −0.04em; a dark brand teal instead of a full accent fill), as §3 says.
 - **Owner verdict (2026-11-05, relayed):** go ahead; **the default look stays None**. `clean` ships as an option.
 
-### K1: inlining registry blocks into contract scenes (2026-11-05, `spikes/k1`, `npx tsx spikes/k1/run.ts [--render] [case…]`, no credits)
+### K1: inlining registry blocks into contract scenes (2026-11-05, `docs/spikes/k1`, `npx tsx docs/spikes/k1/run.ts [--render] [case…]`, no credits)
 
-Each case in `spikes/k1/cases/<block>/` is a contract composition: an intro scene plus one scene holding the block,
+Each case in `docs/spikes/k1/cases/<block>/` is a contract composition: an intro scene plus one scene holding the block,
 rewritten by hand. The harness runs the contract validator, `hyperframes check` (0.8.222), the editor's own edit
 operations through `applyEdits` (a text edit on the block's text and a retime of its scene: the same code the browser
 editor and the server run), both checks again, and with `--render` a draft render of both versions. Frames of every
@@ -889,7 +889,7 @@ a rule, a section number and a serif headline in a slow pan; §5's table is upda
 
 ## Screen recording demo spikes (docs/plans/2026-11-04-screen-recording-demo.md §10 Phase 0)
 
-### D1: recording clips at an offset and a rate in a later scene (2026-11-05, `spikes/d1`, `npx tsx spikes/d1/render.ts`; local, then run `6aec398430f5a5123b566e38`)
+### D1: recording clips at an offset and a rate in a later scene (2026-11-05, `docs/spikes/d1`, `npx tsx docs/spikes/d1/render.ts`; local, then run `6aec398430f5a5123b566e38`)
 
 The fixture is 2560×1440 H.264 at 30 fps with 1 s GOPs (`-g 30 -sc_threshold 0`). Every frame carries its own number
 as a 4×4 grid of 160 px blocks (11 bits plus 5 check bits), so output frames are read back by sampling block
@@ -926,7 +926,7 @@ What this means:
   22-minute run.
 - **Pass.**
 
-### D2: CDP screencast frame rate and clock (2026-11-05, `spikes/d2`, `npx tsx spikes/d2/screencast.ts`)
+### D2: CDP screencast frame rate and clock (2026-11-05, `docs/spikes/d2`, `npx tsx docs/spikes/d2/screencast.ts`)
 
 Test page: a 400-row list, every row animating, scrolled by `page.mouse.wheel` while the mouse follows a Lissajous
 path. Capture: `Page.startScreencast` JPEG q90, `maxWidth/Height` 2560×1600, every frame acked and saved. Every click
@@ -964,7 +964,7 @@ Changes for 4.1a:
   An idle page sends nothing, so gaps can be long.
 - The default viewport stays 1280×800.
 
-### D3: recording analysis time (2026-11-05, `spikes/d3`, `npx tsx spikes/d3/analyze.ts`; local, then run `6aec398430f5a5123b566e38`)
+### D3: recording analysis time (2026-11-05, `docs/spikes/d3`, `npx tsx docs/spikes/d3/analyze.ts`; local, then run `6aec398430f5a5123b566e38`)
 
 The fixture is drawn by ffmpeg to look like a screen recording:
 - 2560×1440 at 30 fps, H.264 with 1 s GOPs, about 3.7 Mbps, 5 minutes, 131 MB.
@@ -997,12 +997,12 @@ What this means for `recording.ts analyze`:
   reuse them from the archive if it creeps up). That includes the Kokoro speech fixture and Parakeet on 5 minutes.
 - **Pass.**
 - **What was lost:** the run's final answer was replaced by the platform's deploy-fix note (below), so only the
-  run's summary numbers survived, not the per-stage JSON. Rerun `spikes/prompts/d1-d3.md` if stage detail is needed.
+  run's summary numbers survived, not the per-stage JSON. Rerun `docs/spikes/prompts/d1-d3.md` if stage detail is needed.
 - **Lesson for runs on spike branches:** cut the branch from **current main**. This branch predated
   `20261105062314_engines`. That migration was already applied to the shared preview database, so the run's preview
   deploy failed until the agent restored the file. Nothing was published or landed.
 
-### D4: H.264 in the browser with Mediabunny (2026-11-05, `spikes/d4`, `npx tsx spikes/d4/encode.ts --mediabunny <dist/bundles>`)
+### D4: H.264 in the browser with Mediabunny (2026-11-05, `docs/spikes/d4`, `npx tsx docs/spikes/d4/encode.ts --mediabunny <dist/bundles>`)
 
 Setup:
 - Mediabunny **1.62.1**. Newer releases were under two weeks old, and the supply-chain guard refused them.
@@ -1038,7 +1038,7 @@ Setup:
   live runs, and the "2023 laptop" target. Recheck these at 3.5 (the phase 3 gate's fake display stream).
 - Mediabunny is pinned to a release at least two weeks old.
 
-### D5: upload assembly memory for 150 MB (2026-11-05, `spikes/d5`, `npx tsx spikes/d5/assemble.ts [--gc]`; local only so far)
+### D5: upload assembly memory for 150 MB (2026-11-05, `docs/spikes/d5`, `npx tsx docs/spikes/d5/assemble.ts [--gc]`; local only so far)
 
 The test runs the byte path of `assembleUpload` against `@netlify/blobs` 11.1.7's local `BlobsServer`, through the
 production adapter (`src/adapters/blobs.ts`) and the real `classify`:

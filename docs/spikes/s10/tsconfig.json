@@ -1,0 +1,21 @@
+{
+  // Spike S10 browser code (page, worker, worklet): DOM types. The root tsconfig covers lib/, server.ts, analyze.ts
+  // and the Playwright spec (Node types) and excludes web/. Check with: npx tsc -p docs/spikes/s10/tsconfig.json
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "verbatimModuleSyntax": true,
+    "noImplicitOverride": true,
+    "isolatedModules": true,
+    "erasableSyntaxOnly": false,
+    "skipLibCheck": true,
+    "types": [],
+    "noEmit": true
+  },
+  "include": ["web", "lib"]
+}

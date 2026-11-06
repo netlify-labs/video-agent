@@ -11,4 +11,4 @@ packages/sdk/src/generated/schema.d.ts
 ui/dist-mock
 .taste-skill
 test/fixtures
-spikes/*/fixture
+docs/spikes/*/fixture

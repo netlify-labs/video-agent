@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { PGlite } from '@electric-sql/pglite'
 import { drizzle } from 'drizzle-orm/pglite'
-import * as schema from '../db/schema.js'
+import * as schema from '../src/store/schema.js'
 import { createApp } from '../src/app.js'
 import { createDrizzleStore } from '../src/store/drizzle.js'
 import { tick } from '../src/domain/reconciler.js'

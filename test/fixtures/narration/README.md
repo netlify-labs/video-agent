@@ -6,7 +6,7 @@ phase-2 `scripts/narration.ts` tests. **No real person's voice is in them**: eve
 under the repo's license.
 
 All files are 24 kHz mono PCM16 WAV, written with ffmpeg's bitexact flags, 2.98 MB in total.
-`sh spikes/s13/make-fixtures.sh [ffmpeg]` rebuilds them (macOS only). The ffmpeg steps are deterministic but `say`
+`sh docs/spikes/s13/make-fixtures.sh [ffmpeg]` rebuilds them (macOS only). The ffmpeg steps are deterministic but `say`
 isn't quite (some voices' timing varies by a few hundred ms between runs), so a rebuild differs slightly: the
 committed files are the reference, and S13's numbers are measured on them. Each spoken take has 0.5 s of lead-in,
 0.6 s of tail and `[[slnc]]` pauses, so there are gaps to measure room tone in.
@@ -23,4 +23,4 @@ committed files are the reference, and S13's numbers are measured on them. Each 
 | `punch-loud.wav`       | Rishi    | 4.5 s  | …a loud take of the same narration | `volume=0dB`; `anoisesrc=c=pink:a=0.0008:s=72`                                                                                        | -18.8 LUFS, -1.0 dBTP     |
 
 Speech and noise are mixed with `amix=inputs=2:duration=first:normalize=0`; every noise source runs at
-`r=24000`. The exact commands, including the spoken text, are in `spikes/s13/make-fixtures.sh`.
+`r=24000`. The exact commands, including the spoken text, are in `docs/spikes/s13/make-fixtures.sh`.
