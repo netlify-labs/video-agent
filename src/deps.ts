@@ -25,6 +25,11 @@ export interface Config {
   siteUrl: string
   allowedOrigins: string[]
   runnerTokenPresent: boolean
+  /**
+   * VIDEO_AGENT_RUN_SECRET (a secret env var, builds and functions): runs derive their attempt's callback token from it,
+   * so no token is in a prompt, a command or a file. Null without it (at least 32 characters): the per-attempt token.
+   */
+  runSecret: string | null
   uploadMode: 'blobs' | 'signed'
   /** Optional OAuth for the MCP; null (off) unless a provider and its credentials are set. */
   mcpOAuth: McpOAuthConfig | null
@@ -116,6 +121,10 @@ export function readConfig(env: Record<string, string | undefined>): Config {
     siteUrl: (env.URL ?? 'http://localhost:8888').replace(/\/$/, ''),
     allowedOrigins: list(env.ALLOWED_ORIGINS),
     runnerTokenPresent: Boolean(env.RUNNER_API_TOKEN),
+    runSecret:
+      (env.VIDEO_AGENT_RUN_SECRET?.trim().length ?? 0) >= 32
+        ? (env.VIDEO_AGENT_RUN_SECRET?.trim() ?? null)
+        : null,
     uploadMode: env.UPLOAD_MODE === 'signed' ? 'signed' : 'blobs',
     mcpOAuth: readMcpOAuth(env, list, admission),
     google:

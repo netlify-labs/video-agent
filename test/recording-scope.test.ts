@@ -82,7 +82,6 @@ describe('scoped revisions of a demo', () => {
       targetDurationSec: 30,
       callbackUrl: 'https://x/cb',
       checkpointUrl: 'https://x/cp',
-      callbackToken: 'tok',
       upload: { mode: 'blobs' },
       revision: { parentN: 2 },
       runManifestSha256: 'b'.repeat(64),

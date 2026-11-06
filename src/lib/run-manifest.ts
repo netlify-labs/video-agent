@@ -30,6 +30,10 @@ export type RunKind = 'author' | 'revision' | 'render_unchanged' | 'author_from_
 
 export const RUN_KINDS: readonly RunKind[] = ['author', 'revision', 'render_unchanged', 'author_from_frozen']
 
+export interface RunCallback {
+  token: string
+}
+
 export interface RunManifest {
   v: typeof RUN_MANIFEST_VERSION
   jobId: string
@@ -77,6 +81,12 @@ export interface RunManifest {
    * tier picks the key the render reports with, and `development` marks a test deployment's renders.
    */
   engine?: RunEngine | undefined
+  /**
+   * The attempt's callback token when the deployment has no VIDEO_AGENT_RUN_SECRET (src/lib/run-auth.ts), here and
+   * nowhere in the prompt or a command line. prepare-run moves it to .va-run/callback.json (mode 0600, never archived or
+   * uploaded) for render-job and checkpoint, and leaves it out of .render/run-manifest.json.
+   */
+  callback?: RunCallback | undefined
   /**
    * A scoped revision (redo a scene, docs/plans/2026-11-04-regenerate-beat.md §4.3): only these beats may change.
    * The stills of their neighbours come from `feedback.video` (with no pins when nothing was commented).
@@ -363,6 +373,8 @@ export function serializeRunManifest(m: RunManifest): string {
           },
         }
       : {}),
+    // Only without the run secret (src/lib/run-auth.ts): the attempt's token, for prepare-run's .va-run/callback.json.
+    ...(m.callback ? { callback: { token: m.callback.token } } : {}),
     // Only when scoped, so every other manifest keeps its bytes.
     ...(m.scope
       ? {
@@ -625,6 +637,9 @@ export function verifyRunManifest(raw: string, expected: { attemptId: string; sh
   }
   if (m.recording !== undefined && !isRecording(m.recording, m.media))
     throw new Error('The run manifest has a bad recording entry.')
+  const cb = m.callback as { token?: unknown } | undefined
+  if (cb !== undefined && (typeof cb.token !== 'string' || !/^[A-Za-z0-9_-]{16,128}$/.test(cb.token)))
+    throw new Error('The run manifest has a bad callback entry.')
   if (m.kind === 'revision' && !m.source) throw new Error('A revision run needs a source.')
   if (m.kind === 'render_unchanged' && !m.bundle) throw new Error('A render-unchanged run needs a bundle.')
   // A fit starts from the frozen draft alone, and exists for its narration (the guard and the bus target need it).

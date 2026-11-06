@@ -20,7 +20,7 @@ import {
 } from './engine-prompt.js'
 import type { EngineId } from './engines.js'
 
-export const PROMPT_TEMPLATE_VERSION = 25
+export const PROMPT_TEMPLATE_VERSION = 26
 
 /**
  * Where render-job puts a run's outputs: Blobs (the service's runs), a signed URL, or local, where a laptop run keeps
@@ -41,7 +41,6 @@ export interface PromptInput {
   callbackUrl: string
   /** Where scripts/checkpoint.ts posts milestones (plan v2 §6 A2). */
   checkpointUrl: string
-  callbackToken: string
   upload: PromptUpload
   /** A revision restores its parent; a remix (parentN null) restores the copy of the video it remixes. */
   revision: { parentN: number | null } | null
@@ -254,7 +253,7 @@ export function buildPrompt(p: PromptInput): string {
   const { width, height } = ASPECTS[p.aspect]
   const other = usesEnginePrompt(p.engine)
   const upload = uploadArg(p.upload)
-  const renderCmd = `npx tsx scripts/render-job.ts --job ${p.jobId} --attempt ${p.attemptId} --callback ${p.callbackUrl} --token ${p.callbackToken} ${upload}`
+  const renderCmd = `npx tsx scripts/render-job.ts --job ${p.jobId} --attempt ${p.attemptId} --callback ${p.callbackUrl} ${upload}`
   const locked = p.narration ?? null
   const lengthLine = locked
     ? `Keep it exactly ${lengthOf(locked.samples)}: the recorded narration is that long.`
@@ -427,7 +426,7 @@ export function buildPrompt(p: PromptInput): string {
     '6. End your answer with the fenced ```json block render-job.ts prints.',
     `   Once it has succeeded, never run render-job.ts again: if its json block is out of view, print it with cat .render/${p.attemptId}/manifest.json.`,
     '',
-    `Progress (optional, best effort): at milestones (after reading context/, after each scene, before each check round) run: npx tsx scripts/checkpoint.ts --attempt ${p.attemptId} --url ${p.checkpointUrl} --token ${p.callbackToken} --message "<what you are doing, in a few words>".${other ? '' : ' Add --bundle once video/index.html exists, so people can watch it take shape.'} It never fails the run; don't retry it or wait for it.`,
+    `Progress (optional, best effort): at milestones (after reading context/, after each scene, before each check round) run: npx tsx scripts/checkpoint.ts --attempt ${p.attemptId} --url ${p.checkpointUrl} --message "<what you are doing, in a few words>".${other ? '' : ' Add --bundle once video/index.html exists, so people can watch it take shape.'} It never fails the run; don't retry it or wait for it.`,
     '',
     'Never print environment variables. Never commit, push or open a pull request.',
   )
@@ -569,11 +568,10 @@ export function buildQuickDemoPrompt(p: {
   runManifestSha256: string
   callbackUrl: string
   checkpointUrl: string
-  callbackToken: string
   upload: PromptUpload
 }): string {
   const upload = uploadArg(p.upload)
-  const render = `npx tsx scripts/render-job.ts --job ${p.jobId} --attempt ${p.attemptId} --callback ${p.callbackUrl} --token ${p.callbackToken} ${upload}`
+  const render = `npx tsx scripts/render-job.ts --job ${p.jobId} --attempt ${p.attemptId} --callback ${p.callbackUrl} ${upload}`
   const id = p.mediaId
   const target = p.targetDurationSec === null ? '' : ` --target ${String(p.targetDurationSec)}`
   return [
@@ -591,7 +589,7 @@ export function buildQuickDemoPrompt(p: {
     '7. End your answer with the fenced ```json block render-job.ts prints.',
     `   Once it has succeeded, never run render-job.ts again: if its json block is out of view, print it with cat .render/${p.attemptId}/manifest.json.`,
     '',
-    `Progress (optional, best effort): after each step run: npx tsx scripts/checkpoint.ts --attempt ${p.attemptId} --url ${p.checkpointUrl} --token ${p.callbackToken} --message "<the step, in a few words>". It never fails the run; don't retry it or wait for it.`,
+    `Progress (optional, best effort): after each step run: npx tsx scripts/checkpoint.ts --attempt ${p.attemptId} --url ${p.checkpointUrl} --message "<the step, in a few words>". It never fails the run; don't retry it or wait for it.`,
     '',
     'Never print environment variables. Never commit, push or open a pull request.',
   ].join('\n')
@@ -611,12 +609,11 @@ export function buildRenderUnchangedPrompt(p: {
   runManifestSha256: string
   callbackUrl: string
   checkpointUrl: string
-  callbackToken: string
   upload: PromptUpload
 }): string {
   const upload = uploadArg(p.upload)
   const revoice = p.revoice ?? []
-  const render = `npx tsx scripts/render-job.ts --job ${p.jobId} --attempt ${p.attemptId} --callback ${p.callbackUrl} --token ${p.callbackToken} ${upload}`
+  const render = `npx tsx scripts/render-job.ts --job ${p.jobId} --attempt ${p.attemptId} --callback ${p.callbackUrl} ${upload}`
   if (!revoice.length && !p.narration)
     return [
       `You are rendering version ${p.versionN} of video ${p.jobId} (attempt ${p.attemptId}) exactly as someone edited it in the browser from version ${p.editedFromN}.`,
@@ -635,7 +632,7 @@ export function buildRenderUnchangedPrompt(p: {
       '4. End your answer with the fenced ```json block render-job.ts prints.',
       `   Once it has succeeded, never run render-job.ts again: if its json block is out of view, print it with cat .render/${p.attemptId}/manifest.json.`,
       '',
-      `Optional progress: npx tsx scripts/checkpoint.ts --attempt ${p.attemptId} --url ${p.checkpointUrl} --token ${p.callbackToken} --message "<what you are doing>"`,
+      `Optional progress: npx tsx scripts/checkpoint.ts --attempt ${p.attemptId} --url ${p.checkpointUrl} --message "<what you are doing>"`,
       'Never ask questions or request authorization. Never print environment variables. Never commit, push or open a pull request.',
     ].join('\n')
   // Beat ids are checked ([a-z0-9-]) before they get here, so they can go in the prompt as they are.
@@ -701,7 +698,7 @@ export function buildRenderUnchangedPrompt(p: {
     `${steps.length + 1}. End your answer with the fenced \`\`\`json block render-job.ts prints.`,
     `   Once it has succeeded, never run render-job.ts again: if its json block is out of view, print it with cat .render/${p.attemptId}/manifest.json.`,
     '',
-    `Optional progress: npx tsx scripts/checkpoint.ts --attempt ${p.attemptId} --url ${p.checkpointUrl} --token ${p.callbackToken} --message "<what you are doing>"`,
+    `Optional progress: npx tsx scripts/checkpoint.ts --attempt ${p.attemptId} --url ${p.checkpointUrl} --message "<what you are doing>"`,
     'Never ask questions or request authorization. Never print environment variables. Never commit, push or open a pull request.',
   ].join('\n')
 }
@@ -827,14 +824,13 @@ export function buildFitPrompt(p: {
   runManifestSha256: string
   callbackUrl: string
   checkpointUrl: string
-  callbackToken: string
   upload: PromptUpload
   /** The version's look: the fit gets the look lines, never the restyle lines. */
   look?: { id: string; name: string } | null
 }): string {
   const { width, height } = ASPECTS[p.aspect]
   const upload = uploadArg(p.upload)
-  const render = `npx tsx scripts/render-job.ts --job ${p.jobId} --attempt ${p.attemptId} --callback ${p.callbackUrl} --token ${p.callbackToken} ${upload}`
+  const render = `npx tsx scripts/render-job.ts --job ${p.jobId} --attempt ${p.attemptId} --callback ${p.callbackUrl} ${upload}`
   const revoice = p.revoice ?? []
   const target = lengthOf(p.targetSamples)
   const music = (p.sound ?? 'silent') !== 'silent'
@@ -888,7 +884,7 @@ export function buildFitPrompt(p: {
     `${steps.length + 1}. End your answer with the fenced \`\`\`json block render-job.ts prints.`,
     `   Once it has succeeded, never run render-job.ts again: if its json block is out of view, print it with cat .render/${p.attemptId}/manifest.json.`,
     '',
-    `Progress (optional, best effort): at milestones run: npx tsx scripts/checkpoint.ts --attempt ${p.attemptId} --url ${p.checkpointUrl} --token ${p.callbackToken} --message "<what you are doing, in a few words>". Add --bundle once you have changed video/index.html, so people can watch it take shape. It never fails the run; don't retry it or wait for it.`,
+    `Progress (optional, best effort): at milestones run: npx tsx scripts/checkpoint.ts --attempt ${p.attemptId} --url ${p.checkpointUrl} --message "<what you are doing, in a few words>". Add --bundle once you have changed video/index.html, so people can watch it take shape. It never fails the run; don't retry it or wait for it.`,
     '',
     'Never print environment variables. Never commit, push or open a pull request.',
   ].join('\n')

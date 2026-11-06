@@ -20,7 +20,6 @@ const base = {
   targetDurationSec: null,
   callbackUrl: 'https://v.example.com/api/internal/runs/x/done',
   checkpointUrl: 'https://v.example.com/api/internal/runs/x/checkpoint',
-  callbackToken: 'tok',
   upload: { mode: 'blobs' as const },
   revision: null,
   runManifestSha256: null,
@@ -33,7 +32,8 @@ describe('buildPrompt', () => {
     expect(p).toContain('Format: 1080x1920, 30 fps, silent.')
     expect(p).toContain('Pick the shortest length')
     expect(p).toContain('Never ask questions')
-    expect(p).toContain('--token tok --upload blobs')
+    expect(p).toContain('--callback https://v.example.com/api/internal/runs/x/done --upload blobs')
+    expect(p).not.toContain('--token')
     expect(p).not.toContain('prepare-run')
   })
   it('uses a target length and adds the revision steps', () => {
@@ -222,7 +222,6 @@ describe('buildRenderUnchangedPrompt', () => {
     runManifestSha256: 'b'.repeat(64),
     callbackUrl: 'https://x/done',
     checkpointUrl: 'https://x/cp',
-    callbackToken: 'tok',
     upload: { mode: 'blobs' as const },
   }
 
@@ -299,7 +298,6 @@ describe('buildFitPrompt (fit the video to my narration, plan 2026-11-02 §6.4)'
     runManifestSha256: 'b'.repeat(64),
     callbackUrl: 'https://x/done',
     checkpointUrl: 'https://x/cp',
-    callbackToken: 'tok',
     upload: { mode: 'blobs' as const },
   }
 

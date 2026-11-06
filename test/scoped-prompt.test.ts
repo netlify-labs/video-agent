@@ -14,7 +14,6 @@ const base = {
   targetDurationSec: 12,
   callbackUrl: 'https://v.example.com/api/internal/runs/x/done',
   checkpointUrl: 'https://v.example.com/api/internal/runs/x/checkpoint',
-  callbackToken: 'tok',
   upload: { mode: 'blobs' as const },
   revision: { parentN: 3 },
   runManifestSha256: 'b'.repeat(64),

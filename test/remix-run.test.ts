@@ -166,7 +166,6 @@ describe('remix prompt', () => {
     targetDurationSec: 20,
     callbackUrl: 'https://x/cb',
     checkpointUrl: 'https://x/cp',
-    callbackToken: 'tok',
     upload: { mode: 'blobs' as const },
     runManifestSha256: 'b'.repeat(64),
   }

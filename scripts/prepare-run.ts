@@ -58,6 +58,7 @@ import { RECORDING_LIMITS } from '../src/lib/media/classify.js'
 import { MAX_OUTPUT_SAMPLES, SAMPLE_RATE } from '../src/lib/timeline.js'
 import { runEngineFor } from './lib/engines/index.js'
 import type { RunEngine } from './lib/engines/types.js'
+import { writeCallback } from './lib/run-callback.js'
 import { narrationPaths, type HydratedTake, type NarrationInputs } from './lib/narration-inputs.js'
 import {
   StepError,
@@ -485,6 +486,19 @@ export async function hydrateNarration(
   return inputs
 }
 
+/**
+ * Moves the manifest's callback token (deployments without a run secret) to .va-run/callback.json, the one place
+ * render-job and checkpoint read it (never the prompt, a command line or a log), and returns the manifest without it,
+ * which is what .render/run-manifest.json keeps.
+ */
+export function takeCallback(m: RunManifest, root: string): RunManifest {
+  if (!m.callback) return m
+  writeCallback(root, { attemptId: m.attemptId, token: m.callback.token })
+  const rest = { ...m }
+  delete rest.callback
+  return rest
+}
+
 /** Restores what the manifest lists, in the steps above. `root`, `fetch` and `engine` are injectable for tests. */
 export async function prepare(
   m: RunManifest,
@@ -647,6 +661,9 @@ async function main() {
     throw new StepError(`${e instanceof Error ? e.message : String(e)} Stop and report this.`)
   }
   if (m.jobId !== job) throw new StepError('The run manifest is for a different video. Stop and report this.')
+  // The downloaded copy may hold the callback token: removed once it's read.
+  rmSync(local, { force: true })
+  m = takeCallback(m, repoRoot)
   log('manifest', {
     kind: m.kind,
     source: Boolean(m.source),

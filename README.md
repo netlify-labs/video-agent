@@ -149,7 +149,10 @@ prompt ─► POST /api/v1/videos ─► queue ─► Agent Runner run (on this 
 Agent runs in this project can read the project's environment variables, like any Netlify build. That includes
 `RUNNER_API_TOKEN`. Only signed-in people from your allowed domains (or invited people) can start runs, and every
 output is verified (hashes against the run's authenticated report, a real MP4 check) before it becomes a video.
-Prompts are visible to your Netlify team in the project's Agent Runs page.
+Prompts are visible to your Netlify team in the project's Agent Runs page, so they carry no secret: a run proves which
+attempt it is with a token derived from `VIDEO_AGENT_RUN_SECRET` (a secret environment variable `npm run setup`
+creates), which it never writes down. Without it, each attempt's own token reaches the run through its run manifest
+instead, and `/setup` warns.
 Runs can also read the project's Blobs, so they can read uploaded media, including voice-over recordings.
 A run renders offline, with one exception: when [Remotion](#experimental-the-remotion-engine-bring-your-own-license) is
 on, each Remotion render reports to remotion.pro which license key was used, the kind of event and whether it was
@@ -163,6 +166,7 @@ Looks are instructions to the agent, like `context/`, so only people who can cha
 | `RUNNER_API_TOKEN`                                       | **Required**                                   | —                                              | Personal access token for starting and watching runs.                                                                                                    |
 | `ALLOWED_EMAIL_DOMAINS`                                  | **Required**                                   | —                                              | Company domains, or `invite-only`.                                                                                                                       |
 | `ADMIN_EMAILS`                                           | **Required**                                   | —                                              | First admins.                                                                                                                                            |
+| `VIDEO_AGENT_RUN_SECRET`                                 | Recommended (`npm run setup` sets it)          | —                                              | At least 32 random characters. Mark it secret; scopes builds and functions. Runs derive their callback token from it, so none is in a prompt.            |
 | `MAX_ACTIVE_RUNS`                                        | Optional                                       | `3`                                            | Runs at once.                                                                                                                                            |
 | `AGENT`, `AGENT_MODEL`, `AGENT_EFFORT`                   | Optional                                       | runner default                                 | Which agent makes videos.                                                                                                                                |
 | `SCOPED_AGENT_MODEL`, `SCOPED_AGENT_EFFORT`              | Optional                                       | the deployment's model                         | Model and effort for scoped revisions ([Redo a scene](#redo-a-scene)), on revise and retry.                                                              |

@@ -22,7 +22,7 @@ import {
 import type { NarrationTracks } from '../src/lib/timeline.js'
 import { toVtt } from '../scripts/lib/captions.js'
 import { applyNarrationCaptions, captionsForRender } from '../scripts/lib/narration-captions.js'
-import { harness, PROMPT } from './helpers.js'
+import { harness, PROMPT, runToken } from './helpers.js'
 
 const fx = (f: string) => readFileSync(new URL(`./fixtures/contract1-voice/${f}`, import.meta.url), 'utf8')
 const html = fx('index.html')
@@ -301,7 +301,7 @@ describe('an empty captions.vtt', () => {
         onTerminal: async () => {
           const { fixtureFiles, uploadAndManifest } = await import('./fakes.js')
           const a = await h.deps.store.getAttempt(req.requestId)
-          const token = /--token (\S+)/.exec(req.prompt)?.[1]
+          const token = await runToken(h.deps, req.requestId)
           const m = await uploadAndManifest(h.deps.blobs, a?.jobId ?? '', req.requestId, {
             ...fixtureFiles(),
             'captions.vtt': empty,

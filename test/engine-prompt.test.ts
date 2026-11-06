@@ -16,7 +16,6 @@ const base: PromptInput = {
   targetDurationSec: 20,
   callbackUrl: 'https://x/done',
   checkpointUrl: 'https://x/checkpoint',
-  callbackToken: 'tok',
   upload: { mode: 'blobs' },
   revision: null,
   runManifestSha256: null,

@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { TestDeps } from './fakes.js'
 import { injectPreviewScripts, parsePreviewPath, previewCsp, previewContentType } from '../src/lib/preview.js'
 import { running } from './fakes.js'
-import { harness, PROMPT, readyVideo, stubNetlify, type Harness } from './helpers.js'
+import { harness, PROMPT, readyVideo, stubNetlify, type Harness, runToken } from './helpers.js'
 import { loadEdge } from './edge.js'
 import { tarGz } from './tarball.js'
 
@@ -170,7 +170,7 @@ describe('preview links and the edge function', () => {
     const v = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }))
     await h.drive(2)
     const [a] = await h.attempts(v.id)
-    const token = /--token (\S+)/.exec(h.deps.runner.starts.at(-1)?.prompt ?? '')?.[1] ?? ''
+    const token = await runToken(h.deps, h.deps.runner.starts.at(-1)?.requestId ?? '')
     const bundle = Buffer.from(
       tarGz([
         { name: 'video/index.html', body: '<!doctype html><head></head><body><h1>wip</h1></body>' },

@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { postCheckpoint } from '../scripts/checkpoint.js'
 import { checkpointBundleKey } from '../src/domain/checkpoints.js'
 import { failedSnap, running } from './fakes.js'
-import { harness, PROMPT, readyVideo, type Harness } from './helpers.js'
+import { harness, PROMPT, readyVideo, type Harness, runToken } from './helpers.js'
 import { tarGz } from './tarball.js'
 import { liveIndexKey } from '../src/domain/bundles.js'
 
@@ -15,7 +15,7 @@ async function runningAttempt(h: Harness) {
   const [a] = await h.attempts(v.id)
   expect(a?.stage).toBe('running')
   const prompt = h.deps.runner.starts.at(-1)?.prompt ?? ''
-  const token = /--token (\S+)/.exec(prompt)?.[1] ?? ''
+  const token = await runToken(h.deps, a?.id ?? '')
   const url = /checkpoint\.ts --attempt \S+ --url (\S+)/.exec(prompt)?.[1] ?? ''
   return { id: v.id as string, attemptId: a?.id ?? '', token, url }
 }
@@ -126,7 +126,7 @@ describe('checkpoints', () => {
     const v = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }))
     await h.drive(2)
     const [a] = await h.attempts(v.id)
-    const token = /--token (\S+)/.exec(h.deps.runner.starts[0]?.prompt ?? '')?.[1] ?? ''
+    const token = await runToken(h.deps, h.deps.runner.starts[0]?.requestId ?? '')
     expect((await post(h, a?.id ?? '', token, { seq: 1, message: 'ok' })).status).toBe(200)
     await h.drive(4)
     expect((await h.attempts(v.id))[0]?.stage).toBe('failed')

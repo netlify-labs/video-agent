@@ -851,6 +851,20 @@ export function installMock() {
       let stale = false
       let render = false
       let live = false
+      // localStorage.mockRawStep=1: the step is a raw command holding a token (made here, kept on window.__mockRawToken),
+      // as an old server could send it; the page must show a label.
+      let rawStep: string | null = null
+      try {
+        if (localStorage.getItem('mockRawStep') === '1') {
+          const t = window as unknown as { __mockRawToken?: string }
+          t.__mockRawToken ??= Array.from(crypto.getRandomValues(new Uint8Array(24)), (b) =>
+            b.toString(16).padStart(2, '0'),
+          ).join('')
+          rawStep = `Run command \`npx tsx scripts/render-job.ts --job ${pg[1]} --attempt att_1 --callback https://x/done --token ${t.__mockRawToken} --upload blobs\``
+        }
+      } catch {
+        // private mode
+      }
       try {
         stale = localStorage.getItem('mockStale') === '1'
         render = localStorage.getItem('mockRender') === '1' || pictureRender?.n === latest?.n
@@ -863,7 +877,12 @@ export function installMock() {
         versionN: latest?.n ?? null,
         stage: latest?.stage ?? null,
         music: latest?.music ?? null,
-        step: latest?.stage === 'finding_music' ? null : steps[(w.__progressCalls - 1) % steps.length],
+        step:
+          latest?.stage === 'finding_music'
+            ? null
+            : rawStep
+              ? rawStep
+              : steps[(w.__progressCalls - 1) % steps.length],
         steps: 10 + w.__progressCalls,
         credits: 30 + w.__progressCalls * 2,
         observedAt: new Date(Date.now() - (stale ? 90_000 : 2000)).toISOString(),

@@ -3,7 +3,7 @@
 // attempt is the video's latest and running, sequence numbers so a late post never replaces a newer one, size and
 // rate bounds, and server-chosen keys in their own store. It never touches receipts, leases or outcomes.
 import type { Deps } from '../deps.js'
-import { safeEqual, sha256Hex } from '../lib/crypto.js'
+import { runTokenOk } from '../lib/run-auth.js'
 import { ApiError } from '../lib/errors.js'
 import { readTarGz } from '../lib/tar.js'
 import { redactSecrets } from '../lib/run-text.js'
@@ -31,7 +31,7 @@ export async function receiveCheckpoint(
   input: CheckpointInput,
 ): Promise<{ accepted: boolean; seq: number; reason?: string }> {
   const a = await deps.store.getAttempt(attemptId)
-  if (!a || !token || !a.callbackTokenHash || !safeEqual(a.callbackTokenHash, sha256Hex(token)))
+  if (!a || !runTokenOk(token, a, deps.config.runSecret))
     throw new ApiError('unauthorized', 'Invalid callback token.')
   const job = await deps.store.getJob(a.jobId)
   if (!job || job.deletedAt || a.cancelRequestedAt)

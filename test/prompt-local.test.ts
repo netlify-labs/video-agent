@@ -17,7 +17,6 @@ const run = {
   runManifestSha256: 'b'.repeat(64),
   callbackUrl: 'https://x/cb/done',
   checkpointUrl: 'https://x/cb/checkpoint',
-  callbackToken: 'tok',
 }
 const BUILDERS: [string, (upload: PromptUpload) => string][] = [
   [

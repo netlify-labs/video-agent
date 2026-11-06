@@ -59,10 +59,11 @@ describe.each([
   })
 
   it('a HyperFrames manifest still names no engine', async () => {
-    const h = harness({ ENGINES: 'remotion' }, await stores())
+    // With the run secret (no callback token to deliver) and no inputs to restore, no manifest at all: the prompt is
+    // exactly what it was before engines.
+    const h = harness({ ENGINES: 'remotion', VIDEO_AGENT_RUN_SECRET: 's'.repeat(40) }, await stores())
     const v = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }))
     await h.drive(2)
-    // No inputs to restore, so no manifest at all: the prompt is exactly what it was before engines.
     expect(
       await h.deps.blobs.get('sources', runManifestKey(v.id, h.deps.runner.starts[0]?.requestId ?? '')),
     ).toBeNull()

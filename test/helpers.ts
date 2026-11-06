@@ -12,6 +12,8 @@ import { receiveCallback } from '../src/domain/callback.js'
 import { runOpenverseJob } from '../src/domain/openverse-jobs.js'
 import { NARRATION_SRC } from '../src/lib/contract.js'
 import { sha256Hex } from '../src/lib/crypto.js'
+import { runAttemptToken } from '../src/lib/run-auth.js'
+import { runManifestKey } from '../src/lib/run-manifest.js'
 import type { AttemptRow, Role } from '../src/domain/types.js'
 import { fixtureFiles, makeDeps, uploadAndManifest, type TestDeps } from './fakes.js'
 import { tarGz } from './tarball.js'
@@ -104,7 +106,7 @@ export function harness(
         await deps.blobs.set('uploads', `${a.id}/narration-bus.wav`, bus)
         manifest.references = [{ path: NARRATION_SRC, sha256: sha256Hex(bus), bytes: bus.byteLength }]
       }
-      const token = /--token (\S+)/.exec(req.prompt)?.[1] ?? null
+      const token = await runToken(deps, a.id)
       if (opts.autoCallback ?? true) await receiveCallback(deps, a.id, token, manifest)
     },
   })
@@ -190,6 +192,24 @@ export const contractSource = () =>
 export async function editableVideo(h: Harness) {
   h.deps.nextSource = contractSource()
   return readyVideo(h)
+}
+
+/**
+ * An attempt's callback token, where a run gets it: the run manifest the server stored (prepare-run moves it to
+ * .va-run/callback.json). Never from the prompt, which no longer carries it.
+ */
+export async function runToken(
+  deps: Pick<TestDeps, 'store' | 'blobs' | 'config'>,
+  attemptId: string,
+): Promise<string> {
+  // With the run secret, the run derives its token (src/lib/run-auth.ts) and the manifest carries none.
+  if (deps.config.runSecret) return runAttemptToken(deps.config.runSecret, attemptId)
+  const a = await deps.store.getAttempt(attemptId)
+  const raw = a ? await deps.blobs.get('sources', runManifestKey(a.jobId, attemptId)) : null
+  if (!raw) return ''
+  return (
+    (JSON.parse(new TextDecoder().decode(raw)) as { callback?: { token?: string } }).callback?.token ?? ''
+  )
 }
 
 /** Creates an API key for the signed-in person; returns the secret. */

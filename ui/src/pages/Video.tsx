@@ -96,6 +96,7 @@ import {
   showError,
   useAfterWrite,
 } from '../components/bits'
+import { stepText } from '../../../src/lib/run-text'
 
 /** Versions whose editing record this page already tried to repair (once per page load). */
 const healed = new Set<string>()
@@ -160,7 +161,8 @@ function Narration({ video, v }: { video: Video; v: Version }) {
   const p = progress.data?.versionN === v.n ? progress.data : null
   // The run's own milestones (checkpoints) read better than the SDK's step; render-job reports Rendering N%.
   const cp = p?.checkpoint
-  const step = cp?.message ?? p?.step ?? v.latestStep
+  // The server redacts run text; stepText again here, so a raw command never shows (labels for the repo's scripts).
+  const step = stepText(cp?.message ?? p?.step ?? v.latestStep)
   const rendering =
     cp?.renderPercent != null && cp.renderPercent < 100 && v.status === 'running' ? cp.renderPercent : null
   if (!step && p?.steps == null && rendering === null) return null

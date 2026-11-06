@@ -292,7 +292,6 @@ describe('buildPrompt voice-over', () => {
     targetDurationSec: null,
     callbackUrl: 'https://x/done',
     checkpointUrl: 'https://x/cp',
-    callbackToken: 'tok',
     upload: { mode: 'blobs' as const },
     revision: null,
     runManifestSha256: null,

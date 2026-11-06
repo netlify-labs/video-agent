@@ -53,7 +53,6 @@ export function k2Prompt(look: keyof typeof LOOKS | null, which: keyof typeof PR
     targetDurationSec: p.seconds,
     callbackUrl: 'https://unused.invalid/done',
     checkpointUrl: 'https://unused.invalid/cp',
-    callbackToken: 'unused',
     upload: { mode: 'blobs' },
     revision: null,
     runManifestSha256: null,

@@ -1,6 +1,7 @@
 // The agent's callback is a wake-up hint: store the manifest as a receipt and poke the reconciler.
 import type { Deps } from '../deps.js'
-import { safeEqual, sha256Hex } from '../lib/crypto.js'
+import { sha256Hex } from '../lib/crypto.js'
+import { runTokenOk } from '../lib/run-auth.js'
 import { ApiError } from '../lib/errors.js'
 import { isManifest } from './finalize.js'
 import { isTerminal } from './types.js'
@@ -12,7 +13,7 @@ export async function receiveCallback(
   body: unknown,
 ): Promise<void> {
   const a = await deps.store.getAttempt(attemptId)
-  if (!a || !token || !a.callbackTokenHash || !safeEqual(a.callbackTokenHash, sha256Hex(token))) {
+  if (!a || !runTokenOk(token, a, deps.config.runSecret)) {
     throw new ApiError('unauthorized', 'Invalid callback token.')
   }
   const job = await deps.store.getJob(a.jobId)

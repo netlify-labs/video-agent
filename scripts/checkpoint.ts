@@ -1,6 +1,6 @@
 // Best-effort milestone from inside a run (plan v2 §6 A2): tells the person watching what the agent is doing, and
 // optionally sends a snapshot of video/ for the live preview.
-//   npx tsx scripts/checkpoint.ts --attempt <id> --url <checkpoint url> --token <t> --message "Writing the end card" [--bundle]
+//   npx tsx scripts/checkpoint.ts --attempt <id> --url <checkpoint url> --message "Writing the end card" [--bundle]
 // Never fails the run: any problem prints "checkpoint skipped: …" and exits 0. Sequence numbers come from a counter
 // file in .render/, so a late post never replaces a newer one. render-job.ts reuses postCheckpoint for render %.
 // Local mode passes a file: URL, a folder under <repoRoot>/.render/: each checkpoint is written there as <seq>.json
@@ -9,6 +9,7 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { callbackToken } from './lib/run-callback.js'
 import { log, parseArgs, repoRoot, videoTarArgs } from './lib/run-tools.js'
 
 const BUNDLE_MAX = 2 * 1024 * 1024
@@ -88,15 +89,18 @@ export async function postCheckpoint(o: {
 }
 
 async function main() {
-  const { attempt, url, token, message, bundle } = parseArgs(process.argv.slice(2))
+  const args = parseArgs(process.argv.slice(2))
+  const { attempt, url, message, bundle } = args
+  // From .va-run/callback.json (prepare-run writes it); --token only for runs from prompts before template 26.
+  const token = callbackToken(repoRoot, attempt ?? '', args.token)
   // A file: URL (local mode) needs no token.
   if (!attempt || !url || (!token && !url.startsWith('file:')) || !message) {
     console.log(
-      'checkpoint skipped: usage: checkpoint.ts --attempt <id> --url <url> --token <t> --message "…" [--bundle]',
+      'checkpoint skipped: usage: checkpoint.ts --attempt <id> --url <url> --message "…" [--bundle] (the token comes from .va-run/callback.json)',
     )
     return
   }
-  const r = await postCheckpoint({ attempt, url, token: token ?? '', message, bundle: bundle === 'true' })
+  const r = await postCheckpoint({ attempt, url, token, message, bundle: bundle === 'true' })
   log('checkpoint', { ok: r.ok, reason: r.reason })
   console.log(r.ok ? `checkpoint sent${r.reason ? ` (${r.reason})` : ''}` : `checkpoint skipped: ${r.reason}`)
 }

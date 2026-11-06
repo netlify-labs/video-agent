@@ -9,7 +9,7 @@ import { getSettings } from '../src/domain/settings.js'
 import { deliverWebhooks } from '../src/domain/webhooks.js'
 import { encrypt } from '../src/lib/crypto.js'
 import { running, type RunScript } from './fakes.js'
-import { apiKey, harness, mcpCall, PROMPT, type Harness } from './helpers.js'
+import { apiKey, harness, mcpCall, PROMPT, runToken, type Harness } from './helpers.js'
 
 // A token like the callback's (base64url, 43 characters), made fresh so no secret-shaped literal is in the repo.
 const TOKEN = randomBytes(32).toString('base64url')
@@ -116,7 +116,6 @@ describe('run text never carries secrets to people', () => {
 
   it("a checkpoint's note is redacted when it's stored", async () => {
     const h = harness()
-    const tokenOf = (prompt: string) => /--token (\S+)/.exec(prompt)?.[1] ?? ''
     const id = await video(h, [
       'Writing the composition',
       'Writing the composition',
@@ -126,7 +125,7 @@ describe('run text never carries secrets to people', () => {
     const req = h.deps.runner.starts.at(-1)
     const res = await h.call('POST', `/api/internal/runs/${req?.requestId ?? ''}/checkpoint`, {
       origin: null,
-      headers: { authorization: `Bearer ${tokenOf(req?.prompt ?? '')}` },
+      headers: { authorization: `Bearer ${await runToken(h.deps, req?.requestId ?? '')}` },
       body: { seq: 1, message: `Uploading with VIDEO_AGENT_KEY=${TOKEN}` },
     })
     expect(res.status, await res.clone().text()).toBeLessThan(300)

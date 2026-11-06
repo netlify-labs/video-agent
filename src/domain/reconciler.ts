@@ -215,6 +215,9 @@ async function startRequest(
       attemptId: a.id,
       versionN: a.versionN,
       ...m,
+      // Never in the prompt or a command line. With the run secret the run derives its token itself and the manifest
+      // carries none; without it, the attempt's own token travels here.
+      ...(deps.config.runSecret ? {} : { callback: { token: callbackToken } }),
       // A demo's recording inputs (screen-recording plan §5.5); absent otherwise, so other manifests keep their bytes.
       ...(recording ? { recording } : {}),
       // Named only for other engines, so HyperFrames manifests (and the hash the prompt pins) keep their bytes.
@@ -249,7 +252,6 @@ async function startRequest(
       recordingHolds: (version.frozen.recordingHolds?.length ?? 0) > 0,
       runManifestSha256,
       ...runUrls,
-      callbackToken,
       upload: { mode: 'blobs' },
     })
     return result(prompt, null)
@@ -286,7 +288,6 @@ async function startRequest(
       sound: version.sound ?? 'silent',
       runManifestSha256,
       ...runUrls,
-      callbackToken,
       upload: { mode: 'blobs' },
       look: promptLook,
     })
@@ -357,8 +358,9 @@ async function startRequest(
     }
   })
   let runManifestSha256: string | null = null
-  // Another engine always needs one: prepare-run sets video/ up from it (render-engines plan §5.1).
-  if (revision || media || look || runEngine.engine) {
+  // Another engine always needs one: prepare-run sets video/ up from it (render-engines plan §5.1). So does every run
+  // of a deployment without the run secret: the manifest is how its callback token reaches it.
+  if (revision || media || look || runEngine.engine || !deps.config.runSecret) {
     runManifestSha256 = await putManifest({
       kind: revision ? 'revision' : 'author',
       source: revision && {
@@ -390,7 +392,6 @@ async function startRequest(
         title: job.title,
         runManifestSha256,
         ...runUrls,
-        callbackToken,
         upload: { mode: 'blobs' },
       }),
       revision?.sourceSha256 ?? null,
@@ -406,7 +407,6 @@ async function startRequest(
     aspect: job.aspect,
     targetDurationSec: version.targetDurationSec,
     ...runUrls,
-    callbackToken,
     upload: { mode: 'blobs' },
     revision: revision && { parentN: revision.parentN },
     remix: version.remix ?? null,

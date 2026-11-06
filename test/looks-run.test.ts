@@ -61,8 +61,8 @@ describe('a version with a look', () => {
     expect(h.deps.runner.starts.at(-1)!.prompt).toContain('This is a restyle into that look.')
   })
 
-  it('without a look nothing changes: no manifest for a plain author run', async () => {
-    const h = harness()
+  it('without a look nothing changes: no manifest for a plain author run (with the run secret)', async () => {
+    const h = harness({ VIDEO_AGENT_RUN_SECRET: 's'.repeat(40) })
     const { id } = await h.json<{ id: string }>(
       await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }),
     )

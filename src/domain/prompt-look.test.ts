@@ -15,7 +15,6 @@ const base = {
   targetDurationSec: 20,
   callbackUrl: 'https://v.example.com/done',
   checkpointUrl: 'https://v.example.com/cp',
-  callbackToken: 'tok',
   upload: { mode: 'blobs' as const },
   revision: { parentN: 1 },
   runManifestSha256: 'a'.repeat(64),
@@ -89,7 +88,6 @@ describe('the fit and render-unchanged prompts', () => {
     runManifestSha256: 'b'.repeat(64),
     callbackUrl: 'https://x/done',
     checkpointUrl: 'https://x/cp',
-    callbackToken: 'tok',
     upload: { mode: 'blobs' as const },
   }
 
@@ -109,7 +107,6 @@ describe('the fit and render-unchanged prompts', () => {
       runManifestSha256: 'c'.repeat(64),
       callbackUrl: 'https://x/done',
       checkpointUrl: 'https://x/cp',
-      callbackToken: 'tok',
       upload: { mode: 'blobs' },
     })
     expect(p).not.toContain('look')

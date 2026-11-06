@@ -112,6 +112,17 @@ export async function setupChecks(
     fix: 'Edit context/BRAND.md and context/brand.json, add your logo to context/assets/, and push. Or set BRAND_ZIP_URL to a zip of your brand kit (see context/README.md) and redeploy.',
   })
 
+  // Runs prove which attempt they are with a token derived from this secret, so no token is in a prompt.
+  add({
+    id: 'run-secret',
+    label: 'Run secret',
+    status: deps.config.runSecret ? 'ok' : 'warn',
+    detail: deps.config.runSecret
+      ? 'Set: runs derive their callback token from it, so no token is in a prompt.'
+      : 'Not set: each run gets its own token through its run manifest instead. Videos work as usual.',
+    fix: 'Run npm run setup again, or set VIDEO_AGENT_RUN_SECRET (at least 32 random characters; secret; scopes builds and functions) and redeploy.',
+  })
+
   // Optional: planning with questions needs AI Gateway; without it Plan it first is hidden and nothing else changes.
   add({
     id: 'ai-gateway',

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { verifyPath, webhookSignature } from '../src/lib/crypto.js'
 import { RunnerError } from '../src/deps.js'
 import { getSettings } from '../src/domain/settings.js'
-import { harness, PROMPT } from './helpers.js'
+import { harness, PROMPT, runToken } from './helpers.js'
 import { failedSnap, running, succeeded } from './fakes.js'
 
 describe('video lifecycle', () => {
@@ -283,7 +283,7 @@ describe('video lifecycle', () => {
     expect(a?.stage).toBe('running')
     const { fixtureFiles, uploadAndManifest } = await import('./fakes.js')
     const m = await uploadAndManifest(h.deps.blobs, video.id, a?.id ?? '', fixtureFiles())
-    const token = /--token (\S+)/.exec(h.deps.runner.starts[0]?.prompt ?? '')?.[1]
+    const token = await runToken(h.deps, h.deps.runner.starts[0]?.requestId ?? '')
     const res = await h.call('POST', `/api/internal/runs/${a?.id}/done`, {
       origin: null,
       headers: { authorization: `Bearer ${token}` },
@@ -308,7 +308,7 @@ describe('video lifecycle', () => {
         onTerminal: async () => {
           const { fixtureFiles, uploadAndManifest } = await import('./fakes.js')
           const a = await h.deps.store.getAttempt(req.requestId)
-          const token = /--token (\S+)/.exec(req.prompt)?.[1]
+          const token = await runToken(h.deps, req.requestId)
           const post = async (files: Record<string, Uint8Array>) => {
             const m = await uploadAndManifest(h.deps.blobs, a?.jobId ?? '', req.requestId, files)
             const res = await h.call('POST', `/api/internal/runs/${req.requestId}/done`, {
@@ -348,7 +348,7 @@ describe('video lifecycle', () => {
       createHash('sha256').update(vtt).digest('hex'),
     )
     // Once the video is made from a manifest, a different one is refused.
-    const token = /--token (\S+)/.exec(h.deps.runner.starts[0]?.prompt ?? '')?.[1]
+    const token = await runToken(h.deps, h.deps.runner.starts[0]?.requestId ?? '')
     const { fixtureFiles, uploadAndManifest } = await import('./fakes.js')
     const late = await uploadAndManifest(h.deps.blobs, video.id, a?.id ?? '', fixtureFiles())
     const res = await h.call('POST', `/api/internal/runs/${a?.id}/done`, {
@@ -376,7 +376,7 @@ describe('video lifecycle', () => {
       const [a] = await h.attempts(video.id)
       const { fixtureFiles, uploadAndManifest } = await import('./fakes.js')
       const m = await uploadAndManifest(h.deps.blobs, video.id, a?.id ?? '', fixtureFiles())
-      const token = /--token (\S+)/.exec(h.deps.runner.starts[0]?.prompt ?? '')?.[1]
+      const token = await runToken(h.deps, h.deps.runner.starts[0]?.requestId ?? '')
       await h.call('POST', `/api/internal/runs/${a?.id}/done`, {
         origin: null,
         headers: { authorization: `Bearer ${token}` },
@@ -404,7 +404,7 @@ describe('video lifecycle', () => {
           const { receiveCallback } = await import('../src/domain/callback.js')
           const jobId = (await h.deps.store.getAttempt(req.requestId))?.jobId ?? ''
           const m = await uploadAndManifest(h.deps.blobs, jobId, req.requestId, fixtureFiles('16:9'))
-          await receiveCallback(h.deps, req.requestId, /--token (\S+)/.exec(req.prompt)?.[1] ?? null, m)
+          await receiveCallback(h.deps, req.requestId, await runToken(h.deps, req.requestId), m)
         },
       }
     })(h.deps.runner.defaultScript)
@@ -457,7 +457,7 @@ describe('video lifecycle', () => {
     await h.drive(2)
     await h.call('POST', `/api/v1/videos/${video.id}/versions/1/cancel`, { as: h.member })
     const [a] = await h.attempts(video.id)
-    const token = /--token (\S+)/.exec(h.deps.runner.starts[0]?.prompt ?? '')?.[1]
+    const token = await runToken(h.deps, h.deps.runner.starts[0]?.requestId ?? '')
     const res = await h.call('POST', `/api/internal/runs/${a?.id}/done`, {
       origin: null,
       headers: { authorization: `Bearer ${token}` },

@@ -169,11 +169,15 @@ export function prepareLocalRun(ws: string, input: LocalRunInput, log: Log): Loc
     writeFileSync(join(inputs, 'sources', key), input.look.bytes)
     look = { id: input.look.id, key, sha256: input.look.sha256, hash: input.look.hash }
   }
+  // render-job and checkpoint ignore it for file: URLs; random so no run carries a guessable value. It rides in the
+  // manifest like the server's (prepare-run moves it to .va-run/callback.json), never in the prompt.
+  const callbackToken = randomBytes(16).toString('hex')
   const manifest: RunManifest = {
     v: RUN_MANIFEST_VERSION,
     jobId,
     attemptId,
     versionN,
+    callback: { token: callbackToken },
     kind: input.revision ? 'revision' : 'author',
     source,
     bundle: null,
@@ -191,8 +195,6 @@ export function prepareLocalRun(ws: string, input: LocalRunInput, log: Log): Loc
   const renderDir = join(ws, '.render', attemptId)
   const callbackUrl = pathToFileURL(join(renderDir, 'done')).href
   const checkpointUrl = pathToFileURL(join(renderDir, 'checkpoint')).href
-  // render-job and checkpoint ignore it for file: URLs; random so a prompt never carries a guessable value.
-  const callbackToken = randomBytes(16).toString('hex')
   const prompt =
     input.recording?.quick && recording
       ? buildQuickDemoPrompt({
@@ -206,7 +208,6 @@ export function prepareLocalRun(ws: string, input: LocalRunInput, log: Log): Loc
           runManifestSha256: sha256Hex(raw),
           callbackUrl,
           checkpointUrl,
-          callbackToken,
           upload: { mode: 'local' },
         })
       : buildPrompt({
@@ -219,7 +220,6 @@ export function prepareLocalRun(ws: string, input: LocalRunInput, log: Log): Loc
           targetDurationSec: input.durationSec ?? null,
           callbackUrl,
           checkpointUrl,
-          callbackToken,
           upload: { mode: 'local' },
           ...(recordingPrompt ? { recording: recordingPrompt } : {}),
           revision: input.revision ? { parentN: input.revision.parentN } : null,

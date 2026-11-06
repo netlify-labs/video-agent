@@ -7,6 +7,7 @@
 // GitHub repo, and runs the /setup checks. It builds from Git rather than uploading from this machine: Agent
 // Runners need a Git-connected project, and Netlify Database applies migrations only on Git builds.
 // Uses your Netlify CLI login (`npx netlify login`). Never prints secret values.
+import { randomBytes } from 'node:crypto'
 import { createInterface } from 'node:readline/promises'
 import { exitOnError, parseArgs } from './lib/run-tools.js'
 import {
@@ -65,6 +66,20 @@ async function main() {
     { key: 'ADMIN_EMAILS', value: admins },
   ])
   log('Set RUNNER_API_TOKEN, ALLOWED_EMAIL_DOMAINS and ADMIN_EMAILS.')
+
+  // Runs derive their callback token from it, so no token is ever in a prompt. Builds scope: runs read it; secret: the
+  // platform hides its value. Kept when it's already set, so running setup again never breaks runs in flight.
+  if (!(await siteVarNames(token, site)).includes('VIDEO_AGENT_RUN_SECRET')) {
+    await setSiteVars(token, site, [
+      {
+        key: 'VIDEO_AGENT_RUN_SECRET',
+        value: randomBytes(32).toString('base64url'),
+        secret: true,
+        scopes: ['builds', 'functions'],
+      },
+    ])
+    log('Set VIDEO_AGENT_RUN_SECRET.')
+  }
 
   // Optional: a registered Openverse app for music search (anonymous limits are shared by outbound address).
   if (

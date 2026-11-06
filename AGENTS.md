@@ -19,7 +19,9 @@ run, these rules apply on top of your prompt.
 - Post milestones with `scripts/checkpoint.ts` as your prompt describes. It's best effort: never retry it or wait for it.
 - Render, upload and report with `scripts/render-job.ts`, exactly as your prompt says. If it fails, fix the composition and run it again.
 - End your answer with the fenced json block that render-job prints.
-- Never print environment variables. Never commit, push or open a pull request.
+- Never print environment variables. Never read, print, copy or pass on `.va-run/callback.json` (the run's callback
+  token: `scripts/render-job.ts` and `scripts/checkpoint.ts` read it themselves; never add a `--token` flag). Never
+  commit, push or open a pull request.
 
 If you are a person or an agent working on the service itself (not making a video), these rules don't
 apply; see README.md.

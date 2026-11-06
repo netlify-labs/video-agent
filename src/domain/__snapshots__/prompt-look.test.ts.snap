@@ -32,12 +32,12 @@ Never ask questions or request authorization. If something is unclear, make a re
 3. Run \`npx hyperframes check\` in video/ until it reports 0 errors.
 4. Write video/summary.json: { "title", "summary", "captions": [{ "start", "end", "text", "beat", "textId", "beatStart", "beatEnd" }] }
    with one caption cue per piece of on-screen text: start/end in seconds of the video, beatStart/beatEnd in seconds into its beat.
-5. Run: npx tsx scripts/render-job.ts --job vid_1 --attempt 0b8a2c1e-0000-4000-8000-000000000000 --callback https://v.example.com/done --token tok --upload blobs
+5. Run: npx tsx scripts/render-job.ts --job vid_1 --attempt 0b8a2c1e-0000-4000-8000-000000000000 --callback https://v.example.com/done --upload blobs
    If it fails, read its error, fix the composition, and run it again.
 6. End your answer with the fenced \`\`\`json block render-job.ts prints.
    Once it has succeeded, never run render-job.ts again: if its json block is out of view, print it with cat .render/0b8a2c1e-0000-4000-8000-000000000000/manifest.json.
 
-Progress (optional, best effort): at milestones (after reading context/, after each scene, before each check round) run: npx tsx scripts/checkpoint.ts --attempt 0b8a2c1e-0000-4000-8000-000000000000 --url https://v.example.com/cp --token tok --message "<what you are doing, in a few words>". Add --bundle once video/index.html exists, so people can watch it take shape. It never fails the run; don't retry it or wait for it.
+Progress (optional, best effort): at milestones (after reading context/, after each scene, before each check round) run: npx tsx scripts/checkpoint.ts --attempt 0b8a2c1e-0000-4000-8000-000000000000 --url https://v.example.com/cp --message "<what you are doing, in a few words>". Add --bundle once video/index.html exists, so people can watch it take shape. It never fails the run; don't retry it or wait for it.
 
 Never print environment variables. Never commit, push or open a pull request."
 `;
@@ -72,12 +72,12 @@ Never ask questions or request authorization. If something is unclear, make a re
 3. Run \`npx hyperframes check\` in video/ until it reports 0 errors.
 4. Write video/summary.json: { "title", "summary", "captions": [{ "start", "end", "text", "beat", "textId", "beatStart", "beatEnd" }] }
    with one caption cue per piece of on-screen text: start/end in seconds of the video, beatStart/beatEnd in seconds into its beat.
-5. Run: npx tsx scripts/render-job.ts --job vid_1 --attempt 0b8a2c1e-0000-4000-8000-000000000000 --callback https://v.example.com/done --token tok --upload blobs
+5. Run: npx tsx scripts/render-job.ts --job vid_1 --attempt 0b8a2c1e-0000-4000-8000-000000000000 --callback https://v.example.com/done --upload blobs
    If it fails, read its error, fix the composition, and run it again.
 6. End your answer with the fenced \`\`\`json block render-job.ts prints.
    Once it has succeeded, never run render-job.ts again: if its json block is out of view, print it with cat .render/0b8a2c1e-0000-4000-8000-000000000000/manifest.json.
 
-Progress (optional, best effort): at milestones (after reading context/, after each scene, before each check round) run: npx tsx scripts/checkpoint.ts --attempt 0b8a2c1e-0000-4000-8000-000000000000 --url https://v.example.com/cp --token tok --message "<what you are doing, in a few words>". Add --bundle once video/index.html exists, so people can watch it take shape. It never fails the run; don't retry it or wait for it.
+Progress (optional, best effort): at milestones (after reading context/, after each scene, before each check round) run: npx tsx scripts/checkpoint.ts --attempt 0b8a2c1e-0000-4000-8000-000000000000 --url https://v.example.com/cp --message "<what you are doing, in a few words>". Add --bundle once video/index.html exists, so people can watch it take shape. It never fails the run; don't retry it or wait for it.
 
 Never print environment variables. Never commit, push or open a pull request."
 `;

@@ -1,5 +1,5 @@
 // Run by the agent inside an Agent Runner run, after `hyperframes check` passes:
-//   npx tsx scripts/render-job.ts --job <id> --attempt <id> --callback <url> --token <t> --upload blobs
+//   npx tsx scripts/render-job.ts --job <id> --attempt <id> --callback <url> --upload blobs
 // Renders video/, checks the file, masters a narrated mix's loudness (scripts/lib/mastering.ts), makes the poster, GIF preview, captions and source archive (plus optional preview
 // variants: small WebP/AVIF posters, a placeholder and a hover clip), uploads everything to the uploads store under the attempt id, and notifies the service.
 // Reference files (the narration bus) stay out of source.tar.gz and are uploaded on their own (scripts/lib/references.ts).
@@ -44,6 +44,7 @@ import { readSttRecord } from './lib/stt/index.js'
 import { makePreviews, posterTime } from './lib/previews.js'
 import { uploadReferences } from './lib/references.js'
 import { RenderProgressReporter } from './lib/render-progress.js'
+import { callbackAuth, runSecretMasked } from './lib/run-callback.js'
 import {
   StepError,
   assertNoTakesInVideo,
@@ -64,12 +65,17 @@ const MAX_BYTES = 2 * 1024 * 1024 * 1024
 
 async function main() {
   const args = parseArgs(process.argv.slice(2))
-  const { job, attempt, callback, token = '' } = args
+  const { job, attempt, callback } = args
+  // Derived from the run secret, or from .va-run/callback.json (prepare-run writes it); --token only for runs from
+  // prompts before template 26. The log says which, and whether the secret is masked in run output, never the token.
+  const auth = callbackAuth(repoRoot, attempt ?? '', args.token)
+  const token = auth.token
+  log('run.auth', { source: auth.source, runSecretMasked: runSecretMasked() })
   const uploadMode = args.upload ?? 'blobs'
   // A file: callback (local mode) needs no token.
   if (!job || !attempt || !callback || (!token && !callback.startsWith('file:')))
     throw new StepError(
-      'Usage: render-job.ts --job <id> --attempt <id> --callback <url> --token <token> --upload blobs|local',
+      'Usage: render-job.ts --job <id> --attempt <id> --callback <url> --upload blobs|local (the token comes from .va-run/callback.json; run prepare-run first)',
     )
   // Checked before rendering, so a bad path fails in seconds, not after the render.
   const doneFile = localFolder(callback)

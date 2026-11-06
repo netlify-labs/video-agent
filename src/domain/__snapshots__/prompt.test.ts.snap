@@ -26,12 +26,12 @@ Never ask questions or request authorization. If something is unclear, make a re
    The beats must add up to exactly 10.533333 seconds (316 frames at 30 fps): the root's data-duration and every layer's are that, and each beat is whole frames. Check it with npx tsx scripts/check-contract.ts, which fails until they do.
    Keep video/summary.json's captions in step: one cue per piece of on-screen text in beats you change (start/end in seconds of the video, beatStart/beatEnd in seconds into its beat), and the narration's cues as they are.
 5. Run \`npx hyperframes check\` in video/ until it reports 0 errors.
-6. Run: npx tsx scripts/render-job.ts --job vid_1 --attempt att_1 --callback https://x/done --token tok --upload blobs
+6. Run: npx tsx scripts/render-job.ts --job vid_1 --attempt att_1 --callback https://x/done --upload blobs
    If it fails, read its error, fix the composition (never the narration), and run it again.
 7. End your answer with the fenced \`\`\`json block render-job.ts prints.
    Once it has succeeded, never run render-job.ts again: if its json block is out of view, print it with cat .render/att_1/manifest.json.
 
-Progress (optional, best effort): at milestones run: npx tsx scripts/checkpoint.ts --attempt att_1 --url https://x/cp --token tok --message "<what you are doing, in a few words>". Add --bundle once you have changed video/index.html, so people can watch it take shape. It never fails the run; don't retry it or wait for it.
+Progress (optional, best effort): at milestones run: npx tsx scripts/checkpoint.ts --attempt att_1 --url https://x/cp --message "<what you are doing, in a few words>". Add --bundle once you have changed video/index.html, so people can watch it take shape. It never fails the run; don't retry it or wait for it.
 
 Never print environment variables. Never commit, push or open a pull request."
 `;
@@ -47,12 +47,12 @@ Don't write, change or delete any file in video/ yourself. There is nothing to d
 3. Run from the repo root: npx tsx scripts/narration-stt.ts
    It transcribes the mixed narration for captions (into .va-run/narration/stt.json) and adds its caption cues to video/summary.json. It never fails the run: if it reports that the narration wasn't transcribed, carry on without captions. Don't run it twice and don't edit its output.
 4. Run \`npx hyperframes check\` in video/. If it reports any error, stop: fix nothing, and end your answer with the errors.
-5. Run: npx tsx scripts/render-job.ts --job vid_1 --attempt att_1 --callback https://x/done --token tok --upload blobs
+5. Run: npx tsx scripts/render-job.ts --job vid_1 --attempt att_1 --callback https://x/done --upload blobs
    It checks that only the narration changed before rendering. If it fails, stop and report the error; never edit files to make it pass.
 6. End your answer with the fenced \`\`\`json block render-job.ts prints.
    Once it has succeeded, never run render-job.ts again: if its json block is out of view, print it with cat .render/att_1/manifest.json.
 
-Optional progress: npx tsx scripts/checkpoint.ts --attempt att_1 --url https://x/cp --token tok --message "<what you are doing>"
+Optional progress: npx tsx scripts/checkpoint.ts --attempt att_1 --url https://x/cp --message "<what you are doing>"
 Never ask questions or request authorization. Never print environment variables. Never commit, push or open a pull request."
 `;
 
@@ -69,12 +69,12 @@ Don't write, change or delete any file in video/ yourself. There is nothing to d
 4. Run from the repo root: npx tsx scripts/narration-stt.ts
    It transcribes the mixed narration for captions (into .va-run/narration/stt.json) and adds its caption cues to video/summary.json. It never fails the run: if it reports that the narration wasn't transcribed, carry on without captions. Don't run it twice and don't edit its output.
 5. Run \`npx hyperframes check\` in video/. If it reports any error, stop: fix nothing, and end your answer with the errors.
-6. Run: npx tsx scripts/render-job.ts --job vid_1 --attempt att_1 --callback https://x/done --token tok --upload blobs
+6. Run: npx tsx scripts/render-job.ts --job vid_1 --attempt att_1 --callback https://x/done --upload blobs
    It checks that only the re-voiced lines and the narration changed before rendering. If it fails, stop and report the error; never edit files to make it pass.
 7. End your answer with the fenced \`\`\`json block render-job.ts prints.
    Once it has succeeded, never run render-job.ts again: if its json block is out of view, print it with cat .render/att_1/manifest.json.
 
-Optional progress: npx tsx scripts/checkpoint.ts --attempt att_1 --url https://x/cp --token tok --message "<what you are doing>"
+Optional progress: npx tsx scripts/checkpoint.ts --attempt att_1 --url https://x/cp --message "<what you are doing>"
 Never ask questions or request authorization. Never print environment variables. Never commit, push or open a pull request."
 `;
 
@@ -85,12 +85,12 @@ Don't write, change or delete any file in video/. There is nothing to design: on
 1. Run: npx tsx scripts/prepare-run.ts --job vid_1 --attempt att_1 --manifest bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
    It restores video/ and verifies every file. If it fails, stop and report the error.
 2. Run \`npx hyperframes check\` in video/. If it reports any error, stop: fix nothing, and end your answer with the errors.
-3. Run: npx tsx scripts/render-job.ts --job vid_1 --attempt att_1 --callback https://x/done --token tok --upload blobs
+3. Run: npx tsx scripts/render-job.ts --job vid_1 --attempt att_1 --callback https://x/done --upload blobs
    It checks the files again before rendering. If it fails, stop and report the error; never edit files to make it pass.
 4. End your answer with the fenced \`\`\`json block render-job.ts prints.
    Once it has succeeded, never run render-job.ts again: if its json block is out of view, print it with cat .render/att_1/manifest.json.
 
-Optional progress: npx tsx scripts/checkpoint.ts --attempt att_1 --url https://x/cp --token tok --message "<what you are doing>"
+Optional progress: npx tsx scripts/checkpoint.ts --attempt att_1 --url https://x/cp --message "<what you are doing>"
 Never ask questions or request authorization. Never print environment variables. Never commit, push or open a pull request."
 `;
 
@@ -103,12 +103,12 @@ Don't write, change or delete any file in video/ yourself. There is nothing to d
 2. Run from the repo root: npx tsx scripts/voice.ts revoice
    It re-speaks exactly the marked lines with the video's own voice and speed, lengthens a beat only if its new line no longer fits (later beats move with it), and updates the narration captions and the music's ducking. If it fails, stop and report the error. Don't run it twice, don't use another text-to-speech tool, and don't run voice.ts any other way.
 3. Run \`npx hyperframes check\` in video/. If it reports any error, stop: fix nothing, and end your answer with the errors.
-4. Run: npx tsx scripts/render-job.ts --job vid_1 --attempt att_1 --callback https://x/done --token tok --upload blobs
+4. Run: npx tsx scripts/render-job.ts --job vid_1 --attempt att_1 --callback https://x/done --upload blobs
    It checks that only the re-voiced lines changed before rendering. If it fails, stop and report the error; never edit files to make it pass.
 5. End your answer with the fenced \`\`\`json block render-job.ts prints.
    Once it has succeeded, never run render-job.ts again: if its json block is out of view, print it with cat .render/att_1/manifest.json.
 
-Optional progress: npx tsx scripts/checkpoint.ts --attempt att_1 --url https://x/cp --token tok --message "<what you are doing>"
+Optional progress: npx tsx scripts/checkpoint.ts --attempt att_1 --url https://x/cp --message "<what you are doing>"
 Never ask questions or request authorization. Never print environment variables. Never commit, push or open a pull request."
 `;
 

@@ -759,7 +759,8 @@ describe('prepare-run for a scoped revision (redo a scene)', () => {
 
 describe('server side', () => {
   it('writes the run manifest for a revision and pins its hash in the prompt', async () => {
-    const h = harness()
+    // With the run secret: a first version has nothing to restore and no token to deliver, so no manifest.
+    const h = harness({ VIDEO_AGENT_RUN_SECRET: 's'.repeat(40) })
     const v = await h.json(
       await h.call('POST', '/api/v1/videos', {
         as: h.member,

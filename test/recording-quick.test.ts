@@ -48,7 +48,6 @@ describe('Quick demo', () => {
     const prompt = (req?.prompt ?? '')
       .replaceAll(req?.requestId ?? '', '<attempt>')
       .replaceAll(sha, '<manifest>')
-      .replace(/--token \S+/g, '--token <token>')
       .replaceAll(id, '<media>')
     log({ case: 'prompt', length: prompt.length })
     expect(prompt).toMatchSnapshot()

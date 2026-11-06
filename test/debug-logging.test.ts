@@ -2,7 +2,7 @@
 // redacted); without it, none of those debug lines are written.
 import { describe, expect, it } from 'vitest'
 import { clip, createLogger, verboseFromEnv } from '../src/lib/log.js'
-import { apiKey, harness, mcpCall, PROMPT, type Harness } from './helpers.js'
+import { apiKey, harness, mcpCall, PROMPT, type Harness, runToken } from './helpers.js'
 
 const lines = (h: Harness) => h.deps.logs.map((l) => JSON.parse(l) as Record<string, unknown>)
 const debug = (h: Harness, event: string) => lines(h).filter((l) => l.level === 'debug' && l.event === event)
@@ -45,10 +45,11 @@ describe('debug logging', () => {
     const start = debug(h, 'run.start_request')[0]
     const sent = h.deps.runner.starts.at(-1)?.prompt ?? ''
     expect(String(start?.prompt)).toContain(PROMPT)
-    // The callback token in the real prompt is replaced in the logged copy.
-    expect(sent).not.toContain('[redacted]')
-    expect(String(start?.prompt)).toContain('[redacted]')
-    expect(String(start?.prompt).length).toBeLessThan(sent.length)
+    // The prompt carries no callback token (the run manifest does), so neither copy holds it.
+    const token = await runToken(h.deps, h.deps.runner.starts.at(-1)?.requestId ?? '')
+    expect(token.length).toBeGreaterThan(16)
+    expect(sent).not.toContain(token)
+    expect(String(start?.prompt)).not.toContain(token)
 
     const key = await apiKey(h, h.member, 'claude')
     await mcpCall(h, key, 'tools/call', { name: 'list_videos', arguments: { query: 'webhooks' } })
