@@ -5,6 +5,14 @@ import { expect, test, type Page } from '@playwright/test'
 const mock = (page: Page, key: string, value = '1') =>
   page.addInitScript(({ k, v }) => localStorage.setItem(k, v), { k: key, v: value })
 
+/** The Remotion switch, clicked for real in the middle of the screen (a forced click under the sticky header did
+ * nothing on CI's layout; same fix as remix.spec.ts). */
+async function turnOnRemotion(page: Page) {
+  const sw = page.getByRole('switch', { name: /Use Remotion \(a license is required/ })
+  await sw.evaluate("(el) => el.scrollIntoView({ block: 'center' })")
+  await sw.click()
+}
+
 test('without ENGINES there is no Remotion anywhere on Admin', async ({ page }) => {
   await page.goto('/admin')
   await expect(page.getByText('Remixing', { exact: true })).toBeVisible()
@@ -15,7 +23,7 @@ test('without ENGINES there is no Remotion anywhere on Admin', async ({ page }) 
 test('turning Remotion on asks for the license, and a Company License needs its key', async ({ page }) => {
   await mock(page, 'mockEngines', 'remotion')
   await page.goto('/admin')
-  await page.getByRole('switch', { name: /Use Remotion \(a license is required/ }).click({ force: true })
+  await turnOnRemotion(page)
   const dialog = page.getByRole('dialog', { name: 'Use Remotion' })
   await expect(dialog).toBeVisible()
   await expect(dialog.getByText(/Remotion isn't open source/)).toBeVisible()
@@ -36,7 +44,7 @@ test('turning Remotion on asks for the license, and a Company License needs its 
 test('with the key set, a Company License saves', async ({ page }) => {
   await mock(page, 'mockEngines', 'remotion-key')
   await page.goto('/admin')
-  await page.getByRole('switch', { name: /Use Remotion \(a license is required/ }).click({ force: true })
+  await turnOnRemotion(page)
   const dialog = page.getByRole('dialog', { name: 'Use Remotion' })
   await dialog.getByLabel(/has a Remotion Company License/).check()
   await expect(dialog.getByText("VIDEO_AGENT_REMOTION_KEY isn't set")).toHaveCount(0)
@@ -64,7 +72,7 @@ test('/setup has an Engines row only with ENGINES, and it follows the Admin dial
   await page.goto('/setup')
   await expect(page.getByText('HyperFrames ✓; Remotion: in ENGINES but not set up: see Admin.')).toBeVisible()
   await page.goto('/admin')
-  await page.getByRole('switch', { name: /Use Remotion \(a license is required/ }).click({ force: true })
+  await turnOnRemotion(page)
   const dialog = page.getByRole('dialog', { name: 'Use Remotion' })
   await dialog.getByLabel(/qualifies for the Free License/).check()
   await dialog.getByRole('button', { name: 'Turn Remotion on' }).click()
