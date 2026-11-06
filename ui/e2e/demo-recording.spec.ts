@@ -1,7 +1,7 @@
 // New video -> From a screen recording on the mock build (screen-recording plan §4.3–4.5; va-rsk5.4.1, 4.2, 4.7):
 // the library's recordings (cursor data first, with its badge), setup (notes, draw, move and delete boxes, trim, the
 // private hint, the create request), uploading a normalized MP4 with its trace.json, and recording the screen in the
-// app with a canvas standing in for the shared screen, through to setup. Without getDisplayMedia it says so.
+// app (demo-record-screen.spec.ts). Without getDisplayMedia, Record says it can't.
 import { expect, test, type Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -102,40 +102,6 @@ test('upload a normalized MP4 with its trace.json: no conversion, the trace is s
   await expect(page.getByTestId('cursor-note')).toHaveText('Smooth cursor from your cursor data.')
   const sent = await page.evaluate<Record<string, unknown>>('window.__mockTraces ?? {}')
   expect(Object.values(sent)).toEqual([trace])
-})
-
-test('record the screen in the app: a shared canvas becomes a recording and opens setup', async ({
-  page,
-}) => {
-  // A canvas stands in for the shared screen: an animated picture at 1280x720 from captureStream(30).
-  await page.addInitScript({
-    content: `navigator.mediaDevices.getDisplayMedia = () => {
-      const c = document.createElement('canvas')
-      c.width = 1280
-      c.height = 720
-      const cx = c.getContext('2d')
-      let n = 0
-      const draw = () => {
-        cx.fillStyle = 'hsl(' + (n++ % 360) + ' 60% 50%)'
-        cx.fillRect(0, 0, c.width, c.height)
-        cx.fillStyle = '#fff'
-        cx.fillRect((n * 7) % c.width, 300, 80, 80)
-        requestAnimationFrame(draw)
-      }
-      draw()
-      return Promise.resolve(c.captureStream(30))
-    }`,
-  })
-  await page.goto('/new/demo')
-  await page.getByRole('button', { name: 'Record your screen' }).click()
-  await expect(page.getByText("Recordings made here don't include cursor data")).toBeVisible()
-  await page.getByRole('button', { name: 'Choose what to record' }).click()
-  await expect(page.getByTestId('record-elapsed')).toContainText('0:01', { timeout: 10_000 })
-  await page.getByRole('button', { name: 'Stop recording' }).click()
-  await expect(page).toHaveURL(/\?media=med_screen_up/, { timeout: 30_000 })
-  await expect(page.getByTestId('cursor-note')).toHaveText(
-    'Video Agent will look for your cursor in the picture.',
-  )
 })
 
 test("without screen sharing, Record says this browser can't", async ({ page }) => {
