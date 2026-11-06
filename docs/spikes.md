@@ -218,7 +218,7 @@ are not building it.
 
 ### S9: voice providers (2026-11-01, one Agent Runner run and four draft deploys, since deleted)
 
-**Runner (run `6ae78a43e2327820c2eebd42`, session `6ae78a43e2327820c2eebd44`, 100 s, 16.1 credits, nothing changed):**
+**Runner (one run, 100 s, 16.1 credits, nothing changed):**
 
 | Check                                        | Result                                                                                           |
 | -------------------------------------------- | ------------------------------------------------------------------------------------------------ |
@@ -576,7 +576,7 @@ volume=<pre>dB, deesser=..., acompressor=..., volume=<trim>dB                # a
 docs/spikes/s13/run.ts`). Wall time 0.4-1.3 s per take, about 2-3× light. Not run on ffmpeg 6.0 (no build at hand);
   `adeclick` and `arnndn` exist since 4.2 and 4.3. Heavy needs ears on real takes like light does.
 
-### S11: speech-to-text on the runner (2026-11-03, `docs/spikes/s11`, run `6ae99c77bed4b69e1b6179d1`, 48 credits)
+### S11: speech-to-text on the runner (2026-11-03, `docs/spikes/s11`, one run, 48 credits)
 
 Kokoro-spoken inputs with a known transcript (20 phrases, two voices) were concatenated into 60 s, 90 s and 600 s
 clips; phrase starts are exact, word starts are estimated within a phrase. Runner: Ubuntu, 4 CPUs, 15.3 GB, Node 24,
@@ -596,7 +596,7 @@ fixed 240 ms to Parakeet's word starts (it reports them early) and leave ends al
 tree (setsid plus a recursive kill), not just the group leader. whisper.cpp would need a vendored source tarball;
 it isn't needed for v1. Parakeet's CC-BY-4.0 licence is credited in the README.
 
-### S12: render qualification (2026-11-03, `docs/spikes/s12`, runs `6ae99c7736f6fef837ecc5bb` and `6ae99e7176bcf173e806d8ea`, 65 + 22 + 44 credits)
+### S12: render qualification (2026-11-03, `docs/spikes/s12`, two runs, 65 + 22 + 44 credits)
 
 | Case       | Result                                                                                                                                                                                                                                                 |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -614,23 +614,23 @@ rendering.
 
 ## Publish destination spikes (docs/plans/2026-11-04-publish-destinations.md §8)
 
-### P1: writing a large file into another site's Blobs from outside Netlify (2026-11-05, netliclaw)
+### P1: writing a large file into another site's Blobs from outside Netlify (2026-11-05, a test team)
 
 A 40 MB file went into a scratch site's `site-files` store from outside Netlify with a token (the Netlify CLI's
 `blobs:set`, same API as `@netlify/blobs`): 111 s over a home connection; from a Lambda in us-east-1 it will be far
-faster. site-vendor's copy streams the source to `/tmp` while hashing and uploads from a file-backed `Blob`
+faster. The internal site service's copy streams the source to `/tmp` while hashing and uploads from a file-backed `Blob`
 (`fs.openAsBlob`), so memory stays flat and a retry starts again from the file. The per-object limit is 5 GB; our cap is
 500 MB. Conditional writes (`onlyIfNew`, `onlyIfMatch`) back site.json's compare-and-swap.
 
 ### P2: per-site repos (2026-11-05, decision)
 
-Not needed in v1. Every video site is linked to `netlify-labs/video-site-template` (private) at a pinned commit; its
+Not needed in v1. Every video site is linked to a private template repo at a pinned commit; its
 content lives in Blobs, so sites never rebuild after the first build. An agent run lands by `publish` (its deploy
 becomes production) rather than committing, so it needs no repo of its own. A later re-link to a new template commit
 would replace agent-made design changes, so the template commit only moves on purpose. Per-site repos can come later
 if people want agent edits in git.
 
-### P3: the template's edge function on a real vended site (2026-11-05, netliclaw, site deleted after)
+### P3: the template's edge function on a real vended site (2026-11-05, a test team, site deleted after)
 
 `/site.json` 200; the page rendered; `/v/<pub>/<sha>.mp4` HEAD 200 with `accept-ranges: bytes`; `Range: bytes=0-1023`
 → 206 with the right bytes; a range 41 MB in → 206 with the right bytes in about 2 s (Blobs have no ranged read, so the
@@ -641,7 +641,7 @@ Range requests too. Every file in `netlify/edge-functions` is bundled as a funct
 
 ### P6: the agent run on a vended site
 
-Waits for site-vendor's deploy (it runs with the tenant's token there). The code lands by `publish`, checks that
+Waits for the site service's deploy (it runs with the tenant's token there). The code lands by `publish`, checks that
 production still serves the video, and rolls back to the previous deploy if not.
 
 ## Redo-a-scene spikes (docs/plans/2026-11-04-regenerate-beat.md §7)
@@ -799,7 +799,7 @@ candidate paths.
   That holds per platform only: CI on Linux x64 packed the same files to different gzip bytes (sha256
   `ca581991…4481`) than macOS arm64, with the same look hash. An archive's sha256 is meaningful only within the
   build that wrote it, which is how the catalog uses it (each deploy's build rewrites the catalog).
-- **Draft deploy** (`netlify deploy --build`, alias `k3-looks-spike`, deploy `6aec39f8e7372cfb360f3cf6`; branch
+- **Draft deploy** (`netlify deploy --build`, alias `k3-looks-spike`; branch
   deploys are limited to `main` on this site): `process.cwd()` is `/var/task`, and
   `join(process.cwd(), 'looks-build', 'clean.tar.gz')` exists with the catalog's sha256. Paths relative to the
   module (`/var/task/netlify/functions/…`) don't.
@@ -819,16 +819,15 @@ rendering locally for the run's preview deploy instead of render-job (`docs/spik
 
 **First pair (729 credits, wasted):** none 374, kinetic 355. Both run deploys failed: root npm `workspaces` (CLI phase
 1) made netlify-cli refuse to deploy from the repo root in CI ("Projects detected"), and the agents spent credits
-fighting it. Fixed on main in `20df76a` (no root workspaces). Runs `6aec2348d23c74a7e621c0f0`,
-`6aec2348ea92bbe0293fdb24`.
+fighting it. Fixed on main in `20df76a` (no root workspaces). Two runs.
 
 **Launch brief, after the fix** (16:9, 20 s, the Lumen brief in `looks/PROMPTS.md`):
 
 | Look | Run | Credits | Tokens | Time | Contract | hyperframes check |
 | --- | --- | --- | --- | --- | --- | --- |
-| none | `6aec295d7eb4e01d9139fbc9` | 141.0 | 890 K | 4.6 min | ok | 0 errors |
-| clean | `6aec295db6f2ac7dad417f3d` | 110.0 | 690 K | 3.9 min | ok | 0 errors |
-| kinetic | `6aec295d5f269da95f634157` | 103.1 | 673 K | 3.6 min | ok | 0 errors |
+| none | run 1 | 141.0 | 890 K | 4.6 min | ok | 0 errors |
+| clean | run 2 | 110.0 | 690 K | 3.9 min | ok | 0 errors |
+| kinetic | run 3 | 103.1 | 673 K | 3.6 min | ok | 0 errors |
 
 Contact sheet (6 frames each): `docs/spikes/out/k2/contact-sheet.png` (gitignored; videos in `docs/spikes/out/k2/videos/`).
 
@@ -946,7 +945,7 @@ a rule, a section number and a serif headline in a slow pan; §5's table is upda
 
 ## Screen recording demo spikes (docs/plans/2026-11-04-screen-recording-demo.md §10 Phase 0)
 
-### D1: recording clips at an offset and a rate in a later scene (2026-11-05, `docs/spikes/d1`, `npx tsx docs/spikes/d1/render.ts`; local, then run `6aec398430f5a5123b566e38`)
+### D1: recording clips at an offset and a rate in a later scene (2026-11-05, `docs/spikes/d1`, `npx tsx docs/spikes/d1/render.ts`; local, then one runner run)
 
 The fixture is 2560×1440 H.264 at 30 fps with 1 s GOPs (`-g 30 -sc_threshold 0`). Every frame carries its own number
 as a 4×4 grid of 160 px blocks (11 bits plus 5 check bits), so output frames are read back by sampling block
@@ -978,7 +977,7 @@ What this means:
 - `data-media-start` is the step's `in` in source seconds. `data-playback-rate` = (out − in) / slot.
 - Snap `in` to frame times (k/30) so planned frames don't sit on a rounding boundary.
 - Holds still need `<step>.hold.jpg` (§5.3), because a clip doesn't hold a mid-file frame past its `data-duration`.
-- **On the runner** (run `6aec398430f5a5123b566e38`, shared with D3, 108 credits for both): **0 wrong frames**, render
+- **On the runner** (one run, shared with D3, 108 credits for both): **0 wrong frames**, render
   about **1.6 s per output second** (pass: under 4 s). A 90 s demo renders in about 2.5 minutes, well inside the
   22-minute run.
 - **Pass.**
@@ -1021,7 +1020,7 @@ Changes for 4.1a:
   An idle page sends nothing, so gaps can be long.
 - The default viewport stays 1280×800.
 
-### D3: recording analysis time (2026-11-05, `docs/spikes/d3`, `npx tsx docs/spikes/d3/analyze.ts`; local, then run `6aec398430f5a5123b566e38`)
+### D3: recording analysis time (2026-11-05, `docs/spikes/d3`, `npx tsx docs/spikes/d3/analyze.ts`; local, then one runner run)
 
 The fixture is drawn by ffmpeg to look like a screen recording:
 - 2560×1440 at 30 fps, H.264 with 1 s GOPs, about 3.7 Mbps, 5 minutes, 131 MB.
@@ -1218,7 +1217,7 @@ unchanged (listing and mtimes before/after).
 4. **`npx tsx …` and `npx hyperframes …` resolve to the pinned runtime** through `PATH` and the `node_modules`
    symlinks, with no fetch, on Node 22 and 24. So local mode doesn't need Node 24: Node 22 works.
 
-**Linux (Ubuntu 24.04, x64; 2026-11-05, CI run 42117243317, the hand-run `spikes-linux` job).** Passed on Node
+**Linux (Ubuntu 24.04, x64; 2026-11-05, the hand-run `spikes-linux` CI job).** Passed on Node
 22.23.4 and 24.22.2, online and then `--offline` from the cache. Every step was ok, and all four runs rendered the same
 MP4 (sha256 `2372b512…a9bb`, 366,882 bytes) as the reference in local mode. The runtime installed in 8.2 s online and
 2.3 s offline (`npm ci` from the cache). agent-kit used the system FFmpeg (`/usr/bin/ffmpeg` from apt), as it did with
@@ -1263,7 +1262,7 @@ itself, not in hyperframes.
    gets a venv mode (4.1) instead of `--user`.
 3. C2's allowlist adds the four hosts above for narrated runs.
 
-**Ubuntu 24.04 (2026-11-05, CI run 42117243317, `spikes-linux` on Node 24, apt `python3-venv`).** Passed. The
+**Ubuntu 24.04 (2026-11-05, the hand-run `spikes-linux` CI job on Node 24, apt `python3-venv`).** Passed. The
 system Python 3.12.3 is externally managed, and the venv sidesteps that. The venv took 2.0 s. The install took 5.4 s
 (16 packages, `kokoro-onnx` 0.6.1). The first line, with the model download, took 4.3 s for 3.9 s of speech, and a
 cached line took 2.1 s. The same four hosts were contacted, and the user's
@@ -1504,7 +1503,7 @@ capability path, `sandbox allow-scripts`. The page sets `window.remotion_staticB
   - **Install size.** `node_modules` is 275 MB, plus the Chrome Headless Shell download, which lands inside it
     (`node_modules/.remotion`): 1.3 GB in all on macOS arm64. E1 measures the Linux runner.
 
-### POC: one Remotion video in a real Agent Runner run (2026-11-05, run `6aec3319ed01b77cdba95fc3`, 96.7 credits)
+### POC: one Remotion video in a real Agent Runner run (2026-11-05, one run, 96.7 credits)
 
 The owner asked for one quick proof, without waiting for Remotion's answer to the E6 email: exactly one video,
 development renders, Remotion on for nothing else, nothing published.
