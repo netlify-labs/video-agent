@@ -19,7 +19,10 @@ describe('brokeredRender', () => {
       writeJson(join(out, RESULT), { ok: true })
     })
     await brokeredRender(out, 'standard', (p) => seen.push(p), { pollMs: 10 })
-    expect(seen).toEqual([40, 90])
+    // Each change is reported once, in order (a slow poll may see only the later one).
+    expect(seen.at(-1)).toBe(90)
+    expect([...seen].sort((a, b) => a - b)).toEqual(seen)
+    expect(new Set(seen).size).toBe(seen.length)
     expect(JSON.parse(readFileSync(join(out, REQUEST), 'utf8'))).toEqual({ quality: 'standard' })
   })
 

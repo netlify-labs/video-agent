@@ -146,10 +146,10 @@ export function runAgent(o: {
     })
     child.on('close', (code, signal) => {
       clearTimeout(timer)
-      out.end()
       const r = { code, signal, timedOut, ms: Date.now() - t, logFile }
       o.log('local.agent_done', { agent: o.adapter.id, code, signal, timedOut, ms: r.ms })
-      resolve(r)
+      // Resolve once the log is on disk, so a caller reading it sees all of it.
+      out.end(() => resolve(r))
     })
   })
 }
