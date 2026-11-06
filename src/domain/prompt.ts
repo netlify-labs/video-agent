@@ -20,7 +20,7 @@ import {
 } from './engine-prompt.js'
 import type { EngineId } from './engines.js'
 
-export const PROMPT_TEMPLATE_VERSION = 20
+export const PROMPT_TEMPLATE_VERSION = 21
 
 export interface PromptInput {
   jobId: string

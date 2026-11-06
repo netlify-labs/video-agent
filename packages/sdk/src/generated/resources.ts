@@ -288,6 +288,20 @@ export function resources(t: Transport) {
           opts,
         ),
     },
+    engines: {
+      /** List render engines (`listEngines`) */
+      list: (opts?: CallOptions): Promise<Ok<'/api/v1/engines', 'get'>> =>
+        t.call<Ok<'/api/v1/engines', 'get'>>(
+          {
+            method: 'GET',
+            path: '/api/v1/engines',
+            pathParams: {},
+            features: [...['engines']],
+            operationId: 'listEngines',
+          },
+          opts,
+        ),
+    },
     grants: {
       /** List connected apps (`listGrants`) */
       list: (opts?: CallOptions): Promise<Ok<'/api/v1/oauth/grants', 'get'>> =>
@@ -1001,6 +1015,7 @@ export function resources(t: Transport) {
               'context',
               'recording',
               'agent',
+              'engine',
             ],
             features: [
               ...(input.planId !== undefined ? ['planning'] : []),
@@ -1011,6 +1026,7 @@ export function resources(t: Transport) {
               ...(input.context !== undefined ? ['context'] : []),
               ...(input.recording !== undefined ? ['screen_recording'] : []),
               ...(input.agent !== undefined ? ['screen_recording'] : []),
+              ...(input.engine !== undefined ? ['engines'] : []),
             ],
             operationId: 'createVideo',
           },

@@ -2128,6 +2128,14 @@
           "agent": {
             "type": "boolean",
             "description": "false: a Quick demo, made from the recording with no agent authoring (a stock intro and outro, a scene per step, callouts from what was clicked); costs about as much as an edit. Needs recording; no voiceover."
+          },
+          "engine": {
+            "type": "string",
+            "enum": [
+              "hyperframes",
+              "remotion"
+            ],
+            "description": "The render engine (GET /api/v1/engines). Omit for the look's choice, else hyperframes. Errors: 409 engine_disabled when it isn't on here, 400 engine_not_supported_by_look, 409 engine_unsupported for sound effects or a voice-over it can't make."
           }
         },
         "required": [
@@ -3821,6 +3829,94 @@
           "lastUsedAt"
         ]
       },
+      "Engine": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": [
+              "hyperframes",
+              "remotion"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "license": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "open"
+                    ]
+                  },
+                  "spdx": {
+                    "type": "string",
+                    "enum": [
+                      "Apache-2.0"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind",
+                  "spdx"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "remotion"
+                    ]
+                  },
+                  "url": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "url"
+                ]
+              }
+            ]
+          },
+          "capabilities": {
+            "$ref": "#/components/schemas/EngineCapabilities"
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Offered for new videos here right now."
+          },
+          "notice": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "What anyone choosing it is told: Remotion's license notice."
+          },
+          "extraCredits": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Credits a video costs over a HyperFrames one, once measured; null when unknown or none."
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "license",
+          "capabilities",
+          "enabled",
+          "notice",
+          "extraCredits"
+        ]
+      },
       "Me": {
         "type": "object",
         "properties": {
@@ -4025,6 +4121,63 @@
           "cliLoginEnabled": {
             "type": "boolean",
             "description": "video-agent login can get a key by approving the CLI in the browser (the default). Off: paste a key."
+          },
+          "remotion": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean",
+                "description": "Remotion is offered for new videos (with a recorded license choice)."
+              },
+              "license": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "by": {
+                    "type": "string"
+                  },
+                  "email": {
+                    "type": "string"
+                  },
+                  "at": {
+                    "type": "string"
+                  },
+                  "tier": {
+                    "type": "string",
+                    "enum": [
+                      "free",
+                      "company"
+                    ]
+                  },
+                  "note": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "by",
+                  "email",
+                  "at",
+                  "tier",
+                  "note"
+                ],
+                "description": "Who recorded the license choice, when, and which; null until someone does."
+              },
+              "keySet": {
+                "type": "boolean",
+                "description": "VIDEO_AGENT_REMOTION_KEY is set (its value is never read by the server)."
+              }
+            },
+            "required": [
+              "enabled",
+              "license",
+              "keySet"
+            ],
+            "description": "The Remotion engine (bring your own license); present only when ENGINES lists remotion."
           }
         },
         "required": [
@@ -4095,6 +4248,34 @@
           },
           "cliLoginEnabled": {
             "type": "boolean"
+          },
+          "remotionEnabled": {
+            "type": "boolean",
+            "description": "Turn Remotion on or off for new videos. Needs remotion in ENGINES and a license choice."
+          },
+          "remotionLicense": {
+            "type": "object",
+            "properties": {
+              "tier": {
+                "type": "string",
+                "enum": [
+                  "free",
+                  "company"
+                ]
+              },
+              "note": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 500,
+                "description": "A license reference or who approved it."
+              }
+            },
+            "required": [
+              "tier"
+            ],
+            "description": "The license your organisation has. company needs VIDEO_AGENT_REMOTION_KEY set on the project."
           }
         }
       },
@@ -7638,6 +7819,38 @@
               "string",
               "null"
             ]
+          },
+          "remotionRenders": {
+            "type": "object",
+            "properties": {
+              "since": {
+                "type": "string"
+              },
+              "total": {
+                "type": "integer"
+              },
+              "videos": {
+                "type": "integer"
+              },
+              "stills": {
+                "type": "integer"
+              },
+              "audio": {
+                "type": "integer"
+              },
+              "attempts": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "since",
+              "total",
+              "videos",
+              "stills",
+              "audio",
+              "attempts"
+            ],
+            "description": "This month's Remotion renders (UTC), failed runs included; only when ENGINES lists remotion. Reconcile with remotion.pro."
           }
         },
         "required": [
@@ -7731,7 +7944,8 @@
             "private": "external_ref",
             "context": "context",
             "recording": "screen_recording",
-            "agent": "screen_recording"
+            "agent": "screen_recording",
+            "engine": "engines"
           }
         },
         "summary": "Create a video",
@@ -12781,6 +12995,102 @@
         "responses": {
           "204": {
             "description": "Revoked"
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/engines": {
+      "get": {
+        "operationId": "listEngines",
+        "x-sdk": {
+          "resource": "engines",
+          "method": "list",
+          "feature": "engines"
+        },
+        "summary": "List render engines",
+        "description": "The engines a video can be made with here: HyperFrames always, and Remotion when this deployment offers it (bring your own license), with its license notice.",
+        "tags": [
+          "videos"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Engines",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Engine"
+                      }
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ]
+                }
+              }
+            }
           },
           "400": {
             "description": "Invalid request",

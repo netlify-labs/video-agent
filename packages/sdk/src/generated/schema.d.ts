@@ -871,6 +871,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/engines": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List render engines
+         * @description The engines a video can be made with here: HyperFrames always, and Remotion when this deployment offers it (bring your own license), with its license notice.
+         */
+        get: operations["listEngines"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me": {
         parameters: {
             query?: never;
@@ -2428,6 +2448,11 @@ export interface components {
             recording?: components["schemas"]["RecordingInput"];
             /** @description false: a Quick demo, made from the recording with no agent authoring (a stock intro and outro, a scene per step, callouts from what was clicked); costs about as much as an edit. Needs recording; no voiceover. */
             agent?: boolean;
+            /**
+             * @description The render engine (GET /api/v1/engines). Omit for the look's choice, else hyperframes. Errors: 409 engine_disabled when it isn't on here, 400 engine_not_supported_by_look, 409 engine_unsupported for sound effects or a voice-over it can't make.
+             * @enum {string}
+             */
+            engine?: "hyperframes" | "remotion";
         };
         /** @description A spoken narration with captions from its words. Omit for the plan's choice, else none. */
         VoiceoverInput: {
@@ -2857,6 +2882,28 @@ export interface components {
             createdAt: string;
             lastUsedAt: string | null;
         };
+        Engine: {
+            /** @enum {string} */
+            id: "hyperframes" | "remotion";
+            name: string;
+            license: {
+                /** @enum {string} */
+                kind: "open";
+                /** @enum {string} */
+                spdx: "Apache-2.0";
+            } | {
+                /** @enum {string} */
+                kind: "remotion";
+                url: string;
+            };
+            capabilities: components["schemas"]["EngineCapabilities"];
+            /** @description Offered for new videos here right now. */
+            enabled: boolean;
+            /** @description What anyone choosing it is told: Remotion's license notice. */
+            notice: string | null;
+            /** @description Credits a video costs over a HyperFrames one, once measured; null when unknown or none. */
+            extraCredits: number | null;
+        };
         Me: {
             id: string;
             email: string;
@@ -2918,6 +2965,22 @@ export interface components {
             disabledLooks: string[];
             /** @description video-agent login can get a key by approving the CLI in the browser (the default). Off: paste a key. */
             cliLoginEnabled: boolean;
+            /** @description The Remotion engine (bring your own license); present only when ENGINES lists remotion. */
+            remotion?: {
+                /** @description Remotion is offered for new videos (with a recorded license choice). */
+                enabled: boolean;
+                /** @description Who recorded the license choice, when, and which; null until someone does. */
+                license: {
+                    by: string;
+                    email: string;
+                    at: string;
+                    /** @enum {string} */
+                    tier: "free" | "company";
+                    note: string | null;
+                } | null;
+                /** @description VIDEO_AGENT_REMOTION_KEY is set (its value is never read by the server). */
+                keySet: boolean;
+            };
         };
         /**
          * @description How recorded narration is transcribed for captions: local (the default, audio stays in this deployment), elevenlabs (sends the audio to ElevenLabs) or off (no captions from recordings).
@@ -2938,6 +3001,15 @@ export interface components {
             /** @description The full list of looks to turn off. */
             disabledLooks?: string[];
             cliLoginEnabled?: boolean;
+            /** @description Turn Remotion on or off for new videos. Needs remotion in ENGINES and a license choice. */
+            remotionEnabled?: boolean;
+            /** @description The license your organisation has. company needs VIDEO_AGENT_REMOTION_KEY set on the project. */
+            remotionLicense?: {
+                /** @enum {string} */
+                tier: "free" | "company";
+                /** @description A license reference or who approved it. */
+                note?: string | null;
+            };
         };
         Plan: {
             id: string;
@@ -3743,6 +3815,15 @@ export interface components {
             }[];
             maxActiveRuns: number;
             queuePausedReason: string | null;
+            /** @description This month's Remotion renders (UTC), failed runs included; only when ENGINES lists remotion. Reconcile with remotion.pro. */
+            remotionRenders?: {
+                since: string;
+                total: number;
+                videos: number;
+                stills: number;
+                audio: number;
+                attempts: number;
+            };
         };
     };
     responses: never;
@@ -7199,6 +7280,73 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict or not ready */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listEngines: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Engines */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["Engine"][];
+                    };
+                };
             };
             /** @description Invalid request */
             400: {

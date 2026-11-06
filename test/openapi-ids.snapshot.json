@@ -18,6 +18,12 @@
       "fieldFeatures": {
         "planId": "planning",
         "look": "looks",
+        "externalRef": "external_ref",
+        "externalUrl": "external_ref",
+        "private": "external_ref",
+        "context": "context",
+        "recording": "screen_recording",
+        "agent": "screen_recording",
         "engine": "engines"
       }
     }
@@ -26,7 +32,10 @@
     "operationId": "listVideos",
     "sdk": {
       "resource": "videos",
-      "method": "list"
+      "method": "list",
+      "fieldFeatures": {
+        "externalRef": "external_ref"
+      }
     }
   },
   "PUT /api/v1/videos/{id}/favorite": {
@@ -72,7 +81,8 @@
       "fieldFeatures": {
         "planId": "planning",
         "scope": "scoped_revision",
-        "look": "looks"
+        "look": "looks",
+        "context": "context"
       }
     }
   },
@@ -84,7 +94,12 @@
       "feature": "remix",
       "fieldFeatures": {
         "planId": "planning",
-        "look": "looks"
+        "look": "looks",
+        "externalRef": "external_ref",
+        "externalUrl": "external_ref",
+        "private": "external_ref",
+        "context": "context",
+        "recording": "screen_recording"
       }
     }
   },
@@ -291,6 +306,28 @@
   },
   "POST /api/v1/keys": {
     "operationId": "createKey",
+    "sdk": false
+  },
+  "POST /api/v1/cli/logins": {
+    "operationId": "createCliLogin",
+    "sdk": {
+      "resource": "cliLogins",
+      "method": "create"
+    }
+  },
+  "POST /api/v1/cli/logins/{id}/token": {
+    "operationId": "claimCliLogin",
+    "sdk": {
+      "resource": "cliLogins",
+      "method": "claim"
+    }
+  },
+  "POST /api/v1/cli/logins/lookup": {
+    "operationId": "lookupCliLogin",
+    "sdk": false
+  },
+  "POST /api/v1/cli/logins/approve": {
+    "operationId": "decideCliLogin",
     "sdk": false
   },
   "DELETE /api/v1/keys/{id}": {

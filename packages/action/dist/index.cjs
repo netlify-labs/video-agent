@@ -865,6 +865,19 @@ function resources(t) {
         opts
       )
     },
+    engines: {
+      /** List render engines (`listEngines`) */
+      list: (opts) => t.call(
+        {
+          method: "GET",
+          path: "/api/v1/engines",
+          pathParams: {},
+          features: [...["engines"]],
+          operationId: "listEngines"
+        },
+        opts
+      )
+    },
     grants: {
       /** List connected apps (`listGrants`) */
       list: (opts) => t.call(
@@ -1431,7 +1444,8 @@ function resources(t) {
             "private",
             "context",
             "recording",
-            "agent"
+            "agent",
+            "engine"
           ],
           features: [
             ...input.planId !== void 0 ? ["planning"] : [],
@@ -1441,7 +1455,8 @@ function resources(t) {
             ...input.private !== void 0 ? ["external_ref"] : [],
             ...input.context !== void 0 ? ["context"] : [],
             ...input.recording !== void 0 ? ["screen_recording"] : [],
-            ...input.agent !== void 0 ? ["screen_recording"] : []
+            ...input.agent !== void 0 ? ["screen_recording"] : [],
+            ...input.engine !== void 0 ? ["engines"] : []
           ],
           operationId: "createVideo"
         },
