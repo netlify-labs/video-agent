@@ -1,7 +1,7 @@
 // Upload assembly memory (screen-recording plan §4.2, spike D5): assembly fills one buffer of the declared size,
-// hashing each part as it's copied in, and the production blobs adapter sends bodies over 8 MB as a stream of views
-// (fetch copies a buffered body whole). Assembled bytes and hashes are unchanged; the stream round-trips through
-// @netlify/blobs' local server. VA_MEMORY_SMOKE=1 also runs D5's 150 MB measurement (what assembly adds stays under
+// hashing each part as it's copied in, and the production blobs adapter sends large bodies as a file-backed Blob
+// (fetch copies a buffered body whole; Netlify refuses a streamed one). Assembled bytes and hashes are unchanged; the
+// file path round-trips through @netlify/blobs' local server. VA_MEMORY_SMOKE=1 also runs D5's 150 MB measurement (what assembly adds stays under
 // 450 MB).
 import { spawn, type ChildProcess } from 'node:child_process'
 import { createHash } from 'node:crypto'
@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setEnvironmentContext } from '@netlify/blobs'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { netlifyBlobs, streamAbove, viewStream } from '../src/adapters/blobs.js'
+import { fileAbove, netlifyBlobs } from '../src/adapters/blobs.js'
 import { PART_SIZE } from '../src/domain/media-uploads.js'
 import { harness, raw } from './helpers.js'
 
@@ -61,24 +61,15 @@ describe('assembly', () => {
   })
 })
 
-describe('blobs adapter streaming', () => {
-  it('viewStream yields the bytes in 1 MB views without copying', async () => {
-    const data = bigClip(2.5 * 1024 * 1024)
-    const chunks: Uint8Array[] = []
-    for await (const c of viewStream(data) as unknown as AsyncIterable<Uint8Array>) chunks.push(c)
-    expect(chunks.map((c) => c.byteLength)).toEqual([1048576, 1048576, 524288])
-    expect(chunks.every((c) => c.buffer === data.buffer)).toBe(true)
-    expect(sha(Buffer.concat(chunks))).toBe(sha(data))
-  })
-
+describe('blobs adapter: large bodies from a file', () => {
   describe('through @netlify/blobs and its local server', () => {
     // The server runs in its own process, as in spike D5, so this process's memory is the client's alone.
     let server: ChildProcess
     let dir: string
-    const STREAM_ABOVE = 8 * 1024 * 1024
+    const FILE_ABOVE = 8 * 1024 * 1024
     beforeAll(async () => {
-      // Lowered from production's 100 MiB so the streamed path is exercised with small bodies.
-      streamAbove.bytes = STREAM_ABOVE
+      // Lowered from production's 100 MiB so the file path is exercised with small bodies.
+      fileAbove.bytes = FILE_ABOVE
       dir = mkdtempSync(join(tmpdir(), 'va-blobs-'))
       const code = `import { BlobsServer } from '@netlify/blobs/server'
         const s = new BlobsServer({ directory: ${JSON.stringify(dir)}, token: 'local', port: 0 })
@@ -94,20 +85,20 @@ describe('blobs adapter streaming', () => {
       setEnvironmentContext({ siteID: 'local-site', token: 'local', edgeURL: url, uncachedEdgeURL: url })
     })
     afterAll(() => {
-      streamAbove.bytes = 100 * 1024 * 1024
+      fileAbove.bytes = 100 * 1024 * 1024
       server.kill()
       rmSync(dir, { recursive: true, force: true })
     })
 
-    it('round-trips a body over STREAM_ABOVE (streamed) and one under it (buffered)', async () => {
-      for (const size of [STREAM_ABOVE + 3 * 1024 * 1024 + 17, 64 * 1024]) {
+    it('round-trips a body over FILE_ABOVE (from a file) and one under it (buffered)', async () => {
+      for (const size of [FILE_ABOVE + 3 * 1024 * 1024 + 17, 64 * 1024]) {
         const data = bigClip(size)
         await netlifyBlobs.set('media', `assembly/${size}`, data, { contentType: 'video/mp4' })
         const back = await netlifyBlobs.get('media', `assembly/${size}`)
         log({
           test: 'round trip',
           size,
-          streamed: size > STREAM_ABOVE,
+          fromFile: size > FILE_ABOVE,
           ok: !!back && sha(back) === sha(data),
         })
         expect(back && sha(back)).toBe(sha(data))

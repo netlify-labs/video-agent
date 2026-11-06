@@ -1,28 +1,19 @@
+import { randomUUID } from 'node:crypto'
+import { openAsBlob, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { getStore } from '@netlify/blobs'
 import type { BlobStoreName, BlobsPort } from '../deps.js'
 
 const store = (name: BlobStoreName) => getStore({ name, consistency: 'strong' })
 
 /**
- * Bodies above this go out as a stream of views: fetch copies a buffered body whole (spike D5), a stream it doesn't.
- * 100 MiB, the clip cap, so only screen recordings over it stream until the phase 1 gate (va-rsk5.2.12) has shown the
- * Blobs service takes a streamed 150 MB write; then it can come down. Tests lower it.
+ * Bodies above this go out as a file-backed Blob (fs.openAsBlob of a temporary file): fetch copies a buffered body
+ * whole (spike D5), and the Blobs service refuses a streamed (chunked) body on Netlify (the phase 1 gate, va-rsk5.2.12:
+ * "Response body object should not be disturbed or locked" after the SDK's retry). A file-backed Blob has a length, so
+ * it's a plain PUT, and fetch reads it from disk (486 MB peak for 150 MB locally, against 460 MB streamed). Tests lower it.
  */
-export const streamAbove = { bytes: 100 * 1024 * 1024 }
-const STREAM_CHUNK = 1024 * 1024
-const STREAM_ATTEMPTS = 3
-
-/** The bytes as a stream of 1 MB views (no copy). A stream is read once, so each attempt makes a new one. */
-export function viewStream(data: Uint8Array): ReadableStream<Uint8Array> {
-  let off = 0
-  return new ReadableStream<Uint8Array>({
-    pull(ctl) {
-      if (off >= data.byteLength) return ctl.close()
-      ctl.enqueue(data.subarray(off, Math.min(data.byteLength, off + STREAM_CHUNK)))
-      off += STREAM_CHUNK
-    },
-  })
-}
+export const fileAbove = { bytes: 100 * 1024 * 1024 }
 
 export const netlifyBlobs: BlobsPort = {
   async get(name, key) {
@@ -31,18 +22,16 @@ export const netlifyBlobs: BlobsPort = {
   },
   async set(name, key, data, metadata) {
     const opts = metadata ? { metadata } : {}
-    if (typeof data !== 'string' && data.byteLength > streamAbove.bytes) {
-      // The SDK passes a ReadableStream body to fetch (duplex: 'half') though its types don't list it. Its own retry
-      // would resend the spent stream, so retries happen here with a fresh one.
-      for (let attempt = 1; ; attempt++) {
-        try {
-          await store(name).set(key, viewStream(data) as unknown as Blob, opts)
-          return
-        } catch (e) {
-          if (attempt >= STREAM_ATTEMPTS) throw e
-          await new Promise((r) => setTimeout(r, 500 * attempt))
-        }
+    if (typeof data !== 'string' && data.byteLength > fileAbove.bytes) {
+      const path = join(tmpdir(), `va-blob-${randomUUID()}`)
+      writeFileSync(path, data)
+      try {
+        // A Blob can be read again, so the SDK's own retry is safe.
+        await store(name).set(key, await openAsBlob(path), opts)
+      } finally {
+        rmSync(path, { force: true })
       }
+      return
     }
     const body =
       typeof data === 'string'

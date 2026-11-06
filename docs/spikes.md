@@ -1066,8 +1066,18 @@ Changes for 1.2c:
 - Store it as a stream of views. `BlobsPort.set` gets a stream form.
 - `fetchAndRetry` can't replay a consumed stream, so the caller retries with a fresh stream.
 
-Still to prove on Netlify: that the Blobs edge accepts a streamed (chunked) 150 MB PUT from a background function, and
-the peak there (the function already logs `rssMb`).
+**On Netlify (the phase 1 gate, 2026-11-06, production):** the Blobs service does **not** take the streamed body. A
+140 MB recording uploaded and classified at 397 MB RSS, then every write failed with `TypeError: Response body object
+should not be disturbed or locked` (the SDK's retry resending a spent stream, after the first attempt was refused).
+
+**Fix:** write the assembled bytes to a temporary file and pass `fs.openAsBlob(path)`: a Blob with a length (a plain
+PUT, no chunked encoding) that fetch reads from disk, so the SDK's retry is safe. Locally (`--variant
+prealloc-stream,prealloc-file`, 150 MB): 486 MB peak RSS, against 460 MB streamed.
+
+| Variant | Peak RSS | Peak arrayBuffers |
+| --- | --- | --- |
+| prealloc + stream (for comparison, same run) | 460 MB | 183 MB |
+| **prealloc + file-backed Blob** | **486 MB** | **303 MB** |
 
 ## CLI spikes (docs/plans/2026-11-04-cli-and-sdk.md §11 Phase 0)
 
