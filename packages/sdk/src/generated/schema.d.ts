@@ -1955,7 +1955,7 @@ export interface components {
                 release: string | null;
             };
             /** @description Features this deployment has and has switched on. Clients hide what isn't listed. See src/domain/features.ts. */
-            features: ("remix" | "narration" | "planning" | "rest_wait" | "cli_login" | "looks" | "engines" | "scoped_revision" | "screen_recording" | "context" | "external_ref" | "destinations" | "youtube")[];
+            features: ("remix" | "narration" | "planning" | "rest_wait" | "cli_login" | "looks" | "engines" | "scoped_revision" | "screen_recording" | "context" | "external_ref" | "destinations" | "youtube" | "webmcp")[];
             admission: "invite-only" | string[] | null;
             siteUrl: string;
             /** @description AI Gateway is available, so Plan it first is offered. */
@@ -2968,6 +2968,8 @@ export interface components {
             recordingQuotaBytes: number;
             /** @description Remixing is on (the default). Off hides every Remix button and refuses new remixes; queued ones still run. */
             remixEnabled: boolean;
+            /** @description WebMCP is on (the default): in browsers that support it, the web app offers its tools to AI agents. Off: no tools are registered. */
+            webmcpEnabled: boolean;
             /** @description YouTube is offered as a publish destination (needs youtubeConfigured). */
             youtubeEnabled: boolean;
             /** @description GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set (read-only). */
@@ -3008,6 +3010,7 @@ export interface components {
             /** @description 1 MiB to 1 TiB. */
             recordingQuotaBytes?: number;
             remixEnabled?: boolean;
+            webmcpEnabled?: boolean;
             youtubeEnabled?: boolean;
             /** @description A look id, or null for none. */
             defaultLook?: string | null;

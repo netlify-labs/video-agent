@@ -199,7 +199,8 @@
                 "context",
                 "external_ref",
                 "destinations",
-                "youtube"
+                "youtube",
+                "webmcp"
               ]
             },
             "description": "Features this deployment has and has switched on. Clients hide what isn't listed. See src/domain/features.ts."
@@ -4128,6 +4129,10 @@
             "type": "boolean",
             "description": "Remixing is on (the default). Off hides every Remix button and refuses new remixes; queued ones still run."
           },
+          "webmcpEnabled": {
+            "type": "boolean",
+            "description": "WebMCP is on (the default): in browsers that support it, the web app offers its tools to AI agents. Off: no tools are registered."
+          },
           "youtubeEnabled": {
             "type": "boolean",
             "description": "YouTube is offered as a publish destination (needs youtubeConfigured)."
@@ -4218,6 +4223,7 @@
           "takeQuotaBytes",
           "recordingQuotaBytes",
           "remixEnabled",
+          "webmcpEnabled",
           "youtubeEnabled",
           "youtubeConfigured",
           "defaultLook",
@@ -4256,6 +4262,9 @@
             "description": "1 MiB to 1 TiB."
           },
           "remixEnabled": {
+            "type": "boolean"
+          },
+          "webmcpEnabled": {
             "type": "boolean"
           },
           "youtubeEnabled": {
