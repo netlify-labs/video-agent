@@ -254,6 +254,14 @@
     "operationId": "refreshDestinationFiles",
     "sdk": false
   },
+  "POST /api/v1/videos/{id}/versions/{n}/hidden/confirm": {
+    "operationId": "markHiddenAreasChecked",
+    "sdk": {
+      "resource": "videos",
+      "method": "confirmHidden",
+      "feature": "screen_recording"
+    }
+  },
   "PUT /api/v1/videos/{id}/versions/{n}/verdict": {
     "operationId": "setVerdict",
     "sdk": {

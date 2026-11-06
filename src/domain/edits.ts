@@ -410,7 +410,7 @@ async function computeRev(
     recording = {
       duration: analysis.source?.duration ?? 0,
       trace: analysis.cursorSource === 'trace',
-      locked: locked.ok ? (locked.entries as unknown as Record<string, unknown>[]) : [],
+      locked: locked.ok ? (locked.entries) : [],
       camera: Object.fromEntries((plan.steps ?? []).map((st) => [st.id, st.camera])),
       zoomMax: plan.zoomMax ?? 2.2,
     }

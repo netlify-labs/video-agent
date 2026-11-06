@@ -596,7 +596,7 @@ export interface paths {
          * Mark hidden areas checked
          * @description A demo's Looks right: marks these hidden areas (ids from the version's recording.hidden) as checked by you, with the time. Owner or admin. 400 for an id the version doesn't have; 404 when the version has no recording.
          */
-        post: operations["confirmHiddenAreas"];
+        post: operations["markHiddenAreasChecked"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6341,7 +6341,7 @@ export interface operations {
             };
         };
     };
-    confirmHiddenAreas: {
+    markHiddenAreasChecked: {
         parameters: {
             query?: never;
             header?: never;

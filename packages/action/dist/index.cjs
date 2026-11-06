@@ -1426,6 +1426,20 @@ function resources(t) {
       )
     },
     videos: {
+      /** Mark hidden areas checked (`markHiddenAreasChecked`) */
+      confirmHidden: (id, n, input, opts) => t.call(
+        {
+          method: "POST",
+          path: "/api/v1/videos/{id}/versions/{n}/hidden/confirm",
+          pathParams: { id, n },
+          input,
+          query: [],
+          body: ["ids"],
+          features: [...["screen_recording"]],
+          operationId: "markHiddenAreasChecked"
+        },
+        opts
+      ),
       /** Create a video (`createVideo`) */
       create: (input, opts) => t.call(
         {

@@ -1164,7 +1164,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
     createRoute({
       method: 'post',
       path: '/api/v1/videos/{id}/versions/{n}/hidden/confirm',
-      operationId: 'confirmHiddenAreas',
+      operationId: 'markHiddenAreasChecked',
       'x-sdk': { resource: 'videos', method: 'confirmHidden', feature: 'screen_recording' },
       summary: 'Mark hidden areas checked',
       description:

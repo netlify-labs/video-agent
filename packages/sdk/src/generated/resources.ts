@@ -992,7 +992,7 @@ export function resources(t: Transport) {
         ),
     },
     videos: {
-      /** Mark hidden areas checked (`confirmHiddenAreas`) */
+      /** Mark hidden areas checked (`markHiddenAreasChecked`) */
       confirmHidden: (
         id: string | number,
         n: string | number,
@@ -1008,7 +1008,7 @@ export function resources(t: Transport) {
             query: [],
             body: ['ids'],
             features: [...['screen_recording']],
-            operationId: 'confirmHiddenAreas',
+            operationId: 'markHiddenAreasChecked',
           },
           opts,
         ),

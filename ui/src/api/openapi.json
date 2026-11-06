@@ -11766,7 +11766,7 @@
     },
     "/api/v1/videos/{id}/versions/{n}/hidden/confirm": {
       "post": {
-        "operationId": "confirmHiddenAreas",
+        "operationId": "markHiddenAreasChecked",
         "x-sdk": {
           "resource": "videos",
           "method": "confirmHidden",
