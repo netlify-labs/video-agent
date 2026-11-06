@@ -540,7 +540,7 @@ video-agent local --look ./looks/my-look "A 20-second launch video for our webho
 - `--context <value>`: Your brand folder (default ./context, else a neutral one).
 - `--look <value>`: A Look: an id bundled with the CLI (video-agent looks lists a server's), or a look folder.
 - `--out <value>`: Where the video goes (default ./videos/<slug>).
-- `--keep`: Keep the workspace (for debugging).
+- `--keep`: Keep the workspace (for debugging). A failed run's is always kept.
 - `--timeout <value>`: Give up after this long: 30m, 1h (default 40m).
 
 ### local demo
@@ -565,7 +565,7 @@ video-agent local demo ./take1 --prompt "Adding a webhook, for new admins" --pri
 - `--look <value>`: A Look bundled with the CLI, or a look folder.
 - `--context <value>`: Your brand folder (default ./context, else a neutral one).
 - `--out <value>`: Where the video goes (default ./videos/<slug>).
-- `--keep`: Keep the workspace (for debugging).
+- `--keep`: Keep the workspace (for debugging). A failed run's is always kept.
 - `--timeout <value>`: Give up after this long: 30m, 1h (default 40m).
 
 ### local revise
@@ -581,5 +581,5 @@ video-agent local revise ./videos/webhooks-launch --scene demo "Show the preview
 - `--agent <value>`: The coding agent: claude.
 - `--from-version <n>`: The version to change (default: the latest).
 - `--scene <value>` (repeatable): Only redo these scenes (id or label; repeatable). The rest stay as they are.
-- `--keep`: Keep the workspace (for debugging).
+- `--keep`: Keep the workspace (for debugging). A failed run's is always kept.
 - `--timeout <value>`: Give up after this long: 30m, 1h (default 40m).
