@@ -433,7 +433,8 @@
       "method": "create",
       "feature": "planning",
       "fieldFeatures": {
-        "look": "looks"
+        "look": "looks",
+        "engine": "engines"
       }
     }
   },

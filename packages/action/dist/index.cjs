@@ -1186,9 +1186,14 @@ function resources(t) {
             "mediaIds",
             "sound",
             "voiceover",
-            "look"
+            "look",
+            "engine"
           ],
-          features: [...["planning"], ...input.look !== void 0 ? ["looks"] : []],
+          features: [
+            ...["planning"],
+            ...input.look !== void 0 ? ["looks"] : [],
+            ...input.engine !== void 0 ? ["engines"] : []
+          ],
           operationId: "createPlan"
         },
         opts

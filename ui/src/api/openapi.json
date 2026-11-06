@@ -4630,6 +4630,18 @@
             ],
             "description": "The plan's look: the person's choice (chosen), else the first enabled look made for the plan's template, else the admin default. id null: none. null: a remix or revision plan that keeps its video's look."
           },
+          "engine": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "hyperframes",
+              "remotion",
+              null
+            ],
+            "description": "The engine chosen for this new-video plan; null: the look's choice."
+          },
           "expiresAt": {
             "type": "string"
           }
@@ -4648,6 +4660,7 @@
           "sound",
           "voiceover",
           "look",
+          "engine",
           "expiresAt"
         ]
       },
@@ -4722,6 +4735,14 @@
               "null"
             ],
             "description": "A look id from GET /api/v1/looks, or null for none. Left out, a new-video plan picks one from its template."
+          },
+          "engine": {
+            "type": "string",
+            "enum": [
+              "hyperframes",
+              "remotion"
+            ],
+            "description": "New-video plans only: the render engine, kept by the video made from the plan. Omit for the look's choice. Errors as on create."
           }
         },
         "required": [
@@ -14280,7 +14301,8 @@
           "method": "create",
           "feature": "planning",
           "fieldFeatures": {
-            "look": "looks"
+            "look": "looks",
+            "engine": "engines"
           }
         },
         "summary": "Start a plan",

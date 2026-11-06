@@ -3082,6 +3082,11 @@ export interface components {
                 id: string | null;
                 chosen: boolean;
             } | null;
+            /**
+             * @description The engine chosen for this new-video plan; null: the look's choice.
+             * @enum {string|null}
+             */
+            engine: "hyperframes" | "remotion" | null;
             expiresAt: string;
         };
         CreatePlan: {
@@ -3104,6 +3109,11 @@ export interface components {
             voiceover?: components["schemas"]["VoiceoverInput"];
             /** @description A look id from GET /api/v1/looks, or null for none. Left out, a new-video plan picks one from its template. */
             look?: string | null;
+            /**
+             * @description New-video plans only: the render engine, kept by the video made from the plan. Omit for the look's choice. Errors as on create.
+             * @enum {string}
+             */
+            engine?: "hyperframes" | "remotion";
         };
         PlanAnswers: {
             answers: {
