@@ -23,7 +23,9 @@ video-agent local revise ./videos/webhooks-launch "Make the end card orange"
 
 The first run sets up its tools in `~/.cache/video-agent` (a few minutes, once). Each version lands in
 `./videos/<name>/vN/`, and `./context/`, if you have one, is your brand. The agent's shell can't read your
-credentials, write outside its own folder or reach services on your machine. Nothing goes to Netlify, and it uses
+credentials, write outside its own folder or reach services on your machine. The CLI renders the video with your
+Chrome, and blocks the rendered page's requests to localhost, private and link-local addresses and `.local` names
+(except the render's own asset server; each block is logged). Nothing goes to Netlify, and it uses
 your agent subscription, not credits. The app's **API docs → CLI** page (`/docs/cli`) has the details.
 
 |         | `video-agent local`      | A deployment                              |

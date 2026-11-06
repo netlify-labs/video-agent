@@ -208,6 +208,12 @@ video-agent local revise ./videos/webhooks-launch "Make the end card orange"`}</
                       outside the sandbox.
                     </List.Item>
                     <List.Item>
+                      The CLI renders the video with your Chrome, and the page it renders can't reach your
+                      machine or your network either: requests to localhost, private and link-local addresses
+                      and <Code>.local</Code> names are blocked (each one is logged), except the render's own
+                      asset server.
+                    </List.Item>
+                    <List.Item>
                       What leaves your machine: the prompt and files you give it, sent to your agent's own
                       provider, as in any session with it. Nothing goes to this deployment.
                     </List.Item>

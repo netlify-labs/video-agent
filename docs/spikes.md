@@ -1333,9 +1333,17 @@ adapters are in the code (`codex.ts`, `gemini.ts`), and `--agent codex|gemini` s
    `<img>`, `fetch` and JS. A page can't read cross-origin responses, but an image or iframe from a local service would
    be drawn into the video's frames. No macOS sandbox profile isolates the loopback while still letting Chrome reach
    the renderer's own server. Linux sandboxes give each run a private loopback, and Docker
-   (`hyperframes render --docker`) does too on macOS. **Owner decision:** accept this for v1 on macOS (the agent's
-   shell is sealed; only the composition's Chrome can reach local services), or require Docker for local renders on
-   macOS.
+   (`hyperframes render --docker`) does too on macOS. **Owner decision (2026-11-06):** accept host rendering for v1,
+   with the rendered page's requests blocked. `packages/cli/src/local/render-guard.ts` puts Chrome behind a proxy in
+   the CLI:
+   - **How:** `HYPERFRAMES_BROWSER_PATH` points at a wrapper that adds `--proxy-server` and
+     `--proxy-bypass-list=<-loopback>` (so loopback goes through it too), and limits WebRTC to the proxy.
+   - **What it refuses:** loopback, private (10/8, 172.16/12, 192.168/16, fc00::/7), link-local (169.254/16,
+     fe80::/10), unspecified and `*.local`. The one exception is the render's own asset server: a loopback port the
+     render's process group listens on (`lsof -g`).
+   - **How it decides:** it resolves each host once and connects to that address itself, so DNS rebinding can't switch
+     it. It fails closed and logs each block (`local.render_blocked`).
+   - **Re-run:** the canary composition rendered with 0 canary hits and 30 requests blocked.
 5. **Node's `fetch` ignores the sandbox's proxy.** The sandbox routes network through `HTTPS_PROXY`; `curl` and
    Python honour it, Node's `fetch` doesn't, so Openverse "fetch failed" and the first narrated video had no music.
    `NODE_USE_ENV_PROXY=1` in the workspace env fixed it (Node 22.21+ and 24). The re-run made no Openverse retries.

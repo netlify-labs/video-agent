@@ -14,6 +14,7 @@ test('the CLI page fills in this site and lists every command and exit code', as
     await expect(page.locator(`[data-command="${c.name}"]`), c.name).toHaveCount(1)
   for (const code of Object.values(EXIT)) await expect(page.locator(`[data-exit="${code}"]`)).toHaveCount(1)
   await expect(page.getByText('The agent runs in its sandbox')).toBeVisible()
+  await expect(page.getByText(/requests to localhost, private and link-local addresses/)).toBeVisible()
   await expect(page.locator('#record')).toHaveCount(1)
   // Nothing spills sideways on a phone.
   const fits = await page.evaluate(() => {
