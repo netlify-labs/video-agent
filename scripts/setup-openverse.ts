@@ -5,7 +5,7 @@
 // click it, or the app keeps anonymous rate limits. Variables reach the functions on the next deploy (--deploy
 // starts one). Uses your Netlify CLI login (`npx netlify login`).
 import { createInterface } from 'node:readline/promises'
-import { parseArgs } from './lib/run-tools.js'
+import { exitOnError, parseArgs } from './lib/run-tools.js'
 import { ask, buildAndWait, cliEmail, cliToken, getSite, siteVarNames } from './lib/netlify-setup.js'
 import { defaultAppName, defaultDescription, registerOpenverse } from './lib/openverse-setup.js'
 
@@ -61,7 +61,4 @@ async function main() {
   }
 }
 
-main().catch((e: unknown) => {
-  console.error(e instanceof Error ? e.message : String(e))
-  process.exit(1)
-})
+main().catch(exitOnError())

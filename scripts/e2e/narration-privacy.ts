@@ -39,6 +39,7 @@ import {
   dry,
   dryRun,
   encodeWav,
+  finish,
   GateError,
   mcpTool,
   mcpTools,
@@ -504,8 +505,5 @@ try {
     credits: 0,
     sec: Math.round((Date.now() - started) / 1000),
   }
-  if (failure) {
-    log('FAIL', { msg: failure.message, ...(failure instanceof GateError ? failure.fields : {}), summary })
-    process.exitCode = 1
-  } else log('PASS', summary)
+  finish(failure, summary)
 }

@@ -7,7 +7,7 @@ import { copyFileSync, cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, wri
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { isPreviewBuild, videoRunOf, writeVideoRunPreview } from './lib/agent-preview.js'
-import { repoRoot } from './lib/run-tools.js'
+import { pinnedHyperframesVersion, repoRoot } from './lib/run-tools.js'
 import { unpackZip, ZipError } from './lib/brand-zip.js'
 import { buildLooks, copyLookPreviews, LookBuildError, writeLooksModule } from './lib/looks.js'
 import { buildMcpApp } from './lib/mcp-app.js'
@@ -137,15 +137,7 @@ log('mcp-app', await buildMcpApp(repoRoot))
 // included_files), video-run previews included. A look that fails look:check --static fails the deploy.
 let looks
 try {
-  looks = buildLooks({
-    repoRoot,
-    hyperframesVersion: (
-      JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8')) as {
-        netlifyAgent: { hyperframes: { version: string } }
-      }
-    ).netlifyAgent.hyperframes.version,
-    writeArchives: true,
-  })
+  looks = buildLooks({ repoRoot, hyperframesVersion: pinnedHyperframesVersion(), writeArchives: true })
 } catch (e) {
   if (e instanceof LookBuildError) log('looks', { ok: false, problems: e.problems })
   throw e

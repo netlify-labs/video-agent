@@ -26,7 +26,7 @@ import {
   type RunCredit,
 } from '../src/lib/openverse-rules.js'
 import { BUNDLE_LIMITS } from '../src/lib/tar.js'
-import { StepError, log, parseArgs, repoRoot } from './lib/run-tools.js'
+import { StepError, exitOnError, log, parseArgs, repoRoot } from './lib/run-tools.js'
 
 export const OPENVERSE_API = 'https://api.openverse.org/v1'
 const USER_AGENT = 'VideoAgent/1.0 (Netlify video agent template; music for a video run)'
@@ -368,8 +368,4 @@ async function main() {
   )
 }
 
-if (process.argv[1]?.endsWith('openverse.ts'))
-  main().catch((e: unknown) => {
-    console.error(`openverse failed: ${e instanceof Error ? e.message : String(e)}`)
-    process.exit(1)
-  })
+if (process.argv[1]?.endsWith('openverse.ts')) main().catch(exitOnError('openverse failed: '))

@@ -10,11 +10,27 @@ import { NARRATION_RUN_DIR, narrationPaths, readNarrationInputs } from './narrat
 
 export const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
 
+/** The pinned HyperFrames version: package.json `netlifyAgent.hyperframes.version` (the looks scripts check against it). */
+export const pinnedHyperframesVersion = () =>
+  (
+    JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8')) as {
+      netlifyAgent: { hyperframes: { version: string } }
+    }
+  ).netlifyAgent.hyperframes.version
+
 export const log = (step: string, fields: Record<string, unknown> = {}) => {
   console.error(JSON.stringify({ ts: new Date().toISOString(), step, ...fields }))
 }
 
 export class StepError extends Error {}
+
+/** A CLI's `main().catch(…)`: prints `<prefix><message>` to stderr and exits 1. */
+export const exitOnError =
+  (prefix = '') =>
+  (e: unknown) => {
+    console.error(`${prefix}${e instanceof Error ? e.message : String(e)}`)
+    process.exit(1)
+  }
 
 /**
  * tar arguments for an archive of video/: exactly the files the bundle manifest counts (no dependencies, caches,
@@ -180,6 +196,33 @@ export async function withRetries<T>(what: string, n: number, fn: () => Promise<
     }
   }
   throw last instanceof Error ? last : new StepError(String(last))
+}
+
+/**
+ * Writes a generated file, or with `check` exits 1 when the committed one (a missing one counts) differs from `out`.
+ * The messages name the file as `label`; `hint` says how to regenerate it.
+ */
+export function writeOrCheck(
+  file: string,
+  out: string,
+  o: { check: boolean; label: string; hint: string },
+): void {
+  if (!o.check) {
+    writeFileSync(file, out)
+    console.log(`Wrote ${file}`)
+    return
+  }
+  let current = ''
+  try {
+    current = readFileSync(file, 'utf8')
+  } catch {
+    // missing counts as stale
+  }
+  if (current !== out) {
+    console.error(`${o.label} is stale. ${o.hint}`)
+    process.exit(1)
+  }
+  console.log(`${o.label} is up to date.`)
 }
 
 export function parseArgs(argv: string[]): Record<string, string> {

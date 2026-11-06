@@ -1,11 +1,11 @@
 // The static half of look:check (plan 2026-11-04-looks §9): everything that needs no browser, so it runs in the
 // Netlify build (scripts/lib/looks.ts) and in CI. Problems are collected, never thrown, so a contributor sees every
 // line in one run. The browser half (hyperframes check on the example) is scripts/look-check.ts without --static.
-import { createHash } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { parse, type DefaultTreeAdapterMap } from 'parse5'
 import { validate, type Summary } from '../../src/lib/contract.js'
+import { sha256Hex as sha256 } from '../../src/lib/crypto.js'
 import {
   CreditsSchema,
   isPreviewFile,
@@ -34,7 +34,6 @@ export interface StaticCheckOptions {
 }
 
 const kb = (n: number) => `${Math.round(n / 1024)} KB`
-const sha256 = (b: Uint8Array) => createHash('sha256').update(b).digest('hex')
 const extOf = (p: string) => {
   const i = p.lastIndexOf('.')
   return i > p.lastIndexOf('/') ? p.slice(i).toLowerCase() : ''

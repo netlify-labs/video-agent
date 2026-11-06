@@ -48,7 +48,7 @@ import {
   type VoiceScript,
 } from '../src/lib/voice.js'
 import { pickProvider, toPcm as ffmpegPcm } from './lib/voice-providers.js'
-import { StepError, log, parseArgs, repoRoot } from './lib/run-tools.js'
+import { StepError, exitOnError, log, parseArgs, repoRoot } from './lib/run-tools.js'
 
 /** Speaks every line of the script into `videoDir`; `provider` and `toPcm` are injectable for tests. */
 export async function generateVoice(
@@ -316,8 +316,4 @@ async function main() {
   )
 }
 
-if (process.argv[1]?.endsWith('voice.ts'))
-  main().catch((e: unknown) => {
-    console.error(`voice failed: ${e instanceof Error ? e.message : String(e)}`)
-    process.exit(1)
-  })
+if (process.argv[1]?.endsWith('voice.ts')) main().catch(exitOnError('voice failed: '))

@@ -4,7 +4,7 @@
 import { createHash } from 'node:crypto'
 import { computePeaks, detectSpeech, encodePeaks, VAD_VERSION } from '../../src/lib/peaks.js'
 import { SAMPLE_RATE, type Span } from '../../src/lib/timeline.js'
-import { base, log } from './lib.js'
+import { base, log, mcpPost } from './lib.js'
 
 export const dry = process.argv.includes('--dry')
 export const sha256 = (b: Uint8Array) => createHash('sha256').update(b).digest('hex')
@@ -21,6 +21,13 @@ export class GateError extends Error {
 }
 export function check(ok: boolean, msg: string, f: Record<string, unknown> = {}): asserts ok {
   if (!ok) throw new GateError(msg, f)
+}
+/** A gate's last line, after cleanup: FAIL with the failure's fields and the summary (exit code 1), or PASS. */
+export function finish(failure: Error | null, summary: Record<string, unknown>) {
+  if (failure) {
+    log('FAIL', { msg: failure.message, ...(failure instanceof GateError ? failure.fields : {}), summary })
+    process.exitCode = 1
+  } else log('PASS', summary)
 }
 
 export interface Res<T> {
@@ -69,15 +76,7 @@ export async function download(k: string, url: string) {
 
 /** An MCP tools/call as `k` (stateless JSON-RPC, as roles.ts does). The tool's structured result, or its error. */
 export async function mcpTool(k: string, name: string, args: Record<string, unknown>) {
-  const res = await fetch(`${base}/mcp`, {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${k}`,
-      'content-type': 'application/json',
-      accept: 'application/json, text/event-stream',
-    },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }),
-  })
+  const res = await mcpPost(k, 'tools/call', { name, arguments: args })
   const text = await res.text()
   // A streamable-HTTP server may answer as one SSE event.
   const body = text.trimStart().startsWith('{') ? text : (/^data: (.*)$/m.exec(text)?.[1] ?? '{}')
@@ -93,15 +92,7 @@ export async function mcpTool(k: string, name: string, args: Record<string, unkn
   return { http: res.status, rpcError: rpc.error ?? null, isError: rpc.result?.isError ?? false, structured }
 }
 export async function mcpTools(k: string) {
-  const res = await fetch(`${base}/mcp`, {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${k}`,
-      'content-type': 'application/json',
-      accept: 'application/json, text/event-stream',
-    },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
-  })
+  const res = await mcpPost(k, 'tools/list', {})
   const text = await res.text()
   const body = text.trimStart().startsWith('{') ? text : (/^data: (.*)$/m.exec(text)?.[1] ?? '{}')
   return ((JSON.parse(body) as { result?: { tools?: { name: string }[] } }).result?.tools ?? []).map(
