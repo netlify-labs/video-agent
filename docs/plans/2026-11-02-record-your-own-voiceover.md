@@ -864,3 +864,9 @@ These are the decisions the spikes and the build settled; `docs/spikes.md` S10-S
   - **Teleprompter:** it now shows the take's first line (or the punch point's) from the Record click through the
     countdown (`prompterTime`). Until then it showed where the last take ended until the picture rolled.
   - **Pending hardware data:** S10b's real-hardware run, if it happens, replaces this reasoning with measured residuals.
+- **Download a take (owner, 2026-11-06):** the take review row and a selected narration clip have **Download**. It
+  saves the take as stored, named after the video, the version and the take (`lumen-v1-take-3.wav`). A recorded take
+  is a 24 kHz mono 16-bit WAV, about 2.9 MB a minute, not an MP3; an uploaded take keeps its own format. Where the
+  browser can encode AAC (WebCodecs; Chrome, Edge and Safari), the menu also offers a smaller M4A, made in the browser
+  with mediabunny at 96 kbps, about 0.7 MB a minute. There's no server-side transcoding (`ui/src/lib/take-download.ts`,
+  `TakeDownload.tsx`).

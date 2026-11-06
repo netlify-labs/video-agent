@@ -5,7 +5,7 @@
 // why it stopped, and Add (Enter), Record again, Keep recording from here, Discard (Esc).
 import { ActionIcon, Alert, Button, Group, Slider, Stack, Text, Tooltip } from '@mantine/core'
 import { IconPlayerPauseFilled, IconPlayerPlayFilled } from '@tabler/icons-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { NarrationOp, Span } from '../../../src/lib/timeline'
 import { log } from '../lib/log'
 import { NarrationAudition } from '../lib/narration-audition'
@@ -34,6 +34,8 @@ export interface TakeReviewProps {
   onAgain: () => void
   onContinue: () => void
   onDiscard: () => void
+  /** The take's Download (next to Discard). */
+  download?: ReactNode
 }
 
 /** A take that ends this close to the picture's end reached the end (no Keep recording from here). */
@@ -207,6 +209,7 @@ export function TakeReview(p: TakeReviewProps) {
         >
           Discard (Esc)
         </Button>
+        {p.download}
       </Group>
     </Stack>
   )

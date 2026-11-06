@@ -64,6 +64,8 @@ import { CompositionPreview, type PreviewCommand } from './CompositionPreview'
 import { AlignToVoice } from './AlignToVoice'
 import { showError } from './bits'
 import { MediaLibraryModal } from './MediaPicker'
+import { ClipTakeDownload } from './TakeDownload'
+import { takeNumber } from '../lib/take-download'
 import {
   applyTrackPatch,
   ClipInspector,
@@ -544,7 +546,21 @@ export function NarrationSection(props: NarrationSectionProps) {
         <ClipMenu editor={editor} />
         <EditorAnnouncer editor={editor} />
         <Stack gap="sm" mt="sm">
-          <ClipInspector editor={editor} start={addAudio} />
+          <ClipInspector
+            editor={editor}
+            start={addAudio}
+            end={(clip) => (
+              <ClipTakeDownload
+                videoId={videoId}
+                versionN={props.versionN}
+                mediaId={clip.mediaId}
+                take={takeNumber(
+                  editor.op.clips.map((c) => c.mediaId),
+                  clip.mediaId,
+                )}
+              />
+            )}
+          />
           <Group gap="lg" align="end" wrap="wrap">
             <Stack gap={4}>
               <Text size="xs" c="var(--va-muted)">

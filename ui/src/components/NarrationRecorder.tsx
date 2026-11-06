@@ -57,6 +57,8 @@ import { createRecorder, micStream, type RecordedTake, type Recorder } from '../
 import { RecoveryPrompt } from '../recorder/RecoveryPrompt'
 import { reviewMediaId, reviewOp } from '../recorder/review'
 import { TakeReview } from '../recorder/TakeReview'
+import { takeBaseName, takeNumber } from '../lib/take-download'
+import { TakeDownload } from './TakeDownload'
 import { useRecordingRecovery } from '../recorder/recovery'
 import { RecordingSetup } from '../recorder/setup/RecordingSetup'
 import { micProblem, PROBLEM_COPY, browserOf } from '../recorder/setup/mic'
@@ -203,6 +205,8 @@ export interface NarrationRecorderProps {
 export function NarrationRecorder({ api, videoId, versionN, draft }: NarrationRecorderProps) {
   const me = $api.useQuery('get', '/api/v1/me')
   const userId = me.data?.id ?? ''
+  const videoTitle =
+    $api.useQuery('get', '/api/v1/videos/{id}', { params: { path: { id: videoId } } }).data?.title ?? 'video'
   const latest = useRef({ api, draft, userId })
   latest.current = { api, draft, userId }
 
@@ -670,6 +674,23 @@ export function NarrationRecorder({ api, videoId, versionN, draft }: NarrationRe
                   flow.keepRecording(preRoll)
                 }}
                 onDiscard={() => flow.reject()}
+                download={
+                  reviewTake ? (
+                    <TakeDownload
+                      base={takeBaseName(
+                        videoTitle,
+                        versionN,
+                        takeNumber(
+                          api.op.clips.map((c) => c.mediaId),
+                          reviewMediaId(review.recordingId),
+                        ),
+                      )}
+                      ext="wav"
+                      load={async () => reviewTake.wav}
+                      testId="review-download"
+                    />
+                  ) : null
+                }
               />
             ) : (
               <Group gap="sm" align="center">
