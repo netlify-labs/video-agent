@@ -29,7 +29,8 @@ export interface Exchange {
 const MAX_RETRY_AFTER_SEC = 60
 const BACKOFF_MS = 500
 
-const sleep = (ms: number, signal?: AbortSignal) =>
+/** @internal Waits ms, or rejects with the signal's reason when it aborts (the helpers poll with it too). */
+export const sleep = (ms: number, signal?: AbortSignal) =>
   new Promise<void>((resolve, reject) => {
     if (signal?.aborted) {
       reject(signal.reason as Error)
