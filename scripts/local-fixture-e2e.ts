@@ -49,6 +49,8 @@ const env: NodeJS.ProcessEnv = {
   ...process.env,
   XDG_CACHE_HOME: join(work, 'cache'),
   XDG_CONFIG_HOME: join(work, 'config'),
+  // The CLI's event log on stderr (local.render_blocked, local.render_done), shown when a step fails.
+  VIDEO_AGENT_DEBUG: '1',
 }
 delete env.VIDEO_AGENT_KEY
 delete env.VIDEO_AGENT_URL
@@ -63,7 +65,11 @@ const cli = (args: string[], extra: NodeJS.ProcessEnv = {}) => {
     maxBuffer: 64 * 1024 * 1024,
   })
   log('cli', { args: args.slice(0, 2), code: r.status, ms: Date.now() - t })
-  if (r.status !== 0) fail(`video-agent ${args[0]} exited ${r.status}`, { stderr: r.stderr.slice(-3000) })
+  if (r.status !== 0)
+    fail(`video-agent ${args[0]} exited ${r.status}`, {
+      stdout: r.stdout.slice(-2000),
+      stderr: r.stderr.slice(-6000),
+    })
   return JSON.parse(r.stdout.trim().split('\n').at(-1) ?? '{}') as {
     dir: string
     version: number
