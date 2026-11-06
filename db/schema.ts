@@ -34,6 +34,8 @@ export const settings = pgTable('settings', {
   recordingQuotaBytes: bigint('recording_quota_bytes', { mode: 'number' }).notNull().default(2147483648),
   // Remixing (docs/plans/2026-11-03-remix.md §4): admins can turn it off without a redeploy.
   remixEnabled: boolean('remix_enabled').notNull().default(true),
+  // WebMCP: the web app's tools for browser agents (va-qago). On by default; an admin can turn it off.
+  webmcpEnabled: boolean('webmcp_enabled').notNull().default(true),
   // The Remotion engine (render-engines plan §7): an admin's switch, and the license choice recorded with it.
   remotionEnabled: boolean('remotion_enabled').notNull().default(false),
   remotionLicenseAck: jsonb('remotion_license_ack'),

@@ -14,6 +14,7 @@ import {
 } from './engine-settings.js'
 import { assertCan, type Principal } from './policy.js'
 import { remixEnabled } from './remix-settings.js'
+import { webmcpEnabled } from './webmcp-settings.js'
 import { getSettings } from './settings.js'
 import { RECORDING_QUOTA_DEFAULT } from './media-roles.js'
 import { NARRATION_SETTING_DEFAULTS, type TranscriptionProvider } from './types.js'
@@ -51,6 +52,8 @@ export async function assertNarrationEnabled(deps: Pick<Deps, 'store'>): Promise
 /** Everything on the admin Settings page: the voice-over settings plus the remix switch (remix spec §4). */
 export interface AdminSettings extends NarrationSettings {
   remixEnabled: boolean
+  /** WebMCP tools for browser agents (va-qago). */
+  webmcpEnabled: boolean
   /** YouTube as a publish destination (publish destinations §4). */
   youtubeEnabled: boolean
   /** The Google OAuth env is set (read-only). */
@@ -73,6 +76,7 @@ async function adminSettings(deps: Pick<Deps, 'store' | 'config'>): Promise<Admi
   return {
     ...(await narrationSettings(deps)),
     remixEnabled: await remixEnabled(deps),
+    webmcpEnabled: await webmcpEnabled(deps),
     youtubeEnabled: row?.youtubeEnabled ?? false,
     youtubeConfigured: deps.config.google !== null,
     recordingQuotaBytes: row?.recordingQuotaBytes ?? RECORDING_QUOTA_DEFAULT,

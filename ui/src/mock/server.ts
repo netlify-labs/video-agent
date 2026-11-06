@@ -103,6 +103,7 @@ const adminSettings: {
   youtubeEnabled: boolean
   youtubeConfigured: boolean
   cliLoginEnabled: boolean
+  webmcpEnabled: boolean
   remotion?: {
     enabled: boolean
     license: { by: string; email: string; at: string; tier: 'free' | 'company'; note: string | null } | null
@@ -134,6 +135,14 @@ const adminSettings: {
   cliLoginEnabled: (() => {
     try {
       return localStorage.getItem('mockCliLoginOff') !== '1'
+    } catch {
+      return true
+    }
+  })(),
+  // localStorage.mockWebMcpOff = '1' starts with WebMCP turned off.
+  webmcpEnabled: (() => {
+    try {
+      return localStorage.getItem('mockWebMcpOff') !== '1'
     } catch {
       return true
     }
@@ -648,6 +657,7 @@ export function installMock() {
           'destinations',
           ...(adminSettings.youtubeEnabled ? ['youtube'] : []),
           ...(adminSettings.cliLoginEnabled ? ['cli_login'] : []),
+          ...(adminSettings.webmcpEnabled ? ['webmcp'] : []),
           // Only once Remotion is actually on (render-engines plan §7).
           ...(adminSettings.remotion?.enabled ? ['engines'] : []),
           // Redo a scene; localStorage.mockNoScopedRevision=1 leaves it out, to test the hidden UI.

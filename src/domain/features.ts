@@ -7,6 +7,7 @@ import { narrationEnabled } from './narration-settings.js'
 import { remixEnabled } from './remix-settings.js'
 import { youtubeAvailable } from './destinations/registry.js'
 import { cliLoginEnabled } from './cli-login.js'
+import { webmcpEnabled } from './webmcp-settings.js'
 import { scopeCheckFor } from './engines.js'
 
 export const FEATURES = [
@@ -23,6 +24,7 @@ export const FEATURES = [
   'external_ref', // external references on jobs (github-action plan)
   'destinations', // publish destinations (publish-destinations plan)
   'youtube', // the YouTube destination, when it's set up and on
+  'webmcp', // the web app's WebMCP tools for browser agents; admin switch webmcpEnabled (va-qago)
 ] as const
 
 export type Feature = (typeof FEATURES)[number]
@@ -48,6 +50,7 @@ export async function enabledFeatures(deps: Deps): Promise<Feature[]> {
   if (scopeCheckFor('hyperframes')) on.push('scoped_revision')
   if (await youtubeAvailable(deps, deps.store).catch(() => false)) on.push('youtube')
   if (await cliLoginEnabled(deps).catch(() => true)) on.push('cli_login')
+  if (await webmcpEnabled(deps).catch(() => true)) on.push('webmcp')
   // Only once Remotion is actually on: with HyperFrames alone there's no engine to choose.
   if ((await enabledEngines(deps).catch(() => [])).length > 1) on.push('engines')
   return on

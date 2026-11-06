@@ -33,6 +33,8 @@ import { brand } from '../theme'
 import { Mark, PoweredBy } from './bits'
 import { MissingSettingsBanner } from './MissingSettings'
 import { NotificationBell } from './NotificationBell'
+import { WebMcpConfirmHost } from '../webmcp/confirm'
+import { WebMcpGlobalTools } from '../webmcp/GlobalTools'
 
 export function Layout() {
   const [opened, { toggle, close }] = useDisclosure()
@@ -182,6 +184,9 @@ export function Layout() {
       <AppShell.Main>
         <MissingSettingsBanner admin={isAdmin} />
         <Outlet />
+        {/* WebMCP (va-qago): the tools every page offers, and the person's yes for an agent's consequential action. */}
+        <WebMcpGlobalTools />
+        <WebMcpConfirmHost />
       </AppShell.Main>
     </AppShell>
   )

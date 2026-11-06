@@ -1929,6 +1929,11 @@ export const AdminSettingsSchema = z
       .describe(
         'Remixing is on (the default). Off hides every Remix button and refuses new remixes; queued ones still run.',
       ),
+    webmcpEnabled: z
+      .boolean()
+      .describe(
+        'WebMCP is on (the default): in browsers that support it, the web app offers its tools to AI agents. Off: no tools are registered.',
+      ),
     youtubeEnabled: z
       .boolean()
       .describe('YouTube is offered as a publish destination (needs youtubeConfigured).'),
@@ -1987,6 +1992,7 @@ export const UpdateAdminSettingsSchema = z
       .optional()
       .describe('1 MiB to 1 TiB.'),
     remixEnabled: z.boolean().optional(),
+    webmcpEnabled: z.boolean().optional(),
     youtubeEnabled: z.boolean().optional(),
     defaultLook: LookIdSchema.nullable().optional().describe('A look id, or null for none.'),
     disabledLooks: z.array(LookIdSchema).max(100).optional().describe('The full list of looks to turn off.'),

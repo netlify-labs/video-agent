@@ -368,6 +368,7 @@ export function AdminPage() {
           <WebhookCard scope="team" />
           <NarrationSettingsCard />
           <RemixSettingsCard />
+          <WebMcpSettingsCard />
           <LooksSettingsCard />
           <CliLoginSettingsCard />
           <RemotionSettingsCard />
@@ -451,6 +452,30 @@ function RemixSettingsCard() {
         disabled={!s}
         onChange={(e) => {
           save.mutate({ body: { remixEnabled: e.currentTarget.checked } })
+        }}
+      />
+    </Card>
+  )
+}
+
+/** WebMCP (va-qago): in browsers that support it, AI agents can drive this app's pages through its tools. */
+function WebMcpSettingsCard() {
+  const afterWrite = useAfterWrite()
+  const settings = $api.useQuery('get', '/api/v1/admin/settings')
+  const save = $api.useMutation('patch', '/api/v1/admin/settings', afterWrite)
+  const s = settings.data
+  return (
+    <Card>
+      <Text fw={600} mb="xs">
+        WebMCP
+      </Text>
+      <Switch
+        label="AI agents in the browser can use this app"
+        description="In browsers with WebMCP, an agent can search, fill forms, edit and play videos for the person using it. Anything that spends credits, publishes or deletes still needs that person's click. Off registers no tools."
+        checked={s?.webmcpEnabled ?? false}
+        disabled={!s}
+        onChange={(e) => {
+          save.mutate({ body: { webmcpEnabled: e.currentTarget.checked } })
         }}
       />
     </Card>
