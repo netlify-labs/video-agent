@@ -28,6 +28,7 @@
     "openapi:check": "tsx scripts/gen-openapi.ts --check && npx -y openapi-typescript@7.13.0 ui/src/api/openapi.json --check -o packages/sdk/src/generated/schema.d.ts && tsx scripts/gen-sdk.ts --check",
     "test:ui": "playwright test",
     "look:check": "tsx scripts/look-check.ts",
+    "public-snapshot": "tsx scripts/public-snapshot.ts",
     "look:new": "tsx scripts/look-new.ts",
     "look:vendor": "tsx scripts/look-vendor.ts",
     "looks:gen": "tsx scripts/looks-gen.ts"
