@@ -86,7 +86,10 @@ test('the admin switch turns CLI sign-in off, and the page says so', async ({ pa
   await page.goto('/admin')
   const sw = page.getByRole('switch', { name: 'People can sign in from the CLI' })
   await expect(sw).toBeChecked()
-  await sw.click({ force: true })
+  // Clicked for real in the middle of the screen: a forced click under the sticky header did nothing on CI's layout
+  // (the same fix as 07f2d9e and 6b64ee3).
+  await sw.evaluate("(el) => el.scrollIntoView({ block: 'center' })")
+  await sw.click()
   await expect(sw).not.toBeChecked()
   // In-app navigation: a reload would restart the mock with the switch on.
   await page.evaluate(() => {
