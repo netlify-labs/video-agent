@@ -9,6 +9,8 @@ import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
 import { finalizeRecording } from '../src/domain/finalize-recording.js'
+import { applyEdits, type Summary } from '../src/lib/contract.js'
+import { RATE_RANGE } from '../src/lib/recording.js'
 import type { VersionRecording } from '../src/domain/types.js'
 import { parseTrace } from '../src/lib/recording-trace.js'
 import type { Analysis } from '../scripts/lib/recording-analyze.js'
@@ -111,6 +113,44 @@ describe('finalize: recording', () => {
       's1:setup@step-2',
     ])
     expect(r.recording.hidden[2]).toMatchObject({ start: 1, end: 3, reason: 'email', checkedBy: null })
+  })
+
+  it("an editor render with LT-2's ops (a span under 0.5x holds the end) passes; the same in an author run doesn't", async () => {
+    const h = await setup()
+    const files = demoFiles()
+    const dec = (p: string) => new TextDecoder().decode(files.get(p))
+    const summary = JSON.parse(dec('summary.json')) as Summary
+    const beat = applyEdits(dec('index.html'), summary, []).composition.beats.find((b) => b.recording)
+    const r0 = beat?.recording
+    if (!beat || !r0) throw new Error('no recording scene')
+    const out = Math.round((r0.in + Math.max(0.6, beat.duration * RATE_RANGE[0] * 0.8)) * 1000) / 1000
+    const edited = applyEdits(dec('index.html'), summary, [
+      { op: 'span', beat: beat.id, in: r0.in, out },
+      {
+        op: 'camera',
+        beat: beat.id,
+        keys: [
+          [r0.in, 0.5, 0.5, 1],
+          [out, 0.4, 0.4, 1.5, 'power2.inOut'],
+        ],
+      },
+    ] as never)
+    expect(edited.html).toMatch(/data-va-rec-hold="end"/)
+    files.set('index.html', new TextEncoder().encode(edited.html))
+    files.set(`assets/recording/${r0.step}.hold.jpg`, png())
+    const asEdit = await finalizeRecording(
+      h.deps,
+      JOB,
+      2,
+      { ...version, mode: 'render_unchanged', editedFromN: 1 },
+      files,
+    )
+    console.log(JSON.stringify({ test: 'finalize-recording', case: 'editor hold', ok: asEdit?.ok }))
+    expect(asEdit?.ok === false ? asEdit.message : 'ok').toBe('ok')
+    const asAuthor = await finalizeRecording(h.deps, JOB, 1, version, files)
+    expect(asAuthor?.ok === false && asAuthor.message).toMatch(
+      /held frame is only for a scene with a voice line/,
+    )
   })
 
   it('a removed locked entry is redaction_removed', async () => {

@@ -70,6 +70,8 @@ export async function finalizeRecording(
     readFile: (p) => text(files, p),
     recording: media ? { filename: media.filename, durationSec: row?.durationSec ?? undefined } : null,
     locked: { trace: traceRedact, setup: r.boxes },
+    // An editor render: the person set the spans, so a held end needs no voice line or retime (as in the run).
+    edited: version.mode === 'render_unchanged',
   })
   const first = problems[0]
   if (first) {
