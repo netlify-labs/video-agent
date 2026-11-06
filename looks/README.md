@@ -150,8 +150,8 @@ the registry blocks the built-in looks use, and `spikes/k1/cases/` their code.
 4. `npm run look:check -- --static <id>` until it passes; then `npm run look:check <id>` (needs Chrome) to run the
    example through `hyperframes check` too.
 5. Render the preview and poster (the commands are below).
-6. Try it on real prompts: the three in `PROMPTS.md`, on a deployment of your own (or, once the CLI's local mode
-   exists, `video-agent local --look ./looks/<id> "<prompt>"`). Attach a GIF of each to the pull request.
+6. Try it on real prompts: the three in `PROMPTS.md`, with `video-agent local --look ./looks/<id> "<prompt>"` (your own
+   coding agent, no credits) or on a deployment of your own. Attach a GIF of each to the pull request.
 7. Open the pull request.
 
 ### Preview commands
