@@ -14,7 +14,7 @@ import {
   Tooltip,
 } from '@mantine/core'
 import { IconCheck, IconCopy, IconExternalLink, IconInfoCircle, IconMapPin } from '@tabler/icons-react'
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { $api, type Version, type Video } from '../api/client'
 import { clockTime, credits, duration } from './bits'
 import { engineName } from '../lib/engines'
@@ -102,6 +102,32 @@ const listOf = (items: string[]) => (
   </ul>
 )
 
+/** Long context (a whole PR description) starts clamped; "Show all" opens the rest. */
+const CONTEXT_LINES = 12
+
+function ContextText({ text }: { text: string }) {
+  const [open, setOpen] = useState(false)
+  const lines = text.split('\n').length
+  const long = lines > CONTEXT_LINES || text.length > 1200
+  return (
+    <>
+      <Text
+        size="sm"
+        className="va-details-prompt"
+        data-testid="version-context"
+        {...(long && !open ? { lineClamp: CONTEXT_LINES } : {})}
+      >
+        {text}
+      </Text>
+      {long ? (
+        <Button size="xs" variant="subtle" color="gray" mt={4} onClick={() => setOpen((o) => !o)}>
+          {open ? 'Show less' : `Show all (${lines} lines)`}
+        </Button>
+      ) : null}
+    </>
+  )
+}
+
 export function VersionDetailsModal({
   video,
   v,
@@ -180,18 +206,31 @@ function Everything({
         <Part
           title={`Context from ${v.context.label}`}
           aside={
-            v.context.url ? (
-              <Anchor href={v.context.url} target="_blank" rel="noopener noreferrer" size="xs">
-                <Group gap={4} wrap="nowrap">
-                  Open <IconExternalLink size={12} />
-                </Group>
-              </Anchor>
-            ) : null
+            <Group gap="xs" wrap="nowrap">
+              <CopyButton value={v.context.text}>
+                {({ copied, copy }) => (
+                  <Button
+                    size="xs"
+                    variant="subtle"
+                    color="gray"
+                    leftSection={copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
+                    onClick={copy}
+                  >
+                    {copied ? 'Copied' : 'Copy'}
+                  </Button>
+                )}
+              </CopyButton>
+              {v.context.url ? (
+                <Anchor href={v.context.url} target="_blank" rel="noopener noreferrer" size="xs">
+                  <Group gap={4} wrap="nowrap">
+                    Open <IconExternalLink size={12} />
+                  </Group>
+                </Anchor>
+              ) : null}
+            </Group>
           }
         >
-          <Text size="sm" className="va-details-prompt" data-testid="version-context" lineClamp={12}>
-            {v.context.text}
-          </Text>
+          <ContextText text={v.context.text} />
         </Part>
       ) : null}
 
