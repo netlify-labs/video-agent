@@ -879,14 +879,17 @@ in `.va-run`.
 
    Everything is a GSAP tween on the scene's own timeline, so it's seek-safe and deterministic.
 
-**Hidden areas** are solid boxes in `--va-color-muted` with a small "Hidden" label, positioned in stage coordinates so
-they move with the camera. Each box jumps from key to key with no easing (a `set` at each key's time), so it follows a
-scrolling field without lagging behind it. Why solid and not blur:
-- a blur on the whole clip can't isolate a region (`media-treatments.md:17-21`);
-- a blurred copy clipped to the box would need a second decode of the same clip;
-- a light blur can leave text readable.
+**Hidden areas** are blurred by default (changed 2026-11-06 at the owner's request): each box is a
+`backdrop-filter: blur(16px) brightness(.82)` over the picture under it, so the frame's own pixels are blurred past
+reading small UI text and darkened a little, with no label. An entry with `"style": "solid"` is a flat box in
+`--va-color-muted` instead (a per-box choice in setup and the editor). Boxes are positioned in stage coordinates, so
+they move with the camera, and the blur radius (stage px) grows with the zoom. Each box jumps from key to key with no
+easing (a `set` at each key's time), so it follows a scrolling field without lagging behind it.
 
-A blurred-copy option is in §13.
+Why `backdrop-filter`, not the blurred copy first planned: it blurs what's already drawn under the box, so there's no
+second decode of the clip and nothing to keep in sync. Measured on a D6 demo (1280x720 source, 1080p, `standard`, PNG
+frames): 8.5 s to render with two boxes against 8.3 s with none; the metadata line and URLs under a box are unreadable
+at zoom 1, where the blur is weakest. Either style is cosmetic: the recording file underneath is unchanged (§9).
 
 **Callouts** are ordinary `data-va-text` fields, so the editor and captions already handle them. Callouts that move
 with the camera (`data-va-anchor`) are in §13.
@@ -1529,7 +1532,7 @@ Everything in §13.
 - **Browser extension** (path D): the same trace from any tab, without the CLI.
 - **Desktop traces:** native macOS and Windows cursor logs. That's out of scope for a web template. A `trace.json`
   written by any tool that follows our schema already works.
-- **Blurred-copy hiding, face tracking, OCR of every frame, a webcam bubble.**
+- **Face tracking, OCR of every frame, a webcam bubble.** (Blurred hiding shipped 2026-11-06, §5.3.)
 - **Splitting a scene in the editor** without the agent.
 - **Streaming assembly**, if spike D5 fails.
 
@@ -1549,7 +1552,8 @@ follows:
 2. **Limits:** 5 minutes and 150 MB per recording, and 2 GiB stored per person? *Recommended:* yes, revisited after
    spike D5.
 3. **Visibility:** recordings private to their uploader until a video uses them? *Recommended:* yes.
-4. **Hiding style:** solid boxes by default? *Recommended:* yes; a blurred copy later as an option.
+4. **Hiding style:** solid boxes by default? *Recommended:* yes; a blurred copy later as an option. *Decided
+   2026-11-06 (owner):* blurred by default, solid as a per-box choice (§5.3).
 5. **Hiding is cosmetic in v1.** People who can open the video can watch the full recording. Is that acceptable with the
    setup note, plus **demos with anything hidden starting private** (with the note shown again on Make public and on
    Publish), or must "burn in my hidden areas" (§13) ship in v1? *Recommended:* the note and private-by-default in v1,

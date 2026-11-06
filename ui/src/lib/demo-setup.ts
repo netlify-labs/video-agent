@@ -9,6 +9,8 @@ export interface SetupBox {
   h: number
   start: number
   end: number
+  /** blur (the default) or solid. */
+  style?: 'blur' | 'solid'
 }
 
 /** The server's default length (src/domain/demo-recording.ts demoDuration): about 0.4 of what's used, 20 to 90 s. */
@@ -50,6 +52,7 @@ export function recordingInput(s: SetupState) {
             return {
               start: r3(b.start),
               end: r3(Math.max(b.end, b.start + 0.1)),
+              ...(b.style === 'solid' ? { style: 'solid' as const } : {}),
               box: [x, y, Math.min(r3(b.w), floor3(1 - x)), Math.min(r3(b.h), floor3(1 - y))] as [
                 number,
                 number,

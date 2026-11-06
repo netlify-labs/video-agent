@@ -86,5 +86,14 @@ describe('setup', () => {
     expect(x + w).toBeLessThanOrEqual(1)
     expect(y + h).toBeLessThanOrEqual(1)
     expect(r.redact?.[0]).toMatchObject({ start: 0, end: 60 })
+    // Blur is the default and isn't sent; solid is.
+    expect(r.redact?.[0]).not.toHaveProperty('style')
+    const solid = recordingInput({
+      mediaId: 'med_a',
+      duration: 60,
+      trim: [0, 60],
+      boxes: [{ id: 'b', x: 0.1, y: 0.1, w: 0.2, h: 0.1, start: 0, end: 60, style: 'solid' }],
+    })
+    expect(solid.redact?.[0]?.style).toBe('solid')
   })
 })

@@ -102,10 +102,14 @@ const event = z.discriminatedUnion('kind', [click, type, scroll, focus, drag, na
 const redactKey = z
   .tuple([time, frac, frac, frac, frac])
   .refine(([, x, y, w, h]) => x + w <= 1 + 1e-9 && y + h <= 1 + 1e-9, 'box must stay inside the frame')
+/** How a hidden area looks: a heavy blur of the picture under it (the default) or a solid box. */
+export const HIDE_STYLES = ['blur', 'solid'] as const
+export type HideStyle = (typeof HIDE_STYLES)[number]
 const redact = z.strictObject({
   start: time,
   end: time,
   reason: name,
+  style: z.enum(HIDE_STYLES).optional(),
   /** [t, x, y, w, h] keys; w = h = 0 hides the box from t on. */
   boxes: z.array(redactKey).min(1).max(TRACE_LIMITS.keysPerEntry),
 })

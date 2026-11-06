@@ -57,7 +57,14 @@ export const demoDuration = (sourceSec: number) => Math.min(90, Math.max(20, Mat
 export interface RecordingRequest {
   mediaId: string
   trim?: [number, number] | undefined
-  redact?: { start: number; end: number; box: [number, number, number, number] }[] | undefined
+  redact?:
+    | {
+        start: number
+        end: number
+        box: [number, number, number, number]
+        style?: 'blur' | 'solid' | undefined
+      }[]
+    | undefined
 }
 
 /**
@@ -116,6 +123,7 @@ export async function demoRecording(
       start: r.start,
       end: Math.min(r.end, length || r.end),
       reason: 'Hidden by you',
+      ...(r.style === 'solid' ? { style: 'solid' as const } : {}),
       boxes: [[r.start, x, y, w, h]] as [number, number, number, number, number][],
     }
   })

@@ -999,6 +999,27 @@ describe('contract: recording scenes', () => {
         [{ op: 'redact', beat: 'add-site', entries: [{ ...box, boxes: [[3, 0.95, 0.2, 0.1, 0.05]] }] }],
         /inside the frame/,
       )
+      // Blurred unless the entry says solid (blur, the default, isn't written).
+      const styled = apply([
+        {
+          op: 'redact',
+          beat: 'add-site',
+          entries: [
+            { ...box, style: 'solid' },
+            { ...box, id: 'a2', style: 'blur' },
+          ],
+        },
+      ])
+      expect(
+        (JSON.parse(attrOf(styled.html, 'data-va-redact') ?? '[]') as { style?: string }[]).map(
+          (e) => e.style,
+        ),
+      ).toEqual(['solid', undefined])
+      refused(
+        'an unknown style',
+        [{ op: 'redact', beat: 'add-site', entries: [{ ...box, style: 'pixelate' as 'solid' }] }],
+        /blurred or solid/,
+      )
       // Nothing can drop the locked file: a scene without its redact.js script doesn't validate.
       const noScript = rec.replace('<script src="assets/recording/redact.js"></script>', '')
       expect(validate(noScript, recSummary).join(' ')).toMatch(/must load assets\/recording\/redact.js/)

@@ -77,6 +77,34 @@ describe('demo API', () => {
     expect(put.status).toBe(409)
   })
 
+  it('setup boxes are blurred unless they say solid', async () => {
+    const h = harness()
+    const id = await recording(h, h.member)
+    const v = await h.json<{ id: string }>(
+      await create(h, h.member, {
+        recording: {
+          mediaId: id,
+          redact: [
+            { start: 0, end: 10, box: [0.1, 0.1, 0.2, 0.1], style: 'solid' },
+            { start: 0, end: 10, box: [0.5, 0.5, 0.2, 0.1] },
+          ],
+        },
+      }),
+    )
+    const boxes = (await h.deps.store.getVersion(v.id, 1))?.recording?.boxes ?? []
+    console.log(
+      JSON.stringify({ test: 'recording-api', case: 'style', styles: boxes.map((b) => b.style ?? null) }),
+    )
+    expect(boxes.map((b) => b.style)).toEqual(['solid', undefined])
+    const bad = await create(h, h.member, {
+      recording: {
+        mediaId: id,
+        redact: [{ start: 0, end: 10, box: [0.1, 0.1, 0.2, 0.1], style: 'pixelate' }],
+      },
+    })
+    expect(bad.status).toBe(400)
+  })
+
   it('a demo with nothing hidden stays team-visible; any other video has no recording', async () => {
     const h = harness()
     const id = await recording(h, h.member)

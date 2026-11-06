@@ -214,10 +214,14 @@ export function parseRedactScript(
       !finite4(r.start) ||
       !finite4(r.end) ||
       typeof r.reason !== 'string' ||
+      (r.style !== undefined && r.style !== 'blur' && r.style !== 'solid') ||
       !keys?.length ||
       !keys.every((k) => Array.isArray(k) && k.length === 5 && k.every(finite4))
     )
-      return { ok: false, reason: "has an entry that isn't { id, origin, start, end, reason, boxes }" }
+      return {
+        ok: false,
+        reason: "has an entry that isn't { id, origin, start, end, reason, style?, boxes }",
+      }
   }
   return { ok: true, entries: entries as LockedEntry[] }
 }

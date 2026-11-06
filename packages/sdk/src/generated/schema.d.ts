@@ -2484,6 +2484,11 @@ export interface components {
                     number,
                     number
                 ];
+                /**
+                 * @description blur (the default): a heavy blur of the picture under the box; solid: a flat box.
+                 * @enum {string}
+                 */
+                style?: "blur" | "solid";
             }[];
         };
         VideoList: {
@@ -3267,6 +3272,8 @@ export interface components {
                     start: number;
                     end: number;
                     reason?: string;
+                    /** @enum {string} */
+                    style?: "blur" | "solid";
                     boxes: number[][];
                 }[];
             } | components["schemas"]["NarrationOp"])[];
@@ -3490,6 +3497,8 @@ export interface components {
                     start: number;
                     end: number;
                     reason?: string;
+                    /** @enum {string} */
+                    style?: "blur" | "solid";
                     boxes: number[][];
                 }[];
             } | components["schemas"]["NarrationOp"])[];

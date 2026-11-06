@@ -1308,7 +1308,17 @@ function checkSceneRedact(entries: unknown[]): unknown[] {
       last = t ?? 0
     }
     const reason = typeof e.reason === 'string' ? e.reason.replace(/\s+/g, ' ').trim().slice(0, 60) : ''
-    return { id, origin, start: e.start, end: e.end, reason, boxes }
+    if (e.style !== undefined && e.style !== 'blur' && e.style !== 'solid')
+      throw new ContractError(['A hidden area is blurred or solid.'])
+    return {
+      id,
+      origin,
+      start: e.start,
+      end: e.end,
+      reason,
+      ...(e.style === 'solid' ? { style: 'solid' } : {}),
+      boxes,
+    }
   })
 }
 
@@ -1421,6 +1431,8 @@ export interface RecordingRedactEntry {
   start: number
   end: number
   reason?: string | undefined
+  /** blur (the default) or solid. */
+  style?: 'blur' | 'solid' | undefined
   boxes: number[][]
 }
 

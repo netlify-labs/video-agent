@@ -134,6 +134,31 @@ test('locked boxes step from key to key with no easing; a zero-size key hides th
   expect(await second()).toBe('hidden')
 })
 
+test('hidden areas blur the picture by default, solid when asked, with no label', async ({ page }) => {
+  await open(page, {
+    redact: [{ id: 'a1', start: 0, end: 12, style: 'solid', boxes: [[0, 0.1, 0.1, 0.2, 0.1]] }],
+  })
+  await seek(page, 'add-site', 1)
+  const looks = await js<{ cls: string; backdrop: string; bg: string; text: string }[]>(
+    page,
+    `[...document.querySelectorAll('[data-va-beat="add-site"] .va-hide')].map((e) => {
+      const cs = getComputedStyle(e)
+      return { cls: e.className, backdrop: cs.backdropFilter, bg: cs.backgroundColor, text: e.textContent }
+    })`,
+  )
+  logCase('hide-style', { expected: 'blur, blur, solid', actual: looks.map((l) => l.cls) })
+  // The two locked boxes (no style: blur), then the scene's solid one.
+  expect(looks.map((l) => l.cls)).toEqual([
+    'va-hide va-hide-blur',
+    'va-hide va-hide-blur',
+    'va-hide va-hide-solid',
+  ])
+  expect(looks[0]?.backdrop).toBe('blur(16px) brightness(0.82)')
+  expect(looks[2]?.backdrop).toBe('none')
+  expect(looks[2]?.bg).not.toBe('rgba(0, 0, 0, 0)')
+  expect(looks.every((l) => l.text === '')).toBe(true)
+})
+
 test('malformed camera, clicks and redact entries are skipped and logged, never thrown', async ({ page }) => {
   const errors: string[] = []
   page.on('pageerror', (e) => errors.push(e.message))

@@ -20,8 +20,11 @@
     '.va-cursor svg{position:absolute;left:-3px;top:-2px;width:28px;height:28px;filter:drop-shadow(0 2px 3px rgba(0,0,0,.4))}' +
     '.va-cursor .va-ring{position:absolute;left:-22px;top:-22px;width:44px;height:44px;border-radius:50%;border:3px solid var(--va-color-accent,#14b8a6);background:rgba(20,184,166,.15)}' +
     '.va-ripple{position:absolute;width:56px;height:56px;margin:-28px 0 0 -28px;border-radius:50%;border:3px solid var(--va-color-accent,#14b8a6);visibility:hidden;z-index:2}' +
-    '.va-hide{position:absolute;background:var(--va-color-muted,#9aa3ad);visibility:hidden;z-index:4;display:flex;align-items:center;justify-content:center;overflow:hidden}' +
-    '.va-hide span{font:600 14px system-ui,sans-serif;color:var(--va-color-bg,#0b0d10);opacity:.8}'
+    '.va-hide{position:absolute;visibility:hidden;z-index:4;overflow:hidden}' +
+    // Blur (the default): the picture under the box, blurred past reading small text, and darkened a little. The
+    // radius is in stage px, so it grows with the camera's zoom.
+    '.va-hide-blur{-webkit-backdrop-filter:blur(16px) brightness(.82);backdrop-filter:blur(16px) brightness(.82);background:rgba(0,0,0,.06)}' +
+    '.va-hide-solid{background:var(--va-color-muted,#9aa3ad)}'
   var ARROW =
     '<svg viewBox="0 0 24 24"><path d="M3 2l7.5 19 2.6-7.9L21 10.5z" fill="#fff" stroke="#111" stroke-width="1.5" stroke-linejoin="round"/></svg>'
 
@@ -181,8 +184,7 @@
       if (!okKeys) return warn(beat, 'redact', i)
       if (e.end <= inS || e.start >= outS) return
       var box = document.createElement('div')
-      box.className = 'va-hide'
-      box.innerHTML = '<span>Hidden</span>'
+      box.className = 'va-hide ' + (e.style === 'solid' ? 'va-hide-solid' : 'va-hide-blur')
       stage.appendChild(box)
       var times = [e.start, e.end]
       e.boxes.forEach(function (k) {

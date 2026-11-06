@@ -148,7 +148,14 @@ function BoxCanvas(props: {
             top: `${String(b.y * 100)}%`,
             width: `${String(b.w * 100)}%`,
             height: `${String(b.h * 100)}%`,
-            background: 'rgba(120,120,120,0.85)',
+            // As the render draws it: the picture blurred and darkened under the box, or a flat box.
+            ...(b.style === 'solid'
+              ? { background: 'var(--mantine-color-gray-5)' }
+              : {
+                  backdropFilter: 'blur(8px) brightness(0.82)',
+                  WebkitBackdropFilter: 'blur(8px) brightness(0.82)',
+                  background: 'rgba(0,0,0,0.06)',
+                }),
             outline: props.selected === b.id ? '2px solid var(--mantine-color-blue-5)' : '1px solid #fff',
             cursor: 'move',
             display: 'grid',
@@ -156,9 +163,7 @@ function BoxCanvas(props: {
             color: '#fff',
             fontSize: 12,
           }}
-        >
-          {b.w > 0.06 && b.h > 0.04 ? <IconEyeOff size={14} /> : null}
-        </div>
+        ></div>
       ))}
     </div>
   )
@@ -259,8 +264,8 @@ export function DemoSetup(props: { media: Media; onBack: () => void }) {
               Hide something
             </Text>
             <Text size="xs" c="var(--va-muted)">
-              Draw a box on the picture over anything private: an email, a key, a customer's name. Drag a box
-              to move it.
+              Draw a box on the picture over anything private: an email, a key, a customer's name. It's
+              blurred in the video (or a solid box, if you choose). Drag a box to move it.
             </Text>
           </div>
           {boxes.length ? (
@@ -298,6 +303,22 @@ export function DemoSetup(props: { media: Media; onBack: () => void }) {
                     onChange={(v) => {
                       setBoxes(boxes.map((x) => (x.id === b.id ? { ...x, end: Number(v) || 0 } : x)))
                     }}
+                  />
+                  <SegmentedControl
+                    size="xs"
+                    aria-label={`Area ${String(i + 1)} style`}
+                    value={b.style ?? 'blur'}
+                    onChange={(v) => {
+                      setBoxes(
+                        boxes.map((x) =>
+                          x.id === b.id ? { ...x, style: v === 'solid' ? 'solid' : 'blur' } : x,
+                        ),
+                      )
+                    }}
+                    data={[
+                      { value: 'blur', label: 'Blur' },
+                      { value: 'solid', label: 'Solid' },
+                    ]}
                   />
                   <ActionIcon
                     variant="subtle"

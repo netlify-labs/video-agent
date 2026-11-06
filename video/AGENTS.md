@@ -237,7 +237,8 @@ Only when the run's prompt has a screen recording (a demo). Run these from the r
    instructions) and a checkpoint message.
 3. Name each step and write its callout only from text you can read in its focus crop, the clicked elements or the
    transcript. To drop, reorder or trim steps, or add a hidden area, edit `assets/recording/plan.json` (add an
-   entry `{ "id": "a1", "start", "end", "reason", "boxes": [[t, x, y, w, h]] }` to the step's `redact`).
+   entry `{ "id": "a1", "start", "end", "reason", "boxes": [[t, x, y, w, h]] }` to the step's `redact`; it's
+   blurred, or a flat box with `"style": "solid"`).
 4. `npx tsx scripts/recording.ts emit --step <id> [--beat <scene id>] [--duration <seconds>]` prints the scene's
    markup: paste it as the scene and change only its label and callout text. Never write camera, cursor or click
    JSON by hand.

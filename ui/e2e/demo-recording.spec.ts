@@ -50,6 +50,8 @@ test('pick a recording, hide something, trim, and make the demo', async ({ page 
   await page.getByRole('button', { name: 'Delete area 2' }).click()
   await expect(page.getByTestId('hidden-box')).toHaveCount(1)
   await page.getByLabel('Area 1 to').fill('40')
+  // Blurred by default; this one solid.
+  await page.getByRole('radiogroup', { name: 'Area 1 style' }).getByText('Solid').click()
 
   // Trim the start by 5 s with the keyboard: the length follows (90 s used -> 36 s).
   await page.getByRole('slider', { name: 'Start' }).focus()
@@ -72,7 +74,7 @@ test('pick a recording, hide something, trim, and make the demo', async ({ page 
   expect(body?.recording.trim).toEqual([5, 95])
   expect(body?.recording.redact).toHaveLength(1)
   const box = body?.recording.redact?.[0]
-  expect(box).toMatchObject({ start: 0, end: 40 })
+  expect(box).toMatchObject({ start: 0, end: 40, style: 'solid' })
   // Dragged by (0.2, 0.1) from (0.1, 0.1).
   expect(box?.box[0]).toBeCloseTo(0.3, 1)
   expect(box?.box[1]).toBeCloseTo(0.2, 1)

@@ -16,7 +16,7 @@
 //      or not); A private, B not; a summary with steps; the Hidden list (A: the setup box and every trace entry, each
 //      with its source); captions; the bundle (through the preview link): index.html has recording scenes,
 //      assets/recording/redact.js holds exactly the trace and setup entries, plan.json and analysis.json hold no
-//      clicked-element names; a frame of A's first recording scene has a flat grey patch where the box is (weak).
+//      clicked-element names; a frame of A's first recording scene is smooth (blurred) where the box is (weak).
 //   5. Credits: each run's usage.totalCreditsCost and the total.
 //   6. Cleanup: both demos and both uploads are deleted, even on failure, unless --keep.
 import { spawnSync } from 'node:child_process'
@@ -221,7 +221,7 @@ async function checkDemo(name: string, v: Video, trace: Trace | null) {
   return ver.usage?.totalCreditsCost ?? perDemo
 }
 
-/** Weak: a frame early in A's first recording scene has a flat grey patch where the setup box is. */
+/** Weak: a frame early in A's first recording scene is smooth (blurred, no sharp detail) where the setup box is. */
 async function boxFrame(v: Video) {
   const res = await fetch(`${base}/api/v1/videos/${v.id}/versions/${String(v.versions[0]?.n)}/video`, {
     headers: { authorization: `Bearer ${key}` },
@@ -232,27 +232,20 @@ async function boxFrame(v: Video) {
   // The intro is about 3 s; the window is inset 6% (wallpaper).
   const x = Math.round(1920 * (0.06 + 0.88 * (BOX[0] + BOX[2] / 2)))
   const y = Math.round(1080 * (0.06 + 0.88 * (BOX[1] + BOX[3] / 2)))
+  // A 24x24 grey crop at the box's centre: blurred, its pixels barely differ (sharp UI text swings by 100+).
   const r = spawnSync('ffmpeg', [
-    '-loglevel',
-    'error',
-    '-ss',
-    '3.5',
-    '-i',
-    mp4,
-    '-frames:v',
-    '1',
-    '-vf',
-    `crop=8:8:${String(x - 4)}:${String(y - 4)},scale=1:1`,
-    '-f',
-    'rawvideo',
-    '-pix_fmt',
-    'rgb24',
-    '-',
+    ...['-loglevel', 'error', '-ss', '3.5', '-i', mp4, '-frames:v', '1'],
+    ...['-vf', `crop=24:24:${String(x - 12)}:${String(y - 12)}`, '-f', 'rawvideo', '-pix_fmt', 'gray', '-'],
   ])
-  const [red, green, blue] = [...(r.stdout as Buffer)]
-  const grey =
-    red !== undefined && Math.max(red, green ?? 0, blue ?? 0) - Math.min(red, green ?? 0, blue ?? 0) < 30
-  log('box_frame', { weak: true, at: [x, y], rgb: [red, green, blue], grey })
+  const px = [...(r.stdout as Buffer)]
+  const mean = px.reduce((a, b) => a + b, 0) / Math.max(1, px.length)
+  const sd = Math.sqrt(px.reduce((a, b) => a + (b - mean) ** 2, 0) / Math.max(1, px.length))
+  log('box_frame', {
+    weak: true,
+    at: [x, y],
+    sd: Math.round(sd * 10) / 10,
+    blurred: px.length > 0 && sd < 20,
+  })
 }
 
 async function main() {

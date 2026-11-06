@@ -714,6 +714,10 @@ export const RecordingInputSchema = z
               z.number().min(0).max(1),
             ])
             .describe('[x, y, width, height] as fractions of the frame.'),
+          style: z
+            .enum(['blur', 'solid'])
+            .optional()
+            .describe('blur (the default): a heavy blur of the picture under the box; solid: a flat box.'),
         }),
       )
       .max(50)
@@ -1496,6 +1500,7 @@ const EditOpSchema = z.discriminatedUnion('op', [
             start: z.number().min(0),
             end: z.number().min(0),
             reason: z.string().max(60).optional(),
+            style: z.enum(['blur', 'solid']).optional(),
             boxes: z.array(z.array(z.number()).length(5)).min(1).max(600),
           }),
         )

@@ -191,6 +191,14 @@ describe('recording.ts check', () => {
       expect(check(r.root).code).toBe(0)
     })
 
+  it('a locked box may switch between blur and solid (how it looks, not whether it hides)', () => {
+    const r = runRoot()
+    redact(r, (e) => e.map((x) => ({ ...x, style: 'solid' })))
+    const res = check(r.root)
+    console.log(JSON.stringify({ test: 'recording-check', case: 'style change', lines: res.lines }))
+    expect(res.code).toBe(0)
+  })
+
   it('holds: refused without a still or without a voice line or retime; the camera stays inside out', () => {
     const r = runRoot()
     // Turn step-1 (0-10 s in a 10 s scene) into a held slot: 0.5x over 20 s needs a 25 s scene.

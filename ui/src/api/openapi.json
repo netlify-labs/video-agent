@@ -2236,6 +2236,14 @@
                     }
                   ],
                   "description": "[x, y, width, height] as fractions of the frame."
+                },
+                "style": {
+                  "type": "string",
+                  "enum": [
+                    "blur",
+                    "solid"
+                  ],
+                  "description": "blur (the default): a heavy blur of the picture under the box; solid: a flat box."
                 }
               },
               "required": [
@@ -5446,6 +5454,13 @@
                             "type": "string",
                             "maxLength": 60
                           },
+                          "style": {
+                            "type": "string",
+                            "enum": [
+                              "blur",
+                              "solid"
+                            ]
+                          },
                           "boxes": {
                             "type": "array",
                             "items": {
@@ -6464,6 +6479,13 @@
                           "reason": {
                             "type": "string",
                             "maxLength": 60
+                          },
+                          "style": {
+                            "type": "string",
+                            "enum": [
+                              "blur",
+                              "solid"
+                            ]
                           },
                           "boxes": {
                             "type": "array",
