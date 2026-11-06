@@ -1,12 +1,14 @@
 // The CLI's half of the render broker (scripts/lib/render-broker.ts; docs/spikes.md C2): render-job, inside the agent's
 // sandbox, asks for the render with .render/<attempt>/render-request.json, and this renders video.mp4 with the
-// workspace's pinned hyperframes, outside the sandbox, so the agent's shell never needs the loopback.
-import { spawn } from 'node:child_process'
+// workspace's pinned hyperframes, outside the sandbox, so the agent's shell never needs the loopback. The page it renders
+// goes through the render guard (render-guard.ts): no requests to this machine or its network but the render's own.
+import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { REQUEST, RESULT, PROGRESS, writeJson } from '../../../../scripts/lib/render-broker.js'
 import { RenderProgressReporter } from '../../../../scripts/lib/render-progress.js'
 import { agentEnv } from './agent.js'
+import { startRenderGuard, writeChromeWrapper, type Guard } from './render-guard.js'
 import type { Log } from './workspace.js'
 
 /** Renders one request when it arrives; resolves when the run is over (signal) or the render is done. */
@@ -42,27 +44,7 @@ export function serveRenders(o: {
         0,
         1,
       )
-      let tail = ''
-      const child = spawn(
-        'npx',
-        ['hyperframes', 'render', '--quality', quality, '--output', join(o.renderDir, 'video.mp4')],
-        { cwd: join(o.ws, 'video'), env: agentEnv(o.env), stdio: ['ignore', 'pipe', 'pipe'] },
-      )
-      const onChunk = (b: Buffer) => {
-        const s = b.toString('utf8')
-        tail = (tail + s).slice(-4000)
-        progress.line(s)
-      }
-      child.stdout.on('data', onChunk)
-      child.stderr.on('data', onChunk)
-      const stop = () => child.kill('SIGTERM')
-      o.signal.addEventListener('abort', stop, { once: true })
-      child.on('close', (code) => {
-        o.signal.removeEventListener('abort', stop)
-        progress.end()
-        const ok = code === 0 && existsSync(join(o.renderDir, 'video.mp4'))
-        writeJson(join(o.renderDir, RESULT), ok ? { ok } : { ok, error: tail.trim().slice(-1500) })
-        o.log('local.render_done', { ok, code, ms: Date.now() - t })
+      void guarded(o, quality, progress, t).then(() => {
         clearInterval(timer)
         resolve()
       })
@@ -78,4 +60,77 @@ export function serveRenders(o: {
       { once: true },
     )
   })
+}
+
+/** The real Chrome hyperframes would use, from its own `browser path`. */
+function chromePath(ws: string, env: NodeJS.ProcessEnv): string | null {
+  const r = spawnSync('npx', ['hyperframes', 'browser', 'path'], {
+    cwd: join(ws, 'video'),
+    env: agentEnv(env),
+    encoding: 'utf8',
+    timeout: 5 * 60_000,
+  })
+  const path = r.stdout.trim().split('\n').pop() ?? ''
+  return r.status === 0 && path.startsWith('/') && existsSync(path) ? path : null
+}
+
+/** One render through the guard; fails closed when the guard can't be set up. */
+async function guarded(
+  o: { renderDir: string; ws: string; env: NodeJS.ProcessEnv; log: Log; signal: AbortSignal },
+  quality: string,
+  progress: RenderProgressReporter,
+  t: number,
+): Promise<void> {
+  const fail = (error: string) => {
+    writeJson(join(o.renderDir, RESULT), { ok: false, error })
+    o.log('local.render_done', { ok: false, error, ms: Date.now() - t })
+  }
+  const chrome = chromePath(o.ws, o.env)
+  if (!chrome) return fail("Couldn't find hyperframes' Chrome to render with (npx hyperframes browser path).")
+  let pgid: number | null = null
+  let guard: Guard
+  try {
+    guard = await startRenderGuard({ getPgid: () => pgid, log: o.log })
+  } catch (e) {
+    return fail(`The render guard didn't start: ${e instanceof Error ? e.message : String(e)}`)
+  }
+  const wrapper = join(o.ws, '.va', 'chrome-guarded')
+  writeChromeWrapper(wrapper, chrome, guard.port)
+  let tail = ''
+  // Its own process group: the guard allows only the loopback ports this group listens on (the asset server).
+  const child = spawn(
+    'npx',
+    ['hyperframes', 'render', '--quality', quality, '--output', join(o.renderDir, 'video.mp4')],
+    {
+      cwd: join(o.ws, 'video'),
+      env: { ...agentEnv(o.env), HYPERFRAMES_BROWSER_PATH: wrapper },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      detached: true,
+    },
+  )
+  pgid = child.pid ?? null
+  const onChunk = (b: Buffer) => {
+    const s = b.toString('utf8')
+    tail = (tail + s).slice(-4000)
+    progress.line(s)
+  }
+  child.stdout.on('data', onChunk)
+  child.stderr.on('data', onChunk)
+  const stop = () => {
+    if (child.pid !== undefined) {
+      try {
+        process.kill(-child.pid, 'SIGTERM')
+      } catch {
+        // Already gone.
+      }
+    }
+  }
+  o.signal.addEventListener('abort', stop, { once: true })
+  const code = await new Promise<number | null>((r) => child.on('close', r))
+  o.signal.removeEventListener('abort', stop)
+  progress.end()
+  await guard.close()
+  const ok = code === 0 && existsSync(join(o.renderDir, 'video.mp4'))
+  writeJson(join(o.renderDir, RESULT), ok ? { ok } : { ok, error: tail.trim().slice(-1500) })
+  o.log('local.render_done', { ok, code, blocked: guard.blocked.length, ms: Date.now() - t })
 }
