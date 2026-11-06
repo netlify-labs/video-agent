@@ -26,23 +26,48 @@ function run(cmd: string, args: string[]): Promise<void> {
   })
 }
 
-/** Writes the recording; returns its length in seconds (first frame to `stopTs`). */
+/**
+ * The frames on the output's frame grid: one entry per run of slots that show the same frame, with its length in
+ * slots. The concat demuxer stretches a frame shorter than one output frame, so a burst of screencast frames (typing)
+ * made the file longer than its trace; on the grid, every duration is a whole number of frames and the total is exact.
+ */
+export function onGrid(
+  frames: CapturedFrame[],
+  fps: number,
+  stopTs: number,
+): { file: string; slots: number }[] {
+  const first = frames[0]
+  if (!first) return []
+  const total = Math.max(
+    1,
+    Math.round((Math.max(stopTs, (frames.at(-1) as CapturedFrame).ts + 1 / fps) - first.ts) * fps),
+  )
+  const runs: { file: string; slots: number }[] = []
+  let i = 0
+  for (let k = 0; k < total; k++) {
+    // The latest frame shown by the middle of slot k.
+    const t = first.ts + (k + 0.5) / fps
+    while (i + 1 < frames.length && (frames[i + 1] as CapturedFrame).ts <= t) i++
+    const file = (frames[i] as CapturedFrame).file
+    const last = runs.at(-1)
+    if (last?.file === file) last.slots++
+    else runs.push({ file, slots: 1 })
+  }
+  return runs
+}
+
+/** Writes the recording; returns its length in seconds (a whole number of frames from the first frame to `stopTs`). */
 export async function assemble(
   frames: CapturedFrame[],
   opts: { out: string; fps: number; workDir: string; stopTs: number },
 ): Promise<number> {
-  const first = frames[0]
-  if (!first) throw new Error('The recording has no frames: nothing changed on the page.')
-  const lines: string[] = []
-  frames.forEach((f, i) => {
-    const next = frames[i + 1]?.ts ?? Math.max(opts.stopTs, f.ts + 1 / opts.fps)
-    lines.push(
-      `file '${f.file.replace(/'/g, "'\\''")}'`,
-      `duration ${Math.max(next - f.ts, 0.001).toFixed(6)}`,
-    )
-  })
+  if (!frames[0]) throw new Error('The recording has no frames: nothing changed on the page.')
+  const runs = onGrid(frames, opts.fps, opts.stopTs)
+  const total = runs.reduce((n, r) => n + r.slots, 0)
+  const quote = (f: string) => `file '${f.replace(/'/g, "'\\''")}'`
+  const lines = runs.flatMap((r) => [quote(r.file), `duration ${(r.slots / opts.fps).toFixed(6)}`])
   // The concat demuxer ignores the last duration unless the last file is listed again.
-  lines.push(`file '${(frames.at(-1) as CapturedFrame).file.replace(/'/g, "'\\''")}'`)
+  lines.push(quote((runs.at(-1) as { file: string }).file))
   const list = join(opts.workDir, 'frames.txt')
   writeFileSync(list, `${lines.join('\n')}\n`)
   await run('ffmpeg', [
@@ -51,9 +76,10 @@ export async function assemble(
       '-vf',
       `fps=${String(opts.fps)},scale='min(${String(MAX_WIDTH)},iw)':-2,scale=trunc(iw/2)*2:trunc(ih/2)*2`,
     ],
+    ...['-frames:v', String(total)],
     ...['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p'],
     ...['-g', String(opts.fps), '-keyint_min', String(opts.fps), '-sc_threshold', '0'],
     ...['-movflags', '+faststart', '-an', opts.out],
   ])
-  return Math.max(opts.stopTs, (frames.at(-1) as CapturedFrame).ts + 1 / opts.fps) - first.ts
+  return total / opts.fps
 }

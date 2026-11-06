@@ -105,6 +105,18 @@ async function recordings(): Promise<{ a: { file: string; trace: Trace }; b: { f
 /** Step 1: the whole pipeline locally on both recordings (demo-local's demo()); throws on any failed check. */
 async function localPipeline(rec: Awaited<ReturnType<typeof recordings>>) {
   process.argv.push('--out', join(work, 'local'))
+  // The server's rule for a trace (src/domain/media-trace.ts): the recording's length within 0.5 s of the trace's.
+  const probe = spawnSync(
+    'ffprobe',
+    ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', rec.a.file],
+    { encoding: 'utf8' },
+  )
+  const seconds = Number(probe.stdout.trim())
+  log('trace_length', { file: seconds, trace: rec.a.trace.frame.duration })
+  if (!(Math.abs(seconds - rec.a.trace.frame.duration) <= 0.5))
+    throw new GateError(
+      `Recording A is ${String(seconds)} s but its trace says ${String(rec.a.trace.frame.duration)} s: the server would refuse the trace.`,
+    )
   const { demo } = await import('./demo-local.js')
   await demo({ name: 'lt1-a', mediaId: 'med_lt1recaaaa', file: rec.a.file, trace: rec.a.trace, boxes: [] })
   await demo({ name: 'lt1-b', mediaId: 'med_lt1recbbbb', file: rec.b.file, trace: null, boxes: [] })
