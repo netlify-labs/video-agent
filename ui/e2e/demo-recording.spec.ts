@@ -120,3 +120,23 @@ test("without screen sharing, Record says this browser can't", async ({ page }) 
   await page.getByRole('button', { name: 'Record your screen' }).click()
   await expect(page.getByText("This browser can't record the screen here")).toBeVisible()
 })
+
+test('the demo look picker leaves out looks that hide recordings; such a default is None and sent as null', async ({
+  page,
+}) => {
+  // retro-crt has recording: false.
+  await page.addInitScript(() => localStorage.setItem('mockLookDefault', 'retro-crt'))
+  await page.goto('/new/demo?media=med_screen_plain')
+  await page.getByRole('button', { name: 'Look: None' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Pick a look' })
+  await expect(dialog.locator('.va-look-pick[data-look="clean"]')).toBeVisible()
+  await expect(dialog.locator('.va-look-pick[data-look="retro-crt"]')).toHaveCount(0)
+  await page.keyboard.press('Escape')
+  await page
+    .getByLabel('What should the demo show?')
+    .fill('A short demo of the settings page for new admins.')
+  await page.getByRole('button', { name: 'Make it' }).click()
+  await expect(page).toHaveURL(/\/videos\//)
+  const [body] = (await creates(page)) as { look?: string | null }[]
+  expect(body?.look).toBeNull()
+})

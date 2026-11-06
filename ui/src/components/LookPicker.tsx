@@ -213,10 +213,13 @@ export function LookControl(props: {
   disabled?: boolean
   label?: string
   hint?: string | undefined
+  /** Only these of the catalog's looks (a demo's picker: looksForDemo). */
+  only?: (looks: readonly Look[]) => Look[]
 }) {
   const data = useLooks()
   const [open, setOpen] = useState(false)
-  if (!data || pickable(data.looks).length === 0) return null
+  const looks = data ? (props.only ? props.only(data.looks) : data.looks) : []
+  if (!data || pickable(looks).length === 0) return null
   const inherited = props.value === undefined && props.inherit !== undefined
   const catalogLook = (id: string | undefined) => data.looks.find((l) => l.id === id) ?? null
   const shown = inherited
@@ -264,7 +267,7 @@ export function LookControl(props: {
         centered
       >
         <LookPicker
-          looks={data.looks}
+          looks={looks}
           value={shown?.id ?? null}
           template={props.template}
           onPick={(id) => {

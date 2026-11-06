@@ -25,7 +25,8 @@ import { $api, errorMessage, newIdempotencyKey } from '../../api/client'
 import type { paths } from '../../api/schema'
 import { sharpZoomMax, ZOOM_MIN } from '../../../../src/lib/recording'
 import { defaultLength, fitBox, MIN_TRIM, recordingInput, type SetupBox } from '../../lib/demo-setup'
-import { LookControl } from '../LookPicker'
+import { defaultLook, looksForDemo } from '../../lib/looks'
+import { LookControl, useLooks } from '../LookPicker'
 import { SoundControl, type Sound } from '../SoundControl'
 import { VOICE_OFF, VoiceoverControl, voiceInput, type VoiceState } from '../VoiceoverControl'
 
@@ -186,6 +187,12 @@ export function DemoSetup(props: { media: Media; onBack: () => void }) {
   const [sound, setSound] = useState<Sound>('silent')
   const [voice, setVoice] = useState<VoiceState>(VOICE_OFF)
   const [look, setLook] = useState<string | null | undefined>(undefined)
+  // The admin default only when a demo can use it (HyperFrames, recordings shown); else None, sent as null so the
+  // server doesn't apply it either.
+  const looks = useLooks()
+  const def = defaultLook(looks)
+  const unusableDefault = !!def && !looksForDemo(looks?.looks ?? []).some((l) => l.id === def.id)
+  const chosenLook = look === undefined && unusableDefault ? null : look
   const [quick, setQuick] = useState(false)
 
   const create = $api.useMutation('post', '/api/v1/videos', {
@@ -215,7 +222,7 @@ export function DemoSetup(props: { media: Media; onBack: () => void }) {
       sound,
       recording,
       ...(quick ? { agent: false } : voice.enabled ? { voiceover: voiceInput(voice) } : {}),
-      ...(look !== undefined ? { look } : {}),
+      ...(chosenLook !== undefined ? { look: chosenLook } : {}),
     }
     create.mutate({ body, params: { header: { 'idempotency-key': key } } })
   }
@@ -402,7 +409,7 @@ export function DemoSetup(props: { media: Media; onBack: () => void }) {
         </Group>
         <SoundControl value={sound} media={[]} onChange={setSound} />
         {quick ? null : <VoiceoverControl value={voice} onChange={setVoice} />}
-        <LookControl value={look} onChange={setLook} />
+        <LookControl value={chosenLook} onChange={setLook} only={looksForDemo} />
         <Checkbox
           label="Quick demo"
           description="A scene per step with a stock intro and outro, made without the agent writing it. No voice-over."
