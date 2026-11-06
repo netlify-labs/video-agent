@@ -20,7 +20,7 @@ import {
 } from './engine-prompt.js'
 import type { EngineId } from './engines.js'
 
-export const PROMPT_TEMPLATE_VERSION = 22
+export const PROMPT_TEMPLATE_VERSION = 23
 
 /**
  * Where render-job puts a run's outputs: Blobs (the service's runs), a signed URL, or local, where a laptop run keeps
