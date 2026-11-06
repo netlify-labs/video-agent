@@ -13,7 +13,7 @@ test('the docs pages are grouped, and each group links to its pages', async ({ p
   const groups = {
     Build: ['REST API', 'TypeScript SDK'],
     'AI tools': ['MCP for AI tools', 'Agent skills'],
-    Guides: ['Publish destinations'],
+    Guides: ['Publish destinations', 'Looks'],
   }
   for (const [group, links] of Object.entries(groups)) {
     const g = nav.getByRole('group', { name: group })
