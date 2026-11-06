@@ -19,6 +19,8 @@ interface Base<I> {
   title: string
   description: string
   input: InputSchema
+  /** Checks the schema can't express (a look that exists, a scene on the page); run before any confirm. */
+  check?: (input: I) => ToolFailure | null
   /** The work, with an input that fits `input`. */
   run: (input: I, signal: AbortSignal) => Promise<ToolResult | ToolFailure> | ToolResult | ToolFailure
 }
@@ -54,6 +56,8 @@ export async function executeTool<I>(tool: WebMcpTool<I>, input: unknown, signal
   const problems = inputProblems(tool.input, input ?? {})
   if (problems.length) return invalidInput(problems)
   const valid = (input ?? {}) as I
+  const refused = tool.check?.(valid)
+  if (refused) return refused
   if (tool.kind === 'consequential') {
     const yes = await confirmAction(tool.confirm(valid), signal)
     if (!yes)

@@ -26,6 +26,8 @@ import { $api, errorMessage, newIdempotencyKey, useCanCreate, type Version, type
 import { PageHeader, Status, VersionImage, relativeTime } from '../components/bits'
 import { MediaChips, type Media } from '../components/MediaPicker'
 import { LookControl, shownLook, useLooks } from '../components/LookPicker'
+import { pickable } from '../lib/looks'
+import { useNewVideoTools } from '../webmcp/newVideoTools'
 import {
   capabilitiesOf,
   engineName,
@@ -249,6 +251,54 @@ export function NewVideoPage() {
       params: { header: { 'idempotency-key': key } },
     })
   }
+
+  // WebMCP (va-qago): an agent fills the same form, and creates through the same request as Create it now.
+  const lookIds = pickable(useLooks()?.looks ?? []).map((l) => l.id)
+  useNewVideoTools({
+    canCreate: useCanCreate(),
+    looks: lookIds,
+    fill: (f) => {
+      setPrompt(f.prompt)
+      if (f.aspect) {
+        setShape(f.aspect)
+        setShapeTouched(true)
+      }
+      setLengthMode(f.duration_sec ? 'set' : 'auto')
+      if (f.duration_sec) setSeconds(f.duration_sec)
+      setTitle(f.title ?? '')
+      if (f.look !== undefined) setLook(f.look)
+      setSound(f.sound ?? 'silent')
+      setSoundTouched(f.sound !== undefined)
+      setVoice(
+        f.voiceover ? { enabled: true, voice: f.voice ?? '', speed: 1, script: f.script ?? [] } : VOICE_OFF,
+      )
+    },
+    create: async (f) => {
+      const v = await create.mutateAsync({
+        body: {
+          prompt: f.prompt,
+          aspect: f.aspect ?? '16:9',
+          ...(f.duration_sec ? { durationSec: f.duration_sec } : {}),
+          ...(f.title?.trim() ? { title: f.title.trim() } : {}),
+          ...(media.length ? { mediaIds: media.map((m) => m.id) } : {}),
+          sound: f.sound ?? 'silent',
+          ...(f.voiceover
+            ? {
+                voiceover: voiceInput({
+                  enabled: true,
+                  voice: f.voice ?? '',
+                  speed: 1,
+                  script: f.script ?? [],
+                }),
+              }
+            : {}),
+          ...(f.look !== undefined ? { look: f.look } : {}),
+        },
+        params: { header: { 'idempotency-key': key } },
+      })
+      return v.id
+    },
+  })
 
   const picker = (
     <RemixSourcePicker

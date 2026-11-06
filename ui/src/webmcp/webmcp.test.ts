@@ -22,7 +22,9 @@ function fakeModelContext() {
       const t = tools.get(name)
       if (!t) throw new Error(`no tool ${name}`)
       return JSON.parse(
-        JSON.stringify(await t.execute(input as object, { signal: new AbortController().signal })),
+        JSON.stringify(
+          await t.execute(input as Record<string, unknown>, { signal: new AbortController().signal }),
+        ),
       )
     },
   }

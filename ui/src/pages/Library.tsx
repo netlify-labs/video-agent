@@ -33,6 +33,7 @@ import {
 import { FavoriteStar } from '../components/FavoriteButton'
 import { RemixDialog, latestReady, useCanRemix } from '../components/RemixDialog'
 import { lazyPage, newVideoRoute, videoRoute } from '../routes'
+import { useLibraryTools } from '../webmcp/libraryTools'
 
 // Shown only in an empty library, so the form's code loads only then.
 const QuickCreate = lazyPage(newVideoRoute, (m) => m.QuickCreate)
@@ -275,6 +276,8 @@ export function LibraryPage() {
   const [published, setPublished] = useState<string | null>(null)
   const search = useRef<HTMLInputElement>(null)
   useHotkeys([['/', () => search.current?.focus()]])
+  // WebMCP (va-qago): an agent searches and filters through the same controls.
+  useLibraryTools({ setQuery: setQ, setOwner, setStatus, setPublished })
 
   const query = {
     owner: owner === 'me' ? ('me' as const) : ('all' as const),
