@@ -15,6 +15,7 @@ import { claimMediaCache, registerMediaCache } from './sw/register'
 // and the editor's contract code are large).
 const VideoPage = routes.lazyPage(routes.videoRoute, (m) => m.VideoPage)
 const NewVideoPage = routes.lazyPage(routes.newVideoRoute, (m) => m.NewVideoPage)
+const NewDemoPage = routes.lazyPage(routes.newDemoRoute, (m) => m.NewDemoPage)
 const EditPage = routes.lazyPage(routes.editRoute, (m) => m.EditPage)
 const MediaPage = routes.lazyPage(routes.mediaRoute, (m) => m.MediaPage)
 const KeysPage = routes.lazyPage(routes.keysRoute, (m) => m.KeysPage)
@@ -107,6 +108,14 @@ export function App() {
           element={
             <Page>
               <NewVideoPage />
+            </Page>
+          }
+        />
+        <Route
+          path="/new/demo"
+          element={
+            <Page>
+              <NewDemoPage />
             </Page>
           }
         />

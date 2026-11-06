@@ -22,6 +22,7 @@ function route<M>(importer: () => Promise<M>): RouteModule<M> {
 
 export const videoRoute = route(() => import('./pages/Video'))
 export const newVideoRoute = route(() => import('./pages/NewVideo'))
+export const newDemoRoute = route(() => import('./pages/NewDemo'))
 export const editRoute = route(() => import('./pages/Edit'))
 export const mediaRoute = route(() => import('./pages/Media'))
 export const keysRoute = route(() => import('./pages/Keys'))
@@ -55,6 +56,7 @@ export function lazyPage<M, P extends object>(r: RouteModule<M>, pick: (m: M) =>
 
 const BY_PATH: Record<string, RouteModule<unknown>> = {
   '/new': newVideoRoute,
+  '/new/demo': newDemoRoute,
   '/media': mediaRoute,
   '/keys': keysRoute,
   '/admin': adminRoute,
