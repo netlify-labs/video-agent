@@ -14,12 +14,18 @@ import { repoRoot } from '../scripts/lib/run-tools.js'
 function renderJob(args: (ws: string) => string[]) {
   const ws = mkdtempSync(join(tmpdir(), 'va-ws-'))
   mkdirSync(join(ws, 'video'))
-  const r = spawnSync('npx', ['tsx', join(repoRoot, 'scripts/render-job.ts'), ...args(ws)], {
-    cwd: repoRoot,
-    encoding: 'utf8',
-    env: { ...process.env, VA_REPO_ROOT: ws, VA_NETLIFY_CLI: 'off' },
-    timeout: 60_000,
-  })
+  // node with tsx's loader, not `npx tsx`: npx's own start-up was most of each spawn's time.
+  const tsx = join(repoRoot, 'node_modules', 'tsx', 'dist', 'loader.mjs')
+  const r = spawnSync(
+    process.execPath,
+    ['--import', tsx, join(repoRoot, 'scripts/render-job.ts'), ...args(ws)],
+    {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      env: { ...process.env, VA_REPO_ROOT: ws, VA_NETLIFY_CLI: 'off' },
+      timeout: 60_000,
+    },
+  )
   return { ws, code: r.status, err: r.stderr }
 }
 const done = (ws: string, attempt = 'att_1') => pathToFileURL(join(ws, '.render', attempt, 'done')).href
@@ -55,7 +61,9 @@ describe('render-job --upload local', () => {
     expect(r.err).toContain('A file: callback goes with --upload local.')
   })
 
-  it('needs no token with a file: callback, and gets past the argument checks', () => {
+  // Past the argument checks render-job runs the engine's `npx hyperframes --version` before it finds the empty
+  // composition: genuinely a few seconds on a busy CI runner (5 s timed out on 49c1eb0).
+  it('needs no token with a file: callback, and gets past the argument checks', { timeout: 30_000 }, () => {
     const r = renderJob((ws) => [
       '--job',
       'vid_1',
