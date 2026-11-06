@@ -11,6 +11,8 @@ Commands:
   redo             Redo one or more scenes only. (needs a server with scoped_revision)
   scenes           List a version's scenes.
   remix            Make a new video from another one. (needs a server with remix)
+  looks            List the Looks. (needs a server with looks)
+  restyle          Restyle a video with another Look. (needs a server with looks)
   get              Show a video.
   list             List videos.
   wait             Follow a run until the video is ready.

@@ -107,7 +107,7 @@ video-agent create "A 20-second launch video for webhooks" --aspect 16:9 --wait 
 
 - `--aspect <value>`: 16:9, 9:16, 1:1 or 4:5.
 - `--title <value>`: The video title.
-- `--look <value>`: A Look id.
+- `--look <value>`: A Look id (video-agent looks), or none.
 - `--engine <value>`: A render engine id.
 - `--plan`: Ask the planning questions and stop (needs planning on the server).
 - `--plan-id <value>`: With --answers: answer a plan and make the video from its brief.
@@ -135,7 +135,7 @@ video-agent revise vid_01… "Make the end card orange" --wait
 - `--from-version <n>`: The version (default: the latest).
 - `--comments <value>`: Comment ids to address, comma-separated.
 - `--scene <value>` (repeatable): Only redo these scenes (id or label; repeatable).
-- `--look <value>`: Restyle with this Look.
+- `--look <value>`: Restyle with this Look, or none for no look.
 - `--duration <n>`: Target length in seconds.
 - `--sound <value>`: silent, music or music_sfx.
 - `--voice <value>`: A voice-over in this voice (e.g. af_heart), or off.
@@ -185,7 +185,7 @@ video-agent remix vid_01… "Same format, about edge functions"
 - `--from-version <n>`: The version (default: the latest).
 - `--aspect <value>`: 16:9, 9:16, 1:1 or 4:5 (default: the source's).
 - `--language <value>`: The language (default: the source's).
-- `--look <value>`: A Look id.
+- `--look <value>`: A Look id, or none (default: the source's).
 - `--duration <n>`: Target length in seconds.
 - `--sound <value>`: silent, music or music_sfx.
 - `--voice <value>`: A voice-over in this voice (e.g. af_heart), or off.
@@ -194,6 +194,28 @@ video-agent remix vid_01… "Same format, about edge functions"
 - `--idempotency-key <value>`: Retrying with the same key never makes two.
 - `--prompt-file <value>`: Read the prompt from a file, or '-' for stdin.
 - `--out <value>`: Follow it, then download the video, poster and captions into this folder.
+- `--wait`: Follow the run until the video is ready.
+- `--timeout <value>`: With --wait: give up after this long: seconds, or 30m, 2h (exit 6).
+
+### looks
+
+List the Looks. Needs the server feature "looks" (see whoami).
+
+```sh
+video-agent looks
+video-agent looks
+video-agent looks --json
+```
+
+### restyle
+
+Restyle a video with another Look. Needs the server feature "looks" (see whoami).
+
+```sh
+video-agent restyle <video> <look>
+video-agent restyle vid_01… kinetic --wait
+```
+
 - `--wait`: Follow the run until the video is ready.
 - `--timeout <value>`: With --wait: give up after this long: seconds, or 30m, 2h (exit 6).
 

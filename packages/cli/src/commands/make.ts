@@ -64,6 +64,13 @@ async function mediaIds(ctx: Ctx): Promise<string[] | undefined> {
   return ids
 }
 
+/** --look: a Look id, or none for no look (the API's null); left out, the server decides (default, or kept). */
+export function lookOf(ctx: Ctx): { look?: string | null } {
+  const v = str(ctx, 'look')
+  if (v === undefined) return {}
+  return { look: v === 'none' ? null : v }
+}
+
 /** The fields create, revise and remix share. */
 async function common(ctx: Ctx) {
   const voice = str(ctx, 'voice')
@@ -74,13 +81,14 @@ async function common(ctx: Ctx) {
     ...(voice ? { voiceover: voice === 'off' ? { enabled: false } : { enabled: true, voice } } : {}),
     ...(media ? { mediaIds: media } : {}),
     ...opt('webhookUrl', str(ctx, 'webhook-url')),
+    ...lookOf(ctx),
   }
 }
 
 const opts = (ctx: Ctx) => opt('idempotencyKey', str(ctx, 'idempotency-key'))
 
 /** --wait and --out: follow the new version, then download its video, poster and captions. */
-async function follow(ctx: Ctx, video: Video, n: number) {
+export async function follow(ctx: Ctx, video: Video, n: number) {
   const out = str(ctx, 'out')
   if (!ctx.flags.wait && !out)
     return {

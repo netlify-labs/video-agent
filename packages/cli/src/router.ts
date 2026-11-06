@@ -9,6 +9,7 @@ import { ACCOUNT_COMMANDS } from './commands/account.js'
 import { LOCAL_COMMANDS } from './commands/local.js'
 import { BRIEF_COMMANDS } from './commands/brief.js'
 import { LIBRARY_COMMANDS } from './commands/library.js'
+import { LOOK_COMMANDS } from './commands/looks.js'
 import { MAKE_COMMANDS } from './commands/make.js'
 import { READ_COMMANDS } from './commands/read.js'
 import { SCENE_COMMANDS } from './commands/scenes.js'
@@ -65,6 +66,7 @@ export const HANDLERS: Record<string, Handler> = {
   ...REVIEW_COMMANDS,
   ...LIBRARY_COMMANDS,
   ...MAKE_COMMANDS,
+  ...LOOK_COMMANDS,
   ...SCENE_COMMANDS,
   ...ACCOUNT_COMMANDS,
   ...LOCAL_COMMANDS,

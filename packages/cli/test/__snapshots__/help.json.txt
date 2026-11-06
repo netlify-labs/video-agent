@@ -127,7 +127,7 @@
         },
         "look": {
           "type": "string",
-          "description": "A Look id."
+          "description": "A Look id (video-agent looks), or none."
         },
         "engine": {
           "type": "string",
@@ -233,7 +233,7 @@
         },
         "look": {
           "type": "string",
-          "description": "Restyle with this Look."
+          "description": "Restyle with this Look, or none for no look."
         },
         "duration": {
           "type": "number",
@@ -401,7 +401,7 @@
         },
         "look": {
           "type": "string",
-          "description": "A Look id."
+          "description": "A Look id, or none (default: the source's)."
         },
         "duration": {
           "type": "number",
@@ -452,6 +452,61 @@
         "videos.remix"
       ],
       "feature": "remix",
+      "needsHostedApp": true,
+      "local": false
+    },
+    {
+      "name": "looks",
+      "summary": "List the Looks.",
+      "args": [],
+      "flags": {},
+      "examples": [
+        "video-agent looks",
+        "video-agent looks --json"
+      ],
+      "sdk": [
+        "looks.list"
+      ],
+      "feature": "looks",
+      "needsHostedApp": true,
+      "local": false
+    },
+    {
+      "name": "restyle",
+      "summary": "Restyle a video with another Look.",
+      "args": [
+        {
+          "name": "video",
+          "type": "video",
+          "required": true,
+          "description": "A video id (vid_…), its web address or a share link."
+        },
+        {
+          "name": "look",
+          "type": "string",
+          "required": true,
+          "description": "A Look id, or none."
+        }
+      ],
+      "flags": {
+        "wait": {
+          "type": "boolean",
+          "description": "Follow the run until the video is ready."
+        },
+        "timeout": {
+          "type": "string",
+          "description": "With --wait: give up after this long: seconds, or 30m, 2h (exit 6)."
+        }
+      },
+      "examples": [
+        "video-agent restyle vid_01… kinetic --wait"
+      ],
+      "sdk": [
+        "looks.list",
+        "videos.revise",
+        "videos.wait"
+      ],
+      "feature": "looks",
       "needsHostedApp": true,
       "local": false
     },

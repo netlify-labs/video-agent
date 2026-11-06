@@ -1,6 +1,5 @@
 // /docs/looks (plan 2026-11-04-looks §6): every look in this deployment's catalog, and how to use looks from the API,
-// MCP and the SDK. The CLI section is added with its looks commands (bead va-nifa.5.2), so this page never documents a
-// command that doesn't exist yet.
+// the SDK, the CLI and MCP.
 import { Anchor, Code, Text } from '@mantine/core'
 import { useState } from 'react'
 import { Link } from 'react-router'
@@ -142,6 +141,28 @@ content-type: application/json
                 lang="ts"
                 code={`const { looks } = await va.looks.list()
 await va.videos.create({ prompt: 'A 20-second launch video for org webhooks', look: 'kinetic' })`}
+              />
+            ),
+          },
+          {
+            id: 'cli',
+            title: 'From the command line',
+            description: (
+              <>
+                <Code>video-agent looks</Code> lists them; <Code>--look</Code> on <Code>create</Code>,{' '}
+                <Code>revise</Code> and <Code>remix</Code> picks one (<Code>none</Code> for no look);{' '}
+                <Code>video-agent restyle</Code> makes the next version in another look. With{' '}
+                <Code>video-agent local --look</Code> you can try a look, or a look folder you're writing, on
+                your own machine before it reaches a deployment.
+              </>
+            ),
+            children: (
+              <CodeBlock
+                lang="http"
+                code={`video-agent looks
+video-agent create "A 20-second launch video for org webhooks" --look kinetic --wait
+video-agent restyle vid_01… terminal --wait
+video-agent local --look ./looks/my-look "A 20-second launch video for org webhooks"`}
               />
             ),
           },

@@ -109,12 +109,15 @@ describe('router', () => {
     const b = makeIo()
     expect(await b.run(['version', '--jsno'])).toBe(EXIT.usage)
     expect(b.out.stderr).toContain('Did you mean --json?')
-    const c = makeIo()
-    const notReady = COMMANDS.find((x) => !x.ready)?.name ?? 'none'
-    expect(await c.run(['help', ...notReady.split(' ')])).toBe(EXIT.usage)
-    const d = makeIo()
-    expect(await d.run([...notReady.split(' '), 'vid_1', 'x'])).toBe(EXIT.usage)
-    expect(d.out.stderr).toContain("isn't in this version yet")
+    // A command in the catalog that isn't built yet (none once every bead has landed).
+    const notReady = COMMANDS.find((x) => !x.ready)?.name
+    if (notReady) {
+      const c = makeIo()
+      expect(await c.run(['help', ...notReady.split(' ')])).toBe(EXIT.usage)
+      const d = makeIo()
+      expect(await d.run([...notReady.split(' '), 'vid_1', 'x'])).toBe(EXIT.usage)
+      expect(d.out.stderr).toContain("isn't in this version yet")
+    }
   })
 
   it('version reports the server when one is configured', async () => {
