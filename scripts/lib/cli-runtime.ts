@@ -6,7 +6,8 @@
 //   <out>/lib/engines/*.mjs     render engines and <out>/engine.mjs, when the repo has scripts/engine.ts
 //   <out>/package.json + package-lock.json   hyperframes, tsx, netlify-agent-kit and css-tree at the repo's pins,
 //                               installed per machine with `npm ci`
-//   <out>/template/             video/ (the neutral template), context/ and the root AGENTS.md for each workspace
+//   <out>/template/             video/ (the neutral template), context/, the root AGENTS.md and a package.json with
+//                               netlifyAgent (agent-kit's config) for each workspace
 //   <out>/engines/remotion/     the Remotion template's package.json and lockfile only, when the repo has them
 // Missing optional pieces are skipped, so nothing here waits for the plans that add them.
 import { execFileSync } from 'node:child_process'
@@ -129,6 +130,14 @@ export async function buildRuntime(o: {
   }
   cpSync(join(repo, 'context'), join(template, 'context'), { recursive: true })
   copyFileSync(join(repo, 'AGENTS.md'), join(template, 'AGENTS.md'))
+  // netlify-agent-kit reads its config from the workspace's package.json, as on the runner (C1).
+  const { netlifyAgent } = JSON.parse(readFileSync(join(repo, 'package.json'), 'utf8')) as {
+    netlifyAgent?: unknown
+  }
+  writeFileSync(
+    join(template, 'package.json'),
+    `${JSON.stringify({ name: 'video-agent-local-run', private: true, type: 'module', ...(netlifyAgent ? { netlifyAgent } : {}) }, null, 2)}\n`,
+  )
 
   const remotionDir = join(repo, 'engines', 'remotion', 'template')
   const remotion = existsSync(join(remotionDir, 'package-lock.json'))
