@@ -88,7 +88,7 @@ export async function renderCliMd(): Promise<string> {
     '`video-agent revise <video> "Make the end card orange" --wait`.',
     '',
   ]
-  if (has('brief'))
+  if (has('brief pr'))
     out.push(
       'From a pull request: `video-agent brief pr <url> | video-agent create --prompt-file - --wait`.',
       '',

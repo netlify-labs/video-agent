@@ -29,6 +29,8 @@ Upload screenshots or logos first with `video-agent media upload <file> --captio
 `--media`, or pass the file to `--media` directly and it is uploaded first. A revision changes only what you say:
 `video-agent revise <video> "Make the end card orange" --wait`.
 
+From a pull request: `video-agent brief pr <url> | video-agent create --prompt-file - --wait`.
+
 ## Output and errors
 
 With `--json`, stdout is exactly one JSON object: what the command made or read (a video has `id`,
