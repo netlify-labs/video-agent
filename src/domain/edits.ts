@@ -425,10 +425,40 @@ async function buildRev(
   await deps.blobs.set('bundles', `${prefix}manifest.json`, JSON.stringify(index), {
     contentType: 'application/json',
   })
-  // Only the newest rev is kept.
-  for (const k of await deps.blobs.list('bundles', editPrefix(e.jobId, e.baseN, e.id)))
-    if (!k.startsWith(prefix)) await deps.blobs.delete('bundles', k)
+  await pruneRevs(deps, e, rev)
   return r
+}
+
+/**
+ * The newest rev is kept, and each one it superseded for a preview link's lifetime after that: a save the preview
+ * shows live (a narration take) doesn't reload the frame, which keeps loading its rev's media by range (a recording
+ * scene's video), so deleting that rev at once left those scenes on their first frame (owner, 2026-11-06). A rev's
+ * `gone/r{rev}.{seconds}` marker says when it was superseded; the key itself is the time, so a list is enough.
+ */
+async function pruneRevs(deps: Deps, e: Pick<EditRow, 'id' | 'jobId' | 'baseN'>, newest: number) {
+  const base = editPrefix(e.jobId, e.baseN, e.id)
+  const now = Math.floor(deps.clock.now().getTime() / 1000)
+  const keys = await deps.blobs.list('bundles', base)
+  const gone = new Map<number, number>()
+  const revs = new Map<number, string[]>()
+  for (const k of keys) {
+    const rest = k.slice(base.length)
+    const g = /^gone\/r(\d+)\.(\d+)$/.exec(rest)
+    if (g) gone.set(Number(g[1]), Number(g[2]))
+    const r = /^r(\d+)\//.exec(rest)
+    if (r && Number(r[1]) !== newest) revs.set(Number(r[1]), [...(revs.get(Number(r[1])) ?? []), k])
+  }
+  for (const [rev, files] of revs) {
+    const at = gone.get(rev)
+    if (at === undefined) await deps.blobs.set('bundles', `${base}gone/r${rev}.${now}`, '')
+    else if (now - at > PREVIEW_TTL_SEC + 60) {
+      for (const k of files) await deps.blobs.delete('bundles', k)
+      await deps.blobs.delete('bundles', `${base}gone/r${rev}.${at}`)
+    }
+  }
+  // A marker whose rev is gone (or is the newest again) goes too.
+  for (const [rev, at] of gone)
+    if (!revs.has(rev)) await deps.blobs.delete('bundles', `${base}gone/r${rev}.${at}`)
 }
 
 async function editDto(deps: Deps, e: EditRow, built?: Rev, repo: Repo = deps.store) {

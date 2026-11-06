@@ -140,8 +140,8 @@ describe('edit drafts', () => {
       await h.deps.blobs.get('bundles', `${editRevPrefix(id, 1, e.id, 1)}f/index.html`),
     )
     expect(html).toMatch(/data-va-beat="intro"[^>]*data-duration="4.5"/)
-    // Only the newest rev's bundle is kept.
-    expect(await h.deps.blobs.list('bundles', editRevPrefix(id, 1, e.id, 0))).toEqual([])
+    // The rev it superseded stays for a preview link's lifetime (see the next test).
+    expect(await h.deps.blobs.list('bundles', editRevPrefix(id, 1, e.id, 0))).not.toEqual([])
     const more = await h.json<Edit>(
       await save(h, e.id, {
         rev: 1,
@@ -223,6 +223,40 @@ describe('edit drafts', () => {
     expect((await edge(version.url.replace('index.html', `e/${e.id}/r1/index.html`))).status).toBe(403)
     const bob = await person(h, 'u_bob')
     expect((await h.call('GET', `/api/v1/edits/${e.id}/preview`, { as: bob })).status).toBe(404)
+  })
+
+  it('a frame showing a superseded rev keeps loading its media until its link expires (blank recording scenes after adding a take, owner 2026-11-06)', async () => {
+    const h = harness()
+    current = h.deps
+    const rec = new Uint8Array(4096).map((_, i) => i % 251)
+    const id = await editableVideo(h, fx('index.html'), [{ name: 'video/assets/media/rec.mp4', body: rec }])
+    const e = await h.json<Edit>(await open(h, id))
+    await save(h, e.id, { rev: 0, ops: [{ op: 'text', id: 'intro-title', text: 'One' }] })
+    const link = await h.json<{ url: string }>(
+      await h.call('GET', `/api/v1/edits/${e.id}/preview`, { as: h.member }),
+    )
+    const media = link.url.replace('index.html', 'assets/media/rec.mp4')
+    const range = async () => {
+      const res = await (
+        await loadEdge('preview')
+      )(new Request(media, { headers: { range: 'bytes=1000-1999' } }), {
+        deploy: { published: true },
+      })
+      if (res.status === 206) expect(new Uint8Array(await res.arrayBuffer())).toEqual(rec.slice(1000, 2000))
+      return res.status
+    }
+    expect(await range()).toBe(206)
+    // A save the preview shows live (as a narration take's is) doesn't reload the frame: it stays on r1, and its
+    // recording's later range requests must still be served, or the scene sits on its first frame.
+    await save(h, e.id, { rev: 1, ops: [{ op: 'text', id: 'intro-title', text: 'Two' }] })
+    expect(await range()).toBe(206)
+    expect((await edge(link.url)).status).toBe(200)
+    // Once any link to r1 has expired, the next save (r3) prunes it; r2, which r3 just superseded, stays.
+    h.deps.clock.advance((600 + 61) * 1000)
+    await save(h, e.id, { rev: 2, ops: [{ op: 'text', id: 'intro-title', text: 'Three' }] })
+    expect(await h.deps.blobs.list('bundles', editRevPrefix(id, 1, e.id, 1))).toEqual([])
+    expect(await h.deps.blobs.list('bundles', editRevPrefix(id, 1, e.id, 2))).not.toEqual([])
+    expect(await h.deps.blobs.list('bundles', `${id}/v1/e/${e.id}/gone/`)).toHaveLength(1)
   })
 
   it('swaps a media slot for a library item: served from the library, snapshotted when rendered', async () => {
