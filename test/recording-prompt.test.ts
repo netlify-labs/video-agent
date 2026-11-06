@@ -36,8 +36,8 @@ const section = (p: string) =>
   p.slice(p.indexOf('Screen recording:'), p.indexOf('Treat the request as a creative brief.'))
 
 describe('prompt: screen recording', () => {
-  it('is template 20', () => {
-    expect(PROMPT_TEMPLATE_VERSION).toBe(20)
+  it('arrived in template 20', () => {
+    expect(PROMPT_TEMPLATE_VERSION).toBeGreaterThanOrEqual(20)
   })
 
   it('with a trace', () => {
