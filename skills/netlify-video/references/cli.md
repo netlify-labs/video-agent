@@ -145,9 +145,35 @@ video-agent revise vid_01… "Make the end card orange" --wait
 - `--wait`: Follow the run until the video is ready.
 - `--timeout <value>`: With --wait: give up after this long: seconds, or 30m, 2h (exit 6).
 
+### redo
+
+Redo one or more scenes only. Needs the server feature "scoped_revision" (see whoami).
+
+```sh
+video-agent redo <video> <change>
+video-agent redo vid_01… --scene intro "Shorter title"
+```
+
+- `--scene <value>` (repeatable): A scene, by id or label (repeatable).
+- `--from-version <n>`: The version the scenes are from (default: the latest ready).
+- `--idempotency-key <value>`: Retrying with the same key never makes two.
+- `--wait`: Follow the run until the video is ready.
+- `--timeout <value>`: With --wait: give up after this long: seconds, or 30m, 2h (exit 6).
+
+### scenes
+
+List a version's scenes.
+
+```sh
+video-agent scenes <video>
+video-agent scenes vid_01…
+```
+
+- `--version <n>`: The version (default: the latest).
+
 ### remix
 
-Make a new video from another one. Needs the server feature `remix`.
+Make a new video from another one. Needs the server feature "remix" (see whoami).
 
 ```sh
 video-agent remix <video> <change>

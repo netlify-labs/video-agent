@@ -31,7 +31,10 @@ const write = (file: string, text: string) => {
 
 describe('the CLI runtime', () => {
   it('bundles every run script a prompt calls', () => {
-    const missing = promptScripts().filter((s) => !(RUNTIME_SCRIPTS as readonly string[]).includes(s))
+    // scripts/engine.ts is bundled whenever it exists (with lib/engines), so it isn't listed.
+    const missing = promptScripts().filter(
+      (s) => s !== 'engine' && !(RUNTIME_SCRIPTS as readonly string[]).includes(s),
+    )
     expect(missing, 'add these to RUNTIME_SCRIPTS in scripts/lib/cli-runtime.ts').toEqual([])
   })
 
@@ -40,6 +43,8 @@ describe('the CLI runtime', () => {
     const r = await buildRuntime({ repo: repoRoot, out, lockfile: false })
     expect(r.scripts).toEqual([...RUNTIME_SCRIPTS])
     for (const s of RUNTIME_SCRIPTS) expect(existsSync(join(out, `${s}.mjs`)), s).toBe(true)
+    if (existsSync(join(repoRoot, 'scripts', 'engine.ts')))
+      expect(existsSync(join(out, 'engine.mjs'))).toBe(true)
     const repoPkg = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8'))
     const pins = JSON.parse(readFileSync(join(out, 'package.json'), 'utf8')).dependencies
     for (const name of RUNTIME_PACKAGES)

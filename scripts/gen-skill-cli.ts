@@ -42,7 +42,7 @@ function command(c: CommandSpec): string {
   const lines = [
     `### ${c.name}`,
     '',
-    `${c.summary}${c.feature ? ` Needs the server feature \`${c.feature}\`.` : ''}`,
+    `${c.summary}${c.feature ? ` Needs the server feature "${c.feature}" (see whoami).` : ''}`,
     '',
   ]
   lines.push('```sh', usage(c), ...c.examples, '```')
