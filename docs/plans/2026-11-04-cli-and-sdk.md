@@ -1,6 +1,7 @@
 # CLI, SDK and player: make videos from a terminal, from code, and on your own machine
 
-- **Status:** draft 3 (2026-11-04). Reviewed three times: an independent review (Fable 5.1, "sound with changes"),
+- **Status:** draft 4 (2026-11-06): phase 0's spike results folded in (see "Draft 4" just below; the details are in
+  `docs/spikes.md`, C1-C3). Earlier: draft 3 (2026-11-04). Reviewed three times: an independent review (Fable 5.1, "sound with changes"),
   the cross-plan seam review of all six 2026-11-04 plans, and a remote review (Fable 5.1 high, in a Netlify Agent
   Run at `19740d8`, "sound with changes"). Every claim was checked against the code (and the web for external facts)
   before being folded in; the review log is §16. No beads yet.
@@ -21,6 +22,39 @@
   (`--engine`), [`regenerate-beat`](2026-11-04-regenerate-beat.md) (`scenes`, `redo`),
   [`github-action`](2026-11-04-github-action.md) (built on this SDK and CLI; owns `brief`),
   [`screen-recording-demo`](2026-11-04-screen-recording-demo.md) (owns `record`, `local demo`, big uploads).
+
+
+### Draft 4: what phase 0 changed (2026-11-06)
+
+- **Node.** Local mode runs on Node 22 and 24 (C1, macOS and Ubuntu); the floor stays 22.
+- **Runtime.**
+  - **Size:** 1.46 MB of bundled run scripts, split into chunks, plus the template.
+  - **Install:** `npm ci` from the shipped lockfile into `~/.cache/video-agent/runtime/<version>`, 8 s online and
+    2.3 s from cache on Ubuntu (C1).
+  - **Refresh:** each run refreshes the scripts and template from the CLI, so a rebuilt CLI never runs stale bundles.
+- **agent-kit with a redirected HOME works** (C1): ffmpeg, Chrome and the skills install into
+  `~/.cache/video-agent/agent-kit-home`, so the fallback in §6.4 isn't needed.
+- **Kokoro** (C3): a venv from the newest python3.13…3.10, `kokoro-onnx>=0.6`, `PIP_CONFIG_FILE=/dev/null`; Python 3.14
+  is unsupported upstream. 1.5-2 s per cached line.
+- **Agents that ship (Q8, C2).** Claude Code only. Codex was out of quota and Gemini's account tier is no longer
+  supported, so neither ran. Their adapters exist but say "not supported yet".
+- **Sandbox settings** are verbatim in `docs/spikes.md` C2: Claude Code's flags, its settings file (`//` absolute
+  paths in deny rules, no `allowLocalBinding`), the deny-read folders, the env allowlist and the network allowlist
+  (Openverse and its audio hosts, Google Fonts, Kokoro's model hosts).
+- **New in the design, from C2:**
+  - **The render broker.** `render-job` asks the CLI to render outside the agent's sandbox
+    (`.render/<attempt>/render-request.json`), because rendering needs the loopback.
+  - **The workspace's tsx wrapper.** The tsx CLI's IPC socket is refused in sandboxes.
+  - **`NODE_USE_ENV_PROXY=1`.** Node's fetch otherwise ignores the sandbox proxy.
+  - **`HYPERFRAMES_FONT_CACHE_DIR` in the workspace.**
+- **Open (owner):** on macOS the host-side render's Chrome can still reach the person's local services from an
+  agent-written composition (C2 finding 4). Accept that for v1 on macOS, or require Docker renders there.
+- **Bead polish since draft 3:**
+  - `videos.progress` replaces `versions.progress`.
+  - The `x-sdk` `feature`/`fieldFeatures` keys.
+  - The approve page has its own lookup route.
+  - Release 7.2 is split into tarballs and the first npmjs publish.
+  - The fixture agent is split into an adapter (5.14) and a CI job (5.17).
 
 ---
 
