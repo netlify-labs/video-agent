@@ -14,6 +14,7 @@ import {
   flowKey,
   isPunchKey,
   placementsFromRecord,
+  prompterTime,
   punchAt,
   sliceToRange,
   takeEnd,
@@ -613,5 +614,21 @@ describe('review', () => {
     h.flow.dispose()
     await h.flush()
     expect(h.calls.some((c) => c.startsWith('decided'))).toBe(false)
+  })
+})
+
+describe('the prompter time', () => {
+  // The last take ended at 8.7 s: the clock's stale anchors and the picture both still say so.
+  const stale = { pictureClock: 8.7, videoTime: 8.7 }
+
+  it('from the Record click through the countdown, the take’s start (its first line, or the punch point’s)', () => {
+    expect(prompterTime('countdown', { ...stale, startsAt: 0 })).toBe(0)
+    expect(prompterTime('countdown', { ...stale, startsAt: 4.2 })).toBe(4.2)
+  })
+
+  it('recording follows the picture clock; review follows the picture itself', () => {
+    expect(prompterTime('recording', { startsAt: 0, pictureClock: 3.1, videoTime: 3.0 })).toBe(3.1)
+    expect(prompterTime('review', { startsAt: 0, pictureClock: 8.7, videoTime: 1.5 })).toBe(1.5)
+    expect(prompterTime('setup', { startsAt: 0, pictureClock: null, videoTime: 2 })).toBe(2)
   })
 })

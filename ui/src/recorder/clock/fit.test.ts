@@ -150,8 +150,8 @@ describe('piecewise fit', () => {
 
   it('stops on residual: a breach that scatters (not a frame step, not steady) keeps the clean part', () => {
     const { pts } = take({ seconds: 30 })
-    // From anchor 450 on, the picture lurches 30-70 ms off, a different amount each frame.
-    const lurch = [0.03, 0.07, 0.045, 0.06]
+    // From anchor 450 on, the picture lurches 30-70 ms off either way, each frame: nothing steady to re-anchor on.
+    const lurch = [0.03, -0.07, 0.045, -0.06]
     const bad = pts.map((p, i) => (i >= 450 ? { ...p, time: p.time + (lurch[i % 4] ?? 0) } : p))
     const f = fitPiecewise(bad, Math.ceil(bad.at(-1)!.sample))
     expect(f.stop?.kind).toBe('residual')
@@ -174,10 +174,27 @@ describe('piecewise fit', () => {
     for (const seg of f.segments) expect(seg.residualMax).toBeLessThan(2)
   })
 
+  it('real-ish hardware never stops a take: vsync lateness, jitter, a one-frame step, a 250 ms block', () => {
+    // 60 s at 30 fps on a 60 Hz screen: ±6 ms of jitter, every third frame a vsync (16.7 ms) late, a one-frame step at
+    // 20 s, and a 250 ms main-thread block at 40 s that leaves the picture that much behind from then on.
+    const r = rng(11)
+    const { pts } = take({ seconds: 60, steps: [{ at: 600, frames: -1 }] })
+    const real = pts.map((p, i) => ({
+      ...p,
+      time: p.time + r() * 0.006 - (i % 3 === 0 ? 0.0167 : 0) - (i >= 1200 ? 0.25 : 0),
+    }))
+    const f = fitPiecewise(real, Math.ceil(real.at(-1)!.sample))
+    expect(f.stop).toBeNull()
+    expect(f.cleanSamples).toBe(Math.ceil(real.at(-1)!.sample))
+    // The step and the block each start a segment; jitter alone starts none.
+    expect(f.steps.length + f.reanchors.length).toBeGreaterThanOrEqual(2)
+    expect(f.steps.length + f.reanchors.length).toBeLessThanOrEqual(4)
+  })
+
   it('a steady offset beyond the re-anchor limit still stops', () => {
     const { pts } = take({ seconds: 30 })
-    // 150 ms (4.5 frames): too large to be jitter or a latency change.
-    const far = pts.map((p, i) => (i >= 450 ? { ...p, time: p.time + 0.15 } : p))
+    // 3 s: longer than any stall the picture clock lets through.
+    const far = pts.map((p, i) => (i >= 450 ? { ...p, time: p.time + 3 } : p))
     expect(fitPiecewise(far, Math.ceil(far.at(-1)!.sample)).stop?.kind).toBe('residual')
   })
 
@@ -251,7 +268,7 @@ describe('piecewise fit', () => {
 
   it('after a trimmed warm-up, a real drift still stops and a one-frame step still splits', () => {
     const { pts } = take({ seconds: 30, jitterMs: 1 })
-    const lurch = [0.03, 0.07, 0.045, 0.06]
+    const lurch = [0.03, -0.07, 0.045, -0.06]
     const bad = strays(pts).map((p, i) => (i >= 450 ? { ...p, time: p.time + (lurch[i % 4] ?? 0) } : p))
     const f = fitPiecewise(bad, Math.ceil(bad.at(-1)!.sample))
     expect(f.stop?.kind).toBe('residual')

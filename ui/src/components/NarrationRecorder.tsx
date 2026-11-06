@@ -45,7 +45,9 @@ import {
   isRunning,
   MAX_PRE_ROLL_SEC,
   placementsFromRecord,
+  prompterTime,
   punchAt,
+  takeEnd,
   type FlowSnapshot,
   type Punch,
   type RecordFlowParts,
@@ -453,7 +455,11 @@ export function NarrationRecorder({ api, videoId, versionN, draft }: NarrationRe
     }
   }, [flow, phase])
 
+  /** Composition second the next take starts at (0, or its punch point): the prompter's line during the countdown. */
+  const startsAt = useRef(0)
   const onRecord = (punch: Punch | null = null) => {
+    startsAt.current = punch ? punch.from / SAMPLE_RATE : 0
+    prompterPhase.current = 'countdown'
     // The setup's Original audio goes on the track the take is recorded for.
     const t = setupToTrackPatch(setupRef.current)
     latest.current.api.setTracks({
@@ -503,15 +509,16 @@ export function NarrationRecorder({ api, videoId, versionN, draft }: NarrationRe
   const onOffsets = useCallback((o: CalibrationOffsets) => {
     offsets.current = o
   }, [])
-  const reviewing = useRef(false)
-  reviewing.current = phase === 'review' || phase === 'adding'
+  // The phase as the prompter's poll sees it: set in the Record click too, before the flow's own snapshot arrives.
+  const prompterPhase = useRef(phase)
+  prompterPhase.current = phase
   const getTime = useCallback(
     () =>
-      // Reviewing, the picture plays without the clock: the prompter follows it directly.
-      (reviewing.current ? videoRef.current?.currentTime : null) ??
-      pictureTime(pictureRef.current.anchors, performance.now()) ??
-      videoRef.current?.currentTime ??
-      0,
+      prompterTime(prompterPhase.current, {
+        startsAt: startsAt.current,
+        pictureClock: pictureTime(pictureRef.current.anchors, performance.now()),
+        videoTime: videoRef.current?.currentTime ?? null,
+      }),
     [],
   )
 
@@ -650,11 +657,15 @@ export function NarrationRecorder({ api, videoId, versionN, draft }: NarrationRe
                 onAdd={() => flow.add()}
                 onAgain={() => {
                   ;(document.activeElement as HTMLElement | null)?.blur()
+                  startsAt.current = review.punch ? review.punch.from / SAMPLE_RATE : 0
+                  prompterPhase.current = 'countdown'
                   if (review.punch) setMonitorFrom(Math.max(0, review.punch.from / SAMPLE_RATE - preRoll))
                   flow.recordAgain(preRoll)
                 }}
                 onContinue={() => {
                   ;(document.activeElement as HTMLElement | null)?.blur()
+                  startsAt.current = takeEnd(review.pieces) / SAMPLE_RATE
+                  prompterPhase.current = 'countdown'
                   setMonitorFrom(0)
                   flow.keepRecording(preRoll)
                 }}

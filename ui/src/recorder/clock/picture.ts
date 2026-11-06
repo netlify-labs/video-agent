@@ -80,7 +80,11 @@ export interface PictureMonitorOptions {
   stepToleranceMs: number
   /** Anchors in the running median reference. */
   reference: number
-  /** No anchor for this long while playing is a stall. S10's 300 ms. */
+  /**
+   * No anchor for this long while playing (or the video waiting for data this long) is a stall. S10 used 300 ms, which
+   * a garbage collection or a busy main thread reaches in normal playback and stopped real takes; a shorter pause only
+   * moves the picture against the audio, which the fit re-anchors on.
+   */
   stallMs: number
 }
 
@@ -90,7 +94,7 @@ export const DEFAULT_PICTURE_OPTIONS: PictureMonitorOptions = {
   run: 3,
   stepToleranceMs: 4,
   reference: 30,
-  stallMs: 300,
+  stallMs: 2000,
 }
 
 export class PictureMonitor {
@@ -236,6 +240,8 @@ export class PictureClock {
   private rvfc = 0
   private watchdog: ReturnType<typeof setInterval> | null = null
   private ctxWasRunning = false
+  /** When the video started waiting for data (null while it plays). */
+  private waitingSince: number | null = null
   private detach: (() => void) | null = null
   private readonly now: () => number
   private readonly fitOptions: Partial<FitOptions>
@@ -271,12 +277,27 @@ export class PictureClock {
     this.ctxWasRunning = ctx?.state === 'running'
     const offs = [
       on(this.video, 'seeking', () => this.stop('seek')),
-      on(this.video, 'waiting', () => this.stop('stall', 'waiting')),
+      // Waiting for data stops the take only if it lasts (tick); the video resuming clears it.
+      on(this.video, 'waiting', () => {
+        this.waitingSince ??= this.now()
+        o.log?.('clock.waiting', { at: this.waitingSince })
+      }),
+      on(this.video, 'playing', () => {
+        if (this.waitingSince !== null)
+          o.log?.('clock.resumed', { waitedMs: Math.round(this.now() - this.waitingSince) })
+        this.waitingSince = null
+      }),
       on(this.video, 'ended', () => this.stop('ended')),
       on(o.doc, 'visibilitychange', () => {
         if (o.doc?.visibilityState === 'hidden') this.stop('hidden')
       }),
-      on(o.mediaDevices, 'devicechange', () => this.stop('devicechange')),
+      // A device list change alone doesn't stop the take (Chrome fires it for devices that have nothing to do with it);
+      // losing the take's own mic ends its track, which does.
+      on(o.mediaDevices, 'devicechange', () => {
+        const state = (o.track as { readyState?: string } | null | undefined)?.readyState ?? null
+        o.log?.('clock.devicechange', { trackState: state })
+        if (state === 'ended') this.stop('track-ended', 'the microphone went away')
+      }),
       on(o.track, 'ended', () => this.stop('track-ended')),
       on(ctx, 'statechange', () => {
         const state = ctx?.state
@@ -318,8 +339,14 @@ export class PictureClock {
 
   /** The watchdog tick (100 ms). Public for tests. */
   tick(): void {
-    const s = this.monitor.checkStall(this.now(), this.video.paused, this.anchors.at(-1) ?? null)
-    if (s) this.stop('stall', `no frame for ${Math.round(s.gapMs)} ms`)
+    const now = this.now()
+    const stallMs = this.monitor.options.stallMs
+    if (this.waitingSince !== null && now - this.waitingSince > stallMs) {
+      this.stop('stall', `the video waited ${((now - this.waitingSince) / 1000).toFixed(1)} s for data`)
+      return
+    }
+    const s = this.monitor.checkStall(now, this.video.paused, this.anchors.at(-1) ?? null)
+    if (s) this.stop('stall', `the video showed no new frame for ${(s.gapMs / 1000).toFixed(1)} s`)
   }
 
   /**
@@ -375,11 +402,16 @@ export class PictureClock {
 
   private readonly onFrame = (now: number, md: VideoFrameCallbackMetadata) => {
     if (this.stopped) return
+    // Tests on the mock build can make the frames as uneven as real hardware's (window.__vaTestFrameJitter).
+    const jitter = (
+      globalThis as { __vaTestFrameJitter?: (m: VideoFrameCallbackMetadata) => VideoFrameCallbackMetadata }
+    ).__vaTestFrameJitter
+    const m = jitter ? jitter(md) : md
     this.observe({
-      mediaTime: md.mediaTime,
-      expectedDisplayTime: md.expectedDisplayTime,
+      mediaTime: m.mediaTime,
+      expectedDisplayTime: m.expectedDisplayTime,
       now,
-      presentedFrames: md.presentedFrames,
+      presentedFrames: m.presentedFrames,
     })
     // observe() may have stopped the take.
     if (!this.stopReason) this.rvfc = this.video.requestVideoFrameCallback?.(this.onFrame) ?? 0

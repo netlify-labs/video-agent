@@ -23,7 +23,8 @@
 // mutes the existing narration inside the range from the punch point on, and only the samples placed inside the
 // range (or from the punch point until stop) become the clip; the whole capture is still the take's source.
 import { placeTake, SAMPLE_RATE, type Span } from '../../../src/lib/timeline'
-import { placeRecordedTake, STOP_MESSAGES, type FitSegment, type RecordedPlacement } from './clock'
+import { placeRecordedTake, type FitSegment, type RecordedPlacement } from './clock'
+import { stopMessage } from './clock/fit'
 import type { StopKind, StopReason } from './clock/fit'
 import type { TakeRecord } from './store'
 import type { TakeUploadState } from './take-upload'
@@ -293,6 +294,20 @@ const IDLE: FlowSnapshot = {
   review: null,
 }
 
+/**
+ * The second the teleprompter shows. From the Record click through the 3-2-1, the take's start (its first line, or a
+ * punch point's): the picture clock still holds the last take's anchors and the picture sits wherever it was left
+ * until the new take cues it. In review the picture plays on its own, so its time; otherwise the picture clock's.
+ */
+export function prompterTime(
+  phase: FlowPhase,
+  o: { startsAt: number; pictureClock: number | null; videoTime: number | null },
+): number {
+  if (phase === 'countdown') return o.startsAt
+  if (phase === 'review' || phase === 'adding') return o.videoTime ?? o.pictureClock ?? 0
+  return o.pictureClock ?? o.videoTime ?? 0
+}
+
 /** Where a take's clips end on the composition (samples): what Keep recording from here punches in from. */
 export function takeEnd(pieces: readonly RecordedPlacement[]): number {
   return Math.max(0, ...pieces.map((p) => placeTake(p.fit, p.offsetSamples, p.srcEnd)))
@@ -381,7 +396,7 @@ export function createRecordFlow<C, R extends FlowRecorder>(
       phase: 'stopping',
       count: null,
       stop: reason,
-      notice: notice ?? (early ? STOP_MESSAGES[reason.kind] : null),
+      notice: notice ?? (early ? stopMessage(reason) : null),
     })
     parts.halt(reason.kind, reason.detail)
     if (take.punch) parts.arm(null)

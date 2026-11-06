@@ -159,3 +159,63 @@ test('a take that stopped early offers Keep recording from here: it punches in f
   expect(next).toBeDefined()
   expect(Math.abs((next?.start ?? 0) / RATE - end)).toBeLessThan(0.2)
 })
+
+test('with real-ish frame jitter (vsync lateness, a frame step, a 250 ms block), a take runs until Space and never stops on its own', async ({
+  page,
+}) => {
+  test.setTimeout(120_000)
+  // Frames as uneven as a real 60 Hz screen's (picture.ts reads window.__vaTestFrameJitter): every third a vsync late,
+  // ±6 ms of jitter, from 60 frames in one frame behind (a step), and from 120 a 250 ms main-thread block's lag.
+  await page.addInitScript(() => {
+    let n = 0
+    ;(
+      globalThis as unknown as { __vaTestFrameJitter?: (m: Record<string, number>) => Record<string, number> }
+    ).__vaTestFrameJitter = (m) => {
+      n++
+      const late = (n % 3 === 0 ? 16.7 : 0) + (Math.random() * 12 - 6) + (n > 120 ? 250 : 0)
+      return {
+        ...m,
+        expectedDisplayTime: (m.expectedDisplayTime ?? 0) + late,
+        mediaTime: (m.mediaTime ?? 0) - (n > 60 ? 1 / 30 : 0),
+      }
+    }
+  })
+  await page.reload()
+  await page.getByTestId('record-open').click()
+  await page.getByTestId('record-start').click()
+  await expect(phase(page)).toHaveAttribute('data-phase', 'recording', { timeout: 20_000 })
+  await page.waitForTimeout(6_000)
+  // Still recording: nothing stopped it.
+  await expect(phase(page)).toHaveAttribute('data-phase', 'recording')
+  await page.keyboard.press('Space')
+  await expect(phase(page)).toHaveAttribute('data-phase', 'review', { timeout: 30_000 })
+  await expect(page.getByTestId('review-stop')).toHaveCount(0)
+  const lands = (await page.getByTestId('review-lands').textContent()) ?? ''
+  expect(seconds(lands.split(' to ')[1] ?? '')).toBeGreaterThan(5)
+})
+
+test('Record resets the prompter to the take’s first line during the countdown, not where the last take ended', async ({
+  page,
+}) => {
+  test.setTimeout(120_000)
+  const prompter = page.getByTestId('teleprompter')
+  const first = await prompter.locator('[data-state]').first().textContent()
+  // A first take that runs past the first scene (the prompter moves on), added to the track.
+  await page.getByTestId('record-start').click()
+  await expect(phase(page)).toHaveAttribute('data-phase', 'recording', { timeout: 20_000 })
+  await expect(prompter.locator('[data-state=current]')).not.toHaveText(first ?? '', { timeout: 15_000 })
+  await page.keyboard.press('Space')
+  await expect(phase(page)).toHaveAttribute('data-phase', 'review', { timeout: 30_000 })
+  // Leave the picture at the take's end (as playing the review through does), then add it.
+  await page.getByRole('slider', { name: 'Review position' }).focus()
+  await page.keyboard.press('End')
+  await expect(prompter.locator('[data-state=current]')).not.toHaveText(first ?? '')
+  await page.getByTestId('review-add').click()
+  await expect(phase(page)).toHaveAttribute('data-phase', 'saved', { timeout: 30_000 })
+  // Record: at once (before the new take has even cued the picture) and through the 3-2-1, the first line.
+  await page.getByTestId('record-start').click()
+  expect(await prompter.locator('[data-state=current]').textContent()).toBe(first)
+  await expect(page.getByTestId('record-countdown')).toBeVisible()
+  await expect(prompter.locator('[data-state=current]')).toHaveText(first ?? '')
+  await page.keyboard.press('Escape')
+})

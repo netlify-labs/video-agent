@@ -833,12 +833,34 @@ These are the decisions the spikes and the build settled; `docs/spikes.md` S10-S
   - Per-video transcription language shipped (`jobs.language`; Parakeet covers 25 European languages).
 - **Live gates:** scripts are `scripts/e2e/narration-privacy.ts` (phase 1) and `scripts/e2e/narration.ts` (phase 2;
   `--dry`, `--selftest`); they need Creator and Reviewer API keys and haven't run yet.
-- **Take review and the sync limit (owner, 2026-11-06):** a stopped take is reviewed before it goes on the track (§2.1
-  step 6; `ui/src/recorder/flow.ts` review phase, `TakeReview.tsx`, `review.ts`). The owner's first take stopped at
-  8.69 s of a 12.97 s video on a `residual` stop. S10's 10 ms residual limit was the headless pipeline's own error with
-  room to spare, and real screens present a frame on a vsync, so an anchor can sit up to one display interval (16.7 ms
-  at 60 Hz) off the line. The limit is now 20 ms: still under a frame at 30 fps (frame steps stay steps) and well
-  inside lip-sync tolerance (EBU R37, +40/−60 ms). A steady offset that isn't a whole frame (up to 100 ms, or beyond
-  8 ms inside the limit) now re-anchors, starting a new fit segment instead of stopping. Only a run that scatters
-  still stops the take. Every early stop is logged (`record.stop_early`, with its kind and the clock's detail). S10b's
-  real-hardware run, if it happens, replaces this reasoning with measured residuals.
+- **Take review, and takes that stopped on their own (owner, 2026-11-06):**
+  - **Review:** a stopped take is reviewed before it goes on the track (§2.1 step 6). It's built in
+    `ui/src/recorder/flow.ts` (the review phase), `TakeReview.tsx` and `review.ts`.
+  - **The owner's report:** takes "randomly chopped off" with nothing pressed. One stopped at 8.69 s of 12.97 s.
+  - **The cause:** the stop rules were tuned on headless frames, which have no jitter.
+    - **Strict breach checks:** on a real screen, frames show on a vsync, so anchors jitter by several ms. A breaching run then
+      failed both "a whole frame within 4 ms" and "steady within 4 ms", and the take stopped, even on the one-frame
+      picture step that real playback produces. Main's fit stopped a 60 s take with 60 Hz vsync lateness, ±6 ms
+      jitter and a one-frame step at the step ("3 anchors beyond 10 ms (worst −48 ms)"), and so did a 20 ms limit
+      on its own.
+    - **Over-eager stop rules:** the picture clock also stopped a take on any `waiting` event (a brief buffer) and
+      after 300 ms without a frame (a garbage collection). It stopped on any `devicechange` too, which Chrome fires
+      for unrelated devices.
+  - **What changed:**
+    - **Residual limit:** 20 ms (one 60 Hz vsync is 16.7 ms; it's under a 30 fps frame and inside EBU R37's
+      lip-sync tolerance).
+    - **One-sided runs:** a breaching run that sits on one side is a jump. It becomes a frame step when it's on a
+      whole frame (the tolerance widens with the segment's own jitter), or else a re-anchor (a new fit segment) at
+      its median, up to 2 s.
+    - **In-limit shifts:** a shift inside the limit re-anchors after 10 anchors in a row past 8 ms on one side.
+    - **Scattered runs:** these are dropped as outliers and stop the take only after 30 frames (about 1 s).
+    - **Cap:** after 40 re-anchors the take stops.
+    - **Stalls:** a stall stops the take only after 2 s, whether the video waits for data or shows no new frame.
+    - **Device changes:** a device change stops the take only when the take's own mic went away.
+  - **Messages and logs:** every stop is logged with its numbers (`clock.stop`, `record.stop`, and `record.stop_early`
+    with the fit's segments). The message says why in plain words, with the numbers (`stopMessage`).
+  - **Tests:** unit tests replay real-ish jitter, steps, blocks and stalls. The mock build's
+    `window.__vaTestFrameJitter` drives the same on the page (`ui/e2e/take-review.spec.ts`).
+  - **Teleprompter:** it now shows the take's first line (or the punch point's) from the Record click through the
+    countdown (`prompterTime`). Until then it showed where the last take ended until the picture rolled.
+  - **Pending hardware data:** S10b's real-hardware run, if it happens, replaces this reasoning with measured residuals.

@@ -408,11 +408,15 @@ offset leave the fit as outliers. The residual limit (10 ms), the step rule and 
 15 ms drift or a 2500 ppm slope still stops a take with lookaheads in it (unit tests). Firefox's `presentedFrames`
 jumps still count as skipped frames, so `skippedFrames` overstates Firefox's real frame loss.
 
-**Later (2026-11-06):** the residual limit is now 20 ms, and a steady offset re-anchors instead of stopping. The 10 ms
-default stopped a real take at 8.69 s of 12.97 s (a `residual` stop), and on real screens a frame can present up to one
-vsync (16.7 ms at 60 Hz) off the line. Re-anchoring catches a steady offset that isn't a whole frame: up to 100 ms
-beyond the limit, or past 8 ms inside it. Only a scattering run still stops (`fit.ts`; reasoning in the voice-over
-plan's As built).
+**Later (2026-11-06):**
+- **What happened:** real takes stopped on their own. Real screens jitter anchors by several ms, and a breaching run
+  failed the 4 ms "whole frame" and "steady" checks, even on a genuine one-frame step.
+- **What changed:**
+  - The residual limit is 20 ms.
+  - A one-sided run re-anchors (or steps) at its median.
+  - Only scatter lasting about 1 s, a jump over 2 s, or a 2 s stall stops a take.
+  - `devicechange` alone no longer stops one.
+- **Where:** `fit.ts` and `picture.ts`; the reasoning is in the voice-over plan's As built.
 
 #### Pending: owner hardware matrix (`spikes/s10/CHECKLIST.md`)
 

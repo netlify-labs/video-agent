@@ -165,6 +165,16 @@ export const STOP_MESSAGES: Record<StopKind, string> = {
   slope: 'The audio clock ran at the wrong speed against the picture, so the take stopped there.',
 }
 
+/** Kinds whose detail is written for people (the numbers that made the clock stop), shown with the message. */
+const SAYS_WHY: ReadonlySet<StopKind> = new Set(['residual', 'slope', 'stall'])
+
+/** Why a take stopped, in plain words, with the numbers when the clock has them ("…out of sync (the picture jumped 2400 ms…)"). */
+export function stopMessage(reason: Pick<StopReason, 'kind' | 'detail'>): string {
+  const base = STOP_MESSAGES[reason.kind]
+  if (!reason.detail || !SAYS_WHY.has(reason.kind)) return base
+  return base.replace(/, so the take stopped there\.$/, ` (${reason.detail}), so the take stopped there.`)
+}
+
 // ---- piecewise fit
 
 /**
@@ -176,8 +186,18 @@ export const STOP_MESSAGES: Record<StopKind, string> = {
  * its residuals replace this reasoning.
  */
 export const RESIDUAL_LIMIT_MS = 20
-/** A steady offset larger than this isn't re-anchored: the take stops (something larger than jitter went wrong). */
-export const REANCHOR_MAX_MS = 100
+/**
+ * A jump larger than this isn't re-anchored: the take stops. A short buffering pause or a long main-thread block moves
+ * the picture against the audio by its length, and the picture clock stops a take that stalls longer (stallMs), so
+ * this matches it.
+ */
+export const REANCHOR_MAX_MS = 2000
+/** Anchors in a row out of sync both ways (no steady offset to re-anchor on) before the take stops: about 1 s. */
+export const SCATTER_RUN = 30
+/** In-limit anchors in a row past SHIFT_FROM_MS, one side, before a re-anchor (real jitter rarely gives 10). */
+export const SHIFT_RUN = 10
+/** Re-anchors in one take before it stops instead (a picture that keeps jumping isn't one take any more). */
+export const MAX_REANCHORS = 40
 /**
  * A steady shift smaller than the residual limit still re-anchors once it's beyond this: left in the segment, a 15 ms
  * jump would tilt the line until the slope rule stopped the take.
@@ -201,8 +221,13 @@ export interface FitOptions {
    * mean, and that mean within this many ms) re-anchors: a new segment starts there instead of the take stopping.
    */
   reanchorMaxMs: number
-  /** Within the residual limit, a steady run beyond this many ms re-anchors too (see SHIFT_FROM_MS). */
+  /** Within the residual limit, a run beyond this many ms re-anchors too (see SHIFT_FROM_MS). */
   shiftFromMs: number
+  /** In-limit anchors in a row past shiftFromMs, one side, that re-anchor. */
+  shiftRun: number
+  /** Breaching anchors in a row on both sides (scattered) before the take stops. */
+  scatterRun: number
+  maxReanchors: number
   slopeTolerancePpm: number
   /**
    * Anchors in the first segment before residuals are checked (the fit is still settling). When the warm-up fills,
@@ -223,6 +248,9 @@ export const DEFAULT_FIT_OPTIONS: FitOptions = {
   stepToleranceMs: 4,
   reanchorMaxMs: REANCHOR_MAX_MS,
   shiftFromMs: SHIFT_FROM_MS,
+  shiftRun: SHIFT_RUN,
+  scatterRun: SCATTER_RUN,
+  maxReanchors: MAX_REANCHORS,
   slopeTolerancePpm: SLOPE_TOLERANCE_PPM,
   residualWarmup: 60,
   slopeWarmup: 300,
@@ -357,38 +385,59 @@ export class SyncFitter {
       this.outliers.push({ sample: p.sample, residualMs: r })
       return { type: 'outlier', residualMs: r }
     }
-    const k = wholeFrameStep(
-      this.run.map((q) => q.r),
-      1000 / o.fps,
-      o.stepToleranceMs,
-    )
+    const rs = this.run.map((q) => q.r)
     const from = this.run[0]?.x ?? p.sample
-    if (k === null) {
-      // Not a whole frame: recover when the run holds steady (a latency change, a dropped buffer), stop when it scatters.
-      const rs = this.run.map((q) => q.r)
-      const m = mean(rs)
-      if (Math.abs(m) <= o.reanchorMaxMs && rs.every((r) => Math.abs(r - m) <= o.stepToleranceMs)) {
-        this.outliers.splice(this.outliers.length - (this.run.length - 1))
-        this.split(from)
-        this.reanchors.push({ atSample: from, offsetMs: m })
-        return { type: 'reanchor', atSample: from, offsetMs: m }
+    // Real anchors jitter by several ms (a frame shows on a vsync), so a run is judged by its side and its median, not
+    // by every anchor sitting within a few ms of each other.
+    const oneSide = rs.every((v) => Math.sign(v) === Math.sign(rs[0] ?? 0))
+    if (!oneSide) {
+      // Out of sync both ways: dropped as outliers while it lasts; only a second of it stops the take.
+      if (this.run.length < o.scatterRun) {
+        this.outliers.push({ sample: p.sample, residualMs: r })
+        return { type: 'outlier', residualMs: r }
       }
-      const worst = this.run.reduce((m, q) => (Math.abs(q.r) > Math.abs(m) ? q.r : m), 0)
-      this.stopped = {
-        type: 'stop',
-        kind: 'residual',
-        atSample: from,
-        detail: `${this.run.length} anchors beyond ${o.residualLimitMs} ms (worst ${worst.toFixed(1)} ms)`,
-      }
-      this.pending = []
-      this.run = []
-      return this.stopped
+      const worst = rs.reduce((m, v) => Math.max(m, Math.abs(v)), 0)
+      return this.halt(
+        'residual',
+        from,
+        `the picture's timing scattered up to ${worst.toFixed(0)} ms either way for ${this.run.length} frames`,
+      )
     }
-    // The run's first anchors were counted as outliers before it turned out to be a step.
+    const m = median(rs)
+    const k = wholeFrameStep(rs, 1000 / o.fps, Math.max(o.stepToleranceMs, this.jitterMs()))
+    if (Math.abs(m) > o.reanchorMaxMs)
+      return this.halt('residual', from, `the picture jumped ${m.toFixed(0)} ms against the recording`)
+    if (this.reanchors.length + this.steps.length >= o.maxReanchors)
+      return this.halt('residual', from, `the picture kept jumping (${o.maxReanchors} times)`)
+    // The run's first anchors were counted as outliers before it turned out to be a jump.
     this.outliers.splice(this.outliers.length - (this.run.length - 1))
     this.split(from)
-    this.steps.push({ atSample: from, frames: k })
-    return { type: 'step', atSample: from, frames: k }
+    if (k !== null) {
+      this.steps.push({ atSample: from, frames: k })
+      return { type: 'step', atSample: from, frames: k }
+    }
+    this.reanchors.push({ atSample: from, offsetMs: m })
+    return { type: 'reanchor', atSample: from, offsetMs: m }
+  }
+
+  /** The current segment's residual spread (ms), for telling a frame step from jitter around one. */
+  private jitterMs(): number {
+    const line = this.currentLine()
+    const p = this.piece
+    if (!line || p.xs.length < 10) return 0
+    return residuals(line, p.xs.slice(-60), p.ys.slice(-60)).rms * 1000 * 2
+  }
+
+  private halt(
+    kind: 'residual' | 'slope',
+    atSample: number,
+    detail: string,
+  ): Extract<FitEvent, { type: 'stop' }> {
+    this.stopped = { type: 'stop', kind, atSample, detail }
+    this.pending = []
+    this.run = []
+    this.shift = []
+    return this.stopped
   }
 
   /**
@@ -467,13 +516,9 @@ export class SyncFitter {
       return null
     }
     this.shift.push({ x, r })
-    if (this.shift.length < o.residualRun) return null
-    const rs = this.shift.map((q) => q.r)
-    const m = mean(rs)
-    if (!rs.every((v) => Math.abs(v - m) <= o.stepToleranceMs)) {
-      this.shift.shift()
-      return null
-    }
+    if (this.shift.length < o.shiftRun) return null
+    if (this.reanchors.length + this.steps.length >= o.maxReanchors) return null
+    const m = median(this.shift.map((q) => q.r))
     const from = this.shift[0]?.x ?? x
     this.shift = []
     this.split(from)
@@ -488,13 +533,11 @@ export class SyncFitter {
     if (!line) return null
     const ppm = slopePpm(line.b, o.sampleRate)
     if (Math.abs(ppm) <= o.slopeTolerancePpm) return null
-    this.stopped = {
-      type: 'stop',
-      kind: 'slope',
-      atSample: p.sample,
-      detail: `slope ${ppm.toFixed(0)} ppm beyond ±${o.slopeTolerancePpm} ppm`,
-    }
-    return this.stopped
+    return this.halt(
+      'slope',
+      p.sample,
+      `the audio ran ${Math.abs(ppm).toFixed(0)} ppm ${ppm > 0 ? 'slow' : 'fast'} against the picture (more than ${o.slopeTolerancePpm} ppm)`,
+    )
   }
 
   /**
