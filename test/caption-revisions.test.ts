@@ -2,7 +2,7 @@
 // compare-and-swap on the revision, new immutable files behind revision-aware signed paths, the render's files and
 // hashes untouched, the video's ETag bumped, and the publication mirror following by generation (never older, never
 // after unpublishing) with a durable retry. A new version with the same narration op carries the corrections.
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { carriedCaptions, cleanCueText, narrationOpHash } from '../src/domain/captions.js'
 import { runCleanup } from '../src/domain/cleanup.js'
 import { pubKey } from '../src/domain/videos.js'
@@ -11,16 +11,8 @@ import { parseVtt, writeVtt, type VttCue } from '../src/lib/vtt.js'
 import type { Store } from '../src/store/types.js'
 import { loadEdge } from './edge.js'
 import type { TestDeps } from './fakes.js'
-import { harness, person, pgStore, type Harness } from './helpers.js'
-import {
-  BUS,
-  contractSource,
-  draftNarration,
-  narratedDraft,
-  narrationOp,
-  render,
-  report,
-} from './narration-render.js'
+import { contractSource, harness, person, pgStore, stubNetlify, type Harness } from './helpers.js'
+import { BUS, draftNarration, narratedDraft, narrationOp, render, report } from './narration-render.js'
 
 let current: TestDeps | null = null
 vi.mock('@netlify/blobs', async () => (await import('./edge.js')).fakeBlobsModule(() => current?.blobs))
@@ -102,9 +94,7 @@ describe('caption text', () => {
 })
 
 describe('caption revisions', () => {
-  beforeEach(() => vi.stubGlobal('Netlify', { env: { get: () => undefined } }))
-  afterEach(() => {
-    vi.unstubAllGlobals()
+  stubNetlify(() => {
     current = null
   })
 

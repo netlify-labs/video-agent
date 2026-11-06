@@ -8,7 +8,7 @@
 // Runners need a Git-connected project, and Netlify Database applies migrations only on Git builds.
 // Uses your Netlify CLI login (`npx netlify login`). Never prints secret values.
 import { createInterface } from 'node:readline/promises'
-import { parseArgs } from './lib/run-tools.js'
+import { exitOnError, parseArgs } from './lib/run-tools.js'
 import {
   ask,
   buildAndWait,
@@ -157,7 +157,4 @@ Last step: connect this project to your GitHub copy of the template.
   )
 }
 
-main().catch((e: unknown) => {
-  console.error(e instanceof Error ? e.message : String(e))
-  process.exit(1)
-})
+main().catch(exitOnError())

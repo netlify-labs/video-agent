@@ -4,8 +4,8 @@
 // how, with the overflow past the end, and Hold the last frame sends holdFinalFrame. A chosen file, a recording of
 // this video and library audio land at the playhead.
 import { expect, test, type Page } from '@playwright/test'
+import { dropOnLane, pcmWav, RATE, span } from './narration-helpers.js'
 
-const RATE = 24_000
 const lastOps = (page: Page) => page.evaluate<{ op: string }[]>('window.__lastEditOps ?? []')
 const lastRender = (page: Page) => page.evaluate<unknown>('window.__lastRender ?? null')
 const mock = (page: Page, key: string, value = '1') =>
@@ -14,71 +14,13 @@ const mock = (page: Page, key: string, value = '1') =>
 /** `seconds` of a speech-like tone (syllables at 2 Hz) as a plain mono PCM16 WAV at `rate`. */
 function speechWav(seconds: number, rate = RATE): number[] {
   const n = Math.round(seconds * rate)
-  const v = new DataView(new ArrayBuffer(44 + n * 2))
-  const tag = (at: number, s: string) => {
-    for (let i = 0; i < 4; i++) v.setUint8(at + i, s.charCodeAt(i))
-  }
-  tag(0, 'RIFF')
-  v.setUint32(4, 36 + n * 2, true)
-  tag(8, 'WAVE')
-  tag(12, 'fmt ')
-  v.setUint32(16, 16, true)
-  v.setUint16(20, 1, true)
-  v.setUint16(22, 1, true)
-  v.setUint32(24, rate, true)
-  v.setUint32(28, rate * 2, true)
-  v.setUint16(32, 2, true)
-  v.setUint16(34, 16, true)
-  tag(36, 'data')
-  v.setUint32(40, n * 2, true)
-  for (let i = 0; i < n; i++) {
-    const t = i / rate
-    const syllable = Math.sin(Math.PI * 4 * t) ** 2
-    v.setInt16(44 + i * 2, Math.round(Math.sin(2 * Math.PI * 220 * t) * syllable * 12_000), true)
-  }
-  return [...new Uint8Array(v.buffer)]
-}
-
-/** Drops a WAV on the Narration lane `seconds` in (with Alt held, it doesn't snap). */
-async function dropOnLane(page: Page, name: string, bytes: number[], seconds: number, alt = false) {
-  const lane = page.locator('.va-tl-lane[data-lane="narration"]')
-  await lane.scrollIntoViewIfNeeded()
-  const box = await lane.boundingBox()
-  const content = await page.locator('.va-tl-content').boundingBox()
-  if (!box || !content) throw new Error('no Narration lane')
-  const pps = Number(await page.getByTestId('timeline').getAttribute('data-px-per-sec'))
-  await lane.evaluate(
-    (el, a) => {
-      // The browser's DOM, typed only as far as this uses it (the e2e project has no DOM lib).
-      const w = globalThis as unknown as {
-        DataTransfer: new () => { items: { add: (f: unknown) => void } }
-        File: new (parts: unknown[], name: string, o: { type: string }) => unknown
-        DragEvent: new (type: string, o: Record<string, unknown>) => unknown
-      }
-      const dt = new w.DataTransfer()
-      dt.items.add(new w.File([new Uint8Array(a.bytes)], a.name, { type: 'audio/wav' }))
-      for (const type of ['dragenter', 'dragover', 'drop'])
-        (el as unknown as { dispatchEvent: (e: unknown) => void }).dispatchEvent(
-          new w.DragEvent(type, {
-            dataTransfer: dt,
-            clientX: a.x,
-            clientY: a.y,
-            altKey: a.alt,
-            bubbles: true,
-            cancelable: true,
-          }),
-        )
-    },
-    { bytes, name, alt, x: content.x + seconds * pps, y: box.y + box.height / 2 },
-  )
-}
-
-/** The selected clip's [id, start, end] in seconds, from the inspector. */
-const span = async (page: Page): Promise<[string, number, number]> => {
-  const text = (await page.getByTestId('clip-inspector-span').textContent()) ?? ''
-  const m = /^(\S+): ([\d.]+)–([\d.]+) s$/.exec(text)
-  if (!m) throw new Error(`no span in "${text}"`)
-  return [m[1] ?? '', Number(m[2]), Number(m[3])]
+  return pcmWav(n, rate, (set) => {
+    for (let i = 0; i < n; i++) {
+      const t = i / rate
+      const syllable = Math.sin(Math.PI * 4 * t) ** 2
+      set(i, Math.round(Math.sin(2 * Math.PI * 220 * t) * syllable * 12_000))
+    }
+  })
 }
 
 test('the Narration section shows while recorded voice-over is on, and not when an admin turns it off', async ({

@@ -5,11 +5,11 @@
 //   copyLookPreviews(…) after `vite build ui` (which empties ui/dist): the picker's clips and posters, content-hashed
 //     under ui/dist/assets/looks/ so /assets/*'s immutable cache header applies.
 // A look that fails look:check --static fails the build: a broken look never deploys.
-import { createHash } from 'node:crypto'
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { lookIds } from '../look-check.js'
 import { checkLookStatic } from './look-static.js'
+import { sha256Hex as sha256 } from '../../src/lib/crypto.js'
 import {
   buildLookArchive,
   LookJsonSchema,
@@ -22,8 +22,6 @@ export class LookBuildError extends Error {
     super(`Looks failed look:check --static:\n${problems.join('\n')}`)
   }
 }
-
-const sha256 = (b: Uint8Array) => createHash('sha256').update(b).digest('hex')
 
 const PREVIEWS = [
   ['mp4', 'preview.mp4'],

@@ -1,13 +1,11 @@
 // In-app notifications (plan v2 §3, §14 rule 13).
 import { describe, expect, it } from 'vitest'
-import { harness, pgStore, PROMPT, type Harness } from './helpers.js'
+import { harness, pgStore, readyVideo, type Harness } from './helpers.js'
 
 async function setup(h: Harness) {
   const bob = h.deps.identity.addUser({ id: 'u_bob', email: 'bob@acme.com', name: 'Bob' }).cookie
   await h.call('GET', '/api/v1/me', { as: bob })
-  const v = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }))
-  await h.drive(4)
-  return { bob, id: v.id as string }
+  return { bob, id: await readyVideo(h) }
 }
 
 const feed = async (h: Harness, as: string, q = '') =>

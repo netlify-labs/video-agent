@@ -1,45 +1,14 @@
 // Stale base (plan 2026-11-02 §2.7): a draft's DTO says when a newer ready version changed the narration (a stable
 // hash of the resolved op, base vs newest), and Rebase moves the draft's narration op onto the caller's draft of that
 // version through the save path, so it's revalidated there (lock, take access, limits).
-import { readFileSync } from 'node:fs'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { narrationHash } from '../src/domain/narration-stale.js'
 import type { VersionNarration, VersionRow } from '../src/domain/types.js'
 import { SAMPLE_RATE } from '../src/lib/timeline.js'
-import { harness, person, PROMPT, upload } from './helpers.js'
-import { tarGz } from './tarball.js'
-import { BUS } from './narration-render.js'
+import { contractSource, editableVideo, harness, narrationTake, person, stubNetlify } from './helpers.js'
+import { BUS, narrationAt as narration } from './narration-render.js'
 
-const fx = (f: string) => readFileSync(new URL(`./fixtures/contract1/${f}`, import.meta.url), 'utf8')
-const tone = () => new Uint8Array(readFileSync(new URL('./fixtures/audio/tone.mp3', import.meta.url)))
 const S = SAMPLE_RATE
-
-const narration = (mediaId: string, start = S) => ({
-  op: 'narration',
-  schema: 1,
-  sampleRate: S,
-  clips: [
-    {
-      id: 'c1',
-      mediaId,
-      srcStart: 0,
-      srcEnd: 2 * S,
-      fit: { a: 0, b: 1 / S, residualMs: 0 },
-      offsetSamples: 0,
-      start,
-      gainDb: 0,
-      fadeInSamples: 0,
-      fadeOutSamples: 0,
-    },
-  ],
-  tracks: {
-    narration: { volumeDb: 0, muted: false, solo: false },
-    aiVoice: { mode: 'replace', volumeDb: -12 },
-    music: { duck: true, duckDb: -12 },
-    original: { muteAll: false },
-  },
-  cleanup: 'light',
-})
 
 describe('narrationHash', () => {
   type Narrated = Pick<VersionRow, 'narration' | 'frozen'>
@@ -62,27 +31,14 @@ describe('narrationHash', () => {
 })
 
 describe('stale base and rebase', () => {
-  beforeEach(() => vi.stubGlobal('Netlify', { env: { get: () => undefined } }))
-  afterEach(() => vi.unstubAllGlobals())
+  stubNetlify()
 
   // Each run's saved source: an editable contract-1 composition.
-  const source = () =>
-    tarGz([
-      { name: 'video/index.html', body: fx('index.html') },
-      { name: 'video/summary.json', body: fx('summary.json') },
-    ])
   async function setup() {
     const h = harness()
-    h.deps.nextSource = source()
-    const v = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }))
-    await h.drive(4)
-    const id = v.id as string
+    const id = await editableVideo(h)
     const dana = await person(h, 'u_dana', 'creator')
-    const take = async (as: string) => {
-      const m = await h.json<{ id: string }>(await upload(h, as, tone(), 'filename=take.mp3'))
-      await h.deps.store.updateMedia(m.id, { role: 'narration-take', scopeJobId: id, durationSec: 20 })
-      return m.id
-    }
+    const take = (as: string) => narrationTake(h, id, as)
     const draft = async (as: string, n = 1) =>
       h.json<{ id: string; rev: number }>(
         await h.call('POST', `/api/v1/videos/${id}/versions/${n}/edits`, { as }),
@@ -96,7 +52,7 @@ describe('stale base and rebase', () => {
       const e = await draft(dana)
       await lock(dana, e.id)
       expect((await save(dana, e.id, 0, ops)).status).toBe(200)
-      h.deps.nextSource = source()
+      h.deps.nextSource = contractSource()
       // A narrated render uploads its bus with the outputs; finalize fails a version without one.
       h.deps.nextBus = BUS
       expect((await h.call('POST', `/api/v1/edits/${e.id}/render`, { as: dana })).status).toBe(202)

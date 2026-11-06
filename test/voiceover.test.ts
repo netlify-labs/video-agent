@@ -1,11 +1,9 @@
 // Voice-over (idea 3, docs/spikes.md S9): the choice stored on versions and plans and inherited by revisions, the plan's
 // narration becoming the script, what the run prompt says, and the MCP arguments.
-import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { buildPrompt } from '../src/domain/prompt.js'
 import { ONE_WAY_WORDS } from '../src/lib/voice.js'
-import { apiKey, harness, mcpCall, PROMPT, type Harness } from './helpers.js'
-import { tarGz } from './tarball.js'
+import { apiKey, contractSource, harness, mcpCall, PROMPT, type Harness } from './helpers.js'
 
 const create = async (h: Harness, body: Record<string, unknown>) =>
   h.json<{ id: string; versions: { n: number; voiceover: unknown }[] }>(
@@ -83,11 +81,7 @@ describe('voice-over per version', () => {
 
   it('an edit rendered in the browser keeps the sound and voice-over of the version it edits', async () => {
     const h = harness()
-    const fx = (f: string) => readFileSync(new URL(`./fixtures/contract1/${f}`, import.meta.url), 'utf8')
-    h.deps.nextSource = tarGz([
-      { name: 'video/index.html', body: fx('index.html') },
-      { name: 'video/summary.json', body: fx('summary.json') },
-    ])
+    h.deps.nextSource = contractSource()
     const v = await create(h, { sound: 'music', voiceover: { enabled: true, voice: 'af_sky' } })
     await h.drive(4)
     const e = await h.json<{ id: string }>(

@@ -61,6 +61,7 @@ import type { RunEngine } from './lib/engines/types.js'
 import { narrationPaths, type HydratedTake, type NarrationInputs } from './lib/narration-inputs.js'
 import {
   StepError,
+  exitOnError,
   log,
   netlifyCli,
   parseArgs,
@@ -273,24 +274,27 @@ async function restoreReferences(
   if (refs?.length) log('references', { what, files: refs.map((r) => r.path) })
 }
 
+/** ffprobe's JSON for `entries` of `path`; a probe that fails or prints no JSON says `<what> can't be read`. */
+function ffprobeJson(path: string, entries: string, what: string): unknown {
+  try {
+    return JSON.parse(
+      run('ffprobe', ['-v', 'error', '-show_entries', entries, '-of', 'json', path], { timeoutMs: 60_000 }),
+    )
+  } catch (e) {
+    throw new StepError(
+      `${what} can't be read (${e instanceof Error ? e.message.slice(0, 200) : 'ffprobe failed'}). Stop and report this.`,
+    )
+  }
+}
+
 /**
  * A second check of a clip with ffprobe (the upload was checked without it): H.264, AAC or no audio, ≤ 2 min; a screen
  * recording (the manifest's recording) may run 5 minutes (RECORDING_LIMITS, screen-recording plan gotcha 2).
  */
 export function probeClip(path: string, name: string, opts: { role?: 'screen-recording' } = {}) {
-  let info: { streams?: { codec_type?: string; codec_name?: string }[]; format?: { duration?: string } }
-  try {
-    info = JSON.parse(
-      run(
-        'ffprobe',
-        ['-v', 'error', '-show_entries', 'stream=codec_type,codec_name:format=duration', '-of', 'json', path],
-        { timeoutMs: 60_000 },
-      ),
-    ) as typeof info
-  } catch (e) {
-    throw new StepError(
-      `Clip ${name} can't be read (${e instanceof Error ? e.message.slice(0, 200) : 'ffprobe failed'}). Stop and report this.`,
-    )
+  const info = ffprobeJson(path, 'stream=codec_type,codec_name:format=duration', `Clip ${name}`) as {
+    streams?: { codec_type?: string; codec_name?: string }[]
+    format?: { duration?: string }
   }
   const video = info.streams?.find((s) => s.codec_type === 'video')
   const audio = info.streams?.filter((s) => s.codec_type === 'audio') ?? []
@@ -324,28 +328,11 @@ export function webmProblem(info: ProbedStreams): string | null {
 
 /** A second check of a library audio file with ffprobe: it has an audio stream and lasts at most 10 minutes. */
 export function probeAudio(path: string, name: string) {
-  let info: ProbedStreams & { format?: { duration?: string } }
-  try {
-    info = JSON.parse(
-      run(
-        'ffprobe',
-        [
-          '-v',
-          'error',
-          '-show_entries',
-          'stream=codec_type,codec_name:format=format_name,duration',
-          '-of',
-          'json',
-          path,
-        ],
-        { timeoutMs: 60_000 },
-      ),
-    ) as typeof info
-  } catch (e) {
-    throw new StepError(
-      `Audio ${name} can't be read (${e instanceof Error ? e.message.slice(0, 200) : 'ffprobe failed'}). Stop and report this.`,
-    )
-  }
+  const info = ffprobeJson(
+    path,
+    'stream=codec_type,codec_name:format=format_name,duration',
+    `Audio ${name}`,
+  ) as ProbedStreams & { format?: { duration?: string } }
   if (!info.streams?.some((s) => s.codec_type === 'audio'))
     throw new StepError(`Audio ${name} has no audio stream. Stop and report this.`)
   if (Number(info.format?.duration) > 600.5)
@@ -359,30 +346,13 @@ export function probeAudio(path: string, name: string) {
  * at least has audio within the 15-minute output limit to decode.
  */
 export function probeTake(path: string, mediaId: string): { pcm16: boolean } {
-  let info: {
+  const info = ffprobeJson(
+    path,
+    'stream=codec_type,codec_name,sample_rate,channels:format=format_name,duration',
+    `Narration take ${mediaId}`,
+  ) as {
     streams?: { codec_type?: string; codec_name?: string; sample_rate?: string; channels?: number }[]
     format?: { format_name?: string; duration?: string }
-  }
-  try {
-    info = JSON.parse(
-      run(
-        'ffprobe',
-        [
-          '-v',
-          'error',
-          '-show_entries',
-          'stream=codec_type,codec_name,sample_rate,channels:format=format_name,duration',
-          '-of',
-          'json',
-          path,
-        ],
-        { timeoutMs: 60_000 },
-      ),
-    ) as typeof info
-  } catch (e) {
-    throw new StepError(
-      `Narration take ${mediaId} can't be read (${e instanceof Error ? e.message.slice(0, 200) : 'ffprobe failed'}). Stop and report this.`,
-    )
   }
   const audio = info.streams?.filter((s) => s.codec_type === 'audio') ?? []
   if (!audio.length)
@@ -696,8 +666,4 @@ async function main() {
   )
 }
 
-if (process.argv[1]?.endsWith('prepare-run.ts'))
-  main().catch((e: unknown) => {
-    console.error(`prepare-run failed: ${e instanceof Error ? e.message : String(e)}`)
-    process.exit(1)
-  })
+if (process.argv[1]?.endsWith('prepare-run.ts')) main().catch(exitOnError('prepare-run failed: '))

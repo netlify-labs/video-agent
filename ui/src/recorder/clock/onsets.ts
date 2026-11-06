@@ -1,4 +1,4 @@
-// A streaming onset detector for claps and clicks (ported from spikes/s10/lib/onsets.ts, docs/spikes.md S10), used by
+// A streaming onset detector for claps and clicks (ported from docs/spikes/s10/lib/onsets.ts, docs/spikes.md S10), used by
 // the per-route calibration (calibration.ts). Pure; runs on worklet blocks in the page and in Node tests.
 //
 // x -> 2nd-order high-pass at 1 kHz (removes rumble, the monitor's bed and most speech fundamentals) -> |x| envelope

@@ -1,10 +1,10 @@
 // The media library (plan v2 §9, §14 rules 24-27): single-request uploads, SVG clean copies, listing and
 // visibility, captions, soft delete, usage counts, and the signed /media edge route.
 import { readFileSync } from 'node:fs'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { loadEdge } from './edge.js'
 import type { TestDeps } from './fakes.js'
-import { harness, person, png, PROMPT, upload } from './helpers.js'
+import { harness, person, png, PROMPT, stubNetlify, upload } from './helpers.js'
 
 const evilSvg = new TextEncoder().encode(
   '<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"><script>alert(2)</script><rect width="5" height="5"/></svg>',
@@ -28,11 +28,7 @@ interface Media {
 }
 
 describe('media library', () => {
-  beforeEach(() => {
-    vi.stubGlobal('Netlify', { env: { get: () => undefined } })
-  })
-  afterEach(() => {
-    vi.unstubAllGlobals()
+  stubNetlify(() => {
     current = null
   })
 

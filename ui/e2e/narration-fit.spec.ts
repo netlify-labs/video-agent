@@ -2,49 +2,15 @@
 // the fit option shows its cost and the length it fits to, an overrun can switch to it, it asks once more before an
 // authoring run starts, and it says when the draft's AI voice setting (Keep or Under) won't apply.
 import { expect, test, type Page } from '@playwright/test'
-import { toneWav } from './narration-helpers.js'
+import { dropOnLane, toneWav } from './narration-helpers.js'
 
 const lastRender = (page: Page) => page.evaluate<unknown>('window.__lastRender ?? null')
 
-/** Drops a WAV on the Narration lane `seconds` in (Alt held, so it doesn't snap to a scene). */
-async function dropAt(page: Page, name: string, bytes: number[], seconds: number) {
-  const lane = page.locator('.va-tl-lane[data-lane="narration"]')
-  await lane.scrollIntoViewIfNeeded()
-  const box = await lane.boundingBox()
-  const content = await page.locator('.va-tl-content').boundingBox()
-  if (!box || !content) throw new Error('no Narration lane')
-  const pps = Number(await page.getByTestId('timeline').getAttribute('data-px-per-sec'))
-  await lane.evaluate(
-    (el, a) => {
-      // The browser's DOM, typed only as far as this uses it (the e2e project has no DOM lib).
-      const w = globalThis as unknown as {
-        DataTransfer: new () => { items: { add: (f: unknown) => void } }
-        File: new (parts: unknown[], name: string, o: { type: string }) => unknown
-        DragEvent: new (type: string, o: Record<string, unknown>) => unknown
-      }
-      const dt = new w.DataTransfer()
-      dt.items.add(new w.File([new Uint8Array(a.bytes)], a.name, { type: 'audio/wav' }))
-      for (const type of ['dragenter', 'dragover', 'drop'])
-        (el as unknown as { dispatchEvent: (e: unknown) => void }).dispatchEvent(
-          new w.DragEvent(type, {
-            dataTransfer: dt,
-            clientX: a.x,
-            clientY: a.y,
-            altKey: true,
-            bubbles: true,
-            cancelable: true,
-          }),
-        )
-    },
-    { bytes, name, x: content.x + seconds * pps, y: box.y + box.height / 2 },
-  )
-}
-
-/** A draft of the teaser's v2 with one take dropped `at` seconds in, saved. */
+/** A draft of the teaser's v2 with one take dropped `at` seconds in (Alt held, so it doesn't snap), saved. */
 async function narrated(page: Page, seconds: number, at: number) {
   await page.goto('/videos/vid_teaser/edit/2')
   await expect(page.getByTestId('narration-section')).toBeVisible()
-  await dropAt(page, 'my-voice.wav', toneWav(seconds), at)
+  await dropOnLane(page, 'my-voice.wav', toneWav(seconds), at, true)
   await expect(page.locator('.va-tl-clip[data-clip-id="nar_1"]')).toBeVisible({ timeout: 15_000 })
   await expect(page.getByTestId('edit-status')).toContainText('Draft saved')
 }

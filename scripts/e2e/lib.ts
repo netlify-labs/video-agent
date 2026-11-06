@@ -39,6 +39,18 @@ export async function api<T = unknown>(
   return { status: res.status, json: (text ? JSON.parse(text) : {}) as T }
 }
 
+/** One stateless MCP JSON-RPC request (id 1) as `k`; the server may answer as JSON or as one SSE event. */
+export const mcpPost = (k: string, method: string, params: unknown) =>
+  fetch(`${base}/mcp`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${k}`,
+      'content-type': 'application/json',
+      accept: 'application/json, text/event-stream',
+    },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+  })
+
 /** A client for VIDEO_AGENT_URL / VIDEO_AGENT_KEY whose request events print as the scripts' JSON lines. */
 export const sdk = () =>
   new VideoAgent({ url: base, apiKey: key, userAgent: 'video-agent-e2e', logger: (_e, f) => log('api', f) })

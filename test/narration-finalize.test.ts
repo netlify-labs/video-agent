@@ -2,7 +2,7 @@
 // version records what was mixed (the frozen op, the recipe with ffmpeg's version from the run's receipt, the bus as
 // stored) and its captions (transcription status, policy, rev 0); the attempt's take references become the version's.
 // A failed or cancelled attempt lets go of its references instead (their 30 days start), and a retry takes them again.
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { narrationOpHash } from '../src/domain/captions.js'
 import { narrationReportOf, wavSamples } from '../src/domain/finalize.js'
 import { TAKE_RETAIN_MS } from '../src/domain/takes.js'
@@ -10,7 +10,7 @@ import type { NarrationReport } from '../src/domain/types.js'
 import { sha256Hex } from '../src/lib/crypto.js'
 import type { Store } from '../src/store/types.js'
 import { failedSnap, running } from './fakes.js'
-import { harness, pgStore, type Harness } from './helpers.js'
+import { harness, pgStore, stubNetlify, type Harness } from './helpers.js'
 import { BUS, dropDraftRefs, narratedDraft, render, report, S } from './narration-render.js'
 
 const stores: [string, () => Promise<Store | undefined>][] = [
@@ -32,8 +32,7 @@ const logged = (h: Harness, event: string) =>
   h.deps.logs.map((l) => JSON.parse(l) as Record<string, unknown>).filter((l) => l.event === event)
 
 describe('finalizing recorded narration', () => {
-  beforeEach(() => vi.stubGlobal('Netlify', { env: { get: () => undefined } }))
-  afterEach(() => vi.unstubAllGlobals())
+  stubNetlify()
 
   it.each(stores)(
     'records the narration and captions, and the takes become the version’s (%s)',

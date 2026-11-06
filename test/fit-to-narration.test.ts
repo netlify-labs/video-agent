@@ -27,17 +27,8 @@ import { prepare } from '../scripts/prepare-run.js'
 import { readNarrationInputs } from '../scripts/lib/narration-inputs.js'
 import { which } from '../scripts/lib/run-tools.js'
 import { failedSnap, running } from './fakes.js'
-import { harness, type Harness } from './helpers.js'
-import {
-  BUS,
-  S,
-  contractSource,
-  draftNarration,
-  narratedDraft,
-  narrationOp,
-  render,
-  report,
-} from './narration-render.js'
+import { contractSource, harness, type Harness } from './helpers.js'
+import { BUS, S, draftNarration, narratedDraft, narrationOp, render, report } from './narration-render.js'
 
 const ffmpeg = which('ffmpeg') && which('ffprobe')
 const dirs: string[] = []

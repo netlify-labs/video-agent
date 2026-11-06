@@ -2,11 +2,11 @@
 // one namespace per x-sdk resource, one thin typed method per operation. --check fails when the file is stale.
 // Signature rule: path parameters positionally in path order, then one `input` object (body and query fields merged;
 // a name in both fails generation), then opts. Routes with x-sdk false or a binary body are skipped (va.raw has them).
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { format } from 'prettier'
 import type { SdkMeta } from '../src/lib/sdk-meta.js'
-import { repoRoot } from './lib/run-tools.js'
+import { repoRoot, writeOrCheck } from './lib/run-tools.js'
 
 interface Param {
   name: string
@@ -190,23 +190,9 @@ export const PAGEABLE = ${list(methods.filter((m) => m.pageable).map((m) => `${m
 if (import.meta.url === `file://${process.argv[1]}`) {
   const spec = JSON.parse(readFileSync(join(repoRoot, 'ui/src/api/openapi.json'), 'utf8')) as Spec
   const out = await generateResources(spec)
-  const file = join(repoRoot, 'packages/sdk/src/generated/resources.ts')
-  if (process.argv.includes('--check')) {
-    let current = ''
-    try {
-      current = readFileSync(file, 'utf8')
-    } catch {
-      // missing counts as stale
-    }
-    if (current !== out) {
-      console.error(
-        'packages/sdk/src/generated/resources.ts is stale. Run `npm run openapi:gen` and commit it.',
-      )
-      process.exit(1)
-    }
-    console.log('packages/sdk/src/generated/resources.ts is up to date.')
-  } else {
-    writeFileSync(file, out)
-    console.log(`Wrote ${file}`)
-  }
+  writeOrCheck(join(repoRoot, 'packages/sdk/src/generated/resources.ts'), out, {
+    check: process.argv.includes('--check'),
+    label: 'packages/sdk/src/generated/resources.ts',
+    hint: 'Run `npm run openapi:gen` and commit it.',
+  })
 }

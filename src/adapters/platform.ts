@@ -17,6 +17,17 @@ export function createPlatform(opts: {
       signal: AbortSignal.timeout(8000),
     })
   }
+  /** POSTs `{ [key]: id }` to `<fn>-background`, signed over `<kind>:<id>`; the function answers 202. */
+  const dispatch = async (fn: string, kind: string, key: string, id: string, what: string, ms = 8000) => {
+    const sig = hmacHex(await opts.signingSecret(), `${kind}:${id}`)
+    const res = await fetch(`${opts.siteUrl}/.netlify/functions/${fn}-background`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', [`x-${kind}-signature`]: sig },
+      body: JSON.stringify({ [key]: id }),
+      signal: AbortSignal.timeout(ms),
+    })
+    if (res.status !== 202) throw new Error(`${what} dispatch returned ${res.status}`)
+  }
   return {
     async productionDeployId() {
       if (!opts.siteId) return null
@@ -25,47 +36,13 @@ export function createPlatform(opts: {
       const site = (await res.json()) as { published_deploy?: { id?: string } }
       return site.published_deploy?.id ?? null
     },
-    async dispatchFinalize(attemptId) {
-      const sig = hmacHex(await opts.signingSecret(), `finalize:${attemptId}`)
-      const res = await fetch(`${opts.siteUrl}/.netlify/functions/finalize-background`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-finalize-signature': sig },
-        body: JSON.stringify({ attemptId }),
-        signal: AbortSignal.timeout(8000),
-      })
-      if (res.status !== 202) throw new Error(`finalize dispatch returned ${res.status}`)
-    },
-    async dispatchMediaAssembly(uploadId) {
-      const sig = hmacHex(await opts.signingSecret(), `assemble:${uploadId}`)
-      const res = await fetch(`${opts.siteUrl}/.netlify/functions/media-assemble-background`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-assemble-signature': sig },
-        body: JSON.stringify({ uploadId }),
-        signal: AbortSignal.timeout(8000),
-      })
-      if (res.status !== 202) throw new Error(`assembly dispatch returned ${res.status}`)
-    },
-    async dispatchOpenverseJob(jobId) {
-      const sig = hmacHex(await opts.signingSecret(), `openverse:${jobId}`)
-      // Short: the API request that dispatches has already spent seconds trying Openverse itself.
-      const res = await fetch(`${opts.siteUrl}/.netlify/functions/openverse-background`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-openverse-signature': sig },
-        body: JSON.stringify({ jobId }),
-        signal: AbortSignal.timeout(3000),
-      })
-      if (res.status !== 202) throw new Error(`openverse dispatch returned ${res.status}`)
-    },
-    async dispatchPublish(publicationId) {
-      const sig = hmacHex(await opts.signingSecret(), `publish:${publicationId}`)
-      const res = await fetch(`${opts.siteUrl}/.netlify/functions/publish-background`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-publish-signature': sig },
-        body: JSON.stringify({ publicationId }),
-        signal: AbortSignal.timeout(8000),
-      })
-      if (res.status !== 202) throw new Error(`publish dispatch returned ${res.status}`)
-    },
+    dispatchFinalize: (attemptId) => dispatch('finalize', 'finalize', 'attemptId', attemptId, 'finalize'),
+    dispatchMediaAssembly: (uploadId) =>
+      dispatch('media-assemble', 'assemble', 'uploadId', uploadId, 'assembly'),
+    // Short: the API request that dispatches has already spent seconds trying Openverse itself.
+    dispatchOpenverseJob: (jobId) => dispatch('openverse', 'openverse', 'jobId', jobId, 'openverse', 3000),
+    dispatchPublish: (publicationId) =>
+      dispatch('publish', 'publish', 'publicationId', publicationId, 'publish'),
     async setupFacts() {
       const out = {
         tokenValid: null as boolean | null,

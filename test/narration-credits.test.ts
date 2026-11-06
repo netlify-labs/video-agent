@@ -2,18 +2,15 @@
 // version's narration plays is referenced through media_refs (owner `version`), not version_media, so usage and
 // credits union those references in and take audibility from the resolved mix: the narration track not muted, a clip
 // with a level. Recordings are the user's own and get no credit line.
-import { readFileSync } from 'node:fs'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { audibleNarration, versionCredits } from '../src/domain/credits.js'
 import { promoteAttemptRefs } from '../src/domain/takes.js'
 import type { VersionProvenanceRow, VersionRow } from '../src/domain/types.js'
 import { SAMPLE_RATE } from '../src/lib/timeline.js'
 import type { Store } from '../src/store/types.js'
-import { harness, pgStore, PROMPT, upload, type Harness } from './helpers.js'
-import { tarGz } from './tarball.js'
+import { editableVideo, harness, pgStore, stubNetlify, tone, upload, type Harness } from './helpers.js'
+import { narrationClip as clip } from './narration-render.js'
 
-const fx = (f: string) => readFileSync(new URL(`./fixtures/contract1/${f}`, import.meta.url), 'utf8')
-const tone = () => new Uint8Array(readFileSync(new URL('./fixtures/audio/tone.mp3', import.meta.url)))
 const S = SAMPLE_RATE
 
 const CC_BY = {
@@ -29,19 +26,6 @@ const CC_BY = {
   attribution: null,
 }
 
-const clip = (mediaId: string, over: Record<string, unknown> = {}) => ({
-  id: 'c1',
-  mediaId,
-  srcStart: 0,
-  srcEnd: 2 * S,
-  fit: { a: 0, b: 1 / S, residualMs: 0 },
-  offsetSamples: 0,
-  start: S,
-  gainDb: 0,
-  fadeInSamples: 0,
-  fadeOutSamples: 0,
-  ...over,
-})
 const narration = (clips: object[], muted = false) => ({
   op: 'narration',
   schema: 1,
@@ -102,18 +86,8 @@ describe('versionCredits for narration', () => {
 })
 
 describe('narration credits end to end', () => {
-  beforeEach(() => vi.stubGlobal('Netlify', { env: { get: () => undefined } }))
-  afterEach(() => vi.unstubAllGlobals())
+  stubNetlify()
 
-  async function editableVideo(h: Harness) {
-    h.deps.nextSource = tarGz([
-      { name: 'video/index.html', body: fx('index.html') },
-      { name: 'video/summary.json', body: fx('summary.json') },
-    ])
-    const v = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }))
-    await h.drive(4)
-    return v.id as string
-  }
   async function audio(h: Harness, patch: object) {
     const m = await h.json<{ id: string }>(await upload(h, h.member, tone(), 'filename=a.mp3'))
     await h.deps.store.updateMedia(m.id, { durationSec: 20, ...patch })

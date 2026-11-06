@@ -1776,21 +1776,6 @@ var jitter = (ms) => ms / 2 + Math.random() * (ms / 2);
 // packages/sdk/src/helpers/videos.ts
 var TERMINAL_FAILURES = /* @__PURE__ */ new Set(["failed", "cancelled", "timed_out"]);
 var LIVE = /* @__PURE__ */ new Set(["running", "finishing"]);
-var sleep2 = (ms, signal) => new Promise((resolve2, reject) => {
-  if (signal?.aborted) {
-    reject(signal.reason);
-    return;
-  }
-  const t = setTimeout(() => {
-    signal?.removeEventListener("abort", onAbort);
-    resolve2();
-  }, ms);
-  const onAbort = () => {
-    clearTimeout(t);
-    reject(signal?.reason);
-  };
-  signal?.addEventListener("abort", onAbort, { once: true });
-});
 async function waitForVideo(d, id, o = {}) {
   const started = Date.now();
   const deadline = o.timeoutMs === void 0 ? Infinity : started + o.timeoutMs;
@@ -1849,7 +1834,7 @@ async function waitForVideo(d, id, o = {}) {
         message: `Version ${n} of ${id} is still ${v.status} after ${Math.round((Date.now() - started) / 1e3)} s.`,
         details: { videoId: id, version: n, status: v.status }
       });
-    await sleep2(Math.min(interval, deadline - Date.now()), o.signal);
+    await sleep(Math.min(interval, deadline - Date.now()), o.signal);
   }
 }
 async function* listAll(list, input = {}, opts = {}) {
@@ -1981,26 +1966,18 @@ async function downloadFile(d, video, o) {
 
 // packages/sdk/src/helpers/media.ts
 var SINGLE_UPLOAD_MAX = 4 * 1024 * 1024;
-var sleep3 = (ms, signal) => new Promise((resolve2, reject) => {
-  if (signal?.aborted) {
-    reject(signal.reason);
-    return;
-  }
-  const t = setTimeout(() => {
-    signal?.removeEventListener("abort", onAbort);
-    resolve2();
-  }, ms);
-  const onAbort = () => {
-    clearTimeout(t);
-    reject(signal?.reason);
-  };
-  signal?.addEventListener("abort", onAbort, { once: true });
-});
 var hex = (b) => [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join("");
 var sha256 = async (b) => hex(await crypto.subtle.digest("SHA-256", b));
 async function json(res) {
   return await (await res).json();
 }
+var postJson = (d, url, body2, signal) => d.send({
+  method: "POST",
+  url,
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify(body2),
+  signal
+});
 async function bytesOf(file, o) {
   if (typeof file === "string") {
     const spec = "node:fs/promises";
@@ -2020,13 +1997,7 @@ async function uploadMedia(d, file, o = {}) {
   const whole = await sha256(bytes);
   if (o.dedupe !== false && !o.role) {
     const check = await json(
-      d.send({
-        method: "POST",
-        url: "/api/v1/media/check",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ files: [{ filename, sha256: whole }] }),
-        signal: o.signal
-      })
+      postJson(d, "/api/v1/media/check", { files: [{ filename, sha256: whole }] }, o.signal)
     );
     const same = check.files[0]?.sameFile;
     if (same) {
@@ -2069,24 +2040,23 @@ async function uploadMedia(d, file, o = {}) {
         message: `${filename} was rejected: ${item.rejectReason ?? "no reason given"}`,
         details: { mediaId, rejectReason: item.rejectReason }
       });
-    await sleep3(o.pollIntervalMs ?? 2e3, o.signal);
+    await sleep(o.pollIntervalMs ?? 2e3, o.signal);
   }
 }
 async function sessionUpload(d, bytes, filename, whole, o, progress) {
   let session = await json(
-    d.send({
-      method: "POST",
-      url: "/api/v1/media/uploads",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
+    postJson(
+      d,
+      "/api/v1/media/uploads",
+      {
         filename,
         size: bytes.byteLength,
         sha256: whole,
         ...o.caption ? { caption: o.caption } : {},
         ...o.role ? { role: o.role, scopeJobId: o.scopeJobId } : {}
-      }),
-      signal: o.signal
-    })
+      },
+      o.signal
+    )
   );
   const path = `/api/v1/media/uploads/${session.id}`;
   try {
@@ -2118,7 +2088,7 @@ async function sessionUpload(d, bytes, filename, whole, o, progress) {
         } catch (e) {
           d.log?.("media.part_failed", { uploadId: session.id, index: i, attempt, ms: Date.now() - started });
           if (o.signal?.aborted || attempt > d.retries) throw e;
-          await sleep3(500 * 2 ** (attempt - 1), o.signal);
+          await sleep(500 * 2 ** (attempt - 1), o.signal);
           session = await json(d.send({ method: "GET", url: path, signal: o.signal }));
         }
       }
@@ -2138,18 +2108,12 @@ async function sessionUpload(d, bytes, filename, whole, o, progress) {
         message: `${filename} couldn't be assembled: ${session.error ?? "no reason given"}`,
         details: { uploadId: session.id, error: session.error }
       });
-    await sleep3(o.pollIntervalMs ?? 2e3, o.signal);
+    await sleep(o.pollIntervalMs ?? 2e3, o.signal);
     session = await json(d.send({ method: "GET", url: path, signal: o.signal }));
   }
 }
 async function importMusicAndWait(d, input, o = {}) {
-  const res = await d.send({
-    method: "POST",
-    url: "/api/v1/media/openverse/import",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(input),
-    signal: o.signal
-  });
+  const res = await postJson(d, "/api/v1/media/openverse/import", input, o.signal);
   if (res.status !== 202) return await res.json();
   let job = await res.json();
   for (; ; ) {
@@ -2161,7 +2125,7 @@ async function importMusicAndWait(d, input, o = {}) {
         message: `Importing Openverse track ${input.id} failed${job.error ? `: ${job.error.message}` : "."}`,
         details: { jobId: job.id, error: job.error }
       });
-    await sleep3(o.pollIntervalMs ?? 2e3, o.signal);
+    await sleep(o.pollIntervalMs ?? 2e3, o.signal);
     job = await json(
       d.send({ method: "GET", url: `/api/v1/media/openverse/jobs/${job.id}`, signal: o.signal })
     );

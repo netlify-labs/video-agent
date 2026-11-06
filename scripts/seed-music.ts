@@ -7,7 +7,7 @@
 // Needs VIDEO_AGENT_KEY: an API key of a Creator or admin (Settings → API keys). A site id or name is looked up with
 // your Netlify CLI login (`npx netlify login`); an https URL is used as is. Never prints the key.
 import { cliToken, getSite } from './lib/netlify-setup.js'
-import { parseArgs } from './lib/run-tools.js'
+import { exitOnError, parseArgs } from './lib/run-tools.js'
 import { VideoAgent } from '../packages/sdk/src/index.js'
 import { sdkCall, seedMusic, summary } from './lib/seed-music.js'
 
@@ -38,7 +38,4 @@ async function main() {
   if (!rows.some((r) => r.outcome !== 'failed')) process.exitCode = 1
 }
 
-main().catch((e: unknown) => {
-  console.error(e instanceof Error ? e.message : String(e))
-  process.exit(1)
-})
+main().catch(exitOnError())

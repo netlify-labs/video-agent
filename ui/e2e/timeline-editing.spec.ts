@@ -1,18 +1,12 @@
 // Clip editing on the mock build's timeline demo (/dev/timeline): drags with snapping, trims, split, delete, the
 // clip menu, nudges, and undo/redo from the keyboard, all through useNarrationEditor.
 import { expect, test, type Page } from '@playwright/test'
+import { span } from './narration-helpers.js'
 
 const FRAME = 1 / 30
 const clipEl = (page: Page, id: string) => page.locator(`.va-tl-clip[data-clip-id="${id}"]`)
 const announcer = (page: Page) => page.getByTestId('timeline-announcer')
 const summary = (page: Page) => page.getByTestId('timeline-summary')
-/** The selected clip's [start, end] in seconds, from the inspector. */
-const span = async (page: Page): Promise<[string, number, number]> => {
-  const text = (await page.getByTestId('clip-inspector-span').textContent()) ?? ''
-  const m = /^(\S+): ([\d.]+)–([\d.]+) s$/.exec(text)
-  if (!m) throw new Error(`no span in "${text}"`)
-  return [m[1] ?? '', Number(m[2]), Number(m[3])]
-}
 const pxPerSec = async (page: Page) =>
   Number(await page.getByTestId('timeline').getAttribute('data-px-per-sec'))
 

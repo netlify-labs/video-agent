@@ -3,7 +3,7 @@
 // refreshes common and popular searches, spaced out; the sweep drops old searches. Openverse is a fake that can be
 // slow (it never answers until the caller gives up) or count every call.
 import { readFileSync } from 'node:fs'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { openverseTiming, resetOpenverseCache, searchRequest } from '../src/domain/openverse.js'
 import {
   COMMON_SEARCHES,
@@ -15,7 +15,7 @@ import {
   SYSTEM_USER_ID,
 } from '../src/domain/openverse-jobs.js'
 import type { TestDeps } from './fakes.js'
-import { apiKey, harness, mcpCall, pgStore, upload, type Harness } from './helpers.js'
+import { apiKey, harness, mcpCall, pgStore, stubNetlify, upload, type Harness } from './helpers.js'
 
 let current: TestDeps | null = null
 vi.mock('@netlify/blobs', async () => (await import('./edge.js')).fakeBlobsModule(() => current?.blobs))
@@ -105,11 +105,7 @@ const search = (h: Harness, q: string, as = h.member) =>
   h.call('GET', `/api/v1/media/openverse/search?${q}`, { as })
 const keyFor = (q: string) => searchRequest({ q, license: 'cc0,by', category: 'music' }).key
 
-beforeEach(() => {
-  vi.stubGlobal('Netlify', { env: { get: () => undefined } })
-})
-afterEach(() => {
-  vi.unstubAllGlobals()
+stubNetlify(() => {
   current = null
 })
 

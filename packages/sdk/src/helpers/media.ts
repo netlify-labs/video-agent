@@ -5,6 +5,7 @@
 import { VideoAgentError } from '../errors.js'
 import type { components } from '../generated/schema.js'
 import type { Exchange } from '../http.js'
+import { sleep } from '../http.js'
 
 type Media = components['schemas']['Media']
 type Session = components['schemas']['UploadSession']
@@ -46,29 +47,21 @@ export interface MediaHelperDeps {
   log?: ((event: string, fields: Record<string, unknown>) => void) | undefined
 }
 
-const sleep = (ms: number, signal?: AbortSignal) =>
-  new Promise<void>((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(signal.reason as Error)
-      return
-    }
-    const t = setTimeout(() => {
-      signal?.removeEventListener('abort', onAbort)
-      resolve()
-    }, ms)
-    const onAbort = () => {
-      clearTimeout(t)
-      reject(signal?.reason as Error)
-    }
-    signal?.addEventListener('abort', onAbort, { once: true })
-  })
-
 const hex = (b: ArrayBuffer) => [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, '0')).join('')
 export const sha256 = async (b: Uint8Array<ArrayBuffer>) => hex(await crypto.subtle.digest('SHA-256', b))
 
 async function json<T>(res: Promise<Response>): Promise<T> {
   return (await (await res).json()) as T
 }
+
+const postJson = (d: MediaHelperDeps, url: string, body: unknown, signal: AbortSignal | undefined) =>
+  d.send({
+    method: 'POST',
+    url,
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+    signal,
+  })
 
 /** The bytes and name of a path (Node, loaded lazily), a Blob or File, or raw bytes. */
 async function bytesOf(file: string | Blob | Uint8Array, o: UploadOptions) {
@@ -95,13 +88,7 @@ export async function uploadMedia(
   const whole = await sha256(bytes)
   if (o.dedupe !== false && !o.role) {
     const check = await json<MediaCheckResult>(
-      d.send({
-        method: 'POST',
-        url: '/api/v1/media/check',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ files: [{ filename, sha256: whole }] }),
-        signal: o.signal,
-      }),
+      postJson(d, '/api/v1/media/check', { files: [{ filename, sha256: whole }] }, o.signal),
     )
     const same = check.files[0]?.sameFile
     if (same) {
@@ -157,19 +144,18 @@ async function sessionUpload(
   progress: (sent: number, phase: UploadProgress['phase']) => void,
 ): Promise<string> {
   let session = await json<Session>(
-    d.send({
-      method: 'POST',
-      url: '/api/v1/media/uploads',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
+    postJson(
+      d,
+      '/api/v1/media/uploads',
+      {
         filename,
         size: bytes.byteLength,
         sha256: whole,
         ...(o.caption ? { caption: o.caption } : {}),
         ...(o.role ? { role: o.role, scopeJobId: o.scopeJobId } : {}),
-      }),
-      signal: o.signal,
-    }),
+      },
+      o.signal,
+    ),
   )
   const path = `/api/v1/media/uploads/${session.id}`
   try {
@@ -234,13 +220,7 @@ export async function importMusicAndWait(
   input: { id: string; caption?: string },
   o: { signal?: AbortSignal; pollIntervalMs?: number } = {},
 ): Promise<Media> {
-  const res = await d.send({
-    method: 'POST',
-    url: '/api/v1/media/openverse/import',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(input),
-    signal: o.signal,
-  })
+  const res = await postJson(d, '/api/v1/media/openverse/import', input, o.signal)
   if (res.status !== 202) return (await res.json()) as Media
   let job = (await res.json()) as OpenverseJob
   for (;;) {

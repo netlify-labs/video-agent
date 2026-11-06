@@ -8,7 +8,7 @@ import { copyFileSync, cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, wri
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { isPreviewBuild, videoRunOf, writeVideoRunPreview } from './lib/agent-preview.js'
-import { repoRoot } from './lib/run-tools.js'
+import { pinnedHyperframesVersion, repoRoot } from './lib/run-tools.js'
 import { unpackZip, ZipError } from './lib/brand-zip.js'
 import { buildLooks, copyLookPreviews, LookBuildError, writeLooksModule } from './lib/looks.js'
 import { buildMcpApp } from './lib/mcp-app.js'
@@ -139,15 +139,7 @@ log('mcp-app', await buildMcpApp(repoRoot))
 // included_files), video-run previews included. A look that fails look:check --static fails the deploy.
 let looks
 try {
-  looks = buildLooks({
-    repoRoot,
-    hyperframesVersion: (
-      JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8')) as {
-        netlifyAgent: { hyperframes: { version: string } }
-      }
-    ).netlifyAgent.hyperframes.version,
-    writeArchives: true,
-  })
+  looks = buildLooks({ repoRoot, hyperframesVersion: pinnedHyperframesVersion(), writeArchives: true })
 } catch (e) {
   if (e instanceof LookBuildError) log('looks', { ok: false, problems: e.problems })
   throw e
@@ -197,8 +189,8 @@ if (videoRun && process.env.FORCE_UI_BUILD !== 'true') {
   copyFileSync(join(repoRoot, 'src/preview/bridge.js'), join(repoRoot, 'ui/dist/_preview/bridge.js'))
   // For compositions made before GSAP was vendored (the preview rewrites their CDN tag to this).
   copyFileSync(join(repoRoot, 'video/vendor/gsap.min.js'), join(repoRoot, 'ui/dist/_preview/gsap.js'))
-  // Static pages outside the app (static/<path>/index.html), public and without the app's JavaScript.
-  cpSync(join(repoRoot, 'static'), join(repoRoot, 'ui/dist'), { recursive: true })
+  // Static pages outside the app (ui/static/<path>/index.html), public and without the app's JavaScript.
+  cpSync(join(repoRoot, 'ui/static'), join(repoRoot, 'ui/dist'), { recursive: true })
   log('preview', { runtime: 'hyperframes/dist/hyperframe.runtime.iife.js' })
   // Installable agent skills at /skills/<name>.zip and /skills/index.json, pointing at this deployment's URL (the
   // same URL the API uses for links), so a fork serves skills for itself.

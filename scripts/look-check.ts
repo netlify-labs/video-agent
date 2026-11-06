@@ -2,11 +2,11 @@
 //   npm run look:check [--static] [id…]        (every look in looks/ when no id; looks/_template as a template)
 // --static runs only what needs no browser (the Netlify build runs this). Without it (CI), each example also goes
 // through the pinned `hyperframes check` in a temp project, which needs Chrome; with no browser it stops and says so.
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { checkLookBrowser, NoBrowserError, type BrowserCheckOptions } from './lib/look-browser.js'
 import { checkLookStatic } from './lib/look-static.js'
-import { repoRoot } from './lib/run-tools.js'
+import { pinnedHyperframesVersion, repoRoot } from './lib/run-tools.js'
 
 export interface LookCheckResult {
   looks: string[]
@@ -54,15 +54,13 @@ if (process.argv[1]?.endsWith('look-check.ts')) {
   const args = process.argv.slice(2)
   const staticOnly = args.includes('--static')
   const ids = args.filter((a) => !a.startsWith('--'))
-  const pkg = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8')) as {
-    netlifyAgent: { hyperframes: { version: string } }
-  }
+  const hyperframesVersion = pinnedHyperframesVersion()
   let result: LookCheckResult
   try {
     result = runLookCheck(
       join(repoRoot, 'looks'),
       ids,
-      pkg.netlifyAgent.hyperframes.version,
+      hyperframesVersion,
       staticOnly ? undefined : { repoRoot },
     )
   } catch (e) {

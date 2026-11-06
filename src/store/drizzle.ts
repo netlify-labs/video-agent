@@ -22,7 +22,7 @@ import {
 } from 'drizzle-orm'
 import type { PgTable } from 'drizzle-orm/pg-core'
 import type { PgAsyncDatabase } from 'drizzle-orm/pg-core/async/db'
-import * as t from '../../db/schema.js'
+import * as t from './schema.js'
 import { SLOT_STAGES, TERMINAL_STAGES } from '../domain/types.js'
 import type {
   ApiKeyRow,

@@ -5,7 +5,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { PGlite } from '@electric-sql/pglite'
 import { drizzle } from 'drizzle-orm/pglite'
 import { describe, expect, it } from 'vitest'
-import * as schema from '../db/schema.js'
+import * as schema from '../src/store/schema.js'
 import { getSettings, resetSettingsCache } from '../src/domain/settings.js'
 import {
   NARRATION_SETTING_DEFAULTS,

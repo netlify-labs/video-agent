@@ -4,13 +4,12 @@
 // changed duplicate, corrupted part, missing part, resume), two concurrent completions (one assembly), assembly time,
 // Range playback, quota with cancellation, and the SVG sanitizer on a malicious file. Logs JSON lines (the S5 numbers);
 // exits non-zero on the first failure. Prints the media id for the next gate.
-import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
+import { sha256Hex as sha } from '../../src/lib/crypto.js'
 import { base, fail, key, log } from './lib.js'
 
 const clipPath = process.env.CLIP ?? ''
 if (!base || !key || !clipPath) throw new Error('Set VIDEO_AGENT_URL, VIDEO_AGENT_KEY and CLIP.')
-const sha = (b: Uint8Array) => createHash('sha256').update(b).digest('hex')
 const auth = { authorization: `Bearer ${key}` }
 
 async function call(method: string, path: string, body?: unknown, headers: Record<string, string> = {}) {

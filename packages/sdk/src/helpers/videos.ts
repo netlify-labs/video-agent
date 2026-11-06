@@ -3,6 +3,7 @@
 import { VideoAgentError } from '../errors.js'
 import type { components } from '../generated/schema.js'
 import type { Exchange } from '../http.js'
+import { sleep } from '../http.js'
 import type { CallOptions } from '../transport.js'
 
 type Video = components['schemas']['Video']
@@ -34,23 +35,6 @@ export interface VideoHelperDeps {
   send: (x: Exchange) => Promise<Response>
   progress: (id: string) => Promise<Progress>
 }
-
-const sleep = (ms: number, signal?: AbortSignal) =>
-  new Promise<void>((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(signal.reason as Error)
-      return
-    }
-    const t = setTimeout(() => {
-      signal?.removeEventListener('abort', onAbort)
-      resolve()
-    }, ms)
-    const onAbort = () => {
-      clearTimeout(t)
-      reject(signal?.reason as Error)
-    }
-    signal?.addEventListener('abort', onAbort, { once: true })
-  })
 
 /** Polls the video with If-None-Match (an unchanged video is a bodyless 304) until the version is ready. */
 export async function waitForVideo(d: VideoHelperDeps, id: string, o: WaitOptions = {}): Promise<Video> {

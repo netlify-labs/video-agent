@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import type { RunnerSnapshot } from '../src/deps.js'
 import { progressKey, SNAPSHOT_EVERY_MS } from '../src/domain/progress.js'
 import { failedSnap, running } from './fakes.js'
-import { apiKey, harness, mcpCall, PROMPT, type Harness } from './helpers.js'
+import { apiKey, harness, mcpCall, PROMPT, readyVideo, type Harness } from './helpers.js'
 
 const step = (latestStep: string, stepsCount: number, totalCreditsCost: number): RunnerSnapshot => ({
   kind: 'running',
@@ -169,9 +169,7 @@ describe('progress', () => {
 
   it('schedules cleanup of the progress cache when the attempt ends', async () => {
     const h = harness()
-    const v = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }))
-    await h.drive(4)
-    const [a] = await h.attempts(v.id)
+    const [a] = await h.attempts(await readyVideo(h))
     expect(a?.stage).toBe('ready')
     const due = await h.deps.store.listDueCleanup(new Date(Date.now() + 365 * 86400_000).toISOString(), 100)
     expect(due.some((c) => c.store === 'internal' && c.prefix === progressKey(a?.id ?? ''))).toBe(true)

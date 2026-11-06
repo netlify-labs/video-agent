@@ -2,10 +2,9 @@
 // renamed or removed name shows in review. The declarations come from the TypeScript compiler, in memory, for every
 // source file except the generated schema (its types follow openapi.json, which has its own check). --check fails
 // when the committed report is stale.
-import { readFileSync, writeFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import ts from 'typescript'
-import { repoRoot } from './lib/run-tools.js'
+import { repoRoot, writeOrCheck } from './lib/run-tools.js'
 
 const pkg = join(repoRoot, 'packages/sdk')
 
@@ -32,22 +31,9 @@ export function apiReport(): string {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const file = join(pkg, 'api.md')
-  const report = apiReport()
-  if (process.argv.includes('--check')) {
-    let current = ''
-    try {
-      current = readFileSync(file, 'utf8')
-    } catch {
-      // missing counts as stale
-    }
-    if (current !== report) {
-      console.error('packages/sdk/api.md is stale. Run `npx tsx scripts/sdk-api-report.ts` and commit it.')
-      process.exit(1)
-    }
-    console.log('packages/sdk/api.md is up to date.')
-  } else {
-    writeFileSync(file, report)
-    console.log(`Wrote ${file}`)
-  }
+  writeOrCheck(join(pkg, 'api.md'), apiReport(), {
+    check: process.argv.includes('--check'),
+    label: 'packages/sdk/api.md',
+    hint: 'Run `npx tsx scripts/sdk-api-report.ts` and commit it.',
+  })
 }

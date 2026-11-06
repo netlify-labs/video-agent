@@ -3,7 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { loadEdge } from './edge.js'
 import { LQIP, previewFixtures, type TestDeps } from './fakes.js'
-import { harness, PROMPT, type Harness } from './helpers.js'
+import { harness, readyVideo, type Harness } from './helpers.js'
 
 let current: TestDeps | null = null
 vi.mock('@netlify/blobs', async () => (await import('./edge.js')).fakeBlobsModule(() => current?.blobs))
@@ -22,12 +22,11 @@ interface Files {
 }
 const make = async (h: Harness, previews: TestDeps['nextPreviews']) => {
   h.deps.nextPreviews = previews
-  const v = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }))
-  await h.drive(4)
+  const id = await readyVideo(h)
   const got = await h.json<{ versions: { status: string; files: Files | null }[] }>(
-    await h.call('GET', `/api/v1/videos/${v.id}`, { as: h.member }),
+    await h.call('GET', `/api/v1/videos/${id}`, { as: h.member }),
   )
-  return { id: v.id as string, version: got.versions[0] }
+  return { id, version: got.versions[0] }
 }
 const publish = async (h: Harness, id: string) =>
   h.json<{ slug: string; urls: Record<string, string>; embed: string }>(

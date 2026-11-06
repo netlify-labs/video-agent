@@ -6,7 +6,6 @@
 // come from scripts/lib/registry-licences.json (docs/spikes.md K4); an item not listed there is refused. Re-running
 // prints what changed, so a moved upstream shows up as a diff to review.
 import { spawnSync } from 'node:child_process'
-import { createHash } from 'node:crypto'
 import {
   cpSync,
   existsSync,
@@ -20,8 +19,9 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative, sep } from 'node:path'
+import { sha256Hex as sha256 } from '../src/lib/crypto.js'
 import { LookJsonSchema, type RegistryLock } from '../src/lib/looks.js'
-import { repoRoot } from './lib/run-tools.js'
+import { pinnedHyperframesVersion, repoRoot } from './lib/run-tools.js'
 
 export class LookVendorError extends Error {}
 
@@ -46,7 +46,6 @@ export interface VendorOptions {
   licences?: Licences
 }
 
-const sha256 = (b: Uint8Array) => createHash('sha256').update(b).digest('hex')
 const posix = (p: string) => p.split(sep).join('/')
 
 function runAdd(version: string, name: string, dir: string): AddResult {
@@ -150,9 +149,7 @@ export function vendorLook(lookDir: string, opts: VendorOptions): string[] {
 
 if (process.argv[1]?.endsWith('look-vendor.ts')) {
   const id = process.argv[2] ?? ''
-  const pkg = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8')) as {
-    netlifyAgent: { hyperframes: { version: string } }
-  }
+  const hyperframesVersion = pinnedHyperframesVersion()
   const dir = join(repoRoot, 'looks', id)
   if (!id || !existsSync(join(dir, 'look.json'))) {
     console.error(`Usage: npm run look:vendor <id> (looks/${id}/look.json not found)`)
@@ -160,7 +157,7 @@ if (process.argv[1]?.endsWith('look-vendor.ts')) {
   }
   const started = Date.now()
   try {
-    const changes = vendorLook(dir, { repoRoot, hyperframesVersion: pkg.netlifyAgent.hyperframes.version })
+    const changes = vendorLook(dir, { repoRoot, hyperframesVersion })
     for (const c of changes) console.log(c)
     console.error(
       JSON.stringify({ step: 'look-vendor', look: id, changes: changes.length, ms: Date.now() - started }),

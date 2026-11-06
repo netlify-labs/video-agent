@@ -157,11 +157,11 @@ jobs:
       - run: npm ci --ignore-scripts
       - name: C1 online, then offline
         run: |
-          npx tsx spikes/c1/c1.ts --cache "$RUNNER_TEMP/c1" | tee c1-online.jsonl
-          npx tsx spikes/c1/c1.ts --cache "$RUNNER_TEMP/c1" --offline | tee c1-offline.jsonl
+          npx tsx docs/spikes/c1/c1.ts --cache "$RUNNER_TEMP/c1" | tee c1-online.jsonl
+          npx tsx docs/spikes/c1/c1.ts --cache "$RUNNER_TEMP/c1" --offline | tee c1-offline.jsonl
       - name: C3
         if: matrix.node == 24
-        run: npx tsx spikes/c3/c3.ts --cache "$RUNNER_TEMP/c3" | tee c3.jsonl
+        run: npx tsx docs/spikes/c3/c3.ts --cache "$RUNNER_TEMP/c3" | tee c3.jsonl
       - if: always()
         uses: actions/upload-artifact@v4
         with:

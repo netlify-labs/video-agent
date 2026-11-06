@@ -2,7 +2,7 @@
 // its takes (bounds, counts, who may use them) and the output-duration limit, held by the draft's media_refs, and
 // written into the draft bundle as the narration layer. A keep-visuals render freezes it (§6.1 Snapshots, §6.3): the
 // audible op, its takes by key, the recipe and the bus length, held by the attempt and carried in the run manifest.
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -23,63 +23,15 @@ import { readTarGz } from '../src/lib/tar.js'
 import { NARRATION_CLEANUP_PRESETS, SAMPLE_RATE } from '../src/lib/timeline.js'
 import { failedSnap, running } from './fakes.js'
 import type { Store } from '../src/store/types.js'
-import { harness, person, pgStore, PROMPT, upload, type Harness } from './helpers.js'
-import { tarGz } from './tarball.js'
+import { editableVideo, harness, narrationTake as take, person, pgStore, type Harness } from './helpers.js'
+import { narrationClip as clip, narrationTrack as narration } from './narration-render.js'
 import { wav } from '../src/lib/voice.js'
 import { hydrateNarration } from '../scripts/prepare-run.js'
 import { readNarrationInputs } from '../scripts/lib/narration-inputs.js'
 import { which } from '../scripts/lib/run-tools.js'
 import { runStt } from '../scripts/lib/stt/index.js'
 
-const fx = (f: string) => readFileSync(new URL(`./fixtures/contract1/${f}`, import.meta.url), 'utf8')
-const tone = () => new Uint8Array(readFileSync(new URL('./fixtures/audio/tone.mp3', import.meta.url)))
 const S = SAMPLE_RATE
-
-/** A ready video whose v1 keeps contract v1 (9 s: intro, demo, outro). */
-async function editableVideo(h: Harness) {
-  h.deps.nextSource = tarGz([
-    { name: 'video/index.html', body: fx('index.html') },
-    { name: 'video/summary.json', body: fx('summary.json') },
-  ])
-  const v = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }))
-  await h.drive(4)
-  return v.id as string
-}
-
-/** A recorded take of `seconds` for the video, uploaded by `as`. */
-async function take(h: Harness, jobId: string, as = h.member, seconds = 20) {
-  const m = await h.json<{ id: string }>(await upload(h, as, tone(), 'filename=take.mp3'))
-  await h.deps.store.updateMedia(m.id, { role: 'narration-take', scopeJobId: jobId, durationSec: seconds })
-  return m.id
-}
-
-const clip = (mediaId: string, over: Record<string, unknown> = {}) => ({
-  id: 'c1',
-  mediaId,
-  srcStart: 0,
-  srcEnd: 2 * S,
-  fit: { a: 0, b: 1 / S, residualMs: 0 },
-  offsetSamples: 0,
-  start: S,
-  gainDb: 0,
-  fadeInSamples: 0,
-  fadeOutSamples: 0,
-  ...over,
-})
-const narration = (clips: object[], over: Record<string, unknown> = {}) => ({
-  op: 'narration',
-  schema: 1,
-  sampleRate: S,
-  clips,
-  tracks: {
-    narration: { volumeDb: 0, muted: false, solo: false },
-    aiVoice: { mode: 'replace', volumeDb: -12 },
-    music: { duck: true, duckDb: -12 },
-    original: { muteAll: false },
-  },
-  cleanup: 'light',
-  ...over,
-})
 
 const openDraft = async (h: Harness, id: string, as = h.member) =>
   h.json<{ id: string; rev: number }>(await h.call('POST', `/api/v1/videos/${id}/versions/1/edits`, { as }))

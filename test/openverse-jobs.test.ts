@@ -3,12 +3,12 @@
 // Polling is owner-only; identical requests share a job; starts are rate-limited per person; the sweep re-dispatches
 // lost jobs and deletes expired ones. Openverse is a fake fetch that can hang until the caller gives up.
 import { readFileSync } from 'node:fs'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { runCleanup } from '../src/domain/cleanup.js'
 import { openverseTiming, resetOpenverseCache } from '../src/domain/openverse.js'
 import { JOBS_PER_MINUTE, runOpenverseJob, sweepOpenverseJobs } from '../src/domain/openverse-jobs.js'
 import type { TestDeps } from './fakes.js'
-import { apiKey, harness, mcpCall, person, pgStore, type Harness } from './helpers.js'
+import { apiKey, harness, mcpCall, person, pgStore, stubNetlify, type Harness } from './helpers.js'
 
 let current: TestDeps | null = null
 vi.mock('@netlify/blobs', async () => (await import('./edge.js')).fakeBlobsModule(() => current?.blobs))
@@ -115,11 +115,7 @@ const importIt = (h: Harness, n: number, as = h.member) =>
 const getJob = async (h: Harness, jobId: string, as = h.member) =>
   h.call('GET', `/api/v1/media/openverse/jobs/${jobId}`, { as })
 
-beforeEach(() => {
-  vi.stubGlobal('Netlify', { env: { get: () => undefined } })
-})
-afterEach(() => {
-  vi.unstubAllGlobals()
+stubNetlify(() => {
   current = null
 })
 

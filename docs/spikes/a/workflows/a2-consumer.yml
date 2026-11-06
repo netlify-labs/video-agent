@@ -1,0 +1,22 @@
+# Spike A2: the consumer side. Copy to .github/workflows/ in a second private repo in the netlify-labs org, with
+# <sha> set to the throwaway branch's commit on netlify-labs/video-agent (see docs/spikes/a/README.md).
+name: A2 consumer
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  sha-pin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: netlify-labs/video-agent/spikes/a/hello-action@<sha> # action-v0.0.1
+        id: hello
+        with:
+          greeting: pinned by sha
+      - run: echo "ran on ${{ steps.hello.outputs.node }}"
+  prefixed-tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: netlify-labs/video-agent/spikes/a/hello-action@action-v0.0.1
+        with:
+          greeting: pinned by tag

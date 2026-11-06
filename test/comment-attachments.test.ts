@@ -1,16 +1,14 @@
 // Files on comments: a comment (or a note in a block) carries ready library media; the list returns them with signed
 // links; incorporating the comment adds them to the revision's media and names them in the agent's feedback.
 import { describe, expect, it } from 'vitest'
-import { harness, person, pgStore, png, PROMPT, upload, type Harness } from './helpers.js'
+import { harness, person, pgStore, png, readyVideo, upload, type Harness } from './helpers.js'
 
 const comment = (h: Harness, as: string, id: string, body: object) =>
   h.call('POST', `/api/v1/videos/${id}/comments`, { as, body: { versionN: 1, ...body } })
 
 async function scenario(h: Harness) {
   const rita = await person(h, 'u_rita', 'reviewer')
-  const v = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }))
-  await h.drive(4)
-  const id = v.id as string
+  const id = await readyVideo(h)
   const logo = await h.json<{ id: string }>(await upload(h, h.member, png(64, 64), 'filename=anthropic.png'))
   const shot = await h.json<{ id: string }>(await upload(h, h.member, png(320, 180), 'filename=shot.png'))
 

@@ -17,7 +17,7 @@ export default tseslint.config(
       '.render',
       'netlify/database/migrations',
       'netlify/edge-functions',
-      'spikes',
+      'docs/spikes',
       'ui/src/api/schema.d.ts',
       'packages/sdk/src/generated/schema.d.ts',
       '**/*.cjs',

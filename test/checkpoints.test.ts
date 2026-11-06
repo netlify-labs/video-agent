@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { postCheckpoint } from '../scripts/checkpoint.js'
 import { checkpointBundleKey } from '../src/domain/checkpoints.js'
 import { failedSnap, running } from './fakes.js'
-import { harness, PROMPT, type Harness } from './helpers.js'
+import { harness, PROMPT, readyVideo, type Harness } from './helpers.js'
 import { tarGz } from './tarball.js'
 import { liveIndexKey } from '../src/domain/bundles.js'
 
@@ -157,9 +157,7 @@ describe('checkpoints', () => {
 
   it('schedules cleanup of the bundles when the attempt ends', async () => {
     const h = harness()
-    const v = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }))
-    await h.drive(4)
-    const [a] = await h.attempts(v.id)
+    const [a] = await h.attempts(await readyVideo(h))
     const due = await h.deps.store.listDueCleanup(new Date(Date.now() + 365 * 86400_000).toISOString(), 100)
     expect(due.some((c) => c.store === 'checkpoints' && c.prefix === `${a?.id}/`)).toBe(true)
   })
@@ -203,10 +201,9 @@ describe('live snapshots', () => {
     expect(
       (await h.call('GET', `/api/v1/videos/${id}/versions/1/preview?live=1`, { as: h.member })).status,
     ).toBe(404)
-    const v = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }))
-    await h.drive(4)
+    const other = await readyVideo(h)
     const due = await h.deps.store.listDueCleanup(new Date(Date.now() + 365 * 86400_000).toISOString(), 100)
-    expect(due.some((c) => c.store === 'bundles' && c.prefix === `${v.id}/v1/live/`)).toBe(true)
+    expect(due.some((c) => c.store === 'bundles' && c.prefix === `${other}/v1/live/`)).toBe(true)
   })
 })
 

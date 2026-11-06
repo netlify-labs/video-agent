@@ -26,7 +26,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { parseVtt } from '../../src/lib/vtt.js'
 import { base, key, log, started } from './lib.js'
-import { call, check, download, dry, dryRun, GateError, sleep } from './narration-lib.js'
+import { call, check, download, dry, dryRun, finish, sleep } from './narration-lib.js'
 
 const env = process.env
 const keep = process.argv.includes('--keep')
@@ -404,8 +404,5 @@ try {
     files: keepFiles ? work : null,
     sec: Math.round((Date.now() - started) / 1000),
   }
-  if (failure) {
-    log('FAIL', { msg: failure.message, ...(failure instanceof GateError ? failure.fields : {}), summary })
-    process.exitCode = 1
-  } else log('PASS', summary)
+  finish(failure, summary)
 }

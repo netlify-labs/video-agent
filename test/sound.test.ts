@@ -2,11 +2,11 @@
 // choice stored on versions and plans and inherited by revisions, what the run prompt says, and the MCP arguments.
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { PART_SIZE } from '../src/domain/media-uploads.js'
 import { loadEdge } from './edge.js'
 import type { TestDeps } from './fakes.js'
-import { apiKey, harness, mcpCall, png, PROMPT, raw, upload, type Harness } from './helpers.js'
+import { apiKey, harness, mcpCall, png, PROMPT, raw, stubNetlify, upload, type Harness } from './helpers.js'
 
 let current: TestDeps | null = null
 vi.mock('@netlify/blobs', async () => (await import('./edge.js')).fakeBlobsModule(() => current?.blobs))
@@ -57,11 +57,7 @@ function wav(seconds: number) {
 }
 
 describe('audio media', () => {
-  beforeEach(() => {
-    vi.stubGlobal('Netlify', { env: { get: () => undefined } })
-  })
-  afterEach(() => {
-    vi.unstubAllGlobals()
+  stubNetlify(() => {
     current = null
   })
 

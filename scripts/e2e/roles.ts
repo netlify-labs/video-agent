@@ -7,7 +7,7 @@
 //   - the Reviewer can list videos and approve someone else's version, but create_video isn't offered and the REST
 //     create returns the role error; a private video is 404 to them
 // Logs JSON lines; exits non-zero on the first failure. Restores the video's privacy before exiting.
-import { base, key, log } from './lib.js'
+import { base, key, log, mcpPost } from './lib.js'
 
 const reviewerKey = process.env.REVIEWER_KEY ?? ''
 if (!base || !key) throw new Error('Set VIDEO_AGENT_URL and VIDEO_AGENT_KEY.')
@@ -38,15 +38,7 @@ async function api(k: string, method: string, path: string, body?: unknown) {
 }
 
 async function mcp(k: string, method: string, params: unknown) {
-  const res = await fetch(`${base}/mcp`, {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${k}`,
-      'content-type': 'application/json',
-      accept: 'application/json, text/event-stream',
-    },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
-  })
+  const res = await mcpPost(k, method, params)
   return ((await res.json()) as { result: { tools: { name: string }[] } }).result
 }
 

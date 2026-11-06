@@ -1,6 +1,5 @@
 // One engine per video (render-engines plan §4.2): every derived version takes its parent's engine, a mismatch is
 // refused as engine_mismatch, and the version DTO says which engine made it and what its editor may offer.
-import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { getSettings } from '../src/domain/settings.js'
 import { deliverWebhooks } from '../src/domain/webhooks.js'
@@ -8,17 +7,13 @@ import { encrypt } from '../src/lib/crypto.js'
 import { assertSameEngine, engineInfo } from '../src/domain/engines.js'
 import { ApiError } from '../src/lib/errors.js'
 import { failedSnap, running } from './fakes.js'
-import { harness, PROMPT, type Harness } from './helpers.js'
-import { tarGz } from './tarball.js'
-
-const fx = (f: string) => readFileSync(new URL(`./fixtures/contract1/${f}`, import.meta.url), 'utf8')
+import { editableVideo, harness, PROMPT, readyVideo, type Harness } from './helpers.js'
 
 /** A ready video whose v1 is marked as made by Remotion, as only a Remotion deployment (Phase 2) would make it. */
 async function remotionVideo(h: Harness) {
-  const v = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }))
-  await h.drive(4)
-  await h.deps.store.updateVersion(v.id, 1, { engine: 'remotion' })
-  return v.id as string
+  const id = await readyVideo(h)
+  await h.deps.store.updateVersion(id, 1, { engine: 'remotion' })
+  return id
 }
 const engineOfVersion = async (h: Harness, id: string, n: number) =>
   (await h.deps.store.getVersion(id, n))?.engine
@@ -26,10 +21,9 @@ const engineOfVersion = async (h: Harness, id: string, n: number) =>
 describe('one engine per video', () => {
   it('a new video is HyperFrames, and its DTO says so next to editable', async () => {
     const h = harness()
-    const v = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }))
-    await h.drive(4)
-    expect(await engineOfVersion(h, v.id, 1)).toBe('hyperframes')
-    const dto = await h.json(await h.call('GET', `/api/v1/videos/${v.id}`, { as: h.member }))
+    const id = await readyVideo(h)
+    expect(await engineOfVersion(h, id, 1)).toBe('hyperframes')
+    const dto = await h.json(await h.call('GET', `/api/v1/videos/${id}`, { as: h.member }))
     expect(dto.versions[0]).toMatchObject({
       editable: false,
       editing: { engine: 'hyperframes', capabilities: engineInfo('hyperframes').capabilities },
@@ -94,13 +88,8 @@ describe('one engine per video', () => {
 
   it('an edit renders with its base’s engine', async () => {
     const h = harness()
-    h.deps.nextSource = tarGz([
-      { name: 'video/index.html', body: fx('index.html') },
-      { name: 'video/summary.json', body: fx('summary.json') },
-    ])
-    const v = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }))
-    await h.drive(4)
-    const e = await h.json(await h.call('POST', `/api/v1/videos/${v.id}/versions/1/edits`, { as: h.member }))
+    const id = await editableVideo(h)
+    const e = await h.json(await h.call('POST', `/api/v1/videos/${id}/versions/1/edits`, { as: h.member }))
     await h.call('PUT', `/api/v1/edits/${e.id}`, {
       as: h.member,
       body: { rev: 0, ops: [{ op: 'retime', beat: 'intro', duration: 4 }] },
@@ -110,20 +99,17 @@ describe('one engine per video', () => {
       headers: { 'idempotency-key': 'k1' },
     })
     expect(res.status).toBe(202)
-    expect(await engineOfVersion(h, v.id, 2)).toBe('hyperframes')
+    expect(await engineOfVersion(h, id, 2)).toBe('hyperframes')
   })
 
   it('Try again keeps the version, so it keeps its engine', async () => {
     const h = harness()
     h.deps.runner.nextScripts.push({ timeline: [running(), failedSnap()] })
-    const v = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }))
+    const id = await readyVideo(h)
+    await h.deps.store.updateVersion(id, 1, { engine: 'remotion' })
+    expect((await h.call('POST', `/api/v1/videos/${id}/versions/1/retry`, { as: h.admin })).status).toBe(202)
     await h.drive(4)
-    await h.deps.store.updateVersion(v.id, 1, { engine: 'remotion' })
-    expect((await h.call('POST', `/api/v1/videos/${v.id}/versions/1/retry`, { as: h.admin })).status).toBe(
-      202,
-    )
-    await h.drive(4)
-    expect(await engineOfVersion(h, v.id, 1)).toBe('remotion')
+    expect(await engineOfVersion(h, id, 1)).toBe('remotion')
   })
 
   it('refuses a version whose engine differs from its parent’s, and logs it', () => {

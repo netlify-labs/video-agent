@@ -139,7 +139,7 @@ doesn't stretch them). Put them into a scene by hand instead:
    and Google Fonts links.
 
 Write these steps for each block in LOOK.md's Building blocks section. `docs/spikes.md` (K1) has worked examples for
-the registry blocks the built-in looks use, and `spikes/k1/cases/` their code.
+the registry blocks the built-in looks use, and `docs/spikes/k1/cases/` their code.
 
 ## Adding a look
 

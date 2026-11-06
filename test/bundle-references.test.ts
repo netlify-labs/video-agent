@@ -1,7 +1,7 @@
 // Reference entries (plan 2026-11-02 §6.2): the narration bus is uploaded on its own, kept by key in the videos
 // store with its entry pinned next to the source archive, restored by key + sha256, and previewed under the
 // version's capability, never a draft's.
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { bundleFileKey, ensureBundle, readBundleIndex, readReferences } from '../src/domain/bundles.js'
 import { editScope } from '../src/domain/edits.js'
 import { isManifest } from '../src/domain/finalize.js'
@@ -13,7 +13,7 @@ import { runManifestKey, verifyRunManifest } from '../src/lib/run-manifest.js'
 import { readTarGz } from '../src/lib/tar.js'
 import type { TestDeps } from './fakes.js'
 import { loadEdge } from './edge.js'
-import { harness, person, PROMPT, type Harness } from './helpers.js'
+import { harness, person, readyVideo, stubNetlify, type Harness } from './helpers.js'
 import { tarGz } from './tarball.js'
 
 let current: TestDeps | null = null
@@ -31,9 +31,7 @@ async function narrated(h: Harness) {
     { name: 'video/summary.json', body: '{}' },
   ])
   h.deps.nextBus = BUS
-  const v = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }))
-  await h.drive(4)
-  return v.id as string
+  return readyVideo(h)
 }
 
 const dropBundle = async (h: Harness, id: string) => {
@@ -71,14 +69,13 @@ describe('reference entries', () => {
 
   it('versions without references keep their outputs and bundles exactly as before', async () => {
     const h = harness()
-    const v = await h.json(await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT } }))
-    await h.drive(4)
-    const out = await h.deps.store.getOutput(v.id, 1)
+    const id = await readyVideo(h)
+    const out = await h.deps.store.getOutput(id, 1)
     expect(Object.keys(out!.sha256).sort()).toEqual(
       ['captions.vtt', 'poster.jpg', 'preview.gif', 'source.tar.gz', 'video.mp4'].sort(),
     )
     expect(await readReferences(h.deps, out!)).toEqual([])
-    expect(await h.deps.blobs.get('sources', referencesKey(v.id, 1))).toBeNull()
+    expect(await h.deps.blobs.get('sources', referencesKey(id, 1))).toBeNull()
   })
 
   it('a revision restores the parent bus by key, from a hash-pinned run manifest', async () => {
@@ -150,11 +147,7 @@ describe('reference entries', () => {
 })
 
 describe('previewing the bus', () => {
-  beforeEach(() => {
-    vi.stubGlobal('Netlify', { env: { get: () => undefined } })
-  })
-  afterEach(() => {
-    vi.unstubAllGlobals()
+  stubNetlify(() => {
     current = null
   })
   const edge = async (url: string, init: RequestInit = {}) =>
