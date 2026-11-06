@@ -195,6 +195,41 @@ latest ready version), `aspect`, `durationSec`, `language`, `sound`, `voiceover`
 set), `planId` and `webhookUrl`. It takes an `Idempotency-Key` header and returns 202 with the new video. From AI
 tools, it's the `remix_video` MCP tool.
 
+## Screen recording demos
+
+A **demo** turns a raw screen recording into a finished product video: an intro, one scene per step of what you did
+with auto zoom that follows the action, a smooth cursor and click ripples, dead time cut or sped up, a callout per
+step, hidden areas over private things, and an outro in your brand (or a Look). It's an ordinary video afterwards:
+versions, comments, the editor, publishing and remix all work.
+
+- **Getting the recording in:** upload it to the library with the `screen-recording` role (`POST /api/v1/media/uploads`
+  with `"role": "screen-recording"`, or the SDK's `media.uploadRecording`). A recording made by a script can come with
+  a **pointer trace** (`PUT /api/v1/media/{id}/trace`): exact clicks with the clicked element's role and name, the
+  cursor path, typing (how many keys, never which), scrolls, navigations (the path only) and boxes to hide that follow
+  a field as the page scrolls. Without a trace, clicks and the cursor are inferred from the pixels.
+- **The format:** H.264 MP4, 24 to 30 frames per second, a keyframe at least every 2 seconds, fast start, at most
+  5 minutes, 150 MB and 4096 pixels on a side. Anything else is refused with what to run instead (an `ffmpeg` command).
+- **Making the demo:** `POST /api/v1/videos` with `{"prompt": "…", "recording": {"mediaId": "med_…"}}` and optionally
+  `trim: [in, out]` (seconds) and `redact: [{start, end, box: [x, y, w, h]}]` (fractions of the frame) to hide things
+  from the start. Without `durationSec`, the target is about 0.4 of the recording used, 20 to 90 seconds. Remix takes
+  `recording` too (a new recording, the same request and look); without it, a demo's remix keeps its recording. From
+  AI tools, `create_video` and `remix_video` take `recording_media_id`, `trim` and `redact`. Demos are made with
+  HyperFrames only (`409 engine_unsupported` otherwise).
+- **Quick demo:** add `"agent": false` and the run composes the demo straight from the plan, with no authoring: a stock
+  intro and outro, a scene per step, callouts from what was clicked. It costs about as much as an edit render. It
+  needs a recording and takes no voice-over.
+- **Hidden areas are cosmetic.** They're solid boxes drawn over the video in the render; the recording file underneath
+  is unchanged and stays in your library. Boxes from the trace and the ones you add when you create the demo are
+  locked: the agent and the editor can add boxes but never remove or move those, and a render that lost one is refused
+  (`redaction_removed`). The agent also hides anything that looks private and lists it. A demo with any hidden area
+  **starts private**: check its Hidden list (the version's `recording.hidden`, with where each came from) before you
+  make it public.
+- **Who sees the recording:** like voice recordings, a raw screen recording is readable by the person who uploaded it
+  and by admins; once a video uses it, Creators who can see that video can too. Runs read it from Blobs (see the trust
+  model above). Retention and the per-person budget are in "Your own voice-over" below.
+- **Credits:** a demo is one authoring run (analysis of the recording happens inside it, on the runner). Editor changes
+  (trim, camera, cursor, hidden areas) render like any other edit.
+
 ## Redo a scene
 
 A **scoped revision** redoes one or more scenes of a finished version and leaves the rest alone. Pick the scenes, say
