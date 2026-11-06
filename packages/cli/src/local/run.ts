@@ -15,6 +15,7 @@ import {
   sha256Hex,
   type RunManifest,
 } from '../../../../src/lib/run-manifest.js'
+import type { LocalLook } from './look.js'
 import type { Log } from './workspace.js'
 
 export const INPUTS_DIR = '.va-inputs'
@@ -29,6 +30,8 @@ export interface LocalRunInput {
   requesterName?: string
   /** Files to put in the video, with an optional caption each. */
   media?: { path: string; caption: string | null }[]
+  /** local --look: the look's archive, restored by prepare-run into context/look/ as on the runner. */
+  look?: LocalLook
   /**
    * A revision (local revise, bead va-p1th.5.12): the video's job id and the version it changes, whose source.tar.gz
    * is restored by prepare-run exactly as on the runner. The prompt is then the change.
@@ -93,6 +96,14 @@ export function prepareLocalRun(ws: string, input: LocalRunInput, log: Log): Loc
       },
     }
   })
+  // The look goes where the server keeps a version's snapshot: <jobId>/looks/<hash>.tar.gz in the sources store.
+  let look: RunManifest['look']
+  if (input.look) {
+    const key = `${jobId}/looks/${input.look.hash}.tar.gz`
+    mkdirSync(join(inputs, 'sources', jobId, 'looks'), { recursive: true })
+    writeFileSync(join(inputs, 'sources', key), input.look.bytes)
+    look = { id: input.look.id, key, sha256: input.look.sha256, hash: input.look.hash }
+  }
   const manifest: RunManifest = {
     v: RUN_MANIFEST_VERSION,
     jobId,
@@ -105,6 +116,7 @@ export function prepareLocalRun(ws: string, input: LocalRunInput, log: Log): Loc
     feedback: null,
     // No neighbour stills locally: the prompt's no-stills variant says so.
     ...(input.revision?.scope ? { scope: { beats: input.revision.scope.ids, stills: [] } } : {}),
+    ...(look ? { look } : {}),
   }
   const raw = serializeRunManifest(manifest)
   const manifestFile = join(inputs, 'sources', runManifestKey(jobId, attemptId))
@@ -129,6 +141,7 @@ export function prepareLocalRun(ws: string, input: LocalRunInput, log: Log): Loc
     media: media.map((m) => m.prompt),
     ...(input.sound ? { sound: input.sound } : {}),
     ...(input.voiceover ? { voiceover: input.voiceover } : {}),
+    ...(input.look ? { look: { id: input.look.id, name: input.look.name } } : {}),
     ...(input.revision?.scope
       ? {
           scope: {
@@ -142,7 +155,7 @@ export function prepareLocalRun(ws: string, input: LocalRunInput, log: Log): Loc
       : {}),
   })
   writeFileSync(join(ws, 'prompt.txt'), prompt)
-  log('local.prepared', { jobId, attemptId, media: media.length, ms: Date.now() - t })
+  log('local.prepared', { jobId, attemptId, media: media.length, look: look?.id ?? null, ms: Date.now() - t })
   return { jobId, attemptId, versionN, renderDir, manifestSha256: sha256Hex(raw), prompt }
 }
 

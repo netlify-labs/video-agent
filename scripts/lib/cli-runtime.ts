@@ -10,6 +10,7 @@
 //                               netlifyAgent (agent-kit's config) for each workspace
 //   <out>/engines/remotion/     the Remotion template's package.json and lockfile only, when the repo has them
 //   <out>/fixture-agent.mjs     the fixture agent and fixture/ (contract1), for --agent fixture
+//   <out>/looks/<id>/           each look's run files (no previews), for local --look <id> (looks plan §4.13)
 // Missing optional pieces are skipped, so nothing here waits for the plans that add them.
 import { execFileSync } from 'node:child_process'
 import {
@@ -22,8 +23,9 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { build } from 'esbuild'
+import { lookRunFiles } from '../../src/lib/looks.js'
 
 /** Every scripts/<name>.ts a run prompt tells the agent to run (test/cli-runtime.test.ts keeps this in step). */
 export const RUNTIME_SCRIPTS = [
@@ -48,6 +50,8 @@ export interface RuntimeReport {
   engines: string[]
   pins: Record<string, string>
   remotion: boolean
+  /** The look ids bundled for local --look. */
+  looks: string[]
   bytes: number
 }
 
@@ -158,6 +162,19 @@ export async function buildRuntime(o: {
     )
   }
 
+  // The looks, as a run gets them (lookRunFiles: no preview or poster), for `local --look <id>`.
+  const looks: string[] = []
+  const looksDir = join(repo, 'looks')
+  if (existsSync(looksDir))
+    for (const id of readdirSync(looksDir).sort()) {
+      if (id.startsWith('_') || !existsSync(join(looksDir, id, 'look.json'))) continue
+      for (const f of lookRunFiles(join(looksDir, id))) {
+        mkdirSync(dirname(join(out, 'looks', id, f)), { recursive: true })
+        copyFileSync(join(looksDir, id, f), join(out, 'looks', id, f))
+      }
+      looks.push(id)
+    }
+
   const remotionDir = join(repo, 'engines', 'remotion', 'template')
   const remotion = existsSync(join(remotionDir, 'package-lock.json'))
   if (remotion) {
@@ -168,5 +185,5 @@ export async function buildRuntime(o: {
   }
 
   const bytes = Object.values(r.metafile.outputs).reduce((n, x) => n + x.bytes, 0)
-  return { scripts, engines: engines.map((f) => f.slice(0, -3)), pins, remotion, bytes }
+  return { scripts, engines: engines.map((f) => f.slice(0, -3)), pins, remotion, looks, bytes }
 }

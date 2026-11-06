@@ -492,6 +492,7 @@ Make a video on this machine with your own coding agent, inside its sandbox.
 video-agent local <prompt>
 video-agent local "A 20-second launch video for our webhooks feature" --aspect 16:9
 video-agent local "A product teaser" --voice --sound music --media ./shot.png:"The new dashboard"
+video-agent local --look ./looks/my-look "A 20-second launch video for our webhooks feature"
 ```
 
 - `--agent <value>`: The coding agent: claude (the one this version supports).
@@ -501,6 +502,7 @@ video-agent local "A product teaser" --voice --sound music --media ./shot.png:"T
 - `--voice`: Add a spoken voice-over (needs Python 3.10 to 3.13).
 - `--media <value>` (repeatable): A file to put in the video (file:"caption" sets its caption). Repeatable, up to 12.
 - `--context <value>`: Your brand folder (default ./context, else a neutral one).
+- `--look <value>`: A Look: an id bundled with the CLI (video-agent looks lists a server's), or a look folder.
 - `--out <value>`: Where the video goes (default ./videos/<slug>).
 - `--keep`: Keep the workspace (for debugging).
 - `--timeout <value>`: Give up after this long: 30m, 1h (default 40m).

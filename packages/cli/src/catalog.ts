@@ -622,6 +622,11 @@ export const COMMANDS: CommandSpec[] = [
         description: 'A file to put in the video (file:"caption" sets its caption). Repeatable, up to 12.',
       },
       context: { type: 'string', description: 'Your brand folder (default ./context, else a neutral one).' },
+      look: {
+        type: 'string',
+        description:
+          "A Look: an id bundled with the CLI (video-agent looks lists a server's), or a look folder.",
+      },
       out: { type: 'string', description: 'Where the video goes (default ./videos/<slug>).' },
       keep: { type: 'boolean', description: 'Keep the workspace (for debugging).' },
       timeout: { type: 'string', description: 'Give up after this long: 30m, 1h (default 40m).' },
@@ -629,6 +634,7 @@ export const COMMANDS: CommandSpec[] = [
     examples: [
       'video-agent local "A 20-second launch video for our webhooks feature" --aspect 16:9',
       'video-agent local "A product teaser" --voice --sound music --media ./shot.png:"The new dashboard"',
+      'video-agent local --look ./looks/my-look "A 20-second launch video for our webhooks feature"',
     ],
     sdk: [],
     local: true,

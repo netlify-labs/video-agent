@@ -8,6 +8,7 @@ import { claude } from '../local/claude.js'
 import { fixture } from '../local/fixture.js'
 import { runLocal, slugify, type VideoJson } from '../local/index.js'
 import type { LocalRunInput } from '../local/run.js'
+import { resolveLocalLook } from '../local/look.js'
 import { bundledRuntime, cacheDir } from '../local/workspace.js'
 import { CliError, EXIT, UsageError } from '../exit.js'
 import type { Ctx, Handler } from '../router.js'
@@ -119,6 +120,11 @@ const local: Handler = async (ctx) => {
     ...(sound ? { sound: sound as NonNullable<LocalRunInput['sound']> } : {}),
     ...(ctx.flags.voice ? { voiceover: { voice: null, speed: null, script: null } } : {}),
     media: mediaOf((ctx.flags.media as string[] | undefined) ?? []),
+  }
+  const look = ctx.flags.look as string | undefined
+  if (look) {
+    input.look = resolveLocalLook(look, ctx.io.env.VA_RUNTIME_SOURCE ?? bundledRuntime())
+    ctx.log('local.look', { id: input.look.id, hash: input.look.hash, from: look })
   }
   const out = ctx.flags.out as string | undefined
   return go(ctx, input, (title) => {
