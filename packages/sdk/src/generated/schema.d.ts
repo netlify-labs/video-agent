@@ -2122,6 +2122,15 @@ export interface components {
                     checkedBy: string | null;
                     checkedAt: string | null;
                 }[];
+                /** @description Privacy mode only: private-looking text the check of the rendered video could still read. A warning to look at, not a failure; only the person's own hide strings fail a render. */
+                privacyWarnings: {
+                    /** @description Seconds into the video. */
+                    t: number;
+                    /** @enum {string} */
+                    kind: "email" | "key" | "token" | "url" | "card" | "phone";
+                    /** @description For people: "An email may still be readable at 0:12". */
+                    warning: string;
+                }[];
             } | null;
             /** @description The render engine that made this version (a video keeps one) and what the editor may offer on it. editable still decides whether the editor opens. */
             editing: {
@@ -2262,7 +2271,7 @@ export interface components {
         };
         EngineCapabilities: {
             /** @description The edit operations the browser editor may offer on this engine. */
-            editOps: ("text" | "retime" | "reorder" | "delete" | "color" | "media" | "audio" | "music" | "voice" | "span" | "camera" | "cursor" | "redact")[];
+            editOps: ("text" | "retime" | "reorder" | "delete" | "color" | "media" | "audio" | "music" | "voice" | "span" | "camera" | "cursor" | "redact" | "boxSpan")[];
             /** @description The editor plays drafts live; otherwise it shows the last render. */
             liveDraftPreview: boolean;
             /**
@@ -2499,8 +2508,10 @@ export interface components {
             ];
             /** @description Areas to hide from the start (seconds of the recording). A demo with any starts private. */
             redact?: {
-                start: number;
-                end: number;
+                /** @description Seconds of the recording it starts hiding at; 0 (the start) when left out. */
+                start?: number;
+                /** @description Seconds of the recording it stops at; the end when left out. The editor can shorten it later. */
+                end?: number;
                 /** @description [x, y, width, height] as fractions of the frame. */
                 box: [
                     number,
@@ -3317,6 +3328,12 @@ export interface components {
                     style?: "blur" | "solid";
                     boxes: number[][];
                 }[];
+            } | {
+                /** @enum {string} */
+                op: "boxSpan";
+                id: string;
+                start: number;
+                end: number;
             } | components["schemas"]["NarrationOp"])[];
             composition: components["schemas"]["Composition"];
             base: components["schemas"]["Composition"];
@@ -3426,6 +3443,12 @@ export interface components {
         };
         Composition: {
             duration: number;
+            /** @description A demo: when each of the person's setup boxes hides (seconds of the recording); boxSpan changes it. */
+            setupBoxes?: {
+                id: string;
+                start: number;
+                end: number;
+            }[];
             colors: {
                 [key: string]: string;
             };
@@ -3592,6 +3615,12 @@ export interface components {
                     style?: "blur" | "solid";
                     boxes: number[][];
                 }[];
+            } | {
+                /** @enum {string} */
+                op: "boxSpan";
+                id: string;
+                start: number;
+                end: number;
             } | components["schemas"]["NarrationOp"])[];
             rev: number;
         };

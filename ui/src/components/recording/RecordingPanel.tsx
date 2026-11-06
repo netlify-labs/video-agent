@@ -1,8 +1,8 @@
 // A recording scene in the editor (screen-recording plan §8.2; va-rsk5.4.4, 4.5): Trim (the span and the speed it
 // gives), Camera (the zoom box at a moment, keys, Auto, No zoom), Cursor (style and size), Hide (the locked areas with
-// why, the scene's own: keep or remove, blur or solid, draw more). Every change is the scene's recording in the editor's
-// composition; the page turns it into span, camera, cursor and redact ops (lib/recording-edit.ts) and the patcher
-// checks each.
+// why, the scene's own: keep or remove, blur or solid, draw more; the person's setup boxes can be shortened). Every
+// change is the scene's recording (or the composition's setupBoxes) in the editor's composition; the page turns it into
+// span, camera, cursor, redact and boxSpan ops (lib/recording-edit.ts) and the server checks each.
 import {
   ActionIcon,
   Badge,
@@ -136,6 +136,9 @@ export function RecordingPanel(props: {
   aspect: number
   readOnly?: boolean
   onChange: (next: RecordingBeat) => void
+  /** When each of the person's setup boxes hides (the composition's setupBoxes); they can shorten it here. */
+  setupBoxes?: { id: string; start: number; end: number }[] | undefined
+  onSetupBoxes?: (next: { id: string; start: number; end: number }[]) => void
 }) {
   const { rec, info } = props
   const ro = props.readOnly === true
@@ -343,15 +346,73 @@ export function RecordingPanel(props: {
 
       <Tabs.Panel value="hide" pt="sm">
         <Stack gap="xs">
-          {locked.map((e) => (
-            <Group key={e.id} gap="xs" wrap="nowrap" data-testid="locked-area">
-              <IconLock size={14} aria-label="Locked" />
-              <Text size="sm">{lockedWhy(e)}</Text>
-              <Text size="xs" c="var(--va-muted)" className="num">
-                {fmt(e.start)} – {fmt(e.end)} · {e.style === 'solid' ? 'solid' : 'blurred'}
-              </Text>
-            </Group>
-          ))}
+          {locked.map((e) => {
+            // The person's own box: its span can change (where it is and how it looks can't).
+            const span = e.origin === 'setup' ? props.setupBoxes?.find((x) => x.id === e.id) : undefined
+            const setSpan = (start: number, end: number) => {
+              props.onSetupBoxes?.(
+                (props.setupBoxes ?? []).map((x) => (x.id === e.id ? { ...x, start, end } : x)),
+              )
+            }
+            return (
+              <Stack key={e.id} gap={4} data-testid="locked-area">
+                <Group gap="xs" wrap="nowrap">
+                  <IconLock size={14} aria-label="Locked" />
+                  <Text size="sm">{lockedWhy(e)}</Text>
+                  <Text size="xs" c="var(--va-muted)" className="num">
+                    {fmt(span?.start ?? e.start)} – {fmt(span?.end ?? e.end)} ·{' '}
+                    {e.style === 'solid' ? 'solid' : 'blurred'}
+                  </Text>
+                </Group>
+                {span && props.onSetupBoxes ? (
+                  <Group gap="xs" wrap="nowrap" pl={22} data-testid="setup-span">
+                    <NumberInput
+                      size="xs"
+                      w={96}
+                      label="From (s)"
+                      aria-label={`${e.id} from`}
+                      min={0}
+                      max={span.end - 0.1}
+                      step={0.5}
+                      decimalScale={1}
+                      value={span.start}
+                      disabled={ro}
+                      onChange={(v) => {
+                        const n = typeof v === 'number' ? v : Number(v)
+                        if (Number.isFinite(n) && n >= 0 && n < span.end) setSpan(n, span.end)
+                      }}
+                    />
+                    <NumberInput
+                      size="xs"
+                      w={96}
+                      label="To (s)"
+                      aria-label={`${e.id} to`}
+                      min={span.start + 0.1}
+                      max={info.duration}
+                      step={0.5}
+                      decimalScale={1}
+                      value={span.end}
+                      disabled={ro}
+                      onChange={(v) => {
+                        const n = typeof v === 'number' ? v : Number(v)
+                        if (Number.isFinite(n) && n > span.start && n <= info.duration + 0.5)
+                          setSpan(span.start, n)
+                      }}
+                    />
+                    <Button
+                      size="xs"
+                      variant="subtle"
+                      mt={18}
+                      disabled={ro || (span.start === 0 && span.end >= info.duration)}
+                      onClick={() => setSpan(0, info.duration)}
+                    >
+                      Whole recording
+                    </Button>
+                  </Group>
+                ) : null}
+              </Stack>
+            )
+          })}
           {areas.map((a) => (
             <Group key={a.id} gap="xs" wrap="nowrap" data-testid="scene-area">
               <Text size="sm" style={{ flex: 1 }}>
@@ -400,7 +461,7 @@ export function RecordingPanel(props: {
           ) : null}
           <Text size="xs" c="var(--va-muted)">
             Draw a box on the picture to hide more (for the whole scene, blurred). Locked areas, from your
-            setup and the recording, can&apos;t be removed.
+            setup and the recording, can&apos;t be removed; your own boxes can be shortened.
           </Text>
           {ro ? null : (
             <BoxCanvas

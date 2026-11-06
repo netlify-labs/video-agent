@@ -297,6 +297,7 @@ async function main() {
     )
   if (statSync(video).size > MAX_BYTES)
     throw new StepError('The rendered MP4 is larger than 2 GB. Make the video shorter.')
+  let privacyReport: { frames: number; stopped: boolean; noted: { t: number; kind: string }[] } | undefined
   if (privacyCheck) {
     const r = await checkOutputPrivacy(
       video,
@@ -315,6 +316,8 @@ async function main() {
         `Text the person asked to hide is still readable in the video at ${at.join(', ')}. Add or widen a hidden area over it there (in plan.json), emit that scene again and render again.`,
       )
     }
+    // Private-looking text (an email, a key...) only warns: the person sees where in the Hidden list.
+    privacyReport = { frames: r.frames, stopped: r.stopped, noted: r.noted.slice(0, 50) }
   }
   // The MP4 keeps its sound; only the previews below drop it. A composition with <audio> and no track is logged.
   const audioCodecs = run('ffprobe', [
@@ -483,6 +486,7 @@ async function main() {
       : {}),
     ...(mastering ? { mastering } : {}),
     ...(narrationReport ? { narration: narrationReport } : {}),
+    ...(privacyReport ? { privacyCheck: privacyReport } : {}),
     durationSec,
     width: stream.width,
     height: stream.height,

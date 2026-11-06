@@ -69,6 +69,7 @@ describe('demo API', () => {
       privacy: false,
       summary: null,
       hidden: [],
+      privacyWarnings: [],
     })
     // The trace is frozen now a video uses it.
     const put = await h.call('PUT', `/api/v1/media/${id}/trace`, {
@@ -148,6 +149,27 @@ describe('demo API', () => {
       },
     })
     expect(bad.status).toBe(400)
+  })
+
+  it('a setup box with no start or end covers the whole recording; one end given keeps it', async () => {
+    const h = harness()
+    const id = await recording(h, h.member)
+    const v = await h.json<{ id: string }>(
+      await create(h, h.member, {
+        recording: {
+          mediaId: id,
+          redact: [{ box: [0.1, 0.1, 0.2, 0.1] }, { start: 30, box: [0.5, 0.5, 0.2, 0.1] }],
+        },
+      }),
+    )
+    const boxes = (await h.deps.store.getVersion(v.id, 1))?.recording?.boxes ?? []
+    console.log(
+      JSON.stringify({ test: 'recording-api', case: 'whole', spans: boxes.map((b) => [b.start, b.end]) }),
+    )
+    expect(boxes.map((b) => [b.start, b.end, b.boxes[0]?.[0]])).toEqual([
+      [0, 100, 0],
+      [30, 100, 30],
+    ])
   })
 
   it('a demo with nothing hidden stays team-visible; any other video has no recording', async () => {

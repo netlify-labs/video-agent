@@ -66,6 +66,15 @@ describe('recording panel ops', () => {
     expect(ops[0]).toEqual({ op: 'span', beat: 'add-site', in: 2.5, out: 12 })
   })
 
+  it("a setup box's new span is a boxSpan op; the same span is none", () => {
+    const withBoxes = (end: number) =>
+      ({ ...comp(rec), setupBoxes: [{ id: 's1', start: 0, end }] }) as unknown as Composition
+    expect(recordingOps(withBoxes(20), withBoxes(20))).toEqual([])
+    expect(recordingOps(withBoxes(20), withBoxes(8.5))).toEqual([
+      { op: 'boxSpan', id: 's1', start: 0, end: 8.5 },
+    ])
+  })
+
   it('speed: amber over 2x, a hold under 0.5x, refused past 4x', () => {
     expect(speedOf(rec, 7.5)).toBe(1.33)
     expect(speedNote(1.33).tone).toBe('ok')

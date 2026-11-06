@@ -780,6 +780,39 @@
                   ]
                 },
                 "description": "Every hidden area, per scene, with who checked it. Hiding is cosmetic: see the README."
+              },
+              "privacyWarnings": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "t": {
+                      "type": "number",
+                      "description": "Seconds into the video."
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "email",
+                        "key",
+                        "token",
+                        "url",
+                        "card",
+                        "phone"
+                      ]
+                    },
+                    "warning": {
+                      "type": "string",
+                      "description": "For people: \"An email may still be readable at 0:12\"."
+                    }
+                  },
+                  "required": [
+                    "t",
+                    "kind",
+                    "warning"
+                  ]
+                },
+                "description": "Privacy mode only: private-looking text the check of the rendered video could still read. A warning to look at, not a failure; only the person's own hide strings fail a render."
               }
             },
             "required": [
@@ -788,7 +821,8 @@
               "compose",
               "privacy",
               "summary",
-              "hidden"
+              "hidden",
+              "privacyWarnings"
             ],
             "description": "A demo made from a screen recording; null (or absent) for any other video."
           },
@@ -1410,7 +1444,8 @@
                 "span",
                 "camera",
                 "cursor",
-                "redact"
+                "redact",
+                "boxSpan"
               ]
             },
             "description": "The edit operations the browser editor may offer on this engine."
@@ -2217,11 +2252,13 @@
               "properties": {
                 "start": {
                   "type": "number",
-                  "minimum": 0
+                  "minimum": 0,
+                  "description": "Seconds of the recording it starts hiding at; 0 (the start) when left out."
                 },
                 "end": {
                   "type": "number",
-                  "exclusiveMinimum": 0
+                  "exclusiveMinimum": 0,
+                  "description": "Seconds of the recording it stops at; the end when left out. The editor can shorten it later."
                 },
                 "box": {
                   "type": "array",
@@ -2259,8 +2296,6 @@
                 }
               },
               "required": [
-                "start",
-                "end",
                 "box"
               ]
             },
@@ -5569,6 +5604,36 @@
                   "description": "A recording scene's own hidden areas (keyframed boxes). Areas from the pointer trace or the demo's setup can't be removed or changed."
                 },
                 {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "enum": [
+                        "boxSpan"
+                      ]
+                    },
+                    "id": {
+                      "type": "string",
+                      "maxLength": 24
+                    },
+                    "start": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "end": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "id",
+                    "start",
+                    "end"
+                  ],
+                  "description": "When one of the demo's setup boxes (s1, s2...) hides, in seconds of the recording: shorten or lengthen it. Its place and look stay; areas from the pointer trace can't change."
+                },
+                {
                   "$ref": "#/components/schemas/NarrationOp"
                 }
               ]
@@ -6000,6 +6065,29 @@
         "properties": {
           "duration": {
             "type": "number"
+          },
+          "setupBoxes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "start": {
+                  "type": "number"
+                },
+                "end": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "id",
+                "start",
+                "end"
+              ]
+            },
+            "description": "A demo: when each of the person's setup boxes hides (seconds of the recording); boxSpan changes it."
           },
           "colors": {
             "type": "object",
@@ -6764,6 +6852,36 @@
                     "entries"
                   ],
                   "description": "A recording scene's own hidden areas (keyframed boxes). Areas from the pointer trace or the demo's setup can't be removed or changed."
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "enum": [
+                        "boxSpan"
+                      ]
+                    },
+                    "id": {
+                      "type": "string",
+                      "maxLength": 24
+                    },
+                    "start": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "end": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "id",
+                    "start",
+                    "end"
+                  ],
+                  "description": "When one of the demo's setup boxes (s1, s2...) hides, in seconds of the recording: shorten or lengthen it. Its place and look stay; areas from the pointer trace can't change."
                 },
                 {
                   "$ref": "#/components/schemas/NarrationOp"

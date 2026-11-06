@@ -7,6 +7,7 @@ import type { MediaKind } from '../lib/media/classify.js'
 import type { NarrationCleanup } from '../lib/timeline.js'
 import type { PreviewFile, Previews } from '../lib/media/previews.js'
 import type { RunCredit } from '../lib/openverse-rules.js'
+import type { PrivacyKind } from '../lib/privacy-patterns.js'
 import type { RedactEntry } from '../lib/recording-trace.js'
 
 export type Role = 'admin' | 'creator' | 'reviewer' | 'viewer'
@@ -847,6 +848,15 @@ export interface VersionRecording {
     redactionsAdded: number
   } | null
   hidden: HiddenArea[]
+  /** What the output check (OCR of the rendered video) still read that looks private: a warning for the person to look
+   * at, never a failure. Only the person's own hide strings fail a render. */
+  privacyNotes?: PrivacyNote[]
+}
+
+/** A moment of the rendered video where something private-looking (an email, a key...) may still be readable. */
+export interface PrivacyNote {
+  t: number
+  kind: Exclude<PrivacyKind, 'string'>
 }
 
 /** Where an imported item came from, with its licence and credit; all null for uploads. */
@@ -1136,6 +1146,8 @@ export interface Manifest {
   lqip?: string
   /** Variants render-job couldn't make or upload, with why. */
   previewsSkipped?: { name: string; reason: string }[]
+  /** A demo with privacy mode: what the output check still read that looks private (only reported, never a failure). */
+  privacyCheck?: { frames: number; stopped: boolean; noted: { t: number; kind: string }[] }
   durationSec: number
   width: number
   height: number

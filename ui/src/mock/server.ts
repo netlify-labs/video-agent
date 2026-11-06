@@ -2,6 +2,7 @@
 import spec from '../api/openapi.json'
 import type { paths } from '../api/schema'
 import { applyEdits, applyNarration, type EditOp } from '../../../src/lib/contract'
+import { applyBoxSpans, setupSpansOf, type BoxSpanOp, type LockedEntry } from '../../../src/lib/recording'
 import { isLanguage } from '../../../src/lib/language'
 import { REMOTION_LICENSE_NOTICE } from '../../../src/lib/remotion-notice'
 import type { NarrationOp, Span } from '../../../src/lib/timeline'
@@ -1300,7 +1301,7 @@ export function installMock() {
           const out = applyEdits(
             contractHtml(),
             mockSummary(),
-            b.ops.filter((o) => (o as { op: string }).op !== 'narration'),
+            b.ops.filter((o) => !['narration', 'boxSpan'].includes((o as { op: string }).op)),
             { palette: mockPalette, ...mockNarration() },
           )
           const spans = new Map<string, Span[]>()
@@ -1309,7 +1310,12 @@ export function installMock() {
             if (speech?.spans) spans.set(c.mediaId, speech.spans)
           }
           mockEditHtml = track ? applyNarration(out.html, out.summary, track, spans).html : out.html
-          mockEdit = { ...mockEdit, rev: mockEdit.rev + 1, ops: b.ops, composition: out.composition }
+          mockEdit = {
+            ...mockEdit,
+            rev: mockEdit.rev + 1,
+            ops: b.ops,
+            composition: { ...out.composition, ...mockSetupBoxes(b.ops) },
+          }
           return json(mockEdit)
         } catch (e) {
           return fail(400, 'invalid_request', `That edit can't be made: ${(e as Error).message}`)
@@ -2111,8 +2117,18 @@ const mockNarration = () =>
   localStorage.getItem('mockVoice')
     ? { narration: Object.fromEntries(voiceFile.beats.map((b) => [b.beat, b.text])) }
     : {}
+/** A demo's setup box spans as the server puts them on the compositions (boxSpan ops applied). */
+function mockSetupBoxes(ops: unknown[]) {
+  const locked = mockEditRecording()?.locked as LockedEntry[] | undefined
+  if (!locked) return {}
+  const spans = ops.filter((o): o is BoxSpanOp => (o as { op: string }).op === 'boxSpan')
+  return { setupBoxes: setupSpansOf(applyBoxSpans(locked, spans, 20)) }
+}
 function newMockEdit(videoId: string, baseN: number) {
-  const base = applyEdits(contractHtml(), mockSummary(), [], mockNarration()).composition
+  const base = {
+    ...applyEdits(contractHtml(), mockSummary(), [], mockNarration()).composition,
+    ...mockSetupBoxes([]),
+  }
   return {
     id: '00000000-0000-4000-8000-00000000ed17',
     videoId,

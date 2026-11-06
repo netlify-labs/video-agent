@@ -137,6 +137,48 @@ export const STEP_ID = /^[a-z0-9-]{1,40}$/
 
 export type LockedEntry = RedactEntry & { id: string; origin: 'trace' | 'setup' }
 
+/** The editor's change to one of the person's setup boxes: when it hides, in seconds of the recording. */
+export interface BoxSpanOp {
+  op: 'boxSpan'
+  id: string
+  start: number
+  end: number
+}
+
+/** A setup box's span as the editor shows and changes it (the composition's setupBoxes). */
+export interface SetupSpan {
+  id: string
+  start: number
+  end: number
+}
+
+export const setupSpansOf = (entries: LockedEntry[]): SetupSpan[] =>
+  entries.filter((e) => e.origin === 'setup').map((e) => ({ id: e.id, start: e.start, end: e.end }))
+
+/**
+ * The locked entries with the editor's span changes (the last change to a box wins). Only the person's own setup
+ * boxes change, and only when they hide: never where, and never an area from the pointer trace. Throws an Error that
+ * says why for a change that can't be made.
+ */
+export function applyBoxSpans(entries: LockedEntry[], ops: BoxSpanOp[], durationSec: number): LockedEntry[] {
+  const out = entries.map((e) => ({ ...e }))
+  for (const o of ops) {
+    const e = out.find((x) => x.id === o.id)
+    if (!e) throw new Error(`There's no hidden area ${o.id}.`)
+    if (e.origin !== 'setup')
+      throw new Error(
+        `Hidden area ${o.id} was marked when it was recorded; only the boxes you drew can change.`,
+      )
+    if (!(Number.isFinite(o.start) && Number.isFinite(o.end) && o.start >= 0 && o.end > o.start))
+      throw new Error(`Hidden area ${o.id} must start before it ends.`)
+    if (durationSec > 0 && o.end > durationSec + 0.5)
+      throw new Error(`Hidden area ${o.id} must end inside the recording (${String(round4(durationSec))} s).`)
+    e.start = round4(o.start)
+    e.end = round4(o.end)
+  }
+  return out
+}
+
 /** Numbers to 4 places, arrays and plain objects only (no other JSON can reach the data files). */
 const json4 = (v: unknown) =>
   JSON.stringify(v, (_k, x: unknown) => (typeof x === 'number' ? round4(x) + 0 : x))

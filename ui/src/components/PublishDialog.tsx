@@ -39,7 +39,9 @@ export function PublishButton({
   const [open, setOpen] = useState(false)
   const transcriptUrl = v.links.transcript
   // A demo: the dialog says what Video Agent hid that nobody has checked, and that hiding is cosmetic.
-  const demo = v.recording ? { unchecked: uncheckedAgentAreas(v).length } : null
+  const demo = v.recording
+    ? { unchecked: uncheckedAgentAreas(v).length, warnings: v.recording.privacyWarnings.length }
+    : null
   return (
     <>
       <Button
@@ -60,6 +62,12 @@ export function PublishButton({
                   <Text size="sm" fw={500}>
                     Video Agent hid {demo.unchecked} {demo.unchecked === 1 ? 'thing' : 'things'} it thought
                     were private. Check them in the Hidden list before you publish.
+                  </Text>
+                ) : null}
+                {demo.warnings ? (
+                  <Text size="sm" fw={500} data-testid="publish-privacy-warning">
+                    Something that looks private may still be readable at {demo.warnings}{' '}
+                    {demo.warnings === 1 ? 'moment' : 'moments'}. See the Hidden list.
                   </Text>
                 ) : null}
                 <Text size="sm" c="var(--va-muted)">

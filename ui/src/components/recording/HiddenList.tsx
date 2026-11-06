@@ -1,9 +1,10 @@
 // A demo on the video page (screen-recording plan §8.1; va-rsk5.4.3): "Made from a recording" with what the run made
 // of it, and the Hidden list: every hidden area per scene, why it's hidden, and who checked it. Looks right marks the
-// unchecked ones checked (POST .../hidden/confirm). Hiding is cosmetic: the note says so.
-import { Badge, Button, Card, Group, Stack, Text } from '@mantine/core'
+// unchecked ones checked (POST .../hidden/confirm). Hiding is cosmetic: the note says so. In privacy mode, what the
+// check of the rendered video could still read that looks private shows above it as warnings to look at.
+import { Alert, Badge, Button, Card, Group, Stack, Text } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
-import { IconEyeOff } from '@tabler/icons-react'
+import { IconAlertTriangle, IconEyeOff } from '@tabler/icons-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { $api, errorMessage, type Version, type Video } from '../../api/client'
 
@@ -45,6 +46,26 @@ export function HiddenList({ video, v, canCheck }: { video: Video; v: Version; c
             {mss(s.cutSec)} cut, {String(rec.hidden.length ? new Set(rec.hidden.map((h) => h.id)).size : 0)}{' '}
             areas hidden
           </Text>
+        ) : null}
+        {rec.privacyWarnings.length ? (
+          <Alert
+            color="yellow"
+            variant="light"
+            icon={<IconAlertTriangle size={16} />}
+            title="Check these moments"
+            data-testid="privacy-warnings"
+          >
+            <Stack gap={2}>
+              {rec.privacyWarnings.map((w) => (
+                <Text key={`${w.kind}@${String(w.t)}`} size="sm" data-testid="privacy-warning">
+                  {w.warning}
+                </Text>
+              ))}
+              <Text size="xs" c="var(--va-muted)">
+                Privacy mode looked for these in the finished video. If one is private, hide it in the editor.
+              </Text>
+            </Stack>
+          </Alert>
         ) : null}
         {rec.hidden.length ? (
           [...byScene].map(([beat, areas]) => (

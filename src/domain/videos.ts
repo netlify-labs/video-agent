@@ -92,6 +92,7 @@ import {
   inheritRecording,
   type RecordingRequest,
   hiddenWhy,
+  privacyWarningOf,
 } from './demo-recording.js'
 
 const IDEMPOTENCY_TTL_MS = 24 * 3600_000
@@ -1224,6 +1225,10 @@ function versionDto(
           privacy: v.recording.privacy === true,
           summary: v.recording.summary,
           hidden: v.recording.hidden.map((h) => ({ ...h, why: hiddenWhy(h) })),
+          privacyWarnings: (v.recording.privacyNotes ?? []).map((n) => ({
+            ...n,
+            warning: privacyWarningOf(n),
+          })),
         }
       : null,
     mode: v.mode ?? 'author',

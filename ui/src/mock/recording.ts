@@ -267,6 +267,8 @@ async function withDemo(res: Response) {
           privacy: true,
           summary: { sourceSec: 75, steps: 3, cutSec: 31, spedUpSec: 6, redactionsAdded: 1 },
           hidden: demoHidden(),
+          // What the check of the rendered video still read (privacy mode): a warning, not a failure.
+          privacyWarnings: [{ t: 12.4, kind: 'email', warning: 'An email may still be readable at 0:12' }],
         },
       })),
     },

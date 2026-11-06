@@ -1311,6 +1311,10 @@ function EditVersion({ id, versionN }: { id: string; versionN: number }) {
                           beats: c.beats.map((x) => (x.id === b.id ? { ...x, recording: r } : x)),
                         }))
                       }}
+                      setupBoxes={cur.setupBoxes}
+                      onSetupBoxes={(next) => {
+                        update((c) => ({ ...c, setupBoxes: next }))
+                      }}
                     />
                   </div>
                 ) : null}

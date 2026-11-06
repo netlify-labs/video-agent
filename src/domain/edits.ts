@@ -64,15 +64,25 @@ import { canonical, narrationChangedSince } from './narration-stale.js'
 import type { Repo } from '../store/types.js'
 import { type EditRow, type MediaRow, type TranscriptionProvider, type VersionRow } from './types.js'
 import { hasUnfinished, loadJob, newAttempt, videoDto, withIdempotency } from './videos.js'
-import { LOCKED_SRC, parseRedactScript } from '../lib/recording.js'
-import { inheritRecording } from './demo-recording.js'
+import {
+  applyBoxSpans,
+  LOCKED_SRC,
+  parseRedactScript,
+  redactScript,
+  setupSpansOf,
+  type BoxSpanOp,
+} from '../lib/recording.js'
+import { inheritRecording, withBoxSpans } from './demo-recording.js'
 
 export const EDIT_TTL_MS = 7 * 24 * 3600_000
 const MAX_OPS = 500
 const AUDIO_FILE = /\.(mp3|m4a|aac|wav|ogg|opus|webm)$/i
 
-/** A draft's ops: the contract's edits, plus at most one whole-track narration op (plan 2026-11-02 §6.1). */
-export type DraftOp = EditOp | RecordingOp | NarrationOp
+/**
+ * A draft's ops: the contract's edits, plus at most one whole-track narration op (plan 2026-11-02 §6.1), and on a demo
+ * the spans of the person's setup boxes (redact.js, outside the composition).
+ */
+export type DraftOp = EditOp | RecordingOp | NarrationOp | BoxSpanOp
 
 export const editPrefix = (jobId: string, n: number, editId: string) =>
   `${bundlePrefix(jobId, n)}e/${editId}/`
@@ -269,7 +279,8 @@ async function computeRev(
 ) {
   // The narration goes on last, over the edited visuals, so its spans and the music's dip follow every retime.
   const track = narrationOp(draftOps)
-  const ops = draftOps.filter((o): o is EditOp => o.op !== 'narration')
+  const spans = draftOps.filter((o): o is BoxSpanOp => o.op === 'boxSpan')
+  const ops = draftOps.filter((o): o is EditOp => o.op !== 'narration' && o.op !== 'boxSpan')
   const index = await baseIndex(deps, e.jobId, e.baseN)
   // Unchanged files are served from where they already are; only index.html and summary.json are rewritten.
   const entries = new Map<string, BundleEntry>(
@@ -284,6 +295,28 @@ async function computeRev(
   }
   const html = await read('index.html')
   const summary = JSON.parse((await read('summary.json')) || '{}') as Summary
+  // A demo: its locked hidden areas (the person's setup boxes change only their span here) and the recording's facts.
+  const demo = /class="[^"]*\bva-recording\b/.test(html)
+  const analysis = demo
+    ? (JSON.parse((await read('assets/recording/analysis.json')) || '{}') as {
+        source?: { duration?: number }
+        cursorSource?: string
+      })
+    : null
+  const baseLocked = demo ? parseRedactScript(await read(LOCKED_SRC)) : null
+  let locked = baseLocked?.ok ? baseLocked.entries : null
+  if (spans.length) {
+    if (!locked)
+      throw new ApiError(
+        'invalid_request',
+        "That edit can't be made: this version has no boxes of yours to change.",
+      )
+    try {
+      locked = applyBoxSpans(locked, spans, analysis?.source?.duration ?? 0)
+    } catch (err) {
+      throw new ApiError('invalid_request', `That edit can't be made: ${(err as Error).message}`)
+    }
+  }
   // Each voiced beat's line as it was spoken, which voice ops change and the editor shows.
   const voice = parseVoice(await read(VOICE_JSON))
   const narration = voice?.beats.length
@@ -354,6 +387,7 @@ async function computeRev(
     const script: VoiceScript = was ? { ...was, lines } : { voice: voice.voice, speed: voice.speed, lines }
     changed.set(VOICE_SCRIPT, new TextEncoder().encode(JSON.stringify(script, null, 2)))
   }
+  if (spans.length && locked) changed.set(LOCKED_SRC, new TextEncoder().encode(redactScript(locked)))
   for (const [path, bytes] of changed)
     entries.set(path, { path, size: bytes.byteLength, sha256: sha256Hex(bytes) })
   // Media and music swapped in from the library (plan v2 §8): ready items only, of the slot's (or audio's) kind,
@@ -397,20 +431,16 @@ async function computeRev(
   const list = [...entries.values()]
   // A demo: the recording's facts for the editor's panels, from the bundle's own files.
   let recording: EditRecording | null = null
-  if (/class="[^"]*\bva-recording\b/.test(html)) {
-    const analysis = JSON.parse((await read('assets/recording/analysis.json')) || '{}') as {
-      source?: { duration?: number }
-      cursorSource?: string
-    }
+  if (demo) {
     const plan = JSON.parse((await read('assets/recording/plan.json')) || '{}') as {
       zoomMax?: number
       steps?: { id: string; camera: (number | string)[][] }[]
     }
-    const locked = parseRedactScript(await read(LOCKED_SRC))
     recording = {
-      duration: analysis.source?.duration ?? 0,
-      trace: analysis.cursorSource === 'trace',
-      locked: locked.ok ? (locked.entries) : [],
+      duration: analysis?.source?.duration ?? 0,
+      trace: analysis?.cursorSource === 'trace',
+      // As the version has them: the setup boxes' spans in this draft are the composition's setupBoxes.
+      locked: baseLocked?.ok ? baseLocked.entries : [],
       camera: Object.fromEntries((plan.steps ?? []).map((st) => [st.id, st.camera])),
       zoomMax: plan.zoomMax ?? 2.2,
     }
@@ -421,9 +451,12 @@ async function computeRev(
     list,
     picks,
     track,
-    composition,
+    // A demo's setup box spans ride on the compositions, so the editor diffs them like everything else.
+    composition: locked ? { ...composition, setupBoxes: setupSpansOf(locked) } : composition,
     targetSamples,
-    base: baseComposition,
+    base: baseLocked?.ok
+      ? { ...baseComposition, setupBoxes: setupSpansOf(baseLocked.entries) }
+      : baseComposition,
     palette,
     bundleSha256: manifestHash(
       list.map(({ path, sha256 }) => ({ path, sha256 })),
@@ -880,7 +913,15 @@ export async function renderEdit(
         // The base's look: shown on a render as is, and the fit's run reads it (never a restyle).
         look: base?.look ? { ...base.look, restyle: false } : null,
         // A demo's recording inputs carry on (screen-recording plan §5.5).
-        ...(base?.recording ? { recording: inheritRecording(base.recording) } : {}),
+        // The person's setup box spans as this draft set them, so finalize checks redact.js against them.
+        ...(base?.recording
+          ? {
+              recording: withBoxSpans(
+                inheritRecording(base.recording),
+                ops.filter((o): o is BoxSpanOp => o.op === 'boxSpan'),
+              ),
+            }
+          : {}),
       }
       if (base) assertSameEngine(deps, base, row)
       await repo.insertVersion(row)

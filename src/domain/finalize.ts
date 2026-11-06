@@ -49,6 +49,7 @@ import {
   type VersionRow,
 } from './types.js'
 import { finalizeRecording } from './finalize-recording.js'
+import { privacyNotesOf } from './demo-recording.js'
 
 const MIN = 60_000
 const FINALIZE_LEASE_MS = 12 * MIN
@@ -273,6 +274,9 @@ export async function finalizeAttempt(deps: Deps, attemptId: string): Promise<Fi
         throw new Invalid('invalid_output', r.message)
       }
       recording = r?.recording ?? null
+      // What the output check still read that looks private: kept as warnings for the person, never a failure.
+      const notes = recording ? privacyNotesOf(manifest.privacyCheck, info.durationSec) : []
+      if (recording && notes.length) recording = { ...recording, privacyNotes: notes }
     }
 
     const prefix = `${a.jobId}/v${a.versionN}`

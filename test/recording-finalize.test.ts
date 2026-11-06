@@ -322,6 +322,41 @@ describe('finalize: recording, end to end', () => {
     expect(new Set(v?.recording?.hidden.map((x) => x.source))).toEqual(new Set(['trace', 'setup', 'agent']))
   })
 
+  it("privacy mode's output check: what it still read becomes warnings on the version and its DTO, never a failure", async () => {
+    const h = harness()
+    const { videoId, mediaId } = await demoVideo(h)
+    h.deps.nextSource = saved(mediaId)
+    h.deps.nextExtra = {
+      files: {},
+      manifest: {
+        privacyCheck: {
+          frames: 12,
+          stopped: false,
+          noted: [
+            { t: 1.2, kind: 'email' },
+            { t: 1.6, kind: 'email' },
+            { t: 0.5, kind: 'string' },
+            { t: 600, kind: 'email' },
+          ],
+        },
+      },
+    }
+    await h.drive(4)
+    const v = await h.deps.store.getVersion(videoId, 1)
+    expect(v?.status).toBe('ready')
+    // One per kind a second; a hide string isn't a warning (it fails the run instead); past the video's end is dropped.
+    expect(v?.recording?.privacyNotes).toEqual([{ t: 1.2, kind: 'email' }])
+    const dto = await h.json<{ versions: { recording: { privacyWarnings: unknown[] } }[] }>(
+      await h.call('GET', `/api/v1/videos/${videoId}`, { as: h.member }),
+    )
+    console.log(
+      JSON.stringify({ test: 'finalize-recording', case: 'privacy-notes', dto: dto.versions[0]?.recording }),
+    )
+    expect(dto.versions[0]?.recording.privacyWarnings).toEqual([
+      { t: 1.2, kind: 'email', warning: 'An email may still be readable at 0:01' },
+    ])
+  })
+
   it('a demo that lost a hidden area never becomes ready', async () => {
     const h = harness()
     const { videoId, mediaId } = await demoVideo(h)

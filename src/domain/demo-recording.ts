@@ -4,14 +4,15 @@
 import type { Deps } from '../deps.js'
 import { ApiError } from '../lib/errors.js'
 import { classify, MediaError } from '../lib/media/classify.js'
+import { round4, type BoxSpanOp } from '../lib/recording.js'
 import { parseTrace } from '../lib/recording-trace.js'
 import type { RunMedia, RunRecording } from '../lib/run-manifest.js'
 import type { Principal } from './policy.js'
 import { isScreenRecording } from './media-roles.js'
 import type { Repo } from '../store/types.js'
 import { canReadMedia } from './takes.js'
-import { HIDE_STRINGS_MAX, normalizeHideString } from '../lib/privacy-patterns.js'
-import type { HiddenArea, VersionMediaRow, VersionRecording } from './types.js'
+import { HIDE_STRINGS_MAX, normalizeHideString, PRIVACY_LABELS } from '../lib/privacy-patterns.js'
+import type { HiddenArea, PrivacyNote, VersionMediaRow, VersionRecording } from './types.js'
 
 /** The inputs a new version keeps from its parent's recording; the results (summary, hidden areas) are its run's. */
 export function inheritRecording(parent: VersionRecording | null | undefined): VersionRecording | null {
@@ -64,8 +65,9 @@ export interface RecordingRequest {
   trim?: [number, number] | undefined
   redact?:
     | {
-        start: number
-        end: number
+        /** The whole recording when left out (0 to its end). */
+        start?: number | undefined
+        end?: number | undefined
         box: [number, number, number, number]
         style?: 'blur' | 'solid' | undefined
       }[]
@@ -120,7 +122,9 @@ export async function demoRecording(
       'invalid_request',
       `trim must be [in, out] inside the recording (0 to ${String(Math.round(length * 10) / 10)} s), at least 2 seconds.`,
     )
-  const boxes = (req.redact ?? []).map((r, i) => {
+  const boxes = (req.redact ?? []).map((r0, i) => {
+    // A box covers the whole recording unless it says otherwise (the editor can shorten it later).
+    const r = { ...r0, start: r0.start ?? 0, end: r0.end ?? length }
     const [x, y, w, h] = r.box
     if (!(r.end > r.start) || x + w > 1 + 1e-9 || y + h > 1 + 1e-9 || !(w > 0 && h > 0))
       throw new ApiError(
@@ -198,4 +202,45 @@ export function hiddenWhy(h: Pick<HiddenArea, 'source' | 'reason'>): string {
     case 'agent':
       return /^privacy mode/i.test(reason) ? reason : `Added by the agent${reason ? `: ${reason}` : ''}`
   }
+}
+
+/** A version's recording with the editor's span changes to the person's setup boxes (box i is redact.js' s<i+1>). */
+export function withBoxSpans<R extends VersionRecording | null>(r: R, ops: BoxSpanOp[]): R {
+  if (!r || !ops.length) return r
+  const boxes = r.boxes.map((b, i) => {
+    const o = ops.findLast((x) => x.id === `s${String(i + 1)}`)
+    return o ? { ...b, start: round4(o.start), end: round4(o.end) } : b
+  })
+  return { ...r, boxes }
+}
+
+const NOTE_KINDS = new Set<string>(['email', 'key', 'token', 'url', 'card', 'phone'])
+
+/**
+ * The output check's private-looking matches from the run's manifest (render-job), as the version keeps them: known
+ * kinds at real times, one per kind a second, at most 50. Anything else in the manifest is dropped.
+ */
+export function privacyNotesOf(check: unknown, durationSec: number): PrivacyNote[] {
+  const noted = (check as { noted?: unknown } | null)?.noted
+  if (!Array.isArray(noted)) return []
+  const seen = new Set<string>()
+  const out: PrivacyNote[] = []
+  for (const n of noted as { t?: unknown; kind?: unknown }[]) {
+    const t = typeof n.t === 'number' && Number.isFinite(n.t) ? n.t : -1
+    if (t < 0 || t > durationSec + 1 || typeof n.kind !== 'string' || !NOTE_KINDS.has(n.kind)) continue
+    const key = `${n.kind}@${String(Math.floor(t))}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push({ t: Math.round(t * 100) / 100, kind: n.kind as PrivacyNote['kind'] })
+    if (out.length === 50) break
+  }
+  return out.sort((a, b) => a.t - b.t)
+}
+
+/** A privacy note for people: "An email may still be readable at 0:12". */
+export function privacyWarningOf(n: PrivacyNote): string {
+  const at = `${String(Math.floor(n.t / 60))}:${String(Math.floor(n.t % 60)).padStart(2, '0')}`
+  const what = PRIVACY_LABELS[n.kind]
+  // "An email", but "A URL" and "A key": only email starts with a vowel sound.
+  return `${n.kind === 'email' ? 'An' : 'A'} ${what} may still be readable at ${at}`
 }

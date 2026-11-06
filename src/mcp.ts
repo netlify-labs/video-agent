@@ -341,8 +341,8 @@ const RECORDING_ARGS = {
   redact: z
     .array(
       z.object({
-        start: z.number().min(0),
-        end: z.number().positive(),
+        start: z.number().min(0).optional().describe('Seconds of the recording; the start when left out.'),
+        end: z.number().positive().optional().describe('Seconds of the recording; the end when left out.'),
         box: z
           .array(z.number().min(0).max(1))
           .length(4)
@@ -359,7 +359,7 @@ const RECORDING_ARGS = {
 function toRecording(args: {
   recording_media_id?: string | undefined
   trim?: number[] | undefined
-  redact?: { start: number; end: number; box: number[] }[] | undefined
+  redact?: { start?: number | undefined; end?: number | undefined; box: number[] }[] | undefined
 }) {
   if (!args.recording_media_id) return undefined
   return {
@@ -368,8 +368,8 @@ function toRecording(args: {
     ...(args.redact
       ? {
           redact: args.redact.map((r) => ({
-            start: r.start,
-            end: r.end,
+            ...(r.start !== undefined ? { start: r.start } : {}),
+            ...(r.end !== undefined ? { end: r.end } : {}),
             box: [r.box[0] ?? 0, r.box[1] ?? 0, r.box[2] ?? 0, r.box[3] ?? 0] as [
               number,
               number,

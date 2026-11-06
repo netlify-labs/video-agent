@@ -1,6 +1,6 @@
 // The editor's recording panels (screen-recording plan §8.2; va-rsk5.4.4, 4.5), pure parts: the ops a recording scene's
-// changes make (span, camera, cursor, redact: the API's own), the speed a span gives its scene, and the camera's Auto
-// and No zoom. The patcher (src/lib/contract.ts) checks every op again; these only say what changed.
+// changes make (span, camera, cursor, redact: the API's own; boxSpan for the person's setup boxes, which belong to the
+// whole recording), the speed a span gives its scene, and the camera's Auto and No zoom. The patcher (src/lib/contract.ts) checks every op again; these only say what changed.
 import { cameraAt, type CameraKey } from '../../../src/lib/recording'
 import { RATE_RANGE } from '../../../src/lib/recording'
 import type { paths } from '../api/schema'
@@ -38,6 +38,13 @@ export function recordingOps(base: Composition, cur: Composition): Op[] {
     if (r.cursor.style !== was.cursor.style || (r.cursor.size ?? 1) !== (was.cursor.size ?? 1))
       ops.push({ op: 'cursor', beat: b.id, style: r.cursor.style, size: r.cursor.size ?? 1 } as Op)
     if (json(r.redact) !== json(was.redact)) ops.push({ op: 'redact', beat: b.id, entries: r.redact } as Op)
+  }
+  // The person's setup boxes: when each hides (shorten or lengthen; where and how stay).
+  const wasSpan = new Map((base.setupBoxes ?? []).map((x) => [x.id, x] as const))
+  for (const x of cur.setupBoxes ?? []) {
+    const w = wasSpan.get(x.id)
+    if (w && (!near(w.start, x.start) || !near(w.end, x.end)))
+      ops.push({ op: 'boxSpan', id: x.id, start: x.start, end: x.end })
   }
   return ops
 }

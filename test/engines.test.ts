@@ -35,7 +35,7 @@ describe('engines', () => {
     })
   })
 
-  it("HyperFrames has the nine contract ops, the recording scenes' four and every authoring feature", () => {
+  it("HyperFrames has the nine contract ops, the recording scenes' four, setup box spans and every authoring feature", () => {
     expect(engineInfo('hyperframes').capabilities).toEqual({
       editOps: [
         'text',
@@ -51,6 +51,7 @@ describe('engines', () => {
         'camera',
         'cursor',
         'redact',
+        'boxSpan',
       ],
       liveDraftPreview: true,
       sound: 'all',

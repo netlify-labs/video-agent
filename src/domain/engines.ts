@@ -17,7 +17,7 @@ export function isEngineId(x: unknown): x is EngineId {
 }
 
 /** Op names: the contract's EditOp union plus the ops the screen-recording plan adds (span, camera, cursor, redact). */
-export type EditOpName = EditOp['op'] | 'span' | 'camera' | 'cursor' | 'redact'
+export type EditOpName = EditOp['op'] | 'span' | 'camera' | 'cursor' | 'redact' | 'boxSpan'
 
 export interface EngineCapabilities {
   /** Ops the editor may offer on this engine. */
@@ -77,6 +77,7 @@ export const EDIT_OP_NAMES = [
   'camera',
   'cursor',
   'redact',
+  'boxSpan',
 ] as const satisfies readonly EditOpName[]
 
 const scopeChecks = new Map<EngineId, ScopeCheck>()
@@ -100,7 +101,14 @@ function capabilities(id: EngineId): EngineCapabilities {
   if (id === 'hyperframes')
     return {
       // The contract's ops, then the recording scenes' (screen-recording plan §5.3).
-      editOps: [...(Object.keys(CONTRACT_OPS) as EditOpName[]), 'span', 'camera', 'cursor', 'redact'],
+      editOps: [
+        ...(Object.keys(CONTRACT_OPS) as EditOpName[]),
+        'span',
+        'camera',
+        'cursor',
+        'redact',
+        'boxSpan',
+      ],
       liveDraftPreview: true,
       sound: 'all',
       voiceover: true,

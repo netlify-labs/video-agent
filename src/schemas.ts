@@ -494,6 +494,17 @@ export const VersionSchema = z
             }),
           )
           .describe('Every hidden area, per scene, with who checked it. Hiding is cosmetic: see the README.'),
+        privacyWarnings: z
+          .array(
+            z.object({
+              t: z.number().describe('Seconds into the video.'),
+              kind: z.enum(['email', 'key', 'token', 'url', 'card', 'phone']),
+              warning: z.string().describe('For people: "An email may still be readable at 0:12".'),
+            }),
+          )
+          .describe(
+            "Privacy mode only: private-looking text the check of the rendered video could still read. A warning to look at, not a failure; only the person's own hide strings fail a render.",
+          ),
       })
       .nullable()
       .optional()
@@ -710,8 +721,18 @@ export const RecordingInputSchema = z
     redact: z
       .array(
         z.object({
-          start: z.number().min(0),
-          end: z.number().positive(),
+          start: z
+            .number()
+            .min(0)
+            .optional()
+            .describe('Seconds of the recording it starts hiding at; 0 (the start) when left out.'),
+          end: z
+            .number()
+            .positive()
+            .optional()
+            .describe(
+              'Seconds of the recording it stops at; the end when left out. The editor can shorten it later.',
+            ),
           box: z
             .tuple([
               z.number().min(0).max(1),
@@ -1542,11 +1563,28 @@ const EditOpSchema = z.discriminatedUnion('op', [
       description:
         "A recording scene's own hidden areas (keyframed boxes). Areas from the pointer trace or the demo's setup can't be removed or changed.",
     }),
+  z
+    .object({
+      op: z.literal('boxSpan'),
+      id: z.string().max(24),
+      start: z.number().min(0),
+      end: z.number().positive(),
+    })
+    .openapi({
+      description:
+        "When one of the demo's setup boxes (s1, s2...) hides, in seconds of the recording: shorten or lengthen it. Its place and look stay; areas from the pointer trace can't change.",
+    }),
   NarrationOpSchema,
 ])
 const CompositionSchema = z
   .object({
     duration: z.number(),
+    setupBoxes: z
+      .array(z.object({ id: z.string(), start: z.number(), end: z.number() }))
+      .optional()
+      .describe(
+        "A demo: when each of the person's setup boxes hides (seconds of the recording); boxSpan changes it.",
+      ),
     colors: z.record(z.string(), z.string()),
     beats: z.array(
       z.object({
@@ -1686,13 +1724,9 @@ export const EditSchema = z
   .openapi('Edit')
 export const ConfirmHiddenSchema = z
   .object({
-    ids: z
-      .array(z.string().min(1).max(24))
-      .min(1)
-      .max(500)
-      .openapi({
-        description: "The hidden areas' ids (from the version's recording.hidden) that look right",
-      }),
+    ids: z.array(z.string().min(1).max(24)).min(1).max(500).openapi({
+      description: "The hidden areas' ids (from the version's recording.hidden) that look right",
+    }),
   })
   .openapi('ConfirmHidden')
 export const RebaseNarrationSchema = z

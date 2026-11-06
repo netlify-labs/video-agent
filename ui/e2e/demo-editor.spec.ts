@@ -1,6 +1,7 @@
 // The editor's recording panels on the mock build (screen-recording plan §8.2; va-rsk5.4.4, 4.5, the phase 3 gate):
 // a demo's recording scene (mockDemo: test/fixtures/contract1-recording) gets Trim, Camera, Cursor and Hide; each
 // change autosaves as the API's own op (span, camera, cursor, redact), which the mock applies with the real patcher.
+// The person's setup box can be shortened (boxSpan), and Whole recording puts it back.
 import { expect, test, type Page } from '@playwright/test'
 
 type Op = { op: string; beat?: string; [k: string]: unknown }
@@ -62,6 +63,24 @@ test('a recording scene has its panels; trim, camera, cursor and hide save as op
   await panel.getByRole('button', { name: 'Remove e1' }).click()
   await expect(panel.getByTestId('scene-area')).toHaveCount(0)
   await expect(panel.getByTestId('locked-area')).toHaveCount(1)
+})
+
+test('a setup box is shortened in Hide and saved as boxSpan; Whole recording puts it back', async ({
+  page,
+}) => {
+  const panel = page.getByTestId('recording-panel-add-site')
+  await panel.getByRole('tab', { name: 'Hide' }).click()
+  const span = panel.getByTestId('setup-span')
+  await expect(span).toHaveCount(1)
+  const to = span.getByRole('textbox', { name: 's1 to' })
+  await expect(to).toHaveValue('20')
+  await to.fill('8')
+  await to.blur()
+  await expect.poll(async () => opOf(page, 'boxSpan')).toEqual({ op: 'boxSpan', id: 's1', start: 0, end: 8 })
+  await expect(panel.getByTestId('locked-area')).toContainText('0:00.0 – 0:08.0')
+  await span.getByRole('button', { name: 'Whole recording' }).click()
+  await expect.poll(async () => opOf(page, 'boxSpan')).toBeUndefined()
+  await expect(span.getByRole('button', { name: 'Whole recording' })).toBeDisabled()
 })
 
 test('a span that would play past 4x says so', async ({ page }) => {
