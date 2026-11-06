@@ -1,7 +1,7 @@
 // Privacy mode's matcher (src/lib/privacy-patterns.ts): the recommended patterns find what demos most often show by
 // accident, ordinary UI text doesn't match, hide strings match whatever their case, and overlaps keep the longest.
 import { describe, expect, it } from 'vitest'
-import { findPrivate } from '../src/lib/privacy-patterns.js'
+import { findPrivate, matchText, PATTERN_SOURCES } from '../src/lib/privacy-patterns.js'
 
 // Key-shaped values are put together at run time, so no secret-looking literal sits in the source (deploys run a
 // secret scanner over the repo, and these are fakes).
@@ -67,5 +67,21 @@ describe('privacy patterns', () => {
     expect(kinds('ada@acme.dev', ['acme'])).toEqual([['email', 'ada@acme.dev']])
     // Privacy mode off and no strings: nothing.
     expect(findPrivate('ada@acme.dev', { patterns: false })).toEqual([])
+  })
+
+  it("the matcher runs from its own source text, as video-agent record's page script uses it", () => {
+    // The page gets String(matchText) (and a no-op __name, in case a bundler wraps functions).
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval -- the page runs the matcher from source; so does this
+    const inPage = new Function('__name', `return (${String(matchText)})`)(
+      (f: unknown) => f,
+    ) as typeof matchText
+    for (const text of [
+      `Signed in as ada@acme.dev, key ${STRIPE}`,
+      'Card 4242 4242 4242 4242 · Priya Raman',
+      'nothing here',
+    ])
+      expect(inPage(text, PATTERN_SOURCES, ['priya raman'])).toEqual(
+        matchText(text, PATTERN_SOURCES, ['priya raman']),
+      )
   })
 })

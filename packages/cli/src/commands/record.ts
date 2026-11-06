@@ -4,6 +4,7 @@
 import { isAbsolute, relative, resolve } from 'node:path'
 import { CliError, UsageError } from '../exit.js'
 import { runRecord } from '../record/capture.js'
+import { recordingInput, recordingMediaId } from './recording.js'
 import type { Handler } from '../router.js'
 import { VERSION } from '../version.js'
 import { arg } from './shared.js'
@@ -54,6 +55,12 @@ const record: Handler = async (ctx) => {
     throw new UsageError('--duration is 1 to 300 seconds.')
   const hide =
     ctx.flags.hide === undefined ? [] : ([] as string[]).concat(ctx.flags.hide as string | string[])
+  const hideText =
+    ctx.flags['hide-text'] === undefined
+      ? []
+      : ([] as string[])
+          .concat(ctx.flags['hide-text'] as string | string[])
+          .filter((s) => s.trim().length >= 2)
   try {
     const r = await runRecord({
       url,
@@ -67,16 +74,26 @@ const record: Handler = async (ctx) => {
       script: typeof ctx.flags.script === 'string' ? ctx.flags.script : undefined,
       headless: ctx.flags.headless === true,
       hide,
+      privacy: ctx.flags.privacy === true,
+      hideText,
       names: ctx.flags['no-target-names'] !== true,
       tool: `netlify-video-agent@${VERSION}`,
       log: ctx.log,
       say: (text) => ctx.io.stderr(`${text}\n`),
     })
-    const text = [
+    const lines = [
       `Recorded ${r.seconds.toFixed(1)} s at ${String(r.width)}x${String(r.height)}: ${r.file}`,
-      `Pointer trace: ${r.trace} (${String(r.clicks)} clicks, ${String(r.hidden)} hidden ${r.hidden === 1 ? 'field' : 'fields'})`,
-    ].join('\n')
-    return { json: r, text }
+      `Pointer trace: ${r.trace} (${String(r.clicks)} clicks, ${String(r.hidden)} hidden ${r.hidden === 1 ? 'area' : 'areas'})`,
+    ]
+    // --upload: into the library with its trace; --make "<prompt>": and a demo from it (--wait to follow it).
+    const make = typeof ctx.flags.make === 'string' ? ctx.flags.make : null
+    if (!ctx.flags.upload && !make) return { json: r, text: lines.join('\n') }
+    const mediaId = await recordingMediaId(ctx, out)
+    lines.push(`Uploaded: ${mediaId}`)
+    if (!make) return { json: { ...r, mediaId }, text: lines.join('\n') }
+    const video = await ctx.sdk().videos.create({ prompt: make, recording: recordingInput(ctx, mediaId) })
+    lines.push(`Demo: ${video.title} (${video.id}), v1 queued. Follow it: video-agent wait ${video.id}`)
+    return { json: { ...r, mediaId, video }, text: lines.join('\n') }
   } catch (e) {
     if (e instanceof UsageError) throw e
     throw new CliError('record_failed', e instanceof Error ? e.message : String(e), 1)

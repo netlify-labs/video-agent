@@ -49,42 +49,51 @@ const PATTERNS: [PrivacyKind, RegExp][] = [
   ['phone', /(?:\+\d{1,3}[ .-]?)?\(?\d{3}\)?[ .-]\d{3}[ .-]\d{4}\b/g],
 ]
 
-/** The Luhn check, so a long number is only a card when it could be one. */
-function luhn(digits: string): boolean {
-  let sum = 0
-  for (let i = 0; i < digits.length; i++) {
-    let d = Number(digits[digits.length - 1 - i])
-    if (i % 2) {
-      d *= 2
-      if (d > 9) d -= 9
-    }
-    sum += d
-  }
-  return sum % 10 === 0
-}
+/** The patterns as [kind, source, flags]: data, so `video-agent record`'s page script runs the same ones. */
+export const PATTERN_SOURCES: [PrivacyKind, string, string][] = PATTERNS.map(([kind, re]) => [
+  kind,
+  re.source,
+  re.flags,
+])
 
 /** Normalizes a hide string for matching: trimmed, inner whitespace collapsed, case ignored. */
 export const normalizeHideString = (s: string) => s.trim().replace(/\s+/g, ' ').slice(0, HIDE_STRING_CHARS)
 
 /**
- * Every private-looking thing in `text`: the recommended patterns when `patterns` is on (privacy mode), and every
- * occurrence of each hide string (case-insensitive) always. Overlaps keep the longest match.
+ * The matcher itself, self-contained (no outer names), so `video-agent record` can put its source text in the page
+ * (`String(matchText)`) and both sides run the same code: patterns as [kind, source, flags], hide strings matched in
+ * any case (trimmed, spaces collapsed, at least 2 characters), cards only when they pass Luhn, the longest of
+ * overlapping matches kept.
  */
-export function findPrivate(
+export function matchText(
   text: string,
-  opts: { patterns: boolean; strings?: readonly string[] | undefined },
-): PrivacyMatch[] {
-  const found: PrivacyMatch[] = []
-  if (opts.patterns)
-    for (const [kind, re] of PATTERNS)
-      for (const m of text.matchAll(re)) {
-        const s = m[0].replace(/[.,;:)\s-]+$/, '')
-        if (kind === 'card' && !luhn(s.replace(/\D/g, ''))) continue
-        found.push({ kind, start: m.index, end: m.index + s.length, text: s })
+  patterns: readonly (readonly [string, string, string])[],
+  strings: readonly string[],
+): { kind: string; start: number; end: number; text: string }[] {
+  const found: { kind: string; start: number; end: number; text: string }[] = []
+  const luhnOk = (digits: string) => {
+    let sum = 0
+    for (let i = 0; i < digits.length; i++) {
+      let d = Number(digits[digits.length - 1 - i])
+      if (i % 2) {
+        d *= 2
+        if (d > 9) d -= 9
       }
+      sum += d
+    }
+    return sum % 10 === 0
+  }
+  for (const [kind, source, flags] of patterns) {
+    const re = new RegExp(source, flags.includes('g') ? flags : `${flags}g`)
+    for (const m of text.matchAll(re)) {
+      const s = m[0].replace(/[.,;:)\s-]+$/, '')
+      if (kind === 'card' && !luhnOk(s.replace(/\D/g, ''))) continue
+      found.push({ kind, start: m.index, end: m.index + s.length, text: s })
+    }
+  }
   const lower = text.toLowerCase()
-  for (const raw of opts.strings ?? []) {
-    const needle = normalizeHideString(raw).toLowerCase()
+  for (const raw of strings) {
+    const needle = raw.trim().replace(/\s+/g, ' ').slice(0, 200).toLowerCase()
     if (needle.length < 2) continue
     for (let at = lower.indexOf(needle); at >= 0; at = lower.indexOf(needle, at + needle.length))
       found.push({
@@ -94,9 +103,19 @@ export function findPrivate(
         text: text.slice(at, at + needle.length),
       })
   }
-  // Longest first, then drop anything inside a kept match.
   found.sort((a, b) => b.end - b.start - (a.end - a.start) || a.start - b.start)
-  const kept: PrivacyMatch[] = []
+  const kept: typeof found = []
   for (const m of found) if (!kept.some((k) => m.start < k.end && m.end > k.start)) kept.push(m)
   return kept.sort((a, b) => a.start - b.start)
+}
+
+/**
+ * Every private-looking thing in `text`: the recommended patterns when `patterns` is on (privacy mode), and every
+ * occurrence of each hide string (case-insensitive) always. Overlaps keep the longest match.
+ */
+export function findPrivate(
+  text: string,
+  opts: { patterns: boolean; strings?: readonly string[] | undefined },
+): PrivacyMatch[] {
+  return matchText(text, opts.patterns ? PATTERN_SOURCES : [], opts.strings ?? []) as PrivacyMatch[]
 }

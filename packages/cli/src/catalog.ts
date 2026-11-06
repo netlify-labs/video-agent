@@ -179,6 +179,25 @@ export const COMMANDS: CommandSpec[] = [
       'webhook-url': { type: 'string', description: "Also send this video's webhook events here." },
       'idempotency-key': { type: 'string', description: 'Retrying with the same key never makes two.' },
       'prompt-file': { type: 'string', description: "Read the prompt from a file, or '-' for stdin." },
+      recording: {
+        type: 'string',
+        description:
+          'Make a demo from a screen recording: a media id, a video-agent record folder or an MP4 (uploaded first).',
+      },
+      trim: { type: 'string', description: 'With --recording: the seconds to use, in,out (like 2,48.5).' },
+      privacy: {
+        type: 'boolean',
+        description: 'With --recording: privacy mode (find and hide emails, keys, tokens, URLs with ids…).',
+      },
+      'hide-text': {
+        type: 'string',
+        multiple: true,
+        description: 'With --recording: text to hide wherever it shows. Repeatable.',
+      },
+      quick: {
+        type: 'boolean',
+        description: 'With --recording: a Quick demo, made with no agent authoring.',
+      },
       out: {
         type: 'string',
         description: 'Follow it, then download the video, poster and captions into this folder.',
@@ -187,8 +206,9 @@ export const COMMANDS: CommandSpec[] = [
     },
     examples: [
       'video-agent create "A 20-second launch video for webhooks" --aspect 16:9 --wait --out webhooks.mp4',
+      'video-agent create "A demo of adding a webhook" --recording ./take1 --hide-text "Acme Labs" --wait',
     ],
-    sdk: ['videos.create', 'videos.wait', 'media.upload', 'files.download'],
+    sdk: ['videos.create', 'videos.wait', 'media.upload', 'media.uploadRecording', 'files.download'],
     needsHostedApp: true,
     ready: true,
   },
@@ -454,9 +474,19 @@ export const COMMANDS: CommandSpec[] = [
     name: 'media upload',
     summary: 'Upload files to the media library; waits until each is ready.',
     args: [{ name: 'file', type: 'file', required: true, variadic: true, description: 'Files to upload.' }],
-    flags: { caption: { type: 'string', description: 'What the file shows (the agent reads it).' } },
-    examples: ['video-agent media upload ./checkout.png --caption "New checkout page"'],
-    sdk: ['media.upload'],
+    flags: {
+      caption: { type: 'string', description: 'What the file shows (the agent reads it).' },
+      role: {
+        type: 'string',
+        description: 'screen-recording: a recording for a demo (an MP4, or a video-agent record folder).',
+      },
+      trace: { type: 'string', description: "With --role screen-recording: the recording's trace.json." },
+    },
+    examples: [
+      'video-agent media upload ./checkout.png --caption "New checkout page"',
+      'video-agent media upload ./take1 --role screen-recording',
+    ],
+    sdk: ['media.upload', 'media.uploadRecording', 'media.get'],
     needsHostedApp: true,
     ready: true,
   },
@@ -602,6 +632,64 @@ export const COMMANDS: CommandSpec[] = [
       url: { type: 'string', description: 'Where the video should end.' },
     },
     examples: ['video-agent brief changelog --since 2026-11-01 --repo acme/web'],
+    sdk: [],
+    local: true,
+    ready: true,
+  },
+  {
+    name: 'record',
+    summary: 'Record a web app in Chromium with a pointer trace, for a demo (on this machine, no server).',
+    args: [{ name: 'url', type: 'string', required: true, description: 'The page to start on.' }],
+    flags: {
+      out: {
+        type: 'string',
+        description: 'The recording folder (recording.mp4, trace.json).',
+        default: './recording',
+      },
+      viewport: { type: 'string', description: 'The window size, like 1280x800.', default: '1280x800' },
+      dpr: { type: 'number', description: 'Device pixel ratio: 2 (sharp zooms) or 1.', default: 2 },
+      fps: { type: 'number', description: '24, 25 or 30.', default: 30 },
+      duration: {
+        type: 'number',
+        description: 'Record this many seconds and stop (else r starts and s stops).',
+      },
+      script: {
+        type: 'string',
+        description: 'A module whose default export drives the page (a scripted tour).',
+      },
+      headless: { type: 'boolean', description: 'No window (with --duration or --script).' },
+      hide: {
+        type: 'string',
+        multiple: true,
+        description: 'A CSS selector to hide wherever it shows (password fields always are). Repeatable.',
+      },
+      'hide-text': {
+        type: 'string',
+        multiple: true,
+        description: "Text to hide wherever it shows on the page (a customer's name). Repeatable.",
+      },
+      privacy: {
+        type: 'boolean',
+        description:
+          'Privacy mode: find and hide emails, keys, tokens, URLs with ids, card and phone numbers.',
+      },
+      'storage-state': { type: 'string', description: 'A sign-in file to start from (kept outside --out).' },
+      'save-storage-state': {
+        type: 'string',
+        description: 'Save the sign-in here when you stop (mode 600).',
+      },
+      'no-target-names': { type: 'boolean', description: "Don't record clicked elements' names." },
+      upload: {
+        type: 'boolean',
+        description: 'Then upload it to the library (needs a sign-in, like create).',
+      },
+      make: { type: 'string', description: 'Then upload it and make a demo with this prompt.' },
+    },
+    examples: [
+      'video-agent record https://app.example.com --out ./take1',
+      'video-agent record https://app.example.com --privacy --hide-text "Acme Labs" --hide ".account-email"',
+      'video-agent record http://localhost:3000 --script ./tour.mjs --headless --out ./tour',
+    ],
     sdk: [],
     local: true,
     ready: true,

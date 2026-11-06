@@ -103,6 +103,7 @@ Make a video from a prompt.
 ```sh
 video-agent create [prompt]
 video-agent create "A 20-second launch video for webhooks" --aspect 16:9 --wait --out webhooks.mp4
+video-agent create "A demo of adding a webhook" --recording ./take1 --hide-text "Acme Labs" --wait
 ```
 
 - `--aspect <value>`: 16:9, 9:16, 1:1 or 4:5.
@@ -119,6 +120,11 @@ video-agent create "A 20-second launch video for webhooks" --aspect 16:9 --wait 
 - `--webhook-url <value>`: Also send this video's webhook events here.
 - `--idempotency-key <value>`: Retrying with the same key never makes two.
 - `--prompt-file <value>`: Read the prompt from a file, or '-' for stdin.
+- `--recording <value>`: Make a demo from a screen recording: a media id, a video-agent record folder or an MP4 (uploaded first).
+- `--trim <value>`: With --recording: the seconds to use, in,out (like 2,48.5).
+- `--privacy`: With --recording: privacy mode (find and hide emails, keys, tokens, URLs with ids…).
+- `--hide-text <value>` (repeatable): With --recording: text to hide wherever it shows. Repeatable.
+- `--quick`: With --recording: a Quick demo, made with no agent authoring.
 - `--out <value>`: Follow it, then download the video, poster and captions into this folder.
 - `--wait`: Follow the run until the video is ready.
 - `--timeout <value>`: With --wait: give up after this long: seconds, or 30m, 2h (exit 6).
@@ -359,9 +365,12 @@ Upload files to the media library; waits until each is ready.
 ```sh
 video-agent media upload <file…>
 video-agent media upload ./checkout.png --caption "New checkout page"
+video-agent media upload ./take1 --role screen-recording
 ```
 
 - `--caption <value>`: What the file shows (the agent reads it).
+- `--role <value>`: screen-recording: a recording for a demo (an MP4, or a video-agent record folder).
+- `--trace <value>`: With --role screen-recording: the recording's trace.json.
 
 ### media list
 
@@ -483,6 +492,33 @@ video-agent brief changelog --since 2026-11-01 --repo acme/web
 - `--repo <value>`: owner/name (default: GITHUB_REPOSITORY).
 - `--prompt <value>`: Your own words, added to the brief.
 - `--url <value>`: Where the video should end.
+
+### record
+
+Record a web app in Chromium with a pointer trace, for a demo (on this machine, no server).
+
+```sh
+video-agent record <url>
+video-agent record https://app.example.com --out ./take1
+video-agent record https://app.example.com --privacy --hide-text "Acme Labs" --hide ".account-email"
+video-agent record http://localhost:3000 --script ./tour.mjs --headless --out ./tour
+```
+
+- `--out <value>`: The recording folder (recording.mp4, trace.json).
+- `--viewport <value>`: The window size, like 1280x800.
+- `--dpr <n>`: Device pixel ratio: 2 (sharp zooms) or 1.
+- `--fps <n>`: 24, 25 or 30.
+- `--duration <n>`: Record this many seconds and stop (else r starts and s stops).
+- `--script <value>`: A module whose default export drives the page (a scripted tour).
+- `--headless`: No window (with --duration or --script).
+- `--hide <value>` (repeatable): A CSS selector to hide wherever it shows (password fields always are). Repeatable.
+- `--hide-text <value>` (repeatable): Text to hide wherever it shows on the page (a customer's name). Repeatable.
+- `--privacy`: Privacy mode: find and hide emails, keys, tokens, URLs with ids, card and phone numbers.
+- `--storage-state <value>`: A sign-in file to start from (kept outside --out).
+- `--save-storage-state <value>`: Save the sign-in here when you stop (mode 600).
+- `--no-target-names`: Don't record clicked elements' names.
+- `--upload`: Then upload it to the library (needs a sign-in, like create).
+- `--make <value>`: Then upload it and make a demo with this prompt.
 
 ### local
 

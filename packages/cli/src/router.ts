@@ -13,6 +13,7 @@ import { LOOK_COMMANDS } from './commands/looks.js'
 import { MAKE_COMMANDS } from './commands/make.js'
 import { READ_COMMANDS } from './commands/read.js'
 import { SCENE_COMMANDS } from './commands/scenes.js'
+import { RECORD_COMMANDS } from './commands/record.js'
 import { REVIEW_COMMANDS } from './commands/review.js'
 import { CliError, errorJson, EXIT, exitCodeFor, UsageError } from './exit.js'
 import { helpJson, helpText } from './help.js'
@@ -70,6 +71,7 @@ export const HANDLERS: Record<string, Handler> = {
   ...SCENE_COMMANDS,
   ...ACCOUNT_COMMANDS,
   ...LOCAL_COMMANDS,
+  ...RECORD_COMMANDS,
   ...BRIEF_COMMANDS,
   help: helpHandler,
   version: async (ctx) => {

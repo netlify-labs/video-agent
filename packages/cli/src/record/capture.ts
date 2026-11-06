@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { classify, MediaError } from '../../../../src/lib/media/classify.js'
+import { PATTERN_SOURCES } from '../../../../src/lib/privacy-patterns.js'
 import type { Trace } from '../../../../src/lib/recording-trace.js'
 import { assemble, type CapturedFrame } from './assemble.js'
 import { buildTrace } from './trace-build.js'
@@ -28,6 +29,10 @@ export interface RecordOptions {
   script?: string | undefined
   headless: boolean
   hide: string[]
+  /** --privacy: the page's text is matched against the recommended patterns, and each match hidden. */
+  privacy?: boolean | undefined
+  /** --hide-text: text to hide wherever it shows, privacy mode or not. */
+  hideText?: string[] | undefined
   names: boolean
   tool: string
   /** Keys typed in the terminal (r, s); tests pass their own. */
@@ -103,7 +108,13 @@ export async function runRecord(o: RecordOptions): Promise<RecordResult> {
     await context.exposeBinding(TRACE_BINDING, (_src, batch: PageEvent[]) => {
       events.push(...batch)
     })
-    await context.addInitScript(traceScript({ hide: ['input[type=password]', ...o.hide], names: o.names }))
+    const match =
+      o.privacy || o.hideText?.length
+        ? { patterns: o.privacy ? PATTERN_SOURCES : [], strings: o.hideText ?? [] }
+        : null
+    await context.addInitScript(
+      traceScript({ hide: ['input[type=password]', ...o.hide], names: o.names, match }),
+    )
     const page = await context.newPage()
     const metrics = await context.newCDPSession(page)
     await metrics.send('Emulation.setDeviceMetricsOverride', {

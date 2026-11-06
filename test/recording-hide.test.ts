@@ -40,6 +40,8 @@ describe('hidden area style', () => {
       [{ source: 'editor', reason: '' }, 'You drew it in the editor'],
       [{ source: 'trace', reason: 'password field' }, 'Password field'],
       [{ source: 'trace', reason: 'hidden field' }, 'Marked hidden when recorded'],
+      [{ source: 'trace', reason: 'hidden text' }, 'Text you asked to hide'],
+      [{ source: 'trace', reason: 'Privacy mode: email' }, 'Privacy mode: email'],
       [{ source: 'agent', reason: 'Privacy mode: email' }, 'Privacy mode: email'],
       [{ source: 'agent', reason: 'card number' }, 'Added by the agent: card number'],
     ]

@@ -26,9 +26,9 @@ let server: Server
 let url = ''
 
 beforeAll(async () => {
-  server = createServer((_req, res) => {
+  server = createServer((req, res) => {
     res.writeHead(200, { 'content-type': 'text/html' })
-    res.end(readFileSync(join(FIX, 'page.html')))
+    res.end(readFileSync(join(FIX, req.url?.startsWith('/privacy') ? 'privacy.html' : 'page.html')))
   })
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
   url = `http://127.0.0.1:${String((server.address() as AddressInfo).port)}/start`
@@ -61,6 +61,39 @@ function opts(
 }
 
 describe.runIf(hasFfmpeg && hasChromium)('video-agent record', () => {
+  it('--privacy and --hide-text hide matches in the page: their own boxes, off once they leave', async () => {
+    const out = join(tmp, 'privacy')
+    const o = opts(out, {
+      url: url.replace('/start', '/privacy'),
+      durationS: 3,
+      privacy: true,
+      hideText: ['Priya Raman'],
+    })
+    const r = await runRecord(o)
+    const trace = parseTrace(readFileSync(r.trace, 'utf8'))
+    const reasons = trace.redact.map((e) => e.reason).sort()
+    console.log(
+      JSON.stringify({
+        test: 'record',
+        case: 'privacy',
+        reasons,
+        keys: trace.redact.map((e) => e.boxes.length),
+      }),
+    )
+    expect(reasons).toEqual(['Privacy mode: email', 'Privacy mode: key', 'hidden text'])
+    // The email's box goes off (a zero-size key) after it leaves the page at about 1.5 s.
+    const email = trace.redact.find((e) => e.reason === 'Privacy mode: email')
+    const off = email?.boxes.find((k) => k[3] === 0 && k[4] === 0)
+    expect(off?.[0]).toBeGreaterThan(1)
+    expect(off?.[0]).toBeLessThan(2.5)
+    // Each box sits on its own line of text, not the whole paragraph block.
+    for (const e of trace.redact) expect(e.boxes[0]?.[4]).toBeLessThan(0.08)
+    // The text itself never reaches the trace.
+    const text = readFileSync(r.trace, 'utf8')
+    expect(text).not.toContain('acme-labs')
+    expect(text).not.toContain('Priya')
+  })
+
   it('records a scripted session: a normalized file and a scrubbed, aligned trace', async () => {
     const out = join(tmp, 'a')
     const state = join(tmp, 'state.json')

@@ -4,6 +4,7 @@
 // in. Positions: 0-1 of the viewport (the recorded frame is the viewport at its dpr). Moves are simplified with
 // Ramer-Douglas-Peucker at 0.5 px; hidden elements get a key when they move over 2 px, a zero-size key off screen, and
 // at most 600 keys each. Names are scrubbed by the shared schema (src/lib/recording-trace.ts) when it's parsed.
+import { PRIVACY_LABELS } from '../../../../src/lib/privacy-patterns.js'
 import { parseTrace, TRACE_LIMITS, type Trace } from '../../../../src/lib/recording-trace.js'
 import type { PageEvent } from './trace-page.js'
 
@@ -187,7 +188,14 @@ export function buildTrace(input: TraceInput): Trace {
     redact.push({
       start: Math.max(0, keys[0]?.[0] ?? 0),
       end: duration,
-      reason: first?.role === 'textbox' ? 'password field' : 'hidden field',
+      reason:
+        first?.kind === 'string'
+          ? 'hidden text'
+          : first?.kind
+            ? `Privacy mode: ${(PRIVACY_LABELS as Record<string, string | undefined>)[first.kind] ?? first.kind}`
+            : first?.role === 'textbox'
+              ? 'password field'
+              : 'hidden field',
       boxes: keys.slice(0, TRACE_LIMITS.keysPerEntry),
     })
   }

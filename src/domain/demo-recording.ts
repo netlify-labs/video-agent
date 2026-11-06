@@ -187,7 +187,14 @@ export function hiddenWhy(h: Pick<HiddenArea, 'source' | 'reason'>): string {
     case 'editor':
       return 'You drew it in the editor'
     case 'trace':
-      return reason === 'password field' ? 'Password field' : 'Marked hidden when recorded'
+      // video-agent record: a password field, a --hide selector, --hide-text, or --privacy's "Privacy mode: email".
+      return reason === 'password field'
+        ? 'Password field'
+        : reason === 'hidden text'
+          ? 'Text you asked to hide'
+          : /^privacy mode/i.test(reason)
+            ? reason
+            : 'Marked hidden when recorded'
     case 'agent':
       return /^privacy mode/i.test(reason) ? reason : `Added by the agent${reason ? `: ${reason}` : ''}`
   }

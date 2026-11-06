@@ -1,7 +1,10 @@
 // The page side of `video-agent record`'s pointer trace (screen-recording plan §4.6; va-rsk5.5.2): an init script that
 // listens in the capture phase and sends batches to the recorder through a binding. Times are epoch milliseconds
 // (performance.timeOrigin + now(), the screencast's clock); positions are CSS pixels with the viewport size. Keys are
-// counted, never recorded. Hidden areas: elements matching the selectors are sampled at 10 Hz.
+// counted, never recorded. Hidden areas: elements matching the selectors are sampled at 10 Hz; with --privacy or
+// --hide-text, the page's text is matched (src/lib/privacy-patterns.ts, the same code as the runner's OCR side) about
+// three times a second and each match's own rectangle is sampled, off again once it's gone.
+import { matchText } from '../../../../src/lib/privacy-patterns.js'
 
 export interface PageEvent {
   /** move [t, x, y]; down/click/focus/key/wheel/hide per their fields. */
@@ -14,8 +17,10 @@ export interface PageEvent {
   box?: [number, number, number, number]
   role?: string
   name?: string
-  /** hide: which element (stable per element, within its document), and whether it's on screen. */
-  id?: number
+  /** hide: which element or text match (stable within its document), and whether it's on screen. */
+  id?: number | string
+  /** hide from text matching: what it is (email, key, …, string for a hide string). */
+  kind?: string
   /** The document it came from (hidden-element ids are per document). */
   doc: string
   on?: boolean
@@ -26,11 +31,20 @@ export interface PageEvent {
 export const TRACE_BINDING = '__vaTraceEmit'
 
 /** The init script, as a string Playwright adds to every page. */
-export function traceScript(opts: { hide: string[]; names: boolean }): string {
+export function traceScript(opts: {
+  hide: string[]
+  names: boolean
+  /** Text to find and hide: the patterns as [kind, source, flags] (privacy mode) and hide strings. */
+  match?: { patterns: readonly (readonly [string, string, string])[]; strings: readonly string[] } | null
+}): string {
   return `(() => {
   if (window.__vaTraceInstalled) return
   window.__vaTraceInstalled = true
   const HIDE = ${JSON.stringify(opts.hide)}
+  const MATCH = ${JSON.stringify(opts.match ?? null)}
+  // The matcher's own source (a bundler may wrap functions with __name: a no-op here).
+  const __name = (f) => f
+  const matchText = ${String(matchText)}
   const NAMES = ${JSON.stringify(opts.names)}
   const now = () => performance.timeOrigin + performance.now()
   let batch = []
@@ -112,5 +126,40 @@ export function traceScript(opts: { hide: string[]; names: boolean }): string {
       }
     }
   }, 100)
+  // Text matches: each match's rectangle (the union of its line boxes), keyed by its text node, kind and text, so a
+  // scroll moves the same box; one gone since the last pass is sent once more, off.
+  const textIds = new WeakMap()
+  let nextText = 1
+  let shown = new Map()
+  const SKIP = { SCRIPT: 1, STYLE: 1, NOSCRIPT: 1, TEMPLATE: 1 }
+  if (MATCH) setInterval(() => {
+    if (!document.body) return
+    const t = now()
+    const seen = new Map()
+    const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+      acceptNode: (n) => (n.parentElement && !SKIP[n.parentElement.tagName] && n.nodeValue && n.nodeValue.trim().length > 1 ? 1 : 3),
+    })
+    for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+      const found = matchText(n.nodeValue, MATCH.patterns, MATCH.strings)
+      if (!found.length) continue
+      if (!textIds.has(n)) textIds.set(n, nextText++)
+      for (const m of found) {
+        const r = document.createRange()
+        r.setStart(n, m.start)
+        r.setEnd(n, m.end)
+        const rects = [...r.getClientRects()].filter((q) => q.width > 0 && q.height > 0)
+        if (!rects.length) continue
+        const x0 = Math.min(...rects.map((q) => q.left)), y0 = Math.min(...rects.map((q) => q.top))
+        const x1 = Math.max(...rects.map((q) => q.right)), y1 = Math.max(...rects.map((q) => q.bottom))
+        const b = [x0 - 2, y0 - 2, x1 - x0 + 4, y1 - y0 + 4]
+        const on = b[0] < innerWidth && b[1] < innerHeight && b[0] + b[2] > 0 && b[1] + b[3] > 0
+        const id = 'm' + textIds.get(n) + ':' + m.kind + ':' + m.text.length + ':' + m.start
+        seen.set(id, m.kind)
+        push({ k: 'hide', t, id, box: b, on, kind: m.kind })
+      }
+    }
+    for (const [id, kind] of shown) if (!seen.has(id)) push({ k: 'hide', t, id, box: [0, 0, 0, 0], on: false, kind })
+    shown = seen
+  }, 300)
 })()`
 }

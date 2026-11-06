@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import type { Video } from '../../../sdk/src/index.js'
 import { CliError, EXIT, UsageError } from '../exit.js'
 import type { Ctx, Handler } from '../router.js'
+import { recordingInput, recordingMediaId } from './recording.js'
 import { sceneFlags, scopeFor } from './scenes.js'
 import { describeProgress, durationMs, progressLine, resolveVideoArg } from './shared.js'
 
@@ -173,12 +174,18 @@ const create: Handler = async (ctx) => {
     const plan = await va.plans.brief(planId, body)
     prompt = ctx.args[0] ?? plan.prompt
   } else prompt = await promptOf(ctx, 0)
+  // A demo: --recording (a media id, a recording folder or an MP4, uploaded first) and --quick (no agent authoring).
+  const rec = str(ctx, 'recording')
+  if (ctx.flags.quick && !rec) throw new UsageError('--quick makes a demo: it needs --recording.')
+  const recording = rec ? recordingInput(ctx, await recordingMediaId(ctx, rec)) : null
   const video = await va.videos.create(
     {
       prompt,
       ...base,
       ...opt('title', str(ctx, 'title')),
       ...(planId ? { planId } : {}),
+      ...(recording ? { recording } : {}),
+      ...(ctx.flags.quick ? { agent: false } : {}),
     },
     opts(ctx),
   )

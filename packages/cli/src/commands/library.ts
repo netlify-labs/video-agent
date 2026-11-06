@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises'
 import type { Media } from '../../../sdk/src/index.js'
 import { CliError, EXIT, UsageError } from '../exit.js'
 import type { Handler } from '../router.js'
+import { recordingMediaId } from './recording.js'
 import { arg, progressLine } from './shared.js'
 
 const mb = (n: number) => `${(n / 1024 / 1024).toFixed(1)} MB`
@@ -11,6 +12,33 @@ const mediaUpload: Handler = async (ctx) => {
   if (!ctx.args.length) throw new UsageError('Missing <file>. Run: video-agent media upload --help')
   const caption = typeof ctx.flags.caption === 'string' ? ctx.flags.caption : undefined
   const items: Media[] = []
+  // A screen recording: uploaded with its role (and --trace, or the trace.json of a recording folder).
+  if (ctx.flags.role !== undefined) {
+    if (ctx.flags.role !== 'screen-recording') throw new UsageError('--role takes screen-recording.')
+    for (const ref of ctx.args) {
+      const id = await recordingMediaId(
+        ctx,
+        ref,
+        typeof ctx.flags.trace === 'string' ? ctx.flags.trace : undefined,
+      )
+      items.push(await ctx.sdk().media.get(id))
+    }
+    return {
+      json: {
+        items: items.map((m) => ({
+          id: m.id,
+          status: m.status,
+          kind: m.kind,
+          filename: m.filename,
+          hasTrace: m.hasTrace,
+        })),
+      },
+      text: items
+        .map((m) => `${m.id}  screen recording${m.hasTrace ? ' with a pointer trace' : ''}  ${m.filename}`)
+        .join('\n'),
+    }
+  }
+  if (ctx.flags.trace !== undefined) throw new UsageError('--trace goes with --role screen-recording.')
   for (const file of ctx.args) {
     const show = progressLine(ctx)
     const item = await ctx.sdk().media.upload(file, {
