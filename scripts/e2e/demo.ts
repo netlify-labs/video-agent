@@ -4,7 +4,7 @@
 //   npx tsx scripts/e2e/demo.ts --dry   # makes the two recordings and runs the whole pipeline LOCALLY (analyze, plan,
 //                                       # compose, check-contract, npx hyperframes check, a local render): no network
 //                                       # to the deployment, no credits; then prints the env, steps and credits
-//   VIDEO_AGENT_URL=https://<site> VIDEO_AGENT_KEY=nva_… [CREDIT_CEILING=500] npx tsx scripts/e2e/demo.ts [--keep]
+//   VIDEO_AGENT_URL=https://<site> VIDEO_AGENT_KEY=nva_… [CREDIT_CEILING=500] npx tsx scripts/e2e/demo.ts [--keep] [--only a]
 //
 // The recordings: two tours of the app's mock build, recorded with video-agent record's capture (headless). Tour A
 // keeps its pointer trace; tour B is pixels only, like an upload. Or bring your own: RECORDING_A=<dir with recording.mp4
@@ -31,6 +31,9 @@ import { call, check, dry, dryRun, GateError, sleep } from './narration-lib.js'
 
 const env = process.env
 const keep = process.argv.includes('--keep')
+// --only a: demo A alone (one run's credits), e.g. to compare a fix with an earlier A.
+const onlyA = process.argv.includes('--only') && process.argv[process.argv.indexOf('--only') + 1] === 'a'
+const demos = onlyA ? 1 : 2
 const ceiling = Number(env.CREDIT_CEILING ?? 500)
 const perDemo = Number(env.DEMO_CREDITS ?? 210)
 const work = mkdtempSync(join(tmpdir(), 'va-lt1-'))
@@ -271,27 +274,34 @@ async function main() {
       },
       steps: [
         'local pipeline on both recordings (done above: analyze, plan, compose, checks, local render)',
-        'upload A (with its pointer trace) and B (pixels only) with the screen-recording role',
-        'create demo A (a setup box at the top right) and demo B (nothing hidden)',
+        onlyA
+          ? 'upload A (with its pointer trace) with the screen-recording role'
+          : 'upload A (with its pointer trace) and B (pixels only) with the screen-recording role',
+        onlyA
+          ? 'create demo A (a setup box at the top right)'
+          : 'create demo A (a setup box at the top right) and demo B (nothing hidden)',
         'wait for both, then check: ready, HyperFrames, recording field, privacy, summary, Hidden list, captions, bundle files, no names',
         'report credits; delete both demos and both uploads (unless --keep)',
       ],
-      credits: { projected: 2 * perDemo, perDemo, ceiling, under: 2 * perDemo <= ceiling },
+      credits: { projected: demos * perDemo, perDemo, ceiling, under: demos * perDemo <= ceiling },
       problems:
-        2 * perDemo > ceiling
-          ? [`projected ${String(2 * perDemo)} credits is over CREDIT_CEILING ${String(ceiling)}`]
+        demos * perDemo > ceiling
+          ? [`projected ${String(demos * perDemo)} credits is over CREDIT_CEILING ${String(ceiling)}`]
           : [],
     })
   check(!!base && !!key, 'VIDEO_AGENT_URL and VIDEO_AGENT_KEY are set')
-  check(2 * perDemo <= ceiling, 'projected credits under CREDIT_CEILING', { projected: 2 * perDemo, ceiling })
+  check(demos * perDemo <= ceiling, 'projected credits under CREDIT_CEILING', {
+    projected: demos * perDemo,
+    ceiling,
+  })
   const va = sdk()
   const a = await va.media.uploadRecording(new Uint8Array(readFileSync(rec.a.file)), {
     trace: rec.a.trace,
   })
   uploaded.push(a.id)
-  const b = await va.media.uploadRecording(new Uint8Array(readFileSync(rec.b.file)))
-  uploaded.push(b.id)
-  log('uploaded', { a: a.id, b: b.id })
+  const b = onlyA ? null : await va.media.uploadRecording(new Uint8Array(readFileSync(rec.b.file)))
+  if (b) uploaded.push(b.id)
+  log('uploaded', { a: a.id, b: b?.id ?? null })
   const make = async (prompt: string, recording: Record<string, unknown>) => {
     const r = await call<{ id: string }>(key, 'POST', '/api/v1/videos', { prompt, recording })
     check(r.status === 202, 'create demo', { status: r.status, body: r.json })
@@ -303,12 +313,12 @@ async function main() {
     mediaId: a.id,
     redact: [{ start: 0, end: duration, box: BOX }],
   })
-  const idB = await make('A short demo of moving between the media library and the video library.', {
-    mediaId: b.id,
-  })
+  const idB = b
+    ? await make('A short demo of moving between the media library and the video library.', { mediaId: b.id })
+    : null
   log('created', { a: idA, b: idB })
-  const [va1, vb1] = await Promise.all([waitReady(idA), waitReady(idB)])
-  const credits = (await checkDemo('A', va1, rec.a.trace)) + (await checkDemo('B', vb1, null))
+  const [va1, vb1] = await Promise.all([waitReady(idA), idB ? waitReady(idB) : null])
+  const credits = (await checkDemo('A', va1, rec.a.trace)) + (vb1 ? await checkDemo('B', vb1, null) : 0)
   await boxFrame(va1)
   log('PASS', { credits, seconds: Math.round((Date.now() - started) / 1000) })
 }
