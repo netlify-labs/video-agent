@@ -18,6 +18,10 @@ import { runRecord, type RecordOptions } from '../src/record/capture.js'
 const FIX = join(import.meta.dirname, 'fixtures', 'record')
 const tmp = mkdtempSync(join(tmpdir(), 'va-record-test-'))
 const hasFfmpeg = spawnSync('ffmpeg', ['-version'], { stdio: 'ignore' }).status === 0
+// Playwright's Chromium: CI's test job doesn't install browsers (only the UI job does).
+const hasChromium = await import('playwright')
+  .then(({ chromium }) => existsSync(chromium.executablePath()))
+  .catch(() => false)
 let server: Server
 let url = ''
 
@@ -56,7 +60,7 @@ function opts(
   }
 }
 
-describe.runIf(hasFfmpeg)('video-agent record', () => {
+describe.runIf(hasFfmpeg && hasChromium)('video-agent record', () => {
   it('records a scripted session: a normalized file and a scrubbed, aligned trace', async () => {
     const out = join(tmp, 'a')
     const state = join(tmp, 'state.json')
