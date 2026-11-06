@@ -289,6 +289,87 @@
       "local": false
     },
     {
+      "name": "redo",
+      "summary": "Redo one or more scenes only.",
+      "args": [
+        {
+          "name": "video",
+          "type": "video",
+          "required": true,
+          "description": "A video id (vid_…), its web address or a share link."
+        },
+        {
+          "name": "change",
+          "type": "string",
+          "required": true,
+          "description": "What to change."
+        }
+      ],
+      "flags": {
+        "scene": {
+          "type": "string",
+          "multiple": true,
+          "description": "A scene, by id or label (repeatable)."
+        },
+        "from-version": {
+          "type": "number",
+          "description": "The version the scenes are from (default: the latest ready)."
+        },
+        "idempotency-key": {
+          "type": "string",
+          "description": "Retrying with the same key never makes two."
+        },
+        "wait": {
+          "type": "boolean",
+          "description": "Follow the run until the video is ready."
+        },
+        "timeout": {
+          "type": "string",
+          "description": "With --wait: give up after this long: seconds, or 30m, 2h (exit 6)."
+        }
+      },
+      "examples": [
+        "video-agent redo vid_01… --scene intro \"Shorter title\""
+      ],
+      "sdk": [
+        "videos.get",
+        "versions.beats",
+        "videos.redoScenes",
+        "videos.wait"
+      ],
+      "feature": "scoped_revision",
+      "needsHostedApp": true,
+      "local": false
+    },
+    {
+      "name": "scenes",
+      "summary": "List a version's scenes.",
+      "args": [
+        {
+          "name": "video",
+          "type": "video",
+          "required": true,
+          "description": "A video id (vid_…), its web address or a share link."
+        }
+      ],
+      "flags": {
+        "version": {
+          "type": "number",
+          "description": "The version (default: the latest)."
+        }
+      },
+      "examples": [
+        "video-agent scenes vid_01…"
+      ],
+      "sdk": [
+        "videos.get",
+        "versions.beats"
+      ],
+      "feature": null,
+      "needsHostedApp": true,
+      "local": false
+    },
+    {
       "name": "remix",
       "summary": "Make a new video from another one.",
       "args": [

@@ -8,6 +8,8 @@ Commands:
   whoami           Show who the key acts as, and the server.
   create           Make a video from a prompt.
   revise           Make the next version of a video.
+  redo             Redo one or more scenes only. (needs a server with scoped_revision)
+  scenes           List a version's scenes.
   remix            Make a new video from another one. (needs a server with remix)
   get              Show a video.
   list             List videos.
