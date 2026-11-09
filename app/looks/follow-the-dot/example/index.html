@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="vendor/gsap.min.js"></script>
+    <script src="vendor/va-contract.js"></script>
+    <style>
+      /* Follow the dot example: the fictional product Orbit, placeholder words. Runs reuse the dot's jobs and the
+         hand-overs, never the words. Colours are the brand's roles, written as literal colours. */
+      #root {
+        --va-color-bg: #f6f4ee;
+        --va-color-text: #121212;
+        --va-color-accent: #ff5a1f;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1920px; height: 1080px; overflow: hidden; background: #f6f4ee; }
+      #root { width: 100%; height: 100%; position: relative; font-family: system-ui, sans-serif; background: var(--va-color-bg); color: var(--va-color-text); }
+      .beat { position: absolute; inset: 0; overflow: hidden; }
+      .dot { position: absolute; left: 0; top: 0; width: 28px; height: 28px; border-radius: 50%; background: var(--va-color-accent); z-index: 2; }
+      .mask { position: absolute; overflow: hidden; padding-bottom: 14px; }
+      .head { font-size: 104px; font-weight: 800; line-height: 1.02; letter-spacing: -0.03em; }
+      .label { position: absolute; font-size: 38px; font-weight: 600; }
+      .pill { position: absolute; width: 104px; height: 52px; border-radius: 26px; border: 4px solid var(--va-color-text); }
+      .axis { position: absolute; left: 360px; top: 800px; width: 1200px; height: 4px; background: var(--va-color-text); opacity: 0.18; }
+      svg { position: absolute; inset: 0; }
+      .line { fill: none; stroke: var(--va-color-accent); stroke-width: 8; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1309; stroke-dashoffset: 1309; }
+      .centre { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; }
+      .name { font-size: 220px; font-weight: 800; letter-spacing: -0.04em; line-height: 1; }
+      .stop { display: inline-block; position: relative; z-index: 2; width: 0.16em; height: 0.16em; margin-left: 0.04em; border-radius: 50%; background: var(--va-color-accent); }
+      .cta { font-size: 40px; font-weight: 600; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-va-contract="1" data-start="0" data-duration="12.5" data-width="1920" data-height="1080">
+      <section id="hook" class="clip beat" data-va-beat="hook" data-va-label="Hook" data-composition-id="hook" data-start="0" data-duration="3" data-va-authored-duration="3" data-track-index="0">
+        <div class="pill" style="left: 200px; top: 330px"></div>
+        <p class="label" style="left: 332px; top: 332px" data-va-text="hook-label" data-va-label="Toggle label">Instant search</p>
+        <div class="mask" style="left: 200px; top: 440px; width: 1400px">
+          <h1 class="head" data-va-text="hook-title" data-va-label="Headline">Find it before you finish typing</h1>
+        </div>
+        <div class="dot"></div>
+        <script>
+          vaBeat('hook', (tl, el) => {
+            const dot = el.querySelector('.dot')
+            // The dot is the toggle's knob. It flips the toggle, the headline answers, then it hops to where the next scene starts.
+            tl.set(dot, { x: 212, y: 342 }, 0)
+              .to(dot, { x: 264, duration: 0.35, ease: 'back.out(1.6)' }, 0.5)
+              .to(el.querySelector('.pill'), { borderColor: '#ff5a1f', duration: 0.2 }, 0.6)
+              .fromTo(el.querySelector('[data-va-text="hook-title"]'), { yPercent: 110 }, { yPercent: 0, duration: 0.5, ease: 'power3.out' }, 0.75)
+              .to(dot, { x: 346, duration: 0.55, ease: 'power1.inOut' }, 2.3)
+              .to(dot, { y: 786, duration: 0.55, ease: 'power2.in' }, 2.3)
+          })
+        </script>
+      </section>
+      <section id="trace" class="clip beat" data-va-beat="trace" data-va-label="Chart" data-composition-id="trace" data-start="3" data-duration="4" data-va-authored-duration="4" data-track-index="0">
+        <div class="mask" style="left: 200px; top: 130px; width: 760px">
+          <h2 class="head" style="font-size: 72px" data-va-text="trace-title" data-va-label="Headline">Searches per team, month by month</h2>
+        </div>
+        <div class="axis"></div>
+        <svg viewBox="0 0 1920 1080"><polyline class="line" points="360,800 660,700 960,620 1260,430 1560,300" /></svg>
+        <div class="mask" style="left: 1180px; top: 150px; width: 560px">
+          <p class="label" style="position: static; font-size: 44px; font-weight: 700" data-va-text="trace-callout" data-va-label="Callout">4.6× since January</p>
+        </div>
+        <div class="dot"></div>
+        <script>
+          vaBeat('trace', (tl, el) => {
+            const dot = el.querySelector('.dot')
+            // The dot starts where the last scene left it and draws the line: segment times follow segment lengths.
+            tl.set(dot, { x: 346, y: 786 }, 0)
+              .fromTo(el.querySelector('[data-va-text="trace-title"]'), { yPercent: 110 }, { yPercent: 0, duration: 0.5, ease: 'power3.out' }, 0.15)
+              .to(el.querySelector('.line'), { strokeDashoffset: 0, duration: 1.6, ease: 'none' }, 0.8)
+              .to(dot, { x: 646, y: 686, duration: 0.387, ease: 'none' }, 0.8)
+              .to(dot, { x: 946, y: 606, duration: 0.38, ease: 'none' }, 1.187)
+              .to(dot, { x: 1246, y: 416, duration: 0.434, ease: 'none' }, 1.567)
+              .to(dot, { x: 1546, y: 286, duration: 0.399, ease: 'none' }, 2.001)
+              .fromTo(el.querySelector('[data-va-text="trace-callout"]'), { yPercent: 110 }, { yPercent: 0, duration: 0.5, ease: 'power3.out' }, 2.5)
+          })
+        </script>
+      </section>
+      <section id="flood" class="clip beat" data-va-beat="flood" data-va-label="Flood" data-composition-id="flood" data-start="7" data-duration="2.5" data-va-authored-duration="2.5" data-track-index="0">
+        <div class="dot"></div>
+        <div class="centre" style="z-index: 3">
+          <div class="mask" style="position: relative; width: 1300px">
+            <h2 class="head" data-va-text="flood-title" data-va-label="Headline">Every note, doc and comment in one box</h2>
+          </div>
+        </div>
+        <script>
+          vaBeat('flood', (tl, el) => {
+            const dot = el.querySelector('.dot')
+            // The dot grows from the end of the line until the frame is all accent; the scene ends flooded.
+            tl.set(dot, { x: 1546, y: 286 }, 0)
+              .to(dot, { scale: 170, duration: 0.55, ease: 'power3.in' }, 0.1)
+              .fromTo(el.querySelector('[data-va-text="flood-title"]'), { yPercent: 110 }, { yPercent: 0, duration: 0.5, ease: 'power3.out' }, 0.7)
+          })
+        </script>
+      </section>
+      <section id="end" class="clip beat" data-va-beat="end" data-va-label="End card" data-composition-id="end" data-start="9.5" data-duration="3" data-va-authored-duration="3" data-track-index="0">
+        <div class="centre">
+          <div>
+            <h2 class="name"><span data-va-text="end-title" data-va-label="Product name">Orbit</span><i class="stop"></i></h2>
+            <div class="mask" style="position: relative; margin-top: 28px">
+              <p class="cta" data-va-text="end-cta" data-va-label="Call to action">Try it free at orbit.example</p>
+            </div>
+          </div>
+        </div>
+        <script>
+          vaBeat('end', (tl, el) => {
+            // Starts flooded, like the last scene ended, and the flood shrinks into the full stop after the name.
+            tl.fromTo(el.querySelector('.stop'), { scale: 150 }, { scale: 1, duration: 0.7, ease: 'power3.inOut' }, 0)
+              .fromTo(el.querySelector('[data-va-text="end-cta"]'), { yPercent: 110 }, { yPercent: 0, duration: 0.5, ease: 'power3.out' }, 0.9)
+          })
+        </script>
+      </section>
+    </div>
+    <script>
+      window.__timelines['main'] = gsap.timeline({ paused: true })
+    </script>
+  </body>
+</html>

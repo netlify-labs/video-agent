@@ -1,0 +1,16 @@
+{
+  "id": "swiss-grid",
+  "name": "Swiss grid",
+  "description": "A modernist poster in motion: a visible grid, big flush-left type, circles and squares in one accent, everything moving along the grid lines.",
+  "tags": ["grid", "modernist", "type"],
+  "bestFor": ["launch", "changelog", "sales"],
+  "aspects": ["16:9", "9:16", "1:1", "4:5"],
+  "engines": ["hyperframes"],
+  "colors": { "roles": ["bg", "text", "accent"], "derived": ["rule"] },
+  "sound": { "musicMood": "dry minimal techno with a steady click, 124 bpm" },
+  "recording": { "frame": "none", "padding": 0.05, "radius": 0, "shadow": "none", "zoomMax": 1.8 },
+  "registry": [],
+  "authors": ["Video Agent maintainers"],
+  "license": "MIT",
+  "since": "2026-11-09"
+}

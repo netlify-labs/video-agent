@@ -1,0 +1,14 @@
+{
+  "title": "Orbit",
+  "summary": "A riso print example for the fictional product Orbit: two inks, grain and stepped motion.",
+  "captions": [
+    { "start": 0, "end": 3, "text": "New in Orbit / No. 12", "beat": "hook", "textId": "hook-label", "beatStart": 0, "beatEnd": 3 },
+    { "start": 0, "end": 3, "text": "Search everything at once", "beat": "hook", "textId": "hook-title", "beatStart": 0, "beatEnd": 3 },
+    { "start": 3, "end": 7, "text": "One box for all three", "beat": "trio", "textId": "trio-label", "beatStart": 0, "beatEnd": 4 },
+    { "start": 3.5, "end": 7, "text": "Notes", "beat": "trio", "textId": "trio-a", "beatStart": 0.5, "beatEnd": 4 },
+    { "start": 4.1, "end": 7, "text": "Tasks", "beat": "trio", "textId": "trio-b", "beatStart": 1.1, "beatEnd": 4 },
+    { "start": 4.7, "end": 7, "text": "Docs", "beat": "trio", "textId": "trio-c", "beatStart": 1.7, "beatEnd": 4 },
+    { "start": 7, "end": 10, "text": "Orbit", "beat": "end", "textId": "end-title", "beatStart": 0, "beatEnd": 3 },
+    { "start": 8.15, "end": 10, "text": "Try it free / orbit.example", "beat": "end", "textId": "end-cta", "beatStart": 1.15, "beatEnd": 3 }
+  ]
+}

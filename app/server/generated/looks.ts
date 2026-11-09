@@ -77,6 +77,46 @@ export const looksCatalog: LookCatalogEntry[] = [
     }
   },
   {
+    "id": "dark-stage",
+    "name": "Dark stage",
+    "description": "Product moments on a near-black rounded stage, lit from behind by the brand's accent. Compact type, lots of space, quietly confident.",
+    "tags": [
+      "dark",
+      "premium",
+      "product"
+    ],
+    "bestFor": [
+      "launch",
+      "sales",
+      "changelog"
+    ],
+    "aspects": [
+      "16:9",
+      "9:16",
+      "1:1",
+      "4:5"
+    ],
+    "engines": [
+      "hyperframes"
+    ],
+    "recording": {
+      "frame": "none",
+      "padding": 0.1,
+      "radius": 28,
+      "shadow": "none",
+      "zoomMax": 2
+    },
+    "musicMood": "deep melodic electronic, 110 to 118 bpm",
+    "hash": "b8502540d983e8a4548e6a1410878113552babb61bde38753e38fa37e24dad77",
+    "sha256": "da47f339e51e2ec6756b56b1d4c08d5ef370e5acdd4d633e1650b783b2d343c4",
+    "bytes": 5460,
+    "source": "builtin",
+    "preview": {
+      "mp4": "/assets/looks/dark-stage.24c3a873a64a.mp4",
+      "poster": "/assets/looks/dark-stage.5dd404956697.webp"
+    }
+  },
+  {
     "id": "data-story",
     "name": "Data story",
     "description": "Numbers first: counters that run up, charts that build bar by bar, and one annotation that says why it matters.",
@@ -145,6 +185,39 @@ export const looksCatalog: LookCatalogEntry[] = [
     }
   },
   {
+    "id": "follow-the-dot",
+    "name": "Follow the dot",
+    "description": "One dot in the brand's accent runs through every scene: a toggle knob, a full stop, the tip of a chart line, a flood of colour.",
+    "tags": [
+      "minimal",
+      "playful",
+      "motion"
+    ],
+    "bestFor": [
+      "social",
+      "launch"
+    ],
+    "aspects": [
+      "16:9",
+      "9:16",
+      "1:1",
+      "4:5"
+    ],
+    "engines": [
+      "hyperframes"
+    ],
+    "recording": false,
+    "musicMood": "tight minimal electronic with a clear beat, 120 bpm",
+    "hash": "e07856d819ccbd6fe1d8c91cb1d3a9b216546464dba233b6ac0686313ff9208d",
+    "sha256": "cafd839cfa12b884da3ad6f7dedfd2c506a9932707b9207921139f156d48798b",
+    "bytes": 5297,
+    "source": "builtin",
+    "preview": {
+      "mp4": "/assets/looks/follow-the-dot.0fc3dbd69943.mp4",
+      "poster": "/assets/looks/follow-the-dot.0c040d0fb2d5.webp"
+    }
+  },
+  {
     "id": "kinetic",
     "name": "Kinetic type",
     "description": "Big words that move with the beat. Type is the picture.",
@@ -175,6 +248,46 @@ export const looksCatalog: LookCatalogEntry[] = [
     "preview": {
       "mp4": "/assets/looks/kinetic.1d7e4a535c13.mp4",
       "poster": "/assets/looks/kinetic.968438493f84.webp"
+    }
+  },
+  {
+    "id": "one-take",
+    "name": "One take",
+    "description": "No cuts. Each scene grows out of the last: a button opens into a page, a colour floods the frame and shrinks into the next thing.",
+    "tags": [
+      "continuous",
+      "product",
+      "premium"
+    ],
+    "bestFor": [
+      "launch",
+      "sales",
+      "social"
+    ],
+    "aspects": [
+      "16:9",
+      "9:16",
+      "1:1",
+      "4:5"
+    ],
+    "engines": [
+      "hyperframes"
+    ],
+    "recording": {
+      "frame": "browser",
+      "padding": 0.08,
+      "radius": 20,
+      "shadow": "md",
+      "zoomMax": 2
+    },
+    "musicMood": "confident house with a clear drop, 120 to 124 bpm",
+    "hash": "4f02f8c20f782e35b183bc3bde92f33ad189f7edb49d0ed675148f45e7991ed4",
+    "sha256": "9e8fa8a70e25d90748b6561635326276cbe7366966dca607e22d783bfba8b22e",
+    "bytes": 5175,
+    "source": "builtin",
+    "preview": {
+      "mp4": "/assets/looks/one-take.602ac3526ae1.mp4",
+      "poster": "/assets/looks/one-take.2444e2a732f4.webp"
     }
   },
   {
@@ -209,6 +322,121 @@ export const looksCatalog: LookCatalogEntry[] = [
     "preview": {
       "mp4": "/assets/looks/retro-crt.3f7c144b3bdd.mp4",
       "poster": "/assets/looks/retro-crt.a37e10462061.webp"
+    }
+  },
+  {
+    "id": "riso-print",
+    "name": "Riso print",
+    "description": "A two-ink print that moves: grainy paper, halftone dots, flat overlapping shapes and type that sits slightly off register.",
+    "tags": [
+      "print",
+      "texture",
+      "poster"
+    ],
+    "bestFor": [
+      "social",
+      "launch",
+      "other"
+    ],
+    "aspects": [
+      "16:9",
+      "9:16",
+      "1:1",
+      "4:5"
+    ],
+    "engines": [
+      "hyperframes"
+    ],
+    "recording": false,
+    "musicMood": "loose lo-fi beat with tape hiss, 90 to 100 bpm",
+    "hash": "91e1c9b86327a9d2c4d595a84de08078fbfb64b7b2dfc8108fc84b04c2d8597b",
+    "sha256": "edfcb4cd4ced9465c1a63f0e4236183458ab4640bc874667fccb064d0f82ffa7",
+    "bytes": 4984,
+    "source": "builtin",
+    "preview": {
+      "mp4": "/assets/looks/riso-print.5b56819ff530.mp4",
+      "poster": "/assets/looks/riso-print.0af9989fe361.webp"
+    }
+  },
+  {
+    "id": "soft-glass",
+    "name": "Soft glass",
+    "description": "A bright haze in the brand's accent, frosted panels and a cursor that drives every change. For polished launch films.",
+    "tags": [
+      "premium",
+      "glass",
+      "product"
+    ],
+    "bestFor": [
+      "launch",
+      "sales",
+      "tutorial"
+    ],
+    "aspects": [
+      "16:9",
+      "9:16",
+      "1:1",
+      "4:5"
+    ],
+    "engines": [
+      "hyperframes"
+    ],
+    "recording": {
+      "frame": "wallpaper",
+      "padding": 0.07,
+      "radius": 24,
+      "shadow": "lg",
+      "wallpaper": "gradient",
+      "zoomMax": 2.2
+    },
+    "musicMood": "airy melodic house, 120 to 124 bpm",
+    "hash": "c90473fad58b96770180c6b0e603ddffe53705ce6f52723c82721b2702e474ef",
+    "sha256": "af84e1dbcb984b974ff8a4013b3ec23c890531a02828fa265e729e5682e8f695",
+    "bytes": 5823,
+    "source": "builtin",
+    "preview": {
+      "mp4": "/assets/looks/soft-glass.5a99ea61707c.mp4",
+      "poster": "/assets/looks/soft-glass.0cf2e848d293.webp"
+    }
+  },
+  {
+    "id": "swiss-grid",
+    "name": "Swiss grid",
+    "description": "A modernist poster in motion: a visible grid, big flush-left type, circles and squares in one accent, everything moving along the grid lines.",
+    "tags": [
+      "grid",
+      "modernist",
+      "type"
+    ],
+    "bestFor": [
+      "launch",
+      "changelog",
+      "sales"
+    ],
+    "aspects": [
+      "16:9",
+      "9:16",
+      "1:1",
+      "4:5"
+    ],
+    "engines": [
+      "hyperframes"
+    ],
+    "recording": {
+      "frame": "none",
+      "padding": 0.05,
+      "radius": 0,
+      "shadow": "none",
+      "zoomMax": 1.8
+    },
+    "musicMood": "dry minimal techno with a steady click, 124 bpm",
+    "hash": "80b3a776cf45f1bc4346fa8f85cc91bc3f891138aaabbaad266924e608784026",
+    "sha256": "5b43c08bd26574ed724e259191083e93f6142721b29c69d026e07ab1891ebea2",
+    "bytes": 4981,
+    "source": "builtin",
+    "preview": {
+      "mp4": "/assets/looks/swiss-grid.7fb23f6d7a92.mp4",
+      "poster": "/assets/looks/swiss-grid.d857aad9458d.webp"
     }
   },
   {

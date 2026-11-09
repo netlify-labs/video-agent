@@ -1,0 +1,18 @@
+{
+  "title": "Orbit",
+  "summary": "A Swiss grid example for the fictional product Orbit, with a made-up figure.",
+  "captions": [
+    { "start": 0, "end": 3.5, "text": "01 Search", "beat": "hook", "textId": "hook-index", "beatStart": 0, "beatEnd": 3.5 },
+    { "start": 0, "end": 3.5, "text": "Orbit", "beat": "hook", "textId": "hook-brand", "beatStart": 0, "beatEnd": 3.5 },
+    { "start": 0, "end": 3.5, "text": "Find anything", "beat": "hook", "textId": "hook-line-1", "beatStart": 0, "beatEnd": 3.5 },
+    { "start": 0.1, "end": 3.5, "text": "your team wrote", "beat": "hook", "textId": "hook-line-2", "beatStart": 0.1, "beatEnd": 3.5 },
+    { "start": 3.5, "end": 7.5, "text": "02 Everything", "beat": "count", "textId": "count-index", "beatStart": 0, "beatEnd": 4 },
+    { "start": 5.35, "end": 7.5, "text": "Twelve months of notes", "beat": "count", "textId": "count-line-1", "beatStart": 1.85, "beatEnd": 4 },
+    { "start": 5.45, "end": 7.5, "text": "One search box", "beat": "count", "textId": "count-line-2", "beatStart": 1.95, "beatEnd": 4 },
+    { "start": 5.6, "end": 7.5, "text": "12", "beat": "count", "textId": "count-figure", "beatStart": 2.1, "beatEnd": 4 },
+    { "start": 7.5, "end": 10.5, "text": "03 Start", "beat": "end", "textId": "end-index", "beatStart": 0, "beatEnd": 3 },
+    { "start": 8.3, "end": 10.5, "text": "Try it free", "beat": "end", "textId": "end-cta", "beatStart": 0.8, "beatEnd": 3 },
+    { "start": 8.3, "end": 10.5, "text": "orbit.example", "beat": "end", "textId": "end-url", "beatStart": 0.8, "beatEnd": 3 },
+    { "start": 8.7, "end": 10.5, "text": "Orbit", "beat": "end", "textId": "end-title", "beatStart": 1.2, "beatEnd": 3 }
+  ]
+}

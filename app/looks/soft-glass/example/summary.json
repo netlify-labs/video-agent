@@ -1,0 +1,20 @@
+{
+  "title": "Orbit",
+  "summary": "A soft glass example for the fictional product Orbit: frosted panels on a haze, driven by a cursor.",
+  "captions": [
+    { "start": 0, "end": 3, "text": "Orbit", "beat": "intro", "textId": "intro-name", "beatStart": 0, "beatEnd": 3 },
+    { "start": 0, "end": 3, "text": "Ask your team's notes anything", "beat": "intro", "textId": "intro-title", "beatStart": 0, "beatEnd": 3 },
+    { "start": 0, "end": 3, "text": "Ask Orbit", "beat": "intro", "textId": "intro-button", "beatStart": 0, "beatEnd": 3 },
+    { "start": 4.4, "end": 7, "text": "Where is the Q3 roadmap?", "beat": "ask", "textId": "ask-query", "beatStart": 1.4, "beatEnd": 4 },
+    { "start": 5.4, "end": 7, "text": "Q3 roadmap", "beat": "ask", "textId": "ask-title", "beatStart": 2.4, "beatEnd": 4 },
+    { "start": 5.4, "end": 7, "text": "Updated yesterday by the product team.", "beat": "ask", "textId": "ask-body", "beatStart": 2.4, "beatEnd": 4 },
+    { "start": 5.4, "end": 7, "text": "Search ships in September", "beat": "ask", "textId": "ask-key", "beatStart": 2.4, "beatEnd": 4 },
+    { "start": 7.4, "end": 9.5, "text": "Notes, tasks and docs, all answered", "beat": "cards", "textId": "cards-title", "beatStart": 0.4, "beatEnd": 2.5 },
+    { "start": 7.9, "end": 9.5, "text": "Search", "beat": "cards", "textId": "cards-a", "beatStart": 0.9, "beatEnd": 2.5 },
+    { "start": 7.9, "end": 9.5, "text": "Every page your team wrote", "beat": "cards", "textId": "cards-a-sub", "beatStart": 0.9, "beatEnd": 2.5 },
+    { "start": 8.05, "end": 9.5, "text": "Share", "beat": "cards", "textId": "cards-b", "beatStart": 1.05, "beatEnd": 2.5 },
+    { "start": 8.05, "end": 9.5, "text": "Send an answer with its source", "beat": "cards", "textId": "cards-b-sub", "beatStart": 1.05, "beatEnd": 2.5 },
+    { "start": 10.4, "end": 12.5, "text": "Orbit", "beat": "end", "textId": "end-title", "beatStart": 0.9, "beatEnd": 3 },
+    { "start": 10.4, "end": 12.5, "text": "Try Orbit free", "beat": "end", "textId": "end-cta", "beatStart": 0.9, "beatEnd": 3 }
+  ]
+}

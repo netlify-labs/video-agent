@@ -16,6 +16,12 @@ words, share it with a link, or make videos from scripts, CI and AI tools.
   <a href="app/looks/whiteboard/LOOK.md"><img src="app/looks/whiteboard/poster.webp" alt="Whiteboard" width="260"></a>
   <a href="app/looks/kinetic/LOOK.md"><img src="app/looks/kinetic/poster.webp" alt="Kinetic type" width="260"></a>
   <a href="app/looks/terminal/LOOK.md"><img src="app/looks/terminal/poster.webp" alt="Terminal" width="260"></a>
+  <a href="app/looks/one-take/LOOK.md"><img src="app/looks/one-take/poster.webp" alt="One take" width="260"></a>
+  <a href="app/looks/follow-the-dot/LOOK.md"><img src="app/looks/follow-the-dot/poster.webp" alt="Follow the dot" width="260"></a>
+  <a href="app/looks/soft-glass/LOOK.md"><img src="app/looks/soft-glass/poster.webp" alt="Soft glass" width="260"></a>
+  <a href="app/looks/dark-stage/LOOK.md"><img src="app/looks/dark-stage/poster.webp" alt="Dark stage" width="260"></a>
+  <a href="app/looks/riso-print/LOOK.md"><img src="app/looks/riso-print/poster.webp" alt="Riso print" width="260"></a>
+  <a href="app/looks/swiss-grid/LOOK.md"><img src="app/looks/swiss-grid/poster.webp" alt="Swiss grid" width="260"></a>
 </p>
 
 Each video can use one of these looks. To add your own, see [app/looks/README.md](app/looks/README.md).

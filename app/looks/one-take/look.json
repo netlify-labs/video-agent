@@ -1,0 +1,16 @@
+{
+  "id": "one-take",
+  "name": "One take",
+  "description": "No cuts. Each scene grows out of the last: a button opens into a page, a colour floods the frame and shrinks into the next thing.",
+  "tags": ["continuous", "product", "premium"],
+  "bestFor": ["launch", "sales", "social"],
+  "aspects": ["16:9", "9:16", "1:1", "4:5"],
+  "engines": ["hyperframes"],
+  "colors": { "roles": ["bg", "text", "muted", "accent"], "derived": [] },
+  "sound": { "musicMood": "confident house with a clear drop, 120 to 124 bpm" },
+  "recording": { "frame": "browser", "padding": 0.08, "radius": 20, "shadow": "md", "zoomMax": 2 },
+  "registry": [],
+  "authors": ["Video Agent maintainers"],
+  "license": "MIT",
+  "since": "2026-11-09"
+}

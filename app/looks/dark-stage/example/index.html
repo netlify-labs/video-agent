@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="vendor/gsap.min.js"></script>
+    <script src="vendor/va-contract.js"></script>
+    <style>
+      /* Dark stage example: the fictional product Orbit, placeholder words. Runs reuse the stage, the surround and
+         the moves, never the words. Colours are the brand's roles and the derived stage, backdrop and panel, as literals. */
+      #root {
+        --va-color-bg: #f4f1ea;
+        --va-color-text: #1b1b1f;
+        --va-color-muted: #9a9aa3;
+        --va-color-accent: #19c37d;
+        --va-color-stage: #141416;
+        --va-color-backdrop: #0a4a30;
+        --va-color-panel: rgba(255, 255, 255, 0.07);
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1920px; height: 1080px; overflow: hidden; background: #050506; }
+      #root { width: 100%; height: 100%; position: relative; font-family: system-ui, sans-serif; background: #050506; color: var(--va-color-bg); }
+      .beat { position: absolute; inset: 0; background: radial-gradient(1500px 1100px at 8% 0%, var(--va-color-accent), var(--va-color-backdrop) 45%, #050506 100%); }
+      .stage { position: absolute; left: 192px; top: 146px; width: 1536px; height: 820px; border-radius: 44px; background: var(--va-color-stage); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08); overflow: hidden; display: grid; place-items: center; text-align: center; }
+      .head { font-size: 72px; font-weight: 600; line-height: 1.12; letter-spacing: -0.02em; }
+      .accent { color: var(--va-color-accent); }
+      .sub { font-size: 34px; color: var(--va-color-muted); }
+      .brand { display: flex; align-items: center; justify-content: center; gap: 16px; font-size: 34px; font-weight: 600; }
+      .mark { width: 44px; height: 44px; border-radius: 50%; background: var(--va-color-accent); }
+      .list { position: relative; width: 820px; text-align: left; }
+      .field, .row { height: 88px; border-radius: 18px; display: flex; align-items: center; padding: 0 32px; font-size: 32px; font-weight: 500; }
+      .field { background: var(--va-color-panel); margin-bottom: 28px; }
+      .row { position: relative; color: var(--va-color-muted); }
+      .glow { position: absolute; left: 0; top: 116px; width: 820px; height: 88px; border-radius: 18px; background: var(--va-color-accent); box-shadow: 0 0 48px rgba(25, 195, 125, 0.35); }
+      .row.on { color: var(--va-color-stage); }
+      .figure { font-size: 176px; font-weight: 600; letter-spacing: -0.04em; line-height: 1; color: var(--va-color-accent); }
+      .track { width: 520px; height: 8px; border-radius: 4px; background: var(--va-color-panel); margin: 36px auto 0; overflow: hidden; }
+      .fill { width: 100%; height: 100%; background: var(--va-color-accent); transform-origin: left center; }
+      .btn { display: inline-flex; align-items: center; height: 80px; padding: 0 44px; border-radius: 40px; background: var(--va-color-accent); color: var(--va-color-stage); font-size: 32px; font-weight: 600; box-shadow: 0 0 48px rgba(25, 195, 125, 0.35); }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-va-contract="1" data-start="0" data-duration="12.5" data-width="1920" data-height="1080">
+      <section id="intro" class="clip beat" data-va-beat="intro" data-va-label="Intro" data-composition-id="intro" data-start="0" data-duration="3" data-va-authored-duration="3" data-track-index="0">
+        <div class="stage">
+          <div>
+            <div class="brand item"><span class="mark"></span><span data-va-text="intro-brand" data-va-label="Product name">Orbit</span></div>
+            <h1 class="head item" style="margin-top: 40px" data-va-text="intro-title" data-va-label="Headline">Find anything</h1>
+            <p class="head accent item" data-va-text="intro-title-2" data-va-label="Headline, accent line">your team wrote</p>
+          </div>
+        </div>
+        <script>
+          vaBeat('intro', (tl, el) => {
+            // The headline is up at 0 s (the first frame is the thumbnail); the brand row and the accent line rise after it.
+            tl.fromTo(el.querySelector('[data-va-text="intro-title"]'), { y: 16 }, { y: 0, duration: 0.6, ease: 'power3.out' }, 0)
+              .fromTo(el.querySelector('.brand'), { y: 32, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6, ease: 'power3.out' }, 0.15)
+              .fromTo(el.querySelector('[data-va-text="intro-title-2"]'), { y: 32, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6, ease: 'power3.out' }, 0.6)
+          })
+        </script>
+      </section>
+      <section id="search" class="clip beat" data-va-beat="search" data-va-label="Search" data-composition-id="search" data-start="3" data-duration="4" data-va-authored-duration="4" data-track-index="0">
+        <div class="stage">
+          <div class="list">
+            <div class="glow"></div>
+            <div class="field item"><span data-va-text="search-query" data-va-label="Search query">roadmap q3</span></div>
+            <div class="row item on"><span data-va-text="search-row-1" data-va-label="Result 1">Q3 roadmap, updated yesterday</span></div>
+            <div class="row item"><span data-va-text="search-row-2" data-va-label="Result 2">Roadmap review notes</span></div>
+            <div class="row item"><span data-va-text="search-row-3" data-va-label="Result 3">Launch checklist</span></div>
+          </div>
+        </div>
+        <script>
+          vaBeat('search', (tl, el) => {
+            // The field and rows build top to bottom; the accent highlight grows in behind the first result.
+            tl.fromTo(el.querySelectorAll('.item'), { y: 32, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6, ease: 'power3.out', stagger: 0.08 }, 0.15)
+              .fromTo(el.querySelector('[data-va-text="search-query"]'), { clipPath: 'inset(0 100% 0 0)' }, { clipPath: 'inset(0 0% 0 0)', duration: 0.6, ease: 'steps(10)' }, 0.4)
+              .fromTo(el.querySelector('.glow'), { opacity: 0, scaleX: 0.9 }, { opacity: 1, scaleX: 1, duration: 0.45, ease: 'power3.out' }, 1.3)
+              .fromTo(el.querySelector('.row.on'), { color: '#9a9aa3' }, { color: '#141416', duration: 0.2 }, 1.35)
+          })
+        </script>
+      </section>
+      <section id="stat" class="clip beat" data-va-beat="stat" data-va-label="Figure" data-composition-id="stat" data-start="7" data-duration="2.5" data-va-authored-duration="2.5" data-track-index="0">
+        <div class="stage">
+          <div>
+            <p class="figure item" data-va-text="stat-figure" data-va-label="Figure">0.2 s</p>
+            <p class="sub item" style="margin-top: 20px" data-va-text="stat-sub" data-va-label="Figure caption">from question to answer</p>
+            <div class="track item"><div class="fill"></div></div>
+          </div>
+        </div>
+        <script>
+          vaBeat('stat', (tl, el) => {
+            // One live detail: the bar fills across the scene. It scales with the scene's length, so a retimed scene stays right.
+            const k = Number(el.dataset.duration) / Number(el.dataset.vaAuthoredDuration)
+            tl.fromTo(el.querySelectorAll('.item'), { y: 32, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6, ease: 'power3.out', stagger: 0.1 }, 0.15)
+              .fromTo(el.querySelector('.fill'), { scaleX: 0 }, { scaleX: 1, duration: 1.6 * k, ease: 'none' }, 0.5)
+          })
+        </script>
+      </section>
+      <section id="end" class="clip beat" data-va-beat="end" data-va-label="End card" data-composition-id="end" data-start="9.5" data-duration="3" data-va-authored-duration="3" data-track-index="0">
+        <div class="stage">
+          <div>
+            <div class="brand item" style="font-size: 96px; gap: 28px"><span class="mark" style="width: 96px; height: 96px"></span><span data-va-text="end-title" data-va-label="Product name">Orbit</span></div>
+            <p class="sub item" style="margin-top: 28px" data-va-text="end-sub" data-va-label="Tagline">Search for everything your team wrote</p>
+            <div class="item" style="margin-top: 48px"><span class="btn" data-va-text="end-cta" data-va-label="Call to action">Try Orbit free</span></div>
+          </div>
+        </div>
+        <script>
+          vaBeat('end', (tl, el) => {
+            tl.fromTo(el.querySelectorAll('.item'), { y: 32, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6, ease: 'power3.out', stagger: 0.1 }, 0.15)
+          })
+        </script>
+      </section>
+    </div>
+    <script>
+      window.__timelines['main'] = gsap.timeline({ paused: true })
+    </script>
+  </body>
+</html>

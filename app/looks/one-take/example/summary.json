@@ -1,0 +1,15 @@
+{
+  "title": "Orbit",
+  "summary": "A one-take example for the fictional product Orbit: every scene grows out of the last.",
+  "captions": [
+    { "start": 0, "end": 3, "text": "Everything your team wrote, one search away", "beat": "open", "textId": "open-title", "beatStart": 0, "beatEnd": 3 },
+    { "start": 0.85, "end": 2.2, "text": "Search Orbit", "beat": "open", "textId": "open-button", "beatStart": 0.85, "beatEnd": 2.2 },
+    { "start": 4.35, "end": 7, "text": "roadmap q3", "beat": "page", "textId": "page-query", "beatStart": 1.35, "beatEnd": 4 },
+    { "start": 4.9, "end": 7, "text": "Q3 roadmap, updated yesterday", "beat": "page", "textId": "page-row-1", "beatStart": 1.9, "beatEnd": 4 },
+    { "start": 5.02, "end": 7, "text": "Roadmap review notes", "beat": "page", "textId": "page-row-2", "beatStart": 2.02, "beatEnd": 4 },
+    { "start": 5.14, "end": 7, "text": "Launch checklist", "beat": "page", "textId": "page-row-3", "beatStart": 2.14, "beatEnd": 4 },
+    { "start": 7.65, "end": 10, "text": "Notes, tasks and docs in one box", "beat": "claim", "textId": "claim-title", "beatStart": 0.65, "beatEnd": 3 },
+    { "start": 10.9, "end": 13, "text": "Orbit", "beat": "end", "textId": "end-title", "beatStart": 0.9, "beatEnd": 3 },
+    { "start": 11, "end": 13, "text": "Try Orbit free", "beat": "end", "textId": "end-cta", "beatStart": 1, "beatEnd": 3 }
+  ]
+}

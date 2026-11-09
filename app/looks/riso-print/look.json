@@ -1,0 +1,16 @@
+{
+  "id": "riso-print",
+  "name": "Riso print",
+  "description": "A two-ink print that moves: grainy paper, halftone dots, flat overlapping shapes and type that sits slightly off register.",
+  "tags": ["print", "texture", "poster"],
+  "bestFor": ["social", "launch", "other"],
+  "aspects": ["16:9", "9:16", "1:1", "4:5"],
+  "engines": ["hyperframes"],
+  "colors": { "roles": ["bg", "text", "accent"], "derived": [] },
+  "sound": { "musicMood": "loose lo-fi beat with tape hiss, 90 to 100 bpm" },
+  "recording": false,
+  "registry": [],
+  "authors": ["Video Agent maintainers"],
+  "license": "MIT",
+  "since": "2026-11-09"
+}

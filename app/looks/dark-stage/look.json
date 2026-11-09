@@ -1,0 +1,16 @@
+{
+  "id": "dark-stage",
+  "name": "Dark stage",
+  "description": "Product moments on a near-black rounded stage, lit from behind by the brand's accent. Compact type, lots of space, quietly confident.",
+  "tags": ["dark", "premium", "product"],
+  "bestFor": ["launch", "sales", "changelog"],
+  "aspects": ["16:9", "9:16", "1:1", "4:5"],
+  "engines": ["hyperframes"],
+  "colors": { "roles": ["bg", "text", "muted", "accent"], "derived": ["stage", "backdrop", "panel"] },
+  "sound": { "musicMood": "deep melodic electronic, 110 to 118 bpm" },
+  "recording": { "frame": "none", "padding": 0.1, "radius": 28, "shadow": "none", "zoomMax": 2 },
+  "registry": [],
+  "authors": ["Video Agent maintainers"],
+  "license": "MIT",
+  "since": "2026-11-09"
+}

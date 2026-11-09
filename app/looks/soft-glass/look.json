@@ -1,0 +1,16 @@
+{
+  "id": "soft-glass",
+  "name": "Soft glass",
+  "description": "A bright haze in the brand's accent, frosted panels and a cursor that drives every change. For polished launch films.",
+  "tags": ["premium", "glass", "product"],
+  "bestFor": ["launch", "sales", "tutorial"],
+  "aspects": ["16:9", "9:16", "1:1", "4:5"],
+  "engines": ["hyperframes"],
+  "colors": { "roles": ["bg", "text", "muted", "accent"], "derived": ["haze", "glass"] },
+  "sound": { "musicMood": "airy melodic house, 120 to 124 bpm" },
+  "recording": { "frame": "wallpaper", "padding": 0.07, "radius": 24, "shadow": "lg", "wallpaper": "gradient", "zoomMax": 2.2 },
+  "registry": [],
+  "authors": ["Video Agent maintainers"],
+  "license": "MIT",
+  "since": "2026-11-09"
+}

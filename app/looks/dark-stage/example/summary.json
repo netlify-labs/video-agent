@@ -1,0 +1,18 @@
+{
+  "title": "Orbit",
+  "summary": "A dark stage example for the fictional product Orbit, with a made-up figure.",
+  "captions": [
+    { "start": 0.75, "end": 3, "text": "Orbit", "beat": "intro", "textId": "intro-brand", "beatStart": 0.75, "beatEnd": 3 },
+    { "start": 0, "end": 3, "text": "Find anything", "beat": "intro", "textId": "intro-title", "beatStart": 0, "beatEnd": 3 },
+    { "start": 1.2, "end": 3, "text": "your team wrote", "beat": "intro", "textId": "intro-title-2", "beatStart": 1.2, "beatEnd": 3 },
+    { "start": 4, "end": 7, "text": "roadmap q3", "beat": "search", "textId": "search-query", "beatStart": 1, "beatEnd": 4 },
+    { "start": 3.85, "end": 7, "text": "Q3 roadmap, updated yesterday", "beat": "search", "textId": "search-row-1", "beatStart": 0.85, "beatEnd": 4 },
+    { "start": 3.95, "end": 7, "text": "Roadmap review notes", "beat": "search", "textId": "search-row-2", "beatStart": 0.95, "beatEnd": 4 },
+    { "start": 4, "end": 7, "text": "Launch checklist", "beat": "search", "textId": "search-row-3", "beatStart": 1, "beatEnd": 4 },
+    { "start": 7.75, "end": 9.5, "text": "0.2 s", "beat": "stat", "textId": "stat-figure", "beatStart": 0.75, "beatEnd": 2.5 },
+    { "start": 7.85, "end": 9.5, "text": "from question to answer", "beat": "stat", "textId": "stat-sub", "beatStart": 0.85, "beatEnd": 2.5 },
+    { "start": 10.25, "end": 12.5, "text": "Orbit", "beat": "end", "textId": "end-title", "beatStart": 0.75, "beatEnd": 3 },
+    { "start": 10.35, "end": 12.5, "text": "Search for everything your team wrote", "beat": "end", "textId": "end-sub", "beatStart": 0.85, "beatEnd": 3 },
+    { "start": 10.45, "end": 12.5, "text": "Try Orbit free", "beat": "end", "textId": "end-cta", "beatStart": 0.95, "beatEnd": 3 }
+  ]
+}

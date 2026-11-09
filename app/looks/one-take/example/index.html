@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="vendor/gsap.min.js"></script>
+    <script src="vendor/va-contract.js"></script>
+    <style>
+      /* One take example: the fictional product Orbit, placeholder words. Runs reuse the carriers and the four moves,
+         never the words. Colours are the brand's roles, written as literal colours. */
+      #root {
+        --va-color-bg: #f5f4f0;
+        --va-color-text: #0f0f11;
+        --va-color-muted: #6f6f76;
+        --va-color-accent: #c8f04a;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1920px; height: 1080px; overflow: hidden; background: #f5f4f0; }
+      #root { width: 100%; height: 100%; position: relative; font-family: system-ui, sans-serif; background: var(--va-color-bg); color: var(--va-color-text); }
+      .beat { position: absolute; inset: 0; overflow: hidden; }
+      .mask { position: absolute; overflow: hidden; padding-bottom: 14px; }
+      .head { font-size: 100px; font-weight: 700; line-height: 1.05; letter-spacing: -0.03em; }
+      .ui { font-size: 38px; font-weight: 600; white-space: nowrap; }
+      .carrier { position: absolute; background: var(--va-color-text); display: grid; place-items: center; overflow: hidden; }
+      .on-dark { color: var(--va-color-bg); }
+      .row { position: absolute; left: 410px; width: 1100px; height: 96px; border-bottom: 3px solid var(--va-color-text); display: flex; align-items: center; overflow: hidden; }
+      .row .ui { font-weight: 500; }
+      .hi { position: absolute; left: 410px; top: 330px; width: 1100px; height: 96px; background: var(--va-color-accent); transform-origin: left center; }
+      .seed { position: absolute; left: 1420px; top: 358px; width: 40px; height: 40px; border-radius: 50%; background: var(--va-color-accent); }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-va-contract="1" data-start="0" data-duration="13" data-width="1920" data-height="1080">
+      <section id="open" class="clip beat" data-va-beat="open" data-va-label="Hook" data-composition-id="open" data-start="0" data-duration="3" data-va-authored-duration="3" data-track-index="0">
+        <div class="mask" style="left: 260px; top: 300px; width: 1400px; text-align: center">
+          <h1 class="head" data-va-text="open-title" data-va-label="Headline">Everything your team wrote, one search away</h1>
+        </div>
+        <div class="carrier" style="left: 760px; top: 640px; width: 400px; height: 96px; border-radius: 48px">
+          <span class="ui on-dark" data-va-text="open-button" data-va-label="Button">Search Orbit</span>
+        </div>
+        <script>
+          vaBeat('open', (tl, el) => {
+            const pill = el.querySelector('.carrier')
+            // The headline is up at 0 s (the first frame is the thumbnail). The pill pops, is pressed, and grows into the frame.
+            tl.fromTo(el.querySelector('[data-va-text="open-title"]'), { yPercent: 30 }, { yPercent: 0, duration: 0.5, ease: 'power3.out' }, 0)
+              .fromTo(pill, { scale: 0 }, { scale: 1, duration: 0.35, ease: 'back.out(1.6)' }, 0.5)
+              .to(pill, { scale: 0.96, duration: 0.08 }, 2.15)
+              .to(pill.querySelector('.ui'), { yPercent: -160, duration: 0.3, ease: 'power3.in' }, 2.2)
+              .to(pill, { scale: 1, left: 0, top: 0, width: 1920, height: 1080, borderRadius: 0, duration: 0.6, ease: 'power3.inOut' }, 2.3)
+          })
+        </script>
+      </section>
+      <section id="page" class="clip beat" data-va-beat="page" data-va-label="Search" data-composition-id="page" data-start="3" data-duration="4" data-va-authored-duration="4" data-track-index="0">
+        <div class="hi"></div>
+        <div class="row" style="top: 330px"><div class="ui" data-va-text="page-row-1" data-va-label="Result 1">Q3 roadmap, updated yesterday</div></div>
+        <div class="row" style="top: 426px"><div class="ui" data-va-text="page-row-2" data-va-label="Result 2">Roadmap review notes</div></div>
+        <div class="row" style="top: 522px"><div class="ui" data-va-text="page-row-3" data-va-label="Result 3">Launch checklist</div></div>
+        <div class="seed"></div>
+        <div class="carrier" style="justify-items: start; padding-left: 48px">
+          <span class="ui on-dark" data-va-text="page-query" data-va-label="Search query">roadmap q3</span>
+        </div>
+        <script>
+          vaBeat('page', (tl, el) => {
+            // Starts as the full dark frame the last scene ended on; it contracts into the search field.
+            tl.fromTo(el.querySelector('.carrier'), { left: 0, top: 0, width: 1920, height: 1080, borderRadius: 0 }, { left: 410, top: 170, width: 1100, height: 112, borderRadius: 56, duration: 0.65, ease: 'power3.inOut' }, 0)
+              .fromTo(el.querySelector('[data-va-text="page-query"]'), { clipPath: 'inset(0 100% 0 0)' }, { clipPath: 'inset(0 0% 0 0)', duration: 0.6, ease: 'steps(10)' }, 0.75)
+              .fromTo(el.querySelectorAll('.row .ui'), { yPercent: 160 }, { yPercent: 0, duration: 0.5, ease: 'power3.out', stagger: 0.12 }, 1.4)
+              .fromTo(el.querySelector('.hi'), { scaleX: 0 }, { scaleX: 1, duration: 0.45, ease: 'power2.out' }, 2.1)
+              .fromTo(el.querySelector('.seed'), { scale: 0 }, { scale: 1, duration: 0.3, ease: 'back.out(1.6)' }, 2.6)
+              .to(el.querySelector('.seed'), { scale: 110, duration: 0.6, ease: 'power3.in' }, 3.35)
+          })
+        </script>
+      </section>
+      <section id="claim" class="clip beat" data-va-beat="claim" data-va-label="Claim" data-composition-id="claim" data-start="7" data-duration="3" data-va-authored-duration="3" data-track-index="0">
+        <div class="carrier" style="background: var(--va-color-accent)"></div>
+        <div class="mask" style="left: 260px; top: 330px; width: 1400px; text-align: center">
+          <h2 class="head" data-va-text="claim-title" data-va-label="Headline">Notes, tasks and docs in one box</h2>
+        </div>
+        <script>
+          vaBeat('claim', (tl, el) => {
+            // Starts flooded in accent, as the last scene ended; the flood contracts into the underline.
+            tl.fromTo(el.querySelector('[data-va-text="claim-title"]'), { yPercent: 110 }, { yPercent: 0, duration: 0.5, ease: 'power3.out' }, 0.15)
+              .fromTo(el.querySelector('.carrier'), { left: 0, top: 0, width: 1920, height: 1080, borderRadius: 0 }, { left: 384, top: 600, width: 1152, height: 24, borderRadius: 12, duration: 0.7, ease: 'power3.inOut' }, 0.9)
+          })
+        </script>
+      </section>
+      <section id="end" class="clip beat" data-va-beat="end" data-va-label="End card" data-composition-id="end" data-start="10" data-duration="3" data-va-authored-duration="3" data-track-index="0">
+        <div class="mask" style="left: 260px; top: 300px; width: 1400px; text-align: center">
+          <h2 class="head" style="font-size: 200px; line-height: 1.1" data-va-text="end-title" data-va-label="Product name">Orbit</h2>
+        </div>
+        <div class="carrier" style="background: var(--va-color-accent)">
+          <span class="ui" data-va-text="end-cta" data-va-label="Call to action">Try Orbit free</span>
+        </div>
+        <script>
+          vaBeat('end', (tl, el) => {
+            // The underline from the last scene becomes the button.
+            tl.fromTo(el.querySelector('.carrier'), { left: 384, top: 600, width: 1152, height: 24, borderRadius: 12 }, { left: 710, top: 620, width: 500, height: 104, borderRadius: 52, duration: 0.6, ease: 'power3.inOut' }, 0.1)
+              .fromTo(el.querySelector('[data-va-text="end-cta"]'), { yPercent: 220 }, { yPercent: 0, duration: 0.45, ease: 'power3.out' }, 0.55)
+              .fromTo(el.querySelector('[data-va-text="end-title"]'), { yPercent: 110 }, { yPercent: 0, duration: 0.55, ease: 'power3.out' }, 0.35)
+          })
+        </script>
+      </section>
+    </div>
+    <script>
+      window.__timelines['main'] = gsap.timeline({ paused: true })
+    </script>
+  </body>
+</html>

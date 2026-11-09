@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="vendor/gsap.min.js"></script>
+    <script src="vendor/va-contract.js"></script>
+    <style>
+      /* Swiss grid example: the fictional product Orbit, placeholder words. Runs reuse the grid and the moves along
+         it, never the words. Colours are the brand's roles and the derived rule, written as literal colours. */
+      #root {
+        --va-color-bg: #f2f0ea;
+        --va-color-text: #111111;
+        --va-color-accent: #1f3fd6;
+        --va-color-rule: rgba(17, 17, 17, 0.14);
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1920px; height: 1080px; overflow: hidden; background: #f2f0ea; }
+      #root { width: 100%; height: 100%; position: relative; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background: var(--va-color-bg); color: var(--va-color-text); }
+      .beat { position: absolute; inset: 0; overflow: hidden; background: var(--va-color-bg); }
+      .grid { position: absolute; left: 96px; top: 96px; width: 1728px; height: 888px; border: 2px solid var(--va-color-rule); background-image: linear-gradient(to right, var(--va-color-rule) 2px, transparent 2px), linear-gradient(to bottom, var(--va-color-rule) 2px, transparent 2px); background-size: 144px 111px; }
+      .label { position: absolute; font-size: 30px; font-weight: 500; }
+      .line { position: absolute; left: 16px; padding-left: 80px; overflow: hidden; height: 152px; }
+      .head { font-size: 132px; font-weight: 700; line-height: 1; letter-spacing: -0.04em; white-space: nowrap; }
+      .circle { position: absolute; border-radius: 50%; background: var(--va-color-accent); }
+      .cell { position: absolute; width: 136px; height: 103px; background: var(--va-color-accent); transform-origin: center bottom; }
+      .figure { position: absolute; right: 96px; bottom: 30px; font-size: 380px; font-weight: 700; line-height: 1; letter-spacing: -0.05em; }
+      .bar { position: absolute; left: 96px; width: 1728px; height: 111px; background: var(--va-color-accent); color: var(--va-color-bg); transform-origin: left center; display: flex; align-items: center; justify-content: space-between; padding: 0 28px; font-size: 48px; font-weight: 700; letter-spacing: -0.02em; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-va-contract="1" data-start="0" data-duration="10.5" data-width="1920" data-height="1080">
+      <section id="hook" class="clip beat" data-va-beat="hook" data-va-label="Hook" data-composition-id="hook" data-start="0" data-duration="3.5" data-va-authored-duration="3.5" data-track-index="0">
+        <div class="grid"></div>
+        <p class="label" style="left: 112px; top: 110px" data-va-text="hook-index" data-va-label="Index label">01  Search</p>
+        <p class="label" style="right: 112px; top: 110px" data-va-text="hook-brand" data-va-label="Product name">Orbit</p>
+        <div class="line" style="top: 318px"><h1 class="head" data-va-text="hook-line-1" data-va-label="Headline, line 1">Find anything</h1></div>
+        <div class="line" style="top: 452px"><p class="head" data-va-text="hook-line-2" data-va-label="Headline, line 2">your team wrote</p></div>
+        <div class="circle" style="left: 1392px; top: 540px; width: 288px; height: 288px"></div>
+        <script>
+          vaBeat('hook', (tl, el) => {
+            // The headline is in place at 0 s apart from a short slide (the first frame is the thumbnail); the circle comes down its column by two rows.
+            tl.fromTo(el.querySelectorAll('.head'), { x: -72 }, { x: 0, duration: 0.75, ease: 'expo.out', stagger: 0.1 }, 0)
+              .fromTo(el.querySelector('.circle'), { y: -444 }, { y: 0, duration: 0.8, ease: 'expo.out' }, 0.5)
+              .to(el.querySelector('.circle'), { x: -288, duration: 0.6, ease: 'power4.inOut' }, 2.2)
+          })
+        </script>
+      </section>
+      <section id="count" class="clip beat" data-va-beat="count" data-va-label="Count" data-composition-id="count" data-start="3.5" data-duration="4" data-va-authored-duration="4" data-track-index="0">
+        <div class="grid"></div>
+        <p class="label" style="left: 112px; top: 110px" data-va-text="count-index" data-va-label="Index label">02  Everything</p>
+        <div class="cell" style="left: 100px; top: 322px"></div><div class="cell" style="left: 244px; top: 322px"></div><div class="cell" style="left: 388px; top: 322px"></div><div class="cell" style="left: 532px; top: 322px"></div>
+        <div class="cell" style="left: 100px; top: 433px"></div><div class="cell" style="left: 244px; top: 433px"></div><div class="cell" style="left: 388px; top: 433px"></div><div class="cell" style="left: 532px; top: 433px"></div>
+        <div class="cell" style="left: 100px; top: 544px"></div><div class="cell" style="left: 244px; top: 544px"></div><div class="cell" style="left: 388px; top: 544px"></div><div class="cell" style="left: 532px; top: 544px"></div>
+        <div class="line" style="left: 736px; top: 207px; height: 88px"><p class="head" style="font-size: 72px" data-va-text="count-line-1" data-va-label="Caption, line 1">Twelve months of notes</p></div>
+        <div class="line" style="left: 736px; top: 291px; height: 88px"><p class="head" style="font-size: 72px" data-va-text="count-line-2" data-va-label="Caption, line 2">One search box</p></div>
+        <p class="figure" data-va-text="count-figure" data-va-label="Figure">12</p>
+        <script>
+          vaBeat('count', (tl, el) => {
+            // Twelve cells fill in reading order, then the caption slides in and the figure comes up its column.
+            tl.fromTo(el.querySelectorAll('.cell'), { scaleY: 0 }, { scaleY: 1, duration: 0.3, ease: 'power2.out', stagger: 0.05 }, 0.3)
+              .fromTo(el.querySelectorAll('.line .head'), { x: -144, opacity: 0 }, { x: 0, opacity: 1, duration: 0.75, ease: 'expo.out', stagger: 0.1 }, 1.1)
+              .fromTo(el.querySelector('.figure'), { y: 222, opacity: 0 }, { y: 0, opacity: 1, duration: 0.8, ease: 'expo.out' }, 1.3)
+          })
+        </script>
+      </section>
+      <section id="end" class="clip beat" data-va-beat="end" data-va-label="End card" data-composition-id="end" data-start="7.5" data-duration="3" data-va-authored-duration="3" data-track-index="0">
+        <div class="grid"></div>
+        <p class="label" style="left: 112px; top: 110px" data-va-text="end-index" data-va-label="Index label">03  Start</p>
+        <div class="bar" style="top: 318px">
+          <span data-va-text="end-cta" data-va-label="Call to action">Try it free</span>
+          <span data-va-text="end-url" data-va-label="Address">orbit.example</span>
+        </div>
+        <div class="line" style="top: 540px; height: 380px"><h2 class="head" style="font-size: 330px" data-va-text="end-title" data-va-label="Product name">Orbit</h2></div>
+        <script>
+          vaBeat('end', (tl, el) => {
+            tl.fromTo(el.querySelector('.bar'), { scaleX: 0 }, { scaleX: 1, duration: 0.6, ease: 'power4.inOut' }, 0.1)
+              .fromTo(el.querySelectorAll('.bar span'), { opacity: 0 }, { opacity: 1, duration: 0.2 }, 0.6)
+              .fromTo(el.querySelector('[data-va-text="end-title"]'), { x: -144, opacity: 0 }, { x: 0, opacity: 1, duration: 0.8, ease: 'expo.out' }, 0.4)
+          })
+        </script>
+      </section>
+    </div>
+    <script>
+      window.__timelines['main'] = gsap.timeline({ paused: true })
+    </script>
+  </body>
+</html>

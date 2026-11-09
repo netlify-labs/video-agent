@@ -1,0 +1,16 @@
+{
+  "id": "follow-the-dot",
+  "name": "Follow the dot",
+  "description": "One dot in the brand's accent runs through every scene: a toggle knob, a full stop, the tip of a chart line, a flood of colour.",
+  "tags": ["minimal", "playful", "motion"],
+  "bestFor": ["social", "launch"],
+  "aspects": ["16:9", "9:16", "1:1", "4:5"],
+  "engines": ["hyperframes"],
+  "colors": { "roles": ["bg", "text", "accent"], "derived": [] },
+  "sound": { "musicMood": "tight minimal electronic with a clear beat, 120 bpm" },
+  "recording": false,
+  "registry": [],
+  "authors": ["Video Agent maintainers"],
+  "license": "MIT",
+  "since": "2026-11-09"
+}

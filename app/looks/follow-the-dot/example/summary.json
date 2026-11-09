@@ -1,0 +1,13 @@
+{
+  "title": "Orbit",
+  "summary": "A follow-the-dot example for the fictional product Orbit, with made-up numbers.",
+  "captions": [
+    { "start": 0, "end": 3, "text": "Instant search", "beat": "hook", "textId": "hook-label", "beatStart": 0, "beatEnd": 3 },
+    { "start": 1.25, "end": 3, "text": "Find it before you finish typing", "beat": "hook", "textId": "hook-title", "beatStart": 1.25, "beatEnd": 3 },
+    { "start": 3.65, "end": 7, "text": "Searches per team, month by month", "beat": "trace", "textId": "trace-title", "beatStart": 0.65, "beatEnd": 4 },
+    { "start": 6, "end": 7, "text": "4.6× since January", "beat": "trace", "textId": "trace-callout", "beatStart": 3, "beatEnd": 4 },
+    { "start": 8.2, "end": 9.5, "text": "Every note, doc and comment in one box", "beat": "flood", "textId": "flood-title", "beatStart": 1.2, "beatEnd": 2.5 },
+    { "start": 10.2, "end": 12.5, "text": "Orbit", "beat": "end", "textId": "end-title", "beatStart": 0.7, "beatEnd": 3 },
+    { "start": 10.9, "end": 12.5, "text": "Try it free at orbit.example", "beat": "end", "textId": "end-cta", "beatStart": 1.4, "beatEnd": 3 }
+  ]
+}
