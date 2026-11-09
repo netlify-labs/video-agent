@@ -11,7 +11,11 @@ product's name.
 - Flat `bg`, a lot of empty space, at most one headline, one small UI part or chart, and the dot. Nothing decorative.
 - The dot: a circle in `accent`, 2.6 % of the short side across (28 px at 1080) when it rests. Exactly one per frame.
 - 16:9: 10 % side margins; text left-aligned in the left 70 %. 9:16, 1:1 and 4:5: 8 % margins, text stacked and
-  left-aligned, the dot's path kept inside the middle 70 % of the height; 9:16 keeps the bottom 15 % clear.
+  left-aligned; 9:16 keeps the bottom 15 % clear.
+- Centre each scene's content vertically. On 9:16 and 4:5 the block of headline plus UI part sits between 25 % and
+  75 % of the height, its middle within 5 % of the frame's middle: never packed into the top half with the rest
+  empty. Use the height: put the headline in the upper part of that band and the UI part or chart in the lower part,
+  at least 12 % of the height apart, so the dot has room to travel between them.
 - The dot always has a job. Pick one per scene: the knob of a toggle or slider, the dot on an "i" or a full stop, a
   bullet, a cursor, the tip of a line it is drawing, a flood of colour. Never a dot that just sits beside the text.
 - This look doesn't frame screen recordings (`recording: false`); draw the one UI part the scene is about (a toggle,
@@ -68,7 +72,7 @@ product's name.
 
 - Do: decide the dot's job in each scene before writing anything else; end with the product name and the dot as
   its full stop; keep the first frame readable (the headline may already be there at 0 s).
-- Don't: add a second dot, sparkles, trails or rings; colour anything `accent` that the dot hasn't touched; teleport
+- Don't: stack everything at the top of a tall frame; add a second dot, sparkles, trails or rings; colour anything `accent` that the dot hasn't touched; teleport
   the dot across a cut; put a full stop in a headline.
 
 ## Building blocks

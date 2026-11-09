@@ -208,9 +208,9 @@ export const looksCatalog: LookCatalogEntry[] = [
     ],
     "recording": false,
     "musicMood": "tight minimal electronic with a clear beat, 120 bpm",
-    "hash": "e07856d819ccbd6fe1d8c91cb1d3a9b216546464dba233b6ac0686313ff9208d",
-    "sha256": "cafd839cfa12b884da3ad6f7dedfd2c506a9932707b9207921139f156d48798b",
-    "bytes": 5297,
+    "hash": "a4ec1cec26275eaf2ad2d0616bf1556f5de8b9024131425acc88e3c3594a2295",
+    "sha256": "efc231a81d496b70fb94fbe801195df4efc9bfc7483001050e3247ee31c2a29b",
+    "bytes": 5447,
     "source": "builtin",
     "preview": {
       "mp4": "/assets/looks/follow-the-dot.0fc3dbd69943.mp4",
