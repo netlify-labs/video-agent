@@ -138,7 +138,7 @@ export const MCP_TOOLS: readonly McpCatalogEntry[] = [
   },
 ]
 
-/** The netlify-video skill's recipes as MCP prompts (app/server/mcp-prompts.ts). */
+/** The create-video skill's recipes as MCP prompts (app/server/mcp-prompts.ts). */
 export const MCP_PROMPTS: readonly McpCatalogEntry[] = [
   {
     name: 'pr_video',

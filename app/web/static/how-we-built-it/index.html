@@ -445,8 +445,8 @@
       <p class="muted">In Claude Code:</p>
       <pre><code>claude mcp add --transport http video-agent https://netlify-video-agent.netlify.app/mcp</code></pre>
       <p class="muted">Install the skill:</p>
-      <pre><code>curl -fsSL https://netlify-video-agent.netlify.app/skills/netlify-video.zip -o /tmp/netlify-video.zip \
-  &amp;&amp; unzip -o /tmp/netlify-video.zip -d ~/.claude/skills/</code></pre>
+      <pre><code>curl -fsSL https://netlify-video-agent.netlify.app/skills/create-video.zip -o /tmp/create-video.zip \
+  &amp;&amp; unzip -o /tmp/create-video.zip -d ~/.claude/skills/</code></pre>
       <p class="muted">Or press <b>Copy prompt for your agent</b> (bottom right) and paste it into your AI tool: it walks you
       through connecting, whichever tool you use. The app's <a href="/docs/mcp">MCP page</a> and <a href="/docs/skills">Agent skills page</a> cover
       other tools.</p>
@@ -871,8 +871,8 @@
    - Claude Code: run claude mcp add --transport http video-agent ${SITE}/mcp, then /mcp to sign in.
    - Cursor and other MCP clients: add ${SITE}/mcp as a remote (HTTP) MCP server and sign in when asked. Clients that only run local servers: npx -y mcp-remote ${SITE}/mcp
    - Without OAuth: I can create an API key at ${SITE}/keys; send it as Authorization: Bearer <key>.
-2. If you can install skills (Claude Code, Codex, Cursor, Gemini CLI), install the netlify-video skill, which has the good path and recipes:
-   curl -fsSL ${SITE}/skills/netlify-video.zip -o /tmp/netlify-video.zip && unzip -o /tmp/netlify-video.zip -d ~/.claude/skills/
+2. If you can install skills (Claude Code, Codex, Cursor, Gemini CLI), install the create-video skill, which has the good path and recipes:
+   curl -fsSL ${SITE}/skills/create-video.zip -o /tmp/create-video.zip && unzip -o /tmp/create-video.zip -d ~/.claude/skills/
 3. Then ask me what the video should show. Use plan_video to ask me a few questions and write a brief, show me the brief, and create it with create_video once I'm happy.
 
 Ask me before starting any video: each one is an agent run that uses AI credits. While it renders, check on it with get_video and send me the link when it's ready. To change it later, use revise_video; to share it, publish_video.`

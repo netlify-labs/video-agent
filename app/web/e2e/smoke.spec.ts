@@ -363,23 +363,26 @@ test('narrow screens get a row of section chips instead of the sticky contents',
   await expect(chips).toBeHidden()
 })
 
-test('API docs show how to install the agent skill, with copy buttons', async ({ page }) => {
+test('API docs show how to install the agent skills, with copy buttons', async ({ page }) => {
   await page.goto('/docs/skills')
   await expect(page.getByRole('heading', { level: 1, name: 'Agent skills' })).toBeVisible()
   await expect(page.getByRole('navigation', { name: 'On this page' }).getByRole('link')).toHaveText([
-    'Skill package',
+    'Skill packages',
     'Install',
     'MCP prompts',
   ])
   const origin = new URL(page.url()).origin
-  await expect(page.getByRole('textbox', { name: 'Skill package (zip)', exact: true })).toHaveValue(
-    `${origin}/skills/netlify-video.zip`,
+  await expect(page.getByRole('textbox', { name: 'create-video (zip)', exact: true })).toHaveValue(
+    `${origin}/skills/create-video.zip`,
+  )
+  await expect(page.getByRole('textbox', { name: 'video-agent-cli (zip)', exact: true })).toHaveValue(
+    `${origin}/skills/video-agent-cli.zip`,
   )
   await expect(page.getByRole('textbox', { name: 'Claude Code', exact: true })).toHaveValue(
-    `curl -fsSL ${origin}/skills/netlify-video.zip -o /tmp/netlify-video.zip && unzip -o /tmp/netlify-video.zip -d ~/.claude/skills/`,
+    `for s in create-video video-agent-cli; do curl -fsSL ${origin}/skills/$s.zip -o /tmp/$s.zip && unzip -o /tmp/$s.zip -d ~/.claude/skills/; done`,
   )
   await expect(page.getByRole('textbox', { name: 'Codex', exact: true })).toHaveValue(
-    /-d ~\/\.codex\/skills\/$/,
+    /-d ~\/\.codex\/skills\/; done$/,
   )
   await expect(page.getByRole('button', { name: 'Copy Claude Code' })).toBeVisible()
   await expect(page.getByText('pr_video', { exact: true })).toBeVisible()

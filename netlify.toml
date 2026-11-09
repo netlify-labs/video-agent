@@ -24,6 +24,12 @@
 #   AGENT, AGENT_MODEL, AGENT_EFFORT (optional) which agent makes videos
 #   RENDER_QUALITY (optional, standard)         HyperFrames render quality
 
+# The agent skill was called netlify-video until it was split into create-video and video-agent-cli.
+[[redirects]]
+  from = "/skills/netlify-video.zip"
+  to = "/skills/create-video.zip"
+  status = 301
+
 # The web app is a single-page app. API, file and share routes are served by functions and edge
 # functions, which take precedence over this fallback.
 [[redirects]]

@@ -3,7 +3,7 @@
 ## Use it from AI tools (MCP)
 
 Agents with a shell (Claude Code, Codex) can also use the CLI: one `video-agent create … --wait --json` instead of a
-polling loop. The `netlify-video` skill's `references/cli.md` tells them how.
+polling loop. The `video-agent-cli` skill tells them how.
 
 The same video tasks are MCP tools, so people can ask Claude, Cursor or any MCP client for a video:
 `create_video`, `get_video`, `show_video`, `list_videos`, `revise_video`, `remix_video`, `publish_video`, `unpublish_video`, `cancel_video`,
@@ -52,17 +52,23 @@ WebMCP off on the Admin page (on by default); browsers without it see nothing.
 
 ## Agent skills and MCP prompts
 
-Each deployment serves a `netlify-video` [Agent Skill](https://agentskills.io) that teaches coding agents (Claude
-Code, Codex, Cursor, Gemini CLI) the good path: connecting, plan → create → follow → publish, asking before spending
-a run, reusing library media, and recipes for a pull request → demo video, release notes → changelog video, a
-15-second vertical cut, localising captions and a review loop. The source is `skills/netlify-video/`; the build
-packages it as `https://<your-site>/skills/netlify-video.zip` (listed with its sha256 in `/skills/index.json`) with
-your site's URL filled in, so forks serve their own. The zip is deterministic: the same sources and URL give the same
-bytes.
+Each deployment serves two [Agent Skills](https://agentskills.io) for coding agents (Claude Code, Codex, Cursor,
+Gemini CLI), with the site's URL filled in so forks serve their own:
+
+- **`create-video`** is the good path: connecting, plan → create → follow → publish, asking before spending a run,
+  reusing library media, the TypeScript SDK and the player, and recipes for a pull request → demo video, release
+  notes → changelog video, a 15-second vertical cut, localising captions and a review loop.
+- **`video-agent-cli`** is the CLI for agents with a shell. Its command list is generated from the CLI
+  (`npx tsx scripts/gen-skill-cli.ts`), so it never names a flag the CLI doesn't have.
+
+The sources are in [`skills/`](../../skills). The build packages each one as `https://<your-site>/skills/<name>.zip`,
+listed with its sha256 in `/skills/index.json`. The zips are deterministic: the same sources and URL give the same
+bytes. The old `/skills/netlify-video.zip` address redirects to `create-video.zip`.
 
 ```sh
-curl -fsSL https://<your-site>/skills/netlify-video.zip -o /tmp/netlify-video.zip \
-  && unzip -o /tmp/netlify-video.zip -d ~/.claude/skills/
+for s in create-video video-agent-cli; do
+  curl -fsSL https://<your-site>/skills/$s.zip -o /tmp/$s.zip && unzip -o /tmp/$s.zip -d ~/.claude/skills/
+done
 ```
 
 The **API docs → Agent skills** page (`/docs/skills`) has the command for each agent. The same recipes are MCP prompts (`pr_video`, `changelog_video`,

@@ -69,7 +69,8 @@ npx -y mcp-remote {{SITE_URL}}/mcp --header "Authorization: Bearer $VIDEO_AGENT_
 The MCP tools read the media library (`list_media`) and import Openverse music (`import_music`, finished by
 `get_music_job` when Openverse is slow), but don't upload
 files. With a shell, the CLI uploads any size and waits until each file is ready; pass the ids it prints in
-`media_ids` (see [cli.md](cli.md)):
+`media_ids` (the `video-agent-cli` skill has every command). From code, the SDK's `media.upload` does the same
+(see [sdk.md](sdk.md)):
 
 ```sh
 video-agent media upload ./checkout.png --caption "New checkout page" --json

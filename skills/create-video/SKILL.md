@@ -1,17 +1,23 @@
 ---
-name: netlify-video
-description: Make, revise, review and publish short videos with the video agent at {{SITE_URL}} through its MCP tools. Use when someone asks for a demo, launch, changelog or social video, a video from a pull request or release notes, a vertical cut of an existing video, captions in other languages, or wants feedback on a video.
+name: create-video
+description: Make, revise, review and publish short videos with the video agent at {{SITE_URL}}, through its MCP tools, the video-agent CLI or the TypeScript SDK. Use when someone asks for a demo, launch, changelog or social video, a video from a pull request or release notes, a vertical cut of an existing video, captions in other languages, or wants feedback on a video.
 ---
 
-# Netlify video agent
+# Create a video
 
 The video agent at {{SITE_URL}} turns a prompt into a short MP4. Each video is made by an AI agent with HyperFrames
 (HTML, CSS and GSAP rendered to video) and takes 3 to 8 minutes. Videos are silent, with captions, and the team's
 brand (colors, logo, fonts) is applied automatically. Every video keeps its versions: a revision makes the next
 version and changes only what you describe.
 
-You drive it through MCP tools. If the tools below aren't available, connect first: see
-[references/connect.md](references/connect.md).
+There are three ways to drive it. This file uses the MCP tools; the flow and the etiquette are the same for all
+three.
+
+- **MCP tools**, when they're connected (below). If they aren't, see [references/connect.md](references/connect.md).
+- **The `video-agent` CLI** (npm `netlify-video-agent`), when you have a shell: one command makes a video, waits and
+  downloads it. Install the `video-agent-cli` skill from {{SITE_URL}}/skills/video-agent-cli.zip for every command.
+- **The TypeScript SDK** (npm `netlify-video-agent-sdk`), when you're writing code, plus the
+  `<video-agent-player>` web component for showing a video on a page: see [references/sdk.md](references/sdk.md).
 
 ## Connect (short version)
 
@@ -19,9 +25,6 @@ You drive it through MCP tools. If the tools below aren't available, connect fir
 - Auth: an API key from {{SITE_URL}}/keys sent as `Authorization: Bearer nva_…`, or, when the deployment has it on,
   **Sign in with Netlify** (OAuth): add the URL alone and the client opens a browser to sign in.
 - Claude Code: `claude mcp add --transport http video-agent {{SITE_URL}}/mcp --header "Authorization: Bearer $VIDEO_AGENT_API_KEY"`
-
-With a shell, the `video-agent` CLI does the same in one command (`video-agent create "…" --wait --out ./video
---json`): see [references/cli.md](references/cli.md).
 
 Keys act as their owner with their role. Creators can make videos; Reviewers can comment and approve; Viewers can
 only watch. The tool list shows only what your role can do.

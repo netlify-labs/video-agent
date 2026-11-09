@@ -141,7 +141,7 @@ ALLOW_NON_PRODUCTION=true npx netlify dev
 | `context/`  | Your brand and product facts. Every run reads it.                                                          |
 | `video/`    | The HyperFrames project each run starts from                                                               |
 | `scripts/`  | Build and setup tools, and the scripts agent runs call                                                     |
-| `skills/`   | The agent skill each deployment serves at `/skills/`                                                       |
+| `skills/`   | The agent skills each deployment serves at `/skills/`: `create-video` and `video-agent-cli`                |
 | `netlify/`  | Functions, edge functions and database migrations                                                          |
 | `packages/` | The CLI, SDK, player and GitHub Action                                                                     |
 | `docs/`     | These guides, the design plans ([start here](docs/plans/2026-10-30-video-agent-spec.md)) and spike results |

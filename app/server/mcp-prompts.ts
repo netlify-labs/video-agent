@@ -1,4 +1,4 @@
-// MCP prompts: the netlify-video skill's recipes (skills/netlify-video/references/recipes.md) for clients without
+// MCP prompts: the create-video skill's recipes (skills/create-video/references/recipes.md) for clients without
 // skills. Each returns one user message that walks the agent through the tool flow. Like the tools, the list shows
 // only what the caller's role can do.
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
