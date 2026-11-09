@@ -41,7 +41,7 @@ export function RestyleDialog(props: {
       opened={props.opened}
       onClose={props.onClose}
       title={`Restyle v${v.n}`}
-      size="xl"
+      size="min(1200px, 94vw)"
       fullScreen={phone}
       closeButtonProps={{ 'aria-label': 'Close' }}
       centered

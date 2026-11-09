@@ -262,7 +262,7 @@ export function LookControl(props: {
           setOpen(false)
         }}
         title="Pick a look"
-        size="xl"
+        size="min(1200px, 94vw)"
         closeButtonProps={{ 'aria-label': 'Close' }}
         centered
       >
