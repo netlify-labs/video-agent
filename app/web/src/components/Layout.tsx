@@ -13,6 +13,7 @@ import {
 import { useDisclosure, useHotkeys } from '@mantine/hooks'
 import { Fragment, useState } from 'react'
 import {
+  IconApi,
   IconBook,
   IconKey,
   IconLayoutGrid,
@@ -29,6 +30,7 @@ import { $api } from '../api/client'
 import { DOCS_GROUPS, DOCS_PAGES } from '../pages/docs/nav'
 import { useAuth } from '../auth'
 import { brand } from '../theme'
+import { ApiCallsDrawer } from './ApiCalls'
 import { Mark, PoweredBy } from './bits'
 import { MissingSettingsBanner } from './MissingSettings'
 import { NotificationBell } from './NotificationBell'
@@ -37,6 +39,7 @@ import { WebMcpGlobalTools } from '../webmcp/GlobalTools'
 
 export function Layout() {
   const [opened, { toggle, close }] = useDisclosure()
+  const [callsOpened, calls] = useDisclosure()
   const { pathname } = useLocation()
   const navigate = useNavigate()
   const auth = useAuth()
@@ -99,6 +102,11 @@ export function Layout() {
               </Link>
             ) : null}
             <NotificationBell />
+            <Tooltip label="API calls">
+              <ActionIcon variant="subtle" color="gray" onClick={calls.toggle} aria-label="API calls">
+                <IconApi size={18} />
+              </ActionIcon>
+            </Tooltip>
             <Tooltip label={colorScheme === 'dark' ? 'Light theme' : 'Dark theme'}>
               <ActionIcon variant="subtle" color="gray" onClick={toggleColorScheme} aria-label="Toggle theme">
                 {colorScheme === 'dark' ? <IconSun size={18} /> : <IconMoon size={18} />}
@@ -189,6 +197,7 @@ export function Layout() {
         {/* WebMCP (va-qago): the tools every page offers, and the person's yes for an agent's consequential action. */}
         <WebMcpGlobalTools />
         <WebMcpConfirmHost />
+        <ApiCallsDrawer opened={callsOpened} onClose={calls.close} />
       </AppShell.Main>
     </AppShell>
   )

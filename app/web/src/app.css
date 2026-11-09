@@ -1795,6 +1795,52 @@ main.va-shell-main {
   margin-right: 6px;
 }
 
+/* API calls drawer (components/ApiCalls.tsx) */
+.va-calls {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.va-calls li {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--va-rule);
+  font-size: 13px;
+}
+.va-calls-time,
+.va-calls-ms {
+  color: var(--va-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.va-calls-path {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.va-calls-path code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--va-text);
+}
+.va-calls-path span {
+  color: var(--va-muted);
+  font-size: 12px;
+}
+@media (max-width: 600px) {
+  .va-calls li {
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+  }
+  .va-calls-time,
+  .va-calls-ms {
+    display: none;
+  }
+}
+
 /* Incorporate feedback: the comments to pick on the left, the note and the button on the right. */
 .va-incorporate {
   display: grid;

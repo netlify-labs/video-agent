@@ -3,6 +3,7 @@ import createFetchClient from 'openapi-fetch'
 import createClient from 'openapi-react-query'
 import { authMode, cookieSessionLost } from '../auth-mode'
 import { recoverAfterUnauthorized, refreshIfNeeded } from '../session'
+import { recordCall } from './calls'
 import type { paths } from './schema'
 
 /**
@@ -33,7 +34,7 @@ export async function sessionFetch(req: Request): Promise<Response> {
 export const fetchClient = createFetchClient<paths>({
   baseUrl: '',
   credentials: 'same-origin',
-  fetch: sessionFetch,
+  fetch: (req) => recordCall(req, sessionFetch),
 })
 export const $api = createClient(fetchClient)
 
