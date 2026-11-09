@@ -35,8 +35,8 @@ export const looksCatalog: LookCatalogEntry[] = [
     },
     "musicMood": "warm minimal electronic, 100 to 110 bpm",
     "hash": "9ac943c193b747618dd085fe9dea8e746e7126c2b096b45a30503d0832d5c9e2",
-    "sha256": "373277407e86ba29f85008162e97f10c92b0c65d4bbf3cd3c77eb5938615596a",
-    "bytes": 4285,
+    "sha256": "23ab43956ce42fd853236ce5a0efbdcf231493d0e0ad0d45b32c11618ddc7d82",
+    "bytes": 4275,
     "source": "builtin",
     "preview": {
       "mp4": "/assets/looks/clean.6aa9fa8b5e71.mp4",
@@ -68,8 +68,8 @@ export const looksCatalog: LookCatalogEntry[] = [
     "recording": null,
     "musicMood": "upbeat indie pop, 120 to 128 bpm",
     "hash": "51a972db0ff70b4f2de778db5d06272f59cb3c1cebf4821268be396b4285ca14",
-    "sha256": "0e2edd8736499f1e6f802e88c5d6a0d42f25642254c5614509e30bd0cdd66c0b",
-    "bytes": 3699,
+    "sha256": "ea8427922200be21edc078c63069705fe8214e94d4686367a40714348e8925da",
+    "bytes": 3704,
     "source": "builtin",
     "preview": {
       "mp4": "/assets/looks/bold-blocks.7d1f53082f4a.mp4",
@@ -102,8 +102,8 @@ export const looksCatalog: LookCatalogEntry[] = [
     "recording": null,
     "musicMood": "steady minimal electronic, 100 to 110 bpm",
     "hash": "fcd942c96446c1572cec72e9df83c8f8b6d481dcd6f52504453d7fb870a2ce7c",
-    "sha256": "040f98b36bd0732e33d55414b13f98bd9eaef0da49d09b1c6ca38c8cf55f452c",
-    "bytes": 4618,
+    "sha256": "08f3ffb1fd36ee03af4a69e5c645c2347282338e3152d8cdc6f60e13b59c7f54",
+    "bytes": 4619,
     "source": "builtin",
     "preview": {
       "mp4": "/assets/looks/data-story.67672d2cadce.mp4",
@@ -136,8 +136,8 @@ export const looksCatalog: LookCatalogEntry[] = [
     "recording": null,
     "musicMood": "warm piano and strings, 80 to 90 bpm",
     "hash": "ec00d04022fe14745d961aa6316ecb822d94e2cef65c8e1b207c7d3004274339",
-    "sha256": "0d952797caa6d7b4f3035a2f064a5be212f94e8c1742e4f9a1f922488f9f2183",
-    "bytes": 4204,
+    "sha256": "f9c3cfacef9843e8614cde9c15258bf82d2fb3db82697b1609981250c96783d7",
+    "bytes": 4199,
     "source": "builtin",
     "preview": {
       "mp4": "/assets/looks/editorial.7b2ef2f7648f.mp4",
@@ -169,7 +169,7 @@ export const looksCatalog: LookCatalogEntry[] = [
     "recording": null,
     "musicMood": "punchy electronic, 120 bpm",
     "hash": "17ddedc2edaa0eda388c5cd5f0f8266cb8288d5b8af21c590767f6538b9e0aa6",
-    "sha256": "171c66106c99f67ca76e3e8e4d51fdeacf5629c86e144ce38366ae186a0b81fb",
+    "sha256": "69b5de0be7f14d525fe35ecabe3a3cb2bdad96147eee1f70daea0b8759956412",
     "bytes": 3832,
     "source": "builtin",
     "preview": {
@@ -203,8 +203,8 @@ export const looksCatalog: LookCatalogEntry[] = [
     "recording": false,
     "musicMood": "synthwave, 100 to 110 bpm",
     "hash": "5f3d0a8964b1b72acab8c4eb036245dace280985776e17ba78c748b5aa91ee71",
-    "sha256": "b1bb6b51542c749a4a8821150b874eaefa4a2944f08865b7a9c3fa6e83a34040",
-    "bytes": 4084,
+    "sha256": "475e06f5222715555a234b15ad43bdc02d367da2f297588ec6fea51426a6e937",
+    "bytes": 4085,
     "source": "builtin",
     "preview": {
       "mp4": "/assets/looks/retro-crt.3f7c144b3bdd.mp4",
@@ -236,7 +236,7 @@ export const looksCatalog: LookCatalogEntry[] = [
     "recording": null,
     "musicMood": "minimal electronic, steady 110 bpm",
     "hash": "3cdf421a143ea1531eb05bdb79e5f782b3386662a457ee909d486cdb4365bd4f",
-    "sha256": "e802ba92442bed61e5fd57d51d54bd40cbba8a9bdf858094a5d0be1de1f720d6",
+    "sha256": "29f09dbc530e6c022aac55163a53c086fa224a1ca2ec4925e031d2b4e5633d4d",
     "bytes": 5155,
     "source": "builtin",
     "preview": {
@@ -269,8 +269,8 @@ export const looksCatalog: LookCatalogEntry[] = [
     "recording": null,
     "musicMood": "light acoustic, ukulele or guitar, 95 to 105 bpm",
     "hash": "1133c1e6e366c6a26c8bcbd3e2c2ae296244f32a928e9bf956f002b654e573e0",
-    "sha256": "bf54dff14e1fe71b6bf3e37acb803ce757105a6f0022ddc243887b77ea499101",
-    "bytes": 57376,
+    "sha256": "1f9379be7d9dfa7a54093239a1b51e56a5cc19487c4a3d97c3578be421ef716d",
+    "bytes": 57464,
     "source": "builtin",
     "preview": {
       "mp4": "/assets/looks/whiteboard.d33491335c76.mp4",

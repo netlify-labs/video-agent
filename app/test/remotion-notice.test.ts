@@ -21,9 +21,9 @@ describe('the Remotion license notice', () => {
     expect(list.at(-1)?.notice).toBe(REMOTION_LICENSE_NOTICE)
   })
 
-  it('the README quotes it', () => {
+  it('the Remotion guide quotes it', () => {
     const first = REMOTION_LICENSE_NOTICE.split('. ')[0] ?? ''
-    expect(read('README.md').replace(/\n> /g, ' ')).toContain(first)
+    expect(read('docs/guides/remotion.md').replace(/\n> /g, ' ')).toContain(first)
   })
 
   it("the Deploy button's environment doesn't ask for any engine setting", () => {
