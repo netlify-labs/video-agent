@@ -430,9 +430,9 @@ export const looksCatalog: LookCatalogEntry[] = [
       "zoomMax": 1.8
     },
     "musicMood": "dry minimal techno with a steady click, 124 bpm",
-    "hash": "80b3a776cf45f1bc4346fa8f85cc91bc3f891138aaabbaad266924e608784026",
-    "sha256": "5b43c08bd26574ed724e259191083e93f6142721b29c69d026e07ab1891ebea2",
-    "bytes": 4981,
+    "hash": "0d728ebf5578161c24a0abe3bee27d2a936b833f998beecfc7553a98d135c7fc",
+    "sha256": "7403124ef1a9a91b6b432d0b579779da015fa891bd0126c5ec24d1def6736491",
+    "bytes": 5325,
     "source": "builtin",
     "preview": {
       "mp4": "/assets/looks/swiss-grid.7fb23f6d7a92.mp4",

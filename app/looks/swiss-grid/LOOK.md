@@ -23,10 +23,18 @@ squares in one accent do the counting and pointing, and everything travels along
   700 for headlines and figures, 500 for labels.
 - Headlines 12–13 % of the short side, line height 0.95, tracking -0.04em, sentence case, at most 6 words. Figures
   (one per video at most) 32–36 %. Labels 2.8–3 %, tracking 0. Never below 28 px.
+- Everything that isn't a headline or a figure is a label and follows the label size: index labels, chart axis
+  labels, values above bars, units, footnotes and sources. At 1080 on the short side that is 30–32 px and never below
+  28 px. If a label doesn't fit at that size, cut words or drop the label; never shrink it.
+- Charts are built from cells: each bar is one column wide, heights are measured in rows (say what one row stands
+  for in a label), values sit on the row line above their bar, and there are at most 8 bars.
 - No centred text, no italics, no all-caps headlines, no drop shadows.
 
 ## Colour use
 
+- All three colours come from the brand in `context/`: its `bg`, its `text` and its `accent`. The example's off-white
+  paper and blue are placeholders; never carry them into a video. On a dark brand the grid sits on the dark `bg` with
+  light type, and that is correct for this look.
 - `bg` paper, `text` for type, `accent` for shapes and for one full-width bar per video. Type on `accent` is `bg` or
   `text`, whichever contrasts at least 4.5:1. Never two accent hues, never gradients.
 - Derived role, written as a literal colour: `rule` is `text` at 0.14 opacity, e.g. `rgba(17, 17, 17, 0.14)`. Never
