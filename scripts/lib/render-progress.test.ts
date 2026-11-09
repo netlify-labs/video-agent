@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { parseRenderProgress, RenderProgressReporter } from './render-progress.js'
 
 // Real `hyperframes render` output (0.8.222), progress bars and machine lines.
-const fixture = readFileSync(new URL('../../test/fixtures/hyperframes-render.txt', import.meta.url), 'utf8')
+const fixture = readFileSync(new URL('../../app/test/fixtures/hyperframes-render.txt', import.meta.url), 'utf8')
 
 describe('render progress', () => {
   it('reads the percent from @hf-progress lines only', () => {

@@ -113,7 +113,7 @@ describe('gen-sdk', () => {
   })
 
   it('the committed resources match the committed spec', async () => {
-    const spec = JSON.parse(readFileSync(join(repoRoot, 'ui/src/api/openapi.json'), 'utf8')) as Spec
+    const spec = JSON.parse(readFileSync(join(repoRoot, 'app/web/src/api/openapi.json'), 'utf8')) as Spec
     expect(await generateResources(spec)).toBe(
       readFileSync(join(repoRoot, 'packages/sdk/src/generated/resources.ts'), 'utf8'),
     )

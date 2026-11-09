@@ -2,9 +2,9 @@
 // listens in the capture phase and sends batches to the recorder through a binding. Times are epoch milliseconds
 // (performance.timeOrigin + now(), the screencast's clock); positions are CSS pixels with the viewport size. Keys are
 // counted, never recorded. Hidden areas: elements matching the selectors are sampled at 10 Hz; with --privacy or
-// --hide-text, the page's text is matched (src/lib/privacy-patterns.ts, the same code as the runner's OCR side) about
+// --hide-text, the page's text is matched (app/server/lib/privacy-patterns.ts, the same code as the runner's OCR side) about
 // three times a second and each match's own rectangle is sampled, off again once it's gone.
-import { matchText } from '../../../../src/lib/privacy-patterns.js'
+import { matchText } from '../../../../app/server/lib/privacy-patterns.js'
 
 export interface PageEvent {
   /** move [t, x, y]; down/click/focus/key/wheel/hide per their fields. */

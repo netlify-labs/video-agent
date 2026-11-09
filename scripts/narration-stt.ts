@@ -9,9 +9,9 @@
 // is not an error: it exits 0 and the render goes on without narration captions. Logs JSON lines on stderr.
 // In a fit-to-narration run (the run inputs' `fit`, plan 2026-11-02 §6.4) it then prints, for the agent, the words with
 // their times as fenced, sanitized data and the exact target, or duration-only guidance when nothing was transcribed
-// (src/domain/prompt.ts fitTranscriptLines).
+// (app/server/domain/prompt.ts fitTranscriptLines).
 import { join } from 'node:path'
-import { fitTranscriptLines } from '../src/domain/prompt.js'
+import { fitTranscriptLines } from '../app/server/domain/prompt.js'
 import { applyNarrationCaptions } from './lib/narration-captions.js'
 import { readNarrationInputs } from './lib/narration-inputs.js'
 import { parseArgs, repoRoot, log } from './lib/run-tools.js'

@@ -15,7 +15,7 @@ function workspace(engine: object = { id: 'remotion', tier: 'free' }) {
   mkdirSync(join(root, '.render'))
   writeFileSync(join(root, '.render', 'run-manifest.json'), JSON.stringify({ engine }))
   const video = join(root, 'video')
-  cpSync(join(repo, 'engines', 'remotion', 'template'), video, {
+  cpSync(join(repo, 'app', 'engines', 'remotion'), video, {
     recursive: true,
     filter: (src) => !src.includes('node_modules'),
   })

@@ -1,7 +1,7 @@
 // The run side of a render engine (docs/plans/2026-11-04-render-engines.md §4.3): what render-job and prepare-run call
 // instead of naming HyperFrames. Phase 1 builds only what render-job needs (entry, contract, render, version); the
 // optional hooks arrive with their first consumer (scaffold, hydrate, check and snapshot with Remotion in Phase 2).
-import type { EngineId } from '../../../src/domain/engines.js'
+import type { EngineId } from '../../../app/server/domain/engines.js'
 
 export interface RenderReport {
   /** Renders the engine's license counts (Remotion: the video, each still, any audio render). HyperFrames: none. */

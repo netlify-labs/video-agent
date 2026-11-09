@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { sampleFrame, ssim, tileSsim } from './ssim.js'
 
-const fixture = (f: string) => join(process.cwd(), 'test/fixtures', f)
+const fixture = (f: string) => join(process.cwd(), 'app/test/fixtures', f)
 /** One generated picture (an ffmpeg lavfi source). */
 const picture = (src: string, out: string) =>
   execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'lavfi', '-i', src, '-frames:v', '1', out])

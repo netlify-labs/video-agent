@@ -9,8 +9,8 @@ import { execFileSync } from 'node:child_process'
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { attr, load, validate, walk } from '../../../src/lib/contract.js'
-import { scopedStyleProblems } from '../../../src/lib/scope-style.js'
+import { attr, load, validate, walk } from '../../../app/server/lib/contract.js'
+import { scopedStyleProblems } from '../../../app/server/lib/scope-style.js'
 
 const fixture = 'test/fixtures/scope/at-scope/index.html'
 const html = readFileSync(fixture, 'utf8')

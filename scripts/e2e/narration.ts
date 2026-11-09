@@ -11,7 +11,7 @@
 // VIDEO_AGENT_KEY owns VIDEO_ID (default: its newest ready video with an editable version, at least 9 s long). The
 // renders add versions to that video. VIDEO_AGENT_KEY_R (a Reviewer) adds the raw-take checks on the new version.
 //
-// The fixture is built here: the speech of FIXTURE (default test/fixtures/narration/punch-loud.wav, macOS `say`, "Then
+// The fixture is built here: the speech of FIXTURE (default app/test/fixtures/narration/punch-loud.wav, macOS `say`, "Then
 // select deploys, and press the button to publish.") converted by ffmpeg to 24 kHz mono PCM16, laid out as three
 // blocks of [0.3 s silence][100 ms 1 kHz beep][0.3 s silence][the speech, trimmed to 0.2 s before its onset]. Beeps are
 // written sample-exact, so their source times are known. It's uploaded as narration-upload and three clips (one per
@@ -34,7 +34,7 @@
 //     expectedRev is refused (409). With VIDEO_PUBLISH_OK=1 it publishes the version, checks the public VTT follows a
 //     correction, unpublishes, corrects again and checks the public VTT stays gone (no resurrection);
 //   - with VIDEO_AGENT_KEY_R: the Reviewer gets 404 on the take and the preview carries no raw take path.
-// Then a silence-only take (test/fixtures/narration/silence-only.wav) renders over the new version: ready, captions
+// Then a silence-only take (app/test/fixtures/narration/silence-only.wav) renders over the new version: ready, captions
 // status off or failed, and a valid VTT with no narration cues.
 // LONG=1 (expensive): for each of LONG_MINUTES (4 and 10), a take that long (a beep every 30 s with speech after it)
 // on a video from LONG_VIDEO_IDS whose length is at least the take minus 120 s (narration past the end holds the last
@@ -49,9 +49,9 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { detectSpeech } from '../../src/lib/peaks.js'
-import { SAMPLE_RATE } from '../../src/lib/timeline.js'
-import { parseVtt } from '../../src/lib/vtt.js'
+import { detectSpeech } from '../../app/server/lib/peaks.js'
+import { SAMPLE_RATE } from '../../app/server/lib/timeline.js'
+import { parseVtt } from '../../app/server/lib/vtt.js'
 import { base, key, log, started } from './lib.js'
 import {
   call,
@@ -74,9 +74,9 @@ import {
 
 const env = process.env
 const repo = fileURLToPath(new URL('../../', import.meta.url))
-const fixturePath = env.FIXTURE ?? join(repo, 'test/fixtures/narration/punch-loud.wav')
+const fixturePath = env.FIXTURE ?? join(repo, 'app/test/fixtures/narration/punch-loud.wav')
 const fixtureText = env.FIXTURE_TEXT ?? 'Then select deploys, and press the button to publish.'
-const silencePath = join(repo, 'test/fixtures/narration/silence-only.wav')
+const silencePath = join(repo, 'app/test/fixtures/narration/silence-only.wav')
 const FFMPEG = env.FFMPEG ?? 'ffmpeg'
 const FFPROBE = env.FFPROBE ?? 'ffprobe'
 const maxCredits = Number(env.MAX_CREDITS ?? 250)

@@ -1,5 +1,5 @@
 // Checks looks (plan 2026-11-04-looks §9). One line per problem, `look:<id>: <problem>`, then exit 1.
-//   npm run look:check [--static] [id…]        (every look in looks/ when no id; looks/_template as a template)
+//   npm run look:check [--static] [id…]        (every look in app/looks/ when no id; app/looks/_template as a template)
 // --static runs only what needs no browser (the Netlify build runs this). Without it (CI), each example also goes
 // through the pinned `hyperframes check` in a temp project, which needs Chrome; with no browser it stops and says so.
 import { existsSync, readdirSync, statSync } from 'node:fs'
@@ -33,7 +33,7 @@ export function runLookCheck(
   for (const id of looks) {
     const dir = join(looksDir, id)
     if (!existsSync(dir)) {
-      problems.push(`look:${id}: there's no folder looks/${id}`)
+      problems.push(`look:${id}: there's no folder app/looks/${id}`)
       continue
     }
     for (const p of checkLookStatic(dir, { hyperframesVersion, template: id === '_template' }))
@@ -58,7 +58,7 @@ if (process.argv[1]?.endsWith('look-check.ts')) {
   let result: LookCheckResult
   try {
     result = runLookCheck(
-      join(repoRoot, 'looks'),
+      join(repoRoot, 'app', 'looks'),
       ids,
       hyperframesVersion,
       staticOnly ? undefined : { repoRoot },

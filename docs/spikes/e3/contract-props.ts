@@ -10,7 +10,7 @@ import {
   type Composition,
   type EditOp,
   type Summary,
-} from '../../../src/lib/contract.js'
+} from '../../../app/server/lib/contract.js'
 import { frames, layout, sec } from './project/src/va/layout.js'
 import type { VaProps } from './project/src/va/schema.js'
 

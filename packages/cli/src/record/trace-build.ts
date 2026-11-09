@@ -3,9 +3,9 @@
 // latency spike D2 measured (an event shows on screen about 46 ms later), so a click lines up with the frame it shows
 // in. Positions: 0-1 of the viewport (the recorded frame is the viewport at its dpr). Moves are simplified with
 // Ramer-Douglas-Peucker at 0.5 px; hidden elements get a key when they move over 2 px, a zero-size key off screen, and
-// at most 600 keys each. Names are scrubbed by the shared schema (src/lib/recording-trace.ts) when it's parsed.
-import { PRIVACY_LABELS } from '../../../../src/lib/privacy-patterns.js'
-import { parseTrace, TRACE_LIMITS, type Trace } from '../../../../src/lib/recording-trace.js'
+// at most 600 keys each. Names are scrubbed by the shared schema (app/server/lib/recording-trace.ts) when it's parsed.
+import { PRIVACY_LABELS } from '../../../../app/server/lib/privacy-patterns.js'
+import { parseTrace, TRACE_LIMITS, type Trace } from '../../../../app/server/lib/recording-trace.js'
 import type { PageEvent } from './trace-page.js'
 
 /** Event to frame, headed Chromium (docs/spikes.md D2: 46 ms median). */

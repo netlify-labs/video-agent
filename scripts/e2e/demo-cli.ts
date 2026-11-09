@@ -15,7 +15,7 @@ import { spawnSync } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { parseTrace } from '../../src/lib/recording-trace.js'
+import { parseTrace } from '../../app/server/lib/recording-trace.js'
 import { api, base, fail, key, log, started } from './lib.js'
 import { dryRun } from './narration-lib.js'
 

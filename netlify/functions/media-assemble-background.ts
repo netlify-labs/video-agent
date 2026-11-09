@@ -1,9 +1,9 @@
 // Background function (15-minute limit): assemble and verify one finished media upload session (plan v2 §14 rule 24).
 import type { Context } from '@netlify/functions'
-import { prodDeps } from '../../src/adapters/prod.js'
-import { assembleUpload } from '../../src/domain/media-uploads.js'
-import { getSettings } from '../../src/domain/settings.js'
-import { hmacHex, safeEqual } from '../../src/lib/crypto.js'
+import { prodDeps } from '../../app/server/adapters/prod.js'
+import { assembleUpload } from '../../app/server/domain/media-uploads.js'
+import { getSettings } from '../../app/server/domain/settings.js'
+import { hmacHex, safeEqual } from '../../app/server/lib/crypto.js'
 
 export default async (req: Request, context: Context) => {
   const deps = prodDeps()

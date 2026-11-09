@@ -3,10 +3,10 @@
 // manifest carries the scope, so prepare-run freezes the parent and render-job renders only the splice, as on the
 // runner; and before copying out, the result passes finalize's check (the splice's bytes, and the MP4's length).
 import { readFileSync } from 'node:fs'
-import { attr, load, read } from '../../../../src/lib/contract.js'
-import { hyperframesScopeCheck, SCOPE_REFUSED_PREFIX, scopeRules } from '../../../../src/lib/scope.js'
-import { readTarGz } from '../../../../src/lib/tar.js'
-import { sha256Hex } from '../../../../src/lib/run-manifest.js'
+import { attr, load, read } from '../../../../app/server/lib/contract.js'
+import { hyperframesScopeCheck, SCOPE_REFUSED_PREFIX, scopeRules } from '../../../../app/server/lib/scope.js'
+import { readTarGz } from '../../../../app/server/lib/tar.js'
+import { sha256Hex } from '../../../../app/server/lib/run-manifest.js'
 import { CliError, EXIT, UsageError } from '../exit.js'
 import { resolveScenes } from '../commands/scenes.js'
 

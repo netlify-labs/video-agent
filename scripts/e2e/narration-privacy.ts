@@ -31,7 +31,7 @@
 // Logs JSON lines, one per step and check; ends with PASS or FAIL and a summary; exits non-zero on failure.
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { SAMPLE_RATE } from '../../src/lib/timeline.js'
+import { SAMPLE_RATE } from '../../app/server/lib/timeline.js'
 import { base, key, log, started } from './lib.js'
 import {
   call,

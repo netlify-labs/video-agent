@@ -1,9 +1,9 @@
 // The command catalog (cli-and-sdk plan §6.1): one list that the router, --help, `help --json`, the /docs/cli page and
-// the skill's references/cli.md all come from, like src/mcp-catalog.ts for the MCP tools. A command is runnable once
+// the skill's references/cli.md all come from, like app/server/mcp-catalog.ts for the MCP tools. A command is runnable once
 // its bead lands (`ready`); until then it's listed nowhere and answers "not built yet". People see "scene", "Look",
 // "Restyle"; flags follow those words (--scene, --look, --engine); the API keeps beat, scope, look and engine.
 
-/** The server's `features` strings a command can need (src/domain/features.ts; a test keeps them in step). */
+/** The server's `features` strings a command can need (app/server/domain/features.ts; a test keeps them in step). */
 export type FeatureName =
   | 'remix'
   | 'narration'

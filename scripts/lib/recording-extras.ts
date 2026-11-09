@@ -13,7 +13,7 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { cameraAt, ZOOM_MIN, type PlanV1 } from '../../src/lib/recording.js'
+import { cameraAt, ZOOM_MIN, type PlanV1 } from '../../app/server/lib/recording.js'
 import { ANALYZER_VERSION, type Analysis } from './recording-analyze.js'
 import { log } from './run-tools.js'
 import type { SttProvider, SttWord } from './stt/types.js'

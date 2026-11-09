@@ -14,15 +14,15 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { NARRATION_SRC } from '../../../src/lib/contract.js'
+import { NARRATION_SRC } from '../../../app/server/lib/contract.js'
 import {
   DEFAULT_LANGUAGE,
   PARAKEET_LANGUAGES,
   isLanguage,
   parakeetCovers,
   type Language,
-} from '../../../src/lib/language.js'
-import type { FrozenTranscription } from '../../../src/lib/run-manifest.js'
+} from '../../../app/server/lib/language.js'
+import type { FrozenTranscription } from '../../../app/server/lib/run-manifest.js'
 import { narrationPaths, readNarrationInputs } from '../narration-inputs.js'
 import { runTree } from '../proc-tree.js'
 import { log, sha256File } from '../run-tools.js'

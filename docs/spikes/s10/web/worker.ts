@@ -6,7 +6,7 @@
 // take because its 44-byte header carries the length and comes first, so the worker streams SHA-256 over the PCM
 // (the data chunk) live and computes the file hash at stop with one pass over header + chunks read back from
 // IndexedDB (bounded: read 64 chunks, 1.5 MB, at a time). Both are timed and checked against one-shot hashes by the page.
-import { encodePeaks, PeaksBuilder } from '../../../../src/lib/peaks.js'
+import { encodePeaks, PeaksBuilder } from '../../../../app/server/lib/peaks.js'
 import { OnsetDetector } from '../lib/onsets.js'
 import { Resampler } from '../lib/resample.js'
 import { Sha256 } from '../lib/sha256.js'

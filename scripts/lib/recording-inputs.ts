@@ -1,11 +1,11 @@
-// The run-side inputs of the recording check (src/lib/recording-check.ts): the composition's files, the run's
+// The run-side inputs of the recording check (app/server/lib/recording-check.ts): the composition's files, the run's
 // recording from .render/run-manifest.json (prepare-run writes it), the source length from the kept analysis, and the
 // locked hidden areas from .va-run/recording/<id>/ (the trace's redact entries, the person's setup boxes). Without a
 // manifest (a local composition) the recording is taken from the slot and its inputs from .va-run when they're there.
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { recordingCheck, type RecordingProblem } from '../../src/lib/recording-check.js'
-import { parseTrace, type RedactEntry } from '../../src/lib/recording-trace.js'
+import { recordingCheck, type RecordingProblem } from '../../app/server/lib/recording-check.js'
+import { parseTrace, type RedactEntry } from '../../app/server/lib/recording-trace.js'
 import { log } from './run-tools.js'
 
 const readIf = (path: string) => (existsSync(path) ? readFileSync(path, 'utf8') : null)

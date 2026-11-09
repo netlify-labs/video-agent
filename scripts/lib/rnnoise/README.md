@@ -1,7 +1,7 @@
 # RNNoise model for the heavy cleanup preset
 
 `sh.rnnn` is the RNNoise model ffmpeg's `arnndn` filter loads for the `heavy` narration cleanup preset
-(`src/lib/narration-cleanup.ts`, docs/spikes.md S13). It is vendored so a run never downloads it.
+(`app/server/lib/narration-cleanup.ts`, docs/spikes.md S13). It is vendored so a run never downloads it.
 
 | Field   | Value                                                                                                          |
 | ------- | -------------------------------------------------------------------------------------------------------------- |

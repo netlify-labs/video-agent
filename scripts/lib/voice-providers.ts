@@ -11,7 +11,7 @@ import {
   wordsFromCharacters,
   type Speech,
   type VoiceProvider,
-} from '../../src/lib/voice.js'
+} from '../../app/server/lib/voice.js'
 import { StepError, log, run } from './run-tools.js'
 
 const DEFAULT_ELEVENLABS_VOICE = '21m00Tcm4TlvDq8ikWAM'

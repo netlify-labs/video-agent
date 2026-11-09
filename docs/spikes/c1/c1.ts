@@ -32,7 +32,7 @@ import { createServer } from 'node:http'
 import { homedir, tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { build } from 'esbuild'
-import { runManifestKey, serializeRunManifest, type RunManifest } from '../../../src/lib/run-manifest.js'
+import { runManifestKey, serializeRunManifest, type RunManifest } from '../../../app/server/lib/run-manifest.js'
 
 const repo = join(import.meta.dirname, '..', '..', '..')
 const argv = process.argv.slice(2)

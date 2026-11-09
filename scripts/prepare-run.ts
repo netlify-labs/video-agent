@@ -34,14 +34,14 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { dirname, isAbsolute, join, relative, sep } from 'node:path'
-import { archiveFiles, bundleManifest } from '../src/lib/bundle-manifest.js'
-import type { BundleReference } from '../src/lib/bundle-references.js'
-import { NARRATION_SRC, load, read } from '../src/lib/contract.js'
-import { frozenFilesFor, optionalFrozenFilesFor } from '../src/lib/narration-run.js'
-import { LOOK_ARCHIVE_ROOT, lookFiles, lookHash } from '../src/lib/looks.js'
-import { FROZEN_DIR, keptHash } from '../src/lib/revoice.js'
-import { SCOPE_LAYOUT_FILE, type ScopeLayout } from '../src/lib/scope.js'
-import { readPcm16 } from '../src/lib/narration-cleanup.js'
+import { archiveFiles, bundleManifest } from '../app/server/lib/bundle-manifest.js'
+import type { BundleReference } from '../app/server/lib/bundle-references.js'
+import { NARRATION_SRC, load, read } from '../app/server/lib/contract.js'
+import { frozenFilesFor, optionalFrozenFilesFor } from '../app/server/lib/narration-run.js'
+import { LOOK_ARCHIVE_ROOT, lookFiles, lookHash } from '../app/server/lib/looks.js'
+import { FROZEN_DIR, keptHash } from '../app/server/lib/revoice.js'
+import { SCOPE_LAYOUT_FILE, type ScopeLayout } from '../app/server/lib/scope.js'
+import { readPcm16 } from '../app/server/lib/narration-cleanup.js'
 import {
   feedbackStillPath,
   runManifestKey,
@@ -53,9 +53,9 @@ import {
   type RunManifest,
   type RunRecording,
   type ScopeStill,
-} from '../src/lib/run-manifest.js'
-import { RECORDING_LIMITS } from '../src/lib/media/classify.js'
-import { MAX_OUTPUT_SAMPLES, SAMPLE_RATE } from '../src/lib/timeline.js'
+} from '../app/server/lib/run-manifest.js'
+import { RECORDING_LIMITS } from '../app/server/lib/media/classify.js'
+import { MAX_OUTPUT_SAMPLES, SAMPLE_RATE } from '../app/server/lib/timeline.js'
 import { runEngineFor } from './lib/engines/index.js'
 import type { RunEngine } from './lib/engines/types.js'
 import { writeCallback } from './lib/run-callback.js'
@@ -107,7 +107,7 @@ export function fromInputs(dir: string): Fetch {
   }
 }
 
-export { SCOPE_LAYOUT_FILE, type ScopeLayout } from '../src/lib/scope.js'
+export { SCOPE_LAYOUT_FILE, type ScopeLayout } from '../app/server/lib/scope.js'
 
 /**
  * One still per pinned comment from the parent MP4, with a dot at the spot, into video/feedback/ (plan v2 §5).

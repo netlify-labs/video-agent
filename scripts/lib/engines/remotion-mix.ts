@@ -4,7 +4,7 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { MAX_VOLUME } from '../../../src/lib/contract.js'
+import { MAX_VOLUME } from '../../../app/server/lib/contract.js'
 import { MASTER, measure } from '../mastering.js'
 import { run } from '../run-tools.js'
 

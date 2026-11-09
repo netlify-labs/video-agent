@@ -1,4 +1,4 @@
-# Makes the voice preview samples in ui/src/assets/voices (one short line per Kokoro voice the UI offers).
+# Makes the voice preview samples in app/web/src/assets/voices (one short line per Kokoro voice the UI offers).
 #   python3 -m venv .venv && .venv/bin/pip install kokoro-onnx soundfile
 #   npx hyperframes tts "warm up" -o /tmp/w.wav   # downloads the model into ~/.cache/hyperframes/tts
 #   .venv/bin/python scripts/voice-samples.py /tmp/voices

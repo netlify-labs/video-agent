@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import * as ts from 'typescript'
 import { describe, expect, it } from 'vitest'
-import { generateRegistry } from '../../../src/lib/remotion-project.js'
+import { generateRegistry } from '../../../app/server/lib/remotion-project.js'
 import { checkProject, scanSources, snapshotProject, type RemotionApi } from './remotion-check.js'
 import { readProject } from './remotion.js'
 
@@ -15,7 +15,7 @@ const repo = join(import.meta.dirname, '..', '..', '..')
 function project() {
   const root = mkdtempSync(join(tmpdir(), 'va-rcheck-'))
   const video = join(root, 'video')
-  cpSync(join(repo, 'engines', 'remotion', 'template'), video, {
+  cpSync(join(repo, 'app', 'engines', 'remotion'), video, {
     recursive: true,
     filter: (src) => !src.includes('node_modules'),
   })

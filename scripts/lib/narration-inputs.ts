@@ -8,14 +8,14 @@
 //   .va-run/narration/receipt.json       scripts/narration.ts: inputs, recipe, bus digest, spans, attempt id
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { Language } from '../../src/lib/language.js'
-import type { NarrationReceipt } from '../../src/lib/narration-run.js'
+import type { Language } from '../../app/server/lib/language.js'
+import type { NarrationReceipt } from '../../app/server/lib/narration-run.js'
 import type {
   CaptionPolicy,
   FrozenNarration,
   FrozenTake,
   FrozenTranscription,
-} from '../../src/lib/run-manifest.js'
+} from '../../app/server/lib/run-manifest.js'
 
 export const NARRATION_RUN_DIR = '.va-run/narration'
 
@@ -23,7 +23,7 @@ export const narrationPaths = (root: string) => {
   const dir = join(root, NARRATION_RUN_DIR)
   return {
     dir,
-    /** Raw downloads, removed once each take is checked and in src/. */
+    /** Raw downloads, removed once each take is checked and in app/server/. */
     fetch: join(dir, 'fetch'),
     src: join(dir, 'src'),
     clean: join(dir, 'clean'),

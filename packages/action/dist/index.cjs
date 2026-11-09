@@ -3265,7 +3265,7 @@ var import_promises2 = require("node:fs/promises");
 var import_node_net2 = require("node:net");
 var import_node_path = require("node:path");
 
-// src/adapters/http.ts
+// app/server/adapters/http.ts
 var import_promises = require("node:dns/promises");
 var import_node_https = require("node:https");
 var import_node_net = require("node:net");

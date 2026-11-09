@@ -17,6 +17,6 @@
     "types": ["node"],
     "noEmit": true
   },
-  "include": ["src", "netlify/functions", "scripts", "docs/spikes", "test", "drizzle.config.ts", "vitest.config.ts", "playwright.config.ts", "ui/e2e"],
+  "include": ["app/server", "app/test", "app/web/e2e", "app/web/playwright.config.ts", "netlify/functions", "scripts", "docs/spikes", "vitest.config.ts"],
   "exclude": ["docs/spikes/s10/web", "docs/spikes/e3", "docs/spikes/e4", "docs/spikes/e5"]
 }

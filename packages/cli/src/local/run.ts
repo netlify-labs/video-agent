@@ -12,16 +12,16 @@ import {
   MAX_PROMPT_CLICKS,
   type PromptInput,
   type RecordingPrompt,
-} from '../../../../src/domain/prompt.js'
-import { parseTrace } from '../../../../src/lib/recording-trace.js'
-import { classify } from '../../../../src/lib/media/classify.js'
+} from '../../../../app/server/domain/prompt.js'
+import { parseTrace } from '../../../../app/server/lib/recording-trace.js'
+import { classify } from '../../../../app/server/lib/media/classify.js'
 import {
   RUN_MANIFEST_VERSION,
   runManifestKey,
   serializeRunManifest,
   sha256Hex,
   type RunManifest,
-} from '../../../../src/lib/run-manifest.js'
+} from '../../../../app/server/lib/run-manifest.js'
 import type { LocalLook } from './look.js'
 import type { Log } from './workspace.js'
 

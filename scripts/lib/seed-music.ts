@@ -170,7 +170,7 @@ interface Job {
   error: { code: string; message: string } | null
 }
 
-// A job (src/domain/openverse-jobs.ts), told apart from a media item by its expiry.
+// A job (app/server/domain/openverse-jobs.ts), told apart from a media item by its expiry.
 const isJob = (x: unknown): x is Job =>
   typeof x === 'object' && x !== null && typeof (x as Job).id === 'string' && 'expiresAt' in x
 const errorOf = (x: unknown) =>

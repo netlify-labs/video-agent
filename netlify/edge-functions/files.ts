@@ -3,7 +3,7 @@
 // (poster.r<k>.jpg, poster-480.r<k>.webp, poster-960.r<k>.webp), so every file stays immutable.
 import type { Config, Context } from '@netlify/edge-functions'
 import { getStore } from '@netlify/blobs'
-import { CONTENT_TYPES, mediaResponse, verifyFileUrl, type AccessMirror } from '../../src/lib/media/range.ts'
+import { CONTENT_TYPES, mediaResponse, verifyFileUrl, type AccessMirror } from '../../app/server/lib/media/range.ts'
 
 /** The longest URL lifetime the API mints (public videos, one hour). */
 const MAX_AGE_SEC = 3600

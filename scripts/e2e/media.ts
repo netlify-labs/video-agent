@@ -5,7 +5,7 @@
 // Range playback, quota with cancellation, and the SVG sanitizer on a malicious file. Logs JSON lines (the S5 numbers);
 // exits non-zero on the first failure. Prints the media id for the next gate.
 import { readFileSync } from 'node:fs'
-import { sha256Hex as sha } from '../../src/lib/crypto.js'
+import { sha256Hex as sha } from '../../app/server/lib/crypto.js'
 import { base, fail, key, log } from './lib.js'
 
 const clipPath = process.env.CLIP ?? ''

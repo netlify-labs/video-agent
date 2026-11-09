@@ -1,7 +1,7 @@
 // Picks the run engine: the one the run manifest names (render-engines plan §4.2), HyperFrames when it names none.
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { isEngineId, type EngineId } from '../../../src/domain/engines.js'
+import { isEngineId, type EngineId } from '../../../app/server/domain/engines.js'
 import { log as runLog, StepError } from '../run-tools.js'
 import { hyperframesEngine } from './hyperframes.js'
 import { remotionEngine } from './remotion.js'

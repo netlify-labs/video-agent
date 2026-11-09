@@ -11,7 +11,7 @@
 // squares (b ≈ 1/24000). Placement then subtracts the input-latency calibration L (mic hears at perf P, the worklet
 // sees it at render-map perf P + L), which is route-specific to the INPUT only, so (a) can be measured once on
 // speakers and reused with headphones, while the monitor's output latency comes from getOutputTimestamp.
-import { computePeaks, decodePeaks } from '../../../../src/lib/peaks.js'
+import { computePeaks, decodePeaks } from '../../../../app/server/lib/peaks.js'
 import {
   fitLine,
   mean,

@@ -24,8 +24,8 @@ import { existsSync, mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { runRecord } from '../../packages/cli/src/record/capture.js'
-import { parseRedactScript } from '../../src/lib/recording.js'
-import { parseTrace, type Trace } from '../../src/lib/recording-trace.js'
+import { parseRedactScript } from '../../app/server/lib/recording.js'
+import { parseTrace, type Trace } from '../../app/server/lib/recording-trace.js'
 import { base, key, log, sdk, started } from './lib.js'
 import { call, check, dry, dryRun, GateError, sleep } from './narration-lib.js'
 
@@ -109,7 +109,7 @@ async function recordings(): Promise<{ a: { file: string; trace: Trace }; b: { f
 /** Step 1: the whole pipeline locally on both recordings (demo-local's demo()); throws on any failed check. */
 async function localPipeline(rec: Awaited<ReturnType<typeof recordings>>) {
   process.argv.push('--out', join(work, 'local'))
-  // The server's rule for a trace (src/domain/media-trace.ts): the recording's length within 0.5 s of the trace's.
+  // The server's rule for a trace (app/server/domain/media-trace.ts): the recording's length within 0.5 s of the trace's.
   const probe = spawnSync(
     'ffprobe',
     ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', rec.a.file],

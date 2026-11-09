@@ -7,7 +7,7 @@
 // template), without rendering the base again. The receipt records its sha256 for checkNarration.
 import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { applyHoldFrame, FPS, HOLD_STILL_SRC, holdBeatOf, load, save } from '../../src/lib/contract.js'
+import { applyHoldFrame, FPS, HOLD_STILL_SRC, holdBeatOf, load, save } from '../../app/server/lib/contract.js'
 import { StepError, run, sha256File } from './run-tools.js'
 
 /** Captures the frame at `atSeconds` of the project in `dir` as a PNG under `outDir`, and returns its path. */

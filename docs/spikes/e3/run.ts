@@ -19,7 +19,7 @@ import { fileURLToPath } from 'node:url'
 import { isDeepStrictEqual } from 'node:util'
 import { bundle } from '@remotion/bundler'
 import { openBrowser, renderStill, selectComposition } from '@remotion/renderer'
-import { applyEdits, type EditOp, type Summary } from '../../../src/lib/contract.js'
+import { applyEdits, type EditOp, type Summary } from '../../../app/server/lib/contract.js'
 import { applyOps, propsFromComposition, readProps, registryFor, syncCaptions } from './contract-props.js'
 import type { VaProps } from './project/src/va/schema.js'
 

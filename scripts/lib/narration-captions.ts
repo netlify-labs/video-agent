@@ -5,10 +5,10 @@
 // have none, and captions.vtt is then a valid empty "WEBVTT\n\n". The words stay in .va-run/narration/stt.json for the
 // outputs (transcript.txt).
 import { readFileSync, writeFileSync } from 'node:fs'
-import type { Caption, Summary } from '../../src/lib/contract.js'
-import { audibleCaptions, type NarrationCue } from '../../src/lib/narration-captions.js'
-import { narrationSummary, type NarrationTranscript } from '../../src/lib/narration-run.js'
-import type { NarrationOp } from '../../src/lib/timeline.js'
+import type { Caption, Summary } from '../../app/server/lib/contract.js'
+import { audibleCaptions, type NarrationCue } from '../../app/server/lib/narration-captions.js'
+import { narrationSummary, type NarrationTranscript } from '../../app/server/lib/narration-run.js'
+import type { NarrationOp } from '../../app/server/lib/timeline.js'
 import { log } from './run-tools.js'
 
 /** Writes the narration cues into summary.json, keeping every other cue. Idempotent: earlier narration cues go. */

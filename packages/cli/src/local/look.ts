@@ -8,7 +8,7 @@ import {
   lookJsonProblems,
   LookFileError,
   readLookRunFiles,
-} from '../../../../src/lib/looks.js'
+} from '../../../../app/server/lib/looks.js'
 import { UsageError } from '../exit.js'
 
 export interface LocalLook {

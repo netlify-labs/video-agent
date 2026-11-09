@@ -5,10 +5,10 @@
 // effect immediately (the JSON is cached for a minute at most).
 import type { Config, Context } from '@netlify/edge-functions'
 import { getStore } from '@netlify/blobs'
-import { CONTENT_TYPES, mediaResponse } from '../../src/lib/media/range.ts'
-import { creditHtml, embedHtml, type CreditLine } from '../../src/lib/credit-html.ts'
-import { contextMeta } from '../../src/generated/context.ts'
-import { denyMicrophone } from '../../src/lib/permissions-policy.ts'
+import { CONTENT_TYPES, mediaResponse } from '../../app/server/lib/media/range.ts'
+import { creditHtml, embedHtml, type CreditLine } from '../../app/server/lib/credit-html.ts'
+import { contextMeta } from '../../app/server/generated/context.ts'
+import { denyMicrophone } from '../../app/server/lib/permissions-policy.ts'
 
 interface Mirror {
   slug: string

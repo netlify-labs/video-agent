@@ -1,4 +1,4 @@
-// The composition's reference files (src/lib/bundle-references.ts: the narration bus), uploaded on their own to the
+// The composition's reference files (app/server/lib/bundle-references.ts: the narration bus), uploaded on their own to the
 // uploads store under the attempt id, like render-job's outputs, because source.tar.gz and checkpoints leave them
 // out. render-job lists what this returns in its manifest, and finalize copies each one to the version's prefix.
 import { join } from 'node:path'
@@ -6,8 +6,8 @@ import {
   MAX_REFERENCE_BYTES,
   REFERENCE_FILES,
   type BundleReference,
-} from '../../src/lib/bundle-references.js'
-import { bundleManifest } from '../../src/lib/bundle-manifest.js'
+} from '../../app/server/lib/bundle-references.js'
+import { bundleManifest } from '../../app/server/lib/bundle-manifest.js'
 import { StepError, log, netlifyCli, run, withRetries } from './run-tools.js'
 
 type Upload = (key: string, file: string) => Promise<void>

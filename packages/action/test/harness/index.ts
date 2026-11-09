@@ -1,14 +1,14 @@
-// The action's test harness (bead va-mg4i.2.2): run() in-process against the real Hono app (test/helpers.ts harness,
+// The action's test harness (bead va-mg4i.2.2): run() in-process against the real Hono app (app/test/helpers.ts harness,
 // memory or PGlite store) through the SDK's fetch, a fake GitHub, a fake image host and a fake clock, so a 30-minute
 // wait takes milliseconds and nothing touches the network or spends credits.
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect } from 'vitest'
-import { tick } from '../../../../src/domain/reconciler.js'
-import type { RunnerSnapshot } from '../../../../src/deps.js'
-import { failedSnap, running, succeeded } from '../../../../test/fakes.js'
-import { apiKey, harness, pgStore, type Harness } from '../../../../test/helpers.js'
+import { tick } from '../../../../app/server/domain/reconciler.js'
+import type { RunnerSnapshot } from '../../../../app/server/deps.js'
+import { failedSnap, running, succeeded } from '../../../../app/test/fakes.js'
+import { apiKey, harness, pgStore, type Harness } from '../../../../app/test/helpers.js'
 import type { Core } from '../../src/core.js'
 import type { ActionDeps, RunResult } from '../../src/main.js'
 import { run } from '../../src/main.js'

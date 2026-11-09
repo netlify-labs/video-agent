@@ -7,7 +7,7 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { PreviewFile } from '../src/lib/media/previews.js'
+import type { PreviewFile } from '../app/server/lib/media/previews.js'
 import { api, base, fail, key, log } from './e2e/lib.js'
 import { makePreviews, posterTime } from './lib/previews.js'
 

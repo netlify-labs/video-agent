@@ -1,10 +1,10 @@
 // The attempt's callback token on the runner, never in the prompt or on a command line. With VIDEO_AGENT_RUN_SECRET in
-// the env, render-job and checkpoint derive it (src/lib/run-auth.ts). Without it, the server puts the attempt's token
+// the env, render-job and checkpoint derive it (app/server/lib/run-auth.ts). Without it, the server puts the attempt's token
 // in the run manifest, prepare-run writes it here (mode 0600, under .va-run/, which is never archived, uploaded,
 // checkpointed or committed), and render-job and checkpoint read it back.
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { RUN_SECRET_ENV, runAttemptToken } from '../../src/lib/run-auth.js'
+import { RUN_SECRET_ENV, runAttemptToken } from '../../app/server/lib/run-auth.js'
 
 export const CALLBACK_FILE = join('.va-run', 'callback.json')
 

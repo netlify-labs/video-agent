@@ -1,11 +1,11 @@
 // Background function (15-minute limit): run one Openverse search or import job, waiting out a slow Openverse, then
 // wake the run whose music pick waits on it.
 import type { Context } from '@netlify/functions'
-import { prodDeps } from '../../src/adapters/prod.js'
-import { runOpenverseJob } from '../../src/domain/openverse-jobs.js'
-import { wakeMusicPick } from '../../src/domain/reconciler.js'
-import { getSettings } from '../../src/domain/settings.js'
-import { hmacHex, safeEqual } from '../../src/lib/crypto.js'
+import { prodDeps } from '../../app/server/adapters/prod.js'
+import { runOpenverseJob } from '../../app/server/domain/openverse-jobs.js'
+import { wakeMusicPick } from '../../app/server/domain/reconciler.js'
+import { getSettings } from '../../app/server/domain/settings.js'
+import { hmacHex, safeEqual } from '../../app/server/lib/crypto.js'
 
 export default async (req: Request, context: Context) => {
   const deps = prodDeps()

@@ -101,7 +101,7 @@ log('v2', { dir: v2.dir, durationSec: probe(v2.video) })
 
 // A Quick demo from a screen recording (va-rsk5.5.4): no agent, no model, the runtime reused.
 const demo = cli(
-  ['local', 'demo', join(repo, 'test', 'fixtures', 'recording', 'privacy', 'secrets.mp4'), '--quick'],
+  ['local', 'demo', join(repo, 'app', 'test', 'fixtures', 'recording', 'privacy', 'secrets.mp4'), '--quick'],
   {
     npm_config_offline: 'true',
   },

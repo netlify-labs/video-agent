@@ -21,8 +21,8 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { getStore, setEnvironmentContext } from '@netlify/blobs'
 import { BlobsServer } from '@netlify/blobs/server'
-import { netlifyBlobs } from '../../../src/adapters/blobs.js'
-import { classify, LIMITS } from '../../../src/lib/media/classify.js'
+import { netlifyBlobs } from '../../../app/server/adapters/blobs.js'
+import { classify, LIMITS } from '../../../app/server/lib/media/classify.js'
 import { log, parseFlags, printSummary, round } from '../lib/proc.js'
 
 const flags = parseFlags(process.argv.slice(2))

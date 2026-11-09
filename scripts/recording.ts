@@ -35,13 +35,13 @@
 //
 //   npx tsx scripts/recording.ts check
 //
-// check: the recording scenes of video/index.html against the run's inputs (src/lib/recording-check.ts): one line per
+// check: the recording scenes of video/index.html against the run's inputs (app/server/lib/recording-check.ts): one line per
 // problem naming the scene and the rule, exit 1. check-contract runs the same check.
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { basename, dirname, extname, join } from 'node:path'
-import { parseTrace } from '../src/lib/recording-trace.js'
+import { parseTrace } from '../app/server/lib/recording-trace.js'
 import { analyzeRecording } from './lib/recording-analyze.js'
-import { ASPECTS, keptPlan, type Aspect, type PlanRedact, type PlanV1 } from '../src/lib/recording.js'
+import { ASPECTS, keptPlan, type Aspect, type PlanRedact, type PlanV1 } from '../app/server/lib/recording.js'
 import type { Analysis } from './lib/recording-analyze.js'
 import { composeDemo } from './lib/recording-compose.js'
 import { emitStep, holdsOnly, readKeptPlan } from './lib/recording-emit.js'
@@ -258,13 +258,13 @@ function compose() {
   if (!existsSync(analysisPath))
     throw new StepError(`No analysis at ${analysisPath}: run recording.ts analyze first.`)
   const tracePath = args.trace ?? join(repoRoot, '.va-run', 'recording', full.mediaId, 'trace.json')
-  // --look none, a look id (looks/<id>/look.json), or the run's look (context/look/look.json) by default.
+  // --look none, a look id (app/looks/<id>/look.json), or the run's look (context/look/look.json) by default.
   const lookArg = args.look
   const lookPath =
     lookArg === 'none'
       ? null
       : lookArg
-        ? join(repoRoot, 'looks', lookArg, 'look.json')
+        ? join(repoRoot, 'app', 'looks', lookArg, 'look.json')
         : join(repoRoot, 'context', 'look', 'look.json')
   if (lookArg && lookArg !== 'none' && !existsSync(lookPath ?? ''))
     throw new StepError(`No look "${lookArg}".`)

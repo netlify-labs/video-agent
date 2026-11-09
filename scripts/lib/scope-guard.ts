@@ -6,10 +6,10 @@
 // scoped revision of a narrated parent gets both.
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { compositionFiles } from '../../src/lib/bundle-manifest.js'
-import { FROZEN_DIR } from '../../src/lib/revoice.js'
-import type { RunManifest } from '../../src/lib/run-manifest.js'
-import { SCOPE_LAYOUT_FILE, SCOPE_VIOLATED } from '../../src/lib/scope.js'
+import { compositionFiles } from '../../app/server/lib/bundle-manifest.js'
+import { FROZEN_DIR } from '../../app/server/lib/revoice.js'
+import type { RunManifest } from '../../app/server/lib/run-manifest.js'
+import { SCOPE_LAYOUT_FILE, SCOPE_VIOLATED } from '../../app/server/lib/scope.js'
 import type { RunEngine } from './engines/types.js'
 import { log, StepError } from './run-tools.js'
 

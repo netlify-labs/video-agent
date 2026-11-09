@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // The Quick demo's agent for `video-agent local demo --quick` (screen-recording plan §6.3; va-rsk5.5.4): the Quick demo
-// prompt (src/domain/prompt.ts buildQuickDemoPrompt) is a fixed list of commands with no authoring, so this runs them
+// prompt (app/server/domain/prompt.ts buildQuickDemoPrompt) is a fixed list of commands with no authoring, so this runs them
 // in order without a model: prepare-run, recording.ts analyze, plan and compose, check-contract, hyperframes check (in
 // video/), render-job. It stops at the first that fails, as the prompt tells an agent to.
 //   node quick-agent.mjs <ws>/prompt.txt

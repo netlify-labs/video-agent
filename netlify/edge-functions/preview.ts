@@ -5,9 +5,9 @@
 // files (the narration bus) come from the videos store under the same capability, checked against their digest.
 import type { Config, Context } from '@netlify/edge-functions'
 import { getStore } from '@netlify/blobs'
-import { isReference } from '../../src/lib/bundle-references.ts'
-import { mediaResponse, verifySignedPath, type AccessMirror } from '../../src/lib/media/range.ts'
-import { denyMicrophone } from '../../src/lib/permissions-policy.ts'
+import { isReference } from '../../app/server/lib/bundle-references.ts'
+import { mediaResponse, verifySignedPath, type AccessMirror } from '../../app/server/lib/media/range.ts'
+import { denyMicrophone } from '../../app/server/lib/permissions-policy.ts'
 import {
   BRIDGE_PATH,
   GSAP_PATH,
@@ -18,7 +18,7 @@ import {
   previewContentType,
   previewHeaders,
   previewScope,
-} from '../../src/lib/preview.ts'
+} from '../../app/server/lib/preview.ts'
 
 const plain = (status: number, text: string) =>
   new Response(text, { status, headers: { 'cache-control': 'no-store', 'content-type': 'text/plain' } })

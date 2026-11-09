@@ -1,8 +1,8 @@
 import { handle } from '@hono/netlify'
 import type { Config } from '@netlify/functions'
-import { createApp, type NetlifyContext } from '../../src/app.js'
-import { prodDeps } from '../../src/adapters/prod.js'
-import { contextMeta } from '../../src/generated/context.js'
+import { createApp, type NetlifyContext } from '../../app/server/app.js'
+import { prodDeps } from '../../app/server/adapters/prod.js'
+import { contextMeta } from '../../app/server/generated/context.js'
 
 const app = createApp(prodDeps(), {
   isLive: (ctx: NetlifyContext | undefined) =>
@@ -12,7 +12,7 @@ const app = createApp(prodDeps(), {
 
 export default handle(app)
 
-// The OAuth paths answer only when MCP OAuth is configured, and /auth/* only with Sign in with Netlify (src/auth);
+// The OAuth paths answer only when MCP OAuth is configured, and /auth/* only with Sign in with Netlify (app/server/auth);
 // otherwise they 404.
 export const config: Config = {
   path: [

@@ -8,7 +8,7 @@
 //   spike/k2-none (no context/look/), spike/k2-clean, spike/k2-kinetic. Nothing here starts a run.
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { buildPrompt } from '../../../src/domain/prompt.js'
+import { buildPrompt } from '../../../app/server/domain/prompt.js'
 
 const root = new URL('../../..', import.meta.url).pathname
 const outDir = join(root, 'docs', 'spikes', 'out', 'k2', 'prompts')

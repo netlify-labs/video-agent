@@ -1,17 +1,17 @@
-// Writes skills/netlify-video/references/cli.md from the CLI's catalog (cli-and-sdk plan §8; bead va-p1th.7.5), so
+// Writes app/skills/netlify-video/references/cli.md from the CLI's catalog (cli-and-sdk plan §8; bead va-p1th.7.5), so
 // the skill never lists a command, flag or exit code the CLI doesn't have. Only ready commands are listed; the
 // sections for `local` and `brief` appear once those commands are ready. {{SITE_URL}} is filled in when the skill is
 // packaged.
 //
 //   npx tsx scripts/gen-skill-cli.ts          # writes the file
-//   npx tsx scripts/gen-skill-cli.ts --check  # exits 1 if it's stale (test/skill-cli.test.ts runs the same check)
+//   npx tsx scripts/gen-skill-cli.ts --check  # exits 1 if it's stale (app/test/skill-cli.test.ts runs the same check)
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { format, resolveConfig } from 'prettier'
 import { COMMANDS, GLOBAL_FLAGS, type CommandSpec } from '../packages/cli/src/catalog.js'
 import { EXIT, EXIT_MEANINGS } from '../packages/cli/src/exit.js'
 
-export const CLI_MD = join(import.meta.dirname, '../skills/netlify-video/references/cli.md')
+export const CLI_MD = join(import.meta.dirname, '../app/skills/netlify-video/references/cli.md')
 
 const usage = (c: CommandSpec) =>
   [

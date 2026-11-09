@@ -4,8 +4,8 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { parse, type DefaultTreeAdapterMap } from 'parse5'
-import { validate, type Summary } from '../../src/lib/contract.js'
-import { sha256Hex as sha256 } from '../../src/lib/crypto.js'
+import { validate, type Summary } from '../../app/server/lib/contract.js'
+import { sha256Hex as sha256 } from '../../app/server/lib/crypto.js'
 import {
   CreditsSchema,
   isPreviewFile,
@@ -17,11 +17,11 @@ import {
   REQUIRED_LOOK_SECTIONS,
   RegistryLockSchema,
   type LookJson,
-} from '../../src/lib/looks.js'
-import { classify } from '../../src/lib/media/classify.js'
-import { sniffAudio } from '../../src/lib/media/audio.js'
-import { sniffPreview } from '../../src/lib/media/previews.js'
-import { sanitizeSvg, SvgError } from '../../src/lib/media/svg.js'
+} from '../../app/server/lib/looks.js'
+import { classify } from '../../app/server/lib/media/classify.js'
+import { sniffAudio } from '../../app/server/lib/media/audio.js'
+import { sniffPreview } from '../../app/server/lib/media/previews.js'
+import { sanitizeSvg, SvgError } from '../../app/server/lib/media/svg.js'
 
 type Element = DefaultTreeAdapterMap['element']
 type Node = DefaultTreeAdapterMap['node']
@@ -29,7 +29,7 @@ type Node = DefaultTreeAdapterMap['node']
 export interface StaticCheckOptions {
   /** The pinned HyperFrames version (package.json netlifyAgent.hyperframes.version); the lock's tag must be v<this>. */
   hyperframesVersion: string
-  /** looks/_template: checked like a look, but preview.mp4 and poster.webp are optional. */
+  /** app/looks/_template: checked like a look, but preview.mp4 and poster.webp are optional. */
   template?: boolean
 }
 
@@ -350,7 +350,7 @@ export function checkLookStatic(dir: string, opts: StaticCheckOptions): string[]
     ['poster.webp', 'poster-480.webp', LOOK_LIMITS.posterBytes],
   ] as const) {
     if (!files.includes(name)) {
-      if (!opts.template) p.push(`${name} is missing (see looks/README.md for the preview commands)`)
+      if (!opts.template) p.push(`${name} is missing (see app/looks/README.md for the preview commands)`)
       continue
     }
     const b = new Uint8Array(readFileSync(join(dir, name)))

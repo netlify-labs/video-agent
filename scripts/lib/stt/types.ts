@@ -1,8 +1,8 @@
 // Speech-to-text providers for recorded narration captions (plan 2026-11-02 §6.6, docs/spikes.md S11). Each one turns
 // a 16 kHz mono WAV into word timings in seconds on the composition's clock (the bus starts at 0), in the video's
-// language (src/lib/language.ts).
-import type { Language } from '../../../src/lib/language.js'
-import type { FrozenTranscription } from '../../../src/lib/run-manifest.js'
+// language (app/server/lib/language.ts).
+import type { Language } from '../../../app/server/lib/language.js'
+import type { FrozenTranscription } from '../../../app/server/lib/run-manifest.js'
 
 export interface SttWord {
   text: string

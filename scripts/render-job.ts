@@ -8,18 +8,18 @@
 // file: --callback (file://<ws>/.render/<attempt>/done) writes the manifest to done.json there instead of POSTing it.
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import type { MasteringReport, NarrationOutput, NarrationReport } from '../src/domain/types.js'
-import { bundleManifest, compositionFiles, manifestHash } from '../src/lib/bundle-manifest.js'
-import { NARRATION_SRC } from '../src/lib/contract.js'
-import { groupWords, transcriptText } from '../src/lib/narration-captions.js'
-import { checkNarration } from '../src/lib/narration-guard.js'
-import { checkNarrationKept, checkNarrationModified } from '../src/lib/narration-modified.js'
-import { checkRevoiced, FROZEN_DIR } from '../src/lib/revoice.js'
-import { sniff } from '../src/lib/media/mp4.js'
-import type { PreviewFile } from '../src/lib/media/previews.js'
-import type { RunManifest } from '../src/lib/run-manifest.js'
+import type { MasteringReport, NarrationOutput, NarrationReport } from '../app/server/domain/types.js'
+import { bundleManifest, compositionFiles, manifestHash } from '../app/server/lib/bundle-manifest.js'
+import { NARRATION_SRC } from '../app/server/lib/contract.js'
+import { groupWords, transcriptText } from '../app/server/lib/narration-captions.js'
+import { checkNarration } from '../app/server/lib/narration-guard.js'
+import { checkNarrationKept, checkNarrationModified } from '../app/server/lib/narration-modified.js'
+import { checkRevoiced, FROZEN_DIR } from '../app/server/lib/revoice.js'
+import { sniff } from '../app/server/lib/media/mp4.js'
+import type { PreviewFile } from '../app/server/lib/media/previews.js'
+import type { RunManifest } from '../app/server/lib/run-manifest.js'
 import { checkOutputPrivacy } from './lib/recording-privacy.js'
-import type { NarrationOp } from '../src/lib/timeline.js'
+import type { NarrationOp } from '../app/server/lib/timeline.js'
 import { localFolder, postCheckpoint, writeAtomic } from './checkpoint.js'
 import { brokeredRender } from './lib/render-broker.js'
 import {
@@ -139,7 +139,7 @@ async function main() {
       privacyCheck = { patterns: m.recording.privacy === true, strings: m.recording.hideStrings ?? [] }
     if (m.attemptId === attempt && m.kind === 'render_unchanged' && m.bundle?.narration) {
       // Recorded narration (after any re-voice): only the files narration-run.ts's steps write may differ, each
-      // exactly as those steps write it from the frozen files and the receipt (src/lib/narration-guard.ts).
+      // exactly as those steps write it from the frozen files and the receipt (app/server/lib/narration-guard.ts).
       const receipt = readNarrationReceipt(repoRoot)
       const problems = checkNarration(
         join(repoRoot, FROZEN_DIR),
@@ -158,7 +158,7 @@ async function main() {
       })
     } else if (m.attemptId === attempt && m.kind === 'author_from_frozen') {
       // A fit to recorded narration: the agent retimed the visuals, but the narration must sound exactly as
-      // scripts/narration.ts mixed it (src/lib/narration-modified.ts), from the frozen draft and the receipt.
+      // scripts/narration.ts mixed it (app/server/lib/narration-modified.ts), from the frozen draft and the receipt.
       const receipt = readNarrationReceipt(repoRoot)
       const problems = checkNarrationModified(
         join(repoRoot, FROZEN_DIR),

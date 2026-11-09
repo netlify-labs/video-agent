@@ -1,5 +1,5 @@
 // Privacy mode on the runner (screen-recording plan §5.3, "Privacy mode"): OCR of sampled frames finds what the person
-// asked to hide (their hide strings) and, in privacy mode, the recommended patterns (src/lib/privacy-patterns.ts). Each
+// asked to hide (their hide strings) and, in privacy mode, the recommended patterns (app/server/lib/privacy-patterns.ts). Each
 // thing found becomes a candidate hidden area: keyframed boxes over the frames it was read in, a time span out to the
 // frames either side where it wasn't (hiding a little too long is safe; too short shows it), and a crop for the agent
 // to confirm. Runs only when privacy mode or hide strings are set, and
@@ -9,7 +9,7 @@ import { spawnSync } from 'node:child_process'
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
-import { findPrivate, PRIVACY_LABELS, type PrivacyKind } from '../../src/lib/privacy-patterns.js'
+import { findPrivate, PRIVACY_LABELS, type PrivacyKind } from '../../app/server/lib/privacy-patterns.js'
 import type { Analysis } from './recording-analyze.js'
 import { log } from './run-tools.js'
 

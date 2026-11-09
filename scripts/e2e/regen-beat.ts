@@ -28,8 +28,8 @@ import { execFileSync, spawnSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { attr, load, read, walk, type Caption, type Summary } from '../../src/lib/contract.js'
-import { readTarGz } from '../../src/lib/tar.js'
+import { attr, load, read, walk, type Caption, type Summary } from '../../app/server/lib/contract.js'
+import { readTarGz } from '../../app/server/lib/tar.js'
 import { key, log } from './lib.js'
 import { sampleFrame, ssim, tileSsim } from './lib/ssim.js'
 import { call, check, download, dry, dryRun, GateError, sleep } from './narration-lib.js'
@@ -98,7 +98,7 @@ const ms = (n: number | undefined) => (n === undefined ? null : Math.round(n * 1
 
 if (process.argv.includes('--selftest')) {
   const dir = mkdtempSync(join(tmpdir(), 'va-regen-self-'))
-  const fx = (f: string) => join(process.cwd(), 'test/fixtures', f)
+  const fx = (f: string) => join(process.cwd(), 'app/test/fixtures', f)
   const same = sceneDrift(fx('a169.mp4'), 0, fx('a169.mp4'), 0, 2, dir)
   check(same.frame > 0.999 && same.tile > 0.999, 'a video against itself has no drift', same)
   const pic = (out: string, filter?: string) =>

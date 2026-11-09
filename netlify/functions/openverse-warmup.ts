@@ -1,8 +1,8 @@
 // Scheduled daily on the published production deploy: queue the warm-up that refreshes common and popular music
 // searches in openverse-background, so Find music answers them at once. Quick: it only plans and dispatches.
 import type { Config } from '@netlify/functions'
-import { prodDeps } from '../../src/adapters/prod.js'
-import { startWarmup } from '../../src/domain/openverse-jobs.js'
+import { prodDeps } from '../../app/server/adapters/prod.js'
+import { startWarmup } from '../../app/server/domain/openverse-jobs.js'
 
 export default async () => {
   const deps = prodDeps()

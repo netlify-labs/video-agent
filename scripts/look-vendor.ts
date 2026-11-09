@@ -1,7 +1,7 @@
 // Vendors a look's HyperFrames registry items (plan 2026-11-04-looks §4.5).
 //   npm run look:vendor <id>
-// For each name in looks/<id>/look.json `registry`, runs the pinned `hyperframes add <name> --json` in a temp project
-// with video/hyperframes.json (the registry at the CLI's tag), copies what it wrote into looks/<id>/registry/<name>/
+// For each name in app/looks/<id>/look.json `registry`, runs the pinned `hyperframes add <name> --json` in a temp project
+// with video/hyperframes.json (the registry at the CLI's tag), copies what it wrote into app/looks/<id>/registry/<name>/
 // and writes registry/registry.lock.json (type, upstream path, tag, licence, author, sha256 of each file). Licences
 // come from scripts/lib/registry-licences.json (docs/spikes.md K4); an item not listed there is refused. Re-running
 // prints what changed, so a moved upstream shows up as a diff to review.
@@ -19,8 +19,8 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative, sep } from 'node:path'
-import { sha256Hex as sha256 } from '../src/lib/crypto.js'
-import { LookJsonSchema, type RegistryLock } from '../src/lib/looks.js'
+import { sha256Hex as sha256 } from '../app/server/lib/crypto.js'
+import { LookJsonSchema, type RegistryLock } from '../app/server/lib/looks.js'
 import { pinnedHyperframesVersion, repoRoot } from './lib/run-tools.js'
 
 export class LookVendorError extends Error {}
@@ -150,9 +150,9 @@ export function vendorLook(lookDir: string, opts: VendorOptions): string[] {
 if (process.argv[1]?.endsWith('look-vendor.ts')) {
   const id = process.argv[2] ?? ''
   const hyperframesVersion = pinnedHyperframesVersion()
-  const dir = join(repoRoot, 'looks', id)
+  const dir = join(repoRoot, 'app', 'looks', id)
   if (!id || !existsSync(join(dir, 'look.json'))) {
-    console.error(`Usage: npm run look:vendor <id> (looks/${id}/look.json not found)`)
+    console.error(`Usage: npm run look:vendor <id> (app/looks/${id}/look.json not found)`)
     process.exit(1)
   }
   const started = Date.now()
@@ -162,7 +162,7 @@ if (process.argv[1]?.endsWith('look-vendor.ts')) {
     console.error(
       JSON.stringify({ step: 'look-vendor', look: id, changes: changes.length, ms: Date.now() - started }),
     )
-    console.log(changes.length ? `Vendored looks/${id}/registry: review the changes above.` : 'No changes.')
+    console.log(changes.length ? `Vendored app/looks/${id}/registry: review the changes above.` : 'No changes.')
   } catch (e) {
     if (!(e instanceof LookVendorError)) throw e
     console.error(e.message)

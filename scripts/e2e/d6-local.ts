@@ -9,7 +9,7 @@ import { spawnSync } from 'node:child_process'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { runRecord } from '../../packages/cli/src/record/capture.js'
-import { parseTrace } from '../../src/lib/recording-trace.js'
+import { parseTrace } from '../../app/server/lib/recording-trace.js'
 import { log, parseArgs, StepError } from '../lib/run-tools.js'
 import { demo, serveMock } from './demo-local.js'
 

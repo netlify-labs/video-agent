@@ -2,17 +2,17 @@
 // so the agent never writes keyframe JSON by hand, plus the data files it loads:
 // - assets/recording/<step>.cursor.js: the cursor path (scripts/lib/recording-plan.ts cursorPath) simplified at 0.5 px
 //   (time-aware Ramer-Douglas-Peucker: a point is kept unless it sits within 0.5 px of where the cursor would be at its
-//   time on the line between its neighbours, so pauses survive), in the one-statement form of src/lib/recording.ts;
+//   time on the line between its neighbours, so pauses survive), in the one-statement form of app/server/lib/recording.ts;
 // - assets/recording/redact.js: the plan's locked hidden areas, whole (rewritten on every emit, identical each time);
 // - assets/recording/<step>.hold.jpg when the scene is slower than 0.5x: the frame at `out`, JPEG q85, at most 2560 wide.
 // `holdsOnly` writes just the stills index.html's held slots name and lack (render-unchanged runs); it never changes
-// index.html. The slot follows the contract (src/lib/contract.ts recording rules; spike D1: data-start="0", no
+// index.html. The slot follows the contract (app/server/lib/contract.ts recording rules; spike D1: data-start="0", no
 // basis attribute, in and out snapped to frames).
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { load, read, recHoldSrc } from '../../src/lib/contract.js'
-import { fmt, frames } from '../../src/lib/contract-core.js'
+import { load, read, recHoldSrc } from '../../app/server/lib/contract.js'
+import { fmt, frames } from '../../app/server/lib/contract-core.js'
 import {
   cursorScript,
   cursorSrc,
@@ -25,8 +25,8 @@ import {
   type ClickKey,
   type LockedEntry,
   type PlanV1,
-} from '../../src/lib/recording.js'
-import type { Trace } from '../../src/lib/recording-trace.js'
+} from '../../app/server/lib/recording.js'
+import type { Trace } from '../../app/server/lib/recording-trace.js'
 import type { Analysis } from './recording-analyze.js'
 import { cursorPath, stableJson } from './recording-plan.js'
 import { log, StepError } from './run-tools.js'

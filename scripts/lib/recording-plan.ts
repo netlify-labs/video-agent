@@ -28,8 +28,8 @@ import {
   type PlanRedact,
   type PlanStep,
   type PlanV1,
-} from '../../src/lib/recording.js'
-import { scrubName, type RedactEntry, type Trace } from '../../src/lib/recording-trace.js'
+} from '../../app/server/lib/recording.js'
+import { scrubName, type RedactEntry, type Trace } from '../../app/server/lib/recording-trace.js'
 import type { Analysis } from './recording-analyze.js'
 
 /** The person's setup from the manifest (§5.5): boxes are one-key redact entries; trim is [in, out]. */

@@ -18,7 +18,7 @@ export function packageBuildOptions(root: string, node: boolean): BuildOptions {
   }
 }
 
-/** The settings that write the player to one file, e.g. ui/dist/player.js. */
+/** The settings that write the player to one file, e.g. app/web/dist/player.js. */
 export function playerBuildOptions(repoRoot: string, outfile: string): BuildOptions {
   return { ...packageBuildOptions(join(repoRoot, 'packages/player'), false), outfile }
 }

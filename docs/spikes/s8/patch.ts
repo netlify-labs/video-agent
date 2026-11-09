@@ -2,7 +2,7 @@
 //   npx tsx docs/spikes/s8/patch.ts
 import { cpSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { applyEdits, type Summary } from '../../../src/lib/contract.js'
+import { applyEdits, type Summary } from '../../../app/server/lib/contract.js'
 
 const here = new URL('.', import.meta.url).pathname
 const out = join(here, 'variants', 'patched')

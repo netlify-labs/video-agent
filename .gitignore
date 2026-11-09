@@ -2,7 +2,7 @@ node_modules/
 dist/
 # The GitHub Action runs from its committed bundle (github-action plan §3.1).
 !packages/action/dist/
-ui/dist/
+app/web/dist/
 .netlify/
 .env
 .env.*
@@ -14,7 +14,7 @@ coverage/
 *.log
 docs/spikes/out/
 docs/spikes/out-*.log
-ui/dist-mock/
+app/web/dist-mock/
 .taste-skill/
 test-results/
 playwright-report/
@@ -35,4 +35,4 @@ docs/spikes/s10/out/
 looks-build/
 context/look/
 context/recording/
-engines/remotion/template/node_modules/
+app/engines/remotion/node_modules/

@@ -400,7 +400,7 @@ export {};
 import type { components } from '../generated/schema.js';
 import type { Exchange } from '../http.js';
 type Media = components['schemas']['Media'];
-/** The server's single-upload limit and session part size (src/domain/media-uploads.ts PART_SIZE). */
+/** The server's single-upload limit and session part size (app/server/domain/media-uploads.ts PART_SIZE). */
 export declare const SINGLE_UPLOAD_MAX: number;
 export interface UploadProgress {
     /** Bytes the server has acknowledged. */

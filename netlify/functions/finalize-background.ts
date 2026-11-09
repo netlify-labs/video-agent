@@ -1,9 +1,9 @@
 // Background function (15-minute limit): verify and store one attempt's files.
 import type { Context } from '@netlify/functions'
-import { prodDeps } from '../../src/adapters/prod.js'
-import { finalizeAttempt } from '../../src/domain/finalize.js'
-import { getSettings } from '../../src/domain/settings.js'
-import { hmacHex, safeEqual } from '../../src/lib/crypto.js'
+import { prodDeps } from '../../app/server/adapters/prod.js'
+import { finalizeAttempt } from '../../app/server/domain/finalize.js'
+import { getSettings } from '../../app/server/domain/settings.js'
+import { hmacHex, safeEqual } from '../../app/server/lib/crypto.js'
 
 export default async (req: Request, context: Context) => {
   const deps = prodDeps()

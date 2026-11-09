@@ -7,9 +7,9 @@ import { hyperframesEngine, type Exec } from './hyperframes.js'
 import { engineReport, runEngineFor, runEngineIdFromManifest } from './index.js'
 
 const fx = (f: string) =>
-  readFileSync(new URL(`../../../test/fixtures/contract1/${f}`, import.meta.url), 'utf8')
+  readFileSync(new URL(`../../../app/test/fixtures/contract1/${f}`, import.meta.url), 'utf8')
 const renderOutput = readFileSync(
-  new URL('../../../test/fixtures/hyperframes-render.txt', import.meta.url),
+  new URL('../../../app/test/fixtures/hyperframes-render.txt', import.meta.url),
   'utf8',
 )
 

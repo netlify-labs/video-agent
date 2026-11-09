@@ -2,11 +2,11 @@
 // the GIF and release assets, and /video redo of one scene.
 import { readFileSync } from 'node:fs'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { registerScopeCheck, resetScopeChecks } from '../../../src/domain/engines.js'
-import { load, save } from '../../../src/lib/contract.js'
-import { hyperframesScopeCheck } from '../../../src/lib/scope.js'
-import { readyVideo } from '../../../test/helpers.js'
-import { tarGz } from '../../../test/tarball.js'
+import { registerScopeCheck, resetScopeChecks } from '../../../app/server/domain/engines.js'
+import { load, save } from '../../../app/server/lib/contract.js'
+import { hyperframesScopeCheck } from '../../../app/server/lib/scope.js'
+import { readyVideo } from '../../../app/test/helpers.js'
+import { tarGz } from '../../../app/test/tarball.js'
 import { events, expectLog, makeEnv, runAction, type TestEnv, PHASE3_FEATURES } from './harness/index.js'
 
 async function withPr(n = 123) {
@@ -181,7 +181,7 @@ describe('/video redo', () => {
   beforeEach(() => registerScopeCheck('hyperframes', hyperframesScopeCheck))
   afterEach(() => resetScopeChecks())
   const music = save(
-    load(readFileSync(new URL('../../../test/fixtures/contract1-music/index.html', import.meta.url), 'utf8')),
+    load(readFileSync(new URL('../../../app/test/fixtures/contract1-music/index.html', import.meta.url), 'utf8')),
   )
 
   it('redoes one scene by label or id; unknown scenes and a missing feature answer 😕', async () => {

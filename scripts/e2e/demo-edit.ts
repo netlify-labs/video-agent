@@ -2,7 +2,7 @@
 // production, about 34 credits. CREDIT_CEILING (default 60) refuses to start when the projection is over it.
 //
 //   npx tsx scripts/e2e/demo-edit.ts --dry   # the same kinds of ops on the recording fixture through the real patcher
-//                                           # (src/lib/contract.ts applyEdits), then the env, steps and credits
+//                                           # (app/server/lib/contract.ts applyEdits), then the env, steps and credits
 //   VIDEO_AGENT_URL=https://<site> VIDEO_AGENT_KEY=nva_… DEMO_VIDEO=vid_… npx tsx scripts/e2e/demo-edit.ts
 //
 // On the demo's latest ready version: open a draft, then on its first recording scene set a new camera (two keys), a
@@ -12,8 +12,8 @@
 // the editor's area; credits (usage.totalCreditsCost).
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { applyEdits, type Summary } from '../../src/lib/contract.js'
-import { RATE_RANGE } from '../../src/lib/recording.js'
+import { applyEdits, type Summary } from '../../app/server/lib/contract.js'
+import { RATE_RANGE } from '../../app/server/lib/recording.js'
 import { api, base, fail, key, log, started } from './lib.js'
 import { dryRun } from './narration-lib.js'
 
@@ -76,7 +76,7 @@ function opsFor(b: Beat): unknown[] {
 
 if (dry) {
   // The same ops through the real patcher, on the recording fixture: a refused op fails here, not on production.
-  const fx = join(import.meta.dirname, '..', '..', 'test', 'fixtures', 'contract1-recording')
+  const fx = join(import.meta.dirname, '..', '..', 'app', 'test', 'fixtures', 'contract1-recording')
   const html = readFileSync(join(fx, 'index.html'), 'utf8')
   const summary = JSON.parse(readFileSync(join(fx, 'summary.json'), 'utf8')) as Summary
   const before = applyEdits(html, summary, []).composition.beats.find((b) => b.recording) as Beat | undefined

@@ -22,8 +22,8 @@ import {
   save,
   type Composition,
   type Summary,
-} from '../src/lib/contract.js'
-import { revoiceLines } from '../src/lib/revoice.js'
+} from '../app/server/lib/contract.js'
+import { revoiceLines } from '../app/server/lib/revoice.js'
 import {
   DEFAULT_LEAD,
   FPS_TOLERANCE,
@@ -46,7 +46,7 @@ import {
   type VoiceFile,
   type VoiceProvider,
   type VoiceScript,
-} from '../src/lib/voice.js'
+} from '../app/server/lib/voice.js'
 import { pickProvider, toPcm as ffmpegPcm } from './lib/voice-providers.js'
 import { StepError, exitOnError, log, parseArgs, repoRoot } from './lib/run-tools.js'
 

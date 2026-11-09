@@ -12,7 +12,7 @@
 /** This package's name, as published. */
 export const PACKAGE_NAME = 'netlify-video-agent-player'
 
-/** A CC BY credit, as /v/{slug}.json lists it (src/lib/credit-html.ts on the server). */
+/** A CC BY credit, as /v/{slug}.json lists it (app/server/lib/credit-html.ts on the server). */
 export interface Credit {
   role: string
   title: string

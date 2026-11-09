@@ -1,9 +1,9 @@
 // Background function (15-minute limit): drives one destination publication (publish destinations §2.4).
 import type { Context } from '@netlify/functions'
-import { prodDeps } from '../../src/adapters/prod.js'
-import { runPublication } from '../../src/domain/destinations/run.js'
-import { getSettings } from '../../src/domain/settings.js'
-import { hmacHex, safeEqual } from '../../src/lib/crypto.js'
+import { prodDeps } from '../../app/server/adapters/prod.js'
+import { runPublication } from '../../app/server/domain/destinations/run.js'
+import { getSettings } from '../../app/server/domain/settings.js'
+import { hmacHex, safeEqual } from '../../app/server/lib/crypto.js'
 
 export default async (req: Request, context: Context) => {
   const deps = prodDeps()

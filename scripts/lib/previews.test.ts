@@ -4,12 +4,12 @@ import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:f
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { isLqip, sniffPreview } from '../../src/lib/media/previews.js'
+import { isLqip, sniffPreview } from '../../app/server/lib/media/previews.js'
 import { encoders, makePreviews } from './previews.js'
 import { which } from './run-tools.js'
 
 const ffmpeg = process.env.FFMPEG ?? 'ffmpeg'
-const fixture = (name: string) => new URL(`../../test/fixtures/${name}`, import.meta.url).pathname
+const fixture = (name: string) => new URL(`../../app/test/fixtures/${name}`, import.meta.url).pathname
 const dirs: string[] = []
 const tmp = () => {
   const d = mkdtempSync(join(tmpdir(), 'previews-'))

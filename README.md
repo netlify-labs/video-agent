@@ -190,19 +190,19 @@ Looks are instructions to the agent, like `context/`, so only people who can cha
 ## Looks
 
 <p>
-  <a href="looks/clean/LOOK.md"><img src="looks/clean/poster.webp" alt="Clean product" width="260"></a>
-  <a href="looks/editorial/LOOK.md"><img src="looks/editorial/poster.webp" alt="Editorial" width="260"></a>
-  <a href="looks/data-story/LOOK.md"><img src="looks/data-story/poster.webp" alt="Data story" width="260"></a>
-  <a href="looks/bold-blocks/LOOK.md"><img src="looks/bold-blocks/poster.webp" alt="Bold blocks" width="260"></a>
-  <a href="looks/retro-crt/LOOK.md"><img src="looks/retro-crt/poster.webp" alt="Retro CRT" width="260"></a>
-  <a href="looks/whiteboard/LOOK.md"><img src="looks/whiteboard/poster.webp" alt="Whiteboard" width="260"></a>
-  <a href="looks/kinetic/LOOK.md"><img src="looks/kinetic/poster.webp" alt="Kinetic type" width="260"></a>
-  <a href="looks/terminal/LOOK.md"><img src="looks/terminal/poster.webp" alt="Terminal" width="260"></a>
+  <a href="app/looks/clean/LOOK.md"><img src="app/looks/clean/poster.webp" alt="Clean product" width="260"></a>
+  <a href="app/looks/editorial/LOOK.md"><img src="app/looks/editorial/poster.webp" alt="Editorial" width="260"></a>
+  <a href="app/looks/data-story/LOOK.md"><img src="app/looks/data-story/poster.webp" alt="Data story" width="260"></a>
+  <a href="app/looks/bold-blocks/LOOK.md"><img src="app/looks/bold-blocks/poster.webp" alt="Bold blocks" width="260"></a>
+  <a href="app/looks/retro-crt/LOOK.md"><img src="app/looks/retro-crt/poster.webp" alt="Retro CRT" width="260"></a>
+  <a href="app/looks/whiteboard/LOOK.md"><img src="app/looks/whiteboard/poster.webp" alt="Whiteboard" width="260"></a>
+  <a href="app/looks/kinetic/LOOK.md"><img src="app/looks/kinetic/poster.webp" alt="Kinetic type" width="260"></a>
+  <a href="app/looks/terminal/LOOK.md"><img src="app/looks/terminal/poster.webp" alt="Terminal" width="260"></a>
 </p>
 
 A look is a style for a video: its type, colour roles, motion and layout rules. People pick one on New video, restyle
 a video into another, or leave it to the admin default (none unless an admin picks one). Every look in a deployment,
-with its preview, is under **Docs → Looks** (`/docs/looks`). To add one, see [looks/README.md](looks/README.md).
+with its preview, is under **Docs → Looks** (`/docs/looks`). To add one, see [app/looks/README.md](app/looks/README.md).
 
 ## Remix a video
 
@@ -530,7 +530,7 @@ await va.files.download(await va.videos.wait(video.id), { file: 'video', to: './
 ```
 
 Reference: the app's **API docs → REST API** page (`/docs/api`), built from the OpenAPI spec at `/api/openapi.json` (committed as
-[`ui/src/api/openapi.json`](ui/src/api/openapi.json)). A standalone copy is at `/api/docs`. With plain HTTP:
+[`app/web/src/api/openapi.json`](app/web/src/api/openapi.json)). A standalone copy is at `/api/docs`. With plain HTTP:
 
 ```sh
 curl -X POST https://<site>/api/v1/videos -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
@@ -581,7 +581,7 @@ In clients that show [MCP Apps](https://github.com/modelcontextprotocol/ext-apps
 `revise_video` and `show_video` also show a **video card** in the chat. It follows the run with `get_video` and plays
 the video when it's ready, with Download, Open in Video Agent, and full screen or picture-in-picture where the
 client offers them. Other clients get the same JSON, and every result in progress tells the agent to keep checking
-until the video is done. The card is `ui/src/mcp-app/video-card.ts`, bundled into `src/generated/video-card.ts` by
+until the video is done. The card is `app/web/src/mcp-app/video-card.ts`, bundled into `app/server/generated/video-card.ts` by
 the build.
 
 - Server URL: `https://<your-site>/mcp` (Streamable HTTP). Authenticate with an API key: `Authorization: Bearer nva_…`,
@@ -591,7 +591,7 @@ the build.
 - Stdio-only clients: `npx -y mcp-remote https://<your-site>/mcp --header "Authorization: Bearer nva_…"`
 
 The web app's **API docs → MCP for AI tools** page (`/docs/mcp`) has these instructions with your site's URL filled in,
-and the tool list from [`src/mcp-catalog.ts`](src/mcp-catalog.ts), which a test keeps in step with the server.
+and the tool list from [`app/server/mcp-catalog.ts`](app/server/mcp-catalog.ts), which a test keeps in step with the server.
 
 ### WebMCP: AI agents in the browser
 
@@ -615,7 +615,7 @@ WebMCP off on the Admin page (on by default); browsers without it see nothing.
 Each deployment serves a `netlify-video` [Agent Skill](https://agentskills.io) that teaches coding agents (Claude
 Code, Codex, Cursor, Gemini CLI) the good path: connecting, plan → create → follow → publish, asking before spending
 a run, reusing library media, and recipes for a pull request → demo video, release notes → changelog video, a
-15-second vertical cut, localising captions and a review loop. The source is `skills/netlify-video/`; the build
+15-second vertical cut, localising captions and a review loop. The source is `app/skills/netlify-video/`; the build
 packages it as `https://<your-site>/skills/netlify-video.zip` (listed with its sha256 in `/skills/index.json`) with
 your site's URL filled in, so forks serve their own. The zip is deterministic: the same sources and URL give the same
 bytes.
@@ -701,33 +701,36 @@ in as before, while accounts created by Sign in with Netlify can only use MCP OA
 npm ci
 npm test             # unit and integration tests (in-memory store and a real Postgres via PGlite)
 npm run typecheck && npm run lint
-npm run openapi:gen  # after changing routes; CI fails if ui/src/api/openapi.json or the UI's types are stale
-npm run db:generate  # after changing src/store/schema.ts
+npm run openapi:gen  # after changing routes; CI fails if app/web/src/api/openapi.json or the UI's types are stale
+npm run db:generate  # after changing app/server/store/schema.ts
 npx netlify dev      # local app (set ALLOW_NON_PRODUCTION=true to serve the API outside production)
 ```
 
-The code is TypeScript throughout: Hono + zod-openapi API (`src/app.ts`), domain logic in `src/domain`, ports in
-`src/deps.ts` with production adapters in `src/adapters` and fakes in `test/fakes.ts`, and a React + Mantine app
-in `ui/`. The design and its reasoning are in [`docs/plans/`](docs/plans/), starting with the
+The code is TypeScript throughout: Hono + zod-openapi API (`app/server/app.ts`), domain logic in `app/server/domain`, ports in
+`app/server/deps.ts` with production adapters in `app/server/adapters` and fakes in `app/test/fakes.ts`, and a React + Mantine app
+in `app/web/`. The design and its reasoning are in [`docs/plans/`](docs/plans/), starting with the
 [v1 spec](docs/plans/2026-10-30-video-agent-spec.md); measurements behind the defaults are in
 [`docs/spikes.md`](docs/spikes.md).
 
 ### Repository layout
 
-The root keeps only what Netlify, the Deploy button and agent runs look for by path.
+The root keeps only what Netlify, the Deploy button and agent runs look for by path, plus `app/` (the service) and
+`packages/` (what's published).
 
-| Path                           | What it is                                                                                             |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------ |
-| `src/`                         | The service: API, MCP server, domain logic, adapters, and the database schema (`src/store/schema.ts`). |
-| `ui/`                          | The React web app, its Playwright specs (`ui/e2e/`) and public static pages (`ui/static/`).            |
-| `netlify/`                     | Functions, edge functions and database migrations (paths Netlify reads).                               |
-| `scripts/`                     | Build, setup and look tooling, and the scripts agent runs call (`prepare-run.ts`, `render-job.ts`, …). |
-| `video/`, `context/`, `looks/` | What a run works with: the HyperFrames project, your brand, and the look catalog.                      |
-| `packages/`                    | The published CLI, SDK and player, and the GitHub Action.                                              |
-| `skills/`                      | The agent skill each deployment serves at `/skills/`.                                                  |
-| `test/`                        | Unit and integration tests for `src/` and `scripts/`.                                                  |
-| `docs/`                        | Plans, spike results (`docs/spikes.md`) and the spike harnesses behind them (`docs/spikes/`).          |
-| `examples/`                    | Standalone examples, such as a publish-destination receiver.                                           |
+| Path           | What it is                                                                                                     |
+| -------------- | -------------------------------------------------------------------------------------------------------------- |
+| `app/server/`  | The service: API, MCP server, domain logic, adapters, and the database schema (`app/server/store/schema.ts`).  |
+| `app/web/`     | The React web app, its Playwright specs (`app/web/e2e/`) and public static pages (`app/web/static/`).          |
+| `app/test/`    | Unit and integration tests for `app/server/` and `scripts/`.                                                   |
+| `app/looks/`   | The look catalog: each look's rules, example composition and preview.                                          |
+| `app/skills/`  | The agent skill each deployment serves at `/skills/`.                                                          |
+| `app/engines/` | The Remotion project template, copied into `video/` for Remotion runs.                                         |
+| `context/`     | Your brand and product facts. Every run reads this folder.                                                     |
+| `video/`       | The HyperFrames project each run starts from and renders.                                                      |
+| `scripts/`     | Build, setup and look tooling, and the scripts agent runs call (`prepare-run.ts`, `render-job.ts`, …).         |
+| `netlify/`     | Functions, edge functions and database migrations (paths Netlify reads).                                       |
+| `packages/`    | The published CLI, SDK and player, and the GitHub Action.                                                      |
+| `docs/`        | Plans, spike results (`docs/spikes.md`), the spike harnesses (`docs/spikes/`) and examples (`docs/examples/`). |
 
 ### Voice-over live gates
 

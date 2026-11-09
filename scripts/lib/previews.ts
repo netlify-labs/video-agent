@@ -3,7 +3,7 @@
 // that fails, or needs an encoder this ffmpeg lacks, is skipped and the version falls back to poster.jpg/preview.gif.
 import { existsSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { MAX_PREVIEW_BYTES, isLqip, sniffPreview, type PreviewFile } from '../../src/lib/media/previews.js'
+import { MAX_PREVIEW_BYTES, isLqip, sniffPreview, type PreviewFile } from '../../app/server/lib/media/previews.js'
 import { run } from './run-tools.js'
 
 export interface PreviewResult {

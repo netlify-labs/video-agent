@@ -2,8 +2,8 @@
 // of several keys, a gate error that still runs cleanup, a recording upload through an upload session, the MCP call,
 // PCM16 WAV read/write, and the --dry plan printer. JSON-line logging comes from lib.ts.
 import { createHash } from 'node:crypto'
-import { computePeaks, detectSpeech, encodePeaks, VAD_VERSION } from '../../src/lib/peaks.js'
-import { SAMPLE_RATE, type Span } from '../../src/lib/timeline.js'
+import { computePeaks, detectSpeech, encodePeaks, VAD_VERSION } from '../../app/server/lib/peaks.js'
+import { SAMPLE_RATE, type Span } from '../../app/server/lib/timeline.js'
 import { base, log, mcpPost } from './lib.js'
 
 export const dry = process.argv.includes('--dry')

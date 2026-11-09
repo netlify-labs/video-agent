@@ -69,7 +69,7 @@ describe('excludes', () => {
       })
       for (const e of EXCLUDES) expect(existsSync(join(out, 'snap', e.path)), e.path).toBe(false)
       expect(existsSync(join(out, 'snap', 'README.md'))).toBe(true)
-      expect(existsSync(join(out, 'snap', 'src', 'app.ts'))).toBe(true)
+      expect(existsSync(join(out, 'snap', 'app', 'server', 'app.ts'))).toBe(true)
     } finally {
       rmSync(out, { recursive: true, force: true })
     }

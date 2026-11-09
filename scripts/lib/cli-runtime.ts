@@ -1,6 +1,6 @@
 // The CLI's runtime for local mode (cli-and-sdk plan §7; bead va-p1th.5.4), built from this repo at CLI build time so a
 // run-script fix ships to runners and laptops together (docs/spikes.md C1):
-//   <out>/<script>.mjs          each run script the prompts call, bundled with src/lib (shared code in chunks/);
+//   <out>/<script>.mjs          each run script the prompts call, bundled with app/server/lib (shared code in chunks/);
 //                               hyperframes, esbuild and
 //                               css-tree stay packages (css-tree reads its data files relative to itself)
 //   <out>/lib/engines/*.mjs     render engines and <out>/engine.mjs, when the repo has scripts/engine.ts
@@ -26,9 +26,9 @@ import {
 } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { build } from 'esbuild'
-import { lookRunFiles } from '../../src/lib/looks.js'
+import { lookRunFiles } from '../../app/server/lib/looks.js'
 
-/** Every scripts/<name>.ts a run prompt tells the agent to run (test/cli-runtime.test.ts keeps this in step). */
+/** Every scripts/<name>.ts a run prompt tells the agent to run (app/test/cli-runtime.test.ts keeps this in step). */
 export const RUNTIME_SCRIPTS = [
   'prepare-run',
   'render-job',
@@ -102,7 +102,7 @@ export async function buildRuntime(o: {
     outdir: out,
     outExtension: { '.js': '.mjs' },
     bundle: true,
-    // Shared code (src/lib, parse5, …) once, in chunks/, instead of in every script.
+    // Shared code (app/server/lib, parse5, …) once, in chunks/, instead of in every script.
     splitting: true,
     chunkNames: 'chunks/[name]-[hash]',
     platform: 'node',
@@ -153,11 +153,11 @@ export async function buildRuntime(o: {
     copyFileSync(join(repo, 'scripts', 'lib', 'fixture-agent.mjs'), join(out, 'fixture-agent.mjs'))
     mkdirSync(join(out, 'fixture'), { recursive: true })
     for (const f of ['index.html', 'summary.json'])
-      copyFileSync(join(repo, 'test', 'fixtures', 'contract1', f), join(out, 'fixture', f))
+      copyFileSync(join(repo, 'app', 'test', 'fixtures', 'contract1', f), join(out, 'fixture', f))
     // The media contract1 plays (as spike C1 placed them).
     mkdirSync(join(out, 'fixture', 'assets', 'media'), { recursive: true })
     copyFileSync(
-      join(repo, 'test', 'fixtures', 'a169.mp4'),
+      join(repo, 'app', 'test', 'fixtures', 'a169.mp4'),
       join(out, 'fixture', 'assets', 'media', 'med_clip.mp4'),
     )
     writeFileSync(
@@ -168,7 +168,7 @@ export async function buildRuntime(o: {
 
   // The looks, as a run gets them (lookRunFiles: no preview or poster), for `local --look <id>`.
   const looks: string[] = []
-  const looksDir = join(repo, 'looks')
+  const looksDir = join(repo, 'app', 'looks')
   if (existsSync(looksDir))
     for (const id of readdirSync(looksDir).sort()) {
       if (id.startsWith('_') || !existsSync(join(looksDir, id, 'look.json'))) continue
@@ -179,7 +179,7 @@ export async function buildRuntime(o: {
       looks.push(id)
     }
 
-  const remotionDir = join(repo, 'engines', 'remotion', 'template')
+  const remotionDir = join(repo, 'app', 'engines', 'remotion')
   const remotion = existsSync(join(remotionDir, 'package-lock.json'))
   if (remotion) {
     mkdirSync(join(out, 'engines', 'remotion'), { recursive: true })

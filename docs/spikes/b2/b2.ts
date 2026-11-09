@@ -9,7 +9,7 @@ import { execFileSync } from 'node:child_process'
 import { copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { sampleFrame, ssim } from '../../../scripts/e2e/lib/ssim.js'
-import { FPS, validate } from '../../../src/lib/contract.js'
+import { FPS, validate } from '../../../app/server/lib/contract.js'
 
 const arg = (name: string) => {
   const i = process.argv.indexOf(`--${name}`)

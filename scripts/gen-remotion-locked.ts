@@ -1,18 +1,18 @@
 // Generates what the service knows about the Remotion template (render-engines plan §5.1), from
-// engines/remotion/template, with no Remotion installed:
-//   src/lib/remotion-locked.json        { remotion, files: { path: sha256 } } for every template-owned file
-//   src/lib/remotion-props.schema.json  props.json's JSON Schema, from the template's src/va/schema.ts (zod 4)
-//   engines/remotion/template/src/registry.ts, from the starter props.json
+// app/engines/remotion, with no Remotion installed:
+//   app/server/lib/remotion-locked.json        { remotion, files: { path: sha256 } } for every template-owned file
+//   app/server/lib/remotion-props.schema.json  props.json's JSON Schema, from the template's src/va/schema.ts (zod 4)
+//   app/engines/remotion/src/registry.ts, from the starter props.json
 //   npx tsx scripts/gen-remotion-locked.ts [--check]   (--check: exit 1 if any of them is stale)
 import { createHash } from 'node:crypto'
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { z } from 'zod'
-import { vaSchema } from '../engines/remotion/template/src/va/schema.js'
-import { generateRegistry } from '../src/lib/remotion-project.js'
+import { vaSchema } from '../app/engines/remotion/src/va/schema.js'
+import { generateRegistry } from '../app/server/lib/remotion-project.js'
 
 const root = join(import.meta.dirname, '..')
-const template = join(root, 'engines', 'remotion', 'template')
+const template = join(root, 'app', 'engines', 'remotion')
 const check = process.argv.includes('--check')
 
 /** The files the template owns: the wiring, the package set, the va/ runtime and AGENTS.md. */
@@ -42,7 +42,7 @@ const outputs: [string, string][] = [
     ),
   ],
   [
-    join(root, 'src', 'lib', 'remotion-locked.json'),
+    join(root, 'app', 'server', 'lib', 'remotion-locked.json'),
     `${JSON.stringify(
       {
         remotion: pkg.dependencies.remotion,
@@ -60,7 +60,7 @@ const outputs: [string, string][] = [
     )}\n`,
   ],
   [
-    join(root, 'src', 'lib', 'remotion-props.schema.json'),
+    join(root, 'app', 'server', 'lib', 'remotion-props.schema.json'),
     `${JSON.stringify(z.toJSONSchema(vaSchema), null, 2)}\n`,
   ],
 ]

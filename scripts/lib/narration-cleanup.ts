@@ -23,7 +23,7 @@ import {
   type LightParams,
   type Pcm16,
   type Region,
-} from '../../src/lib/narration-cleanup.js'
+} from '../../app/server/lib/narration-cleanup.js'
 
 const STEP_TIMEOUT_MS = 5 * 60_000
 

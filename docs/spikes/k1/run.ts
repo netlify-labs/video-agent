@@ -9,7 +9,7 @@ import { spawnSync } from 'node:child_process'
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { applyEdits, validate, type EditOp, type Summary } from '../../../src/lib/contract.js'
+import { applyEdits, validate, type EditOp, type Summary } from '../../../app/server/lib/contract.js'
 
 const root = new URL('../../..', import.meta.url).pathname
 const casesDir = join(root, 'docs', 'spikes', 'k1', 'cases')

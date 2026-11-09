@@ -5,12 +5,12 @@ export default tseslint.config(
   {
     ignores: [
       'node_modules',
-      'ui/dist',
-      'ui/dist-mock',
+      'app/web/dist',
+      'app/web/dist-mock',
       '.taste-skill',
       'video',
       // The Remotion template is linted by its own tsc (Remotion's types aren't installed at the root).
-      'engines/remotion/template',
+      'app/engines/remotion',
       '.netlify',
       '.beads',
       '.nax',
@@ -18,7 +18,7 @@ export default tseslint.config(
       'netlify/database/migrations',
       'netlify/edge-functions',
       'docs/spikes',
-      'ui/src/api/schema.d.ts',
+      'app/web/src/api/schema.d.ts',
       'packages/sdk/src/generated/schema.d.ts',
       '**/*.cjs',
       'packages/*/dist',
@@ -37,7 +37,7 @@ export default tseslint.config(
   },
   {
     // Tests read untyped JSON responses on purpose.
-    files: ['test/**/*.ts', '**/*.test.ts', 'ui/e2e/**/*.ts'],
+    files: ['app/test/**/*.ts', '**/*.test.ts', 'app/web/e2e/**/*.ts'],
     rules: {
       '@typescript-eslint/no-unsafe-assignment': 'off',
       '@typescript-eslint/no-unsafe-member-access': 'off',

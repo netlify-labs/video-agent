@@ -1,6 +1,6 @@
 [build]
   command = "npm run build"
-  publish = "ui/dist"
+  publish = "app/web/dist"
 
 [build.environment]
   NODE_VERSION = "24"
@@ -33,7 +33,7 @@
 
 # The app may use the microphone (recording voice-over takes), from its own origin only. These headers reach the
 # static responses: the SPA and its assets. Share, embed and preview pages are edge-function responses, which deny
-# the microphone themselves (src/lib/permissions-policy.ts); scripts/e2e/headers.ts checks both live.
+# the microphone themselves (app/server/lib/permissions-policy.ts); scripts/e2e/headers.ts checks both live.
 [[headers]]
   for = "/*"
   [headers.values]

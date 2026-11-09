@@ -1,11 +1,11 @@
 // Scheduled every minute on the published production deploy. Bounded: stops taking work ~20 s in
 // and never moves bytes (finalize-background does that).
 import type { Config } from '@netlify/functions'
-import { prodDeps } from '../../src/adapters/prod.js'
-import { runCleanup } from '../../src/domain/cleanup.js'
-import { tick } from '../../src/domain/reconciler.js'
-import { deliverWebhooks } from '../../src/domain/webhooks.js'
-import { duePublications } from '../../src/domain/destinations/sweep.js'
+import { prodDeps } from '../../app/server/adapters/prod.js'
+import { runCleanup } from '../../app/server/domain/cleanup.js'
+import { tick } from '../../app/server/domain/reconciler.js'
+import { deliverWebhooks } from '../../app/server/domain/webhooks.js'
+import { duePublications } from '../../app/server/domain/destinations/sweep.js'
 
 export default async () => {
   const deps = prodDeps()

@@ -1,6 +1,6 @@
 // Remotion as a run engine (render-engines plan §5.1, §8), Phase 2: setting video/ up. Loads nothing from Remotion at
 // import time, and every command and download goes through injectable deps, so its tests need no Remotion install.
-//   scaffold (author runs): clear video/, copy engines/remotion/template/ in, install.
+//   scaffold (author runs): clear video/, copy app/engines/remotion/ in, install.
 //   hydrate (every other kind): check the restored files against the template's rules FIRST (engine_tampered), then
 //     install. Nothing from a restored package.json or lockfile runs before that check passes.
 //   install: npm ci --ignore-scripts, Chrome Headless Shell, and the four pinned agent skills.
@@ -17,8 +17,8 @@ import {
 } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { dirname, join, relative } from 'node:path'
-import { REMOTION_VERSION, remotionProjectProblems } from '../../../src/lib/remotion-project.js'
-import { readTarGz, TarError } from '../../../src/lib/tar.js'
+import { REMOTION_VERSION, remotionProjectProblems } from '../../../app/server/lib/remotion-project.js'
+import { readTarGz, TarError } from '../../../app/server/lib/tar.js'
 import { log as runLog, repoRoot as defaultRoot, runStreaming, StepError } from '../run-tools.js'
 import {
   bundleFor,
@@ -114,7 +114,7 @@ export function remotionEngine(overrides: Partial<RemotionRunDeps> = {}): RunEng
     log: d.log,
     readProject,
   })
-  const template = join(d.root, 'engines', 'remotion', 'template')
+  const template = join(d.root, 'app', 'engines', 'remotion')
 
   /** One install step, logged; a timeout or a failure becomes engine_install_failed with the step's name. */
   async function step(name: string, cmd: string, args: string[], cwd: string) {

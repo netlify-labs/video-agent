@@ -17,13 +17,13 @@ import {
   type CleanupPreset,
   type LightParams,
   type Region,
-} from '../../../src/lib/narration-cleanup.js'
+} from '../../../app/server/lib/narration-cleanup.js'
 import { cleanTake, ebur128, ffmpegVersion, pcmSha256 } from '../../../scripts/lib/narration-cleanup.js'
 
 const ffmpeg = process.env.FFMPEG ?? 'ffmpeg'
 const alt = process.env.FFMPEG_ALT
 const altModel = process.env.RNNOISE_ALT
-const dir = new URL('../../../test/fixtures/narration/', import.meta.url).pathname
+const dir = new URL('../../../app/test/fixtures/narration/', import.meta.url).pathname
 const tmp = mkdtempSync(join(tmpdir(), 's13-'))
 const fixtures = readdirSync(dir)
   .filter((f) => f.endsWith('.wav'))

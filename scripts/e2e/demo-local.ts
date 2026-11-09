@@ -1,7 +1,7 @@
 // Phase 2 gate of the screen-recording plan (va-rsk5.3.18), local and free: three demos made with no agent and no
 // credits, each through the whole run-side pipeline (recording.ts analyze, plan, compose; check-contract with the
 // recording check; npx hyperframes check; a local render) and inspected at its clicks:
-//   - the synthetic fixture (test/fixtures/recording/make-fixture.ts), no trace;
+//   - the synthetic fixture (app/test/fixtures/recording/make-fixture.ts), no trace;
 //   - tour A: a real recording of the app (its mock build) with a pointer trace and a setup box;
 //   - tour B: another real recording of the app, without a trace.
 // Real recordings: Playwright's video capture of a scripted tour, normalized like an upload (H.264, 30 fps, 1 s GOPs,
@@ -22,10 +22,10 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { chromium, type Page } from '@playwright/test'
-import { load, read } from '../../src/lib/contract.js'
-import { LOCKED_SRC, parseRedactScript } from '../../src/lib/recording.js'
-import { parseTrace, type Trace } from '../../src/lib/recording-trace.js'
-import { makeFixture } from '../../test/fixtures/recording/make-fixture.js'
+import { load, read } from '../../app/server/lib/contract.js'
+import { LOCKED_SRC, parseRedactScript } from '../../app/server/lib/recording.js'
+import { parseTrace, type Trace } from '../../app/server/lib/recording-trace.js'
+import { makeFixture } from '../../app/test/fixtures/recording/make-fixture.js'
 import { checkContract } from '../lib/check-contract.js'
 import { log, parseArgs, repoRoot, StepError } from '../lib/run-tools.js'
 
@@ -74,10 +74,10 @@ export async function serveMock(): Promise<ChildProcess> {
   process.env.VITE_MOCK = '1'
   const dist = join(out, 'dist-mock')
   if (!existsSync(join(dist, 'index.html')))
-    sh('npx', ['vite', 'build', 'ui', '--outDir', dist, '--emptyOutDir'], { timeoutMs: 600_000 })
+    sh('npx', ['vite', 'build', 'app/web', '--outDir', dist, '--emptyOutDir'], { timeoutMs: 600_000 })
   const server = spawn(
     'npx',
-    ['vite', 'preview', 'ui', '--outDir', dist, '--port', String(port), '--strictPort'],
+    ['vite', 'preview', 'app/web', '--outDir', dist, '--port', String(port), '--strictPort'],
     {
       cwd: repoRoot,
       env: { ...process.env, VITE_MOCK: '1' },
@@ -376,7 +376,7 @@ export async function demo(d: Demo) {
   const p = await step('plan', { demo: d.name }, () =>
     cli([
       ...['plan', '--media', d.mediaId, '--file', file, '--analysis', analysis, ...trace],
-      ...['--input', join(run, 'input.json'), '--look', join(repoRoot, 'looks', 'clean', 'look.json')],
+      ...['--input', join(run, 'input.json'), '--look', join(repoRoot, 'app', 'looks', 'clean', 'look.json')],
       ...[
         '--out',
         join(video, 'assets', 'recording', 'plan.json'),

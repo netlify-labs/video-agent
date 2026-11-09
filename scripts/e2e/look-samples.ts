@@ -1,5 +1,5 @@
-// Sample renders for looks (looks/README.md "Adding a look", step 6; beads va-nifa.5.4–5.8). Spends credits: the three
-// prompts in looks/PROMPTS.md, once per look in LOOKS, each about LOOK_RUN_CREDITS (default 100). Each look has its
+// Sample renders for looks (app/looks/README.md "Adding a look", step 6; beads va-nifa.5.4–5.8). Spends credits: the three
+// prompts in app/looks/PROMPTS.md, once per look in LOOKS, each about LOOK_RUN_CREDITS (default 100). Each look has its
 // own CREDIT_CEILING (default 300): no run of that look starts once its credits so far have reached it.
 //
 //   npx tsx scripts/e2e/look-samples.ts --dry   # checks the env and local tools, prints the steps and credits; no network
@@ -16,7 +16,7 @@ import { spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { looksCatalog } from '../../src/generated/looks.js'
+import { looksCatalog } from '../../app/server/generated/looks.js'
 import { key, log } from './lib.js'
 import { CreditMeter } from './looks-lib.js'
 import { call, check, download, dry, dryRun, GateError, sleep } from './narration-lib.js'
@@ -33,7 +33,7 @@ const site = (env.VIDEO_AGENT_URL ?? '').replace(/\/$/, '')
 /** Whether a look ships its own font (look.json fonts). */
 const shipsFont = (id: string) => {
   try {
-    const j = JSON.parse(readFileSync(new URL(`../../looks/${id}/look.json`, import.meta.url), 'utf8')) as {
+    const j = JSON.parse(readFileSync(new URL(`../../app/looks/${id}/look.json`, import.meta.url), 'utf8')) as {
       fonts?: unknown[]
     }
     return (j.fonts?.length ?? 0) > 0
@@ -49,7 +49,7 @@ export interface SamplePrompt {
   prompt: string
 }
 
-/** The standard prompts, read from looks/PROMPTS.md: "## <n>. …" headings naming a shape and "<seconds> s", over a quote. */
+/** The standard prompts, read from app/looks/PROMPTS.md: "## <n>. …" headings naming a shape and "<seconds> s", over a quote. */
 export function samplePrompts(md: string): SamplePrompt[] {
   const out: SamplePrompt[] = []
   for (const part of md.split(/^## /m).slice(1)) {
@@ -74,7 +74,7 @@ export function samplePrompts(md: string): SamplePrompt[] {
   return out
 }
 
-const prompts = samplePrompts(readFileSync(new URL('../../looks/PROMPTS.md', import.meta.url), 'utf8'))
+const prompts = samplePrompts(readFileSync(new URL('../../app/looks/PROMPTS.md', import.meta.url), 'utf8'))
 const tool = (bin: string) => spawnSync(bin, ['-version'], { encoding: 'utf8' }).status === 0
 const runs = looks.length * prompts.length
 
@@ -116,7 +116,7 @@ async function main() {
       },
       problems: [
         ...(looks.length ? [] : ['LOOKS lists no look']),
-        ...(prompts.length === 3 ? [] : [`looks/PROMPTS.md has ${prompts.length} prompts, not 3`]),
+        ...(prompts.length === 3 ? [] : [`app/looks/PROMPTS.md has ${prompts.length} prompts, not 3`]),
         ...looks
           .filter((l) => !looksCatalog.some((c) => c.id === l))
           .map((l) => `${l} isn't in this build's catalog`),

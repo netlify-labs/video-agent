@@ -6,13 +6,13 @@
 //     Re-reads the item by id, checks its licence again, downloads its file (https only, at most 3 redirects, 10 MB)
 //     and checks the bytes are audio, saves it to video/assets/music/<slug>.<ext> (sound effects: video/assets/sfx/)
 //     and records its credit in video/assets/music/credits.json, which finalize reads to credit CC BY works.
-// The licence rules are the server's (src/lib/openverse-rules.ts): only CC0 and CC BY, never NC, ND, SA or mature.
+// The licence rules are the server's (app/server/lib/openverse-rules.ts): only CC0 and CC BY, never NC, ND, SA or mature.
 // Uses OPENVERSE_CLIENT_ID and OPENVERSE_CLIENT_SECRET when the run has them (a registered app's rate limits), else
 // searches anonymously. Never prints them or the token.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { classify, LIMITS, MediaError } from '../src/lib/media/classify.js'
-import { readCapped } from '../src/lib/media/range.js'
+import { classify, LIMITS, MediaError } from '../app/server/lib/media/classify.js'
+import { readCapped } from '../app/server/lib/media/range.js'
 import {
   isImportLicense,
   licenseLabel,
@@ -24,8 +24,8 @@ import {
   RUN_CREDITS_FILE,
   type RawAudio,
   type RunCredit,
-} from '../src/lib/openverse-rules.js'
-import { BUNDLE_LIMITS } from '../src/lib/tar.js'
+} from '../app/server/lib/openverse-rules.js'
+import { BUNDLE_LIMITS } from '../app/server/lib/tar.js'
 import { StepError, exitOnError, log, parseArgs, repoRoot } from './lib/run-tools.js'
 
 export const OPENVERSE_API = 'https://api.openverse.org/v1'

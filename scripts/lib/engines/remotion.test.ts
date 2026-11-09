@@ -5,7 +5,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync 
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { tarGz, type Entry } from '../../../test/tarball.js'
+import { tarGz, type Entry } from '../../../app/test/tarball.js'
 import { readProject, remotionEngine, SKILLS } from './remotion.js'
 
 const repo = join(import.meta.dirname, '..', '..', '..')
@@ -15,7 +15,7 @@ const ALL_SKILLS = [...SKILLS.names, 'remotion-maps', 'remotion-studio', 'remoti
 /** A root with the real template and a video/ holding a HyperFrames starter. */
 function workspace() {
   const root = mkdtempSync(join(tmpdir(), 'va-remotion-'))
-  cpSync(join(repo, 'engines', 'remotion', 'template'), join(root, 'engines', 'remotion', 'template'), {
+  cpSync(join(repo, 'app', 'engines', 'remotion'), join(root, 'app', 'engines', 'remotion'), {
     recursive: true,
     filter: (src) => !src.includes('node_modules'),
   })
@@ -71,7 +71,7 @@ describe('Remotion scaffold', () => {
     const { root, video } = workspace()
     const { e, calls, logs } = engine(root)
     await e.scaffold?.(video)
-    const template = readProject(join(root, 'engines', 'remotion', 'template'))
+    const template = readProject(join(root, 'app', 'engines', 'remotion'))
     expect([...readProject(video).keys()].sort()).toEqual([...template.keys()].sort())
     expect(existsSync(join(video, 'index.html'))).toBe(false)
     expect(calls).toEqual(['npm ci --ignore-scripts --no-audit --no-fund', 'npx remotion browser ensure'])
@@ -105,7 +105,7 @@ describe('Remotion hydrate', () => {
   function restored() {
     const { root } = workspace()
     const video = join(root, 'restored')
-    cpSync(join(root, 'engines', 'remotion', 'template'), video, { recursive: true })
+    cpSync(join(root, 'app', 'engines', 'remotion'), video, { recursive: true })
     return { root, video }
   }
 

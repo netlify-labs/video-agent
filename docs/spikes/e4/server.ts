@@ -7,7 +7,7 @@ import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { dirname, extname, join, normalize } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { previewHeaders } from '../../../src/lib/preview.js'
+import { previewHeaders } from '../../../app/server/lib/preview.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const bundle = join(here, '.work', 'preview')

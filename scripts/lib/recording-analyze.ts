@@ -8,9 +8,9 @@ import { spawn } from 'node:child_process'
 import { readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { classify, MediaError } from '../../src/lib/media/classify.js'
-import { sha256Hex } from '../../src/lib/crypto.js'
-import type { Trace } from '../../src/lib/recording-trace.js'
+import { classify, MediaError } from '../../app/server/lib/media/classify.js'
+import { sha256Hex } from '../../app/server/lib/crypto.js'
+import type { Trace } from '../../app/server/lib/recording-trace.js'
 import { log, StepError } from './run-tools.js'
 
 /** Goes up whenever a rule here changes, so cached analyses are made again. */

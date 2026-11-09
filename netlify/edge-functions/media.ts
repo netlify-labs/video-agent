@@ -3,7 +3,7 @@
 // sanitized one for SVGs); "original" is always a download.
 import type { Config, Context } from '@netlify/edge-functions'
 import { getStore } from '@netlify/blobs'
-import { mediaResponse, verifySignedPath } from '../../src/lib/media/range.ts'
+import { mediaResponse, verifySignedPath } from '../../app/server/lib/media/range.ts'
 
 const plain = (status: number, text: string) =>
   new Response(text, { status, headers: { 'cache-control': 'no-store', 'content-type': 'text/plain' } })

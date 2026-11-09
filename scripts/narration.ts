@@ -9,7 +9,7 @@
 //               .va-run/narration/clean/<mediaId>.wav; the sample count must not change
 //   3. mix      the bus with timeline.mixToBuffer at exactly the composition's FINAL root duration in samples (after a
 //               re-voice that can differ from the frozen targetSamples: the bus is padded or cut to the root, and both
-//               lengths are logged), then pre-limited to -2 dBTP (src/lib/narration-bus.ts). In a fit-to-narration run
+//               lengths are logged), then pre-limited to -2 dBTP (app/server/lib/narration-bus.ts). In a fit-to-narration run
 //               (author_from_frozen, the run inputs' `fit`) the bus is the frozen targetSamples instead: the agent
 //               fits the beats to it afterwards (plan 2026-11-02 §6.4)
 //   4. write    video/assets/narration/bus.wav (24 kHz mono PCM16), data-va-speech from the processed bus's VAD and the
@@ -26,20 +26,20 @@
 // builds that is best-effort (the receipt records the version). Exits non-zero on any failure: stop and report it.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { applyFitNarration, load, NARRATION_SRC, read, validate, type Summary } from '../src/lib/contract.js'
-import { BUS_LIMITER, floatToPcm16, limitBus, pcm16ToFloat } from '../src/lib/narration-bus.js'
-import { NARRATION_PIPELINE } from '../src/lib/narration-cleanup.js'
-import { narrationTransform, type NarrationReceipt } from '../src/lib/narration-run.js'
-import { detectSpeech, VAD_VERSION } from '../src/lib/peaks.js'
-import type { RunManifest } from '../src/lib/run-manifest.js'
-import { MAX_OUTPUT_SAMPLES, SAMPLE_RATE, mixToBuffer } from '../src/lib/timeline.js'
-import { wav } from '../src/lib/voice.js'
+import { applyFitNarration, load, NARRATION_SRC, read, validate, type Summary } from '../app/server/lib/contract.js'
+import { BUS_LIMITER, floatToPcm16, limitBus, pcm16ToFloat } from '../app/server/lib/narration-bus.js'
+import { NARRATION_PIPELINE } from '../app/server/lib/narration-cleanup.js'
+import { narrationTransform, type NarrationReceipt } from '../app/server/lib/narration-run.js'
+import { detectSpeech, VAD_VERSION } from '../app/server/lib/peaks.js'
+import type { RunManifest } from '../app/server/lib/run-manifest.js'
+import { MAX_OUTPUT_SAMPLES, SAMPLE_RATE, mixToBuffer } from '../app/server/lib/timeline.js'
+import { wav } from '../app/server/lib/voice.js'
 import { cleanTake, pcmSha256, readTake } from './lib/narration-cleanup.js'
 import { writeHoldStill, type Snapshot } from './lib/hold-still.js'
 import { narrationPaths, readNarrationInputs } from './lib/narration-inputs.js'
 import { StepError, assertNoTakesInVideo, log, repoRoot, run, sha256File } from './lib/run-tools.js'
 
-/** The receipt's shape lives with the guard that reads it (src/lib/narration-run.ts). */
+/** The receipt's shape lives with the guard that reads it (app/server/lib/narration-run.ts). */
 export type { NarrationReceipt }
 
 const r2 = (n: number) => Math.round(n * 100) / 100

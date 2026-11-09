@@ -12,7 +12,7 @@ type Session = components['schemas']['UploadSession']
 type MediaCheckResult = components['schemas']['MediaCheckResult']
 type OpenverseJob = components['schemas']['OpenverseJob']
 
-/** The server's single-upload limit and session part size (src/domain/media-uploads.ts PART_SIZE). */
+/** The server's single-upload limit and session part size (app/server/domain/media-uploads.ts PART_SIZE). */
 export const SINGLE_UPLOAD_MAX = 4 * 1024 * 1024
 
 export interface UploadProgress {

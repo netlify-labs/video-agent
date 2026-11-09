@@ -2,9 +2,9 @@
 // messages, so a HyperFrames run behaves exactly as it did.
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { compositionFiles } from '../../../src/lib/bundle-manifest.js'
-import { validate, type Summary } from '../../../src/lib/contract.js'
-import { hyperframesScopeCheck, SCOPE_LAYOUT_FILE } from '../../../src/lib/scope.js'
+import { compositionFiles } from '../../../app/server/lib/bundle-manifest.js'
+import { validate, type Summary } from '../../../app/server/lib/contract.js'
+import { hyperframesScopeCheck, SCOPE_LAYOUT_FILE } from '../../../app/server/lib/scope.js'
 import { RenderProgressReporter } from '../render-progress.js'
 import { run, runStreaming } from '../run-tools.js'
 import type { RunEngine } from './types.js'
@@ -64,7 +64,7 @@ export function hyperframesEngine(exec: Exec = { run, runStreaming }): RunEngine
       lines.end()
       return {}
     },
-    // Redo a scene: the splice and every check, over the frozen parent and video/ (src/lib/scope.ts).
+    // Redo a scene: the splice and every check, over the frozen parent and video/ (app/server/lib/scope.ts).
     scopeCheck: (frozenDir, dir, beats) => {
       // The frozen copy also holds prepare-run's scope.json, which isn't one of the parent's files.
       const parent = filesOf(frozenDir)

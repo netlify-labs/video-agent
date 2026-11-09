@@ -14,7 +14,7 @@ import {
   projectFileProblems,
   propsProblems,
   registryProblems,
-} from '../../../src/lib/remotion-project.js'
+} from '../../../app/server/lib/remotion-project.js'
 import { StepError } from '../run-tools.js'
 
 /** The few Remotion calls the engine makes: its own declarations, so the root typecheck needs no Remotion. */

@@ -68,7 +68,7 @@ export const STEPS = [
     ? `restyle the ${looks[0]} video into ${looks[1]} (≈${perRun} credits): the look changed; every scene and text id kept; colour roles literal`
     : 'restyle skipped (RESTYLE=0 or one look)',
   retryCheck
-    ? `retry after a look change (≈${perRun} credits): create in ${looks[0]}, cancel, wait up to ${waitMinutes} min for its catalog hash to change (push a trivial looks/${looks[0]}/LOOK.md change to main meanwhile), retry: the version keeps its original hash`
+    ? `retry after a look change (≈${perRun} credits): create in ${looks[0]}, cancel, wait up to ${waitMinutes} min for its catalog hash to change (push a trivial app/looks/${looks[0]}/LOOK.md change to main meanwhile), retry: the version keeps its original hash`
     : 'retry-after-look-change skipped (set RETRY_CHECK=1)',
   fontLooks.length
     ? `font check for ${fontLooks.join(', ')}: @font-face under assets/look/`
@@ -259,7 +259,7 @@ async function main() {
       const recorded = (await waitFor(r.json.id, 1)).look?.hash ?? ''
       check(recorded !== '', 'the cancelled version has a look hash', {})
       log('waiting', {
-        msg: `push a trivial change to looks/${look}/LOOK.md to main now; waiting up to ${waitMinutes} min`,
+        msg: `push a trivial change to app/looks/${look}/LOOK.md to main now; waiting up to ${waitMinutes} min`,
       })
       const changed = await waitForHashChange({
         from: recorded,

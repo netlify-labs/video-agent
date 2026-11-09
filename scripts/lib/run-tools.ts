@@ -4,8 +4,8 @@ import { createHash } from 'node:crypto'
 import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { archiveFiles } from '../../src/lib/bundle-manifest.js'
-import { NARRATION_SRC } from '../../src/lib/contract.js'
+import { archiveFiles } from '../../app/server/lib/bundle-manifest.js'
+import { NARRATION_SRC } from '../../app/server/lib/contract.js'
 import { NARRATION_RUN_DIR, narrationPaths, readNarrationInputs } from './narration-inputs.js'
 
 /** The repo the run works in. Local mode runs the bundled scripts against a workspace elsewhere (VA_REPO_ROOT). */

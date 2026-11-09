@@ -4,11 +4,11 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { MAX_VOLUME } from '../../../src/lib/contract.js'
+import { MAX_VOLUME } from '../../../app/server/lib/contract.js'
 import { measure } from '../mastering.js'
 import { mixMusic, musicVolume } from './remotion-mix.js'
 
-const tone = join(import.meta.dirname, '..', '..', '..', 'test', 'fixtures', 'audio', 'tone.wav')
+const tone = join(import.meta.dirname, '..', '..', '..', 'app', 'test', 'fixtures', 'audio', 'tone.wav')
 
 /** A project whose music is the fixture tone at this gain (dB), and a beat of `seconds`. */
 function project(gainDb: number | null, seconds = 1) {

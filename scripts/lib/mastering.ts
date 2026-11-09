@@ -9,8 +9,8 @@
 import { spawnSync } from 'node:child_process'
 import { renameSync, rmSync } from 'node:fs'
 import { parse, type DefaultTreeAdapterMap } from 'parse5'
-import type { Loudness, MasteringReport } from '../../src/domain/types.js'
-import { MAX_DUCK_POINTS, NARRATION_ID } from '../../src/lib/contract.js'
+import type { Loudness, MasteringReport } from '../../app/server/domain/types.js'
+import { MAX_DUCK_POINTS, NARRATION_ID } from '../../app/server/lib/contract.js'
 import { ebur128 } from './narration-cleanup.js'
 import { StepError } from './run-tools.js'
 

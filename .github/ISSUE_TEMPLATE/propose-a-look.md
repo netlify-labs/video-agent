@@ -1,6 +1,6 @@
 ---
 name: Propose a look
-about: Suggest a visual style for videos (see looks/README.md)
+about: Suggest a visual style for videos (see app/looks/README.md)
 title: 'Look: '
 labels: ['good first issue']
 ---
@@ -15,4 +15,4 @@ labels: ['good first issue']
 
 **Shapes it should cover**: <!-- 16:9, 9:16, 1:1, 4:5 -->
 
-Building it yourself? The guide is [looks/README.md](../../looks/README.md).
+Building it yourself? The guide is [app/looks/README.md](../../app/looks/README.md).

@@ -1,4 +1,4 @@
-import { CUE_ID, writeVtt } from '../../src/lib/vtt.js'
+import { CUE_ID, writeVtt } from '../../app/server/lib/vtt.js'
 
 export interface Cue {
   start: number

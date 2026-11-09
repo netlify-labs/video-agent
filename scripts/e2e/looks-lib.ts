@@ -1,6 +1,6 @@
 // Offline helpers for the looks live check (scripts/e2e/looks.ts): comparing a restyle's scene and text ids with its
 // parent's, refusing derived colours written as expressions, waiting for a look's catalog hash to change, the credit
-// ceiling, and the contact sheet. No network here, so they're unit-tested (test/e2e-looks.test.ts).
+// ceiling, and the contact sheet. No network here, so they're unit-tested (app/test/e2e-looks.test.ts).
 import { spawnSync } from 'node:child_process'
 
 export interface DraftComposition {

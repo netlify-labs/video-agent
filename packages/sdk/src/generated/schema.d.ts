@@ -1974,7 +1974,7 @@ export interface components {
                 /** @description The template release tag this build is, or null. */
                 release: string | null;
             };
-            /** @description Features this deployment has and has switched on. Clients hide what isn't listed. See src/domain/features.ts. */
+            /** @description Features this deployment has and has switched on. Clients hide what isn't listed. See app/server/domain/features.ts. */
             features: ("remix" | "narration" | "planning" | "rest_wait" | "cli_login" | "looks" | "engines" | "scoped_revision" | "screen_recording" | "context" | "external_ref" | "destinations" | "youtube" | "webmcp")[];
             admission: "invite-only" | string[] | null;
             siteUrl: string;

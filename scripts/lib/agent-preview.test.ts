@@ -46,7 +46,7 @@ describe('agent run preview', () => {
 
   it('shows the rendered video with its poster, the title escaped, and a link to it in the app', () => {
     const root = checkout()
-    const out = join(root, 'ui/dist')
+    const out = join(root, 'app/web/dist')
     expect(
       writeVideoRunPreview({ root, outDir: out, run: RUN, siteUrl: 'https://video.example.com/' }),
     ).toEqual({
@@ -63,7 +63,7 @@ describe('agent run preview', () => {
 
   it('links to the video in the app when the build has no rendered files', () => {
     const root = checkout({ rendered: false })
-    const out = join(root, 'ui/dist')
+    const out = join(root, 'app/web/dist')
     expect(
       writeVideoRunPreview({ root, outDir: out, run: RUN, siteUrl: 'https://video.example.com' }),
     ).toEqual({

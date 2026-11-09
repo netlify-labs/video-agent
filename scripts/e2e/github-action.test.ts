@@ -4,9 +4,9 @@
 import { spawnSync } from 'node:child_process'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { png } from '../../test/helpers.js'
+import { png } from '../../app/test/helpers.js'
 import { events, makeEnv, runAction, type TestEnv } from '../../packages/action/test/harness/index.js'
-import { readyVideo } from '../../test/helpers.js'
+import { readyVideo } from '../../app/test/helpers.js'
 import {
   PHASE1,
   PHASE2,
