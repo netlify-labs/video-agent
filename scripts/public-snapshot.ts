@@ -158,7 +158,7 @@ export function scanDir(dir: string): Hit[] {
 
 /**
  * gitleaks' findings in `dir` as hits, or null when gitleaks isn't installed. It runs inside `dir`, so paths come out
- * relative and the snapshot's own .gitleaks.toml (the default rules minus the tests' fake secrets) applies.
+ * relative, and the snapshot's own .config/gitleaks.toml (the default rules minus the tests' fake secrets) applies.
  */
 function gitleaks(dir: string): Hit[] | null {
   if (spawnSync('gitleaks', ['version'], { encoding: 'utf8' }).error) return null
@@ -168,6 +168,7 @@ function gitleaks(dir: string): Hit[] | null {
     [
       'dir',
       '.',
+      ...(existsSync(join(dir, '.config', 'gitleaks.toml')) ? ['--config', join('.config', 'gitleaks.toml')] : []),
       '--no-banner',
       '--redact',
       '--exit-code',

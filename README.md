@@ -615,7 +615,7 @@ WebMCP off on the Admin page (on by default); browsers without it see nothing.
 Each deployment serves a `netlify-video` [Agent Skill](https://agentskills.io) that teaches coding agents (Claude
 Code, Codex, Cursor, Gemini CLI) the good path: connecting, plan → create → follow → publish, asking before spending
 a run, reusing library media, and recipes for a pull request → demo video, release notes → changelog video, a
-15-second vertical cut, localising captions and a review loop. The source is `app/skills/netlify-video/`; the build
+15-second vertical cut, localising captions and a review loop. The source is `skills/netlify-video/`; the build
 packages it as `https://<your-site>/skills/netlify-video.zip` (listed with its sha256 in `/skills/index.json`) with
 your site's URL filled in, so forks serve their own. The zip is deterministic: the same sources and URL give the same
 bytes.
@@ -714,8 +714,8 @@ in `app/web/`. The design and its reasoning are in [`docs/plans/`](docs/plans/),
 
 ### Repository layout
 
-The root keeps only what Netlify, the Deploy button and agent runs look for by path, plus `app/` (the service) and
-`packages/` (what's published).
+The root keeps only what Netlify, the Deploy button and agent runs look for by path, plus `app/` (the service),
+`packages/` (what's published) and `skills/` (the agent skill).
 
 | Path           | What it is                                                                                                     |
 | -------------- | -------------------------------------------------------------------------------------------------------------- |
@@ -723,11 +723,11 @@ The root keeps only what Netlify, the Deploy button and agent runs look for by p
 | `app/web/`     | The React web app, its Playwright specs (`app/web/e2e/`) and public static pages (`app/web/static/`).          |
 | `app/test/`    | Unit and integration tests for `app/server/` and `scripts/`.                                                   |
 | `app/looks/`   | The look catalog: each look's rules, example composition and preview.                                          |
-| `app/skills/`  | The agent skill each deployment serves at `/skills/`.                                                          |
 | `app/engines/` | The Remotion project template, copied into `video/` for Remotion runs.                                         |
 | `context/`     | Your brand and product facts. Every run reads this folder.                                                     |
 | `video/`       | The HyperFrames project each run starts from and renders.                                                      |
 | `scripts/`     | Build, setup and look tooling, and the scripts agent runs call (`prepare-run.ts`, `render-job.ts`, …).         |
+| `skills/`      | The agent skill each deployment serves at `/skills/`.                                                          |
 | `netlify/`     | Functions, edge functions and database migrations (paths Netlify reads).                                       |
 | `packages/`    | The published CLI, SDK and player, and the GitHub Action.                                                      |
 | `docs/`        | Plans, spike results (`docs/spikes.md`), the spike harnesses (`docs/spikes/`) and examples (`docs/examples/`). |

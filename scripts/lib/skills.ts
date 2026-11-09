@@ -1,4 +1,4 @@
-// Packages app/skills/<name>/ as installable Agent Skills: one zip per skill with a single top-level <name>/ folder, plus
+// Packages skills/<name>/ as installable Agent Skills: one zip per skill with a single top-level <name>/ folder, plus
 // an index.json. {{SITE_URL}} in the sources becomes this deployment's URL, so every fork serves skills that point
 // at itself. The zips are deterministic (see zip.ts): the same sources and URL give the same sha256.
 import { createHash } from 'node:crypto'
@@ -47,9 +47,9 @@ export function packageSkill(skillsDir: string, name: string, siteUrl: string) {
     return { path: `${name}/${relative(dir, file).split('\\').join('/')}`, data }
   })
   const skill = entries.find((e) => e.path === `${name}/SKILL.md`)
-  if (!skill) throw new Error(`app/skills/${name} has no SKILL.md`)
+  if (!skill) throw new Error(`skills/${name} has no SKILL.md`)
   const meta = frontmatter(skill.data.toString('utf8'))
-  if (meta.name !== name) throw new Error(`app/skills/${name}/SKILL.md is named "${meta.name}"`)
+  if (meta.name !== name) throw new Error(`skills/${name}/SKILL.md is named "${meta.name}"`)
   return { ...meta, zip: zip(entries) }
 }
 

@@ -1,4 +1,4 @@
-# gitleaks (scripts/public-snapshot.ts runs `gitleaks dir`): the default rules, minus the fake secrets tests use.
+# gitleaks (scripts/public-snapshot.ts runs `gitleaks dir --config .config/gitleaks.toml`): the default rules, minus the fake secrets tests use.
 [extend]
 useDefault = true
 

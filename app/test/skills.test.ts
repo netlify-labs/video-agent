@@ -8,7 +8,7 @@ import { buildSkills, frontmatter, packageSkill, SITE_URL_TOKEN } from '../../sc
 import { repoRoot } from '../../scripts/lib/run-tools.js'
 import { apiKey, mcpCall, harness } from './helpers.js'
 
-const skillsDir = join(repoRoot, 'app', 'skills')
+const skillsDir = join(repoRoot, 'skills')
 const SITE = 'https://videos.example.com'
 const tmp = mkdtempSync(join(tmpdir(), 'skills-test-'))
 afterAll(() => {

@@ -195,7 +195,7 @@ if (videoRun && process.env.FORCE_UI_BUILD !== 'true') {
   // Installable agent skills at /skills/<name>.zip and /skills/index.json, pointing at this deployment's URL (the
   // same URL the API uses for links), so a fork serves skills for itself.
   const skills = buildSkills(
-    join(repoRoot, 'app', 'skills'),
+    join(repoRoot, 'skills'),
     join(repoRoot, 'app/web/dist/skills'),
     process.env.URL ?? 'http://localhost:8888',
   )

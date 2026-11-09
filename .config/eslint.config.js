@@ -1,6 +1,9 @@
+import { join } from 'node:path'
 import js from '@eslint/js'
 import tseslint from 'typescript-eslint'
 
+// Lives in .config/ to keep the repo root short. npm run lint passes -c, which makes the patterns below relative to
+// the directory ESLint runs in (the repo root), not this folder.
 export default tseslint.config(
   {
     ignores: [
@@ -27,7 +30,7 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.strictTypeChecked,
   {
-    languageOptions: { parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname } },
+    languageOptions: { parserOptions: { projectService: true, tsconfigRootDir: join(import.meta.dirname, '..') } },
     rules: {
       '@typescript-eslint/restrict-template-expressions': ['error', { allowNumber: true }],
       '@typescript-eslint/no-confusing-void-expression': 'off',

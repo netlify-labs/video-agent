@@ -6,7 +6,7 @@ import { COMMANDS } from '../../packages/cli/src/catalog.js'
 import { EXIT } from '../../packages/cli/src/exit.js'
 import { CLI_MD, renderCliMd } from '../../scripts/gen-skill-cli.js'
 
-describe('app/skills/netlify-video/references/cli.md', () => {
+describe('skills/netlify-video/references/cli.md', () => {
   it('matches the catalog (run npx tsx scripts/gen-skill-cli.ts after changing a command)', async () => {
     expect(readFileSync(CLI_MD, 'utf8')).toBe(await renderCliMd())
   })

@@ -70,7 +70,8 @@ describe('the Remotion template', () => {
   })
 
   it('lint and format skip the template (its own tsc checks it)', () => {
-    expect(readFileSync(join(root, 'eslint.config.js'), 'utf8')).toContain("'app/engines/remotion'")
-    expect(readFileSync(join(root, '.prettierignore'), 'utf8')).toContain('app/engines/remotion')
+    expect(readFileSync(join(root, '.config', 'eslint.config.js'), 'utf8')).toContain("'app/engines/remotion'")
+    const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { scripts: { format: string } }
+    expect(pkg.scripts.format).toContain("'!app/engines/remotion'")
   })
 })
