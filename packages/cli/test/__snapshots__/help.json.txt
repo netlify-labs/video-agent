@@ -162,6 +162,11 @@
           "multiple": true,
           "description": "A media id, or a file to upload first (file:\"caption\" sets its caption). Repeatable, up to 12."
         },
+        "tag": {
+          "type": "string",
+          "multiple": true,
+          "description": "A tag to file it under, like demo. Repeatable, up to 10. (needs tags on the server)"
+        },
         "webhook-url": {
           "type": "string",
           "description": "Also send this video's webhook events here."
@@ -581,6 +586,14 @@
           "type": "boolean",
           "description": "Only the ones you starred."
         },
+        "tag": {
+          "type": "string",
+          "description": "Only videos with this tag."
+        },
+        "without-tag": {
+          "type": "string",
+          "description": "Leave out videos with this tag."
+        },
         "limit": {
           "type": "number",
           "description": "How many per page."
@@ -598,6 +611,35 @@
         "videos.listAll"
       ],
       "feature": null,
+      "needsHostedApp": true,
+      "local": false
+    },
+    {
+      "name": "tag",
+      "summary": "Set a video's tags.",
+      "args": [
+        {
+          "name": "video",
+          "type": "video",
+          "required": true,
+          "description": "A video id (vid_…), its web address or a share link."
+        },
+        {
+          "name": "tags",
+          "type": "string",
+          "variadic": true,
+          "description": "The whole new list, like demo launch. None clears them."
+        }
+      ],
+      "flags": {},
+      "examples": [
+        "video-agent tag vid_01… demo",
+        "video-agent list --without-tag demo"
+      ],
+      "sdk": [
+        "videos.update"
+      ],
+      "feature": "tags",
       "needsHostedApp": true,
       "local": false
     },

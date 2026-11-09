@@ -652,6 +652,19 @@ export const ExternalRefSchema = z
   .regex(/^[a-z]+:[^\s]+$/, 'Use scheme:reference, for example github:acme/web#pr-123.')
   .openapi({ example: 'github:acme/web#pr-123' })
 
+/** A tag: a lowercase slug ("demo", "q3-launch"). */
+export const TagSchema = z
+  .string()
+  .max(30)
+  .regex(/^[a-z0-9][a-z0-9-]*$/, 'Use lowercase letters, digits and dashes, for example demo or q3-launch.')
+  .openapi({ example: 'demo' })
+
+/** A video's tags: at most 10, no repeats. */
+export const TagsSchema = z
+  .array(TagSchema)
+  .max(10)
+  .refine((t) => new Set(t).size === t.length, { message: 'Tags must not repeat.' })
+
 const ExternalFields = {
   externalRef: ExternalRefSchema.optional().openapi({
     description:
@@ -700,9 +713,18 @@ export const VideoSchema = z
       .nullable()
       .openapi({ description: 'What the video is for outside the app (set at creation), or null' }),
     externalUrl: z.string().nullable().openapi({ description: 'A link to it, or null' }),
+    tags: z
+      .array(z.string())
+      .openapi({ description: 'Its tags, sorted; everyone who sees the video sees them' }),
     links: z.object({ self: z.string() }),
   })
   .openapi('Video')
+
+export const VideoTagsSchema = z
+  .object({
+    items: z.array(z.object({ tag: z.string(), count: z.number().int() })),
+  })
+  .openapi('VideoTags')
 
 export const VideoListSchema = z
   .object({ items: z.array(VideoSchema), nextCursor: z.string().nullable() })
@@ -803,6 +825,10 @@ export const CreateVideoSchema = z
         "A look id (GET /api/v1/looks). Omit for the plan's look, else the admin's default (none unless set); null for no look. Errors: 400 unknown_look, 409 look_disabled.",
     }),
     ...ExternalFields,
+    tags: TagsSchema.optional().openapi({
+      description:
+        'Labels to filter the library by, like ["demo"]. Change them later with PATCH /api/v1/videos/{id}.',
+    }),
     context: ContextSchema.optional().openapi({
       description: 'Background for the run (a PR, release notes) outside the prompt, read as data.',
     }),
@@ -935,10 +961,13 @@ export const UpdateVideoSchema = z
     title: z.string().min(1).max(120).optional(),
     private: z.boolean().optional(),
     language: LanguageSchema.optional(),
+    tags: TagsSchema.optional().openapi({ description: 'The whole new list of tags; [] removes them all.' }),
   })
-  .refine((v) => v.title !== undefined || v.private !== undefined || v.language !== undefined, {
-    message: 'Send title, private or language.',
-  })
+  .refine(
+    (v) =>
+      v.title !== undefined || v.private !== undefined || v.language !== undefined || v.tags !== undefined,
+    { message: 'Send title, private, language or tags.' },
+  )
   .openapi('UpdateVideo')
 
 export const KeySchema = z

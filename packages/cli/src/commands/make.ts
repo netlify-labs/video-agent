@@ -72,6 +72,13 @@ export function lookOf(ctx: Ctx): { look?: string | null } {
   return { look: v === 'none' ? null : v }
 }
 
+/** --tag (repeatable) as the create body's tags. */
+function tagsOf(ctx: Ctx): { tags?: string[] } {
+  const raw = ctx.flags.tag
+  const tags = raw === undefined ? [] : ([] as string[]).concat(raw as string | string[])
+  return tags.length ? { tags } : {}
+}
+
 /** The fields create, revise and remix share. */
 async function common(ctx: Ctx) {
   const voice = str(ctx, 'voice')
@@ -126,6 +133,7 @@ const create: Handler = async (ctx) => {
   const answers = str(ctx, 'answers')
   const base = {
     ...(str(ctx, 'aspect') ? { aspect: str(ctx, 'aspect') as '16:9' } : {}),
+    ...tagsOf(ctx),
     ...(await common(ctx)),
   }
   // Planning: --plan asks the questions and stops; --plan-id with --answers writes the brief and makes the video.

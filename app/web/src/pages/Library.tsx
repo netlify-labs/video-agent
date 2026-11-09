@@ -1,7 +1,6 @@
 import {
   Alert,
   Button,
-  Center,
   Group,
   Loader,
   Menu,
@@ -19,6 +18,7 @@ import { IconArrowsShuffle, IconDots, IconLock, IconMessage, IconSearch } from '
 import { Suspense, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { useQueryClient } from '@tanstack/react-query'
+import { useTagsInUse } from '../components/TagsField'
 import { $api, commentsInit, errorMessage, useCanCreate, videoInit, type Video } from '../api/client'
 import {
   PageHeader,
@@ -31,6 +31,7 @@ import {
   relativeTime,
 } from '../components/bits'
 import { FavoriteStar } from '../components/FavoriteButton'
+import { LoadMore } from '../components/LoadMore'
 import { RemixDialog, latestReady, useCanRemix } from '../components/RemixDialog'
 import { lazyPage, newVideoRoute, videoRoute } from '../routes'
 import { useLibraryTools } from '../webmcp/libraryTools'
@@ -195,6 +196,7 @@ function VideoCard({ v, priority }: { v: Video; priority: boolean }) {
               v.versions.length > 1 ? `${v.versions.length} versions` : null,
               live ? 'Public' : null,
               v.isRemix ? 'Remix' : null,
+              ...v.tags.map((t) => `#${t}`),
               approved ? `${approved} approved` : null,
             ]
               .filter(Boolean)
@@ -266,6 +268,15 @@ function CardSkeleton() {
   )
 }
 
+const HIDE_TAG_KEY = 'va.library.hideTag'
+
+/** The tags in use as Select options ("demo (20)"), plus the chosen one when no video carries it any more. */
+function tagOptions(inUse: { tag: string; count: number }[], chosen: string | null) {
+  const opts = inUse.map((t) => ({ value: t.tag, label: `${t.tag} (${t.count})` }))
+  if (chosen && !inUse.some((t) => t.tag === chosen)) opts.push({ value: chosen, label: chosen })
+  return opts
+}
+
 export function LibraryPage() {
   const [q, setQ] = useState('')
   const [debounced] = useDebouncedValue(q, 300)
@@ -274,6 +285,26 @@ export function LibraryPage() {
   const [status, setStatus] = useState<string | null>(null)
   const canCreate = useCanCreate()
   const [published, setPublished] = useState<string | null>(null)
+  // Two tag filters: only videos with a tag, and hide videos with a tag. Hiding is remembered on this device, so
+  // demo videos stay out of the way until you ask for them.
+  const tagsInUse = useTagsInUse()
+  const [tag, setTag] = useState<string | null>(null)
+  const [hideTag, setHideTagState] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(HIDE_TAG_KEY)
+    } catch {
+      return null
+    }
+  })
+  const setHideTag = (t: string | null) => {
+    setHideTagState(t)
+    try {
+      if (t) localStorage.setItem(HIDE_TAG_KEY, t)
+      else localStorage.removeItem(HIDE_TAG_KEY)
+    } catch {
+      // Not remembered, then.
+    }
+  }
   const search = useRef<HTMLInputElement>(null)
   useHotkeys([['/', () => search.current?.focus()]])
   // WebMCP (va-qago): an agent searches and filters through the same controls.
@@ -285,6 +316,9 @@ export function LibraryPage() {
     ...(debounced ? { q: debounced } : {}),
     ...(status ? { status: status as Video['status'] } : {}),
     ...(published ? { published: published as 'true' | 'false' } : {}),
+    ...(tag ? { tag } : {}),
+    // Asking for a tag shows it even if it's the hidden one.
+    ...(hideTag && hideTag !== tag ? { withoutTag: hideTag } : {}),
   }
   const list = $api.useInfiniteQuery(
     'get',
@@ -299,7 +333,7 @@ export function LibraryPage() {
     },
   )
   const items = list.data?.pages.flatMap((p) => p.items) ?? []
-  const filtered = Boolean(debounced || status || published || owner !== 'all')
+  const filtered = Boolean(debounced || status || published || tag || hideTag || owner !== 'all')
   const working = items.filter((v) => inProgress(v.status)).length
   const finding =
     items.length === 0
@@ -374,6 +408,32 @@ export function LibraryPage() {
             { value: 'false', label: 'Not public' },
           ]}
         />
+        {tagsInUse.length || tag || hideTag ? (
+          <>
+            <Select
+              aria-label="Tag"
+              placeholder="Any tag"
+              clearable
+              value={tag}
+              onChange={setTag}
+              w={160}
+              radius="xl"
+              data-testid="tag-filter"
+              data={tagOptions(tagsInUse, tag)}
+            />
+            <Select
+              aria-label="Hide a tag"
+              placeholder="Hide a tag"
+              clearable
+              value={hideTag}
+              onChange={setHideTag}
+              w={170}
+              radius="xl"
+              data-testid="hide-tag-filter"
+              data={tagOptions(tagsInUse, hideTag).map((o) => ({ ...o, label: `Hide ${o.label}` }))}
+            />
+          </>
+        ) : null}
         <TextInput
           aria-label="Search prompts and titles"
           placeholder="Search"
@@ -421,17 +481,13 @@ export function LibraryPage() {
           ))}
         </div>
       )}
-      {list.hasNextPage ? (
-        <Center mt="xl">
-          <Button
-            variant="default"
-            loading={list.isFetchingNextPage}
-            onClick={() => void list.fetchNextPage()}
-          >
-            Show more
-          </Button>
-        </Center>
-      ) : null}
+      {/* Scrolling near the end loads the next 24. */}
+      <LoadMore
+        hasMore={list.hasNextPage}
+        loading={list.isFetchingNextPage}
+        failed={list.isFetchNextPageError}
+        onMore={() => void list.fetchNextPage()}
+      />
     </Stack>
   )
 }

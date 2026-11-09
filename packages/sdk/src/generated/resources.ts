@@ -1038,6 +1038,7 @@ export function resources(t: Transport) {
               'externalRef',
               'externalUrl',
               'private',
+              'tags',
               'context',
               'recording',
               'agent',
@@ -1105,9 +1106,24 @@ export function resources(t: Transport) {
             path: '/api/v1/videos',
             pathParams: {},
             input,
-            query: ['status', 'owner', 'published', 'favorite', 'q', 'externalRef', 'cursor', 'limit'],
+            query: [
+              'status',
+              'owner',
+              'published',
+              'favorite',
+              'q',
+              'externalRef',
+              'tag',
+              'withoutTag',
+              'cursor',
+              'limit',
+            ],
             body: null,
-            features: [...(input?.externalRef !== undefined ? ['external_ref'] : [])],
+            features: [
+              ...(input?.externalRef !== undefined ? ['external_ref'] : []),
+              ...(input?.tag !== undefined ? ['tags'] : []),
+              ...(input?.withoutTag !== undefined ? ['tags'] : []),
+            ],
             operationId: 'listVideos',
           },
           opts,
@@ -1209,6 +1225,18 @@ export function resources(t: Transport) {
           },
           opts,
         ),
+      /** List the tags in use (`listVideoTags`) */
+      tags: (opts?: CallOptions): Promise<Ok<'/api/v1/video-tags', 'get'>> =>
+        t.call<Ok<'/api/v1/video-tags', 'get'>>(
+          {
+            method: 'GET',
+            path: '/api/v1/video-tags',
+            pathParams: {},
+            features: [...['tags']],
+            operationId: 'listVideoTags',
+          },
+          opts,
+        ),
       /** Unstar a video (`unfavoriteVideo`) */
       unfavorite: (id: string | number, opts?: CallOptions): Promise<undefined> =>
         t.call<undefined>(
@@ -1234,7 +1262,7 @@ export function resources(t: Transport) {
             pathParams: { id },
             input,
             query: [],
-            body: ['title', 'private', 'language'],
+            body: ['title', 'private', 'language', 'tags'],
             features: [],
             operationId: 'updateVideo',
           },

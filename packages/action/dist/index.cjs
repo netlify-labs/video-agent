@@ -1462,6 +1462,7 @@ function resources(t) {
             "externalRef",
             "externalUrl",
             "private",
+            "tags",
             "context",
             "recording",
             "agent",
@@ -1522,9 +1523,24 @@ function resources(t) {
           path: "/api/v1/videos",
           pathParams: {},
           input,
-          query: ["status", "owner", "published", "favorite", "q", "externalRef", "cursor", "limit"],
+          query: [
+            "status",
+            "owner",
+            "published",
+            "favorite",
+            "q",
+            "externalRef",
+            "tag",
+            "withoutTag",
+            "cursor",
+            "limit"
+          ],
           body: null,
-          features: [...input?.externalRef !== void 0 ? ["external_ref"] : []],
+          features: [
+            ...input?.externalRef !== void 0 ? ["external_ref"] : [],
+            ...input?.tag !== void 0 ? ["tags"] : [],
+            ...input?.withoutTag !== void 0 ? ["tags"] : []
+          ],
           operationId: "listVideos"
         },
         opts
@@ -1612,6 +1628,17 @@ function resources(t) {
         },
         opts
       ),
+      /** List the tags in use (`listVideoTags`) */
+      tags: (opts) => t.call(
+        {
+          method: "GET",
+          path: "/api/v1/video-tags",
+          pathParams: {},
+          features: [...["tags"]],
+          operationId: "listVideoTags"
+        },
+        opts
+      ),
       /** Unstar a video (`unfavoriteVideo`) */
       unfavorite: (id, opts) => t.call(
         {
@@ -1631,7 +1658,7 @@ function resources(t) {
           pathParams: { id },
           input,
           query: [],
-          body: ["title", "private", "language"],
+          body: ["title", "private", "language", "tags"],
           features: [],
           operationId: "updateVideo"
         },

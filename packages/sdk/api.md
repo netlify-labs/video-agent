@@ -334,6 +334,8 @@ export declare function resources(t: Transport): {
         remix: (id: string | number, input: Input<"/api/v1/videos/{id}/remix", "post">, opts?: CallOptions) => Promise<Ok<"/api/v1/videos/{id}/remix", "post">>;
         /** Revise a video (`reviseVideo`) */
         revise: (id: string | number, input: Input<"/api/v1/videos/{id}/versions", "post">, opts?: CallOptions) => Promise<Ok<"/api/v1/videos/{id}/versions", "post">>;
+        /** List the tags in use (`listVideoTags`) */
+        tags: (opts?: CallOptions) => Promise<Ok<"/api/v1/video-tags", "get">>;
         /** Unstar a video (`unfavoriteVideo`) */
         unfavorite: (id: string | number, opts?: CallOptions) => Promise<undefined>;
         /** Update a video (`updateVideo`) */

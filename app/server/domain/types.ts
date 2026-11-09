@@ -333,6 +333,8 @@ export interface JobRow {
   externalRef?: string | null
   /** A link to that thing (https). */
   externalUrl?: string | null
+  /** Labels to filter the library by ("demo"): lowercase slugs, sorted, at most 10. Absent reads as none. */
+  tags?: string[]
 }
 
 /**

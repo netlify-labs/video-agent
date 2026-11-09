@@ -16,6 +16,7 @@ import {
   createVideo,
   deleteVideo,
   listVideos,
+  listVideoTags,
   setFavorite,
   publishVersion,
   updateVideo,
@@ -433,7 +434,11 @@ export function createApp(deps: Deps, opts: AppOptions) {
       method: 'get',
       path: '/api/v1/videos',
       operationId: 'listVideos',
-      'x-sdk': { resource: 'videos', method: 'list', fieldFeatures: { externalRef: 'external_ref' } },
+      'x-sdk': {
+        resource: 'videos',
+        method: 'list',
+        fieldFeatures: { externalRef: 'external_ref', tag: 'tags', withoutTag: 'tags' },
+      },
       summary: 'List videos',
       description: 'Lists videos, newest first.',
       tags: ['videos'],
@@ -451,6 +456,8 @@ export function createApp(deps: Deps, opts: AppOptions) {
           externalRef: s.ExternalRefSchema.optional().openapi({
             description: 'Only videos made with this externalRef (exact match), newest first',
           }),
+          tag: s.TagSchema.optional().openapi({ description: 'Only videos with this tag' }),
+          withoutTag: s.TagSchema.optional().openapi({ description: 'Leave out videos with this tag' }),
           cursor: z.string().max(500).optional(),
           limit: z.coerce.number().int().min(1).max(50).optional(),
         }),
@@ -466,6 +473,21 @@ export function createApp(deps: Deps, opts: AppOptions) {
       })
       return c.json(res, 200)
     },
+  )
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/v1/video-tags',
+      operationId: 'listVideoTags',
+      'x-sdk': { resource: 'videos', method: 'tags', feature: 'tags' },
+      summary: 'List the tags in use',
+      description:
+        "The tags on the videos you can see, most used first, each with how many videos carry it. Set a video's tags when creating it or with PATCH /api/v1/videos/{id}; filter the list with ?tag= and ?withoutTag=.",
+      tags: ['videos'],
+      security,
+      responses: { 200: json(s.VideoTagsSchema, 'Tags'), ...errors },
+    }),
+    async (c) => c.json(await listVideoTags(deps, c.get('principal')), 200),
   )
   for (const method of ['put', 'delete'] as const)
     app.openapi(
@@ -521,7 +543,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       'x-sdk': { resource: 'videos', method: 'update' },
       summary: 'Update a video',
       description:
-        'Renames a video, makes it private, or sets the language spoken in it (for narration captions).',
+        'Renames a video, makes it private, sets its tags, or sets the language spoken in it (for narration captions).',
       tags: ['videos'],
       security,
       request: { params: IdParam, body: jsonBody(s.UpdateVideoSchema) },

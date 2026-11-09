@@ -16,6 +16,7 @@ import {
   Tooltip,
   UnstyledButton,
 } from '@mantine/core'
+import { TagsField } from '../components/TagsField'
 import { useMediaQuery } from '@mantine/hooks'
 import { notifications } from '@mantine/notifications'
 import { IconArrowsShuffle, IconBolt, IconListCheck } from '@tabler/icons-react'
@@ -193,6 +194,7 @@ export function NewVideoPage() {
   const [lengthMode, setLengthMode] = useState<'auto' | 'set'>('auto')
   const [seconds, setSeconds] = useState<number | string>(30)
   const [title, setTitle] = useState('')
+  const [tags, setTags] = useState<string[]>([])
   const [media, setMedia] = useState<Media[]>([])
   const [sound, setSound] = useState<Sound>('silent')
   const [soundTouched, setSoundTouched] = useState(false)
@@ -238,6 +240,7 @@ export function NewVideoPage() {
         aspect: shape,
         ...(lengthMode === 'set' ? { durationSec: Number(seconds) } : {}),
         ...(title.trim() ? { title: title.trim() } : {}),
+        ...(tags.length ? { tags } : {}),
         ...(planId ? { planId } : {}),
         ...(media.length ? { mediaIds: media.map((m) => m.id) } : {}),
         // With a plan, an untouched Sound is the plan's (from the request); without one there's nothing else to go on.
@@ -280,6 +283,7 @@ export function NewVideoPage() {
           aspect: f.aspect ?? '16:9',
           ...(f.duration_sec ? { durationSec: f.duration_sec } : {}),
           ...(f.title?.trim() ? { title: f.title.trim() } : {}),
+          ...(tags.length ? { tags } : {}),
           ...(media.length ? { mediaIds: media.map((m) => m.id) } : {}),
           sound: f.sound ?? 'silent',
           ...(f.voiceover
@@ -552,6 +556,11 @@ export function NewVideoPage() {
                 onChange={(e) => {
                   setTitle(e.currentTarget.value)
                 }}
+              />
+              <TagsField
+                value={tags}
+                onChange={setTags}
+                description="Optional. Labels like demo, to filter the library by."
               />
               {/* Sticks to the bottom of the window while the form scrolls, so Create video is always in reach. */}
               <Group className="va-sticky-actions">

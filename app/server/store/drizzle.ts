@@ -198,6 +198,8 @@ function repoFor(db: Db): Repo {
       }
       if (q.status) conds.push(eq(t.jobs.status, q.status))
       if (q.externalRef !== undefined) conds.push(eq(t.jobs.externalRef, q.externalRef))
+      if (q.tag) conds.push(sql`${t.jobs.tags} @> array[${q.tag}]::text[]`)
+      if (q.withoutTag) conds.push(sql`not (${t.jobs.tags} @> array[${q.withoutTag}]::text[])`)
       const livePub = anyRow(
         t.publications,
         and(eq(t.publications.jobId, t.jobs.id), isNull(t.publications.unpublishedAt)),
@@ -1171,6 +1173,23 @@ function repoFor(db: Db): Repo {
       if (on) await db.insert(t.favorites).values({ userId, jobId, createdAt: at }).onConflictDoNothing()
       else
         await db.delete(t.favorites).where(and(eq(t.favorites.userId, userId), eq(t.favorites.jobId, jobId)))
+    },
+    tagCounts: async (vis) => {
+      // Tagged videos are few, so their tag lists are read and counted here rather than unnested in SQL.
+      const conds = [isNull(t.jobs.deletedAt), sql`cardinality(${t.jobs.tags}) > 0`]
+      if (!vis.all) {
+        const visible = or(eq(t.jobs.private, false), eq(t.jobs.ownerId, vis.userId))
+        if (visible) conds.push(visible)
+      }
+      const rows = await db
+        .select({ tags: t.jobs.tags })
+        .from(t.jobs)
+        .where(and(...conds))
+      const counts = new Map<string, number>()
+      for (const r of rows) for (const tag of r.tags) counts.set(tag, (counts.get(tag) ?? 0) + 1)
+      return [...counts]
+        .map(([tag, count]) => ({ tag, count }))
+        .sort((x, y) => y.count - x.count || (x.tag < y.tag ? -1 : 1))
     },
     favoriteJobIds: async (userId, jobIds) => {
       if (jobIds.length === 0) return []

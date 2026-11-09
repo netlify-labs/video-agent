@@ -41,6 +41,8 @@ const list: Handler = async (ctx) => {
     ...(typeof f.status === 'string' ? { status: f.status as Video['status'] } : {}),
     ...(f.published ? { published: 'true' as const } : {}),
     ...(f.favorite ? { favorite: 'true' as const } : {}),
+    ...(typeof f.tag === 'string' ? { tag: f.tag } : {}),
+    ...(typeof f['without-tag'] === 'string' ? { withoutTag: f['without-tag'] } : {}),
     ...(typeof f.limit === 'number' ? { limit: f.limit } : {}),
   }
   const va = ctx.sdk()
@@ -63,6 +65,17 @@ const list: Handler = async (ctx) => {
           ...(nextCursor ? ['', 'More videos: add --all, or --limit.'] : []),
         ].join('\n')
       : 'No videos.',
+  }
+}
+
+/** Sets a video's whole list of tags; with none, clears it. */
+const tag: Handler = async (ctx) => {
+  const { id } = await resolveVideoArg(ctx)
+  const tags = ctx.args.slice(1)
+  const video = await ctx.sdk().videos.update(id, { tags })
+  return {
+    json: video,
+    text: video.tags.length ? `${video.title}: ${video.tags.join(', ')}` : `${video.title}: no tags.`,
   }
 }
 
@@ -147,4 +160,4 @@ const open: Handler = async (ctx) => {
   return { json: { url }, text: url }
 }
 
-export const READ_COMMANDS: Record<string, Handler> = { get, list, wait, download, open }
+export const READ_COMMANDS: Record<string, Handler> = { get, list, tag, wait, download, open }

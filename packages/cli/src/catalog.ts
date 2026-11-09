@@ -17,6 +17,7 @@ export type FeatureName =
   | 'external_ref'
   | 'destinations'
   | 'youtube'
+  | 'tags'
 
 export type ArgType = 'string' | 'video' | 'file'
 
@@ -175,6 +176,11 @@ export const COMMANDS: CommandSpec[] = [
         multiple: true,
         description:
           'A media id, or a file to upload first (file:"caption" sets its caption). Repeatable, up to 12.',
+      },
+      tag: {
+        type: 'string',
+        multiple: true,
+        description: 'A tag to file it under, like demo. Repeatable, up to 10. (needs tags on the server)',
       },
       'webhook-url': { type: 'string', description: "Also send this video's webhook events here." },
       'idempotency-key': { type: 'string', description: 'Retrying with the same key never makes two.' },
@@ -355,6 +361,8 @@ export const COMMANDS: CommandSpec[] = [
       },
       published: { type: 'boolean', description: 'Only published ones.' },
       favorite: { type: 'boolean', description: 'Only the ones you starred.' },
+      tag: { type: 'string', description: 'Only videos with this tag.' },
+      'without-tag': { type: 'string', description: 'Leave out videos with this tag.' },
       limit: { type: 'number', description: 'How many per page.' },
       all: { type: 'boolean', description: 'Every page, not just the first.' },
     },
@@ -362,6 +370,25 @@ export const COMMANDS: CommandSpec[] = [
     sdk: ['videos.list', 'videos.listAll'],
     needsHostedApp: true,
     ready: true,
+  },
+  {
+    name: 'tag',
+    summary: "Set a video's tags.",
+    args: [
+      video,
+      {
+        name: 'tags',
+        type: 'string',
+        variadic: true,
+        description: 'The whole new list, like demo launch. None clears them.',
+      },
+    ],
+    flags: {},
+    examples: ['video-agent tag vid_01… demo', 'video-agent list --without-tag demo'],
+    sdk: ['videos.update'],
+    needsHostedApp: true,
+    ready: true,
+    feature: 'tags',
   },
   {
     name: 'wait',

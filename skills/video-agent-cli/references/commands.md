@@ -116,6 +116,7 @@ video-agent create "A demo of adding a webhook" --recording ./take1 --hide-text 
 - `--sound <value>`: silent, music or music_sfx.
 - `--voice <value>`: A voice-over in this voice (e.g. af_heart), or off.
 - `--media <value>` (repeatable): A media id, or a file to upload first (file:"caption" sets its caption). Repeatable, up to 12.
+- `--tag <value>` (repeatable): A tag to file it under, like demo. Repeatable, up to 10. (needs tags on the server)
 - `--webhook-url <value>`: Also send this video's webhook events here.
 - `--idempotency-key <value>`: Retrying with the same key never makes two.
 - `--prompt-file <value>`: Read the prompt from a file, or '-' for stdin.
@@ -247,8 +248,20 @@ video-agent list --mine --json
 - `--status <value>`: queued, running, finishing, ready, failed, cancelled or timed_out.
 - `--published`: Only published ones.
 - `--favorite`: Only the ones you starred.
+- `--tag <value>`: Only videos with this tag.
+- `--without-tag <value>`: Leave out videos with this tag.
 - `--limit <n>`: How many per page.
 - `--all`: Every page, not just the first.
+
+### tag
+
+Set a video's tags. Needs the server feature "tags" (see whoami).
+
+```sh
+video-agent tag <video> [tags…]
+video-agent tag vid_01… demo
+video-agent list --without-tag demo
+```
 
 ### wait
 

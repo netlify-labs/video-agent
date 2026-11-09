@@ -68,6 +68,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/video-tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the tags in use
+         * @description The tags on the videos you can see, most used first, each with how many videos carry it. Set a video's tags when creating it or with PATCH /api/v1/videos/{id}; filter the list with ?tag= and ?withoutTag=.
+         */
+        get: operations["listVideoTags"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/videos/{id}/favorite": {
         parameters: {
             query?: never;
@@ -115,7 +135,7 @@ export interface paths {
         head?: never;
         /**
          * Update a video
-         * @description Renames a video, makes it private, or sets the language spoken in it (for narration captions).
+         * @description Renames a video, makes it private, sets its tags, or sets the language spoken in it (for narration captions).
          */
         patch: operations["updateVideo"];
         trace?: never;
@@ -1975,7 +1995,7 @@ export interface components {
                 release: string | null;
             };
             /** @description Features this deployment has and has switched on. Clients hide what isn't listed. See app/server/domain/features.ts. */
-            features: ("remix" | "narration" | "planning" | "rest_wait" | "cli_login" | "looks" | "engines" | "scoped_revision" | "screen_recording" | "context" | "external_ref" | "destinations" | "youtube" | "webmcp")[];
+            features: ("remix" | "narration" | "planning" | "rest_wait" | "cli_login" | "looks" | "engines" | "scoped_revision" | "screen_recording" | "context" | "external_ref" | "destinations" | "youtube" | "webmcp" | "tags")[];
             admission: "invite-only" | string[] | null;
             siteUrl: string;
             /** @description AI Gateway is available, so Plan it first is offered. */
@@ -2040,6 +2060,8 @@ export interface components {
             externalRef: string | null;
             /** @description A link to it, or null */
             externalUrl: string | null;
+            /** @description Its tags, sorted; everyone who sees the video sees them */
+            tags: string[];
             links: {
                 self: string;
             };
@@ -2477,6 +2499,8 @@ export interface components {
             externalUrl?: string;
             /** @description Make the video private (you and admins only) from the start. Needs permission to make videos private. */
             private?: boolean;
+            /** @description Labels to filter the library by, like ["demo"]. Change them later with PATCH /api/v1/videos/{id}. */
+            tags?: string[];
             context?: components["schemas"]["Context"] & unknown;
             recording?: components["schemas"]["RecordingInput"];
             /** @description false: a Quick demo, made from the recording with no agent authoring (a stock intro and outro, a scene per step, callouts from what was clicked); costs about as much as an edit. Needs recording; no voiceover. */
@@ -2534,10 +2558,18 @@ export interface components {
             items: components["schemas"]["Video"][];
             nextCursor: string | null;
         };
+        VideoTags: {
+            items: {
+                tag: string;
+                count: number;
+            }[];
+        };
         UpdateVideo: {
             title?: string;
             private?: boolean;
             language?: components["schemas"]["Language"];
+            /** @description The whole new list of tags; [] removes them all. */
+            tags?: string[];
         };
         Revise: {
             prompt: string;
@@ -4033,6 +4065,10 @@ export interface operations {
                 q?: string;
                 /** @description Only videos made with this externalRef (exact match), newest first */
                 externalRef?: string;
+                /** @description Only videos with this tag */
+                tag?: string;
+                /** @description Leave out videos with this tag */
+                withoutTag?: string;
                 cursor?: string;
                 limit?: number;
             };
@@ -4169,6 +4205,71 @@ export interface operations {
             };
             /** @description Setup required */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listVideoTags: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tags */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VideoTags"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict or not ready */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

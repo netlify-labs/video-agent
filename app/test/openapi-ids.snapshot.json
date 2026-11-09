@@ -34,8 +34,18 @@
       "resource": "videos",
       "method": "list",
       "fieldFeatures": {
-        "externalRef": "external_ref"
+        "externalRef": "external_ref",
+        "tag": "tags",
+        "withoutTag": "tags"
       }
+    }
+  },
+  "GET /api/v1/video-tags": {
+    "operationId": "listVideoTags",
+    "sdk": {
+      "resource": "videos",
+      "method": "tags",
+      "feature": "tags"
     }
   },
   "PUT /api/v1/videos/{id}/favorite": {

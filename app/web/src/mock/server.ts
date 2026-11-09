@@ -30,6 +30,21 @@ export const mockAuthProvider = (): 'identity' | 'netlify' => {
     return 'identity'
   }
 }
+// localStorage.mockManyVideos=<n> pads the library to n videos (copies of the real ones) so a test can scroll pages.
+function manyVideos(list: Video[]): Video[] {
+  let n: number
+  try {
+    n = Number(localStorage.getItem('mockManyVideos') ?? 0)
+  } catch {
+    return list
+  }
+  if (!(n > list.length)) return list
+  return Array.from({ length: n }, (_, i) => {
+    const v = list[i % list.length] as Video
+    return i < list.length ? v : { ...v, id: `${v.id}_${i}`, title: `${v.title} ${i}` }
+  })
+}
+
 // Tests switch roles with localStorage.mockRole (admin by default).
 const mockRole = () => {
   try {
@@ -816,7 +831,7 @@ export function installMock() {
       const q = url.searchParams.get('q')?.toLowerCase()
       const status = url.searchParams.get('status')
       const owner = url.searchParams.get('owner')
-      let items = videos
+      let items = manyVideos(videos)
       if (q)
         items = items.filter(
           (v) =>
@@ -825,7 +840,23 @@ export function installMock() {
       if (status) items = items.filter((v) => v.status === status)
       if (owner === 'me') items = items.filter((v) => v.owner.id === me.id)
       if (url.searchParams.get('favorite') === 'true') items = items.filter((v) => v.favorite)
-      return json({ items: items.map(withComments), nextCursor: null })
+      const tag = url.searchParams.get('tag')
+      const withoutTag = url.searchParams.get('withoutTag')
+      if (tag) items = items.filter((v) => v.tags.includes(tag))
+      if (withoutTag) items = items.filter((v) => !v.tags.includes(withoutTag))
+      // Pages like the server: limit, and an opaque cursor (here, the offset of the next page).
+      const limit = Number(url.searchParams.get('limit') ?? 50)
+      const from = Number(url.searchParams.get('cursor') || 0)
+      const next = from + limit < items.length ? String(from + limit) : null
+      return json({ items: items.slice(from, from + limit).map(withComments), nextCursor: next })
+    }
+    if (p === '/api/v1/video-tags' && method === 'GET') {
+      const counts = new Map<string, number>()
+      for (const v of videos) for (const t of v.tags) counts.set(t, (counts.get(t) ?? 0) + 1)
+      const items = [...counts]
+        .map(([tag, count]) => ({ tag, count }))
+        .sort((a, b) => b.count - a.count || (a.tag < b.tag ? -1 : 1))
+      return json({ items })
     }
     const fav = /^\/api\/v1\/videos\/([^/]+)\/favorite$/.exec(p)
     if (fav?.[1] && (method === 'PUT' || method === 'DELETE')) {
@@ -1902,12 +1933,18 @@ export function installMock() {
       if (method === 'GET') stepMockFinish(m[1])
       const v = videos.find((x) => x.id === m[1])
       if (v && method === 'PATCH') {
-        const b = (await readBody(init, input)) as { title?: string; private?: boolean; language?: string }
+        const b = (await readBody(init, input)) as {
+          title?: string
+          private?: boolean
+          language?: string
+          tags?: string[]
+        }
         if (b.language !== undefined && !isLanguage(b.language))
           return fail(400, 'invalid_request', 'Unknown language.')
         if (b.title !== undefined) v.title = b.title.trim()
         if (b.private !== undefined) v.private = b.private
         if (b.language !== undefined) v.language = b.language
+        if (b.tags !== undefined) v.tags = [...b.tags].sort()
       }
       return v ? json(withComments(v)) : fail(404, 'not_found', 'Video not found.')
     }

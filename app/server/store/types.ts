@@ -61,6 +61,10 @@ export interface JobQuery {
   q?: string
   /** Exact match on the video's externalRef. */
   externalRef?: string
+  /** Only videos that carry this tag. */
+  tag?: string
+  /** Leave out videos that carry this tag. */
+  withoutTag?: string
   cursor?: { createdAt: string; id: string }
   /** Private videos are returned only to their owner, unless `all` (admins). */
   visibleTo?: { userId: string; all: boolean }
@@ -323,6 +327,8 @@ export interface Repo {
   setFavorite(userId: string, jobId: string, on: boolean, at: string): Promise<void>
   /** Which of these videos the person starred. */
   favoriteJobIds(userId: string, jobIds: string[]): Promise<string[]>
+  /** The tags in use on videos this person can see, most used first. */
+  tagCounts(visibleTo: { userId: string; all: boolean }): Promise<{ tag: string; count: number }[]>
   insertPlan(row: PlanRow): Promise<void>
   getPlan(id: string, opts?: { lock?: boolean }): Promise<PlanRow | null>
   updatePlan(id: string, patch: Partial<PlanRow>): Promise<void>

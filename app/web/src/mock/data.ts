@@ -252,6 +252,7 @@ function video(
     favorite: false,
     externalRef: null,
     externalUrl: null,
+    tags: [],
     links: { self: `/api/v1/videos/${id}` },
     ...extra,
   }
@@ -461,7 +462,11 @@ export const videos: Video[] = [
         },
       ),
     ],
-    { externalRef: 'github:acme/web#pr-123', externalUrl: 'https://github.com/acme/web/pull/123' },
+    {
+      externalRef: 'github:acme/web#pr-123',
+      externalUrl: 'https://github.com/acme/web/pull/123',
+      tags: ['demo'],
+    },
   ),
   video(
     'vid_sales',

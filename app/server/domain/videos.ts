@@ -113,6 +113,8 @@ export interface CreateVideoInput {
   /** What the video is for outside the app; set once (github-action plan §6.2). */
   externalRef?: string | undefined
   externalUrl?: string | undefined
+  /** Labels to filter the library by. */
+  tags?: string[] | undefined
   /** Private from the start (needs video:private). */
   private?: boolean | undefined
   /** Background for the run outside the prompt (github-action plan §6.1). */
@@ -498,6 +500,7 @@ export async function createVideo(
         language: DEFAULT_LANGUAGE,
         externalRef: input.externalRef ?? null,
         externalUrl: input.externalUrl ?? null,
+        tags: [...(input.tags ?? [])].sort(),
       }
       await repo.insertJob(job)
       if (job.private) await writeAccessMirror(deps, job)
@@ -909,12 +912,18 @@ export async function updateVideo(
   deps: Deps,
   principal: Principal,
   jobId: string,
-  patch: { title?: string | undefined; private?: boolean | undefined; language?: Language | undefined },
+  patch: {
+    title?: string | undefined
+    private?: boolean | undefined
+    language?: Language | undefined
+    tags?: string[] | undefined
+  },
 ) {
   return deps.store.tx(async (repo) => {
     const job = await loadJob(repo, principal, jobId, true)
     // The language is a setting of the video like its title: whoever may rename it may set it.
-    if (patch.title !== undefined || patch.language !== undefined)
+    // Tags too: they're a label on the video, like its title.
+    if (patch.title !== undefined || patch.language !== undefined || patch.tags !== undefined)
       assertCan(principal, 'video:rename', { ownerId: job.ownerId })
     const privacyChanges = patch.private !== undefined && patch.private !== job.private
     if (patch.private !== undefined) assertCan(principal, 'video:private', { ownerId: job.ownerId })
@@ -922,6 +931,7 @@ export async function updateVideo(
       ...(patch.title !== undefined ? { title: patch.title.trim() } : {}),
       ...(privacyChanges ? { private: patch.private as boolean, accessEpoch: job.accessEpoch + 1 } : {}),
       ...(patch.language !== undefined ? { language: patch.language } : {}),
+      ...(patch.tags !== undefined ? { tags: [...patch.tags].sort() } : {}),
       updatedAt: deps.clock.now().toISOString(),
       version: job.version + 1,
     })
@@ -1501,6 +1511,7 @@ async function buildVideoDto(
     favorite,
     externalRef: job.externalRef ?? null,
     externalUrl: job.externalUrl ?? null,
+    tags: job.tags ?? [],
     links: { self: `${deps.config.siteUrl}/api/v1/videos/${job.id}` },
   }
 }
@@ -1561,6 +1572,14 @@ function pageRepo(store: Repo, rows: VideoPageRows): Repo {
   })
 }
 
+/** The tags in use on the videos this person can see, most used first (for the library's tag filter). */
+export async function listVideoTags(deps: Deps, principal: Principal) {
+  assertCan(principal, 'video:read')
+  return {
+    items: await deps.store.tagCounts({ userId: principal.userId, all: principal.role === 'admin' }),
+  }
+}
+
 export async function listVideos(
   deps: Deps,
   principal: Principal,
@@ -1571,6 +1590,8 @@ export async function listVideos(
     favorite?: boolean | undefined
     q?: string | undefined
     externalRef?: string | undefined
+    tag?: string | undefined
+    withoutTag?: string | undefined
     cursor?: string | undefined
     limit?: number | undefined
   },
@@ -1585,6 +1606,8 @@ export async function listVideos(
     ...(q.favorite ? { favoriteOf: principal.userId } : {}),
     ...(q.q ? { q: q.q } : {}),
     ...(q.externalRef ? { externalRef: q.externalRef } : {}),
+    ...(q.tag ? { tag: q.tag } : {}),
+    ...(q.withoutTag ? { withoutTag: q.withoutTag } : {}),
     ...(cursor ? { cursor } : {}),
     visibleTo: { userId: principal.userId, all: principal.role === 'admin' },
     limit: limit + 1,

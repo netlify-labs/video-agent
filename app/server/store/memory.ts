@@ -271,6 +271,9 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
       if (vis && !vis.all) rows = rows.filter((j) => !j.private || j.ownerId === vis.userId)
       if (q.status) rows = rows.filter((j) => j.status === q.status)
       if (q.externalRef !== undefined) rows = rows.filter((j) => j.externalRef === q.externalRef)
+      const { tag, withoutTag } = q
+      if (tag) rows = rows.filter((j) => (j.tags ?? []).includes(tag))
+      if (withoutTag) rows = rows.filter((j) => !(j.tags ?? []).includes(withoutTag))
       if (q.published !== undefined) rows = rows.filter((j) => published.has(j.id) === q.published)
       const fav = q.favoriteOf
       if (fav) rows = rows.filter((j) => state.favorites.has(`${fav}/${j.id}`))
@@ -826,6 +829,16 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
       else if (!state.favorites.has(k)) state.favorites.set(k, at)
     },
     favoriteJobIds: async (userId, jobIds) => jobIds.filter((id) => state.favorites.has(`${userId}/${id}`)),
+    tagCounts: async (vis) => {
+      const counts = new Map<string, number>()
+      for (const j of state.jobs.values()) {
+        if (j.deletedAt !== null || (!vis.all && j.private && j.ownerId !== vis.userId)) continue
+        for (const tag of j.tags ?? []) counts.set(tag, (counts.get(tag) ?? 0) + 1)
+      }
+      return [...counts]
+        .map(([tag, count]) => ({ tag, count }))
+        .sort((a, b) => b.count - a.count || (a.tag < b.tag ? -1 : 1))
+    },
     getNotificationReadAt: async (userId) => state.notificationReads.get(userId) ?? null,
     setNotificationReadAt: async (userId, readAt) => {
       state.notificationReads.set(userId, readAt)

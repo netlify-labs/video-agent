@@ -3,6 +3,7 @@ import {
   ActionIcon,
   Alert,
   Anchor,
+  Badge,
   Button,
   Card,
   CopyButton,
@@ -44,6 +45,7 @@ import {
 } from '../components/VoiceoverControl'
 import { CommentsCard, ReviewPlayer, VerdictBar, type Pin } from '../components/Review'
 import { CompositionPreview } from '../components/CompositionPreview'
+import { TagsField } from '../components/TagsField'
 import { DetailsButton, DetailsCard, VersionDetailsModal } from '../components/VersionDetails'
 import { AttachButton, DropTarget, PendingUploads, useAttachUploads } from '../components/AttachFiles'
 import { LanguageSelect, languageName } from '../components/LanguageSelect'
@@ -212,17 +214,7 @@ function Progress({ video, v, canCancel }: { video: Video; v: Version; canCancel
   }, [notify, video.id])
   return (
     <Card p={0} style={{ overflow: 'hidden' }}>
-      {snapshot ? (
-        <div style={{ padding: 12, paddingBottom: 0 }} data-testid="live-snapshot">
-          <CompositionPreview
-            key={snapshot.seq}
-            videoId={video.id}
-            versionN={v.n}
-            dimensions={video.dimensions}
-            live
-          />
-        </div>
-      ) : null}
+      {/* The status comes first, so it's in view without scrolling past a tall draft; the live draft sits under it. */}
       <div
         style={{
           aspectRatio: snapshot ? undefined : '16 / 9',
@@ -332,6 +324,17 @@ function Progress({ video, v, canCancel }: { video: Video; v: Version; canCancel
           </Group>
         </Stack>
       </div>
+      {snapshot ? (
+        <div style={{ padding: 12 }} data-testid="live-snapshot">
+          <CompositionPreview
+            key={snapshot.seq}
+            videoId={video.id}
+            versionN={v.n}
+            dimensions={video.dimensions}
+            live
+          />
+        </div>
+      ) : null}
     </Card>
   )
 }
@@ -885,6 +888,26 @@ export function VideoPage() {
             </Title>
           )}
           <div className="va-sub num">{sub}</div>
+          {canPublish ? (
+            <div style={{ maxWidth: 520, marginTop: 8 }}>
+              <TagsField
+                label={null}
+                size="xs"
+                value={data.tags}
+                onChange={(tags) => {
+                  rename.mutate({ params: { path: { id } }, body: { tags } })
+                }}
+              />
+            </div>
+          ) : data.tags.length ? (
+            <Group gap={6} mt={8} data-testid="video-tags">
+              {data.tags.map((t) => (
+                <Badge key={t} variant="light" color="gray" tt="none">
+                  {t}
+                </Badge>
+              ))}
+            </Group>
+          ) : null}
           {data.externalRef ? (
             <div className="va-sub" data-testid="external-ref">
               {externalLabel(data.externalRef).from}{' '}

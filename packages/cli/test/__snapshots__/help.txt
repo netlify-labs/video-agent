@@ -15,6 +15,7 @@ Commands:
   restyle          Restyle a video with another Look. (needs a server with looks)
   get              Show a video.
   list             List videos.
+  tag              Set a video's tags. (needs a server with tags)
   wait             Follow a run until the video is ready.
   download         Download a version's files.
   publish          Publish a version: share link, MP4 link and embed snippet.

@@ -101,8 +101,15 @@ export const jobs = pgTable(
     // GitHub Action, which look the video up by it (github-action plan §6.2). Not unique.
     externalRef: text('external_ref'),
     externalUrl: text('external_url'),
+    // Free-form labels people put on a video ("demo", "launch") to filter the library by; everyone who sees the
+    // video sees them. Lowercase slugs, at most 10.
+    tags: text('tags')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
   },
   (t) => [
+    index('jobs_tags_idx').using('gin', t.tags),
     index('jobs_created_idx').on(t.createdAt, t.id),
     index('jobs_owner_idx').on(t.ownerId, t.createdAt),
     index('jobs_owner_external_ref_idx').on(t.ownerId, t.externalRef),

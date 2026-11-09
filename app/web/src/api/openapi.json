@@ -200,7 +200,8 @@
                 "external_ref",
                 "destinations",
                 "youtube",
-                "webmcp"
+                "webmcp",
+                "tags"
               ]
             },
             "description": "Features this deployment has and has switched on. Clients hide what isn't listed. See app/server/domain/features.ts."
@@ -434,6 +435,13 @@
             ],
             "description": "A link to it, or null"
           },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Its tags, sorted; everyone who sees the video sees them"
+          },
           "links": {
             "type": "object",
             "properties": {
@@ -467,6 +475,7 @@
           "favorite",
           "externalRef",
           "externalUrl",
+          "tags",
           "links"
         ]
       },
@@ -2159,6 +2168,17 @@
             "type": "boolean",
             "description": "Make the video private (you and admins only) from the start. Needs permission to make videos private."
           },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 30,
+              "pattern": "^[a-z0-9][a-z0-9-]*$",
+              "example": "demo"
+            },
+            "maxItems": 10,
+            "description": "Labels to filter the library by, like [\"demo\"]. Change them later with PATCH /api/v1/videos/{id}."
+          },
           "context": {
             "allOf": [
               {
@@ -2343,6 +2363,32 @@
           "nextCursor"
         ]
       },
+      "VideoTags": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "tag": {
+                  "type": "string"
+                },
+                "count": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "tag",
+                "count"
+              ]
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
       "UpdateVideo": {
         "type": "object",
         "properties": {
@@ -2356,6 +2402,17 @@
           },
           "language": {
             "$ref": "#/components/schemas/Language"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 30,
+              "pattern": "^[a-z0-9][a-z0-9-]*$",
+              "example": "demo"
+            },
+            "maxItems": 10,
+            "description": "The whole new list of tags; [] removes them all."
           }
         }
       },
@@ -8502,7 +8559,9 @@
           "resource": "videos",
           "method": "list",
           "fieldFeatures": {
-            "externalRef": "external_ref"
+            "externalRef": "external_ref",
+            "tag": "tags",
+            "withoutTag": "tags"
           }
         },
         "summary": "List videos",
@@ -8590,6 +8649,32 @@
           {
             "schema": {
               "type": "string",
+              "maxLength": 30,
+              "pattern": "^[a-z0-9][a-z0-9-]*$",
+              "example": "demo",
+              "description": "Only videos with this tag"
+            },
+            "required": false,
+            "description": "Only videos with this tag",
+            "name": "tag",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 30,
+              "pattern": "^[a-z0-9][a-z0-9-]*$",
+              "example": "demo",
+              "description": "Leave out videos with this tag"
+            },
+            "required": false,
+            "description": "Leave out videos with this tag",
+            "name": "withoutTag",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
               "maxLength": 500
             },
             "required": false,
@@ -8614,6 +8699,91 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/VideoList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/video-tags": {
+      "get": {
+        "operationId": "listVideoTags",
+        "x-sdk": {
+          "resource": "videos",
+          "method": "tags",
+          "feature": "tags"
+        },
+        "summary": "List the tags in use",
+        "description": "The tags on the videos you can see, most used first, each with how many videos carry it. Set a video's tags when creating it or with PATCH /api/v1/videos/{id}; filter the list with ?tag= and ?withoutTag=.",
+        "tags": [
+          "videos"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tags",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VideoTags"
                 }
               }
             }
@@ -8946,7 +9116,7 @@
           "method": "update"
         },
         "summary": "Update a video",
-        "description": "Renames a video, makes it private, or sets the language spoken in it (for narration captions).",
+        "description": "Renames a video, makes it private, sets its tags, or sets the language spoken in it (for narration captions).",
         "tags": [
           "videos"
         ],
