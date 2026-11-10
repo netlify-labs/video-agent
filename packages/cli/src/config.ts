@@ -45,6 +45,25 @@ export async function writeConfig(dir: string, config: CliConfig): Promise<strin
   return file
 }
 
+/**
+ * A deployment's address from what someone typed: `acme-video.netlify.app`, `https://acme-video.netlify.app/keys` and
+ * `localhost:8888` all work (https unless it's this machine). Only the origin is kept. Null if it isn't a web address.
+ */
+export function siteOrigin(input: string): string | null {
+  const s = input.trim()
+  if (!s || /\s/.test(s)) return null
+  const local = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/|$)/i.test(s)
+  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(s) ? s : `${local ? 'http' : 'https'}://${s}`
+  try {
+    const u = new URL(withScheme)
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return null
+    if (!u.hostname.includes('.') && u.hostname !== 'localhost' && u.hostname !== '[::1]') return null
+    return u.origin
+  } catch {
+    return null
+  }
+}
+
 /** The deployment and key to use, and where each came from (for doctor and whoami). */
 export function resolveConnection(
   flags: { url?: string | undefined; key?: string | undefined },

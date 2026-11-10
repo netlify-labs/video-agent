@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { main } from '../../packages/cli/src/router.js'
 import { hostLabel } from '../../packages/cli/src/commands/account.js'
+import { siteOrigin } from '../../packages/cli/src/config.js'
 import { cli, SITE } from './cli-io.js'
 import { apiKey, harness, type Harness } from './helpers.js'
 
@@ -67,6 +68,68 @@ describe('video-agent login', () => {
     expect(who.stdout).toContain('mia@acme.com (creator)')
     expect(who.stdout).toContain('key from config')
     expect(who.stdout).toMatch(/features: .*cli_login/)
+  })
+
+  it('with no site set, asks for it on the terminal, then saves it with the key', async () => {
+    const h = harness()
+    const c = await cli(h, { key: null, url: null, answers: ['video.example.com/keys'], before: browser(h) })
+    const r = await c.run(['login'])
+    expect(r.code, r.stderr).toBe(0)
+    expect(c.asked).toEqual(['Your Video Agent site (like https://acme-video.netlify.app): '])
+    expect(r.stdout).toContain(`Signed in as mia@acme.com (creator) at ${SITE}.`)
+    expect(saved(c.configDir)).toMatchObject({ url: SITE, apiKey: expect.stringMatching(/^nva_/) })
+    // Next time it's saved, so nothing is asked.
+    const who = await c.run(['whoami'])
+    expect(who.code).toBe(0)
+    expect(who.stdout).toContain('mia@acme.com (creator)')
+    expect(c.asked).toHaveLength(1)
+  })
+
+  it('asks again after an answer that is not a Video Agent site; gives up after three', async () => {
+    const h = harness()
+    const c = await cli(h, {
+      key: null,
+      url: null,
+      answers: ['my site', 'blog.example.com', SITE],
+      before: browser(h),
+    })
+    const r = await c.run(['login'])
+    expect(r.code, r.stderr).toBe(0)
+    expect(r.stderr).toContain(`"my site" isn't a web address.`)
+    expect(r.stderr).toContain(`https://blog.example.com doesn't look like a Video Agent site.`)
+    expect(c.asked).toHaveLength(3)
+    expect(saved(c.configDir).url).toBe(SITE)
+
+    const bad = await cli(h, { key: null, url: null, answers: ['a b', 'nope', 'ftp://x.example'] })
+    const b = await bad.run(['login'])
+    expect(bad.asked).toHaveLength(3)
+    expect([b.code, b.stderr]).toEqual([2, expect.stringContaining('No server set.')])
+    expect(exists(bad.configDir)).toBe(false)
+  })
+
+  it('asks nothing with a site already set, or with no terminal (then says how to set one)', async () => {
+    const h = harness()
+    const c = await cli(h, { key: null, answers: ['other.example.com'], before: browser(h) })
+    expect((await c.run(['login'])).code).toBe(0)
+    expect(c.asked).toEqual([])
+    expect(saved(c.configDir).url).toBe(SITE)
+
+    const ci = await cli(h, { key: null, url: null })
+    const r = await ci.run(['login'])
+    expect([r.code, r.stderr]).toEqual([
+      2,
+      expect.stringContaining('No server set. Run: video-agent login --url <your deployment>'),
+    ])
+  })
+
+  it('reads a site from what people type: bare host, a page on it, or this machine', () => {
+    expect(siteOrigin('acme-video.netlify.app')).toBe('https://acme-video.netlify.app')
+    expect(siteOrigin('  https://acme-video.netlify.app/keys?x=1 ')).toBe('https://acme-video.netlify.app')
+    expect(siteOrigin('http://acme.example')).toBe('http://acme.example')
+    expect(siteOrigin('localhost:8888')).toBe('http://localhost:8888')
+    expect(siteOrigin('127.0.0.1:8888/')).toBe('http://127.0.0.1:8888')
+    for (const bad of ['', 'my site', 'acme', 'ftp://acme.example', 'javascript:alert(1)', 'https://'])
+      expect(siteOrigin(bad), bad).toBeNull()
   })
 
   it('honours slow_down: the interval grows by five seconds', async () => {

@@ -9,6 +9,8 @@ export interface Io {
   fetch: typeof fetch
   now: () => number
   openBrowser: (url: string) => Promise<void>
+  /** Asks a question on the terminal and returns the answer, or null when there's no one to ask (not a terminal). */
+  ask?: (question: string) => Promise<string | null>
   /** Where config.json lives: $XDG_CONFIG_HOME/video-agent, else ~/.config/video-agent. */
   configDir: string
   /** Poll interval for waits; tests set 0. Unset: the SDK's own (3 s, then 8 s). */

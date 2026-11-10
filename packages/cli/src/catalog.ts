@@ -112,7 +112,8 @@ export const COMMANDS: CommandSpec[] = [
   },
   {
     name: 'login',
-    summary: 'Get an API key by approving this CLI in the browser, or save a key you paste.',
+    summary:
+      'Get an API key by approving this CLI in the browser (asks for your site the first time), or paste one.',
     args: [],
     flags: {
       'no-browser': { type: 'boolean', description: 'Print the address and code only (SSH, containers).' },

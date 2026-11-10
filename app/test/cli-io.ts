@@ -30,11 +30,17 @@ export async function cli(
     drive?: boolean
     /** Runs before each request reaches the app (login's tests approve and move the clock here). */
     before?: (req: Request) => void | Promise<void>
+    /** null: no VIDEO_AGENT_URL, as on a fresh machine. */
+    url?: string | null
+    /** Typed answers to the CLI's questions, in order; unset: not a terminal, so nothing is asked. */
+    answers?: string[]
   } = {},
 ) {
   const key = o.key === null ? undefined : (o.key ?? (await apiKey(h, o.as ?? h.member)))
   const opened: string[] = []
   const requests: Request[] = []
+  const asked: string[] = []
+  const answers = [...(o.answers ?? [])]
   const configDir = mkdtempSync(join(tmpdir(), 'va-cli-'))
   const run = async (argv: string[]): Promise<CliRun> => {
     let stdout = ''
@@ -43,7 +49,10 @@ export async function cli(
       stdout: (t) => (stdout += t),
       stderr: (t) => (stderr += t),
       stdin: async () => o.stdin ?? '',
-      env: { VIDEO_AGENT_URL: SITE, ...(key ? { VIDEO_AGENT_KEY: key } : {}) },
+      env: {
+        ...(o.url === null ? {} : { VIDEO_AGENT_URL: o.url ?? SITE }),
+        ...(key ? { VIDEO_AGENT_KEY: key } : {}),
+      },
       fetch: async (input: string | URL | Request, init?: RequestInit) => {
         const req = new Request(input, init)
         requests.push(req.clone())
@@ -57,11 +66,19 @@ export async function cli(
       },
       now: () => Date.now(),
       openBrowser: async (u) => void opened.push(u),
+      ...(o.answers
+        ? {
+            ask: async (q: string) => {
+              asked.push(q)
+              return answers.shift() ?? ''
+            },
+          }
+        : {}),
       configDir,
       pollMs: 0,
     }
     const code = await main(argv, io)
     return { code, stdout, stderr, json: () => JSON.parse(stdout) }
   }
-  return { run, opened, requests, key, configDir }
+  return { run, opened, requests, asked, key, configDir }
 }

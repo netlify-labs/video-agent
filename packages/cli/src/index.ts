@@ -1,5 +1,6 @@
 // netlify-video-agent: the video-agent command (docs/plans/2026-11-04-cli-and-sdk.md §6).
 import { spawn } from 'node:child_process'
+import { createInterface } from 'node:readline/promises'
 import { defaultConfigDir } from './config.js'
 import type { Io } from './io.js'
 
@@ -29,6 +30,20 @@ export function nodeIo(): Io {
       const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'cmd' : 'xdg-open'
       const args = process.platform === 'win32' ? ['/c', 'start', '', url] : [url]
       spawn(cmd, args, { stdio: 'ignore', detached: true }).unref()
+    },
+    ask: async (question) => {
+      if (!process.stdin.isTTY || !process.stderr.isTTY) return null
+      const rl = createInterface({ input: process.stdin, output: process.stderr })
+      // Ctrl+C at the question quits, as it would anywhere else.
+      rl.on('SIGINT', () => {
+        process.stderr.write('\n')
+        process.exit(130)
+      })
+      try {
+        return await rl.question(question)
+      } finally {
+        rl.close()
+      }
     },
     configDir: defaultConfigDir(process.env),
   }

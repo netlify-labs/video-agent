@@ -64,7 +64,7 @@ one JSON line per request on stderr, with request ids.
 
 ### login
 
-Get an API key by approving this CLI in the browser, or save a key you paste.
+Get an API key by approving this CLI in the browser (asks for your site the first time), or paste one.
 
 ```sh
 video-agent login

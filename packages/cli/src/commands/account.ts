@@ -2,7 +2,7 @@
 // this CLI in the browser (the device flow, 3.3a-c) or checks a key you paste; either way the key is never printed.
 import { hostname } from 'node:os'
 import { isVideoAgentError } from '../../../sdk/src/index.js'
-import { readConfig, writeConfig } from '../config.js'
+import { readConfig, siteOrigin, writeConfig } from '../config.js'
 import { localChecks } from '../local/doctor.js'
 import { VERSION } from '../version.js'
 import { CliError, EXIT, UsageError } from '../exit.js'
@@ -55,7 +55,43 @@ async function loginWithKey(ctx: Ctx, key: string) {
   }
 }
 
+/**
+ * The first login on a machine with no --url, VIDEO_AGENT_URL or saved site: asks for it on the terminal (three tries).
+ * With no terminal, or no answer, it leaves the site unset, so the next step says how to set one.
+ */
+async function askForSite(ctx: Ctx) {
+  if (ctx.connection.url || !ctx.io.ask) return
+  for (let tries = 0; tries < 3; tries++) {
+    const answer = await ctx.io.ask('Your Video Agent site (like https://acme-video.netlify.app): ')
+    if (answer === null || !answer.trim()) return
+    const url = siteOrigin(answer)
+    const problem = url
+      ? await notVideoAgent(ctx, url)
+      : `"${answer.trim()}" isn't a web address. Paste your site's address, like acme-video.netlify.app.`
+    if (url && !problem) {
+      ctx.connection.url = url
+      ctx.connection.from.url = 'prompt'
+      ctx.log('login.site_asked', { url })
+      return
+    }
+    ctx.io.stderr(`${problem}\n`)
+  }
+}
+
+/** Why `url` isn't a Video Agent deployment we can reach, or null if it is (its public GET /api/v1/config answers). */
+async function notVideoAgent(ctx: Ctx, url: string): Promise<string | null> {
+  try {
+    const res = await ctx.io.fetch(`${url}/api/v1/config`, { headers: { accept: 'application/json' } })
+    const body = res.ok ? ((await res.json().catch(() => null)) as { features?: unknown } | null) : null
+    if (Array.isArray(body?.features)) return null
+    return `${url} doesn't look like a Video Agent site. Check the address: it's the site you deployed.`
+  } catch (e) {
+    return `Couldn't reach ${url}: ${e instanceof Error ? e.message : String(e)}`
+  }
+}
+
 const login: Handler = async (ctx) => {
+  await askForSite(ctx)
   const key = ctx.flags.key as string | undefined
   if (key) return loginWithKey(ctx, key)
   if (ctx.flags['no-save'])
