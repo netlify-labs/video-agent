@@ -40,6 +40,8 @@ import { voiceoverFrom, type VoiceoverInput } from './voiceover.js'
 export const PLAN_TTL_MS = 24 * 3600_000
 export const ROUTE_DEADLINE_MS = 5_000
 export const MODEL_DEADLINE_MS = 25_000
+/** The wait before the second attempt when the Gateway was busy (429 or 5xx). Tests set it to 0. */
+export const planRetry = { pauseMs: 1_500 }
 const MAX_PROMPT = 4_000
 /** Images the planner looks at (vision input); the rest are described by name and caption only. */
 const MAX_PLAN_IMAGES = 4
@@ -479,7 +481,23 @@ export async function createPlan(
   return planDto(plan)
 }
 
-/** Runs a model call with one bounded retry on invalid output; the retry uses the fast model (docs/spikes.md S1). */
+/** Why a model call failed: the Gateway refused it (429, 5xx), it ran out of time, or anything else. */
+export function failureKind(e: unknown): 'busy' | 'timeout' | 'other' {
+  if (!(e instanceof Error)) return 'other'
+  if (e.name === 'TimeoutError' || e.name === 'AbortError') return 'timeout'
+  return /AI Gateway returned (429|5\d\d)\b/.test(e.message) ? 'busy' : 'other'
+}
+
+const FAILURE_MESSAGES = {
+  busy: 'The AI Gateway is busy right now. Try again in a moment, or create the video now.',
+  timeout: "Planning didn't finish in time. Create the video now, or try again.",
+  other: "Planning couldn't write a usable answer. Try again, or create the video now.",
+}
+
+/**
+ * Runs a model call with one bounded retry; the retry uses the fast model (docs/spikes.md S1). A busy Gateway
+ * refuses both attempts within milliseconds, so the retry waits first.
+ */
 async function callJson<T>(
   deps: Deps,
   p: Principal,
@@ -522,13 +540,13 @@ async function callJson<T>(
       if (!(e instanceof SyntaxError))
         await record(deps, p, plan.id, attempt === 0 ? kind : 'retry', m, started, { error: e })
       lastError = e
+      if (attempt === 0 && failureKind(e) === 'busy' && deadline - Date.now() > planRetry.pauseMs + 3_000)
+        await new Promise((r) => setTimeout(r, planRetry.pauseMs))
     }
   }
-  deps.log.warn('plan.model_failed', { planId: plan.id, kind, error: lastError })
-  throw new ApiError(
-    'planning_unavailable',
-    "Planning didn't finish in time. Create the video now, or try again.",
-  )
+  const why = failureKind(lastError)
+  deps.log.warn('plan.model_failed', { planId: plan.id, kind, why, error: lastError })
+  throw new ApiError('planning_unavailable', FAILURE_MESSAGES[why])
 }
 
 /** At most one recommended option per question, and it comes first, whatever order the model gave. */

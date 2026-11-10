@@ -1,6 +1,9 @@
 // Plan with questions (plan v2 §4, §14 rules 14–17), with a scripted AI Gateway.
 import { describe, expect, it } from 'vitest'
+import { failureKind, planRetry } from '../server/domain/plans.js'
 import { harness, type Harness } from './helpers.js'
+
+planRetry.pauseMs = 0
 
 const PROMPT = 'A 30-second launch video for org-wide webhooks. Ends on our logo.'
 const QUESTIONS = JSON.stringify({
@@ -160,10 +163,43 @@ describe('planning', () => {
     h.deps.gateway.replies.push(new Error('AI Gateway returned 429'), new Error('AI Gateway returned 429'))
     const fail = await h.call('POST', `/api/v1/plans/${p2.id}/questions`, { as: h.member })
     expect(fail.status).toBe(503)
-    expect((await h.json(fail)).error.code).toBe('planning_unavailable')
+    const error = (await h.json(fail)).error
+    expect(error.code).toBe('planning_unavailable')
+    expect(error.message).toMatch(/busy right now/)
     const failed = (await h.deps.store.listGatewayCalls({ since: '2000' })).filter((c) => !c.ok)
     expect(failed.length).toBeGreaterThanOrEqual(2)
     expect(failed.every((c) => c.credits === null)).toBe(true)
+  })
+
+  it('waits before the retry when the Gateway is busy, and says why planning failed', async () => {
+    expect(failureKind(new Error('AI Gateway returned 529: Overloaded'))).toBe('busy')
+    expect(failureKind(new Error('AI Gateway returned 400: max_tokens is too large'))).toBe('other')
+    expect(failureKind(new DOMException('The operation timed out', 'TimeoutError'))).toBe('timeout')
+    expect(failureKind(new Error('invalid questions: shape'))).toBe('other')
+
+    const h = harness()
+    h.deps.gateway.routeAnswers = {
+      needs_questions: 'yes',
+      template: 'launch',
+      complexity: 'simple',
+      aspect: 'unspecified',
+    }
+    const { plan } = await start(h)
+    h.deps.gateway.replies.push(new Error('AI Gateway returned 429: rate limited'), QUESTIONS)
+    planRetry.pauseMs = 60
+    const began = Date.now()
+    try {
+      const ok = await h.call('POST', `/api/v1/plans/${plan.id}/questions`, { as: h.member })
+      expect(ok.status).toBe(200)
+      expect(Date.now() - began).toBeGreaterThanOrEqual(55)
+    } finally {
+      planRetry.pauseMs = 0
+    }
+
+    const p2 = (await start(h)).plan
+    h.deps.gateway.replies.push('not json', 'still not json')
+    const bad = await h.call('POST', `/api/v1/plans/${p2.id}/questions`, { as: h.member })
+    expect((await h.json(bad)).error.message).toMatch(/usable answer/)
   })
 
   it('escapes injection attempts so they cannot leave the data block', async () => {
