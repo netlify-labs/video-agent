@@ -277,6 +277,24 @@ describe('screenshots', () => {
     expectLog(r.logs, { screenshot: 'uploaded' })
     expect(env.images.requests.map((x) => x.url)).toEqual([signed])
   })
+
+  it('images committed to a private repo are read through the API, and the brief takes the look from them', async () => {
+    const env = await setup()
+    env.gh.state.files.set('feat/cook:site/shots/1-before.png', PNG)
+    env.gh.state.files.set('main:docs/after.png', new Uint8Array(png(800, 450)))
+    const pr = env.gh.state.pulls.get(123)
+    if (pr)
+      pr.body =
+        '![before](https://github.com/acme/web/blob/feat/cook/site/shots/1-before.png?raw=true) ![after](https://raw.githubusercontent.com/acme/web/refs/heads/main/docs/after.png) ![gone](https://github.com/acme/web/raw/main/docs/gone.png)'
+    const r = await runAction(env, { event: events.labeled(env.gh, 123) })
+    expect(r.status).toBe('ready')
+    expect(r.logs.filter((l) => l.includes('screenshot=uploaded'))).toHaveLength(2)
+    expectLog(r.logs, { screenshot: 'skipped', reason: 'not-in-repo' })
+    // Nothing went to an image host: the token only ever reaches the API.
+    expect(env.images.requests).toHaveLength(0)
+    const v = await video(env, r.outputs['video-id'] ?? '')
+    expect(v.versions[0].prompt).toContain("take the video's look from them")
+  })
 })
 
 describe('screenshots from the workspace and max-versions', () => {

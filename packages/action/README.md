@@ -230,9 +230,13 @@ for (const [i, p] of paths.entries()) {
 await browser.close()
 ```
 
-Images in the PR description work when they were uploaded to GitHub (dragged into the editor) or are on a public
-site. In a private repository, a link to an image in the repository itself can't be read without credentials, and the
-action never sends any to an image host, so it skips those: commit them and pass a glob, as above.
+Images in the PR description work when they were uploaded to GitHub (dragged into the editor), are on a public site,
+or are files in the repository itself (`github.com/<owner>/<repo>/blob/<branch>/shot.png?raw=true` or a
+`raw.githubusercontent.com` link). Repository files are read through the GitHub API with the workflow's token, so they
+work in a private repository too; the job needs `contents: read`. The token never goes to an image host.
+
+When screenshots are attached, the brief tells the agent to show them and to take the video's look from them: the
+product's own colours, type and shapes instead of the house brand's.
 
 ### Two cuts of one release
 

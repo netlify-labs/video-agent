@@ -8,7 +8,7 @@ import { join, relative, resolve, sep } from 'node:path'
 import { isPrivateAddress } from '../../../app/server/adapters/http.js'
 import { screenshotCaption } from '../../cli/src/brief/index.js'
 import type { VideoAgent } from '../../sdk/src/index.js'
-import type { GitHub } from './github.js'
+import { GitHubError, type GitHub } from './github.js'
 import type { Run } from './main.js'
 
 export const MAX_SHOTS = 6
@@ -58,7 +58,81 @@ export function imageLinks(body: string): { url: string; alt: string }[] {
 const isAttachment = (url: string) => /^https:\/\/github\.com\/user-attachments\/assets\//.test(url)
 
 type Skip =
-  'private-attachment' | 'too-big' | 'type' | 'private-address' | 'redirects' | 'http' | 'outside-workspace'
+  | 'private-attachment'
+  | 'too-big'
+  | 'type'
+  | 'private-address'
+  | 'redirects'
+  | 'http'
+  | 'outside-workspace'
+  | 'not-in-repo'
+
+/** A branch name has at most this many path segments when we look for where the ref ends and the path starts. */
+const MAX_REF_SEGMENTS = 4
+
+/**
+ * A link to a file in this repository (github.com/<owner>/<repo>/blob|raw/<ref>/<path>, with or without ?raw=true, or
+ * raw.githubusercontent.com/<owner>/<repo>/<ref>/<path>): the segments after the repository, ref first. Null for any
+ * other link. In a private repository these answer 404 without credentials, so they're read through the API instead.
+ */
+export function repoFile(url: string, serverUrl: string, owner: string, repo: string): string[] | null {
+  let u: URL
+  try {
+    u = new URL(url)
+  } catch {
+    return null
+  }
+  if (u.protocol !== 'https:') return null
+  let segs: string[]
+  try {
+    segs = u.pathname.split('/').filter(Boolean).map(decodeURIComponent)
+  } catch {
+    return null
+  }
+  const same = (a: string | undefined, b: string) => (a ?? '').toLowerCase() === b.toLowerCase()
+  if (!same(segs[0], owner) || !same(segs[1], repo)) return null
+  let rest: string[]
+  if (u.host === new URL(serverUrl).host && (segs[2] === 'blob' || segs[2] === 'raw')) rest = segs.slice(3)
+  else if (u.host === 'raw.githubusercontent.com') rest = segs.slice(2)
+  else return null
+  if (rest[0] === 'refs' && (rest[1] === 'heads' || rest[1] === 'tags')) rest = rest.slice(2)
+  return rest.length >= 2 && !rest.includes('..') ? rest : null
+}
+
+interface Contents {
+  type?: string
+  size?: number
+  encoding?: string
+  content?: string
+  download_url?: string | null
+}
+
+/**
+ * Reads a file of this repository with the workflow's token (it needs contents: read). The token goes to the GitHub
+ * API only, never to an image host. A branch name can hold slashes, so each split of ref/path is tried, shortest ref
+ * first, until one exists.
+ */
+export async function fromRepo(run: Run, gh: GitHub, segs: string[]): Promise<Uint8Array | Skip> {
+  for (let k = 1; k < segs.length && k <= MAX_REF_SEGMENTS; k++) {
+    let data: Contents | Contents[]
+    try {
+      const res = await gh.request<Contents | Contents[]>('GET /repos/{owner}/{repo}/contents/{path}', {
+        path: { path: segs.slice(k).join('/') },
+        query: { ref: segs.slice(0, k).join('/') },
+      })
+      data = res.data
+    } catch (e) {
+      if (e instanceof GitHubError && e.status === 404) continue
+      return 'http'
+    }
+    if (Array.isArray(data) || data.type !== 'file') continue
+    if ((data.size ?? 0) > MAX_BYTES) return 'too-big'
+    if (data.encoding === 'base64' && data.content) return new Uint8Array(Buffer.from(data.content, 'base64'))
+    // Over 1 MB the API leaves the content out; its download_url is signed for a few minutes and needs no credentials.
+    return data.download_url ? download(run, data.download_url) : 'http'
+  }
+  return 'not-in-repo'
+}
 
 /** Downloads one image: HTTPS only, at most 3 redirects, every host public, no credentials, 4 MB, a real image. */
 export async function download(run: Run, url: string): Promise<Uint8Array | Skip> {
@@ -122,7 +196,10 @@ export async function signedAttachments(gh: GitHub, pr: number): Promise<string[
     .filter((u) => u.startsWith('https://private-user-images.githubusercontent.com/'))
 }
 
-/** Images from a PR description, at most 6, skipping (with a log line) any that can't be used. */
+/**
+ * Images from a PR description, at most 6, skipping (with a log line) any that can't be used. Files of this
+ * repository are read through the API, uploads through their signed URLs, anything else with a plain GET.
+ */
 export async function fromBody(run: Run, gh: GitHub, pr: number, body: string): Promise<Shot[]> {
   const links = imageLinks(body).slice(0, MAX_SHOTS)
   let signed: string[] | null = null
@@ -134,7 +211,8 @@ export async function fromBody(run: Run, gh: GitHub, pr: number, body: string): 
       signed ??= await signedAttachments(gh, pr).catch(() => [])
       url = signed[attachmentIndex++] ?? url
     }
-    const got = await download(run, url)
+    const inRepo = repoFile(url, run.ctx.serverUrl, gh.owner, gh.repo)
+    const got = inRepo ? await fromRepo(run, gh, inRepo) : await download(run, url)
     if (typeof got === 'string') {
       run.log.line({ screenshot: 'skipped', reason: got, url: new URL(link.url).host })
       continue

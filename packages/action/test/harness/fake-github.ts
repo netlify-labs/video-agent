@@ -75,6 +75,8 @@ export function fakeGitHub(o: FakeGitHubOptions = {}) {
     permissions: { ...o.permissions } as Record<string, string>,
     tokenUser: o.tokenUser ?? BOT,
     pulls: new Map<number, FakePull>(),
+    /** Repository files for the contents API: "<ref>:<path>" → bytes. */
+    files: new Map<string, Uint8Array>(),
     comments: [] as FakeComment[],
     releases: [] as FakeRelease[],
     remaining: o.rateLimit ?? 1000,
@@ -335,6 +337,23 @@ export function fakeGitHub(o: FakeGitHubOptions = {}) {
           })
         }
         return json(404, { message: 'Not Found' })
+      },
+    ],
+    [
+      'GET',
+      '/repos/{o}/{r}/contents/{path}',
+      (m, url) => {
+        const path = decodeURIComponent(m[3] ?? '')
+        const bytes = state.files.get(`${url.searchParams.get('ref') ?? 'main'}:${path}`)
+        if (!bytes) return json(404, { message: 'Not Found' })
+        return json(200, {
+          type: 'file',
+          path,
+          size: bytes.byteLength,
+          encoding: 'base64',
+          content: Buffer.from(bytes).toString('base64'),
+          download_url: null,
+        })
       },
     ],
     [
