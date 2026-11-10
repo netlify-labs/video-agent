@@ -1864,13 +1864,25 @@ export async function handleMcp(
   req: Request,
   kick: () => void,
 ): Promise<Response> {
+  // Stateless: there is no notification stream to open and no session to end. A GET the transport answered was a
+  // stream closed at once by server.close() below, which clients took for a dropped connection and reopened in a
+  // loop (about 10 requests a second, live on 11-10). 405 is the spec's "no stream offered here".
+  if (req.method !== 'POST')
+    return Response.json(
+      {
+        jsonrpc: '2.0',
+        error: { code: -32000, message: 'Method not allowed. Send MCP requests with POST.' },
+        id: null,
+      },
+      { status: 405, headers: { allow: 'POST' } },
+    )
   const engines = (await enabledEngines(deps)).map((e) => e.id)
   const server = buildMcpServer(deps, principal, kick, { engines })
   const transport = new WebStandardStreamableHTTPServerTransport({ enableJsonResponse: true }) // no sessionIdGenerator: stateless
   await server.connect(transport)
   // Kept to explain a refused request (and, verbose, to log the call); the transport reads the original.
-  const copy = req.method === 'POST' ? req.clone() : null
-  const seen = deps.log.verbose && req.method === 'POST' ? req.clone() : null
+  const copy = req.clone()
+  const seen = deps.log.verbose ? req.clone() : null
   const started = Date.now()
   try {
     const res = await transport.handleRequest(req)

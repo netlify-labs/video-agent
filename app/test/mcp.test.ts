@@ -41,6 +41,20 @@ describe('MCP', () => {
     expect((r.body as { result: { tools: unknown[] } }).result.tools).toHaveLength(23)
   })
 
+  it('offers no notification stream: GET and DELETE are 405, and 401 without a key', async () => {
+    const { h, key } = await setup()
+    const headers = { accept: 'text/event-stream', authorization: `Bearer ${key}` }
+    for (const path of ['/mcp', '/api/mcp']) {
+      const get = await h.call('GET', path, { origin: null, headers })
+      expect(get.status).toBe(405)
+      expect(get.headers.get('allow')).toBe('POST')
+      expect(get.headers.get('content-type')).not.toContain('text/event-stream')
+    }
+    expect((await h.call('DELETE', '/mcp', { origin: null, headers })).status).toBe(405)
+    const anon = await h.call('GET', '/mcp', { origin: null, headers: { accept: 'text/event-stream' } })
+    expect(anon.status).toBe(401)
+  })
+
   it('initializes and lists twenty-three tools with instructions', async () => {
     const { h, key } = await setup()
     const init = await rpc(h, key, 'initialize', {
