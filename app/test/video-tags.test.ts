@@ -1,5 +1,5 @@
 // Tags on videos: set on create or with PATCH, shown to everyone who sees the video, and filtered in the list with
-// ?tag= and ?withoutTag=. GET /api/v1/video-tags lists the tags in use with their counts.
+// ?tag= and ?withoutTag= (one tag or several, comma-separated). GET /api/v1/video-tags lists the tags in use with their counts.
 import { describe, expect, it } from 'vitest'
 import { harness, person, pgStore, PROMPT, type Harness } from './helpers.js'
 
@@ -27,6 +27,27 @@ describe.each([
     expect(await ids(h, h.member, 'withoutTag=demo')).toEqual([plain.id])
     expect(await ids(h, h.member, 'tag=nope')).toEqual([])
     expect(await ids(h, h.member)).toEqual([plain.id, demo.id])
+  })
+
+  it('takes several tags, comma-separated: any of them, or none of them', async () => {
+    const h = await make()
+    const demo = await h.json(await create(h, h.member, { tags: ['demo'] }))
+    h.deps.clock.advance(1000)
+    const netlify = await h.json(await create(h, h.member, { tags: ['netlify', 'launch'] }))
+    h.deps.clock.advance(1000)
+    const plain = await h.json(await create(h, h.member))
+    expect(await ids(h, h.member, 'tag=demo,netlify')).toEqual([netlify.id, demo.id])
+    expect(await ids(h, h.member, 'tag=launch,nope')).toEqual([netlify.id])
+    expect(await ids(h, h.member, 'withoutTag=demo,launch')).toEqual([plain.id])
+    expect(await ids(h, h.member, 'tag=demo,netlify&withoutTag=launch')).toEqual([demo.id])
+    for (const bad of [
+      'tag=demo,',
+      'tag=,demo',
+      'withoutTag=Demo,x',
+      `tag=${Array.from({ length: 11 }, (_, i) => `t${i}`).join(',')}`,
+    ]) {
+      expect((await h.call('GET', `/api/v1/videos?${bad}`, { as: h.member })).status, bad).toBe(400)
+    }
   })
 
   it('PATCH replaces the whole list; [] clears it; the tags in use are counted', async () => {

@@ -248,8 +248,8 @@ video-agent list --mine --json
 - `--status <value>`: queued, running, finishing, ready, failed, cancelled or timed_out.
 - `--published`: Only published ones.
 - `--favorite`: Only the ones you starred.
-- `--tag <value>`: Only videos with this tag.
-- `--without-tag <value>`: Leave out videos with this tag.
+- `--tag <value>`: Only videos with any of these tags (comma-separated: demo,launch).
+- `--without-tag <value>`: Leave out videos with any of these tags (comma-separated).
 - `--limit <n>`: How many per page.
 - `--all`: Every page, not just the first.
 

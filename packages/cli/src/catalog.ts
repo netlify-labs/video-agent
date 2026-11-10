@@ -361,8 +361,14 @@ export const COMMANDS: CommandSpec[] = [
       },
       published: { type: 'boolean', description: 'Only published ones.' },
       favorite: { type: 'boolean', description: 'Only the ones you starred.' },
-      tag: { type: 'string', description: 'Only videos with this tag.' },
-      'without-tag': { type: 'string', description: 'Leave out videos with this tag.' },
+      tag: {
+        type: 'string',
+        description: 'Only videos with any of these tags (comma-separated: demo,launch).',
+      },
+      'without-tag': {
+        type: 'string',
+        description: 'Leave out videos with any of these tags (comma-separated).',
+      },
       limit: { type: 'number', description: 'How many per page.' },
       all: { type: 'boolean', description: 'Every page, not just the first.' },
     },

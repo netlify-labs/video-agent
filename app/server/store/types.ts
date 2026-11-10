@@ -61,10 +61,10 @@ export interface JobQuery {
   q?: string
   /** Exact match on the video's externalRef. */
   externalRef?: string
-  /** Only videos that carry this tag. */
-  tag?: string
-  /** Leave out videos that carry this tag. */
-  withoutTag?: string
+  /** Only videos that carry any of these tags. */
+  tags?: string[]
+  /** Leave out videos that carry any of these tags. */
+  withoutTags?: string[]
   cursor?: { createdAt: string; id: string }
   /** Private videos are returned only to their owner, unless `all` (admins). */
   visibleTo?: { userId: string; all: boolean }

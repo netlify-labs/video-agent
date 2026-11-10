@@ -198,8 +198,14 @@ function repoFor(db: Db): Repo {
       }
       if (q.status) conds.push(eq(t.jobs.status, q.status))
       if (q.externalRef !== undefined) conds.push(eq(t.jobs.externalRef, q.externalRef))
-      if (q.tag) conds.push(sql`${t.jobs.tags} @> array[${q.tag}]::text[]`)
-      if (q.withoutTag) conds.push(sql`not (${t.jobs.tags} @> array[${q.withoutTag}]::text[])`)
+      // && is overlap: the video carries at least one of them (the GIN index on tags serves it).
+      const tagArray = (tags: string[]) =>
+        sql`array[${sql.join(
+          tags.map((x) => sql`${x}`),
+          sql`, `,
+        )}]::text[]`
+      if (q.tags?.length) conds.push(sql`${t.jobs.tags} && ${tagArray(q.tags)}`)
+      if (q.withoutTags?.length) conds.push(sql`not (${t.jobs.tags} && ${tagArray(q.withoutTags)})`)
       const livePub = anyRow(
         t.publications,
         and(eq(t.publications.jobId, t.jobs.id), isNull(t.publications.unpublishedAt)),

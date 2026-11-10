@@ -4,6 +4,7 @@ import {
   Group,
   Loader,
   Menu,
+  MultiSelect,
   Select,
   SegmentedControl,
   Skeleton,
@@ -14,8 +15,16 @@ import {
   UnstyledButton,
 } from '@mantine/core'
 import { useDebouncedValue, useHotkeys, useReducedMotion } from '@mantine/hooks'
-import { IconArrowsShuffle, IconDots, IconLock, IconMessage, IconSearch } from '@tabler/icons-react'
-import { Suspense, useEffect, useRef, useState } from 'react'
+import {
+  IconArrowsShuffle,
+  IconDots,
+  IconEyeOff,
+  IconLock,
+  IconMessage,
+  IconSearch,
+  IconTag,
+} from '@tabler/icons-react'
+import { Suspense, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTagsInUse } from '../components/TagsField'
@@ -268,13 +277,60 @@ function CardSkeleton() {
   )
 }
 
-const HIDE_TAG_KEY = 'va.library.hideTag'
+const HIDE_TAGS_KEY = 'va.library.hideTags'
+/** Where one hidden tag was remembered before the filter took several. */
+const OLD_HIDE_TAG_KEY = 'va.library.hideTag'
 
-/** The tags in use as Select options ("demo (20)"), plus the chosen one when no video carries it any more. */
-function tagOptions(inUse: { tag: string; count: number }[], chosen: string | null) {
-  const opts = inUse.map((t) => ({ value: t.tag, label: `${t.tag} (${t.count})` }))
-  if (chosen && !inUse.some((t) => t.tag === chosen)) opts.push({ value: chosen, label: chosen })
-  return opts
+/** The tags hidden on this device. */
+function savedHiddenTags(): string[] {
+  try {
+    const raw = localStorage.getItem(HIDE_TAGS_KEY) ?? localStorage.getItem(OLD_HIDE_TAG_KEY)
+    return raw ? raw.split(',').filter(Boolean) : []
+  } catch {
+    return []
+  }
+}
+
+/** A tag filter: any number of tags as pills, picked from the tags in use (each with its count); × removes one. */
+function TagFilter(props: {
+  label: string
+  icon: ReactNode
+  value: string[]
+  onChange: (tags: string[]) => void
+  inUse: { tag: string; count: number }[]
+  testId: string
+}) {
+  const counts = new Map(props.inUse.map((t) => [t.tag, t.count]))
+  // A chosen tag no video carries any more stays listed, so its pill still shows and can be removed.
+  const data = [...props.inUse.map((t) => t.tag), ...props.value.filter((t) => !counts.has(t))]
+  return (
+    <MultiSelect
+      aria-label={props.label}
+      placeholder={props.value.length ? undefined : props.label}
+      leftSection={props.icon}
+      data={data}
+      value={props.value}
+      onChange={props.onChange}
+      searchable
+      // Type part of a tag and press Enter to add it.
+      selectFirstOptionOnChange
+      clearable
+      hidePickedOptions
+      nothingFoundMessage="No other tags"
+      radius="xl"
+      // A fixed width: more pills wrap onto another line inside the field instead of pushing the filters around.
+      w={240}
+      data-testid={props.testId}
+      renderOption={({ option }) => (
+        <Group justify="space-between" gap="md" wrap="nowrap" w="100%">
+          <span>{option.value}</span>
+          <Text span size="xs" c="var(--va-faint)">
+            {counts.get(option.value) ?? 0}
+          </Text>
+        </Group>
+      )}
+    />
+  )
 }
 
 export function LibraryPage() {
@@ -285,26 +341,23 @@ export function LibraryPage() {
   const [status, setStatus] = useState<string | null>(null)
   const canCreate = useCanCreate()
   const [published, setPublished] = useState<string | null>(null)
-  // Two tag filters: only videos with a tag, and hide videos with a tag. Hiding is remembered on this device, so
-  // demo videos stay out of the way until you ask for them.
+  // Two tag filters: videos with any of some tags, and hiding videos with any of others. Hiding is remembered on
+  // this device, so demo videos stay out of the way until you ask for them.
   const tagsInUse = useTagsInUse()
-  const [tag, setTag] = useState<string | null>(null)
-  const [hideTag, setHideTagState] = useState<string | null>(() => {
+  const [tags, setTags] = useState<string[]>([])
+  const [hideTags, setHideTagsState] = useState<string[]>(savedHiddenTags)
+  const setHideTags = (t: string[]) => {
+    setHideTagsState(t)
     try {
-      return localStorage.getItem(HIDE_TAG_KEY)
-    } catch {
-      return null
-    }
-  })
-  const setHideTag = (t: string | null) => {
-    setHideTagState(t)
-    try {
-      if (t) localStorage.setItem(HIDE_TAG_KEY, t)
-      else localStorage.removeItem(HIDE_TAG_KEY)
+      if (t.length) localStorage.setItem(HIDE_TAGS_KEY, t.join(','))
+      else localStorage.removeItem(HIDE_TAGS_KEY)
+      localStorage.removeItem(OLD_HIDE_TAG_KEY)
     } catch {
       // Not remembered, then.
     }
   }
+  // Asking for a tag shows it even if it's a hidden one.
+  const hidden = hideTags.filter((t) => !tags.includes(t))
   const search = useRef<HTMLInputElement>(null)
   useHotkeys([['/', () => search.current?.focus()]])
   // WebMCP (va-qago): an agent searches and filters through the same controls.
@@ -316,9 +369,8 @@ export function LibraryPage() {
     ...(debounced ? { q: debounced } : {}),
     ...(status ? { status: status as Video['status'] } : {}),
     ...(published ? { published: published as 'true' | 'false' } : {}),
-    ...(tag ? { tag } : {}),
-    // Asking for a tag shows it even if it's the hidden one.
-    ...(hideTag && hideTag !== tag ? { withoutTag: hideTag } : {}),
+    ...(tags.length ? { tag: tags.join(',') } : {}),
+    ...(hidden.length ? { withoutTag: hidden.join(',') } : {}),
   }
   const list = $api.useInfiniteQuery(
     'get',
@@ -333,7 +385,9 @@ export function LibraryPage() {
     },
   )
   const items = list.data?.pages.flatMap((p) => p.items) ?? []
-  const filtered = Boolean(debounced || status || published || tag || hideTag || owner !== 'all')
+  const filtered = Boolean(
+    debounced || status || published || tags.length || hideTags.length || owner !== 'all',
+  )
   const working = items.filter((v) => inProgress(v.status)).length
   const finding =
     items.length === 0
@@ -408,29 +462,23 @@ export function LibraryPage() {
             { value: 'false', label: 'Not public' },
           ]}
         />
-        {tagsInUse.length || tag || hideTag ? (
+        {tagsInUse.length || tags.length || hideTags.length ? (
           <>
-            <Select
-              aria-label="Tag"
-              placeholder="Any tag"
-              clearable
-              value={tag}
-              onChange={setTag}
-              w={160}
-              radius="xl"
-              data-testid="tag-filter"
-              data={tagOptions(tagsInUse, tag)}
+            <TagFilter
+              label="Tags"
+              icon={<IconTag size={15} />}
+              value={tags}
+              onChange={setTags}
+              inUse={tagsInUse}
+              testId="tag-filter"
             />
-            <Select
-              aria-label="Hide a tag"
-              placeholder="Hide a tag"
-              clearable
-              value={hideTag}
-              onChange={setHideTag}
-              w={170}
-              radius="xl"
-              data-testid="hide-tag-filter"
-              data={tagOptions(tagsInUse, hideTag).map((o) => ({ ...o, label: `Hide ${o.label}` }))}
+            <TagFilter
+              label="Hide tags"
+              icon={<IconEyeOff size={15} />}
+              value={hideTags}
+              onChange={setHideTags}
+              inUse={tagsInUse}
+              testId="hide-tag-filter"
             />
           </>
         ) : null}

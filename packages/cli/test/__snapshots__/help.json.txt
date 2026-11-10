@@ -588,11 +588,11 @@
         },
         "tag": {
           "type": "string",
-          "description": "Only videos with this tag."
+          "description": "Only videos with any of these tags (comma-separated: demo,launch)."
         },
         "without-tag": {
           "type": "string",
-          "description": "Leave out videos with this tag."
+          "description": "Leave out videos with any of these tags (comma-separated)."
         },
         "limit": {
           "type": "number",

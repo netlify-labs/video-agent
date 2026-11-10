@@ -456,8 +456,12 @@ export function createApp(deps: Deps, opts: AppOptions) {
           externalRef: s.ExternalRefSchema.optional().openapi({
             description: 'Only videos made with this externalRef (exact match), newest first',
           }),
-          tag: s.TagSchema.optional().openapi({ description: 'Only videos with this tag' }),
-          withoutTag: s.TagSchema.optional().openapi({ description: 'Leave out videos with this tag' }),
+          tag: s.TagFilterSchema.optional().openapi({
+            description: 'Only videos with any of these tags (one, or several comma-separated: demo,launch)',
+          }),
+          withoutTag: s.TagFilterSchema.optional().openapi({
+            description: 'Leave out videos with any of these tags (one, or several comma-separated)',
+          }),
           cursor: z.string().max(500).optional(),
           limit: z.coerce.number().int().min(1).max(50).optional(),
         }),
@@ -482,7 +486,7 @@ export function createApp(deps: Deps, opts: AppOptions) {
       'x-sdk': { resource: 'videos', method: 'tags', feature: 'tags' },
       summary: 'List the tags in use',
       description:
-        "The tags on the videos you can see, most used first, each with how many videos carry it. Set a video's tags when creating it or with PATCH /api/v1/videos/{id}; filter the list with ?tag= and ?withoutTag=.",
+        "The tags on the videos you can see, most used first, each with how many videos carry it. Set a video's tags when creating it or with PATCH /api/v1/videos/{id}; filter the list with ?tag= and ?withoutTag= (each takes one tag or several, comma-separated).",
       tags: ['videos'],
       security,
       responses: { 200: json(s.VideoTagsSchema, 'Tags'), ...errors },

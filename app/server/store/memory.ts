@@ -271,9 +271,9 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
       if (vis && !vis.all) rows = rows.filter((j) => !j.private || j.ownerId === vis.userId)
       if (q.status) rows = rows.filter((j) => j.status === q.status)
       if (q.externalRef !== undefined) rows = rows.filter((j) => j.externalRef === q.externalRef)
-      const { tag, withoutTag } = q
-      if (tag) rows = rows.filter((j) => (j.tags ?? []).includes(tag))
-      if (withoutTag) rows = rows.filter((j) => !(j.tags ?? []).includes(withoutTag))
+      const { tags, withoutTags } = q
+      if (tags?.length) rows = rows.filter((j) => (j.tags ?? []).some((t) => tags.includes(t)))
+      if (withoutTags?.length) rows = rows.filter((j) => !(j.tags ?? []).some((t) => withoutTags.includes(t)))
       if (q.published !== undefined) rows = rows.filter((j) => published.has(j.id) === q.published)
       const fav = q.favoriteOf
       if (fav) rows = rows.filter((j) => state.favorites.has(`${fav}/${j.id}`))

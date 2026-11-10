@@ -8649,26 +8649,26 @@
           {
             "schema": {
               "type": "string",
-              "maxLength": 30,
-              "pattern": "^[a-z0-9][a-z0-9-]*$",
-              "example": "demo",
-              "description": "Only videos with this tag"
+              "maxLength": 310,
+              "pattern": "^[a-z0-9][a-z0-9-]{0,29}(,[a-z0-9][a-z0-9-]{0,29}){0,9}$",
+              "example": "demo,launch",
+              "description": "Only videos with any of these tags (one, or several comma-separated: demo,launch)"
             },
             "required": false,
-            "description": "Only videos with this tag",
+            "description": "Only videos with any of these tags (one, or several comma-separated: demo,launch)",
             "name": "tag",
             "in": "query"
           },
           {
             "schema": {
               "type": "string",
-              "maxLength": 30,
-              "pattern": "^[a-z0-9][a-z0-9-]*$",
-              "example": "demo",
-              "description": "Leave out videos with this tag"
+              "maxLength": 310,
+              "pattern": "^[a-z0-9][a-z0-9-]{0,29}(,[a-z0-9][a-z0-9-]{0,29}){0,9}$",
+              "example": "demo,launch",
+              "description": "Leave out videos with any of these tags (one, or several comma-separated)"
             },
             "required": false,
-            "description": "Leave out videos with this tag",
+            "description": "Leave out videos with any of these tags (one, or several comma-separated)",
             "name": "withoutTag",
             "in": "query"
           },
@@ -8765,7 +8765,7 @@
           "feature": "tags"
         },
         "summary": "List the tags in use",
-        "description": "The tags on the videos you can see, most used first, each with how many videos carry it. Set a video's tags when creating it or with PATCH /api/v1/videos/{id}; filter the list with ?tag= and ?withoutTag=.",
+        "description": "The tags on the videos you can see, most used first, each with how many videos carry it. Set a video's tags when creating it or with PATCH /api/v1/videos/{id}; filter the list with ?tag= and ?withoutTag= (each takes one tag or several, comma-separated).",
         "tags": [
           "videos"
         ],

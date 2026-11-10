@@ -842,8 +842,9 @@ export function installMock() {
       if (url.searchParams.get('favorite') === 'true') items = items.filter((v) => v.favorite)
       const tag = url.searchParams.get('tag')
       const withoutTag = url.searchParams.get('withoutTag')
-      if (tag) items = items.filter((v) => v.tags.includes(tag))
-      if (withoutTag) items = items.filter((v) => !v.tags.includes(withoutTag))
+      // Each takes one tag or several, comma-separated: any of them, or none of them.
+      if (tag) items = items.filter((v) => tag.split(',').some((t) => v.tags.includes(t)))
+      if (withoutTag) items = items.filter((v) => !withoutTag.split(',').some((t) => v.tags.includes(t)))
       // Pages like the server: limit, and an opaque cursor (here, the offset of the next page).
       const limit = Number(url.searchParams.get('limit') ?? 50)
       const from = Number(url.searchParams.get('cursor') || 0)

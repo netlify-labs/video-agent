@@ -659,6 +659,16 @@ export const TagSchema = z
   .regex(/^[a-z0-9][a-z0-9-]*$/, 'Use lowercase letters, digits and dashes, for example demo or q3-launch.')
   .openapi({ example: 'demo' })
 
+/** A list filter's tags: one, or up to 10 comma-separated ("demo,launch"). */
+export const TagFilterSchema = z
+  .string()
+  .max(310)
+  .regex(
+    /^[a-z0-9][a-z0-9-]{0,29}(,[a-z0-9][a-z0-9-]{0,29}){0,9}$/,
+    'Use one tag or several separated by commas, for example demo or demo,launch.',
+  )
+  .openapi({ example: 'demo,launch' })
+
 /** A video's tags: at most 10, no repeats. */
 export const TagsSchema = z
   .array(TagSchema)

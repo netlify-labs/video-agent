@@ -77,7 +77,7 @@ export interface paths {
         };
         /**
          * List the tags in use
-         * @description The tags on the videos you can see, most used first, each with how many videos carry it. Set a video's tags when creating it or with PATCH /api/v1/videos/{id}; filter the list with ?tag= and ?withoutTag=.
+         * @description The tags on the videos you can see, most used first, each with how many videos carry it. Set a video's tags when creating it or with PATCH /api/v1/videos/{id}; filter the list with ?tag= and ?withoutTag= (each takes one tag or several, comma-separated).
          */
         get: operations["listVideoTags"];
         put?: never;
@@ -4065,9 +4065,9 @@ export interface operations {
                 q?: string;
                 /** @description Only videos made with this externalRef (exact match), newest first */
                 externalRef?: string;
-                /** @description Only videos with this tag */
+                /** @description Only videos with any of these tags (one, or several comma-separated: demo,launch) */
                 tag?: string;
-                /** @description Leave out videos with this tag */
+                /** @description Leave out videos with any of these tags (one, or several comma-separated) */
                 withoutTag?: string;
                 cursor?: string;
                 limit?: number;
