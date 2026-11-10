@@ -58,11 +58,14 @@ test('the mock answers GET /api/v1/looks and lists looks in the config', async (
 test('the picker shows posters only until a card is hovered or focused', async ({ page, isMobile }) => {
   const urls = clips(page)
   await page.goto('/new')
-  // A tap on a phone: a mouse click would leave the pointer resting over a card of the full-screen picker.
+  // A tap on a phone, the keyboard elsewhere: a mouse click would leave the pointer resting over a card of the
+  // picker, which is a hover that plays its clip.
   const open = page.getByRole('button', { name: 'Look: None' })
-  await (isMobile ? open.tap() : open.click())
-  // The wide picker can open under the pointer that just clicked; a resting pointer is a hover.
-  if (!isMobile) await page.mouse.move(0, 0)
+  if (isMobile) await open.tap()
+  else {
+    await open.focus()
+    await page.keyboard.press('Enter')
+  }
   const dialog = page.getByRole('dialog', { name: 'Pick a look' })
   await expect(dialog.locator('.va-look-pick')).toHaveCount(IDS.length + 1)
   await expect(dialog.locator('img')).toHaveCount(IDS.length)
