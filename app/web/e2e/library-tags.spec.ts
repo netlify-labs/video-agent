@@ -38,9 +38,13 @@ test('type a tag and press Enter to show only it; several tags; × and Backspace
   await page.goto('/')
   const tags = page.getByRole('textbox', { name: 'Tags', exact: true })
   await tags.click()
-  await tags.fill('laun')
+  // A whole tag at once (pasted) works like a typed part of one.
+  await tags.fill('launch')
   await page.keyboard.press('Enter')
   await expect(titles(page)).toHaveText(['Ship faster with preview deploys'])
+  // The field stays one line however many pills it holds: it widens instead.
+  const height = async () => (await page.getByTestId('tag-filter').boundingBox())?.height ?? 0
+  const oneLine = await height()
   // Asking for a hidden tag shows it anyway.
   await removePill(page, 'demo').click()
   await tags.fill('dem')
@@ -49,6 +53,7 @@ test('type a tag and press Enter to show only it; several tags; × and Backspace
   await expect(titles(page)).toHaveText(['Ship faster with preview deploys', 'Org webhooks launch'])
   await expect(page.getByText('2 videos in this view.')).toBeVisible()
   await expect(pills(page)).toHaveText(['launch', 'demo'])
+  expect(await height()).toBe(oneLine)
 
   await removePill(page, 'launch').click()
   await expect(titles(page)).toHaveText(['Org webhooks launch'])

@@ -328,6 +328,7 @@ function TagFilter(props: {
       key={`${hidden ? 'hide' : 'show'}:${tag}`}
       withRemoveButton
       data-hidden={hidden || undefined}
+      style={{ flexShrink: 0 }}
       title={hidden ? `Videos tagged ${tag} are hidden` : `Only videos tagged ${tag}`}
       onRemove={() => {
         if (hidden) props.onHide(props.hide.filter((t) => t !== tag))
@@ -355,20 +356,23 @@ function TagFilter(props: {
       <Combobox.DropdownTarget>
         <PillsInput
           radius="xl"
-          // A fixed width: more pills wrap onto another line inside the field instead of pushing the filters around.
-          w={260}
+          // One line, always: the field widens with each pill instead of wrapping onto a second line (the filter row
+          // wraps as a whole when it runs out of room).
+          miw={180}
           leftSection={<IconTag size={15} />}
           data-testid="tag-filter"
           onClick={() => {
             combobox.openDropdown()
           }}
         >
-          <Pill.Group>
+          <Pill.Group style={{ flexWrap: 'nowrap' }}>
             {props.hide.map((t) => pill(t, true))}
             {props.show.map((t) => pill(t, false))}
             <Combobox.EventsTarget>
               <PillsInput.Field
                 aria-label="Tags"
+                // Room to type a tag's first letters; the pills take the rest.
+                style={{ minWidth: 72, flex: '1 0 72px' }}
                 placeholder={picked.size ? undefined : 'Tags'}
                 value={search}
                 onFocus={() => {
@@ -380,10 +384,17 @@ function TagFilter(props: {
                 onChange={(e) => {
                   setSearch(e.currentTarget.value)
                   combobox.openDropdown()
-                  // Type part of a tag and press Enter to show only it.
                   combobox.selectFirstOption()
                 }}
                 onKeyDown={(e) => {
+                  // Type part of a tag and press Enter to show only it. A pasted or fast-typed tag can reach Enter
+                  // before the list has an option highlighted: take the first match then.
+                  const first = matches[0]
+                  if (e.key === 'Enter' && search && first && combobox.getSelectedOptionIndex() < 0) {
+                    e.preventDefault()
+                    pick(first.tag)
+                    return
+                  }
                   if (e.key !== 'Backspace' || search) return
                   // In the empty field, Backspace removes the last pill.
                   if (props.show.length) props.onShow(props.show.slice(0, -1))
