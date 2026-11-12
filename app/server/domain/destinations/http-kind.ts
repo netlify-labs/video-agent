@@ -3,7 +3,7 @@
 // goes through the pinned transport (public addresses only, no redirects, no credentials) and reads a bounded answer.
 import type { Deps } from '../../deps.js'
 import { decrypt, deriveKey, hmacHex, safeEqual, webhookSignature } from '../../lib/crypto.js'
-import { parseOptionsSchema } from '../../lib/options-schema.js'
+import { openOptions, parseOptionsSchema } from '../../lib/options-schema.js'
 import { getSettings } from '../settings.js'
 import type { DestinationPublicationRow, DestinationRow, Target } from '../types.js'
 import { publicManifest, type PublishManifest } from './manifest.js'
@@ -169,7 +169,7 @@ async function step(ctx: StepCtx): Promise<StepResult> {
   const p = ctx.publication
   const publisher = await deps.store.getUser(p.publishedBy)
   const op = operationId(p)
-  const { fileSigningSecret } = await getSettings(deps)
+  const { fileSigningSecret, dataEncryptionKey } = await getSettings(deps)
   const callback = {
     url: `${deps.config.siteUrl}/api/v1/destination-callbacks/${p.id}`,
     token: callbackToken(fileSigningSecret, p.id, op),
@@ -185,7 +185,7 @@ async function step(ctx: StepCtx): Promise<StepResult> {
       ...envelope('publish', d, pub, deps.clock.now()),
       publication: p.id,
       operation: op,
-      options: p.options,
+      options: openOptions(p.options, (s) => decrypt(dataEncryptionKey, s)),
       target: p.target,
       instructions: p.instructions,
       manifest: publicManifest(m, await ctx.files()),
@@ -256,9 +256,9 @@ export async function fetchTargets(
 }
 
 /** The `ping` event (§3.6): reachability plus the capabilities it reports, validated. */
-export async function pingDestination(deps: Deps, d: DestinationRow) {
+export async function pingDestination(deps: Deps, d: DestinationRow, timeoutMs = REQUEST_TIMEOUT_MS) {
   try {
-    const res = await send(deps, d, 'ping', envelope('ping', d, null, deps.clock.now()))
+    const res = await send(deps, d, 'ping', envelope('ping', d, null, deps.clock.now()), {}, timeoutMs)
     const j = parse(res.body)
     const ok = res.status >= 200 && res.status < 300
     return {

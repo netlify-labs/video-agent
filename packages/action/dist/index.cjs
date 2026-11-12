@@ -808,7 +808,7 @@ function resources(t) {
           pathParams: { id, n },
           input,
           query: [],
-          body: ["destination", "options", "target", "instructions", "includeTranscript"],
+          body: ["destination", "options", "target", "instructions", "includeTranscript", "makeVisible"],
           features: [...["destinations"]],
           operationId: "publishToDestination"
         },

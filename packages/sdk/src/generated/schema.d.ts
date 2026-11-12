@@ -2806,6 +2806,8 @@ export interface components {
             } | null;
             instructions?: string | null;
             includeTranscript?: boolean;
+            /** @description For a private video: make it visible to the team as part of publishing (private videos cannot be published to a destination). */
+            makeVisible?: boolean;
         };
         Target: {
             id: string;

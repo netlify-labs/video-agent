@@ -4,6 +4,7 @@
 // again. Copy is generic: words that are specific to a destination (its noun, its instructions label and hint, its
 // progress messages, its secret's label) come from the destination itself.
 import {
+  Alert,
   Anchor,
   Badge,
   Button,
@@ -13,6 +14,7 @@ import {
   Loader,
   Menu,
   Modal,
+  PasswordInput,
   Radio,
   Select,
   Stack,
@@ -22,7 +24,7 @@ import {
   Textarea,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
-import { IconChevronDown, IconSend, IconTrash } from '@tabler/icons-react'
+import { IconChevronDown, IconLockOpen, IconSend, IconTrash } from '@tabler/icons-react'
 import { useMemo, useState } from 'react'
 import { $api, errorMessage, newIdempotencyKey, type Version, type Video } from '../api/client'
 import { confirmDanger, useAfterWrite } from './bits'
@@ -35,9 +37,14 @@ interface OptionSpec {
   type: 'string' | 'boolean'
   title?: string
   description?: string
+  minLength?: number
   maxLength?: number
   enum?: string[]
   default?: string | boolean
+  /** A secret: masked here, kept encrypted by the server. */
+  format?: 'password'
+  /** A boolean option's name: this one shows only while that one is on. */
+  showIf?: string
 }
 interface OptionsSchema {
   type: 'object'
@@ -170,7 +177,16 @@ export function DestinationDialog({
     },
     onError: afterWrite.onError,
   })
-  const missing = (schema?.required ?? []).filter((k) => values[k] === undefined || values[k] === '')
+  const props = Object.entries(schema?.properties ?? {})
+  // An option behind a switch shows (and counts) only while the switch is on; the server drops it otherwise.
+  const shown = props.filter(([, spec]) => spec.showIf === undefined || values[spec.showIf] === true)
+  const missing = (schema?.required ?? []).filter(
+    (k) => shown.some(([name]) => name === k) && (values[k] === undefined || values[k] === ''),
+  )
+  const tooShort = shown.some(([k, spec]) => {
+    const x = values[k]
+    return spec.minLength !== undefined && typeof x === 'string' && x !== '' && x.length < spec.minLength
+  })
   const tooLong =
     youtube &&
     (descBytes > 5000 ||
@@ -181,6 +197,11 @@ export function DestinationDialog({
   return (
     <Modal opened onClose={onClose} title={`Publish v${v.n} to ${destination.name}`} centered size="lg">
       <Stack gap="md">
+        {video.private ? (
+          <Alert color="yellow" icon={<IconLockOpen size={16} />} data-testid="publish-makes-visible">
+            This video is private. Publishing it here also makes it visible to everyone on the team.
+          </Alert>
+        ) : null}
         {caps.targets ? (
           <Stack gap={6}>
             <Text fw={600} size="sm">
@@ -225,7 +246,7 @@ export function DestinationDialog({
             ) : null}
           </Stack>
         ) : null}
-        {Object.entries(schema?.properties ?? {}).map(([k, spec]) => {
+        {shown.map(([k, spec]) => {
           const label = spec.title ?? k
           if (spec.type === 'boolean')
             return (
@@ -275,6 +296,28 @@ export function DestinationDialog({
                 </Text>
               </Stack>
             )
+          if (spec.format === 'password') {
+            const x = String(values[k] ?? '')
+            return (
+              <PasswordInput
+                key={k}
+                label={label}
+                description={spec.description}
+                withAsterisk={schema?.required?.includes(k) ?? false}
+                maxLength={spec.maxLength}
+                autoComplete="new-password"
+                value={x}
+                error={
+                  spec.minLength !== undefined && x !== '' && x.length < spec.minLength
+                    ? `At least ${spec.minLength} characters.`
+                    : undefined
+                }
+                onChange={(e) => {
+                  setValues({ ...values, [k]: e.currentTarget.value })
+                }}
+              />
+            )
+          }
           return (
             <TextInput
               key={k}
@@ -294,7 +337,7 @@ export function DestinationDialog({
             label={caps.instructionsLabel ?? 'Instructions'}
             description={caps.instructionsHint ?? undefined}
             autosize
-            minRows={3}
+            minRows={5}
             maxLength={4000}
             value={instructions}
             onChange={(e) => {
@@ -317,7 +360,7 @@ export function DestinationDialog({
           </Button>
           <Button
             loading={publish.isPending}
-            disabled={missing.length > 0 || tooLong}
+            disabled={missing.length > 0 || tooLong || tooShort}
             onClick={() => {
               const target = where === 'new' ? null : (list.find((t) => t.id === where) ?? null)
               publish.mutate({
@@ -328,6 +371,7 @@ export function DestinationDialog({
                   target,
                   instructions: instructions.trim() ? instructions.trim() : null,
                   includeTranscript: transcript,
+                  ...(video.private ? { makeVisible: true } : {}),
                 },
               })
             }}

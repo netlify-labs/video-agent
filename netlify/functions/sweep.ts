@@ -5,6 +5,7 @@ import { prodDeps } from '../../app/server/adapters/prod.js'
 import { runCleanup } from '../../app/server/domain/cleanup.js'
 import { tick } from '../../app/server/domain/reconciler.js'
 import { deliverWebhooks } from '../../app/server/domain/webhooks.js'
+import { refreshCapabilities } from '../../app/server/domain/destinations/admin.js'
 import { duePublications } from '../../app/server/domain/destinations/sweep.js'
 
 export default async () => {
@@ -16,7 +17,15 @@ export default async () => {
     const delivered = await deliverWebhooks(deps, budget)
     const destinations = await duePublications(deps, budget)
     const cleaned = await runCleanup(deps, { ...budget, maxItems: 5 })
-    deps.log.info('sweep.done', { ...r, delivered, destinations, cleaned, ms: Date.now() - started })
+    const capabilities = await refreshCapabilities(deps, budget)
+    deps.log.info('sweep.done', {
+      ...r,
+      delivered,
+      destinations,
+      cleaned,
+      capabilities,
+      ms: Date.now() - started,
+    })
   } catch (e) {
     deps.log.error('sweep.failed', { error: e, ms: Date.now() - started })
   }

@@ -1225,6 +1225,8 @@ export interface DestinationCapabilities {
   instructions?: boolean
   instructionsLabel?: string
   instructionsHint?: string
+  /** Ours, not the receiver's: when the sweep asks again (so a new or changed receiver needs no manual Test). */
+  nextCheckAt?: string
 }
 
 /** An admin-configured HTTP destination. Built-in kinds are virtual and have no row. */

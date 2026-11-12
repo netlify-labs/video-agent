@@ -3367,6 +3367,10 @@
           },
           "includeTranscript": {
             "type": "boolean"
+          },
+          "makeVisible": {
+            "type": "boolean",
+            "description": "For a private video: make it visible to the team as part of publishing (private videos cannot be published to a destination)."
           }
         },
         "required": [

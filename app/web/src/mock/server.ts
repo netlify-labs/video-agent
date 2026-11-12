@@ -523,15 +523,24 @@ function mockDestRows(): MockDest[] {
             properties: {
               name: { type: 'string', title: 'Site name', maxLength: 40 },
               password: { type: 'boolean', title: 'Password-protect the site', default: false },
+              sitePassword: {
+                type: 'string',
+                format: 'password',
+                showIf: 'password',
+                title: 'Password',
+                description: 'At least 8 characters. Leave empty and one is made for you.',
+                minLength: 8,
+                maxLength: 64,
+              },
             },
           },
           capabilities: {
             targets: true,
             targetNoun: 'site',
             instructions: true,
-            instructionsLabel: 'Where should the video go?',
+            instructionsLabel: 'What should the site do with this video?',
             instructionsHint:
-              'An agent will edit the site to place it. Leave empty to use the standard layout.',
+              'Say how to use the video and what else to include. An agent edits the site once it is published. Leave empty for the standard layout.',
           },
           sharePublisherContact: false,
           createdAt: new Date().toISOString(),
@@ -1735,6 +1744,10 @@ export function installMock() {
       if (!vid || !ver) return fail(404, 'not_found', 'Video not found.')
       const b = await readBody(init, input)
       ;(window as unknown as { __lastDestPublish?: unknown }).__lastDestPublish = b
+      // As the server does: a private video leaves only when the request also shares it with the team.
+      if (vid.private && b.makeVisible !== true)
+        return fail(403, 'forbidden', 'Make the video visible to the team first.')
+      if (vid.private) vid.private = false
       if (b.destination === 'youtube') {
         const o = (b.options ?? {}) as Record<string, unknown>
         if (typeof o.title !== 'string' || !o.title) return fail(400, 'invalid_request', 'Give it a title.')
@@ -1789,7 +1802,9 @@ export function installMock() {
         liveAt: null,
       }
       ver.destinations = [...ver.destinations, entry]
-      const password = (b.options as Record<string, unknown> | undefined)?.password === true
+      const sent = b.options as Record<string, unknown> | undefined
+      // A password the person chose is theirs already: only a generated one is revealed.
+      const password = sent?.password === true && !sent.sitePassword
       setTimeout(() => {
         Object.assign(entry, {
           status: 'waiting',

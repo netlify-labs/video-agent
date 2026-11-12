@@ -197,6 +197,12 @@ export const PublishToDestinationSchema = z
       .describe('One of listDestinationTargets, exactly as listed; null: new.'),
     instructions: z.string().max(4000).nullable().optional(),
     includeTranscript: z.boolean().optional(),
+    makeVisible: z
+      .boolean()
+      .optional()
+      .describe(
+        'For a private video: make it visible to the team as part of publishing (private videos cannot be published to a destination).',
+      ),
   })
   .openapi('PublishToDestination')
 

@@ -1,8 +1,11 @@
 // Starting and retrying a destination publication (publish destinations §2.4, §6.1).
 import type { Deps } from '../../deps.js'
 import { ApiError } from '../../lib/errors.js'
-import { validateOptions } from '../../lib/options-schema.js'
+import { encrypt } from '../../lib/crypto.js'
+import { sealOptions, validateOptions, withoutSealed } from '../../lib/options-schema.js'
 import { assertCan, type Principal } from '../policy.js'
+import { writeAccessMirror } from '../files.js'
+import { getSettings } from '../settings.js'
 import type { DestinationPublicationRow, Target } from '../types.js'
 import { loadJob, publishVersion, withIdempotency } from '../videos.js'
 import {
@@ -25,6 +28,8 @@ export interface PublishInput {
   target?: unknown
   instructions?: string | null | undefined
   includeTranscript?: boolean | undefined
+  /** A private video: make it visible to the team as part of publishing (needs video:private). */
+  makeVisible?: boolean | undefined
 }
 
 const sameRequest = (
@@ -33,7 +38,8 @@ const sameRequest = (
   target: Target | null,
   instr: string | null,
 ) =>
-  JSON.stringify(p.options) === JSON.stringify(options) &&
+  // Secret options are left out: they're encrypted at rest, and a retried request means the same publication.
+  JSON.stringify(withoutSealed(p.options)) === JSON.stringify(withoutSealed(options)) &&
   JSON.stringify(p.target) === JSON.stringify(target) &&
   (p.instructions ?? null) === instr
 
@@ -59,7 +65,10 @@ export async function publishToDestination(
       const o = await repo.getOutput(jobId, n)
       if (!v || v.status !== 'ready' || !o)
         throw new ApiError('not_ready', 'Only ready versions can be published.')
-      assertCanLeave(job)
+      // A private video can't leave (decision 7). The dialog says so and asks for it to be shared in the same step.
+      const share = job.private && input.makeVisible === true
+      if (share) assertCan(principal, 'video:private', { ownerId: job.ownerId })
+      else assertCanLeave(job)
       const destination = await loadDestination(deps, repo, input.destination)
       if (!destination) throw new ApiError('not_found', 'Destination not found.')
       if (destination.row && !destination.row.enabled)
@@ -68,8 +77,11 @@ export async function publishToDestination(
       const ready = await kind.ready({ deps, repo, destination, principal })
       if (!ready.ok) throw new ApiError('conflict', ready.reason)
 
-      const opts = validateOptions(kind.optionsSchema(destination), input.options ?? {})
+      const schema = kind.optionsSchema(destination)
+      const opts = validateOptions(schema, input.options ?? {})
       if (!opts.ok) throw new ApiError('invalid_request', opts.errors.join(' '))
+      const { dataEncryptionKey } = await getSettings(deps)
+      const options = sealOptions(schema, opts.value, (s) => encrypt(dataEncryptionKey, s))
       const caps = destination.row?.capabilities ?? {}
       let target: Target | null = null
       if (input.target != null) {
@@ -104,7 +116,7 @@ export async function publishToDestination(
       }
       const existing = await repo.findActiveDestinationPublication(key)
       if (existing) {
-        if (!sameRequest(existing, opts.value, target, instructions))
+        if (!sameRequest(existing, options, target, instructions))
           throw new ApiError('conflict', 'This version is already published there with other settings.')
         return { status: 200, body: { id: existing.id, dispatch: false } }
       }
@@ -122,7 +134,7 @@ export async function publishToDestination(
         destinationRevision: destination.row?.revision ?? null,
         connectionId,
         target,
-        options: opts.value,
+        options,
         instructions,
         desired: 'published',
         status: 'queued',
@@ -151,6 +163,12 @@ export async function publishToDestination(
         liveAt: null,
         removedAt: null,
       })
+      if (share) {
+        // Last, once nothing else can refuse: the same change as "Make visible to the team" on the video page.
+        const accessEpoch = job.accessEpoch + 1
+        await repo.updateJob(jobId, { private: false, accessEpoch, updatedAt: now, version: job.version + 1 })
+        await writeAccessMirror(deps, { id: jobId, private: false, accessEpoch })
+      }
       deps.log.info('destination.publish', {
         id,
         jobId,

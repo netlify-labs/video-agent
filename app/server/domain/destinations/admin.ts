@@ -43,6 +43,13 @@ function checkSchema(raw: unknown) {
   return p.value
 }
 
+/** What the receiver said, without our own bookkeeping (when to ask again). */
+function shownCapabilities(c: DestinationRow['capabilities']) {
+  const out = { ...c }
+  delete out.nextCheckAt
+  return out
+}
+
 const newSecret = (deps: Pick<Deps, 'ids'>) => `dsec_${deps.ids.secret(24)}`
 
 export function adminDto(
@@ -55,7 +62,7 @@ export function adminDto(
     url: d.url,
     enabled: d.enabled,
     optionsSchema: d.optionsSchema ?? null,
-    capabilities: d.capabilities,
+    capabilities: shownCapabilities(d.capabilities),
     sharePublisherContact: d.sharePublisherContact,
     revision: d.revision,
     createdAt: d.createdAt,
@@ -165,10 +172,44 @@ export async function testDestination(deps: Deps, p: Principal, id: string) {
   const r = await pingDestination(deps, cur)
   if (r.ok && r.capabilities) {
     await deps.store.updateDestination(id, {
-      capabilities: r.capabilities,
+      capabilities: { ...r.capabilities, nextCheckAt: later(deps, CHECK_EVERY_MS) },
       updatedAt: deps.clock.now().toISOString(),
     })
   }
   deps.log.info('destination.test', { id, ok: r.ok, status: r.status })
   return r
+}
+
+const CHECK_EVERY_MS = 3600_000
+const CHECK_AGAIN_MS = 5 * 60_000
+const later = (deps: Pick<Deps, 'clock'>, ms: number) =>
+  new Date(deps.clock.now().getTime() + ms).toISOString()
+
+/**
+ * The sweep's part: asks each enabled destination what it supports (existing targets, instructions and their
+ * wording), hourly, and within a minute of being added or pointed at a new URL. Without this the Publish dialog
+ * showed neither until an admin pressed Test. A receiver that doesn't answer keeps what it last said and is asked
+ * again in five minutes.
+ */
+export async function refreshCapabilities(
+  deps: Deps,
+  budget: { deadline: number },
+  max = 3,
+): Promise<number> {
+  const now = deps.clock.now().toISOString()
+  let checked = 0
+  for (const d of await deps.store.listDestinations()) {
+    if (checked >= max || Date.now() > budget.deadline) break
+    if (!d.enabled || (d.capabilities.nextCheckAt ?? '') > now) continue
+    const r = await pingDestination(deps, d, 5_000)
+    await deps.store.updateDestination(d.id, {
+      capabilities:
+        r.ok && r.capabilities
+          ? { ...r.capabilities, nextCheckAt: later(deps, CHECK_EVERY_MS) }
+          : { ...d.capabilities, nextCheckAt: later(deps, CHECK_AGAIN_MS) },
+    })
+    if (!r.ok) deps.log.warn('destination.capabilities_failed', { id: d.id, status: r.status })
+    checked++
+  }
+  return checked
 }

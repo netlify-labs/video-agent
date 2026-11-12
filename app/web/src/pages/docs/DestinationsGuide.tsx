@@ -233,6 +233,28 @@ export default function DestinationsGuidePage() {
                     }
                   </Code>{' '}
                   to get the target picker ("New site / Your sites") and an instructions box worded your way.
+                  Video Agent asks again every hour, and within a minute of the destination being added or
+                  pointed at a new URL, so a change to your answer shows up without anyone pressing Test.
+                </Text>
+                <Text size="sm">
+                  The options form is a JSON-Schema subset: at most 10 <Code>string</Code> or{' '}
+                  <Code>boolean</Code> properties with <Code>title</Code>, <Code>description</Code>,{' '}
+                  <Code>default</Code>, and for strings <Code>minLength</Code>, <Code>maxLength</Code> and{' '}
+                  <Code>enum</Code>. Two extras: <Code>{'"format": "password"'}</Code> makes a string a secret
+                  (masked in the dialog, encrypted at rest, sent to you in <Code>options</Code> and never
+                  shown again), and <Code>{'"showIf": "<a boolean option>"'}</Code> shows an option, and sends
+                  it, only while that switch is on. For example, a site password the publisher chooses:{' '}
+                  <Code>
+                    {
+                      '{ "password": { "type": "boolean", "title": "Password-protect the site" }, "sitePassword": { "type": "string", "format": "password", "showIf": "password", "minLength": 8 } }'
+                    }
+                  </Code>
+                  .
+                </Text>
+                <Text size="sm">
+                  Private videos never leave Video Agent. When someone publishes a private video to a
+                  destination, the dialog tells them it becomes visible to the team, and it does, in the same
+                  step.
                 </Text>
               </Stack>
             ),

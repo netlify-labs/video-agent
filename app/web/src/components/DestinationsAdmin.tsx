@@ -292,7 +292,7 @@ function AddDestination({
         />
         <Textarea
           label="Options form (optional)"
-          description='JSON: { "type": "object", "properties": { "name": { "type": "string", "title": "Site name" } } }. Strings and switches only.'
+          description='JSON: { "type": "object", "properties": { "name": { "type": "string", "title": "Site name" } } }. Strings and switches only; a string can be "format": "password", and any option can be "showIf" a switch.'
           autosize
           minRows={3}
           value={schema}

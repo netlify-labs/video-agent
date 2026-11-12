@@ -21,11 +21,18 @@ test('publish a version to a destination: an existing site, instructions, then r
   await expect(dialog).toContainText('2 videos · updated yesterday')
   // The options form and the instructions box, labelled by the destination.
   await dialog.getByLabel('Site name').fill('acme-teaser')
+  // The password box shows only while the switch is on; left empty, the destination makes one.
+  await expect(dialog.getByLabel('Password', { exact: true })).toHaveCount(0)
   await dialog.getByLabel('Password-protect the site').check()
-  await expect(dialog.getByLabel('Where should the video go?')).toBeVisible()
-  await expect(dialog).toContainText('An agent will edit the site to place it.')
+  await expect(dialog.getByLabel('Password', { exact: true })).toBeVisible()
+  await expect(dialog.getByLabel('What should the site do with this video?')).toBeVisible()
+  await expect(dialog).toContainText('An agent edits the site once it is published.')
+  // A public video: nothing about visibility.
+  await expect(dialog.getByTestId('publish-makes-visible')).toHaveCount(0)
   await dialog.getByRole('radio', { name: /acme-launch/ }).check()
-  await dialog.getByLabel('Where should the video go?').fill('In the hero, above the pricing table.')
+  await dialog
+    .getByLabel('What should the site do with this video?')
+    .fill('In the hero, above the pricing table.')
   await dialog.getByRole('button', { name: 'Publish' }).click()
   await expect(dialog).toHaveCount(0)
   const sent = await page.evaluate('window.__lastDestPublish')
@@ -59,6 +66,45 @@ test('publish a version to a destination: an existing site, instructions, then r
     .getByRole('button', { name: 'Remove' })
     .click()
   await expect(page.getByTestId('published-to-row')).toHaveCount(0, { timeout: 15_000 })
+})
+
+test('a private video: the dialog says publishing shares it with the team, and does it; your own password is kept', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('mockDestinations', '1')
+  })
+  await page.goto('/videos/vid_teaser')
+  await page.getByRole('button', { name: 'More actions' }).click()
+  await page.getByRole('menuitem', { name: 'Make private' }).click()
+  await page.getByRole('button', { name: 'Publish to' }).click()
+  await page.getByRole('menuitem', { name: /Netlify site/ }).click()
+  const dialog = page.getByRole('dialog', { name: /Publish v2 to Netlify site/ })
+  await expect(dialog.getByTestId('publish-makes-visible')).toContainText(
+    'also makes it visible to everyone on the team',
+  )
+  await dialog.getByLabel('Site name').fill('acme-private')
+  await dialog.getByLabel('Password-protect the site').check()
+  // Too short: said under the box, and Publish is off.
+  await dialog.getByLabel('Password', { exact: true }).fill('short')
+  await expect(dialog).toContainText('At least 8 characters.')
+  await expect(dialog.getByRole('button', { name: 'Publish' })).toBeDisabled()
+  await dialog.getByLabel('Password', { exact: true }).fill('correct-horse-9')
+  await dialog.getByRole('button', { name: 'Publish' }).click()
+  await expect(dialog).toHaveCount(0)
+  // No error toast, no second trip: one request that shares the video and publishes it.
+  await expect(page.getByText('Make the video visible to the team first.')).toHaveCount(0)
+  expect(await page.evaluate('window.__lastDestPublish')).toMatchObject({
+    options: { name: 'acme-private', password: true, sitePassword: 'correct-horse-9' },
+    makeVisible: true,
+  })
+  const row = page.getByTestId('published-to-row').first()
+  await expect(row).toContainText('Live', { timeout: 15_000 })
+  // Your own password isn't "revealed": you already know it.
+  await expect(row.getByRole('button', { name: 'Reveal site password' })).toHaveCount(0)
+  // The video is visible to the team now.
+  await page.getByRole('button', { name: 'More actions' }).click()
+  await expect(page.getByRole('menuitem', { name: 'Make private' })).toBeVisible()
 })
 
 test('without destinations, publishing looks exactly as before', async ({ page }) => {
