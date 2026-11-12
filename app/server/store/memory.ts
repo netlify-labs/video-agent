@@ -240,6 +240,11 @@ export function createMemoryStore(): Store & { reset(): void; dump(): State } {
     updateUser: async (id, patch) => patchRow(state.users, id, patch),
     listUsers: async () =>
       clone([...state.users.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt))),
+    countVideosByOwner: async () => {
+      const out = new Map<string, number>()
+      for (const j of state.jobs.values()) if (!j.deletedAt) out.set(j.ownerId, (out.get(j.ownerId) ?? 0) + 1)
+      return out
+    },
 
     insertKey: async (row) => {
       state.keys.set(row.id, clone(row))

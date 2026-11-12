@@ -99,6 +99,8 @@ export interface Repo {
   insertUserIfAbsent(row: UserRow): Promise<UserRow>
   updateUser(id: string, patch: Partial<UserRow>): Promise<void>
   listUsers(): Promise<UserRow[]>
+  /** How many videos (not deleted) each person owns, by user id; people with none are absent. */
+  countVideosByOwner(): Promise<Map<string, number>>
 
   // api keys
   insertKey(row: ApiKeyRow): Promise<void>

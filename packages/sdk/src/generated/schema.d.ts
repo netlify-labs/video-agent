@@ -3006,6 +3006,8 @@ export interface components {
             disabled: boolean;
             /** @description How the person signs in: 'identity' (Netlify Identity) and/or 'netlify' (Sign in with Netlify). */
             signInMethods: string[];
+            /** @description How many videos the person owns (deleted ones not counted). In the users list only. */
+            videoCount?: number;
         };
         UpdateUser: {
             role?: components["schemas"]["Role"];

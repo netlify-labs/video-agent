@@ -802,6 +802,7 @@ export function installMock() {
           lastSeenAt: new Date().toISOString(),
           disabled: false,
           signInMethods: i === 0 ? ['identity', 'netlify'] : i % 2 ? ['netlify'] : ['identity'],
+          videoCount: videos.filter((v) => v.owner.id === u.id).length,
         })),
       )
     }

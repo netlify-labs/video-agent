@@ -19,7 +19,11 @@ export const userDto = (u: UserRow, methods: string[] = []) => ({
 export async function listUsers(deps: Deps, p: Principal) {
   assertCan(p, 'users:manage')
   const methods = await signInMethods(deps)
-  return (await deps.store.listUsers()).map((u) => userDto(u, methods.get(u.id)))
+  const videos = await deps.store.countVideosByOwner()
+  return (await deps.store.listUsers()).map((u) => ({
+    ...userDto(u, methods.get(u.id)),
+    videoCount: videos.get(u.id) ?? 0,
+  }))
 }
 
 export async function updateUser(

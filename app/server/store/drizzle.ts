@@ -166,6 +166,14 @@ function repoFor(db: Db): Repo {
       await db.update(t.users).set(patch).where(eq(t.users.id, id))
     },
     listUsers: async () => (await db.select().from(t.users).orderBy(asc(t.users.createdAt))) as UserRow[],
+    countVideosByOwner: async () => {
+      const rows = await db
+        .select({ ownerId: t.jobs.ownerId, n: sql<number>`count(*)::int` })
+        .from(t.jobs)
+        .where(isNull(t.jobs.deletedAt))
+        .groupBy(t.jobs.ownerId)
+      return new Map(rows.map((r) => [r.ownerId, r.n]))
+    },
 
     insertKey: async (row) => {
       await db.insert(t.apiKeys).values(row)

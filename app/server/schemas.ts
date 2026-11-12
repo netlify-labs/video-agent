@@ -1081,6 +1081,11 @@ export const UserSchema = z
       .describe(
         "How the person signs in: 'identity' (Netlify Identity) and/or 'netlify' (Sign in with Netlify).",
       ),
+    videoCount: z
+      .number()
+      .int()
+      .optional()
+      .describe('How many videos the person owns (deleted ones not counted). In the users list only.'),
   })
   .openapi('User')
 const PlanQuestionSchema = z.object({

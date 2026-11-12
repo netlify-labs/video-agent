@@ -292,6 +292,7 @@ export function AdminPage() {
                 <tr>
                   <th>Email</th>
                   <th>Joined</th>
+                  <th style={{ textAlign: 'right' }}>Videos</th>
                   <th>Role</th>
                   <th style={{ textAlign: 'right' }}>Active</th>
                 </tr>
@@ -309,6 +310,9 @@ export function AdminPage() {
                       ) : null}
                     </td>
                     <td className="num">{relativeTime(u.createdAt)}</td>
+                    <td className="num" data-testid="user-video-count">
+                      {u.videoCount ?? 0}
+                    </td>
                     <td>
                       <Select
                         aria-label={`Role for ${u.email}`}
