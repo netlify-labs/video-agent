@@ -16,6 +16,14 @@ export default defineConfig({
   use: {
     baseURL: 'http://localhost:4198',
     trace: 'retain-on-failure',
+    // The library hides demo videos until a device says otherwise. The specs were written against the whole mock
+    // library, so they start as a device that has cleared that; library-tags.spec.ts starts fresh to test the default.
+    storageState: {
+      cookies: [],
+      origins: [
+        { origin: 'http://localhost:4198', localStorage: [{ name: 'va.library.hideTags', value: '' }] },
+      ],
+    },
     ...(process.env.CI ? {} : { channel: 'chrome' }),
   },
   projects: [

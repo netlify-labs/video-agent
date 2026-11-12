@@ -1,10 +1,12 @@
 import {
   Alert,
   Button,
+  Combobox,
   Group,
   Loader,
   Menu,
-  MultiSelect,
+  Pill,
+  PillsInput,
   Select,
   SegmentedControl,
   Skeleton,
@@ -13,6 +15,7 @@ import {
   TextInput,
   Tooltip,
   UnstyledButton,
+  useCombobox,
 } from '@mantine/core'
 import { useDebouncedValue, useHotkeys, useReducedMotion } from '@mantine/hooks'
 import {
@@ -24,7 +27,7 @@ import {
   IconSearch,
   IconTag,
 } from '@tabler/icons-react'
-import { Suspense, useEffect, useRef, useState, type ReactNode } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTagsInUse } from '../components/TagsField'
@@ -280,56 +283,130 @@ function CardSkeleton() {
 const HIDE_TAGS_KEY = 'va.library.hideTags'
 /** Where one hidden tag was remembered before the filter took several. */
 const OLD_HIDE_TAG_KEY = 'va.library.hideTag'
+/** Hidden until someone says otherwise: demo videos, so the library opens on the real ones. */
+const DEFAULT_HIDDEN_TAGS = ['demo']
 
-/** The tags hidden on this device. */
+/** The tags hidden on this device; the default until this device has chosen (an emptied list is a choice). */
 function savedHiddenTags(): string[] {
   try {
     const raw = localStorage.getItem(HIDE_TAGS_KEY) ?? localStorage.getItem(OLD_HIDE_TAG_KEY)
-    return raw ? raw.split(',').filter(Boolean) : []
+    return raw === null ? DEFAULT_HIDDEN_TAGS : raw.split(',').filter(Boolean)
   } catch {
-    return []
+    return DEFAULT_HIDDEN_TAGS
   }
 }
 
-/** A tag filter: any number of tags as pills, picked from the tags in use (each with its count); × removes one. */
+/**
+ * The tag filter: one searchable field. Its list offers every tag in use twice, to show only videos with it or to
+ * hide videos with it; what's picked sits in the field as pills (hidden ones marked with a crossed eye), each with
+ * an × to remove it.
+ */
 function TagFilter(props: {
-  label: string
-  icon: ReactNode
-  value: string[]
-  onChange: (tags: string[]) => void
+  show: string[]
+  hide: string[]
+  onShow: (tags: string[]) => void
+  onHide: (tags: string[]) => void
   inUse: { tag: string; count: number }[]
-  testId: string
 }) {
-  const counts = new Map(props.inUse.map((t) => [t.tag, t.count]))
-  // A chosen tag no video carries any more stays listed, so its pill still shows and can be removed.
-  const data = [...props.inUse.map((t) => t.tag), ...props.value.filter((t) => !counts.has(t))]
+  const combobox = useCombobox({
+    onDropdownClose: () => {
+      combobox.resetSelectedOption()
+    },
+  })
+  const [search, setSearch] = useState('')
+  const picked = new Set([...props.show, ...props.hide])
+  const matches = props.inUse.filter(
+    (t) => !picked.has(t.tag) && t.tag.toLowerCase().includes(search.trim().toLowerCase()),
+  )
+  const pick = (value: string) => {
+    if (value.startsWith('hide:')) props.onHide([...props.hide, value.slice(5)])
+    else props.onShow([...props.show, value])
+    setSearch('')
+  }
+  const pill = (tag: string, hidden: boolean) => (
+    <Pill
+      key={`${hidden ? 'hide' : 'show'}:${tag}`}
+      withRemoveButton
+      data-hidden={hidden || undefined}
+      title={hidden ? `Videos tagged ${tag} are hidden` : `Only videos tagged ${tag}`}
+      onRemove={() => {
+        if (hidden) props.onHide(props.hide.filter((t) => t !== tag))
+        else props.onShow(props.show.filter((t) => t !== tag))
+      }}
+    >
+      {hidden ? (
+        <IconEyeOff size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} aria-label="Hidden:" />
+      ) : null}
+      {tag}
+    </Pill>
+  )
+  const option = (value: string, t: { tag: string; count: number }) => (
+    <Combobox.Option key={value} value={value}>
+      <Group justify="space-between" gap="md" wrap="nowrap">
+        <span>{t.tag}</span>
+        <Text span size="xs" c="var(--va-faint)">
+          {t.count}
+        </Text>
+      </Group>
+    </Combobox.Option>
+  )
   return (
-    <MultiSelect
-      aria-label={props.label}
-      placeholder={props.value.length ? undefined : props.label}
-      leftSection={props.icon}
-      data={data}
-      value={props.value}
-      onChange={props.onChange}
-      searchable
-      // Type part of a tag and press Enter to add it.
-      selectFirstOptionOnChange
-      clearable
-      hidePickedOptions
-      nothingFoundMessage="No other tags"
-      radius="xl"
-      // A fixed width: more pills wrap onto another line inside the field instead of pushing the filters around.
-      w={240}
-      data-testid={props.testId}
-      renderOption={({ option }) => (
-        <Group justify="space-between" gap="md" wrap="nowrap" w="100%">
-          <span>{option.value}</span>
-          <Text span size="xs" c="var(--va-faint)">
-            {counts.get(option.value) ?? 0}
-          </Text>
-        </Group>
-      )}
-    />
+    <Combobox store={combobox} onOptionSubmit={pick} withinPortal>
+      <Combobox.DropdownTarget>
+        <PillsInput
+          radius="xl"
+          // A fixed width: more pills wrap onto another line inside the field instead of pushing the filters around.
+          w={260}
+          leftSection={<IconTag size={15} />}
+          data-testid="tag-filter"
+          onClick={() => {
+            combobox.openDropdown()
+          }}
+        >
+          <Pill.Group>
+            {props.hide.map((t) => pill(t, true))}
+            {props.show.map((t) => pill(t, false))}
+            <Combobox.EventsTarget>
+              <PillsInput.Field
+                aria-label="Tags"
+                placeholder={picked.size ? undefined : 'Tags'}
+                value={search}
+                onFocus={() => {
+                  combobox.openDropdown()
+                }}
+                onBlur={() => {
+                  combobox.closeDropdown()
+                }}
+                onChange={(e) => {
+                  setSearch(e.currentTarget.value)
+                  combobox.openDropdown()
+                  // Type part of a tag and press Enter to show only it.
+                  combobox.selectFirstOption()
+                }}
+                onKeyDown={(e) => {
+                  if (e.key !== 'Backspace' || search) return
+                  // In the empty field, Backspace removes the last pill.
+                  if (props.show.length) props.onShow(props.show.slice(0, -1))
+                  else if (props.hide.length) props.onHide(props.hide.slice(0, -1))
+                }}
+              />
+            </Combobox.EventsTarget>
+          </Pill.Group>
+        </PillsInput>
+      </Combobox.DropdownTarget>
+      <Combobox.Dropdown>
+        <Combobox.Options mah={320} style={{ overflowY: 'auto' }}>
+          {matches.length ? (
+            <>
+              <Combobox.Group label="Show only">{matches.map((t) => option(t.tag, t))}</Combobox.Group>
+              <Combobox.Group label="Hide">{matches.map((t) => option(`hide:${t.tag}`, t))}</Combobox.Group>
+            </>
+          ) : (
+            <Combobox.Empty>No other tags</Combobox.Empty>
+          )}
+        </Combobox.Options>
+      </Combobox.Dropdown>
+    </Combobox>
   )
 }
 
@@ -341,16 +418,16 @@ export function LibraryPage() {
   const [status, setStatus] = useState<string | null>(null)
   const canCreate = useCanCreate()
   const [published, setPublished] = useState<string | null>(null)
-  // Two tag filters: videos with any of some tags, and hiding videos with any of others. Hiding is remembered on
-  // this device, so demo videos stay out of the way until you ask for them.
+  // One tag filter with two kinds of pick: videos with any of some tags, and hiding videos with any of others.
+  // Hiding is remembered on this device and starts with demo, so demo videos stay out of the way until asked for.
   const tagsInUse = useTagsInUse()
   const [tags, setTags] = useState<string[]>([])
   const [hideTags, setHideTagsState] = useState<string[]>(savedHiddenTags)
   const setHideTags = (t: string[]) => {
     setHideTagsState(t)
     try {
-      if (t.length) localStorage.setItem(HIDE_TAGS_KEY, t.join(','))
-      else localStorage.removeItem(HIDE_TAGS_KEY)
+      // Saved even when empty: removing the default is a choice to remember.
+      localStorage.setItem(HIDE_TAGS_KEY, t.join(','))
       localStorage.removeItem(OLD_HIDE_TAG_KEY)
     } catch {
       // Not remembered, then.
@@ -385,9 +462,9 @@ export function LibraryPage() {
     },
   )
   const items = list.data?.pages.flatMap((p) => p.items) ?? []
-  const filtered = Boolean(
-    debounced || status || published || tags.length || hideTags.length || owner !== 'all',
-  )
+  // Hiding demo videos is how the library opens, not a filter someone set.
+  const hidingMore = hideTags.join(',') !== DEFAULT_HIDDEN_TAGS.join(',') && hideTags.length > 0
+  const filtered = Boolean(debounced || status || published || tags.length || hidingMore || owner !== 'all')
   const working = items.filter((v) => inProgress(v.status)).length
   const finding =
     items.length === 0
@@ -463,24 +540,7 @@ export function LibraryPage() {
           ]}
         />
         {tagsInUse.length || tags.length || hideTags.length ? (
-          <>
-            <TagFilter
-              label="Tags"
-              icon={<IconTag size={15} />}
-              value={tags}
-              onChange={setTags}
-              inUse={tagsInUse}
-              testId="tag-filter"
-            />
-            <TagFilter
-              label="Hide tags"
-              icon={<IconEyeOff size={15} />}
-              value={hideTags}
-              onChange={setHideTags}
-              inUse={tagsInUse}
-              testId="hide-tag-filter"
-            />
-          </>
+          <TagFilter show={tags} hide={hideTags} onShow={setTags} onHide={setHideTags} inUse={tagsInUse} />
         ) : null}
         <TextInput
           aria-label="Search prompts and titles"
