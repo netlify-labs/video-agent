@@ -73,8 +73,9 @@ export default function LooksGuidePage() {
         title="Looks"
         sub={
           <>
-            A look is a style for a video: its type, colour roles, motion and layout rules. Pick one when you
-            make a video, or restyle a video into another. With no look, the agent decides, as before.
+            A look is a style for a video. It sets the type, color roles, motion, and layout rules. Choose a
+            look when you make a video, or restyle an existing video with a different look. If you don&apos;t
+            choose a look, the agent decides the style.
           </>
         }
       />
@@ -82,14 +83,14 @@ export default function LooksGuidePage() {
         sections={[
           {
             id: 'catalog',
-            title: 'The looks here',
+            title: 'Looks in this deployment',
             description: looks?.default ? (
               <>
-                New videos get <Code>{looks.default}</Code> unless the person picks another (an admin
-                setting).
+                New videos use the <Code>{looks.default}</Code> look unless you choose another one. An admin
+                sets this default.
               </>
             ) : (
-              'New videos get no look unless the person picks one.'
+              'New videos have no look unless you choose one.'
             ),
             children: looks ? (
               <div className="va-look-grid" data-testid="looks-catalog">
@@ -103,13 +104,15 @@ export default function LooksGuidePage() {
           },
           {
             id: 'api',
-            title: 'From the API',
+            title: 'Use looks from the API',
             description: (
               <>
-                <Code>GET /api/v1/looks</Code> lists them. Create, revise and remix take <Code>look</Code>: an
-                id, or <Code>null</Code> for none. Left out, a revision keeps its version&apos;s look, a remix
-                keeps the source&apos;s, and a new video gets the admin default. A revision with another look
-                is a restyle: a full run that keeps the story and changes the style.
+                To list the looks, call <Code>GET /api/v1/looks</Code>. The create, revise, and remix requests
+                take a <Code>look</Code> field. Set it to a look ID, or to <Code>null</Code> for no look. If
+                you leave out <Code>look</Code>, a revision keeps the look of its version, a remix keeps the
+                look of its source video, and a new video gets the admin default. A revision that sets a
+                different look is a restyle. A restyle is a full run that keeps the story and changes the
+                style.
               </>
             ),
             children: (
@@ -125,15 +128,15 @@ content-type: application/json
           },
           {
             id: 'sdk',
-            title: 'From the SDK',
+            title: 'Use looks from the SDK',
             description: (
               <>
-                <Code>va.looks.list()</Code>, and <Code>look</Code> on <Code>videos.create</Code>,{' '}
-                <Code>revise</Code> and <Code>remix</Code> (
+                To list the looks, call <Code>va.looks.list()</Code>. To choose one, pass <Code>look</Code> to{' '}
+                <Code>videos.create</Code>, <Code>revise</Code>, or <Code>remix</Code>. For more, see{' '}
                 <Anchor component={Link} to="/docs/sdk#looks" c="var(--va-text)" inherit>
                   TypeScript SDK
                 </Anchor>
-                ).
+                .
               </>
             ),
             children: (
@@ -146,14 +149,15 @@ await va.videos.create({ prompt: 'A 20-second launch video for org webhooks', lo
           },
           {
             id: 'cli',
-            title: 'From the command line',
+            title: 'Use looks from the command line',
             description: (
               <>
-                <Code>video-agent looks</Code> lists them; <Code>--look</Code> on <Code>create</Code>,{' '}
-                <Code>revise</Code> and <Code>remix</Code> picks one (<Code>none</Code> for no look);{' '}
-                <Code>video-agent restyle</Code> makes the next version in another look. With{' '}
-                <Code>video-agent local --look</Code> you can try a look, or a look folder you're writing, on
-                your own machine before it reaches a deployment.
+                To list the looks, run <Code>video-agent looks</Code>. To choose one, add <Code>--look</Code>{' '}
+                to <Code>create</Code>, <Code>revise</Code>, or <Code>remix</Code>. Use{' '}
+                <Code>--look none</Code> for no look. To make the next version of a video with a different
+                look, run <Code>video-agent restyle</Code>. To try a look on your own computer before it
+                reaches a deployment, run <Code>video-agent local --look</Code>. This also works with a look
+                folder that you&apos;re still writing.
               </>
             ),
             children: (
@@ -168,11 +172,12 @@ video-agent local --look ./looks/my-look "A 20-second launch video for org webho
           },
           {
             id: 'mcp',
-            title: 'From AI tools (MCP)',
+            title: 'Use looks from AI tools (MCP)',
             description: (
               <>
-                <Code>list_looks</Code> lists them; <Code>create_video</Code>, <Code>revise_video</Code> and{' '}
-                <Code>remix_video</Code> take <Code>look</Code>. Connect as shown under{' '}
+                The <Code>list_looks</Code> tool lists the looks. The <Code>create_video</Code>,{' '}
+                <Code>revise_video</Code>, and <Code>remix_video</Code> tools take a <Code>look</Code>{' '}
+                argument. To connect your AI tool, see{' '}
                 <Anchor component={Link} to="/docs/mcp#connect" c="var(--va-text)" inherit>
                   MCP for AI tools
                 </Anchor>
@@ -181,7 +186,7 @@ video-agent local --look ./looks/my-look "A 20-second launch video for org webho
             ),
             children: (
               <Text size="sm" c="var(--va-muted)">
-                For example: “Make a launch video for org webhooks in the Kinetic type look.”
+                For example, ask: “Make a launch video for org webhooks in the Kinetic type look.”
               </Text>
             ),
           },
@@ -190,9 +195,10 @@ video-agent local --look ./looks/my-look "A 20-second launch video for org webho
             title: 'Add a look',
             description: (
               <>
-                A look is a folder in <Code>app/looks/</Code>: its rules, an example composition and a preview.
-                Looks are instructions to the agent, like <Code>context/</Code>, so only people who can change
-                the repo add them. See{' '}
+                A look is a folder in <Code>app/looks/</Code>. The folder holds the look&apos;s rules, an
+                example composition, and a preview. Looks are instructions to the agent, like the files in{' '}
+                <Code>context/</Code>, so only people who can change the repository can add one. For the
+                steps, see{' '}
                 <Anchor href={REPO_LOOKS} c="var(--va-text)" inherit>
                   app/looks/README.md
                 </Anchor>

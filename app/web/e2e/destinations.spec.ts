@@ -142,7 +142,7 @@ test('the destination contract page renders its sections, test vector and exampl
   await expect(page.getByRole('heading', { name: 'Publish destinations' })).toBeVisible()
   for (const s of [
     'Requests',
-    'Verifying requests',
+    'Verify requests',
     'Responses',
     'Callbacks',
     'Targets and capabilities',

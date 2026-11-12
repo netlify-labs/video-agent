@@ -10,7 +10,7 @@ import { CatalogTable, DocSections } from './DocsLayout'
 const KEY = 'Bearer nva_…'
 
 const EXAMPLES = [
-  'Make a 20-second vertical video announcing our new pricing page, ending on “Try it today”, then publish it when it’s ready.',
+  'Make a 20-second vertical video that announces our new pricing page and ends on “Try it today”. Publish it when it’s ready.',
   'Turn pull request #482 into a 30-second demo video for customers.',
   'What did people say about the onboarding video? Revise it with the open comments.',
   'Find calm, openly licensed music and use it for a 15-second cut of the launch video.',
@@ -43,7 +43,7 @@ export default function McpGuidePage() {
     <>
       <PageHeader
         title="MCP for AI tools"
-        sub="Connect your AI tools to make, follow, revise and publish videos by asking for them."
+        sub="Connect your AI tools, and then ask for videos in your own words. Your AI tool can make, follow, revise, and publish them."
       />
       <DocSections
         sections={[
@@ -51,7 +51,7 @@ export default function McpGuidePage() {
             id: 'tools',
             title: 'MCP tools',
             description:
-              'What your AI tool can do here. The server lists only the tools your role allows; keys and connected apps act as you.',
+              'What your AI tool can do after it connects. The server lists only the tools that your role allows. API keys and connected apps act as you.',
             children: (
               <Card>
                 <CatalogTable entries={MCP_TOOLS} label="MCP tools" />
@@ -63,7 +63,7 @@ export default function McpGuidePage() {
             title: 'Connect',
             description: (
               <>
-                One Streamable HTTP endpoint. It uses your{' '}
+                The server is one Streamable HTTP endpoint. To sign in to it, use your{' '}
                 <Anchor component={Link} to="/keys" c="var(--va-text)" inherit>
                   API key
                 </Anchor>
@@ -75,7 +75,8 @@ export default function McpGuidePage() {
                 <Stack gap="sm">
                   <CopyField label="Server URL (Streamable HTTP)" value={url} />
                   <Text size="sm" c="var(--va-muted)">
-                    Send the key as <Code>Authorization: {KEY}</Code>. Create one on the{' '}
+                    Send the key in the <Code>Authorization</Code> header: <Code>Authorization: {KEY}</Code>.
+                    To create a key, go to the{' '}
                     <Anchor component={Link} to="/keys" c="var(--va-text)" inherit>
                       API keys
                     </Anchor>{' '}
@@ -83,8 +84,9 @@ export default function McpGuidePage() {
                   </Text>
                   {oauth ? (
                     <Text size="sm" c="var(--va-muted)">
-                      Or connect without a key: clients that support OAuth (Claude and ChatGPT connectors,
-                      Claude Code) can add the URL alone and <b>Sign in with Netlify</b>.
+                      To connect without a key, add only the URL, and then <b>Sign in with Netlify</b>. This
+                      works in clients that support OAuth, such as Claude and ChatGPT connectors and Claude
+                      Code.
                     </Text>
                   ) : null}
                 </Stack>
@@ -94,12 +96,16 @@ export default function McpGuidePage() {
           {
             id: 'clients',
             title: 'Client setup',
-            description: 'Replace nva_… with your key.',
+            description: 'In each example, replace nva_… with your key.',
             children: (
               <>
                 <Snippet
                   title="Claude Code"
-                  note={oauth ? 'Or leave out --header and run /mcp in Claude Code to sign in.' : undefined}
+                  note={
+                    oauth
+                      ? 'To sign in without a key, leave out --header, and then run /mcp in Claude Code.'
+                      : undefined
+                  }
                 >
                   {`claude mcp add --transport http video-agent ${url} \\\n  --header "Authorization: ${KEY}"`}
                 </Snippet>
@@ -107,7 +113,7 @@ export default function McpGuidePage() {
                   title="Claude Desktop (claude_desktop_config.json)"
                   note={
                     oauth
-                      ? 'Or add it as a custom connector under Settings → Connectors with the URL alone, and sign in.'
+                      ? 'To add it as a custom connector instead, go to Settings > Connectors, enter only the URL, and then sign in.'
                       : undefined
                   }
                 >
@@ -125,10 +131,10 @@ export default function McpGuidePage() {
                   )}
                 </Snippet>
                 <Snippet
-                  title="Cursor, Windsurf and other clients (mcp.json)"
+                  title="Cursor, Windsurf, and other clients (mcp.json)"
                   note={
                     <>
-                      Clients that only speak stdio can use a bridge:{' '}
+                      If your client supports only stdio, use a bridge:{' '}
                       <Code>{`npx -y mcp-remote ${url} --header "Authorization: ${KEY}"`}</Code>
                     </>
                   }
@@ -147,8 +153,8 @@ export default function McpGuidePage() {
             title: 'Prompts',
             description: (
               <>
-                Ready-made recipes from <Code>prompts/list</Code>, limited to what your role can do. Coding
-                agents can get the same recipes as an{' '}
+                Ready-made recipes that your AI tool gets from <Code>prompts/list</Code>. You see only the
+                prompts that your role can use. Coding agents can get the same recipes as an{' '}
                 <Anchor component={Link} to="/docs/skills" c="var(--va-text)" inherit>
                   agent skill
                 </Anchor>
@@ -163,8 +169,8 @@ export default function McpGuidePage() {
           },
           {
             id: 'examples',
-            title: 'Example asks',
-            description: 'Once connected, ask in your own words. The tools take it from there.',
+            title: 'Example requests',
+            description: 'After you connect, ask in your own words. Your AI tool chooses the tools to call.',
             children: (
               <Card>
                 <ul className="va-docs-examples">

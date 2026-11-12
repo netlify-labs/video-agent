@@ -50,43 +50,48 @@ export default function GithubGuidePage() {
     <>
       <PageHeader
         title="GitHub Action"
-        sub="A demo video for a labelled pull request or a release, posted in one comment that keeps itself up to date."
+        sub="Get a demo video for a labeled pull request or a release. The action posts the video in one comment, and keeps that comment up to date."
       />
       <DocSections
         sections={[
           {
             id: 'setup',
-            title: 'Set it up',
+            title: 'Set up the action',
             children: (
               <Card>
                 <List type="ordered" spacing="sm" size="sm">
                   <List.Item>
-                    Make a Video Agent account for CI (for example <Code>video-bot@acme.com</Code>, role
-                    Creator), sign in as it and{' '}
+                    Create a Video Agent account for CI, for example <Code>video-bot@acme.com</Code>, with the
+                    Creator role.
+                  </List.Item>
+                  <List.Item>
+                    Sign in as that account and{' '}
                     <Anchor component={Link} to="/keys" inherit>
                       create an API key
                     </Anchor>
-                    . Store the key as the secret <Code>VIDEO_AGENT_KEY</Code>.
+                    . In GitHub, store the key as a secret named <Code>VIDEO_AGENT_KEY</Code>.
                   </List.Item>
                   <List.Item>
-                    Store this site as the variable <Code>VIDEO_AGENT_URL</Code>, at the org level so only org
-                    admins can change where the key is sent. Not a secret: GitHub would hide every link the
-                    action prints.
+                    Store this site&apos;s URL as a variable named <Code>VIDEO_AGENT_URL</Code>. Set it at the
+                    organization level, so that only organization admins can change where the key is sent. Use
+                    a variable and not a secret. GitHub hides secret values in logs, which would hide every
+                    link that the action prints.
                     <CopyField value={site} label="VIDEO_AGENT_URL" />
                   </List.Item>
                   <List.Item>
-                    Add a workflow from the examples below with <Code>dry-run: true</Code>: it prints the
-                    brief and the calls it would make, and spends nothing. Remove it when the brief reads
-                    well.
+                    Add a workflow from the examples on this page, and set <Code>dry-run: true</Code>. A dry
+                    run prints the brief and the calls that the action would make, and spends no credits. When
+                    the brief reads well, remove <Code>dry-run</Code>.
                   </List.Item>
                   <List.Item>
                     Add the <Code>video</Code> label to a pull request.
                   </List.Item>
                 </List>
                 <Text {...muted} mt="sm">
-                  While the action's repository is private, other repositories in the org can use it only when
-                  its Settings → Actions → General → Access is set to “Accessible from repositories in the
-                  organization”.
+                  If the action&apos;s repository is private, other repositories in the organization can use
+                  it only after you allow that. In the action&apos;s repository, go to{' '}
+                  <b>Settings &gt; Actions &gt; General &gt; Access</b> and select{' '}
+                  <b>Accessible from repositories in the organization</b>.
                 </Text>
               </Card>
             ),
@@ -94,7 +99,7 @@ export default function GithubGuidePage() {
           {
             id: 'features',
             title: 'This deployment',
-            description: 'The action asks the server what it offers and uses only that.',
+            description: 'The action asks the server which features it has, and uses only those.',
             children: (
               <Card>
                 <Stack gap="xs" aria-label="Server features">
@@ -113,7 +118,7 @@ export default function GithubGuidePage() {
                         </Badge>
                         <Text size="sm">
                           {f.label}
-                          {on ? null : <Text span {...muted}>{` — off here: ${f.without}`}</Text>}
+                          {on ? null : <Text span {...muted}>{` (off here: ${f.without})`}</Text>}
                         </Text>
                       </Group>
                     )
@@ -144,7 +149,7 @@ export default function GithubGuidePage() {
             id: 'commands',
             title: 'Commands',
             description:
-              'Reply on the pull request. The action reacts 👀 when it starts and 👍 or 😕 when it’s done, and updates its one comment.',
+              'To run a command, reply on the pull request with it. The action reacts with 👀 when it starts, and with 👍 or 😕 when it finishes. It then updates its comment.',
             children: (
               <Card>
                 <Stack gap={4}>
@@ -169,7 +174,7 @@ export default function GithubGuidePage() {
             title: 'Outputs',
             description: (
               <>
-                <Code>status</Code> is one of{' '}
+                The <Code>status</Code> output is one of the following:{' '}
                 {OUTPUT_STATUSES.map((s, i) => (
                   <span key={s}>
                     {i ? ', ' : ''}
@@ -188,33 +193,36 @@ export default function GithubGuidePage() {
           {
             id: 'security',
             title: 'Security',
-            description: 'Strict by default; relax each on purpose.',
+            description: 'The defaults are strict. Relax a setting only when you mean to.',
             children: (
               <Card>
                 <List spacing="xs" size="sm">
                   <List.Item>
-                    Fork PRs are off. Only people with write access to the repository start videos, run
-                    commands, or have their PR description and screenshots used.
+                    Pull requests from forks are off. Only people with write access to the repository can
+                    start videos or run commands. The action uses a pull request&apos;s description and
+                    screenshots only when its author has write access.
                   </List.Item>
                   <List.Item>
-                    The action never runs PR code and needs no checkout. Don't combine it with a checkout of a
-                    fork's head under <Code>pull_request_target</Code> or <Code>issue_comment</Code>.
+                    The action never runs code from a pull request, and it needs no checkout. Don&apos;t
+                    combine it with a checkout of a fork&apos;s head under <Code>pull_request_target</Code> or{' '}
+                    <Code>issue_comment</Code>.
                   </List.Item>
                   <List.Item>
-                    The key sees everything a Creator sees. Give the CI account only CI keys: disabling it is
-                    the one switch that stops all CI spend.
+                    The key can see everything that a Creator can see. Use the CI account only for CI keys.
+                    Then, to stop all CI spending at once, turn off that account.
                   </List.Item>
                   <List.Item>
-                    Publishing is off by default. A published GIF in a comment goes through GitHub's image
-                    cache and stops showing within minutes of an unpublish. A release asset on a public repo
-                    is a public MP4 for good, so it needs <Code>publish: true</Code>.
+                    Publishing is off by default. A published GIF in a comment goes through GitHub&apos;s
+                    image cache, and it stops showing within minutes after you unpublish. A release asset on a
+                    public repository is a public MP4 permanently, so it requires <Code>publish: true</Code>.
                   </List.Item>
                   <List.Item>
-                    <Code>private: true</Code> and <Code>publish: true</Code> can't both be set.
+                    You can&apos;t set both <Code>private: true</Code> and <Code>publish: true</Code>.
                   </List.Item>
                   <List.Item>
-                    Permissions: <Code>pull-requests: write</Code> for comments and reactions,{' '}
-                    <Code>contents: write</Code> only for releases, <Code>contents: read</Code> otherwise.
+                    The action needs the <Code>pull-requests: write</Code> permission for comments and
+                    reactions. It needs <Code>contents: write</Code> only for releases, and{' '}
+                    <Code>contents: read</Code> otherwise.
                   </List.Item>
                 </List>
               </Card>
@@ -226,11 +234,14 @@ export default function GithubGuidePage() {
             children: (
               <Card>
                 <Text size="sm">
-                  A video is about 150 credits, and a revision or retry costs as much as a new one: 10 PR
-                  videos a week is about 1,500 credits, plus revisions. The action stops at{' '}
-                  <Code>max-versions</Code> per PR (3), <Code>max-runs-per-day</Code> for the account (10),
-                  and <Code>max-credits-per-month</Code> when you set it. The comment shows each version's
-                  credits.
+                  A video costs about 150 credits. A revision or a retry costs as much as a new video. For
+                  example, 10 pull request videos a week cost about 1,500 credits, plus revisions.
+                </Text>
+                <Text size="sm" mt="xs">
+                  The action stops at these limits: <Code>max-versions</Code> for each pull request (3 by
+                  default), <Code>max-runs-per-day</Code> for the account (10 by default), and{' '}
+                  <Code>max-credits-per-month</Code> if you set it. The comment shows the credits that each
+                  version used.
                 </Text>
               </Card>
             ),
@@ -240,15 +251,16 @@ export default function GithubGuidePage() {
             title: 'Other CI systems',
             children: (
               <Card>
+                <Text {...muted} mb="sm">
+                  On other CI systems, use the CLI. It makes the same briefs with <Code>brief pr</Code>,{' '}
+                  <Code>brief release</Code>, and <Code>brief changelog</Code>. For a private repository, set{' '}
+                  <Code>GH_TOKEN</Code>.
+                </Text>
                 <CodeBlock
                   code={`npx -y netlify-video-agent brief pr https://github.com/acme/web/pull/123 \\
   | npx -y netlify-video-agent create --prompt-file - --wait`}
                   lang="http"
                 />
-                <Text {...muted} mt="sm">
-                  The same briefs from the CLI: <Code>brief pr</Code>, <Code>brief release</Code> and{' '}
-                  <Code>brief changelog</Code>. Set <Code>GH_TOKEN</Code> for a private repository.
-                </Text>
               </Card>
             ),
           },

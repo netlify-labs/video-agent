@@ -306,7 +306,7 @@ test('the MCP page lists sections with MCP tools first, and the contents follow 
     'Connect',
     'Client setup',
     'Prompts',
-    'Example asks',
+    'Example requests',
   ])
   await expect(toc.getByRole('link', { name: 'MCP tools' })).toHaveAttribute('aria-current', 'location')
   const tools = page.getByRole('table', { name: 'MCP tools' })

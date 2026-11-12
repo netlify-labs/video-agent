@@ -51,9 +51,9 @@ export default function CliGuidePage() {
         title="CLI"
         sub={
           <>
-            <Code>video-agent</Code> (npm <Code>netlify-video-agent</Code>): make, follow, download and
-            publish videos from a terminal, scripts and CI, or make them on your own machine with your own
-            coding agent.
+            <Code>video-agent</Code> is the command-line tool (npm package <Code>netlify-video-agent</Code>).
+            Use it to make, follow, download, and publish videos from a terminal, a script, or CI. It can also
+            make videos on your own computer with your own coding agent.
           </>
         }
       />
@@ -69,8 +69,8 @@ video-agent --version
 # or without installing:
 npx -y netlify-video-agent@1 --version`}</Code>
                 <Text size="sm" c="var(--va-muted)" mt="sm">
-                  Node 22 or later. <Code>video-agent doctor</Code> checks your setup. Every command takes{' '}
-                  <Code>--help</Code>.
+                  The CLI needs Node 22 or later. To check your setup, run <Code>video-agent doctor</Code>.
+                  For help with any command, add <Code>--help</Code>.
                 </Text>
               </Card>
             ),
@@ -78,20 +78,24 @@ npx -y netlify-video-agent@1 --version`}</Code>
           {
             id: 'sign-in',
             title: 'Sign in',
-            description: 'Approve the CLI in your browser; it gets an API key that acts as you.',
+            description: 'Approve the CLI in your browser. The CLI then gets an API key that acts as you.',
             children: (
               <Card>
                 <Code block>{`video-agent login --url ${site}
 video-agent whoami`}</Code>
                 <Text size="sm" c="var(--va-muted)" mt="sm">
-                  It prints a code; open {site}/cli/approve, type the code and approve. The key is saved in{' '}
-                  <Code>~/.config/video-agent/config.json</Code> (only you can read it).{' '}
-                  <Code>video-agent logout --revoke</Code> forgets it and revokes it. Prefer a key you made on
-                  the{' '}
+                  The <Code>login</Code> command prints a code. Open {site}/cli/approve, enter the code, and
+                  approve it. The CLI saves the key in <Code>~/.config/video-agent/config.json</Code>, which
+                  only you can read. To forget the key and revoke it, run{' '}
+                  <Code>video-agent logout --revoke</Code>.
+                </Text>
+                <Text size="sm" c="var(--va-muted)" mt="xs">
+                  To use a key from the{' '}
                   <Anchor component={Link} to="/keys" inherit>
                     API keys
                   </Anchor>{' '}
-                  page? <Code>video-agent login --url {site} --key -</Code> reads it from stdin.
+                  page instead, run <Code>video-agent login --url {site} --key -</Code>. This reads the key
+                  from stdin.
                 </Text>
               </Card>
             ),
@@ -107,9 +111,9 @@ video-agent whoami`}</Code>
 video-agent revise <video> "Make the end card orange" --wait
 video-agent publish <video>`}</Code>
                 <Text size="sm" c="var(--va-muted)" mt="sm">
-                  <Code>&lt;video&gt;</Code> is an id (<Code>vid_…</Code>), its web address or a share link.{' '}
-                  <Code>--wait</Code> follows the run with progress on stderr; <Code>--out</Code> downloads
-                  the MP4, poster and captions.
+                  <Code>&lt;video&gt;</Code> is a video ID (<Code>vid_…</Code>), the video&apos;s web address,
+                  or a share link. The <Code>--wait</Code> flag follows the run and prints progress to stderr.
+                  The <Code>--out</Code> flag downloads the MP4, the poster, and the captions.
                 </Text>
               </Card>
             ),
@@ -117,7 +121,7 @@ video-agent publish <video>`}</Code>
           {
             id: 'commands',
             title: 'Commands',
-            description: 'The same list video-agent help prints.',
+            description: 'The same list that video-agent help prints.',
             children: (
               <Card>
                 <CommandTable commands={remote} />
@@ -129,9 +133,10 @@ video-agent publish <video>`}</Code>
             title: 'JSON output and exit codes',
             description: (
               <>
-                With <Code>--json</Code>, stdout is exactly one JSON object: what the command made or read, or{' '}
-                <Code>{'{ "error": { "code", "message", "requestId" } }'}</Code>. Progress goes to stderr.{' '}
-                <Code>--verbose</Code> logs each request as JSON lines with request ids.
+                With <Code>--json</Code>, stdout is exactly one JSON object. The object is what the command
+                made or read, or an error: <Code>{'{ "error": { "code", "message", "requestId" } }'}</Code>.
+                Progress goes to stderr. With <Code>--verbose</Code>, the CLI logs each request as JSON lines
+                that include request IDs. The following table lists the exit codes.
               </>
             ),
             children: (
@@ -154,15 +159,17 @@ video-agent publish <video>`}</Code>
           {
             id: 'ci',
             title: 'Scripts and CI',
-            description: 'Use an API key from an environment variable; nothing is written to disk.',
+            description:
+              'In scripts and CI, pass the API key in an environment variable. The CLI then writes nothing to disk.',
             children: (
               <Card>
                 <Code block>{`export VIDEO_AGENT_URL=${site}
 export VIDEO_AGENT_KEY=nva_…   # a secret in your CI, from ${site}/keys
 video-agent create "Release notes for v2.4" --wait --json > video.json`}</Code>
                 <Text size="sm" c="var(--va-muted)" mt="sm">
-                  Flags win over the environment, which wins over the saved config. Never put a key on the
-                  command line: pipe it to <Code>--key -</Code>. In code, use the{' '}
+                  Flags override environment variables, and environment variables override the saved config.
+                  Never put a key on the command line. Pipe it to <Code>--key -</Code> instead. In code, use
+                  the{' '}
                   <Anchor component={Link} to="/docs/sdk" inherit>
                     TypeScript SDK
                   </Anchor>
@@ -173,9 +180,9 @@ video-agent create "Release notes for v2.4" --wait --json > video.json`}</Code>
           },
           {
             id: 'local',
-            title: 'Make videos on your laptop',
+            title: 'Make videos on your own computer',
             description:
-              'video-agent local makes the video on your machine with your own coding agent. No deployment, key or credits.',
+              'video-agent local makes the video on your computer with your own coding agent. You need no deployment, no key, and no credits.',
             children: (
               <Stack gap="sm">
                 <Card>
@@ -183,10 +190,14 @@ video-agent create "Release notes for v2.4" --wait --json > video.json`}</Code>
 video-agent local "A 20-second launch video for our webhooks feature" --aspect 16:9
 video-agent local revise ./videos/webhooks-launch "Make the end card orange"`}</Code>
                   <Text size="sm" c="var(--va-muted)" mt="sm">
-                    It needs Claude Code, installed and signed in (other agents follow once they pass the same
-                    sandbox checks). The first run sets up its tools in <Code>~/.cache/video-agent</Code>, a
-                    few minutes once. Each version lands in <Code>./videos/&lt;name&gt;/vN/</Code> with a{' '}
-                    <Code>video.json</Code>. <Code>./context/</Code>, if you have one, is your brand.
+                    Local mode needs Claude Code, installed and signed in. Support for other agents comes
+                    after they pass the same sandbox checks. The first run sets up its tools in{' '}
+                    <Code>~/.cache/video-agent</Code>. This takes a few minutes, one time.
+                  </Text>
+                  <Text size="sm" c="var(--va-muted)" mt="xs">
+                    Each version is saved in <Code>./videos/&lt;name&gt;/vN/</Code> with a{' '}
+                    <Code>video.json</Code> file. If you have a <Code>./context/</Code> folder, the agent uses
+                    it as your brand.
                   </Text>
                 </Card>
                 <Card>
@@ -195,27 +206,28 @@ video-agent local revise ./videos/webhooks-launch "Make the end card orange"`}</
                   </Text>
                   <List size="sm" spacing={4}>
                     <List.Item>
-                      Its shell can write only in the run's own folder, and can't read your SSH, cloud, npm,
-                      Netlify or agent credentials (the CLI's own key included).
+                      Its shell can write only in the run&apos;s own folder. It can&apos;t read your SSH,
+                      cloud, npm, Netlify, or agent credentials, including the CLI&apos;s own key.
                     </List.Item>
                     <List.Item>
-                      It gets no API keys or tokens from your environment, and none of your own agent
-                      settings, hooks, MCP servers or memory files.
+                      It gets no API keys or tokens from your environment. It also gets none of your own agent
+                      settings, hooks, MCP servers, or memory files.
                     </List.Item>
                     <List.Item>
-                      It can reach only the sites a video needs: Openverse music, Google Fonts and the voice
-                      model's downloads. It can't reach services on your machine; the CLI renders the video
-                      outside the sandbox.
+                      It can reach only the sites that a video needs: Openverse for music, Google Fonts, and
+                      the voice model&apos;s downloads. It can&apos;t reach services on your computer. The CLI
+                      renders the video outside the sandbox.
                     </List.Item>
                     <List.Item>
-                      The CLI renders the video with your Chrome, and the page it renders can't reach your
-                      machine or your network either: requests to localhost, private and link-local addresses
-                      and <Code>.local</Code> names are blocked (each one is logged), except the render's own
-                      asset server.
+                      The CLI renders the video with your Chrome. The page that it renders can&apos;t reach
+                      your computer or your network either. The CLI blocks and logs requests to localhost,
+                      private and link-local addresses, and <Code>.local</Code> names. The only exception is
+                      the render&apos;s own asset server.
                     </List.Item>
                     <List.Item>
-                      What leaves your machine: the prompt and files you give it, sent to your agent's own
-                      provider, as in any session with it. Nothing goes to this deployment.
+                      The prompt and the files that you give the agent do leave your computer. They go to your
+                      agent&apos;s own provider, as in any session with that agent. Nothing goes to this
+                      deployment.
                     </List.Item>
                   </List>
                 </Card>
@@ -230,7 +242,7 @@ video-agent local revise ./videos/webhooks-launch "Make the end card orange"`}</
                     </Table.Thead>
                     <Table.Tbody>
                       {[
-                        ['Runs on', 'Your machine, your agent', 'Netlify Agent Runners'],
+                        ['Runs on', 'Your computer, your agent', 'Netlify Agent Runners'],
                         ['Costs', 'Your agent subscription', 'Netlify credits'],
                         ['Brand', './context/', "This site's context/"],
                         ['Sharing', 'The MP4 file', 'Share pages, embeds, publish destinations'],
@@ -254,36 +266,64 @@ video-agent local revise ./videos/webhooks-launch "Make the end card orange"`}</
           {
             id: 'record',
             title: 'Screen recordings',
-            description: 'Record a demo on this machine and turn it into a video.',
+            description: 'Record a demo on your computer, and turn it into a video.',
             children: (
               <Card>
                 <Stack gap="sm">
-                  <Text size="sm">
-                    <Code>video-agent record https://app.example.com --out ./take1</Code> opens Chromium on
-                    the page: press <Code>r</Code> to start, use the app, press <Code>s</Code> to stop. It
-                    writes <Code>recording.mp4</Code> (ready to upload as it is) and <Code>trace.json</Code>,
-                    a pointer trace with the exact clicks and the clicked element's role and name, so the demo
-                    gets a smooth cursor and zooms to the right place. Typing is counted, never recorded. It
-                    records at 2x by default so zooms stay sharp. It needs ffmpeg and Playwright's Chromium (
-                    <Code>npm i -g playwright &amp;&amp; npx playwright install chromium</Code>).
+                  <Text fw={600} size="sm">
+                    Record
                   </Text>
                   <Text size="sm">
-                    Hiding: password fields are always hidden. <Code>--hide &quot;.selector&quot;</Code> hides
-                    elements, <Code>--hide-text &quot;Acme Labs&quot;</Code> hides text wherever it shows, and{' '}
-                    <Code>--privacy</Code> finds emails, keys, tokens, URLs with ids, card and phone numbers
-                    in the page and hides each. The boxes are written into the trace and follow the text as
-                    the page scrolls; the text itself never is. <Code>--script tour.mjs --headless</Code>{' '}
-                    records a scripted tour.
+                    Run <Code>video-agent record https://app.example.com --out ./take1</Code>. Chromium opens
+                    on the page. Press <Code>r</Code> to start, use the app, and then press <Code>s</Code> to
+                    stop.
                   </Text>
                   <Text size="sm">
-                    Make the demo:{' '}
-                    <Code>video-agent create &quot;Adding a webhook&quot; --recording ./take1</Code> (uploads
-                    the folder with its trace; <Code>--trim</Code>, <Code>--privacy</Code>,{' '}
-                    <Code>--hide-text</Code> and <Code>--quick</Code> as on the API), or in one go:{' '}
-                    <Code>video-agent record &lt;url&gt; --make &quot;Adding a webhook&quot;</Code>. Without a
-                    server: <Code>video-agent local demo ./take1</Code> (with your coding agent) or{' '}
-                    <Code>video-agent local demo ./take1 --quick</Code> (no agent, no model). You can also
-                    record in the app, from New video.
+                    The command writes two files. The <Code>recording.mp4</Code> file is ready to upload as it
+                    is. The <Code>trace.json</Code> file is a pointer trace. It holds the exact clicks, and
+                    the role and name of each clicked element, so the demo gets a smooth cursor and zooms to
+                    the right place. The trace counts your typing, and never records what you type. The
+                    recording is at 2x by default, so zooms stay sharp.
+                  </Text>
+                  <Text size="sm">
+                    Recording needs ffmpeg and Playwright&apos;s Chromium. To install Chromium, run{' '}
+                    <Code>npm i -g playwright &amp;&amp; npx playwright install chromium</Code>.
+                  </Text>
+                  <Text fw={600} size="sm">
+                    Hide private details
+                  </Text>
+                  <List size="sm" spacing={4}>
+                    <List.Item>Password fields are always hidden.</List.Item>
+                    <List.Item>
+                      <Code>--hide &quot;.selector&quot;</Code> hides the elements that match a CSS selector.
+                    </List.Item>
+                    <List.Item>
+                      <Code>--hide-text &quot;Acme Labs&quot;</Code> hides that text wherever it appears.
+                    </List.Item>
+                    <List.Item>
+                      <Code>--privacy</Code> finds emails, keys, tokens, URLs with IDs, card numbers, and
+                      phone numbers in the page, and hides each one.
+                    </List.Item>
+                  </List>
+                  <Text size="sm">
+                    The trace stores the hidden boxes, which follow the text as the page scrolls. It never
+                    stores the text itself. To record a scripted tour, add{' '}
+                    <Code>--script tour.mjs --headless</Code>.
+                  </Text>
+                  <Text fw={600} size="sm">
+                    Make the demo
+                  </Text>
+                  <Text size="sm">
+                    Run <Code>video-agent create &quot;Adding a webhook&quot; --recording ./take1</Code>. This
+                    uploads the folder with its trace. The <Code>--trim</Code>, <Code>--privacy</Code>,{' '}
+                    <Code>--hide-text</Code>, and <Code>--quick</Code> flags work as they do on the API. To
+                    record and make the demo in one step, run{' '}
+                    <Code>video-agent record &lt;url&gt; --make &quot;Adding a webhook&quot;</Code>.
+                  </Text>
+                  <Text size="sm">
+                    To make the demo without a server, run <Code>video-agent local demo ./take1</Code>, which
+                    uses your coding agent. Add <Code>--quick</Code> to use no agent and no model. You can
+                    also record in the app, on the <b>New video</b> page.
                   </Text>
                 </Stack>
               </Card>

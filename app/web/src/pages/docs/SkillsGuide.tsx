@@ -1,6 +1,6 @@
 // The create-video and video-agent-cli skills are built with the site (scripts/build.ts) and already point at this
 // deployment.
-import { Anchor, Card, Code, Stack, Text } from '@mantine/core'
+import { Anchor, Card, Code, List, Stack, Text } from '@mantine/core'
 import { Link } from 'react-router'
 import { MCP_PROMPTS } from '../../../../server/mcp-catalog'
 import { CopyField, PageHeader } from '../../components/bits'
@@ -15,8 +15,11 @@ const SKILL_AGENTS: [string, string][] = [
 
 /** The skills each deployment serves (skills/ in the repo), installed together. */
 const SKILLS: [string, string][] = [
-  ['create-video', 'what to make and how: the plan, create, follow and publish flow, recipes, the SDK'],
-  ['video-agent-cli', 'every command of the video-agent CLI, for agents with a shell'],
+  [
+    'create-video',
+    'What to make and how to make it. It covers planning, creating, following, and publishing a video, plus recipes and the SDK.',
+  ],
+  ['video-agent-cli', 'Every command of the video-agent CLI, for agents that have a shell.'],
 ]
 
 export default function SkillsGuidePage() {
@@ -27,13 +30,7 @@ export default function SkillsGuidePage() {
     <>
       <PageHeader
         title="Agent skills"
-        sub={
-          <>
-            Two skills teach your coding agent to use this video agent: <Code>create-video</Code> (the MCP
-            tools, the plan, create, follow and publish flow, the SDK, and recipes such as turning a pull
-            request into a demo video) and <Code>video-agent-cli</Code> (the CLI, for agents with a shell).
-          </>
-        }
+        sub="Two skills teach your coding agent how to use this Video Agent: one for making videos, and one for the CLI."
       />
       <DocSections
         sections={[
@@ -42,7 +39,8 @@ export default function SkillsGuidePage() {
             title: 'Skill packages',
             description: (
               <>
-                It points at this site: install it, then connect the MCP server as shown under{' '}
+                The skills already point at this site. After you install them, connect the MCP server. For the
+                steps, see{' '}
                 <Anchor component={Link} to="/docs/mcp#connect" c="var(--va-text)" inherit>
                   MCP for AI tools
                 </Anchor>
@@ -55,11 +53,16 @@ export default function SkillsGuidePage() {
                   {SKILLS.map(([name]) => (
                     <CopyField key={name} label={`${name} (zip)`} value={`${origin}/skills/${name}.zip`} />
                   ))}
+                  <List size="sm" spacing={4}>
+                    {SKILLS.map(([name, what]) => (
+                      <List.Item key={name}>
+                        <Code>{name}</Code>: {what}
+                      </List.Item>
+                    ))}
+                  </List>
                   <Text size="sm" c="var(--va-muted)">
-                    Each unzips to one folder named after the skill, with <Code>SKILL.md</Code> and its
-                    references.
-                    {SKILLS.map(([name, what]) => ` ${name}: ${what}.`).join('')} Names, sizes and checksums
-                    are in{' '}
+                    Each zip file unpacks to one folder that&apos;s named after the skill. The folder holds a{' '}
+                    <Code>SKILL.md</Code> file and its reference files. For names, sizes, and checksums, see{' '}
                     <Anchor href="/skills/index.json" c="var(--va-text)">
                       /skills/index.json
                     </Anchor>
@@ -72,7 +75,8 @@ export default function SkillsGuidePage() {
           {
             id: 'install',
             title: 'Install',
-            description: 'One command per agent installs both. Run it again to update.',
+            description:
+              'One command for each agent installs both skills. To update them, run the command again.',
             children: (
               <Card>
                 <Stack gap="sm">
@@ -81,9 +85,9 @@ export default function SkillsGuidePage() {
                   ))}
                 </Stack>
                 <Text size="sm" c="var(--va-muted)" mt="sm">
-                  For one project only, unzip into the project’s skills folder instead (for example{' '}
-                  <Code>.claude/skills/</Code>). In the Claude apps, upload each zip under Settings →
-                  Capabilities → Skills.
+                  To install the skills for one project only, unzip them into that project&apos;s skills
+                  folder, for example <Code>.claude/skills/</Code>. In the Claude apps, go to{' '}
+                  <b>Settings &gt; Capabilities &gt; Skills</b> and upload each zip file.
                 </Text>
               </Card>
             ),
@@ -93,8 +97,8 @@ export default function SkillsGuidePage() {
             title: 'MCP prompts',
             description: (
               <>
-                The same recipes for clients without skills, from the MCP server (<Code>prompts/list</Code>),
-                limited to what your role can do.
+                Clients without skills can get the same recipes from the MCP server as prompts (
+                <Code>prompts/list</Code>). You see only the prompts that your role can use.
               </>
             ),
             children: (

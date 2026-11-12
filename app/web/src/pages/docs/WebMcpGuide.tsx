@@ -45,7 +45,7 @@ export default function WebMcpGuidePage() {
     <>
       <PageHeader
         title="WebMCP"
-        sub="Let an AI agent in your browser use this app for you: search, fill forms, edit and play videos, with you in the loop."
+        sub="Let an AI agent in your browser use this app for you. It can search, fill in forms, and edit and play videos, and it asks you before it spends credits, publishes, or deletes."
       />
       <DocSections
         sections={[
@@ -63,26 +63,29 @@ export default function WebMcpGuidePage() {
                 >
                   WebMCP
                 </Anchor>{' '}
-                is a browser API (<Code>document.modelContext</Code>) that lets a web page offer tools to an
-                AI agent running in the browser. The agent works in your signed-in tab, as you, through the
-                same controls and requests your clicks use.
+                is a browser API (<Code>document.modelContext</Code>). A web page uses it to offer tools to an
+                AI agent that runs in the browser. The agent works in your signed-in tab, as you. It uses the
+                same controls and requests that your clicks use.
               </>
             ),
             children: (
               <Card>
                 <Stack gap="xs">
                   <Text size="sm">
-                    Each page offers only the tools that make sense on it, and drops them when you leave it.
-                    After an agent opens another page, it asks the browser for that page&apos;s tools.
+                    Each page offers only the tools that make sense on that page, and removes them when you
+                    leave. After an agent opens another page, it asks the browser for that page&apos;s tools.
                   </Text>
                   <Text size="sm">
-                    Anything that spends credits, publishes or deletes asks you in the app first, and runs
-                    only if you click. Tools that return people&apos;s words (prompts, titles, comments) are
-                    marked as untrusted content, so the agent treats them as data, not instructions.
+                    Before a tool spends credits, publishes, or deletes anything, the app asks you. The tool
+                    runs only if you confirm.
+                  </Text>
+                  <Text size="sm">
+                    Some tools return text that people wrote, such as prompts, titles, and comments. That text
+                    is marked as untrusted content, so the agent treats it as data and not as instructions.
                   </Text>
                   {on ? null : (
                     <Text size="sm" c="var(--va-warn, orange)">
-                      An admin has turned WebMCP off here, so pages offer no tools.
+                      An admin turned off WebMCP for this deployment, so pages offer no tools.
                     </Text>
                   )}
                 </Stack>
@@ -92,7 +95,7 @@ export default function WebMcpGuidePage() {
           {
             id: 'tools',
             title: 'Tools',
-            description: 'What an agent can do, page by page.',
+            description: 'What an agent can do on each page.',
             children: (
               <Card>
                 <ToolTable />
@@ -102,23 +105,27 @@ export default function WebMcpGuidePage() {
           {
             id: 'try',
             title: 'Try it in Chrome',
-            description: 'WebMCP is in an origin trial from Chrome 149. To try it on your own machine:',
+            description:
+              'WebMCP is in an origin trial that starts with Chrome 149. To try it on your own computer, follow these steps:',
             children: (
               <Card>
                 <List type="ordered" spacing="xs" size="sm">
                   <List.Item>
-                    Open <Code>chrome://flags/#enable-webmcp-testing</Code>, set it to <b>Enabled</b>, and
-                    relaunch Chrome.
+                    In Chrome, go to <Code>chrome://flags/#enable-webmcp-testing</Code>, set the flag to{' '}
+                    <b>Enabled</b>, and then relaunch Chrome.
+                  </List.Item>
+                  <List.Item>Open this app and sign in.</List.Item>
+                  <List.Item>
+                    To list the tools of the current page, open the console and run{' '}
+                    <Code>await document.modelContext.getTools()</Code>.
                   </List.Item>
                   <List.Item>
-                    Open this app and sign in. In the console,{' '}
-                    <Code>await document.modelContext.getTools()</Code> lists the tools of the page
-                    you&apos;re on.
-                  </List.Item>
-                  <List.Item>
-                    Use a browser agent that supports WebMCP, or call a tool yourself:{' '}
-                    <Code>
-                      {`const [t] = (await document.modelContext.getTools()).filter((t) => t.name === 'get_page'); await document.modelContext.executeTool(t, {})`}
+                    Use a browser agent that supports WebMCP. To call a tool yourself instead, run the
+                    following in the console:
+                    <Code block mt={6} style={{ fontSize: 13 }}>
+                      {`const tools = await document.modelContext.getTools()
+const tool = tools.find((t) => t.name === 'get_page')
+await document.modelContext.executeTool(tool, {})`}
                     </Code>
                   </List.Item>
                 </List>
@@ -127,14 +134,14 @@ export default function WebMcpGuidePage() {
           },
           {
             id: 'admin',
-            title: 'Turning it off',
+            title: 'Turn off WebMCP',
             description: (
               <>
                 WebMCP is on by default. An admin can turn it off on the{' '}
                 <Anchor component={Link} to="/admin" c="var(--va-text)" inherit>
                   Admin
                 </Anchor>{' '}
-                page; pages then register no tools. Browsers without WebMCP never see any.
+                page. Pages then offer no tools. A browser without WebMCP never sees any tools.
               </>
             ),
             children: null,
