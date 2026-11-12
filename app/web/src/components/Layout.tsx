@@ -15,15 +15,23 @@ import { Fragment, useState } from 'react'
 import {
   IconApi,
   IconBook,
+  IconBrandGithub,
+  IconBrandTypescript,
+  IconBrowser,
   IconKey,
   IconLayoutGrid,
   IconPhoto,
   IconLogout,
   IconMoon,
+  IconPalette,
+  IconPlugConnected,
   IconPlus,
+  IconSend,
   IconSettings,
   IconShieldLock,
+  IconSparkles,
   IconSun,
+  IconTerminal2,
 } from '@tabler/icons-react'
 import { Link, NavLink as RouterLink, Outlet, useLocation, useNavigate } from 'react-router'
 import { $api } from '../api/client'
@@ -36,6 +44,23 @@ import { MissingSettingsBanner } from './MissingSettings'
 import { NotificationBell } from './NotificationBell'
 import { WebMcpConfirmHost } from '../webmcp/confirm'
 import { WebMcpGlobalTools } from '../webmcp/GlobalTools'
+
+/** An icon per docs page, so the list under API docs scans by shape as well as by name. */
+const DOCS_ICONS: Record<string, typeof IconApi> = {
+  '/docs/api': IconApi,
+  '/docs/sdk': IconBrandTypescript,
+  '/docs/cli': IconTerminal2,
+  '/docs/mcp': IconPlugConnected,
+  '/docs/skills': IconSparkles,
+  '/docs/webmcp': IconBrowser,
+  '/docs/destinations': IconSend,
+  '/docs/looks': IconPalette,
+  '/docs/github': IconBrandGithub,
+}
+function docsIcon(path: string) {
+  const Icon = DOCS_ICONS[path] ?? IconBook
+  return <Icon size={15} stroke={1.6} />
+}
 
 export function Layout() {
   const [opened, { toggle, close }] = useDisclosure()
@@ -182,7 +207,9 @@ export function Layout() {
                     {group}
                   </div>
                   {pages.map((p) => (
-                    <Fragment key={p.path}>{link(p.path, p.label, undefined, 'va-subnav-link')}</Fragment>
+                    <Fragment key={p.path}>
+                      {link(p.path, p.label, docsIcon(p.path), 'va-subnav-link')}
+                    </Fragment>
                   ))}
                 </div>
               ) : null

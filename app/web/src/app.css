@@ -101,13 +101,14 @@ main.va-shell-main {
   padding-left: 10px;
   border-left: 1px solid var(--va-rule);
 }
+/* Group headings in the accent, small and spaced, so they read as labels and not as three more links. */
 .va-subnav-group {
-  padding: 10px 8px 2px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
+  padding: 14px 8px 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
   text-transform: uppercase;
-  color: var(--va-faint);
+  color: color-mix(in srgb, var(--va-accent) 75%, var(--va-text));
 }
 .va-subnav > :first-child .va-subnav-group {
   padding-top: 4px;
@@ -120,6 +121,16 @@ main.va-shell-main {
 }
 .va-subnav-link .mantine-NavLink-label {
   font-size: 13px;
+}
+.va-subnav-link .mantine-NavLink-section {
+  margin-inline-end: 9px;
+  color: var(--va-faint);
+}
+.va-subnav-link:hover .mantine-NavLink-section {
+  color: var(--va-text);
+}
+.va-subnav-link[data-active] .mantine-NavLink-section {
+  color: var(--va-accent);
 }
 .va-subnav-link:hover {
   background: var(--va-surface);
