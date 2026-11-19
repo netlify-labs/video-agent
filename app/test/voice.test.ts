@@ -205,18 +205,20 @@ describe('phrases and timing', () => {
 
 describe('spoken forms', () => {
   it('swaps whole terms only, keeping everything else as written', () => {
-    expect(spokenText('Two CLIs, the CLI and an A/B test, 24/7.')).toBe(
+    expect(spokenText('Two CLIs, the CLI and an A/B test, 24/7.', 'kokoro')).toBe(
       "Two C-L-I's, the CLI and an A-B test, twenty four seven.",
     )
-    expect(spokenText('Edit .env, e.g. on Vite vs. Deno.')).toBe(
+    expect(spokenText('Edit .env, e.g. on Vite vs. Deno.', 'kokoro')).toBe(
       'Edit dot env, for example on veet versus dee-no.',
     )
-    expect(spokenText('Loads in 1.5 ms or 50ms.')).toBe('Loads in 1.5 milliseconds or 50 milliseconds.')
+    expect(spokenText('Loads in 1.5 ms or 50ms.', 'kokoro')).toBe(
+      'Loads in 1.5 milliseconds or 50 milliseconds.',
+    )
     // Not inside other words, and case matters.
-    expect(spokenText('Visit Vitesse, saas.dev, an ISRs list, items, forms and ARRow.')).toBe(
+    expect(spokenText('Visit Vitesse, saas.dev, an ISRs list, items, forms and ARRow.', 'kokoro')).toBe(
       'Visit Vitesse, saas.dev, an ISRs list, items, forms and ARRow.',
     )
-    expect(spokenText('Meet org webhooks.')).toBe('Meet org webhooks.')
+    expect(spokenText('Meet org webhooks.', 'kokoro')).toBe('Meet org webhooks.')
   })
 })
 
@@ -364,14 +366,20 @@ describe('scripts/voice.ts', () => {
   })
 
   it('reads "backend" as two words, so the stress lands on "back"', () => {
-    expect(spokenText('Backends and a backend. Backend first.')).toBe(
+    expect(spokenText('Backends and a backend. Backend first.', 'kokoro')).toBe(
       'Back ends and a back end. Back end first.',
     )
   })
 
-  it('says every form of "deploy" with a full "dee"', () => {
-    expect(spokenText('Deploy it. We deployed, redeploying deployments.')).toBe(
-      'Dee-ploy it. We dee-ployed, ree-dee-ploying dee-ployments.',
+  it('says "publish" for every form of "deploy" with Kokoro', () => {
+    expect(spokenText('Deploy it. We deployed, redeploying deployments.', 'kokoro')).toBe(
+      'Publish it. We published, re-publishing releases.',
+    )
+  })
+
+  it('leaves "deploy" as written for ElevenLabs, which keeps the other spoken forms', () => {
+    expect(spokenText('Deploy the backend 24/7, then redeploy.', 'elevenlabs')).toBe(
+      'Deploy the back end twenty four seven, then redeploy.',
     )
   })
 

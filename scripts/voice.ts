@@ -70,8 +70,8 @@ export async function generateVoice(
   const beats: BeatVoice[] = []
   for (const line of script.lines) {
     const text = line.text.replace(/\s+/g, ' ').trim()
-    // Hashed as spoken, so a line re-speaks when SPOKEN_AS changes how it sounds.
-    const hash = lineHash(opts.provider.name, opts.voice, opts.speed, spokenText(text))
+    // Hashed as spoken, so a line re-speaks when a respelling changes how it sounds.
+    const hash = lineHash(opts.provider.name, opts.voice, opts.speed, spokenText(text, opts.provider.name))
     const file = `${VOICE_DIR}/${line.beat}.wav`
     const old = previous?.beats.find((b) => b.beat === line.beat)
     if (opts.only && !opts.only.includes(line.beat)) {
@@ -90,7 +90,7 @@ export async function generateVoice(
     for (const phrase of splitPhrases(text)) {
       // The caption keeps the written phrase. When the spoken one differs, the provider's words don't match the
       // caption's, so they're dropped and the words are spread over the phrase instead.
-      const spoken = spokenText(phrase)
+      const spoken = spokenText(phrase, opts.provider.name)
       const speech = await opts.provider.synthesize(spoken, { voice: opts.voice, speed: opts.speed })
       const pcm = toPcm(speech)
       const words = spoken === phrase ? speech.words : undefined

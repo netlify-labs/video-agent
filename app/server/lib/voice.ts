@@ -63,29 +63,50 @@ export const SPOKEN_AS: Readonly<Record<string, string>> = {
   backends: 'back ends',
   Backend: 'Back end',
   Backends: 'Back ends',
-  // Kokoro says "deploy" as "dep-ploy" (a reduced first vowel); "dee-ploy" gives it a full "dee". Every form, capitalized too.
-  ...Object.fromEntries(
-    ['', 's', 'ed', 'ing', 'ment', 'ments'].flatMap((end) => [
-      [`deploy${end}`, `dee-ploy${end}`],
-      [`Deploy${end}`, `Dee-ploy${end}`],
-      [`redeploy${end}`, `ree-dee-ploy${end}`],
-      [`Redeploy${end}`, `Ree-dee-ploy${end}`],
-    ]),
-  ),
 }
-const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')
-const SPOKEN_RE = new RegExp(
-  `(?<![\\p{L}\\p{N}.])(${Object.keys(SPOKEN_AS)
-    .sort((a, b) => b.length - a.length)
-    .map(escapeRe)
-    .join('|')})(?![\\p{L}\\p{N}])`,
-  'gu',
-)
 
-/** A phrase as the voice should say it: terms from SPOKEN_AS, and "50ms" as "50 milliseconds". */
-export function spokenText(text: string): string {
+/**
+ * Swaps for Kokoro only: it says "deploy" wrong ("dep-ploy"), and the respelling "dee-ploy" sounded wrong too, so it
+ * says "publish" instead (a "deployment" is a "release"). Every form, capitalized too. Captions keep "deploy".
+ * ElevenLabs says the written word right, so it gets no swap.
+ */
+const DEPLOY_FORMS: Readonly<Record<string, string>> = {
+  deploy: 'publish',
+  deploys: 'publishes',
+  deployed: 'published',
+  deploying: 'publishing',
+  deployment: 'release',
+  deployments: 'releases',
+}
+const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
+export const KOKORO_SPOKEN_AS: Readonly<Record<string, string>> = Object.fromEntries(
+  Object.entries(DEPLOY_FORMS).flatMap(([written, spoken]) => [
+    [written, spoken],
+    [capital(written), capital(spoken)],
+    [`re${written}`, `re-${spoken}`],
+    [`Re${written}`, `Re-${spoken}`],
+  ]),
+)
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')
+const termsRe = (terms: Readonly<Record<string, string>>) =>
+  new RegExp(
+    `(?<![\\p{L}\\p{N}.])(${Object.keys(terms)
+      .sort((a, b) => b.length - a.length)
+      .map(escapeRe)
+      .join('|')})(?![\\p{L}\\p{N}])`,
+    'gu',
+  )
+const KOKORO_TERMS = { ...SPOKEN_AS, ...KOKORO_SPOKEN_AS }
+const SPOKEN_RE = termsRe(SPOKEN_AS)
+const KOKORO_RE = termsRe(KOKORO_TERMS)
+
+/** A phrase as the provider's voice should say it: terms from SPOKEN_AS (and KOKORO_SPOKEN_AS for Kokoro), and
+ * "50ms" as "50 milliseconds". */
+export function spokenText(text: string, provider: string): string {
+  const kokoro = provider === 'kokoro'
+  const terms = kokoro ? KOKORO_TERMS : SPOKEN_AS
   return text
-    .replace(SPOKEN_RE, (t) => SPOKEN_AS[t] ?? t)
+    .replace(kokoro ? KOKORO_RE : SPOKEN_RE, (t) => terms[t] ?? t)
     .replace(/(?<![\p{L}\p{N}])(\d+(?:\.\d+)?) ?ms(?![\p{L}\p{N}])/gu, '$1 milliseconds')
 }
 
