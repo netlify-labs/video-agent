@@ -56,7 +56,7 @@ export const voiceLabel = (voice: string | null | undefined) =>
 interface ElevenLabsChoices {
   /** This deployment has ElevenLabs: the picker offers its voices and the default is one of them. */
   on: boolean
-  voices: { value: string; label: string; previewUrl: string | null }[]
+  voices: { value: string; label: string; name: string; previewUrl: string | null }[]
   defaultLabel: string
 }
 
@@ -68,11 +68,13 @@ function useElevenLabs(): ElevenLabsChoices {
   const items = on ? (list.data?.items ?? []) : []
   const voices = items.map((x) => ({
     value: x.id,
-    label: x.description ? `${x.name} · ${x.description}` : x.name,
+    // Prefixed, so the closed picker shows whose voice is chosen.
+    label: `ElevenLabs - ${x.description ? `${x.name}, ${x.description}` : x.name}`,
+    name: x.name,
     previewUrl: x.previewUrl,
   }))
   const def = items.find((x) => x.id === list.data?.default)
-  return { on, voices, defaultLabel: `Default (${def?.name ?? 'ElevenLabs'})` }
+  return { on, voices, defaultLabel: def ? `Default (ElevenLabs - ${def.name})` : 'Default (ElevenLabs)' }
 }
 
 /** A voice's name for people, ElevenLabs voices included (Version details). */
@@ -199,9 +201,10 @@ export function VoiceoverControl(props: {
   const el = useElevenLabs()
   // With ElevenLabs, the default voice is whichever one the deployment set.
   const chosen = v.voice || (el.on ? '' : DEFAULT_VOICE)
-  const all = [...VOICES, ...el.voices]
   const nameOf = (voice: string) =>
-    (all.find((x) => x.value === voice)?.label ?? voice).split(' · ')[0] ?? voice
+    el.voices.find((x) => x.value === voice)?.name ??
+    (VOICES.find((x) => x.value === voice)?.label ?? voice).split(' · ')[0] ??
+    voice
   // Built-in voices have a sample in the bundle; ElevenLabs voices bring a link to theirs.
   const sampleOf = (voice: string): string | undefined =>
     SAMPLES[voice] ?? el.voices.find((x) => x.value === voice)?.previewUrl ?? undefined
@@ -230,7 +233,7 @@ export function VoiceoverControl(props: {
                 onChange={(x) => {
                   set({ voice: x ?? '' })
                 }}
-                w={220}
+                w={el.on ? 340 : 220}
                 renderOption={({ option }) => {
                   const voice = option.value
                   return (

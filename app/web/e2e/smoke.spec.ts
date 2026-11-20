@@ -1148,12 +1148,13 @@ test('with an ElevenLabs key, the voice picker offers ElevenLabs voices and send
   await page.getByLabel('What should the video show?').fill('A 20-second launch video for our new feature.')
   await page.getByRole('switch', { name: /Voice-over/ }).click()
   const picker = page.getByLabel('Voice', { exact: true }).first()
-  await expect(picker).toHaveValue('Default (Roger)')
+  await expect(picker).toHaveValue('Default (ElevenLabs - Roger)')
   await picker.click()
   await expect(page.getByRole('option', { name: /Michael/ })).toBeVisible()
   // The account's own voices are listed, not a fixed set.
-  await expect(page.getByRole('option', { name: 'Our narrator' })).toBeVisible()
-  await page.getByRole('option', { name: /Sarah/ }).click()
+  await expect(page.getByRole('option', { name: 'ElevenLabs - Our narrator' })).toBeVisible()
+  await page.getByRole('option', { name: 'ElevenLabs - Sarah, US, warm' }).click()
+  await expect(picker).toHaveValue('ElevenLabs - Sarah, US, warm')
   await createNow(page)
   await expect(page).toHaveURL(/\/videos\//)
   expect(await page.evaluate("window.__sent['/api/v1/videos'].voiceover")).toEqual({

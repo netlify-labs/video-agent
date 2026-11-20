@@ -48,10 +48,14 @@ function voiceOption(raw: unknown): VoiceOption | null {
   if (!raw || typeof raw !== 'object') return null
   const v = raw as Record<string, unknown>
   const id = text(v.voice_id, 64)
-  const name = text(v.name, 80)
-  if (!id || !name || !/^[A-Za-z0-9_-]+$/.test(id)) return null
+  const full = text(v.name, 120)
+  if (!id || !full || !/^[A-Za-z0-9_-]+$/.test(id)) return null
+  // ElevenLabs' own voices carry their style in the name ("Roger - Laid-Back, Casual, Resonant").
+  const [first, ...rest] = full.split(' - ')
+  const name = (first ?? full).trim() || full
+  const style = rest.join(' - ').trim().toLowerCase()
   const labels = (v.labels && typeof v.labels === 'object' ? v.labels : {}) as Record<string, unknown>
-  const words = [text(labels.accent, 30), text(labels.description, 30)].filter(Boolean)
+  const words = [text(labels.accent, 30), style || text(labels.description, 30)].filter(Boolean)
   const preview = text(v.preview_url, 500)
   return {
     id,

@@ -55,6 +55,11 @@ describe('voices', () => {
           preview_url: 'https://cdn.example/zoe.mp3',
         },
         { voice_id: 'voiceA', name: 'Abe', preview_url: 'http://insecure.example/abe.mp3' },
+        {
+          voice_id: 'voiceC',
+          name: 'Roger - Laid-Back, Casual',
+          labels: { accent: 'american', description: 'classy' },
+        },
         { voice_id: 'bad id!', name: 'Nope' },
         { name: 'No id' },
       ],
@@ -66,6 +71,7 @@ describe('voices', () => {
       source: 'account',
       items: [
         { id: 'voiceA', name: 'Abe', description: null, previewUrl: null },
+        { id: 'voiceC', name: 'Roger', description: 'american, laid-back, casual', previewUrl: null },
         {
           id: 'voiceB',
           name: 'Zoe',
