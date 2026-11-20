@@ -163,6 +163,10 @@
       "method": "list"
     }
   },
+  "GET /api/v1/voices/{id}/preview": {
+    "operationId": "getVoicePreview",
+    "sdk": false
+  },
   "GET /api/v1/looks": {
     "operationId": "listLooks",
     "sdk": {

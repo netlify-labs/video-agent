@@ -2,7 +2,9 @@
 // list is empty and voice-overs use the built-in Kokoro voices. With a key functions can read, it is the account's
 // own voices (the key needs ElevenLabs' "Voices: read" permission); otherwise ElevenLabs' default voices, which
 // every plan may use.
+import { createHash } from 'node:crypto'
 import type { Deps } from '../deps.js'
+import { ApiError } from '../lib/errors.js'
 import { DEFAULT_ELEVENLABS_VOICE } from '../lib/voice.js'
 
 export interface VoiceOption {
@@ -10,7 +12,7 @@ export interface VoiceOption {
   name: string
   /** A few words on how it sounds (accent, style), or null. */
   description: string | null
-  /** A short sample to play, or null. */
+  /** A short sample to play (GET /api/v1/voices/{id}/preview), or null when the server can't make one. */
   previewUrl: string | null
 }
 
@@ -56,13 +58,7 @@ function voiceOption(raw: unknown): VoiceOption | null {
   const style = rest.join(' - ').trim().toLowerCase()
   const labels = (v.labels && typeof v.labels === 'object' ? v.labels : {}) as Record<string, unknown>
   const words = [text(labels.accent, 30), style || text(labels.description, 30)].filter(Boolean)
-  const preview = text(v.preview_url, 500)
-  return {
-    id,
-    name,
-    description: words.length ? words.join(', ') : null,
-    previewUrl: preview?.startsWith('https://') ? preview : null,
-  }
+  return { id, name, description: words.length ? words.join(', ') : null, previewUrl: null }
 }
 
 /** The account's voices, or null when ElevenLabs refuses or can't be reached (the picker then shows the defaults). */
@@ -93,6 +89,12 @@ async function accountVoices(
   }
 }
 
+/** What each voice says in its sample. */
+export const previewLine = (name: string) => `Hi, I'm ${name}. Here's how your next video could sound.`
+
+const previewPath = (id: string) => `/api/v1/voices/${id}/preview`
+const MAX_PREVIEW_BYTES = 2 * 1024 * 1024
+
 export async function listVoices(deps: Pick<Deps, 'config' | 'fetch' | 'clock'>): Promise<Voices> {
   const { elevenlabsKeySet, elevenlabsApiKey, elevenlabsVoiceId } = deps.config
   if (!elevenlabsKeySet) return { provider: 'kokoro', default: null, source: 'none', items: [] }
@@ -102,6 +104,47 @@ export async function listVoices(deps: Pick<Deps, 'config' | 'fetch' | 'clock'>)
     provider: 'elevenlabs',
     default: fallback,
     source: account ? 'account' : 'defaults',
-    items: account ?? ELEVENLABS_DEFAULT_VOICES,
+    // A sample needs the key: the server speaks it once and keeps it.
+    items: (account ?? ELEVENLABS_DEFAULT_VOICES).map((v) => ({
+      ...v,
+      previewUrl: elevenlabsApiKey ? previewPath(v.id) : null,
+    })),
   }
+}
+
+/**
+ * A listed voice's sample (MP3): spoken by ElevenLabs the first time someone plays it, then kept in Blobs, so each
+ * voice costs one short line once. Only listed voices get one, so the route can't be used to speak anything else.
+ */
+export async function voicePreview(
+  deps: Pick<Deps, 'config' | 'fetch' | 'clock' | 'blobs'>,
+  id: string,
+): Promise<Uint8Array> {
+  const key = deps.config.elevenlabsApiKey
+  const voice = key ? (await listVoices(deps)).items.find((v) => v.id === id) : undefined
+  if (!key || !voice) throw new ApiError('not_found', 'No such voice.')
+  const line = previewLine(voice.name)
+  const blob = `voice-previews/${voice.id}-${createHash('sha256').update(line).digest('hex').slice(0, 12)}.mp3`
+  const kept = await deps.blobs.get('internal', blob)
+  if (kept) return kept
+  let res: Response
+  try {
+    res = await deps.fetch(
+      `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voice.id)}?output_format=mp3_44100_128`,
+      {
+        method: 'POST',
+        headers: { 'xi-api-key': key, 'content-type': 'application/json' },
+        body: JSON.stringify({ text: line, model_id: 'eleven_multilingual_v2' }),
+        signal: AbortSignal.timeout(20_000),
+      },
+    )
+  } catch {
+    throw new ApiError('upstream_error', "ElevenLabs didn't answer. Try again in a moment.")
+  }
+  if (!res.ok) throw new ApiError('upstream_error', `ElevenLabs couldn't speak this voice (${res.status}).`)
+  const audio = new Uint8Array(await res.arrayBuffer())
+  if (!audio.length || audio.length > MAX_PREVIEW_BYTES)
+    throw new ApiError('upstream_error', "ElevenLabs didn't return a usable sample.")
+  await deps.blobs.set('internal', blob, audio, { contentType: 'audio/mpeg' })
+  return audio
 }

@@ -63,7 +63,7 @@ import { enabledFeatures } from './domain/features.js'
 import { PROMPT_TEMPLATE_VERSION } from './domain/prompt.js'
 import { buildInfo } from './generated/build-info.js'
 import { listLooks } from './domain/looks.js'
-import { listVoices } from './domain/voices.js'
+import { listVoices, voicePreview } from './domain/voices.js'
 import { remixVideo, versionMediaItems } from './domain/remix.js'
 import { listNotifications, markNotificationsRead } from './domain/notifications.js'
 import { getProgress } from './domain/progress.js'
@@ -792,6 +792,35 @@ export function createApp(deps: Deps, opts: AppOptions) {
       responses: { 200: json(s.VoicesSchema, 'Voices'), ...errors },
     }),
     async (c) => c.json(await listVoices(deps), 200),
+  )
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/v1/voices/{id}/preview',
+      operationId: 'getVoicePreview',
+      'x-sdk': false,
+      summary: "Get a voice's sample",
+      description:
+        'A short MP3 of a listed ElevenLabs voice introducing itself. It is spoken the first time someone asks, then kept.',
+      tags: ['videos'],
+      security,
+      request: { params: IdParam },
+      responses: {
+        200: {
+          description: 'The sample',
+          content: { 'audio/mpeg': { schema: z.string().openapi({ format: 'binary' }) } },
+        },
+        ...errors,
+      },
+    }),
+    async (c) => {
+      const bytes = await voicePreview(deps, c.req.valid('param').id)
+      return c.body(new Uint8Array(bytes), 200, {
+        'content-type': 'audio/mpeg',
+        'cache-control': 'private, max-age=86400',
+        'x-content-type-options': 'nosniff',
+      })
+    },
   )
   // Publish destinations (docs/plans/2026-11-04-publish-destinations.md §6.1).
   app.openapi(

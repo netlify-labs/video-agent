@@ -2352,7 +2352,12 @@ export const VoicesSchema = z
         id: z.string().describe('Pass it as voiceover.voice.'),
         name: z.string(),
         description: z.string().nullable().describe('A few words on how it sounds.'),
-        previewUrl: z.string().nullable().describe('A short sample to play.'),
+        previewUrl: z
+          .string()
+          .nullable()
+          .describe(
+            'A short sample to play (a path under the site root); null when the server cannot make one.',
+          ),
       }),
     ),
   })
