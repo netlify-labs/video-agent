@@ -26,6 +26,7 @@ export const FEATURES = [
   'youtube', // the YouTube destination, when it's set up and on
   'webmcp', // the web app's WebMCP tools for browser agents; admin switch webmcpEnabled (va-qago)
   'tags', // tags on videos and the library's tag filters
+  'elevenlabs_voices', // ElevenLabs voices for voice-overs: functions see ELEVENLABS_API_KEY or ELEVENLABS_VOICE_ID
 ] as const
 
 export type Feature = (typeof FEATURES)[number]
@@ -52,6 +53,7 @@ export async function enabledFeatures(deps: Deps): Promise<Feature[]> {
   if (await youtubeAvailable(deps, deps.store).catch(() => false)) on.push('youtube')
   if (await cliLoginEnabled(deps).catch(() => true)) on.push('cli_login')
   if (await webmcpEnabled(deps).catch(() => true)) on.push('webmcp')
+  if (deps.config.elevenlabsKeySet) on.push('elevenlabs_voices')
   // Only once Remotion is actually on: with HyperFrames alone there's no engine to choose.
   if ((await enabledEngines(deps).catch(() => [])).length > 1) on.push('engines')
   return on

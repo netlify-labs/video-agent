@@ -14,7 +14,8 @@ import {
 } from '../../app/server/lib/voice.js'
 import { StepError, log, run } from './run-tools.js'
 
-const DEFAULT_ELEVENLABS_VOICE = '21m00Tcm4TlvDq8ikWAM'
+// Roger, one of ElevenLabs' default voices: free plans may use those through the API, but not library voices.
+const DEFAULT_ELEVENLABS_VOICE = 'CwhRBWXzGAHq8TQ4Fs17'
 
 /**
  * Installs kokoro-onnx once per run; a run without a voice-over never pays for it. On a runner it goes into the

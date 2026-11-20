@@ -50,6 +50,11 @@ export interface Config {
   engines: EngineId[]
   /** ENGINES entries that aren't engines: logged once at startup, otherwise ignored. */
   enginesIgnored: string[]
+  /**
+   * Whether this deployment has ElevenLabs, so the app offers its voices. The key is only ever read inside a run and
+   * may be scoped to builds alone, where functions can't see it; ELEVENLABS_VOICE_ID (not a secret) says so too.
+   */
+  elevenlabsKeySet: boolean
   /** Whether VIDEO_AGENT_REMOTION_KEY is set (its value is only ever read inside a run). */
   remotionKeySet: boolean
   /** VIDEO_AGENT_REMOTION_DEVELOPMENT=1: a scratch or test deployment whose Remotion renders are development ones. */
@@ -149,6 +154,7 @@ export function readConfig(env: Record<string, string | undefined>): Config {
       ...list(env.ENGINES).filter((e): e is EngineId => isEngineId(e) && e !== 'hyperframes'),
     ],
     enginesIgnored: list(env.ENGINES).filter((e) => !isEngineId(e)),
+    elevenlabsKeySet: Boolean(env.ELEVENLABS_API_KEY?.trim() || env.ELEVENLABS_VOICE_ID?.trim()),
     remotionKeySet: Boolean(env.VIDEO_AGENT_REMOTION_KEY?.trim()),
     remotionDevelopmentRenders: env.VIDEO_AGENT_REMOTION_DEVELOPMENT === '1',
   }

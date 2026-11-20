@@ -201,7 +201,8 @@
                 "destinations",
                 "youtube",
                 "webmcp",
-                "tags"
+                "tags",
+                "elevenlabs_voices"
               ]
             },
             "description": "Features this deployment has and has switched on. Clients hide what isn't listed. See app/server/domain/features.ts."

@@ -1140,6 +1140,36 @@ test('a video without a voice-over sends none', async ({ page }) => {
   expect(await page.evaluate("'voiceover' in window.__sent['/api/v1/videos']")).toBe(false)
 })
 
+test('with an ElevenLabs key, the voice picker offers ElevenLabs voices and sends the chosen id', async ({
+  page,
+}) => {
+  await mock(page, 'mockElevenLabs')
+  await page.goto('/new')
+  await page.getByLabel('What should the video show?').fill('A 20-second launch video for our new feature.')
+  await page.getByRole('switch', { name: /Voice-over/ }).click()
+  const picker = page.getByLabel('Voice', { exact: true }).first()
+  await expect(picker).toHaveValue('Default (ElevenLabs)')
+  await picker.click()
+  await expect(page.getByRole('option', { name: /Michael/ })).toBeVisible()
+  await page.getByRole('option', { name: /Roger/ }).click()
+  await createNow(page)
+  await expect(page).toHaveURL(/\/videos\//)
+  expect(await page.evaluate("window.__sent['/api/v1/videos'].voiceover")).toEqual({
+    enabled: true,
+    voice: 'CwhRBWXzGAHq8TQ4Fs17',
+  })
+})
+
+test('without an ElevenLabs key, the voice picker offers only the built-in voices', async ({ page }) => {
+  await page.goto('/new')
+  await page.getByRole('switch', { name: /Voice-over/ }).click()
+  const picker = page.getByLabel('Voice', { exact: true }).first()
+  await expect(picker).toHaveValue('Default (Heart)')
+  await picker.click()
+  await expect(page.getByRole('option', { name: /Michael/ })).toBeVisible()
+  await expect(page.getByRole('option', { name: /Roger/ })).toHaveCount(0)
+})
+
 test('Plan it first with a voice-over shows an editable narration per beat and creates with the plan', async ({
   page,
 }) => {

@@ -685,6 +685,8 @@ export function installMock() {
           ...(adminSettings.youtubeEnabled ? ['youtube'] : []),
           ...(adminSettings.cliLoginEnabled ? ['cli_login'] : []),
           ...(adminSettings.webmcpEnabled ? ['webmcp'] : []),
+          // ElevenLabs voices in the voice picker; localStorage.mockElevenLabs=1 turns them on.
+          ...(localStorage.getItem('mockElevenLabs') === '1' ? ['elevenlabs_voices'] : []),
           // Only once Remotion is actually on (render-engines plan §7).
           ...(adminSettings.remotion?.enabled ? ['engines'] : []),
           // Redo a scene; localStorage.mockNoScopedRevision=1 leaves it out, to test the hidden UI.

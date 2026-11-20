@@ -1995,7 +1995,7 @@ export interface components {
                 release: string | null;
             };
             /** @description Features this deployment has and has switched on. Clients hide what isn't listed. See app/server/domain/features.ts. */
-            features: ("remix" | "narration" | "planning" | "rest_wait" | "cli_login" | "looks" | "engines" | "scoped_revision" | "screen_recording" | "context" | "external_ref" | "destinations" | "youtube" | "webmcp" | "tags")[];
+            features: ("remix" | "narration" | "planning" | "rest_wait" | "cli_login" | "looks" | "engines" | "scoped_revision" | "screen_recording" | "context" | "external_ref" | "destinations" | "youtube" | "webmcp" | "tags" | "elevenlabs_voices")[];
             admission: "invite-only" | string[] | null;
             siteUrl: string;
             /** @description AI Gateway is available, so Plan it first is offered. */

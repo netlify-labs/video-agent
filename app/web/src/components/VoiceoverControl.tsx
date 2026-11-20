@@ -14,6 +14,7 @@ import {
 } from '@mantine/core'
 import { IconPlayerPlay, IconPlayerStop } from '@tabler/icons-react'
 import { useEffect, useRef, useState } from 'react'
+import { $api } from '../api/client'
 import type { components } from '../api/schema'
 
 export type VoiceoverInput = components['schemas']['VoiceoverInput']
@@ -40,6 +41,16 @@ const VOICES = [
   { value: 'bf_isabella', label: 'Isabella · UK, soft' },
   { value: 'bm_george', label: 'George · UK, steady' },
 ]
+// ElevenLabs' default voices, which every plan (the free one too) may use through the API. Offered when the
+// deployment has ELEVENLABS_API_KEY (the elevenlabs_voices feature); a run speaks any other voice id it is given.
+const ELEVENLABS_VOICES = [
+  { value: 'CwhRBWXzGAHq8TQ4Fs17', label: 'Roger · US, laid-back' },
+  { value: 'EXAVITQu4vr4xnSDxMaL', label: 'Sarah · US, warm' },
+  { value: 'pNInz6obpgDQGcFmaJgB', label: 'Adam · US, deep' },
+  { value: 'JBFqnCBsd6RMkjVDRZzb', label: 'George · UK, storyteller' },
+  { value: 'onwK4e9ZLuTAKqWW03F9', label: 'Daniel · UK, newsreader' },
+]
+const ALL_VOICES = [...VOICES, ...ELEVENLABS_VOICES]
 // Short samples of each voice, made once with the same Kokoro voices the runs use, so previews cost nothing.
 const SAMPLES = Object.fromEntries(
   Object.entries(
@@ -50,7 +61,31 @@ const DEFAULT_VOICE = 'af_heart'
 
 /** A voice's name for people (Heart · US, warm); an ElevenLabs id stays as it is. */
 export const voiceLabel = (voice: string | null | undefined) =>
-  VOICES.find((x) => x.value === (voice ?? ''))?.label ?? voice ?? 'Default (Heart)'
+  ALL_VOICES.find((x) => x.value === (voice ?? ''))?.label ?? voice ?? 'Default (Heart)'
+
+/** Whether this deployment has an ElevenLabs key, so the picker offers its voices and the default is one of them. */
+function useElevenLabs(): boolean {
+  const config = $api.useQuery('get', '/api/v1/config', {}, { staleTime: 60_000 })
+  return config.data?.features.includes('elevenlabs_voices') === true
+}
+
+/** The picker's choices: with a key, ElevenLabs first (the default is its voice), then the built-in voices. */
+function voiceChoices(elevenlabs: boolean, chosen: string) {
+  if (!elevenlabs) return VOICES
+  const known = ALL_VOICES.some((x) => x.value === chosen)
+  return [
+    {
+      group: 'ElevenLabs',
+      items: [
+        { value: '', label: 'Default (ElevenLabs)' },
+        ...ELEVENLABS_VOICES,
+        // A voice id set through the API or CLI stays selectable.
+        ...(known ? [] : [{ value: chosen, label: chosen }]),
+      ],
+    },
+    { group: 'Built in (Kokoro)', items: VOICES.filter((x) => x.value) },
+  ]
+}
 
 /** One sample plays at a time; returns the voice playing and a toggle. */
 function usePreview() {
@@ -147,9 +182,11 @@ export function VoiceoverControl(props: {
   }
   const lines = v.script.length ? v.script : ['']
   const preview = usePreview()
-  const chosen = v.voice || DEFAULT_VOICE
+  const elevenlabs = useElevenLabs()
+  // With a key, the default voice is ElevenLabs', which has no sample here.
+  const chosen = v.voice || (elevenlabs ? '' : DEFAULT_VOICE)
   const nameOf = (voice: string) =>
-    (VOICES.find((x) => x.value === voice)?.label ?? voice).split(' · ')[0] ?? voice
+    (ALL_VOICES.find((x) => x.value === voice)?.label ?? voice).split(' · ')[0] ?? voice
   return (
     <div>
       <Switch
@@ -168,7 +205,7 @@ export function VoiceoverControl(props: {
             <Group gap={4} align="end" wrap="nowrap">
               <Select
                 label="Voice"
-                data={VOICES}
+                data={voiceChoices(elevenlabs, v.voice)}
                 value={v.voice}
                 allowDeselect={false}
                 disabled={props.disabled === true}
@@ -177,7 +214,7 @@ export function VoiceoverControl(props: {
                 }}
                 w={220}
                 renderOption={({ option }) => {
-                  const voice = option.value || DEFAULT_VOICE
+                  const voice = option.value
                   return (
                     <Group justify="space-between" wrap="nowrap" w="100%" gap="xs">
                       <span>{option.label}</span>

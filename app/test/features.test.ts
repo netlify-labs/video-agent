@@ -1,5 +1,6 @@
 // GET /api/v1/config carries the deployment's version and its features (cli-and-sdk plan §5.1, roadmap shared rule 1).
 import { describe, expect, it } from 'vitest'
+import { readConfig } from '../server/deps.js'
 import { FEATURES } from '../server/domain/features.js'
 import { PROMPT_TEMPLATE_VERSION } from '../server/domain/prompt.js'
 import { harness, type Harness } from './helpers.js'
@@ -50,6 +51,19 @@ describe('config version and features', () => {
     expect((await config(h)).features).not.toContain('planning')
     h.deps.gateway.isAvailable = true
     expect((await config(h)).features).toContain('planning')
+  })
+
+  it('lists elevenlabs_voices only when the deployment has an ElevenLabs key', async () => {
+    const h = harness()
+    expect((await config(h)).features).not.toContain('elevenlabs_voices')
+    h.deps.config.elevenlabsKeySet = true
+    expect((await config(h)).features).toContain('elevenlabs_voices')
+  })
+
+  it('reads ElevenLabs from the key or, when the key is scoped to builds only, from the default voice', () => {
+    expect(readConfig({}).elevenlabsKeySet).toBe(false)
+    expect(readConfig({ ELEVENLABS_API_KEY: 'sk_test' }).elevenlabsKeySet).toBe(true)
+    expect(readConfig({ ELEVENLABS_VOICE_ID: 'CwhRBWXzGAHq8TQ4Fs17' }).elevenlabsKeySet).toBe(true)
   })
 
   it('lists youtube exactly when YouTube is available', async () => {
