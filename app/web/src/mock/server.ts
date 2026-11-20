@@ -683,7 +683,12 @@ export function installMock() {
         source: on ? 'account' : 'none',
         items: on
           ? [
-              { id: 'CwhRBWXzGAHq8TQ4Fs17', name: 'Roger', description: 'US, laid-back', previewUrl: null },
+              {
+                id: 'CwhRBWXzGAHq8TQ4Fs17',
+                name: 'Roger',
+                description: 'american, laid-back, casual, resonant',
+                previewUrl: '/api/v1/voices/CwhRBWXzGAHq8TQ4Fs17/preview',
+              },
               { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Sarah', description: 'US, warm', previewUrl: null },
               { id: 'mockClonedVoice01', name: 'Our narrator', description: null, previewUrl: null },
             ]

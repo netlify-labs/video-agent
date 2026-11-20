@@ -233,12 +233,12 @@ export function VoiceoverControl(props: {
                 onChange={(x) => {
                   set({ voice: x ?? '' })
                 }}
-                w={el.on ? 340 : 220}
+                w={el.on ? 490 : 220}
                 renderOption={({ option }) => {
                   const voice = option.value
                   return (
-                    <Group justify="space-between" wrap="nowrap" w="100%" gap="xs">
-                      <span>{option.label}</span>
+                    <Group justify="space-between" wrap="nowrap" gap="xs" style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ flex: 1, minWidth: 0 }}>{option.label}</span>
                       {option.value && sampleOf(voice) ? (
                         <PreviewButton
                           voice={voice}
