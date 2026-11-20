@@ -63,6 +63,7 @@ import { enabledFeatures } from './domain/features.js'
 import { PROMPT_TEMPLATE_VERSION } from './domain/prompt.js'
 import { buildInfo } from './generated/build-info.js'
 import { listLooks } from './domain/looks.js'
+import { listVoices } from './domain/voices.js'
 import { remixVideo, versionMediaItems } from './domain/remix.js'
 import { listNotifications, markNotificationsRead } from './domain/notifications.js'
 import { getProgress } from './domain/progress.js'
@@ -776,6 +777,21 @@ export function createApp(deps: Deps, opts: AppOptions) {
       await unpublishVersion(deps, c.get('principal'), p.id, p.n)
       return c.body(null, 204)
     },
+  )
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/v1/voices',
+      operationId: 'listVoices',
+      'x-sdk': { resource: 'voices', method: 'list' },
+      summary: 'List voices',
+      description:
+        "The ElevenLabs voices a voice-over can use (pass an id as `voiceover.voice`), and the default. With an ElevenLabs key the server can read, these are the account's own voices; otherwise ElevenLabs' default voices. Empty without ElevenLabs: voice-overs then use the built-in Kokoro voices (af_heart, am_michael, …), which work on every deployment.",
+      tags: ['videos'],
+      security,
+      responses: { 200: json(s.VoicesSchema, 'Voices'), ...errors },
+    }),
+    async (c) => c.json(await listVoices(deps), 200),
   )
   // Publish destinations (docs/plans/2026-11-04-publish-destinations.md §6.1).
   app.openapi(

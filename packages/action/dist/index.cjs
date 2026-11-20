@@ -1665,6 +1665,13 @@ function resources(t) {
         opts
       )
     },
+    voices: {
+      /** List voices (`listVoices`) */
+      list: (opts) => t.call(
+        { method: "GET", path: "/api/v1/voices", pathParams: {}, features: [], operationId: "listVoices" },
+        opts
+      )
+    },
     webhooks: {
       /** Remove your webhook (`deleteWebhook`) */
       delete: (opts) => t.call(

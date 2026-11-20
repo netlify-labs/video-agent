@@ -5,6 +5,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
+  DEFAULT_ELEVENLABS_VOICE,
   DEFAULT_KOKORO_VOICE,
   KOKORO_VOICE,
   SAMPLE_RATE,
@@ -13,9 +14,6 @@ import {
   type VoiceProvider,
 } from '../../app/server/lib/voice.js'
 import { StepError, log, run } from './run-tools.js'
-
-// Roger, one of ElevenLabs' default voices: free plans may use those through the API, but not library voices.
-const DEFAULT_ELEVENLABS_VOICE = 'CwhRBWXzGAHq8TQ4Fs17'
 
 /**
  * Installs kokoro-onnx once per run; a run without a voice-over never pays for it. On a runner it goes into the

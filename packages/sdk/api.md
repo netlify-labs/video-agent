@@ -341,6 +341,10 @@ export declare function resources(t: Transport): {
         /** Update a video (`updateVideo`) */
         update: (id: string | number, input?: Input<"/api/v1/videos/{id}", "patch">, opts?: CallOptions) => Promise<Ok<"/api/v1/videos/{id}", "patch">>;
     };
+    voices: {
+        /** List voices (`listVoices`) */
+        list: (opts?: CallOptions) => Promise<Ok<"/api/v1/voices", "get">>;
+    };
     webhooks: {
         /** Remove your webhook (`deleteWebhook`) */
         delete: (opts?: CallOptions) => Promise<undefined>;

@@ -284,6 +284,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/voices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List voices
+         * @description The ElevenLabs voices a voice-over can use (pass an id as `voiceover.voice`), and the default. With an ElevenLabs key the server can read, these are the account's own voices; otherwise ElevenLabs' default voices. Empty without ElevenLabs: voice-overs then use the built-in Kokoro voices (af_heart, am_michael, …), which work on every deployment.
+         */
+        get: operations["listVoices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/looks": {
         parameters: {
             query?: never;
@@ -2725,6 +2745,29 @@ export interface components {
             /** @description Offer the narration's transcript on the share page. Default off; publishing again changes only this. */
             showTranscript?: boolean;
         };
+        Voices: {
+            /**
+             * @description Who speaks a voice-over that names no voice: ElevenLabs when the deployment has a key, else Kokoro.
+             * @enum {string}
+             */
+            provider: "elevenlabs" | "kokoro";
+            /** @description The ElevenLabs voice a voice-over gets when it names none; null with Kokoro (af_heart). */
+            default: string | null;
+            /**
+             * @description account: the deployment's own ElevenLabs voices; defaults: ElevenLabs' default voices (the key can't list voices); none: no ElevenLabs.
+             * @enum {string}
+             */
+            source: "account" | "defaults" | "none";
+            items: {
+                /** @description Pass it as voiceover.voice. */
+                id: string;
+                name: string;
+                /** @description A few words on how it sounds. */
+                description: string | null;
+                /** @description A short sample to play. */
+                previewUrl: string | null;
+            }[];
+        };
         Looks: {
             looks: components["schemas"]["Look"][];
             /** @description The look creates get when they omit one; null: none. */
@@ -5162,6 +5205,71 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict or not ready */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listVoices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Voices */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Voices"];
+                };
             };
             /** @description Invalid request */
             400: {

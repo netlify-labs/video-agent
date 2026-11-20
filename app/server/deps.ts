@@ -55,6 +55,10 @@ export interface Config {
    * may be scoped to builds alone, where functions can't see it; ELEVENLABS_VOICE_ID (not a secret) says so too.
    */
   elevenlabsKeySet: boolean
+  /** The key, when functions can read it: used only to list the account's voices for the picker. */
+  elevenlabsApiKey: string | null
+  /** ELEVENLABS_VOICE_ID: the voice a video gets when it doesn't choose one. */
+  elevenlabsVoiceId: string | null
   /** Whether VIDEO_AGENT_REMOTION_KEY is set (its value is only ever read inside a run). */
   remotionKeySet: boolean
   /** VIDEO_AGENT_REMOTION_DEVELOPMENT=1: a scratch or test deployment whose Remotion renders are development ones. */
@@ -155,6 +159,8 @@ export function readConfig(env: Record<string, string | undefined>): Config {
     ],
     enginesIgnored: list(env.ENGINES).filter((e) => !isEngineId(e)),
     elevenlabsKeySet: Boolean(env.ELEVENLABS_API_KEY?.trim() || env.ELEVENLABS_VOICE_ID?.trim()),
+    elevenlabsApiKey: env.ELEVENLABS_API_KEY?.trim() || null,
+    elevenlabsVoiceId: env.ELEVENLABS_VOICE_ID?.trim() || null,
     remotionKeySet: Boolean(env.VIDEO_AGENT_REMOTION_KEY?.trim()),
     remotionDevelopmentRenders: env.VIDEO_AGENT_REMOTION_DEVELOPMENT === '1',
   }

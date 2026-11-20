@@ -19,7 +19,7 @@ import { $api, type Version, type Video } from '../api/client'
 import { clockTime, credits, duration } from './bits'
 import { engineName } from '../lib/engines'
 import { languageName } from './LanguageSelect'
-import { voiceLabel } from './VoiceoverControl'
+import { useVoiceLabel } from './VoiceoverControl'
 
 /** What a version sounds like, so a silent one isn't mistaken for missing audio. */
 export function soundWords(v: Version): string {
@@ -162,6 +162,7 @@ function Everything({
   media: { id: string; title?: string | null; filename: string; kind: string }[] | null
 }) {
   const brief = v.plan?.brief
+  const voiceName = useVoiceLabel()
   return (
     <Stack gap="lg" data-testid="version-details">
       <Group gap={6} wrap="wrap">
@@ -276,7 +277,7 @@ function Everything({
           {v.music?.query ? <Fact label="Music search">{v.music.query}</Fact> : null}
           {v.voiceover ? (
             <>
-              <Fact label="Voice">{voiceLabel(v.voiceover.voice)}</Fact>
+              <Fact label="Voice">{voiceName(v.voiceover.voice)}</Fact>
               <Fact label="Pace">
                 {v.voiceover.speed === null || v.voiceover.speed === 1
                   ? 'Normal'

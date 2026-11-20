@@ -41,16 +41,6 @@ const VOICES = [
   { value: 'bf_isabella', label: 'Isabella · UK, soft' },
   { value: 'bm_george', label: 'George · UK, steady' },
 ]
-// ElevenLabs' default voices, which every plan (the free one too) may use through the API. Offered when the
-// deployment has ELEVENLABS_API_KEY (the elevenlabs_voices feature); a run speaks any other voice id it is given.
-const ELEVENLABS_VOICES = [
-  { value: 'CwhRBWXzGAHq8TQ4Fs17', label: 'Roger · US, laid-back' },
-  { value: 'EXAVITQu4vr4xnSDxMaL', label: 'Sarah · US, warm' },
-  { value: 'pNInz6obpgDQGcFmaJgB', label: 'Adam · US, deep' },
-  { value: 'JBFqnCBsd6RMkjVDRZzb', label: 'George · UK, storyteller' },
-  { value: 'onwK4e9ZLuTAKqWW03F9', label: 'Daniel · UK, newsreader' },
-]
-const ALL_VOICES = [...VOICES, ...ELEVENLABS_VOICES]
 // Short samples of each voice, made once with the same Kokoro voices the runs use, so previews cost nothing.
 const SAMPLES = Object.fromEntries(
   Object.entries(
@@ -59,26 +49,51 @@ const SAMPLES = Object.fromEntries(
 )
 const DEFAULT_VOICE = 'af_heart'
 
-/** A voice's name for people (Heart · US, warm); an ElevenLabs id stays as it is. */
+/** A built-in voice's name for people (Heart · US, warm); any other id stays as it is. */
 export const voiceLabel = (voice: string | null | undefined) =>
-  ALL_VOICES.find((x) => x.value === (voice ?? ''))?.label ?? voice ?? 'Default (Heart)'
+  VOICES.find((x) => x.value === (voice ?? ''))?.label ?? voice ?? 'Default (Heart)'
 
-/** Whether this deployment has an ElevenLabs key, so the picker offers its voices and the default is one of them. */
-function useElevenLabs(): boolean {
-  const config = $api.useQuery('get', '/api/v1/config', {}, { staleTime: 60_000 })
-  return config.data?.features.includes('elevenlabs_voices') === true
+interface ElevenLabsChoices {
+  /** This deployment has ElevenLabs: the picker offers its voices and the default is one of them. */
+  on: boolean
+  voices: { value: string; label: string; previewUrl: string | null }[]
+  defaultLabel: string
 }
 
-/** The picker's choices: with a key, ElevenLabs first (the default is its voice), then the built-in voices. */
-function voiceChoices(elevenlabs: boolean, chosen: string) {
-  if (!elevenlabs) return VOICES
-  const known = ALL_VOICES.some((x) => x.value === chosen)
+/** The deployment's ElevenLabs voices (GET /api/v1/voices), when it has ElevenLabs. */
+function useElevenLabs(): ElevenLabsChoices {
+  const config = $api.useQuery('get', '/api/v1/config', {}, { staleTime: 60_000 })
+  const on = config.data?.features.includes('elevenlabs_voices') === true
+  const list = $api.useQuery('get', '/api/v1/voices', {}, { enabled: on, staleTime: 5 * 60_000 })
+  const items = on ? (list.data?.items ?? []) : []
+  const voices = items.map((x) => ({
+    value: x.id,
+    label: x.description ? `${x.name} · ${x.description}` : x.name,
+    previewUrl: x.previewUrl,
+  }))
+  const def = items.find((x) => x.id === list.data?.default)
+  return { on, voices, defaultLabel: `Default (${def?.name ?? 'ElevenLabs'})` }
+}
+
+/** A voice's name for people, ElevenLabs voices included (Version details). */
+export function useVoiceLabel(): (voice: string | null | undefined) => string {
+  const el = useElevenLabs()
+  return (voice) => {
+    if (!voice && el.on) return el.defaultLabel
+    return el.voices.find((x) => x.value === voice)?.label ?? voiceLabel(voice)
+  }
+}
+
+/** The picker's choices: with ElevenLabs, its voices first (the default is one of them), then the built-in ones. */
+function voiceChoices(el: ElevenLabsChoices, chosen: string) {
+  if (!el.on) return VOICES
+  const known = !chosen || [...VOICES, ...el.voices].some((x) => x.value === chosen)
   return [
     {
       group: 'ElevenLabs',
       items: [
-        { value: '', label: 'Default (ElevenLabs)' },
-        ...ELEVENLABS_VOICES,
+        { value: '', label: el.defaultLabel },
+        ...el.voices.map(({ value, label }) => ({ value, label })),
         // A voice id set through the API or CLI stays selectable.
         ...(known ? [] : [{ value: chosen, label: chosen }]),
       ],
@@ -97,8 +112,7 @@ function usePreview() {
     },
     [],
   )
-  const toggle = (voice: string) => {
-    const url = SAMPLES[voice]
+  const toggle = (voice: string, url: string | undefined) => {
     audio.current?.pause()
     if (!url || playing === voice) {
       setPlaying(null)
@@ -182,11 +196,15 @@ export function VoiceoverControl(props: {
   }
   const lines = v.script.length ? v.script : ['']
   const preview = usePreview()
-  const elevenlabs = useElevenLabs()
-  // With a key, the default voice is ElevenLabs', which has no sample here.
-  const chosen = v.voice || (elevenlabs ? '' : DEFAULT_VOICE)
+  const el = useElevenLabs()
+  // With ElevenLabs, the default voice is whichever one the deployment set.
+  const chosen = v.voice || (el.on ? '' : DEFAULT_VOICE)
+  const all = [...VOICES, ...el.voices]
   const nameOf = (voice: string) =>
-    (ALL_VOICES.find((x) => x.value === voice)?.label ?? voice).split(' · ')[0] ?? voice
+    (all.find((x) => x.value === voice)?.label ?? voice).split(' · ')[0] ?? voice
+  // Built-in voices have a sample in the bundle; ElevenLabs voices bring a link to theirs.
+  const sampleOf = (voice: string): string | undefined =>
+    SAMPLES[voice] ?? el.voices.find((x) => x.value === voice)?.previewUrl ?? undefined
   return (
     <div>
       <Switch
@@ -205,7 +223,7 @@ export function VoiceoverControl(props: {
             <Group gap={4} align="end" wrap="nowrap">
               <Select
                 label="Voice"
-                data={voiceChoices(elevenlabs, v.voice)}
+                data={voiceChoices(el, v.voice)}
                 value={v.voice}
                 allowDeselect={false}
                 disabled={props.disabled === true}
@@ -218,13 +236,13 @@ export function VoiceoverControl(props: {
                   return (
                     <Group justify="space-between" wrap="nowrap" w="100%" gap="xs">
                       <span>{option.label}</span>
-                      {option.value && SAMPLES[voice] ? (
+                      {option.value && sampleOf(voice) ? (
                         <PreviewButton
                           voice={voice}
                           label={nameOf(voice)}
                           playing={preview.playing === voice}
                           onToggle={() => {
-                            preview.toggle(voice)
+                            preview.toggle(voice, sampleOf(voice))
                           }}
                         />
                       ) : null}
@@ -232,14 +250,14 @@ export function VoiceoverControl(props: {
                   )
                 }}
               />
-              {SAMPLES[chosen] ? (
+              {sampleOf(chosen) ? (
                 <div style={{ paddingBottom: 6 }}>
                   <PreviewButton
                     voice={`chosen-${chosen}`}
                     label={nameOf(chosen)}
                     playing={preview.playing === chosen}
                     onToggle={() => {
-                      preview.toggle(chosen)
+                      preview.toggle(chosen, sampleOf(chosen))
                     }}
                   />
                 </div>

@@ -15,6 +15,8 @@ export const VOICE_TAIL = 0.4
 /** Where the voice starts in its beat unless the agent chooses otherwise. */
 export const DEFAULT_LEAD = 0.3
 export const DEFAULT_KOKORO_VOICE = 'af_heart'
+/** Roger, one of ElevenLabs' default voices: free plans may use those through the API, but not library voices. */
+export const DEFAULT_ELEVENLABS_VOICE = 'CwhRBWXzGAHq8TQ4Fs17'
 /** Kokoro voice ids: a language letter, f or m, then a name (af_heart, bm_george). */
 export const KOKORO_VOICE = /^[a-z][fm]_[a-z]+$/
 /** A voice id as people may pass it (Kokoro names or provider ids). */

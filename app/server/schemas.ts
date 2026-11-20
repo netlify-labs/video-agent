@@ -2331,6 +2331,33 @@ export const LookSchema = z
   })
   .openapi('Look')
 
+export const VoicesSchema = z
+  .object({
+    provider: z
+      .enum(['elevenlabs', 'kokoro'])
+      .describe(
+        'Who speaks a voice-over that names no voice: ElevenLabs when the deployment has a key, else Kokoro.',
+      ),
+    default: z
+      .string()
+      .nullable()
+      .describe('The ElevenLabs voice a voice-over gets when it names none; null with Kokoro (af_heart).'),
+    source: z
+      .enum(['account', 'defaults', 'none'])
+      .describe(
+        "account: the deployment's own ElevenLabs voices; defaults: ElevenLabs' default voices (the key can't list voices); none: no ElevenLabs.",
+      ),
+    items: z.array(
+      z.object({
+        id: z.string().describe('Pass it as voiceover.voice.'),
+        name: z.string(),
+        description: z.string().nullable().describe('A few words on how it sounds.'),
+        previewUrl: z.string().nullable().describe('A short sample to play.'),
+      }),
+    ),
+  })
+  .openapi('Voices')
+
 export const LooksSchema = z
   .object({
     looks: z.array(LookSchema),

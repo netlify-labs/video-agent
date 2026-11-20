@@ -19,7 +19,7 @@
 #   NETLIFY_REQUIRED_TEAM (optional)            only members of these Netlify teams can sign in
 #   OPENVERSE_CLIENT_ID / _SECRET (optional)     a registered Openverse app for music search (npm run setup:openverse)
 #   ELEVENLABS_API_KEY (optional)               ElevenLabs voices for voice-overs (Kokoro is built in)
-#                                               (scope builds; a secret also needs the dev-server context; see docs/guides/deploy.md)
+#                                               (scopes builds + functions; a secret also needs the dev-server context)
 #   BRAND_ZIP_URL (optional)                    your brand kit as a zip, instead of committing it to context/
 #   MAX_ACTIVE_RUNS (optional, 3)               runs at once
 #   AGENT, AGENT_MODEL, AGENT_EFFORT (optional) which agent makes videos

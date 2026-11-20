@@ -156,6 +156,13 @@
       "method": "unpublish"
     }
   },
+  "GET /api/v1/voices": {
+    "operationId": "listVoices",
+    "sdk": {
+      "resource": "voices",
+      "method": "list"
+    }
+  },
   "GET /api/v1/looks": {
     "operationId": "listLooks",
     "sdk": {

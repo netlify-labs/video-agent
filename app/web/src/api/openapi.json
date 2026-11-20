@@ -3015,6 +3015,76 @@
           }
         }
       },
+      "Voices": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": [
+              "elevenlabs",
+              "kokoro"
+            ],
+            "description": "Who speaks a voice-over that names no voice: ElevenLabs when the deployment has a key, else Kokoro."
+          },
+          "default": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The ElevenLabs voice a voice-over gets when it names none; null with Kokoro (af_heart)."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "account",
+              "defaults",
+              "none"
+            ],
+            "description": "account: the deployment's own ElevenLabs voices; defaults: ElevenLabs' default voices (the key can't list voices); none: no ElevenLabs."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Pass it as voiceover.voice."
+                },
+                "name": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "A few words on how it sounds."
+                },
+                "previewUrl": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "A short sample to play."
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "description",
+                "previewUrl"
+              ]
+            }
+          }
+        },
+        "required": [
+          "provider",
+          "default",
+          "source",
+          "items"
+        ]
+      },
       "Looks": {
         "type": "object",
         "properties": {
@@ -10169,6 +10239,90 @@
         "responses": {
           "204": {
             "description": "Unpublished"
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/voices": {
+      "get": {
+        "operationId": "listVoices",
+        "x-sdk": {
+          "resource": "voices",
+          "method": "list"
+        },
+        "summary": "List voices",
+        "description": "The ElevenLabs voices a voice-over can use (pass an id as `voiceover.voice`), and the default. With an ElevenLabs key the server can read, these are the account's own voices; otherwise ElevenLabs' default voices. Empty without ElevenLabs: voice-overs then use the built-in Kokoro voices (af_heart, am_michael, …), which work on every deployment.",
+        "tags": [
+          "videos"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Voices",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Voices"
+                }
+              }
+            }
           },
           "400": {
             "description": "Invalid request",

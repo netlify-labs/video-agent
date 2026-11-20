@@ -674,6 +674,22 @@ export function installMock() {
       g.__enginesRequests = (g.__enginesRequests ?? 0) + 1
       return json({ items: mockEngineListing() })
     }
+    // The deployment's ElevenLabs voices, when localStorage.mockElevenLabs=1 says it has ElevenLabs.
+    if (p === '/api/v1/voices') {
+      const on = localStorage.getItem('mockElevenLabs') === '1'
+      return json({
+        provider: on ? 'elevenlabs' : 'kokoro',
+        default: on ? 'CwhRBWXzGAHq8TQ4Fs17' : null,
+        source: on ? 'account' : 'none',
+        items: on
+          ? [
+              { id: 'CwhRBWXzGAHq8TQ4Fs17', name: 'Roger', description: 'US, laid-back', previewUrl: null },
+              { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Sarah', description: 'US, warm', previewUrl: null },
+              { id: 'mockClonedVoice01', name: 'Our narrator', description: null, previewUrl: null },
+            ]
+          : [],
+      })
+    }
     if (p === '/api/v1/config')
       return json({
         version: { commit: null, promptTemplate: 16, release: null },

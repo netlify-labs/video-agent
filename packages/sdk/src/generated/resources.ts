@@ -1269,6 +1269,14 @@ export function resources(t: Transport) {
           opts,
         ),
     },
+    voices: {
+      /** List voices (`listVoices`) */
+      list: (opts?: CallOptions): Promise<Ok<'/api/v1/voices', 'get'>> =>
+        t.call<Ok<'/api/v1/voices', 'get'>>(
+          { method: 'GET', path: '/api/v1/voices', pathParams: {}, features: [], operationId: 'listVoices' },
+          opts,
+        ),
+    },
     webhooks: {
       /** Remove your webhook (`deleteWebhook`) */
       delete: (opts?: CallOptions): Promise<undefined> =>
