@@ -23,16 +23,16 @@ body {
   border-radius: var(--mantine-radius-sm);
 }
 
-/* The one primary: inverted. Secondary: raised grey. The accent never goes on buttons. */
+/* The one primary: inverted, or the brand fill when the kit names its ink (theme.ts). Secondary: raised grey. */
 .va-button[data-variant='filled'] {
   --button-bg: var(--va-primary-bg);
-  --button-hover: var(--va-primary-bg);
+  --button-hover: var(--va-primary-hover);
   --button-color: var(--va-primary-ink);
   height: 36px;
   font-weight: 600;
 }
 .va-button[data-variant='filled']:hover:not(:disabled) {
-  filter: brightness(0.88);
+  filter: var(--va-primary-hover-filter);
 }
 .va-button[data-variant='default'] {
   --button-bg: var(--va-raised);
@@ -46,7 +46,7 @@ body {
 /* (Mantine sets its own colours inline as variables, so these set the properties themselves.) */
 .va-button[data-variant='light']:not(:disabled):not([data-disabled]) {
   background: color-mix(in srgb, var(--va-accent) 22%, transparent);
-  color: color-mix(in srgb, var(--va-accent) 70%, var(--va-text));
+  color: color-mix(in srgb, var(--va-accent-ink) 70%, var(--va-text));
   border: 1px solid color-mix(in srgb, var(--va-accent) 55%, transparent);
 }
 .va-button[data-variant='light']:not(:disabled):not([data-disabled]):hover {
@@ -108,7 +108,7 @@ main.va-shell-main {
   font-weight: 700;
   letter-spacing: 0.09em;
   text-transform: uppercase;
-  color: color-mix(in srgb, var(--va-accent) 75%, var(--va-text));
+  color: color-mix(in srgb, var(--va-accent-ink) 75%, var(--va-text));
 }
 .va-subnav > :first-child .va-subnav-group {
   padding-top: 4px;
@@ -130,7 +130,7 @@ main.va-shell-main {
   color: var(--va-text);
 }
 .va-subnav-link[data-active] .mantine-NavLink-section {
-  color: var(--va-accent);
+  color: var(--va-accent-ink);
 }
 .va-subnav-link:hover {
   background: var(--va-surface);
@@ -190,6 +190,18 @@ main.va-shell-main {
   font-weight: 600;
   font-size: 17px;
   white-space: nowrap;
+}
+/* A brand with a wide logo: that from 48em up, its mark alone below (Mantine's sm breakpoint). */
+.va-mark-full {
+  display: none;
+}
+@media (min-width: 48em) {
+  .va-mark-full {
+    display: block;
+  }
+  .va-mark-small {
+    display: none;
+  }
 }
 .va-nav {
   display: flex;
@@ -326,7 +338,7 @@ main.va-shell-main {
   background: var(--va-raised);
 }
 .va-remix-pick[data-selected='true'] {
-  outline: 2px solid var(--va-accent);
+  outline: 2px solid var(--va-accent-ink);
 }
 .va-remix-source {
   padding: 8px 10px;
@@ -571,7 +583,7 @@ main.va-shell-main {
   color: var(--va-text);
 }
 .va-docs-toc-link[data-active] {
-  border-left-color: var(--va-accent);
+  border-left-color: var(--va-accent-ink);
   color: var(--va-text);
   font-weight: 500;
 }
@@ -600,7 +612,7 @@ main.va-shell-main {
 }
 .va-docs-toc-link:focus-visible,
 .va-docs-chip:focus-visible {
-  outline: 2px solid var(--va-accent);
+  outline: 2px solid var(--va-accent-ink);
   outline-offset: 2px;
 }
 .va-docs-sections {
@@ -903,7 +915,7 @@ main.va-shell-main {
   margin-left: -1px;
 }
 .va-plan {
-  border-color: var(--va-accent);
+  border-color: var(--va-accent-ink);
 }
 .va-plan-q {
   background: var(--va-raised);
@@ -1018,7 +1030,7 @@ main.va-shell-main {
   border-color: var(--va-dialog-edge);
 }
 .mantine-Textarea-input:focus {
-  border-color: var(--va-accent);
+  border-color: var(--va-accent-ink);
 }
 .va-composer-input {
   font-size: 14px;
@@ -1036,7 +1048,7 @@ main.va-shell-main {
   background: var(--va-dialog-raised);
 }
 .va-code-frame:focus-within {
-  border-color: var(--va-accent);
+  border-color: var(--va-accent-ink);
 }
 .va-code-frame[data-error] {
   border-color: var(--va-negative);
@@ -1053,7 +1065,7 @@ main.va-shell-main {
   position: relative;
 }
 .va-drop-target[data-over] .mantine-Textarea-input {
-  border-color: var(--va-accent);
+  border-color: var(--va-accent-ink);
   border-style: dashed;
   background: color-mix(in srgb, var(--va-accent) 10%, var(--va-dialog-raised));
 }
@@ -1065,7 +1077,7 @@ main.va-shell-main {
   place-items: center;
   font-size: 14px;
   font-weight: 600;
-  color: var(--va-accent);
+  color: var(--va-accent-ink);
   pointer-events: none;
 }
 .va-media-chip[data-error] {
@@ -1112,7 +1124,7 @@ main.va-shell-main {
   background: none;
   padding: 0;
   font-size: 12px;
-  color: var(--va-accent);
+  color: var(--va-accent-ink);
   cursor: pointer;
 }
 .va-comment-count {
@@ -1123,7 +1135,7 @@ main.va-shell-main {
   color: var(--va-faint);
 }
 .va-comment-count[data-unread] {
-  color: var(--va-primary-ink);
+  color: var(--va-on-accent);
   background: var(--va-accent);
   padding: 1px 7px;
   border-radius: 999px;
@@ -1393,8 +1405,8 @@ main.va-shell-main {
   border-color: var(--va-muted);
 }
 .va-media-pick[data-on] {
-  border-color: var(--va-accent);
-  box-shadow: 0 0 0 1px var(--va-accent);
+  border-color: var(--va-accent-ink);
+  box-shadow: 0 0 0 1px var(--va-accent-ink);
   background: color-mix(in srgb, var(--va-accent) 10%, var(--va-dialog-raised));
 }
 .va-pick-check {
@@ -1471,7 +1483,7 @@ main.va-shell-main {
   text-align: center;
 }
 .va-dropzone[data-active] {
-  border-color: var(--va-accent);
+  border-color: var(--va-accent-ink);
   background: var(--va-accent-tint);
 }
 /* The Media page's drop zone: a raised, clickable target with a stronger dashed edge that lights up on hover or drag. */
@@ -1490,7 +1502,7 @@ main.va-shell-main {
 }
 .va-dropzone-media:hover,
 .va-dropzone-media:focus-visible {
-  border-color: color-mix(in srgb, var(--va-accent) 60%, var(--va-dialog-edge));
+  border-color: color-mix(in srgb, var(--va-accent-ink) 60%, var(--va-dialog-edge));
   outline: none;
 }
 .va-dropzone-icon {
@@ -1500,11 +1512,11 @@ main.va-shell-main {
   height: 40px;
   border-radius: 50%;
   background: var(--va-raised);
-  color: var(--va-accent);
+  color: var(--va-accent-ink);
   margin-bottom: 4px;
 }
 .va-dropzone-link {
-  color: var(--va-accent);
+  color: var(--va-accent-ink);
 }
 .va-dropzone-limits {
   max-width: 620px;
@@ -1676,7 +1688,7 @@ main.va-shell-main {
   outline-color: var(--va-rule);
 }
 .va-title-edit:focus {
-  outline: 2px solid var(--va-accent);
+  outline: 2px solid var(--va-accent-ink);
 }
 
 /* A form's main action, pinned to the bottom of the window as the form scrolls: it spans the card (the card's lg
@@ -1701,7 +1713,7 @@ main.va-shell-main {
   content: '';
   position: absolute;
   inset: -8px;
-  border: 2px dashed var(--va-accent);
+  border: 2px dashed var(--va-accent-ink);
   border-radius: var(--mantine-radius-lg);
   background: color-mix(in srgb, var(--va-accent) 8%, transparent);
   pointer-events: none;
@@ -1799,7 +1811,7 @@ main.va-shell-main {
 }
 .va-row-pick[data-on] {
   background: color-mix(in srgb, var(--va-accent) 12%, transparent);
-  box-shadow: inset 3px 0 0 var(--va-accent);
+  box-shadow: inset 3px 0 0 var(--va-accent-ink);
 }
 .va-view-icon {
   vertical-align: -2px;

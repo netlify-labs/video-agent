@@ -22,6 +22,23 @@ Keep it short and concrete. The agent follows rules better than adjectives: "hea
 
 The web app's setup page shows a warning while this folder still has the neutral default.
 
+## The web app's look (optional)
+
+By default the web app is neutral (a black or off-white page, an inverted primary button) and uses only `name`,
+`primaryColor` and `logo`. A `brand.json` can also give it the brand's own look. Every field is optional; a value
+that isn't a hex colour or a plain font list is ignored.
+
+| Field                               | What it changes                                                                                                                           |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `backgroundLight` and `textOnLight` | The light theme's page and text colours. Cards, edges and quieter text are worked out from the pair.                                      |
+| `backgroundDark` and `textOnDark`   | The same for the dark theme. `backgroundDarkAlt` is the darker colour of input fields.                                                    |
+| `onPrimaryColor`                    | The colour of text on `primaryColor`. With it, the primary button is filled with `primaryColor`; `primaryHoverColor` is its hover fill.   |
+| `fonts`                             | `{ "text", "heading", "mono" }`, each a CSS font list. The app doesn't load font files, so name fonts people have, ending in `system-ui`. |
+| `logoFull`, `logoFullLight`         | A wide logo (mark and wordmark) for dark and for light backgrounds. The nav and sign-in show it; phones show `logo`.                      |
+
+`primaryColor` is used as a fill. Where the app shows it as text or an outline, it darkens or lightens it until it
+reads on the page, so a pale brand colour stays readable.
+
 ## Keeping your brand out of the repo
 
 If this repo is public, or several deployments share it, put the brand kit in a zip instead and set

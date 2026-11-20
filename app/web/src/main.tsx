@@ -16,7 +16,7 @@ import { fetchClient } from './api/client'
 import { App } from './App'
 import { AuthProvider } from './auth'
 import { preloadRoute } from './routes'
-import { resolver, theme } from './theme'
+import { brand, resolver, theme } from './theme'
 
 // Data stays fresh for 30 s, so going back and forth between pages shows it at once instead of refetching it. Writes
 // invalidate what they change, and in-progress videos keep polling on their own intervals.
@@ -29,6 +29,16 @@ const queryClient = new QueryClient({
     },
   },
 })
+
+// The brand's mark as the tab icon, when the kit has one: the file for dark backgrounds when the OS is dark.
+const tabIcon = (href: string | null, media: string) => {
+  if (!href) return
+  const link = document.createElement('link')
+  Object.assign(link, { rel: 'icon', type: 'image/svg+xml', href, media })
+  document.head.append(link)
+}
+tabIcon(brand.logoLight ?? brand.logo, '(prefers-color-scheme: light)')
+tabIcon(brand.logo, '(prefers-color-scheme: dark)')
 
 // A preview build can't run the app (no API or data, and sign-in can't come back to this address): show the project
 // page instead, with a note and a link to the real app.

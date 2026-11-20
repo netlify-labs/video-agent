@@ -23,7 +23,9 @@ import { Mark, PoweredBy } from '../components/bits'
 import { MissingSettingsNotice } from '../components/MissingSettings'
 
 export function AuthPages({ setupReady }: { setupReady: boolean }) {
-  const logo = useComputedColorScheme('dark') === 'light' ? (brand.logoLight ?? brand.logo) : brand.logo
+  const light = useComputedColorScheme('dark') === 'light'
+  const logo = light ? (brand.logoLight ?? brand.logo) : brand.logo
+  const logoFull = light ? (brand.logoFullLight ?? brand.logoFull) : brand.logoFull
   const auth = useAuth()
   const config = $api.useQuery('get', '/api/v1/config')
   const [email, setEmail] = useState('')
@@ -63,10 +65,18 @@ export function AuthPages({ setupReady }: { setupReady: boolean }) {
       <Card p="xl" w="100%" maw={420}>
         <Stack>
           <div>
-            <Group gap={10} mb="md">
-              {logo ? <img src={logo} alt="" height={36} /> : <Mark size={28} />}
-              <Title order={1}>{brand.appName}</Title>
-            </Group>
+            {logoFull ? (
+              // The wide logo on its own line, then the app's name.
+              <Stack gap={14} mb="md" align="flex-start">
+                <img src={logoFull} alt={brand.name} height={32} />
+                <Title order={1}>{brand.appName}</Title>
+              </Stack>
+            ) : (
+              <Group gap={10} mb="md">
+                {logo ? <img src={logo} alt="" height={36} /> : <Mark size={28} />}
+                <Title order={1}>{brand.appName}</Title>
+              </Group>
+            )}
             <Text c="var(--va-muted)" size="sm">
               Describe a video. An agent makes it in a few minutes.
             </Text>

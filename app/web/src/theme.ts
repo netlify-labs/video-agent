@@ -1,6 +1,8 @@
 // One Mantine theme: true-black flat in dark (the default), a quiet neutral in light.
-// Elevation is lightness alone; colour goes on data (the brand hue), never on buttons, tabs or nav.
+// Elevation is lightness alone; colour goes on data (the brand hue), never on tabs or nav.
 // The primary action is inverted: white on black in dark, near-black in light. Corners stay small (8px default).
+// A brand kit can change that (context/brand.json, optional fields): its own page and text colours for each
+// scheme, its fonts, and a primary button filled with the brand colour when it says what goes on that fill.
 import {
   Button,
   Card,
@@ -18,41 +20,68 @@ import {
   type MantineColorsTuple,
 } from '@mantine/core'
 import { contextMeta } from '../../server/generated/context'
+import { inkOn, mix, readable, shadeFor, shades } from './lib/brand-colors'
 
+const look = contextMeta.look
+const accent = contextMeta.primaryColor
 /** A 10-shade Mantine palette from the brand's primary colour (context/brand.json). */
-function palette(hex: string): MantineColorsTuple {
-  const n = parseInt(hex.replace('#', ''), 16)
-  const rgb = [(n >> 16) & 255, (n >> 8) & 255, n & 255] as const
-  const mix = (t: number, to: number) => rgb.map((c) => Math.round(c + (to - c) * t))
-  const toHex = (c: number[]) => `#${c.map((v) => v.toString(16).padStart(2, '0')).join('')}`
-  const steps = [0.9, 0.75, 0.6, 0.4, 0.2, 0, -0.15, -0.3, -0.45, -0.6]
-  return steps.map((s) => toHex(s >= 0 ? mix(s, 255) : mix(-s, 0))) as unknown as MantineColorsTuple
-}
+const brandShades = shades(accent)
+const lightGround = look.light?.ground ?? '#f9fafb'
+const darkGround = look.dark?.ground ?? '#000000'
+// The primary button: inverted by default; the brand colour when the kit names the ink for it.
+const primary = (bg: string, ink: string) => ({
+  '--va-primary-bg': look.onPrimary ? accent : bg,
+  '--va-primary-ink': look.onPrimary ?? ink,
+  '--va-primary-hover': look.onPrimary && look.primaryHover ? look.primaryHover : 'var(--va-primary-bg)',
+  '--va-primary-hover-filter': look.onPrimary && look.primaryHover ? 'none' : 'brightness(0.88)',
+})
 
 // Mantine reads dark[0] as text, dark[2] as dimmed, dark[4] as borders, dark[6] as fields and
 // dark[7] as the body. A black page with grey cards (#1c1c1c) and raised steps (#2a2a2a); fields are a darker well
 // with a visible border, so every control reads against its card.
-const dark: MantineColorsTuple = [
-  '#ffffff',
-  '#b4b4b4',
-  '#949494',
-  '#5e5e5e',
-  '#424242',
-  '#2a2a2a',
-  '#121212',
-  '#000000',
-  '#000000',
-  '#000000',
-]
+const dark: MantineColorsTuple = look.dark
+  ? (() => {
+      const { ground, text } = look.dark
+      const step = (t: number) => mix(ground, text, t)
+      return [
+        text,
+        step(0.87),
+        step(0.55),
+        step(0.33),
+        step(0.22),
+        step(0.14),
+        look.dark.well ?? mix(ground, '#000000', 0.3),
+        ground,
+        ground,
+        ground,
+      ]
+    })()
+  : [
+      '#ffffff',
+      '#b4b4b4',
+      '#949494',
+      '#5e5e5e',
+      '#424242',
+      '#2a2a2a',
+      '#121212',
+      '#000000',
+      '#000000',
+      '#000000',
+    ]
+
+const sans = look.fonts.text ?? '"IBM Plex Sans", system-ui, sans-serif'
 
 export const theme = createTheme({
   primaryColor: 'brand',
-  colors: { brand: palette(contextMeta.primaryColor), dark },
-  primaryShade: { light: 7, dark: 4 },
-  fontFamily: '"IBM Plex Sans", system-ui, sans-serif',
-  fontFamilyMonospace: '"IBM Plex Mono", ui-monospace, monospace', // code samples only (taste-skill-ignore)
+  colors: { brand: brandShades as unknown as MantineColorsTuple, dark },
+  // In light, the first shade dark enough to read as text on the page (7 for most colours, 8 for a pale one).
+  primaryShade: { light: shadeFor(brandShades, lightGround, 7) as 7 | 8 | 9, dark: 4 },
+  // Text on a brand fill is dark when the fill is light (a checkbox tick, a badge).
+  autoContrast: true,
+  fontFamily: sans,
+  fontFamilyMonospace: look.fonts.mono ?? '"IBM Plex Mono", ui-monospace, monospace', // code samples only (taste-skill-ignore)
   headings: {
-    fontFamily: '"IBM Plex Sans", system-ui, sans-serif',
+    fontFamily: look.fonts.heading ?? sans,
     fontWeight: '600',
     sizes: {
       h1: { fontSize: '24px', lineHeight: '32px' },
@@ -78,7 +107,7 @@ export const theme = createTheme({
           ? {
               root: {
                 '--button-bg': 'var(--va-primary-bg)',
-                '--button-hover': 'var(--va-primary-bg)',
+                '--button-hover': 'var(--va-primary-hover)',
                 '--button-color': 'var(--va-primary-ink)',
               },
             }
@@ -109,53 +138,88 @@ export const theme = createTheme({
 export const resolver: CSSVariablesResolver = () => ({
   variables: {
     '--va-column': '1152px',
-    '--va-accent': contextMeta.primaryColor,
+    // The accent is a fill. As text, an outline or an edge it is --va-accent-ink, which is readable on the page.
+    '--va-accent': accent,
+    '--va-on-accent': look.onPrimary ?? inkOn(accent),
     '--va-bar': '48px',
   },
   light: {
-    '--va-ground': '#f9fafb',
-    '--va-surface': '#ffffff',
-    '--va-raised': '#f2f3f5',
-    '--va-dialog': '#ffffff',
-    '--va-dialog-raised': '#f2f3f5',
-    '--va-dialog-edge': '#dfe2e6',
-    '--va-rule': '#ebedf0',
-    '--va-text': '#111111',
-    '--va-muted': '#5f6368',
-    '--va-faint': '#6b6b6b',
-    '--va-primary-bg': '#1d1f20',
-    '--va-primary-ink': '#ffffff',
+    ...(look.light
+      ? {
+          '--va-ground': look.light.ground,
+          '--va-surface': '#ffffff',
+          '--va-raised': mix(look.light.ground, look.light.text, 0.04),
+          '--va-dialog': '#ffffff',
+          '--va-dialog-raised': mix(look.light.ground, look.light.text, 0.04),
+          '--va-dialog-edge': mix(look.light.ground, look.light.text, 0.13),
+          '--va-rule': mix(look.light.ground, look.light.text, 0.07),
+          '--va-text': look.light.text,
+          '--va-muted': mix(look.light.text, look.light.ground, 0.29),
+          '--va-faint': mix(look.light.text, look.light.ground, 0.42),
+          '--mantine-color-text': look.light.text,
+          ...primary(look.light.text, '#ffffff'),
+        }
+      : {
+          '--va-ground': '#f9fafb',
+          '--va-surface': '#ffffff',
+          '--va-raised': '#f2f3f5',
+          '--va-dialog': '#ffffff',
+          '--va-dialog-raised': '#f2f3f5',
+          '--va-dialog-edge': '#dfe2e6',
+          '--va-rule': '#ebedf0',
+          '--va-text': '#111111',
+          '--va-muted': '#5f6368',
+          '--va-faint': '#6b6b6b',
+          ...primary('#1d1f20', '#ffffff'),
+        }),
+    '--va-accent-ink': readable(accent, lightGround),
     '--va-negative': '#c4242a',
     '--va-negative-bg': '#ffedea',
     '--va-warning-bg': '#fffbeb',
     '--va-warning-ink': '#92400e',
     '--va-star': '#b7791f',
     '--va-accent-tint': 'color-mix(in srgb, var(--va-accent) 14%, white)',
-    '--mantine-color-body': '#f9fafb',
+    '--mantine-color-body': lightGround,
   },
   dark: {
-    '--va-ground': '#000000',
-    '--va-surface': '#1c1c1c',
-    '--va-raised': '#2a2a2a',
-    // Dialogs sit a clear step above the black page, with their own raised step and edge.
-    '--va-dialog': '#242424',
-    '--va-dialog-raised': '#303030',
-    '--va-dialog-edge': '#454545',
-    '--va-rule': '#2a2a2a',
-    '--va-text': '#ffffff',
-    '--va-muted': '#b4b4b4',
-    '--va-faint': '#949494',
-    '--va-primary-bg': '#ffffff',
-    '--va-primary-ink': '#000000',
+    ...(look.dark
+      ? {
+          '--va-ground': look.dark.ground,
+          '--va-surface': mix(look.dark.ground, look.dark.text, 0.06),
+          '--va-raised': mix(look.dark.ground, look.dark.text, 0.14),
+          '--va-dialog': mix(look.dark.ground, look.dark.text, 0.1),
+          '--va-dialog-raised': mix(look.dark.ground, look.dark.text, 0.17),
+          '--va-dialog-edge': mix(look.dark.ground, look.dark.text, 0.26),
+          '--va-rule': mix(look.dark.ground, look.dark.text, 0.14),
+          '--va-text': look.dark.text,
+          '--va-muted': mix(look.dark.text, look.dark.ground, 0.13),
+          '--va-faint': mix(look.dark.text, look.dark.ground, 0.45),
+          ...primary(look.dark.text, look.dark.ground),
+        }
+      : {
+          '--va-ground': '#000000',
+          '--va-surface': '#1c1c1c',
+          '--va-raised': '#2a2a2a',
+          // Dialogs sit a clear step above the black page, with their own raised step and edge.
+          '--va-dialog': '#242424',
+          '--va-dialog-raised': '#303030',
+          '--va-dialog-edge': '#454545',
+          '--va-rule': '#2a2a2a',
+          '--va-text': '#ffffff',
+          '--va-muted': '#b4b4b4',
+          '--va-faint': '#949494',
+          ...primary('#ffffff', '#000000'),
+        }),
+    '--va-accent-ink': readable(accent, darkGround),
     '--va-negative': '#e5566f',
     '--va-negative-bg': '#2c1a20',
     '--va-warning-bg': '#2a2310',
     '--va-warning-ink': '#f2c94c',
     '--va-star': '#f5b82e',
     '--va-accent-tint': 'color-mix(in srgb, var(--va-accent) 18%, black)',
-    '--mantine-color-body': '#000000',
-    '--mantine-color-text': '#ffffff',
-    '--mantine-color-dimmed': '#b4b4b4',
+    '--mantine-color-body': darkGround,
+    '--mantine-color-text': look.dark?.text ?? '#ffffff',
+    '--mantine-color-dimmed': look.dark ? mix(look.dark.text, look.dark.ground, 0.13) : '#b4b4b4',
   },
 })
 

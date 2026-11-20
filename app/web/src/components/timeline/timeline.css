@@ -6,7 +6,7 @@
   --tl-narration: 56px;
   --tl-aiVoice: 56px;
   --tl-music: 72px;
-  --tl-narration-ink: var(--va-accent);
+  --tl-narration-ink: var(--va-accent-ink);
   display: grid;
   grid-template-columns: var(--tl-head) minmax(0, 1fr);
   border-radius: 8px;
@@ -94,7 +94,7 @@
   touch-action: none;
 }
 .va-tl-ruler:focus-visible {
-  outline: 2px solid var(--va-accent);
+  outline: 2px solid var(--va-accent-ink);
   outline-offset: -2px;
 }
 .va-tl-tick {
@@ -150,7 +150,7 @@
 }
 /* Each scene gets its own tint (data-hue cycles 0-5), so the blocks read as separate clips in both themes. */
 .va-tl-scene {
-  --scene-ink: var(--va-accent);
+  --scene-ink: var(--va-accent-ink);
   background: color-mix(in srgb, var(--scene-ink) 24%, var(--va-raised));
   border-left: 3px solid var(--scene-ink);
   border-right: 2px solid var(--va-surface);
@@ -271,7 +271,7 @@
   top: 0;
   bottom: 0;
   background: color-mix(in srgb, var(--va-accent) 16%, transparent);
-  border-left: 1px solid var(--va-accent);
+  border-left: 1px solid var(--va-accent-ink);
   border-right: 1px solid var(--va-accent);
   pointer-events: none;
 }

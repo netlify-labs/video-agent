@@ -99,6 +99,8 @@ export function Layout() {
   )
   // brand.logo is for dark backgrounds; logoLight (when the brand has one) for the light theme.
   const logo = computedScheme === 'light' ? (brand.logoLight ?? brand.logo) : brand.logo
+  // The wide logo (mark and wordmark) where there is room; the mark alone on a phone.
+  const logoFull = computedScheme === 'light' ? (brand.logoFullLight ?? brand.logoFull) : brand.logoFull
   const initial = (me.data?.name ?? me.data?.email ?? '?').slice(0, 1).toUpperCase()
 
   return (
@@ -113,7 +115,12 @@ export function Layout() {
           <Group gap="sm">
             <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" aria-label="Menu" />
             <Link to="/" className="va-mark">
-              {logo ? <img src={logo} alt="" height={28} /> : <Mark />}
+              {logoFull ? <img src={logoFull} alt={brand.name} height={26} className="va-mark-full" /> : null}
+              {logo ? (
+                <img src={logo} alt="" height={28} className={logoFull ? 'va-mark-small' : undefined} />
+              ) : logoFull ? null : (
+                <Mark />
+              )}
               {brand.appName}
             </Link>
           </Group>

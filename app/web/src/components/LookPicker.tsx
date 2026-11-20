@@ -100,7 +100,7 @@ function LookCard(props: {
             </Text>
           ) : null}
           {props.fits ? (
-            <Text size="xs" c="var(--va-accent, teal)" mt={4}>
+            <Text size="xs" c="var(--va-accent-ink)" mt={4}>
               Fits {props.fits}
             </Text>
           ) : null}

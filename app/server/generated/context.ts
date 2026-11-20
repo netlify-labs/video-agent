@@ -6,6 +6,19 @@ export const contextMeta = {
   "primaryColor": "#14b8a6",
   "logo": null,
   "logoLight": null,
+  "logoFull": null,
+  "logoFullLight": null,
+  "look": {
+    "onPrimary": null,
+    "primaryHover": null,
+    "light": null,
+    "dark": null,
+    "fonts": {
+      "text": null,
+      "heading": null,
+      "mono": null
+    }
+  },
   "music": null
 } as {
   isDefault: boolean
@@ -14,5 +27,14 @@ export const contextMeta = {
   primaryColor: string
   logo: string | null
   logoLight: string | null
+  logoFull: string | null
+  logoFullLight: string | null
+  look: {
+    onPrimary: string | null
+    primaryHover: string | null
+    light: { ground: string; text: string } | null
+    dark: { ground: string; well: string | null; text: string } | null
+    fonts: { text: string | null; heading: string | null; mono: string | null }
+  }
   music: { file: string; genre: string | null; tempo: string | null } | null
 }
