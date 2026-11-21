@@ -467,6 +467,7 @@ export function NewVideoPage() {
                       <span className="va-media-chip-name">
                         Screen recording · {clock(recording.usedSec)}
                         {recording.cropped ? ' · cropped' : ''}
+                        {recording.boxes ? ` · ${String(recording.boxes)} hidden` : ''}
                       </span>
                       {planning ? null : (
                         <ActionIcon

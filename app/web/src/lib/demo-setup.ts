@@ -91,7 +91,11 @@ export interface SetupState {
   crop?: CropBox | null
 }
 
-/** A recording set up and added to the New video form: Create video sends `input` as the request's `recording`. */
+/**
+ * A recording set up and added to the New video form: Create video sends `input` as the request's `recording`. From
+ * Record screen, the trim, crop and boxes are already in the uploaded file (lib/recording-bake), so `input` then has
+ * only the media id, privacy mode and hide words.
+ */
 export interface AttachedRecording {
   input: ReturnType<typeof recordingInput> & { privacy?: true; hideStrings?: string[] }
   filename: string
@@ -99,7 +103,9 @@ export interface AttachedRecording {
   /** Seconds of the recording used, after the trim. */
   usedSec: number
   cropped: boolean
-  /** Anything hidden (boxes, privacy mode, hide words): the video starts private. */
+  /** Boxes were drawn over parts of the picture. */
+  boxes: number
+  /** Privacy mode or hide words: the run hides more, and the video starts private. */
   hides: boolean
 }
 

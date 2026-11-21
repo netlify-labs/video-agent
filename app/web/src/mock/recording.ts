@@ -84,13 +84,18 @@ const recordings: MockRecording[] =
       ]
 /** Marks this route's own config request, so it passes through. */
 const SKIP = 'x-mock-recording-pass'
-const sessions = new Map<string, { id: string; filename: string; size: number; parts: Set<number> }>()
+const sessions = new Map<
+  string,
+  { id: string; filename: string; size: number; parts: Set<number>; bytes: Map<number, Blob> }
+>()
 
 declare global {
   interface Window {
     __mockDemoConfirms?: string[][]
     __mockDemoCreates?: unknown[]
     __mockTraces?: Record<string, unknown>
+    /** Uploaded screen recordings, by media id: a blob URL of the bytes that were sent. */
+    __mockRecordingFiles?: Record<string, string>
   }
 }
 
@@ -133,6 +138,7 @@ export async function recordingRoute(
       filename: String(b.filename),
       size: Number(b.size),
       parts: new Set<number>(),
+      bytes: new Map<number, Blob>(),
     }
     sessions.set(s.id, s)
     return json(session(s), 201)
@@ -143,14 +149,21 @@ export async function recordingRoute(
     if (!s) return fail(404, 'not_found', 'Upload not found.')
     if (up[2] !== undefined) {
       s.parts.add(Number(up[2]))
+      // The bytes are kept, so the uploaded recording is what plays afterwards (and tests can look at it).
+      const body = init?.body ?? (input instanceof Request ? await input.clone().blob() : null)
+      if (body) s.bytes.set(Number(up[2]), body instanceof Blob ? body : new Blob([body as BlobPart]))
       return json({ idx: Number(up[2]), sha256: 'x', duplicate: false })
     }
     if (up[3]) {
+      const parts = [...s.bytes.entries()].sort((a, b) => a[0] - b[0]).map(([, blob]) => blob)
+      const file = parts.length ? URL.createObjectURL(new Blob(parts, { type: 'video/mp4' })) : null
       const m = item(`med_screen_up${String(recordings.length + 1)}`, s.filename, {
         bytes: s.size,
         durationSec: 30,
         createdAt: new Date().toISOString(),
+        ...(file ? { urls: { file, original: file, poster: null } } : {}),
       })
+      if (file) window.__mockRecordingFiles = { ...window.__mockRecordingFiles, [m.id]: file }
       recordings.unshift(m)
       return json({ ...session(s), status: 'done', mediaId: m.id }, 202)
     }

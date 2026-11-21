@@ -13,6 +13,7 @@ import {
   WHOLE,
   type CropBox,
 } from './demo-setup'
+import { bakeEdits, boxRect, hasEdits } from './recording-bake'
 import { convertSettings, needsConversion, type VideoFacts } from './recording-convert'
 import { bitrateFor, captureMode, encodedSize } from './screen-capture'
 
@@ -151,5 +152,36 @@ describe('setup', () => {
     // At (or just before) the end, and past it: from the start again.
     expect(playFrom(19.95, [5, 20])).toBe(5)
     expect(playFrom(25, [5, 20])).toBe(5)
+  })
+
+  it('Record screen: the edits setup made become pixels and seconds of the file', () => {
+    const frame = { width: 1280, height: 720 }
+    expect(bakeEdits({}, frame)).toEqual({ trim: null, crop: null, boxes: [] })
+    expect(hasEdits(bakeEdits({}, frame))).toBe(false)
+    const e = bakeEdits(
+      {
+        trim: [1, 4.5],
+        crop: [0.2, 0.2, 0.6, 0.7],
+        redact: [{ start: 2, end: 4, box: [0.4, 0.4, 0.2, 0.2], style: 'solid' }],
+      },
+      frame,
+    )
+    expect(e.trim).toEqual([1, 4.5])
+    expect(e.crop).toEqual({ left: 256, top: 144, width: 768, height: 504 })
+    expect(e.boxes).toEqual([{ x: 0.4, y: 0.4, w: 0.2, h: 0.2, start: 2, end: 4, solid: true }])
+    expect(hasEdits(e)).toBe(true)
+    expect(hasEdits(bakeEdits({ trim: [1, 3] }, frame))).toBe(true)
+    const box = e.boxes[0]
+    if (!box) throw new Error('no box')
+    const out = { width: 768, height: 504 }
+    // Inside its span: its place in the cropped picture. Outside it: nothing.
+    expect(boxRect(box, 3, frame, e.crop, out)).toEqual([256, 144, 256, 144])
+    expect(boxRect(box, 1.9, frame, e.crop, out)).toBeNull()
+    expect(boxRect(box, 4, frame, e.crop, out)).toBeNull()
+    // Without a crop, and scaled to a smaller output.
+    expect(boxRect(box, 3, frame, null, { width: 640, height: 360 })).toEqual([256, 144, 128, 72])
+    // Half outside the crop is cut to it; wholly outside is nothing.
+    expect(boxRect({ ...box, x: 0.1, w: 0.2 }, 3, frame, e.crop, out)).toEqual([0, 144, 128, 144])
+    expect(boxRect({ ...box, x: 0.85, w: 0.1 }, 3, frame, e.crop, out)).toBeNull()
   })
 })

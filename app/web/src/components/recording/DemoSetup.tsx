@@ -45,7 +45,12 @@ import { LookControl, useLooks } from '../LookPicker'
 import { SoundControl, type Sound } from '../SoundControl'
 import { VOICE_OFF, VoiceoverControl, voiceInput, type VoiceState } from '../VoiceoverControl'
 
-type Media = paths['/api/v1/media/{id}']['get']['responses'][200]['content']['application/json']
+type LibraryMedia = paths['/api/v1/media/{id}']['get']['responses'][200]['content']['application/json']
+/** What setup needs of a recording: a library item, or a file still on this device (Record screen on New video). */
+export type SetupMedia = Pick<
+  LibraryMedia,
+  'id' | 'filename' | 'title' | 'width' | 'height' | 'durationSec' | 'hasTrace'
+> & { urls?: { original: string; poster: string | null } | null | undefined }
 
 const SHAPES = [
   { value: '16:9', label: 'Landscape' },
@@ -224,7 +229,7 @@ export function BoxCanvas(props: {
 }
 
 export function DemoSetup(props: {
-  media: Media
+  media: SetupMedia
   onBack: () => void
   /**
    * New video's Record screen: only the recording's own setup shows (play, trim, crop, hide, privacy), and the button
@@ -486,8 +491,9 @@ export function DemoSetup(props: {
                   : 'Video Agent will look for your cursor in the picture.'}
               </Text>
               <Text size="sm">
-                People who can open this video can also watch the full recording, including the parts that get
-                cut and hidden.
+                {attach
+                  ? 'Your trim, crop and boxes are applied before it uploads: only the edited clip goes to your library.'
+                  : 'People who can open this video can also watch the full recording, including the parts that get cut and hidden.'}
               </Text>
               <Text size="sm">Video Agent's AI looks at frames from your recording.</Text>
             </Stack>
@@ -569,7 +575,7 @@ export function DemoSetup(props: {
             setHideText(e.currentTarget.value)
           }}
         />
-        {boxes.length || privacy || hideStrings.length ? (
+        {(attach ? false : boxes.length > 0) || privacy || hideStrings.length ? (
           <Text size="sm" c="var(--va-muted)" data-testid="private-hint">
             <IconEyeOff size={14} style={{ verticalAlign: -2 }} /> This {attach ? 'video' : 'demo'} starts
             private (only you and admins) because something is hidden. You can share it once you've checked
@@ -586,7 +592,8 @@ export function DemoSetup(props: {
                   poster: media.urls?.poster ?? null,
                   usedSec: trim[1] - trim[0],
                   cropped,
-                  hides: boxes.length > 0 || privacy || hideStrings.length > 0,
+                  boxes: boxes.length,
+                  hides: privacy || hideStrings.length > 0,
                 })
               }}
             >

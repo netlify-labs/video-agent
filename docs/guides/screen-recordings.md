@@ -23,6 +23,12 @@ versions, comments, the editor, publishing and remix all work.
 - **The setup page** (New video → From a screen recording): play the recording (play and pause, a scrubber, its
   sound), trim its ends, crop the picture and draw boxes over anything private. Playback covers the part the trim
   keeps and stops at its end.
+- **Record screen on New video:** the button beside Add media records the screen there and then; when you stop, the
+  same setup opens in a dialog on the file still on your device. **Add to video** applies your trim, crop and boxes to
+  the file in the browser, uploads that edited clip, and puts it on the form with the picked media. The library gets
+  only the edited clip: what you cut, cropped away or covered is never uploaded, and can't be brought back. Create
+  video then makes a demo of it. (On the From a screen recording page, and through the API, the file is stored as
+  recorded and the trim, crop and boxes are applied when the video is rendered.)
 - **Crop:** when the recording shows more than the demo should (a whole screen with the menu bar, the tabs and the
   dock, say), keep only part of the picture: **Crop** on the setup page (drag the corners and edges, or draw a
   rectangle), `"crop": [x, y, w, h]` in `recording`, or `--crop x,y,w,h` in the CLI (`create --recording`, `demo`,
