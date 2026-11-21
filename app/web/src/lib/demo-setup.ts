@@ -91,6 +91,18 @@ export interface SetupState {
   crop?: CropBox | null
 }
 
+/** A recording set up and added to the New video form: Create video sends `input` as the request's `recording`. */
+export interface AttachedRecording {
+  input: ReturnType<typeof recordingInput> & { privacy?: true; hideStrings?: string[] }
+  filename: string
+  poster: string | null
+  /** Seconds of the recording used, after the trim. */
+  usedSec: number
+  cropped: boolean
+  /** Anything hidden (boxes, privacy mode, hide words): the video starts private. */
+  hides: boolean
+}
+
 /** The crop as it's sent: to 4 places, inside the frame. */
 function cropInput(c: CropBox): CropBox {
   const r4 = (n: number) => Math.round(n * 1e4) / 1e4

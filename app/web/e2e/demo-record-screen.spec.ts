@@ -51,7 +51,7 @@ test('record the screen in the app: a shared canvas becomes a recording and open
   )
 })
 
-test('New video: Record screen beside Add media records, then setup opens in a dialog and makes the demo', async ({
+test('New video: Record screen beside Add media records, its setup opens in a dialog, and the recording is added to the form', async ({
   page,
 }) => {
   await page.addInitScript({
@@ -74,12 +74,13 @@ test('New video: Record screen beside Add media records, then setup opens in a d
   await page
     .getByLabel('What should the video show?')
     .fill('A short demo of the settings page for new admins.')
-  // Right beside Add media, on the same line.
+  // Right beside Add media, on the same line, and both look like buttons (bordered).
   const add = page.getByRole('button', { name: 'Add media' })
   const record = page.getByRole('button', { name: 'Record screen' })
   await expect(record).toBeVisible()
   const [a, b] = [await add.boundingBox(), await record.boundingBox()]
   expect(Math.abs((a?.y ?? 0) - (b?.y ?? 99))).toBeLessThan(4)
+  for (const button of [add, record]) await expect(button).toHaveAttribute('data-variant', 'default')
   await record.click()
   const dialog = page.getByRole('dialog', { name: 'Record your screen' })
   const cant = dialog.getByText("This browser can't record the screen here")
@@ -94,19 +95,54 @@ test('New video: Record screen beside Add media records, then setup opens in a d
   await dialog.getByRole('button', { name: 'Choose what to record' }).click()
   await expect(dialog.getByTestId('record-elapsed')).toContainText('0:01', { timeout: 10_000 })
   await dialog.getByRole('button', { name: 'Stop recording' }).click()
-  // Uploaded: the same setup as /new/demo, in the dialog, with the prompt already typed.
-  const setup = page.getByRole('dialog', { name: 'Make a demo from your recording' })
+  // Uploaded: the recording's own setup (the same component as /new/demo), without the demo's form.
+  const setup = page.getByRole('dialog', { name: 'Set up your recording' })
   await expect(setup.getByTestId('demo-setup')).toBeVisible({ timeout: 30_000 })
-  await expect(page).toHaveURL(/\/new$/)
   await expect(setup.getByTestId('recording-player')).toBeVisible()
-  await expect(setup.getByRole('button', { name: 'Crop', exact: true })).toBeVisible()
-  await expect(setup.getByLabel('What should the demo show?')).toHaveValue(
+  await expect(setup.getByRole('slider', { name: 'Start' })).toBeVisible()
+  await expect(setup.getByLabel('Privacy mode')).toBeVisible()
+  await expect(setup.getByLabel('What should the demo show?')).toHaveCount(0)
+  await expect(setup.getByRole('button', { name: 'Make it' })).toHaveCount(0)
+  // Crop it: draw a rectangle on the picture.
+  await setup.getByRole('button', { name: 'Crop', exact: true }).click()
+  const canvas = setup.getByTestId('box-canvas')
+  await canvas.scrollIntoViewIfNeeded()
+  const r = await canvas.boundingBox()
+  if (!r) throw new Error('no canvas')
+  await page.mouse.move(r.x + r.width * 0.2, r.y + r.height * 0.2)
+  await page.mouse.down()
+  await page.mouse.move(r.x + r.width * 0.8, r.y + r.height * 0.9, { steps: 5 })
+  await page.mouse.up()
+  await setup.getByRole('button', { name: 'Done' }).click()
+  await setup.getByRole('button', { name: 'Add to video' }).click()
+
+  // It's on the form with the picked media, removable; nothing was created yet.
+  await expect(setup).toHaveCount(0)
+  await expect(page).toHaveURL(/\/new$/)
+  const chip = page.getByTestId('chip-recording')
+  await expect(chip).toContainText('Screen recording')
+  await expect(chip).toContainText('cropped')
+  await expect(page.getByTestId('recording-note')).toContainText('the video is a demo of it')
+  expect(await page.evaluate<unknown[]>('window.__mockDemoCreates ?? []')).toHaveLength(0)
+  await expect(page.getByLabel('What should the video show?')).toHaveValue(
     'A short demo of the settings page for new admins.',
   )
-  await setup.getByRole('button', { name: 'Make it' }).click()
+  await expect(page.getByRole('button', { name: 'Remove the screen recording' })).toBeVisible()
+
+  // Create video sends it as the request's recording, with its crop.
+  await page.getByRole('button', { name: 'Create video' }).click()
+  await page.getByRole('button', { name: /Create it now/ }).click()
   await expect(page).toHaveURL(/\/videos\//)
-  const creates = await page.evaluate<{ recording?: { mediaId: string } }[]>('window.__mockDemoCreates ?? []')
-  expect(creates.at(-1)?.recording?.mediaId).toMatch(/^med_screen_up/)
+  const creates = await page.evaluate<
+    { prompt: string; engine?: string; recording?: { mediaId: string; crop?: number[] } }[]
+  >('window.__mockDemoCreates ?? []')
+  const body = creates.at(-1)
+  console.log(JSON.stringify({ test: 'demo-recording', case: 'new-video-record', body }))
+  expect(body?.prompt).toBe('A short demo of the settings page for new admins.')
+  expect(body?.engine).toBe('hyperframes')
+  expect(body?.recording?.mediaId).toMatch(/^med_screen_up/)
+  expect(body?.recording?.crop?.[0]).toBeCloseTo(0.2, 1)
+  expect(body?.recording?.crop?.[2]).toBeCloseTo(0.6, 1)
 })
 
 test('New video: no Record screen button when screen recording is off', async ({ page }) => {

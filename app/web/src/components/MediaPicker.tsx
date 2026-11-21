@@ -425,6 +425,8 @@ export function MediaChips(props: {
   button?: boolean
   /** Shown beside the Add media button (New video's Record screen). */
   extra?: ReactNode
+  /** More chips after the picked media (New video's screen recording). */
+  chips?: ReactNode
 }) {
   const [open, setOpen] = useState(false)
   if (props.button === false && !props.value.length) return null
@@ -460,11 +462,11 @@ export function MediaChips(props: {
             )}
           </span>
         ))}
+        {props.chips}
         {props.button === false ? null : (
           <Button
             size="compact-sm"
-            variant="subtle"
-            color="gray"
+            variant="default"
             leftSection={<IconPhoto size={14} />}
             disabled={props.disabled === true}
             onClick={() => {

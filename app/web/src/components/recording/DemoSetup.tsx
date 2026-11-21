@@ -34,6 +34,7 @@ import {
   MIN_TRIM,
   recordingInput,
   WHOLE,
+  type AttachedRecording,
   type CropBox,
   type SetupBox,
 } from '../../lib/demo-setup'
@@ -225,9 +226,15 @@ export function BoxCanvas(props: {
 export function DemoSetup(props: {
   media: Media
   onBack: () => void
-  /** What the person had already typed (New video's prompt box). */
-  initialPrompt?: string
+  /**
+   * New video's Record screen: only the recording's own setup shows (play, trim, crop, hide, privacy), and the button
+   * hands the result to the form it's added to, which has the prompt, shape and the rest and creates the video.
+   */
+  onAttach?: (r: AttachedRecording) => void
+  /** With onAttach: the form's shape, for the low-resolution note. */
+  aspect?: Shape
 }) {
+  const attach = props.onAttach
   const { media } = props
   const duration = media.durationSec ?? 0
   const navigate = useNavigate()
@@ -245,10 +252,10 @@ export function DemoSetup(props: {
       ? { width: Math.round(crop[2] * media.width), height: Math.round(crop[3] * media.height) }
       : null
   const [selected, setSelected] = useState<string | null>(null)
-  const [prompt, setPrompt] = useState(props.initialPrompt ?? '')
+  const [prompt, setPrompt] = useState('')
   const [length, setLength] = useState<number | string>(defaultLength(duration))
   const [lengthTouched, setLengthTouched] = useState(false)
-  const [shape, setShape] = useState<Shape>('16:9')
+  const [shape, setShape] = useState<Shape>(props.aspect ?? '16:9')
   const [sound, setSound] = useState<Sound>('silent')
   const [voice, setVoice] = useState<VoiceState>(VOICE_OFF)
   const [look, setLook] = useState<string | null | undefined>(undefined)
@@ -285,18 +292,18 @@ export function DemoSetup(props: {
   // Too small to zoom in sharply in this shape (the planner holds the camera back; app/server/lib/recording.ts).
   const small = kept !== null && kept.width > 0 && sharpZoomMax(kept, shape, 'wallpaper') < ZOOM_MIN
   const valid = prompt.trim().length >= 10 && Number(length) >= 3
+  const recordingBody = () => ({
+    ...recordingInput({ mediaId: media.id, duration, trim, boxes, crop }),
+    ...(privacy ? { privacy: true as const } : {}),
+    ...(hideStrings.length ? { hideStrings } : {}),
+  })
   const submit = () => {
-    const recording = recordingInput({ mediaId: media.id, duration, trim, boxes, crop })
     const body = {
       prompt: prompt.trim(),
       aspect: shape,
       durationSec: Number(length),
       sound,
-      recording: {
-        ...recording,
-        ...(privacy ? { privacy: true } : {}),
-        ...(hideStrings.length ? { hideStrings } : {}),
-      },
+      recording: recordingBody(),
       ...(quick ? { agent: false } : voice.enabled ? { voiceover: voiceInput(voice) } : {}),
       ...(chosenLook !== undefined ? { look: chosenLook } : {}),
     }
@@ -489,56 +496,60 @@ export function DemoSetup(props: {
       </Card>
 
       <Stack gap="md">
-        <Textarea
-          label="What should the demo show?"
-          description="The story, the audience, any words to put on screen."
-          placeholder="A 45-second demo of adding a webhook: open Settings, add the URL, send a test event."
-          autosize
-          minRows={3}
-          maxLength={4000}
-          value={prompt}
-          onChange={(e) => {
-            setPrompt(e.currentTarget.value)
-          }}
-        />
-        <Group align="end" gap="md">
-          <NumberInput
-            label="Length"
-            description="About 0.4 of what's used"
-            min={3}
-            max={300}
-            suffix=" s"
-            w={160}
-            value={length}
-            onChange={(v) => {
-              setLength(v)
-              setLengthTouched(true)
-            }}
-          />
-          <div>
-            <Text size="sm" fw={500} mb={8}>
-              Shape
-            </Text>
-            <SegmentedControl
-              value={shape}
-              onChange={(v) => {
-                setShape(v)
+        {attach ? null : (
+          <>
+            <Textarea
+              label="What should the demo show?"
+              description="The story, the audience, any words to put on screen."
+              placeholder="A 45-second demo of adding a webhook: open Settings, add the URL, send a test event."
+              autosize
+              minRows={3}
+              maxLength={4000}
+              value={prompt}
+              onChange={(e) => {
+                setPrompt(e.currentTarget.value)
               }}
-              data={SHAPES.map((s) => ({ value: s.value, label: s.label }))}
             />
-          </div>
-        </Group>
-        <SoundControl value={sound} media={[]} onChange={setSound} />
-        {quick ? null : <VoiceoverControl value={voice} onChange={setVoice} />}
-        <LookControl value={chosenLook} onChange={setLook} only={looksForDemo} />
-        <Checkbox
-          label="Quick demo"
-          description="A scene per step with a stock intro and outro, made without the agent writing it. No voice-over."
-          checked={quick}
-          onChange={(e) => {
-            setQuick(e.currentTarget.checked)
-          }}
-        />
+            <Group align="end" gap="md">
+              <NumberInput
+                label="Length"
+                description="About 0.4 of what's used"
+                min={3}
+                max={300}
+                suffix=" s"
+                w={160}
+                value={length}
+                onChange={(v) => {
+                  setLength(v)
+                  setLengthTouched(true)
+                }}
+              />
+              <div>
+                <Text size="sm" fw={500} mb={8}>
+                  Shape
+                </Text>
+                <SegmentedControl
+                  value={shape}
+                  onChange={(v) => {
+                    setShape(v)
+                  }}
+                  data={SHAPES.map((s) => ({ value: s.value, label: s.label }))}
+                />
+              </div>
+            </Group>
+            <SoundControl value={sound} media={[]} onChange={setSound} />
+            {quick ? null : <VoiceoverControl value={voice} onChange={setVoice} />}
+            <LookControl value={chosenLook} onChange={setLook} only={looksForDemo} />
+            <Checkbox
+              label="Quick demo"
+              description="A scene per step with a stock intro and outro, made without the agent writing it. No voice-over."
+              checked={quick}
+              onChange={(e) => {
+                setQuick(e.currentTarget.checked)
+              }}
+            />
+          </>
+        )}
         <Checkbox
           label="Privacy mode"
           description="Off: only the areas you draw (and password fields) are hidden; names and URLs stay visible. On: Video Agent also finds emails, keys, tokens, URLs and names on screen and hides them for you to keep or remove."
@@ -560,18 +571,41 @@ export function DemoSetup(props: {
         />
         {boxes.length || privacy || hideStrings.length ? (
           <Text size="sm" c="var(--va-muted)" data-testid="private-hint">
-            <IconEyeOff size={14} style={{ verticalAlign: -2 }} /> This demo starts private (only you and
-            admins) because something is hidden. You can share it once you've checked it.
+            <IconEyeOff size={14} style={{ verticalAlign: -2 }} /> This {attach ? 'video' : 'demo'} starts
+            private (only you and admins) because something is hidden. You can share it once you've checked
+            it.
           </Text>
         ) : null}
-        <Group>
-          <Button onClick={submit} disabled={!valid} loading={create.isPending}>
-            Make it
-          </Button>
-          <Button variant="subtle" onClick={props.onBack}>
-            Choose another recording
-          </Button>
-        </Group>
+        {attach ? (
+          <Group>
+            <Button
+              onClick={() => {
+                attach({
+                  input: recordingBody(),
+                  filename: media.title ?? media.filename,
+                  poster: media.urls?.poster ?? null,
+                  usedSec: trim[1] - trim[0],
+                  cropped,
+                  hides: boxes.length > 0 || privacy || hideStrings.length > 0,
+                })
+              }}
+            >
+              Add to video
+            </Button>
+            <Button variant="subtle" onClick={props.onBack}>
+              Record again
+            </Button>
+          </Group>
+        ) : (
+          <Group>
+            <Button onClick={submit} disabled={!valid} loading={create.isPending}>
+              Make it
+            </Button>
+            <Button variant="subtle" onClick={props.onBack}>
+              Choose another recording
+            </Button>
+          </Group>
+        )}
       </Stack>
     </Stack>
   )

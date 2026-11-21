@@ -19,7 +19,14 @@ import {
 import { TagsField } from '../components/TagsField'
 import { useMediaQuery } from '@mantine/hooks'
 import { notifications } from '@mantine/notifications'
-import { IconArrowsShuffle, IconBolt, IconCopy, IconListCheck, IconScreenShare } from '@tabler/icons-react'
+import {
+  IconArrowsShuffle,
+  IconBolt,
+  IconCopy,
+  IconListCheck,
+  IconScreenShare,
+  IconX,
+} from '@tabler/icons-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router'
@@ -39,6 +46,7 @@ import {
 } from '../lib/engines'
 import { PlanPanel } from '../components/PlanPanel'
 import { RecordScreenButton } from '../components/recording/RecordScreenButton'
+import type { AttachedRecording } from '../lib/demo-setup'
 import { RemixForm, RemixSourcePicker, latestReady, useCanRemix } from '../components/RemixDialog'
 import { SoundControl, soundAfterPick, type Sound } from '../components/SoundControl'
 import { VOICE_OFF, VoiceoverControl, voiceInput, type VoiceState } from '../components/VoiceoverControl'
@@ -189,6 +197,9 @@ function RecentMine({ onRemix }: { onRemix: ((video: Video, version: Version) =>
   )
 }
 
+/** m:ss */
+const clock = (s: number) => `${String(Math.floor(s / 60))}:${String(Math.round(s % 60)).padStart(2, '0')}`
+
 export function NewVideoPage() {
   const [prompt, setPrompt] = useState('')
   const [shape, setShape] = useState<Shape>('16:9')
@@ -197,6 +208,8 @@ export function NewVideoPage() {
   const [title, setTitle] = useState('')
   const [tags, setTags] = useState<string[]>([])
   const [media, setMedia] = useState<Media[]>([])
+  // A screen recording made with Record screen, set up (trim, crop, hide) and added to this form.
+  const [recording, setRecording] = useState<AttachedRecording | null>(null)
   const [sound, setSound] = useState<Sound>('silent')
   const [soundTouched, setSoundTouched] = useState(false)
   const [voice, setVoice] = useState<VoiceState>(VOICE_OFF)
@@ -249,8 +262,13 @@ export function NewVideoPage() {
         // A plan carries the voice-over (with its narration), so only a direct create sends it.
         ...(sentVoice && !planId ? { voiceover: voiceInput(voice) } : {}),
         ...(look !== undefined ? { look } : {}),
-        // Only a choice the person made; a plan already carries its own.
-        ...(engineAsked === engine && !planId ? { engine } : {}),
+        // A screen recording makes the video a demo of it, with its trim, crop and hidden areas (HyperFrames only).
+        ...(recording
+          ? { recording: recording.input, ...(planId ? {} : { engine: 'hyperframes' as const }) }
+          : // Only a choice the person made; a plan already carries its own.
+            engineAsked === engine && !planId
+            ? { engine }
+            : {}),
       },
       params: { header: { 'idempotency-key': key } },
     })
@@ -437,13 +455,48 @@ export function NewVideoPage() {
                   setMedia(next)
                 }}
                 disabled={planning}
-                // Record the screen right here: its setup opens in a dialog and makes the demo (as /new/demo does).
+                // A screen recording made here sits with the picked media; Create video sends it as `recording`.
+                chips={
+                  recording ? (
+                    <span className="va-media-chip" data-testid="chip-recording" style={{ maxWidth: 320 }}>
+                      {recording.poster ? (
+                        <img src={recording.poster} alt="" />
+                      ) : (
+                        <IconScreenShare size={14} />
+                      )}
+                      <span className="va-media-chip-name">
+                        Screen recording · {clock(recording.usedSec)}
+                        {recording.cropped ? ' · cropped' : ''}
+                      </span>
+                      {planning ? null : (
+                        <ActionIcon
+                          size="xs"
+                          variant="subtle"
+                          color="gray"
+                          aria-label="Remove the screen recording"
+                          onClick={() => {
+                            setRecording(null)
+                          }}
+                        >
+                          <IconX size={12} />
+                        </ActionIcon>
+                      )}
+                    </span>
+                  ) : null
+                }
                 extra={
                   config.data?.features.includes('screen_recording') ? (
-                    <RecordScreenButton prompt={prompt} disabled={planning} />
+                    <RecordScreenButton aspect={shape} disabled={planning} onAttach={setRecording} />
                   ) : null
                 }
               />
+              {recording ? (
+                <Text size="xs" c="var(--va-muted)" data-testid="recording-note">
+                  With a screen recording, the video is a demo of it: the agent turns its steps into scenes
+                  with zooms and a cursor, around what you describe. It&apos;s made with HyperFrames
+                  {recording.hides ? ', and starts private because something is hidden' : ''}.
+                </Text>
+              ) : null}
               <div>
                 <Text size="sm" fw={500} mb={8} id="shape-label">
                   Shape

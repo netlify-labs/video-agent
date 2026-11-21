@@ -1,16 +1,23 @@
-// New video's "Record screen" button, beside Add media: record the screen without leaving the page, and when the
-// recording is uploaded its setup (play, trim, crop, hide) opens in the same dialog. It's the /new/demo flow in a
-// dialog, made of the same parts (RecordingSource opened on recording, then DemoSetup): "Make it" there creates the
-// demo and goes to it. What was typed in the prompt box comes along.
+// New video's "Record screen" button, beside Add media: record the screen without leaving the page. When the
+// recording is uploaded, its setup (play, trim, crop, hide, privacy) opens in the same dialog, and "Add to video"
+// puts it on the form like a picked media item. Create video then sends it as the request's `recording`, so the
+// trim, crop and hidden areas all carry over. The same parts as /new/demo: RecordingSource opened on recording, then
+// DemoSetup with only the recording's own settings.
 import { Alert, Button, Loader, Modal } from '@mantine/core'
 import { useMediaQuery } from '@mantine/hooks'
 import { IconPlayerRecordFilled } from '@tabler/icons-react'
 import { useState } from 'react'
 import { $api, errorMessage } from '../../api/client'
+import type { AttachedRecording } from '../../lib/demo-setup'
 import { DemoSetup } from './DemoSetup'
 import { RecordingSource } from './RecordingSource'
 
-export function RecordScreenButton(props: { prompt?: string; disabled?: boolean }) {
+export function RecordScreenButton(props: {
+  onAttach: (r: AttachedRecording) => void
+  /** The form's shape (for setup's note about small recordings). */
+  aspect?: '16:9' | '9:16' | '1:1' | '4:5'
+  disabled?: boolean
+}) {
   const [open, setOpen] = useState(false)
   const [mediaId, setMediaId] = useState<string | null>(null)
   const phone = useMediaQuery('(max-width: 48em)')
@@ -28,8 +35,7 @@ export function RecordScreenButton(props: { prompt?: string; disabled?: boolean 
     <>
       <Button
         size="compact-sm"
-        variant="subtle"
-        color="gray"
+        variant="default"
         leftSection={<IconPlayerRecordFilled size={14} color="var(--mantine-color-red-6)" />}
         disabled={props.disabled === true}
         onClick={() => {
@@ -42,7 +48,7 @@ export function RecordScreenButton(props: { prompt?: string; disabled?: boolean 
         <Modal
           opened
           onClose={close}
-          title={mediaId ? 'Make a demo from your recording' : 'Record your screen'}
+          title={mediaId ? 'Set up your recording' : 'Record your screen'}
           size={mediaId ? 960 : 'lg'}
           padding={phone ? 'md' : 'xl'}
           fullScreen={phone}
@@ -60,7 +66,11 @@ export function RecordScreenButton(props: { prompt?: string; disabled?: boolean 
           ) : (
             <DemoSetup
               media={media.data}
-              initialPrompt={props.prompt ?? ''}
+              {...(props.aspect ? { aspect: props.aspect } : {})}
+              onAttach={(r) => {
+                props.onAttach(r)
+                close()
+              }}
               onBack={() => {
                 setMediaId(null)
               }}
