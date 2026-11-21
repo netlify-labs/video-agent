@@ -591,7 +591,12 @@ export function NewVideoPage() {
               {voiceAllowed ? (
                 <VoiceoverControl value={voice} onChange={setVoice} disabled={planning} planning={canPlan} />
               ) : null}
-              <LookControl value={look} onChange={setLook} disabled={planning} />
+              <LookControl
+                value={look}
+                onChange={setLook}
+                disabled={planning}
+                label="What style / look should the video have?"
+              />
               {engineChoices.length > 1 ? (
                 <Select
                   label="Engine"
