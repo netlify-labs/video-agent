@@ -414,6 +414,7 @@ export function NewVideoPage() {
               <Textarea
                 label="What should the video show?"
                 description="Who it's for, the one message, any exact words to show on screen, and how it should end."
+                placeholder="Describe what you want to see. For example: a 30-second launch video for our new webhooks feature, for developers, ending on “Try it today”."
                 autosize
                 minRows={6}
                 maxLength={4000}
