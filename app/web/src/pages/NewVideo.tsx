@@ -19,7 +19,7 @@ import {
 import { TagsField } from '../components/TagsField'
 import { useMediaQuery } from '@mantine/hooks'
 import { notifications } from '@mantine/notifications'
-import { IconArrowsShuffle, IconBolt, IconListCheck } from '@tabler/icons-react'
+import { IconArrowsShuffle, IconBolt, IconCopy, IconListCheck, IconScreenShare } from '@tabler/icons-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router'
@@ -372,28 +372,33 @@ export function NewVideoPage() {
         sub={
           <>
             Describe it once. The agent writes, checks and renders it, usually in 3 to 8 minutes.
-            {canRemix ? (
-              <>
-                {' '}
-                <Anchor
-                  component="button"
-                  type="button"
-                  inherit
-                  onClick={() => {
-                    setPickingSource(true)
-                  }}
-                >
-                  Start from an existing video
-                </Anchor>
-              </>
-            ) : null}
-            {config.data?.features.includes('screen_recording') ? (
-              <>
-                {' '}
-                <Anchor component={Link} to="/new/demo" inherit>
-                  From a screen recording
-                </Anchor>
-              </>
+            {canRemix || config.data?.features.includes('screen_recording') ? (
+              // Other ways to start, as separate buttons so they don't read as one link.
+              <Group gap="xs" mt="xs">
+                {canRemix ? (
+                  <Button
+                    variant="default"
+                    size="compact-sm"
+                    leftSection={<IconCopy size={15} />}
+                    onClick={() => {
+                      setPickingSource(true)
+                    }}
+                  >
+                    Start from an existing video
+                  </Button>
+                ) : null}
+                {config.data?.features.includes('screen_recording') ? (
+                  <Button
+                    component={Link}
+                    to="/new/demo"
+                    variant="default"
+                    size="compact-sm"
+                    leftSection={<IconScreenShare size={15} />}
+                  >
+                    From a screen recording
+                  </Button>
+                ) : null}
+              </Group>
             ) : null}
           </>
         }

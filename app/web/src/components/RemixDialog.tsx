@@ -18,12 +18,12 @@ import {
   UnstyledButton,
 } from '@mantine/core'
 import { useDebouncedValue, useMediaQuery } from '@mantine/hooks'
-import { IconChevronDown, IconChevronRight, IconSearch } from '@tabler/icons-react'
+import { IconChevronDown, IconChevronRight, IconPlayerPlay, IconSearch } from '@tabler/icons-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router'
 import { $api, newIdempotencyKey, useCanCreate, type Version, type Video } from '../api/client'
-import { showError } from './bits'
+import { VersionImage, fileUrl, imageUrl, showError } from './bits'
 import { LanguageSelect } from './LanguageSelect'
 import { MediaChips, type Media } from './MediaPicker'
 import { PlanPanel } from './PlanPanel'
@@ -351,92 +351,139 @@ export function RemixSourcePicker(props: {
     ? [...chosen.versions].filter((v) => v.status === 'ready').sort((a, b) => b.n - a.n)
     : []
   const version = chosen ? (readyVersions.find((v) => String(v.n) === n) ?? readyVersions[0]) : undefined
+  const owner = (v: Video) => v.owner.name ?? v.owner.email?.split('@')[0]
+  const pickRow = (
+    <Group justify="space-between" align="flex-end" wrap="nowrap">
+      <Select
+        label="Version"
+        data={readyVersions.map((v) => ({ value: String(v.n), label: `v${v.n}` }))}
+        value={version ? String(version.n) : null}
+        allowDeselect={false}
+        onChange={setN}
+        w={140}
+      />
+      <Button
+        onClick={() => {
+          if (chosen && version) props.onPick(chosen, version)
+        }}
+      >
+        Remix this
+      </Button>
+    </Group>
+  )
   return (
     <Modal
       opened={props.opened}
       onClose={props.onClose}
       title="Start from an existing video"
-      size="lg"
+      size={1040}
       fullScreen={phone}
     >
-      <Stack gap="sm">
-        <TextInput
-          aria-label="Search videos"
-          placeholder="Search prompts and titles"
-          leftSection={<IconSearch size={16} />}
-          value={q}
-          data-autofocus
-          onChange={(e) => {
-            setQ(e.currentTarget.value)
-          }}
-        />
-        <SegmentedControl
-          value={scope}
-          onChange={(v) => {
-            setScope(v)
-          }}
-          data={[
-            { label: 'Everyone', value: 'all' },
-            { label: 'Mine', value: 'me' },
-            { label: 'Favorites', value: 'favorites' },
-          ]}
-        />
-        <Stack gap={4} mah={360} style={{ overflowY: 'auto' }} role="listbox" aria-label="Videos">
-          {list.isLoading ? (
-            <Text size="sm" c="var(--va-muted)">
-              Loading…
-            </Text>
-          ) : items.length === 0 ? (
-            <Text size="sm" c="var(--va-muted)">
-              {scope === 'favorites' && !debounced
-                ? 'No favorites yet. Star a video in the Library to find it here.'
-                : 'No ready videos match.'}
-            </Text>
-          ) : (
-            items.map((v) => (
-              <UnstyledButton
-                key={v.id}
-                role="option"
-                aria-selected={chosen?.id === v.id}
-                className="va-remix-pick"
-                data-selected={chosen?.id === v.id ? 'true' : undefined}
-                onClick={() => {
-                  setChosen(v)
-                  setN(null)
-                }}
-              >
-                <Text size="sm" fw={500} lineClamp={1}>
-                  {v.title}
-                </Text>
-                <Text size="xs" c="var(--va-muted)" lineClamp={1}>
-                  {[v.owner.name ?? v.owner.email?.split('@')[0], v.aspect, latestReady(v)?.prompt]
-                    .filter(Boolean)
-                    .join(' · ')}
-                </Text>
-              </UnstyledButton>
-            ))
-          )}
+      <div className="va-remix-picker">
+        <Stack gap="sm" style={{ minWidth: 0 }}>
+          <TextInput
+            aria-label="Search videos"
+            placeholder="Search prompts and titles"
+            leftSection={<IconSearch size={16} />}
+            value={q}
+            data-autofocus
+            onChange={(e) => {
+              setQ(e.currentTarget.value)
+            }}
+          />
+          <SegmentedControl
+            value={scope}
+            onChange={(v) => {
+              setScope(v)
+            }}
+            data={[
+              { label: 'Everyone', value: 'all' },
+              { label: 'Mine', value: 'me' },
+              { label: 'Favorites', value: 'favorites' },
+            ]}
+          />
+          <Stack gap={4} className="va-remix-list" role="listbox" aria-label="Videos">
+            {list.isLoading ? (
+              <Text size="sm" c="var(--va-muted)">
+                Loading…
+              </Text>
+            ) : items.length === 0 ? (
+              <Text size="sm" c="var(--va-muted)">
+                {scope === 'favorites' && !debounced
+                  ? 'No favorites yet. Star a video in the Library to find it here.'
+                  : 'No ready videos match.'}
+              </Text>
+            ) : (
+              items.map((v) => {
+                const ready = latestReady(v)
+                return (
+                  <UnstyledButton
+                    key={v.id}
+                    role="option"
+                    aria-selected={chosen?.id === v.id}
+                    className="va-remix-pick"
+                    data-selected={chosen?.id === v.id ? 'true' : undefined}
+                    onClick={() => {
+                      setChosen(v)
+                      setN(null)
+                    }}
+                  >
+                    <span className="va-remix-thumb" data-testid={`remix-thumb-${v.id}`}>
+                      {ready ? <VersionImage videoId={v.id} v={ready} file="poster" sizes="96px" /> : null}
+                    </span>
+                    <span style={{ minWidth: 0 }}>
+                      <Text size="sm" fw={500} lineClamp={1}>
+                        {v.title}
+                      </Text>
+                      <Text size="xs" c="var(--va-muted)" lineClamp={1}>
+                        {[owner(v), v.aspect].filter(Boolean).join(' · ')}
+                      </Text>
+                      <Text size="xs" c="var(--va-faint)" lineClamp={1}>
+                        {ready?.prompt}
+                      </Text>
+                    </span>
+                  </UnstyledButton>
+                )
+              })
+            )}
+          </Stack>
         </Stack>
-        {chosen && version ? (
-          <Group justify="space-between" align="flex-end">
-            <Select
-              label="Version"
-              data={readyVersions.map((v) => ({ value: String(v.n), label: `v${v.n}` }))}
-              value={String(version.n)}
-              allowDeselect={false}
-              onChange={setN}
-              w={140}
-            />
-            <Button
-              onClick={() => {
-                props.onPick(chosen, version)
-              }}
-            >
-              Remix this
-            </Button>
-          </Group>
-        ) : null}
-      </Stack>
+        <div className="va-remix-preview" data-testid="remix-preview">
+          {chosen && version ? (
+            <Stack gap="sm">
+              {/* Keyed, so choosing another video or version loads that one. */}
+              <video
+                key={`${chosen.id}-${version.n}`}
+                className="va-remix-video"
+                data-aspect={chosen.aspect}
+                src={fileUrl(chosen.id, version.n, 'video')}
+                poster={imageUrl(chosen.id, version, 'poster')}
+                controls
+                playsInline
+                preload="metadata"
+                aria-label={`${chosen.title}, version ${version.n}`}
+              />
+              <div>
+                <Text fw={600} lineClamp={2}>
+                  {chosen.title}
+                </Text>
+                <Text size="xs" c="var(--va-muted)">
+                  {[owner(chosen), chosen.aspect, `v${version.n}`].filter(Boolean).join(' · ')}
+                </Text>
+              </div>
+              <Text size="sm" c="var(--va-muted)" lineClamp={5}>
+                {version.prompt}
+              </Text>
+              {pickRow}
+            </Stack>
+          ) : (
+            <div className="va-remix-empty">
+              <IconPlayerPlay size={28} />
+              <Text size="sm">Select a video to watch it here before you start from it.</Text>
+            </div>
+          )}
+        </div>
+      </div>
     </Modal>
   )
 }
