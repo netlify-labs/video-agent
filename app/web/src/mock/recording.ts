@@ -5,6 +5,7 @@
 //
 // localStorage switches, set before the app loads:
 //   mockNoRecordings=1   the library has no screen recordings yet
+//   mockNoScreenRecording=1   the deployment has no screen_recording feature
 
 interface MockRecording {
   id: string
@@ -118,7 +119,7 @@ export async function recordingRoute(
   const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase()
 
   const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined))
-  if (p === '/api/v1/config' && !headers.has(SKIP)) {
+  if (p === '/api/v1/config' && !headers.has(SKIP) && setting('mockNoScreenRecording') !== '1') {
     // Through the other routes (looks adds its feature too), then screen_recording.
     const res = await window.fetch(url.pathname + url.search, { headers: { [SKIP]: '1' } })
     const body = (await res.json()) as { features: string[] }

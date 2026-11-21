@@ -22,7 +22,7 @@ import {
   IconX,
 } from '@tabler/icons-react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { $api, useCanCreate } from '../api/client'
 import type { paths } from '../api/schema'
 import { uploadFile } from '../lib/upload'
@@ -423,6 +423,8 @@ export function MediaChips(props: {
   label?: string
   /** False: chips only (the caller has its own Attach button). */
   button?: boolean
+  /** Shown beside the Add media button (New video's Record screen). */
+  extra?: ReactNode
 }) {
   const [open, setOpen] = useState(false)
   if (props.button === false && !props.value.length) return null
@@ -472,6 +474,7 @@ export function MediaChips(props: {
             {props.label ?? 'Add media'}
           </Button>
         )}
+        {props.extra}
       </Group>
       {open ? (
         <MediaLibraryModal

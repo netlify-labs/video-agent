@@ -38,6 +38,7 @@ import {
   type EngineId,
 } from '../lib/engines'
 import { PlanPanel } from '../components/PlanPanel'
+import { RecordScreenButton } from '../components/recording/RecordScreenButton'
 import { RemixForm, RemixSourcePicker, latestReady, useCanRemix } from '../components/RemixDialog'
 import { SoundControl, soundAfterPick, type Sound } from '../components/SoundControl'
 import { VOICE_OFF, VoiceoverControl, voiceInput, type VoiceState } from '../components/VoiceoverControl'
@@ -436,6 +437,12 @@ export function NewVideoPage() {
                   setMedia(next)
                 }}
                 disabled={planning}
+                // Record the screen right here: its setup opens in a dialog and makes the demo (as /new/demo does).
+                extra={
+                  config.data?.features.includes('screen_recording') ? (
+                    <RecordScreenButton prompt={prompt} disabled={planning} />
+                  ) : null
+                }
               />
               <div>
                 <Text size="sm" fw={500} mb={8} id="shape-label">

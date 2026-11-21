@@ -222,7 +222,12 @@ export function BoxCanvas(props: {
   )
 }
 
-export function DemoSetup(props: { media: Media; onBack: () => void }) {
+export function DemoSetup(props: {
+  media: Media
+  onBack: () => void
+  /** What the person had already typed (New video's prompt box). */
+  initialPrompt?: string
+}) {
   const { media } = props
   const duration = media.durationSec ?? 0
   const navigate = useNavigate()
@@ -240,7 +245,7 @@ export function DemoSetup(props: { media: Media; onBack: () => void }) {
       ? { width: Math.round(crop[2] * media.width), height: Math.round(crop[3] * media.height) }
       : null
   const [selected, setSelected] = useState<string | null>(null)
-  const [prompt, setPrompt] = useState('')
+  const [prompt, setPrompt] = useState(props.initialPrompt ?? '')
   const [length, setLength] = useState<number | string>(defaultLength(duration))
   const [lengthTouched, setLengthTouched] = useState(false)
   const [shape, setShape] = useState<Shape>('16:9')

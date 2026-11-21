@@ -24,9 +24,17 @@ type Stage =
   | { kind: 'uploading'; sent: number; total: number; phase: string }
   | { kind: 'error'; message: string; ffmpeg?: boolean }
 
-export function RecordingSource(props: { onReady: (mediaId: string) => void }) {
+export function RecordingSource(props: {
+  onReady: (mediaId: string) => void
+  /** Opens on Record your screen (New video's Record screen button) instead of the choices. */
+  initial?: 'record'
+  /** Back from recording leaves (closes the dialog it's in) instead of showing the choices. */
+  onCancel?: () => void
+}) {
   const auth = useAuth()
-  const [stage, setStage] = useState<Stage>({ kind: 'idle' })
+  const [stage, setStage] = useState<Stage>(
+    props.initial === 'record' ? { kind: 'record' } : { kind: 'idle' },
+  )
   const [over, setOver] = useState(false)
   const input = useRef<HTMLInputElement>(null)
   const library = $api.useQuery('get', '/api/v1/media', { params: { query: { kind: 'video', limit: 100 } } })
@@ -100,7 +108,8 @@ export function RecordingSource(props: { onReady: (mediaId: string) => void }) {
         <RecordScreen
           onRecorded={(file) => void run(() => upload(file, null))}
           onCancel={() => {
-            setStage({ kind: 'idle' })
+            if (props.onCancel) props.onCancel()
+            else setStage({ kind: 'idle' })
           }}
         />
       </Card>

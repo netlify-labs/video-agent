@@ -50,3 +50,68 @@ test('record the screen in the app: a shared canvas becomes a recording and open
     'Video Agent will look for your cursor in the picture.',
   )
 })
+
+test('New video: Record screen beside Add media records, then setup opens in a dialog and makes the demo', async ({
+  page,
+}) => {
+  await page.addInitScript({
+    content: `navigator.mediaDevices.getDisplayMedia = () => {
+    const c = document.createElement('canvas')
+    c.width = 1280
+    c.height = 720
+    const cx = c.getContext('2d')
+    let n = 0
+    const draw = () => {
+      cx.fillStyle = 'hsl(' + (n++ % 360) + ' 60% 50%)'
+      cx.fillRect(0, 0, c.width, c.height)
+      requestAnimationFrame(draw)
+    }
+    draw()
+    return Promise.resolve(c.captureStream(30))
+  }`,
+  })
+  await page.goto('/new')
+  await page
+    .getByLabel('What should the video show?')
+    .fill('A short demo of the settings page for new admins.')
+  // Right beside Add media, on the same line.
+  const add = page.getByRole('button', { name: 'Add media' })
+  const record = page.getByRole('button', { name: 'Record screen' })
+  await expect(record).toBeVisible()
+  const [a, b] = [await add.boundingBox(), await record.boundingBox()]
+  expect(Math.abs((a?.y ?? 0) - (b?.y ?? 99))).toBeLessThan(4)
+  await record.click()
+  const dialog = page.getByRole('dialog', { name: 'Record your screen' })
+  const cant = dialog.getByText("This browser can't record the screen here")
+  await expect(dialog.getByText("Recordings made here don't include cursor data").or(cant)).toBeVisible()
+  if (await cant.isVisible()) test.skip(true, 'This Chrome has no H.264 encoder for WebCodecs.')
+  // Back closes the dialog; the page is as it was.
+  await dialog.getByRole('button', { name: 'Back' }).click()
+  await expect(dialog).toHaveCount(0)
+  await expect(page).toHaveURL(/\/new$/)
+
+  await record.click()
+  await dialog.getByRole('button', { name: 'Choose what to record' }).click()
+  await expect(dialog.getByTestId('record-elapsed')).toContainText('0:01', { timeout: 10_000 })
+  await dialog.getByRole('button', { name: 'Stop recording' }).click()
+  // Uploaded: the same setup as /new/demo, in the dialog, with the prompt already typed.
+  const setup = page.getByRole('dialog', { name: 'Make a demo from your recording' })
+  await expect(setup.getByTestId('demo-setup')).toBeVisible({ timeout: 30_000 })
+  await expect(page).toHaveURL(/\/new$/)
+  await expect(setup.getByTestId('recording-player')).toBeVisible()
+  await expect(setup.getByRole('button', { name: 'Crop', exact: true })).toBeVisible()
+  await expect(setup.getByLabel('What should the demo show?')).toHaveValue(
+    'A short demo of the settings page for new admins.',
+  )
+  await setup.getByRole('button', { name: 'Make it' }).click()
+  await expect(page).toHaveURL(/\/videos\//)
+  const creates = await page.evaluate<{ recording?: { mediaId: string } }[]>('window.__mockDemoCreates ?? []')
+  expect(creates.at(-1)?.recording?.mediaId).toMatch(/^med_screen_up/)
+})
+
+test('New video: no Record screen button when screen recording is off', async ({ page }) => {
+  await page.addInitScript({ content: `localStorage.setItem('mockNoScreenRecording', '1')` })
+  await page.goto('/new')
+  await expect(page.getByRole('button', { name: 'Add media' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Record screen' })).toHaveCount(0)
+})
