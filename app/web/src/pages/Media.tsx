@@ -179,8 +179,9 @@ export function MediaPage() {
       },
     },
     {
-      // Poll while something of yours is still being checked.
-      refetchInterval: (q) => (q.state.data?.items.some((m) => m.status === 'verifying') ? 3000 : false),
+      // Poll while something of yours is still being checked. Otherwise refresh before the items' signed links (good
+      // for ten minutes) run out, so a player or a preview on a page left open still loads.
+      refetchInterval: (q) => (q.state.data?.items.some((m) => m.status === 'verifying') ? 3000 : 8 * 60_000),
     },
   )
 

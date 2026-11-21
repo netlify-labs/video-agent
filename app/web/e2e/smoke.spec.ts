@@ -1142,6 +1142,24 @@ test('the media library takes audio: an Audio filter and a play button in its ro
   await expect(page.getByTestId('media-med_mock0001')).toBeVisible()
 })
 
+test('a track that fails to load says why in the edit dialog, and plays on the next press', async ({
+  page,
+}) => {
+  await page.goto('/media')
+  await page.locator('input[type=file]').setInputFiles(mp3File())
+  const card = page.getByTestId('media-med_mock0001')
+  // The link is refused, as an expired one is.
+  await page.route('**/tone.mp3', (r) => r.fulfill({ status: 403, body: 'expired' }))
+  await card.getByRole('button', { name: 'Actions for theme.mp3' }).click()
+  await page.getByRole('menuitem', { name: 'Edit name and notes' }).click()
+  const edit = page.getByRole('dialog', { name: 'Edit theme.mp3' })
+  await expect(edit.getByTestId('audio-error')).toContainText('It didn’t play')
+  await page.unroute('**/tone.mp3')
+  await edit.getByRole('button', { name: 'Play theme.mp3' }).click()
+  await expect(edit.getByRole('button', { name: 'Pause theme.mp3' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(edit.getByTestId('audio-error')).toHaveCount(0)
+})
+
 test('New video sends the Sound choice; picking a track turns music on', async ({ page }) => {
   await page.goto('/new')
   await page

@@ -184,7 +184,7 @@ function PlayButton({ m, src }: { m: Media; src: string }) {
           e.stopPropagation()
           const a = ref.current
           if (!a) return
-          if (a.paused) playOnly(a)
+          if (a.paused) void playOnly(a)
           else a.pause()
         }}
       >
