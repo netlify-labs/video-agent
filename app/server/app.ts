@@ -63,7 +63,7 @@ import { enabledFeatures } from './domain/features.js'
 import { PROMPT_TEMPLATE_VERSION } from './domain/prompt.js'
 import { buildInfo } from './generated/build-info.js'
 import { listLooks } from './domain/looks.js'
-import { listVoices, voicePreview } from './domain/voices.js'
+import { addLibraryVoice, listVoices, searchVoiceLibrary, voicePreview } from './domain/voices.js'
 import { remixVideo, versionMediaItems } from './domain/remix.js'
 import { listNotifications, markNotificationsRead } from './domain/notifications.js'
 import { getProgress } from './domain/progress.js'
@@ -792,6 +792,51 @@ export function createApp(deps: Deps, opts: AppOptions) {
       responses: { 200: json(s.VoicesSchema, 'Voices'), ...errors },
     }),
     async (c) => c.json(await listVoices(deps), 200),
+  )
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/api/v1/voices/library',
+      operationId: 'searchVoiceLibrary',
+      'x-sdk': { resource: 'voices', method: 'searchLibrary' },
+      summary: "Search ElevenLabs' voice library",
+      description:
+        "Voices from ElevenLabs' shared library that match the search words, most used first, each with ElevenLabs' own sample. Add one with POST /api/v1/voices to use it. Creators and admins, on deployments whose server can read the ElevenLabs key.",
+      tags: ['videos'],
+      security,
+      request: {
+        query: z.object({
+          q: z.string().max(100).optional(),
+          page: z.coerce.number().int().min(1).max(50).optional(),
+        }),
+      },
+      responses: {
+        200: json(s.LibraryVoicesSchema, 'Library voices'),
+        ...errors,
+        502: err("ElevenLabs didn't answer"),
+      },
+    }),
+    async (c) => c.json(await searchVoiceLibrary(deps, c.get('principal'), c.req.valid('query')), 200),
+  )
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/api/v1/voices',
+      operationId: 'addVoice',
+      'x-sdk': { resource: 'voices', method: 'add' },
+      summary: 'Add a library voice',
+      description:
+        "Adds a voice from ElevenLabs' library to the deployment's ElevenLabs account (it takes one of the account's voice slots, and the key needs the Voices: write permission), so voice-overs can use the returned id. Creators and admins.",
+      tags: ['videos'],
+      security,
+      request: { body: jsonBody(s.AddVoiceSchema) },
+      responses: {
+        200: json(z.object({ id: z.string(), name: z.string() }), 'The added voice'),
+        ...errors,
+        502: err('ElevenLabs refused'),
+      },
+    }),
+    async (c) => c.json(await addLibraryVoice(deps, c.get('principal'), c.req.valid('json')), 200),
   )
   app.openapi(
     createRoute({

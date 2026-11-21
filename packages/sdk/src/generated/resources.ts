@@ -1270,10 +1270,46 @@ export function resources(t: Transport) {
         ),
     },
     voices: {
+      /** Add a library voice (`addVoice`) */
+      add: (
+        input: Input<'/api/v1/voices', 'post'>,
+        opts?: CallOptions,
+      ): Promise<Ok<'/api/v1/voices', 'post'>> =>
+        t.call<Ok<'/api/v1/voices', 'post'>>(
+          {
+            method: 'POST',
+            path: '/api/v1/voices',
+            pathParams: {},
+            input,
+            query: [],
+            body: ['ownerId', 'voiceId', 'name'],
+            features: [],
+            operationId: 'addVoice',
+          },
+          opts,
+        ),
       /** List voices (`listVoices`) */
       list: (opts?: CallOptions): Promise<Ok<'/api/v1/voices', 'get'>> =>
         t.call<Ok<'/api/v1/voices', 'get'>>(
           { method: 'GET', path: '/api/v1/voices', pathParams: {}, features: [], operationId: 'listVoices' },
+          opts,
+        ),
+      /** Search ElevenLabs' voice library (`searchVoiceLibrary`) */
+      searchLibrary: (
+        input?: Input<'/api/v1/voices/library', 'get'>,
+        opts?: CallOptions,
+      ): Promise<Ok<'/api/v1/voices/library', 'get'>> =>
+        t.call<Ok<'/api/v1/voices/library', 'get'>>(
+          {
+            method: 'GET',
+            path: '/api/v1/voices/library',
+            pathParams: {},
+            input,
+            query: ['q', 'page'],
+            body: null,
+            features: [],
+            operationId: 'searchVoiceLibrary',
+          },
           opts,
         ),
     },

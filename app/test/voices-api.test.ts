@@ -8,6 +8,7 @@ type Voices = {
   provider: string
   default: string | null
   source: string
+  library: boolean
   items: { id: string; name: string; description: string | null; previewUrl: string | null }[]
 }
 const voices = async (h: Harness) => {
@@ -39,7 +40,13 @@ describe('voices', () => {
   it('lists nothing without ElevenLabs, and asks nobody', async () => {
     const h = harness()
     const calls = answer(h, 200, { voices: [] })
-    expect(await voices(h)).toEqual({ provider: 'kokoro', default: null, source: 'none', items: [] })
+    expect(await voices(h)).toEqual({
+      provider: 'kokoro',
+      default: null,
+      source: 'none',
+      library: false,
+      items: [],
+    })
     expect(calls).toEqual([])
   })
 
@@ -69,6 +76,7 @@ describe('voices', () => {
       provider: 'elevenlabs',
       default: 'voiceB',
       source: 'account',
+      library: true,
       items: [
         { id: 'voiceA', name: 'Abe', description: null, previewUrl: '/api/v1/voices/voiceA/preview' },
         {
@@ -147,5 +155,111 @@ describe('voices', () => {
     expect((await h.call('GET', '/api/v1/voices/CwhRBWXzGAHq8TQ4Fs17/preview', { as: h.admin })).status).toBe(
       502,
     )
+  })
+
+  it("searches ElevenLabs' voice library, most used first, for creators", async () => {
+    const h = harness()
+    elevenlabs(h, 'sk_test')
+    const calls = answer(h, 200, {
+      voices: [
+        {
+          voice_id: 'lib1',
+          public_owner_id: 'owner1',
+          name: 'Clara',
+          gender: 'female',
+          accent: 'british',
+          descriptive: 'calm',
+          use_case: 'narrative_story',
+          preview_url: 'https://cdn.example/clara.mp3',
+          is_added_by_user: true,
+        },
+        {
+          voice_id: 'lib2',
+          public_owner_id: 'owner2',
+          name: 'Max',
+          preview_url: 'http://insecure.example/max.mp3',
+        },
+        { voice_id: 'lib3', name: 'No owner' },
+      ],
+      has_more: true,
+    })
+    const res = await h.call('GET', '/api/v1/voices/library?q=calm%20narrator&page=2', { as: h.admin })
+    expect(res.status).toBe(200)
+    expect(await h.json(res)).toEqual({
+      items: [
+        {
+          id: 'lib1',
+          ownerId: 'owner1',
+          name: 'Clara',
+          description: 'female, british, calm, narrative story',
+          previewUrl: 'https://cdn.example/clara.mp3',
+          added: true,
+        },
+        { id: 'lib2', ownerId: 'owner2', name: 'Max', description: null, previewUrl: null, added: false },
+      ],
+      hasMore: true,
+    })
+    expect(calls).toEqual([
+      {
+        url: 'https://api.elevenlabs.io/v1/shared-voices?page_size=20&page=1&sort=usage_character_count_1y&search=calm+narrator',
+        key: 'sk_test',
+      },
+    ])
+    expect((await h.call('GET', '/api/v1/voices/library')).status).toBe(401)
+  })
+
+  it('adds a library voice to the account, and the list is read again', async () => {
+    const h = harness()
+    elevenlabs(h, 'sk_test')
+    const sent: { url: string; method: string; body: unknown }[] = []
+    let listed = 0
+    h.deps.fetch = (url, init) => {
+      if (url.endsWith('/v1/voices')) {
+        listed++
+        return Promise.resolve(Response.json({ voices: [{ voice_id: 'voiceA', name: 'Abe' }] }))
+      }
+      sent.push({ url, method: init?.method ?? 'GET', body: JSON.parse(init?.body as string) as unknown })
+      return Promise.resolve(Response.json({ voice_id: 'newVoice1' }))
+    }
+    await voices(h)
+    const res = await h.call('POST', '/api/v1/voices', {
+      as: h.admin,
+      body: { ownerId: 'owner1', voiceId: 'lib1', name: 'Clara' },
+    })
+    expect(res.status).toBe(200)
+    expect(await h.json(res)).toEqual({ id: 'newVoice1', name: 'Clara' })
+    expect(sent).toEqual([
+      {
+        url: 'https://api.elevenlabs.io/v1/voices/add/owner1/lib1',
+        method: 'POST',
+        body: { new_name: 'Clara' },
+      },
+    ])
+    await voices(h)
+    expect(listed).toBe(2)
+    const bad = await h.call('POST', '/api/v1/voices', {
+      as: h.admin,
+      body: { ownerId: '../x', voiceId: 'lib1', name: 'Clara' },
+    })
+    expect(bad.status).toBe(400)
+  })
+
+  it("says so when the key isn't allowed to add voices, and when the server can't read the key", async () => {
+    const h = harness()
+    elevenlabs(h, 'sk_test')
+    answer(h, 401, {
+      detail: { status: 'missing_permissions', message: 'The API key is missing voices_write.' },
+    })
+    const res = await h.call('POST', '/api/v1/voices', {
+      as: h.admin,
+      body: { ownerId: 'owner1', voiceId: 'lib1', name: 'Clara' },
+    })
+    expect(res.status).toBe(502)
+    expect((await h.json<{ error: { message: string } }>(res)).error.message).toBe(
+      "This deployment's ElevenLabs key isn't allowed to add voices. The API key is missing voices_write.",
+    )
+    elevenlabs(h, null)
+    expect((await voices(h)).library).toBe(false)
+    expect((await h.call('GET', '/api/v1/voices/library', { as: h.admin })).status).toBe(404)
   })
 })

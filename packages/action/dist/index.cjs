@@ -1666,9 +1666,37 @@ function resources(t) {
       )
     },
     voices: {
+      /** Add a library voice (`addVoice`) */
+      add: (input, opts) => t.call(
+        {
+          method: "POST",
+          path: "/api/v1/voices",
+          pathParams: {},
+          input,
+          query: [],
+          body: ["ownerId", "voiceId", "name"],
+          features: [],
+          operationId: "addVoice"
+        },
+        opts
+      ),
       /** List voices (`listVoices`) */
       list: (opts) => t.call(
         { method: "GET", path: "/api/v1/voices", pathParams: {}, features: [], operationId: "listVoices" },
+        opts
+      ),
+      /** Search ElevenLabs' voice library (`searchVoiceLibrary`) */
+      searchLibrary: (input, opts) => t.call(
+        {
+          method: "GET",
+          path: "/api/v1/voices/library",
+          pathParams: {},
+          input,
+          query: ["q", "page"],
+          body: null,
+          features: [],
+          operationId: "searchVoiceLibrary"
+        },
         opts
       )
     },

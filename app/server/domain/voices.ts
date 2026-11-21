@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto'
 import type { Deps } from '../deps.js'
 import { ApiError } from '../lib/errors.js'
 import { DEFAULT_ELEVENLABS_VOICE } from '../lib/voice.js'
+import { assertCan, type Principal } from './policy.js'
 
 export interface VoiceOption {
   id: string
@@ -22,6 +23,8 @@ export interface Voices {
   default: string | null
   /** account: this deployment's ElevenLabs voices; defaults: ElevenLabs' default voices; none: no ElevenLabs. */
   source: 'account' | 'defaults' | 'none'
+  /** The server can search ElevenLabs' voice library and add a voice from it (it can read the key). */
+  library: boolean
   items: VoiceOption[]
 }
 
@@ -97,13 +100,15 @@ const MAX_PREVIEW_BYTES = 2 * 1024 * 1024
 
 export async function listVoices(deps: Pick<Deps, 'config' | 'fetch' | 'clock'>): Promise<Voices> {
   const { elevenlabsKeySet, elevenlabsApiKey, elevenlabsVoiceId } = deps.config
-  if (!elevenlabsKeySet) return { provider: 'kokoro', default: null, source: 'none', items: [] }
+  if (!elevenlabsKeySet)
+    return { provider: 'kokoro', default: null, source: 'none', library: false, items: [] }
   const fallback = elevenlabsVoiceId ?? DEFAULT_ELEVENLABS_VOICE
   const account = elevenlabsApiKey ? await accountVoices(deps, elevenlabsApiKey) : null
   return {
     provider: 'elevenlabs',
     default: fallback,
     source: account ? 'account' : 'defaults',
+    library: Boolean(elevenlabsApiKey),
     // A sample needs the key: the server speaks it once and keeps it.
     items: (account ?? ELEVENLABS_DEFAULT_VOICES).map((v) => ({
       ...v,
@@ -147,4 +152,120 @@ export async function voicePreview(
     throw new ApiError('upstream_error', "ElevenLabs didn't return a usable sample.")
   await deps.blobs.set('internal', blob, audio, { contentType: 'audio/mpeg' })
   return audio
+}
+
+export interface LibraryVoice {
+  id: string
+  /** Who shared it: sent back when adding the voice. */
+  ownerId: string
+  name: string
+  description: string | null
+  /** ElevenLabs' own sample of the voice. */
+  previewUrl: string | null
+  /** Already among the account's voices. */
+  added: boolean
+}
+
+const LIBRARY_PAGE = 20
+const ID = /^[A-Za-z0-9_-]{1,64}$/
+
+function libraryVoice(raw: unknown): LibraryVoice | null {
+  if (!raw || typeof raw !== 'object') return null
+  const v = raw as Record<string, unknown>
+  const id = text(v.voice_id, 64)
+  const ownerId = text(v.public_owner_id, 64)
+  const name = text(v.name, 120)
+  if (!id || !ownerId || !name || !ID.test(id) || !ID.test(ownerId)) return null
+  const words = [v.gender, v.accent, v.descriptive, v.use_case]
+    .map((w) => text(w, 30)?.replaceAll('_', ' '))
+    .filter(Boolean)
+  const preview = text(v.preview_url, 500)
+  return {
+    id,
+    ownerId,
+    name,
+    description: words.length ? words.join(', ') : null,
+    previewUrl: preview?.startsWith('https://') ? preview : null,
+    added: v.is_added_by_user === true,
+  }
+}
+
+/** What ElevenLabs said went wrong, in a sentence people can act on. */
+async function elevenlabsProblem(res: Response, doing: string): Promise<ApiError> {
+  const body = (await res.json().catch(() => null)) as {
+    detail?: { status?: string; message?: string }
+  } | null
+  if (body?.detail?.status === 'missing_permissions')
+    return new ApiError(
+      'upstream_error',
+      `This deployment's ElevenLabs key isn't allowed to ${doing}. ${text(body.detail.message, 200) ?? ''}`.trim(),
+    )
+  return new ApiError(
+    'upstream_error',
+    text(body?.detail?.message, 200) ?? `ElevenLabs couldn't ${doing} (${res.status}).`,
+  )
+}
+
+/** Searches ElevenLabs' voice library (most used first); `page` starts at 1. */
+export async function searchVoiceLibrary(
+  deps: Pick<Deps, 'config' | 'fetch'>,
+  p: Principal,
+  q: { q?: string | undefined; page?: number | undefined },
+): Promise<{ items: LibraryVoice[]; hasMore: boolean }> {
+  assertCan(p, 'video:create')
+  const key = deps.config.elevenlabsApiKey
+  if (!key) throw new ApiError('not_found', "This deployment can't search ElevenLabs' voice library.")
+  const params = new URLSearchParams({
+    page_size: String(LIBRARY_PAGE),
+    page: String((q.page ?? 1) - 1),
+    sort: 'usage_character_count_1y',
+  })
+  if (q.q?.trim()) params.set('search', q.q.trim())
+  let res: Response
+  try {
+    res = await deps.fetch(`https://api.elevenlabs.io/v1/shared-voices?${params.toString()}`, {
+      headers: { 'xi-api-key': key },
+      signal: AbortSignal.timeout(10_000),
+    })
+  } catch {
+    throw new ApiError('upstream_error', "ElevenLabs didn't answer. Try again in a moment.")
+  }
+  if (!res.ok) throw await elevenlabsProblem(res, 'search the voice library')
+  const body = (await res.json().catch(() => null)) as { voices?: unknown; has_more?: unknown } | null
+  const voices = Array.isArray(body?.voices) ? body.voices : []
+  return {
+    items: voices.map(libraryVoice).filter((v): v is LibraryVoice => v !== null),
+    hasMore: body?.has_more === true,
+  }
+}
+
+/** Adds a library voice to the deployment's ElevenLabs account, so voice-overs can use it; returns its new id. */
+export async function addLibraryVoice(
+  deps: Pick<Deps, 'config' | 'fetch'>,
+  p: Principal,
+  input: { ownerId: string; voiceId: string; name: string },
+): Promise<{ id: string; name: string }> {
+  assertCan(p, 'video:create')
+  const key = deps.config.elevenlabsApiKey
+  if (!key) throw new ApiError('not_found', "This deployment can't add ElevenLabs voices.")
+  let res: Response
+  try {
+    res = await deps.fetch(
+      `https://api.elevenlabs.io/v1/voices/add/${encodeURIComponent(input.ownerId)}/${encodeURIComponent(input.voiceId)}`,
+      {
+        method: 'POST',
+        headers: { 'xi-api-key': key, 'content-type': 'application/json' },
+        body: JSON.stringify({ new_name: input.name }),
+        signal: AbortSignal.timeout(15_000),
+      },
+    )
+  } catch {
+    throw new ApiError('upstream_error', "ElevenLabs didn't answer. Try again in a moment.")
+  }
+  if (!res.ok) throw await elevenlabsProblem(res, 'add voices')
+  const body = (await res.json().catch(() => null)) as { voice_id?: unknown } | null
+  const id = text(body?.voice_id, 64)
+  if (!id || !ID.test(id)) throw new ApiError('upstream_error', "ElevenLabs didn't say which voice it added.")
+  resetVoicesCache()
+  return { id, name: input.name }
 }

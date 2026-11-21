@@ -3042,6 +3042,10 @@
             ],
             "description": "account: the deployment's own ElevenLabs voices; defaults: ElevenLabs' default voices (the key can't list voices); none: no ElevenLabs."
           },
+          "library": {
+            "type": "boolean",
+            "description": "The server can search ElevenLabs' voice library and add a voice from it."
+          },
           "items": {
             "type": "array",
             "items": {
@@ -3082,7 +3086,87 @@
           "provider",
           "default",
           "source",
+          "library",
           "items"
+        ]
+      },
+      "LibraryVoices": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "ownerId": {
+                  "type": "string",
+                  "description": "Who shared the voice; send it back when adding the voice."
+                },
+                "name": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "previewUrl": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "ElevenLabs' own sample of the voice."
+                },
+                "added": {
+                  "type": "boolean",
+                  "description": "Already among the account's voices."
+                }
+              },
+              "required": [
+                "id",
+                "ownerId",
+                "name",
+                "description",
+                "previewUrl",
+                "added"
+              ]
+            }
+          },
+          "hasMore": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items",
+          "hasMore"
+        ]
+      },
+      "AddVoice": {
+        "type": "object",
+        "properties": {
+          "ownerId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,64}$"
+          },
+          "voiceId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,64}$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "description": "What the voice is called in the account and the picker."
+          }
+        },
+        "required": [
+          "ownerId",
+          "voiceId",
+          "name"
         ]
       },
       "Looks": {
@@ -10366,6 +10450,235 @@
           },
           "409": {
             "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "addVoice",
+        "x-sdk": {
+          "resource": "voices",
+          "method": "add"
+        },
+        "summary": "Add a library voice",
+        "description": "Adds a voice from ElevenLabs' library to the deployment's ElevenLabs account (it takes one of the account's voice slots, and the key needs the Voices: write permission), so voice-overs can use the returned id. Creators and admins.",
+        "tags": [
+          "videos"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddVoice"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The added voice",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "ElevenLabs refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/voices/library": {
+      "get": {
+        "operationId": "searchVoiceLibrary",
+        "x-sdk": {
+          "resource": "voices",
+          "method": "searchLibrary"
+        },
+        "summary": "Search ElevenLabs' voice library",
+        "description": "Voices from ElevenLabs' shared library that match the search words, most used first, each with ElevenLabs' own sample. Add one with POST /api/v1/voices to use it. Creators and admins, on deployments whose server can read the ElevenLabs key.",
+        "tags": [
+          "videos"
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            },
+            "required": false,
+            "name": "q",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            },
+            "required": false,
+            "name": "page",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Library voices",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryVoices"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict or not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "ElevenLabs didn't answer",
             "content": {
               "application/json": {
                 "schema": {

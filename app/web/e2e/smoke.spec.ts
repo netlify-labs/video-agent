@@ -1163,6 +1163,37 @@ test('with an ElevenLabs key, the voice picker offers ElevenLabs voices and send
   })
 })
 
+test('Other… finds a voice in the ElevenLabs library, adds it and selects it', async ({ page }) => {
+  await mock(page, 'mockElevenLabs')
+  await page.goto('/new')
+  await page.getByLabel('What should the video show?').fill('A 20-second launch video for our new feature.')
+  await page.getByRole('switch', { name: /Voice-over/ }).click()
+  const picker = page.getByLabel('Voice', { exact: true }).first()
+  await picker.click()
+  await page.getByRole('option', { name: 'Other…' }).click()
+  const finder = page.getByRole('dialog', { name: 'Find an ElevenLabs voice' })
+  await expect(finder.getByText('Clara, calm narrator')).toBeVisible()
+  // A voice already in the account can't be added twice.
+  await expect(finder.getByTestId('library-voice-libVoiceAdded').getByText('In your voices')).toBeVisible()
+  await finder.getByLabel('Search voices').fill('upbeat')
+  await finder.getByRole('button', { name: 'Search' }).click()
+  await expect(finder.getByText('Clara, calm narrator')).toHaveCount(0)
+  await finder
+    .getByTestId('library-voice-libVoiceUpbeat')
+    .getByRole('button', { name: 'Use this voice' })
+    .click()
+  await expect(finder).toHaveCount(0)
+  await expect(picker).toHaveValue('ElevenLabs - Max, upbeat host')
+  expect(await page.evaluate("window.__sent['/api/v1/voices']")).toEqual({
+    ownerId: 'owner2',
+    voiceId: 'libVoiceUpbeat',
+    name: 'Max, upbeat host',
+  })
+  await createNow(page)
+  await expect(page).toHaveURL(/\/videos\//)
+  expect(await page.evaluate("window.__sent['/api/v1/videos'].voiceover.voice")).toBe('added_libVoiceUpbeat')
+})
+
 test('without an ElevenLabs key, the voice picker offers only the built-in voices', async ({ page }) => {
   await page.goto('/new')
   await page.getByRole('switch', { name: /Voice-over/ }).click()

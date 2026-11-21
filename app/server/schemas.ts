@@ -2347,6 +2347,7 @@ export const VoicesSchema = z
       .describe(
         "account: the deployment's own ElevenLabs voices; defaults: ElevenLabs' default voices (the key can't list voices); none: no ElevenLabs.",
       ),
+    library: z.boolean().describe("The server can search ElevenLabs' voice library and add a voice from it."),
     items: z.array(
       z.object({
         id: z.string().describe('Pass it as voiceover.voice.'),
@@ -2362,6 +2363,35 @@ export const VoicesSchema = z
     ),
   })
   .openapi('Voices')
+
+export const LibraryVoicesSchema = z
+  .object({
+    items: z.array(
+      z.object({
+        id: z.string(),
+        ownerId: z.string().describe('Who shared the voice; send it back when adding the voice.'),
+        name: z.string(),
+        description: z.string().nullable(),
+        previewUrl: z.string().nullable().describe("ElevenLabs' own sample of the voice."),
+        added: z.boolean().describe("Already among the account's voices."),
+      }),
+    ),
+    hasMore: z.boolean(),
+  })
+  .openapi('LibraryVoices')
+
+export const AddVoiceSchema = z
+  .object({
+    ownerId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
+    voiceId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
+    name: z
+      .string()
+      .trim()
+      .min(1)
+      .max(80)
+      .describe('What the voice is called in the account and the picker.'),
+  })
+  .openapi('AddVoice')
 
 export const LooksSchema = z
   .object({

@@ -342,8 +342,12 @@ export declare function resources(t: Transport): {
         update: (id: string | number, input?: Input<"/api/v1/videos/{id}", "patch">, opts?: CallOptions) => Promise<Ok<"/api/v1/videos/{id}", "patch">>;
     };
     voices: {
+        /** Add a library voice (`addVoice`) */
+        add: (input: Input<"/api/v1/voices", "post">, opts?: CallOptions) => Promise<Ok<"/api/v1/voices", "post">>;
         /** List voices (`listVoices`) */
         list: (opts?: CallOptions) => Promise<Ok<"/api/v1/voices", "get">>;
+        /** Search ElevenLabs' voice library (`searchVoiceLibrary`) */
+        searchLibrary: (input?: Input<"/api/v1/voices/library", "get">, opts?: CallOptions) => Promise<Ok<"/api/v1/voices/library", "get">>;
     };
     webhooks: {
         /** Remove your webhook (`deleteWebhook`) */

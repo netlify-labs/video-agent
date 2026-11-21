@@ -297,6 +297,30 @@ export interface paths {
          */
         get: operations["listVoices"];
         put?: never;
+        /**
+         * Add a library voice
+         * @description Adds a voice from ElevenLabs' library to the deployment's ElevenLabs account (it takes one of the account's voice slots, and the key needs the Voices: write permission), so voice-overs can use the returned id. Creators and admins.
+         */
+        post: operations["addVoice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/voices/library": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search ElevenLabs' voice library
+         * @description Voices from ElevenLabs' shared library that match the search words, most used first, each with ElevenLabs' own sample. Add one with POST /api/v1/voices to use it. Creators and admins, on deployments whose server can read the ElevenLabs key.
+         */
+        get: operations["searchVoiceLibrary"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -2778,6 +2802,8 @@ export interface components {
              * @enum {string}
              */
             source: "account" | "defaults" | "none";
+            /** @description The server can search ElevenLabs' voice library and add a voice from it. */
+            library: boolean;
             items: {
                 /** @description Pass it as voiceover.voice. */
                 id: string;
@@ -2787,6 +2813,26 @@ export interface components {
                 /** @description A short sample to play (a path under the site root); null when the server cannot make one. */
                 previewUrl: string | null;
             }[];
+        };
+        LibraryVoices: {
+            items: {
+                id: string;
+                /** @description Who shared the voice; send it back when adding the voice. */
+                ownerId: string;
+                name: string;
+                description: string | null;
+                /** @description ElevenLabs' own sample of the voice. */
+                previewUrl: string | null;
+                /** @description Already among the account's voices. */
+                added: boolean;
+            }[];
+            hasMore: boolean;
+        };
+        AddVoice: {
+            ownerId: string;
+            voiceId: string;
+            /** @description What the voice is called in the account and the picker. */
+            name: string;
         };
         Looks: {
             looks: components["schemas"]["Look"][];
@@ -5329,6 +5375,164 @@ export interface operations {
             };
             /** @description Conflict or not ready */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    addVoice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddVoice"];
+            };
+        };
+        responses: {
+            /** @description The added voice */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id: string;
+                        name: string;
+                    };
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict or not ready */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description ElevenLabs refused */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    searchVoiceLibrary: {
+        parameters: {
+            query?: {
+                q?: string;
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Library voices */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryVoices"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict or not ready */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description ElevenLabs didn't answer */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };

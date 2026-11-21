@@ -163,6 +163,20 @@
       "method": "list"
     }
   },
+  "POST /api/v1/voices": {
+    "operationId": "addVoice",
+    "sdk": {
+      "resource": "voices",
+      "method": "add"
+    }
+  },
+  "GET /api/v1/voices/library": {
+    "operationId": "searchVoiceLibrary",
+    "sdk": {
+      "resource": "voices",
+      "method": "searchLibrary"
+    }
+  },
   "GET /api/v1/voices/{id}/preview": {
     "operationId": "getVoicePreview",
     "sdk": false

@@ -552,6 +552,10 @@ function mockDestRows(): MockDest[] {
   return [...demo, ...mockAdminDest]
 }
 
+/** Voices added from the mock ElevenLabs library this session. */
+const mockAddedVoices: { id: string; name: string; description: string | null; previewUrl: string | null }[] =
+  []
+
 /** Extra mock routes (./looks.ts), tried before the built-in ones; a route returns null to pass. */
 export const mockRoutes: ((
   input: RequestInfo | URL,
@@ -674,6 +678,52 @@ export function installMock() {
       g.__enginesRequests = (g.__enginesRequests ?? 0) + 1
       return json({ items: mockEngineListing() })
     }
+    // ElevenLabs' voice library and adding a voice from it (the added voice joins the list above).
+    if (p === '/api/v1/voices/library') {
+      const q = (url.searchParams.get('q') ?? '').toLowerCase()
+      const all = [
+        {
+          id: 'libVoiceNarrator',
+          ownerId: 'owner1',
+          name: 'Clara, calm narrator',
+          description: 'female, british, calm, narration',
+          previewUrl: null,
+          added: false,
+        },
+        {
+          id: 'libVoiceUpbeat',
+          ownerId: 'owner2',
+          name: 'Max, upbeat host',
+          description: 'male, american, upbeat, social media',
+          previewUrl: null,
+          added: false,
+        },
+        {
+          id: 'libVoiceAdded',
+          ownerId: 'owner3',
+          name: 'Our narrator',
+          description: 'male, american',
+          previewUrl: null,
+          added: true,
+        },
+      ]
+      return json({
+        items: all.filter((v) => !q || `${v.name} ${v.description}`.toLowerCase().includes(q)),
+        hasMore: false,
+      })
+    }
+    if (p === '/api/v1/voices' && method === 'POST') {
+      // The body was just recorded in window.__sent (above).
+      const sent = (window as unknown as { __sent?: Record<string, unknown> }).__sent
+      const body = (sent?.[p] ?? {}) as { voiceId: string; name: string }
+      mockAddedVoices.push({
+        id: `added_${body.voiceId}`,
+        name: body.name,
+        description: null,
+        previewUrl: null,
+      })
+      return json({ id: `added_${body.voiceId}`, name: body.name })
+    }
     // The deployment's ElevenLabs voices, when localStorage.mockElevenLabs=1 says it has ElevenLabs.
     if (p === '/api/v1/voices') {
       const on = localStorage.getItem('mockElevenLabs') === '1'
@@ -681,6 +731,7 @@ export function installMock() {
         provider: on ? 'elevenlabs' : 'kokoro',
         default: on ? 'CwhRBWXzGAHq8TQ4Fs17' : null,
         source: on ? 'account' : 'none',
+        library: on,
         items: on
           ? [
               {
@@ -691,6 +742,7 @@ export function installMock() {
               },
               { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Sarah', description: 'US, warm', previewUrl: null },
               { id: 'mockClonedVoice01', name: 'Our narrator', description: null, previewUrl: null },
+              ...mockAddedVoices,
             ]
           : [],
       })

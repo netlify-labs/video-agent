@@ -16,6 +16,7 @@ import { IconPlayerPlay, IconPlayerStop } from '@tabler/icons-react'
 import { useEffect, useRef, useState } from 'react'
 import { $api } from '../api/client'
 import type { components } from '../api/schema'
+import { FindVoiceModal } from './FindVoice'
 
 export type VoiceoverInput = components['schemas']['VoiceoverInput']
 export type Voiceover = components['schemas']['Version']['voiceover']
@@ -48,6 +49,8 @@ const SAMPLES = Object.fromEntries(
   ).map(([path, url]) => [path.replace(/^.*\/|\.mp3$/g, ''), url]),
 )
 const DEFAULT_VOICE = 'af_heart'
+/** The picker's last ElevenLabs choice: opens the voice finder instead of choosing a voice. */
+const OTHER = '__other__'
 
 /** A built-in voice's name for people (Heart · US, warm); any other id stays as it is. */
 export const voiceLabel = (voice: string | null | undefined) =>
@@ -58,6 +61,8 @@ interface ElevenLabsChoices {
   on: boolean
   voices: { value: string; label: string; name: string; previewUrl: string | null }[]
   defaultLabel: string
+  /** The server can search ElevenLabs' voice library, so the picker offers Other…. */
+  library: boolean
 }
 
 /** The deployment's ElevenLabs voices (GET /api/v1/voices), when it has ElevenLabs. */
@@ -74,7 +79,12 @@ function useElevenLabs(): ElevenLabsChoices {
     previewUrl: x.previewUrl,
   }))
   const def = items.find((x) => x.id === list.data?.default)
-  return { on, voices, defaultLabel: def ? `Default (ElevenLabs - ${def.name})` : 'Default (ElevenLabs)' }
+  return {
+    on,
+    voices,
+    library: on && list.data?.library === true,
+    defaultLabel: def ? `Default (ElevenLabs - ${def.name})` : 'Default (ElevenLabs)',
+  }
 }
 
 /** A voice's name for people, ElevenLabs voices included (Version details). */
@@ -98,6 +108,7 @@ function voiceChoices(el: ElevenLabsChoices, chosen: string) {
         ...el.voices.map(({ value, label }) => ({ value, label })),
         // A voice id set through the API or CLI stays selectable.
         ...(known ? [] : [{ value: chosen, label: chosen }]),
+        ...(el.library ? [{ value: OTHER, label: 'Other…' }] : []),
       ],
     },
     { group: 'Built in (Kokoro)', items: VOICES.filter((x) => x.value) },
@@ -199,6 +210,7 @@ export function VoiceoverControl(props: {
   const lines = v.script.length ? v.script : ['']
   const preview = usePreview()
   const el = useElevenLabs()
+  const [finding, setFinding] = useState(false)
   // With ElevenLabs, the default voice is whichever one the deployment set.
   const chosen = v.voice || (el.on ? '' : DEFAULT_VOICE)
   const nameOf = (voice: string) =>
@@ -220,6 +232,17 @@ export function VoiceoverControl(props: {
         }}
         data-testid="voiceover-switch"
       />
+      {el.library ? (
+        <FindVoiceModal
+          opened={finding}
+          onClose={() => {
+            setFinding(false)
+          }}
+          onPicked={(voice) => {
+            set({ voice })
+          }}
+        />
+      ) : null}
       {v.enabled ? (
         <Stack gap="sm" mt="sm" data-testid="voiceover-options">
           <Group gap="sm" align="end">
@@ -231,9 +254,11 @@ export function VoiceoverControl(props: {
                 allowDeselect={false}
                 disabled={props.disabled === true}
                 onChange={(x) => {
-                  set({ voice: x ?? '' })
+                  if (x === OTHER) setFinding(true)
+                  else set({ voice: x ?? '' })
                 }}
-                w={el.on ? 490 : 220}
+                // Wide enough for an ElevenLabs voice's name and style; narrower on a phone.
+                w={el.on ? { base: 260, sm: 490 } : 220}
                 renderOption={({ option }) => {
                   const voice = option.value
                   return (
