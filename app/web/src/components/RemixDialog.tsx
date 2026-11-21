@@ -376,7 +376,7 @@ export function RemixSourcePicker(props: {
       opened={props.opened}
       onClose={props.onClose}
       title="Start from an existing video"
-      size={1040}
+      size={1320}
       fullScreen={phone}
     >
       <div className="va-remix-picker">
