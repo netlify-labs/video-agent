@@ -66,6 +66,7 @@ describe('demo API', () => {
       mediaId: id,
       trace: true,
       compose: false,
+      crop: null,
       privacy: false,
       summary: null,
       hidden: [],
@@ -77,6 +78,53 @@ describe('demo API', () => {
       body: JSON.parse(trace) as object,
     })
     expect(put.status).toBe(409)
+  })
+
+  it('crop: kept in source pixels on the version and its DTO; setup boxes become fractions of the cropped picture', async () => {
+    const h = harness()
+    const id = await recording(h, h.member, { trace: true })
+    const res = await create(h, h.member, {
+      recording: {
+        mediaId: id,
+        crop: [0.25, 0.25, 0.5, 0.5],
+        redact: [
+          // Inside the crop, half in it, and outside it (nothing left to hide: left out).
+          { box: [0.3, 0.3, 0.1, 0.1] },
+          { start: 2, end: 9, box: [0.7, 0.7, 0.2, 0.2], style: 'solid' },
+          { box: [0, 0, 0.1, 0.1] },
+        ],
+      },
+    })
+    expect(res.status).toBe(202)
+    const v = await h.json<{ id: string; private: boolean; versions: { recording: { crop: unknown } }[] }>(
+      res,
+    )
+    const crop = { x: 320, y: 180, width: 640, height: 360, frameWidth: 1280, frameHeight: 720 }
+    const row = await h.deps.store.getVersion(v.id, 1)
+    console.log(JSON.stringify({ test: 'recording-api', case: 'crop', recording: row?.recording }))
+    expect(row?.recording?.crop).toEqual(crop)
+    expect(row?.recording?.boxes).toEqual([
+      { start: 0, end: 100, reason: 'Hidden by you', boxes: [[0, 0.1, 0.1, 0.2, 0.2]] },
+      { start: 2, end: 9, reason: 'Hidden by you', style: 'solid', boxes: [[2, 0.9, 0.9, 0.1, 0.1]] },
+    ])
+    expect(v.versions[0]?.recording.crop).toEqual(crop)
+    expect(v.private).toBe(true)
+
+    // The whole frame is no crop.
+    const whole = await h.json<{ id: string }>(
+      await create(h, h.member, { recording: { mediaId: id, crop: [0, 0, 1, 1] } }),
+    )
+    expect((await h.deps.store.getVersion(whole.id, 1))?.recording?.crop).toBeUndefined()
+
+    // Too small, or past the frame: 400 with the reason.
+    for (const [bad, says] of [
+      [[0, 0, 0.05, 0.5], 'at least'],
+      [[0.6, 0, 0.5, 1], 'inside the frame'],
+    ] as const) {
+      const r = await create(h, h.member, { recording: { mediaId: id, crop: bad } })
+      expect(r.status).toBe(400)
+      expect(JSON.stringify(await r.json())).toContain(says)
+    }
   })
 
   it('privacy mode is off unless asked; on, it rides on the version and its DTO', async () => {

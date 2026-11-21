@@ -26,6 +26,7 @@ import {
   type LockedEntry,
   type PlanV1,
 } from '../../app/server/lib/recording.js'
+import { cropAttr, cropFilter, type RecordingCrop } from '../../app/server/lib/recording-crop.js'
 import type { Trace } from '../../app/server/lib/recording-trace.js'
 import type { Analysis } from './recording-analyze.js'
 import { cursorPath, stableJson } from './recording-plan.js'
@@ -106,12 +107,12 @@ function writeFile(videoDir: string, rel: string, body: string | Uint8Array) {
 export const lockedEntries = (plan: PlanV1): LockedEntry[] =>
   plan.locked.map((e) => ({ ...e, origin: e.id.startsWith('s') ? 'setup' : 'trace' }))
 
-/** One frame at `t` as a JPEG (q85, at most 2560 wide). */
-function writeStill(file: string, t: number, out: string) {
+/** One frame at `t` as a JPEG (q85, at most 2560 wide): the cropped picture, with a crop. */
+function writeStill(file: string, t: number, out: string, crop: RecordingCrop | null) {
   mkdirSync(dirname(out), { recursive: true })
   const r = spawnSync('ffmpeg', [
     ...['-loglevel', 'error', '-y', '-ss', String(Math.max(0, t)), '-i', file, '-frames:v', '1'],
-    ...['-vf', `scale='min(${HOLD_MAX_WIDTH},iw)':-2`, '-q:v', '2', out],
+    ...['-vf', `${crop ? `${cropFilter(crop)},` : ''}scale='min(${HOLD_MAX_WIDTH},iw)':-2`, '-q:v', '2', out],
   ])
   if (r.status !== 0) throw new StepError(`ffmpeg hold still: ${r.stderr.toString().slice(-300)}`)
   const bytes = statSync(out).size
@@ -156,6 +157,9 @@ export function emitStep(o: EmitOptions) {
   const slotDur = hold ? span / RATE_RANGE[0] : duration
   const rate = hold ? RATE_RANGE[0] : rateOf(inS, outS, duration)
 
+  // With a crop, the analysis (and so the plan, the cursor and every box) is in the cropped picture; the stage's
+  // data-va-crop has va-recording.js draw only that part of the file.
+  const crop = o.analysis.crop ?? null
   const { width: W, height: H } = o.analysis.source
   const files = [writeFile(o.videoDir, LOCKED_SRC, redactScript(lockedEntries(o.plan)))]
   const path = simplifyPath(cursorPath(o.analysis, o.trace, inS, outS), W, H)
@@ -168,7 +172,7 @@ export function emitStep(o: EmitOptions) {
       throw new StepError(`The scene needs a held frame, but ${o.plan.mediaId} isn't in assets/media/.`)
     const rel = recHoldSrc(step.id)
     // The frame at out, a frame early so it's inside the file.
-    writeStill(join(o.videoDir, 'assets', 'media', media), outS - 1 / 30, join(o.videoDir, rel))
+    writeStill(join(o.videoDir, 'assets', 'media', media), outS - 1 / 30, join(o.videoDir, rel), crop)
     files.push({ path: rel, bytes: statSync(join(o.videoDir, rel)).size })
   }
 
@@ -182,7 +186,7 @@ export function emitStep(o: EmitOptions) {
     `  <script src="${LOCKED_SRC}"></script>`,
     ...(path.length ? [`  <script src="${cursorSrc(id)}"></script>`] : []),
     `  <div class="va-recording" data-va-recording="${id}" data-va-frame="${o.plan.frameStyle}">`,
-    `    <div class="va-stage" data-va-camera='${jsonAttr(camera.length ? camera : [[inS, 0.5, 0.5, 1]])}'>`,
+    `    <div class="va-stage"${crop ? ` data-va-crop="${cropAttr(crop)}"` : ''} data-va-camera='${jsonAttr(camera.length ? camera : [[inS, 0.5, 0.5, 1]])}'>`,
     `      <video id="rec-${id}" data-va-media="${id}-screen" data-va-kind="video" data-va-label="Screen" src="assets/media/${media ?? `${o.plan.mediaId}.mp4`}" data-va-in="${fmt(inS)}" data-va-out="${fmt(outS)}" data-media-start="${fmt(inS)}" data-playback-rate="${String(rate)}" muted data-start="0" data-duration="${fmt(slotDur)}"${hold ? ' data-va-rec-hold="end"' : ''}></video>`,
     ...(hold ? [`      <img class="va-rec-hold" src="${recHoldSrc(id)}" alt="">`] : []),
     `      <div class="va-cursor" data-va-cursor="${style}"${path.length ? ` data-va-path="${id}" data-va-cursor-from="${o.trace ? 'trace' : 'inferred'}"` : ''}></div>`,
@@ -220,7 +224,7 @@ export function holdStillTo(videoDir: string, html: string, rel: string, out: st
   if (!r) throw new StepError(`No held scene names ${rel}.`)
   const file = join(videoDir, r.src)
   if (!existsSync(file)) throw new StepError(`The held scene "${b.id}" needs ${r.src}, which isn't there.`)
-  return writeStill(file, r.out - 1 / 30, out)
+  return writeStill(file, r.out - 1 / 30, out, r.crop)
 }
 
 /** Writes the hold stills index.html's held slots name and lack; returns what it wrote. Never changes index.html. */

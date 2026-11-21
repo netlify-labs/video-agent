@@ -14,6 +14,7 @@ import {
   rateInRange,
   rateOf,
 } from './recording.js'
+import { cropAttr, sameCrop, type RecordingCrop } from './recording-crop.js'
 import type { RedactEntry } from './recording-trace.js'
 
 export interface RecordingProblem {
@@ -30,6 +31,11 @@ export interface RecordingCheckInput {
   recording: { filename: string; durationSec?: number | undefined } | null
   /** The locked inputs: the trace's redact entries and the person's setup boxes, in that order. Null: not known. */
   locked: { trace: RedactEntry[]; setup: RedactEntry[] } | null
+  /**
+   * The demo's crop from the run's inputs (null: the whole frame). Every recording scene must draw exactly it: hidden
+   * areas are placed in the cropped picture, so another crop would move them. Undefined: not known, not checked.
+   */
+  crop?: RecordingCrop | null | undefined
   /** Hold stills a render-unchanged run makes itself (recording.ts emit --holds-only): present-but-pending. */
   pendingStills?: readonly string[]
   /** A render-unchanged run: the person set the spans in the editor, so a held end needs no voice line or retime. */
@@ -108,6 +114,14 @@ export function recordingCheck(input: RecordingCheckInput): RecordingProblem[] {
         scene,
         'slot-src',
         `The recording slot must show this run's recording, assets/media/${input.recording.filename}.`,
+      )
+    if (input.crop !== undefined && !sameCrop(r.crop, input.crop))
+      add(
+        scene,
+        'crop',
+        input.crop
+          ? `Its stage must keep data-va-crop="${cropAttr(input.crop)}" (the person's crop); run recording.ts emit to rewrite the scene.`
+          : "Its stage has a data-va-crop, but this demo isn't cropped; remove it.",
       )
     const dur = input.recording?.durationSec
     if (!(r.in >= 0) || !(r.out > r.in) || (dur !== undefined && r.out > dur + TOL))

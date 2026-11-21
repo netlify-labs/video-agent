@@ -100,6 +100,8 @@ export interface RecordingPrompt {
   privacy?: boolean
   /** How many hide strings the person gave (the strings stay out of the prompt). */
   hideStrings?: number
+  /** The person cropped the picture to this many source px; null or absent for the whole frame. */
+  crop?: { width: number; height: number } | null
   /** Click targets from the pointer trace (already scrubbed when it was stored), at most 60. */
   clicks: { t: number; role: string; name: string }[]
   /** The run's deadline, in minutes. */
@@ -127,6 +129,10 @@ function recordingLines(
     '',
     `Screen recording: this video is a demo made from ${r.file}, a screen recording${r.seconds === null ? '' : ` ${mss(r.seconds)} long`}${r.trace ? ', with a pointer trace (exact clicks and cursor)' : ' without a pointer trace (clicks and the cursor are inferred)'}. Follow "Screen recordings" in video/AGENTS.md. Time: you have ${String(r.deadlineMin)} minutes in all; analysis takes up to 3 of them; render once, at the end.`,
   ]
+  if (r.crop)
+    lines.push(
+      `The person cropped the recording to a ${String(r.crop.width)}×${String(r.crop.height)} part of its picture. The recording scripts apply the crop: the sheets, focus crops and scenes show only that part, and every position is in it. Never change or remove a stage's data-va-crop.`,
+    )
   if (p.scoped)
     lines.push(
       "Only some scenes are being redone: emit only the scoped scenes; don't run plan again unless the request asks to re-plan them.",

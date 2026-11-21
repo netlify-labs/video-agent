@@ -74,6 +74,7 @@ import {
   voiceFits,
 } from './contract-core.js'
 import { CAMERA_MAX_KEYS, RATE_RANGE, rateInRange, rateOf } from './recording.js'
+import { parseCropAttr, type RecordingCrop } from './recording-crop.js'
 
 type Node = DefaultTreeAdapterMap['node']
 type Element = DefaultTreeAdapterMap['element']
@@ -134,6 +135,8 @@ export interface RecordingBeat {
   rate: number
   /** Camera keys and clicks in source seconds, as the markup holds them ([] when unreadable). */
   camera: unknown[]
+  /** The part of the picture the scene draws (the stage's data-va-crop); null for the whole frame. */
+  crop: RecordingCrop | null
   cursor: { style: string; size: number | null; path: string | null }
   clicks: unknown[]
   /** The scene's own hidden areas (the agent's and the editor's); the locked ones are in `locked`. */
@@ -1090,6 +1093,7 @@ function recordingOf(beat: Element): { recording?: RecordingBeat } {
       out: num(attr(slot, REC_OUT)),
       rate: num(attr(slot, 'data-playback-rate')),
       camera: jsonArray(camera ? attr(camera, 'data-va-camera') : null),
+      crop: parseCropAttr(camera ? attr(camera, 'data-va-crop') : null),
       cursor: {
         style: (cursor && attr(cursor, 'data-va-cursor')) ?? 'none',
         size: Number.isFinite(size) ? size : null,

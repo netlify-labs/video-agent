@@ -25,6 +25,7 @@ import {
   buildRenderUnchangedPrompt,
   type RecordingPrompt,
 } from './prompt.js'
+import { cropTrace } from '../lib/recording-crop.js'
 import { parseTrace } from '../lib/recording-trace.js'
 import { NARRATION_SRC } from '../lib/contract.js'
 import { isScopeRefusal, scopeStills } from '../lib/scope.js'
@@ -481,7 +482,8 @@ async function recordingPromptFor(deps: Deps, r: RunRecording): Promise<Recordin
   if (r.trace) {
     try {
       const bytes = await deps.blobs.get('media', r.trace.key)
-      const trace = bytes ? parseTrace(new TextDecoder().decode(bytes)) : null
+      // Clicks outside the person's crop aren't in the demo.
+      const trace = bytes ? cropTrace(parseTrace(new TextDecoder().decode(bytes)), r.crop) : null
       clicks = (trace?.events ?? [])
         .flatMap((e) =>
           e.kind === 'click' && e.target ? [{ t: e.t, role: e.target.role, name: e.target.name }] : [],
@@ -498,6 +500,7 @@ async function recordingPromptFor(deps: Deps, r: RunRecording): Promise<Recordin
     trace: Boolean(r.trace),
     privacy: r.privacy === true,
     hideStrings: r.hideStrings?.length ?? 0,
+    crop: r.crop ? { width: r.crop.width, height: r.crop.height } : null,
     clicks,
     deadlineMin: deps.config.authoringDeadlineMin,
   }

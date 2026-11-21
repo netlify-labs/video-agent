@@ -23,6 +23,8 @@ interface Setup {
   clicks?: unknown[]
   redact?: unknown[]
   cursor?: unknown[]
+  /** The first scene's data-va-crop. */
+  crop?: string
 }
 
 const logCase = (c: string, data: Record<string, unknown>) =>
@@ -34,6 +36,11 @@ async function open(page: Page, s: Setup = {}) {
     .replace('CAMERA', JSON.stringify(s.camera ?? CAMERA))
     .replace('CLICKS', JSON.stringify(s.clicks ?? [[4, 0.611, 0.304]]))
     .replace('REDACT', JSON.stringify(s.redact ?? []))
+  if (s.crop)
+    html = html.replace(
+      '<div class="va-stage" data-va-camera=',
+      `<div class="va-stage" data-va-crop="${s.crop}" data-va-camera=`,
+    )
   if (s.duration)
     html = html
       .replace(
@@ -269,4 +276,66 @@ test('seeking backwards and forwards gives identical pixels', async ({ page }) =
   const b = await page.screenshot()
   logCase('seek', { t: 3, expected: 'same pixels', actual: a.equals(b) })
   expect(a.equals(b)).toBe(true)
+})
+
+test("a cropped scene: the stage has the crop's shape, centred in the window, and shows only that part of the file", async ({
+  page,
+}) => {
+  // A 600x600 part of a 1280x720 recording, in the wallpaper window (88% of 1920x1080: 1689.6 x 950.4).
+  const warnings = await open(page, {
+    crop: '400,100,600,600,1280,720',
+    camera: [
+      [2, 0.5, 0.5, 1],
+      [7, 0.25, 0.75, 2],
+    ],
+  })
+  const rects = () =>
+    js<Record<'win' | 'stage' | 'video', { x: number; y: number; w: number; h: number }>>(
+      page,
+      `(() => {
+        const r = (sel) => {
+          const b = document.querySelector('#add-site ' + sel).getBoundingClientRect()
+          return { x: b.x, y: b.y, w: b.width, h: b.height }
+        }
+        return { win: r('.va-window'), stage: r('.va-stage'), video: r('video') }
+      })()`,
+    )
+  await seek(page, 'add-site', 0)
+  const at0 = await rects()
+  logCase('crop', { t: 0, expected: 'a 950.4 px square, centred', actual: at0 })
+  expect(at0.win.w).toBeCloseTo(1689.6, 1)
+  expect(at0.stage.w).toBeCloseTo(950.4, 1)
+  expect(at0.stage.h).toBeCloseTo(950.4, 1)
+  expect(at0.stage.x - at0.win.x).toBeCloseTo((1689.6 - 950.4) / 2, 1)
+  expect(at0.stage.y - at0.win.y).toBeCloseTo(0, 1)
+  // The file is placed so the crop's corner (400, 100) is the stage's, at 950.4 / 600 px per source px.
+  const k = 950.4 / 600
+  expect(at0.video.w).toBeCloseTo(1280 * k, 1)
+  expect(at0.video.h).toBeCloseTo(720 * k, 1)
+  expect(at0.stage.x - at0.video.x).toBeCloseTo(400 * k, 1)
+  expect(at0.stage.y - at0.video.y).toBeCloseTo(100 * k, 1)
+  expect(
+    await js<string>(page, `getComputedStyle(document.querySelector('#add-site .va-stage')).overflow`),
+  ).toBe('hidden')
+  // At the end the camera is at zoom 2 on (0.25, 0.75) of the cropped picture: that point is at the window's centre.
+  await seek(page, 'add-site', 7.5)
+  const end = await rects()
+  logCase('crop-camera', { t: 7.5, expected: 'zoom 2 on (0.25, 0.75)', actual: end })
+  expect(end.stage.w).toBeCloseTo(950.4 * 2, 1)
+  expect(end.stage.x + 0.25 * end.stage.w).toBeCloseTo(end.win.x + end.win.w / 2, 1)
+  expect(end.stage.y + 0.75 * end.stage.h).toBeCloseTo(end.win.y + end.win.h / 2, 1)
+  expect(warnings).toEqual([])
+})
+
+test("a crop that isn't six whole numbers inside the frame is ignored, with a warning: the whole frame shows", async ({
+  page,
+}) => {
+  const warnings = await open(page, { crop: '400,100,600,700,1280,720' })
+  await seek(page, 'add-site', 0)
+  const cropped = await js<boolean>(
+    page,
+    `document.querySelector('#add-site .va-stage').classList.contains('va-cropped')`,
+  )
+  expect(cropped).toBe(false)
+  expect(warnings.some((w) => w.includes('crop'))).toBe(true)
 })

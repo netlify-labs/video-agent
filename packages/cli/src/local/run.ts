@@ -13,6 +13,7 @@ import {
   type PromptInput,
   type RecordingPrompt,
 } from '../../../../app/server/domain/prompt.js'
+import { cropFromFractions, cropTrace } from '../../../../app/server/lib/recording-crop.js'
 import { parseTrace } from '../../../../app/server/lib/recording-trace.js'
 import { classify } from '../../../../app/server/lib/media/classify.js'
 import {
@@ -47,6 +48,8 @@ export interface LocalRunInput {
     path: string
     trace?: string | null
     trim?: [number, number]
+    /** [x, y, width, height] as fractions of the frame. */
+    crop?: [number, number, number, number]
     privacy?: boolean
     hideStrings?: string[]
     quick?: boolean
@@ -126,6 +129,11 @@ export function prepareLocalRun(ws: string, input: LocalRunInput, log: Log): Loc
     mkdirSync(join(inputs, 'media', id), { recursive: true })
     writeFileSync(join(inputs, 'media', key), bytes)
     const run = { key, sha256: sha256Hex(bytes), filename: `${id}.${c.ext}`, kind: 'video' as const }
+    let crop: ReturnType<typeof cropFromFractions> = null
+    if (input.recording.crop) {
+      // Throws with the reason (too small, outside the frame).
+      crop = cropFromFractions(input.recording.crop, c.width ?? 0, c.height ?? 0)
+    }
     let trace: { key: string; sha256: string } | undefined
     let clicks: RecordingPrompt['clicks'] = []
     if (input.recording.trace) {
@@ -133,8 +141,8 @@ export function prepareLocalRun(ws: string, input: LocalRunInput, log: Log): Loc
       const parsed = parseTrace(text)
       trace = { key: `${id}/trace.json`, sha256: sha256Hex(text) }
       writeFileSync(join(inputs, 'media', trace.key), text)
-      clicks = parsed.events
-        .flatMap((e) =>
+      clicks = cropTrace(parsed, crop)
+        .events.flatMap((e) =>
           e.kind === 'click' && e.target ? [{ t: e.t, role: e.target.role, name: e.target.name }] : [],
         )
         .slice(0, MAX_PROMPT_CLICKS)
@@ -146,6 +154,7 @@ export function prepareLocalRun(ws: string, input: LocalRunInput, log: Log): Loc
       ...(trace ? { trace } : {}),
       boxes: [],
       ...(input.recording.trim ? { trim: input.recording.trim } : {}),
+      ...(crop ? { crop } : {}),
       ...(input.recording.quick ? { compose: true } : {}),
       ...(input.recording.privacy ? { privacy: true } : {}),
       ...(input.recording.hideStrings?.length ? { hideStrings: input.recording.hideStrings } : {}),
@@ -157,6 +166,7 @@ export function prepareLocalRun(ws: string, input: LocalRunInput, log: Log): Loc
       trace: Boolean(trace),
       privacy: input.recording.privacy === true,
       hideStrings: input.recording.hideStrings?.length ?? 0,
+      crop: crop ? { width: crop.width, height: crop.height } : null,
       clicks,
       deadlineMin: 40,
     }

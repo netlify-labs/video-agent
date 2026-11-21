@@ -5,6 +5,13 @@ import type { Deps } from '../deps.js'
 import { ApiError } from '../lib/errors.js'
 import { classify, MediaError } from '../lib/media/classify.js'
 import { round4, type BoxSpanOp } from '../lib/recording.js'
+import {
+  canonCrop,
+  cropFromFractions,
+  cropRedact,
+  cropTrace,
+  type RecordingCrop,
+} from '../lib/recording-crop.js'
 import { parseTrace } from '../lib/recording-trace.js'
 import type { RunMedia, RunRecording } from '../lib/run-manifest.js'
 import type { Principal } from './policy.js'
@@ -22,6 +29,7 @@ export function inheritRecording(parent: VersionRecording | null | undefined): V
     trace: parent.trace,
     trim: parent.trim,
     boxes: parent.boxes,
+    ...(parent.crop ? { crop: parent.crop } : {}),
     compose: parent.compose,
     ...(parent.privacy ? { privacy: true } : {}),
     ...(parent.hideStrings?.length ? { hideStrings: parent.hideStrings } : {}),
@@ -49,6 +57,7 @@ export function manifestRecording(
     ...(r.trace ? { trace: r.trace } : {}),
     boxes: r.boxes,
     ...(r.trim ? { trim: r.trim } : {}),
+    ...(r.crop ? { crop: canonCrop(r.crop) } : {}),
     ...(r.compose ? { compose: true } : {}),
     ...(r.privacy ? { privacy: true } : {}),
     ...(r.hideStrings?.length ? { hideStrings: r.hideStrings } : {}),
@@ -63,6 +72,8 @@ export const demoDuration = (sourceSec: number) => Math.min(90, Math.max(20, Mat
 export interface RecordingRequest {
   mediaId: string
   trim?: [number, number] | undefined
+  /** [x, y, width, height] as fractions of the frame; the whole frame when left out. */
+  crop?: [number, number, number, number] | undefined
   redact?:
     | {
         /** The whole recording when left out (0 to its end). */
@@ -122,7 +133,17 @@ export async function demoRecording(
       'invalid_request',
       `trim must be [in, out] inside the recording (0 to ${String(Math.round(length * 10) / 10)} s), at least 2 seconds.`,
     )
-  const boxes = (req.redact ?? []).map((r0, i) => {
+  let crop: RecordingCrop | null = null
+  if (req.crop) {
+    if (!m.width || !m.height)
+      throw new ApiError('invalid_request', `Media ${m.id} has no known size, so it can't be cropped.`)
+    try {
+      crop = cropFromFractions(req.crop, m.width, m.height)
+    } catch (e) {
+      throw new ApiError('invalid_request', e instanceof Error ? e.message : 'crop is not valid.')
+    }
+  }
+  const drawn = (req.redact ?? []).map((r0, i) => {
     // A box covers the whole recording unless it says otherwise (the editor can shorten it later).
     const r = { ...r0, start: r0.start ?? 0, end: r0.end ?? length }
     const [x, y, w, h] = r.box
@@ -139,11 +160,14 @@ export async function demoRecording(
       boxes: [[r.start, x, y, w, h]] as [number, number, number, number, number][],
     }
   })
+  // With a crop the cropped picture is the frame: boxes are kept as fractions of it, and one outside it has nothing
+  // to hide.
+  const boxes = cropRedact(drawn, crop)
   const trace = m.traceKey && m.traceSha256 ? { key: m.traceKey, sha256: m.traceSha256 } : null
   let traceHides = 0
   if (trace) {
     const bytes = await deps.blobs.get('media', trace.key)
-    traceHides = bytes ? parseTrace(new TextDecoder().decode(bytes)).redact.length : 0
+    traceHides = bytes ? cropTrace(parseTrace(new TextDecoder().decode(bytes)), crop).redact.length : 0
   }
   // Trimmed, inner whitespace collapsed, empty and repeated ones dropped.
   const hideStrings = [
@@ -154,6 +178,7 @@ export async function demoRecording(
     trace,
     trim: req.trim ? [tin, tout] : null,
     boxes,
+    ...(crop ? { crop } : {}),
     compose: false,
     ...(req.privacy ? { privacy: true } : {}),
     ...(hideStrings.length ? { hideStrings } : {}),
@@ -174,7 +199,7 @@ export async function demoRecording(
   return {
     recording,
     row,
-    private: boxes.length > 0 || traceHides > 0 || req.privacy === true || hideStrings.length > 0,
+    private: drawn.length > 0 || traceHides > 0 || req.privacy === true || hideStrings.length > 0,
     sourceSec: tout - tin,
   }
 }

@@ -6,7 +6,10 @@
  * data-playback-rate: that would scale twice). It reads data-va-camera, data-va-clicks, data-va-redact and the cursor
  * path and locked hidden areas registered by assets/recording/<step>.cursor.js and assets/recording/redact.js. Every
  * entry is parsed and checked; a bad one is skipped with console.warn('va-recording', ...). Deterministic and
- * seek-safe: only GSAP tweens and sets, no timers or clocks. */
+ * seek-safe: only GSAP tweens and sets, no timers or clocks.
+ * A cropped demo's stage has data-va-crop="x,y,width,height,frameWidth,frameHeight" (source px): the stage takes the
+ * crop's shape, fitted and centred in the window, and shows only that part of the file. Every position (camera,
+ * cursor, clicks, hidden areas) is then a fraction of the cropped picture, and zoom 1 shows all of it. */
 ;(function () {
   var CSS =
     '.va-recording{position:absolute;inset:0;overflow:hidden}' +
@@ -16,6 +19,10 @@
     '.va-stage{position:absolute;left:0;top:0;width:100%;height:100%;transform-origin:0 0}' +
     '.va-stage>video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}' +
     '.va-stage>.va-rec-hold{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;visibility:hidden}' +
+    // Cropped: the window is a size container, so the stage can be the crop's shape (--va-crop-ar) fitted in it.
+    '.va-window.va-crop-window{container-type:size}' +
+    '.va-stage.va-cropped{overflow:hidden;width:min(100cqw,calc(100cqh*var(--va-crop-ar)));height:min(100cqh,calc(100cqw/var(--va-crop-ar)));left:calc((100cqw - min(100cqw,calc(100cqh*var(--va-crop-ar))))/2);top:calc((100cqh - min(100cqh,calc(100cqw/var(--va-crop-ar))))/2)}' +
+    '.va-stage.va-cropped>video{inset:auto;object-fit:fill}' +
     '.va-cursor{position:absolute;left:50%;top:50%;width:0;height:0;pointer-events:none;z-index:3}' +
     '.va-cursor svg{position:absolute;left:-3px;top:-2px;width:28px;height:28px;filter:drop-shadow(0 2px 3px rgba(0,0,0,.4))}' +
     '.va-cursor .va-ring{position:absolute;left:-22px;top:-22px;width:44px;height:44px;border-radius:50%;border:3px solid var(--va-color-accent,#14b8a6);background:rgba(20,184,166,.15)}' +
@@ -97,6 +104,21 @@
 
     // The zoomed stage overflows its window on purpose (the window clips it).
     stage.setAttribute('data-layout-allow-overflow', '')
+    // A crop: six whole numbers, inside the frame; anything else is ignored (the whole frame shows).
+    var cropRaw = stage.getAttribute('data-va-crop')
+    if (cropRaw !== null) {
+      var c = /^\d+(,\d+){5}$/.test(cropRaw) ? cropRaw.split(',').map(Number) : null
+      if (!c || !(c[2] >= 2 && c[3] >= 2 && c[0] + c[2] <= c[4] && c[1] + c[3] <= c[5])) warn(beat, 'crop', -1)
+      else {
+        win.classList.add('va-crop-window')
+        stage.classList.add('va-cropped')
+        stage.style.setProperty('--va-crop-ar', String(c[2] / c[3]))
+        video.style.left = (-c[0] / c[2]) * 100 + '%'
+        video.style.top = (-c[1] / c[3]) * 100 + '%'
+        video.style.width = (c[4] / c[2]) * 100 + '%'
+        video.style.height = (c[5] / c[3]) * 100 + '%'
+      }
+    }
     // Camera: x, y (the frame point at the window's centre) and zoom, as percent translate and scale.
     var keys = parse(stage.getAttribute('data-va-camera'), beat, 'camera').filter(function (k, i) {
       var ok =

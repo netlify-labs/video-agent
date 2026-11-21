@@ -2,7 +2,17 @@
 // records (D4), the encoder settings, which files need converting, and the setup's request (the server's length
 // formula, boxes and trim that the server accepts).
 import { describe, expect, it } from 'vitest'
-import { defaultLength, recordingInput } from './demo-setup'
+import {
+  cropMin,
+  defaultLength,
+  dragCrop,
+  drawCrop,
+  isWhole,
+  playFrom,
+  recordingInput,
+  WHOLE,
+  type CropBox,
+} from './demo-setup'
 import { convertSettings, needsConversion, type VideoFacts } from './recording-convert'
 import { bitrateFor, captureMode, encodedSize } from './screen-capture'
 
@@ -95,5 +105,51 @@ describe('setup', () => {
       boxes: [{ id: 'b', x: 0.1, y: 0.1, w: 0.2, h: 0.1, start: 0, end: 60, style: 'solid' }],
     })
     expect(solid.redact?.[0]?.style).toBe('solid')
+  })
+
+  it('sends the crop only when it cuts, to 4 places and inside the frame', () => {
+    const base = { mediaId: 'med_a', duration: 60, trim: [0, 60] as [number, number], boxes: [] }
+    expect(recordingInput({ ...base, crop: WHOLE })).toEqual({ mediaId: 'med_a' })
+    expect(recordingInput({ ...base, crop: [0.001, 0, 0.998, 1] })).toEqual({ mediaId: 'med_a' })
+    expect(recordingInput({ ...base, crop: null })).toEqual({ mediaId: 'med_a' })
+    const r = recordingInput({ ...base, crop: [0.123456, 0.2, 0.876549, 0.80004] })
+    expect(r.crop).toEqual([0.1235, 0.2, 0.8765, 0.8])
+    const [x, y, w, h] = r.crop ?? WHOLE
+    expect(x + w).toBeLessThanOrEqual(1)
+    expect(y + h).toBeLessThanOrEqual(1)
+  })
+
+  it('the crop rectangle: handles resize inside the frame down to the least size; the box moves whole', () => {
+    const min = cropMin({ width: 1280, height: 720 })
+    // A tenth of the frame, or 160 px when that's more.
+    expect(min[0]).toBeCloseTo(0.125)
+    expect(min[1]).toBeCloseTo(160 / 720)
+    expect(cropMin({ width: 2560, height: 1440 })).toEqual([0.1, 160 / 1440])
+    const c: CropBox = [0.2, 0.2, 0.6, 0.6]
+    const near = (a: CropBox, b: CropBox) => a.forEach((n, i) => expect(n).toBeCloseTo(b[i] ?? NaN, 6))
+    near(dragCrop(c, 'se', 0.1, 0.1, min), [0.2, 0.2, 0.7, 0.7])
+    near(dragCrop(c, 'nw', 0.1, -0.1, min), [0.3, 0.1, 0.5, 0.7])
+    near(dragCrop(c, 'e', 5, 5, min), [0.2, 0.2, 0.8, 0.6])
+    near(dragCrop(c, 'n', 5, -5, min), [0.2, 0, 0.6, 0.8])
+    // Never smaller than the least size: the dragged edge stops.
+    near(dragCrop(c, 'w', 5, 0, min), [0.8 - min[0], 0.2, min[0], 0.6])
+    near(dragCrop(c, 's', 0, -5, min), [0.2, 0.2, 0.6, min[1]])
+    // Moving keeps the size and stays inside.
+    near(dragCrop(c, 'move', 0.1, -0.05, min), [0.3, 0.15, 0.6, 0.6])
+    near(dragCrop(c, 'move', 5, 5, min), [0.4, 0.4, 0.6, 0.6])
+    near(dragCrop(c, 'move', -5, -5, min), [0, 0, 0.6, 0.6])
+    // Drawing: any two corners; a tiny one grows to the least size, inside the frame.
+    near(drawCrop(0.7, 0.8, 0.1, 0.2, min), [0.1, 0.2, 0.6, 0.6])
+    near(drawCrop(0.99, 0.99, 1, 1, min), [1 - min[0], 1 - min[1], min[0], min[1]])
+    expect(isWhole(WHOLE)).toBe(true)
+    expect(isWhole(c)).toBe(false)
+  })
+
+  it('playback starts where it is inside the trim, else at its start', () => {
+    expect(playFrom(0, [5, 20])).toBe(5)
+    expect(playFrom(12.5, [5, 20])).toBe(12.5)
+    // At (or just before) the end, and past it: from the start again.
+    expect(playFrom(19.95, [5, 20])).toBe(5)
+    expect(playFrom(25, [5, 20])).toBe(5)
   })
 })

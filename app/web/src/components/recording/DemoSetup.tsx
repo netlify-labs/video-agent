@@ -1,7 +1,8 @@
-// Demo setup (screen-recording plan §4.4; va-rsk5.4.2): where privacy is set. Trim the ends; draw boxes over anything
-// private (each hides its area for a span, the whole recording by default); two plain notes about who sees what and
-// what the AI looks at; a note on the cursor; then the usual fields and "Make it", which creates the demo with
-// recording { mediaId, trim, redact }. The demo starts private when anything is hidden.
+// Demo setup (screen-recording plan §4.4; va-rsk5.4.2): where privacy is set. Play the recording; trim the ends; crop
+// the picture; draw boxes over anything private (each hides its area for a span, the whole recording by default); two
+// plain notes about who sees what and what the AI looks at; a note on the cursor; then the usual fields and "Make
+// it", which creates the demo with recording { mediaId, trim, crop, redact }. The demo starts private when anything
+// is hidden.
 import {
   ActionIcon,
   Alert,
@@ -17,14 +18,27 @@ import {
   Textarea,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
-import { IconEyeOff, IconInfoCircle, IconTrash } from '@tabler/icons-react'
+import { IconCrop, IconEyeOff, IconInfoCircle, IconTrash } from '@tabler/icons-react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { useNavigate } from 'react-router'
 import { $api, errorMessage, newIdempotencyKey } from '../../api/client'
 import type { paths } from '../../api/schema'
 import { sharpZoomMax, ZOOM_MIN } from '../../../../server/lib/recording'
-import { defaultLength, fitBox, MIN_TRIM, recordingInput, type SetupBox } from '../../lib/demo-setup'
+import type { RecordingCrop } from '../../../../server/lib/recording-crop'
+import {
+  cropMin,
+  defaultLength,
+  fitBox,
+  isWhole,
+  MIN_TRIM,
+  recordingInput,
+  WHOLE,
+  type CropBox,
+  type SetupBox,
+} from '../../lib/demo-setup'
+import { CropOverlay } from './CropOverlay'
+import { RecordingPlayer } from './RecordingPlayer'
 import { defaultLook, looksForDemo } from '../../lib/looks'
 import { LookControl, useLooks } from '../LookPicker'
 import { SoundControl, type Sound } from '../SoundControl'
@@ -43,6 +57,22 @@ type Shape = (typeof SHAPES)[number]['value']
 const fmt = (s: number) => `${String(Math.floor(s / 60))}:${(s % 60).toFixed(1).padStart(4, '0')}`
 let boxSeq = 0
 
+/**
+ * How a <video> is placed in a box of the crop's shape so that only the crop shows (the box clips the rest), as
+ * va-recording.js draws a cropped scene.
+ */
+export function croppedVideoStyle(c: RecordingCrop): React.CSSProperties {
+  return {
+    position: 'absolute',
+    left: `${String((-c.x / c.width) * 100)}%`,
+    top: `${String((-c.y / c.height) * 100)}%`,
+    width: `${String((c.frameWidth / c.width) * 100)}%`,
+    height: `${String((c.frameHeight / c.height) * 100)}%`,
+    maxWidth: 'none',
+    objectFit: 'fill',
+  }
+}
+
 /** The player and the box tool: draw on the picture to add a box, drag one to move it (setup and the editor). */
 export function BoxCanvas(props: {
   media: {
@@ -59,6 +89,12 @@ export function BoxCanvas(props: {
   videoRef: React.RefObject<HTMLVideoElement | null>
   /** The id a newly drawn box gets (the editor's eN); setup numbers its own. */
   newId?: () => string
+  /** The recording's own sound plays (setup's player); muted otherwise. */
+  sound?: boolean
+  /** A cropped demo (the editor): the picture is the crop, and boxes are fractions of it. */
+  crop?: RecordingCrop | null | undefined
+  /** Drawn over the picture and the boxes (setup's crop rectangle). */
+  overlay?: ReactNode
 }) {
   const area = useRef<HTMLDivElement>(null)
   const drag = useRef<{ mode: 'draw' | 'move'; id: string; x0: number; y0: number; box: SetupBox } | null>(
@@ -82,7 +118,9 @@ export function BoxCanvas(props: {
       data-testid="box-canvas"
       style={{
         position: 'relative',
-        aspectRatio: `${String(props.media.width ?? 16)} / ${String(props.media.height ?? 9)}`,
+        aspectRatio: props.crop
+          ? `${String(props.crop.width)} / ${String(props.crop.height)}`
+          : `${String(props.media.width ?? 16)} / ${String(props.media.height ?? 9)}`,
         background: '#000',
         borderRadius: 8,
         overflow: 'hidden',
@@ -128,10 +166,15 @@ export function BoxCanvas(props: {
         ref={props.videoRef}
         src={props.media.src}
         poster={props.media.poster ?? undefined}
-        muted
+        muted={!props.sound}
         playsInline
         preload="metadata"
-        style={{ width: '100%', height: '100%', display: 'block', pointerEvents: 'none' }}
+        style={{
+          ...(props.crop
+            ? croppedVideoStyle(props.crop)
+            : { width: '100%', height: '100%', display: 'block' }),
+          pointerEvents: 'none',
+        }}
       />
       {props.boxes.map((b, i) => (
         <div
@@ -174,6 +217,7 @@ export function BoxCanvas(props: {
           }}
         ></div>
       ))}
+      {props.overlay}
     </div>
   )
 }
@@ -187,6 +231,14 @@ export function DemoSetup(props: { media: Media; onBack: () => void }) {
   const video = useRef<HTMLVideoElement | null>(null)
   const [trim, setTrim] = useState<[number, number]>([0, duration])
   const [boxes, setBoxes] = useState<SetupBox[]>([])
+  const [crop, setCrop] = useState<CropBox>(WHOLE)
+  const [cropping, setCropping] = useState(false)
+  const cropped = !isWhole(crop)
+  // What's kept, in the recording's pixels.
+  const kept =
+    media.width !== null && media.height !== null
+      ? { width: Math.round(crop[2] * media.width), height: Math.round(crop[3] * media.height) }
+      : null
   const [selected, setSelected] = useState<string | null>(null)
   const [prompt, setPrompt] = useState('')
   const [length, setLength] = useState<number | string>(defaultLength(duration))
@@ -226,13 +278,10 @@ export function DemoSetup(props: { media: Media; onBack: () => void }) {
     if (video.current) video.current.currentTime = t
   }
   // Too small to zoom in sharply in this shape (the planner holds the camera back; app/server/lib/recording.ts).
-  const small =
-    media.width !== null &&
-    media.height !== null &&
-    sharpZoomMax({ width: media.width, height: media.height }, shape, 'wallpaper') < ZOOM_MIN
+  const small = kept !== null && kept.width > 0 && sharpZoomMax(kept, shape, 'wallpaper') < ZOOM_MIN
   const valid = prompt.trim().length >= 10 && Number(length) >= 3
   const submit = () => {
-    const recording = recordingInput({ mediaId: media.id, duration, trim, boxes })
+    const recording = recordingInput({ mediaId: media.id, duration, trim, boxes, crop })
     const body = {
       prompt: prompt.trim(),
       aspect: shape,
@@ -260,7 +309,10 @@ export function DemoSetup(props: { media: Media; onBack: () => void }) {
             onSelect={setSelected}
             onChange={setBoxes}
             videoRef={video}
+            sound
+            overlay={<CropOverlay value={crop} active={cropping} min={cropMin(media)} onChange={setCrop} />}
           />
+          <RecordingPlayer video={video} trim={trim} />
           <div>
             <Group justify="space-between">
               <Text size="sm" fw={500}>
@@ -287,6 +339,46 @@ export function DemoSetup(props: { media: Media; onBack: () => void }) {
                 if (!lengthTouched) setLength(defaultLength(v[1] - v[0]))
               }}
             />
+          </div>
+          <div>
+            <Group justify="space-between" align="center" wrap="nowrap">
+              <Text size="sm" fw={500}>
+                Crop the picture
+              </Text>
+              <Group gap="xs" wrap="nowrap">
+                {cropped ? (
+                  <Button
+                    size="compact-xs"
+                    variant="subtle"
+                    onClick={() => {
+                      setCrop(WHOLE)
+                      setCropping(false)
+                    }}
+                  >
+                    Reset
+                  </Button>
+                ) : null}
+                <Button
+                  size="compact-xs"
+                  variant={cropping ? 'filled' : 'light'}
+                  leftSection={<IconCrop size={14} />}
+                  aria-pressed={cropping}
+                  onClick={() => {
+                    setCropping(!cropping)
+                    setSelected(null)
+                  }}
+                >
+                  {cropping ? 'Done' : cropped ? 'Change crop' : 'Crop'}
+                </Button>
+              </Group>
+            </Group>
+            <Text size="xs" c="var(--va-muted)" data-testid="crop-note">
+              {cropping
+                ? 'Drag the corners and edges, or draw a new rectangle on the picture. Then choose Done.'
+                : cropped && kept
+                  ? `The demo uses ${String(kept.width)}×${String(kept.height)} px of the ${String(media.width)}×${String(media.height)} picture; the dimmed part is left out.`
+                  : 'Keep only part of the picture: the browser without the menu bar and the dock, say. Zooms and the cursor follow the part you keep.'}
+            </Text>
           </div>
           <div>
             <Text size="sm" fw={500}>
@@ -366,9 +458,11 @@ export function DemoSetup(props: { media: Media; onBack: () => void }) {
           {small ? (
             <Alert variant="light" color="yellow" data-testid="low-res-note">
               <Text size="sm">
-                This recording is {String(media.width)}×{String(media.height)}, small for a {shape} video, so
-                Video Agent will zoom in only a little to keep it sharp. For sharp zooms, record at 2x or in a
-                larger window.
+                {cropped
+                  ? `The part you keep is ${String(kept.width)}×${String(kept.height)}`
+                  : `This recording is ${String(media.width)}×${String(media.height)}`}
+                , small for a {shape} video, so Video Agent will zoom in only a little to keep it sharp. For
+                sharp zooms, record at 2x or in a larger window.
               </Text>
             </Alert>
           ) : null}

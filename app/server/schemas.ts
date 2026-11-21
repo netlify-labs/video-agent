@@ -415,6 +415,16 @@ export const ContextSchema = z
       'Background for the run (a pull request, release notes), given to it in its own fence as data, never instructions.',
   })
 
+/** A demo's crop as it is kept: source pixels, with the frame's size (app/server/lib/recording-crop.ts). */
+export const RecordingCropSchema = z.object({
+  x: z.number().int(),
+  y: z.number().int(),
+  width: z.number().int(),
+  height: z.number().int(),
+  frameWidth: z.number().int(),
+  frameHeight: z.number().int(),
+})
+
 export const VersionSchema = z
   .object({
     plan: z
@@ -470,6 +480,11 @@ export const VersionSchema = z
         mediaId: z.string(),
         trace: z.boolean().describe('The recording came with a pointer trace (exact clicks and cursor).'),
         compose: z.boolean().describe('Made with no agent authoring (a Quick demo).'),
+        crop: RecordingCropSchema.nullable()
+          .optional()
+          .describe(
+            "The part of the recording's picture the demo uses, in source pixels; null for the whole frame.",
+          ),
         privacy: z.boolean().describe('Privacy mode: private things on screen are found and hidden too.'),
         summary: z
           .object({
@@ -756,6 +771,17 @@ export const RecordingInputSchema = z
       .describe(
         'Seconds of the recording to use, [in, out]: in before out, at least 2 seconds, inside the file.',
       ),
+    crop: z
+      .tuple([
+        z.number().min(0).max(1),
+        z.number().min(0).max(1),
+        z.number().positive().max(1),
+        z.number().positive().max(1),
+      ])
+      .optional()
+      .describe(
+        'The part of the picture to use, [x, y, width, height] as fractions of the frame (a whole-screen recording cut down to the browser, say). The demo shows only this part: zooms, the cursor and hidden areas follow it. At least a tenth of the frame each way and 160 px. The whole frame when left out.',
+      ),
     redact: z
       .array(
         z.object({
@@ -778,7 +804,7 @@ export const RecordingInputSchema = z
               z.number().min(0).max(1),
               z.number().min(0).max(1),
             ])
-            .describe('[x, y, width, height] as fractions of the frame.'),
+            .describe('[x, y, width, height] as fractions of the frame (the whole frame, also with a crop).'),
           style: z
             .enum(['blur', 'solid'])
             .optional()
@@ -1691,6 +1717,9 @@ const CompositionSchema = z
             out: z.number().describe('Source seconds the scene shows to'),
             rate: z.number().describe('Playback speed (1 = real time)'),
             camera: z.array(z.unknown()).describe('[t, x, y, zoom, ease?] keys, in source seconds'),
+            crop: RecordingCropSchema.nullable().describe(
+              "The part of the recording's picture the demo uses, in source pixels; null for the whole frame. Positions (camera, clicks, hidden areas) are fractions of this part.",
+            ),
             cursor: z.object({ style: z.string(), size: z.number().nullable(), path: z.string().nullable() }),
             clicks: z.array(z.unknown()).describe('[t, x, y] clicks, in source seconds'),
             redact: z

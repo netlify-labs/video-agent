@@ -8,6 +8,7 @@ import type { NarrationCleanup } from '../lib/timeline.js'
 import type { PreviewFile, Previews } from '../lib/media/previews.js'
 import type { RunCredit } from '../lib/openverse-rules.js'
 import type { PrivacyKind } from '../lib/privacy-patterns.js'
+import type { RecordingCrop } from '../lib/recording-crop.js'
 import type { RedactEntry } from '../lib/recording-trace.js'
 
 export type Role = 'admin' | 'creator' | 'reviewer' | 'viewer'
@@ -847,8 +848,10 @@ export interface VersionRecording {
   /** The trace, frozen when the version was created; null when the recording has none. */
   trace: { key: string; sha256: string } | null
   trim: [number, number] | null
-  /** The person's setup boxes, one key each. */
+  /** The person's setup boxes, one key each; with a crop, as fractions of the cropped picture. */
   boxes: RedactEntry[]
+  /** The part of the picture the demo uses (source px); absent for the whole frame. */
+  crop?: RecordingCrop
   /** Made by recording.ts compose, with no agent. */
   compose: boolean
   /** Privacy mode: private things are found and hidden for the person to keep or remove. Off (absent): only the

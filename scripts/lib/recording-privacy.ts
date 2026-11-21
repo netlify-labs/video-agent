@@ -10,6 +10,7 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { findPrivate, PRIVACY_LABELS, type PrivacyKind } from '../../app/server/lib/privacy-patterns.js'
+import { cropFilter, type RecordingCrop } from '../../app/server/lib/recording-crop.js'
 import type { Analysis } from './recording-analyze.js'
 import { log } from './run-tools.js'
 
@@ -205,9 +206,13 @@ export async function tesseractOcr(): Promise<{ ocr: Ocr; close: () => Promise<v
   }
 }
 
-const frameAt = (file: string, t: number, out: string) =>
-  spawnSync('ffmpeg', ['-loglevel', 'error', '-y', '-ss', t.toFixed(3), '-i', file, '-frames:v', '1', out])
-    .status === 0
+/** One frame at `t` as an image: the cropped picture when the analysis has a crop. */
+const frameAt = (file: string, t: number, out: string, crop?: RecordingCrop) =>
+  spawnSync('ffmpeg', [
+    ...['-loglevel', 'error', '-y', '-ss', t.toFixed(3), '-i', file, '-frames:v', '1'],
+    ...(crop ? ['-vf', cropFilter(crop)] : []),
+    out,
+  ]).status === 0
 
 /**
  * Reads the recording and writes context/recording/<id>/privacy/candidates.json and a crop per candidate. Returns the
@@ -234,7 +239,7 @@ export async function scanPrivacy(
         break
       }
       const png = join(dir, 'frames', `${t.toFixed(2)}.png`)
-      if (!frameAt(file, t, png)) continue
+      if (!frameAt(file, t, png, a.crop)) continue
       const found = matchFrame(await ocr(png), {
         patterns: opts.patterns,
         strings: opts.strings,
@@ -265,7 +270,8 @@ export async function scanPrivacy(
       ...['-loglevel', 'error', '-y', '-ss', seen.toFixed(3), '-i', file, '-frames:v', '1'],
       ...[
         '-vf',
-        `crop=${String(Math.round(w * W))}:${String(Math.round(h * H))}:${String(Math.round(x * W))}:${String(Math.round(y * H))}`,
+        // Fractions of the (cropped) picture; the file is the whole frame.
+        `crop=${String(Math.round(w * W))}:${String(Math.round(h * H))}:${String(Math.round(x * W) + (a.crop?.x ?? 0))}:${String(Math.round(y * H) + (a.crop?.y ?? 0))}`,
       ],
       ...['-q:v', '3', join(opts.contextDir, crop)],
     ])

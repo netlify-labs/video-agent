@@ -192,6 +192,11 @@ export const COMMANDS: CommandSpec[] = [
           'Make a demo from a screen recording: a media id, a video-agent record folder or an MP4 (uploaded first).',
       },
       trim: { type: 'string', description: 'With --recording: the seconds to use, in,out (like 2,48.5).' },
+      crop: {
+        type: 'string',
+        description:
+          'With --recording: the part of the picture to use, x,y,width,height as fractions (like 0,0.08,1,0.84).',
+      },
       privacy: {
         type: 'boolean',
         description: 'With --recording: privacy mode (find and hide emails, keys, tokens, URLs with ids…).',
@@ -786,6 +791,10 @@ export const COMMANDS: CommandSpec[] = [
       aspect: { type: 'string', description: '16:9, 9:16, 1:1 or 4:5.', default: '16:9' },
       duration: { type: 'number', description: 'Target length in seconds.' },
       trim: { type: 'string', description: 'The seconds of the recording to use, in,out (like 2,48.5).' },
+      crop: {
+        type: 'string',
+        description: 'The part of the picture to use, x,y,width,height as fractions (like 0,0.08,1,0.84).',
+      },
       trace: { type: 'string', description: "The recording's trace.json (default: the one beside it)." },
       privacy: {
         type: 'boolean',

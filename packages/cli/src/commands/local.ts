@@ -16,7 +16,7 @@ import type { Ctx, Handler } from '../router.js'
 import { VERSION } from '../version.js'
 import { localScope } from '../local/scope.js'
 import { sceneFlags } from './scenes.js'
-import { parseTrim, recordingFiles } from './recording.js'
+import { parseCrop, parseTrim, recordingFiles } from './recording.js'
 import { arg, durationMs } from './shared.js'
 
 /** Agents this version ships (docs/spikes.md C2: each must pass the sandbox spike). Fixture is hidden, for CI. */
@@ -191,6 +191,7 @@ const localDemo: Handler = async (ctx) => {
   if (!['16:9', '9:16', '1:1', '4:5'].includes(aspect))
     throw new UsageError('--aspect takes 16:9, 9:16, 1:1 or 4:5.')
   const trim = parseTrim(ctx.flags.trim)
+  const crop = parseCrop(ctx.flags.crop)
   const hideStrings =
     ctx.flags['hide-text'] === undefined
       ? []
@@ -208,6 +209,7 @@ const localDemo: Handler = async (ctx) => {
       path: file,
       trace: (ctx.flags.trace as string | undefined) ?? trace,
       ...(trim ? { trim } : {}),
+      ...(crop ? { crop } : {}),
       ...(ctx.flags.privacy ? { privacy: true } : {}),
       ...(hideStrings.length ? { hideStrings } : {}),
       ...(ctx.flags.quick ? { quick: true } : {}),

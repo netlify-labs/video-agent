@@ -15,10 +15,24 @@ versions, comments, the editor, publishing and remix all work.
 - **Making the demo:** `POST /api/v1/videos` with `{"prompt": "…", "recording": {"mediaId": "med_…"}}` and optionally
   `trim: [in, out]` (seconds) and `redact: [{start, end, box: [x, y, w, h]}]` (fractions of the frame) to hide things
   from the start (blurred; add `"style": "solid"` for a flat box). A box covers the whole recording unless you give
-  `start` or `end`. Without `durationSec`, the target is about 0.4 of the recording used, 20 to 90 seconds. Remix takes
+  `start` or `end`. `crop: [x, y, w, h]` (fractions of the frame too) uses only part of the picture; see Crop below.
+  Without `durationSec`, the target is about 0.4 of the recording used, 20 to 90 seconds. Remix takes
   `recording` too (a new recording, the same request and look); without it, a demo's remix keeps its recording. From
-  AI tools, `create_video` and `remix_video` take `recording_media_id`, `trim` and `redact`. Demos are made with
+  AI tools, `create_video` and `remix_video` take `recording_media_id`, `trim`, `crop` and `redact`. Demos are made with
   HyperFrames only (`409 engine_unsupported` otherwise).
+- **The setup page** (New video → From a screen recording): play the recording (play and pause, a scrubber, its
+  sound), trim its ends, crop the picture and draw boxes over anything private. Playback covers the part the trim
+  keeps and stops at its end.
+- **Crop:** when the recording shows more than the demo should (a whole screen with the menu bar, the tabs and the
+  dock, say), keep only part of the picture: **Crop** on the setup page (drag the corners and edges, or draw a
+  rectangle), `"crop": [x, y, w, h]` in `recording`, or `--crop x,y,w,h` in the CLI (`create --recording`, `demo`,
+  local mode), all as fractions of the frame. The demo then treats that part as the whole picture: the recording is
+  analyzed inside it, zooms and the cursor stay in it, clicks outside it are left out, and hidden areas (yours and the
+  trace's) are cut to it. `redact` boxes are still given as fractions of the whole frame. A crop keeps at least a
+  tenth of the frame each way and 160 px, and is snapped to even pixels; the version's `recording.crop` shows it in
+  source pixels. It can't be changed afterwards (remix with the same recording and another crop instead), and a small
+  crop is drawn larger, so the camera zooms in less to stay sharp. Like hidden areas, a crop is cosmetic: the file in
+  your library is unchanged. Quick demos and revisions keep the crop.
 - **Quick demo:** add `"agent": false` and the run composes the demo straight from the plan, with no authoring: a stock
   intro and outro, a scene per step, callouts from what was clicked. It costs about as much as an edit render. It
   needs a recording and takes no voice-over.

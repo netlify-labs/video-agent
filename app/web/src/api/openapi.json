@@ -696,6 +696,41 @@
                 "type": "boolean",
                 "description": "Made with no agent authoring (a Quick demo)."
               },
+              "crop": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "x": {
+                    "type": "integer"
+                  },
+                  "y": {
+                    "type": "integer"
+                  },
+                  "width": {
+                    "type": "integer"
+                  },
+                  "height": {
+                    "type": "integer"
+                  },
+                  "frameWidth": {
+                    "type": "integer"
+                  },
+                  "frameHeight": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "x",
+                  "y",
+                  "width",
+                  "height",
+                  "frameWidth",
+                  "frameHeight"
+                ],
+                "description": "The part of the recording's picture the demo uses, in source pixels; null for the whole frame."
+              },
               "privacy": {
                 "type": "boolean",
                 "description": "Privacy mode: private things on screen are found and hidden too."
@@ -2266,6 +2301,32 @@
             ],
             "description": "Seconds of the recording to use, [in, out]: in before out, at least 2 seconds, inside the file."
           },
+          "crop": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "maximum": 1
+              },
+              {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "maximum": 1
+              }
+            ],
+            "description": "The part of the picture to use, [x, y, width, height] as fractions of the frame (a whole-screen recording cut down to the browser, say). The demo shows only this part: zooms, the cursor and hidden areas follow it. At least a tenth of the frame each way and 160 px. The whole frame when left out."
+          },
           "redact": {
             "type": "array",
             "items": {
@@ -2305,7 +2366,7 @@
                       "maximum": 1
                     }
                   ],
-                  "description": "[x, y, width, height] as fractions of the frame."
+                  "description": "[x, y, width, height] as fractions of the frame (the whole frame, also with a crop)."
                 },
                 "style": {
                   "type": "string",
@@ -6506,6 +6567,41 @@
                       "items": {},
                       "description": "[t, x, y, zoom, ease?] keys, in source seconds"
                     },
+                    "crop": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "x": {
+                          "type": "integer"
+                        },
+                        "y": {
+                          "type": "integer"
+                        },
+                        "width": {
+                          "type": "integer"
+                        },
+                        "height": {
+                          "type": "integer"
+                        },
+                        "frameWidth": {
+                          "type": "integer"
+                        },
+                        "frameHeight": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "x",
+                        "y",
+                        "width",
+                        "height",
+                        "frameWidth",
+                        "frameHeight"
+                      ],
+                      "description": "The part of the recording's picture the demo uses, in source pixels; null for the whole frame. Positions (camera, clicks, hidden areas) are fractions of this part."
+                    },
                     "cursor": {
                       "type": "object",
                       "properties": {
@@ -6570,6 +6666,7 @@
                     "out",
                     "rate",
                     "camera",
+                    "crop",
                     "cursor",
                     "clicks",
                     "redact",

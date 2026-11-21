@@ -7,6 +7,7 @@ import { LOOK_ID } from './looks.js'
 import { isBundleReference, type BundleReference } from './bundle-references.js'
 import { isLanguage, type Language } from './language.js'
 import { MEDIA_KINDS, type MediaKind } from './media/classify.js'
+import { canonCrop, isRecordingCrop, type RecordingCrop } from './recording-crop.js'
 import type { RedactEntry } from './recording-trace.js'
 import {
   GAIN_DB_RANGE,
@@ -110,9 +111,11 @@ export interface RunRecording {
   sha256: string
   filename: string
   trace?: { key: string; sha256: string } | undefined
-  /** The person's setup boxes: one-key hidden areas. */
+  /** The person's setup boxes: one-key hidden areas (with a crop, as fractions of the cropped picture). */
   boxes: RedactEntry[]
   trim?: [number, number] | undefined
+  /** The part of the picture the demo uses, in source px (app/server/lib/recording-crop.ts). */
+  crop?: RecordingCrop | undefined
   /** Made by recording.ts compose, with no agent (the Quick demo). */
   compose?: boolean | undefined
   /** Privacy mode: find private things and hide them (the agent confirms each). */
@@ -158,6 +161,7 @@ function isRecording(raw: unknown, media: RunMedia[] | null): boolean {
     if ((k[1] as number) + (k[3] as number) > 1 + 1e-9 || (k[2] as number) + (k[4] as number) > 1 + 1e-9)
       return false
   }
+  if (r.crop !== undefined && !isRecordingCrop(r.crop)) return false
   if (r.trim !== undefined) {
     const t = r.trim
     if (
@@ -399,6 +403,7 @@ export function serializeRunManifest(m: RunManifest): string {
               : {}),
             boxes: m.recording.boxes,
             ...(m.recording.trim ? { trim: [m.recording.trim[0], m.recording.trim[1]] } : {}),
+            ...(m.recording.crop ? { crop: canonCrop(m.recording.crop) } : {}),
             ...(m.recording.compose ? { compose: true } : {}),
             ...(m.recording.privacy ? { privacy: true } : {}),
             ...(m.recording.hideStrings?.length ? { hideStrings: [...m.recording.hideStrings] } : {}),

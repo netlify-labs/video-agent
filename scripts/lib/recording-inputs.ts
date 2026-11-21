@@ -5,6 +5,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { recordingCheck, type RecordingProblem } from '../../app/server/lib/recording-check.js'
+import { isRecordingCrop, type RecordingCrop } from '../../app/server/lib/recording-crop.js'
 import { parseTrace, type RedactEntry } from '../../app/server/lib/recording-trace.js'
 import { log } from './run-tools.js'
 
@@ -32,21 +33,23 @@ export function checkRecordingScenes(root: string, html: string): RecordingProbl
     durationSec = undefined
   }
   let locked: { trace: RedactEntry[]; setup: RedactEntry[] } | null = null
+  // The person's crop: known (null for none) when the run's inputs are; trace.json and the boxes are already in it.
+  let crop: RecordingCrop | null | undefined
   if (mediaId) {
     const dir = join(root, '.va-run', 'recording', mediaId)
     const trace = readIf(join(dir, 'trace.json'))
     const inputText = readIf(join(dir, 'input.json'))
-    if (trace !== null || inputText !== null || manifest?.recording)
-      locked = {
-        trace: trace ? parseTrace(trace).redact : [],
-        setup: inputText ? ((JSON.parse(inputText) as { boxes?: RedactEntry[] }).boxes ?? []) : [],
-      }
+    const input = inputText ? (JSON.parse(inputText) as { boxes?: RedactEntry[]; crop?: unknown }) : null
+    if (trace !== null || input !== null || manifest?.recording)
+      locked = { trace: trace ? parseTrace(trace).redact : [], setup: input?.boxes ?? [] }
+    if (input) crop = isRecordingCrop(input.crop) ? input.crop : null
   }
   const problems = recordingCheck({
     html,
     readFile: (p) => readIf(join(video, p)),
     recording: manifest?.recording ? { filename: manifest.recording.filename, durationSec } : null,
     locked,
+    crop,
     // A render-unchanged run plays the person's editor spans, and makes missing hold stills itself (emit --holds-only).
     edited: manifest?.kind === 'render_unchanged',
     pendingStills:

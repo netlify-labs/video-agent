@@ -14,6 +14,7 @@ import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { cameraAt, ZOOM_MIN, type PlanV1 } from '../../app/server/lib/recording.js'
+import { cropFilter, sameCrop, type RecordingCrop } from '../../app/server/lib/recording-crop.js'
 import { ANALYZER_VERSION, type Analysis } from './recording-analyze.js'
 import { log } from './run-tools.js'
 import type { SttProvider, SttWord } from './stt/types.js'
@@ -27,12 +28,16 @@ const SPEECH_MIN_DB = -45
 
 const r3 = (n: number) => Math.round(n * 1000) / 1000
 
-/** The cached analysis for this file, or null when there's none or it's stale (other bytes, other analyzer). */
-export function cachedAnalysis(path: string, fileSha256: string): Analysis | null {
+/** The cached analysis for this file and crop, or null when there's none or it's stale (other bytes, analyzer, crop). */
+export function cachedAnalysis(
+  path: string,
+  fileSha256: string,
+  crop: RecordingCrop | null = null,
+): Analysis | null {
   if (!existsSync(path)) return null
   try {
     const a = JSON.parse(readFileSync(path, 'utf8')) as Analysis
-    return a.sha256 === fileSha256 && a.analyzer === ANALYZER_VERSION ? a : null
+    return a.sha256 === fileSha256 && a.analyzer === ANALYZER_VERSION && sameCrop(a.crop, crop) ? a : null
   } catch {
     return null
   }
@@ -71,7 +76,7 @@ export function makeSheets(file: string, a: Analysis, dir: string) {
         '-frames:v',
         '1',
         '-vf',
-        `scale=${tile}:-2`,
+        `${a.crop ? `${cropFilter(a.crop)},` : ''}scale=${tile}:-2`,
         '-q:v',
         '3',
         out,
@@ -175,7 +180,10 @@ export function focusMoment(step: PlanV1['steps'][number], a: Analysis): number 
   return peak ? peak[0] : (step.in + step.out) / 2
 }
 
-/** The crop for a step: the camera box at its focus moment, in source px [x, y, w, h], and the zoom used. */
+/**
+ * The crop for a step: the camera box at its focus moment, in px of the picture [x, y, w, h] (the cropped one, with a
+ * crop), and the zoom used.
+ */
 export function focusBox(step: PlanV1['steps'][number], a: Analysis) {
   const { width: W, height: H } = a.source
   const t = focusMoment(step, a)
@@ -204,7 +212,8 @@ export function makeFocusCrops(file: string, plan: PlanV1, a: Analysis, dir: str
       ...['-loglevel', 'error', '-y', '-ss', String(f.t), '-i', file, '-frames:v', '1'],
       ...[
         '-vf',
-        `crop=${w}:${h}:${x}:${y},scale=${SHEET_WIDTH}:-2:flags=lanczos`,
+        // The box is in the (cropped) picture; the file is the whole frame.
+        `crop=${w}:${h}:${x + (a.crop?.x ?? 0)}:${y + (a.crop?.y ?? 0)},scale=${SHEET_WIDTH}:-2:flags=lanczos`,
         '-q:v',
         '3',
         join(dir, name),

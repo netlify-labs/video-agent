@@ -149,3 +149,164 @@ test('the demo look picker leaves out looks that hide recordings; such a default
   const [body] = (await creates(page)) as { look?: string | null }[]
   expect(body?.look).toBeNull()
 })
+
+/** Opens setup for the mock's plain recording (1280x720; its sample file is 8 s long). */
+async function openSetup(page: Page) {
+  await page.goto('/new/demo?media=med_screen_plain')
+  await expect(page.getByTestId('demo-setup')).toBeVisible()
+  const canvas = page.getByTestId('box-canvas')
+  await canvas.scrollIntoViewIfNeeded()
+  return canvas
+}
+const videoState = (page: Page) =>
+  page.evaluate<{ t: number; paused: boolean; muted: boolean }>(`(() => {
+    const v = document.querySelector('[data-testid="box-canvas"] video')
+    return { t: v.currentTime, paused: v.paused, muted: v.muted }
+  })()`)
+/** Drags from one point of an element's box to another (fractions of it). */
+async function dragIn(
+  page: Page,
+  box: { x: number; y: number; width: number; height: number },
+  from: [number, number],
+  to: [number, number],
+) {
+  await page.mouse.move(box.x + box.width * from[0], box.y + box.height * from[1])
+  await page.mouse.down()
+  await page.mouse.move(box.x + box.width * to[0], box.y + box.height * to[1], { steps: 6 })
+  await page.mouse.up()
+}
+
+test('play the recording: play and pause, scrub, sound, and it stops at the end of the trim', async ({
+  page,
+}) => {
+  await openSetup(page)
+  const player = page.getByTestId('recording-player')
+  await expect(player).toBeVisible()
+  await expect(player.getByTestId('player-time')).toHaveText('0:00.0 / 1:35.0')
+  // The recording's own sound is on until muted.
+  expect((await videoState(page)).muted).toBe(false)
+
+  await player.getByRole('button', { name: 'Play' }).click()
+  await expect(player.getByRole('button', { name: 'Pause' })).toBeVisible()
+  await expect.poll(async () => (await videoState(page)).t).toBeGreaterThan(0.3)
+  await expect(player.getByTestId('player-time')).not.toHaveText('0:00.0 / 1:35.0')
+  await player.getByRole('button', { name: 'Pause' }).click()
+  await expect(player.getByRole('button', { name: 'Play' })).toBeVisible()
+  const paused = await videoState(page)
+  expect(paused.paused).toBe(true)
+
+  // Scrub with the keyboard: a tenth of a second a press.
+  await player.getByRole('slider', { name: 'Position' }).focus()
+  for (let i = 0; i < 10; i++) await page.keyboard.press('ArrowRight')
+  await expect.poll(async () => (await videoState(page)).t).toBeGreaterThan(paused.t + 0.8)
+
+  await player.getByRole('button', { name: 'Mute' }).click()
+  expect((await videoState(page)).muted).toBe(true)
+  await player.getByRole('button', { name: 'Turn sound on' }).click()
+  expect((await videoState(page)).muted).toBe(false)
+
+  // Trim to about 2-5 s: the start with the keyboard, the end by dragging its handle. Playback follows the trim.
+  await page.getByRole('slider', { name: 'Start' }).focus()
+  for (let i = 0; i < 20; i++) await page.keyboard.press('ArrowRight')
+  const end = await page.getByRole('slider', { name: 'End' }).boundingBox()
+  const track = await page.getByRole('slider', { name: 'Start' }).boundingBox()
+  if (!end || !track) throw new Error('no trim handles')
+  // The start handle sits at 2 s of 95: the track's left edge is that far to its left.
+  const trackBox = await page.locator('.mantine-RangeSlider-track').first().boundingBox()
+  if (!trackBox) throw new Error('no trim track')
+  await page.mouse.move(end.x + end.width / 2, end.y + end.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(trackBox.x + trackBox.width * (5 / 95), end.y + end.height / 2, { steps: 8 })
+  await page.mouse.up()
+  const label = (await page.getByTestId('trim-label').textContent()) ?? ''
+  const out = Number(/– 0:0?(\d+\.\d)/.exec(label)?.[1])
+  console.log(JSON.stringify({ test: 'demo-recording', case: 'play-trim', label, out }))
+  expect(out).toBeGreaterThanOrEqual(4)
+  expect(out).toBeLessThan(8)
+  // The handle moved the picture to the trim's end; Play starts again from its start and stops at its end.
+  await player.getByRole('button', { name: 'Play' }).click()
+  await expect(player.getByRole('button', { name: 'Pause' })).toBeVisible()
+  const started = (await videoState(page)).t
+  expect(started).toBeGreaterThanOrEqual(1.9)
+  expect(started).toBeLessThan(out - 0.2)
+  await expect(player.getByRole('button', { name: 'Play' })).toBeVisible({ timeout: 15_000 })
+  const stopped = await videoState(page)
+  expect(stopped.paused).toBe(true)
+  expect(Math.abs(stopped.t - out)).toBeLessThan(0.15)
+  // Nothing spills past the page at any width (the phone project runs this too).
+  expect(
+    await page.evaluate<boolean>(
+      'document.documentElement.scrollWidth <= document.documentElement.clientWidth',
+    ),
+  ).toBe(true)
+})
+
+test('crop the picture: resize the rectangle, hide something inside it, and the demo is made with the crop', async ({
+  page,
+}) => {
+  const canvas = await openSetup(page)
+  await expect(page.getByTestId('crop-overlay')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Crop', exact: true }).click()
+  await expect(page.getByTestId('crop-note')).toContainText('Drag the corners and edges')
+  const r = await canvas.boundingBox()
+  if (!r) throw new Error('no canvas')
+  // Corners in from the whole frame, then the box moved, then an edge nudged with the keyboard.
+  await dragIn(page, r, [0.02, 0.03], [0.22, 0.13])
+  await dragIn(page, r, [0.98, 0.97], [0.68, 0.77])
+  await dragIn(page, r, [0.45, 0.45], [0.5, 0.55])
+  await page.getByRole('button', { name: 'Crop right edge' }).focus()
+  await page.keyboard.press('ArrowRight')
+  // While cropping, the picture doesn't take hidden areas.
+  await expect(page.getByTestId('hidden-box')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Done' }).click()
+  await expect(page.getByRole('button', { name: 'Crop top left corner' })).toHaveCount(0)
+  await expect(page.getByTestId('crop-note')).toContainText('of the 1280×720 picture')
+  await expect(page.getByRole('button', { name: 'Change crop' })).toBeVisible()
+  // The part kept is small for a 16:9 video: the note names it.
+  await expect(page.getByTestId('low-res-note')).toContainText('The part you keep is')
+
+  // Hidden areas are still drawn on the whole picture.
+  await dragIn(page, r, [0.4, 0.4], [0.5, 0.5])
+  await expect(page.getByTestId('hidden-box')).toHaveCount(1)
+  await page
+    .getByLabel('What should the demo show?')
+    .fill('A short demo of the settings page for new admins.')
+  await page.getByRole('button', { name: 'Make it' }).click()
+  await expect(page).toHaveURL(/\/videos\//)
+  const [body] = (await creates(page)) as {
+    recording: { crop?: number[]; redact?: { box: number[] }[]; trim?: number[] }
+  }[]
+  console.log(JSON.stringify({ test: 'demo-recording', case: 'crop', recording: body?.recording }))
+  const crop = body?.recording.crop ?? []
+  expect(crop).toHaveLength(4)
+  // (0.2, 0.1)-(0.7, 0.8) moved by (0.05, 0.1), the right edge out by 0.01.
+  expect(crop[0]).toBeCloseTo(0.25, 1)
+  expect(crop[1]).toBeCloseTo(0.2, 1)
+  expect(crop[2]).toBeCloseTo(0.51, 1)
+  expect(crop[3]).toBeCloseTo(0.7, 1)
+  expect((crop[0] ?? 0) + (crop[2] ?? 0)).toBeLessThanOrEqual(1)
+  expect(body?.recording.trim).toBeUndefined()
+  // The box is in fractions of the whole frame.
+  expect(body?.recording.redact?.[0]?.box[0]).toBeCloseTo(0.4, 1)
+})
+
+test('crop: Reset puts the whole picture back, and nothing is sent', async ({ page }) => {
+  const canvas = await openSetup(page)
+  await page.getByRole('button', { name: 'Crop', exact: true }).click()
+  const r = await canvas.boundingBox()
+  if (!r) throw new Error('no canvas')
+  // Drawing on the picture makes a new rectangle.
+  await dragIn(page, r, [0.3, 0.3], [0.8, 0.9])
+  await page.getByRole('button', { name: 'Done' }).click()
+  await expect(page.getByTestId('crop-overlay')).toBeVisible()
+  await page.getByRole('button', { name: 'Reset' }).click()
+  await expect(page.getByTestId('crop-overlay')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Crop', exact: true })).toBeVisible()
+  await page
+    .getByLabel('What should the demo show?')
+    .fill('A short demo of the settings page for new admins.')
+  await page.getByRole('button', { name: 'Make it' }).click()
+  await expect(page).toHaveURL(/\/videos\//)
+  const [body] = (await creates(page)) as { recording: Record<string, unknown> }[]
+  expect(body?.recording).toEqual({ mediaId: 'med_screen_plain' })
+})

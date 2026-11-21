@@ -13,6 +13,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { classify } from '../../../app/server/lib/media/classify.js'
 import { parseTrace } from '../../../app/server/lib/recording-trace.js'
 import { checkStorageState, parseViewport } from '../src/commands/record.js'
+import { parseCrop } from '../src/commands/recording.js'
 import { runRecord, type RecordOptions } from '../src/record/capture.js'
 
 const FIX = join(import.meta.dirname, 'fixtures', 'record')
@@ -197,6 +198,23 @@ describe('video-agent record: options', () => {
     )
     expect(() => checkStorageState('./demo', ['./demo'])).toThrow()
     expect(() => checkStorageState('./demo', ['./demo-state.json', undefined])).not.toThrow()
+  })
+
+  it('reads --crop: four fractions inside the picture', () => {
+    expect(parseCrop(undefined)).toBeUndefined()
+    expect(parseCrop('0,0.08,1,0.84')).toEqual([0, 0.08, 1, 0.84])
+    expect(parseCrop(' .25, .25 ,.5,.5')).toEqual([0.25, 0.25, 0.5, 0.5])
+    for (const bad of [
+      '0,0,1',
+      '0,0,1,1,1',
+      'a,b,c,d',
+      '0,0,0,1',
+      '0.5,0,0.6,1',
+      '0,0,1280,720',
+      '-0.1,0,1,1',
+      true,
+    ])
+      expect(() => parseCrop(bad), String(bad)).toThrow(/--crop takes x,y,width,height/)
   })
 
   it('reads the viewport', () => {

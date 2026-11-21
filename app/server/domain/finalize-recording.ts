@@ -8,6 +8,7 @@ import { sha256Hex } from '../lib/crypto.js'
 import { load, read, type Summary } from '../lib/contract.js'
 import { recordingCheck } from '../lib/recording-check.js'
 import { parseRedactScript, LOCKED_SRC } from '../lib/recording.js'
+import { cropRedact } from '../lib/recording-crop.js'
 import { parseTrace, type RedactEntry } from '../lib/recording-trace.js'
 import type { HiddenArea, VersionRecording, VersionRow } from './types.js'
 
@@ -44,7 +45,8 @@ export async function finalizeRecording(
     const bytes = await deps.blobs.get('media', r.trace.key)
     if (!bytes || sha256Hex(bytes) !== r.trace.sha256)
       return fail('recording_file_invalid', '*', "the pointer trace doesn't match its hash.")
-    traceRedact = parseTrace(new TextDecoder().decode(bytes)).redact
+    // With a crop, as the run's copy has them: in the cropped picture (prepare-run converts the trace the same way).
+    traceRedact = cropRedact(parseTrace(new TextDecoder().decode(bytes)).redact, r.crop)
   }
   const media = (await deps.store.listVersionMedia(jobId, versionN)).find((m) => m.mediaId === r.mediaId)
   const row = await deps.store.getMedia(r.mediaId)
@@ -70,6 +72,7 @@ export async function finalizeRecording(
     readFile: (p) => text(files, p),
     recording: media ? { filename: media.filename, durationSec: row?.durationSec ?? undefined } : null,
     locked: { trace: traceRedact, setup: r.boxes },
+    crop: r.crop ?? null,
     // An editor render: the person set the spans, so a held end needs no voice line or retime (as in the run).
     edited: version.mode === 'render_unchanged',
   })

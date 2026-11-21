@@ -132,7 +132,8 @@ checks it, and `render-job` refuses a composition that declares the contract but
   mute it in the editor. See "Sound" below.
 - **Recordings** (only in a demo): a recording scene has one recording slot, its only video, written by
   `scripts/recording.ts emit` (never by hand): `data-va-in`/`data-va-out` in seconds of the recording,
-  `data-media-start` = in, `data-playback-rate` = (out − in) ÷ the slot's duration (0.5× to 4×), `data-start="0"`. Its
+  `data-media-start` = in, `data-playback-rate` = (out − in) ÷ the slot's duration (0.5× to 4×), `data-start="0"`. A cropped demo's stage has
+  `data-va-crop` (the part of the picture it draws). Its
   camera, clicks and hidden areas are JSON in recording seconds; the cursor path and the locked hidden areas are
   `assets/recording/<step>.cursor.js` and `assets/recording/redact.js`. See "Screen recordings" below.
 - **Voice** (only when the run asks for it): at most one `<audio data-va-voice="<beat id>">` per beat, a direct child
@@ -258,6 +259,9 @@ Rules:
   proposed hidden area in its steps in `plan.json`. Look at every crop; delete a proposal that isn't what it says, keep
   every "hidden text" one, and add what it missed. `render-job` reads the rendered video back and refuses one where a
   hide string is still readable.
+- A cropped demo (your prompt says so): the scripts apply the person's crop, so the sheets, focus crops and scenes
+  show only that part of the picture and every position is a fraction of it. Never change or remove a stage's
+  `data-va-crop`; `check` refuses a scene whose crop isn't the person's.
 - A scene can be 0.5× to 4× as fast as the recording. With a voice-over, set each recording scene's length to its
   line: `emit --duration` makes it slower, and past 0.5× it plays the step at 0.5× and holds its last frame
   (`data-va-rec-hold="end"` and an `<img class="va-rec-hold">`; `data-va-hold` stays the held last frame's). Or widen

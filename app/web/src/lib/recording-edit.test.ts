@@ -20,6 +20,7 @@ const rec: RecordingBeat = {
   in: 2,
   out: 12,
   rate: 1.3333,
+  crop: null,
   camera: [
     [2, 0.5, 0.5, 1],
     [3.4, 0.6, 0.31, 1.9, 'power2.inOut'],

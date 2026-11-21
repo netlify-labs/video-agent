@@ -338,6 +338,13 @@ const RECORDING_ARGS = {
     .length(2)
     .optional()
     .describe('Optional, with recording_media_id. Seconds of the recording to use: [in, out].'),
+  crop: z
+    .array(z.number().min(0).max(1))
+    .length(4)
+    .optional()
+    .describe(
+      'Optional, with recording_media_id. The part of the picture to use: [x, y, width, height], fractions of the frame (a whole-screen recording cut down to the browser, say).',
+    ),
   redact: z
     .array(
       z.object({
@@ -359,12 +366,23 @@ const RECORDING_ARGS = {
 function toRecording(args: {
   recording_media_id?: string | undefined
   trim?: number[] | undefined
+  crop?: number[] | undefined
   redact?: { start?: number | undefined; end?: number | undefined; box: number[] }[] | undefined
 }) {
   if (!args.recording_media_id) return undefined
   return {
     mediaId: args.recording_media_id,
     ...(args.trim ? { trim: [args.trim[0] ?? 0, args.trim[1] ?? 0] as [number, number] } : {}),
+    ...(args.crop
+      ? {
+          crop: [args.crop[0] ?? 0, args.crop[1] ?? 0, args.crop[2] ?? 1, args.crop[3] ?? 1] as [
+            number,
+            number,
+            number,
+            number,
+          ],
+        }
+      : {}),
     ...(args.redact
       ? {
           redact: args.redact.map((r) => ({

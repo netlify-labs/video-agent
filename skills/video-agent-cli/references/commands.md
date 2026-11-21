@@ -122,6 +122,7 @@ video-agent create "A demo of adding a webhook" --recording ./take1 --hide-text 
 - `--prompt-file <value>`: Read the prompt from a file, or '-' for stdin.
 - `--recording <value>`: Make a demo from a screen recording: a media id, a video-agent record folder or an MP4 (uploaded first).
 - `--trim <value>`: With --recording: the seconds to use, in,out (like 2,48.5).
+- `--crop <value>`: With --recording: the part of the picture to use, x,y,width,height as fractions (like 0,0.08,1,0.84).
 - `--privacy`: With --recording: privacy mode (find and hide emails, keys, tokens, URLs with ids…).
 - `--hide-text <value>` (repeatable): With --recording: text to hide wherever it shows. Repeatable.
 - `--quick`: With --recording: a Quick demo, made with no agent authoring.
@@ -571,6 +572,7 @@ video-agent local demo ./take1 --prompt "Adding a webhook, for new admins" --pri
 - `--aspect <value>`: 16:9, 9:16, 1:1 or 4:5.
 - `--duration <n>`: Target length in seconds.
 - `--trim <value>`: The seconds of the recording to use, in,out (like 2,48.5).
+- `--crop <value>`: The part of the picture to use, x,y,width,height as fractions (like 0,0.08,1,0.84).
 - `--trace <value>`: The recording's trace.json (default: the one beside it).
 - `--privacy`: Privacy mode: find and hide emails, keys, tokens, URLs with ids…
 - `--hide-text <value>` (repeatable): Text to hide wherever it shows. Repeatable.

@@ -2,7 +2,7 @@
 // prints a JSON result on stdout and logs every stage with its timing (scripts/lib/run-tools.ts log) on stderr.
 //
 //   npx tsx scripts/recording.ts analyze (--media <id> | --file <path>) [--trace <trace.json>] [--out <analysis.json>]
-//     [--context <dir>] [--no-transcript]
+//     [--context <dir>] [--no-transcript] [--crop x,y,width,height]
 //
 // analyze: refuses a recording that isn't normalized (§4.2) with the reason, then writes what happens in it (idle,
 // scene changes, activity, the cursor and clicks: times and positions only, no names) to
@@ -10,7 +10,9 @@
 // trace, when the recording has one, is .va-run/recording/<id>/trace.json unless --trace says otherwise. An
 // analysis.json for the same bytes and analyzer version is reused. Contact sheets per scene and, when the recording
 // has speech, an on-device transcript go to context/recording/<id>/ (or --context): for the agent to read, never
-// archived (scripts/lib/recording-extras.ts).
+// archived (scripts/lib/recording-extras.ts). A crop (input.json's, from the person's setup; or --crop in source
+// pixels, for a file with no trace) is analyzed as the picture: analysis.json records it, and plan, emit and compose
+// follow the analysis, so they take no crop of their own.
 //
 //   npx tsx scripts/recording.ts plan --media <id> [--target <s>] [--aspect 16:9|9:16|1:1|4:5]
 //
@@ -37,8 +39,10 @@
 //
 // check: the recording scenes of video/index.html against the run's inputs (app/server/lib/recording-check.ts): one line per
 // problem naming the scene and the rule, exit 1. check-contract runs the same check.
+import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { basename, dirname, extname, join } from 'node:path'
+import { cropFromFractions, isRecordingCrop, type RecordingCrop } from '../app/server/lib/recording-crop.js'
 import { parseTrace } from '../app/server/lib/recording-trace.js'
 import { analyzeRecording } from './lib/recording-analyze.js'
 import { ASPECTS, keptPlan, type Aspect, type PlanRedact, type PlanV1 } from '../app/server/lib/recording.js'
@@ -71,6 +75,27 @@ function mediaFile(id: string) {
   return join(dir, name)
 }
 
+/** --crop x,y,width,height in source pixels (a local file; a run's crop is in input.json, with its trace converted). */
+function cropArg(file: string): RecordingCrop | null {
+  if (!args.crop) return null
+  const n = args.crop.split(',').map(Number)
+  const probe = spawnSync(
+    'ffprobe',
+    ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'csv=p=0', file],
+    { encoding: 'utf8' },
+  )
+  const [W, H] = probe.stdout.trim().split(',').map(Number)
+  if (n.length !== 4 || !n.every(Number.isFinite) || !W || !H)
+    throw new StepError('--crop takes x,y,width,height in pixels of the recording (like 0,160,2560,1280).')
+  if (args.trace)
+    throw new StepError('--crop is for a recording without --trace (a run converts its trace itself).')
+  try {
+    return cropFromFractions([(n[0] ?? 0) / W, (n[1] ?? 0) / H, (n[2] ?? 0) / W, (n[3] ?? 0) / H], W, H)
+  } catch (e) {
+    throw new StepError(e instanceof Error ? e.message : '--crop is not valid.')
+  }
+}
+
 async function analyze() {
   const file = args.file ?? (args.media ? mediaFile(args.media) : null)
   if (!file) throw new StepError('analyze needs --media <id> or --file <path>.')
@@ -80,9 +105,18 @@ async function analyze() {
   const out = args.out ?? join(repoRoot, 'video', 'assets', 'recording', 'analysis.json')
   const id = args.media ?? basename(file, extname(file))
   const context = args.context ?? join(repoRoot, 'context', 'recording', id)
-  const cached = cachedAnalysis(out, sha256File(file))
-  log('recording.analyze_cache', { hit: Boolean(cached) })
-  const analysis = cached ?? (await analyzeRecording(file, trace))
+  // Privacy mode, hide strings and the crop: input.json (prepare-run writes it), or flags.
+  const input = args.media
+    ? (readIf(join(repoRoot, '.va-run', 'recording', args.media, 'input.json')) as {
+        privacy?: boolean
+        hideStrings?: string[]
+        crop?: unknown
+      } | null)
+    : null
+  const crop = cropArg(file) ?? (isRecordingCrop(input?.crop) ? input.crop : null)
+  const cached = cachedAnalysis(out, sha256File(file), crop)
+  log('recording.analyze_cache', { hit: Boolean(cached), crop })
+  const analysis = cached ?? (await analyzeRecording(file, trace, crop))
   if (!cached) {
     mkdirSync(dirname(out), { recursive: true })
     writeFileSync(out, `${JSON.stringify(analysis)}\n`)
@@ -99,12 +133,6 @@ async function analyze() {
           deadlineAt: Date.now() + 10 * 60_000,
         })
   // Privacy mode and hide strings (input.json, or --privacy and --hide-strings a,b): OCR for things to hide.
-  const input = args.media
-    ? (readIf(join(repoRoot, '.va-run', 'recording', args.media, 'input.json')) as {
-        privacy?: boolean
-        hideStrings?: string[]
-      } | null)
-    : null
   const privacy = 'privacy' in args || input?.privacy === true
   const strings = args['hide-strings'] ? args['hide-strings'].split(',') : (input?.hideStrings ?? [])
   const scan =
@@ -115,6 +143,7 @@ async function analyze() {
     ok: true,
     out,
     cached: Boolean(cached),
+    crop: analysis.crop ?? null,
     privacy: scan
       ? { candidates: scan.candidates.length, frames: scan.frames, ms: scan.ms, stopped: scan.stopped }
       : null,

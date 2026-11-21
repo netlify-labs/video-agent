@@ -55,6 +55,8 @@ import {
   type ScopeStill,
 } from '../app/server/lib/run-manifest.js'
 import { RECORDING_LIMITS } from '../app/server/lib/media/classify.js'
+import { canonCrop, cropTrace } from '../app/server/lib/recording-crop.js'
+import { parseTrace } from '../app/server/lib/recording-trace.js'
 import { MAX_OUTPUT_SAMPLES, SAMPLE_RATE } from '../app/server/lib/timeline.js'
 import { runEngineFor } from './lib/engines/index.js'
 import type { RunEngine } from './lib/engines/types.js'
@@ -184,6 +186,9 @@ export async function hydrateRecording(root: string, r: RunRecording, fetch: Fet
       rmSync(to, { force: true })
       throw new StepError("The pointer trace doesn't match its hash. Stop and report this.")
     }
+    // With a crop, the run's copy is the trace in the cropped picture (finalize converts the stored one the same way).
+    if (r.crop)
+      writeFileSync(to, `${JSON.stringify(cropTrace(parseTrace(readFileSync(to, 'utf8')), r.crop))}\n`)
   }
   writeFileSync(
     join(dir, 'input.json'),
@@ -191,6 +196,7 @@ export async function hydrateRecording(root: string, r: RunRecording, fetch: Fet
       {
         boxes: r.boxes,
         ...(r.trim ? { trim: r.trim } : {}),
+        ...(r.crop ? { crop: canonCrop(r.crop) } : {}),
         ...(r.privacy ? { privacy: true } : {}),
         ...(r.hideStrings?.length ? { hideStrings: r.hideStrings } : {}),
       },
@@ -203,6 +209,7 @@ export async function hydrateRecording(root: string, r: RunRecording, fetch: Fet
     trace: Boolean(r.trace),
     boxes: r.boxes.length,
     trim: r.trim ?? null,
+    crop: r.crop ?? null,
     privacy: r.privacy === true,
     hideStrings: r.hideStrings?.length ?? 0,
   })

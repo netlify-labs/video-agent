@@ -1,6 +1,6 @@
 // A demo from the CLI (screen-recording plan §6.3; va-rsk5.5.3): a recording given as a library id, a recording folder
 // (video-agent record's: recording.mp4 and trace.json) or an MP4 with an optional trace beside it, uploaded with the
-// screen-recording role when it's a file; and the recording field of a create, from --trim, --privacy, --hide-text.
+// screen-recording role when it's a file; and the recording field of a create, from --trim, --crop, --privacy, --hide-text.
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import type { components } from '../../../sdk/src/generated/schema.js'
@@ -55,9 +55,29 @@ export function parseTrim(v: unknown): [number, number] | undefined {
   return [Number(m[1]), Number(m[2])]
 }
 
-/** The create's recording field: the media id, --trim, --privacy and --hide-text. */
+/** "x,y,width,height" fractions of the frame -> [x, y, width, height]. */
+export function parseCrop(v: unknown): [number, number, number, number] | undefined {
+  if (v === undefined) return undefined
+  const usage =
+    '--crop takes x,y,width,height as fractions of the picture, inside it (like 0,0.08,1,0.84 to cut a menu bar and a dock).'
+  if (typeof v !== 'string') throw new UsageError(usage)
+  const n = v.split(',').map((s) => (/^\s*\d*\.?\d+\s*$/.test(s) ? Number(s) : NaN))
+  const [x, y, w, h] = n as [number, number, number, number]
+  if (
+    n.length !== 4 ||
+    n.some((k) => !Number.isFinite(k)) ||
+    !(w > 0 && h > 0) ||
+    x + w > 1 + 1e-6 ||
+    y + h > 1 + 1e-6
+  )
+    throw new UsageError(usage)
+  return [x, y, Math.min(w, 1 - x), Math.min(h, 1 - y)]
+}
+
+/** The create's recording field: the media id, --trim, --crop, --privacy and --hide-text. */
 export function recordingInput(ctx: Ctx, mediaId: string) {
   const trim = parseTrim(ctx.flags.trim)
+  const crop = parseCrop(ctx.flags.crop)
   const hideStrings =
     ctx.flags['hide-text'] === undefined
       ? []
@@ -68,6 +88,7 @@ export function recordingInput(ctx: Ctx, mediaId: string) {
   return {
     mediaId,
     ...(trim ? { trim } : {}),
+    ...(crop ? { crop } : {}),
     ...(ctx.flags.privacy === true ? { privacy: true } : {}),
     ...(hideStrings.length ? { hideStrings } : {}),
   }

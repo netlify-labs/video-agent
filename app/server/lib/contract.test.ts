@@ -707,6 +707,7 @@ describe('contract: recording scenes', () => {
           [10.9, 0.6, 0.31, 1.9],
           [12, 0.5, 0.5, 1, 'power2.inOut'],
         ],
+        crop: null,
         cursor: { style: 'smooth', size: null, path: 'add-site' },
         clicks: [[4, 0.611, 0.304]],
         redact: [],

@@ -187,6 +187,10 @@
           "type": "string",
           "description": "With --recording: the seconds to use, in,out (like 2,48.5)."
         },
+        "crop": {
+          "type": "string",
+          "description": "With --recording: the part of the picture to use, x,y,width,height as fractions (like 0,0.08,1,0.84)."
+        },
         "privacy": {
           "type": "boolean",
           "description": "With --recording: privacy mode (find and hide emails, keys, tokens, URLs with ids…)."
@@ -1437,6 +1441,10 @@
         "trim": {
           "type": "string",
           "description": "The seconds of the recording to use, in,out (like 2,48.5)."
+        },
+        "crop": {
+          "type": "string",
+          "description": "The part of the picture to use, x,y,width,height as fractions (like 0,0.08,1,0.84)."
         },
         "trace": {
           "type": "string",

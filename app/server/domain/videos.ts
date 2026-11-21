@@ -1233,6 +1233,7 @@ function versionDto(
           mediaId: v.recording.mediaId,
           trace: v.recording.trace !== null,
           compose: v.recording.compose,
+          crop: v.recording.crop ?? null,
           privacy: v.recording.privacy === true,
           summary: v.recording.summary,
           hidden: v.recording.hidden.map((h) => ({ ...h, why: hiddenWhy(h) })),

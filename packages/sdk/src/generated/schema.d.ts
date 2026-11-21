@@ -2184,6 +2184,15 @@ export interface components {
                 trace: boolean;
                 /** @description Made with no agent authoring (a Quick demo). */
                 compose: boolean;
+                /** @description The part of the recording's picture the demo uses, in source pixels; null for the whole frame. */
+                crop?: {
+                    x: number;
+                    y: number;
+                    width: number;
+                    height: number;
+                    frameWidth: number;
+                    frameHeight: number;
+                } | null;
                 /** @description Privacy mode: private things on screen are found and hidden too. */
                 privacy: boolean;
                 /** @description What the run made of the recording; null until it is ready. */
@@ -2594,13 +2603,20 @@ export interface components {
                 number,
                 number
             ];
+            /** @description The part of the picture to use, [x, y, width, height] as fractions of the frame (a whole-screen recording cut down to the browser, say). The demo shows only this part: zooms, the cursor and hidden areas follow it. At least a tenth of the frame each way and 160 px. The whole frame when left out. */
+            crop?: [
+                number,
+                number,
+                number,
+                number
+            ];
             /** @description Areas to hide from the start (seconds of the recording). A demo with any starts private. */
             redact?: {
                 /** @description Seconds of the recording it starts hiding at; 0 (the start) when left out. */
                 start?: number;
                 /** @description Seconds of the recording it stops at; the end when left out. The editor can shorten it later. */
                 end?: number;
-                /** @description [x, y, width, height] as fractions of the frame. */
+                /** @description [x, y, width, height] as fractions of the frame (the whole frame, also with a crop). */
                 box: [
                     number,
                     number,
@@ -3648,6 +3664,15 @@ export interface components {
                     rate: number;
                     /** @description [t, x, y, zoom, ease?] keys, in source seconds */
                     camera: unknown[];
+                    /** @description The part of the recording's picture the demo uses, in source pixels; null for the whole frame. Positions (camera, clicks, hidden areas) are fractions of this part. */
+                    crop: {
+                        x: number;
+                        y: number;
+                        width: number;
+                        height: number;
+                        frameWidth: number;
+                        frameHeight: number;
+                    } | null;
                     cursor: {
                         style: string;
                         size: number | null;

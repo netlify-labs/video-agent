@@ -32,7 +32,7 @@ import {
   type RecordingBeat,
   type SceneArea,
 } from '../../lib/recording-edit'
-import { BoxCanvas } from './DemoSetup'
+import { BoxCanvas, croppedVideoStyle } from './DemoSetup'
 
 type Edit = paths['/api/v1/edits/{id}']['get']['responses'][200]['content']['application/json']
 export type EditRecording = NonNullable<Edit['recording']>
@@ -63,6 +63,8 @@ function CameraFrame(props: {
   const area = useRef<HTMLDivElement>(null)
   const video = useRef<HTMLVideoElement>(null)
   const drag = useRef<{ x0: number; y0: number; cx: number; cy: number } | null>(null)
+  // A cropped demo: the picture is the crop, as the scene draws it.
+  const crop = props.rec.crop ?? null
   const [x, y, z] = cameraNow(props.rec.camera, props.t)
   if (video.current && Math.abs(video.current.currentTime - props.t) > 0.05)
     video.current.currentTime = props.t
@@ -76,7 +78,7 @@ function CameraFrame(props: {
       data-testid="camera-frame"
       style={{
         position: 'relative',
-        aspectRatio: String(props.aspect),
+        aspectRatio: crop ? `${String(crop.width)} / ${String(crop.height)}` : String(props.aspect),
         background: '#000',
         borderRadius: 8,
         overflow: 'hidden',
@@ -89,7 +91,7 @@ function CameraFrame(props: {
         muted
         playsInline
         preload="auto"
-        style={{ width: '100%', height: '100%', display: 'block' }}
+        style={crop ? croppedVideoStyle(crop) : { width: '100%', height: '100%', display: 'block' }}
       />
       <div
         role="button"
@@ -472,6 +474,7 @@ export function RecordingPanel(props: {
                 src: props.src,
                 poster: null,
               }}
+              crop={rec.crop}
               boxes={drawing ? [...canvasBoxes, drawing] : canvasBoxes}
               newId={nextId}
               selected={selected}

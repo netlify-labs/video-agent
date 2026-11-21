@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { classify, MediaError } from '../../app/server/lib/media/classify.js'
 import { sha256Hex } from '../../app/server/lib/crypto.js'
+import { canonCrop, cropFilter, type RecordingCrop } from '../../app/server/lib/recording-crop.js'
 import type { Trace } from '../../app/server/lib/recording-trace.js'
 import { log, StepError } from './run-tools.js'
 
@@ -32,7 +33,10 @@ export interface Analysis {
   v: 1
   sha256: string
   analyzer: string
+  /** The picture's size (the crop's, with one), its frame rate and length. */
   source: { width: number; height: number; fps: number; duration: number }
+  /** The person's crop: every position here is in the cropped picture. Absent for the whole frame. */
+  crop?: RecordingCrop
   cursorSource: 'trace' | 'inferred' | 'none'
   idle: { start: number; end: number }[]
   scenes: number[]
@@ -113,11 +117,11 @@ interface FrameChange {
 }
 
 /** One decode: scdet events to a metadata file, grey frames differenced in Node. */
-async function decode(file: string, width: number, height: number) {
+async function decode(file: string, width: number, height: number, crop: RecordingCrop | null) {
   const w = DIFF_WIDTH
   const h = Math.round((w * height) / width / 2) * 2
   const meta = join(tmpdir(), `va-scdet-${process.pid}-${Date.now()}.txt`)
-  const graph = `[0:v]split=2[a][b];[a]scale=640:-2,scdet=threshold=${SCDET_THRESHOLD},metadata=mode=print:file=${meta.replace(/:/g, '\\:')},nullsink;[b]fps=${DIFF_FPS},scale=${w}:${h}:flags=area,format=gray[g]`
+  const graph = `[0:v]${crop ? `${cropFilter(crop)},` : ''}split=2[a][b];[a]scale=640:-2,scdet=threshold=${SCDET_THRESHOLD},metadata=mode=print:file=${meta.replace(/:/g, '\\:')},nullsink;[b]fps=${DIFF_FPS},scale=${w}:${h}:flags=area,format=gray[g]`
   const ff = spawn(
     'ffmpeg',
     ['-loglevel', 'error', '-i', file, '-filter_complex', graph, '-map', '[g]', '-f', 'rawvideo', '-'],
@@ -287,18 +291,29 @@ function fromTrace(trace: Trace, width: number, height: number) {
   return { cursor, clicks, navigations }
 }
 
-/** Analyzes a recording file. `trace`: its (already parsed) pointer trace, when there is one. */
-export async function analyzeRecording(file: string, trace: Trace | null = null): Promise<Analysis> {
+/**
+ * Analyzes a recording file. `trace`: its (already parsed) pointer trace, when there is one. `crop`: the part of the
+ * picture to analyze; the trace must already be in it (prepare-run converts it).
+ */
+export async function analyzeRecording(
+  file: string,
+  trace: Trace | null = null,
+  crop: RecordingCrop | null = null,
+): Promise<Analysis> {
   const started = Date.now()
   const bytes = new Uint8Array(readFileSync(file))
   const c = checkNormalized(bytes)
-  const width = c.width ?? 0
-  const height = c.height ?? 0
+  if (crop && (crop.frameWidth !== c.width || crop.frameHeight !== c.height))
+    throw new StepError(
+      `The crop is for a ${String(crop.frameWidth)}×${String(crop.frameHeight)} recording, but this one is ${String(c.width)}×${String(c.height)}.`,
+    )
+  const width = crop?.width ?? c.width ?? 0
+  const height = crop?.height ?? c.height ?? 0
   const duration = c.durationSec ?? 0
   const sha256 = sha256Hex(bytes)
   log('recording.analyze_probe', { file, width, height, duration, ms: Date.now() - started })
   const t0 = Date.now()
-  const { changes, scenes: scdet, frames, scale } = await decode(file, width, height)
+  const { changes, scenes: scdet, frames, scale } = await decode(file, width, height, crop)
   log('recording.analyze_decode', {
     frames,
     changed: changes.length,
@@ -341,6 +356,7 @@ export async function analyzeRecording(file: string, trace: Trace | null = null)
     sha256,
     analyzer: ANALYZER_VERSION,
     source: { width, height, fps: r3(fps), duration: r3(duration) },
+    ...(crop ? { crop: canonCrop(crop) } : {}),
     cursorSource,
     idle,
     scenes,
