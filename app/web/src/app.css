@@ -1838,7 +1838,8 @@ main.va-shell-main {
 }
 
 /* A form's main action, pinned to the bottom of the window as the form scrolls: it spans the card (the card's lg
-   padding is undone and redone) with an edge above it. */
+   padding is undone and redone) on a raised ground with an edge and a soft shadow above it, so it reads as a bar
+   over the form, not part of it. */
 .va-sticky-actions {
   position: sticky;
   bottom: 0;
@@ -1847,7 +1848,8 @@ main.va-shell-main {
   padding: 14px var(--mantine-spacing-lg);
   border-top: 1px solid var(--va-rule);
   border-radius: 0 0 var(--mantine-radius-lg) var(--mantine-radius-lg);
-  background: var(--va-surface);
+  background: var(--va-raised);
+  box-shadow: 0 -10px 18px -12px rgb(0 0 0 / 35%);
 }
 
 /* The Add media dialog takes files dropped anywhere on it; the strip says so and lights up while dragging. */

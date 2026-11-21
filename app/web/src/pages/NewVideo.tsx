@@ -132,7 +132,7 @@ export function QuickCreate() {
 /** Your last few videos, to reuse a prompt or check on one in progress. */
 /** Your last few videos; each ready one can be remixed here (onRemix turns this page into the remix form). */
 function RecentMine({ onRemix }: { onRemix: ((video: Video, version: Version) => void) | null }) {
-  const mine = $api.useQuery('get', '/api/v1/videos', { params: { query: { owner: 'me', limit: 4 } } })
+  const mine = $api.useQuery('get', '/api/v1/videos', { params: { query: { owner: 'me', limit: 8 } } })
   const items = mine.data?.items ?? []
   return (
     <Card>
@@ -576,9 +576,6 @@ export function NewVideoPage() {
                 >
                   Create video
                 </Button>
-                <Text size="sm" c="var(--va-faint)">
-                  You can revise it in plain words afterwards.
-                </Text>
               </Group>
             </Stack>
           </form>
