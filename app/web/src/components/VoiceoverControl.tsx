@@ -61,6 +61,8 @@ interface ElevenLabsChoices {
   on: boolean
   voices: { value: string; label: string; name: string; previewUrl: string | null }[]
   defaultLabel: string
+  /** The voice Default means, when it is one of the listed voices (so it has a sample). */
+  defaultVoice: string | null
   /** The server can search ElevenLabs' voice library, so the picker offers Other…. */
   library: boolean
 }
@@ -84,6 +86,7 @@ function useElevenLabs(): ElevenLabsChoices {
     voices,
     library: on && list.data?.library === true,
     defaultLabel: def ? `Default (ElevenLabs - ${def.name})` : 'Default (ElevenLabs)',
+    defaultVoice: def?.id ?? null,
   }
 }
 
@@ -212,7 +215,9 @@ export function VoiceoverControl(props: {
   const el = useElevenLabs()
   const [finding, setFinding] = useState(false)
   // With ElevenLabs, the default voice is whichever one the deployment set.
-  const chosen = v.voice || (el.on ? '' : DEFAULT_VOICE)
+  // Default stands for a real voice, so it has a sample like any other choice.
+  const actual = (voice: string) => voice || (el.on ? (el.defaultVoice ?? '') : DEFAULT_VOICE)
+  const chosen = actual(v.voice)
   const nameOf = (voice: string) =>
     el.voices.find((x) => x.value === voice)?.name ??
     (VOICES.find((x) => x.value === voice)?.label ?? voice).split(' · ')[0] ??
@@ -260,13 +265,13 @@ export function VoiceoverControl(props: {
                 // Wide enough for an ElevenLabs voice's name and style; narrower on a phone.
                 w={el.on ? { base: 260, sm: 490 } : 220}
                 renderOption={({ option }) => {
-                  const voice = option.value
+                  const voice = option.value === OTHER ? '' : actual(option.value)
                   return (
                     <Group justify="space-between" wrap="nowrap" gap="xs" style={{ flex: 1, minWidth: 0 }}>
                       <span style={{ flex: 1, minWidth: 0 }}>{option.label}</span>
-                      {option.value && sampleOf(voice) ? (
+                      {voice && sampleOf(voice) ? (
                         <PreviewButton
-                          voice={voice}
+                          voice={option.value || 'default'}
                           label={nameOf(voice)}
                           playing={preview.playing === voice}
                           onToggle={() => {

@@ -1588,8 +1588,24 @@ test('voice previews play a sample, one at a time, without picking the voice', a
   await page.getByRole('combobox', { name: 'Voice' }).click()
   await page.getByTestId('voice-preview-am_michael').click()
   await expect.poll(() => samples.some((u) => /am_michael.*\.mp3$/.test(u))).toBe(true)
+  // The default has a sample in the list too: it is a real voice.
+  await expect(page.getByTestId('voice-preview-default')).toBeVisible()
   await page.keyboard.press('Escape')
   await expect(page.getByRole('combobox', { name: 'Voice' })).toHaveValue('Default (Heart)')
+})
+
+test('with ElevenLabs, the default voice has a play button beside the picker and in the list', async ({
+  page,
+}) => {
+  await mock(page, 'mockElevenLabs')
+  await page.goto('/new')
+  await page.getByTestId('voiceover-switch').check()
+  const picker = page.getByRole('combobox', { name: 'Voice' })
+  await expect(picker).toHaveValue('Default (ElevenLabs - Roger)')
+  await expect(page.getByRole('button', { name: 'Hear Roger' })).toBeVisible()
+  await picker.click()
+  await expect(page.getByTestId('voice-preview-default')).toBeVisible()
+  await expect(page.getByTestId('voice-preview-CwhRBWXzGAHq8TQ4Fs17')).toBeVisible()
 })
 
 // Openverse (Find music): search through the mock API, preview, import into the library, and the credit line.
