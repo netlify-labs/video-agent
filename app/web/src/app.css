@@ -1431,6 +1431,10 @@ main.va-shell-main {
   width: 100%;
   height: 36px;
 }
+/* The browser's own player is a pill; in a card it sits square, edge to edge. */
+.va-media-audio::-webkit-media-controls-enclosure {
+  border-radius: 0;
+}
 .va-media-duration {
   position: absolute;
   right: 8px;

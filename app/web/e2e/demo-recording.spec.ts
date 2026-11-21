@@ -136,7 +136,7 @@ test('the demo look picker leaves out looks that hide recordings; such a default
   // retro-crt has recording: false.
   await page.addInitScript(() => localStorage.setItem('mockLookDefault', 'retro-crt'))
   await page.goto('/new/demo?media=med_screen_plain')
-  await page.getByRole('button', { name: 'Look: None' }).click()
+  await page.getByRole('button', { name: 'Look: Agent decides' }).click()
   const dialog = page.getByRole('dialog', { name: 'Pick a look' })
   await expect(dialog.locator('.va-look-pick[data-look="clean"]')).toBeVisible()
   await expect(dialog.locator('.va-look-pick[data-look="retro-crt"]')).toHaveCount(0)

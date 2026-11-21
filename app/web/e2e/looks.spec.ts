@@ -60,7 +60,7 @@ test('the picker shows posters only until a card is hovered or focused', async (
   await page.goto('/new')
   // A tap on a phone, the keyboard elsewhere: a mouse click would leave the pointer resting over a card of the
   // picker, which is a hover that plays its clip.
-  const open = page.getByRole('button', { name: 'Look: None' })
+  const open = page.getByRole('button', { name: 'Look: Agent decides' })
   if (isMobile) await open.tap()
   else {
     await open.focus()
@@ -92,7 +92,7 @@ test('with reduced motion a card shows its poster and a play button', async ({ p
   await page.emulateMedia({ reducedMotion: 'reduce' })
   const urls = clips(page)
   await page.goto('/new')
-  await page.getByRole('button', { name: 'Look: None' }).click()
+  await page.getByRole('button', { name: 'Look: Agent decides' }).click()
   await card(page, 'kinetic').hover()
   await card(page, 'clean').focus()
   await expect(page.locator('.va-look-grid video')).toHaveCount(0)
@@ -103,7 +103,7 @@ test('with reduced motion a card shows its poster and a play button', async ({ p
 
 test('picks with the keyboard, and the create request carries the look', async ({ page }) => {
   await page.goto('/new')
-  await page.getByRole('button', { name: 'Look: None' }).click()
+  await page.getByRole('button', { name: 'Look: Agent decides' }).click()
   await card(page, 'none').focus()
   const [first, second] = looksCatalog
   await page.keyboard.press('ArrowRight')
@@ -119,11 +119,11 @@ test('picks with the keyboard, and the create request carries the look', async (
 
 test('Escape closes the picker without a change; untouched leaves look out', async ({ page }) => {
   await page.goto('/new')
-  await page.getByRole('button', { name: 'Look: None' }).click()
+  await page.getByRole('button', { name: 'Look: Agent decides' }).click()
   await card(page, 'clean').focus()
   await page.keyboard.press('Escape')
   await expect(page.getByRole('dialog', { name: 'Pick a look' })).toBeHidden()
-  await expect(page.getByRole('button', { name: 'Look: None' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Look: Agent decides' })).toBeVisible()
   expect(await createNow(page)).not.toHaveProperty('look')
 })
 
@@ -135,7 +135,7 @@ test('None sends look: null over the admin default; disabled looks are hidden', 
   await expect(card(page, 'kinetic')).toHaveAttribute('aria-pressed', 'true')
   await expect(card(page, 'terminal')).toHaveCount(0)
   await card(page, 'none').click()
-  await expect(page.getByRole('button', { name: 'Look: None' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Look: Agent decides' })).toBeVisible()
   expect((await createNow(page)).look).toBeNull()
 })
 
@@ -271,7 +271,7 @@ test("Remix shows the source's look, leaves it out unchanged and sends a change"
   const again = page.getByRole('dialog', { name: /Remix Org webhooks launch v1/ })
   await again.getByRole('button', { name: 'Look: Kinetic type' }).click()
   await card(page, 'none').click()
-  await expect(again.getByRole('button', { name: 'Look: None' })).toBeVisible()
+  await expect(again.getByRole('button', { name: 'Look: Agent decides' })).toBeVisible()
   await again.getByLabel('What would you change?').fill('Same story, no look')
   await again.getByRole('button', { name: 'Remix', exact: true }).click()
   await expect.poll(() => lastRemix(page)).toMatchObject({ look: null })
@@ -363,7 +363,7 @@ test("the brief shows the plan's look, and changing it sends the new look on cre
 
 test('a look picked before planning goes to the plan and the brief shows it', async ({ page }) => {
   await page.goto('/new')
-  await page.getByRole('button', { name: 'Look: None' }).click()
+  await page.getByRole('button', { name: 'Look: Agent decides' }).click()
   await card(page, 'terminal').click()
   await page
     .getByLabel('What should the video show?')

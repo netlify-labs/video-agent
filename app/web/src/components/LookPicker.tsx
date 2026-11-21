@@ -3,7 +3,7 @@
 // motion). Reused by New video, Restyle and Remix.
 import { ActionIcon, Button, Modal, Text, UnstyledButton } from '@mantine/core'
 import { useMediaQuery } from '@mantine/hooks'
-import { IconPlayerPlay } from '@tabler/icons-react'
+import { IconPlayerPlay, IconRobot } from '@tabler/icons-react'
 import { useRef, useState, type KeyboardEvent } from 'react'
 import { $api } from '../api/client'
 import {
@@ -172,14 +172,16 @@ export function LookPicker(props: {
             props.onPick(null)
           }}
         >
-          <div className="va-look-frame va-look-none">None</div>
+          <div className="va-look-frame va-look-none">
+            <IconRobot size={44} stroke={1.5} aria-hidden />
+          </div>
           <div className="va-look-text">
             <Text size="sm" fw={600}>
-              No look
+              Agent decides
               {noneMark ? <span className="va-look-mark">Current</span> : null}
             </Text>
             <Text size="xs" c="var(--va-muted)">
-              The agent decides, as before.
+              No set look: the agent picks a style that fits your prompt.
             </Text>
           </div>
         </UnstyledButton>
@@ -246,10 +248,16 @@ export function LookControl(props: {
         onClick={() => {
           setOpen(true)
         }}
-        leftSection={shown?.poster ? <img className="va-look-thumb" src={shown.poster} alt="" /> : null}
+        leftSection={
+          shown?.poster ? (
+            <img className="va-look-thumb" src={shown.poster} alt="" />
+          ) : shown ? null : (
+            <IconRobot size={18} stroke={1.5} aria-hidden />
+          )
+        }
         data-testid="look-control"
       >
-        Look: {shown?.name ?? 'None'}
+        Look: {shown?.name ?? 'Agent decides'}
       </Button>
       {props.hint ? (
         <Text size="xs" c="var(--va-faint)" mt={6}>

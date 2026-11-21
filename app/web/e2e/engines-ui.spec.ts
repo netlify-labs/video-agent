@@ -38,7 +38,7 @@ test('New video: the Engine select shows only where there is a choice, and Remot
   await expect(sound(page, 'Music')).toBeVisible()
   await expect(page.getByRole('switch', { name: 'Voice-over' })).toHaveCount(0)
   // A look made only with HyperFrames leaves no choice, so the select goes and HyperFrames' options come back.
-  await page.getByRole('button', { name: 'Look: None' }).click()
+  await page.getByRole('button', { name: 'Look: Agent decides' }).click()
   await page.locator('.va-look-pick[data-look="clean"]').click()
   await expect(select).toHaveCount(0)
   await expect(sound(page, 'Music + effects')).toBeVisible()
