@@ -1407,7 +1407,8 @@ main.va-shell-main {
 /* Media library */
 .va-media-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  /* Six across on a wide screen. */
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
   gap: 16px;
 }
 .va-media-card {
@@ -1427,13 +1428,9 @@ main.va-shell-main {
   object-fit: contain;
 }
 .va-media-audio {
-  display: block;
-  width: 100%;
   height: 36px;
-}
-/* The browser's own player is a pill; in a card it sits square, edge to edge. */
-.va-media-audio::-webkit-media-controls-enclosure {
-  border-radius: 0;
+  padding: 0 8px;
+  background: var(--va-raised);
 }
 .va-media-duration {
   position: absolute;

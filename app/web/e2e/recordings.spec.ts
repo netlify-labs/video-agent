@@ -28,7 +28,7 @@ test('recordings are left out of the library and listed under Recordings, with w
   await page.getByRole('menuitem', { name: 'Edit name and notes' }).click()
   const edit = page.getByRole('dialog', { name: 'Edit Warm-up' })
   // The dialog has the recording itself, to listen to.
-  await expect(edit.getByTestId('media-preview')).toHaveJSProperty('tagName', 'AUDIO')
+  await expect(edit.getByTestId('media-preview-audio')).toHaveJSProperty('tagName', 'AUDIO')
   await edit.getByLabel('Notes').fill('Too fast')
   await edit.getByRole('button', { name: 'Save' }).click()
   await expect(page.getByTestId('media-med_take0003').getByText('Too fast', { exact: false })).toBeVisible()

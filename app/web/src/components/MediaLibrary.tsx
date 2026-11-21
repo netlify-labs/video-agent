@@ -1,6 +1,7 @@
 // The media library's shared browsing parts, for the Media page and the Add media picker: search (title, file
 // name, notes), sort, a Table/Grid switch (table by default, remembered per browser), the table itself, and a
 // dialog to rename an item and edit its notes.
+import { AudioPlayer, playOnly, warmAudio } from './AudioPlayer'
 import {
   ActionIcon,
   Anchor,
@@ -159,15 +160,20 @@ const size = (n: number) =>
 const lengthOrSize = (m: Media) =>
   m.durationSec ? duration(m.durationSec) : m.width && m.height ? `${m.width}×${m.height}` : size(m.bytes)
 
-// One track plays at a time across the list.
-let playing: HTMLAudioElement | null = null
-
-/** A track's play/pause button, in place of its icon. Nothing loads until it's pressed. */
+/** A track's play/pause button, in place of its icon. Nothing loads until it's pointed at or pressed. */
 function PlayButton({ m, src }: { m: Media; src: string }) {
   const ref = useRef<HTMLAudioElement>(null)
   const [on, setOn] = useState(false)
   return (
-    <span className="va-row-thumb">
+    <span
+      className="va-row-thumb"
+      onPointerEnter={() => {
+        warmAudio(ref.current)
+      }}
+      onFocus={() => {
+        warmAudio(ref.current)
+      }}
+    >
       <ActionIcon
         variant="subtle"
         color="gray"
@@ -178,11 +184,8 @@ function PlayButton({ m, src }: { m: Media; src: string }) {
           e.stopPropagation()
           const a = ref.current
           if (!a) return
-          if (a.paused) {
-            if (playing && playing !== a) playing.pause()
-            playing = a
-            void a.play()
-          } else a.pause()
+          if (a.paused) playOnly(a)
+          else a.pause()
         }}
       >
         {on ? <IconPlayerPauseFilled size={16} /> : <IconPlayerPlayFilled size={16} />}
@@ -414,7 +417,19 @@ function DetailsForm({ m, onDone }: { m: Media; onDone: (saved: boolean) => void
           </Button>
         </Group>
       </Stack>
-      <div style={{ flex: '1.4 1 320px', minWidth: 0 }}>
+      {/* The item sits in the middle of its side, both ways. */}
+      <div
+        style={{
+          flex: '1.4 1 320px',
+          minWidth: 0,
+          alignSelf: 'stretch',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+        data-testid="media-preview-side"
+      >
         <DetailsPreview m={m} />
       </div>
     </div>
@@ -459,13 +474,16 @@ function DetailsPreview({ m }: { m: Media }) {
     )
   if (m.kind === 'audio')
     return (
-      <audio
-        data-testid="media-preview"
-        src={m.urls.file}
-        controls
-        preload="metadata"
-        style={{ width: '100%' }}
-      />
+      // Opening the dialog is the sign someone wants to hear it: it loads at once.
+      <div data-testid="media-preview" style={{ width: '100%' }}>
+        <AudioPlayer
+          src={m.urls.file}
+          name={mediaName(m)}
+          durationSec={m.durationSec}
+          eager
+          testId="media-preview-audio"
+        />
+      </div>
     )
   if (m.kind === 'font') {
     const family = `va-preview-${m.id}`

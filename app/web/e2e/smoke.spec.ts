@@ -1110,6 +1110,28 @@ test('the media library takes audio: an Audio filter and a play button in its ro
   expect(await prop<boolean>(player, 'muted')).toBe(false)
   await expect(card.getByRole('button', { name: 'Play theme.mp3' })).toHaveAttribute('aria-pressed', 'false')
   await expect(card.getByText(/1:35/).filter({ visible: true })).toBeVisible()
+  // Pointing at the player starts loading the track, so play starts sooner.
+  // The length shows before any of the file has loaded.
+  if (await card.getByTestId('audio-time').isVisible())
+    await expect(card.getByTestId('audio-time')).toHaveText('0:00 / 1:35')
+  await player.locator('..').hover()
+  await expect(player).toHaveJSProperty('preload', 'auto')
+  // The edit dialog's player loads at once, and sits in the middle of its side.
+  await card.getByRole('button', { name: 'Actions for theme.mp3' }).click()
+  await page.getByRole('menuitem', { name: 'Edit name and notes' }).click()
+  const edit = page.getByRole('dialog', { name: 'Edit theme.mp3' })
+  const preview = edit.getByTestId('media-preview')
+  await expect(edit.getByTestId('media-preview-audio')).toHaveJSProperty('preload', 'auto')
+  // (Once the file has loaded, its own length shows: the mock's tone is two seconds.)
+  await expect(preview.getByTestId('audio-time')).toHaveText(/^0:00 \/ \d:\d\d$/)
+  const [side, shown] = [
+    await edit.getByTestId('media-preview-side').boundingBox(),
+    await preview.boundingBox(),
+  ]
+  if (!side || !shown) throw new Error('no preview')
+  expect(Math.abs(side.y + side.height / 2 - (shown.y + shown.height / 2))).toBeLessThan(2)
+  expect(Math.abs(side.x + side.width / 2 - (shown.x + shown.width / 2))).toBeLessThan(2)
+  await edit.getByRole('button', { name: 'Cancel' }).click()
   const filter = (k: string) =>
     page.locator('.mantine-SegmentedControl-label', { hasText: new RegExp(`^${k}$`) })
   await filter('Audio').click()

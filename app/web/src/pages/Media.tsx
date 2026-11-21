@@ -22,6 +22,7 @@ import { useNavigate } from 'react-router'
 import { $api, useCanCreate } from '../api/client'
 import { PageHeader, confirmDanger, relativeTime, showError } from '../components/bits'
 import { FindMusicModal } from '../components/FindMusic'
+import { AudioPlayer } from '../components/AudioPlayer'
 import { MEDIA_ACCEPT, Thumb, type Media } from '../components/MediaPicker'
 import { planUploads, retireReplaced, type PlannedUpload } from '../components/Duplicates'
 import {
@@ -108,14 +109,13 @@ function MediaCard({ m }: { m: Media }) {
     <Card padding={0} className="va-media-card" data-testid={`media-${m.id}`}>
       <Thumb m={m} />
       {m.kind === 'audio' && m.urls ? (
-        // Plays from the signed URL; nothing loads until someone presses play.
-        <audio
+        // Shows the track's length at once; the file loads when someone points at the player or tabs to it.
+        <AudioPlayer
           className="va-media-audio"
-          controls
-          preload="none"
           src={m.urls.file}
-          aria-label={`Play ${mediaName(m)}`}
-          data-testid={`player-${m.id}`}
+          name={mediaName(m)}
+          durationSec={m.durationSec}
+          testId={`player-${m.id}`}
         />
       ) : null}
       <Stack gap={4} p="sm">
