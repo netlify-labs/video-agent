@@ -190,6 +190,56 @@ test('Plan it first asks questions, writes an editable brief, and creates the vi
   await expect(page).toHaveURL(/\/videos\//)
 })
 
+test("the brief's scenes can be inserted between, moved and dragged into a new order", async ({
+  page,
+}, testInfo) => {
+  await page.goto('/new')
+  await page
+    .getByLabel('What should the video show?')
+    .fill('A 30-second launch video for org-wide webhooks, ending on our logo.')
+  await planFirst(page)
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByText('Who is this video for?')).toBeVisible()
+  await dialog.getByRole('button', { name: 'Next' }).click()
+  await dialog.getByRole('button', { name: 'Write the brief' }).click()
+  const scene = (n: number) => dialog.getByLabel(`Scene ${n}`, { exact: true })
+  await expect(scene(3)).toHaveValue('End card: Read the docs')
+
+  // A plus between two scenes puts an empty one there.
+  await dialog.getByRole('button', { name: 'Insert a scene after scene 2' }).click()
+  await expect(scene(3)).toHaveValue('')
+  await expect(scene(4)).toHaveValue('End card: Read the docs')
+  await scene(3).fill('A customer quote')
+
+  // Up and down move a scene one place; the first can't go up, the last can't go down.
+  await expect(dialog.getByRole('button', { name: 'Move scene 1 up' })).toBeDisabled()
+  await expect(dialog.getByRole('button', { name: 'Move scene 4 down' })).toBeDisabled()
+  await dialog.getByRole('button', { name: 'Move scene 3 up' }).click()
+  await expect(scene(2)).toHaveValue('A customer quote')
+  await expect(scene(3)).toHaveValue('Org webhooks: subscribe once')
+
+  const order = ['The problem: a webhook per project', 'A customer quote', 'Org webhooks: subscribe once']
+  // Dragging by the handle (a mouse; touch screens use the buttons): the third scene dropped on the first's top half.
+  if (testInfo.project.name === 'desktop') {
+    const grip = await dialog.getByTestId('brief-scene-grip-3').boundingBox()
+    const first = await dialog.getByTestId('brief-scene-1').boundingBox()
+    if (!grip || !first) throw new Error('The scenes are not on screen.')
+    await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2)
+    await page.mouse.down()
+    // A drag starts once the pointer has moved a little with the button held.
+    await page.mouse.move(grip.x + 20, grip.y - 20, { steps: 5 })
+    await page.mouse.move(first.x + 60, first.y + 10, { steps: 10 })
+    await page.mouse.up()
+    await expect(scene(1)).toHaveValue('Org webhooks: subscribe once')
+    order.unshift(order.pop() ?? '')
+  }
+  await dialog.getByRole('button', { name: 'Create with this brief' }).click()
+  await expect(page).toHaveURL(/\/videos\//)
+  expect(
+    await page.evaluate("window.__sent['/api/v1/plans/plan_mock'].brief.beats.map((b) => b.text)"),
+  ).toEqual([...order, 'End card: Read the docs'])
+})
+
 test('the Create dialog can start the video from any step of the plan', async ({ page }) => {
   await page.goto('/new')
   await page

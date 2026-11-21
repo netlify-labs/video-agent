@@ -20,7 +20,7 @@ import {
   TextInput,
   Textarea,
 } from '@mantine/core'
-import { IconPlus, IconX } from '@tabler/icons-react'
+import { IconChevronDown, IconChevronUp, IconGripVertical, IconPlus, IconX } from '@tabler/icons-react'
 import { useEffect, useRef, useState } from 'react'
 import { $api, errorMessage, fetchClient } from '../api/client'
 import type { paths } from '../api/schema'
@@ -66,6 +66,8 @@ export interface PlanPanelProps {
   steps?: boolean
 }
 
+/** The most scenes a brief takes (planBriefShape in app/server/schemas.ts). */
+const MAX_SCENES = 20
 /** How often the panel looks at a plan whose questions or brief are being written in the background. */
 const POLL_MS = 1200
 /** Asks the API to answer at once and let the panel poll, rather than hold the request while the model writes. */
@@ -249,6 +251,36 @@ function BriefEditor({
   limits?: { sounds: Sound[]; voiceover: boolean } | undefined
 }) {
   const spoken = voiceover || brief.voiceover === true
+  const beats = brief.beats
+  const canAdd = beats.length < MAX_SCENES
+  const blank = (): Brief['beats'][number] => ({ text: '', seconds: 5, ...(spoken ? { narration: '' } : {}) })
+  /** A new empty scene at position `at` (0: first). */
+  const insertScene = (at: number) => {
+    edit({ beats: [...beats.slice(0, at), blank(), ...beats.slice(at)] })
+  }
+  /** Moves scene `from` so it sits before what is now at `to` (beats.length: last). */
+  const moveScene = (from: number, to: number) => {
+    const target = to > from ? to - 1 : to
+    const moved = beats[from]
+    if (!moved || target === from) return
+    const rest = beats.filter((_, j) => j !== from)
+    edit({ beats: [...rest.slice(0, target), moved, ...rest.slice(target)] })
+  }
+  // Dragging a scene by its handle: the scene picked up, and the gap it would drop into.
+  // The ref is what a drop reads (set as the drag starts); the state only draws it.
+  const dragFrom = useRef<number | null>(null)
+  const [drag, setDrag] = useState<{ from: number; to: number | null } | null>(null)
+  const endDrag = () => {
+    dragFrom.current = null
+    setDrag(null)
+  }
+  /** The gap the pointer is nearest over scene `i`: before it (i) or after it (i + 1). */
+  const gapAt = (e: React.DragEvent<HTMLElement>, i: number) => {
+    const r = e.currentTarget.getBoundingClientRect()
+    return e.clientY < r.top + r.height / 2 ? i : i + 1
+  }
+  const dropAt =
+    drag && drag.to !== null && drag.to !== drag.from && drag.to !== drag.from + 1 ? drag.to : null
   const decided = brief.sound !== undefined || brief.voiceover !== undefined
   return (
     <Stack gap="sm">
@@ -346,87 +378,183 @@ function BriefEditor({
               Each scene's narration is read word for word, and the scene is made long enough for it.
             </Text>
           ) : null}
-          {brief.beats.map((b, i) => {
-            const setBeat = (patch: Partial<Brief['beats'][number]>) => {
-              edit({ beats: brief.beats.map((x, j) => (j === i ? { ...x, ...patch } : x)) })
-            }
-            return (
-              // One card per scene: its number, length and remove button, then what's shown and what's said.
-              <div key={i} className="va-brief-scene" data-testid={`brief-scene-${i + 1}`}>
-                <Group justify="space-between" wrap="nowrap" gap="xs">
-                  <Text size="sm" fw={600} className="num">
-                    Scene {i + 1}
-                  </Text>
-                  <Group gap={6} wrap="nowrap">
-                    <NumberInput
-                      size="xs"
-                      w={76}
-                      min={0}
-                      max={600}
-                      suffix=" s"
-                      aria-label={`Length of scene ${i + 1}`}
-                      value={b.seconds}
-                      onChange={(v) => {
-                        setBeat({ seconds: Number(v) || 0 })
+          <div className="va-brief-scenes" onDragEnd={endDrag}>
+            {beats.map((b, i) => {
+              const setBeat = (patch: Partial<Brief['beats'][number]>) => {
+                edit({ beats: beats.map((x, j) => (j === i ? { ...x, ...patch } : x)) })
+              }
+              return (
+                <div key={i} className="va-brief-slot">
+                  {/* One card per scene: its handle, number, length and buttons, then what's shown and what's said. */}
+                  <div
+                    className="va-brief-scene"
+                    data-testid={`brief-scene-${i + 1}`}
+                    data-dragging={drag?.from === i || undefined}
+                    data-drop={dropAt === i ? 'before' : dropAt === i + 1 ? 'after' : undefined}
+                    onDragOver={(e) => {
+                      const from = dragFrom.current
+                      if (from === null) return
+                      e.preventDefault()
+                      e.dataTransfer.dropEffect = 'move'
+                      const to = gapAt(e, i)
+                      if (to !== drag?.to) setDrag({ from, to })
+                    }}
+                    onDrop={(e) => {
+                      const from = dragFrom.current
+                      if (from === null) return
+                      e.preventDefault()
+                      moveScene(from, gapAt(e, i))
+                      endDrag()
+                    }}
+                  >
+                    <Group justify="space-between" wrap="nowrap" gap="xs">
+                      <Group gap={4} wrap="nowrap">
+                        {beats.length > 1 ? (
+                          <span
+                            className="va-brief-grip"
+                            draggable
+                            title="Drag to reorder"
+                            aria-hidden
+                            data-testid={`brief-scene-grip-${i + 1}`}
+                            onDragStart={(e) => {
+                              e.dataTransfer.effectAllowed = 'move'
+                              e.dataTransfer.setData('text/plain', `Scene ${i + 1}`)
+                              const card = e.currentTarget.closest('.va-brief-scene')
+                              if (card) e.dataTransfer.setDragImage(card, 16, 16)
+                              dragFrom.current = i
+                              // After the browser has taken its picture of the card: a card restyled during
+                              // dragstart can end the drag before it starts.
+                              setTimeout(() => {
+                                setDrag({ from: i, to: null })
+                              }, 0)
+                            }}
+                          >
+                            <IconGripVertical size={16} />
+                          </span>
+                        ) : null}
+                        <Text size="sm" fw={600} className="num">
+                          Scene {i + 1}
+                        </Text>
+                      </Group>
+                      <Group gap={2} wrap="nowrap">
+                        <NumberInput
+                          size="xs"
+                          w={76}
+                          mr={4}
+                          min={0}
+                          max={600}
+                          suffix=" s"
+                          aria-label={`Length of scene ${i + 1}`}
+                          value={b.seconds}
+                          onChange={(v) => {
+                            setBeat({ seconds: Number(v) || 0 })
+                          }}
+                        />
+                        {beats.length > 1 ? (
+                          <>
+                            {/* The same move without dragging: for the keyboard and for touch screens. */}
+                            <ActionIcon
+                              variant="subtle"
+                              color="gray"
+                              aria-label={`Move scene ${i + 1} up`}
+                              disabled={i === 0}
+                              onClick={() => {
+                                moveScene(i, i - 1)
+                              }}
+                            >
+                              <IconChevronUp size={16} />
+                            </ActionIcon>
+                            <ActionIcon
+                              variant="subtle"
+                              color="gray"
+                              aria-label={`Move scene ${i + 1} down`}
+                              disabled={i === beats.length - 1}
+                              onClick={() => {
+                                moveScene(i, i + 2)
+                              }}
+                            >
+                              <IconChevronDown size={16} />
+                            </ActionIcon>
+                            <ActionIcon
+                              variant="subtle"
+                              color="gray"
+                              aria-label={`Remove scene ${i + 1}`}
+                              onClick={() => {
+                                edit({ beats: beats.filter((_, j) => j !== i) })
+                              }}
+                            >
+                              <IconX size={16} />
+                            </ActionIcon>
+                          </>
+                        ) : null}
+                      </Group>
+                    </Group>
+                    <Textarea
+                      label="On screen"
+                      aria-label={`Scene ${i + 1}`}
+                      autosize
+                      minRows={2}
+                      maxLength={300}
+                      value={b.text}
+                      onChange={(e) => {
+                        setBeat({ text: e.currentTarget.value })
                       }}
                     />
-                    {brief.beats.length > 1 ? (
-                      <ActionIcon
-                        variant="subtle"
-                        color="gray"
-                        aria-label={`Remove scene ${i + 1}`}
-                        onClick={() => {
-                          edit({ beats: brief.beats.filter((_, j) => j !== i) })
+                    {spoken ? (
+                      <Textarea
+                        label="Narration"
+                        aria-label={`Narration for scene ${i + 1}`}
+                        placeholder="What the narrator says over this scene"
+                        autosize
+                        minRows={2}
+                        maxLength={600}
+                        value={b.narration ?? ''}
+                        onChange={(e) => {
+                          setBeat({ narration: e.currentTarget.value })
                         }}
-                      >
-                        <IconX size={16} />
-                      </ActionIcon>
+                      />
                     ) : null}
-                  </Group>
-                </Group>
-                <Textarea
-                  label="On screen"
-                  aria-label={`Scene ${i + 1}`}
-                  autosize
-                  minRows={2}
-                  maxLength={300}
-                  value={b.text}
-                  onChange={(e) => {
-                    setBeat({ text: e.currentTarget.value })
-                  }}
-                />
-                {spoken ? (
-                  <Textarea
-                    label="Narration"
-                    aria-label={`Narration for scene ${i + 1}`}
-                    placeholder="What the narrator says over this scene"
-                    autosize
-                    minRows={2}
-                    maxLength={600}
-                    value={b.narration ?? ''}
-                    onChange={(e) => {
-                      setBeat({ narration: e.currentTarget.value })
-                    }}
-                  />
-                ) : null}
-              </div>
-            )
-          })}
-          {brief.beats.length < 12 ? (
+                  </div>
+                  {/* Between two scenes: a plus that puts a new one there. */}
+                  {i < beats.length - 1 ? (
+                    <div className="va-brief-insert">
+                      {canAdd ? (
+                        <ActionIcon
+                          variant="default"
+                          size="sm"
+                          radius="xl"
+                          aria-label={`Insert a scene after scene ${i + 1}`}
+                          title="Insert a scene here"
+                          onClick={() => {
+                            insertScene(i + 1)
+                          }}
+                        >
+                          <IconPlus size={14} />
+                        </ActionIcon>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              )
+            })}
+          </div>
+          {canAdd ? (
             <Button
               variant="default"
               size="xs"
               leftSection={<IconPlus size={14} />}
               style={{ alignSelf: 'flex-start' }}
               onClick={() => {
-                edit({
-                  beats: [...brief.beats, { text: '', seconds: 5, ...(spoken ? { narration: '' } : {}) }],
-                })
+                insertScene(beats.length)
               }}
             >
               Add scene
             </Button>
-          ) : null}
+          ) : (
+            <Text size="xs" c="var(--va-faint)">
+              A brief takes up to {MAX_SCENES} scenes. Remove one to add another.
+            </Text>
+          )}
         </Stack>
       </div>
     </Stack>

@@ -51,7 +51,7 @@ export const VoiceoverInputSchema = z
       .max(SPEED_RANGE[1])
       .optional()
       .openapi({ description: 'Default 1.' }),
-    script: z.array(z.string().trim().min(1).max(600)).max(12).optional().openapi({
+    script: z.array(z.string().trim().min(1).max(600)).max(20).optional().openapi({
       description:
         "The narration, one line per beat in order, spoken word for word. Omit to let the plan's narration or the agent write it.",
     }),
@@ -386,7 +386,7 @@ export const planBriefShape = z.object({
         narration: z.string().max(600).optional(),
       }),
     )
-    .max(12),
+    .max(20),
   tone: z.string().max(200),
   callToAction: z.string().max(200),
   mustInclude: z.array(z.string().max(200)).max(10),

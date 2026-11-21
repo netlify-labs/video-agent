@@ -104,7 +104,7 @@ function voiceoverArg(describe: string) {
         speed: z.number().min(SPEED_RANGE[0]).max(SPEED_RANGE[1]).optional().describe('0.7-1.3, default 1.'),
         script: z
           .array(z.string().min(1).max(600))
-          .max(12)
+          .max(20)
           .optional()
           .describe(
             `The narration, one line per beat, spoken word for word. Omit to let the agent (or the plan) write it. ${ONE_WAY_WORDS}`,

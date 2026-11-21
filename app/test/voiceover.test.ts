@@ -59,7 +59,7 @@ describe('voice-over per version', () => {
       (await h.call('POST', '/api/v1/videos', { as: h.member, body: { prompt: PROMPT, voiceover } })).status
     expect(await bad({ enabled: true, voice: 'af heart; rm -rf' })).toBe(400)
     expect(await bad({ enabled: true, speed: 3 })).toBe(400)
-    expect(await bad({ enabled: true, script: Array(13).fill('x') })).toBe(400)
+    expect(await bad({ enabled: true, script: Array(21).fill('x') })).toBe(400)
     expect(await bad({ enabled: true, script: ['x'.repeat(601)] })).toBe(400)
     expect(await bad({ voice: 'af_heart' })).toBe(400)
   })

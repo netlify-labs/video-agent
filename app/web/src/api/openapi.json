@@ -1305,7 +1305,7 @@
                 "seconds"
               ]
             },
-            "maxItems": 12
+            "maxItems": 20
           },
           "tone": {
             "type": "string",
@@ -2234,7 +2234,7 @@
               "minLength": 1,
               "maxLength": 600
             },
-            "maxItems": 12,
+            "maxItems": 20,
             "description": "The narration, one line per beat in order, spoken word for word. Omit to let the plan's narration or the agent write it."
           }
         },
@@ -4816,7 +4816,7 @@
                     "seconds"
                   ]
                 },
-                "maxItems": 12
+                "maxItems": 20
               },
               "tone": {
                 "type": "string",

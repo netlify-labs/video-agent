@@ -1634,6 +1634,74 @@ main.va-shell-main {
   background: var(--va-raised);
   border: 1px solid var(--va-rule);
 }
+/* The scenes in order. Between two of them, a gap with a plus that inserts a scene there. */
+.va-brief-scenes {
+  display: flex;
+  flex-direction: column;
+}
+.va-brief-insert {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  position: relative;
+}
+.va-brief-insert::before {
+  content: '';
+  position: absolute;
+  inset-inline: 14px;
+  top: 50%;
+  border-top: 1px dashed var(--va-dialog-edge, var(--va-rule));
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.va-brief-insert:hover::before,
+.va-brief-insert:focus-within::before {
+  opacity: 1;
+}
+.va-brief-insert > button {
+  position: relative;
+  opacity: 0.55;
+  transition: opacity 0.12s;
+}
+.va-brief-insert:hover > button,
+.va-brief-insert > button:focus-visible {
+  opacity: 1;
+}
+/* The handle a scene is dragged by, and where a dragged scene would land. */
+.va-brief-grip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 2px;
+  margin-left: -6px;
+  color: var(--va-faint);
+  cursor: grab;
+  border-radius: 4px;
+}
+.va-brief-grip:hover {
+  color: var(--va-text);
+}
+.va-brief-grip:active {
+  cursor: grabbing;
+}
+.va-brief-scene[data-dragging] {
+  opacity: 0.45;
+}
+.va-brief-scene[data-drop='before'] {
+  box-shadow: 0 -4px 0 -1px var(--va-accent-ink);
+}
+.va-brief-scene[data-drop='after'] {
+  box-shadow: 0 4px 0 -1px var(--va-accent-ink);
+}
+@media (hover: none) {
+  /* No dragging by touch: the up and down buttons move a scene. */
+  .va-brief-grip {
+    display: none;
+  }
+  .va-brief-insert > button {
+    opacity: 1;
+  }
+}
 .mantine-Modal-content .va-brief-scene {
   background: var(--va-dialog-raised);
   border-color: var(--va-dialog-edge);
@@ -1942,4 +2010,11 @@ main.va-shell-main {
   position: absolute;
   right: 0;
   bottom: 6px;
+}
+
+/* A scene's move buttons at either end: dimmed, without the filled look of a disabled button. */
+.va-brief-scene .mantine-ActionIcon-root[data-disabled] {
+  background: transparent;
+  border-color: transparent;
+  opacity: 0.35;
 }
