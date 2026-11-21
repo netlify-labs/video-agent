@@ -374,44 +374,124 @@ function DetailsForm({ m, onDone }: { m: Media; onDone: (saved: boolean) => void
     else onDone(true)
   }
   return (
-    <Stack gap="md">
-      <TextInput
-        label="Name"
-        description={`Shown in the library instead of the file name (${m.filename}). Leave empty to use the file name.`}
-        maxLength={120}
-        value={title}
-        placeholder={m.filename}
-        onChange={(e) => {
-          setTitle(e.currentTarget.value)
-        }}
-        data-autofocus
-      />
-      <Textarea
-        label="Notes"
-        description="What it is and how to use it. Search finds these words, and the planner and the agent read them."
-        autosize
-        minRows={3}
-        maxRows={8}
-        maxLength={500}
-        value={notes}
-        onChange={(e) => {
-          setNotes(e.currentTarget.value)
-        }}
-      />
-      <Group justify="flex-end" gap="sm">
-        <Button
-          variant="default"
-          onClick={() => {
-            onDone(false)
+    // The fields on the left, the item itself on the right (under them when the dialog is narrow).
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, alignItems: 'flex-start' }}>
+      <Stack gap="md" style={{ flex: '1 1 300px', minWidth: 0 }}>
+        <TextInput
+          label="Name"
+          description={`Shown in the library instead of the file name (${m.filename}). Leave empty to use the file name.`}
+          maxLength={120}
+          value={title}
+          placeholder={m.filename}
+          onChange={(e) => {
+            setTitle(e.currentTarget.value)
           }}
-        >
-          Cancel
-        </Button>
-        <Button loading={saving} onClick={() => void save()}>
-          Save
-        </Button>
-      </Group>
-    </Stack>
+          data-autofocus
+        />
+        <Textarea
+          label="Notes"
+          description="What it is and how to use it. Search finds these words, and the planner and the agent read them."
+          autosize
+          minRows={3}
+          maxRows={8}
+          maxLength={500}
+          value={notes}
+          onChange={(e) => {
+            setNotes(e.currentTarget.value)
+          }}
+        />
+        <Group justify="flex-end" gap="sm">
+          <Button
+            variant="default"
+            onClick={() => {
+              onDone(false)
+            }}
+          >
+            Cancel
+          </Button>
+          <Button loading={saving} onClick={() => void save()}>
+            Save
+          </Button>
+        </Group>
+      </Stack>
+      <div style={{ flex: '1.4 1 320px', minWidth: 0 }}>
+        <DetailsPreview m={m} />
+      </div>
+    </div>
+  )
+}
+
+/** The item itself in the edit dialog: the picture, a player for a clip, a recording or audio, a font's sample. */
+function DetailsPreview({ m }: { m: Media }) {
+  const frame: React.CSSProperties = {
+    width: '100%',
+    maxHeight: '60vh',
+    display: 'block',
+    background: '#000',
+    borderRadius: 'var(--mantine-radius-md)',
+  }
+  const none = (text: string) => (
+    <Text size="sm" c="var(--va-muted)" data-testid="media-preview-none">
+      {text}
+    </Text>
+  )
+  if (!m.urls) return none(m.status === 'ready' ? 'No preview for this item.' : "It isn't ready yet.")
+  if (m.kind === 'video')
+    return (
+      <video
+        data-testid="media-preview"
+        src={m.urls.original}
+        poster={m.urls.poster ?? undefined}
+        controls
+        playsInline
+        preload="metadata"
+        style={{ ...frame, objectFit: 'contain' }}
+      />
+    )
+  if (m.kind === 'image' || m.kind === 'svg')
+    return (
+      <img
+        data-testid="media-preview"
+        src={m.urls.file}
+        alt={mediaName(m)}
+        style={{ ...frame, objectFit: 'contain', background: 'var(--va-raised)' }}
+      />
+    )
+  if (m.kind === 'audio')
+    return (
+      <audio
+        data-testid="media-preview"
+        src={m.urls.file}
+        controls
+        preload="metadata"
+        style={{ width: '100%' }}
+      />
+    )
+  if (m.kind === 'font') {
+    const family = `va-preview-${m.id}`
+    return (
+      <div data-testid="media-preview">
+        <style>{`@font-face { font-family: "${family}"; src: url("${m.urls.file}"); }`}</style>
+        <Text style={{ fontFamily: `"${family}", sans-serif`, fontSize: 40, lineHeight: 1.15 }}>
+          Aa Bb Cc 123
+        </Text>
+        <Text style={{ fontFamily: `"${family}", sans-serif`, fontSize: 18 }} mt="xs">
+          The quick brown fox jumps over the lazy dog.
+        </Text>
+      </div>
+    )
+  }
+  return (
+    <Button
+      component="a"
+      href={m.urls.file}
+      target="_blank"
+      rel="noreferrer"
+      variant="default"
+      data-testid="media-preview"
+    >
+      Open the PDF
+    </Button>
   )
 }
 
@@ -419,7 +499,8 @@ function DetailsForm({ m, onDone }: { m: Media; onDone: (saved: boolean) => void
 export function editMediaDetails(m: Media, onSaved: () => void) {
   const id = modals.open({
     title: `Edit ${mediaName(m)}`,
-    size: 'lg',
+    // Wide: the fields and the item side by side.
+    size: 960,
     children: (
       <DetailsForm
         m={m}

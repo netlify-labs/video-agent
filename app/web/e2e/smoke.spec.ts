@@ -916,6 +916,14 @@ test('the media library starts empty, uploads a file, names it, adds notes, find
   await card.getByRole('button', { name: 'Actions for logo.png' }).click()
   await page.getByRole('menuitem', { name: 'Edit name and notes' }).click()
   const edit = page.getByRole('dialog', { name: 'Edit logo.png' })
+  // The item itself shows in the dialog: beside the fields when there's room, under them on a phone.
+  const preview = edit.getByTestId('media-preview')
+  await expect(preview).toBeVisible()
+  await expect(preview).toHaveJSProperty('tagName', 'IMG')
+  const [field, shown] = [await edit.getByLabel('Name').boundingBox(), await preview.boundingBox()]
+  if ((page.viewportSize()?.width ?? 0) > 1000)
+    expect(shown?.x ?? 0).toBeGreaterThan((field?.x ?? 0) + (field?.width ?? 0))
+  else expect(shown?.y ?? 0).toBeGreaterThan(field?.y ?? 0)
   await edit.getByLabel('Name').fill('Main logo')
   await edit.getByLabel('Notes').fill('Dark backgrounds only')
   await edit.getByRole('button', { name: 'Save' }).click()
