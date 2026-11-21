@@ -163,6 +163,8 @@ const binaryBody = () => ({
   required: true,
 })
 const err = (desc: string) => json(s.ErrorSchema, desc)
+/** "Prefer: respond-async" (RFC 7240): answer now and let the caller poll, rather than wait for background work. */
+const respondAsync = (prefer: string | undefined) => /(^|[,;\s])respond-async\b/i.test(prefer ?? '')
 const errors = {
   400: err('Invalid request'),
   401: err('Not signed in'),
@@ -1854,14 +1856,22 @@ export function createApp(deps: Deps, opts: AppOptions) {
       operationId: 'askPlanQuestions',
       'x-sdk': { resource: 'plans', method: 'questions', feature: 'planning' },
       summary: 'Ask questions',
-      description: 'Zero to six multiple-choice questions about the video; empty when the prompt covers it.',
+      description:
+        'Zero to six multiple-choice questions about the video; empty when the prompt covers it. The model call runs in the background. By default the request waits for it (about 40 seconds at most) and answers 200. If it takes longer, or straight away with the header "Prefer: respond-async", the answer is 202 with work.status "running": poll GET /api/v1/plans/{id} until work is null (done) or work.status is "failed" (work.error says why).',
       tags: ['planning'],
       security,
       request: { params: IdParam },
-      responses: { 200: json(s.PlanSchema, 'Plan with questions'), ...errors },
+      responses: {
+        200: json(s.PlanSchema, 'Plan with questions'),
+        202: json(s.PlanSchema, 'Still writing the questions: poll the plan'),
+        ...errors,
+      },
     }),
-    async (c) =>
-      c.json(await planning.generateQuestions(deps, c.get('principal'), c.req.valid('param').id), 200),
+    async (c) => {
+      const run = respondAsync(c.req.header('prefer')) ? planning.startQuestions : planning.generateQuestions
+      const plan = await run(deps, c.get('principal'), c.req.valid('param').id)
+      return c.json(plan, plan.work?.status === 'running' ? 202 : 200)
+    },
   )
   app.openapi(
     createRoute({
@@ -1870,22 +1880,22 @@ export function createApp(deps: Deps, opts: AppOptions) {
       operationId: 'writePlanBrief',
       'x-sdk': { resource: 'plans', method: 'brief', feature: 'planning' },
       summary: 'Write the brief',
-      description: 'Turns the answers into an editable brief.',
+      description:
+        'Turns the answers into an editable brief. The model call runs in the background. By default the request waits for it (about 40 seconds at most) and answers 200. If it takes longer, or straight away with the header "Prefer: respond-async", the answer is 202 with work.status "running": poll GET /api/v1/plans/{id} until work is null (done) or work.status is "failed" (work.error says why).',
       tags: ['planning'],
       security,
       request: { params: IdParam, body: jsonBody(s.PlanAnswersSchema) },
-      responses: { 200: json(s.PlanSchema, 'Plan with a brief'), ...errors },
+      responses: {
+        200: json(s.PlanSchema, 'Plan with a brief'),
+        202: json(s.PlanSchema, 'Still writing the brief: poll the plan'),
+        ...errors,
+      },
     }),
-    async (c) =>
-      c.json(
-        await planning.generateBrief(
-          deps,
-          c.get('principal'),
-          c.req.valid('param').id,
-          c.req.valid('json').answers,
-        ),
-        200,
-      ),
+    async (c) => {
+      const run = respondAsync(c.req.header('prefer')) ? planning.startBrief : planning.generateBrief
+      const plan = await run(deps, c.get('principal'), c.req.valid('param').id, c.req.valid('json').answers)
+      return c.json(plan, plan.work?.status === 'running' ? 202 : 200)
+    },
   )
   app.openapi(
     createRoute({

@@ -659,10 +659,19 @@ export function installMock() {
       }
       const ro = b.remixOf as { videoId: string; version?: number } | undefined
       mockRemixPlan = ro ? { videoId: ro.videoId, version: ro.version ?? 1 } : null
+      mockPlanStage = 'route'
       return json(mockPlan(), 201)
     }
-    if (/^\/api\/v1\/plans\/[^/]+\/questions$/.test(p)) return json(mockPlan('questions'))
-    if (/^\/api\/v1\/plans\/[^/]+\/brief$/.test(p)) return json(mockPlan('brief'))
+    // Like the API with "Prefer: respond-async": the work is running, and the next look at the plan has it.
+    if (/^\/api\/v1\/plans\/[^/]+\/questions$/.test(p)) {
+      mockPlanStage = 'questions'
+      return json({ ...mockPlan('route'), work: { kind: 'questions', status: 'running', error: null } }, 202)
+    }
+    if (/^\/api\/v1\/plans\/[^/]+\/brief$/.test(p)) {
+      mockPlanStage = 'brief'
+      return json({ ...mockPlan('questions'), work: { kind: 'brief', status: 'running', error: null } }, 202)
+    }
+    if (/^\/api\/v1\/plans\/[^/]+$/.test(p) && method === 'GET') return json(mockPlan(mockPlanStage))
     if (/^\/api\/v1\/plans\/[^/]+$/.test(p) && method === 'PATCH')
       return json({ ...mockPlan('brief'), briefRev: 2 })
     if (p === '/api/v1/me/usage')
@@ -2070,6 +2079,8 @@ const NARRATION = [
 
 /** The remix the current mock plan is for, if any (POST /api/v1/plans remixOf). */
 let mockRemixPlan: { videoId: string; version: number } | null = null
+/** What the mock plan's background work has written so far (GET /api/v1/plans/{id}). */
+let mockPlanStage: 'route' | 'questions' | 'brief' = 'route'
 function mockPlan(stage: 'route' | 'questions' | 'brief' = 'route') {
   const questions = [
     {
@@ -2128,6 +2139,7 @@ function mockPlan(stage: 'route' | 'questions' | 'brief' = 'route') {
         : null,
     briefRev: stage === 'brief' ? 1 : 0,
     voiceover: mockVoice,
+    work: null,
     expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
   }
 }

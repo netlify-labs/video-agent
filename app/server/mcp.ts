@@ -1523,7 +1523,7 @@ Example: {"prompt": "A 30-second launch video for org webhooks, ending on our lo
           ...(args.look !== undefined ? { look: args.look } : {}),
           ...(engine ? { engine } : {}),
         })
-        const plan = await planning.generateQuestions(deps, principal, created.id)
+        const plan = planning.finished(await planning.generateQuestions(deps, principal, created.id))
         return {
           plan_id: plan.id,
           suggested_aspect: plan.route?.suggestedAspect ?? null,
@@ -1572,16 +1572,18 @@ Example: {"plan_id": "plan_…", "answers": [{"question_id": "q1", "choice_ids":
     },
     async (args) =>
       run(async () => {
-        const plan = await planning.generateBrief(
-          deps,
-          principal,
-          args.plan_id,
-          args.answers.map((a) => ({
-            questionId: a.question_id,
-            ...(a.choice_ids ? { optionIds: a.choice_ids } : {}),
-            ...(a.other ? { other: a.other } : {}),
-            ...(a.skipped ? { skipped: true } : {}),
-          })),
+        const plan = planning.finished(
+          await planning.generateBrief(
+            deps,
+            principal,
+            args.plan_id,
+            args.answers.map((a) => ({
+              questionId: a.question_id,
+              ...(a.choice_ids ? { optionIds: a.choice_ids } : {}),
+              ...(a.other ? { other: a.other } : {}),
+              ...(a.skipped ? { skipped: true } : {}),
+            })),
+          ),
         )
         return {
           plan_id: plan.id,

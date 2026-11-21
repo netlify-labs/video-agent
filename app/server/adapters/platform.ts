@@ -41,6 +41,8 @@ export function createPlatform(opts: {
       dispatch('media-assemble', 'assemble', 'uploadId', uploadId, 'assembly'),
     // Short: the API request that dispatches has already spent seconds trying Openverse itself.
     dispatchOpenverseJob: (jobId) => dispatch('openverse', 'openverse', 'jobId', jobId, 'openverse', 3000),
+    // Short: a person is waiting, and the request writes the plan itself if this fails.
+    dispatchPlanWork: (planId) => dispatch('plan', 'plan', 'planId', planId, 'plan', 4000),
     dispatchPublish: (publicationId) =>
       dispatch('publish', 'publish', 'publicationId', publicationId, 'publish'),
     async setupFacts() {

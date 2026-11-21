@@ -4958,6 +4958,41 @@
             ],
             "description": "The engine chosen for this new-video plan; null: the look's choice."
           },
+          "work": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "questions",
+                  "brief"
+                ]
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "running",
+                  "failed"
+                ]
+              },
+              "error": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "For failed work: why, for the person."
+              }
+            },
+            "required": [
+              "kind",
+              "status",
+              "error"
+            ],
+            "description": "The questions or the brief being written in the background: running (poll the plan), or failed. null: nothing is being written."
+          },
           "expiresAt": {
             "type": "string"
           }
@@ -4977,6 +5012,7 @@
           "voiceover",
           "look",
           "engine",
+          "work",
           "expiresAt"
         ]
       },
@@ -15849,7 +15885,7 @@
           "feature": "planning"
         },
         "summary": "Ask questions",
-        "description": "Zero to six multiple-choice questions about the video; empty when the prompt covers it.",
+        "description": "Zero to six multiple-choice questions about the video; empty when the prompt covers it. The model call runs in the background. By default the request waits for it (about 40 seconds at most) and answers 200. If it takes longer, or straight away with the header \"Prefer: respond-async\", the answer is 202 with work.status \"running\": poll GET /api/v1/plans/{id} until work is null (done) or work.status is \"failed\" (work.error says why).",
         "tags": [
           "planning"
         ],
@@ -15874,6 +15910,16 @@
         "responses": {
           "200": {
             "description": "Plan with questions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Plan"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Still writing the questions: poll the plan",
             "content": {
               "application/json": {
                 "schema": {
@@ -15944,7 +15990,7 @@
           "feature": "planning"
         },
         "summary": "Write the brief",
-        "description": "Turns the answers into an editable brief.",
+        "description": "Turns the answers into an editable brief. The model call runs in the background. By default the request waits for it (about 40 seconds at most) and answers 200. If it takes longer, or straight away with the header \"Prefer: respond-async\", the answer is 202 with work.status \"running\": poll GET /api/v1/plans/{id} until work is null (done) or work.status is \"failed\" (work.error says why).",
         "tags": [
           "planning"
         ],
@@ -15979,6 +16025,16 @@
         "responses": {
           "200": {
             "description": "Plan with a brief",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Plan"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Still writing the brief: poll the plan",
             "content": {
               "application/json": {
                 "schema": {

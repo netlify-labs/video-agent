@@ -1,6 +1,6 @@
 // Plan with questions (plan v2 §4, §14 rules 14–17), with a scripted AI Gateway.
 import { describe, expect, it } from 'vitest'
-import { failureKind, planRetry } from '../server/domain/plans.js'
+import { failureKind, planRetry, runPlanWork, WORK_STALE_MS } from '../server/domain/plans.js'
 import { harness, type Harness } from './helpers.js'
 
 planRetry.pauseMs = 0
@@ -143,7 +143,7 @@ describe('planning', () => {
     expect(h.deps.gateway.calls.length).toBe(before)
   })
 
-  it('retries invalid output once with the fast model, and gives up cleanly with planning_unavailable', async () => {
+  it('retries invalid output, last with the fast model, and gives up cleanly with planning_unavailable', async () => {
     const h = harness()
     h.deps.gateway.routeAnswers = {
       needs_questions: 'yes',
@@ -152,15 +152,19 @@ describe('planning', () => {
       aspect: 'unspecified',
     }
     const { plan } = await start(h)
-    h.deps.gateway.replies.push('Here are some questions: not json', QUESTIONS)
+    h.deps.gateway.replies.push('Here are some questions: not json', '{"questions": 3}', QUESTIONS)
     const ok = await h.call('POST', `/api/v1/plans/${plan.id}/questions`, { as: h.member })
     expect(ok.status).toBe(200)
     const models = h.deps.gateway.calls.filter((c) => c.kind === 'messages').map((c) => c.model)
-    expect(models).toEqual(['claude-sonnet-5', 'claude-haiku-4-5'])
+    expect(models).toEqual(['claude-sonnet-5', 'claude-sonnet-5', 'claude-haiku-4-5'])
     expect((await h.deps.store.listGatewayCalls({ since: '2000' })).map((c) => c.kind)).toContain('retry')
 
     const p2 = (await start(h)).plan
-    h.deps.gateway.replies.push(new Error('AI Gateway returned 429'), new Error('AI Gateway returned 429'))
+    h.deps.gateway.replies.push(
+      new Error('AI Gateway returned 429'),
+      new Error('AI Gateway returned 429'),
+      new Error('AI Gateway returned 429'),
+    )
     const fail = await h.call('POST', `/api/v1/plans/${p2.id}/questions`, { as: h.member })
     expect(fail.status).toBe(503)
     const error = (await h.json(fail)).error
@@ -197,7 +201,7 @@ describe('planning', () => {
     }
 
     const p2 = (await start(h)).plan
-    h.deps.gateway.replies.push('not json', 'still not json')
+    h.deps.gateway.replies.push('not json', 'still not json', 'nor this')
     const bad = await h.call('POST', `/api/v1/plans/${p2.id}/questions`, { as: h.member })
     expect((await h.json(bad)).error.message).toMatch(/usable answer/)
   })
@@ -270,6 +274,105 @@ describe('planning', () => {
     await h.drive(4)
     await h.call('PATCH', `/api/v1/videos/${v.id}`, { as: h.admin, body: { private: true } })
     expect((await start(h, { revisionOf: { videoId: v.id } })).res.status).toBe(404)
+  })
+
+  it('with Prefer: respond-async the work runs in the background and the plan is polled', async () => {
+    const h = harness()
+    // The background function hasn't run yet.
+    h.deps.platform.onPlanWork = null
+    const { plan } = await start(h)
+    const asyncPost = (path: string, body?: unknown) =>
+      h.call('POST', path, { as: h.member, headers: { prefer: 'respond-async' }, ...(body ? { body } : {}) })
+    const get = async () => h.json(await h.call('GET', `/api/v1/plans/${plan.id}`, { as: h.member }))
+
+    const asked = await asyncPost(`/api/v1/plans/${plan.id}/questions`)
+    expect(asked.status).toBe(202)
+    expect((await h.json(asked)).work).toEqual({ kind: 'questions', status: 'running', error: null })
+    expect(h.deps.platform.planWork).toEqual([plan.id])
+    // Asking again while it runs starts nothing new.
+    expect((await asyncPost(`/api/v1/plans/${plan.id}/questions`)).status).toBe(202)
+    expect(h.deps.platform.planWork).toEqual([plan.id])
+    expect((await get()).questions).toBeNull()
+
+    h.deps.gateway.replies.push(QUESTIONS)
+    expect(await runPlanWork(h.deps, plan.id)).toBe('done')
+    const ready = await get()
+    expect(ready.work).toBeNull()
+    expect(ready.questions).toHaveLength(3)
+    // Nothing left to run.
+    expect(await runPlanWork(h.deps, plan.id)).toBe('skipped')
+
+    // The brief: a failure shows on the plan, and asking again starts over.
+    const answers = [{ questionId: 'q1', optionIds: ['a'] }]
+    expect((await asyncPost(`/api/v1/plans/${plan.id}/brief`, { answers })).status).toBe(202)
+    h.deps.gateway.replies.push('not json', 'not json', 'not json')
+    expect(await runPlanWork(h.deps, plan.id)).toBe('failed')
+    const failed = await get()
+    expect(failed.work).toMatchObject({ kind: 'brief', status: 'failed' })
+    expect(failed.work.error).toMatch(/usable answer/)
+    expect(failed.brief).toBeNull()
+
+    expect((await asyncPost(`/api/v1/plans/${plan.id}/brief`, { answers })).status).toBe(202)
+    h.deps.gateway.replies.push(JSON.stringify(BRIEF))
+    expect(await runPlanWork(h.deps, plan.id)).toBe('done')
+    const briefed = await get()
+    expect(briefed.work).toBeNull()
+    expect(briefed.brief.title).toBe(BRIEF.title)
+    expect(briefed.briefRev).toBe(1)
+    expect(briefed.answers).toEqual(answers)
+  })
+
+  it('new answers replace a brief being written, and lost work reads as failed', async () => {
+    const h = harness()
+    const { plan } = await start(h)
+    h.deps.gateway.replies.push(QUESTIONS)
+    await h.call('POST', `/api/v1/plans/${plan.id}/questions`, { as: h.member })
+    h.deps.platform.onPlanWork = null
+    const brief = (answers: unknown) =>
+      h.call('POST', `/api/v1/plans/${plan.id}/brief`, {
+        as: h.member,
+        headers: { prefer: 'respond-async' },
+        body: { answers },
+      })
+    await brief([{ questionId: 'q1', optionIds: ['a'] }])
+    // The first run is still at the model when the person changes an answer (new work replaces the old).
+    h.deps.gateway.replies.push(() => {
+      void h.deps.store.updatePlan(plan.id, {
+        work: {
+          id: 'newer',
+          kind: 'brief',
+          status: 'running',
+          startedAt: h.deps.clock.now().toISOString(),
+          answers: [{ questionId: 'q1', optionIds: ['b'] }],
+        },
+      })
+      return JSON.stringify({ ...BRIEF, title: 'From the old answers' })
+    })
+    expect(await runPlanWork(h.deps, plan.id)).toBe('skipped')
+    const get = async () => h.json(await h.call('GET', `/api/v1/plans/${plan.id}`, { as: h.member }))
+    expect((await get()).brief).toBeNull()
+    expect((await get()).work.status).toBe('running')
+
+    // The background function never reports back.
+    h.deps.clock.advance(WORK_STALE_MS + 1000)
+    const lost = await get()
+    expect(lost.work).toMatchObject({ kind: 'brief', status: 'failed' })
+    expect(lost.work.error).toMatch(/didn't finish in time/)
+  })
+
+  it('writes the plan in the request when the background function cannot be dispatched', async () => {
+    const h = harness()
+    h.deps.platform.onPlanWork = async () => {
+      throw new Error('plan dispatch returned 500')
+    }
+    const { plan } = await start(h)
+    h.deps.gateway.replies.push(QUESTIONS)
+    const asked = await h.call('POST', `/api/v1/plans/${plan.id}/questions`, {
+      as: h.member,
+      headers: { prefer: 'respond-async' },
+    })
+    expect(asked.status).toBe(200)
+    expect((await h.json(asked)).questions).toHaveLength(3)
   })
 
   it('falls back to asking when the router fails', async () => {

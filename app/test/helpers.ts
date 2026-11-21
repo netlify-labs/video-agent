@@ -7,6 +7,7 @@ import { createApp } from '../server/app.js'
 import { createDrizzleStore } from '../server/store/drizzle.js'
 import { tick } from '../server/domain/reconciler.js'
 import { finalizeAttempt } from '../server/domain/finalize.js'
+import { runPlanWork } from '../server/domain/plans.js'
 import { assembleUpload } from '../server/domain/media-uploads.js'
 import { receiveCallback } from '../server/domain/callback.js'
 import { runOpenverseJob } from '../server/domain/openverse-jobs.js'
@@ -112,6 +113,10 @@ export function harness(
   })
   deps.platform.onAssemble = async (id) => {
     await assembleUpload(deps, id)
+  }
+  // Like a background function that finishes before the request looks again.
+  deps.platform.onPlanWork = async (id) => {
+    await runPlanWork(deps, id)
   }
   // The Openverse jobs a run's music pick queues run right away (against deps.outbound, 404 unless a test scripts it),
   // like a background function that finishes before the next look. Jobs people start stay queued for tests to run.

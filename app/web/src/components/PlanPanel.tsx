@@ -22,7 +22,7 @@ import {
 } from '@mantine/core'
 import { IconPlus, IconX } from '@tabler/icons-react'
 import { useEffect, useRef, useState } from 'react'
-import { $api, errorMessage } from '../api/client'
+import { $api, errorMessage, fetchClient } from '../api/client'
 import type { paths } from '../api/schema'
 import type { EngineId } from '../lib/engines'
 import { isTyping } from '../lib/media-keys'
@@ -66,7 +66,12 @@ export interface PlanPanelProps {
   steps?: boolean
 }
 
-// What the wait shows, a phrase at a time: each model call takes a few seconds, and the brief up to twenty.
+/** How often the panel looks at a plan whose questions or brief are being written in the background. */
+const POLL_MS = 1200
+/** Asks the API to answer at once and let the panel poll, rather than hold the request while the model writes. */
+const ASYNC = { Prefer: 'respond-async' }
+
+// What the wait shows, a phrase at a time: each model call takes a few seconds, and the brief up to a minute.
 const READING = [
   'Reading your prompt…',
   'Working out what kind of video it is…',
@@ -117,12 +122,12 @@ const isUnavailable = (e: unknown) =>
   )
 
 /** An option's label, with the planner's pick marked. */
-function OptionLabel({ o }: { o: Question['options'][number] }) {
+function OptionLabel({ o, large }: { o: Question['options'][number]; large?: boolean | undefined }) {
   return (
     <>
       {o.label}
       {o.recommended ? (
-        <Text span fw={700} size="sm" ml={6} className="va-recommended">
+        <Text span fw={700} size={large ? 'md' : 'sm'} ml={6} className="va-recommended">
           (Recommended)
         </Text>
       ) : null}
@@ -130,25 +135,35 @@ function OptionLabel({ o }: { o: Question['options'][number] }) {
   )
 }
 
-/** One question: its options (one or several), Skip, and free text for another answer or more context. */
+/**
+ * One question: its options (one or several), Skip, and free text for another answer or more context. `large` is for
+ * the New video dialog, which shows one question at a time with room to spare.
+ */
 function QuestionCard({
   q,
   a,
   setAnswer,
+  large,
 }: {
   q: Question
   a: Answer | undefined
   setAnswer: (id: string, patch: Partial<Answer>) => void
+  large?: boolean
 }) {
+  const optionSize = large ? 'md' : 'sm'
   return (
-    <Card className="va-plan-q" padding="md" data-testid={`plan-q-${q.id}`}>
-      <Stack gap="xs">
+    <Card
+      className={large ? 'va-plan-q va-plan-q-large' : 'va-plan-q'}
+      padding={large ? 'xl' : 'md'}
+      data-testid={`plan-q-${q.id}`}
+    >
+      <Stack gap={large ? 'md' : 'xs'}>
         <Group justify="space-between" align="flex-start" wrap="nowrap">
-          <Text fw={600} size="sm">
+          <Text fw={600} size={large ? 'xl' : 'sm'} lh={1.3}>
             {q.question}
           </Text>
           <Checkbox
-            size="xs"
+            size={large ? 'sm' : 'xs'}
             label="Skip"
             checked={a?.skipped ?? false}
             onChange={(e) => {
@@ -157,7 +172,7 @@ function QuestionCard({
           />
         </Group>
         {q.why ? (
-          <Text size="xs" c="var(--va-faint)">
+          <Text size={large ? 'md' : 'xs'} c="var(--va-faint)">
             {q.why}
           </Text>
         ) : null}
@@ -168,12 +183,13 @@ function QuestionCard({
               setAnswer(q.id, { optionIds: v, skipped: false })
             }}
           >
-            <Stack gap={6}>
+            <Stack gap={large ? 'md' : 6}>
               {q.options.map((o) => (
                 <Checkbox
                   key={o.id}
                   value={o.id}
-                  label={<OptionLabel o={o} />}
+                  size={optionSize}
+                  label={<OptionLabel o={o} large={large} />}
                   description={o.description || undefined}
                 />
               ))}
@@ -186,12 +202,13 @@ function QuestionCard({
               setAnswer(q.id, { optionIds: [v], skipped: false })
             }}
           >
-            <Stack gap={6}>
+            <Stack gap={large ? 'md' : 6}>
               {q.options.map((o) => (
                 <Radio
                   key={o.id}
                   value={o.id}
-                  label={<OptionLabel o={o} />}
+                  size={optionSize}
+                  label={<OptionLabel o={o} large={large} />}
                   description={o.description || undefined}
                 />
               ))}
@@ -200,7 +217,7 @@ function QuestionCard({
         )}
         {/* Every question takes free text: another answer, or more context on the one picked. */}
         <Textarea
-          size="sm"
+          size={optionSize}
           mt={4}
           aria-label={`Other, or more context: ${q.question}`}
           placeholder="Other, or more context…"
@@ -456,35 +473,96 @@ export function PlanPanel(props: PlanPanelProps) {
     setError({ unavailable: isUnavailable(e), message: errorMessage(e) })
   }
 
+  // The questions and the brief are written in the background: the POST answers at once with the plan's work
+  // "running", and the panel polls the plan until they're there (or the work failed).
+  const [writing, setWriting] = useState<'questions' | 'brief' | null>(null)
+  const open = useRef(true)
+  useEffect(
+    () => () => {
+      open.current = false
+    },
+    [],
+  )
+  /** The plan once its running work is done; null when the panel closed while waiting. Failed work is thrown. */
+  const written = async (started: Plan): Promise<Plan | null> => {
+    let p = started
+    let misses = 0
+    while (p.work?.status === 'running') {
+      await new Promise((r) => setTimeout(r, POLL_MS))
+      if (!open.current) return null
+      const res = await fetchClient
+        .GET('/api/v1/plans/{id}', { params: { path: { id: p.id } } })
+        .catch(() => null)
+      if (res?.data) {
+        p = res.data
+        misses = 0
+        // One missed poll is nothing (a dropped connection); several in a row is an answer.
+      } else if (++misses >= 5) throw new Error("Can't reach the server. Try again.")
+    }
+    if (p.work?.status === 'failed')
+      // The shape of an API error, so it reads like one that came back from the request.
+      // eslint-disable-next-line @typescript-eslint/only-throw-error
+      throw {
+        error: { code: 'planning_unavailable', message: p.work.error ?? 'Planning failed. Try again.' },
+      }
+    return p
+  }
+  const wait = (kind: 'questions' | 'brief', started: Plan, then: (p: Plan) => void) => {
+    setWriting(kind)
+    written(started)
+      .then((p) => {
+        if (!p) return
+        setWriting(null)
+        then(p)
+      })
+      .catch((e: unknown) => {
+        if (!open.current) return
+        setWriting(null)
+        onError(e)
+      })
+  }
+
   const getBrief = $api.useMutation('post', '/api/v1/plans/{id}/brief', {
-    onSuccess: (p) => {
-      setPlan(p)
-      setBrief(p.brief)
-      setEdited(false)
-      setStep((p.questions ?? []).length)
+    onSuccess: (started) => {
+      wait('brief', started, (p) => {
+        setPlan(p)
+        setBrief(p.brief)
+        setEdited(false)
+        setStep((p.questions ?? []).length)
+      })
     },
     onError,
   })
+  const askBrief = (id: string, list: Answer[]) => {
+    setError(null)
+    getBrief.mutate({ params: { path: { id } }, body: { answers: list }, headers: ASYNC })
+  }
   const getQuestions = $api.useMutation('post', '/api/v1/plans/{id}/questions', {
-    onSuccess: (p) => {
-      setPlan(p)
-      // The prompt covers it: go straight to the brief.
-      if ((p.questions ?? []).length === 0)
-        getBrief.mutate({ params: { path: { id: p.id } }, body: { answers: [] } })
+    onSuccess: (started) => {
+      wait('questions', started, (p) => {
+        setPlan(p)
+        // The prompt covers it: go straight to the brief.
+        if ((p.questions ?? []).length === 0) askBrief(p.id, [])
+      })
     },
     onError,
   })
+  const askQuestions = (id: string) => {
+    setError(null)
+    getQuestions.mutate({ params: { path: { id } }, headers: ASYNC })
+  }
   const start = $api.useMutation('post', '/api/v1/plans', {
     onSuccess: (p) => {
       setPlan(p)
       if (p.route?.suggestedAspect && !props.aspect) props.onSuggestAspect?.(p.route.suggestedAspect)
-      getQuestions.mutate({ params: { path: { id: p.id } } })
+      askQuestions(p.id)
     },
     onError,
   })
   const save = $api.useMutation('patch', '/api/v1/plans/{id}', { onError })
 
-  useEffect(() => {
+  const startPlan = () => {
+    setError(null)
     start.mutate({
       body: {
         prompt: props.prompt,
@@ -499,8 +577,9 @@ export function PlanPanel(props: PlanPanelProps) {
         ...(props.engine ? { engine: props.engine } : {}),
       },
     })
-    // Start once per panel; the prompt is fixed while planning.
-  }, [])
+  }
+  // Start once per panel; the prompt is fixed while planning.
+  useEffect(startPlan, [])
 
   const create = async () => {
     if (!plan) return props.onCreate(null)
@@ -513,7 +592,7 @@ export function PlanPanel(props: PlanPanelProps) {
     props.onCreate(plan.id)
   }
 
-  const busy = start.isPending || getQuestions.isPending || getBrief.isPending
+  const busy = start.isPending || getQuestions.isPending || getBrief.isPending || writing !== null
   const questions = plan?.questions ?? []
   const setAnswer = (id: string, patch: Partial<Answer>) => {
     setAnswers((a) => ({ ...a, [id]: { ...(a[id] ?? { questionId: id }), ...patch } }))
@@ -542,13 +621,19 @@ export function PlanPanel(props: PlanPanelProps) {
       return
     }
     setBriefFrom(JSON.stringify(list))
-    getBrief.mutate({ params: { path: { id: plan.id } }, body: { answers: list } })
+    askBrief(plan.id, list)
+  }
+  /** Runs the step that failed again: the plan, its questions, or the brief from the same answers. */
+  const retry = () => {
+    if (!plan) startPlan()
+    else if (!plan.questions) askQuestions(plan.id)
+    else askBrief(plan.id, answerList())
   }
 
   const phrase = useRotating(
     start.isPending
       ? READING
-      : getQuestions.isPending
+      : getQuestions.isPending || writing === 'questions'
         ? ASKING
         : plan?.voiceover
           ? [...WRITING.slice(0, 4), ...NARRATING, ...WRITING.slice(4)]
@@ -556,16 +641,31 @@ export function PlanPanel(props: PlanPanelProps) {
     busy,
   )
   const status = busy ? (
-    <Group gap="sm" py={props.steps ? 'xl' : 0} justify={props.steps ? 'center' : 'flex-start'} role="status">
-      <Loader size="sm" />
-      <Text key={phrase} size="sm" c="var(--va-muted)" className="va-phrase">
-        {phrase}
-      </Text>
-    </Group>
+    props.steps ? (
+      // The dialog has the room: the wait sits in the middle of it, large enough to read at a glance.
+      <Stack gap="lg" align="center" justify="center" className="va-plan-wait" role="status">
+        <Loader size="xl" />
+        <Text key={phrase} size="xl" fw={500} ta="center" c="var(--va-muted)" className="va-phrase">
+          {phrase}
+        </Text>
+      </Stack>
+    ) : (
+      <Group gap="sm" role="status">
+        <Loader size="sm" />
+        <Text key={phrase} size="sm" c="var(--va-muted)" className="va-phrase">
+          {phrase}
+        </Text>
+      </Group>
+    )
   ) : null
   const problem = error ? (
     <Alert color={error.unavailable ? 'gray' : 'red'} variant="light">
-      {error.message}
+      <Group justify="space-between" gap="sm" wrap="nowrap">
+        <Text size={props.steps ? 'md' : 'sm'}>{error.message}</Text>
+        <Button variant="default" size="compact-sm" style={{ flexShrink: 0 }} onClick={retry}>
+          Try again
+        </Button>
+      </Group>
     </Alert>
   ) : null
   const createLabel = props.revisionOf
@@ -636,6 +736,7 @@ export function PlanPanel(props: PlanPanelProps) {
               q={questions[step]}
               a={answers[questions[step].id]}
               setAnswer={setAnswer}
+              large
             />
           ) : brief ? (
             <>

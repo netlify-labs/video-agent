@@ -1142,6 +1142,17 @@ export const PlanSchema = z
     engine: z.enum(ENGINE_IDS).nullable().openapi({
       description: "The engine chosen for this new-video plan; null: the look's choice.",
     }),
+    work: z
+      .object({
+        kind: z.enum(['questions', 'brief']),
+        status: z.enum(['running', 'failed']),
+        error: z.string().nullable().openapi({ description: 'For failed work: why, for the person.' }),
+      })
+      .nullable()
+      .openapi({
+        description:
+          'The questions or the brief being written in the background: running (poll the plan), or failed. null: nothing is being written.',
+      }),
     expiresAt: z.string(),
   })
   .openapi('Plan')

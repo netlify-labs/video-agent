@@ -1555,6 +1555,18 @@ main.va-shell-main {
 .va-plan-steps {
   min-height: min(64vh, 640px);
 }
+/* The wait (reading, asking, writing the brief) fills the space above the footer and centres in it. */
+.va-plan-steps .va-plan-wait {
+  flex: 1;
+  min-height: 240px;
+}
+/* One question at a time in the dialog: larger type, and descriptions that keep up with their labels. */
+.va-plan-q-large .mantine-Radio-description,
+.va-plan-q-large .mantine-Checkbox-description {
+  font-size: var(--mantine-font-size-sm);
+  line-height: 1.45;
+  margin-top: 2px;
+}
 .va-plan-steps .va-plan-footer {
   margin-top: auto;
   position: sticky;

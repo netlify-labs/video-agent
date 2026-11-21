@@ -1230,7 +1230,7 @@ export interface paths {
         put?: never;
         /**
          * Ask questions
-         * @description Zero to six multiple-choice questions about the video; empty when the prompt covers it.
+         * @description Zero to six multiple-choice questions about the video; empty when the prompt covers it. The model call runs in the background. By default the request waits for it (about 40 seconds at most) and answers 200. If it takes longer, or straight away with the header "Prefer: respond-async", the answer is 202 with work.status "running": poll GET /api/v1/plans/{id} until work is null (done) or work.status is "failed" (work.error says why).
          */
         post: operations["askPlanQuestions"];
         delete?: never;
@@ -1250,7 +1250,7 @@ export interface paths {
         put?: never;
         /**
          * Write the brief
-         * @description Turns the answers into an editable brief.
+         * @description Turns the answers into an editable brief. The model call runs in the background. By default the request waits for it (about 40 seconds at most) and answers 200. If it takes longer, or straight away with the header "Prefer: respond-async", the answer is 202 with work.status "running": poll GET /api/v1/plans/{id} until work is null (done) or work.status is "failed" (work.error says why).
          */
         post: operations["writePlanBrief"];
         delete?: never;
@@ -3283,6 +3283,15 @@ export interface components {
              * @enum {string|null}
              */
             engine: "hyperframes" | "remotion" | null;
+            /** @description The questions or the brief being written in the background: running (poll the plan), or failed. null: nothing is being written. */
+            work: {
+                /** @enum {string} */
+                kind: "questions" | "brief";
+                /** @enum {string} */
+                status: "running" | "failed";
+                /** @description For failed work: why, for the person. */
+                error: string | null;
+            } | null;
             expiresAt: string;
         };
         CreatePlan: {
@@ -9205,6 +9214,15 @@ export interface operations {
                     "application/json": components["schemas"]["Plan"];
                 };
             };
+            /** @description Still writing the questions: poll the plan */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Plan"];
+                };
+            };
             /** @description Invalid request */
             400: {
                 headers: {
@@ -9269,6 +9287,15 @@ export interface operations {
         responses: {
             /** @description Plan with a brief */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Plan"];
+                };
+            };
+            /** @description Still writing the brief: poll the plan */
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };

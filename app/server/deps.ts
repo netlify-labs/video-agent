@@ -264,6 +264,8 @@ export interface PlatformPort {
   dispatchMediaAssembly(uploadId: string): Promise<void>
   /** Asks the platform to run one Openverse search or import job (openverse-background). */
   dispatchOpenverseJob(jobId: string): Promise<void>
+  /** Asks the platform to write a plan's questions or brief (plan-background). */
+  dispatchPlanWork(planId: string): Promise<void>
   /** Asks the platform to run publish-background for one destination publication (publish destinations §2.4). */
   dispatchPublish(publicationId: string): Promise<void>
   /** Checks for /setup: plan, agent runners, token, identity. */
@@ -383,5 +385,5 @@ export interface GatewayPort {
       images?: { mime: string; base64: string }[]
     },
     opts: { signal: AbortSignal },
-  ): Promise<{ text: string; model: string; usage: GatewayUsage }>
+  ): Promise<{ text: string; model: string; usage: GatewayUsage; stopReason?: string }>
 }

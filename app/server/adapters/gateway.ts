@@ -94,6 +94,7 @@ export function createGateway(env: NodeJS.ProcessEnv = process.env): GatewayPort
         content?: { type?: string; text?: string }[]
         model?: string
         usage?: Record<string, number>
+        stop_reason?: string
         error?: { message?: string }
       } = {}
       try {
@@ -120,6 +121,7 @@ export function createGateway(env: NodeJS.ProcessEnv = process.env): GatewayPort
         text: body.content?.find((c) => c.type === 'text')?.text ?? '',
         model: body.model ?? req.model,
         usage,
+        ...(body.stop_reason ? { stopReason: body.stop_reason } : {}),
       }
     },
   }

@@ -66,6 +66,27 @@ async function mediaIds(ctx: Ctx): Promise<string[] | undefined> {
 }
 
 /** --look: a Look id, or none for no look (the API's null); left out, the server decides (default, or kept). */
+/**
+ * A plan whose questions or brief are still being written (the server answers 202 when its model call takes long):
+ * polls it until they're there. Older servers never answer with running work.
+ */
+async function planned<P extends { id: string; work?: { status: string; error: string | null } | null }>(
+  plan: P,
+  get: (id: string) => Promise<P>,
+): Promise<P> {
+  const until = Date.now() + 5 * 60_000
+  let p = plan
+  while (p.work?.status === 'running') {
+    if (Date.now() > until)
+      throw new CliError('wait_timeout', 'Planning is taking too long. Try again.', EXIT.waitTimeout)
+    await new Promise((r) => setTimeout(r, 2000))
+    p = await get(p.id)
+  }
+  if (p.work?.status === 'failed')
+    throw new CliError('planning_unavailable', p.work.error ?? "Planning didn't work. Try again.", EXIT.error)
+  return p
+}
+
 export function lookOf(ctx: Ctx): { look?: string | null } {
   const v = str(ctx, 'look')
   if (v === undefined) return {}
@@ -147,7 +168,7 @@ const create: Handler = async (ctx) => {
   }
   if (ctx.flags.plan) {
     const plan = await va.plans.create({ prompt: await promptOf(ctx, 0), ...base })
-    const asked = await va.plans.questions(plan.id)
+    const asked = await planned(await va.plans.questions(plan.id), (id) => va.plans.get(id))
     const questions = (asked.questions ?? []).map((q) => ({
       id: q.id,
       text: q.question,
@@ -179,7 +200,7 @@ const create: Handler = async (ctx) => {
     } catch {
       throw new UsageError('--answers must be JSON: { "answers": [{ "questionId", "optionIds" }] }.')
     }
-    const plan = await va.plans.brief(planId, body)
+    const plan = await planned(await va.plans.brief(planId, body), (id) => va.plans.get(id))
     prompt = ctx.args[0] ?? plan.prompt
   } else prompt = await promptOf(ctx, 0)
   // A demo: --recording (a media id, a recording folder or an MP4, uploaded first) and --quick (no agent authoring).

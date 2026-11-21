@@ -316,6 +316,8 @@ export const plans = pgTable(
     look: jsonb('look'),
     // The engine the person chose for a new-video plan (render-engines plan §4.2); null: the look's choice.
     engine: text('engine'),
+    // The questions or brief being written in plan-background ({ id, kind, status, startedAt, answers?, error? }).
+    work: jsonb('work'),
   },
   (t) => [index('plans_user_idx').on(t.userId, t.createdAt)],
 )

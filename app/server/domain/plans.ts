@@ -1,8 +1,12 @@
-// Plan with questions (plan v2 §4, §14 rules 14–17). Three short requests, each inside its own deadline:
+// Plan with questions (plan v2 §4, §14 rules 14–17):
 //   POST /plans            → a fast jev router decides whether questions are needed, the template and the model
 //   POST /plans/{id}/questions → 0–6 multiple-choice questions (Haiku by default, the deep model for complex briefs)
 //   POST /plans/{id}/brief     → an editable brief from the answers (the admin's deep model)
 //   PATCH /plans/{id}          → saves the person's edits to the brief (If-Match: briefRev)
+// The questions and the brief are model calls that can take longer than a request should wait, so they run in
+// plan-background: the POST records the work on the plan (plan.work) and dispatches it, and GET /plans/{id} shows it
+// running, then the result or why it failed. A POST without "Prefer: respond-async" waits a while for the result
+// first, so a caller that doesn't poll usually still gets it in one call.
 // Every untrusted value reaches the model as fenced, labelled data, never as instructions. Every call is recorded in
 // gateway_calls (which outlives the plan) so usage views stay right after plans expire.
 import { z } from 'zod'
@@ -29,6 +33,7 @@ import type {
   PlanQuestion,
   PlanRoute,
   PlanRow,
+  PlanWork,
   VideoSound,
   Voiceover,
 } from './types.js'
@@ -39,9 +44,26 @@ import { voiceoverFrom, type VoiceoverInput } from './voiceover.js'
 
 export const PLAN_TTL_MS = 24 * 3600_000
 export const ROUTE_DEADLINE_MS = 5_000
-export const MODEL_DEADLINE_MS = 25_000
+/** Time for one piece of work's model calls: all attempts, and each one. */
+export interface WorkLimits {
+  totalMs: number
+  attemptMs: number
+  /** Tries with the plan's model before the last one, which uses the fast model. */
+  tries: number
+}
+/** Inside a request, only when plan-background couldn't be dispatched. */
+export const INLINE_LIMITS: WorkLimits = { totalMs: 25_000, attemptMs: 25_000, tries: 1 }
+/** In plan-background: a slow or unusable first answer is tried again, then once more with the fast model. */
+export const BACKGROUND_LIMITS: WorkLimits = { totalMs: 180_000, attemptMs: 75_000, tries: 2 }
+/** Work still "running" after this was lost (a crashed or never-started background function): it reads as failed. */
+export const WORK_STALE_MS = 210_000
+/** How long a POST that isn't "respond-async" waits for the background work, and how often it looks. Tests shorten it. */
+export const planWait = { ms: 40_000, everyMs: 500 }
 /** The wait before the second attempt when the Gateway was busy (429 or 5xx). Tests set it to 0. */
 export const planRetry = { pauseMs: 1_500 }
+/** Room for the whole reply: a brief cut off at the limit isn't JSON, and one with narration per beat is long. */
+const QUESTIONS_MAX_TOKENS = 3_000
+const BRIEF_MAX_TOKENS = 4_000
 const MAX_PROMPT = 4_000
 /** Images the planner looks at (vision input); the rest are described by name and caption only. */
 const MAX_PLAN_IMAGES = 4
@@ -227,7 +249,16 @@ async function deepModel(deps: Deps) {
   return clampModel((await deps.store.getSettings())?.planDeepModel)
 }
 
-export function planDto(plan: PlanRow) {
+/** The plan's running or failed work as callers see it; work that ran out of time reads as failed. */
+function workDto(plan: PlanRow, now: Date) {
+  const w = plan.work
+  if (!w) return null
+  if (w.status === 'running' && now.getTime() - Date.parse(w.startedAt) > WORK_STALE_MS)
+    return { kind: w.kind, status: 'failed' as const, error: FAILURE_MESSAGES.timeout }
+  return { kind: w.kind, status: w.status, error: w.status === 'failed' ? (w.error ?? null) : null }
+}
+
+export function planDto(plan: PlanRow, now: Date) {
   return {
     id: plan.id,
     prompt: plan.prompt,
@@ -249,6 +280,7 @@ export function planDto(plan: PlanRow) {
     voiceover: plan.voiceover ?? null,
     look: plan.look ?? null,
     engine: plan.engine ?? null,
+    work: workDto(plan, now),
     expiresAt: plan.expiresAt,
   }
 }
@@ -476,9 +508,10 @@ export async function createPlan(
     remixFromN: remixFrom?.n ?? null,
     look,
     engine: input.engine ?? null,
+    work: null,
   }
   await deps.store.insertPlan(plan)
-  return planDto(plan)
+  return planDto(plan, now)
 }
 
 /** Why a model call failed: the Gateway refused it (429, 5xx), it ran out of time, or anything else. */
@@ -495,12 +528,13 @@ const FAILURE_MESSAGES = {
 }
 
 /**
- * Runs a model call with one bounded retry; the retry uses the fast model (docs/spikes.md S1). A busy Gateway
- * refuses both attempts within milliseconds, so the retry waits first.
+ * Runs a model call with bounded retries (limits.tries with the plan's model, then the fast model: docs/spikes.md
+ * S1), each inside limits.attemptMs and all inside limits.totalMs. A busy Gateway refuses within milliseconds, so the
+ * next attempt waits first.
  */
 async function callJson<T>(
   deps: Deps,
-  p: Principal,
+  limits: WorkLimits,
   plan: PlanRow,
   kind: 'questions' | 'brief',
   model: string,
@@ -510,16 +544,17 @@ async function callJson<T>(
   maxTokens: number,
   images: { mime: string; base64: string }[] = [],
 ): Promise<T> {
-  const deadline = Date.now() + MODEL_DEADLINE_MS
+  const p = { userId: plan.userId }
+  const deadline = Date.now() + limits.totalMs
   let lastError: unknown = null
-  for (const [attempt, m] of [model, FAST_MODEL].entries()) {
+  for (const [attempt, m] of [...Array<string>(limits.tries).fill(model), FAST_MODEL].entries()) {
     const left = deadline - Date.now()
     if (left < 3_000) break
     const started = Date.now()
     try {
       const r = await deps.gateway.messages(
         { model: m, system, user, maxTokens, ...(images.length ? { images } : {}) },
-        { signal: AbortSignal.timeout(left) },
+        { signal: AbortSignal.timeout(Math.min(left, limits.attemptMs)) },
       )
       await record(deps, p, plan.id, attempt === 0 ? kind : 'retry', r.model, started, { usage: r.usage })
       deps.log.debug('plan.model_call', {
@@ -531,8 +566,11 @@ async function callJson<T>(
         system: clip(system, 8000),
         user: clip(user, 12_000),
         images: images.length,
+        stopReason: r.stopReason ?? null,
         reply: clip(r.text, 8000),
       })
+      if (r.stopReason === 'max_tokens')
+        throw new SyntaxError(`${kind} reply was cut off at ${maxTokens} tokens`)
       const parsed = schema.safeParse(parseJson(r.text))
       if (parsed.success) return parsed.data
       lastError = new Error(`invalid ${kind}: ${parsed.error.issues[0]?.message ?? 'shape'}`)
@@ -540,7 +578,7 @@ async function callJson<T>(
       if (!(e instanceof SyntaxError))
         await record(deps, p, plan.id, attempt === 0 ? kind : 'retry', m, started, { error: e })
       lastError = e
-      if (attempt === 0 && failureKind(e) === 'busy' && deadline - Date.now() > planRetry.pauseMs + 3_000)
+      if (failureKind(e) === 'busy' && deadline - Date.now() > planRetry.pauseMs + 3_000)
         await new Promise((r) => setTimeout(r, planRetry.pauseMs))
     }
   }
@@ -560,11 +598,8 @@ export function recommendedFirst(
   return [{ ...pick, recommended: true }, ...plain.filter((_, j) => j !== i)]
 }
 
-export async function generateQuestions(deps: Deps, p: Principal, planId: string) {
-  assertCan(p, 'plan:create')
-  requireGateway(deps)
-  const plan = await loadPlan(deps, p, planId)
-  if (plan.questions) return planDto(plan)
+/** Asks the model for the plan's questions (not saved here). */
+async function writeQuestions(deps: Deps, plan: PlanRow, limits: WorkLimits): Promise<PlanQuestion[]> {
   const route = plan.route ?? { template: 'other', model: FAST_MODEL }
   const system = [
     plan.voiceover
@@ -589,7 +624,7 @@ export async function generateQuestions(deps: Deps, p: Principal, planId: string
   ]
     .filter(Boolean)
     .join('\n')
-  const history = (await deps.store.listJobs({ ownerId: p.userId, limit: 5 })).map((j) => j.title)
+  const history = (await deps.store.listJobs({ ownerId: plan.userId, limit: 5 })).map((j) => j.title)
   const media = await mediaContext(deps, plan)
   const user = [
     dataBlock('request', plan.prompt),
@@ -608,38 +643,29 @@ export async function generateQuestions(deps: Deps, p: Principal, planId: string
     .join('\n')
   const out = await callJson(
     deps,
-    p,
+    limits,
     plan,
     'questions',
     route.model,
     system,
     user,
     QuestionsOut,
-    1500,
+    QUESTIONS_MAX_TOKENS,
     media.images,
   )
-  const questions: PlanQuestion[] = out.questions.map((q) => ({ ...q, options: recommendedFirst(q.options) }))
-  await deps.store.updatePlan(plan.id, { questions })
-  return planDto({ ...plan, questions })
+  return out.questions.map((q) => ({ ...q, options: recommendedFirst(q.options) }))
 }
 
 const AnswersSchema = z.array(PlanAnswerSchema).max(6)
 
-export async function generateBrief(deps: Deps, p: Principal, planId: string, answers: PlanAnswer[]) {
-  assertCan(p, 'plan:create')
-  requireGateway(deps)
-  const plan = await loadPlan(deps, p, planId)
+/** Asks the model for the brief from the answers (not saved here). */
+async function writeBrief(
+  deps: Deps,
+  plan: PlanRow,
+  answers: PlanAnswer[],
+  limits: WorkLimits,
+): Promise<PlanBrief> {
   const qs = plan.questions ?? []
-  const valid = AnswersSchema.safeParse(answers)
-  if (!valid.success) throw new ApiError('invalid_request', 'Invalid answers.')
-  for (const a of answers) {
-    const q = qs.find((x) => x.id === a.questionId)
-    if (!q) throw new ApiError('invalid_request', `Unknown question ${a.questionId}.`)
-    for (const o of a.optionIds ?? [])
-      if (!q.options.some((x) => x.id === o)) throw new ApiError('invalid_request', `Unknown option ${o}.`)
-    if (!q.multiSelect && (a.optionIds?.length ?? 0) > 1)
-      throw new ApiError('invalid_request', `Pick one option for ${a.questionId}.`)
-  }
   const qa = qs.map((q) => {
     const a = answers.find((x) => x.questionId === q.id)
     return {
@@ -702,20 +728,157 @@ export async function generateBrief(deps: Deps, p: Principal, planId: string, an
   ]
     .filter(Boolean)
     .join('\n')
-  const brief = await callJson(
+  return callJson(
     deps,
-    p,
+    limits,
     plan,
     'brief',
     await deepModel(deps),
     system,
     user,
     planBriefShape,
-    1200,
+    BRIEF_MAX_TOKENS,
     media.images,
   )
-  await deps.store.updatePlan(plan.id, { answers, brief, briefRev: plan.briefRev + 1 })
-  return planDto({ ...plan, answers, brief, briefRev: plan.briefRev + 1 })
+}
+
+// ───────── background work ─────────
+
+const isRunning = (plan: PlanRow, now: Date): plan is PlanRow & { work: PlanWork } =>
+  plan.work?.status === 'running' && now.getTime() - Date.parse(plan.work.startedAt) <= WORK_STALE_MS
+
+/**
+ * Records the work on the plan and asks plan-background to run it. If that can't be dispatched, the work runs here
+ * with the short limits, so planning still works without background functions.
+ */
+async function begin(deps: Deps, plan: PlanRow, what: Pick<PlanWork, 'kind' | 'answers'>) {
+  const work: PlanWork = {
+    id: deps.ids.uuid(),
+    status: 'running',
+    startedAt: deps.clock.now().toISOString(),
+    ...what,
+  }
+  await deps.store.updatePlan(plan.id, { work })
+  try {
+    await deps.platform.dispatchPlanWork(plan.id)
+  } catch (e) {
+    deps.log.warn('plan.dispatch_failed', { planId: plan.id, kind: work.kind, error: e })
+    await runPlanWork(deps, plan.id, INLINE_LIMITS)
+  }
+  return current(deps, plan.id)
+}
+
+/** The plan as it is now; failed work is thrown, as the request that ran it used to. */
+async function current(deps: Deps, planId: string) {
+  const plan = await deps.store.getPlan(planId)
+  if (!plan) throw new ApiError('not_found', 'Plan not found.')
+  const dto = planDto(plan, deps.clock.now())
+  if (dto.work?.status === 'failed')
+    throw new ApiError('planning_unavailable', dto.work.error ?? FAILURE_MESSAGES.other)
+  return dto
+}
+
+/**
+ * The background step (plan-background): runs the plan's recorded work once and saves the result, or why it failed.
+ * Work replaced while it ran (new answers) is dropped.
+ */
+export async function runPlanWork(
+  deps: Deps,
+  planId: string,
+  limits: WorkLimits = BACKGROUND_LIMITS,
+): Promise<'done' | 'failed' | 'skipped'> {
+  const plan = await deps.store.getPlan(planId)
+  const work = plan?.work
+  if (!plan || work?.status !== 'running' || plan.consumedByJobId) return 'skipped'
+  let patch: Partial<PlanRow>
+  let outcome: 'done' | 'failed' = 'done'
+  try {
+    patch =
+      work.kind === 'questions'
+        ? { questions: await writeQuestions(deps, plan, limits) }
+        : { answers: work.answers ?? [], brief: await writeBrief(deps, plan, work.answers ?? [], limits) }
+    patch.work = null
+  } catch (e) {
+    if (!(e instanceof ApiError)) deps.log.error('plan.work_crashed', { planId, kind: work.kind, error: e })
+    outcome = 'failed'
+    patch = {
+      work: { ...work, status: 'failed', error: e instanceof ApiError ? e.message : FAILURE_MESSAGES.other },
+    }
+  }
+  const saved = await deps.store.tx(async (repo) => {
+    const fresh = await repo.getPlan(planId, { lock: true })
+    if (fresh?.work?.id !== work.id) return false
+    await repo.updatePlan(planId, { ...patch, ...(patch.brief ? { briefRev: fresh.briefRev + 1 } : {}) })
+    return true
+  })
+  return saved ? outcome : 'skipped'
+}
+
+/** Starts writing the plan's questions in the background; the plan comes back with `work` running. */
+export async function startQuestions(deps: Deps, p: Principal, planId: string) {
+  assertCan(p, 'plan:create')
+  requireGateway(deps)
+  const plan = await loadPlan(deps, p, planId)
+  const now = deps.clock.now()
+  if (plan.questions) return planDto(plan, now)
+  if (isRunning(plan, now) && plan.work.kind === 'questions') return planDto(plan, now)
+  return begin(deps, plan, { kind: 'questions' })
+}
+
+/** Starts writing the brief from the answers in the background; the plan comes back with `work` running. */
+export async function startBrief(deps: Deps, p: Principal, planId: string, answers: PlanAnswer[]) {
+  assertCan(p, 'plan:create')
+  requireGateway(deps)
+  const plan = await loadPlan(deps, p, planId)
+  const qs = plan.questions ?? []
+  const valid = AnswersSchema.safeParse(answers)
+  if (!valid.success) throw new ApiError('invalid_request', 'Invalid answers.')
+  for (const a of answers) {
+    const q = qs.find((x) => x.id === a.questionId)
+    if (!q) throw new ApiError('invalid_request', `Unknown question ${a.questionId}.`)
+    for (const o of a.optionIds ?? [])
+      if (!q.options.some((x) => x.id === o)) throw new ApiError('invalid_request', `Unknown option ${o}.`)
+    if (!q.multiSelect && (a.optionIds?.length ?? 0) > 1)
+      throw new ApiError('invalid_request', `Pick one option for ${a.questionId}.`)
+  }
+  const now = deps.clock.now()
+  // The same request again while it's being written (a retry): one brief, not two.
+  if (
+    isRunning(plan, now) &&
+    plan.work.kind === 'brief' &&
+    JSON.stringify(plan.work.answers ?? []) === JSON.stringify(answers)
+  )
+    return planDto(plan, now)
+  return begin(deps, plan, { kind: 'brief', answers })
+}
+
+type PlanDto = ReturnType<typeof planDto>
+
+/** Waits up to planWait.ms for the plan's running work. Still running after that: the plan as it is. */
+async function settle(deps: Deps, started: PlanDto): Promise<PlanDto> {
+  let plan = started
+  const until = Date.now() + planWait.ms
+  while (plan.work?.status === 'running' && Date.now() < until) {
+    await new Promise((r) => setTimeout(r, planWait.everyMs))
+    plan = await current(deps, plan.id)
+  }
+  return plan
+}
+
+/** For callers that can't poll (MCP tools): a plan whose work outlasted the wait is an error to try again. */
+export function finished(plan: PlanDto): PlanDto {
+  if (plan.work?.status === 'running') throw new ApiError('planning_unavailable', FAILURE_MESSAGES.timeout)
+  return plan
+}
+
+/** The plan with its questions, waiting for them; `work` is still running if they took longer than the wait. */
+export async function generateQuestions(deps: Deps, p: Principal, planId: string) {
+  return settle(deps, await startQuestions(deps, p, planId))
+}
+
+/** The plan with its brief, waiting for it; `work` is still running if it took longer than the wait. */
+export async function generateBrief(deps: Deps, p: Principal, planId: string, answers: PlanAnswer[]) {
+  return settle(deps, await startBrief(deps, p, planId, answers))
 }
 
 /** Saves the person's edits to the brief. `ifMatch` must be the current briefRev. */
@@ -739,7 +902,7 @@ export async function updatePlanBrief(
     const parsed = planBriefShape.safeParse(brief)
     if (!parsed.success) throw new ApiError('invalid_request', 'Invalid brief.')
     await repo.updatePlan(planId, { brief: parsed.data, briefRev: plan.briefRev + 1 })
-    return planDto({ ...plan, brief: parsed.data, briefRev: plan.briefRev + 1 })
+    return planDto({ ...plan, brief: parsed.data, briefRev: plan.briefRev + 1 }, deps.clock.now())
   })
 }
 
@@ -747,5 +910,5 @@ export async function getPlan(deps: Deps, p: Principal, planId: string) {
   assertCan(p, 'plan:create')
   const plan = await deps.store.getPlan(planId)
   if (!plan || plan.userId !== p.userId) throw new ApiError('not_found', 'Plan not found.')
-  return planDto(plan)
+  return planDto(plan, deps.clock.now())
 }

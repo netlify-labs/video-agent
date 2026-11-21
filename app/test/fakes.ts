@@ -256,6 +256,13 @@ export class FakePlatform implements PlatformPort {
     this.assemblies.push(uploadId)
     if (this.onAssemble) await this.onAssemble(uploadId)
   }
+  /** Plan work dispatches: recorded; onPlanWork runs them (helpers.ts runs each at once unless a test holds it). */
+  planWork: string[] = []
+  onPlanWork: ((planId: string) => Promise<void>) | null = null
+  async dispatchPlanWork(planId: string) {
+    this.planWork.push(planId)
+    if (this.onPlanWork) await this.onPlanWork(planId)
+  }
   openverseJobs: string[] = []
   onOpenverseJob: ((jobId: string) => Promise<void>) | null = null
   async dispatchOpenverseJob(jobId: string) {
