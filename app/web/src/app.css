@@ -562,7 +562,8 @@ main.va-shell-main {
   top: 80px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  /* No gap: the links' left borders join into one rule, and the active one colours its stretch. */
+  gap: 0;
 }
 .va-docs-toc-label {
   color: var(--va-faint);
@@ -572,7 +573,7 @@ main.va-shell-main {
 }
 .va-docs-toc-link {
   display: block;
-  padding: 6px 12px;
+  padding: 7px 12px;
   border-left: 2px solid var(--va-rule);
   color: var(--va-muted);
   font-size: 14px;
