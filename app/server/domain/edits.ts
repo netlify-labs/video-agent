@@ -928,7 +928,7 @@ export async function renderEdit(
       await repo.insertVersionMedia(
         await snapshotMedia(repo, e.jobId, n, r.picks, await repo.listVersionMedia(e.jobId, e.baseN)),
       )
-      const attempt = newAttempt(deps, e.jobId, n, now)
+      const attempt = newAttempt(deps, e.jobId, n, now, { runner: job.runner })
       await repo.insertAttempt(attempt)
       // The attempt holds the takes it mixes until its version does (finalize promotes the refs).
       if (narration)

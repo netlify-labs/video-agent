@@ -26,6 +26,7 @@ export const FEATURES = [
   'youtube', // the YouTube destination, when it's set up and on
   'webmcp', // the web app's WebMCP tools for browser agents; admin switch webmcpEnabled (va-qago)
   'tags', // tags on videos and the library's tag filters
+  'runner', // choosing the agent, model and effort of a video's runs
   'elevenlabs_voices', // ElevenLabs voices for voice-overs: functions see ELEVENLABS_API_KEY or ELEVENLABS_VOICE_ID
 ] as const
 
@@ -47,7 +48,7 @@ export async function enabledFeatures(deps: Deps): Promise<Feature[]> {
   if (deps.looks.catalog().length) on.push('looks')
   on.push('destinations')
   // The GitHub Action plan's server additions (phase 3): always on once deployed.
-  on.push('context', 'external_ref', 'tags')
+  on.push('context', 'external_ref', 'tags', 'runner')
   // Redo a scene: once HyperFrames' scope check is registered (prodDeps does it at startup).
   if (scopeCheckFor('hyperframes')) on.push('scoped_revision')
   if (await youtubeAvailable(deps, deps.store).catch(() => false)) on.push('youtube')

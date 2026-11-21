@@ -76,6 +76,7 @@ import { enabledFeatures } from './features.js'
 import { scopeRules } from '../lib/scope.js'
 import { adoptLookSnapshot, snapshotLook } from './look-snapshot.js'
 import { lookSettings } from './look-settings.js'
+import { checkRunnerChoice, wireEffort, type RunnerChoice } from '../lib/agent-catalog.js'
 import {
   assertLookAllowed,
   aspectNotice,
@@ -125,6 +126,8 @@ export interface CreateVideoInput {
   agent?: boolean | undefined
   /** The render engine (render-engines plan §4.2): must be enabled and listed by the look; omitted: the look's choice. */
   engine?: EngineId | undefined
+  /** The agent, model and effort for this video's runs; omitted: the deployment's. */
+  runner?: { agent: string; model?: string | undefined; effort?: string | undefined } | undefined
 }
 
 export interface ReviseInput {
@@ -302,15 +305,29 @@ export function checkWebhook(principal: Principal, url: string | undefined) {
   if (u.protocol !== 'https:') throw new ApiError('invalid_request', 'webhookUrl must use https.')
 }
 
+/** A request's agent choice, checked against the catalog; null when it names none. */
+export function chosenRunner(
+  input: { agent: string; model?: string | undefined; effort?: string | undefined } | undefined,
+): RunnerChoice | null {
+  if (!input) return null
+  const r = checkRunnerChoice(input)
+  if (!r.ok) throw new ApiError('invalid_request', r.message)
+  return r.choice
+}
+
 export function newAttempt(
   deps: Pick<Deps, 'ids' | 'config'>,
   jobId: string,
   versionN: number,
   now: string,
-  /** A scoped revision (redo a scene): SCOPED_AGENT_MODEL / SCOPED_AGENT_EFFORT, when set, pick its model. */
-  o: { scoped?: boolean } = {},
+  /**
+   * scoped: a scoped revision (redo a scene), where SCOPED_AGENT_MODEL / SCOPED_AGENT_EFFORT, when set, pick the
+   * model. runner: the video's chosen agent (job.runner), which every run of the video uses instead.
+   */
+  o: { scoped?: boolean; runner?: RunnerChoice | null | undefined } = {},
 ): AttemptRow {
   const c = deps.config
+  const chosen = o.runner ?? null
   return {
     id: deps.ids.uuid(),
     jobId,
@@ -319,9 +336,9 @@ export function newAttempt(
     nextActionAt: now,
     leaseUntil: null,
     deployId: null,
-    agent: c.agent,
-    model: (o.scoped ? c.scopedAgentModel : null) ?? c.agentModel,
-    effort: (o.scoped ? c.scopedAgentEffort : null) ?? c.agentEffort,
+    agent: chosen?.agent ?? c.agent,
+    model: chosen ? chosen.model : ((o.scoped ? c.scopedAgentModel : null) ?? c.agentModel),
+    effort: chosen ? wireEffort(chosen) : ((o.scoped ? c.scopedAgentEffort : null) ?? c.agentEffort),
     promptTemplateVersion: 0,
     toolVersions: null,
     parentSourceSha256: null,
@@ -432,7 +449,10 @@ export async function createVideo(
     private: input.private ?? false,
     look: input.look ?? null,
     engine: input.engine ?? null,
+    // Only when given, so a replay of a request made before this field still matches.
+    ...(input.runner ? { runner: input.runner } : {}),
   })
+  const runner = chosenRunner(input.runner)
   // The look, resolved and copied before the transaction (blob writes can't roll back), under an id minted now. A
   // plan's look comes before the default; a plan with no look (id null) makes one with none.
   const settings = await lookSettings(deps)
@@ -501,6 +521,7 @@ export async function createVideo(
         externalRef: input.externalRef ?? null,
         externalUrl: input.externalUrl ?? null,
         tags: [...(input.tags ?? [])].sort(),
+        runner,
       }
       await repo.insertJob(job)
       if (job.private) await writeAccessMirror(deps, job)
@@ -538,7 +559,7 @@ export async function createVideo(
         ...(demo ? { recording: { ...demo.recording, compose: input.agent === false } } : {}),
       })
       if (look) await adoptLookSnapshot(repo, deps, jobId, look, now)
-      await repo.insertAttempt(newAttempt(deps, jobId, 1, now))
+      await repo.insertAttempt(newAttempt(deps, jobId, 1, now, { runner }))
       return { status: 202, body: await videoDto(repo, deps, jobId, principal) }
     }),
   )
@@ -693,7 +714,7 @@ export async function reviseVideo(
       if (look && restyle) await adoptLookSnapshot(repo, deps, jobId, look, now)
       await repo.insertVersionComments(feedback)
       await repo.insertVersionMedia(media)
-      await repo.insertAttempt(newAttempt(deps, jobId, n, now, { scoped: !!scope }))
+      await repo.insertAttempt(newAttempt(deps, jobId, n, now, { scoped: !!scope, runner: job.runner }))
       await repo.updateJob(jobId, {
         latestVersion: n,
         nextVersionN: n + 1,
@@ -844,7 +865,7 @@ export async function retryVersion(deps: Deps, principal: Principal, jobId: stri
     if (await hasUnfinished(repo, jobId))
       throw new ApiError('conflict', 'Another version of this video is still in progress.')
     const now = deps.clock.now().toISOString()
-    const attempt = newAttempt(deps, jobId, n, now, { scoped: !!version.scope })
+    const attempt = newAttempt(deps, jobId, n, now, { scoped: !!version.scope, runner: job.runner })
     await repo.insertAttempt(attempt)
     // A frozen narration's takes move to the new attempt (re-locked and re-checked), so a failed one holds nothing.
     const takes = version.frozen?.narration?.takes.map((t) => t.mediaId) ?? []

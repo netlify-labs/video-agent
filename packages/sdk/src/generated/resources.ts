@@ -1043,6 +1043,7 @@ export function resources(t: Transport) {
               'recording',
               'agent',
               'engine',
+              'runner',
             ],
             features: [
               ...(input.planId !== undefined ? ['planning'] : []),
@@ -1054,6 +1055,7 @@ export function resources(t: Transport) {
               ...(input.recording !== undefined ? ['screen_recording'] : []),
               ...(input.agent !== undefined ? ['screen_recording'] : []),
               ...(input.engine !== undefined ? ['engines'] : []),
+              ...(input.runner !== undefined ? ['runner'] : []),
             ],
             operationId: 'createVideo',
           },

@@ -5,6 +5,7 @@ import { z } from '@hono/zod-openapi'
 import { ASPECT_RATIOS, MEDIA_ROLES, SOUNDS, VERDICTS } from './domain/types.js'
 import { MAX_NARRATION } from './lib/contract.js'
 import { LANGUAGES } from './lib/language.js'
+import { AGENT_IDS } from './lib/agent-catalog.js'
 import {
   GAIN_DB_RANGE,
   MAX_FADE_SAMPLES,
@@ -886,6 +887,21 @@ export const CreateVideoSchema = z
       description:
         "The render engine (GET /api/v1/engines). Omit for the look's choice, else hyperframes. Errors: 409 engine_disabled when it isn't on here, 400 engine_not_supported_by_look, 409 engine_unsupported for sound effects or a voice-over it can't make.",
     }),
+    runner: z
+      .object({
+        agent: z.enum(AGENT_IDS).openapi({ description: 'The Agent Runner agent.' }),
+        model: z.string().max(100).optional().openapi({
+          description: "One of the agent's models, like claude-opus-5-5. Omit for the agent's default.",
+        }),
+        effort: z.string().max(20).optional().openapi({
+          description: "One of the model's efforts, like high. Needs model. Omit for the model's default.",
+        }),
+      })
+      .optional()
+      .openapi({
+        description:
+          "The agent that makes this video, and every later version of it. Omit for the deployment's default. Errors: 400 invalid_request for a model the agent doesn't have or an effort the model doesn't take.",
+      }),
   })
   .openapi('CreateVideo')
 

@@ -202,6 +202,7 @@
                 "youtube",
                 "webmcp",
                 "tags",
+                "runner",
                 "elevenlabs_voices"
               ]
             },
@@ -2239,6 +2240,35 @@
               "remotion"
             ],
             "description": "The render engine (GET /api/v1/engines). Omit for the look's choice, else hyperframes. Errors: 409 engine_disabled when it isn't on here, 400 engine_not_supported_by_look, 409 engine_unsupported for sound effects or a voice-over it can't make."
+          },
+          "runner": {
+            "type": "object",
+            "properties": {
+              "agent": {
+                "type": "string",
+                "enum": [
+                  "claude",
+                  "gemini",
+                  "codex",
+                  "opencode"
+                ],
+                "description": "The Agent Runner agent."
+              },
+              "model": {
+                "type": "string",
+                "maxLength": 100,
+                "description": "One of the agent's models, like claude-opus-5-5. Omit for the agent's default."
+              },
+              "effort": {
+                "type": "string",
+                "maxLength": 20,
+                "description": "One of the model's efforts, like high. Needs model. Omit for the model's default."
+              }
+            },
+            "required": [
+              "agent"
+            ],
+            "description": "The agent that makes this video, and every later version of it. Omit for the deployment's default. Errors: 400 invalid_request for a model the agent doesn't have or an effort the model doesn't take."
           }
         },
         "required": [
@@ -8739,7 +8769,8 @@
             "context": "context",
             "recording": "screen_recording",
             "agent": "screen_recording",
-            "engine": "engines"
+            "engine": "engines",
+            "runner": "runner"
           }
         },
         "summary": "Create a video",

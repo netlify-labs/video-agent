@@ -34,6 +34,7 @@ import { $api, errorMessage, newIdempotencyKey, useCanCreate, type Version, type
 import { PageHeader, Status, VersionImage, relativeTime } from '../components/bits'
 import { MediaChips, type Media } from '../components/MediaPicker'
 import { LookControl, shownLook, useLooks } from '../components/LookPicker'
+import { AgentPicker, runnerInput, type AgentChoice } from '../components/AgentPicker'
 import { pickable } from '../lib/looks'
 import { useNewVideoTools } from '../webmcp/newVideoTools'
 import {
@@ -215,6 +216,8 @@ export function NewVideoPage() {
   const [voice, setVoice] = useState<VoiceState>(VOICE_OFF)
   // Undefined until the person picks: the request then leaves look out and the admin default applies.
   const [look, setLook] = useState<string | null | undefined>(undefined)
+  // The agent, model and effort of the video's runs; null: Auto, the deployment's default.
+  const [agentChoice, setAgentChoice] = useState<AgentChoice | null>(null)
   const { create, key } = useCreate()
   const config = $api.useQuery('get', '/api/v1/config')
   const canPlan = useCanCreate() && config.data?.planningAvailable === true
@@ -262,6 +265,7 @@ export function NewVideoPage() {
         // A plan carries the voice-over (with its narration), so only a direct create sends it.
         ...(sentVoice && !planId ? { voiceover: voiceInput(voice) } : {}),
         ...(look !== undefined ? { look } : {}),
+        ...(config.data?.features.includes('runner') ? runnerInput(agentChoice) : {}),
         // A screen recording makes the video a demo of it, with its trim, crop and hidden areas (HyperFrames only).
         ...(recording
           ? { recording: recording.input, ...(planId ? {} : { engine: 'hyperframes' as const }) }
@@ -615,6 +619,9 @@ export function NewVideoPage() {
                 <Text size="xs" c="var(--va-faint)" data-testid="engine-credits">
                   {engineName(engine)} videos take about {extraCredits} more credits.
                 </Text>
+              ) : null}
+              {config.data?.features.includes('runner') ? (
+                <AgentPicker value={agentChoice} onChange={setAgentChoice} disabled={planning} />
               ) : null}
               <TextInput
                 label="Title"

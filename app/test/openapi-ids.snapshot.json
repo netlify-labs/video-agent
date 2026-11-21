@@ -24,7 +24,8 @@
         "context": "context",
         "recording": "screen_recording",
         "agent": "screen_recording",
-        "engine": "engines"
+        "engine": "engines",
+        "runner": "runner"
       }
     }
   },

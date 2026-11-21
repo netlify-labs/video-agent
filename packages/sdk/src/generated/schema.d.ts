@@ -2059,7 +2059,7 @@ export interface components {
                 release: string | null;
             };
             /** @description Features this deployment has and has switched on. Clients hide what isn't listed. See app/server/domain/features.ts. */
-            features: ("remix" | "narration" | "planning" | "rest_wait" | "cli_login" | "looks" | "engines" | "scoped_revision" | "screen_recording" | "context" | "external_ref" | "destinations" | "youtube" | "webmcp" | "tags" | "elevenlabs_voices")[];
+            features: ("remix" | "narration" | "planning" | "rest_wait" | "cli_login" | "looks" | "engines" | "scoped_revision" | "screen_recording" | "context" | "external_ref" | "destinations" | "youtube" | "webmcp" | "tags" | "runner" | "elevenlabs_voices")[];
             admission: "invite-only" | string[] | null;
             siteUrl: string;
             /** @description AI Gateway is available, so Plan it first is offered. */
@@ -2583,6 +2583,18 @@ export interface components {
              * @enum {string}
              */
             engine?: "hyperframes" | "remotion";
+            /** @description The agent that makes this video, and every later version of it. Omit for the deployment's default. Errors: 400 invalid_request for a model the agent doesn't have or an effort the model doesn't take. */
+            runner?: {
+                /**
+                 * @description The Agent Runner agent.
+                 * @enum {string}
+                 */
+                agent: "claude" | "gemini" | "codex" | "opencode";
+                /** @description One of the agent's models, like claude-opus-5-5. Omit for the agent's default. */
+                model?: string;
+                /** @description One of the model's efforts, like high. Needs model. Omit for the model's default. */
+                effort?: string;
+            };
         };
         /** @description A spoken narration with captions from its words. Omit for the plan's choice, else none. */
         VoiceoverInput: {

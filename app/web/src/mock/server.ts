@@ -764,6 +764,7 @@ export function installMock() {
           ...(adminSettings.narrationEnabled ? ['narration'] : []),
           'planning',
           'destinations',
+          'runner',
           ...(adminSettings.youtubeEnabled ? ['youtube'] : []),
           ...(adminSettings.cliLoginEnabled ? ['cli_login'] : []),
           ...(adminSettings.webmcpEnabled ? ['webmcp'] : []),

@@ -1466,7 +1466,8 @@ function resources(t) {
             "context",
             "recording",
             "agent",
-            "engine"
+            "engine",
+            "runner"
           ],
           features: [
             ...input.planId !== void 0 ? ["planning"] : [],
@@ -1477,7 +1478,8 @@ function resources(t) {
             ...input.context !== void 0 ? ["context"] : [],
             ...input.recording !== void 0 ? ["screen_recording"] : [],
             ...input.agent !== void 0 ? ["screen_recording"] : [],
-            ...input.engine !== void 0 ? ["engines"] : []
+            ...input.engine !== void 0 ? ["engines"] : [],
+            ...input.runner !== void 0 ? ["runner"] : []
           ],
           operationId: "createVideo"
         },

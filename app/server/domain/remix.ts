@@ -300,6 +300,8 @@ export async function remixVideo(
         remixOfN: version.n,
         externalRef: input.externalRef ?? null,
         externalUrl: input.externalUrl ?? null,
+        // The source's chosen agent carries over with its other settings.
+        runner: job.runner ?? null,
       }
       await repo.insertJob(created)
       if (created.private) await writeAccessMirror(deps, created)
@@ -347,7 +349,7 @@ export async function remixVideo(
       assertCapabilities(engineOf(row), row)
       await repo.insertVersion(row)
       await repo.insertVersionMedia(media)
-      await repo.insertAttempt(newAttempt(deps, newJobId, 1, now))
+      await repo.insertAttempt(newAttempt(deps, newJobId, 1, now, { runner: created.runner }))
       // Adopt the copies: their reservation rows are done, so the sweep never deletes them.
       await repo.updateCleanup(remixReservationId(newJobId), { doneAt: now })
       if (look) await adoptLookSnapshot(repo, deps, newJobId, look, now)

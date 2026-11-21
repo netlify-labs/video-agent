@@ -1,6 +1,7 @@
 // Domain records. These mirror the database tables (app/server/store/schema.ts) and the in-memory store.
 import type { BundleReference } from '../lib/bundle-references.js'
 import type { EngineId } from './engines.js'
+import type { RunnerChoice } from '../lib/agent-catalog.js'
 import type { Language } from '../lib/language.js'
 import type { FrozenNarration } from '../lib/run-manifest.js'
 import type { MediaKind } from '../lib/media/classify.js'
@@ -336,6 +337,8 @@ export interface JobRow {
   externalUrl?: string | null
   /** Labels to filter the library by ("demo"): lowercase slugs, sorted, at most 10. Absent reads as none. */
   tags?: string[]
+  /** The agent chosen for this video's runs; null or absent: the deployment's (AGENT, AGENT_MODEL, AGENT_EFFORT). */
+  runner?: RunnerChoice | null
 }
 
 /**
