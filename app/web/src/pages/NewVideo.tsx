@@ -369,11 +369,10 @@ export function NewVideoPage() {
     <>
       <PageHeader
         title="New video"
-        sub="Describe it once. The agent writes, checks and renders it, usually in 3 to 8 minutes."
-      >
-        {/* Other ways to start, beside the title: separate buttons, so they don't read as one link. */}
-        {canRemix || config.data?.features.includes('screen_recording') ? (
-          <Group gap="xs">
+        sub={
+          // The other ways to start sit right after the sentence, as separate buttons (they wrap under it when narrow).
+          <Group gap="xs" wrap="wrap" align="center">
+            <span>Describe it once. The agent writes, checks and renders it, usually in 3 to 8 minutes.</span>
             {canRemix ? (
               <Button
                 variant="default"
@@ -398,8 +397,8 @@ export function NewVideoPage() {
               </Button>
             ) : null}
           </Group>
-        ) : null}
-      </PageHeader>
+        }
+      />
       {picker}
       <div className="va-split">
         {/* Not clipped, so the actions row can stick to the window's bottom edge. */}
