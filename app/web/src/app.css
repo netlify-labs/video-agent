@@ -63,6 +63,13 @@ body {
   color: var(--va-muted);
   filter: none;
 }
+/* A disabled primary still reads as a button: a dimmed primary fill, not the grey of the bar it sits on. */
+/* (Mantine leaves data-variant off a button that takes the default variant, which is filled.) */
+.va-button:is([data-variant='filled'], :not([data-variant])):is(:disabled, [data-disabled]) {
+  --button-bg: color-mix(in srgb, var(--va-primary-bg) 30%, var(--va-raised));
+  background: color-mix(in srgb, var(--va-primary-bg) 30%, var(--va-raised));
+  color: color-mix(in srgb, var(--va-text) 70%, var(--va-raised));
+}
 
 /* App shell: header and sidebar on the page ground, divided by one quiet rule. */
 .va-shell-edge {
@@ -1428,7 +1435,8 @@ main.va-shell-main {
   object-fit: contain;
 }
 .va-media-audio {
-  height: 36px;
+  min-height: 36px;
+  justify-content: center;
   padding: 0 8px;
   background: var(--va-raised);
 }
