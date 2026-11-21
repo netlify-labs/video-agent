@@ -369,40 +369,37 @@ export function NewVideoPage() {
     <>
       <PageHeader
         title="New video"
-        sub={
-          <>
-            Describe it once. The agent writes, checks and renders it, usually in 3 to 8 minutes.
-            {canRemix || config.data?.features.includes('screen_recording') ? (
-              // Other ways to start, as separate buttons so they don't read as one link.
-              <Group gap="xs" mt="xs">
-                {canRemix ? (
-                  <Button
-                    variant="default"
-                    size="compact-sm"
-                    leftSection={<IconCopy size={15} />}
-                    onClick={() => {
-                      setPickingSource(true)
-                    }}
-                  >
-                    Start from an existing video
-                  </Button>
-                ) : null}
-                {config.data?.features.includes('screen_recording') ? (
-                  <Button
-                    component={Link}
-                    to="/new/demo"
-                    variant="default"
-                    size="compact-sm"
-                    leftSection={<IconScreenShare size={15} />}
-                  >
-                    From a screen recording
-                  </Button>
-                ) : null}
-              </Group>
+        sub="Describe it once. The agent writes, checks and renders it, usually in 3 to 8 minutes."
+      >
+        {/* Other ways to start, beside the title: separate buttons, so they don't read as one link. */}
+        {canRemix || config.data?.features.includes('screen_recording') ? (
+          <Group gap="xs">
+            {canRemix ? (
+              <Button
+                variant="default"
+                size="compact-sm"
+                leftSection={<IconCopy size={15} />}
+                onClick={() => {
+                  setPickingSource(true)
+                }}
+              >
+                Start from an existing video
+              </Button>
             ) : null}
-          </>
-        }
-      />
+            {config.data?.features.includes('screen_recording') ? (
+              <Button
+                component={Link}
+                to="/new/demo"
+                variant="default"
+                size="compact-sm"
+                leftSection={<IconScreenShare size={15} />}
+              >
+                From a screen recording
+              </Button>
+            ) : null}
+          </Group>
+        ) : null}
+      </PageHeader>
       {picker}
       <div className="va-split">
         {/* Not clipped, so the actions row can stick to the window's bottom edge. */}

@@ -2084,3 +2084,9 @@ main.va-shell-main {
   border-color: transparent;
   opacity: 0.35;
 }
+
+/* Placeholders in the muted text colour: Mantine's default is too faint to read on the raised input grounds. */
+.mantine-Input-input::placeholder {
+  color: var(--va-muted);
+  opacity: 1;
+}
