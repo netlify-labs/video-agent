@@ -119,7 +119,7 @@ export function SetupPage({ standalone = false }: { standalone?: boolean }) {
                 display: 'block',
                 background: 'var(--va-raised)',
                 padding: '8px 12px',
-                borderRadius: 8,
+                borderRadius: 2,
                 fontSize: 13,
               }}
             >

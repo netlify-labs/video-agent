@@ -468,7 +468,7 @@ export function NewVideoPage() {
                               style={{
                                 width: s.w,
                                 height: s.h,
-                                borderRadius: 3,
+                                borderRadius: 2,
                                 border: `2px solid ${on ? 'var(--va-text)' : 'var(--va-faint)'}`,
                               }}
                             />

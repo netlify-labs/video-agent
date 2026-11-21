@@ -91,7 +91,8 @@ export const theme = createTheme({
   },
   fontSizes: { xs: '12px', sm: '14px', md: '14px', lg: '16px', xl: '18px' },
   lineHeights: { xs: '1.4', sm: '1.43', md: '1.5', lg: '1.5', xl: '1.4' },
-  radius: { xs: '2px', sm: '4px', md: '6px', lg: '8px', xl: '12px' },
+  // One small corner everywhere: every step of the scale is 2px, so a component's own radius prop can't round it more.
+  radius: { xs: '2px', sm: '2px', md: '2px', lg: '2px', xl: '2px' },
   defaultRadius: 'lg',
   spacing: { xs: '8px', sm: '12px', md: '16px', lg: '24px', xl: '32px' },
   cursorType: 'pointer',

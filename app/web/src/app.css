@@ -1169,7 +1169,7 @@ main.va-shell-main {
   width: 28px;
   height: 28px;
   object-fit: contain;
-  border-radius: 3px;
+  border-radius: 2px;
   background: var(--va-surface);
 }
 .va-comment-file span {
@@ -1392,7 +1392,7 @@ main.va-shell-main {
 .va-render-bar-narration {
   top: 5px !important;
   bottom: 5px !important;
-  border-radius: 4px;
+  border-radius: 2px;
   background: var(--mantine-color-teal-6);
 }
 .va-render-bar-narration[data-over] {
@@ -1437,7 +1437,7 @@ main.va-shell-main {
   bottom: 8px;
   font-size: 12px;
   padding: 1px 6px;
-  border-radius: 6px;
+  border-radius: 2px;
   background: rgb(0 0 0 / 65%);
   color: #fff;
 }
@@ -1516,7 +1516,7 @@ main.va-shell-main {
 .va-slot-thumb {
   width: 32px;
   height: 24px;
-  border-radius: 4px;
+  border-radius: 2px;
   object-fit: cover;
   flex: none;
 }
@@ -1533,7 +1533,7 @@ main.va-shell-main {
 .va-media-chip img {
   width: 20px;
   height: 20px;
-  border-radius: 4px;
+  border-radius: 2px;
   object-fit: cover;
 }
 .va-media-chip-name {
@@ -1742,7 +1742,7 @@ main.va-shell-main {
   margin-left: -6px;
   color: var(--va-faint);
   cursor: grab;
-  border-radius: 4px;
+  border-radius: 2px;
 }
 .va-brief-grip:hover {
   color: var(--va-text);

@@ -632,7 +632,7 @@ export function NarrationRecorder({ api, videoId, versionN, draft }: NarrationRe
                     playsInline
                     preload="auto"
                     data-testid="record-picture"
-                    style={{ display: 'block', width: '100%', background: '#000', borderRadius: 6 }}
+                    style={{ display: 'block', width: '100%', background: '#000', borderRadius: 2 }}
                   />
                   {phase === 'countdown' && s.count !== null ? (
                     <div
@@ -647,7 +647,7 @@ export function NarrationRecorder({ api, videoId, versionN, draft }: NarrationRe
                         fontWeight: 700,
                         color: '#fff',
                         background: 'rgba(0, 0, 0, 0.45)',
-                        borderRadius: 6,
+                        borderRadius: 2,
                       }}
                     >
                       {s.count}
