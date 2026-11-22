@@ -1,6 +1,7 @@
 # Video Agent
 
 [![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/netlify-labs/video-agent)
+[![Copy prompt for your agent](app/web/static/agent-setup/button.svg)](https://netlify-video-agent.netlify.app/agent-setup/)
 
 Your company's own video agent. Describe a video and get an MP4 a few minutes later. An AI agent builds it as a web
 page with [HyperFrames](https://hyperframes.heygen.com) and renders it in a
@@ -66,7 +67,13 @@ You need:
 - A GitHub account. Agent Runners work from Git.
 - A Netlify personal access token, ideally from an account made just for this.
 
-Press **Deploy to Netlify** above and fill in three values. You can leave them empty and add them later.
+**With your AI agent:** press **Copy prompt for your agent** above. The
+[page it opens](https://netlify-video-agent.netlify.app/agent-setup/) has a prompt for Claude Code, Codex, Cursor or
+another coding agent. The agent copies the repo to your GitHub, creates the Netlify project in your team, saves its
+settings and deploys it. It asks you for the few things only you can do.
+
+**With the button:** press **Deploy to Netlify** above and fill in three values. You can leave them empty and add
+them later.
 
 | Variable                | Value                                                          |
 | ----------------------- | -------------------------------------------------------------- |

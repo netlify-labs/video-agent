@@ -16,6 +16,11 @@ Have these ready before you press the button:
 
 ## Deploy
 
+**With your AI agent:** open the [setup prompt](https://netlify-video-agent.netlify.app/agent-setup/), copy it and
+paste it into Claude Code, Codex, Cursor or another coding agent with a terminal. It follows the "From a clone" steps
+below for you and asks you for the few things only you can do: the personal access token, linking the repo and your
+admin account.
+
 **With the button:** press **Deploy to Netlify** in the [README](../../README.md). It copies this repo to your GitHub and asks for the three settings
 the agent needs to make videos. Don't have them ready? Leave them empty: the site still deploys, and you can add them
 later under Project configuration > Environment variables (then redeploy). The `/setup` page lists anything missing.

@@ -7,8 +7,9 @@
 
 # The Deploy to Netlify button asks for these: the agent needs them to make videos, but the build doesn't, so they can
 # be skipped and added later (Project configuration > Environment variables, then redeploy). /setup lists any missing.
+# The link is the prompt page (app/web/static/agent-setup): a coding agent does the whole setup from it instead.
 [template.environment]
-  RUNNER_API_TOKEN = "A Netlify personal access token that starts agent runs (ideally from a dedicated account in this team). Required to make videos. You can skip this now and add it later."
+  RUNNER_API_TOKEN = "A Netlify personal access token that starts agent runs (ideally from a dedicated account in this team). Required to make videos. You can skip this now and add it later. Or have your AI agent do the whole setup: https://netlify-video-agent.netlify.app/agent-setup/"
   ALLOWED_EMAIL_DOMAINS = "Who can sign up: your company's email domains, comma-separated (e.g. acme.com), or invite-only. Required to make videos. You can skip this now and add it later."
   ADMIN_EMAILS = "The first admins' email addresses, comma-separated. Required to make videos. You can skip this now and add it later."
 
