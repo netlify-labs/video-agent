@@ -87,7 +87,7 @@ export function vendorLook(lookDir: string, opts: VendorOptions): string[] {
   const unknown = look.registry.filter((n) => !licences.items[n])
   if (unknown.length)
     throw new LookVendorError(
-      `No known licence for ${unknown.join(', ')}: add it to scripts/lib/registry-licences.json after reading its files upstream (docs/spikes.md K4), or replace it with a hand-written move.`,
+      `No known licence for ${unknown.join(', ')}: add it to scripts/lib/registry-licences.json after reading its files upstream, or replace it with a hand-written move.`,
     )
   const tag = `v${opts.hyperframesVersion}`
   const add = opts.add ?? ((name, dir) => runAdd(opts.hyperframesVersion, name, dir))
@@ -162,7 +162,9 @@ if (process.argv[1]?.endsWith('look-vendor.ts')) {
     console.error(
       JSON.stringify({ step: 'look-vendor', look: id, changes: changes.length, ms: Date.now() - started }),
     )
-    console.log(changes.length ? `Vendored app/looks/${id}/registry: review the changes above.` : 'No changes.')
+    console.log(
+      changes.length ? `Vendored app/looks/${id}/registry: review the changes above.` : 'No changes.',
+    )
   } catch (e) {
     if (!(e instanceof LookVendorError)) throw e
     console.error(e.message)

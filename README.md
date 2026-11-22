@@ -141,16 +141,16 @@ npm run db:generate                 # after changing app/server/store/schema.ts
 ALLOW_NON_PRODUCTION=true npx netlify dev
 ```
 
-| Folder      | What's in it                                                                                               |
-| ----------- | ---------------------------------------------------------------------------------------------------------- |
-| `app/`      | The service: API and MCP server, web app, tests, looks and the Remotion template                           |
-| `context/`  | Your brand and product facts. Every run reads it.                                                          |
-| `video/`    | The HyperFrames project each run starts from                                                               |
-| `scripts/`  | Build and setup tools, and the scripts agent runs call                                                     |
-| `skills/`   | The agent skills each deployment serves at `/skills/`: `create-video` and `video-agent-cli`                |
-| `netlify/`  | Functions, edge functions and database migrations                                                          |
-| `packages/` | The CLI, SDK, player and GitHub Action                                                                     |
-| `docs/`     | These guides, the design plans ([start here](docs/plans/2026-10-30-video-agent-spec.md)) and spike results |
+| Folder      | What's in it                                                                                |
+| ----------- | ------------------------------------------------------------------------------------------- |
+| `app/`      | The service: API and MCP server, web app, tests, looks and the Remotion template            |
+| `context/`  | Your brand and product facts. Every run reads it.                                           |
+| `video/`    | The HyperFrames project each run starts from                                                |
+| `scripts/`  | Build and setup tools, and the scripts agent runs call                                      |
+| `skills/`   | The agent skills each deployment serves at `/skills/`: `create-video` and `video-agent-cli` |
+| `netlify/`  | Functions, edge functions and database migrations                                           |
+| `packages/` | The CLI, SDK, player and GitHub Action                                                      |
+| `docs/`     | These guides, how releases work and an example publish destination                          |
 
 To contribute, see [CONTRIBUTING](.github/CONTRIBUTING.md). Adding a look is a good first pull request.
 

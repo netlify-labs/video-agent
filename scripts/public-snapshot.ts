@@ -1,4 +1,4 @@
-// The public snapshot (docs/plans/2026-11-02-going-public.md): exports a ref of this repo with `git archive` into a
+// The public snapshot: exports a ref of this repo with `git archive` into a
 // folder, leaves out what's internal, and scans what's left for internal names, ids, private links and secrets. It
 // never pushes, creates a repo or changes anyone's visibility: publishing the folder is a separate, human step.
 //
@@ -33,10 +33,6 @@ export const EXCLUDES: readonly { path: string; why: string }[] = [
     why: 'this tool: its rules spell out the internal strings it looks for',
   },
   { path: 'scripts/public-snapshot.test.ts', why: "this tool's tests, which use those strings as examples" },
-  {
-    path: 'docs/plans/2026-11-02-going-public.md',
-    why: 'the checklist for making this snapshot; it names the internal strings too',
-  },
 ]
 
 export interface Rule {
@@ -168,7 +164,9 @@ function gitleaks(dir: string): Hit[] | null {
     [
       'dir',
       '.',
-      ...(existsSync(join(dir, '.config', 'gitleaks.toml')) ? ['--config', join('.config', 'gitleaks.toml')] : []),
+      ...(existsSync(join(dir, '.config', 'gitleaks.toml'))
+        ? ['--config', join('.config', 'gitleaks.toml')]
+        : []),
       '--no-banner',
       '--redact',
       '--exit-code',

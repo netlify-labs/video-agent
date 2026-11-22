@@ -1,8 +1,0 @@
-# Spike A2: copy to .github/dependabot.yml in the consumer repo. After `action-v0.0.2` exists, check whether
-# Dependabot opens a PR that bumps the SHA pin and its `# action-v0.0.1` comment for the sub-folder action.
-version: 2
-updates:
-  - package-ecosystem: github-actions
-    directory: /
-    schedule:
-      interval: daily

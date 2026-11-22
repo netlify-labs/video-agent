@@ -12,8 +12,6 @@ app/web/dist/
 .render/
 coverage/
 *.log
-docs/spikes/out/
-docs/spikes/out-*.log
 app/web/dist-mock/
 .taste-skill/
 test-results/
@@ -21,11 +19,7 @@ playwright-report/
 
 # bv (beads viewer) local config and caches
 .bv/
-docs/spikes/s8/out-*.mp4
-docs/spikes/s8/variants/
 **/.hyperframes/
-docs/spikes/s10/media/
-docs/spikes/s10/out/
 
 # Run inputs outside video/ (recorded narration takes; scripts/lib/narration-inputs.ts)
 .va-run/

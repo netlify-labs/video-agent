@@ -2,8 +2,7 @@
 
 ## Voice-over live gates
 
-Two scripts check recorded voice-over against a deployed site (plan
-[§9–§10](../../docs/plans/2026-11-02-record-your-own-voiceover.md)). Run either one with `--dry` first: it checks the env
+Two scripts check recorded voice-over against a deployed site. Run either one with `--dry` first: it checks the env
 (and, for the second, ffmpeg and the fixtures), prints the steps and the projected credits, and makes no requests.
 
 ```sh
@@ -25,8 +24,7 @@ every check it makes.
 
 ## Remix live gate
 
-`scripts/e2e/remix.ts` checks remixing against a deployed site (remix spec
-[§7](../../docs/plans/2026-11-03-remix.md)): a targeted remix keeps the first frame, a new-topic remix changes the
+`scripts/e2e/remix.ts` checks remixing against a deployed site: a targeted remix keeps the first frame, a new-topic remix changes the
 captions, a narrated source loses its narration, and replaying a request with the same idempotency key returns the
 same video. It spends two or three runs and stops starting new ones once `CREDIT_CEILING` (default 600) is reached.
 Run it with `--dry` first.
@@ -38,8 +36,7 @@ VIDEO_AGENT_URL=https://<site> VIDEO_AGENT_KEY=nva_… SOURCE_ID=vid_… [NARRAT
 
 ## Redo-a-scene live gate
 
-`scripts/e2e/regen-beat.ts` checks scoped revisions against a deployed site (regenerate-beat spec
-[§7](../../docs/plans/2026-11-04-regenerate-beat.md)). It redoes one scene of a ready contract-v1 video, then compares the
+`scripts/e2e/regen-beat.ts` checks scoped revisions against a deployed site. It redoes one scene of a ready contract-v1 video, then compares the
 frozen scenes' frames and captions with the parent's and reads the stored composition back from Blobs. It stops
 starting runs once `CREDIT_CEILING` (default 700) is reached. `--dry` lists the steps and the projected credits
 without sending anything, and `--selftest` runs its frame and caption checks on local fixtures.

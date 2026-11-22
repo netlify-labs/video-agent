@@ -17,6 +17,13 @@
     "types": ["node"],
     "noEmit": true
   },
-  "include": ["app/server", "app/test", "app/web/e2e", "app/web/playwright.config.ts", "netlify/functions", "scripts", "docs/spikes", "vitest.config.ts"],
-  "exclude": ["docs/spikes/s10/web", "docs/spikes/e3", "docs/spikes/e4", "docs/spikes/e5"]
+  "include": [
+    "app/server",
+    "app/test",
+    "app/web/e2e",
+    "app/web/playwright.config.ts",
+    "netlify/functions",
+    "scripts",
+    "vitest.config.ts"
+  ]
 }

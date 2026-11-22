@@ -1,9 +1,0 @@
-{
-  "title": "Org webhooks",
-  "summary": "Contract-1 spike fixture: three beats, a background layer, an image and a video slot.",
-  "captions": [
-    { "start": 0.4, "end": 3, "text": "Org webhooks", "beat": "intro", "textId": "intro-title", "beatStart": 0.4, "beatEnd": 3 },
-    { "start": 3.5, "end": 6, "text": "One subscription for every project", "beat": "demo", "textId": "demo-sub", "beatStart": 0.5, "beatEnd": 3 },
-    { "start": 6.2, "end": 9, "text": "Read the docs", "beat": "outro", "textId": "outro-cta", "beatStart": 0.2, "beatEnd": 3 }
-  ]
-}

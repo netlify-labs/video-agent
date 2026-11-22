@@ -10,7 +10,7 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p app/web/tsconfig.json --noEmit && tsc -b packages/*/tsconfig.json",
     "lint": "NODE_OPTIONS=--max-old-space-size=6144 eslint -c .config/eslint.config.js .",
-    "format": "prettier --write . '!.beads' '!netlify/database/migrations' '!app/web/src/api/openapi.json' '!package-lock.json' '!video' '!app/web/src/api/schema.d.ts' '!packages/sdk/src/generated/schema.d.ts' '!app/test/fixtures' '!docs/spikes/*/fixture' '!packages/action/dist' '!app/engines/remotion' '!app/server/lib/remotion-locked.json' '!app/server/lib/remotion-props.schema.json'",
+    "format": "prettier --write . '!.beads' '!netlify/database/migrations' '!app/web/src/api/openapi.json' '!package-lock.json' '!video' '!app/web/src/api/schema.d.ts' '!packages/sdk/src/generated/schema.d.ts' '!app/test/fixtures' '!packages/action/dist' '!app/engines/remotion' '!app/server/lib/remotion-locked.json' '!app/server/lib/remotion-props.schema.json'",
     "test": "vitest run",
     "test:packages": "vitest run packages",
     "openapi:gen": "tsx scripts/gen-openapi.ts && npx -y openapi-typescript@7.13.0 app/web/src/api/openapi.json -o packages/sdk/src/generated/schema.d.ts && tsx scripts/gen-sdk.ts",

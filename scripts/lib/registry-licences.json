@@ -1,5 +1,5 @@
 {
-  "$comment": "Licences of HyperFrames registry items looks may vendor (docs/spikes.md K4, read at v0.8.222). look:vendor refuses any item not listed here. `exclude` lists installed files that aren't vendored (bundled third-party copies; fonts aren't look files in v1).",
+  "$comment": "Licences of HyperFrames registry items looks may vendor (read at v0.8.222). look:vendor refuses any item not listed here. `exclude` lists installed files that aren't vendored (bundled third-party copies; fonts aren't look files in v1).",
   "items": {
     "agent-cursor": { "license": "Apache-2.0", "author": "HyperFrames contributors (HeyGen): Miguel Ángel" },
     "bar-chart-race": { "license": "Apache-2.0", "author": "HyperFrames contributors (HeyGen): Miguel Ángel" },

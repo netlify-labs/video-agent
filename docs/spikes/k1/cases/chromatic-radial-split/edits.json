@@ -1,4 +1,0 @@
-[
-  { "op": "text", "id": "split-after", "text": "In one place" },
-  { "op": "retime", "beat": "split", "duration": 5 }
-]

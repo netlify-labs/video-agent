@@ -1,4 +1,0 @@
-[
-  { "op": "text", "id": "footage-date", "text": "NOV 05 2026" },
-  { "op": "retime", "beat": "footage", "duration": 6 }
-]

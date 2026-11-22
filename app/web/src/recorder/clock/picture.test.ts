@@ -295,7 +295,7 @@ describe('PictureClock', () => {
     expect(c.fitFor().segments[0]?.n).toBeGreaterThanOrEqual(119)
   })
 
-  describe('Firefox lookahead anchors (docs/spikes.md S10, Firefox)', () => {
+  describe('Firefox lookahead anchors', () => {
     it('are dropped: the take runs on, one clean segment, nothing in the fit is a lookahead', () => {
       const r = rig()
       // Before the fix: anchors 60-62 breached a line the warm-up lookaheads had skewed, and the take stopped

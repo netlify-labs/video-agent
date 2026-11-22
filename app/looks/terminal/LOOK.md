@@ -74,7 +74,7 @@ A developer's screen, cleaned up: commands typed live, code that changes line by
   them: `tl.fromTo(chars, { opacity: 0 }, { opacity: 1, duration: 0.01, stagger: 0.035 }, start)`. Move the cursor
   with the last character, and blink it with `tl.fromTo(cursor, { opacity: 1 }, { opacity: 0, duration: 0.01,
   repeat: n, yoyo: true, repeatDelay: 0.49 }, at)` (a whole number of blinks, so it seeks the same every time).
-- Code diff (from the HyperFrames `code-diff` block, rewritten for the contract; docs/spikes.md K1): each code line
+- Code diff (from the HyperFrames `code-diff` block, rewritten for the contract): each code line
   is one `.diff-line` with a sign span and one `data-va-text` holding token spans (`.t-kw`, `.t-fn`, `.t-str`, …,
   coloured by roles through classes), so an edit keeps the token colours. Removed lines (`.diff-del`) collapse
   height 46 → 0, then added lines (`.diff-add`) open 0 → 46.

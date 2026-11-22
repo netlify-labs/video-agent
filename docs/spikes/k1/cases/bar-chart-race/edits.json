@@ -1,5 +1,0 @@
-[
-  { "op": "text", "id": "race-name-2", "text": "Design" },
-  { "op": "text", "id": "race-title", "text": "Seats by team" },
-  { "op": "retime", "beat": "race", "duration": 10 }
-]

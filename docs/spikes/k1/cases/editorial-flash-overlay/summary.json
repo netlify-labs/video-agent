@@ -1,8 +1,0 @@
-{
-  "title": "K1 editorial-flash-overlay",
-  "summary": "editorial-flash-overlay inlined into a contract beat.",
-  "captions": [
-    { "start": 0, "end": 3, "text": "Meet Orbit", "beat": "intro", "textId": "intro-title", "beatStart": 0, "beatEnd": 3 },
-    { "start": 3.63, "end": 7, "text": "Everything in one place", "beat": "reveal", "textId": "reveal-headline", "beatStart": 0.63, "beatEnd": 4 }
-  ]
-}

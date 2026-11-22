@@ -138,8 +138,8 @@ doesn't stretch them). Put them into a scene by hand instead:
 6. Block variables become `data-*` attributes; upstream colours become the brand's roles; drop the block's CDN GSAP
    and Google Fonts links.
 
-Write these steps for each block in LOOK.md's Building blocks section. `docs/spikes.md` (K1) has worked examples for
-the registry blocks the built-in looks use, and `docs/spikes/k1/cases/` their code.
+Write these steps for each block in LOOK.md's Building blocks section. The built-in looks are worked examples:
+each one's LOOK.md and `example/index.html` show the registry blocks it uses, rewritten this way.
 
 ## Adding a look
 

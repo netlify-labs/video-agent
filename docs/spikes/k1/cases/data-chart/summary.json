@@ -1,8 +1,0 @@
-{
-  "title": "K1 data-chart",
-  "summary": "data-chart inlined into a contract beat.",
-  "captions": [
-    { "start": 0, "end": 3, "text": "Meet Orbit", "beat": "intro", "textId": "intro-title", "beatStart": 0, "beatEnd": 3 },
-    { "start": 3, "end": 13, "text": "Monthly revenue vs. conversion", "beat": "chart", "textId": "chart-title", "beatStart": 0, "beatEnd": 10 }
-  ]
-}

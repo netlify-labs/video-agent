@@ -1,8 +1,0 @@
-{
-  "title": "K1 bar-chart-race",
-  "summary": "bar-chart-race inlined into a contract beat.",
-  "captions": [
-    { "start": 0, "end": 3, "text": "Meet Orbit", "beat": "intro", "textId": "intro-title", "beatStart": 0, "beatEnd": 3 },
-    { "start": 3, "end": 15, "text": "Orbit workspaces by team", "beat": "race", "textId": "race-title", "beatStart": 0, "beatEnd": 12 }
-  ]
-}

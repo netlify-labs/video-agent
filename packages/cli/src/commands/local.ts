@@ -22,9 +22,8 @@ import { arg, durationMs } from './shared.js'
 /** Agents this version ships (docs/spikes.md C2: each must pass the sandbox spike). Fixture is hidden, for CI. */
 const SHIPPED: Record<string, Adapter> = { claude }
 const NOT_YET: Record<string, string> = {
-  codex: "Codex isn't supported in this version yet: its sandbox spike hasn't passed (docs/spikes.md C2).",
-  gemini:
-    "Gemini CLI isn't supported in this version yet: its sandbox spike hasn't passed (docs/spikes.md C2).",
+  codex: "Codex isn't supported in this version yet: its sandbox check hasn't passed.",
+  gemini: "Gemini CLI isn't supported in this version yet: its sandbox check hasn't passed.",
 }
 
 const installed = (cmd: string) =>

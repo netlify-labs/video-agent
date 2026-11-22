@@ -1,11 +1,11 @@
 #!/bin/sh
-# Builds the synthetic narration fixtures in test/fixtures/narration/ (S13). Every voice is macOS `say` (no real
+# Builds the synthetic narration fixtures in this folder. Every voice is macOS `say` (no real
 # person's voice); every degradation is ffmpeg with fixed noise seeds. Output: 24 kHz mono PCM16 WAV, bitexact.
 # `say` timing varies slightly between runs, so a rebuild isn't byte-identical; the committed files are the reference.
-# Usage: sh docs/spikes/s13/make-fixtures.sh [ffmpeg]   (macOS only: needs `say`)
+# Usage: sh app/test/fixtures/narration/make-fixtures.sh [ffmpeg]   (macOS only: needs `say`)
 set -eu
 FF=${1:-ffmpeg}
-OUT=$(cd "$(dirname "$0")/../../.." && pwd)/test/fixtures/narration
+OUT=$(cd "$(dirname "$0")" && pwd)
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$OUT"

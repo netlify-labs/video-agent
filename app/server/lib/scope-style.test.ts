@@ -35,7 +35,7 @@ describe('scoped beat styles', () => {
     expect(validate(fixture)).toEqual([])
   })
 
-  it('the B1 render fixture keeps contract v1 and passes the check (docs/spikes/b1/b1.ts renders it)', () => {
+  it('the B1 render fixture keeps contract v1 and passes the check', () => {
     const b1 = readFileSync(new URL('../../test/fixtures/scope/at-scope/index.html', import.meta.url), 'utf8')
     expect(validate(b1)).toEqual([])
     expect(scopedStyleProblems(beatIn(b1, 'two'), 'two')).toEqual([])

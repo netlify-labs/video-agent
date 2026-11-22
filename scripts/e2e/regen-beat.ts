@@ -473,7 +473,7 @@ try {
     log('compare', {
       default: one ? { model: one.model, credits: one.credits, sec: one.sec } : 'step 1 not run here',
       cheaper: seven ? { model: seven.model, credits: seven.credits, sec: seven.sec } : null,
-      note: 'Score both results by hand (docs/spikes.md) before writing advice in the README.',
+      note: 'Score both results by hand before writing advice in the README.',
     })
     ok('step 7')
   }

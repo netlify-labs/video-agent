@@ -9,7 +9,6 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { NARRATION_SRC } from '../server/lib/contract.js'
 import { SAMPLE_RATE as S, type NarrationOp } from '../server/lib/timeline.js'
 import { wav } from '../server/lib/voice.js'
-import { FIXTURE_HYPERFRAMES } from '../../docs/spikes/s11/metrics.js'
 import { narrationPaths, type NarrationInputs } from '../../scripts/lib/narration-inputs.js'
 import { alive, runTree } from '../../scripts/lib/proc-tree.js'
 import { which } from '../../scripts/lib/run-tools.js'
@@ -23,6 +22,17 @@ import {
   PARAKEET_OFFSET_S,
 } from '../../scripts/lib/stt/parakeet.js'
 import type { TreeOptions, TreeResult } from '../../scripts/lib/proc-tree.js'
+
+/** What `hyperframes transcribe --json` leaves in <dir>/transcript.json. */
+const FIXTURE_HYPERFRAMES = [
+  { id: 'w0', text: 'The', start: 0.52, end: 0.68 },
+  { id: 'w1', text: 'river', start: 0.68, end: 0.98 },
+  { id: 'w2', text: 'bends', start: 1.02, end: 1.31 },
+  { id: 'w3', text: 'north.', start: 1.31, end: 1.66 },
+  { id: 'w4', text: 'Lantern', start: 2.44, end: 2.88 },
+  { id: 'w5', text: 'glow', start: 2.9, end: 3.18 },
+  { id: 'w6', text: 'softly.', start: 3.2, end: 3.64 },
+]
 
 const dirs: string[] = []
 const tmp = () => {
@@ -82,7 +92,7 @@ describe('runTree (the outer deadline)', () => {
 })
 
 describe('Parakeet', () => {
-  it('parses the hyperframes transcript (S11 fixture) and drops entries without text or times', () => {
+  it('parses the hyperframes transcript and drops entries without text or times', () => {
     const words = parseHyperframesTranscript([
       ...FIXTURE_HYPERFRAMES,
       { id: 'x', text: ' ', start: 4, end: 5 },

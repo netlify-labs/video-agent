@@ -1,8 +1,0 @@
-{
-  "title": "K1 lt-clean-bar",
-  "summary": "lt-clean-bar inlined into a contract beat.",
-  "captions": [
-    { "start": 0, "end": 3, "text": "Meet Orbit", "beat": "intro", "textId": "intro-title", "beatStart": 0, "beatEnd": 3 },
-    { "start": 3.34, "end": 7.3, "text": "Dana Reyes", "beat": "speaker", "textId": "speaker-name", "beatStart": 0.34, "beatEnd": 4.3 }
-  ]
-}
