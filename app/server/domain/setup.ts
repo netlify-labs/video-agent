@@ -120,7 +120,7 @@ export async function setupChecks(
     detail: deps.config.runSecret
       ? 'Set: runs derive their callback token from it, so no token is in a prompt.'
       : 'Not set: each run gets its own token through its run manifest instead. Videos work as usual.',
-    fix: 'Run npm run setup again, or set VIDEO_AGENT_RUN_SECRET (at least 32 random characters; secret; scopes builds and functions) and redeploy.',
+    fix: 'Set VIDEO_AGENT_RUN_SECRET to at least 32 random characters (mark it secret; scopes: builds and functions) under Project configuration > Environment variables, then redeploy. From a clone, npm run setup sets it for you.',
   })
 
   // Optional: planning with questions needs AI Gateway; without it Plan it first is hidden and nothing else changes.

@@ -63,6 +63,7 @@
 
   /* Hero */
   .hero { padding: 64px 0 8px; display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 48px; align-items: center; }
+  .hero.solo { grid-template-columns: minmax(0, 1fr); max-width: 760px; }
   .lede { font-size: 19px; color: var(--muted); margin: 0 0 28px; }
   .actions { display: flex; flex-wrap: wrap; gap: 10px; }
   .btn { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 10px 20px; border-radius: 999px; font-weight: 600; text-decoration: none; font-size: 15px; border: 0; cursor: pointer; }
@@ -262,7 +263,7 @@
 
 <header class="hero" id="overview">
   <div>
-    <p class="kicker">Netlify GTM Engineering</p>
+    <p class="kicker">Built on Netlify Agent Runners</p>
     <h1>How we built Video Agent</h1>
     <p class="lede">Type what a video should say and get a branded MP4 a few minutes later. An AI agent writes the
     video as HTML, renders it with HyperFrames inside a Netlify Agent Runner, and hands it back. Anyone who signs in can
@@ -426,26 +427,27 @@
       <h2>Five ways in, one set of permissions</h2>
       <div class="grid4" style="grid-template-columns:1fr 1fr">
         <div class="card featured" style="grid-column:1 / -1"><h3>Claude connector</h3><p>The quickest way: in Claude,
-        open <b>Settings → Connectors → Add custom connector</b>, paste the MCP URL, then Connect and sign in with
-        Netlify. Now ask Claude for a video, in chat. (If your organization has already added it, just press
+        open <b>Settings → Connectors → Add custom connector</b>, paste the MCP URL, then Connect and sign in.
+        Now ask Claude for a video, in chat. (If your organization has already added it, just press
         Connect.)</p></div>
-        <div class="card"><h3>Web app</h3><p>Sign in with Netlify. Create, watch, edit, comment, approve and
+        <div class="card"><h3>Web app</h3><p>Sign in. Create, watch, edit, comment, approve and
         publish.</p></div>
         <div class="card"><h3>API</h3><p>API keys and signed webhooks for scripts and CI.</p></div>
-        <div class="card"><h3>Other AI tools</h3><p>Claude Code, Cursor or any MCP client: sign in with Netlify, or use an
+        <div class="card"><h3>Other AI tools</h3><p>Claude Code, Cursor or any MCP client: sign in, or use an
         API key.</p></div>
         <div class="card"><h3>Agent skill</h3><p>Recipes for coding agents, like a pull request into a demo
         video.</p></div>
       </div>
     </div>
     <div class="reveal">
-      <p class="muted" style="margin-top:6px">The MCP URL, for the Claude connector or any AI tool. Clients with OAuth only
-      need the URL: sign in with Netlify and approve. Your first sign-in creates your account.</p>
-      <pre><code>https://netlify-video-agent.netlify.app/mcp</code></pre>
+      <p class="muted" style="margin-top:6px">The MCP URL, for the Claude connector or any AI tool. Where this deployment has
+      OAuth on, a client only needs the URL: sign in and approve. Otherwise create an API key on the app's
+      <a href="/keys">API keys page</a>.</p>
+      <pre><code data-site-text>https://&lt;your-site&gt;/mcp</code></pre>
       <p class="muted">In Claude Code:</p>
-      <pre><code>claude mcp add --transport http video-agent https://netlify-video-agent.netlify.app/mcp</code></pre>
+      <pre><code data-site-text>claude mcp add --transport http video-agent https://&lt;your-site&gt;/mcp</code></pre>
       <p class="muted">Install the skill:</p>
-      <pre><code>curl -fsSL https://netlify-video-agent.netlify.app/skills/create-video.zip -o /tmp/create-video.zip \
+      <pre><code data-site-text>curl -fsSL https://&lt;your-site&gt;/skills/create-video.zip -o /tmp/create-video.zip \
   &amp;&amp; unzip -o /tmp/create-video.zip -d ~/.claude/skills/</code></pre>
       <p class="muted">Or press <b>Copy prompt for your agent</b> (bottom right) and paste it into your AI tool: it walks you
       through connecting, whichever tool you use. The app's <a href="/docs/mcp">MCP page</a> and <a href="/docs/skills">Agent skills page</a> cover
@@ -572,7 +574,7 @@
   <div class="cta reveal">
     <div>
       <h2>Make your first video</h2>
-      <p>Sign in with Netlify, describe a video, and choose "Plan it first" the first time.</p>
+      <p>Sign in, describe a video, and choose "Plan it first" the first time.</p>
     </div>
     <div class="actions">
       <a class="btn primary" href="/new">Make a video</a>
@@ -594,7 +596,7 @@
   <span>Copy prompt for your agent</span>
 </button>
 
-<footer>Built by Netlify GTM Engineering with Claude Code, on Netlify Agent Runners and HyperFrames.</footer>
+<footer>Built with Claude Code, on Netlify Agent Runners and HyperFrames.</footer>
 </div>
 </div>
 
@@ -635,7 +637,7 @@
   const $$ = (s, r = document) => [...r.querySelectorAll(s)]
   const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x))
   const ease = (x) => 1 - Math.pow(1 - clamp(x), 3)
-  // Interactions a click listener can't see go to the host page's tracking when it has one (a no-op here).
+  // Interactions a click listener can't see go to the host page's tracking, when a copy served elsewhere has one.
   const report = (label) => { try { window.artifactTrack?.(label) } catch {} }
   const PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg>'
   const PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>'
@@ -695,13 +697,39 @@
   }))
   markCurrent((location.hash && document.getElementById(location.hash.slice(1)) ? location.hash.slice(1) : 'overview'))
 
-  // The hero video: shown once its public MP4 is set on the panel.
+  // Every video reports when it's played, reaches halfway, and finishes.
+  const watch = (v) => {
+    let half = false
+    v.addEventListener('play', () => report(`Played ${v.dataset.name}`))
+    v.addEventListener('timeupdate', () => {
+      if (!half && v.duration && v.currentTime / v.duration >= 0.5) { half = true; report(`Watched half of ${v.dataset.name}`) }
+    })
+    v.addEventListener('ended', () => report(`Finished ${v.dataset.name}`))
+  }
+  $$('video[data-name]').forEach(watch)
+
+  // The videos on this page are share links on the deployment that serves it. A deployment that doesn't have one (a
+  // fresh copy of the template) leaves it out: the hero becomes one column, and Examples goes with its last video.
+  // The poster is the test, loaded as an image, so it also works for a copy of this page served from another site.
+  const has = (url) => new Promise((done) => {
+    if (!url) return done(false)
+    const img = new Image()
+    img.onload = () => done(true)
+    img.onerror = () => done(false)
+    img.src = url
+  })
+  const drop = (el) => el?.parentNode?.removeChild(el)
   const hero = $('#hero-video')
-  if (hero.dataset.src) {
+  has(hero.dataset.src && hero.dataset.poster).then((ok) => {
+    if (!ok) {
+      drop(hero.closest('figure'))
+      $('#overview').classList.add('solo')
+      return
+    }
     hero.innerHTML = ''
     const v = document.createElement('video')
     Object.assign(v, { src: hero.dataset.src, controls: true, playsInline: true, preload: 'metadata' })
-    if (hero.dataset.poster) v.poster = hero.dataset.poster
+    v.poster = hero.dataset.poster
     if (hero.dataset.captions) {
       const tr = document.createElement('track')
       Object.assign(tr, { kind: 'captions', srclang: 'en', label: 'English', src: hero.dataset.captions })
@@ -709,15 +737,17 @@
     }
     v.dataset.name = hero.dataset.name
     hero.append(v)
-  }
-  // Every video reports when it's played, reaches halfway, and finishes.
-  $$('video[data-name]').forEach((v) => {
-    let half = false
-    v.addEventListener('play', () => report(`Played ${v.dataset.name}`))
-    v.addEventListener('timeupdate', () => {
-      if (!half && v.duration && v.currentTime / v.duration >= 0.5) { half = true; report(`Watched half of ${v.dataset.name}`) }
-    })
-    v.addEventListener('ended', () => report(`Finished ${v.dataset.name}`))
+    watch(v)
+  })
+  Promise.all($$('.example').map(async (fig) => {
+    const ok = await has($('video', fig).getAttribute('poster'))
+    if (!ok) drop(fig)
+    return ok
+  })).then((kept) => {
+    if (kept.some(Boolean)) return
+    drop($('#examples'))
+    drop($('.grid3.examples'))
+    drop($('.toc a[href="#examples"]'))
   })
 
   // A video is a page plus time: every scene is a pure function of t, like a HyperFrames seek.
@@ -864,10 +894,12 @@
   // A prompt to paste into Claude Code or any agent: connect, install the skill, then make a video with you. The app's
   // address comes from data-site when this page is served somewhere else (a copy published elsewhere).
   const SITE = document.documentElement.dataset.site || location.origin
-  const PROMPT = `Set me up to make videos with Netlify Video Agent (${SITE}).
+  // The commands under "How to use it" name this deployment (the source says <your-site>).
+  $$('[data-site-text]').forEach((el) => { el.textContent = el.textContent.replaceAll('https://<your-site>', SITE) })
+  const PROMPT = `Set me up to make videos with Video Agent (${SITE}).
 
-1. Connect to its MCP server: ${SITE}/mcp (Streamable HTTP). Signing in with Netlify creates my account the first time.
-   - Claude (web or desktop): you can't add connectors yourself, so tell me to open Settings → Connectors → Add custom connector, paste ${SITE}/mcp, then press Connect and sign in with Netlify. If my organization already added it, I only need to press Connect.
+1. Connect to its MCP server: ${SITE}/mcp (Streamable HTTP). If it offers OAuth, signing in creates my account the first time; if not, use an API key (below).
+   - Claude (web or desktop): you can't add connectors yourself, so tell me to open Settings → Connectors → Add custom connector, paste ${SITE}/mcp, then press Connect and sign in. If my organization already added it, I only need to press Connect.
    - Claude Code: run claude mcp add --transport http video-agent ${SITE}/mcp, then /mcp to sign in.
    - Cursor and other MCP clients: add ${SITE}/mcp as a remote (HTTP) MCP server and sign in when asked. Clients that only run local servers: npx -y mcp-remote ${SITE}/mcp
    - Without OAuth: I can create an API key at ${SITE}/keys; send it as Authorization: Bearer <key>.

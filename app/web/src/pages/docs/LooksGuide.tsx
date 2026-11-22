@@ -10,7 +10,7 @@ import '../../components/look-picker.css'
 import { aspectNote, type Look } from '../../lib/looks'
 import { DocSections } from './DocsLayout'
 
-const REPO_LOOKS = 'https://github.com/netlify-labs/video-agent/blob/main/looks/README.md'
+const REPO_LOOKS = 'https://github.com/netlify-labs/video-agent/blob/main/app/looks/README.md'
 
 /** A look's poster; its clip plays while hovered or focused. */
 function LookFigure({ look }: { look: Look }) {
