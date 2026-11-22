@@ -409,6 +409,7 @@ async function startRequest(
     targetDurationSec: version.targetDurationSec,
     ...runUrls,
     upload: { mode: 'blobs' },
+    deadlineMin: deps.config.authoringDeadlineMin,
     revision: revision && { parentN: revision.parentN },
     remix: version.remix ?? null,
     context: version.context ?? null,

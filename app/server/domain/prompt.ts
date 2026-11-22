@@ -20,7 +20,7 @@ import {
 } from './engine-prompt.js'
 import type { EngineId } from './engines.js'
 
-export const PROMPT_TEMPLATE_VERSION = 26
+export const PROMPT_TEMPLATE_VERSION = 27
 
 /**
  * Where render-job puts a run's outputs: Blobs (the service's runs), a signed URL, or local, where a laptop run keeps
@@ -88,6 +88,29 @@ export interface PromptInput {
   recording?: RecordingPrompt | null
   /** The version's engine; missing is HyperFrames, and the prompt is then exactly as before engines existed. */
   engine?: EngineId
+  /**
+   * Minutes until the service stops the run (AUTHORING_DEADLINE_MIN). Set, the prompt has a Time section; a run
+   * nothing stops (the CLI's local runs) leaves it out.
+   */
+  deadlineMin?: number | null
+}
+
+/**
+ * The Time section. Two runs were stopped at the deadline in November 2026 with the video written but not rendered:
+ * nothing had told them there was a deadline, so they polished sound and looked at frames with minutes left.
+ */
+function timeLines(deadlineMin: number): string[] {
+  const draftBy = Math.round(deadlineMin * 0.45)
+  const renderBy = Math.round(deadlineMin * 0.68)
+  return [
+    `Time: this run is stopped ${String(deadlineMin)} minutes after it starts, finished or not, and a stopped run delivers nothing. A plain video that is rendered beats a polished one that isn't. Plan for that before you write anything:`,
+    '- Keep the clock. Run this now: date +%s > /tmp/va-run-start. Minutes used so far: echo $(( ($(date +%s) - $(cat /tmp/va-run-start)) / 60 )). Check it at each milestone.',
+    `- By minute ${String(draftBy)}: every scene is in the composition, in a simple form. If the request is bigger than the time, build each scene in the simplest form that still shows what it asks for, and say in your summary what you simplified.`,
+    `- By minute ${String(renderBy)}: start step 5 (render-job.ts), with the checks passing. Rendering takes several minutes, more for a long video. Past minute ${String(renderBy)}, fix only what stops the render.`,
+    '- Never work on one problem for long. Try a fix twice at most; then simplify or remove that element and say so in your summary.',
+    '- Look at frames once, in one snapshot call for the whole video, and fix only what is plainly wrong. Measure sound once, on the whole mix; never analyse sound-effect files one by one. After two searches without a fitting track or effect, go without it and say so.',
+    '',
+  ]
 }
 
 export interface RecordingPrompt {
@@ -412,6 +435,7 @@ export function buildPrompt(p: PromptInput): string {
     ...(locked ? lockedNarrationLines('revision') : []),
     'Never ask questions or request authorization. If something is unclear, make a reasonable choice and say so in your summary.',
     '',
+    ...(p.deadlineMin ? timeLines(p.deadlineMin) : []),
     ...(other
       ? remotionAuthorSteps({ width, height })
       : [

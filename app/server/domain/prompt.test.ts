@@ -26,6 +26,17 @@ const base = {
 }
 
 describe('buildPrompt', () => {
+  it('with a deadline: a Time section before the steps, with the draft and render marks; none without', () => {
+    const p = buildPrompt({ ...base, deadlineMin: 22 })
+    expect(p).toContain('Time: this run is stopped 22 minutes after it starts')
+    expect(p).toContain('By minute 10: every scene is in the composition')
+    expect(p).toContain('By minute 15: start step 5 (render-job.ts)')
+    expect(p).toContain('date +%s > /tmp/va-run-start')
+    expect(p.indexOf('Time: this run')).toBeLessThan(p.indexOf('1. Read the hyperframes skill'))
+    expect(buildPrompt(base)).not.toContain('Time: this run')
+    expect(buildPrompt({ ...base, deadlineMin: null })).toBe(buildPrompt(base))
+  })
+
   it('fences the brief, sets the format and nudges Auto length', () => {
     const p = buildPrompt(base)
     expect(p).toContain('<<<\nA launch video\n>>>')
