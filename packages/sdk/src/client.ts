@@ -1,4 +1,4 @@
-// The VideoAgent client (cli-and-sdk plan §4.1, §4.2): the generated resource methods, `raw` for every route, and the
+// The VideoAgent client: the generated resource methods, `raw` for every route, and the
 // cached server config that feature checks read.
 import createClient, { type Client } from 'openapi-fetch'
 import { VideoAgentError } from './errors.js'

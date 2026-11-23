@@ -1,5 +1,5 @@
 {
-  "cli": "0.0.0",
+  "cli": "1.0.0",
   "serverFeatures": null,
   "commands": [
     {

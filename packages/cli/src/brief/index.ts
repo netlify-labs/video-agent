@@ -1,5 +1,5 @@
 // The brief builder: every request the GitHub Action (and `video-agent brief …`) sends is written here, so CI systems
-// write the same briefs (docs/plans/2026-11-04-github-action.md §3.6). Pure functions over plain inputs: the caller
+// write the same briefs. Pure functions over plain inputs: the caller
 // fetches from GitHub and passes the data in.
 export {
   dedupeCommits,

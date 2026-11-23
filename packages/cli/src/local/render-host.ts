@@ -1,4 +1,4 @@
-// The CLI's half of the render broker (scripts/lib/render-broker.ts; docs/spikes.md C2): render-job, inside the agent's
+// The CLI's half of the render broker (scripts/lib/render-broker.ts): render-job, inside the agent's
 // sandbox, asks for the render with .render/<attempt>/render-request.json, and this renders video.mp4 with the
 // workspace's pinned hyperframes, outside the sandbox, so the agent's shell never needs the loopback. The page it renders
 // goes through the render guard (render-guard.ts): no requests to this machine or its network but the render's own.

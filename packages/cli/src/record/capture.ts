@@ -1,4 +1,4 @@
-// `video-agent record`'s capture (screen-recording plan §4.6; va-rsk5.5.1): Chromium at the viewport with spike D2's
+// `video-agent record`'s capture: Chromium at the viewport with the
 // recipe for real 2x pixels (--force-device-scale-factor, viewport null, a CDP metrics override), the CDP screencast
 // (JPEG q90 at viewport x dpr, every frame acked, timestamps kept), r to start and s to stop in the terminal (or a
 // fixed --duration, or a --script that drives the page), then assembly (assemble.ts) and the pointer trace

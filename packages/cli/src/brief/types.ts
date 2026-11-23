@@ -16,7 +16,7 @@ export interface Brief {
   warnings: string[]
   /**
    * In context mode (servers that list `context`): the GitHub text, sent beside a short prompt and given to the run in
-   * its own fence as data (github-action plan §6.1).
+   * its own fence as data.
    */
   context?: ContextField
 }

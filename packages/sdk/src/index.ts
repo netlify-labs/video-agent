@@ -1,5 +1,4 @@
-// netlify-video-agent-sdk: a typed client for a Video Agent deployment's REST API
-// (docs/plans/2026-11-04-cli-and-sdk.md §4).
+// netlify-video-agent-sdk: a typed client for a Video Agent deployment's REST API.
 import type { components } from './generated/schema.js'
 export { VideoAgent, type ServerConfig, type VideoAgentOptions } from './client.js'
 export { VideoAgentError, isVideoAgentError } from './errors.js'

@@ -1,7 +1,7 @@
 {
   "name": "netlify-video-agent",
   "description": "The video-agent command: make videos with a Video Agent deployment, or on your own machine with your own coding agent.",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "license": "MIT",
   "homepage": "https://github.com/netlify-labs/video-agent#readme",

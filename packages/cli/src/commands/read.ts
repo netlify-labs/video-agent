@@ -1,4 +1,4 @@
-// get, list, wait, download, open (cli-and-sdk plan §6.2; bead va-p1th.4.7). Every <video> is an id, a web address or
+// get, list, wait, download, open. Every <video> is an id, a web address or
 // a share link, resolved by the SDK.
 import { mkdir, stat } from 'node:fs/promises'
 import { join } from 'node:path'

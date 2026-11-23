@@ -1,4 +1,4 @@
-// create, revise, remix and redo (cli-and-sdk plan §6.2; beads va-p1th.4.6, va-8cy4.5.2). Flags map to the API's own fields
+// create, revise, remix and redo. Flags map to the API's own fields
 // (CreateVideoSchema, ReviseSchema, RemixSchema). --media takes ids or files (uploaded first, deduped), --wait
 // follows the run with a progress line on stderr, --out downloads the video, poster and captions.
 import { readFile, stat } from 'node:fs/promises'

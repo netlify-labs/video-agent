@@ -1,4 +1,4 @@
-// publish, unpublish, cancel, retry, comments list|add, verdict (cli-and-sdk plan §6.2; bead va-p1th.4.8). Each acts
+// publish, unpublish, cancel, retry, comments list|add, verdict. Each acts
 // on one version: --version, else the one a web or share link named, else the latest.
 import type { Publication } from '../../../sdk/src/index.js'
 import { UsageError } from '../exit.js'

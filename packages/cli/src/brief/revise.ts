@@ -1,6 +1,5 @@
 // Briefs for changing a video that already exists: a revision (`/video revise <change>`, or new commits with
-// `on-push: revise`), a remix of a house-format video (`base-video`), and a one-off dispatch prompt
-// (docs/plans/2026-11-04-github-action.md §3.6, §3.10).
+// `on-push: revise`), a remix of a house-format video (`base-video`), and a one-off dispatch prompt.
 import {
   dedupeCommits,
   excludedBecause,

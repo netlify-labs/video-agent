@@ -1,4 +1,4 @@
-// `local revise --scene` (regenerate-beat plan §4.13; bead va-8cy4.5.14): the same rules, prompt and checks as the
+// `local revise --scene`: the same rules, prompt and checks as the
 // hosted path. The scenes come from the parent's source.tar.gz; scopeRules refuses what the server refuses; the run's
 // manifest carries the scope, so prepare-run freezes the parent and render-job renders only the splice, as on the
 // runner; and before copying out, the result passes finalize's check (the splice's bytes, and the MP4's length).

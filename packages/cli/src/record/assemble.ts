@@ -1,4 +1,4 @@
-// `video-agent record`'s assembly (screen-recording plan §4.6; va-rsk5.5.1): the screencast's JPEG frames, which come
+// `video-agent record`'s assembly: the screencast's JPEG frames, which come
 // only when the page changes, become a constant-frame-rate H.264 file with their real timings: the concat demuxer with
 // a duration per frame, then fps=N. The result is a normalized recording (§4.2): a keyframe every second, fast start,
 // at most 2560 px wide, even sides, no audio.

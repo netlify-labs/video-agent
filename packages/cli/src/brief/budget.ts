@@ -1,6 +1,6 @@
 // Length limits and trimming for briefs. The API takes at most 4,000 characters of prompt (CreateVideoSchema,
 // ReviseSchema, RemixSchema), so text from GitHub gets at most 3,000 and the fixed text, the user's own words and the
-// reference line get the rest (docs/plans/2026-11-04-github-action.md §3.6).
+// reference line get the rest.
 
 export const MAX_PROMPT = 4000
 export const MIN_CREATE_PROMPT = 10

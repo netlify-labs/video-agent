@@ -1,4 +1,4 @@
-// The Gemini CLI adapter (bead va-p1th.5.10; settings from spike C2, docs/spikes.md). Gemini loads the person's
+// The Gemini CLI adapter. Gemini loads the person's
 // ~/.gemini settings, MCP servers, extensions and GEMINI.md with no flag to skip them, so each run gets its own home
 // (GEMINI_CLI_HOME, in the cache, outside the workspace) holding only a minimal settings file and the person's OAuth
 // credentials (0600, removed after the run). On macOS, --sandbox re-runs Gemini under Seatbelt with our profile: reads

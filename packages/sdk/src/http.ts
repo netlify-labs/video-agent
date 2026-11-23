@@ -1,4 +1,4 @@
-// One HTTP exchange with retries (cli-and-sdk plan §4.2): auth, User-Agent, no redirect following, jittered
+// One HTTP exchange with retries: auth, User-Agent, no redirect following, jittered
 // backoff on network errors, 429 (Retry-After, capped at 60 s) and 5xx, for GETs and requests with an
 // Idempotency-Key only. The body is sent as the same bytes on every attempt, because the server replays an
 // idempotent request only when the body's hash matches (app/server/domain/videos.ts).

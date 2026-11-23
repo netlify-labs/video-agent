@@ -1,4 +1,4 @@
-// The render guard (owner decision 2026-11-06, after docs/spikes.md C2 finding 4): local mode renders the agent-written
+// The render guard: local mode renders the agent-written
 // composition with the host's Chrome, outside the agent's sandbox, so the rendered page must not reach the person's own
 // machine or network. Chrome runs through a proxy in the CLI (HYPERFRAMES_BROWSER_PATH points at a wrapper that adds
 // --proxy-server and --proxy-bypass-list=<-loopback>, so even loopback requests come here). The proxy resolves each

@@ -1,4 +1,4 @@
-video-agent 0.0.0: make videos with a Video Agent deployment, or on this machine with your own coding agent.
+video-agent 1.0.0: make videos with a Video Agent deployment, or on this machine with your own coding agent.
 
 Commands:
   help             List the commands, or explain one.

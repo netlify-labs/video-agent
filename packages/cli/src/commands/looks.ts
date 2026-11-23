@@ -1,4 +1,4 @@
-// looks and restyle (looks plan §4.13; bead va-nifa.5.2): the Looks this deployment offers, and a revision in another
+// looks and restyle: the Looks this deployment offers, and a revision in another
 // Look. --look on create, revise and remix lives with them in make.ts; `none` there means no look.
 import { CliError, EXIT } from '../exit.js'
 import type { Handler } from '../router.js'

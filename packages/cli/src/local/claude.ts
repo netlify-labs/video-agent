@@ -1,4 +1,4 @@
-// The Claude Code adapter (bead va-p1th.5.8; settings from spike C2, docs/spikes.md). Claude Code's sandbox wraps Bash;
+// The Claude Code adapter. Claude Code's sandbox wraps Bash;
 // Read, Write, Edit, Glob and Grep run in-process under permission rules, so the deny-read folders are denied both
 // ways. --setting-sources "" and --strict-mcp-config keep the person's own settings, hooks, MCP servers and plugins out.
 import { join } from 'node:path'
@@ -12,7 +12,7 @@ export function claudeSettings(home?: string) {
       enabled: true,
       autoAllowBashIfSandboxed: true,
       allowUnsandboxedCommands: false,
-      // No allowLocalBinding: on macOS it also opens the person's own local services (C2). The render, which needs
+      // No allowLocalBinding: on macOS it also opens the person's own local services. The render, which needs
       // the loopback, happens outside the sandbox through the render broker (VA_RENDER_BROKER).
       network: { allowedDomains: [...NETWORK_ALLOW] },
     },

@@ -1,4 +1,4 @@
-// The router (cli-and-sdk plan §6.1): words → the catalog entry → parseArgs with its flags and the global ones →
+// The router: words → the catalog entry → parseArgs with its flags and the global ones →
 // its handler. No framework. --json prints one JSON object on stdout and nothing else there; progress and prompts go
 // to stderr. Errors map to the exit codes in exit.ts.
 import { parseArgs } from 'node:util'

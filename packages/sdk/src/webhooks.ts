@@ -1,4 +1,4 @@
-// Verifying the webhooks a deployment sends (cli-and-sdk plan §4.2 Webhooks). The signature header is
+// Verifying the webhooks a deployment sends. The signature header is
 // t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>"> (app/server/lib/crypto.ts webhookSignature). WebCrypto only, so
 // it runs in Node, Deno, Bun, Workers and Netlify Edge Functions. Pass the raw body string, exactly as received.
 import { VideoAgentError } from './errors.js'

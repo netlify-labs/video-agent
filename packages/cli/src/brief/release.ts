@@ -1,5 +1,5 @@
 // Changelog-video briefs: from a release's notes (the skill's changelog recipe), and from a list of merged PRs for
-// `video-agent brief changelog --since` (docs/plans/2026-11-04-github-action.md §3.6, §7.2).
+// `video-agent brief changelog --since`.
 import {
   CONTEXT_BUDGET,
   GITHUB_BUDGET,

@@ -1,4 +1,4 @@
-// A demo from the CLI (screen-recording plan §6.3; va-rsk5.5.3): a recording given as a library id, a recording folder
+// A demo from the CLI: a recording given as a library id, a recording folder
 // (video-agent record's: recording.mp4 and trace.json) or an MP4 with an optional trace beside it, uploaded with the
 // screen-recording role when it's a file; and the recording field of a create, from --trim, --crop, --privacy, --hide-text.
 import { existsSync, readFileSync, statSync } from 'node:fs'

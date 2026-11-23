@@ -1,4 +1,4 @@
-// login, logout, whoami and doctor's remote checks (cli-and-sdk plan §5.2, §6.3; bead va-p1th.4.2). login approves
+// login, logout, whoami and doctor's remote checks. login approves
 // this CLI in the browser (the device flow, 3.3a-c) or checks a key you paste; either way the key is never printed.
 import { hostname } from 'node:os'
 import { isVideoAgentError } from '../../../sdk/src/index.js'
@@ -204,7 +204,7 @@ interface Check {
   detail: string
 }
 
-/** The remote half of doctor; local mode adds its tools (va-p1th.5). */
+/** The remote half of doctor; local mode adds its tools. */
 const doctor: Handler = async (ctx) => {
   const checks: Check[] = []
   const major = Number(process.versions.node.split('.')[0])

@@ -1,4 +1,4 @@
-// media upload|list|get (bead va-p1th.4.9), api and keys list|revoke|create (bead va-p1th.4.10).
+// media upload|list|get, api and keys list|revoke|create.
 import { readFile } from 'node:fs/promises'
 import type { Media } from '../../../sdk/src/index.js'
 import { CliError, EXIT, UsageError } from '../exit.js'

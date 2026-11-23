@@ -1,4 +1,4 @@
-// media.upload and music.importAndWait (cli-and-sdk plan §4.1 media and music rows; §2 gotcha 16). Up to 4 MB is one
+// media.upload and music.importAndWait. Up to 4 MB is one
 // POST; bigger files use an upload session: 4 MB parts, each with its own sha256, sent again after a failure only when
 // the session doesn't list them as received, then complete. Either way the item must reach `ready` before a video can
 // use it, so upload waits for that (or throws media_rejected with the reason).

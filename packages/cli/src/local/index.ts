@@ -1,5 +1,5 @@
-// `video-agent local`: make a video on this machine with the person's own coding agent, inside its sandbox
-// (cli-and-sdk plan §7; beads va-p1th.5.5-5.14). One run: the pinned runtime and a fresh workspace, the agent with the
+// `video-agent local`: make a video on this machine with the person's own coding agent, inside its sandbox.
+// One run: the pinned runtime and a fresh workspace, the agent with the
 // run's prompt, the render on the host through the render broker, then the outputs checked against done.json and
 // copied to ./videos/<slug>/vN/ with a video.json. The workspace is deleted unless --keep.
 import { createHash, randomBytes } from 'node:crypto'
@@ -164,7 +164,7 @@ function copyOut(
       throw new Error(`The run's ${name} doesn't match what render-job recorded. Not copying it out.`)
   }
   if (!files['video.mp4']) throw new Error('The run made no video.mp4.')
-  // A scoped revision passes finalize's check before anything is copied out (bead va-8cy4.5.14).
+  // A scoped revision passes finalize's check before anything is copied out.
   const scope = o.input.revision?.scope
   if (scope && o.input.revision) {
     const refusal = scopeRefusal({

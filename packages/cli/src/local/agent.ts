@@ -1,4 +1,4 @@
-// Local mode's agent adapters (cli-and-sdk plan §6.5; beads va-p1th.5.7-5.10, settings from spike C2). The person's
+// Local mode's agent adapters. The person's
 // own coding agent makes the video inside its OS sandbox, which is the boundary (a tool allowlist isn't one):
 //   env       only an allowlist reaches the agent (no VIDEO_AGENT_KEY, cloud credentials or tokens)
 //   files     reads of the folders below are denied, through the shell and through the agent's own file tools
@@ -37,10 +37,10 @@ export const NETWORK_ALLOW = [
   '*.freesound.org',
   'upload.wikimedia.org',
   'commons.wikimedia.org',
-  // Google Fonts: the compiler fetches the bundled families' other weights (C2).
+  // Google Fonts: the compiler fetches the bundled families' other weights.
   'fonts.googleapis.com',
   'fonts.gstatic.com',
-  // Kokoro's model files (docs/spikes.md C3).
+  // Kokoro's model files.
   'github.com',
   'release-assets.githubusercontent.com',
   'objects.githubusercontent.com',

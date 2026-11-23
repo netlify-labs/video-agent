@@ -1,4 +1,4 @@
-// Help, from the catalog (cli-and-sdk plan §6.1). A feature-gated command shows only when the server lists its
+// Help, from the catalog. A feature-gated command shows only when the server lists its
 // feature; when there's no server (or it can't be reached) it shows marked "(needs a server with <feature>)".
 // Local commands are always listed; hosted-only ones say so.
 import { COMMANDS, GLOBAL_FLAGS, type CommandSpec, type FlagSpec } from './catalog.js'

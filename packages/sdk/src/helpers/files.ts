@@ -1,4 +1,4 @@
-// files.url and files.download (cli-and-sdk plan §4.1 files row, §4.2 Redirects). The poster and GIF come signed in
+// files.url and files.download. The poster and GIF come signed in
 // the version DTO, so they need no request. The video, captions, narration audio and transcript go through the file
 // route, which 302s to a signed storage URL valid for 5 to 10 minutes: the SDK reads Location without following it
 // with the key, then fetches the storage URL at once WITHOUT Authorization.

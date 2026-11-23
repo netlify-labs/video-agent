@@ -1,4 +1,4 @@
-// Cleans text from GitHub before it leaves the runner (docs/plans/2026-11-04-github-action.md §3.6): HTML comments
+// Cleans text from GitHub before it leaves the runner: HTML comments
 // (PR templates hide checklists there), images (they become library media instead), reference lines (so a PR
 // description can't carry another PR's reference and hijack its lookup) and anything that looks like a secret.
 // Counts what it removed by kind; never returns the matches.

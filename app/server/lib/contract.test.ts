@@ -41,7 +41,7 @@ describe('contract validator', () => {
     // data-va-label is read where the author gave one, and null elsewhere.
     expect(c.beats.map((b) => b.label)).toEqual(['Opening', null, null])
     expect(c.beats[0]?.texts).toEqual([
-      { id: 'intro-kicker', text: 'Netlify', label: null },
+      { id: 'intro-kicker', text: 'Acme', label: null },
       { id: 'intro-title', text: 'Org webhooks', label: 'Headline' },
     ])
     expect(c.colors).toMatchObject({ bg: '#0b0d10', accent: '#14b8a6' })

@@ -1,4 +1,4 @@
-// doctor's local-mode checks (bead va-p1th.5.13): what `video-agent local` needs on this machine. Informational: they
+// doctor's local-mode checks: what `video-agent local` needs on this machine. Informational: they
 // never fail doctor, since someone who only uses a deployment needs none of them.
 import { spawnSync } from 'node:child_process'
 import { existsSync, statfsSync } from 'node:fs'

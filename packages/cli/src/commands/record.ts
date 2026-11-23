@@ -1,4 +1,4 @@
-// video-agent record (screen-recording plan §4.6; va-rsk5.5.1, va-rsk5.5.2): records a site in Chromium with a pointer
+// video-agent record: records a site in Chromium with a pointer
 // trace, on this machine (no server). The capture is src/record/capture.ts. Sign-in files (--storage-state) stay out of
 // the recording folder, and the one it saves is readable by you only, so a recording folder is safe to upload or share.
 import { isAbsolute, relative, resolve } from 'node:path'

@@ -1,6 +1,6 @@
-// The recorder side of the pointer trace (screen-recording plan §4.6; va-rsk5.5.2): page events (trace-page.ts) become
+// The recorder side of the pointer trace: page events (trace-page.ts) become
 // a schema-valid trace.json on the recording's clock. Times: seconds from the first screencast frame, plus the paint
-// latency spike D2 measured (an event shows on screen about 46 ms later), so a click lines up with the frame it shows
+// latency we measured (an event shows on screen about 46 ms later), so a click lines up with the frame it shows
 // in. Positions: 0-1 of the viewport (the recorded frame is the viewport at its dpr). Moves are simplified with
 // Ramer-Douglas-Peucker at 0.5 px; hidden elements get a key when they move over 2 px, a zero-size key off screen, and
 // at most 600 keys each. Names are scrubbed by the shared schema (app/server/lib/recording-trace.ts) when it's parsed.
@@ -8,7 +8,7 @@ import { PRIVACY_LABELS } from '../../../../app/server/lib/privacy-patterns.js'
 import { parseTrace, TRACE_LIMITS, type Trace } from '../../../../app/server/lib/recording-trace.js'
 import type { PageEvent } from './trace-page.js'
 
-/** Event to frame, headed Chromium (docs/spikes.md D2: 46 ms median). */
+/** Event to frame, headed Chromium. */
 export const PAINT_LATENCY_S = 0.046
 const KEY_RUN_GAP_S = 1
 const WHEEL_RUN_GAP_S = 0.3

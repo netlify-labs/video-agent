@@ -1,4 +1,4 @@
-// One local run's inputs, prompt and results (cli-and-sdk plan §7; bead va-p1th.5.6). Inputs go where prepare-run
+// One local run's inputs, prompt and results. Inputs go where prepare-run
 // --inputs reads them (<ws>/.va-inputs/<store>/<key>) with a v1 run manifest made by the server's own serializer, and
 // the prompt is buildPrompt's, unchanged, with file: callback and checkpoint URLs and --upload local. Results come back
 // as files: <ws>/.render/<attempt>/checkpoint/<seq>.json while the agent works, then done.json.
@@ -41,7 +41,7 @@ export interface LocalRunInput {
   /** local --look: the look's archive, restored by prepare-run into context/look/ as on the runner. */
   look?: LocalLook
   /**
-   * local demo (screen-recording plan §6.3; va-rsk5.5.4): a screen recording (and its pointer trace) the run makes a
+   * local demo: a screen recording (and its pointer trace) the run makes a
    * demo from, as the server's demo runs do; quick composes it with no authoring (the Quick demo's prompt).
    */
   recording?: {
@@ -55,7 +55,7 @@ export interface LocalRunInput {
     quick?: boolean
   }
   /**
-   * A revision (local revise, bead va-p1th.5.12): the video's job id and the version it changes, whose source.tar.gz
+   * A revision: the video's job id and the version it changes, whose source.tar.gz
    * is restored by prepare-run exactly as on the runner. The prompt is then the change.
    */
   revision?: {
@@ -63,7 +63,7 @@ export interface LocalRunInput {
     parentN: number
     versionN?: number
     source: string
-    /** Only these scenes (local revise --scene, bead va-8cy4.5.14): their ids, as the prompt lists them, and voice. */
+    /** Only these scenes: their ids, as the prompt lists them, and voice. */
     scope?: {
       ids: string[]
       beats: { id: string; label: string | null; start: number; duration: number }[]

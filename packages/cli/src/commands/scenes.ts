@@ -1,4 +1,4 @@
-// scenes, and the scene names revise --scene and redo take (regenerate-beat plan §4.13; bead va-8cy4.5.2). A scene is
+// scenes, and the scene names revise --scene and redo take. A scene is
 // named by its id or its label (case-insensitive, unique); the version's scenes come with the video, or from
 // GET …/beats for an older one.
 import type { Video } from '../../../sdk/src/index.js'

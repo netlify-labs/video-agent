@@ -551,7 +551,7 @@ export interface RedoScenesDeps {
     revise: (id: string, input: ReviseInput, opts?: CallOptions) => Promise<Video>;
 }
 /**
- * Redo some scenes of a version (regenerate-beat plan §4.13): a revision with a scope. Fills fromVersion from the
+ * Redo some scenes of a version: a revision with a scope. Fills fromVersion from the
  * latest ready version when it's left out. The generated revise checks the server lists scoped_revision (else
  * unsupported_by_server) and sends an Idempotency-Key.
  */
@@ -689,7 +689,7 @@ export {};
 ## version.d.ts
 
 ```ts
-export declare const VERSION = "0.0.0";
+export declare const VERSION = "1.0.0";
 ```
 
 ## webhooks.d.ts

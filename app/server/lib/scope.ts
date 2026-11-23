@@ -612,7 +612,7 @@ export const DERIVED_FILES: ((beats: readonly string[], comp: Composition | null
     CREDITS_FILE,
     ...beats.map((b) => `${VOICE_DIR}/${b}.wav`),
   ],
-  // Screen recordings (screen-recording plan §5.2 scoped revisions): the kept plan, and the scoped steps' cursor and
+  // Screen recordings: the kept plan, and the scoped steps' cursor and
   // hold files. Never analysis.json or redact.js, and never another step's files.
   (beats, comp) => {
     const recorded = (comp?.beats ?? []).filter((b) => b.recording)

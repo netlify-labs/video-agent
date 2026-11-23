@@ -1,5 +1,5 @@
 // netlify-video-agent-player: <video-agent-player>, a web component that plays a published Video Agent video on any
-// page (docs/plans/2026-11-04-cli-and-sdk.md §7). No dependencies, Shadow DOM.
+// page. No dependencies, Shadow DOM.
 //
 //   <script type="module" src="https://acme-video.netlify.app/player.js"></script>
 //   <video-agent-player src="https://acme-video.netlify.app/v/k3t9x2abcd"></video-agent-player>

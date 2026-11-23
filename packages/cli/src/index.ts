@@ -1,4 +1,4 @@
-// netlify-video-agent: the video-agent command (docs/plans/2026-11-04-cli-and-sdk.md §6).
+// netlify-video-agent: the video-agent command.
 import { spawn } from 'node:child_process'
 import { createInterface } from 'node:readline/promises'
 import { defaultConfigDir } from './config.js'

@@ -1,4 +1,4 @@
-// The page side of `video-agent record`'s pointer trace (screen-recording plan §4.6; va-rsk5.5.2): an init script that
+// The page side of `video-agent record`'s pointer trace: an init script that
 // listens in the capture phase and sends batches to the recorder through a binding. Times are epoch milliseconds
 // (performance.timeOrigin + now(), the screencast's clock); positions are CSS pixels with the viewport size. Keys are
 // counted, never recorded. Hidden areas: elements matching the selectors are sampled at 10 Hz; with --privacy or

@@ -1,4 +1,4 @@
-// brief pr, brief release, brief changelog (github-action plan §7.2; bead va-mg4i.2.6): the GitHub Action's briefs from
+// brief pr, brief release, brief changelog: the GitHub Action's briefs from
 // any CI system, printed on stdout for `create --prompt-file -`. Local: they read GitHub (GH_TOKEN or GITHUB_TOKEN when
 // set; public repos work without) and never call a Video Agent server. --json prints the whole brief (title,
 // reference, durationSec, removed, warnings, and context with --context).

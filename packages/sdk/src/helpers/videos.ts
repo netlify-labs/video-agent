@@ -1,4 +1,4 @@
-// Hand-written video helpers (cli-and-sdk plan §4.1 videos row, §4.2 Waiting): wait for a version to finish,
+// Hand-written video helpers: wait for a version to finish,
 // page through a list, and turn what a person pastes (an id, a web URL, a share URL) into a video id.
 import { VideoAgentError } from '../errors.js'
 import type { components } from '../generated/schema.js'
@@ -188,7 +188,7 @@ export interface RedoScenesDeps {
 }
 
 /**
- * Redo some scenes of a version (regenerate-beat plan §4.13): a revision with a scope. Fills fromVersion from the
+ * Redo some scenes of a version: a revision with a scope. Fills fromVersion from the
  * latest ready version when it's left out. The generated revise checks the server lists scoped_revision (else
  * unsupported_by_server) and sends an Idempotency-Key.
  */

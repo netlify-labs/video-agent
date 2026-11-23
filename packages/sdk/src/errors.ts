@@ -1,4 +1,4 @@
-// Every failure the SDK reports is a VideoAgentError (cli-and-sdk plan §4.2 Errors). `code` is the server's
+// Every failure the SDK reports is a VideoAgentError. `code` is the server's
 // ({ error: { code, message } }), or one of the SDK's own: unsupported_by_server, network, and the helpers' codes.
 
 export class VideoAgentError extends Error {

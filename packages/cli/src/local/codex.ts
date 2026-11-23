@@ -1,6 +1,6 @@
-// The Codex adapter (bead va-p1th.5.9; settings from spike C2, docs/spikes.md). --ignore-user-config and --ignore-rules
+// The Codex adapter. --ignore-user-config and --ignore-rules
 // keep the person's config.toml, MCP servers and rules out. Codex's own sandbox has no deny-read setting, and macOS
-// refuses a Seatbelt profile inside another (C2), so on macOS Codex runs with its sandbox off inside ours: reads
+// refuses a Seatbelt profile inside another, so on macOS Codex runs with its sandbox off inside ours: reads
 // allowed except the secret folders, writes only in the workspace (and ~/.codex, its own session state), and no
 // connections to the host's loopback. Elsewhere Codex's workspace-write sandbox is the boundary.
 import { homedir } from 'node:os'

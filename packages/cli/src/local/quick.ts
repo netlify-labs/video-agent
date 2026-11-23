@@ -1,4 +1,4 @@
-// The Quick demo's adapter (local demo --quick; va-rsk5.5.4): runs runtime/quick-agent.mjs, which runs the Quick demo
+// The Quick demo's adapter (local demo --quick): runs runtime/quick-agent.mjs, which runs the Quick demo
 // prompt's fixed commands without a model. Same env allowlist as a real agent; nothing it runs is authored.
 import { join } from 'node:path'
 import { agentEnv, type Adapter } from './agent.js'

@@ -1,4 +1,4 @@
-// `video-agent local` and `local revise` (cli-and-sdk plan §7; beads va-p1th.5.11, 5.12): a video made on this machine
+// `video-agent local` and `local revise`: a video made on this machine
 // by the person's own coding agent in its sandbox, saved to ./videos/<slug>/vN/. No server, no key, no credits.
 import { spawnSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
@@ -19,7 +19,7 @@ import { sceneFlags } from './scenes.js'
 import { parseCrop, parseTrim, recordingFiles } from './recording.js'
 import { arg, durationMs } from './shared.js'
 
-/** Agents this version ships (docs/spikes.md C2: each must pass the sandbox spike). Fixture is hidden, for CI. */
+/** Agents this version ships. Fixture is hidden, for CI. */
 const SHIPPED: Record<string, Adapter> = { claude }
 const NOT_YET: Record<string, string> = {
   codex: "Codex isn't supported in this version yet: its sandbox check hasn't passed.",
@@ -178,7 +178,7 @@ function aspectOf(w: number, h: number): LocalRunInput['aspect'] {
 }
 
 /**
- * local demo <recording> (va-rsk5.5.4): a demo made on this machine from a recording folder (video-agent record's) or an
+ * local demo <recording>: a demo made on this machine from a recording folder (video-agent record's) or an
  * MP4, the same run the server makes; --quick composes it with no agent and no model.
  */
 const localDemo: Handler = async (ctx) => {

@@ -1,5 +1,5 @@
 // A demo-video brief from a pull request: the skill's PR recipe (skills/create-video/references/recipes.md) with the
-// PR's own text as background (docs/plans/2026-11-04-github-action.md §3.6).
+// PR's own text as background.
 import {
   dedupeCommits,
   excludedBecause,

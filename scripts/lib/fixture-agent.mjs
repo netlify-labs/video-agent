@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// The fixture agent (bead va-p1th.5.14): a deterministic stand-in for a coding agent, for local mode's CI and tests.
+// The fixture agent: a deterministic stand-in for a coding agent, for local mode's CI and tests.
 // It does what the prompt asks without a model: runs its prepare-run command, writes a known-good composition (the
 // contract1 fixture shipped next to this file), posts a checkpoint, and runs its render-job command.
 //   node fixture-agent.mjs <ws>/prompt.txt

@@ -1,5 +1,5 @@
 // What the generated resource methods (generated/resources.ts) call, and the types they're written in. The client
-// core implements Transport: auth, the feature check, retries, errors (cli-and-sdk plan §4.2).
+// core implements Transport: auth, the feature check, retries, errors.
 import type { paths } from './generated/schema.js'
 
 type Op<P extends keyof paths, M extends keyof paths[P]> = paths[P][M]

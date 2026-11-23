@@ -2219,7 +2219,7 @@ function prepare(call) {
 }
 
 // packages/sdk/src/version.ts
-var VERSION = "0.0.0";
+var VERSION = "1.0.0";
 
 // packages/sdk/src/client.ts
 var IDEMPOTENT = /* @__PURE__ */ new Set(["createVideo", "reviseVideo", "remixVideo"]);

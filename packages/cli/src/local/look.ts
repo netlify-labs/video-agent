@@ -1,4 +1,4 @@
-// local --look (looks plan §4.13; bead va-nifa.5.3): a Look bundled with the CLI (<runtime>/looks/<id>/), or a look
+// local --look: a Look bundled with the CLI (<runtime>/looks/<id>/), or a look
 // folder on disk, so a contributor can try a look before their pull request merges. The folder's look.json is checked
 // and its run files archived exactly as the server's build archives them; prepare-run restores it into context/look/.
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'

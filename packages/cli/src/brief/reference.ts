@@ -1,5 +1,5 @@
-// The reference line: how a PR or release finds its video before the server has `externalRef`
-// (docs/plans/2026-11-04-github-action.md §3.5). Every brief with a target ends with it, and the lookup searches for
+// The reference line: how a PR or release finds its video before the server has `externalRef`.
+// Every brief with a target ends with it, and the lookup searches for
 // it with GET /api/v1/videos?owner=me&q=<ref>.
 import { createHash } from 'node:crypto'
 

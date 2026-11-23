@@ -1,4 +1,4 @@
-// Local mode's runtime and workspace (cli-and-sdk plan §7; bead va-p1th.5.5), as spike C1 proved them (docs/spikes.md):
+// Local mode's runtime and workspace:
 //   runtime    <cache>/runtime/<cli version>/: the CLI's bundled runtime (dist/runtime) copied once, then `npm ci` from
 //              its lockfile with an empty npm config, so the person's ~/.npmrc (registries, tokens) never applies
 //   workspace  <cache>/runs/<run id>/: the video/ template, context/ (--context, else ./context, else the neutral
@@ -111,7 +111,7 @@ export interface Workspace {
 
 /**
  * <ws>/node_modules: a link to each runtime package, and a .bin of links except tsx. The tsx CLI listens on a unix
- * socket in the temp folder, which agent sandboxes refuse (docs/spikes.md C2), so `npx tsx` gets a wrapper that runs
+ * socket in the temp folder, which agent sandboxes refuse, so `npx tsx` gets a wrapper that runs
  * node with tsx's loader instead: same TypeScript, no socket.
  */
 function linkNodeModules(runtime: string, ws: string) {
@@ -177,7 +177,7 @@ export function buildWorkspace(o: {
     // render-job asks the CLI to render, outside the agent's sandbox (scripts/lib/render-broker.ts).
     VA_RENDER_BROKER: 'file',
     // Sandboxes route the shell's network through a proxy (HTTPS_PROXY); Node's fetch (Openverse) honours it only
-    // with this (docs/spikes.md C2).
+    // with this.
     NODE_USE_ENV_PROXY: '1',
     // prepare-run reads inputs from here; the prompt's command is the runner's, with no --inputs.
     VA_INPUTS_DIR: join(dir, '.va-inputs'),
@@ -217,7 +217,7 @@ export function installAgentKit(o: { ws: Workspace; runtime: string; log: Log; r
 }
 
 /**
- * Kokoro's venv for voice-overs (docs/spikes.md C3): <cache>/kokoro-venv from the newest python3.13 … 3.10, with
+ * Kokoro's venv for voice-overs: <cache>/kokoro-venv from the newest python3.13 … 3.10, with
  * kokoro-onnx>=0.6 installed and the person's pip config ignored. Returns the venv's python (VA_PYTHON), or null with
  * the reason when there's no usable Python (local voice-over is then unavailable; ElevenLabs still works).
  */

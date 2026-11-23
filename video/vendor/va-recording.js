@@ -1,4 +1,4 @@
-/* Video Agent recording scenes (screen-recording plan §5.3): vaRecording(tl, el) animates a recording scene on its
+/* Video Agent recording scenes: vaRecording(tl, el) animates a recording scene on its
  * beat's inner timeline. Load it after va-contract.js and call it first in the scene's vaBeat:
  *   vaBeat('add-site', (tl, el) => { vaRecording(tl, el); tl.from(...callout...) })
  * Every time is converted from SOURCE seconds to the beat's AUTHORED time, (s - in) / (out - in) x the slot's authored

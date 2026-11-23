@@ -1,4 +1,4 @@
-// The config file (cli-and-sdk plan §6.2 Config): one profile in v1, { url, apiKey, keyId, webhookSecret? }, at
+// The config file: one profile in v1, { url, apiKey, keyId, webhookSecret? }, at
 // <configDir>/config.json, mode 0600, written atomically. Precedence: flags, then VIDEO_AGENT_URL / VIDEO_AGENT_KEY,
 // then the file.
 import { chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises'

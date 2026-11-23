@@ -1,4 +1,4 @@
-// Exit codes (cli-and-sdk plan §6.2). Mapped by HTTP status first, then specific codes override, so a new server
+// Exit codes. Mapped by HTTP status first, then specific codes override, so a new server
 // code needs no CLI change unless it should exit differently from its status.
 import { isVideoAgentError } from '../../sdk/src/index.js'
 

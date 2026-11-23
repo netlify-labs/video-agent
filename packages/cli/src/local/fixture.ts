@@ -1,4 +1,4 @@
-// The fixture agent's adapter (bead va-p1th.5.14; hidden --agent fixture): runs runtime/fixture-agent.mjs, which does
+// The fixture agent's adapter (hidden --agent fixture): runs runtime/fixture-agent.mjs, which does
 // what the prompt says without a model, for local mode's CI and tests. Same env allowlist as a real agent; no sandbox.
 import { join } from 'node:path'
 import { agentEnv, type Adapter } from './agent.js'
